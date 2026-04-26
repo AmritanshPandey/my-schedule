@@ -596,7 +596,7 @@ export default function ScheduleApp() {
 
     if (editingTaskId === task.id) {
       return (
-        <div className="rounded-lg p-4 w-full min-w-0 space-y-3 border border-neutral-200 bg-white transition-colors dark:border-white/10 dark:bg-neutral-900">
+        <div className="rounded-xl p-4 w-full min-w-0 space-y-3 border border-neutral-200/80 bg-white shadow-sm transition-colors dark:border-white/[0.08] dark:bg-neutral-900 dark:shadow-black/20">
           <div className="grid grid-cols-5 gap-3">
             {SECTION_ICONS.map(({ name, label, icon: Icon }) => (
               <button
@@ -687,11 +687,11 @@ export default function ScheduleApp() {
     }
 
     return (
-      <div className={`${cardClassName} transition-[background-color,border-color] duration-200 ease-out ${tone.cardBg} ${tone.cardBorder}`}>
+      <div className={`${cardClassName} transition-[background-color,border-color,box-shadow] duration-200 ease-out ${tone.cardBg} ${tone.cardBorder} ${tone.shadow}`}>
         <div className="flex items-start justify-between gap-2">
           <div className="min-w-0 flex-1 space-y-1 break-words">
             <div className="flex items-start gap-2 min-w-0">
-              <div className={`mt-0.5 ${compact ? "h-6 w-6" : "h-8 w-8"} shrink-0 rounded-md border flex items-center justify-center border-neutral-200 dark:border-white/10 ${tone.iconBg} ${tone.iconText}`}>
+              <div className={`mt-0.5 ${compact ? "h-6 w-6" : "h-8 w-8"} shrink-0 rounded-md flex items-center justify-center ${tone.iconBg} ${tone.iconText}`}>
                 <TaskIcon size={compact ? 15 : 18} strokeWidth={1.7} />
               </div>
               <div className="min-w-0 flex-1">
@@ -752,7 +752,7 @@ export default function ScheduleApp() {
   }
 
   return (
-    <main className="min-h-screen bg-white text-neutral-900 dark:bg-neutral-950 dark:text-white">
+    <main className="min-h-screen bg-neutral-50 text-neutral-900 dark:bg-neutral-950 dark:text-white">
       <div className="mx-auto max-w-6xl px-4 py-4 sm:px-5 sm:py-6">
         <header className="mb-5">
           <div className="flex items-center justify-between gap-4">
@@ -805,7 +805,7 @@ export default function ScheduleApp() {
                           const isToday = day === todayKey;
                           const isActive = day === activeDay;
                           const dayClass = isActive
-                            ? "bg-neutral-900 text-white dark:bg-white dark:text-neutral-900"
+                            ? "bg-neutral-900 text-white shadow-sm shadow-neutral-900/20 dark:bg-white dark:text-neutral-900 dark:shadow-white/10"
                             : isToday
                               ? "bg-neutral-100 text-neutral-700 dark:bg-white/10 dark:text-neutral-300"
                               : "text-neutral-500 hover:bg-neutral-100 dark:text-neutral-400 dark:hover:bg-white/[0.07]";
@@ -824,7 +824,7 @@ export default function ScheduleApp() {
 
                     <div className="space-y-4 pb-24">
                       {dayTasks.length === 0 && !addingTask && (
-                        <div className="rounded-lg border border-dashed border-neutral-200 py-10 text-center text-sm text-neutral-400 dark:border-white/10 dark:text-neutral-500">
+                        <div className="rounded-xl border border-dashed border-neutral-200 py-10 text-center text-sm text-neutral-400 dark:border-white/10 dark:text-neutral-500">
                           Nothing is on today&apos;s calendar yet. Add your first block to start mapping the day.
                         </div>
                       )}
@@ -837,7 +837,7 @@ export default function ScheduleApp() {
                                 <SortableTaskCard key={task.id} task={task}>
                                   {(dragHandleProps) => (
                                     <div className="w-full min-w-0 animate-panel-in">
-                                      {renderTaskCard(task, "border rounded-lg p-4 w-full min-w-0", dragHandleProps)}
+                                      {renderTaskCard(task, "border rounded-xl p-4 w-full min-w-0", dragHandleProps)}
                                     </div>
                                   )}
                                 </SortableTaskCard>
@@ -848,9 +848,9 @@ export default function ScheduleApp() {
                       ) : (
 		                        <div
 		                          ref={timelineScrollRef}
-		                          className="calendar-scrollbar-none relative flex max-h-[72vh] overflow-y-auto overflow-x-hidden rounded-lg border border-neutral-200 bg-white dark:border-white/10 dark:bg-neutral-900"
+		                          className="calendar-scrollbar-none relative flex max-h-[72vh] overflow-y-auto overflow-x-hidden rounded-xl border border-neutral-100 bg-white shadow-sm shadow-neutral-200/50 dark:border-white/[0.07] dark:bg-neutral-900 dark:shadow-black/25"
 		                        >
-		                          <div className="sticky left-0 z-20 w-12 shrink-0 bg-white pr-2 sm:w-14 dark:bg-neutral-900" style={{ height: timelineHeight }}>
+		                          <div className="sticky left-0 z-20 w-12 shrink-0 bg-white/95 pr-2 sm:w-14 dark:bg-neutral-900/95 backdrop-blur-sm" style={{ height: timelineHeight }}>
 		                            {timelineHours.map((hour, index) => (
 		                              <span
 		                                key={hour}
@@ -880,7 +880,7 @@ export default function ScheduleApp() {
 		                                    style={getTaskLaneStyle(layout)}
 		                                  >
 	                                    <div className="relative h-full min-h-[36px]">
-		                                      {renderTaskCard(layout.task, "h-full rounded-lg p-2.5 w-full min-w-0 border overflow-hidden", undefined, layout.compact)}
+		                                      {renderTaskCard(layout.task, "h-full rounded-xl p-2.5 w-full min-w-0 border overflow-hidden", undefined, layout.compact)}
 	                                    </div>
 	                                  </div>
 	                                );
@@ -900,7 +900,7 @@ export default function ScheduleApp() {
 	                      )}
 
                       {addingTask ? (
-                        <div className="space-y-3 rounded-lg border border-neutral-200 bg-white p-4 dark:border-white/10 dark:bg-neutral-900">
+                        <div className="space-y-3 rounded-xl border border-neutral-200/80 bg-white p-4 shadow-sm dark:border-white/[0.08] dark:bg-neutral-900 dark:shadow-black/20">
                           <p className="text-sm font-semibold text-neutral-900 dark:text-white">New time block</p>
                           <div className="grid grid-cols-5 gap-3">
                             {SECTION_ICONS.map(({ name, label, icon: Icon }) => (
@@ -1006,7 +1006,7 @@ export default function ScheduleApp() {
                       ) : (
                         <button
                           onClick={() => setAddingTask(true)}
-                          className="inline-flex h-10 w-full items-center justify-center gap-2 rounded-md border border-dashed border-neutral-200 text-sm font-medium text-neutral-500 transition-colors hover:bg-neutral-50 dark:border-white/10 dark:text-neutral-400 dark:hover:bg-white/5"
+                          className="inline-flex h-10 w-full items-center justify-center gap-2 rounded-xl border border-dashed border-neutral-200 text-sm font-medium text-neutral-500 transition-colors hover:bg-neutral-50 dark:border-white/10 dark:text-neutral-400 dark:hover:bg-white/5"
                         >
                           <IconPlus size={16} />
                           Add Time Block
@@ -1022,7 +1022,7 @@ export default function ScheduleApp() {
                 content: (
                   <div className="space-y-4 pt-1">
                     {schedule.plans.length === 0 && !addingPlan && (
-                      <div className="rounded-lg border border-dashed border-neutral-200 py-8 text-center text-sm text-neutral-400 dark:border-white/10 dark:text-neutral-500">
+                      <div className="rounded-xl border border-dashed border-neutral-200 py-8 text-center text-sm text-neutral-400 dark:border-white/10 dark:text-neutral-500">
                         No plans yet. Create one for routines, meals, workouts, or anything you want to track over time.
                       </div>
                     )}
@@ -1047,7 +1047,7 @@ export default function ScheduleApp() {
                     </DndContext>
 
                     {addingPlan ? (
-                      <div className="space-y-3 rounded-lg border border-neutral-200 bg-white p-4 dark:border-white/10 dark:bg-neutral-900">
+                      <div className="space-y-3 rounded-xl border border-neutral-200/80 bg-white p-4 shadow-sm dark:border-white/[0.08] dark:bg-neutral-900 dark:shadow-black/20">
                         <p className="text-sm font-semibold text-neutral-900 dark:text-white">New plan</p>
                         <input
                           value={newPlanTitle}
@@ -1102,7 +1102,7 @@ export default function ScheduleApp() {
                     ) : (
                       <button
                         onClick={() => setAddingPlan(true)}
-                        className="inline-flex h-10 w-full items-center justify-center gap-2 rounded-md border border-dashed border-neutral-200 text-sm font-medium text-neutral-500 transition-colors hover:bg-neutral-50 dark:border-white/10 dark:text-neutral-400 dark:hover:bg-white/5"
+                        className="inline-flex h-10 w-full items-center justify-center gap-2 rounded-xl border border-dashed border-neutral-200 text-sm font-medium text-neutral-500 transition-colors hover:bg-neutral-50 dark:border-white/10 dark:text-neutral-400 dark:hover:bg-white/5"
                       >
                         <IconPlus size={16} />
                         Add Plan
@@ -1117,7 +1117,11 @@ export default function ScheduleApp() {
         <button
           type="button"
           onClick={() => setEditMode((prev) => !prev)}
-          className="fixed bottom-6 right-6 z-20 flex h-12 w-12 items-center justify-center rounded-lg bg-neutral-900 text-white transition-colors hover:bg-neutral-800 dark:bg-white dark:text-neutral-900 dark:hover:bg-neutral-100"
+          className={`fixed bottom-6 right-6 z-20 flex h-12 w-12 items-center justify-center rounded-xl shadow-lg transition-all duration-200 hover:shadow-xl hover:scale-105 ${
+            editMode
+              ? "bg-rose-500 text-white shadow-rose-500/30 hover:bg-rose-600 dark:bg-rose-500 dark:text-white dark:shadow-rose-500/20 dark:hover:bg-rose-600"
+              : "bg-neutral-900 text-white shadow-neutral-900/25 hover:bg-neutral-800 dark:bg-white dark:text-neutral-900 dark:shadow-white/10 dark:hover:bg-neutral-100"
+          }`}
           title={editMode ? "Exit edit mode" : "Enter edit mode"}
           aria-label={editMode ? "Exit edit mode" : "Enter edit mode"}
         >

@@ -17,14 +17,15 @@ export default function Tabs({ tabs }: TabsProps) {
 
   return (
     <div>
-      <div className="mb-5 flex w-full rounded-lg border border-neutral-200 bg-neutral-100 p-1 dark:border-white/10 dark:bg-white/5">
+      <div className="mb-6 flex w-full gap-2 rounded-xl border border-neutral-200/80 bg-neutral-100/80 p-1 dark:border-white/[0.08] dark:bg-white/[0.04]">
         {tabs.map((tab, i) => (
           <button
             key={tab.label}
+            type="button"
             onClick={() => setActive(i)}
-            className={`flex h-10 flex-1 items-center justify-center gap-2 rounded-md text-sm font-medium transition-all duration-200 ${
+            className={`flex h-10 flex-1 items-center justify-center gap-2  rounded-lg text-sm font-medium transition-all duration-200 ${
               active === i
-                ? "bg-white border border-neutral-300 text-neutral-900 dark:border-white/10 dark:bg-neutral-800 dark:text-white"
+                ? "bg-white border border-neutral-200/80 text-neutral-900 dark:border-white/[0.08] dark:bg-neutral-800 dark:text-white"
                 : "bg-transparent text-neutral-500 hover:bg-neutral-200/60 hover:text-neutral-700 dark:text-neutral-400 dark:hover:bg-white/5 dark:hover:text-neutral-300"
             }`}
           >

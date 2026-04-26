@@ -154,14 +154,18 @@ export default function PlanCard({
   }
 
   return (
-    <div className="overflow-hidden rounded-lg border border-neutral-200 bg-white dark:border-white/10 dark:bg-neutral-900">
-      <div className="border-b border-neutral-200 px-4 py-3 dark:border-white/10">
+    <div className={`overflow-hidden rounded-xl border bg-white shadow-sm dark:bg-neutral-900 dark:shadow-black/25 border-neutral-200/80 dark:border-white/[0.08] ${accent.cardAccent}`}>
+      <div className={`border-b px-4 py-3 border-neutral-100 dark:border-white/[0.07] ${accent.tint}`}>
           <div className="flex items-center justify-between gap-3">
             <h2 className="flex items-center gap-2 text-sm font-semibold text-neutral-900 dark:text-white">
               {(() => {
                 const ic = SECTION_ICONS.find((i) => i.name === emoji);
                 const PlanIcon = (ic ?? SECTION_ICONS[0]).icon;
-                return <PlanIcon size={20} strokeWidth={1.5} className={accent.text} />;
+                return (
+                  <span className={`flex h-6 w-6 items-center justify-center rounded-md ${accent.iconSolid}`}>
+                    <PlanIcon size={14} strokeWidth={1.7} />
+                  </span>
+                );
               })()}
               {title}
               <span className="rounded border border-neutral-200 bg-neutral-50 px-1.5 py-0.5 text-[11px] font-medium text-neutral-500 dark:border-white/10 dark:bg-white/5 dark:text-neutral-400">
@@ -179,6 +183,7 @@ export default function PlanCard({
                 <IconGripVertical size={16} />
               </button>
               <button
+                type="button"
                 onClick={() => {
                   setEditTitle(title);
                   setEditIconName(emoji);
@@ -192,6 +197,7 @@ export default function PlanCard({
                 <IconEdit size={18} />
               </button>
               <button
+                type="button"
                 onClick={() => onDeletePlan(id)}
                 className="inline-flex h-9 w-9 items-center justify-center rounded text-neutral-400 transition-colors hover:bg-red-50 hover:text-red-500 dark:text-neutral-500 dark:hover:bg-rose-500/10 dark:hover:text-rose-400"
                 title="Delete plan"
@@ -202,7 +208,7 @@ export default function PlanCard({
           </div>
 
           {editingPlan && (
-            <div className="mt-3 space-y-3 rounded-lg border border-neutral-200 bg-neutral-50 p-4 dark:border-white/10 dark:bg-neutral-950">
+            <div className="mt-3 space-y-3 rounded-xl border border-neutral-200/80 bg-neutral-50/80 p-4 dark:border-white/[0.08] dark:bg-neutral-950">
               <input
                 value={editTitle}
                 onChange={(e) => setEditTitle(e.target.value)}
@@ -237,6 +243,7 @@ export default function PlanCard({
               />
               <div className="flex gap-2">
                 <button
+                  type="button"
                   onClick={handleSavePlan}
                   className="inline-flex h-9 items-center gap-1.5 rounded-md bg-neutral-900 px-3 text-sm font-medium text-white transition-colors hover:bg-neutral-800 dark:bg-white dark:text-neutral-900 dark:hover:bg-neutral-100"
                 >
@@ -244,6 +251,7 @@ export default function PlanCard({
                   Save
                 </button>
                 <button
+                  type="button"
                   onClick={handleCancelPlanEdit}
                   className="inline-flex h-9 items-center gap-1.5 rounded-md border border-neutral-200 px-3 text-sm font-medium text-neutral-600 transition-colors hover:bg-neutral-50 dark:border-white/10 dark:text-neutral-400 dark:hover:bg-white/5"
                 >
@@ -273,7 +281,7 @@ export default function PlanCard({
 
         <div className="p-4 space-y-4">
           {items.length === 0 && (
-            <div className="rounded-lg border border-dashed border-neutral-200 py-8 text-center text-sm text-neutral-400 dark:border-white/10 dark:text-neutral-500">
+            <div className="rounded-xl border border-dashed border-neutral-200 py-8 text-center text-sm text-neutral-400 dark:border-white/10 dark:text-neutral-500">
               No entries yet. Add the first item to turn this plan into something useful.
             </div>
           )}
@@ -295,7 +303,7 @@ export default function PlanCard({
 
         <div className="px-4 pb-4">
           {adding ? (
-	            <div className="space-y-3 rounded-lg border border-neutral-200 bg-neutral-50 p-4 dark:border-white/10 dark:bg-neutral-950">
+	            <div className="space-y-3 rounded-xl border border-neutral-200/80 bg-neutral-50/80 p-4 dark:border-white/[0.08] dark:bg-neutral-950">
               
               <div className="flex flex-col gap-2">
                 <input
@@ -343,6 +351,7 @@ export default function PlanCard({
 
               <div className="flex gap-2 justify-end">
                 <button
+                  type="button"
                   onClick={() => {
                     setAdding(false);
                     setTime("");
@@ -356,6 +365,7 @@ export default function PlanCard({
                 </button>
 
                 <button
+                  type="button"
                   onClick={handleAdd}
                   className="inline-flex h-9 items-center gap-1.5 rounded-md bg-neutral-900 px-3 text-sm font-medium text-white transition-colors hover:bg-neutral-800 dark:bg-white dark:text-neutral-900 dark:hover:bg-neutral-100"
                 >
@@ -366,8 +376,9 @@ export default function PlanCard({
             </div>
           ) : (
             <button
+              type="button"
               onClick={() => setAdding(true)}
-	              className="inline-flex h-10 w-full items-center justify-center gap-2 rounded-md border border-dashed border-neutral-200 text-sm font-medium text-neutral-500 transition-colors hover:bg-neutral-50 dark:border-white/10 dark:text-neutral-400 dark:hover:bg-white/5"
+	              className="inline-flex h-10 w-full items-center justify-center gap-2 rounded-xl border border-dashed border-neutral-200 text-sm font-medium text-neutral-500 transition-colors hover:bg-neutral-50 dark:border-white/10 dark:text-neutral-400 dark:hover:bg-white/5"
             >
               <IconPlus size={16} />
               Add Entry
