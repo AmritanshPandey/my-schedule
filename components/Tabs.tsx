@@ -10,10 +10,12 @@ interface Tab {
 
 interface TabsProps {
   tabs: Tab[];
+  onActiveChange?: (index: number) => void;
+  initialActive?: number;
 }
 
-export default function Tabs({ tabs }: TabsProps) {
-  const [active, setActive] = useState(0);
+export default function Tabs({ tabs, onActiveChange, initialActive = 0 }: TabsProps) {
+  const [active, setActive] = useState(initialActive);
 
   return (
     <div>
@@ -22,7 +24,10 @@ export default function Tabs({ tabs }: TabsProps) {
           <button
             key={tab.label}
             type="button"
-            onClick={() => setActive(i)}
+            onClick={() => {
+              setActive(i);
+              onActiveChange?.(i);
+            }}
             className={`flex h-10 flex-1 items-center justify-center gap-2  rounded-lg text-sm font-medium transition-all duration-200 ${
               active === i
                 ? "bg-white border border-neutral-200/80 text-neutral-900 dark:border-white/[0.08] dark:bg-neutral-800 dark:text-white"

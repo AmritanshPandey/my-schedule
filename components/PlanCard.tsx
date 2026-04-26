@@ -89,7 +89,8 @@ export default function PlanCard({
   const [editTitle, setEditTitle] = useState(title);
   const [editIconName, setEditIconName] = useState(emoji);
   const [editColor, setEditColor] = useState(resolveAccentColor(color, emoji));
-  const [editMetaFields, setEditMetaFields] = useState(metaFields.join(", "));
+  // Dynamic meta fields as array of objects { label: string }
+  const [editMetaFields, setEditMetaFields] = useState<{ label: string }[]>(metaFields.map(label => ({ label })));
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 8 } }));
   const accent = accentStyles(color);
 
@@ -127,8 +128,7 @@ export default function PlanCard({
     const nextTitle = editTitle.trim();
     if (!nextTitle) return;
     const parsedMetaFields = editMetaFields
-      .split(",")
-      .map((f) => f.trim())
+      .map((f) => f.label.trim())
       .filter(Boolean);
     onUpdatePlan(id, {
       title: nextTitle,
@@ -143,7 +143,7 @@ export default function PlanCard({
     setEditTitle(title);
     setEditIconName(emoji);
     setEditColor(resolveAccentColor(color, emoji));
-    setEditMetaFields(metaFields.join(", "));
+    setEditMetaFields(metaFields.map(label => ({ label })));
     setEditingPlan(false);
   }
 
@@ -188,7 +188,7 @@ export default function PlanCard({
                   setEditTitle(title);
                   setEditIconName(emoji);
                   setEditColor(resolveAccentColor(color, emoji));
-                  setEditMetaFields(metaFields.join(", "));
+                  setEditMetaFields(metaFields.map(label => ({ label })));
                   setEditingPlan(true);
                 }}
                 className={`inline-flex h-9 w-9 items-center justify-center rounded text-neutral-400 transition-colors hover:bg-neutral-100 hover:text-neutral-600 dark:text-neutral-500 dark:hover:bg-white/5 dark:hover:text-neutral-300 ${accent.action}`}
@@ -235,12 +235,38 @@ export default function PlanCard({
                   );
                 })}
               </div>
-              <input
-                value={editMetaFields}
-                onChange={(e) => setEditMetaFields(e.target.value)}
-                placeholder="Meta fields (comma separated): Calories, Protein"
-                className="h-10 w-full rounded-md border border-neutral-200 bg-white px-3 text-sm text-neutral-900 outline-none transition-colors placeholder:text-neutral-400 focus:border-neutral-400 dark:border-white/10 dark:bg-neutral-900 dark:text-white dark:focus:border-white/20"
-              />
+              <div className="space-y-2">
+                <div className="flex flex-col gap-2">
+                  {editMetaFields.map((field, idx) => (
+                    <div key={idx} className="flex gap-2 items-center">
+                      <input
+                        value={field.label}
+                        onChange={e => {
+                          const val = e.target.value;
+                          setEditMetaFields(fields => fields.map((f, i) => i === idx ? { ...f, label: val } : f));
+                        }}
+                        placeholder={`Meta field ${idx + 1}`}
+                        className="flex-1 h-10 rounded-md border border-neutral-200 bg-white px-3 text-sm text-neutral-900 outline-none transition-colors focus:border-neutral-400 dark:border-white/10 dark:bg-neutral-900 dark:text-white dark:focus:border-white/20"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => setEditMetaFields(fields => fields.filter((_, i) => i !== idx))}
+                        className="text-red-400 hover:text-red-600 px-2"
+                        title="Remove meta field"
+                      >
+                        <IconTrash size={16} />
+                      </button>
+                    </div>
+                  ))}
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setEditMetaFields(fields => [...fields, { label: "" }])}
+                  className="mt-2 text-xs text-blue-500 hover:underline"
+                >
+                  + Add Meta Field
+                </button>
+              </div>
               <div className="flex gap-2">
                 <button
                   type="button"

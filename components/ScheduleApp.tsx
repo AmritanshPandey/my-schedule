@@ -9,7 +9,7 @@ import { useScheduleDB, DAYS, DAY_LABELS, DayKey, Plan, SummaryConfig, Task } fr
 import type { AccentColor } from "@/lib/colorSystem";
 import { accentStyles, colorFromIcon, resolveAccentColor, timelineCardStyles } from "@/lib/colorSystem";
 import { SECTION_ICONS, getIconPickerStyle } from "@/components/SectionIcons";
-import { IconActivity, IconCheck, IconChecklist, IconEdit, IconGripVertical, IconLayoutList, IconPlus, IconTimeline, IconTrash, IconX } from "@tabler/icons-react";
+import { IconActivity, IconCheck, IconChecklist, IconEdit, IconGripVertical, IconLayoutList, IconPlus, IconTableColumn, IconTrash, IconX } from "@tabler/icons-react";
 import { DndContext, DragEndEvent, PointerSensor, useSensor, useSensors } from "@dnd-kit/core";
 import { SortableContext, useSortable, verticalListSortingStrategy, arrayMove } from "@dnd-kit/sortable";
 
@@ -227,6 +227,7 @@ export default function ScheduleApp() {
   const [todayKey, setTodayKey] = useState<DayKey>(() => JS_DAYS[new Date().getDay()]);
   const [activeDay, setActiveDay] = useState<DayKey>(() => JS_DAYS[new Date().getDay()]);
   const [editMode, setEditMode] = useState(false);
+  const [activeTab, setActiveTab] = useState(0);
 
   const [addingTask, setAddingTask] = useState(false);
   const [newTask, setNewTask] = useState<Omit<Task, "id">>(emptyTaskDraft());
@@ -892,8 +893,8 @@ export default function ScheduleApp() {
 		                                <div
 		                                  key={`grid-${hour}`}
 				                                  className="absolute left-0 right-0 border-t border-neutral-100 dark:border-white/[0.06]"
-		                                  style={{ top: TIMELINE_TOP_PADDING + index * HOUR_HEIGHT }}
-		                                />
+                                      style={{ top: TIMELINE_TOP_PADDING + index * HOUR_HEIGHT }}
+                                    />
 		                              ))}
 		                            </div>
 		                            <div className="absolute inset-0">
@@ -1134,17 +1135,21 @@ export default function ScheduleApp() {
                 ),
               },
             ]}
+            onActiveChange={setActiveTab}
+            initialActive={0}
           />
         </div>
-        <button
-          type="button"
-          onClick={() => setEditMode((prev) => !prev)}
-          className="fixed bottom-6 right-6 z-20 flex h-12 w-12 items-center justify-center rounded-xl bg-neutral-900 text-white shadow-lg shadow-neutral-900/25 transition-all duration-200 hover:scale-105 hover:bg-neutral-800 hover:shadow-xl dark:bg-white dark:text-neutral-900 dark:shadow-white/10 dark:hover:bg-neutral-100"
-          title={editMode ? "Switch to timeline view" : "Switch to list view"}
-          aria-label={editMode ? "Switch to timeline view" : "Switch to list view"}
-        >
-          {editMode ? <IconTimeline size={20} strokeWidth={2} /> : <IconLayoutList size={20} strokeWidth={2} />}
-        </button>
+        {activeTab !== 1 && (
+          <button
+            type="button"
+            onClick={() => setEditMode((prev) => !prev)}
+            className="fixed bottom-6 right-6 z-20 flex h-12 w-12 items-center justify-center rounded-xl bg-neutral-900 text-white shadow-lg shadow-neutral-900/25 transition-all duration-200 hover:scale-105 hover:bg-neutral-800 hover:shadow-xl dark:bg-white dark:text-neutral-900 dark:shadow-white/10 dark:hover:bg-neutral-100"
+            title={editMode ? "Switch to timeline view" : "Switch to list view"}
+            aria-label={editMode ? "Switch to timeline view" : "Switch to list view"}
+          >
+            {editMode ? < IconLayoutList size={20} strokeWidth={2} /> : <IconTableColumn size={20} strokeWidth={2} />}
+          </button>
+        )}
       </div>
     </main>
   );
