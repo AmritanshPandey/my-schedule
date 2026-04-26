@@ -1,10 +1,10 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
-  <rect width="512" height="512" rx="80" fill="#030712"/>
-  <rect x="112" y="96" width="288" height="320" rx="24" fill="none" stroke="#6366f1" stroke-width="24"/>
-  <rect x="176" y="64" width="32" height="64" rx="16" fill="#6366f1"/>
-  <rect x="304" y="64" width="32" height="64" rx="16" fill="#6366f1"/>
-  <line x1="112" y1="192" x2="400" y2="192" stroke="#6366f1" stroke-width="20"/>
-  <rect x="152" y="240" width="80" height="20" rx="10" fill="#818cf8"/>
-  <rect x="152" y="288" width="120" height="20" rx="10" fill="#818cf8"/>
-  <rect x="152" y="336" width="96" height="20" rx="10" fill="#818cf8"/>
+<svg width="1024" height="1024" viewBox="0 0 1024 1024" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <!-- Background -->
+  <rect width="1024" height="1024" rx="224" fill="#0a0a0a"/>
+  <!-- Schedule block mark: three descending bars, centered -->
+  <!-- Mark group: widest bar 357px, total height 380px -->
+  <!-- Centered: x=334, y=322 -->
+  <rect x="334" y="322" width="357" height="78" rx="39" fill="#ffffff"/>
+  <rect x="334" y="473" width="246" height="78" rx="39" fill="#ffffff"/>
+  <rect x="334" y="624" width="145" height="78" rx="39" fill="#ffffff"/>
 </svg>

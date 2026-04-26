@@ -1,6 +1,179 @@
 @import "tailwindcss";
 
+@custom-variant dark (&:where(.dark, .dark *));
+
 @theme inline {
-  --color-background: #030712;
-  --color-foreground: #f9fafb;
+  --color-background: var(--color-neutral-50);
+  --color-foreground: var(--color-neutral-900);
 }
+
+
+@keyframes panel-in {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.animate-panel-in {
+  animation: panel-in 180ms ease-out;
+}
+
+.calendar-scrollbar-none {
+  scrollbar-width: none;
+}
+
+.calendar-scrollbar-none::-webkit-scrollbar {
+  display: none;
+}
+
+.calendar-row-start-1 { grid-row-start: 1; }
+.calendar-row-start-2 { grid-row-start: 2; }
+.calendar-row-start-3 { grid-row-start: 3; }
+.calendar-row-start-4 { grid-row-start: 4; }
+.calendar-row-start-5 { grid-row-start: 5; }
+.calendar-row-start-6 { grid-row-start: 6; }
+.calendar-row-start-7 { grid-row-start: 7; }
+.calendar-row-start-8 { grid-row-start: 8; }
+.calendar-row-start-9 { grid-row-start: 9; }
+.calendar-row-start-10 { grid-row-start: 10; }
+.calendar-row-start-11 { grid-row-start: 11; }
+.calendar-row-start-12 { grid-row-start: 12; }
+.calendar-row-start-13 { grid-row-start: 13; }
+.calendar-row-start-14 { grid-row-start: 14; }
+.calendar-row-start-15 { grid-row-start: 15; }
+.calendar-row-start-16 { grid-row-start: 16; }
+.calendar-row-start-17 { grid-row-start: 17; }
+.calendar-row-start-18 { grid-row-start: 18; }
+.calendar-row-start-19 { grid-row-start: 19; }
+.calendar-row-start-20 { grid-row-start: 20; }
+.calendar-row-start-21 { grid-row-start: 21; }
+.calendar-row-start-22 { grid-row-start: 22; }
+.calendar-row-start-23 { grid-row-start: 23; }
+.calendar-row-start-24 { grid-row-start: 24; }
+.calendar-row-start-25 { grid-row-start: 25; }
+.calendar-row-start-26 { grid-row-start: 26; }
+.calendar-row-start-27 { grid-row-start: 27; }
+.calendar-row-start-28 { grid-row-start: 28; }
+.calendar-row-start-29 { grid-row-start: 29; }
+.calendar-row-start-30 { grid-row-start: 30; }
+.calendar-row-start-31 { grid-row-start: 31; }
+.calendar-row-start-32 { grid-row-start: 32; }
+.calendar-row-start-33 { grid-row-start: 33; }
+.calendar-row-start-34 { grid-row-start: 34; }
+.calendar-row-start-35 { grid-row-start: 35; }
+.calendar-row-start-36 { grid-row-start: 36; }
+.calendar-row-start-37 { grid-row-start: 37; }
+.calendar-row-start-38 { grid-row-start: 38; }
+.calendar-row-start-39 { grid-row-start: 39; }
+.calendar-row-start-40 { grid-row-start: 40; }
+.calendar-row-start-41 { grid-row-start: 41; }
+.calendar-row-start-42 { grid-row-start: 42; }
+.calendar-row-start-43 { grid-row-start: 43; }
+.calendar-row-start-44 { grid-row-start: 44; }
+.calendar-row-start-45 { grid-row-start: 45; }
+.calendar-row-start-46 { grid-row-start: 46; }
+.calendar-row-start-47 { grid-row-start: 47; }
+.calendar-row-start-48 { grid-row-start: 48; }
+.calendar-row-start-49 { grid-row-start: 49; }
+.calendar-row-start-50 { grid-row-start: 50; }
+.calendar-row-start-51 { grid-row-start: 51; }
+.calendar-row-start-52 { grid-row-start: 52; }
+.calendar-row-start-53 { grid-row-start: 53; }
+.calendar-row-start-54 { grid-row-start: 54; }
+.calendar-row-start-55 { grid-row-start: 55; }
+.calendar-row-start-56 { grid-row-start: 56; }
+.calendar-row-start-57 { grid-row-start: 57; }
+.calendar-row-start-58 { grid-row-start: 58; }
+.calendar-row-start-59 { grid-row-start: 59; }
+.calendar-row-start-60 { grid-row-start: 60; }
+.calendar-row-start-61 { grid-row-start: 61; }
+.calendar-row-start-62 { grid-row-start: 62; }
+.calendar-row-start-63 { grid-row-start: 63; }
+.calendar-row-start-64 { grid-row-start: 64; }
+.calendar-row-start-65 { grid-row-start: 65; }
+.calendar-row-start-66 { grid-row-start: 66; }
+.calendar-row-start-67 { grid-row-start: 67; }
+.calendar-row-start-68 { grid-row-start: 68; }
+.calendar-row-start-69 { grid-row-start: 69; }
+.calendar-row-start-70 { grid-row-start: 70; }
+.calendar-row-start-71 { grid-row-start: 71; }
+.calendar-row-start-72 { grid-row-start: 72; }
+
+.calendar-row-span-1 { grid-row: span 1 / span 1; }
+.calendar-row-span-2 { grid-row: span 2 / span 2; }
+.calendar-row-span-3 { grid-row: span 3 / span 3; }
+.calendar-row-span-4 { grid-row: span 4 / span 4; }
+.calendar-row-span-5 { grid-row: span 5 / span 5; }
+.calendar-row-span-6 { grid-row: span 6 / span 6; }
+.calendar-row-span-7 { grid-row: span 7 / span 7; }
+.calendar-row-span-8 { grid-row: span 8 / span 8; }
+.calendar-row-span-9 { grid-row: span 9 / span 9; }
+.calendar-row-span-10 { grid-row: span 10 / span 10; }
+.calendar-row-span-11 { grid-row: span 11 / span 11; }
+.calendar-row-span-12 { grid-row: span 12 / span 12; }
+.calendar-row-span-13 { grid-row: span 13 / span 13; }
+.calendar-row-span-14 { grid-row: span 14 / span 14; }
+.calendar-row-span-15 { grid-row: span 15 / span 15; }
+.calendar-row-span-16 { grid-row: span 16 / span 16; }
+.calendar-row-span-17 { grid-row: span 17 / span 17; }
+.calendar-row-span-18 { grid-row: span 18 / span 18; }
+.calendar-row-span-19 { grid-row: span 19 / span 19; }
+.calendar-row-span-20 { grid-row: span 20 / span 20; }
+.calendar-row-span-21 { grid-row: span 21 / span 21; }
+.calendar-row-span-22 { grid-row: span 22 / span 22; }
+.calendar-row-span-23 { grid-row: span 23 / span 23; }
+.calendar-row-span-24 { grid-row: span 24 / span 24; }
+.calendar-row-span-25 { grid-row: span 25 / span 25; }
+.calendar-row-span-26 { grid-row: span 26 / span 26; }
+.calendar-row-span-27 { grid-row: span 27 / span 27; }
+.calendar-row-span-28 { grid-row: span 28 / span 28; }
+.calendar-row-span-29 { grid-row: span 29 / span 29; }
+.calendar-row-span-30 { grid-row: span 30 / span 30; }
+.calendar-row-span-31 { grid-row: span 31 / span 31; }
+.calendar-row-span-32 { grid-row: span 32 / span 32; }
+.calendar-row-span-33 { grid-row: span 33 / span 33; }
+.calendar-row-span-34 { grid-row: span 34 / span 34; }
+.calendar-row-span-35 { grid-row: span 35 / span 35; }
+.calendar-row-span-36 { grid-row: span 36 / span 36; }
+.calendar-row-span-37 { grid-row: span 37 / span 37; }
+.calendar-row-span-38 { grid-row: span 38 / span 38; }
+.calendar-row-span-39 { grid-row: span 39 / span 39; }
+.calendar-row-span-40 { grid-row: span 40 / span 40; }
+.calendar-row-span-41 { grid-row: span 41 / span 41; }
+.calendar-row-span-42 { grid-row: span 42 / span 42; }
+.calendar-row-span-43 { grid-row: span 43 / span 43; }
+.calendar-row-span-44 { grid-row: span 44 / span 44; }
+.calendar-row-span-45 { grid-row: span 45 / span 45; }
+.calendar-row-span-46 { grid-row: span 46 / span 46; }
+.calendar-row-span-47 { grid-row: span 47 / span 47; }
+.calendar-row-span-48 { grid-row: span 48 / span 48; }
+.calendar-row-span-49 { grid-row: span 49 / span 49; }
+.calendar-row-span-50 { grid-row: span 50 / span 50; }
+.calendar-row-span-51 { grid-row: span 51 / span 51; }
+.calendar-row-span-52 { grid-row: span 52 / span 52; }
+.calendar-row-span-53 { grid-row: span 53 / span 53; }
+.calendar-row-span-54 { grid-row: span 54 / span 54; }
+.calendar-row-span-55 { grid-row: span 55 / span 55; }
+.calendar-row-span-56 { grid-row: span 56 / span 56; }
+.calendar-row-span-57 { grid-row: span 57 / span 57; }
+.calendar-row-span-58 { grid-row: span 58 / span 58; }
+.calendar-row-span-59 { grid-row: span 59 / span 59; }
+.calendar-row-span-60 { grid-row: span 60 / span 60; }
+.calendar-row-span-61 { grid-row: span 61 / span 61; }
+.calendar-row-span-62 { grid-row: span 62 / span 62; }
+.calendar-row-span-63 { grid-row: span 63 / span 63; }
+.calendar-row-span-64 { grid-row: span 64 / span 64; }
+.calendar-row-span-65 { grid-row: span 65 / span 65; }
+.calendar-row-span-66 { grid-row: span 66 / span 66; }
+.calendar-row-span-67 { grid-row: span 67 / span 67; }
+.calendar-row-span-68 { grid-row: span 68 / span 68; }
+.calendar-row-span-69 { grid-row: span 69 / span 69; }
+.calendar-row-span-70 { grid-row: span 70 / span 70; }
+.calendar-row-span-71 { grid-row: span 71 / span 71; }
+.calendar-row-span-72 { grid-row: span 72 / span 72; }

@@ -5,6 +5,9 @@ import PlanItem from "./PlanItem";
 import { ScheduleEntry, MetaField } from "./ScheduleItem";
 import { IconCheck, IconEdit, IconGripVertical, IconPlus, IconTrash, IconX } from "@tabler/icons-react";
 import { SummaryConfig } from "@/lib/useScheduleDB";
+import { SECTION_ICONS } from "@/components/SectionIcons";
+import type { AccentColor } from "@/lib/colorSystem";
+import { accentStyles, colorFromIcon, resolveAccentColor } from "@/lib/colorSystem";
 import { DndContext, DragEndEvent, PointerSensor, useSensor, useSensors } from "@dnd-kit/core";
 import { SortableContext, useSortable, verticalListSortingStrategy } from "@dnd-kit/sortable";
 
@@ -12,10 +15,11 @@ interface PlanCardProps {
   id: string;
   title: string;
   emoji: string;
+  color: string;
   items: ScheduleEntry[];
   metaFields: string[];
   summary?: SummaryConfig[];
-  onUpdatePlan: (id: string, updates: { title: string; emoji: string; metaFields: string[] }) => void;
+  onUpdatePlan: (id: string, updates: { title: string; emoji: string; color: AccentColor; metaFields: string[] }) => void;
   onDeletePlan: (id: string) => void;
   onReorderItems: (activeId: string, overId: string) => void;
   onAdd: (entry: Omit<ScheduleEntry, "id">) => void;
@@ -65,6 +69,7 @@ export default function PlanCard({
   id,
   title,
   emoji,
+  color,
   items,
   metaFields,
   summary,
@@ -82,9 +87,11 @@ export default function PlanCard({
   const [task, setTask] = useState("");
   const [metaValues, setMetaValues] = useState<Record<string, string>>({});
   const [editTitle, setEditTitle] = useState(title);
-  const [editEmoji, setEditEmoji] = useState(emoji);
+  const [editIconName, setEditIconName] = useState(emoji);
+  const [editColor, setEditColor] = useState(resolveAccentColor(color, emoji));
   const [editMetaFields, setEditMetaFields] = useState(metaFields.join(", "));
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 8 } }));
+  const accent = accentStyles(color);
 
   function handleAdd() {
     if (!time.trim() || !task.trim()) return;
@@ -125,7 +132,8 @@ export default function PlanCard({
       .filter(Boolean);
     onUpdatePlan(id, {
       title: nextTitle,
-      emoji: editEmoji.trim() || "🧠",
+      emoji: editIconName,
+      color: editColor,
       metaFields: parsedMetaFields,
     });
     setEditingPlan(false);
@@ -133,7 +141,8 @@ export default function PlanCard({
 
   function handleCancelPlanEdit() {
     setEditTitle(title);
-    setEditEmoji(emoji);
+    setEditIconName(emoji);
+    setEditColor(resolveAccentColor(color, emoji));
     setEditMetaFields(metaFields.join(", "));
     setEditingPlan(false);
   }
@@ -145,13 +154,17 @@ export default function PlanCard({
   }
 
   return (
-    <div className="rounded-xl overflow-hidden border border-neutral-800 bg-neutral-900">
-      <div className="px-4 py-4 border-b border-neutral-800">
+    <div className="overflow-hidden rounded-lg border border-neutral-200 bg-white dark:border-white/10 dark:bg-neutral-900">
+      <div className="border-b border-neutral-200 px-4 py-3 dark:border-white/10">
           <div className="flex items-center justify-between gap-3">
-            <h2 className="text-base font-medium tracking-wide text-white flex items-center gap-2">
-              <span className="text-lg leading-none">{emoji}</span>
+            <h2 className="flex items-center gap-2 text-sm font-semibold text-neutral-900 dark:text-white">
+              {(() => {
+                const ic = SECTION_ICONS.find((i) => i.name === emoji);
+                const PlanIcon = (ic ?? SECTION_ICONS[0]).icon;
+                return <PlanIcon size={20} strokeWidth={1.5} className={accent.text} />;
+              })()}
               {title}
-              <span className="text-[11px] text-neutral-500 bg-neutral-900 border border-neutral-800 rounded-full px-2 py-0.5">
+              <span className="rounded border border-neutral-200 bg-neutral-50 px-1.5 py-0.5 text-[11px] font-medium text-neutral-500 dark:border-white/10 dark:bg-white/5 dark:text-neutral-400">
                 {items.length}
               </span>
             </h2>
@@ -159,7 +172,7 @@ export default function PlanCard({
               <button
                 type="button"
                 aria-label="Drag plan"
-                className="inline-flex items-center justify-center h-10 w-8 text-neutral-500 touch-none"
+                className="inline-flex h-9 w-8 touch-none items-center justify-center rounded text-neutral-400 transition-colors hover:bg-neutral-100 hover:text-neutral-600 dark:text-neutral-500 dark:hover:bg-white/5 dark:hover:text-neutral-300"
                 {...(dragHandleProps?.attributes ?? {})}
                 {...(dragHandleProps?.listeners ?? {})}
               >
@@ -168,18 +181,19 @@ export default function PlanCard({
               <button
                 onClick={() => {
                   setEditTitle(title);
-                  setEditEmoji(emoji);
+                  setEditIconName(emoji);
+                  setEditColor(resolveAccentColor(color, emoji));
                   setEditMetaFields(metaFields.join(", "));
                   setEditingPlan(true);
                 }}
-                className="inline-flex items-center justify-center h-10 w-10 text-neutral-500 hover:text-cyan-400"
+                className={`inline-flex h-9 w-9 items-center justify-center rounded text-neutral-400 transition-colors hover:bg-neutral-100 hover:text-neutral-600 dark:text-neutral-500 dark:hover:bg-white/5 dark:hover:text-neutral-300 ${accent.action}`}
                 title="Edit plan"
               >
                 <IconEdit size={18} />
               </button>
               <button
                 onClick={() => onDeletePlan(id)}
-                className="inline-flex items-center justify-center h-10 w-10 text-neutral-500 hover:text-amber-400"
+                className="inline-flex h-9 w-9 items-center justify-center rounded text-neutral-400 transition-colors hover:bg-red-50 hover:text-red-500 dark:text-neutral-500 dark:hover:bg-rose-500/10 dark:hover:text-rose-400"
                 title="Delete plan"
               >
                 <IconTrash size={18} />
@@ -188,39 +202,50 @@ export default function PlanCard({
           </div>
 
           {editingPlan && (
-            <div className="mt-3 space-y-3 rounded-lg border border-neutral-800 p-3">
-              <div className="flex gap-2">
-                <input
-                  value={editEmoji}
-                  onChange={(e) => setEditEmoji(e.target.value)}
-                  maxLength={4}
-                  placeholder="🧠"
-                  className="h-10 w-14 rounded-md border border-neutral-800 bg-neutral-900 px-2 text-center text-white focus:outline-none focus:border-cyan-400"
-                />
-                <input
-                  value={editTitle}
-                  onChange={(e) => setEditTitle(e.target.value)}
-                  placeholder="Plan name"
-                  className="h-10 flex-1 rounded-md border border-neutral-800 bg-neutral-900 px-3 text-sm text-white focus:outline-none focus:border-cyan-400"
-                />
+            <div className="mt-3 space-y-3 rounded-lg border border-neutral-200 bg-neutral-50 p-4 dark:border-white/10 dark:bg-neutral-950">
+              <input
+                value={editTitle}
+                onChange={(e) => setEditTitle(e.target.value)}
+                placeholder="Plan name"
+                className="h-10 w-full rounded-md border border-neutral-200 bg-white px-3 text-sm text-neutral-900 outline-none transition-colors focus:border-neutral-400 dark:border-white/10 dark:bg-neutral-900 dark:text-white dark:focus:border-white/20"
+              />
+              <div className="grid grid-cols-5 gap-3">
+                {SECTION_ICONS.map(({ name, label, icon: Icon }) => (
+                  <button
+                    key={name}
+                    type="button"
+                    title={label}
+                    onClick={() => {
+                      setEditIconName(name);
+                      setEditColor(colorFromIcon(name));
+                    }}
+                    className={`h-10 w-10 flex items-center justify-center rounded-md border transition-colors ${
+                      editIconName === name
+                        ? `${accentStyles(editColor).border} ${accentStyles(editColor).tint} ${accentStyles(editColor).text}`
+                        : "border-neutral-200 text-neutral-500 hover:border-neutral-300 dark:border-neutral-800 dark:text-neutral-500 dark:hover:border-neutral-600"
+                    }`}
+                  >
+                    <Icon size={20} strokeWidth={1.5} />
+                  </button>
+                ))}
               </div>
               <input
                 value={editMetaFields}
                 onChange={(e) => setEditMetaFields(e.target.value)}
                 placeholder="Meta fields (comma separated): Calories, Protein"
-                className="h-10 w-full rounded-md border border-neutral-800 bg-neutral-900 px-3 text-sm text-neutral-300 focus:outline-none focus:border-cyan-400"
+                className="h-10 w-full rounded-md border border-neutral-200 bg-white px-3 text-sm text-neutral-900 outline-none transition-colors placeholder:text-neutral-400 focus:border-neutral-400 dark:border-white/10 dark:bg-neutral-900 dark:text-white dark:focus:border-white/20"
               />
               <div className="flex gap-2">
                 <button
                   onClick={handleSavePlan}
-                  className="inline-flex items-center gap-1.5 h-10 px-3 rounded-md bg-cyan-400/10 text-cyan-400 border border-cyan-400/30 text-sm"
+                  className="inline-flex h-9 items-center gap-1.5 rounded-md bg-neutral-900 px-3 text-sm font-medium text-white transition-colors hover:bg-neutral-800 dark:bg-white dark:text-neutral-900 dark:hover:bg-neutral-100"
                 >
                   <IconCheck size={16} />
                   Save
                 </button>
                 <button
                   onClick={handleCancelPlanEdit}
-                  className="inline-flex items-center gap-1.5 h-10 px-3 rounded-md border border-neutral-800 text-neutral-400 text-sm"
+                  className="inline-flex h-9 items-center gap-1.5 rounded-md border border-neutral-200 px-3 text-sm font-medium text-neutral-600 transition-colors hover:bg-neutral-50 dark:border-white/10 dark:text-neutral-400 dark:hover:bg-white/5"
                 >
                   <IconX size={16} />
                   Cancel
@@ -234,9 +259,9 @@ export default function PlanCard({
                 {totals.map((t) => (
                   <div
                     key={t.label}
-                    className={`text-xs px-3 py-1 rounded-full border ${t.colorClass ?? "bg-neutral-900 text-neutral-400 border-neutral-800"}`}
+                    className={`text-xs px-3 py-1 rounded-full border ${t.colorClass ?? accent.badge}`}
                   >
-                    <span className="font-semibold text-white">
+                    <span className="font-semibold text-neutral-900 dark:text-white">
                       {t.total.toLocaleString()}
                     </span>
                     <span className="text-neutral-500 ml-1">{t.unit}</span>
@@ -246,11 +271,11 @@ export default function PlanCard({
             )}
         </div>
 
-        <div className="p-4 space-y-3">
+        <div className="p-4 space-y-4">
           {items.length === 0 && (
-            <p className="text-center text-sm text-neutral-500 py-5">
-              Start adding your plan.
-            </p>
+            <div className="rounded-lg border border-dashed border-neutral-200 py-8 text-center text-sm text-neutral-400 dark:border-white/10 dark:text-neutral-500">
+              No entries yet. Add the first item to turn this plan into something useful.
+            </div>
           )}
 
           <DndContext sensors={sensors} onDragEnd={handleDragEnd}>
@@ -270,7 +295,7 @@ export default function PlanCard({
 
         <div className="px-4 pb-4">
           {adding ? (
-            <div className="rounded-lg border border-neutral-800 p-4 space-y-3">
+	            <div className="space-y-3 rounded-lg border border-neutral-200 bg-neutral-50 p-4 dark:border-white/10 dark:bg-neutral-950">
               
               <div className="flex flex-col gap-2">
                 <input
@@ -278,14 +303,14 @@ export default function PlanCard({
                   onChange={(e) => setTime(e.target.value)}
                   placeholder="Time"
                   autoFocus
-                  className="h-10 w-full sm:w-24 border border-neutral-800 rounded-md px-3 text-sm font-mono text-neutral-400 bg-neutral-900 focus:outline-none focus:border-cyan-400"
+	                  className="h-10 w-full rounded-md border border-neutral-200 bg-white px-3 text-sm font-mono text-neutral-600 outline-none transition-colors focus:border-neutral-400 sm:w-24 dark:border-white/10 dark:bg-neutral-900 dark:text-neutral-300 dark:focus:border-white/20"
                 />
 
                 <input
                   value={task}
                   onChange={(e) => setTask(e.target.value)}
                   placeholder="Description"
-                  className="h-10 flex-1 border border-neutral-800 rounded-md px-3 text-sm text-white bg-neutral-900 focus:outline-none focus:border-cyan-400"
+	                  className="h-10 flex-1 rounded-md border border-neutral-200 bg-white px-3 text-sm text-neutral-900 outline-none transition-colors focus:border-neutral-400 dark:border-white/10 dark:bg-neutral-900 dark:text-white dark:focus:border-white/20"
                 />
               </div>
 
@@ -309,7 +334,7 @@ export default function PlanCard({
                           if (e.key === "Enter") handleAdd();
                           if (e.key === "Escape") setAdding(false);
                         }}
-                        className="w-full h-10 border border-neutral-800 rounded-md pl-20 pr-3 text-sm text-white bg-neutral-900 focus:outline-none focus:border-cyan-400"
+	                        className="h-10 w-full rounded-md border border-neutral-200 bg-white pl-20 pr-3 text-sm text-neutral-900 outline-none transition-colors focus:border-neutral-400 dark:border-white/10 dark:bg-neutral-900 dark:text-white dark:focus:border-white/20"
                       />
                     </div>
                   ))}
@@ -324,15 +349,15 @@ export default function PlanCard({
                     setTask("");
                     setMetaValues({});
                   }}
-                  className="inline-flex items-center gap-1.5 h-10 px-3 border border-neutral-800 text-neutral-400 rounded-md text-sm"
+                  className="inline-flex h-9 items-center gap-1.5 rounded-md border border-neutral-200 px-3 text-sm font-medium text-neutral-600 transition-colors hover:bg-neutral-50 dark:border-white/10 dark:text-neutral-400 dark:hover:bg-white/5"
                 >
-                  <IconX size={16} />
+                  <IconX size={15} />
                   Cancel
                 </button>
 
                 <button
                   onClick={handleAdd}
-                  className="inline-flex items-center gap-1.5 h-10 px-3 bg-cyan-400/10 text-cyan-400 border border-cyan-400/30 rounded-md text-sm"
+                  className="inline-flex h-9 items-center gap-1.5 rounded-md bg-neutral-900 px-3 text-sm font-medium text-white transition-colors hover:bg-neutral-800 dark:bg-white dark:text-neutral-900 dark:hover:bg-neutral-100"
                 >
                   <IconPlus size={16} />
                   Add
@@ -342,10 +367,10 @@ export default function PlanCard({
           ) : (
             <button
               onClick={() => setAdding(true)}
-              className="w-full inline-flex items-center justify-center gap-2 h-10 text-sm text-neutral-400 border border-dashed border-neutral-800 rounded-md"
+	              className="inline-flex h-10 w-full items-center justify-center gap-2 rounded-md border border-dashed border-neutral-200 text-sm font-medium text-neutral-500 transition-colors hover:bg-neutral-50 dark:border-white/10 dark:text-neutral-400 dark:hover:bg-white/5"
             >
               <IconPlus size={16} />
-              Add item
+              Add Entry
             </button>
           )}
         </div>

@@ -25,7 +25,7 @@ import type { ComponentType } from "react";
 interface SectionIconEntry {
   name: string;
   label: string;
-  icon: ComponentType<{ size?: number; className?: string }>;
+  icon: ComponentType<{ size?: number; strokeWidth?: number; className?: string }>;
 }
 
 export const SECTION_ICONS: SectionIconEntry[] = [

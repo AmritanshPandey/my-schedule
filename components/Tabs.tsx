@@ -17,15 +17,15 @@ export default function Tabs({ tabs }: TabsProps) {
 
   return (
     <div>
-      <div className="flex gap-1 bg-neutral-900 border border-neutral-800 rounded-xl p-1 mb-6 w-full">
+      <div className="mb-5 flex w-full rounded-lg border border-neutral-200 bg-neutral-100 p-1 dark:border-white/10 dark:bg-white/5">
         {tabs.map((tab, i) => (
           <button
             key={tab.label}
             onClick={() => setActive(i)}
-            className={`flex-1 inline-flex items-center justify-center gap-2 h-10 text-sm font-medium rounded-lg ${
+            className={`flex h-10 flex-1 items-center justify-center gap-2 rounded-md text-sm font-medium transition-all duration-200 ${
               active === i
-                ? "bg-neutral-800 text-white"
-                : "text-neutral-500"
+                ? "bg-white border border-neutral-300 text-neutral-900 dark:border-white/10 dark:bg-neutral-800 dark:text-white"
+                : "bg-transparent text-neutral-500 hover:bg-neutral-200/60 hover:text-neutral-700 dark:text-neutral-400 dark:hover:bg-white/5 dark:hover:text-neutral-300"
             }`}
           >
             {tab.icon}
@@ -33,7 +33,9 @@ export default function Tabs({ tabs }: TabsProps) {
           </button>
         ))}
       </div>
-      <div>{tabs[active].content}</div>
+      <div key={tabs[active].label} className="animate-panel-in">
+        {tabs[active].content}
+      </div>
     </div>
   );
 }
