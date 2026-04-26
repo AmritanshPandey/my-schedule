@@ -5,7 +5,7 @@ import PlanItem from "./PlanItem";
 import { ScheduleEntry, MetaField } from "./ScheduleItem";
 import { IconCheck, IconEdit, IconGripVertical, IconPlus, IconTrash, IconX } from "@tabler/icons-react";
 import { SummaryConfig } from "@/lib/useScheduleDB";
-import { SECTION_ICONS } from "@/components/SectionIcons";
+import { SECTION_ICONS, getIconPickerStyle } from "@/components/SectionIcons";
 import type { AccentColor } from "@/lib/colorSystem";
 import { accentStyles, colorFromIcon, resolveAccentColor } from "@/lib/colorSystem";
 import { DndContext, DragEndEvent, PointerSensor, useSensor, useSensors } from "@dnd-kit/core";
@@ -215,25 +215,25 @@ export default function PlanCard({
                 placeholder="Plan name"
                 className="h-10 w-full rounded-md border border-neutral-200 bg-white px-3 text-sm text-neutral-900 outline-none transition-colors focus:border-neutral-400 dark:border-white/10 dark:bg-neutral-900 dark:text-white dark:focus:border-white/20"
               />
-              <div className="grid grid-cols-5 gap-3">
-                {SECTION_ICONS.map(({ name, label, icon: Icon }) => (
-                  <button
-                    key={name}
-                    type="button"
-                    title={label}
-                    onClick={() => {
-                      setEditIconName(name);
-                      setEditColor(colorFromIcon(name));
-                    }}
-                    className={`h-10 w-10 flex items-center justify-center rounded-md border transition-colors ${
-                      editIconName === name
-                        ? `${accentStyles(editColor).border} ${accentStyles(editColor).tint} ${accentStyles(editColor).text}`
-                        : "border-neutral-200 text-neutral-500 hover:border-neutral-300 dark:border-neutral-800 dark:text-neutral-500 dark:hover:border-neutral-600"
-                    }`}
-                  >
-                    <Icon size={20} strokeWidth={1.5} />
-                  </button>
-                ))}
+              <div className="grid grid-cols-5 gap-1.5">
+                {SECTION_ICONS.map(({ name, label, icon: Icon }) => {
+                  const ic = getIconPickerStyle(name);
+                  const sel = editIconName === name;
+                  return (
+                    <button
+                      key={name}
+                      type="button"
+                      title={label}
+                      onClick={() => { setEditIconName(name); setEditColor(colorFromIcon(name)); }}
+                      className={`flex flex-col items-center justify-center gap-1 rounded-xl py-2.5 transition-all duration-150 ${
+                        sel ? `${ic.solid} shadow-sm scale-[1.04]` : `${ic.tint} ${ic.text} hover:scale-[1.04]`
+                      }`}
+                    >
+                      <Icon size={17} strokeWidth={1.5} />
+                      <span className={`text-[9px] font-semibold leading-none ${sel ? "text-white/80" : ""}`}>{label}</span>
+                    </button>
+                  );
+                })}
               </div>
               <input
                 value={editMetaFields}
@@ -303,22 +303,22 @@ export default function PlanCard({
 
         <div className="px-4 pb-4">
           {adding ? (
-	            <div className="space-y-3 rounded-xl border border-neutral-200/80 bg-neutral-50/80 p-4 dark:border-white/[0.08] dark:bg-neutral-950">
-              
+            <div className="space-y-3 rounded-xl border border-neutral-200/80 bg-neutral-50/80 p-4 dark:border-white/[0.08] dark:bg-white/[0.03]">
               <div className="flex flex-col gap-2">
                 <input
                   value={time}
                   onChange={(e) => setTime(e.target.value)}
-                  placeholder="Time"
+                  placeholder="Time (e.g. 8:00 AM)"
                   autoFocus
-	                  className="h-10 w-full rounded-md border border-neutral-200 bg-white px-3 text-sm font-mono text-neutral-600 outline-none transition-colors focus:border-neutral-400 sm:w-24 dark:border-white/10 dark:bg-neutral-900 dark:text-neutral-300 dark:focus:border-white/20"
+                  onKeyDown={(e) => { if (e.key === "Enter") handleAdd(); if (e.key === "Escape") { setAdding(false); setTime(""); setTask(""); setMetaValues({}); } }}
+                  className="h-10 w-full rounded-lg border border-neutral-200 bg-white px-3 text-sm text-neutral-900 outline-none transition-colors placeholder:text-neutral-400 focus:border-neutral-400 dark:border-white/10 dark:bg-white/[0.04] dark:text-white dark:placeholder:text-neutral-500 dark:focus:border-white/20"
                 />
-
                 <input
                   value={task}
                   onChange={(e) => setTask(e.target.value)}
                   placeholder="Description"
-	                  className="h-10 flex-1 rounded-md border border-neutral-200 bg-white px-3 text-sm text-neutral-900 outline-none transition-colors focus:border-neutral-400 dark:border-white/10 dark:bg-neutral-900 dark:text-white dark:focus:border-white/20"
+                  onKeyDown={(e) => { if (e.key === "Enter") handleAdd(); if (e.key === "Escape") { setAdding(false); setTime(""); setTask(""); setMetaValues({}); } }}
+                  className="h-10 w-full rounded-lg border border-neutral-200 bg-white px-3 text-sm text-neutral-900 outline-none transition-colors placeholder:text-neutral-400 focus:border-neutral-400 dark:border-white/10 dark:bg-white/[0.04] dark:text-white dark:placeholder:text-neutral-500 dark:focus:border-white/20"
                 />
               </div>
 
@@ -326,23 +326,15 @@ export default function PlanCard({
                 <div className="grid grid-cols-2 gap-2">
                   {metaFields.map((field) => (
                     <div key={field} className="relative">
-                      <span className="absolute left-3 top-1/2 -translate-y-1/2 text-xs text-neutral-500 pointer-events-none">
+                      <span className="absolute left-3 top-1/2 -translate-y-1/2 text-xs font-medium text-neutral-400 dark:text-neutral-500 pointer-events-none">
                         {field}
                       </span>
                       <input
                         value={metaValues[field] ?? ""}
-                        onChange={(e) =>
-                          setMetaValues((prev) => ({
-                            ...prev,
-                            [field]: e.target.value,
-                          }))
-                        }
-                        placeholder="optional"
-                        onKeyDown={(e) => {
-                          if (e.key === "Enter") handleAdd();
-                          if (e.key === "Escape") setAdding(false);
-                        }}
-	                        className="h-10 w-full rounded-md border border-neutral-200 bg-white pl-20 pr-3 text-sm text-neutral-900 outline-none transition-colors focus:border-neutral-400 dark:border-white/10 dark:bg-neutral-900 dark:text-white dark:focus:border-white/20"
+                        onChange={(e) => setMetaValues((prev) => ({ ...prev, [field]: e.target.value }))}
+                        placeholder="—"
+                        onKeyDown={(e) => { if (e.key === "Enter") handleAdd(); if (e.key === "Escape") setAdding(false); }}
+                        className="h-10 w-full rounded-lg border border-neutral-200 bg-white pl-20 pr-3 text-sm text-neutral-900 outline-none transition-colors focus:border-neutral-400 dark:border-white/10 dark:bg-white/[0.04] dark:text-white dark:focus:border-white/20"
                       />
                     </div>
                   ))}
@@ -352,24 +344,18 @@ export default function PlanCard({
               <div className="flex gap-2 justify-end">
                 <button
                   type="button"
-                  onClick={() => {
-                    setAdding(false);
-                    setTime("");
-                    setTask("");
-                    setMetaValues({});
-                  }}
-                  className="inline-flex h-9 items-center gap-1.5 rounded-md border border-neutral-200 px-3 text-sm font-medium text-neutral-600 transition-colors hover:bg-neutral-50 dark:border-white/10 dark:text-neutral-400 dark:hover:bg-white/5"
+                  onClick={() => { setAdding(false); setTime(""); setTask(""); setMetaValues({}); }}
+                  className="inline-flex h-9 items-center gap-1.5 rounded-lg border border-neutral-200 px-3 text-sm font-medium text-neutral-600 transition-colors hover:bg-neutral-50 dark:border-white/10 dark:text-neutral-400 dark:hover:bg-white/5"
                 >
                   <IconX size={15} />
                   Cancel
                 </button>
-
                 <button
                   type="button"
                   onClick={handleAdd}
-                  className="inline-flex h-9 items-center gap-1.5 rounded-md bg-neutral-900 px-3 text-sm font-medium text-white transition-colors hover:bg-neutral-800 dark:bg-white dark:text-neutral-900 dark:hover:bg-neutral-100"
+                  className={`inline-flex h-9 items-center gap-1.5 rounded-lg px-3 text-sm font-medium text-white transition-colors hover:opacity-90 ${accent.iconSolid}`}
                 >
-                  <IconPlus size={16} />
+                  <IconPlus size={15} />
                   Add
                 </button>
               </div>

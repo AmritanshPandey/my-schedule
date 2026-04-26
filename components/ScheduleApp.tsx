@@ -8,8 +8,8 @@ import { ScheduleEntry } from "@/components/ScheduleItem";
 import { useScheduleDB, DAYS, DAY_LABELS, DayKey, Plan, SummaryConfig, Task } from "@/lib/useScheduleDB";
 import type { AccentColor } from "@/lib/colorSystem";
 import { accentStyles, colorFromIcon, resolveAccentColor, timelineCardStyles } from "@/lib/colorSystem";
-import { SECTION_ICONS } from "@/components/SectionIcons";
-import { IconActivity, IconCheck, IconChecklist, IconEdit, IconGripVertical, IconPlus, IconTrash, IconX } from "@tabler/icons-react";
+import { SECTION_ICONS, getIconPickerStyle } from "@/components/SectionIcons";
+import { IconActivity, IconCheck, IconChecklist, IconEdit, IconGripVertical, IconLayoutList, IconPlus, IconTimeline, IconTrash, IconX } from "@tabler/icons-react";
 import { DndContext, DragEndEvent, PointerSensor, useSensor, useSensors } from "@dnd-kit/core";
 import { SortableContext, useSortable, verticalListSortingStrategy, arrayMove } from "@dnd-kit/sortable";
 
@@ -239,7 +239,6 @@ export default function ScheduleApp() {
   const [newPlanMetaFields, setNewPlanMetaFields] = useState("");
   const [nowMinutes, setNowMinutes] = useState(getCurrentMinutes);
   const timelineScrollRef = useRef<HTMLDivElement | null>(null);
-  const newPlanAccent = accentStyles(colorFromIcon(newPlanIconName));
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 8 } }));
 
   useEffect(() => {
@@ -471,15 +470,19 @@ export default function ScheduleApp() {
   function handleReorderTasks(activeId: string, overId: string) {
     setSchedule((prev) => {
       const tasks = prev.activities[activeDay];
-      const oldIndex = tasks.findIndex((task) => task.id === activeId);
-      const newIndex = tasks.findIndex((task) => task.id === overId);
-      if (oldIndex === -1 || newIndex === -1) return prev;
+      const activeTask = tasks.find((t) => t.id === activeId);
+      const overTask = tasks.find((t) => t.id === overId);
+      if (!activeTask || !overTask) return prev;
 
       return {
         ...prev,
         activities: {
           ...prev.activities,
-          [activeDay]: arrayMove(tasks, oldIndex, newIndex),
+          [activeDay]: tasks.map((task) => {
+            if (task.id === activeId) return { ...task, startTime: overTask.startTime, endTime: overTask.endTime };
+            if (task.id === overId) return { ...task, startTime: activeTask.startTime, endTime: activeTask.endTime };
+            return task;
+          }),
         },
       };
     });
@@ -500,7 +503,7 @@ export default function ScheduleApp() {
   }
 
   const storedDayTasks = schedule.activities[activeDay];
-  const dayTasks = editMode ? storedDayTasks : sortTasksByTime(storedDayTasks);
+  const dayTasks = sortTasksByTime(storedDayTasks);
   const timelineHours = Array.from(
     { length: TIMELINE_END_HOUR - TIMELINE_START_HOUR + 1 },
     (_, index) => TIMELINE_START_HOUR + index
@@ -588,7 +591,6 @@ export default function ScheduleApp() {
     dragHandleProps?: { attributes: Record<string, unknown>; listeners: Record<string, unknown> },
     compact = false
   ) {
-    const accent = accentStyles(task.color);
     const tone = timelineCardStyles(task.color);
     const iconEntry = SECTION_ICONS.find((entry) => entry.name === task.icon) ?? SECTION_ICONS[0];
     const TaskIcon = iconEntry.icon;
@@ -596,91 +598,112 @@ export default function ScheduleApp() {
 
     if (editingTaskId === task.id) {
       return (
-        <div className="rounded-xl p-4 w-full min-w-0 space-y-3 border border-neutral-200/80 bg-white shadow-sm transition-colors dark:border-white/[0.08] dark:bg-neutral-900 dark:shadow-black/20">
-          <div className="grid grid-cols-5 gap-3">
-            {SECTION_ICONS.map(({ name, label, icon: Icon }) => (
+        <div className="rounded-xl w-full min-w-0 border border-neutral-200/80 bg-white shadow-sm transition-colors dark:border-white/[0.08] dark:bg-neutral-900 dark:shadow-black/20 overflow-hidden">
+          <div className={`flex items-center gap-2.5 border-b px-4 py-3 border-neutral-100 dark:border-white/[0.07] ${accentStyles(editingTask.color).tint}`}>
+            <div className={`flex h-6 w-6 items-center justify-center rounded-md ${accentStyles(editingTask.color).iconSolid}`}>
+              {(() => { const ic = SECTION_ICONS.find(i => i.name === editingTask.icon); const EI = (ic ?? SECTION_ICONS[0]).icon; return <EI size={13} strokeWidth={2} />; })()}
+            </div>
+            <p className="text-xs font-semibold text-neutral-900 dark:text-white">Edit time block</p>
+          </div>
+          <div className="space-y-3 p-4">
+            <div className="grid grid-cols-5 gap-1.5">
+              {SECTION_ICONS.map(({ name, label, icon: Icon }) => {
+                const ic = getIconPickerStyle(name);
+                const sel = editingTask.icon === name;
+                return (
+                  <button
+                    key={name}
+                    type="button"
+                    title={label}
+                    onClick={() => setEditingTask((prev) => ({ ...prev, icon: name, color: colorFromIcon(name) }))}
+                    className={`flex flex-col items-center justify-center gap-1 rounded-xl py-2.5 transition-all duration-150 ${
+                      sel ? `${ic.solid} shadow-sm scale-[1.04]` : `${ic.tint} ${ic.text} hover:scale-[1.04]`
+                    }`}
+                  >
+                    <Icon size={17} strokeWidth={1.5} />
+                    <span className={`text-[9px] font-semibold leading-none ${sel ? "text-white/80" : ""}`}>{label}</span>
+                  </button>
+                );
+              })}
+            </div>
+            <div className="space-y-2">
+              <input
+                value={editingTask.title}
+                onChange={(e) => setEditingTask((prev) => ({ ...prev, title: e.target.value }))}
+                placeholder="Task title"
+                onKeyDown={(e) => { if (e.key === "Enter") saveEditingTask(task.id); if (e.key === "Escape") cancelEditingTask(); }}
+                className="h-10 w-full rounded-lg border border-neutral-200 bg-neutral-50 px-3 text-sm text-neutral-900 outline-none transition-colors placeholder:text-neutral-400 focus:border-neutral-300 focus:bg-white dark:border-white/10 dark:bg-white/[0.04] dark:text-white dark:placeholder:text-neutral-500 dark:focus:border-white/20 dark:focus:bg-white/[0.08]"
+              />
+              <input
+                value={editingTask.description}
+                onChange={(e) => setEditingTask((prev) => ({ ...prev, description: e.target.value }))}
+                placeholder="Description (optional)"
+                onKeyDown={(e) => { if (e.key === "Enter") saveEditingTask(task.id); if (e.key === "Escape") cancelEditingTask(); }}
+                className="h-10 w-full rounded-lg border border-neutral-200 bg-neutral-50 px-3 text-sm text-neutral-900 outline-none transition-colors placeholder:text-neutral-400 focus:border-neutral-300 focus:bg-white dark:border-white/10 dark:bg-white/[0.04] dark:text-white dark:placeholder:text-neutral-500 dark:focus:border-white/20 dark:focus:bg-white/[0.08]"
+              />
+            </div>
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <p className="mb-1.5 text-xs font-medium text-neutral-500 dark:text-neutral-400">Start</p>
+                <input
+                  value={editingTask.startTime}
+                  onChange={(e) => setEditingTask((prev) => ({ ...prev, startTime: e.target.value }))}
+                  type="time"
+                  aria-label="Edit task start time"
+                  onKeyDown={(e) => { if (e.key === "Enter") saveEditingTask(task.id); if (e.key === "Escape") cancelEditingTask(); }}
+                  className="h-10 w-full rounded-lg border border-neutral-200 bg-neutral-50 px-3 text-sm text-neutral-900 outline-none transition-colors focus:border-neutral-300 focus:bg-white dark:border-white/10 dark:bg-white/[0.04] dark:text-white dark:focus:border-white/20 dark:focus:bg-white/[0.08]"
+                />
+              </div>
+              <div>
+                <p className="mb-1.5 text-xs font-medium text-neutral-500 dark:text-neutral-400">End</p>
+                <input
+                  value={editingTask.endTime}
+                  onChange={(e) => setEditingTask((prev) => ({ ...prev, endTime: e.target.value }))}
+                  type="time"
+                  aria-label="Edit task end time"
+                  onKeyDown={(e) => { if (e.key === "Enter") saveEditingTask(task.id); if (e.key === "Escape") cancelEditingTask(); }}
+                  className="h-10 w-full rounded-lg border border-neutral-200 bg-neutral-50 px-3 text-sm text-neutral-900 outline-none transition-colors focus:border-neutral-300 focus:bg-white dark:border-white/10 dark:bg-white/[0.04] dark:text-white dark:focus:border-white/20 dark:focus:bg-white/[0.08]"
+                />
+              </div>
+            </div>
+            <div className="flex gap-2 pt-1">
               <button
-                key={name}
                 type="button"
-                title={label}
-                onClick={() =>
-                  setEditingTask((prev) => ({
-                    ...prev,
-                    icon: name,
-                    color: colorFromIcon(name),
-                  }))
-                }
-                className={`h-12 w-12 flex items-center justify-center rounded-lg border ${
-                  editingTask.icon === name
-                    ? `${accent.border} ${accent.tint} ${accent.text}`
-                    : "border-neutral-200 text-neutral-500 hover:border-neutral-300 dark:border-white/10 dark:text-neutral-500 dark:hover:border-white/20"
-                }`}
+                onClick={() => saveEditingTask(task.id)}
+                className={`inline-flex flex-1 h-10 items-center justify-center gap-1.5 rounded-lg text-sm font-medium transition-all hover:opacity-90 ${accentStyles(editingTask.color).iconSolid}`}
               >
-                <Icon size={20} strokeWidth={1.5} />
+                <IconCheck size={15} />
+                Save
               </button>
-            ))}
+              <button
+                type="button"
+                onClick={cancelEditingTask}
+                className="inline-flex h-10 items-center gap-1.5 rounded-lg border border-neutral-200 px-4 text-sm font-medium text-neutral-600 transition-colors hover:bg-neutral-50 dark:border-white/10 dark:text-neutral-400 dark:hover:bg-white/5"
+              >
+                <IconX size={15} />
+                Cancel
+              </button>
+            </div>
           </div>
-          <input
-            value={editingTask.title}
-            onChange={(e) => setEditingTask((prev) => ({ ...prev, title: e.target.value }))}
-            placeholder="Task title"
-            onKeyDown={(e) => {
-              if (e.key === "Enter") saveEditingTask(task.id);
-              if (e.key === "Escape") cancelEditingTask();
-            }}
-            className="w-full min-w-0 rounded-md border border-neutral-200 bg-white px-3 py-2 text-sm text-neutral-900 placeholder:text-neutral-400 focus:outline-none focus:border-neutral-400 dark:border-white/10 dark:bg-neutral-950 dark:text-white dark:placeholder:text-neutral-500 dark:focus:border-white/20"
-          />
-          <input
-            value={editingTask.description}
-            onChange={(e) => setEditingTask((prev) => ({ ...prev, description: e.target.value }))}
-            placeholder="Description (optional)"
-            onKeyDown={(e) => {
-              if (e.key === "Enter") saveEditingTask(task.id);
-              if (e.key === "Escape") cancelEditingTask();
-            }}
-            className="w-full min-w-0 rounded-md border border-neutral-200 bg-white px-3 py-2 text-sm text-neutral-900 placeholder:text-neutral-400 focus:outline-none focus:border-neutral-400 dark:border-white/10 dark:bg-neutral-950 dark:text-white dark:placeholder:text-neutral-500 dark:focus:border-white/20"
-          />
-          <div className="flex gap-2 min-w-0">
-            <input
-              value={editingTask.startTime}
-              onChange={(e) => setEditingTask((prev) => ({ ...prev, startTime: e.target.value }))}
-              type="time"
-              aria-label="Edit task start time"
-              title="Edit task start time"
-              onKeyDown={(e) => {
-                if (e.key === "Enter") saveEditingTask(task.id);
-                if (e.key === "Escape") cancelEditingTask();
-              }}
-              className="w-full min-w-0 rounded-md border border-neutral-200 bg-white px-3 py-2 text-sm text-neutral-900 focus:outline-none focus:border-neutral-400 dark:border-white/10 dark:bg-neutral-950 dark:text-white dark:focus:border-white/20"
-            />
-            <input
-              value={editingTask.endTime}
-              onChange={(e) => setEditingTask((prev) => ({ ...prev, endTime: e.target.value }))}
-              type="time"
-              aria-label="Edit task end time"
-              title="Edit task end time"
-              onKeyDown={(e) => {
-                if (e.key === "Enter") saveEditingTask(task.id);
-                if (e.key === "Escape") cancelEditingTask();
-              }}
-              className="w-full min-w-0 rounded-md border border-neutral-200 bg-white px-3 py-2 text-sm text-neutral-900 focus:outline-none focus:border-neutral-400 dark:border-white/10 dark:bg-neutral-950 dark:text-white dark:focus:border-white/20"
-            />
-          </div>
-          <div className="flex gap-2">
-            <button
-              onClick={() => saveEditingTask(task.id)}
-              className="inline-flex items-center gap-1.5 h-10 px-4 rounded-md bg-neutral-900 text-white text-sm hover:bg-neutral-800 dark:bg-white dark:text-neutral-900 dark:hover:bg-neutral-100"
-            >
-              <IconCheck size={16} />
-              Save
-            </button>
-            <button
-              onClick={cancelEditingTask}
-              className="inline-flex items-center gap-1.5 h-10 px-4 rounded-md border border-neutral-200 text-neutral-600 text-sm hover:bg-neutral-50 dark:border-white/10 dark:text-neutral-400 dark:hover:bg-white/5"
-            >
-              <IconX size={16} />
-              Cancel
-            </button>
+        </div>
+      );
+    }
+
+    if (compact) {
+      return (
+        <div className={`${cardClassName} transition-[background-color,border-color,box-shadow] duration-200 ease-out ${tone.cardBg} ${tone.cardBorder} ${tone.shadow}`}>
+          <div className="flex h-full items-center gap-2 min-w-0">
+            <div className={`h-5 w-5 shrink-0 rounded-md flex items-center justify-center ${tone.iconBg} ${tone.iconText}`}>
+              <TaskIcon size={11} strokeWidth={2} />
+            </div>
+            <span className={`text-xs font-semibold leading-tight truncate flex-1 min-w-0 ${tone.title}`}>
+              {task.title}
+            </span>
+            {duration && (
+              <span className={`shrink-0 text-[10px] font-semibold px-1.5 py-0.5 rounded-full border ${tone.durationBadge}`}>
+                {duration}
+              </span>
+            )}
           </div>
         </div>
       );
@@ -688,31 +711,33 @@ export default function ScheduleApp() {
 
     return (
       <div className={`${cardClassName} transition-[background-color,border-color,box-shadow] duration-200 ease-out ${tone.cardBg} ${tone.cardBorder} ${tone.shadow}`}>
-        <div className="flex items-start justify-between gap-2">
-          <div className="min-w-0 flex-1 space-y-1 break-words">
-            <div className="flex items-start gap-2 min-w-0">
-              <div className={`mt-0.5 ${compact ? "h-6 w-6" : "h-8 w-8"} shrink-0 rounded-md flex items-center justify-center ${tone.iconBg} ${tone.iconText}`}>
-                <TaskIcon size={compact ? 15 : 18} strokeWidth={1.7} />
-              </div>
-              <div className="min-w-0 flex-1">
-                <h3 className={`${compact ? "text-sm" : "text-[15px]"} font-semibold leading-snug text-neutral-900 dark:text-white`}>
-                  {task.title}
-                </h3>
-                {!compact && task.description && (
-                  <p className="mt-0.5 text-[13px] leading-relaxed text-neutral-500 dark:text-neutral-400">
-                    {task.description}
-                  </p>
-                )}
-                <div className={`mt-1.5 flex flex-wrap items-center gap-2 ${compact ? "text-[11px]" : "text-xs"} font-medium text-neutral-500 dark:text-neutral-400`}>
-                  <span>{task.startTime} - {task.endTime}</span>
-                  {duration && (
-                    <span className={`rounded border bg-neutral-50 px-2 py-0.5 border-neutral-200 dark:bg-white/[0.06] dark:border-white/10 ${accent.text}`}>
-                      {duration}
-                    </span>
-                  )}
-                </div>
-              </div>
+        <div className="flex items-start justify-between gap-2 h-full">
+          <div className="min-w-0 flex-1 flex flex-col gap-1.5">
+            {/* Time + duration — first so you orient to when before what */}
+            <div className="flex items-center gap-2 flex-wrap">
+              <span className={`text-[11px] font-medium tracking-tight ${tone.time}`}>
+                {task.startTime} – {task.endTime}
+              </span>
+              {duration && (
+                <span className={`text-[10px] font-semibold px-1.5 py-0.5 rounded-full border ${tone.durationBadge}`}>
+                  {duration}
+                </span>
+              )}
             </div>
+            {/* Icon + title */}
+            <div className="flex items-center gap-2 min-w-0">
+              <div className={`h-6 w-6 shrink-0 rounded-md flex items-center justify-center ${tone.iconBg} ${tone.iconText}`}>
+                <TaskIcon size={13} strokeWidth={2} />
+              </div>
+              <h3 className={`text-[14px] font-semibold leading-snug break-words ${tone.title}`}>
+                {task.title}
+              </h3>
+            </div>
+            {task.description && (
+              <p className={`text-[12px] leading-relaxed ${tone.description}`}>
+                {task.description}
+              </p>
+            )}
           </div>
 
           {editMode && (
@@ -900,107 +925,101 @@ export default function ScheduleApp() {
 	                      )}
 
                       {addingTask ? (
-                        <div className="space-y-3 rounded-xl border border-neutral-200/80 bg-white p-4 shadow-sm dark:border-white/[0.08] dark:bg-neutral-900 dark:shadow-black/20">
-                          <p className="text-sm font-semibold text-neutral-900 dark:text-white">New time block</p>
-                          <div className="grid grid-cols-5 gap-3">
-                            {SECTION_ICONS.map(({ name, label, icon: Icon }) => (
+                        <div className="rounded-xl border border-neutral-200/80 bg-white shadow-sm dark:border-white/[0.08] dark:bg-neutral-900 dark:shadow-black/20 overflow-hidden">
+                          {/* Colored header reflecting the selected category */}
+                          <div className={`flex items-center gap-2.5 border-b px-5 py-3.5 border-neutral-100 dark:border-white/[0.07] ${accentStyles(newTask.color).tint}`}>
+                            <div className={`flex h-7 w-7 items-center justify-center rounded-lg ${accentStyles(newTask.color).iconSolid}`}>
+                              {(() => { const ic = SECTION_ICONS.find(i => i.name === newTask.icon); const HI = (ic ?? SECTION_ICONS[0]).icon; return <HI size={14} strokeWidth={2} />; })()}
+                            </div>
+                            <p className="text-sm font-semibold text-neutral-900 dark:text-white">New time block</p>
+                          </div>
+
+                          <div className="space-y-4 p-5">
+                            {/* Icon picker — each icon in its own category color */}
+                            <div className="grid grid-cols-5 gap-1.5">
+                              {SECTION_ICONS.map(({ name, label, icon: Icon }) => {
+                                const ic = getIconPickerStyle(name);
+                                const sel = newTask.icon === name;
+                                return (
+                                  <button
+                                    key={name}
+                                    type="button"
+                                    title={label}
+                                    onClick={() => setNewTask((prev) => ({ ...prev, icon: name, color: colorFromIcon(name) }))}
+                                    className={`flex flex-col items-center justify-center gap-1 rounded-xl py-2.5 transition-all duration-150 ${
+                                      sel ? `${ic.solid} shadow-sm scale-[1.04]` : `${ic.tint} ${ic.text} hover:scale-[1.04]`
+                                    }`}
+                                  >
+                                    <Icon size={17} strokeWidth={1.5} />
+                                    <span className={`text-[9px] font-semibold leading-none ${sel ? "text-white/80" : ""}`}>{label}</span>
+                                  </button>
+                                );
+                              })}
+                            </div>
+
+                            {/* Title + note */}
+                            <div className="space-y-2">
+                              <input
+                                value={newTask.title}
+                                onChange={(e) => setNewTask((prev) => ({ ...prev, title: e.target.value }))}
+                                placeholder="Block title"
+                                autoFocus
+                                onKeyDown={(e) => { if (e.key === "Enter") handleAddTask(); if (e.key === "Escape") { setAddingTask(false); setNewTask(emptyTaskDraft()); } }}
+                                className="h-10 w-full rounded-lg border border-neutral-200 bg-neutral-50 px-3 text-sm text-neutral-900 outline-none transition-colors placeholder:text-neutral-400 focus:border-neutral-300 focus:bg-white dark:border-white/10 dark:bg-white/[0.04] dark:text-white dark:placeholder:text-neutral-500 dark:focus:border-white/20 dark:focus:bg-white/[0.08]"
+                              />
+                              <input
+                                value={newTask.description}
+                                onChange={(e) => setNewTask((prev) => ({ ...prev, description: e.target.value }))}
+                                placeholder="Short note (optional)"
+                                onKeyDown={(e) => { if (e.key === "Enter") handleAddTask(); if (e.key === "Escape") { setAddingTask(false); setNewTask(emptyTaskDraft()); } }}
+                                className="h-10 w-full rounded-lg border border-neutral-200 bg-neutral-50 px-3 text-sm text-neutral-900 outline-none transition-colors placeholder:text-neutral-400 focus:border-neutral-300 focus:bg-white dark:border-white/10 dark:bg-white/[0.04] dark:text-white dark:placeholder:text-neutral-500 dark:focus:border-white/20 dark:focus:bg-white/[0.08]"
+                              />
+                            </div>
+
+                            {/* Time — labeled columns */}
+                            <div className="grid grid-cols-2 gap-3">
+                              <div>
+                                <p className="mb-1.5 text-xs font-medium text-neutral-500 dark:text-neutral-400">Start</p>
+                                <input
+                                  value={newTask.startTime}
+                                  onChange={(e) => setNewTask((prev) => ({ ...prev, startTime: e.target.value }))}
+                                  type="time"
+                                  aria-label="New task start time"
+                                  onKeyDown={(e) => { if (e.key === "Enter") handleAddTask(); if (e.key === "Escape") { setAddingTask(false); setNewTask(emptyTaskDraft()); } }}
+                                  className="h-10 w-full rounded-lg border border-neutral-200 bg-neutral-50 px-3 text-sm text-neutral-900 outline-none transition-colors focus:border-neutral-300 focus:bg-white dark:border-white/10 dark:bg-white/[0.04] dark:text-white dark:focus:border-white/20 dark:focus:bg-white/[0.08]"
+                                />
+                              </div>
+                              <div>
+                                <p className="mb-1.5 text-xs font-medium text-neutral-500 dark:text-neutral-400">End</p>
+                                <input
+                                  value={newTask.endTime}
+                                  onChange={(e) => setNewTask((prev) => ({ ...prev, endTime: e.target.value }))}
+                                  type="time"
+                                  aria-label="New task end time"
+                                  onKeyDown={(e) => { if (e.key === "Enter") handleAddTask(); if (e.key === "Escape") { setAddingTask(false); setNewTask(emptyTaskDraft()); } }}
+                                  className="h-10 w-full rounded-lg border border-neutral-200 bg-neutral-50 px-3 text-sm text-neutral-900 outline-none transition-colors focus:border-neutral-300 focus:bg-white dark:border-white/10 dark:bg-white/[0.04] dark:text-white dark:focus:border-white/20 dark:focus:bg-white/[0.08]"
+                                />
+                              </div>
+                            </div>
+
+                            {/* Actions — save button uses category color */}
+                            <div className="flex gap-2 pt-1">
                               <button
-                                key={name}
                                 type="button"
-                                title={label}
-                                onClick={() =>
-                                  setNewTask((prev) => ({
-                                    ...prev,
-                                    icon: name,
-                                    color: colorFromIcon(name),
-                                  }))
-                                }
-                                className={`h-10 w-10 flex items-center justify-center rounded-lg border transition-colors ${
-                                  newTask.icon === name
-                                    ? `${accentStyles(newTask.color).border} ${accentStyles(newTask.color).tint} ${accentStyles(newTask.color).text}`
-                                    : "border-neutral-200 text-neutral-500 hover:border-neutral-300 dark:border-white/10 dark:text-neutral-500 dark:hover:border-white/20"
-                                }`}
+                                onClick={handleAddTask}
+                                className={`inline-flex flex-1 h-10 items-center justify-center gap-1.5 rounded-lg text-sm font-medium transition-all hover:opacity-90 ${accentStyles(newTask.color).iconSolid}`}
                               >
-                                <Icon size={20} strokeWidth={1.5} />
+                                <IconPlus size={15} />
+                                Save Block
                               </button>
-                            ))}
-                          </div>
-                          <input
-                            value={newTask.title}
-                            onChange={(e) => setNewTask((prev) => ({ ...prev, title: e.target.value }))}
-                            placeholder="Block title"
-                            autoFocus
-                            onKeyDown={(e) => {
-                              if (e.key === "Enter") handleAddTask();
-                              if (e.key === "Escape") {
-                                setAddingTask(false);
-                                setNewTask(emptyTaskDraft());
-                              }
-                            }}
-                            className="h-10 w-full rounded-md border border-neutral-200 bg-white px-3 text-sm text-neutral-900 outline-none transition-colors placeholder:text-neutral-400 focus:border-neutral-400 dark:border-white/10 dark:bg-neutral-950 dark:text-white dark:focus:border-white/20"
-                          />
-                          <input
-                            value={newTask.description}
-                            onChange={(e) => setNewTask((prev) => ({ ...prev, description: e.target.value }))}
-                            placeholder="Short note (optional)"
-                            onKeyDown={(e) => {
-                              if (e.key === "Enter") handleAddTask();
-                              if (e.key === "Escape") {
-                                setAddingTask(false);
-                                setNewTask(emptyTaskDraft());
-                              }
-                            }}
-                            className="h-10 w-full rounded-md border border-neutral-200 bg-white px-3 text-sm text-neutral-900 outline-none transition-colors placeholder:text-neutral-400 focus:border-neutral-400 dark:border-white/10 dark:bg-neutral-950 dark:text-white dark:focus:border-white/20 dark:placeholder:text-neutral-500"
-                          />
-                          <div className="flex gap-2">
-                            <input
-                              value={newTask.startTime}
-                              onChange={(e) => setNewTask((prev) => ({ ...prev, startTime: e.target.value }))}
-                              type="time"
-                              aria-label="New task start time"
-                              title="New task start time"
-                              onKeyDown={(e) => {
-                                if (e.key === "Enter") handleAddTask();
-                                if (e.key === "Escape") {
-                                  setAddingTask(false);
-                                  setNewTask(emptyTaskDraft());
-                                }
-                              }}
-                              className="h-10 w-full rounded-md border border-neutral-200 bg-white px-3 text-sm text-neutral-900 outline-none transition-colors focus:border-neutral-400 dark:border-white/10 dark:bg-neutral-950 dark:text-white dark:focus:border-white/20"
-                            />
-                            <input
-                              value={newTask.endTime}
-                              onChange={(e) => setNewTask((prev) => ({ ...prev, endTime: e.target.value }))}
-                              type="time"
-                              aria-label="New task end time"
-                              title="New task end time"
-                              onKeyDown={(e) => {
-                                if (e.key === "Enter") handleAddTask();
-                                if (e.key === "Escape") {
-                                  setAddingTask(false);
-                                  setNewTask(emptyTaskDraft());
-                                }
-                              }}
-                              className="h-10 w-full rounded-md border border-neutral-200 bg-white px-3 text-sm text-neutral-900 outline-none transition-colors focus:border-neutral-400 dark:border-white/10 dark:bg-neutral-950 dark:text-white dark:focus:border-white/20"
-                            />
-                          </div>
-                          <div className="flex gap-2">
-                            <button
-                              onClick={handleAddTask}
-                              className="inline-flex h-10 items-center gap-1.5 rounded-md bg-neutral-900 px-4 text-sm font-medium text-white transition-colors hover:bg-neutral-800 dark:bg-white dark:text-neutral-900 dark:hover:bg-neutral-100"
-                            >
-                              <IconPlus size={16} />
-                              Save Block
-                            </button>
-                            <button
-                              onClick={() => {
-                                setAddingTask(false);
-                                setNewTask(emptyTaskDraft());
-                              }}
-                              className="inline-flex h-10 items-center gap-1.5 rounded-md border border-neutral-200 px-4 text-sm font-medium text-neutral-600 transition-colors hover:bg-neutral-50 dark:border-white/10 dark:text-neutral-400 dark:hover:bg-white/5"
-                            >
-                              Cancel
-                            </button>
+                              <button
+                                type="button"
+                                onClick={() => { setAddingTask(false); setNewTask(emptyTaskDraft()); }}
+                                className="inline-flex h-10 items-center gap-1.5 rounded-lg border border-neutral-200 px-4 text-sm font-medium text-neutral-600 transition-colors hover:bg-neutral-50 dark:border-white/10 dark:text-neutral-400 dark:hover:bg-white/5"
+                              >
+                                Cancel
+                              </button>
+                            </div>
                           </div>
                         </div>
                       ) : (
@@ -1055,22 +1074,25 @@ export default function ScheduleApp() {
                           placeholder="Plan name"
                           className="h-10 w-full rounded-md border border-neutral-200 bg-white px-3 text-sm text-neutral-900 outline-none transition-colors placeholder:text-neutral-400 focus:border-neutral-400 dark:border-white/10 dark:bg-neutral-950 dark:text-white dark:focus:border-white/20"
                         />
-                        <div className="grid grid-cols-5 gap-3">
-                          {SECTION_ICONS.map(({ name, label, icon: Icon }) => (
-                            <button
-                              key={name}
-                              type="button"
-                              title={label}
-                              onClick={() => setNewPlanIconName(name)}
-                              className={`h-10 w-10 flex items-center justify-center rounded-lg border transition-colors ${
-                                newPlanIconName === name
-                                  ? `${newPlanAccent.border} ${newPlanAccent.tint} ${newPlanAccent.text}`
-                                  : "border-neutral-200 text-neutral-500 hover:border-neutral-300 dark:border-white/10 dark:text-neutral-500 dark:hover:border-white/20"
-                              }`}
-                            >
-                              <Icon size={20} strokeWidth={1.5} />
-                            </button>
-                          ))}
+                        <div className="grid grid-cols-5 gap-1.5">
+                          {SECTION_ICONS.map(({ name, label, icon: Icon }) => {
+                            const ic = getIconPickerStyle(name);
+                            const sel = newPlanIconName === name;
+                            return (
+                              <button
+                                key={name}
+                                type="button"
+                                title={label}
+                                onClick={() => setNewPlanIconName(name)}
+                                className={`flex flex-col items-center justify-center gap-1 rounded-xl py-2.5 transition-all duration-150 ${
+                                  sel ? `${ic.solid} shadow-sm scale-[1.04]` : `${ic.tint} ${ic.text} hover:scale-[1.04]`
+                                }`}
+                              >
+                                <Icon size={17} strokeWidth={1.5} />
+                                <span className={`text-[9px] font-semibold leading-none ${sel ? "text-white/80" : ""}`}>{label}</span>
+                              </button>
+                            );
+                          })}
                         </div>
                         <input
                           value={newPlanMetaFields}
@@ -1117,15 +1139,11 @@ export default function ScheduleApp() {
         <button
           type="button"
           onClick={() => setEditMode((prev) => !prev)}
-          className={`fixed bottom-6 right-6 z-20 flex h-12 w-12 items-center justify-center rounded-xl shadow-lg transition-all duration-200 hover:shadow-xl hover:scale-105 ${
-            editMode
-              ? "bg-rose-500 text-white shadow-rose-500/30 hover:bg-rose-600 dark:bg-rose-500 dark:text-white dark:shadow-rose-500/20 dark:hover:bg-rose-600"
-              : "bg-neutral-900 text-white shadow-neutral-900/25 hover:bg-neutral-800 dark:bg-white dark:text-neutral-900 dark:shadow-white/10 dark:hover:bg-neutral-100"
-          }`}
-          title={editMode ? "Exit edit mode" : "Enter edit mode"}
-          aria-label={editMode ? "Exit edit mode" : "Enter edit mode"}
+          className="fixed bottom-6 right-6 z-20 flex h-12 w-12 items-center justify-center rounded-xl bg-neutral-900 text-white shadow-lg shadow-neutral-900/25 transition-all duration-200 hover:scale-105 hover:bg-neutral-800 hover:shadow-xl dark:bg-white dark:text-neutral-900 dark:shadow-white/10 dark:hover:bg-neutral-100"
+          title={editMode ? "Switch to timeline view" : "Switch to list view"}
+          aria-label={editMode ? "Switch to timeline view" : "Switch to list view"}
         >
-          {editMode ? <IconX size={20} strokeWidth={2} /> : <IconPlus size={20} strokeWidth={2} />}
+          {editMode ? <IconTimeline size={20} strokeWidth={2} /> : <IconLayoutList size={20} strokeWidth={2} />}
         </button>
       </div>
     </main>
