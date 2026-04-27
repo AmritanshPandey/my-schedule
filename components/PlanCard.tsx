@@ -345,7 +345,7 @@ export default function PlanCard({
               type="button"
               onClick={() => setPlanEditMode((prev) => !prev)}
               className={`h-7 rounded-md px-2.5 text-xs font-medium transition-all duration-200
-  ${planEditMode
+              ${planEditMode
                   ? "text-cyan-600 dark:text-cyan-300"
                   : "text-neutral-500 hover:text-neutral-700 dark:text-neutral-400 dark:hover:text-neutral-200"
                 }`}
