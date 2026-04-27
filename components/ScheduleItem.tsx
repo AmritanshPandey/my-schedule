@@ -10,8 +10,9 @@ export interface MetaField {
 
 export interface ScheduleEntry {
   id: string;
-  time: string;
+  time?: string;   // kept for backwards-compat, not used in new UI
   task: string;
+  note?: string;
   meta?: MetaField[];
 }
 
@@ -23,17 +24,17 @@ interface ScheduleItemProps {
 
 export default function ScheduleItem({ entry, onEdit, onDelete }: ScheduleItemProps) {
   const [editing, setEditing] = useState(false);
-  const [time, setTime] = useState(entry.time);
+  const [time, setTime] = useState(entry.time ?? "");
   const [task, setTask] = useState(entry.task);
 
   function handleSave() {
-    if (!time.trim() || !task.trim()) return;
-    onEdit(entry.id, { time: time.trim(), task: task.trim() });
+    if (!task.trim()) return;
+    onEdit(entry.id, { time: time.trim() || undefined, task: task.trim() });
     setEditing(false);
   }
 
   function handleCancel() {
-    setTime(entry.time);
+    setTime(entry.time ?? "");
     setTask(entry.task);
     setEditing(false);
   }

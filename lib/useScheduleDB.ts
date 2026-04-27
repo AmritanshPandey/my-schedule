@@ -106,7 +106,7 @@ function splitLegacyTimeRange(value: string): { startTime: string; endTime: stri
 }
 
 function entryToTask(entry: ScheduleEntry, icon: string, description?: string): Task {
-  const { startTime, endTime } = splitLegacyTimeRange(entry.time);
+  const { startTime, endTime } = splitLegacyTimeRange(entry.time ?? "");
   return {
     id: entry.id,
     title: entry.task,

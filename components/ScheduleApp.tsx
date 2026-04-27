@@ -94,12 +94,15 @@ function inferBadgeClass(index: number): string {
     "bg-blue-500/10 text-blue-600 border-blue-500/25 dark:bg-blue-500/15 dark:text-blue-400 dark:border-blue-400/35",
     "bg-emerald-500/10 text-emerald-600 border-emerald-500/25 dark:bg-emerald-500/15 dark:text-emerald-400 dark:border-emerald-400/35",
     "bg-violet-500/10 text-violet-600 border-violet-500/25 dark:bg-violet-500/15 dark:text-violet-400 dark:border-violet-400/35",
+    "bg-amber-500/10 text-amber-600 border-amber-500/25 dark:bg-amber-500/15 dark:text-amber-400 dark:border-amber-400/35",
+    "bg-pink-500/10 text-pink-600 border-pink-500/25 dark:bg-pink-500/15 dark:text-pink-400 dark:border-pink-400/35",
+    "bg-cyan-500/10 text-cyan-600 border-cyan-500/25 dark:bg-cyan-500/15 dark:text-cyan-400 dark:border-cyan-400/35",
   ];
   return cycle[index % cycle.length];
 }
 
 function createSummaryFromMeta(metaFields: string[]): SummaryConfig[] {
-  return metaFields.slice(0, 3).map((field, index) => ({
+  return metaFields.map((field, index) => ({
     label: field,
     metaKey: field,
     unit: inferUnit(field),
@@ -237,7 +240,8 @@ export default function ScheduleApp() {
   const [addingPlan, setAddingPlan] = useState(false);
   const [newPlanTitle, setNewPlanTitle] = useState("");
   const [newPlanIconName, setNewPlanIconName] = useState("brain");
-  const [newPlanMetaFields, setNewPlanMetaFields] = useState("");
+  const [newPlanMetaFields, setNewPlanMetaFields] = useState<string[]>([]);
+  const [newPlanMetaInput, setNewPlanMetaInput] = useState("");
   const [nowMinutes, setNowMinutes] = useState(getCurrentMinutes);
   const timelineScrollRef = useRef<HTMLDivElement | null>(null);
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 8 } }));
@@ -337,14 +341,14 @@ export default function ScheduleApp() {
         [activeDay]: prev.activities[activeDay].map((task) =>
           task.id === taskId
             ? {
-                ...task,
-                title,
-                description: editingTask.description?.trim() || undefined,
-                startTime,
-                endTime,
-                icon: editingTask.icon,
-                color: editingTask.color,
-              }
+              ...task,
+              title,
+              description: editingTask.description?.trim() || undefined,
+              startTime,
+              endTime,
+              icon: editingTask.icon,
+              color: editingTask.color,
+            }
             : task
         ),
       },
@@ -356,19 +360,14 @@ export default function ScheduleApp() {
     const title = newPlanTitle.trim();
     if (!title) return;
 
-    const metaFields = newPlanMetaFields
-      .split(",")
-      .map((f) => f.trim())
-      .filter(Boolean);
-
     const plan: Plan = {
       id: uid(),
       title,
       emoji: newPlanIconName,
       color: colorFromIcon(newPlanIconName),
       items: [],
-      metaFields,
-      summary: createSummaryFromMeta(metaFields),
+      metaFields: newPlanMetaFields,
+      summary: createSummaryFromMeta(newPlanMetaFields),
     };
 
     setSchedule((prev) => ({
@@ -378,7 +377,8 @@ export default function ScheduleApp() {
 
     setNewPlanTitle("");
     setNewPlanIconName("brain");
-    setNewPlanMetaFields("");
+    setNewPlanMetaFields([]);
+    setNewPlanMetaInput("");
     setAddingPlan(false);
   }
 
@@ -388,13 +388,13 @@ export default function ScheduleApp() {
       plans: prev.plans.map((plan) =>
         plan.id === planId
           ? {
-              ...plan,
-              title: updates.title,
-              emoji: updates.emoji,
-              color: updates.color,
-              metaFields: updates.metaFields,
-              summary: createSummaryFromMeta(updates.metaFields),
-            }
+            ...plan,
+            title: updates.title,
+            emoji: updates.emoji,
+            color: updates.color,
+            metaFields: updates.metaFields,
+            summary: createSummaryFromMeta(updates.metaFields),
+          }
           : plan
       ),
     }));
@@ -617,9 +617,8 @@ export default function ScheduleApp() {
                     type="button"
                     title={label}
                     onClick={() => setEditingTask((prev) => ({ ...prev, icon: name, color: colorFromIcon(name) }))}
-                    className={`flex flex-col items-center justify-center gap-1 rounded-xl py-2.5 transition-all duration-150 ${
-                      sel ? `${ic.solid} shadow-sm scale-[1.04]` : `${ic.tint} ${ic.text} hover:scale-[1.04]`
-                    }`}
+                    className={`flex flex-col items-center justify-center gap-1 rounded-xl py-2.5 transition-all duration-150 ${sel ? `${ic.solid} shadow-sm scale-[1.04]` : `${ic.tint} ${ic.text} hover:scale-[1.04]`
+                      }`}
                   >
                     <Icon size={17} strokeWidth={1.5} />
                     <span className={`text-[9px] font-semibold leading-none ${sel ? "text-white/80" : ""}`}>{label}</span>
@@ -805,7 +804,7 @@ export default function ScheduleApp() {
                 label: "Day Activity",
                 icon: <IconActivity size={18} />,
                 content: (
-	                  <div className="space-y-4 pt-1">
+                  <div className="space-y-4 pt-1">
                     <div className="px-1">
                       {/* Heading */}
                       <div className="mb-3 flex items-start justify-between gap-3">
@@ -850,7 +849,7 @@ export default function ScheduleApp() {
 
                     <div className="space-y-4 pb-24">
                       {dayTasks.length === 0 && !addingTask && (
-                        <div className="rounded-xl border border-dashed border-neutral-200 py-10 text-center text-sm text-neutral-400 dark:border-white/10 dark:text-neutral-500">
+                        <div className="rounded-xl border border-dashed border-neutral-200 p-6 text-center text-sm text-neutral-400 dark:border-white/10 dark:text-neutral-500">
                           Nothing is on today&apos;s calendar yet. Add your first block to start mapping the day.
                         </div>
                       )}
@@ -872,58 +871,58 @@ export default function ScheduleApp() {
                           </SortableContext>
                         </DndContext>
                       ) : (
-		                        <div
-		                          ref={timelineScrollRef}
-		                          className="calendar-scrollbar-none relative flex max-h-[72vh] overflow-y-auto overflow-x-hidden rounded-xl border border-neutral-100 bg-white shadow-sm shadow-neutral-200/50 dark:border-white/[0.07] dark:bg-neutral-900 dark:shadow-black/25"
-		                        >
-		                          <div className="sticky left-0 z-20 w-12 shrink-0 bg-white/95 pr-2 sm:w-14 dark:bg-neutral-900/95 backdrop-blur-sm" style={{ height: timelineHeight }}>
-		                            {timelineHours.map((hour, index) => (
-		                              <span
-		                                key={hour}
-		                                className="absolute right-2 text-[11px] font-medium text-neutral-400 dark:text-neutral-500"
-		                                style={{ top: TIMELINE_TOP_PADDING + index * HOUR_HEIGHT - (index === 0 ? 0 : 8) }}
-		                              >
-		                                {formatHourLabel(hour)}
-		                              </span>
-		                            ))}
-		                          </div>
-				                          <div className="relative min-w-0 flex-1 border-l border-neutral-100 dark:border-white/5" style={{ height: timelineHeight }}>
-		                            <div className="absolute inset-0">
-		                              {timelineHours.map((hour, index) => (
-		                                <div
-		                                  key={`grid-${hour}`}
-				                                  className="absolute left-0 right-0 border-t border-neutral-100 dark:border-white/[0.06]"
-                                      style={{ top: TIMELINE_TOP_PADDING + index * HOUR_HEIGHT }}
-                                    />
-		                              ))}
-		                            </div>
-		                            <div className="absolute inset-0">
-		                              {timelineTaskLayouts.map((layout) => {
-		                                return (
-		                                  <div
-		                                    key={layout.task.id}
-		                                    className="absolute min-w-0 px-1 animate-panel-in"
-		                                    style={getTaskLaneStyle(layout)}
-		                                  >
-	                                    <div className="relative h-full min-h-[36px]">
-		                                      {renderTaskCard(layout.task, "h-full rounded-xl p-2.5 w-full min-w-0 border overflow-hidden", undefined, layout.compact)}
-	                                    </div>
-	                                  </div>
-	                                );
-		                              })}
-		                            </div>
-		                            {showCurrentTime && (
-		                              <div
-		                                className="pointer-events-none absolute left-0 right-0 z-30 flex -translate-y-1/2 items-center"
-		                                style={{ top: currentTimeTop }}
-		                              >
-		                                <div className="-ml-[5px] h-2.5 w-2.5 rounded-full bg-red-500" />
-		                                <div className="h-px flex-1 bg-red-500" />
-		                              </div>
-		                            )}
-		                          </div>
-		                        </div>
-	                      )}
+                        <div
+                          ref={timelineScrollRef}
+                          className="calendar-scrollbar-none relative flex max-h-[72vh] overflow-y-auto overflow-x-hidden rounded-xl border border-neutral-100 bg-white shadow-sm shadow-neutral-200/50 dark:border-white/[0.07] dark:bg-neutral-900 dark:shadow-black/25"
+                        >
+                          <div className="sticky left-0 z-20 w-12 shrink-0 bg-white/95 pr-2 sm:w-14 dark:bg-neutral-900/95 backdrop-blur-sm" style={{ height: timelineHeight }}>
+                            {timelineHours.map((hour, index) => (
+                              <span
+                                key={hour}
+                                className="absolute right-2 text-[11px] font-medium text-neutral-400 dark:text-neutral-500"
+                                style={{ top: TIMELINE_TOP_PADDING + index * HOUR_HEIGHT - (index === 0 ? 0 : 8) }}
+                              >
+                                {formatHourLabel(hour)}
+                              </span>
+                            ))}
+                          </div>
+                          <div className="relative min-w-0 flex-1 border-l border-neutral-100 dark:border-white/5" style={{ height: timelineHeight }}>
+                            <div className="absolute inset-0">
+                              {timelineHours.map((hour, index) => (
+                                <div
+                                  key={`grid-${hour}`}
+                                  className="absolute left-0 right-0 border-t border-neutral-100 dark:border-white/[0.06]"
+                                  style={{ top: TIMELINE_TOP_PADDING + index * HOUR_HEIGHT }}
+                                />
+                              ))}
+                            </div>
+                            <div className="absolute inset-0">
+                              {timelineTaskLayouts.map((layout) => {
+                                return (
+                                  <div
+                                    key={layout.task.id}
+                                    className="absolute min-w-0 px-1 animate-panel-in"
+                                    style={getTaskLaneStyle(layout)}
+                                  >
+                                    <div className="relative h-full min-h-[36px]">
+                                      {renderTaskCard(layout.task, "h-full rounded-xl p-2.5 w-full min-w-0 border overflow-hidden", undefined, layout.compact)}
+                                    </div>
+                                  </div>
+                                );
+                              })}
+                            </div>
+                            {showCurrentTime && (
+                              <div
+                                className="pointer-events-none absolute left-0 right-0 z-30 flex -translate-y-1/2 items-center"
+                                style={{ top: currentTimeTop }}
+                              >
+                                <div className="-ml-[5px] h-2.5 w-2.5 rounded-full bg-red-500" />
+                                <div className="h-px flex-1 bg-red-500" />
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                      )}
 
                       {addingTask ? (
                         <div className="rounded-xl border border-neutral-200/80 bg-white shadow-sm dark:border-white/[0.08] dark:bg-neutral-900 dark:shadow-black/20 overflow-hidden">
@@ -947,9 +946,8 @@ export default function ScheduleApp() {
                                     type="button"
                                     title={label}
                                     onClick={() => setNewTask((prev) => ({ ...prev, icon: name, color: colorFromIcon(name) }))}
-                                    className={`flex flex-col items-center justify-center gap-1 rounded-xl py-2.5 transition-all duration-150 ${
-                                      sel ? `${ic.solid} shadow-sm scale-[1.04]` : `${ic.tint} ${ic.text} hover:scale-[1.04]`
-                                    }`}
+                                    className={`flex flex-col items-center justify-center gap-1 rounded-xl py-2.5 transition-all duration-150 ${sel ? `${ic.solid} shadow-sm scale-[1.04]` : `${ic.tint} ${ic.text} hover:scale-[1.04]`
+                                      }`}
                                   >
                                     <Icon size={17} strokeWidth={1.5} />
                                     <span className={`text-[9px] font-semibold leading-none ${sel ? "text-white/80" : ""}`}>{label}</span>
@@ -1024,13 +1022,28 @@ export default function ScheduleApp() {
                           </div>
                         </div>
                       ) : (
-                        <button
-                          onClick={() => setAddingTask(true)}
-                          className="inline-flex h-10 w-full items-center justify-center gap-2 rounded-xl border border-dashed border-neutral-200 text-sm font-medium text-neutral-500 transition-colors hover:bg-neutral-50 dark:border-white/10 dark:text-neutral-400 dark:hover:bg-white/5"
-                        >
-                          <IconPlus size={16} />
-                          Add Time Block
-                        </button>
+<button
+  onClick={() => setAddingTask(true)}
+  className="relative inline-flex h-12 w-full items-center justify-center gap-2 rounded-lg px-4 text-md font-medium
+  text-cyan-600 dark:text-cyan-300
+  border border-cyan-500/40
+  transition-all duration-300
+
+  hover:border-cyan-400 hover:text-cyan-700
+  dark:hover:text-cyan-200
+
+  before:absolute before:inset-0 before:rounded-lg
+  before:bg-cyan-500/0 before:opacity-0 before:transition-all before:duration-300
+  hover:before:bg-cyan-500/5 hover:before:opacity-100
+
+  shadow-[0_0_0px_rgba(6,182,212,0)]
+  hover:shadow-[0_0_20px_rgba(6,182,212,0.25)]
+
+  active:scale-[0.98]"
+>
+  <IconPlus size={16} />
+  Add Time Block
+</button>
                       )}
                     </div>
                   </div>
@@ -1042,7 +1055,7 @@ export default function ScheduleApp() {
                 content: (
                   <div className="space-y-4 pt-1">
                     {schedule.plans.length === 0 && !addingPlan && (
-                      <div className="rounded-xl border border-dashed border-neutral-200 py-8 text-center text-sm text-neutral-400 dark:border-white/10 dark:text-neutral-500">
+                      <div className="rounded-xl border border-dashed border-neutral-200 p-6 text-center text-sm text-neutral-400 dark:border-white/10 dark:text-neutral-500">
                         No plans yet. Create one for routines, meals, workouts, or anything you want to track over time.
                       </div>
                     )}
@@ -1085,9 +1098,8 @@ export default function ScheduleApp() {
                                 type="button"
                                 title={label}
                                 onClick={() => setNewPlanIconName(name)}
-                                className={`flex flex-col items-center justify-center gap-1 rounded-xl py-2.5 transition-all duration-150 ${
-                                  sel ? `${ic.solid} shadow-sm scale-[1.04]` : `${ic.tint} ${ic.text} hover:scale-[1.04]`
-                                }`}
+                                className={`flex flex-col items-center justify-center gap-1 rounded-xl py-2.5 transition-all duration-150 ${sel ? `${ic.solid} shadow-sm scale-[1.04]` : `${ic.tint} ${ic.text} hover:scale-[1.04]`
+                                  }`}
                               >
                                 <Icon size={17} strokeWidth={1.5} />
                                 <span className={`text-[9px] font-semibold leading-none ${sel ? "text-white/80" : ""}`}>{label}</span>
@@ -1095,14 +1107,59 @@ export default function ScheduleApp() {
                             );
                           })}
                         </div>
-                        <input
-                          value={newPlanMetaFields}
-                          onChange={(e) => setNewPlanMetaFields(e.target.value)}
-                          placeholder="Meta fields (optional): Calories, Protein, Duration"
-                          className="h-10 w-full rounded-md border border-neutral-200 bg-white px-3 text-sm text-neutral-900 outline-none transition-colors placeholder:text-neutral-400 focus:border-neutral-400 dark:border-white/10 dark:bg-neutral-950 dark:text-white dark:focus:border-white/20"
-                        />
+                        <div className="space-y-2">
+                          <p className="text-xs font-medium text-neutral-500 dark:text-neutral-400">Metrics to track</p>
+                          {newPlanMetaFields.length > 0 && (
+                            <div className="flex flex-wrap gap-1.5">
+                              {newPlanMetaFields.map((field, i) => (
+                                <span key={field} className={`inline-flex items-center gap-1 rounded-full border px-2.5 py-1 text-xs font-medium ${inferBadgeClass(i)}`}>
+                                  {field}
+                                  <button
+                                    type="button"
+                                    onClick={() => setNewPlanMetaFields((prev) => prev.filter((f) => f !== field))}
+                                    className="ml-0.5 opacity-60 hover:opacity-100"
+                                  >
+                                    <IconX size={10} />
+                                  </button>
+                                </span>
+                              ))}
+                            </div>
+                          )}
+                          <div className="flex gap-1.5">
+                            <input
+                              value={newPlanMetaInput}
+                              onChange={(e) => setNewPlanMetaInput(e.target.value)}
+                              placeholder="Add metric (e.g. Calories, Sets…)"
+                              onKeyDown={(e) => {
+                                if (e.key === "Enter") {
+                                  e.preventDefault();
+                                  const val = newPlanMetaInput.trim();
+                                  if (val && !newPlanMetaFields.includes(val)) {
+                                    setNewPlanMetaFields((prev) => [...prev, val]);
+                                    setNewPlanMetaInput("");
+                                  }
+                                }
+                              }}
+                              className="h-9 flex-1 rounded-lg border border-neutral-200 bg-white px-3 text-sm text-neutral-900 outline-none transition-colors placeholder:text-neutral-400 focus:border-neutral-400 dark:border-white/10 dark:bg-neutral-950 dark:text-white dark:placeholder:text-neutral-500 dark:focus:border-white/20"
+                            />
+                            <button
+                              type="button"
+                              onClick={() => {
+                                const val = newPlanMetaInput.trim();
+                                if (val && !newPlanMetaFields.includes(val)) {
+                                  setNewPlanMetaFields((prev) => [...prev, val]);
+                                  setNewPlanMetaInput("");
+                                }
+                              }}
+                              className="flex h-9 w-9 items-center justify-center rounded-lg border border-neutral-200 text-neutral-500 transition-colors hover:bg-neutral-100 hover:text-neutral-900 dark:border-white/10 dark:text-neutral-400 dark:hover:bg-white/10 dark:hover:text-white"
+                            >
+                              <IconPlus size={15} />
+                            </button>
+                          </div>
+                        </div>
                         <div className="flex gap-2">
                           <button
+                            type="button"
                             onClick={handleAddPlan}
                             className="inline-flex h-10 items-center gap-1.5 rounded-md bg-neutral-900 px-4 text-sm font-medium text-white transition-colors hover:bg-neutral-800 dark:bg-white dark:text-neutral-900 dark:hover:bg-neutral-100"
                           >
@@ -1110,11 +1167,13 @@ export default function ScheduleApp() {
                             Create Plan
                           </button>
                           <button
+                            type="button"
                             onClick={() => {
                               setAddingPlan(false);
                               setNewPlanTitle("");
                               setNewPlanIconName("brain");
-                              setNewPlanMetaFields("");
+                              setNewPlanMetaFields([]);
+                              setNewPlanMetaInput("");
                             }}
                             className="inline-flex h-10 items-center gap-1.5 rounded-md border border-neutral-200 px-4 text-sm font-medium text-neutral-600 transition-colors hover:bg-neutral-50 dark:border-white/10 dark:text-neutral-400 dark:hover:bg-white/5"
                           >
@@ -1125,7 +1184,22 @@ export default function ScheduleApp() {
                     ) : (
                       <button
                         onClick={() => setAddingPlan(true)}
-                        className="inline-flex h-10 w-full items-center justify-center gap-2 rounded-xl border border-dashed border-neutral-200 text-sm font-medium text-neutral-500 transition-colors hover:bg-neutral-50 dark:border-white/10 dark:text-neutral-400 dark:hover:bg-white/5"
+                        className="relative inline-flex h-12 w-full items-center justify-center gap-2 rounded-lg px-4 text-md font-medium
+  text-cyan-600 dark:text-cyan-300
+  border border-cyan-500/40
+  transition-all duration-300
+
+  hover:border-cyan-400 hover:text-cyan-700
+  dark:hover:text-cyan-200
+
+  before:absolute before:inset-0 before:rounded-lg
+  before:bg-cyan-500/0 before:opacity-0 before:transition-all before:duration-300
+  hover:before:bg-cyan-500/5 hover:before:opacity-100
+
+  shadow-[0_0_0px_rgba(6,182,212,0)]
+  hover:shadow-[0_0_20px_rgba(6,182,212,0.25)]
+
+  active:scale-[0.98]"
                       >
                         <IconPlus size={16} />
                         Add Plan
