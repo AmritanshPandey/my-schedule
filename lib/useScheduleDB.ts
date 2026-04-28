@@ -18,6 +18,16 @@ export const DAY_LABELS: Record<DayKey, string> = {
   sunday: "Su",
 };
 
+export interface Goal {
+  id: string;
+  metric: string;
+  target: number;
+  direction: "below" | "above";
+  unit: string;
+  startDate: string;
+  deadline?: string;
+}
+
 export interface Task {
   id: string;
   title: string;
@@ -26,6 +36,7 @@ export interface Task {
   endTime: string;
   icon: string;
   color: AccentColor;
+  planId?: string;
 }
 
 export interface SummaryConfig {
@@ -43,6 +54,7 @@ export interface Plan {
   items: ScheduleEntry[];
   metaFields?: string[];
   summary?: SummaryConfig[];
+  goals?: Goal[];
 }
 
 type DayActivities = Record<DayKey, Task[]>;
@@ -57,7 +69,7 @@ export interface Schedule {
 }
 
 const DB_NAME = "daily-planner";
-const DB_VERSION = 6;
+const DB_VERSION = 7;
 const STORE = "schedule";
 const RECORD_KEY = "data";
 
@@ -130,6 +142,7 @@ function normalizePlan(value: unknown): Plan | null {
     items: Array.isArray(p.items) ? p.items : [],
     metaFields: Array.isArray(p.metaFields) ? p.metaFields : [],
     summary: Array.isArray(p.summary) ? p.summary : [],
+    goals: Array.isArray(p.goals) ? p.goals : [],
   };
 }
 
@@ -149,6 +162,7 @@ function normalizeTasks(value: unknown, fallbackIcon = "briefcase", fallbackDesc
         endTime: task.endTime,
         icon: task.icon || fallbackIcon,
         color: resolveAccentColor((task as Task & { color?: string }).color, task.icon || fallbackIcon),
+        planId: task.planId,
       }];
     }
 

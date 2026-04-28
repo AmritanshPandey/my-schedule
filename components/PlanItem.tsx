@@ -23,6 +23,7 @@ interface PlanItemProps {
   entry: ScheduleEntry;
   metaFields: string[];
   editMode: boolean;
+  showDate: boolean;
   onEdit: (id: string, updated: Omit<ScheduleEntry, "id">) => void;
   onDelete: (id: string) => void;
   dragHandleProps?: {
@@ -31,7 +32,7 @@ interface PlanItemProps {
   };
 }
 
-export default function PlanItem({ index, entry, metaFields, editMode, onEdit, onDelete, dragHandleProps }: PlanItemProps) {
+export default function PlanItem({ index, entry, metaFields, editMode, showDate, onEdit, onDelete, dragHandleProps }: PlanItemProps) {
   const [editing, setEditing] = useState(false);
   const [task, setTask] = useState(entry.task);
   const [note, setNote] = useState(entry.note ?? "");

@@ -3,8 +3,8 @@
 import { useState } from "react";
 import PlanItem from "./PlanItem";
 import { ScheduleEntry, MetaField } from "./ScheduleItem";
-import { IconCheck, IconEdit, IconGripVertical, IconPlus, IconTrash, IconX } from "@tabler/icons-react";
-import { SummaryConfig } from "@/lib/useScheduleDB";
+import { IconCheck, IconEdit, IconGripVertical, IconPlus, IconTarget, IconTrash, IconX } from "@tabler/icons-react";
+import { Goal, SummaryConfig } from "@/lib/useScheduleDB";
 import { SECTION_ICONS, getIconPickerStyle } from "@/components/SectionIcons";
 import type { AccentColor } from "@/lib/colorSystem";
 import { accentStyles, colorFromIcon, resolveAccentColor } from "@/lib/colorSystem";
@@ -19,12 +19,15 @@ interface PlanCardProps {
   items: ScheduleEntry[];
   metaFields: string[];
   summary?: SummaryConfig[];
+  goals: Goal[];
   onUpdatePlan: (id: string, updates: { title: string; emoji: string; color: AccentColor; metaFields: string[] }) => void;
   onDeletePlan: (id: string) => void;
   onReorderItems: (activeId: string, overId: string) => void;
   onAdd: (entry: Omit<ScheduleEntry, "id">) => void;
   onEdit: (id: string, updated: Omit<ScheduleEntry, "id">) => void;
   onDelete: (id: string) => void;
+  onAddGoal: (goal: Omit<Goal, "id">) => void;
+  onDeleteGoal: (goalId: string) => void;
   dragHandleProps?: {
     attributes: Record<string, unknown>;
     listeners: Record<string, unknown>;
@@ -36,6 +39,7 @@ function SortablePlanItem({
   entry,
   metaFields,
   editMode,
+  showDate,
   onEdit,
   onDelete,
 }: {
@@ -43,6 +47,7 @@ function SortablePlanItem({
   entry: ScheduleEntry;
   metaFields: string[];
   editMode: boolean;
+  showDate: boolean;
   onEdit: (id: string, updated: Omit<ScheduleEntry, "id">) => void;
   onDelete: (id: string) => void;
 }) {
@@ -55,6 +60,7 @@ function SortablePlanItem({
         entry={entry}
         metaFields={metaFields}
         editMode={editMode}
+        showDate={showDate}
         onEdit={onEdit}
         onDelete={onDelete}
         dragHandleProps={editMode ? {
@@ -71,6 +77,26 @@ function parseNumber(val: string): number {
   return m ? parseFloat(m[0]) : 0;
 }
 
+function inferUnit(label: string): string {
+  const key = label.toLowerCase();
+  if (key.includes("calorie")) return "kcal";
+  if (key.includes("protein") || key.includes("carb") || key.includes("fat")) return "g";
+  if (key.includes("duration") || key.includes("time")) return "min";
+  if (key.includes("weight")) return "kg";
+  if (key.includes("step")) return "steps";
+  if (key.includes("water")) return "ml";
+  return "";
+}
+
+function todayISO(): string {
+  return new Date().toISOString().split("T")[0];
+}
+
+function formatDate(iso: string): string {
+  const d = new Date(iso + "T00:00:00");
+  return d.toLocaleDateString("en-US", { month: "short", day: "numeric" });
+}
+
 export default function PlanCard({
   id,
   title,
@@ -79,17 +105,25 @@ export default function PlanCard({
   items,
   metaFields,
   summary,
+  goals,
   onUpdatePlan,
   onDeletePlan,
   onReorderItems,
   onAdd,
   onEdit,
   onDelete,
+  onAddGoal,
+  onDeleteGoal,
   dragHandleProps,
 }: PlanCardProps) {
   const [adding, setAdding] = useState(false);
   const [editingPlan, setEditingPlan] = useState(false);
   const [planEditMode, setPlanEditMode] = useState(false);
+  const [dateFilter, setDateFilter] = useState<"today" | "all">("today");
+  const [addingGoal, setAddingGoal] = useState(false);
+  const [goalMetric, setGoalMetric] = useState(metaFields[0] ?? "");
+  const [goalTarget, setGoalTarget] = useState("");
+  const [goalDirection, setGoalDirection] = useState<"below" | "above">("below");
   const [task, setTask] = useState("");
   const [note, setNote] = useState("");
   const [metaValues, setMetaValues] = useState<Record<string, string>>({});
@@ -100,10 +134,35 @@ export default function PlanCard({
   const [editMetaInput, setEditMetaInput] = useState("");
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 8 } }));
   const accent = accentStyles(color);
+  const todayStr = todayISO();
+
+  const filteredItems = dateFilter === "today"
+    ? items.filter((item) => item.date === todayStr)
+    : items;
+
+  const totalItems = dateFilter === "today"
+    ? items.filter((item) => item.date === todayStr)
+    : items;
+
+  const totals = summary?.map((s) => {
+    const total = totalItems.reduce((acc, item) => {
+      const m = item.meta?.find((x) => x.label.toLowerCase() === s.metaKey.toLowerCase());
+      return acc + (m ? parseNumber(m.value) : 0);
+    }, 0);
+    return { ...s, total: Math.round(total) };
+  });
+
+  function getGoalCurrent(metric: string): number {
+    return items
+      .filter((item) => item.date === todayStr)
+      .reduce((acc, item) => {
+        const m = item.meta?.find((x) => x.label.toLowerCase() === metric.toLowerCase());
+        return acc + parseNumber(m?.value ?? "0");
+      }, 0);
+  }
 
   function handleAdd() {
     if (!task.trim()) return;
-
     const meta: MetaField[] = metaFields
       .filter((f) => metaValues[f]?.trim())
       .map((f) => ({ label: f, value: metaValues[f].trim().slice(0, 20) }));
@@ -112,6 +171,7 @@ export default function PlanCard({
       task: task.trim().slice(0, 50),
       note: note.trim().slice(0, 80) || undefined,
       meta: meta.length > 0 ? meta : undefined,
+      date: todayStr,
     });
 
     setTask("");
@@ -119,17 +179,6 @@ export default function PlanCard({
     setMetaValues({});
     setAdding(false);
   }
-
-  const totals = summary?.map((s) => {
-    const total = items.reduce((acc, item) => {
-      const m = item.meta?.find(
-        (x) => x.label.toLowerCase() === s.metaKey.toLowerCase()
-      );
-      return acc + (m ? parseNumber(m.value) : 0);
-    }, 0);
-
-    return { ...s, total: Math.round(total) };
-  });
 
   function handleSavePlan() {
     const nextTitle = editTitle.trim();
@@ -159,8 +208,49 @@ export default function PlanCard({
     onReorderItems(String(active.id), String(over.id));
   }
 
+  function handleAddGoal() {
+    const target = parseFloat(goalTarget);
+    if (!goalMetric || isNaN(target) || target <= 0) return;
+    onAddGoal({
+      metric: goalMetric,
+      target,
+      direction: goalDirection,
+      unit: inferUnit(goalMetric),
+      startDate: todayStr,
+    });
+    setGoalTarget("");
+    setGoalDirection("below");
+    setGoalMetric(metaFields[0] ?? "");
+    setAddingGoal(false);
+  }
+
+  function goalBarColor(direction: "below" | "above", pct: number): string {
+    if (direction === "below") {
+      if (pct >= 100) return "bg-rose-500";
+      if (pct >= 80) return "bg-amber-400";
+      return "bg-emerald-500";
+    } else {
+      if (pct >= 100) return "bg-emerald-500";
+      if (pct >= 50) return "bg-cyan-500";
+      return "bg-amber-400";
+    }
+  }
+
+  function goalTextColor(direction: "below" | "above", pct: number): string {
+    if (direction === "below") {
+      if (pct >= 100) return "text-rose-600 dark:text-rose-400";
+      if (pct >= 80) return "text-amber-600 dark:text-amber-400";
+      return "text-emerald-600 dark:text-emerald-400";
+    } else {
+      if (pct >= 100) return "text-emerald-600 dark:text-emerald-400";
+      if (pct >= 50) return "text-cyan-600 dark:text-cyan-400";
+      return "text-amber-600 dark:text-amber-400";
+    }
+  }
+
   return (
     <div className={`overflow-hidden rounded-xl border bg-white shadow-sm dark:bg-neutral-900 dark:shadow-black/25 border-neutral-200/80 dark:border-white/[0.08] ${accent.cardAccent}`}>
+      {/* ── Header ── */}
       <div className="border-b border-neutral-100 dark:border-white/[0.07] px-4 pt-4 pb-3">
         <div className="flex items-start justify-between gap-3">
           <div className="flex items-center gap-3 min-w-0">
@@ -178,7 +268,7 @@ export default function PlanCard({
                 {title}
               </h2>
               <p className="mt-0.5 text-xs text-neutral-400 dark:text-neutral-500">
-                {items.length} {items.length === 1 ? "item" : "items"}
+                {items.length} {items.length === 1 ? "entry" : "entries"} total
               </p>
             </div>
           </div>
@@ -235,8 +325,7 @@ export default function PlanCard({
                     type="button"
                     title={label}
                     onClick={() => { setEditIconName(name); setEditColor(colorFromIcon(name)); }}
-                    className={`flex flex-col items-center justify-center gap-1 rounded-xl py-2.5 transition-all duration-150 ${sel ? `${ic.solid} shadow-sm scale-[1.04]` : `${ic.tint} ${ic.text} hover:scale-[1.04]`
-                      }`}
+                    className={`flex flex-col items-center justify-center gap-1 rounded-xl py-2.5 transition-all duration-150 ${sel ? `${ic.solid} shadow-sm scale-[1.04]` : `${ic.tint} ${ic.text} hover:scale-[1.04]`}`}
                   >
                     <Icon size={17} strokeWidth={1.5} />
                     <span className={`text-[9px] font-semibold leading-none ${sel ? "text-white/80" : ""}`}>{label}</span>
@@ -315,6 +404,25 @@ export default function PlanCard({
           </div>
         )}
 
+        {/* Date filter */}
+        <div className="mt-3 flex items-center gap-1.5">
+          {(["today", "all"] as const).map((f) => (
+            <button
+              key={f}
+              type="button"
+              onClick={() => setDateFilter(f)}
+              className={`h-6 rounded-md px-2.5 text-[11px] font-semibold transition-all duration-150 ${
+                dateFilter === f
+                  ? "bg-neutral-900 text-white dark:bg-white dark:text-neutral-900"
+                  : "text-neutral-500 hover:bg-neutral-100 dark:text-neutral-400 dark:hover:bg-white/[0.07]"
+              }`}
+            >
+              {f === "today" ? "Today" : "History"}
+            </button>
+          ))}
+        </div>
+
+        {/* Totals */}
         {totals && totals.length > 0 && (
           <div className="mt-3 flex items-center gap-4 flex-wrap">
             {totals.map((t, i) => (
@@ -332,23 +440,173 @@ export default function PlanCard({
         )}
       </div>
 
+      {/* ── Body ── */}
       <div className="p-4 space-y-4">
-        {items.length === 0 && (
-          <div className="rounded-xl border border-dashed border-neutral-200 py-8 text-center text-sm text-neutral-400 dark:border-white/10 dark:text-neutral-500">
-            No entries yet. Add the first item to turn this plan into something useful.
+        {/* Goals section */}
+        {(goals.length > 0 || (metaFields.length > 0 && !addingGoal)) && (
+          <div className="space-y-2">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-1.5">
+                <IconTarget size={13} className="text-neutral-400 dark:text-neutral-500" />
+                <p className="text-[11px] font-semibold uppercase tracking-wider text-neutral-400 dark:text-neutral-500">
+                  Today&apos;s Goals
+                </p>
+              </div>
+              {metaFields.length > 0 && !addingGoal && (
+                <button
+                  type="button"
+                  onClick={() => { setAddingGoal(true); setGoalMetric(metaFields[0] ?? ""); }}
+                  className="inline-flex items-center gap-1 h-6 px-2 rounded-md text-[11px] font-medium text-neutral-500 hover:bg-neutral-100 hover:text-neutral-700 dark:text-neutral-400 dark:hover:bg-white/[0.07] dark:hover:text-neutral-200 transition-colors"
+                >
+                  <IconPlus size={11} />
+                  Add goal
+                </button>
+              )}
+            </div>
+
+            {goals.length === 0 && !addingGoal && (
+              <p className="text-xs text-neutral-400 dark:text-neutral-500 pl-0.5">
+                No goals set. Add one to track your daily targets.
+              </p>
+            )}
+
+            {goals.map((goal) => {
+              const current = getGoalCurrent(goal.metric);
+              const pct = Math.min((current / goal.target) * 100, 100);
+              const barColor = goalBarColor(goal.direction, pct);
+              const textColor = goalTextColor(goal.direction, pct);
+              const label = goal.direction === "below" ? "limit" : "target";
+              return (
+                <div key={goal.id} className="rounded-xl border border-neutral-100 bg-neutral-50/80 px-3 py-2.5 dark:border-white/[0.07] dark:bg-white/[0.03]">
+                  <div className="flex items-center justify-between gap-2 mb-1.5">
+                    <div className="flex items-center gap-1.5 min-w-0">
+                      <span className="text-sm font-semibold text-neutral-800 dark:text-neutral-200 truncate">
+                        {goal.metric}
+                      </span>
+                      <span className="text-[10px] font-medium text-neutral-400 dark:text-neutral-500">
+                        {goal.direction === "below" ? "↓ stay under" : "↑ reach"}
+                      </span>
+                    </div>
+                    <div className="flex items-center gap-2 shrink-0">
+                      <span className={`text-xs font-bold tabular-nums ${textColor}`}>
+                        {Math.round(current).toLocaleString()} / {goal.target.toLocaleString()}
+                        {goal.unit ? ` ${goal.unit}` : ""}
+                      </span>
+                      <button
+                        type="button"
+                        onClick={() => onDeleteGoal(goal.id)}
+                        className="h-5 w-5 flex items-center justify-center rounded text-neutral-300 hover:text-rose-500 dark:text-neutral-700 dark:hover:text-rose-400 transition-colors"
+                      >
+                        <IconX size={11} />
+                      </button>
+                    </div>
+                  </div>
+                  <div className="h-1.5 w-full rounded-full bg-neutral-200 dark:bg-white/10 overflow-hidden">
+                    <div
+                      className={`h-full rounded-full transition-all duration-500 ${barColor}`}
+                      style={{ width: `${pct}%` }}
+                    />
+                  </div>
+                  <div className="mt-1 flex justify-between">
+                    <span className="text-[10px] text-neutral-400 dark:text-neutral-600">0</span>
+                    <span className="text-[10px] text-neutral-400 dark:text-neutral-600">
+                      {goal.target.toLocaleString()} {goal.unit} {label}
+                    </span>
+                  </div>
+                </div>
+              );
+            })}
+
+            {addingGoal && (
+              <div className="space-y-3 rounded-xl border border-neutral-200/80 bg-neutral-50/80 p-3.5 dark:border-white/[0.08] dark:bg-white/[0.03]">
+                <p className="text-xs font-semibold text-neutral-700 dark:text-neutral-300">New daily goal</p>
+                <div className="grid grid-cols-2 gap-2">
+                  <div>
+                    <p className="mb-1 text-[10px] font-medium text-neutral-500 dark:text-neutral-400">Metric</p>
+                    <select
+                      value={goalMetric}
+                      onChange={(e) => setGoalMetric(e.target.value)}
+                      className="h-9 w-full rounded-lg border border-neutral-200 bg-white px-2.5 text-sm text-neutral-900 outline-none transition-colors focus:border-neutral-400 dark:border-white/10 dark:bg-neutral-900 dark:text-white dark:focus:border-white/20"
+                    >
+                      {metaFields.map((f) => (
+                        <option key={f} value={f}>{f}</option>
+                      ))}
+                    </select>
+                  </div>
+                  <div>
+                    <p className="mb-1 text-[10px] font-medium text-neutral-500 dark:text-neutral-400">Target</p>
+                    <input
+                      type="number"
+                      value={goalTarget}
+                      onChange={(e) => setGoalTarget(e.target.value)}
+                      placeholder="e.g. 2000"
+                      min="1"
+                      onKeyDown={(e) => { if (e.key === "Enter") handleAddGoal(); if (e.key === "Escape") setAddingGoal(false); }}
+                      className="h-9 w-full rounded-lg border border-neutral-200 bg-white px-2.5 text-sm text-neutral-900 outline-none transition-colors focus:border-neutral-400 dark:border-white/10 dark:bg-neutral-900 dark:text-white dark:focus:border-white/20"
+                    />
+                  </div>
+                </div>
+                <div>
+                  <p className="mb-1.5 text-[10px] font-medium text-neutral-500 dark:text-neutral-400">Direction</p>
+                  <div className="flex rounded-lg border border-neutral-200 dark:border-white/10 overflow-hidden">
+                    {(["below", "above"] as const).map((d) => (
+                      <button
+                        key={d}
+                        type="button"
+                        onClick={() => setGoalDirection(d)}
+                        className={`flex-1 h-8 text-xs font-medium transition-colors ${
+                          goalDirection === d
+                            ? "bg-neutral-900 text-white dark:bg-white dark:text-neutral-900"
+                            : "text-neutral-500 hover:bg-neutral-50 dark:text-neutral-400 dark:hover:bg-white/5"
+                        }`}
+                      >
+                        {d === "below" ? "↓ Stay under" : "↑ Reach above"}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+                <div className="flex gap-2">
+                  <button
+                    type="button"
+                    onClick={handleAddGoal}
+                    className={`inline-flex h-8 flex-1 items-center justify-center gap-1.5 rounded-lg text-xs font-semibold text-white transition-colors hover:opacity-90 ${accent.iconSolid}`}
+                  >
+                    <IconCheck size={13} />
+                    Set Goal
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setAddingGoal(false)}
+                    className="inline-flex h-8 items-center gap-1 rounded-lg border border-neutral-200 px-3 text-xs font-medium text-neutral-500 transition-colors hover:bg-neutral-50 dark:border-white/10 dark:text-neutral-400 dark:hover:bg-white/5"
+                  >
+                    <IconX size={13} />
+                    Cancel
+                  </button>
+                </div>
+              </div>
+            )}
           </div>
         )}
 
-        {items.length > 0 && (
+        {/* Items list */}
+        {filteredItems.length === 0 && !adding && (
+          <div className="rounded-xl border border-dashed border-neutral-200 py-8 text-center text-sm text-neutral-400 dark:border-white/10 dark:text-neutral-500">
+            {dateFilter === "today"
+              ? "Nothing logged today. Add an entry or switch to History."
+              : "No entries yet. Add the first item to turn this plan into something useful."}
+          </div>
+        )}
+
+        {filteredItems.length > 0 && (
           <div className="flex justify-end">
             <button
               type="button"
               onClick={() => setPlanEditMode((prev) => !prev)}
-              className={`h-7 rounded-md px-2.5 text-xs font-medium transition-all duration-200
-              ${planEditMode
+              className={`h-7 rounded-md px-2.5 text-xs font-medium transition-all duration-200 ${
+                planEditMode
                   ? "text-cyan-600 dark:text-cyan-300"
                   : "text-neutral-500 hover:text-neutral-700 dark:text-neutral-400 dark:hover:text-neutral-200"
-                }`}
+              }`}
             >
               {planEditMode ? "Done" : "Manage"}
             </button>
@@ -356,14 +614,15 @@ export default function PlanCard({
         )}
 
         <DndContext sensors={sensors} onDragEnd={handleDragEnd}>
-          <SortableContext items={items.map((item) => item.id)} strategy={verticalListSortingStrategy}>
-            {items.map((item, i) => (
+          <SortableContext items={filteredItems.map((item) => item.id)} strategy={verticalListSortingStrategy}>
+            {filteredItems.map((item, i) => (
               <SortablePlanItem
                 key={item.id}
                 index={i + 1}
                 entry={item}
                 metaFields={metaFields}
                 editMode={planEditMode}
+                showDate={dateFilter === "all"}
                 onEdit={onEdit}
                 onDelete={onDelete}
               />
@@ -372,6 +631,7 @@ export default function PlanCard({
         </DndContext>
       </div>
 
+      {/* ── Footer: add entry ── */}
       <div className="px-4 pb-4">
         {adding ? (
           <div className="space-y-3 rounded-xl border border-neutral-200/80 bg-neutral-50/80 p-4 dark:border-white/[0.08] dark:bg-white/[0.03]">
@@ -437,7 +697,7 @@ export default function PlanCard({
                 className={`inline-flex h-9 items-center gap-1.5 rounded-lg px-3 text-sm font-medium text-white transition-colors hover:opacity-90 ${accent.iconSolid}`}
               >
                 <IconPlus size={15} />
-                Add
+                Log Entry
               </button>
             </div>
           </div>
@@ -448,10 +708,13 @@ export default function PlanCard({
             className="inline-flex h-10 w-full items-center justify-center gap-2 rounded-xl border border-dashed border-neutral-200 text-sm font-medium text-neutral-500 transition-colors hover:bg-neutral-50 dark:border-white/10 dark:text-neutral-400 dark:hover:bg-white/5"
           >
             <IconPlus size={16} />
-            Add Entry
+            Log Entry
           </button>
         )}
       </div>
     </div>
   );
 }
+
+// helper re-exported so PlanCard callers can use it
+export { formatDate };

@@ -14,6 +14,7 @@ export interface ScheduleEntry {
   task: string;
   note?: string;
   meta?: MetaField[];
+  date?: string;   // ISO "YYYY-MM-DD", set when entry is logged
 }
 
 interface ScheduleItemProps {
