@@ -55,6 +55,14 @@ export interface Plan {
   metaFields?: string[];
   summary?: SummaryConfig[];
   goals?: Goal[];
+  metric?: { name: string; unit: string };
+}
+
+export interface MetricEntry {
+  id: string;
+  planId: string;
+  value: number;
+  date: string; // ISO "YYYY-MM-DD"
 }
 
 type DayActivities = Record<DayKey, Task[]>;
@@ -66,10 +74,11 @@ function emptyDayActivities(): DayActivities {
 export interface Schedule {
   plans: Plan[];
   activities: DayActivities;
+  metricEntries: MetricEntry[];
 }
 
 const DB_NAME = "daily-planner";
-const DB_VERSION = 7;
+const DB_VERSION = 8;
 const STORE = "schedule";
 const RECORD_KEY = "data";
 
@@ -133,6 +142,11 @@ function entryToTask(entry: ScheduleEntry, icon: string, description?: string): 
 function normalizePlan(value: unknown): Plan | null {
   if (!value || typeof value !== "object") return null;
   const p = value as Plan;
+  const rawMetric = (p as Plan & { metric?: unknown }).metric;
+  const metric =
+    rawMetric && typeof rawMetric === "object" && "name" in rawMetric
+      ? { name: String((rawMetric as { name: unknown }).name ?? ""), unit: String((rawMetric as { unit?: unknown }).unit ?? "") }
+      : undefined;
 
   return {
     id: p.id,
@@ -143,7 +157,15 @@ function normalizePlan(value: unknown): Plan | null {
     metaFields: Array.isArray(p.metaFields) ? p.metaFields : [],
     summary: Array.isArray(p.summary) ? p.summary : [],
     goals: Array.isArray(p.goals) ? p.goals : [],
+    metric,
   };
+}
+
+function normalizeMetricEntry(value: unknown): MetricEntry | null {
+  if (!value || typeof value !== "object") return null;
+  const e = value as MetricEntry;
+  if (!e.id || !e.planId || typeof e.value !== "number" || !e.date) return null;
+  return { id: e.id, planId: e.planId, value: e.value, date: e.date };
 }
 
 function normalizeTasks(value: unknown, fallbackIcon = "briefcase", fallbackDescription?: string): Task[] {
@@ -184,7 +206,7 @@ function defaultPlans(): Plan[] {
     {
       id: "diet",
       title: "Diet",
-      emoji: "leaf",
+      emoji: "sleep",
       color: "emerald",
       items: [],
       metaFields: ["Calories", "Protein"],
@@ -214,6 +236,10 @@ function migrate(raw: unknown): Schedule {
   if (!raw || typeof raw !== "object") return empty;
   const r = raw as Record<string, unknown>;
 
+  const metricEntries: MetricEntry[] = Array.isArray(r.metricEntries)
+    ? (r.metricEntries as unknown[]).map(normalizeMetricEntry).filter((e): e is MetricEntry => e !== null)
+    : [];
+
   // Already current shape or existing activities that still need per-day normalization.
   if (isPerDay(r.activities) && Array.isArray(r.plans)) {
     const normalizedPlans = (r.plans as unknown[])
@@ -225,6 +251,7 @@ function migrate(raw: unknown): Schedule {
       activities: Object.fromEntries(
         DAYS.map((day) => [day, normalizeTasks((r.activities as Record<string, unknown>)[day])])
       ) as DayActivities,
+      metricEntries,
     };
   }
 
@@ -238,6 +265,7 @@ function migrate(raw: unknown): Schedule {
       activities: Object.fromEntries(
         DAYS.map((day) => [day, normalizeTasks((r.activities as Record<string, unknown>)[day])])
       ) as DayActivities,
+      metricEntries,
     };
   }
 
@@ -252,21 +280,18 @@ function migrate(raw: unknown): Schedule {
       : day === "monday" && Array.isArray(r.personal) ? r.personal : [];
 
     activities[day].push(...workItems.map((entry) => entryToTask(entry, "briefcase", "Work Schedule")));
-    activities[day].push(...personalItems.map((entry) => entryToTask(entry, "leaf", "Personal")));
+    activities[day].push(...personalItems.map((entry) => entryToTask(entry, "star", "Personal")));
   }
 
   const plans = defaultPlans();
   plans[0].items = Array.isArray(r.diet) ? (r.diet as ScheduleEntry[]) : [];
   plans[1].items = Array.isArray(r.workout) ? (r.workout as ScheduleEntry[]) : [];
 
-  return {
-    plans,
-    activities,
-  };
+  return { plans, activities, metricEntries };
 }
 
 function emptyEmpty(): Schedule {
-  return { plans: defaultPlans(), activities: emptyDayActivities() };
+  return { plans: defaultPlans(), activities: emptyDayActivities(), metricEntries: [] };
 }
 
 export function useScheduleDB() {

@@ -8,27 +8,16 @@ const LEGACY_COLOR_MAP: Record<string, AccentColor> = {
 };
 
 const ICON_COLOR_MAP: Record<string, AccentColor> = {
-  briefcase: "blue",
-  code: "blue",
-  leaf: "pink",
-  heart: "pink",
-  barbell: "emerald",
-  run: "emerald",
-  school: "violet",
-  book: "violet",
-  brain: "violet",
-  music: "violet",
-  pencil: "violet",
-  shopping: "amber",
-  finance: "amber",
-  coffee: "amber",
-  travel: "blue",
-  plane: "blue",
-  camera: "blue",
-  home: "cyan",
-  star: "amber",
-  tools: "cyan",
-  gaming: "cyan",
+  run:       "amber",
+  school:    "pink",
+  book:      "blue",
+  sleep:     "emerald",
+  star:      "amber",
+  briefcase: "cyan",
+  car:       "cyan",
+  brain:     "violet",
+  barbell:   "pink",
+  code:      "violet",
 };
 
 export function colorFromIcon(icon: string): AccentColor {
@@ -62,7 +51,7 @@ export function timelineCardStyles(color: string) {
     blue: {
       cardBg: "bg-blue-50 dark:bg-blue-950/55",
       cardBorder: "border-blue-100 dark:border-blue-800/30 border-l-[3px] border-l-blue-500 dark:border-l-blue-400",
-      shadow: "shadow-sm shadow-blue-100/80 dark:shadow-black/40",
+      shadow: "shadow-none shadow-blue-100/80 dark:shadow-black/40",
       dot: "bg-blue-500",
       iconBg: "bg-blue-500",
       iconText: "text-white",
@@ -74,7 +63,7 @@ export function timelineCardStyles(color: string) {
     violet: {
       cardBg: "bg-violet-50 dark:bg-violet-950/55",
       cardBorder: "border-violet-100 dark:border-violet-800/30 border-l-[3px] border-l-violet-500 dark:border-l-violet-400",
-      shadow: "shadow-sm shadow-violet-100/80 dark:shadow-black/40",
+      shadow: "shadow-none shadow-violet-100/80 dark:shadow-black/40",
       dot: "bg-violet-500",
       iconBg: "bg-violet-500",
       iconText: "text-white",
@@ -86,7 +75,7 @@ export function timelineCardStyles(color: string) {
     pink: {
       cardBg: "bg-pink-50 dark:bg-pink-950/55",
       cardBorder: "border-pink-100 dark:border-pink-800/30 border-l-[3px] border-l-pink-500 dark:border-l-pink-400",
-      shadow: "shadow-sm shadow-pink-100/80 dark:shadow-black/40",
+      shadow: "shadow-none shadow-pink-100/80 dark:shadow-black/40",
       dot: "bg-pink-500",
       iconBg: "bg-pink-500",
       iconText: "text-white",
@@ -98,7 +87,7 @@ export function timelineCardStyles(color: string) {
     amber: {
       cardBg: "bg-amber-50 dark:bg-amber-950/55",
       cardBorder: "border-amber-100 dark:border-amber-800/30 border-l-[3px] border-l-amber-500 dark:border-l-amber-400",
-      shadow: "shadow-sm shadow-amber-100/80 dark:shadow-black/40",
+      shadow: "shadow-none shadow-amber-100/80 dark:shadow-black/40",
       dot: "bg-amber-500",
       iconBg: "bg-amber-500",
       iconText: "text-white",
@@ -110,7 +99,7 @@ export function timelineCardStyles(color: string) {
     emerald: {
       cardBg: "bg-emerald-50 dark:bg-emerald-950/55",
       cardBorder: "border-emerald-100 dark:border-emerald-800/30 border-l-[3px] border-l-emerald-500 dark:border-l-emerald-400",
-      shadow: "shadow-sm shadow-emerald-100/80 dark:shadow-black/40",
+      shadow: "shadow-none shadow-emerald-100/80 dark:shadow-black/40",
       dot: "bg-emerald-500",
       iconBg: "bg-emerald-500",
       iconText: "text-white",
@@ -122,7 +111,7 @@ export function timelineCardStyles(color: string) {
     cyan: {
       cardBg: "bg-cyan-50 dark:bg-cyan-950/55",
       cardBorder: "border-cyan-100 dark:border-cyan-800/30 border-l-[3px] border-l-cyan-500 dark:border-l-cyan-400",
-      shadow: "shadow-sm shadow-cyan-100/80 dark:shadow-black/40",
+      shadow: "shadow-none shadow-cyan-100/80 dark:shadow-black/40",
       dot: "bg-cyan-500",
       iconBg: "bg-cyan-500",
       iconText: "text-white",

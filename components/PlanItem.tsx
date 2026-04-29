@@ -57,6 +57,7 @@ export default function PlanItem({ index, entry, metaFields, editMode, showDate,
       task: task.trim().slice(0, TITLE_LIMIT),
       note: note.trim().slice(0, NOTE_LIMIT) || undefined,
       meta: meta.length > 0 ? meta : undefined,
+      date: entry.date,
     });
     setEditing(false);
   }
@@ -170,9 +171,16 @@ export default function PlanItem({ index, entry, metaFields, editMode, showDate,
       </span>
 
       <div className="flex-1 min-w-0">
-        <p className="text-sm font-semibold text-neutral-900 dark:text-white truncate">
-          {entry.task}
-        </p>
+        <div className="flex items-center gap-2 min-w-0">
+          <p className="text-sm font-semibold text-neutral-900 dark:text-white truncate flex-1">
+            {entry.task}
+          </p>
+          {showDate && entry.date && (
+            <span className="shrink-0 text-[10px] font-medium text-neutral-400 dark:text-neutral-500 tabular-nums">
+              {new Date(entry.date + "T00:00:00").toLocaleDateString("en-US", { month: "short", day: "numeric" })}
+            </span>
+          )}
+        </div>
         {displayMeta.length > 0 && (
           <div className="mt-1.5 flex flex-wrap gap-1.5">
             {displayMeta.map((m, i) => (

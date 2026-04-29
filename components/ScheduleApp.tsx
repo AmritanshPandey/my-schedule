@@ -1,15 +1,18 @@
 "use client";
 
 import { useEffect, useRef, useState, type ReactNode } from "react";
+import Progress from "@/components/Progress";
+import AddTaskModal from "@/components/AddTaskModal";
 import PlanCard from "@/components/PlanCard";
-import Tabs from "@/components/Tabs";
+import BottomNav from "@/components/BottomNav";
+import Settings from "@/components/Settings";
 import ThemeToggle from "@/components/ThemeToggle";
 import { ScheduleEntry } from "@/components/ScheduleItem";
-import { useScheduleDB, DAYS, DAY_LABELS, DayKey, Plan, SummaryConfig, Task } from "@/lib/useScheduleDB";
+import { useScheduleDB, DAYS, DAY_LABELS, DayKey, Goal, MetricEntry, Plan, SummaryConfig, Task } from "@/lib/useScheduleDB";
 import type { AccentColor } from "@/lib/colorSystem";
 import { accentStyles, colorFromIcon, resolveAccentColor, timelineCardStyles } from "@/lib/colorSystem";
 import { SECTION_ICONS, getIconPickerStyle } from "@/components/SectionIcons";
-import { IconActivity, IconCheck, IconChecklist, IconEdit, IconGripVertical, IconLayoutList, IconPlus, IconTableColumn, IconTrash, IconX } from "@tabler/icons-react";
+import { IconCalendar, IconCheck, IconChevronLeft, IconChevronRight, IconEdit, IconLayoutList, IconPlus, IconTrash, IconX } from "@tabler/icons-react";
 import { DndContext, DragEndEvent, PointerSensor, useSensor, useSensors } from "@dnd-kit/core";
 import { SortableContext, useSortable, verticalListSortingStrategy, arrayMove } from "@dnd-kit/sortable";
 
@@ -21,6 +24,8 @@ function SortablePlanCard({
   onAdd,
   onEdit,
   onDelete,
+  onAddGoal,
+  onDeleteGoal,
 }: {
   plan: Plan;
   onUpdatePlan: (planId: string, updates: { title: string; emoji: string; color: AccentColor; metaFields: string[] }) => void;
@@ -29,6 +34,8 @@ function SortablePlanCard({
   onAdd: (entry: Omit<ScheduleEntry, "id">) => void;
   onEdit: (itemId: string, updated: Omit<ScheduleEntry, "id">) => void;
   onDelete: (itemId: string) => void;
+  onAddGoal: (goal: Omit<Goal, "id">) => void;
+  onDeleteGoal: (goalId: string) => void;
 }) {
   const { attributes, listeners, setNodeRef } = useSortable({ id: plan.id });
 
@@ -42,12 +49,15 @@ function SortablePlanCard({
         items={plan.items}
         metaFields={plan.metaFields ?? []}
         summary={plan.summary}
+        goals={plan.goals ?? []}
         onUpdatePlan={onUpdatePlan}
         onDeletePlan={onDeletePlan}
         onReorderItems={(activeId, overId) => onReorderItems(plan.id, activeId, overId)}
         onAdd={onAdd}
         onEdit={onEdit}
         onDelete={onDelete}
+        onAddGoal={onAddGoal}
+        onDeleteGoal={onDeleteGoal}
         dragHandleProps={{
           attributes: attributes as unknown as Record<string, unknown>,
           listeners: (listeners ?? {}) as Record<string, unknown>,
@@ -118,6 +128,7 @@ function emptyTaskDraft(): Omit<Task, "id"> {
     endTime: "",
     icon: "briefcase",
     color: colorFromIcon("briefcase"),
+    planId: undefined,
   };
 }
 
@@ -190,16 +201,6 @@ function formatHourLabel(hour24: number): string {
   return `${hour} ${suffix}`;
 }
 
-function getActiveDayDate(day: DayKey): string {
-  const today = new Date();
-  const todayIndex = today.getDay();
-  const targetIndex = JS_DAYS.indexOf(day);
-  const diff = targetIndex - todayIndex;
-  const target = new Date(today);
-  target.setDate(today.getDate() + diff);
-  return target.toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" });
-}
-
 function clamp(value: number, min: number, max: number): number {
   return Math.min(Math.max(value, min), max);
 }
@@ -225,6 +226,20 @@ function getCurrentMinutes(): number {
   return now.getHours() * 60 + now.getMinutes();
 }
 
+function getWeekDates(offset: number): Array<{ day: DayKey; date: Date }> {
+  const today = new Date();
+  const dow = today.getDay();
+  const daysToMon = dow === 0 ? 6 : dow - 1;
+  const monday = new Date(today);
+  monday.setDate(today.getDate() - daysToMon + offset * 7);
+  monday.setHours(0, 0, 0, 0);
+  return DAYS.map((day, i) => {
+    const d = new Date(monday);
+    d.setDate(monday.getDate() + i);
+    return { day, date: d };
+  });
+}
+
 export default function ScheduleApp() {
   const { schedule, setSchedule, ready } = useScheduleDB();
   const [todayKey, setTodayKey] = useState<DayKey>(() => JS_DAYS[new Date().getDay()]);
@@ -232,8 +247,9 @@ export default function ScheduleApp() {
   const [editMode, setEditMode] = useState(false);
   const [activeTab, setActiveTab] = useState(0);
 
-  const [addingTask, setAddingTask] = useState(false);
-  const [newTask, setNewTask] = useState<Omit<Task, "id">>(emptyTaskDraft());
+  const [addTaskModalOpen, setAddTaskModalOpen] = useState(false);
+  const [weekOffset, setWeekOffset] = useState(0);
+  const [viewMode, setViewMode] = useState<"card" | "calendar">("card");
   const [editingTaskId, setEditingTaskId] = useState<string | null>(null);
   const [editingTask, setEditingTask] = useState<Omit<Task, "id">>(emptyTaskDraft());
 
@@ -273,32 +289,14 @@ export default function ScheduleApp() {
     timeline.scrollTop = targetTop;
   }, [activeDay, editMode, ready]);
 
-  function handleAddTask() {
-    const title = newTask.title.trim();
-    const startTime = inputValueToDisplayTime(newTask.startTime);
-    const endTime = inputValueToDisplayTime(newTask.endTime);
-    if (!title || !startTime || !endTime) return;
-
+  function handleAddNewTask(task: Omit<Task, "id">) {
     setSchedule((prev) => ({
       ...prev,
       activities: {
         ...prev.activities,
-        [activeDay]: [
-          ...prev.activities[activeDay],
-          {
-            id: uid(),
-            title,
-            description: newTask.description?.trim() || undefined,
-            startTime,
-            endTime,
-            icon: newTask.icon,
-            color: newTask.color,
-          },
-        ],
+        [activeDay]: [...prev.activities[activeDay], { ...task, id: uid() }],
       },
     }));
-    setNewTask(emptyTaskDraft());
-    setAddingTask(false);
   }
 
   function handleDeleteTask(taskId: string) {
@@ -320,6 +318,7 @@ export default function ScheduleApp() {
       endTime: displayTimeToInputValue(task.endTime),
       icon: task.icon,
       color: resolveAccentColor(task.color, task.icon),
+      planId: task.planId,
     });
   }
 
@@ -348,6 +347,7 @@ export default function ScheduleApp() {
               endTime,
               icon: editingTask.icon,
               color: editingTask.color,
+              planId: editingTask.planId,
             }
             : task
         ),
@@ -459,6 +459,58 @@ export default function ScheduleApp() {
         if (oldIndex === -1 || newIndex === -1) return plan;
         return { ...plan, items: arrayMove(plan.items, oldIndex, newIndex) };
       }),
+    }));
+  }
+
+  function handleAddGoal(planId: string, goal: Omit<Goal, "id">) {
+    setSchedule((prev) => ({
+      ...prev,
+      plans: prev.plans.map((plan) =>
+        plan.id === planId
+          ? { ...plan, goals: [...(plan.goals ?? []), { ...goal, id: uid() }] }
+          : plan
+      ),
+    }));
+  }
+
+  function handleDeleteGoal(planId: string, goalId: string) {
+    setSchedule((prev) => ({
+      ...prev,
+      plans: prev.plans.map((plan) =>
+        plan.id === planId
+          ? { ...plan, goals: (plan.goals ?? []).filter((g) => g.id !== goalId) }
+          : plan
+      ),
+    }));
+  }
+
+  function handleAddEntry(entry: Omit<MetricEntry, "id">) {
+    setSchedule((prev) => ({
+      ...prev,
+      metricEntries: [...prev.metricEntries, { ...entry, id: uid() }],
+    }));
+  }
+
+  function handleDeleteEntry(entryId: string) {
+    setSchedule((prev) => ({
+      ...prev,
+      metricEntries: prev.metricEntries.filter((e) => e.id !== entryId),
+    }));
+  }
+
+  function handleSetPlanMetric(planId: string, metric: { name: string; unit: string } | undefined) {
+    setSchedule((prev) => ({
+      ...prev,
+      plans: prev.plans.map((p) => (p.id === planId ? { ...p, metric } : p)),
+    }));
+  }
+
+  function handleClearData() {
+    setSchedule((prev) => ({
+      ...prev,
+      plans: [],
+      activities: Object.fromEntries(DAYS.map((d) => [d, []])) as unknown as typeof prev.activities,
+      metricEntries: [],
     }));
   }
 
@@ -574,6 +626,11 @@ export default function ScheduleApp() {
 
   const timelineTaskLayouts = getTimelineTaskLayouts(dayTasks);
 
+  const weekDates = getWeekDates(weekOffset);
+  const todayMidnight = new Date();
+  todayMidnight.setHours(0, 0, 0, 0);
+  const weekLabel = weekDates[2].date.toLocaleDateString("en-US", { month: "long", year: "numeric" });
+
   function getTaskLaneStyle(layout: (typeof timelineTaskLayouts)[number]) {
     const gap = layout.laneCount > 1 ? 6 : 0;
     const width = 100 / layout.laneCount;
@@ -666,6 +723,29 @@ export default function ScheduleApp() {
                 />
               </div>
             </div>
+            {schedule.plans.length > 0 && (
+              <div>
+                <p className="mb-1.5 text-xs font-medium text-neutral-500 dark:text-neutral-400">Link to plan</p>
+                <div className="flex flex-wrap gap-1.5">
+                  {schedule.plans.map((plan) => {
+                    const ic = SECTION_ICONS.find((i) => i.name === plan.emoji);
+                    const PI = (ic ?? SECTION_ICONS[0]).icon;
+                    const sel = editingTask.planId === plan.id;
+                    return (
+                      <button
+                        key={plan.id}
+                        type="button"
+                        onClick={() => setEditingTask((prev) => ({ ...prev, planId: sel ? undefined : plan.id }))}
+                        className={`inline-flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-xs font-medium transition-all ${sel ? `${accentStyles(plan.color).iconSolid} shadow-sm` : `${accentStyles(plan.color).tint} ${accentStyles(plan.color).text} hover:opacity-90`}`}
+                      >
+                        <PI size={11} strokeWidth={2} />
+                        {plan.title}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
             <div className="flex gap-2 pt-1">
               <button
                 type="button"
@@ -738,21 +818,23 @@ export default function ScheduleApp() {
                 {task.description}
               </p>
             )}
+            {task.planId && (() => {
+              const linkedPlan = schedule.plans.find((p) => p.id === task.planId);
+              if (!linkedPlan) return null;
+              const planIc = SECTION_ICONS.find((i) => i.name === linkedPlan.emoji);
+              const PI = (planIc ?? SECTION_ICONS[0]).icon;
+              const pa = accentStyles(linkedPlan.color);
+              return (
+                <div className={`mt-0.5 inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-semibold ${pa.tint} ${pa.text}`}>
+                  <PI size={9} strokeWidth={2.5} />
+                  {linkedPlan.title}
+                </div>
+              );
+            })()}
           </div>
 
           {editMode && (
             <div className="flex shrink-0 items-center gap-1">
-              {dragHandleProps && (
-                <button
-                  type="button"
-                  className="inline-flex h-9 w-9 items-center justify-center rounded-md text-neutral-400 hover:text-neutral-700 dark:hover:text-neutral-200"
-                  title="Reorder task"
-                  {...dragHandleProps.attributes}
-                  {...dragHandleProps.listeners}
-                >
-                  <IconGripVertical size={18} />
-                </button>
-              )}
               <button
                 type="button"
                 onClick={() => startEditingTask(task)}
@@ -776,8 +858,76 @@ export default function ScheduleApp() {
     );
   }
 
+  function renderCardViewTask(
+    task: Task,
+    dragHandleProps?: { attributes: Record<string, unknown>; listeners: Record<string, unknown> }
+  ) {
+    if (editingTaskId === task.id) {
+      return renderTaskCard(task, "border rounded-xl p-4 w-full min-w-0", dragHandleProps);
+    }
+
+    const tone = timelineCardStyles(task.color);
+    const iconEntry = SECTION_ICONS.find((e) => e.name === task.icon) ?? SECTION_ICONS[0];
+    const CardIcon = iconEntry.icon;
+    const duration = formatTaskDuration(task.startTime, task.endTime);
+    const linkedPlan = task.planId ? schedule.plans.find((p) => p.id === task.planId) : null;
+
+    return (
+      <div
+        className={`flex items-center gap-4 rounded-2xl border p-4 transition-all duration-200 ${tone.cardBg} ${tone.cardBorder} ${editMode && dragHandleProps ? "cursor-grab active:cursor-grabbing" : ""}`}
+        {...(editMode && dragHandleProps ? { ...dragHandleProps.attributes, ...dragHandleProps.listeners } : {})}
+      >
+        <div className={`h-12 w-12 shrink-0 rounded-full flex items-center justify-center ${tone.iconBg} ${tone.iconText}`}>
+          <CardIcon size={22} strokeWidth={1.8} />
+        </div>
+
+        <div className="min-w-0 flex-1">
+          <div className="flex items-center gap-2 min-w-0">
+            <span className={`text-sm font-semibold truncate flex-1 min-w-0 ${tone.title}`}>
+              {task.title}
+            </span>
+            {duration && (
+              <span className={`shrink-0 text-[10px] font-semibold px-2 py-0.5 rounded-full border ${tone.durationBadge}`}>
+                {duration}
+              </span>
+            )}
+          </div>
+          <p className={`text-xs font-medium mt-0.5 ${tone.time}`}>
+            {task.startTime} – {task.endTime}
+          </p>
+          {linkedPlan && (
+            <p className="text-[10px] font-semibold tracking-widest uppercase text-neutral-400 dark:text-neutral-500 mt-0.5">
+              {linkedPlan.title}
+            </p>
+          )}
+        </div>
+
+        {editMode && (
+          <div className="flex shrink-0 items-center gap-0.5">
+            <button
+              type="button"
+              onClick={(e) => { e.stopPropagation(); startEditingTask(task); }}
+              className="inline-flex h-8 w-8 items-center justify-center rounded-lg text-neutral-400 hover:text-neutral-700 dark:hover:text-neutral-200 transition-colors"
+              title="Edit"
+            >
+              <IconEdit size={15} />
+            </button>
+            <button
+              type="button"
+              onClick={(e) => { e.stopPropagation(); handleDeleteTask(task.id); }}
+              className="inline-flex h-8 w-8 items-center justify-center rounded-lg text-neutral-400 hover:text-rose-500 dark:hover:text-rose-400 transition-colors"
+              title="Delete"
+            >
+              <IconTrash size={15} />
+            </button>
+          </div>
+        )}
+      </div>
+    );
+  }
+
   return (
-    <main className="min-h-screen bg-neutral-50 text-neutral-900 dark:bg-neutral-950 dark:text-white">
+    <main className="min-h-screen bg-neutral-50 pb-28 text-neutral-900 dark:bg-neutral-950 dark:text-white">
       <div className="mx-auto max-w-6xl px-4 py-4 sm:px-5 sm:py-6">
         <header className="mb-5">
           <div className="flex items-center justify-between gap-4">
@@ -798,78 +948,122 @@ export default function ScheduleApp() {
         </header>
 
         <div>
-          <Tabs
-            tabs={[
-              {
-                label: "Day Activity",
-                icon: <IconActivity size={18} />,
-                content: (
-                  <div className="space-y-4 pt-1">
-                    <div className="px-1">
-                      {/* Heading */}
-                      <div className="mb-3 flex items-start justify-between gap-3">
-                        <div>
-                          <h2 className="text-base font-semibold text-neutral-900 dark:text-white">
-                            {activeDay.charAt(0).toUpperCase() + activeDay.slice(1)}&apos;s Tasks
-                          </h2>
-                          <p className="mt-0.5 text-xs text-neutral-500 dark:text-neutral-400">
-                            {getActiveDayDate(activeDay)}
-                          </p>
+          {activeTab === 0 && (
+            <div className="space-y-4 pt-1">
+              {/* Week calendar strip */}
+              <div className="rounded-xl border border-neutral-200/80 bg-white px-4 py-3.5 dark:border-white/[0.08] dark:bg-neutral-900">
+                      <div className="mb-3 flex items-center justify-between">
+                        <span className="text-sm font-semibold text-neutral-900 dark:text-white">{weekLabel}</span>
+                        <div className="flex gap-0.5">
+                          <button
+                            type="button"
+                            onClick={() => setWeekOffset((w) => w - 1)}
+                            className="inline-flex h-7 w-7 items-center justify-center rounded-lg text-neutral-500 hover:bg-neutral-100 dark:text-neutral-400 dark:hover:bg-white/[0.07] transition-colors"
+                          >
+                            <IconChevronLeft size={15} />
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => { setWeekOffset(0); setActiveDay(todayKey); }}
+                            className="h-7 rounded-lg px-2 text-[11px] font-medium text-neutral-500 hover:bg-neutral-100 dark:text-neutral-400 dark:hover:bg-white/[0.07] transition-colors"
+                          >
+                            Today
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => setWeekOffset((w) => w + 1)}
+                            className="inline-flex h-7 w-7 items-center justify-center rounded-lg text-neutral-500 hover:bg-neutral-100 dark:text-neutral-400 dark:hover:bg-white/[0.07] transition-colors"
+                          >
+                            <IconChevronRight size={15} />
+                          </button>
                         </div>
-                        <button
-                          type="button"
-                          onClick={() => setActiveDay(todayKey)}
-                          className="mt-0.5 h-7 shrink-0 rounded-md px-2.5 text-xs font-medium text-neutral-600 transition-all duration-200 hover:bg-neutral-100 dark:text-neutral-400 dark:hover:bg-white/5"
-                        >
-                          Today
-                        </button>
                       </div>
-                      {/* Day tabs */}
-                      <div className="flex gap-1.5">
-                        {DAYS.map((day) => {
-                          const isToday = day === todayKey;
+                      <div className="grid grid-cols-7 gap-0.5">
+                        {weekDates.map(({ day, date }) => {
+                          const isDateToday = date.getTime() === todayMidnight.getTime();
                           const isActive = day === activeDay;
-                          const dayClass = isActive
-                            ? "bg-neutral-900 text-white shadow-sm shadow-neutral-900/20 dark:bg-white dark:text-neutral-900 dark:shadow-white/10"
-                            : isToday
-                              ? "bg-neutral-100 text-neutral-700 dark:bg-white/10 dark:text-neutral-300"
-                              : "text-neutral-500 hover:bg-neutral-100 dark:text-neutral-400 dark:hover:bg-white/[0.07]";
                           return (
                             <button
                               key={day}
+                              type="button"
                               onClick={() => setActiveDay(day)}
-                              className={`flex-1 min-w-[40px] max-w-[56px] h-10 rounded-md text-xs font-medium transition-all duration-200 ${dayClass}`}
+                              className={`flex flex-col items-center gap-1 rounded-xl py-2 transition-all duration-200 ${
+                                isActive
+                                  ? "bg-neutral-900 text-white dark:bg-white dark:text-neutral-900"
+                                  : isDateToday
+                                    ? "bg-neutral-100 text-neutral-700 dark:bg-white/10 dark:text-neutral-200"
+                                    : "text-neutral-500 hover:bg-neutral-100 dark:text-neutral-400 dark:hover:bg-white/[0.06]"
+                              }`}
                             >
-                              {DAY_LABELS[day]}
+                              <span className={`text-[9px] font-semibold uppercase tracking-wide leading-none ${isActive ? "opacity-70" : "opacity-60"}`}>
+                                {DAY_LABELS[day]}
+                              </span>
+                              <span className="text-sm font-bold leading-none">{date.getDate()}</span>
                             </button>
                           );
                         })}
                       </div>
                     </div>
 
-                    <div className="space-y-4 pb-24">
-                      {dayTasks.length === 0 && !addingTask && (
-                        <div className="rounded-xl border border-dashed border-neutral-200 p-6 text-center text-sm text-neutral-400 dark:border-white/10 dark:text-neutral-500">
-                          Nothing is on today&apos;s calendar yet. Add your first block to start mapping the day.
+                    {/* Section header */}
+                    <div className="flex items-start justify-between gap-3 px-1">
+                      <div>
+                        <p className="text-[10px] font-semibold uppercase tracking-widest text-neutral-400 dark:text-neutral-500">
+                          My Schedule
+                        </p>
+                        <h2 className="mt-0.5 text-base font-semibold text-neutral-900 dark:text-white">
+                          Today&apos;s Task
+                        </h2>
+                      </div>
+                      {viewMode === "card" && (
+                        <button
+                          type="button"
+                          onClick={() => setEditMode((prev) => !prev)}
+                          title={editMode ? "Done editing" : "Edit tasks"}
+                          className={`mt-0.5 inline-flex h-8 w-8 items-center justify-center rounded-lg border transition-colors ${
+                            editMode
+                              ? "border-neutral-900 bg-neutral-900 text-white dark:border-white dark:bg-white dark:text-neutral-900"
+                              : "border-neutral-200 text-neutral-500 hover:bg-neutral-100 dark:border-white/10 dark:text-neutral-400 dark:hover:bg-white/[0.07]"
+                          }`}
+                        >
+                          <IconEdit size={14} />
+                        </button>
+                      )}
+                    </div>
+
+                    <div className="space-y-3 pb-28">
+                      {dayTasks.length === 0 && (
+                        <div className="rounded-xl border border-dashed border-neutral-200 p-8 text-center text-sm text-neutral-400 dark:border-white/10 dark:text-neutral-500">
+                          Nothing scheduled yet — tap + to add your first task.
                         </div>
                       )}
 
-                      {editMode ? (
-                        <DndContext sensors={sensors} onDragEnd={handleTasksDragEnd}>
-                          <SortableContext items={dayTasks.map((task) => task.id)} strategy={verticalListSortingStrategy}>
-                            <div className="flex flex-col gap-5">
-                              {dayTasks.map((task) => (
-                                <SortableTaskCard key={task.id} task={task}>
-                                  {(dragHandleProps) => (
-                                    <div className="w-full min-w-0 animate-panel-in">
-                                      {renderTaskCard(task, "border rounded-xl p-4 w-full min-w-0", dragHandleProps)}
-                                    </div>
-                                  )}
-                                </SortableTaskCard>
-                              ))}
-                            </div>
-                          </SortableContext>
-                        </DndContext>
+                      {viewMode === "card" ? (
+                        editMode ? (
+                          <DndContext sensors={sensors} onDragEnd={handleTasksDragEnd}>
+                            <SortableContext items={dayTasks.map((t) => t.id)} strategy={verticalListSortingStrategy}>
+                              <div className="flex flex-col gap-3">
+                                {dayTasks.map((task) => (
+                                  <SortableTaskCard key={task.id} task={task}>
+                                    {(dragHandleProps) => (
+                                      <div className="w-full min-w-0 animate-panel-in">
+                                        {renderCardViewTask(task, dragHandleProps)}
+                                      </div>
+                                    )}
+                                  </SortableTaskCard>
+                                ))}
+                              </div>
+                            </SortableContext>
+                          </DndContext>
+                        ) : (
+                          <div className="flex flex-col gap-3">
+                            {dayTasks.map((task) => (
+                              <div key={task.id} className="animate-panel-in">
+                                {renderCardViewTask(task)}
+                              </div>
+                            ))}
+                          </div>
+                        )
                       ) : (
                         <div
                           ref={timelineScrollRef}
@@ -897,19 +1091,17 @@ export default function ScheduleApp() {
                               ))}
                             </div>
                             <div className="absolute inset-0">
-                              {timelineTaskLayouts.map((layout) => {
-                                return (
-                                  <div
-                                    key={layout.task.id}
-                                    className="absolute min-w-0 px-1 animate-panel-in"
-                                    style={getTaskLaneStyle(layout)}
-                                  >
-                                    <div className="relative h-full min-h-[36px]">
-                                      {renderTaskCard(layout.task, "h-full rounded-xl p-2.5 w-full min-w-0 border overflow-hidden", undefined, layout.compact)}
-                                    </div>
+                              {timelineTaskLayouts.map((layout) => (
+                                <div
+                                  key={layout.task.id}
+                                  className="absolute min-w-0 px-1 animate-panel-in"
+                                  style={getTaskLaneStyle(layout)}
+                                >
+                                  <div className="relative h-full min-h-[36px]">
+                                    {renderTaskCard(layout.task, "h-full rounded-xl p-2.5 w-full min-w-0 border overflow-hidden", undefined, layout.compact)}
                                   </div>
-                                );
-                              })}
+                                  </div>
+                                ))}
                             </div>
                             {showCurrentTime && (
                               <div
@@ -924,136 +1116,11 @@ export default function ScheduleApp() {
                         </div>
                       )}
 
-                      {addingTask ? (
-                        <div className="rounded-xl border border-neutral-200/80 bg-white shadow-sm dark:border-white/[0.08] dark:bg-neutral-900 dark:shadow-black/20 overflow-hidden">
-                          {/* Colored header reflecting the selected category */}
-                          <div className={`flex items-center gap-2.5 border-b px-5 py-3.5 border-neutral-100 dark:border-white/[0.07] ${accentStyles(newTask.color).tint}`}>
-                            <div className={`flex h-7 w-7 items-center justify-center rounded-lg ${accentStyles(newTask.color).iconSolid}`}>
-                              {(() => { const ic = SECTION_ICONS.find(i => i.name === newTask.icon); const HI = (ic ?? SECTION_ICONS[0]).icon; return <HI size={14} strokeWidth={2} />; })()}
-                            </div>
-                            <p className="text-sm font-semibold text-neutral-900 dark:text-white">New time block</p>
-                          </div>
-
-                          <div className="space-y-4 p-5">
-                            {/* Icon picker — each icon in its own category color */}
-                            <div className="grid grid-cols-5 gap-1.5">
-                              {SECTION_ICONS.map(({ name, label, icon: Icon }) => {
-                                const ic = getIconPickerStyle(name);
-                                const sel = newTask.icon === name;
-                                return (
-                                  <button
-                                    key={name}
-                                    type="button"
-                                    title={label}
-                                    onClick={() => setNewTask((prev) => ({ ...prev, icon: name, color: colorFromIcon(name) }))}
-                                    className={`flex flex-col items-center justify-center gap-1 rounded-xl py-2.5 transition-all duration-150 ${sel ? `${ic.solid} shadow-sm scale-[1.04]` : `${ic.tint} ${ic.text} hover:scale-[1.04]`
-                                      }`}
-                                  >
-                                    <Icon size={17} strokeWidth={1.5} />
-                                    <span className={`text-[9px] font-semibold leading-none ${sel ? "text-white/80" : ""}`}>{label}</span>
-                                  </button>
-                                );
-                              })}
-                            </div>
-
-                            {/* Title + note */}
-                            <div className="space-y-2">
-                              <input
-                                value={newTask.title}
-                                onChange={(e) => setNewTask((prev) => ({ ...prev, title: e.target.value }))}
-                                placeholder="Block title"
-                                autoFocus
-                                onKeyDown={(e) => { if (e.key === "Enter") handleAddTask(); if (e.key === "Escape") { setAddingTask(false); setNewTask(emptyTaskDraft()); } }}
-                                className="h-10 w-full rounded-lg border border-neutral-200 bg-neutral-50 px-3 text-sm text-neutral-900 outline-none transition-colors placeholder:text-neutral-400 focus:border-neutral-300 focus:bg-white dark:border-white/10 dark:bg-white/[0.04] dark:text-white dark:placeholder:text-neutral-500 dark:focus:border-white/20 dark:focus:bg-white/[0.08]"
-                              />
-                              <input
-                                value={newTask.description}
-                                onChange={(e) => setNewTask((prev) => ({ ...prev, description: e.target.value }))}
-                                placeholder="Short note (optional)"
-                                onKeyDown={(e) => { if (e.key === "Enter") handleAddTask(); if (e.key === "Escape") { setAddingTask(false); setNewTask(emptyTaskDraft()); } }}
-                                className="h-10 w-full rounded-lg border border-neutral-200 bg-neutral-50 px-3 text-sm text-neutral-900 outline-none transition-colors placeholder:text-neutral-400 focus:border-neutral-300 focus:bg-white dark:border-white/10 dark:bg-white/[0.04] dark:text-white dark:placeholder:text-neutral-500 dark:focus:border-white/20 dark:focus:bg-white/[0.08]"
-                              />
-                            </div>
-
-                            {/* Time — labeled columns */}
-                            <div className="grid grid-cols-2 gap-3">
-                              <div>
-                                <p className="mb-1.5 text-xs font-medium text-neutral-500 dark:text-neutral-400">Start</p>
-                                <input
-                                  value={newTask.startTime}
-                                  onChange={(e) => setNewTask((prev) => ({ ...prev, startTime: e.target.value }))}
-                                  type="time"
-                                  aria-label="New task start time"
-                                  onKeyDown={(e) => { if (e.key === "Enter") handleAddTask(); if (e.key === "Escape") { setAddingTask(false); setNewTask(emptyTaskDraft()); } }}
-                                  className="h-10 w-full rounded-lg border border-neutral-200 bg-neutral-50 px-3 text-sm text-neutral-900 outline-none transition-colors focus:border-neutral-300 focus:bg-white dark:border-white/10 dark:bg-white/[0.04] dark:text-white dark:focus:border-white/20 dark:focus:bg-white/[0.08]"
-                                />
-                              </div>
-                              <div>
-                                <p className="mb-1.5 text-xs font-medium text-neutral-500 dark:text-neutral-400">End</p>
-                                <input
-                                  value={newTask.endTime}
-                                  onChange={(e) => setNewTask((prev) => ({ ...prev, endTime: e.target.value }))}
-                                  type="time"
-                                  aria-label="New task end time"
-                                  onKeyDown={(e) => { if (e.key === "Enter") handleAddTask(); if (e.key === "Escape") { setAddingTask(false); setNewTask(emptyTaskDraft()); } }}
-                                  className="h-10 w-full rounded-lg border border-neutral-200 bg-neutral-50 px-3 text-sm text-neutral-900 outline-none transition-colors focus:border-neutral-300 focus:bg-white dark:border-white/10 dark:bg-white/[0.04] dark:text-white dark:focus:border-white/20 dark:focus:bg-white/[0.08]"
-                                />
-                              </div>
-                            </div>
-
-                            {/* Actions — save button uses category color */}
-                            <div className="flex gap-2 pt-1">
-                              <button
-                                type="button"
-                                onClick={handleAddTask}
-                                className={`inline-flex flex-1 h-10 items-center justify-center gap-1.5 rounded-lg text-sm font-medium transition-all hover:opacity-90 ${accentStyles(newTask.color).iconSolid}`}
-                              >
-                                <IconPlus size={15} />
-                                Save Block
-                              </button>
-                              <button
-                                type="button"
-                                onClick={() => { setAddingTask(false); setNewTask(emptyTaskDraft()); }}
-                                className="inline-flex h-10 items-center gap-1.5 rounded-lg border border-neutral-200 px-4 text-sm font-medium text-neutral-600 transition-colors hover:bg-neutral-50 dark:border-white/10 dark:text-neutral-400 dark:hover:bg-white/5"
-                              >
-                                Cancel
-                              </button>
-                            </div>
-                          </div>
-                        </div>
-                      ) : (
-<button
-  onClick={() => setAddingTask(true)}
-  className="relative inline-flex h-12 w-full items-center justify-center gap-2 rounded-lg px-4 text-md font-medium
-  text-cyan-600 dark:text-cyan-300
-  border border-cyan-500/40
-  transition-all duration-300
-
-  hover:border-cyan-400 hover:text-cyan-700
-  dark:hover:text-cyan-200
-
-  before:absolute before:inset-0 before:rounded-lg
-  before:bg-cyan-500/0 before:opacity-0 before:transition-all before:duration-300
-  hover:before:bg-cyan-500/5 hover:before:opacity-100
-
-  shadow-[0_0_0px_rgba(6,182,212,0)]
-  hover:shadow-[0_0_20px_rgba(6,182,212,0.25)]
-
-  active:scale-[0.98]"
->
-  <IconPlus size={16} />
-  Add Time Block
-</button>
-                      )}
                     </div>
-                  </div>
-                ),
-              },
-              {
-                label: "Plan",
-                icon: <IconChecklist size={18} />,
-                content: (
-                  <div className="space-y-4 pt-1">
+            </div>
+          )}
+          {activeTab === 1 && (
+            <div className="space-y-4 pt-1 pb-28">
                     {schedule.plans.length === 0 && !addingPlan && (
                       <div className="rounded-xl border border-dashed border-neutral-200 p-6 text-center text-sm text-neutral-400 dark:border-white/10 dark:text-neutral-500">
                         No plans yet. Create one for routines, meals, workouts, or anything you want to track over time.
@@ -1073,6 +1140,8 @@ export default function ScheduleApp() {
                               onAdd={(entry) => handlePlanAdd(plan.id, entry)}
                               onEdit={(itemId, updated) => handlePlanEdit(plan.id, itemId, updated)}
                               onDelete={(itemId) => handlePlanDelete(plan.id, itemId)}
+                              onAddGoal={(goal) => handleAddGoal(plan.id, goal)}
+                              onDeleteGoal={(goalId) => handleDeleteGoal(plan.id, goalId)}
                             />
                           ))}
                         </div>
@@ -1205,26 +1274,44 @@ export default function ScheduleApp() {
                         Add Plan
                       </button>
                     )}
-                  </div>
-                ),
-              },
-            ]}
-            onActiveChange={setActiveTab}
-            initialActive={0}
-          />
+            </div>
+          )}
+          {activeTab === 2 && (
+            <Progress
+              plans={schedule.plans}
+              entries={schedule.metricEntries}
+              onAddEntry={handleAddEntry}
+              onDeleteEntry={handleDeleteEntry}
+              onSetMetric={handleSetPlanMetric}
+            />
+          )}
+          {activeTab === 3 && (
+            <Settings onClearData={handleClearData} />
+          )}
         </div>
-        {activeTab !== 1 && (
+        {activeTab === 0 && (
           <button
             type="button"
-            onClick={() => setEditMode((prev) => !prev)}
-            className="fixed bottom-6 right-6 z-20 flex h-12 w-12 items-center justify-center rounded-xl bg-neutral-900 text-white shadow-lg shadow-neutral-900/25 transition-all duration-200 hover:scale-105 hover:bg-neutral-800 hover:shadow-xl dark:bg-white dark:text-neutral-900 dark:shadow-white/10 dark:hover:bg-neutral-100"
-            title={editMode ? "Switch to timeline view" : "Switch to list view"}
-            aria-label={editMode ? "Switch to timeline view" : "Switch to list view"}
+            onClick={() => { setViewMode((v) => (v === "card" ? "calendar" : "card")); setEditMode(false); }}
+            aria-label={viewMode === "card" ? "Calendar view" : "Card view"}
+            className="fixed bottom-[88px] right-4 z-20 flex h-12 w-12 items-center justify-center rounded-2xl border border-neutral-200/60 bg-white text-neutral-700 transition-all duration-200 active:scale-95 dark:border-white/[0.08] dark:bg-neutral-900 dark:text-neutral-300"
           >
-            {editMode ? < IconLayoutList size={20} strokeWidth={2} /> : <IconTableColumn size={20} strokeWidth={2} />}
+            {viewMode === "card" ? <IconCalendar size={18} /> : <IconLayoutList size={18} />}
           </button>
         )}
       </div>
+
+      <BottomNav
+        activeTab={activeTab}
+        onTabChange={setActiveTab}
+        onAddTask={() => setAddTaskModalOpen(true)}
+      />
+      <AddTaskModal
+        isOpen={addTaskModalOpen}
+        onClose={() => setAddTaskModalOpen(false)}
+        onSave={handleAddNewTask}
+        plans={schedule.plans}
+      />
     </main>
   );
 }
