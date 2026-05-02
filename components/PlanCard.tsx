@@ -4,7 +4,7 @@ import { useState } from "react";
 import PlanItem from "./PlanItem";
 import { ScheduleEntry, MetaField } from "./ScheduleItem";
 import { IconCheck, IconEdit, IconGripVertical, IconPlus, IconTarget, IconTrash, IconX } from "@tabler/icons-react";
-import { Goal, SummaryConfig } from "@/lib/useScheduleDB";
+import { Goal, PlanCategory, SummaryConfig, categoryFromIcon } from "@/lib/useScheduleDB";
 import { SECTION_ICONS, getIconPickerStyle } from "@/components/SectionIcons";
 import type { AccentColor } from "@/lib/colorSystem";
 import { accentStyles, colorFromIcon, resolveAccentColor } from "@/lib/colorSystem";
@@ -20,7 +20,7 @@ interface PlanCardProps {
   metaFields: string[];
   summary?: SummaryConfig[];
   goals: Goal[];
-  onUpdatePlan: (id: string, updates: { title: string; emoji: string; color: AccentColor; metaFields: string[] }) => void;
+  onUpdatePlan: (id: string, updates: { title: string; category: PlanCategory; emoji: string; color: AccentColor; metaFields: string[] }) => void;
   onDeletePlan: (id: string) => void;
   onReorderItems: (activeId: string, overId: string) => void;
   onAdd: (entry: Omit<ScheduleEntry, "id">) => void;
@@ -185,6 +185,7 @@ export default function PlanCard({
     if (!nextTitle) return;
     onUpdatePlan(id, {
       title: nextTitle,
+      category: categoryFromIcon(editIconName),
       emoji: editIconName,
       color: editColor,
       metaFields: editMetaFields.filter(Boolean),

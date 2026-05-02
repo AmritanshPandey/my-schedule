@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import type { Plan, MetricEntry } from "@/lib/useScheduleDB";
+import type { Plan, MetricEntry, Task } from "@/lib/useScheduleDB";
 import { SECTION_ICONS } from "@/components/SectionIcons";
 import { accentStyles } from "@/lib/colorSystem";
 import { IconCheck, IconPlus, IconTrendingUp, IconX } from "@tabler/icons-react";
@@ -12,9 +12,33 @@ import EntryList from "@/components/EntryList";
 interface ProgressProps {
   plans: Plan[];
   entries: MetricEntry[];
+  activities?: Task[];
   onAddEntry: (entry: Omit<MetricEntry, "id">) => void;
   onDeleteEntry: (id: string) => void;
   onSetMetric: (planId: string, metric: { name: string; unit: string } | undefined) => void;
+}
+
+function parseTimeToMinutes(value: string): number | null {
+  const twelveHour = value.trim().match(/^(\d{1,2}):(\d{2})\s*(AM|PM)$/i);
+  if (twelveHour) {
+    let hours = Number(twelveHour[1]);
+    const minutes = Number(twelveHour[2]);
+    const meridiem = twelveHour[3].toUpperCase();
+    if (meridiem === "PM" && hours !== 12) hours += 12;
+    if (meridiem === "AM" && hours === 12) hours = 0;
+    return hours * 60 + minutes;
+  }
+
+  const twentyFourHour = value.trim().match(/^(\d{1,2}):(\d{2})$/);
+  if (!twentyFourHour) return null;
+  return Number(twentyFourHour[1]) * 60 + Number(twentyFourHour[2]);
+}
+
+function getActivityMinutes(activity: Task): number {
+  const start = parseTimeToMinutes(activity.startTime);
+  const end = parseTimeToMinutes(activity.endTime);
+  if (start === null || end === null || end <= start) return 0;
+  return end - start;
 }
 
 function EmptyCard({ title, subtitle }: { title: string; subtitle: string }) {
@@ -124,11 +148,14 @@ function SetMetricForm({
   );
 }
 
-export default function Progress({ plans, entries, onAddEntry, onDeleteEntry, onSetMetric }: ProgressProps) {
+export default function Progress({ plans, entries, activities = [], onAddEntry, onDeleteEntry, onSetMetric }: ProgressProps) {
   const [selectedPlanId, setSelectedPlanId] = useState<string>(() => plans[0]?.id ?? "");
   const [addEntryOpen, setAddEntryOpen] = useState(false);
 
   const selectedPlan = plans.find((p) => p.id === selectedPlanId) ?? plans[0] ?? null;
+  const planActivities = selectedPlan ? activities.filter((activity) => activity.planId === selectedPlan.id) : [];
+  const totalActivityMinutes = planActivities.reduce((sum, activity) => sum + getActivityMinutes(activity), 0);
+  const totalActivityHours = Math.round((totalActivityMinutes / 60) * 10) / 10;
   const planEntries = entries
     .filter((e) => e.planId === selectedPlan?.id)
     .sort((a, b) => a.date.localeCompare(b.date));
@@ -171,6 +198,21 @@ export default function Progress({ plans, entries, onAddEntry, onDeleteEntry, on
 
       {selectedPlan && (
         <>
+          <div className="grid grid-cols-3 gap-2">
+            <div className="rounded-xl border border-neutral-200 bg-neutral-50 p-3 dark:border-white/10 dark:bg-white/[0.04]">
+              <p className="text-[10px] font-semibold uppercase tracking-widest text-neutral-400 dark:text-neutral-500">Activities</p>
+              <p className="mt-1 text-lg font-semibold text-neutral-900 dark:text-white">{planActivities.length}</p>
+            </div>
+            <div className="rounded-xl border border-neutral-200 bg-neutral-50 p-3 dark:border-white/10 dark:bg-white/[0.04]">
+              <p className="text-[10px] font-semibold uppercase tracking-widest text-neutral-400 dark:text-neutral-500">Hours</p>
+              <p className="mt-1 text-lg font-semibold text-neutral-900 dark:text-white">{totalActivityHours}</p>
+            </div>
+            <div className="rounded-xl border border-neutral-200 bg-neutral-50 p-3 dark:border-white/10 dark:bg-white/[0.04]">
+              <p className="text-[10px] font-semibold uppercase tracking-widest text-neutral-400 dark:text-neutral-500">Entries</p>
+              <p className="mt-1 text-lg font-semibold text-neutral-900 dark:text-white">{planEntries.length}</p>
+            </div>
+          </div>
+
           {selectedPlan.metric ? (
             <>
               {/* Metric header */}
@@ -242,7 +284,7 @@ export default function Progress({ plans, entries, onAddEntry, onDeleteEntry, on
         onClose={() => setAddEntryOpen(false)}
         onSave={(value, date) => {
           if (!selectedPlan) return;
-          onAddEntry({ planId: selectedPlan.id, value, date });
+          onAddEntry({ planId: selectedPlan.id, trackerId: `${selectedPlan.id}-tracker-main`, value, date });
         }}
         metric={selectedPlan?.metric}
       />

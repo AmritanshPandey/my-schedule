@@ -6,6 +6,7 @@ import type { AccentColor } from "@/lib/colorSystem";
 import { colorFromIcon, resolveAccentColor } from "@/lib/colorSystem";
 
 export type DayKey = "monday" | "tuesday" | "wednesday" | "thursday" | "friday" | "saturday" | "sunday";
+export type PlanCategory = "fitness" | "learning" | "work" | "health" | "routine";
 
 export const DAYS: DayKey[] = ["monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday"];
 export const DAY_LABELS: Record<DayKey, string> = {
@@ -36,7 +37,7 @@ export interface Task {
   endTime: string;
   icon: string;
   color: AccentColor;
-  planId?: string;
+  planId: string;
 }
 
 export interface SummaryConfig {
@@ -49,6 +50,10 @@ export interface SummaryConfig {
 export interface Plan {
   id: string;
   title: string;
+  description?: string;
+  startDate?: string;
+  endDate?: string;
+  category: PlanCategory;
   emoji: string;
   color: AccentColor;
   items: ScheduleEntry[];
@@ -58,12 +63,24 @@ export interface Plan {
   metric?: { name: string; unit: string };
 }
 
+export interface ProgressTracker {
+  id: string;
+  planId: string;
+  title: string;
+  type: "number";
+  unit?: string;
+}
+
 export interface MetricEntry {
   id: string;
   planId: string;
+  trackerId: string;
   value: number;
   date: string; // ISO "YYYY-MM-DD"
 }
+
+export type Activity = Task;
+export type ProgressEntry = MetricEntry;
 
 type DayActivities = Record<DayKey, Task[]>;
 
@@ -74,6 +91,7 @@ function emptyDayActivities(): DayActivities {
 export interface Schedule {
   plans: Plan[];
   activities: DayActivities;
+  progressTrackers: ProgressTracker[];
   metricEntries: MetricEntry[];
 }
 
@@ -126,7 +144,43 @@ function splitLegacyTimeRange(value: string): { startTime: string; endTime: stri
   return { startTime: raw, endTime: raw };
 }
 
-function entryToTask(entry: ScheduleEntry, icon: string, description?: string): Task {
+export function categoryFromIcon(icon: string): PlanCategory {
+  if (icon === "run" || icon === "barbell") return "fitness";
+  if (icon === "school" || icon === "book" || icon === "brain" || icon === "code") return "learning";
+  if (icon === "briefcase" || icon === "car") return "work";
+  if (icon === "sleep") return "health";
+  return "routine";
+}
+
+function hasAnyTasks(activities: unknown): boolean {
+  if (!isPerDay(activities)) return false;
+  return DAYS.some((day) => {
+    const tasks = (activities as Record<string, unknown>)[day];
+    return Array.isArray(tasks) && tasks.length > 0;
+  });
+}
+
+function legacyActivityPlan(): Plan {
+  return {
+    id: "legacy-activities",
+    title: "General Plan",
+    description: "Imported activities",
+    category: "routine",
+    emoji: "star",
+    color: colorFromIcon("star"),
+    items: [],
+    metaFields: [],
+    summary: [],
+    goals: [],
+  };
+}
+
+function ensureActivityPlans(plans: Plan[], activities: unknown): Plan[] {
+  if (plans.length > 0 || !hasAnyTasks(activities)) return plans;
+  return [legacyActivityPlan()];
+}
+
+function entryToTask(entry: ScheduleEntry, icon: string, planId: string, description?: string): Task {
   const { startTime, endTime } = splitLegacyTimeRange(entry.time ?? "");
   return {
     id: entry.id,
@@ -136,6 +190,7 @@ function entryToTask(entry: ScheduleEntry, icon: string, description?: string): 
     endTime,
     icon,
     color: colorFromIcon(icon),
+    planId,
   };
 }
 
@@ -151,6 +206,10 @@ function normalizePlan(value: unknown): Plan | null {
   return {
     id: p.id,
     title: p.title,
+    description: typeof (p as Plan & { description?: unknown }).description === "string" ? (p as Plan & { description: string }).description : undefined,
+    startDate: typeof (p as Plan & { startDate?: unknown }).startDate === "string" ? (p as Plan & { startDate: string }).startDate : undefined,
+    endDate: typeof (p as Plan & { endDate?: unknown }).endDate === "string" ? (p as Plan & { endDate: string }).endDate : undefined,
+    category: (p as Plan & { category?: PlanCategory }).category ?? categoryFromIcon(p.emoji),
     emoji: p.emoji,
     color: resolveAccentColor((p as Plan & { color?: string }).color, p.emoji),
     items: Array.isArray(p.items) ? p.items : [],
@@ -161,14 +220,50 @@ function normalizePlan(value: unknown): Plan | null {
   };
 }
 
-function normalizeMetricEntry(value: unknown): MetricEntry | null {
+function defaultTrackerId(planId: string): string {
+  return `${planId}-tracker-main`;
+}
+
+function normalizeTracker(value: unknown): ProgressTracker | null {
+  if (!value || typeof value !== "object") return null;
+  const t = value as ProgressTracker;
+  if (!t.id || !t.planId || !t.title) return null;
+  return {
+    id: t.id,
+    planId: t.planId,
+    title: t.title,
+    type: "number",
+    unit: t.unit,
+  };
+}
+
+function trackersFromPlans(plans: Plan[], storedTrackers: ProgressTracker[]): ProgressTracker[] {
+  if (storedTrackers.length > 0) return storedTrackers;
+  return plans.flatMap((plan) => {
+    if (plan.metric) {
+      return [{ id: defaultTrackerId(plan.id), planId: plan.id, title: plan.metric.name, type: "number" as const, unit: plan.metric.unit }];
+    }
+    return (plan.metaFields ?? []).map((field) => ({
+      id: `${plan.id}-tracker-${field.toLowerCase().replace(/[^a-z0-9]+/g, "-")}`,
+      planId: plan.id,
+      title: field,
+      type: "number" as const,
+      unit: "",
+    }));
+  });
+}
+
+function normalizeMetricEntry(value: unknown, trackers: ProgressTracker[]): MetricEntry | null {
   if (!value || typeof value !== "object") return null;
   const e = value as MetricEntry;
   if (!e.id || !e.planId || typeof e.value !== "number" || !e.date) return null;
-  return { id: e.id, planId: e.planId, value: e.value, date: e.date };
+  const fallbackTracker = trackers.find((tracker) => tracker.planId === e.planId);
+  const trackerId = e.trackerId || fallbackTracker?.id;
+  if (!trackerId) return null;
+  return { id: e.id, planId: e.planId, trackerId, value: e.value, date: e.date };
 }
 
-function normalizeTasks(value: unknown, fallbackIcon = "briefcase", fallbackDescription?: string): Task[] {
+function normalizeTasks(value: unknown, fallbackPlanId: string, fallbackIcon = "briefcase", fallbackDescription?: string): Task[] {
   if (!Array.isArray(value)) return [];
 
   return value.flatMap((item) => {
@@ -184,17 +279,17 @@ function normalizeTasks(value: unknown, fallbackIcon = "briefcase", fallbackDesc
         endTime: task.endTime,
         icon: task.icon || fallbackIcon,
         color: resolveAccentColor((task as Task & { color?: string }).color, task.icon || fallbackIcon),
-        planId: task.planId,
+        planId: task.planId || fallbackPlanId,
       }];
     }
 
     if ("items" in item && Array.isArray((item as { items: unknown[] }).items)) {
       const section = item as { title?: string; iconName?: string; items: ScheduleEntry[] };
-      return section.items.map((entry) => entryToTask(entry, section.iconName ?? fallbackIcon, section.title));
+      return section.items.map((entry) => entryToTask(entry, section.iconName ?? fallbackIcon, fallbackPlanId, section.title));
     }
 
     if ("time" in item && "task" in item) {
-      return [entryToTask(item as ScheduleEntry, fallbackIcon, fallbackDescription)];
+      return [entryToTask(item as ScheduleEntry, fallbackIcon, fallbackPlanId, fallbackDescription)];
     }
 
     return [];
@@ -206,6 +301,8 @@ function defaultPlans(): Plan[] {
     {
       id: "diet",
       title: "Diet",
+      description: "Track meals, hydration, and daily nutrition.",
+      category: "health",
       emoji: "sleep",
       color: "emerald",
       items: [],
@@ -218,6 +315,8 @@ function defaultPlans(): Plan[] {
     {
       id: "workout",
       title: "Workout",
+      description: "Plan workouts and track training progress.",
+      category: "fitness",
       emoji: "barbell",
       color: "cyan",
       items: [],
@@ -236,21 +335,29 @@ function migrate(raw: unknown): Schedule {
   if (!raw || typeof raw !== "object") return empty;
   const r = raw as Record<string, unknown>;
 
-  const metricEntries: MetricEntry[] = Array.isArray(r.metricEntries)
-    ? (r.metricEntries as unknown[]).map(normalizeMetricEntry).filter((e): e is MetricEntry => e !== null)
-    : [];
-
   // Already current shape or existing activities that still need per-day normalization.
   if (isPerDay(r.activities) && Array.isArray(r.plans)) {
     const normalizedPlans = (r.plans as unknown[])
       .map((plan) => normalizePlan(plan))
       .filter((plan): plan is Plan => plan !== null);
+    const plans = ensureActivityPlans(normalizedPlans, r.activities);
+    const fallbackPlanId = plans[0]?.id ?? legacyActivityPlan().id;
+    const progressTrackers = trackersFromPlans(
+      plans,
+      Array.isArray(r.progressTrackers)
+        ? (r.progressTrackers as unknown[]).map(normalizeTracker).filter((t): t is ProgressTracker => t !== null)
+        : []
+    );
+    const metricEntries: MetricEntry[] = Array.isArray(r.metricEntries)
+      ? (r.metricEntries as unknown[]).map((entry) => normalizeMetricEntry(entry, progressTrackers)).filter((e): e is MetricEntry => e !== null)
+      : [];
 
     return {
-      plans: normalizedPlans,
+      plans,
       activities: Object.fromEntries(
-        DAYS.map((day) => [day, normalizeTasks((r.activities as Record<string, unknown>)[day])])
+        DAYS.map((day) => [day, normalizeTasks((r.activities as Record<string, unknown>)[day], fallbackPlanId)])
       ) as DayActivities,
+      progressTrackers,
       metricEntries,
     };
   }
@@ -258,13 +365,18 @@ function migrate(raw: unknown): Schedule {
   // v3/v4 migration: fixed diet/workout plans plus nested day sections.
   if (isPerDay(r.activities) && (Array.isArray(r.diet) || Array.isArray(r.workout))) {
     const plans = defaultPlans();
+    const progressTrackers = trackersFromPlans(plans, []);
+    const metricEntries: MetricEntry[] = Array.isArray(r.metricEntries)
+      ? (r.metricEntries as unknown[]).map((entry) => normalizeMetricEntry(entry, progressTrackers)).filter((e): e is MetricEntry => e !== null)
+      : [];
     plans[0].items = Array.isArray(r.diet) ? (r.diet as ScheduleEntry[]) : [];
     plans[1].items = Array.isArray(r.workout) ? (r.workout as ScheduleEntry[]) : [];
     return {
       plans,
       activities: Object.fromEntries(
-        DAYS.map((day) => [day, normalizeTasks((r.activities as Record<string, unknown>)[day])])
+        DAYS.map((day) => [day, normalizeTasks((r.activities as Record<string, unknown>)[day], plans[0].id)])
       ) as DayActivities,
+      progressTrackers,
       metricEntries,
     };
   }
@@ -279,19 +391,24 @@ function migrate(raw: unknown): Schedule {
       ? ((r.personal as Record<string, ScheduleEntry[]>)[day] ?? [])
       : day === "monday" && Array.isArray(r.personal) ? r.personal : [];
 
-    activities[day].push(...workItems.map((entry) => entryToTask(entry, "briefcase", "Work Schedule")));
-    activities[day].push(...personalItems.map((entry) => entryToTask(entry, "star", "Personal")));
+    activities[day].push(...workItems.map((entry) => entryToTask(entry, "briefcase", "workout", "Work Schedule")));
+    activities[day].push(...personalItems.map((entry) => entryToTask(entry, "star", "diet", "Personal")));
   }
 
   const plans = defaultPlans();
+  const progressTrackers = trackersFromPlans(plans, []);
+  const metricEntries: MetricEntry[] = Array.isArray(r.metricEntries)
+    ? (r.metricEntries as unknown[]).map((entry) => normalizeMetricEntry(entry, progressTrackers)).filter((e): e is MetricEntry => e !== null)
+    : [];
   plans[0].items = Array.isArray(r.diet) ? (r.diet as ScheduleEntry[]) : [];
   plans[1].items = Array.isArray(r.workout) ? (r.workout as ScheduleEntry[]) : [];
 
-  return { plans, activities, metricEntries };
+  return { plans, activities, progressTrackers, metricEntries };
 }
 
 function emptyEmpty(): Schedule {
-  return { plans: defaultPlans(), activities: emptyDayActivities(), metricEntries: [] };
+  const plans = defaultPlans();
+  return { plans, activities: emptyDayActivities(), progressTrackers: trackersFromPlans(plans, []), metricEntries: [] };
 }
 
 export function useScheduleDB() {

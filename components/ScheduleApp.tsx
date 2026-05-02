@@ -1,101 +1,101 @@
 "use client";
 
-import { useEffect, useRef, useState, type ReactNode } from "react";
-import Progress from "@/components/Progress";
+import { useEffect, useRef, useState } from "react";
+import { AnimatePresence, motion } from "framer-motion";
+import ProgressChart from "@/components/ProgressChart";
+import AddEntryModal from "@/components/AddEntryModal";
 import AddTaskModal from "@/components/AddTaskModal";
-import PlanCard from "@/components/PlanCard";
 import BottomNav from "@/components/BottomNav";
-import Settings from "@/components/Settings";
 import ThemeToggle from "@/components/ThemeToggle";
-import { ScheduleEntry } from "@/components/ScheduleItem";
-import { useScheduleDB, DAYS, DAY_LABELS, DayKey, Goal, MetricEntry, Plan, SummaryConfig, Task } from "@/lib/useScheduleDB";
-import type { AccentColor } from "@/lib/colorSystem";
-import { accentStyles, colorFromIcon, resolveAccentColor, timelineCardStyles } from "@/lib/colorSystem";
+import TimeSlotPicker from "@/components/TimeSlotPicker";
+import {
+  useScheduleDB,
+  DAYS,
+  DAY_LABELS,
+  DayKey,
+  MetricEntry,
+  Plan,
+  ProgressTracker,
+  SummaryConfig,
+  Task,
+  categoryFromIcon,
+} from "@/lib/useScheduleDB";
+import {
+  accentStyles,
+  colorFromIcon,
+  resolveAccentColor,
+  timelineCardStyles,
+} from "@/lib/colorSystem";
 import { SECTION_ICONS, getIconPickerStyle } from "@/components/SectionIcons";
-import { IconCalendar, IconCheck, IconChevronLeft, IconChevronRight, IconEdit, IconLayoutList, IconPlus, IconTrash, IconX } from "@tabler/icons-react";
+import {
+  IconArrowLeft,
+  IconCalendar,
+  IconCheck,
+  IconChevronLeft,
+  IconChevronRight,
+  IconClipboardList,
+  IconEdit,
+  IconLayoutList,
+  IconPlus,
+  IconTable,
+  IconTrash,
+  IconTrendingDown,
+  IconTrendingUp,
+  IconX,
+} from "@tabler/icons-react";
 import { DndContext, DragEndEvent, PointerSensor, useSensor, useSensors } from "@dnd-kit/core";
-import { SortableContext, useSortable, verticalListSortingStrategy, arrayMove } from "@dnd-kit/sortable";
+import { SortableContext, useSortable, verticalListSortingStrategy } from "@dnd-kit/sortable";
 
-function SortablePlanCard({
-  plan,
-  onUpdatePlan,
-  onDeletePlan,
-  onReorderItems,
-  onAdd,
-  onEdit,
-  onDelete,
-  onAddGoal,
-  onDeleteGoal,
-}: {
-  plan: Plan;
-  onUpdatePlan: (planId: string, updates: { title: string; emoji: string; color: AccentColor; metaFields: string[] }) => void;
-  onDeletePlan: (planId: string) => void;
-  onReorderItems: (planId: string, activeId: string, overId: string) => void;
-  onAdd: (entry: Omit<ScheduleEntry, "id">) => void;
-  onEdit: (itemId: string, updated: Omit<ScheduleEntry, "id">) => void;
-  onDelete: (itemId: string) => void;
-  onAddGoal: (goal: Omit<Goal, "id">) => void;
-  onDeleteGoal: (goalId: string) => void;
-}) {
-  const { attributes, listeners, setNodeRef } = useSortable({ id: plan.id });
+// ─── Constants ───────────────────────────────────────────────────────────────
 
-  return (
-    <div ref={setNodeRef}>
-      <PlanCard
-        id={plan.id}
-        title={plan.title}
-        emoji={plan.emoji}
-        color={plan.color}
-        items={plan.items}
-        metaFields={plan.metaFields ?? []}
-        summary={plan.summary}
-        goals={plan.goals ?? []}
-        onUpdatePlan={onUpdatePlan}
-        onDeletePlan={onDeletePlan}
-        onReorderItems={(activeId, overId) => onReorderItems(plan.id, activeId, overId)}
-        onAdd={onAdd}
-        onEdit={onEdit}
-        onDelete={onDelete}
-        onAddGoal={onAddGoal}
-        onDeleteGoal={onDeleteGoal}
-        dragHandleProps={{
-          attributes: attributes as unknown as Record<string, unknown>,
-          listeners: (listeners ?? {}) as Record<string, unknown>,
-        }}
-      />
-    </div>
-  );
-}
+const TIMELINE_START_HOUR = 4;
+const TIMELINE_END_HOUR = 24;
+const HOUR_HEIGHT = 96;
+const TIMELINE_TOP_PADDING = 18;
+const TIMELINE_BOTTOM_PADDING = 32;
 
-function SortableTaskCard({
-  task,
-  children,
-}: {
-  task: Task;
-  children: (dragHandleProps: { attributes: Record<string, unknown>; listeners: Record<string, unknown> }) => ReactNode;
-}) {
-  const { attributes, listeners, setNodeRef } = useSortable({ id: task.id });
+const JS_DAYS = [
+  "sunday",
+  "monday",
+  "tuesday",
+  "wednesday",
+  "thursday",
+  "friday",
+  "saturday",
+] as const;
 
-  return <div ref={setNodeRef}>{children({ attributes: attributes as unknown as Record<string, unknown>, listeners: (listeners ?? {}) as Record<string, unknown> })}</div>;
-}
+const WEEKDAY_ORDER: DayKey[] = [
+  "sunday",
+  "monday",
+  "tuesday",
+  "wednesday",
+  "thursday",
+  "friday",
+  "saturday",
+];
+
+const WEEKDAY_SHORT: Record<DayKey, string> = {
+  sunday: "Su",
+  monday: "Mo",
+  tuesday: "Tu",
+  wednesday: "We",
+  thursday: "Th",
+  friday: "Fr",
+  saturday: "Sa",
+};
+
+// ─── Helpers ─────────────────────────────────────────────────────────────────
 
 function uid() {
   return Date.now().toString(36) + Math.random().toString(36).slice(2);
 }
-
-const JS_DAYS = ["sunday", "monday", "tuesday", "wednesday", "thursday", "friday", "saturday"] as const;
-
-const TIMELINE_START_HOUR = 4;
-const TIMELINE_END_HOUR = 24;
-const HOUR_HEIGHT = 76;
-const TIMELINE_TOP_PADDING = 18;
-const TIMELINE_BOTTOM_PADDING = 28;
 
 function inferUnit(label: string): string {
   const key = label.toLowerCase();
   if (key.includes("calorie")) return "kcal";
   if (key.includes("protein") || key.includes("carb") || key.includes("fat")) return "g";
   if (key.includes("duration") || key.includes("time")) return "min";
+  if (key.includes("weight")) return "kg";
   return "";
 }
 
@@ -106,7 +106,6 @@ function inferBadgeClass(index: number): string {
     "bg-violet-500/10 text-violet-600 border-violet-500/25 dark:bg-violet-500/15 dark:text-violet-400 dark:border-violet-400/35",
     "bg-amber-500/10 text-amber-600 border-amber-500/25 dark:bg-amber-500/15 dark:text-amber-400 dark:border-amber-400/35",
     "bg-pink-500/10 text-pink-600 border-pink-500/25 dark:bg-pink-500/15 dark:text-pink-400 dark:border-pink-400/35",
-    "bg-cyan-500/10 text-cyan-600 border-cyan-500/25 dark:bg-cyan-500/15 dark:text-cyan-400 dark:border-cyan-400/35",
   ];
   return cycle[index % cycle.length];
 }
@@ -128,14 +127,13 @@ function emptyTaskDraft(): Omit<Task, "id"> {
     endTime: "",
     icon: "briefcase",
     color: colorFromIcon("briefcase"),
-    planId: undefined,
+    planId: "",
   };
 }
 
 function parseTimeToMinutes(value: string): number | null {
   const raw = value.trim();
   if (!raw) return null;
-
   const twelveHour = raw.match(/^(\d{1,2}):(\d{2})\s*(AM|PM)$/i);
   if (twelveHour) {
     let hours = Number(twelveHour[1]);
@@ -145,22 +143,15 @@ function parseTimeToMinutes(value: string): number | null {
     if (meridiem === "AM" && hours === 12) hours = 0;
     return hours * 60 + minutes;
   }
-
   const twentyFourHour = raw.match(/^(\d{1,2}):(\d{2})$/);
-  if (twentyFourHour) {
-    return Number(twentyFourHour[1]) * 60 + Number(twentyFourHour[2]);
-  }
-
+  if (twentyFourHour) return Number(twentyFourHour[1]) * 60 + Number(twentyFourHour[2]);
   return null;
 }
 
 function displayTimeToInputValue(value: string): string {
   const minutes = parseTimeToMinutes(value);
   if (minutes === null) return "";
-
-  const hours = Math.floor(minutes / 60)
-    .toString()
-    .padStart(2, "0");
+  const hours = Math.floor(minutes / 60).toString().padStart(2, "0");
   const mins = (minutes % 60).toString().padStart(2, "0");
   return `${hours}:${mins}`;
 }
@@ -168,16 +159,11 @@ function displayTimeToInputValue(value: string): string {
 function inputValueToDisplayTime(value: string): string {
   const match = value.match(/^(\d{2}):(\d{2})$/);
   if (!match) return value.trim();
-
   let hours = Number(match[1]);
   const minutes = match[2];
   const suffix = hours >= 12 ? "PM" : "AM";
-  if (hours === 0) {
-    hours = 12;
-  } else if (hours > 12) {
-    hours -= 12;
-  }
-
+  if (hours === 0) hours = 12;
+  else if (hours > 12) hours -= 12;
   return `${hours.toString().padStart(2, "0")}:${minutes} ${suffix}`;
 }
 
@@ -185,7 +171,6 @@ function formatTaskDuration(startTime: string, endTime: string): string | null {
   const start = parseTimeToMinutes(startTime);
   const end = parseTimeToMinutes(endTime);
   if (start === null || end === null || end <= start) return null;
-
   const total = end - start;
   const hours = Math.floor(total / 60);
   const minutes = total % 60;
@@ -201,23 +186,31 @@ function formatHourLabel(hour24: number): string {
   return `${hour} ${suffix}`;
 }
 
+function formatPlanDate(iso: string): string {
+  const d = new Date(iso + "T00:00:00");
+  return d.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
+}
+
+function formatEntryDate(iso: string): string {
+  const d = new Date(iso + "T00:00:00");
+  return d.toLocaleDateString("en-US", { month: "short", day: "numeric" });
+}
+
 function clamp(value: number, min: number, max: number): number {
   return Math.min(Math.max(value, min), max);
 }
 
 function sortTasksByTime(tasks: Task[]): Task[] {
   return [...tasks].sort((left, right) => {
-    const leftMinutes = parseTimeToMinutes(left.startTime);
-    const rightMinutes = parseTimeToMinutes(right.startTime);
-
-    if (leftMinutes === null && rightMinutes === null) return left.title.localeCompare(right.title);
-    if (leftMinutes === null) return 1;
-    if (rightMinutes === null) return -1;
-    if (leftMinutes !== rightMinutes) return leftMinutes - rightMinutes;
-
-    const leftEnd = parseTimeToMinutes(left.endTime) ?? leftMinutes;
-    const rightEnd = parseTimeToMinutes(right.endTime) ?? rightMinutes;
-    return leftEnd - rightEnd;
+    const lm = parseTimeToMinutes(left.startTime);
+    const rm = parseTimeToMinutes(right.startTime);
+    if (lm === null && rm === null) return left.title.localeCompare(right.title);
+    if (lm === null) return 1;
+    if (rm === null) return -1;
+    if (lm !== rm) return lm - rm;
+    const le = parseTimeToMinutes(left.endTime) ?? lm;
+    const re = parseTimeToMinutes(right.endTime) ?? rm;
+    return le - re;
   });
 }
 
@@ -240,6 +233,31 @@ function getWeekDates(offset: number): Array<{ day: DayKey; date: Date }> {
   });
 }
 
+// ─── Sortable wrappers ────────────────────────────────────────────────────────
+
+function SortableTaskCard({
+  task,
+  children,
+}: {
+  task: Task;
+  children: (dragHandleProps: {
+    attributes: Record<string, unknown>;
+    listeners: Record<string, unknown>;
+  }) => React.ReactNode;
+}) {
+  const { attributes, listeners, setNodeRef } = useSortable({ id: task.id });
+  return (
+    <div ref={setNodeRef}>
+      {children({
+        attributes: attributes as unknown as Record<string, unknown>,
+        listeners: (listeners ?? {}) as Record<string, unknown>,
+      })}
+    </div>
+  );
+}
+
+// ─── Main component ───────────────────────────────────────────────────────────
+
 export default function ScheduleApp() {
   const { schedule, setSchedule, ready } = useScheduleDB();
   const [todayKey, setTodayKey] = useState<DayKey>(() => JS_DAYS[new Date().getDay()]);
@@ -248,54 +266,86 @@ export default function ScheduleApp() {
   const [activeTab, setActiveTab] = useState(0);
 
   const [addTaskModalOpen, setAddTaskModalOpen] = useState(false);
+  const [selectedPlanId, setSelectedPlanId] = useState<string | null>(null);
+  const [entryTracker, setEntryTracker] = useState<ProgressTracker | null>(null);
   const [weekOffset, setWeekOffset] = useState(0);
-  const [viewMode, setViewMode] = useState<"card" | "calendar">("card");
+  const [viewMode, setViewMode] = useState<"list" | "timeline">("list");
   const [editingTaskId, setEditingTaskId] = useState<string | null>(null);
   const [editingTask, setEditingTask] = useState<Omit<Task, "id">>(emptyTaskDraft());
 
   const [addingPlan, setAddingPlan] = useState(false);
   const [newPlanTitle, setNewPlanTitle] = useState("");
+  const [newPlanDescription, setNewPlanDescription] = useState("");
+  const [newPlanStartDate, setNewPlanStartDate] = useState("");
+  const [newPlanEndDate, setNewPlanEndDate] = useState("");
   const [newPlanIconName, setNewPlanIconName] = useState("brain");
   const [newPlanMetaFields, setNewPlanMetaFields] = useState<string[]>([]);
   const [newPlanMetaInput, setNewPlanMetaInput] = useState("");
+
+  const [addingTracker, setAddingTracker] = useState(false);
+  const [addingTrackerForPlanId, setAddingTrackerForPlanId] = useState<string | null>(null);
+  const [newTrackerTitle, setNewTrackerTitle] = useState("");
+  const [newTrackerUnit, setNewTrackerUnit] = useState("");
+  const [editingPlanId, setEditingPlanId] = useState<string | null>(null);
+  const [editPlanDraft, setEditPlanDraft] = useState({ title: "", description: "", startDate: "", endDate: "" });
+  const [editingTrackerId, setEditingTrackerId] = useState<string | null>(null);
+  const [editTrackerDraft, setEditTrackerDraft] = useState({ title: "", unit: "" });
+
   const [nowMinutes, setNowMinutes] = useState(getCurrentMinutes);
   const timelineScrollRef = useRef<HTMLDivElement | null>(null);
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 8 } }));
 
   useEffect(() => {
-    const intervalId = window.setInterval(() => setNowMinutes(getCurrentMinutes()), 60_000);
-    return () => window.clearInterval(intervalId);
+    const id = window.setInterval(() => setNowMinutes(getCurrentMinutes()), 60_000);
+    return () => window.clearInterval(id);
   }, []);
 
   useEffect(() => {
     const now = new Date();
-    const msUntilMidnight = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1).getTime() - now.getTime();
-    const timeoutId = window.setTimeout(() => setTodayKey(JS_DAYS[new Date().getDay()]), msUntilMidnight);
-    return () => window.clearTimeout(timeoutId);
+    const msUntilMidnight =
+      new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1).getTime() - now.getTime();
+    const id = window.setTimeout(() => setTodayKey(JS_DAYS[new Date().getDay()]), msUntilMidnight);
+    return () => window.clearTimeout(id);
   }, [todayKey]);
 
   useEffect(() => {
     if (!ready || activeDay !== todayKey || editMode) return;
-
     const timeline = timelineScrollRef.current;
     if (!timeline) return;
-
     const timelineStartMinutes = TIMELINE_START_HOUR * 60;
     const timelineEndMinutes = TIMELINE_END_HOUR * 60;
     const clampedNow = clamp(getCurrentMinutes(), timelineStartMinutes, timelineEndMinutes);
-    const currentTop = TIMELINE_TOP_PADDING + ((clampedNow - timelineStartMinutes) / 60) * HOUR_HEIGHT;
-    const targetTop = clamp(currentTop - timeline.clientHeight * 0.35, 0, timeline.scrollHeight - timeline.clientHeight);
-
+    const currentTop =
+      TIMELINE_TOP_PADDING + ((clampedNow - timelineStartMinutes) / 60) * HOUR_HEIGHT;
+    const targetTop = clamp(
+      currentTop - timeline.clientHeight * 0.35,
+      0,
+      timeline.scrollHeight - timeline.clientHeight
+    );
     timeline.scrollTop = targetTop;
   }, [activeDay, editMode, ready]);
 
-  function handleAddNewTask(task: Omit<Task, "id">) {
+  // ─── Handlers ──────────────────────────────────────────────────────────────
+
+  function handleAddNewTask(task: Omit<Task, "id">, repeatDays: DayKey[] = [activeDay]) {
+    const plan = schedule.plans.find((p) => p.id === task.planId);
+    if (!plan) return;
+    const linkedTask: Omit<Task, "id"> = {
+      ...task,
+      planId: plan.id,
+      icon: plan.emoji,
+      color: plan.color,
+    };
+    const targetDays = Array.from(new Set(repeatDays.length > 0 ? repeatDays : [activeDay]));
     setSchedule((prev) => ({
       ...prev,
-      activities: {
-        ...prev.activities,
-        [activeDay]: [...prev.activities[activeDay], { ...task, id: uid() }],
-      },
+      activities: targetDays.reduce(
+        (activities, day) => ({
+          ...activities,
+          [day]: [...activities[day], { ...linkedTask, id: uid() }],
+        }),
+        { ...prev.activities }
+      ),
     }));
   }
 
@@ -304,7 +354,7 @@ export default function ScheduleApp() {
       ...prev,
       activities: {
         ...prev.activities,
-        [activeDay]: prev.activities[activeDay].filter((task) => task.id !== taskId),
+        [activeDay]: prev.activities[activeDay].filter((t) => t.id !== taskId),
       },
     }));
   }
@@ -331,8 +381,8 @@ export default function ScheduleApp() {
     const title = editingTask.title.trim();
     const startTime = inputValueToDisplayTime(editingTask.startTime);
     const endTime = inputValueToDisplayTime(editingTask.endTime);
-    if (!title || !startTime || !endTime) return;
-
+    const plan = schedule.plans.find((p) => p.id === editingTask.planId);
+    if (!title || !startTime || !endTime || !plan) return;
     setSchedule((prev) => ({
       ...prev,
       activities: {
@@ -340,15 +390,15 @@ export default function ScheduleApp() {
         [activeDay]: prev.activities[activeDay].map((task) =>
           task.id === taskId
             ? {
-              ...task,
-              title,
-              description: editingTask.description?.trim() || undefined,
-              startTime,
-              endTime,
-              icon: editingTask.icon,
-              color: editingTask.color,
-              planId: editingTask.planId,
-            }
+                ...task,
+                title,
+                description: editingTask.description?.trim() || undefined,
+                startTime,
+                endTime,
+                icon: plan.emoji,
+                color: plan.color,
+                planId: plan.id,
+              }
             : task
         ),
       },
@@ -359,129 +409,52 @@ export default function ScheduleApp() {
   function handleAddPlan() {
     const title = newPlanTitle.trim();
     if (!title) return;
-
     const plan: Plan = {
       id: uid(),
       title,
+      description: newPlanDescription.trim() || undefined,
+      startDate: newPlanStartDate || undefined,
+      endDate: newPlanEndDate || undefined,
+      category: categoryFromIcon(newPlanIconName),
       emoji: newPlanIconName,
       color: colorFromIcon(newPlanIconName),
       items: [],
       metaFields: newPlanMetaFields,
       summary: createSummaryFromMeta(newPlanMetaFields),
     };
-
+    const trackers: ProgressTracker[] = newPlanMetaFields.map((field) => ({
+      id: uid(),
+      planId: plan.id,
+      title: field,
+      type: "number",
+      unit: inferUnit(field),
+    }));
     setSchedule((prev) => ({
       ...prev,
       plans: [...prev.plans, plan],
+      progressTrackers: [...prev.progressTrackers, ...trackers],
     }));
-
     setNewPlanTitle("");
+    setNewPlanDescription("");
+    setNewPlanStartDate("");
+    setNewPlanEndDate("");
     setNewPlanIconName("brain");
     setNewPlanMetaFields([]);
     setNewPlanMetaInput("");
     setAddingPlan(false);
   }
 
-  function handleUpdatePlan(planId: string, updates: { title: string; emoji: string; color: AccentColor; metaFields: string[] }) {
-    setSchedule((prev) => ({
-      ...prev,
-      plans: prev.plans.map((plan) =>
-        plan.id === planId
-          ? {
-            ...plan,
-            title: updates.title,
-            emoji: updates.emoji,
-            color: updates.color,
-            metaFields: updates.metaFields,
-            summary: createSummaryFromMeta(updates.metaFields),
-          }
-          : plan
-      ),
-    }));
-  }
-
   function handleDeletePlan(planId: string) {
     setSchedule((prev) => ({
       ...prev,
       plans: prev.plans.filter((plan) => plan.id !== planId),
+      activities: Object.fromEntries(
+        DAYS.map((day) => [day, prev.activities[day].filter((t) => t.planId !== planId)])
+      ) as typeof prev.activities,
+      metricEntries: prev.metricEntries.filter((e) => e.planId !== planId),
+      progressTrackers: prev.progressTrackers.filter((t) => t.planId !== planId),
     }));
-  }
-
-  function handlePlanAdd(planId: string, entry: Omit<ScheduleEntry, "id">) {
-    setSchedule((prev) => ({
-      ...prev,
-      plans: prev.plans.map((plan) =>
-        plan.id === planId
-          ? { ...plan, items: [...plan.items, { ...entry, id: uid() }] }
-          : plan
-      ),
-    }));
-  }
-
-  function handlePlanEdit(planId: string, itemId: string, updated: Omit<ScheduleEntry, "id">) {
-    setSchedule((prev) => ({
-      ...prev,
-      plans: prev.plans.map((plan) =>
-        plan.id === planId
-          ? { ...plan, items: plan.items.map((item) => item.id === itemId ? { ...item, ...updated } : item) }
-          : plan
-      ),
-    }));
-  }
-
-  function handlePlanDelete(planId: string, itemId: string) {
-    setSchedule((prev) => ({
-      ...prev,
-      plans: prev.plans.map((plan) =>
-        plan.id === planId
-          ? { ...plan, items: plan.items.filter((item) => item.id !== itemId) }
-          : plan
-      ),
-    }));
-  }
-
-  function handleReorderPlans(activeId: string, overId: string) {
-    setSchedule((prev) => {
-      const oldIndex = prev.plans.findIndex((p) => p.id === activeId);
-      const newIndex = prev.plans.findIndex((p) => p.id === overId);
-      if (oldIndex === -1 || newIndex === -1) return prev;
-      return { ...prev, plans: arrayMove(prev.plans, oldIndex, newIndex) };
-    });
-  }
-
-  function handleReorderPlanItems(planId: string, activeId: string, overId: string) {
-    setSchedule((prev) => ({
-      ...prev,
-      plans: prev.plans.map((plan) => {
-        if (plan.id !== planId) return plan;
-        const oldIndex = plan.items.findIndex((i) => i.id === activeId);
-        const newIndex = plan.items.findIndex((i) => i.id === overId);
-        if (oldIndex === -1 || newIndex === -1) return plan;
-        return { ...plan, items: arrayMove(plan.items, oldIndex, newIndex) };
-      }),
-    }));
-  }
-
-  function handleAddGoal(planId: string, goal: Omit<Goal, "id">) {
-    setSchedule((prev) => ({
-      ...prev,
-      plans: prev.plans.map((plan) =>
-        plan.id === planId
-          ? { ...plan, goals: [...(plan.goals ?? []), { ...goal, id: uid() }] }
-          : plan
-      ),
-    }));
-  }
-
-  function handleDeleteGoal(planId: string, goalId: string) {
-    setSchedule((prev) => ({
-      ...prev,
-      plans: prev.plans.map((plan) =>
-        plan.id === planId
-          ? { ...plan, goals: (plan.goals ?? []).filter((g) => g.id !== goalId) }
-          : plan
-      ),
-    }));
+    setSelectedPlanId((cur) => (cur === planId ? null : cur));
   }
 
   function handleAddEntry(entry: Omit<MetricEntry, "id">) {
@@ -498,35 +471,12 @@ export default function ScheduleApp() {
     }));
   }
 
-  function handleSetPlanMetric(planId: string, metric: { name: string; unit: string } | undefined) {
-    setSchedule((prev) => ({
-      ...prev,
-      plans: prev.plans.map((p) => (p.id === planId ? { ...p, metric } : p)),
-    }));
-  }
-
-  function handleClearData() {
-    setSchedule((prev) => ({
-      ...prev,
-      plans: [],
-      activities: Object.fromEntries(DAYS.map((d) => [d, []])) as unknown as typeof prev.activities,
-      metricEntries: [],
-    }));
-  }
-
-  function handlePlansDragEnd(event: DragEndEvent) {
-    const { active, over } = event;
-    if (!over || active.id === over.id) return;
-    handleReorderPlans(String(active.id), String(over.id));
-  }
-
   function handleReorderTasks(activeId: string, overId: string) {
     setSchedule((prev) => {
       const tasks = prev.activities[activeDay];
       const activeTask = tasks.find((t) => t.id === activeId);
       const overTask = tasks.find((t) => t.id === overId);
       if (!activeTask || !overTask) return prev;
-
       return {
         ...prev,
         activities: {
@@ -547,47 +497,172 @@ export default function ScheduleApp() {
     handleReorderTasks(String(active.id), String(over.id));
   }
 
-  if (!ready) {
-    return (
-      <main className="min-h-screen bg-neutral-950 flex items-center justify-center">
-        <div className="w-5 h-5 rounded-full border-2 border-cyan-400 border-t-transparent animate-spin" />
-      </main>
-    );
+  function openAddPlan() {
+    setActiveTab(1);
+    setSelectedPlanId(null);
+    setAddingPlan(true);
   }
+
+  function handleAddTracker(planId: string) {
+    const title = newTrackerTitle.trim();
+    if (!title) return;
+    const tracker: ProgressTracker = {
+      id: uid(),
+      planId,
+      title,
+      type: "number",
+      unit: newTrackerUnit.trim() || undefined,
+    };
+    setSchedule((prev) => ({ ...prev, progressTrackers: [...prev.progressTrackers, tracker] }));
+    setNewTrackerTitle("");
+    setNewTrackerUnit("");
+    setAddingTracker(false);
+    setAddingTrackerForPlanId(null);
+  }
+
+  function handleDeleteTracker(trackerId: string) {
+    setSchedule((prev) => ({
+      ...prev,
+      progressTrackers: prev.progressTrackers.filter((t) => t.id !== trackerId),
+      metricEntries: prev.metricEntries.filter((e) => e.trackerId !== trackerId),
+    }));
+  }
+
+  function handleSaveEditTracker(trackerId: string) {
+    const title = editTrackerDraft.title.trim();
+    if (!title) return;
+    setSchedule((prev) => ({
+      ...prev,
+      progressTrackers: prev.progressTrackers.map((t) =>
+        t.id === trackerId
+          ? { ...t, title, unit: editTrackerDraft.unit.trim() || undefined }
+          : t
+      ),
+    }));
+    setEditingTrackerId(null);
+  }
+
+  function handleSaveEditPlan(planId: string) {
+    const title = editPlanDraft.title.trim();
+    if (!title) return;
+    setSchedule((prev) => ({
+      ...prev,
+      plans: prev.plans.map((p) =>
+        p.id === planId
+          ? {
+              ...p,
+              title,
+              description: editPlanDraft.description.trim() || undefined,
+              startDate: editPlanDraft.startDate || undefined,
+              endDate: editPlanDraft.endDate || undefined,
+            }
+          : p
+      ),
+    }));
+    setEditingPlanId(null);
+  }
+
+  function handleDeleteLinkedTask(task: Task, activeDays: DayKey[]) {
+    const matchKey = `${task.title.trim().toLowerCase()}|${task.startTime}|${task.endTime}`;
+    setSchedule((prev) => ({
+      ...prev,
+      activities: Object.fromEntries(
+        DAYS.map((day) => [
+          day,
+          activeDays.includes(day)
+            ? prev.activities[day].filter((t) => {
+                const k = `${t.title.trim().toLowerCase()}|${t.startTime}|${t.endTime}`;
+                return k !== matchKey || t.planId !== task.planId;
+              })
+            : prev.activities[day],
+        ])
+      ) as typeof prev.activities,
+    }));
+  }
+
+  // ─── Derived data ──────────────────────────────────────────────────────────
 
   const storedDayTasks = schedule.activities[activeDay];
   const dayTasks = sortTasksByTime(storedDayTasks);
+
   const timelineHours = Array.from(
     { length: TIMELINE_END_HOUR - TIMELINE_START_HOUR + 1 },
-    (_, index) => TIMELINE_START_HOUR + index
+    (_, i) => TIMELINE_START_HOUR + i
   );
   const timelineStartMinutes = TIMELINE_START_HOUR * 60;
   const timelineEndMinutes = TIMELINE_END_HOUR * 60;
-  const timelineDurationHours = TIMELINE_END_HOUR - TIMELINE_START_HOUR;
-  const timelineHeight = TIMELINE_TOP_PADDING + timelineDurationHours * HOUR_HEIGHT + TIMELINE_BOTTOM_PADDING;
-  const showCurrentTime = activeDay === todayKey && nowMinutes >= timelineStartMinutes && nowMinutes <= timelineEndMinutes;
-  const currentTimeTop = TIMELINE_TOP_PADDING + ((nowMinutes - timelineStartMinutes) / 60) * HOUR_HEIGHT;
+  const timelineHeight =
+    TIMELINE_TOP_PADDING +
+    (TIMELINE_END_HOUR - TIMELINE_START_HOUR) * HOUR_HEIGHT +
+    TIMELINE_BOTTOM_PADDING;
+  const showCurrentTime =
+    activeDay === todayKey &&
+    nowMinutes >= timelineStartMinutes &&
+    nowMinutes <= timelineEndMinutes;
+  const currentTimeTop =
+    TIMELINE_TOP_PADDING + ((nowMinutes - timelineStartMinutes) / 60) * HOUR_HEIGHT;
+
+  const weekDates = getWeekDates(weekOffset);
+  const todayMidnight = new Date();
+  todayMidnight.setHours(0, 0, 0, 0);
+  const weekLabel = weekDates[2].date.toLocaleDateString("en-US", {
+    month: "long",
+    year: "numeric",
+  });
+
+  const selectedPlan = selectedPlanId
+    ? schedule.plans.find((p) => p.id === selectedPlanId) ?? null
+    : null;
+
+  function getUniquePlanTasks(planId: string): Array<{ task: Task; activeDays: DayKey[] }> {
+    const seen = new Map<string, { task: Task; activeDays: DayKey[] }>();
+    for (const day of DAYS) {
+      for (const task of schedule.activities[day]) {
+        if (task.planId !== planId) continue;
+        const key = `${task.title.trim().toLowerCase()}|${task.startTime}|${task.endTime}`;
+        if (!seen.has(key)) seen.set(key, { task, activeDays: [day] });
+        else seen.get(key)!.activeDays.push(day);
+      }
+    }
+    return Array.from(seen.values());
+  }
+
+  function formatPlanRange(plan: Plan): string {
+    if (!plan.startDate && !plan.endDate) return "No date range";
+    if (plan.startDate && plan.endDate)
+      return `${formatPlanDate(plan.startDate)} – ${formatPlanDate(plan.endDate)}`;
+    if (plan.startDate) return `Starts ${formatPlanDate(plan.startDate)}`;
+    return `Ends ${formatPlanDate(plan.endDate ?? "")}`;
+  }
+
+  function getTaskPresentation(task: Task) {
+    const linkedPlan = schedule.plans.find((p) => p.id === task.planId) ?? null;
+    return {
+      linkedPlan,
+      iconName: linkedPlan?.emoji ?? task.icon,
+      color: linkedPlan?.color ?? task.color,
+    };
+  }
 
   function getTimelineTaskLayouts(tasks: Task[]) {
     const intervals = tasks
       .map((task) => {
         const start = parseTimeToMinutes(task.startTime) ?? timelineStartMinutes;
         const end = parseTimeToMinutes(task.endTime) ?? start + 30;
-        const clampedStart = clamp(start, timelineStartMinutes, timelineEndMinutes);
-        const clampedEnd = clamp(Math.max(end, clampedStart + 15), timelineStartMinutes, timelineEndMinutes);
-
+        const cs = clamp(start, timelineStartMinutes, timelineEndMinutes);
+        const ce = clamp(Math.max(end, cs + 15), timelineStartMinutes, timelineEndMinutes);
         return {
           task,
-          start: clampedStart,
-          end: clampedEnd,
-          top: TIMELINE_TOP_PADDING + ((clampedStart - timelineStartMinutes) / 60) * HOUR_HEIGHT,
-          height: ((clampedEnd - clampedStart) / 60) * HOUR_HEIGHT,
-          compact: ((clampedEnd - clampedStart) / 60) * HOUR_HEIGHT <= 60,
+          start: cs,
+          end: ce,
+          top: TIMELINE_TOP_PADDING + ((cs - timelineStartMinutes) / 60) * HOUR_HEIGHT,
+          height: ((ce - cs) / 60) * HOUR_HEIGHT,
+          compact: ((ce - cs) / 60) * HOUR_HEIGHT <= 60,
           lane: 0,
           laneCount: 1,
         };
       })
-      .sort((left, right) => left.start - right.start || left.end - right.end || left.task.title.localeCompare(right.task.title));
+      .sort((a, b) => a.start - b.start || a.end - b.end || a.task.title.localeCompare(b.task.title));
 
     const layouts: typeof intervals = [];
     let cluster: typeof intervals = [];
@@ -596,45 +671,25 @@ export default function ScheduleApp() {
 
     function finishCluster() {
       const laneCount = Math.max(1, laneEnds.length);
-      cluster.forEach((layout) => {
-        layout.laneCount = laneCount;
-        layouts.push(layout);
-      });
-      cluster = [];
-      laneEnds = [];
-      clusterEnd = -1;
+      cluster.forEach((l) => { l.laneCount = laneCount; layouts.push(l); });
+      cluster = []; laneEnds = []; clusterEnd = -1;
     }
 
     intervals.forEach((layout) => {
-      if (cluster.length > 0 && layout.start >= clusterEnd) {
-        finishCluster();
-      }
-
-      const lane = laneEnds.findIndex((laneEnd) => laneEnd <= layout.start);
+      if (cluster.length > 0 && layout.start >= clusterEnd) finishCluster();
+      const lane = laneEnds.findIndex((le) => le <= layout.start);
       layout.lane = lane === -1 ? laneEnds.length : lane;
       laneEnds[layout.lane] = layout.end;
       clusterEnd = Math.max(clusterEnd, layout.end);
       cluster.push(layout);
     });
-
-    if (cluster.length > 0) {
-      finishCluster();
-    }
-
+    if (cluster.length > 0) finishCluster();
     return layouts;
   }
 
-  const timelineTaskLayouts = getTimelineTaskLayouts(dayTasks);
-
-  const weekDates = getWeekDates(weekOffset);
-  const todayMidnight = new Date();
-  todayMidnight.setHours(0, 0, 0, 0);
-  const weekLabel = weekDates[2].date.toLocaleDateString("en-US", { month: "long", year: "numeric" });
-
-  function getTaskLaneStyle(layout: (typeof timelineTaskLayouts)[number]) {
-    const gap = layout.laneCount > 1 ? 6 : 0;
+  function getTaskLaneStyle(layout: ReturnType<typeof getTimelineTaskLayouts>[number]) {
+    const gap = layout.laneCount > 1 ? 5 : 0;
     const width = 100 / layout.laneCount;
-
     return {
       top: layout.top,
       height: layout.height,
@@ -643,89 +698,98 @@ export default function ScheduleApp() {
     };
   }
 
-  function renderTaskCard(
+  // ─── Loading ───────────────────────────────────────────────────────────────
+
+  if (!ready) {
+    return (
+      <main className="min-h-screen bg-neutral-50 flex items-center justify-center dark:bg-neutral-950">
+        <div className="h-5 w-5 rounded-full border-2 border-neutral-300 border-t-neutral-700 animate-spin dark:border-white/20 dark:border-t-white/60" />
+      </main>
+    );
+  }
+
+  // ─── Render helpers ────────────────────────────────────────────────────────
+
+  function renderTimelineTaskCard(
     task: Task,
     cardClassName: string,
-    dragHandleProps?: { attributes: Record<string, unknown>; listeners: Record<string, unknown> },
     compact = false
   ) {
-    const tone = timelineCardStyles(task.color);
-    const iconEntry = SECTION_ICONS.find((entry) => entry.name === task.icon) ?? SECTION_ICONS[0];
+    const { linkedPlan, iconName, color } = getTaskPresentation(task);
+    const tone = timelineCardStyles(color);
+    const iconEntry = SECTION_ICONS.find((e) => e.name === iconName) ?? SECTION_ICONS[0];
     const TaskIcon = iconEntry.icon;
     const duration = formatTaskDuration(task.startTime, task.endTime);
 
+    if (compact) {
+      return (
+        <div className={`${cardClassName} ${tone.cardBg} ${tone.cardBorder} ${tone.shadow}`}>
+          <div className="flex h-full items-center gap-1.5 min-w-0">
+            <div className={`h-4 w-4 shrink-0 rounded-md flex items-center justify-center ${tone.iconBg} ${tone.iconText}`}>
+              <TaskIcon size={9} strokeWidth={2} />
+            </div>
+            <span className={`text-[11px] font-semibold leading-tight truncate flex-1 min-w-0 ${tone.title}`}>
+              {task.title}
+            </span>
+            {duration && (
+              <span className={`shrink-0 text-[9px] font-semibold px-1 py-0.5 rounded-full border ${tone.durationBadge}`}>
+                {duration}
+              </span>
+            )}
+          </div>
+        </div>
+      );
+    }
+
+    return (
+      <div className={`${cardClassName} ${tone.cardBg} ${tone.cardBorder} ${tone.shadow}`}>
+        <div className="flex flex-col gap-1.5 h-full min-w-0">
+          <div className="flex items-center gap-1.5 flex-wrap">
+            <span className={`text-[10px] font-semibold tracking-tight ${tone.time}`}>
+              {task.startTime} – {task.endTime}
+            </span>
+            {duration && (
+              <span className={`text-[9px] font-semibold px-1.5 py-0.5 rounded-full border ${tone.durationBadge}`}>
+                {duration}
+              </span>
+            )}
+          </div>
+          <div className="flex items-center gap-1.5 min-w-0">
+            <div className={`h-5 w-5 shrink-0 rounded-md flex items-center justify-center ${tone.iconBg} ${tone.iconText}`}>
+              <TaskIcon size={11} strokeWidth={2} />
+            </div>
+            <h3 className={`text-[13px] font-semibold leading-snug break-words ${tone.title}`}>
+              {task.title}
+            </h3>
+          </div>
+          {linkedPlan && (() => {
+            const planIc = SECTION_ICONS.find((i) => i.name === linkedPlan.emoji);
+            const PI = (planIc ?? SECTION_ICONS[0]).icon;
+            const pa = accentStyles(linkedPlan.color);
+            return (
+              <div className={`mt-auto inline-flex items-center gap-1 rounded-full px-1.5 py-0.5 text-[9px] font-semibold w-fit ${pa.tint} ${pa.text}`}>
+                <PI size={8} strokeWidth={2.5} />
+                {linkedPlan.title}
+              </div>
+            );
+          })()}
+        </div>
+      </div>
+    );
+  }
+
+  function renderListViewTask(
+    task: Task,
+    dragHandleProps?: { attributes: Record<string, unknown>; listeners: Record<string, unknown> }
+  ) {
     if (editingTaskId === task.id) {
       return (
-        <div className="rounded-xl w-full min-w-0 border border-neutral-200/80 bg-white shadow-sm transition-colors dark:border-white/[0.08] dark:bg-neutral-900 dark:shadow-black/20 overflow-hidden">
-          <div className={`flex items-center gap-2.5 border-b px-4 py-3 border-neutral-100 dark:border-white/[0.07] ${accentStyles(editingTask.color).tint}`}>
-            <div className={`flex h-6 w-6 items-center justify-center rounded-md ${accentStyles(editingTask.color).iconSolid}`}>
-              {(() => { const ic = SECTION_ICONS.find(i => i.name === editingTask.icon); const EI = (ic ?? SECTION_ICONS[0]).icon; return <EI size={13} strokeWidth={2} />; })()}
-            </div>
-            <p className="text-xs font-semibold text-neutral-900 dark:text-white">Edit time block</p>
-          </div>
+        <div className="rounded-2xl w-full min-w-0 border border-neutral-200/80 bg-white shadow-sm dark:border-white/[0.08] dark:bg-neutral-900">
           <div className="space-y-3 p-4">
-            <div className="grid grid-cols-5 gap-1.5">
-              {SECTION_ICONS.map(({ name, label, icon: Icon }) => {
-                const ic = getIconPickerStyle(name);
-                const sel = editingTask.icon === name;
-                return (
-                  <button
-                    key={name}
-                    type="button"
-                    title={label}
-                    onClick={() => setEditingTask((prev) => ({ ...prev, icon: name, color: colorFromIcon(name) }))}
-                    className={`flex flex-col items-center justify-center gap-1 rounded-xl py-2.5 transition-all duration-150 ${sel ? `${ic.solid} shadow-sm scale-[1.04]` : `${ic.tint} ${ic.text} hover:scale-[1.04]`
-                      }`}
-                  >
-                    <Icon size={17} strokeWidth={1.5} />
-                    <span className={`text-[9px] font-semibold leading-none ${sel ? "text-white/80" : ""}`}>{label}</span>
-                  </button>
-                );
-              })}
-            </div>
-            <div className="space-y-2">
-              <input
-                value={editingTask.title}
-                onChange={(e) => setEditingTask((prev) => ({ ...prev, title: e.target.value }))}
-                placeholder="Task title"
-                onKeyDown={(e) => { if (e.key === "Enter") saveEditingTask(task.id); if (e.key === "Escape") cancelEditingTask(); }}
-                className="h-10 w-full rounded-lg border border-neutral-200 bg-neutral-50 px-3 text-sm text-neutral-900 outline-none transition-colors placeholder:text-neutral-400 focus:border-neutral-300 focus:bg-white dark:border-white/10 dark:bg-white/[0.04] dark:text-white dark:placeholder:text-neutral-500 dark:focus:border-white/20 dark:focus:bg-white/[0.08]"
-              />
-              <input
-                value={editingTask.description}
-                onChange={(e) => setEditingTask((prev) => ({ ...prev, description: e.target.value }))}
-                placeholder="Description (optional)"
-                onKeyDown={(e) => { if (e.key === "Enter") saveEditingTask(task.id); if (e.key === "Escape") cancelEditingTask(); }}
-                className="h-10 w-full rounded-lg border border-neutral-200 bg-neutral-50 px-3 text-sm text-neutral-900 outline-none transition-colors placeholder:text-neutral-400 focus:border-neutral-300 focus:bg-white dark:border-white/10 dark:bg-white/[0.04] dark:text-white dark:placeholder:text-neutral-500 dark:focus:border-white/20 dark:focus:bg-white/[0.08]"
-              />
-            </div>
-            <div className="grid grid-cols-2 gap-3">
-              <div>
-                <p className="mb-1.5 text-xs font-medium text-neutral-500 dark:text-neutral-400">Start</p>
-                <input
-                  value={editingTask.startTime}
-                  onChange={(e) => setEditingTask((prev) => ({ ...prev, startTime: e.target.value }))}
-                  type="time"
-                  aria-label="Edit task start time"
-                  onKeyDown={(e) => { if (e.key === "Enter") saveEditingTask(task.id); if (e.key === "Escape") cancelEditingTask(); }}
-                  className="h-10 w-full rounded-lg border border-neutral-200 bg-neutral-50 px-3 text-sm text-neutral-900 outline-none transition-colors focus:border-neutral-300 focus:bg-white dark:border-white/10 dark:bg-white/[0.04] dark:text-white dark:focus:border-white/20 dark:focus:bg-white/[0.08]"
-                />
-              </div>
-              <div>
-                <p className="mb-1.5 text-xs font-medium text-neutral-500 dark:text-neutral-400">End</p>
-                <input
-                  value={editingTask.endTime}
-                  onChange={(e) => setEditingTask((prev) => ({ ...prev, endTime: e.target.value }))}
-                  type="time"
-                  aria-label="Edit task end time"
-                  onKeyDown={(e) => { if (e.key === "Enter") saveEditingTask(task.id); if (e.key === "Escape") cancelEditingTask(); }}
-                  className="h-10 w-full rounded-lg border border-neutral-200 bg-neutral-50 px-3 text-sm text-neutral-900 outline-none transition-colors focus:border-neutral-300 focus:bg-white dark:border-white/10 dark:bg-white/[0.04] dark:text-white dark:focus:border-white/20 dark:focus:bg-white/[0.08]"
-                />
-              </div>
-            </div>
+            <p className="text-[13px] font-semibold text-neutral-900 dark:text-white">Edit time block</p>
             {schedule.plans.length > 0 && (
               <div>
-                <p className="mb-1.5 text-xs font-medium text-neutral-500 dark:text-neutral-400">Link to plan</p>
+                <p className="mb-1.5 text-[11px] font-semibold uppercase tracking-[0.08em] text-neutral-400 dark:text-neutral-500">Plan</p>
                 <div className="flex flex-wrap gap-1.5">
                   {schedule.plans.map((plan) => {
                     const ic = SECTION_ICONS.find((i) => i.name === plan.emoji);
@@ -735,8 +799,14 @@ export default function ScheduleApp() {
                       <button
                         key={plan.id}
                         type="button"
-                        onClick={() => setEditingTask((prev) => ({ ...prev, planId: sel ? undefined : plan.id }))}
-                        className={`inline-flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-xs font-medium transition-all ${sel ? `${accentStyles(plan.color).iconSolid} shadow-sm` : `${accentStyles(plan.color).tint} ${accentStyles(plan.color).text} hover:opacity-90`}`}
+                        onClick={() =>
+                          setEditingTask((prev) => ({ ...prev, planId: plan.id, icon: plan.emoji, color: plan.color }))
+                        }
+                        className={`inline-flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-xs font-semibold transition-all ${
+                          sel
+                            ? `${accentStyles(plan.color).iconSolid} shadow-sm`
+                            : `${accentStyles(plan.color).tint} ${accentStyles(plan.color).text} hover:opacity-90`
+                        }`}
                       >
                         <PI size={11} strokeWidth={2} />
                         {plan.title}
@@ -746,22 +816,49 @@ export default function ScheduleApp() {
                 </div>
               </div>
             )}
+            <div className="space-y-2">
+              <input
+                value={editingTask.title}
+                onChange={(e) => setEditingTask((prev) => ({ ...prev, title: e.target.value }))}
+                placeholder="Task title"
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") saveEditingTask(task.id);
+                  if (e.key === "Escape") cancelEditingTask();
+                }}
+                className="h-10 w-full rounded-xl border border-neutral-200 bg-neutral-50 px-3 text-sm text-neutral-900 outline-none placeholder:text-neutral-400 focus:border-neutral-300 focus:bg-white dark:border-white/10 dark:bg-white/[0.04] dark:text-white dark:placeholder:text-neutral-500"
+              />
+              <input
+                value={editingTask.description}
+                onChange={(e) => setEditingTask((prev) => ({ ...prev, description: e.target.value }))}
+                placeholder="Description (optional)"
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") saveEditingTask(task.id);
+                  if (e.key === "Escape") cancelEditingTask();
+                }}
+                className="h-10 w-full rounded-xl border border-neutral-200 bg-neutral-50 px-3 text-sm text-neutral-900 outline-none placeholder:text-neutral-400 focus:border-neutral-300 focus:bg-white dark:border-white/10 dark:bg-white/[0.04] dark:text-white dark:placeholder:text-neutral-500"
+              />
+            </div>
+            <TimeSlotPicker
+              startTime={editingTask.startTime}
+              endTime={editingTask.endTime}
+              onStartChange={(startTime) => setEditingTask((prev) => ({ ...prev, startTime }))}
+              onEndChange={(endTime) => setEditingTask((prev) => ({ ...prev, endTime }))}
+              activeDay={activeDay}
+            />
             <div className="flex gap-2 pt-1">
               <button
                 type="button"
                 onClick={() => saveEditingTask(task.id)}
-                className={`inline-flex flex-1 h-10 items-center justify-center gap-1.5 rounded-lg text-sm font-medium transition-all hover:opacity-90 ${accentStyles(editingTask.color).iconSolid}`}
+                className="inline-flex flex-1 h-10 items-center justify-center gap-1.5 rounded-xl bg-neutral-950 px-4 text-sm font-semibold text-white transition-colors hover:bg-neutral-800 dark:bg-white dark:text-neutral-900"
               >
-                <IconCheck size={15} />
-                Save
+                <IconCheck size={15} /> Save
               </button>
               <button
                 type="button"
                 onClick={cancelEditingTask}
-                className="inline-flex h-10 items-center gap-1.5 rounded-lg border border-neutral-200 px-4 text-sm font-medium text-neutral-600 transition-colors hover:bg-neutral-50 dark:border-white/10 dark:text-neutral-400 dark:hover:bg-white/5"
+                className="inline-flex h-10 items-center gap-1.5 rounded-xl border border-neutral-200 px-4 text-sm font-medium text-neutral-600 hover:bg-neutral-50 dark:border-white/10 dark:text-neutral-400 dark:hover:bg-white/5"
               >
-                <IconX size={15} />
-                Cancel
+                <IconX size={15} /> Cancel
               </button>
             </div>
           </div>
@@ -769,108 +866,11 @@ export default function ScheduleApp() {
       );
     }
 
-    if (compact) {
-      return (
-        <div className={`${cardClassName} transition-[background-color,border-color,box-shadow] duration-200 ease-out ${tone.cardBg} ${tone.cardBorder} ${tone.shadow}`}>
-          <div className="flex h-full items-center gap-2 min-w-0">
-            <div className={`h-5 w-5 shrink-0 rounded-md flex items-center justify-center ${tone.iconBg} ${tone.iconText}`}>
-              <TaskIcon size={11} strokeWidth={2} />
-            </div>
-            <span className={`text-xs font-semibold leading-tight truncate flex-1 min-w-0 ${tone.title}`}>
-              {task.title}
-            </span>
-            {duration && (
-              <span className={`shrink-0 text-[10px] font-semibold px-1.5 py-0.5 rounded-full border ${tone.durationBadge}`}>
-                {duration}
-              </span>
-            )}
-          </div>
-        </div>
-      );
-    }
-
-    return (
-      <div className={`${cardClassName} transition-[background-color,border-color,box-shadow] duration-200 ease-out ${tone.cardBg} ${tone.cardBorder} ${tone.shadow}`}>
-        <div className="flex items-start justify-between gap-2 h-full">
-          <div className="min-w-0 flex-1 flex flex-col gap-1.5">
-            {/* Time + duration — first so you orient to when before what */}
-            <div className="flex items-center gap-2 flex-wrap">
-              <span className={`text-[11px] font-medium tracking-tight ${tone.time}`}>
-                {task.startTime} – {task.endTime}
-              </span>
-              {duration && (
-                <span className={`text-[10px] font-semibold px-1.5 py-0.5 rounded-full border ${tone.durationBadge}`}>
-                  {duration}
-                </span>
-              )}
-            </div>
-            {/* Icon + title */}
-            <div className="flex items-center gap-2 min-w-0">
-              <div className={`h-6 w-6 shrink-0 rounded-md flex items-center justify-center ${tone.iconBg} ${tone.iconText}`}>
-                <TaskIcon size={13} strokeWidth={2} />
-              </div>
-              <h3 className={`text-[14px] font-semibold leading-snug break-words ${tone.title}`}>
-                {task.title}
-              </h3>
-            </div>
-            {task.description && (
-              <p className={`text-[12px] leading-relaxed ${tone.description}`}>
-                {task.description}
-              </p>
-            )}
-            {task.planId && (() => {
-              const linkedPlan = schedule.plans.find((p) => p.id === task.planId);
-              if (!linkedPlan) return null;
-              const planIc = SECTION_ICONS.find((i) => i.name === linkedPlan.emoji);
-              const PI = (planIc ?? SECTION_ICONS[0]).icon;
-              const pa = accentStyles(linkedPlan.color);
-              return (
-                <div className={`mt-0.5 inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-semibold ${pa.tint} ${pa.text}`}>
-                  <PI size={9} strokeWidth={2.5} />
-                  {linkedPlan.title}
-                </div>
-              );
-            })()}
-          </div>
-
-          {editMode && (
-            <div className="flex shrink-0 items-center gap-1">
-              <button
-                type="button"
-                onClick={() => startEditingTask(task)}
-                className="inline-flex h-9 w-9 items-center justify-center rounded-md text-neutral-500 hover:text-neutral-900 dark:hover:text-white"
-                title="Edit task"
-              >
-                <IconEdit size={18} />
-              </button>
-              <button
-                type="button"
-                onClick={() => handleDeleteTask(task.id)}
-                className="inline-flex h-9 w-9 items-center justify-center rounded-md text-neutral-500 hover:text-rose-500 dark:hover:text-rose-400"
-                title="Delete task"
-              >
-                <IconTrash size={18} />
-              </button>
-            </div>
-          )}
-        </div>
-      </div>
-    );
-  }
-
-  function renderCardViewTask(
-    task: Task,
-    dragHandleProps?: { attributes: Record<string, unknown>; listeners: Record<string, unknown> }
-  ) {
-    if (editingTaskId === task.id) {
-      return renderTaskCard(task, "border rounded-xl p-4 w-full min-w-0", dragHandleProps);
-    }
-
-    const tone = timelineCardStyles(task.color);
-    const iconEntry = SECTION_ICONS.find((e) => e.name === task.icon) ?? SECTION_ICONS[0];
+    const { linkedPlan, iconName, color } = getTaskPresentation(task);
+    const tone = timelineCardStyles(color);
+    const iconEntry = SECTION_ICONS.find((e) => e.name === iconName) ?? SECTION_ICONS[0];
     const CardIcon = iconEntry.icon;
     const duration = formatTaskDuration(task.startTime, task.endTime);
-    const linkedPlan = task.planId ? schedule.plans.find((p) => p.id === task.planId) : null;
 
     return (
       <div
@@ -880,10 +880,9 @@ export default function ScheduleApp() {
         <div className={`h-12 w-12 shrink-0 rounded-full flex items-center justify-center ${tone.iconBg} ${tone.iconText}`}>
           <CardIcon size={22} strokeWidth={1.8} />
         </div>
-
         <div className="min-w-0 flex-1">
           <div className="flex items-center gap-2 min-w-0">
-            <span className={`text-sm font-semibold truncate flex-1 min-w-0 ${tone.title}`}>
+            <span className={`text-[15px] font-semibold truncate flex-1 min-w-0 ${tone.title}`}>
               {task.title}
             </span>
             {duration && (
@@ -892,7 +891,7 @@ export default function ScheduleApp() {
               </span>
             )}
           </div>
-          <p className={`text-xs font-medium mt-0.5 ${tone.time}`}>
+          <p className={`text-[12px] font-medium mt-0.5 ${tone.time}`}>
             {task.startTime} – {task.endTime}
           </p>
           {linkedPlan && (
@@ -901,14 +900,12 @@ export default function ScheduleApp() {
             </p>
           )}
         </div>
-
         {editMode && (
           <div className="flex shrink-0 items-center gap-0.5">
             <button
               type="button"
               onClick={(e) => { e.stopPropagation(); startEditingTask(task); }}
               className="inline-flex h-8 w-8 items-center justify-center rounded-lg text-neutral-400 hover:text-neutral-700 dark:hover:text-neutral-200 transition-colors"
-              title="Edit"
             >
               <IconEdit size={15} />
             </button>
@@ -916,7 +913,6 @@ export default function ScheduleApp() {
               type="button"
               onClick={(e) => { e.stopPropagation(); handleDeleteTask(task.id); }}
               className="inline-flex h-8 w-8 items-center justify-center rounded-lg text-neutral-400 hover:text-rose-500 dark:hover:text-rose-400 transition-colors"
-              title="Delete"
             >
               <IconTrash size={15} />
             </button>
@@ -926,391 +922,1120 @@ export default function ScheduleApp() {
     );
   }
 
-  return (
-    <main className="min-h-screen bg-neutral-50 pb-28 text-neutral-900 dark:bg-neutral-950 dark:text-white">
-      <div className="mx-auto max-w-6xl px-4 py-4 sm:px-5 sm:py-6">
-        <header className="mb-5">
-          <div className="flex items-center justify-between gap-4">
-            <div className="flex min-w-0 items-center">
-              <img
-                src="/logo.svg"
-                alt="Planner"
-                className="h-7 w-auto dark:hidden"
-              />
-              <img
-                src="/logo-dark.svg"
-                alt="Planner"
-                className="hidden h-7 w-auto dark:block"
+  function renderLinkedTaskCard(task: Task, activeDays: DayKey[]) {
+    const { iconName, color } = getTaskPresentation(task);
+    const tone = timelineCardStyles(color);
+    const Icon = (SECTION_ICONS.find((e) => e.name === iconName) ?? SECTION_ICONS[0]).icon;
+    const duration = formatTaskDuration(task.startTime, task.endTime);
+
+    return (
+      <div
+        key={`${task.id}-${activeDays.join("")}`}
+        className="flex items-center gap-3 px-1 py-3.5 border-b border-neutral-100 last:border-b-0 dark:border-white/[0.05]"
+      >
+        <div className={`h-12 w-12 shrink-0 rounded-full flex items-center justify-center ${tone.iconBg} ${tone.iconText}`}>
+          <Icon size={20} strokeWidth={1.8} />
+        </div>
+        <div className="flex-1 min-w-0">
+          <p className={`text-[14px] font-semibold leading-tight truncate ${tone.title}`}>{task.title}</p>
+          <div className="flex items-center gap-2 mt-0.5 flex-wrap">
+            <p className={`text-[12px] font-medium ${tone.time}`}>
+              {task.startTime} – {task.endTime}
+            </p>
+            <div className="flex items-center gap-[3px]">
+              {WEEKDAY_ORDER.map((day) => {
+                const isActive = activeDays.includes(day);
+                return (
+                  <span
+                    key={day}
+                    className={`text-[9px] font-bold ${isActive ? "text-neutral-700 dark:text-neutral-200" : "text-neutral-300 dark:text-neutral-700"}`}
+                  >
+                    {WEEKDAY_SHORT[day]}
+                  </span>
+                );
+              })}
+            </div>
+          </div>
+        </div>
+        <div className="flex items-center gap-1.5 shrink-0">
+          {duration && (
+            <span className={`text-[10px] font-semibold px-2 py-0.5 rounded-full border ${tone.durationBadge}`}>
+              {duration}
+            </span>
+          )}
+          <button
+            type="button"
+            onClick={() => handleDeleteLinkedTask(task, activeDays)}
+            className="h-7 w-7 flex items-center justify-center rounded-lg text-neutral-300 hover:text-rose-500 dark:text-neutral-700 dark:hover:text-rose-400 transition-colors"
+          >
+            <IconTrash size={13} />
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  // ─── Add Plan Sheet ────────────────────────────────────────────────────────
+
+  function renderAddPlanSheet() {
+    return (
+      <div className="space-y-4 p-5 pb-8">
+        <div className="flex items-center justify-between">
+          <div>
+            <p className="text-[10px] font-semibold uppercase tracking-[0.1em] text-neutral-400 dark:text-neutral-500">New</p>
+            <h2 className="text-[18px] font-semibold text-neutral-950 dark:text-white mt-0.5">Create Plan</h2>
+          </div>
+          <button
+            type="button"
+            onClick={() => setAddingPlan(false)}
+            className="flex h-8 w-8 items-center justify-center rounded-xl border border-neutral-200 text-neutral-400 hover:bg-neutral-50 dark:border-white/10 dark:hover:bg-white/5"
+          >
+            <IconX size={16} />
+          </button>
+        </div>
+
+        <div className="space-y-2.5">
+          <input
+            value={newPlanTitle}
+            onChange={(e) => setNewPlanTitle(e.target.value)}
+            placeholder="Plan title"
+            autoFocus
+            onKeyDown={(e) => { if (e.key === "Enter" && newPlanTitle.trim()) handleAddPlan(); }}
+            className="h-11 w-full rounded-xl border border-neutral-200 bg-neutral-50 px-4 text-[15px] font-medium text-neutral-900 outline-none placeholder:text-neutral-400 focus:border-neutral-300 focus:bg-white dark:border-white/10 dark:bg-white/[0.04] dark:text-white dark:placeholder:text-neutral-500"
+          />
+          <input
+            value={newPlanDescription}
+            onChange={(e) => setNewPlanDescription(e.target.value)}
+            placeholder="Short description (optional)"
+            className="h-11 w-full rounded-xl border border-neutral-200 bg-neutral-50 px-4 text-[15px] font-medium text-neutral-900 outline-none placeholder:text-neutral-400 focus:border-neutral-300 focus:bg-white dark:border-white/10 dark:bg-white/[0.04] dark:text-white dark:placeholder:text-neutral-500"
+          />
+          <div className="grid grid-cols-2 gap-2">
+            <div>
+              <p className="mb-1 text-[11px] font-semibold uppercase tracking-[0.08em] text-neutral-400 dark:text-neutral-500">Start date</p>
+              <input
+                type="date"
+                value={newPlanStartDate}
+                onChange={(e) => setNewPlanStartDate(e.target.value)}
+                className="h-10 w-full rounded-xl border border-neutral-200 bg-neutral-50 px-3 text-sm text-neutral-900 outline-none focus:border-neutral-300 dark:border-white/10 dark:bg-white/[0.04] dark:text-white"
               />
             </div>
-            <ThemeToggle />
+            <div>
+              <p className="mb-1 text-[11px] font-semibold uppercase tracking-[0.08em] text-neutral-400 dark:text-neutral-500">End date</p>
+              <input
+                type="date"
+                value={newPlanEndDate}
+                onChange={(e) => setNewPlanEndDate(e.target.value)}
+                className="h-10 w-full rounded-xl border border-neutral-200 bg-neutral-50 px-3 text-sm text-neutral-900 outline-none focus:border-neutral-300 dark:border-white/10 dark:bg-white/[0.04] dark:text-white"
+              />
+            </div>
           </div>
-        </header>
+        </div>
 
         <div>
-          {activeTab === 0 && (
-            <div className="space-y-4 pt-1">
-              {/* Week calendar strip */}
-              <div className="rounded-xl border border-neutral-200/80 bg-white px-4 py-3.5 dark:border-white/[0.08] dark:bg-neutral-900">
-                      <div className="mb-3 flex items-center justify-between">
-                        <span className="text-sm font-semibold text-neutral-900 dark:text-white">{weekLabel}</span>
-                        <div className="flex gap-0.5">
-                          <button
-                            type="button"
-                            onClick={() => setWeekOffset((w) => w - 1)}
-                            className="inline-flex h-7 w-7 items-center justify-center rounded-lg text-neutral-500 hover:bg-neutral-100 dark:text-neutral-400 dark:hover:bg-white/[0.07] transition-colors"
-                          >
-                            <IconChevronLeft size={15} />
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => { setWeekOffset(0); setActiveDay(todayKey); }}
-                            className="h-7 rounded-lg px-2 text-[11px] font-medium text-neutral-500 hover:bg-neutral-100 dark:text-neutral-400 dark:hover:bg-white/[0.07] transition-colors"
-                          >
-                            Today
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => setWeekOffset((w) => w + 1)}
-                            className="inline-flex h-7 w-7 items-center justify-center rounded-lg text-neutral-500 hover:bg-neutral-100 dark:text-neutral-400 dark:hover:bg-white/[0.07] transition-colors"
-                          >
-                            <IconChevronRight size={15} />
-                          </button>
-                        </div>
-                      </div>
-                      <div className="grid grid-cols-7 gap-0.5">
-                        {weekDates.map(({ day, date }) => {
-                          const isDateToday = date.getTime() === todayMidnight.getTime();
-                          const isActive = day === activeDay;
-                          return (
+          <p className="mb-2 text-[11px] font-semibold uppercase tracking-[0.08em] text-neutral-400 dark:text-neutral-500">Icon</p>
+          <div className="grid grid-cols-5 gap-1.5">
+            {SECTION_ICONS.map(({ name, label, icon: Icon }) => {
+              const ic = getIconPickerStyle(name);
+              const sel = newPlanIconName === name;
+              return (
+                <button
+                  key={name}
+                  type="button"
+                  title={label}
+                  onClick={() => setNewPlanIconName(name)}
+                  className={`flex flex-col items-center justify-center gap-1 rounded-2xl py-3 transition-all duration-150 ${
+                    sel ? `${ic.solid} shadow-sm scale-[1.04]` : `${ic.tint} ${ic.text} hover:scale-[1.04]`
+                  }`}
+                >
+                  <Icon size={18} strokeWidth={1.5} />
+                  <span className={`text-[9px] font-semibold leading-none ${sel ? "text-white/80" : ""}`}>
+                    {label}
+                  </span>
+                </button>
+              );
+            })}
+          </div>
+        </div>
+
+        <div>
+          <p className="mb-2 text-[11px] font-semibold uppercase tracking-[0.08em] text-neutral-400 dark:text-neutral-500">
+            Progress trackers <span className="normal-case font-normal text-neutral-400">(optional)</span>
+          </p>
+          <div className="flex gap-2">
+            <input
+              value={newPlanMetaInput}
+              onChange={(e) => setNewPlanMetaInput(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") {
+                  e.preventDefault();
+                  const val = newPlanMetaInput.trim();
+                  if (val && !newPlanMetaFields.includes(val)) {
+                    setNewPlanMetaFields((prev) => [...prev, val]);
+                    setNewPlanMetaInput("");
+                  }
+                }
+              }}
+              placeholder="e.g. Weight, Running Distance…"
+              className="h-10 flex-1 rounded-xl border border-neutral-200 bg-neutral-50 px-3 text-sm text-neutral-900 outline-none placeholder:text-neutral-400 focus:border-neutral-300 focus:bg-white dark:border-white/10 dark:bg-white/[0.04] dark:text-white dark:placeholder:text-neutral-500"
+            />
+            <button
+              type="button"
+              onClick={() => {
+                const val = newPlanMetaInput.trim();
+                if (val && !newPlanMetaFields.includes(val)) {
+                  setNewPlanMetaFields((prev) => [...prev, val]);
+                  setNewPlanMetaInput("");
+                }
+              }}
+              className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-neutral-200 text-neutral-500 hover:bg-neutral-50 dark:border-white/10 dark:text-neutral-400 dark:hover:bg-white/5"
+            >
+              <IconPlus size={16} />
+            </button>
+          </div>
+          {newPlanMetaFields.length > 0 && (
+            <div className="mt-2 flex flex-wrap gap-1.5">
+              {newPlanMetaFields.map((field) => (
+                <span
+                  key={field}
+                  className="inline-flex items-center gap-1.5 rounded-full border border-neutral-200 bg-neutral-50 px-2.5 py-1 text-[12px] font-medium text-neutral-600 dark:border-white/10 dark:bg-white/[0.04] dark:text-neutral-300"
+                >
+                  {field}
+                  <button
+                    type="button"
+                    onClick={() => setNewPlanMetaFields((prev) => prev.filter((f) => f !== field))}
+                    className="opacity-50 hover:opacity-100 hover:text-red-500 transition-opacity"
+                  >
+                    <IconX size={11} />
+                  </button>
+                </span>
+              ))}
+            </div>
+          )}
+        </div>
+
+        <button
+          type="button"
+          onClick={handleAddPlan}
+          disabled={!newPlanTitle.trim()}
+          className="h-12 w-full rounded-2xl bg-neutral-950 text-white text-[15px] font-semibold transition-all hover:bg-neutral-800 active:scale-[0.98] disabled:opacity-40 disabled:cursor-not-allowed dark:bg-white dark:text-neutral-950 dark:hover:bg-neutral-100"
+        >
+          Create New Plan
+        </button>
+      </div>
+    );
+  }
+
+  // ─── Plan list ─────────────────────────────────────────────────────────────
+
+  function renderPlanList() {
+    return (
+      <div className="px-4 pt-5 pb-8">
+        {/* Title section */}
+        <div className="flex items-start justify-between gap-4 mb-6">
+          <div>
+            <p className="text-[10px] font-semibold uppercase tracking-[0.1em] text-neutral-500 dark:text-neutral-400">
+              Stay on track
+            </p>
+            <h1 className="mt-1 text-[22px] font-semibold text-neutral-950 dark:text-white leading-tight">
+              My Plans
+            </h1>
+          </div>
+          <button
+            type="button"
+            onClick={() => setAddingPlan(true)}
+            className="shrink-0 inline-flex items-center gap-1.5 rounded-full border border-neutral-300 bg-white px-4 py-2 text-[13px] font-semibold text-neutral-700 transition-all hover:bg-neutral-50 hover:border-neutral-400 active:scale-95 dark:border-white/10 dark:bg-neutral-900 dark:text-neutral-300 dark:hover:bg-white/5"
+          >
+            <IconPlus size={14} strokeWidth={2.5} />
+            Add New Plan
+          </button>
+        </div>
+
+        {/* Empty state */}
+        {schedule.plans.length === 0 && (
+          <div className="rounded-[28px] border border-dashed border-neutral-200 p-10 text-center dark:border-white/10">
+            <div className="mb-3 flex h-12 w-12 items-center justify-center rounded-2xl bg-neutral-100 dark:bg-white/[0.07] mx-auto">
+              <IconClipboardList size={22} className="text-neutral-400 dark:text-neutral-500" />
+            </div>
+            <p className="text-[15px] font-semibold text-neutral-700 dark:text-neutral-300">No plans yet</p>
+            <p className="mt-1 text-[13px] text-neutral-400 dark:text-neutral-500 max-w-[200px] mx-auto">
+              Create your first plan to organize activities and track progress.
+            </p>
+          </div>
+        )}
+
+        {/* Plan cards */}
+        <div className="space-y-4">
+          {schedule.plans.map((plan) => {
+            const uniqueTasks = getUniquePlanTasks(plan.id);
+            const trackerCount = schedule.progressTrackers.filter(
+              (t) => t.planId === plan.id
+            ).length;
+            return (
+              <button
+                key={plan.id}
+                type="button"
+                onClick={() => setSelectedPlanId(plan.id)}
+                className="w-full rounded-[28px] border border-neutral-200 bg-white p-6 text-left shadow-[0_2px_16px_rgba(0,0,0,0.04)] transition-all hover:border-neutral-300 hover:shadow-[0_4px_24px_rgba(0,0,0,0.07)] dark:border-white/10 dark:bg-neutral-900 dark:hover:border-white/20"
+              >
+                <h2 className="text-[18px] font-semibold text-neutral-950 dark:text-white leading-snug">
+                  {plan.title}
+                </h2>
+                {plan.description && (
+                  <p className="mt-2 text-[13px] leading-relaxed text-neutral-500 dark:text-neutral-400 line-clamp-2">
+                    {plan.description}
+                  </p>
+                )}
+                <div className="mt-5 flex flex-wrap gap-x-5 gap-y-2">
+                  <span className="inline-flex items-center gap-1.5 text-[13px] font-medium text-neutral-500 dark:text-neutral-400">
+                    <IconClipboardList size={14} strokeWidth={1.8} />
+                    Tasks Linked: {uniqueTasks.length}
+                  </span>
+                  <span className="inline-flex items-center gap-1.5 text-[13px] font-medium text-neutral-500 dark:text-neutral-400">
+                    <IconTrendingUp size={14} strokeWidth={1.8} />
+                    Progress tracking: {trackerCount}
+                  </span>
+                </div>
+                {(plan.startDate || plan.endDate) && (
+                  <p className="mt-3 text-[12px] font-medium text-neutral-400 dark:text-neutral-500">
+                    {formatPlanRange(plan)}
+                  </p>
+                )}
+              </button>
+            );
+          })}
+        </div>
+      </div>
+    );
+  }
+
+  // ─── Plan detail ───────────────────────────────────────────────────────────
+
+  function renderPlanDetail(plan: Plan) {
+    const uniqueTasks = getUniquePlanTasks(plan.id);
+    const trackers = schedule.progressTrackers.filter((t) => t.planId === plan.id);
+
+    return (
+      <div className="pb-32">
+        {/* TOP BAR */}
+        <div className="flex items-center justify-between px-4 py-4 border-b border-neutral-200 dark:border-white/[0.08]">
+          <button
+            type="button"
+            onClick={() => setSelectedPlanId(null)}
+            className="inline-flex items-center gap-1.5 text-[13px] font-semibold text-neutral-500 hover:text-neutral-900 dark:text-neutral-400 dark:hover:text-white transition-colors"
+          >
+            <IconArrowLeft size={20} strokeWidth={2} />
+            Plans
+          </button>
+          <div className="flex items-center gap-0.5">
+            <button
+              type="button"
+              onClick={() => {
+                setEditingPlanId(plan.id);
+                setEditPlanDraft({
+                  title: plan.title,
+                  description: plan.description ?? "",
+                  startDate: plan.startDate ?? "",
+                  endDate: plan.endDate ?? "",
+                });
+              }}
+              className="inline-flex h-9 w-9 items-center justify-center rounded-xl text-neutral-400 hover:bg-neutral-100 hover:text-neutral-700 dark:text-neutral-500 dark:hover:bg-white/[0.07] dark:hover:text-neutral-300 transition-colors"
+            >
+              <IconEdit size={20} strokeWidth={2} />
+            </button>
+            <button
+              type="button"
+              onClick={() => handleDeletePlan(plan.id)}
+              className="inline-flex h-9 w-9 items-center justify-center rounded-xl text-neutral-400 hover:bg-rose-50 hover:text-rose-500 dark:text-neutral-500 dark:hover:bg-rose-500/10 dark:hover:text-rose-400 transition-colors"
+            >
+              <IconTrash size={20} strokeWidth={2} />
+            </button>
+          </div>
+        </div>
+
+        {/* HERO */}
+        <div className="px-4 pt-6 space-y-3">
+          <h1 className="text-[40px] font-bold leading-tight text-neutral-950 dark:text-white">
+            {plan.title}
+          </h1>
+          {(plan.startDate || plan.endDate) && (
+            <p className="text-[16px] font-semibold text-neutral-500 dark:text-neutral-400">
+              {formatPlanRange(plan)}
+            </p>
+          )}
+          {plan.description && (
+            <p className="text-[18px] leading-relaxed text-neutral-800 dark:text-neutral-200">
+              {plan.description}
+            </p>
+          )}
+        </div>
+
+        {/* LINKED TASKS */}
+        <section className="mt-8 px-4">
+          <div className="flex items-end justify-between mb-4">
+            <div>
+              <p className="text-[10px] font-semibold uppercase tracking-[0.1em] text-neutral-400 dark:text-neutral-500">
+                Linked
+              </p>
+              <h2 className="text-[16px] font-semibold text-neutral-950 dark:text-white mt-0.5">
+                Planned Tasks
+              </h2>
+            </div>
+            <button
+              type="button"
+              onClick={() => setAddTaskModalOpen(true)}
+              className="inline-flex items-center gap-1.5 text-[13px] font-semibold text-neutral-500 hover:text-neutral-900 dark:text-neutral-400 dark:hover:text-white transition-colors"
+            >
+              <IconPlus size={14} strokeWidth={2.5} />
+              Add Task
+            </button>
+          </div>
+
+          <div className="rounded-[24px] border border-neutral-200 bg-white px-4 dark:border-white/[0.08] dark:bg-neutral-900">
+            {uniqueTasks.length === 0 ? (
+              <div className="py-10 text-center">
+                <p className="text-[14px] font-medium text-neutral-400 dark:text-neutral-500 max-w-[220px] mx-auto">
+                  Link activities to this plan to keep everything connected.
+                </p>
+              </div>
+            ) : (
+              uniqueTasks.map(({ task, activeDays }) =>
+                renderLinkedTaskCard(task, activeDays)
+              )
+            )}
+          </div>
+        </section>
+
+        {/* PROGRESS TRACKING */}
+        <section className="mt-8 px-4">
+          <div className="flex items-end justify-between mb-4">
+            <div>
+              <p className="text-[10px] font-semibold uppercase tracking-[0.1em] text-neutral-400 dark:text-neutral-500">
+                Plan Progress
+              </p>
+              <h2 className="text-[16px] font-semibold text-neutral-950 dark:text-white mt-0.5">
+                Metrics and trends
+              </h2>
+            </div>
+            <button
+              type="button"
+              onClick={() => {
+                setAddingTrackerForPlanId(plan.id);
+                setAddingTracker(true);
+              }}
+              className="inline-flex items-center gap-1.5 text-[13px] font-semibold text-neutral-500 hover:text-neutral-900 dark:text-neutral-400 dark:hover:text-white transition-colors"
+            >
+              <IconPlus size={14} strokeWidth={2.5} />
+              Add Tracker
+            </button>
+          </div>
+
+          {trackers.length === 0 ? (
+            <div className="rounded-[24px] border border-dashed border-neutral-200 py-10 text-center dark:border-white/[0.08]">
+              <p className="text-[14px] font-medium text-neutral-400 dark:text-neutral-500">
+                No progress trackers yet.
+              </p>
+              <button
+                type="button"
+                onClick={() => {
+                  setAddingTrackerForPlanId(plan.id);
+                  setAddingTracker(true);
+                }}
+                className="mt-3 inline-flex items-center gap-1.5 rounded-full border border-neutral-200 px-4 py-2 text-[13px] font-semibold text-neutral-600 hover:bg-neutral-50 dark:border-white/10 dark:text-neutral-400 dark:hover:bg-white/[0.04] transition-colors"
+              >
+                <IconPlus size={13} strokeWidth={2.5} />
+                Create Tracker
+              </button>
+            </div>
+          ) : (
+            <div className="space-y-4">
+              {trackers.map((tracker) => {
+                const entries = schedule.metricEntries
+                  .filter((e) => e.trackerId === tracker.id)
+                  .sort((a, b) => a.date.localeCompare(b.date));
+                const lastTwo = entries.slice(-2);
+                const trend =
+                  lastTwo.length === 2 && lastTwo[0].value !== 0
+                    ? ((lastTwo[1].value - lastTwo[0].value) / Math.abs(lastTwo[0].value)) * 100
+                    : null;
+                const isEditingThisTracker = editingTrackerId === tracker.id;
+
+                return (
+                  <div
+                    key={tracker.id}
+                    className="rounded-[24px] border border-neutral-200 bg-white overflow-hidden dark:border-white/[0.08] dark:bg-neutral-900"
+                  >
+                    {/* Tracker header */}
+                    <div className="px-5 pt-5 pb-4">
+                      {isEditingThisTracker ? (
+                        <div className="space-y-2">
+                          <input
+                            value={editTrackerDraft.title}
+                            onChange={(e) => setEditTrackerDraft((d) => ({ ...d, title: e.target.value }))}
+                            placeholder="Tracker name"
+                            autoFocus
+                            className="h-10 w-full rounded-xl border border-neutral-200 bg-neutral-50 px-3 text-[14px] font-medium text-neutral-900 outline-none focus:border-neutral-400 focus:bg-white dark:border-white/10 dark:bg-white/[0.04] dark:text-white"
+                          />
+                          <input
+                            value={editTrackerDraft.unit}
+                            onChange={(e) => setEditTrackerDraft((d) => ({ ...d, unit: e.target.value }))}
+                            placeholder="Unit (e.g. kg, km, hr)"
+                            className="h-10 w-full rounded-xl border border-neutral-200 bg-neutral-50 px-3 text-[14px] text-neutral-700 outline-none focus:border-neutral-400 focus:bg-white dark:border-white/10 dark:bg-white/[0.04] dark:text-neutral-300"
+                          />
+                          <div className="flex gap-2 pt-1">
                             <button
-                              key={day}
                               type="button"
-                              onClick={() => setActiveDay(day)}
-                              className={`flex flex-col items-center gap-1 rounded-xl py-2 transition-all duration-200 ${
-                                isActive
-                                  ? "bg-neutral-900 text-white dark:bg-white dark:text-neutral-900"
-                                  : isDateToday
-                                    ? "bg-neutral-100 text-neutral-700 dark:bg-white/10 dark:text-neutral-200"
-                                    : "text-neutral-500 hover:bg-neutral-100 dark:text-neutral-400 dark:hover:bg-white/[0.06]"
-                              }`}
+                              onClick={() => handleSaveEditTracker(tracker.id)}
+                              className="inline-flex flex-1 h-9 items-center justify-center gap-1 rounded-xl bg-neutral-950 text-[13px] font-semibold text-white dark:bg-white dark:text-neutral-950"
                             >
-                              <span className={`text-[9px] font-semibold uppercase tracking-wide leading-none ${isActive ? "opacity-70" : "opacity-60"}`}>
-                                {DAY_LABELS[day]}
-                              </span>
-                              <span className="text-sm font-bold leading-none">{date.getDate()}</span>
+                              <IconCheck size={14} /> Save
                             </button>
-                          );
-                        })}
-                      </div>
-                    </div>
-
-                    {/* Section header */}
-                    <div className="flex items-start justify-between gap-3 px-1">
-                      <div>
-                        <p className="text-[10px] font-semibold uppercase tracking-widest text-neutral-400 dark:text-neutral-500">
-                          My Schedule
-                        </p>
-                        <h2 className="mt-0.5 text-base font-semibold text-neutral-900 dark:text-white">
-                          Today&apos;s Task
-                        </h2>
-                      </div>
-                      {viewMode === "card" && (
-                        <button
-                          type="button"
-                          onClick={() => setEditMode((prev) => !prev)}
-                          title={editMode ? "Done editing" : "Edit tasks"}
-                          className={`mt-0.5 inline-flex h-8 w-8 items-center justify-center rounded-lg border transition-colors ${
-                            editMode
-                              ? "border-neutral-900 bg-neutral-900 text-white dark:border-white dark:bg-white dark:text-neutral-900"
-                              : "border-neutral-200 text-neutral-500 hover:bg-neutral-100 dark:border-white/10 dark:text-neutral-400 dark:hover:bg-white/[0.07]"
-                          }`}
-                        >
-                          <IconEdit size={14} />
-                        </button>
-                      )}
-                    </div>
-
-                    <div className="space-y-3 pb-28">
-                      {dayTasks.length === 0 && (
-                        <div className="rounded-xl border border-dashed border-neutral-200 p-8 text-center text-sm text-neutral-400 dark:border-white/10 dark:text-neutral-500">
-                          Nothing scheduled yet — tap + to add your first task.
+                            <button
+                              type="button"
+                              onClick={() => setEditingTrackerId(null)}
+                              className="inline-flex h-9 px-4 items-center gap-1 rounded-xl border border-neutral-200 text-[13px] font-medium text-neutral-500 dark:border-white/10 dark:text-neutral-400"
+                            >
+                              Cancel
+                            </button>
+                          </div>
                         </div>
-                      )}
-
-                      {viewMode === "card" ? (
-                        editMode ? (
-                          <DndContext sensors={sensors} onDragEnd={handleTasksDragEnd}>
-                            <SortableContext items={dayTasks.map((t) => t.id)} strategy={verticalListSortingStrategy}>
-                              <div className="flex flex-col gap-3">
-                                {dayTasks.map((task) => (
-                                  <SortableTaskCard key={task.id} task={task}>
-                                    {(dragHandleProps) => (
-                                      <div className="w-full min-w-0 animate-panel-in">
-                                        {renderCardViewTask(task, dragHandleProps)}
-                                      </div>
-                                    )}
-                                  </SortableTaskCard>
-                                ))}
-                              </div>
-                            </SortableContext>
-                          </DndContext>
-                        ) : (
-                          <div className="flex flex-col gap-3">
-                            {dayTasks.map((task) => (
-                              <div key={task.id} className="animate-panel-in">
-                                {renderCardViewTask(task)}
-                              </div>
-                            ))}
-                          </div>
-                        )
                       ) : (
-                        <div
-                          ref={timelineScrollRef}
-                          className="calendar-scrollbar-none relative flex max-h-[72vh] overflow-y-auto overflow-x-hidden rounded-xl border border-neutral-100 bg-white shadow-sm shadow-neutral-200/50 dark:border-white/[0.07] dark:bg-neutral-900 dark:shadow-black/25"
-                        >
-                          <div className="sticky left-0 z-20 w-12 shrink-0 bg-white/95 pr-2 sm:w-14 dark:bg-neutral-900/95 backdrop-blur-sm" style={{ height: timelineHeight }}>
-                            {timelineHours.map((hour, index) => (
-                              <span
-                                key={hour}
-                                className="absolute right-2 text-[11px] font-medium text-neutral-400 dark:text-neutral-500"
-                                style={{ top: TIMELINE_TOP_PADDING + index * HOUR_HEIGHT - (index === 0 ? 0 : 8) }}
-                              >
-                                {formatHourLabel(hour)}
-                              </span>
-                            ))}
-                          </div>
-                          <div className="relative min-w-0 flex-1 border-l border-neutral-100 dark:border-white/5" style={{ height: timelineHeight }}>
-                            <div className="absolute inset-0">
-                              {timelineHours.map((hour, index) => (
-                                <div
-                                  key={`grid-${hour}`}
-                                  className="absolute left-0 right-0 border-t border-neutral-100 dark:border-white/[0.06]"
-                                  style={{ top: TIMELINE_TOP_PADDING + index * HOUR_HEIGHT }}
-                                />
-                              ))}
-                            </div>
-                            <div className="absolute inset-0">
-                              {timelineTaskLayouts.map((layout) => (
-                                <div
-                                  key={layout.task.id}
-                                  className="absolute min-w-0 px-1 animate-panel-in"
-                                  style={getTaskLaneStyle(layout)}
-                                >
-                                  <div className="relative h-full min-h-[36px]">
-                                    {renderTaskCard(layout.task, "h-full rounded-xl p-2.5 w-full min-w-0 border overflow-hidden", undefined, layout.compact)}
-                                  </div>
-                                  </div>
-                                ))}
-                            </div>
-                            {showCurrentTime && (
-                              <div
-                                className="pointer-events-none absolute left-0 right-0 z-30 flex -translate-y-1/2 items-center"
-                                style={{ top: currentTimeTop }}
-                              >
-                                <div className="-ml-[5px] h-2.5 w-2.5 rounded-full bg-red-500" />
-                                <div className="h-px flex-1 bg-red-500" />
+                        <div className="flex items-start justify-between gap-3">
+                          <div className="flex-1 min-w-0">
+                            <p className="text-[10px] font-semibold uppercase tracking-[0.1em] text-neutral-400 dark:text-neutral-500">
+                              Plan
+                            </p>
+                            <h3 className="text-[20px] font-semibold text-neutral-950 dark:text-white mt-0.5 leading-tight">
+                              {tracker.title}
+                              {tracker.unit && (
+                                <span className="ml-1.5 text-[15px] font-normal text-neutral-400">
+                                  ({tracker.unit})
+                                </span>
+                              )}
+                            </h3>
+                            {trend !== null && (
+                              <div className="flex items-center gap-1 mt-1.5">
+                                {trend >= 0 ? (
+                                  <IconTrendingUp size={14} className="text-emerald-500 shrink-0" />
+                                ) : (
+                                  <IconTrendingDown size={14} className="text-rose-500 shrink-0" />
+                                )}
+                                <p className={`text-[12px] font-medium ${trend >= 0 ? "text-emerald-600 dark:text-emerald-400" : "text-rose-600 dark:text-rose-400"}`}>
+                                  Trending {trend >= 0 ? "up" : "down"} by {Math.abs(trend).toFixed(1)}% from last entry
+                                </p>
                               </div>
                             )}
                           </div>
-                        </div>
-                      )}
-
-                    </div>
-            </div>
-          )}
-          {activeTab === 1 && (
-            <div className="space-y-4 pt-1 pb-28">
-                    {schedule.plans.length === 0 && !addingPlan && (
-                      <div className="rounded-xl border border-dashed border-neutral-200 p-6 text-center text-sm text-neutral-400 dark:border-white/10 dark:text-neutral-500">
-                        No plans yet. Create one for routines, meals, workouts, or anything you want to track over time.
-                      </div>
-                    )}
-
-                    <DndContext sensors={sensors} onDragEnd={handlePlansDragEnd}>
-                      <SortableContext items={schedule.plans.map((plan) => plan.id)} strategy={verticalListSortingStrategy}>
-                        <div className="space-y-4">
-                          {schedule.plans.map((plan) => (
-                            <SortablePlanCard
-                              key={plan.id}
-                              plan={plan}
-                              onUpdatePlan={handleUpdatePlan}
-                              onDeletePlan={handleDeletePlan}
-                              onReorderItems={handleReorderPlanItems}
-                              onAdd={(entry) => handlePlanAdd(plan.id, entry)}
-                              onEdit={(itemId, updated) => handlePlanEdit(plan.id, itemId, updated)}
-                              onDelete={(itemId) => handlePlanDelete(plan.id, itemId)}
-                              onAddGoal={(goal) => handleAddGoal(plan.id, goal)}
-                              onDeleteGoal={(goalId) => handleDeleteGoal(plan.id, goalId)}
-                            />
-                          ))}
-                        </div>
-                      </SortableContext>
-                    </DndContext>
-
-                    {addingPlan ? (
-                      <div className="space-y-3 rounded-xl border border-neutral-200/80 bg-white p-4 shadow-sm dark:border-white/[0.08] dark:bg-neutral-900 dark:shadow-black/20">
-                        <p className="text-sm font-semibold text-neutral-900 dark:text-white">New plan</p>
-                        <input
-                          value={newPlanTitle}
-                          onChange={(e) => setNewPlanTitle(e.target.value)}
-                          placeholder="Plan name"
-                          className="h-10 w-full rounded-md border border-neutral-200 bg-white px-3 text-sm text-neutral-900 outline-none transition-colors placeholder:text-neutral-400 focus:border-neutral-400 dark:border-white/10 dark:bg-neutral-950 dark:text-white dark:focus:border-white/20"
-                        />
-                        <div className="grid grid-cols-5 gap-1.5">
-                          {SECTION_ICONS.map(({ name, label, icon: Icon }) => {
-                            const ic = getIconPickerStyle(name);
-                            const sel = newPlanIconName === name;
-                            return (
-                              <button
-                                key={name}
-                                type="button"
-                                title={label}
-                                onClick={() => setNewPlanIconName(name)}
-                                className={`flex flex-col items-center justify-center gap-1 rounded-xl py-2.5 transition-all duration-150 ${sel ? `${ic.solid} shadow-sm scale-[1.04]` : `${ic.tint} ${ic.text} hover:scale-[1.04]`
-                                  }`}
-                              >
-                                <Icon size={17} strokeWidth={1.5} />
-                                <span className={`text-[9px] font-semibold leading-none ${sel ? "text-white/80" : ""}`}>{label}</span>
-                              </button>
-                            );
-                          })}
-                        </div>
-                        <div className="space-y-2">
-                          <p className="text-xs font-medium text-neutral-500 dark:text-neutral-400">Metrics to track</p>
-                          {newPlanMetaFields.length > 0 && (
-                            <div className="flex flex-wrap gap-1.5">
-                              {newPlanMetaFields.map((field, i) => (
-                                <span key={field} className={`inline-flex items-center gap-1 rounded-full border px-2.5 py-1 text-xs font-medium ${inferBadgeClass(i)}`}>
-                                  {field}
-                                  <button
-                                    type="button"
-                                    onClick={() => setNewPlanMetaFields((prev) => prev.filter((f) => f !== field))}
-                                    className="ml-0.5 opacity-60 hover:opacity-100"
-                                  >
-                                    <IconX size={10} />
-                                  </button>
-                                </span>
-                              ))}
-                            </div>
-                          )}
-                          <div className="flex gap-1.5">
-                            <input
-                              value={newPlanMetaInput}
-                              onChange={(e) => setNewPlanMetaInput(e.target.value)}
-                              placeholder="Add metric (e.g. Calories, Sets…)"
-                              onKeyDown={(e) => {
-                                if (e.key === "Enter") {
-                                  e.preventDefault();
-                                  const val = newPlanMetaInput.trim();
-                                  if (val && !newPlanMetaFields.includes(val)) {
-                                    setNewPlanMetaFields((prev) => [...prev, val]);
-                                    setNewPlanMetaInput("");
-                                  }
-                                }
-                              }}
-                              className="h-9 flex-1 rounded-lg border border-neutral-200 bg-white px-3 text-sm text-neutral-900 outline-none transition-colors placeholder:text-neutral-400 focus:border-neutral-400 dark:border-white/10 dark:bg-neutral-950 dark:text-white dark:placeholder:text-neutral-500 dark:focus:border-white/20"
-                            />
+                          <div className="flex items-center gap-0.5 shrink-0 -mt-0.5">
                             <button
                               type="button"
                               onClick={() => {
-                                const val = newPlanMetaInput.trim();
-                                if (val && !newPlanMetaFields.includes(val)) {
-                                  setNewPlanMetaFields((prev) => [...prev, val]);
-                                  setNewPlanMetaInput("");
-                                }
+                                setEditingTrackerId(tracker.id);
+                                setEditTrackerDraft({ title: tracker.title, unit: tracker.unit ?? "" });
                               }}
-                              className="flex h-9 w-9 items-center justify-center rounded-lg border border-neutral-200 text-neutral-500 transition-colors hover:bg-neutral-100 hover:text-neutral-900 dark:border-white/10 dark:text-neutral-400 dark:hover:bg-white/10 dark:hover:text-white"
+                              className="h-8 w-8 flex items-center justify-center rounded-lg text-neutral-400 hover:text-neutral-700 dark:text-neutral-500 dark:hover:text-neutral-300 transition-colors"
                             >
-                              <IconPlus size={15} />
+                              <IconEdit size={16} strokeWidth={2} />
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => handleDeleteTracker(tracker.id)}
+                              className="h-8 w-8 flex items-center justify-center rounded-lg text-neutral-400 hover:text-rose-500 dark:text-neutral-500 dark:hover:text-rose-400 transition-colors"
+                            >
+                              <IconTrash size={16} strokeWidth={2} />
                             </button>
                           </div>
                         </div>
-                        <div className="flex gap-2">
+                      )}
+                    </div>
+
+                    {/* Chart */}
+                    {!isEditingThisTracker && (
+                      <div className="px-3 pb-3">
+                        {entries.length > 0 ? (
+                          <ProgressChart
+                            entries={entries}
+                            color={plan.color}
+                            metric={{ name: tracker.title, unit: tracker.unit ?? "" }}
+                          />
+                        ) : (
+                          <div className="rounded-xl bg-neutral-50 dark:bg-white/[0.03] py-8 text-center text-[13px] text-neutral-400 dark:text-neutral-500">
+                            No entries yet
+                          </div>
+                        )}
+                      </div>
+                    )}
+
+                    {/* Recent entries */}
+                    {!isEditingThisTracker && (
+                      <div className="border-t border-neutral-100 dark:border-white/[0.06] px-5 pb-5">
+                        <div className="flex items-center justify-between py-3.5">
+                          <p className="text-[12px] font-semibold text-neutral-500 dark:text-neutral-400">
+                            Recent entries
+                          </p>
                           <button
                             type="button"
-                            onClick={handleAddPlan}
-                            className="inline-flex h-10 items-center gap-1.5 rounded-md bg-neutral-900 px-4 text-sm font-medium text-white transition-colors hover:bg-neutral-800 dark:bg-white dark:text-neutral-900 dark:hover:bg-neutral-100"
+                            onClick={() => setEntryTracker(tracker)}
+                            className="inline-flex items-center gap-1.5 text-[12px] font-semibold text-neutral-500 hover:text-neutral-900 dark:text-neutral-400 dark:hover:text-white transition-colors"
                           >
-                            <IconPlus size={16} />
-                            Create Plan
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => {
-                              setAddingPlan(false);
-                              setNewPlanTitle("");
-                              setNewPlanIconName("brain");
-                              setNewPlanMetaFields([]);
-                              setNewPlanMetaInput("");
-                            }}
-                            className="inline-flex h-10 items-center gap-1.5 rounded-md border border-neutral-200 px-4 text-sm font-medium text-neutral-600 transition-colors hover:bg-neutral-50 dark:border-white/10 dark:text-neutral-400 dark:hover:bg-white/5"
-                          >
-                            Cancel
+                            <IconPlus size={12} strokeWidth={2.5} />
+                            Add Entry
                           </button>
                         </div>
+                        {entries.length === 0 ? (
+                          <p className="text-[12px] text-neutral-400 dark:text-neutral-500 pb-1">
+                            Tap Add Entry to start tracking.
+                          </p>
+                        ) : (
+                          entries
+                            .slice(-5)
+                            .reverse()
+                            .map((entry, index) => (
+                              <div
+                                key={entry.id}
+                                className="flex items-center justify-between py-2.5 border-b border-neutral-100 last:border-b-0 dark:border-white/[0.06]"
+                              >
+                                <div className="flex items-center gap-3">
+                                  <span className="text-[11px] font-bold text-neutral-300 dark:text-neutral-700 w-4 text-center tabular-nums">
+                                    {entries.length - index}
+                                  </span>
+                                  <p className="text-[13px] font-medium text-neutral-600 dark:text-neutral-300">
+                                    {formatEntryDate(entry.date)}
+                                  </p>
+                                </div>
+                                <div className="flex items-center gap-3">
+                                  <span className="text-[15px] font-semibold text-neutral-950 dark:text-white tabular-nums">
+                                    {entry.value}
+                                    {tracker.unit && (
+                                      <span className="text-[11px] font-medium text-neutral-400 ml-1">
+                                        {tracker.unit}
+                                      </span>
+                                    )}
+                                  </span>
+                                  <button
+                                    type="button"
+                                    onClick={() => handleDeleteEntry(entry.id)}
+                                    className="h-6 w-6 flex items-center justify-center rounded-lg text-neutral-300 hover:text-rose-500 dark:text-neutral-700 dark:hover:text-rose-400 transition-colors"
+                                  >
+                                    <IconTrash size={13} />
+                                  </button>
+                                </div>
+                              </div>
+                            ))
+                        )}
                       </div>
-                    ) : (
-                      <button
-                        onClick={() => setAddingPlan(true)}
-                        className="relative inline-flex h-12 w-full items-center justify-center gap-2 rounded-lg px-4 text-md font-medium
-  text-cyan-600 dark:text-cyan-300
-  border border-cyan-500/40
-  transition-all duration-300
-
-  hover:border-cyan-400 hover:text-cyan-700
-  dark:hover:text-cyan-200
-
-  before:absolute before:inset-0 before:rounded-lg
-  before:bg-cyan-500/0 before:opacity-0 before:transition-all before:duration-300
-  hover:before:bg-cyan-500/5 hover:before:opacity-100
-
-  shadow-[0_0_0px_rgba(6,182,212,0)]
-  hover:shadow-[0_0_20px_rgba(6,182,212,0.25)]
-
-  active:scale-[0.98]"
-                      >
-                        <IconPlus size={16} />
-                        Add Plan
-                      </button>
                     )}
+                  </div>
+                );
+              })}
             </div>
           )}
-          {activeTab === 2 && (
-            <Progress
-              plans={schedule.plans}
-              entries={schedule.metricEntries}
-              onAddEntry={handleAddEntry}
-              onDeleteEntry={handleDeleteEntry}
-              onSetMetric={handleSetPlanMetric}
-            />
-          )}
-          {activeTab === 3 && (
-            <Settings onClearData={handleClearData} />
-          )}
+        </section>
+      </div>
+    );
+  }
+
+  // ─── Timeline layouts ──────────────────────────────────────────────────────
+
+  const timelineTaskLayouts = getTimelineTaskLayouts(dayTasks);
+
+  // ─── JSX ──────────────────────────────────────────────────────────────────
+
+  return (
+    <main className="min-h-screen bg-neutral-50 text-neutral-900 dark:bg-neutral-950 dark:text-white">
+
+      {/* ── Header ─────────────────────────────────────────────────────────── */}
+      <header className="sticky top-0 z-10 flex items-center justify-between px-4 py-4 border-b border-neutral-200 bg-white/85 backdrop-blur-sm dark:border-white/[0.08] dark:bg-neutral-950/85">
+        <div className="flex items-center">
+          <img src="/logo.svg" alt="PlanR" className="h-6 w-auto dark:hidden" />
+          <img src="/logo-dark.svg" alt="PlanR" className="hidden h-6 w-auto dark:block" />
         </div>
+        <ThemeToggle />
+      </header>
+
+      {/* ── Content ────────────────────────────────────────────────────────── */}
+      <div className="max-w-lg mx-auto pb-40">
+
+        {/* ── Activity Tab ─────────────────────────────────────────────────── */}
         {activeTab === 0 && (
-          <button
-            type="button"
-            onClick={() => { setViewMode((v) => (v === "card" ? "calendar" : "card")); setEditMode(false); }}
-            aria-label={viewMode === "card" ? "Calendar view" : "Card view"}
-            className="fixed bottom-[88px] right-4 z-20 flex h-12 w-12 items-center justify-center rounded-2xl border border-neutral-200/60 bg-white text-neutral-700 transition-all duration-200 active:scale-95 dark:border-white/[0.08] dark:bg-neutral-900 dark:text-neutral-300"
-          >
-            {viewMode === "card" ? <IconCalendar size={18} /> : <IconLayoutList size={18} />}
-          </button>
+          <div>
+            {/* Calendar */}
+            <div className="px-4 pt-4">
+              <div className="rounded-2xl border border-neutral-200 bg-white px-4 py-3.5 shadow-[0_2px_12px_rgba(0,0,0,0.04)] dark:border-white/[0.08] dark:bg-neutral-900">
+                <div className="mb-3 flex items-center justify-between">
+                  <span className="text-[16px] font-semibold text-neutral-900 dark:text-white">
+                    {weekLabel}
+                  </span>
+                  <div className="flex items-center gap-0.5">
+                    <button
+                      type="button"
+                      onClick={() => setWeekOffset((w) => w - 1)}
+                      className="inline-flex h-7 w-7 items-center justify-center rounded-lg text-neutral-400 hover:bg-neutral-100 dark:text-neutral-500 dark:hover:bg-white/[0.07] transition-colors"
+                    >
+                      <IconChevronLeft size={20} strokeWidth={2} />
+                    </button>
+                  
+              
+                    <button
+                      type="button"
+                      onClick={() => setWeekOffset((w) => w + 1)}
+                      className="inline-flex h-7 w-7 items-center justify-center rounded-lg text-neutral-400 hover:bg-neutral-100 dark:text-neutral-500 dark:hover:bg-white/[0.07] transition-colors"
+                    >
+                      <IconChevronRight size={20} strokeWidth={2} />
+                    </button>
+                  </div>
+                </div>
+                <div className="grid grid-cols-7 gap-1">
+                  {weekDates.map(({ day, date }) => {
+                    const isDateToday = date.getTime() === todayMidnight.getTime();
+                    const isActive = day === activeDay;
+                    return (
+                      <button
+                        key={day}
+                        type="button"
+                        onClick={() => setActiveDay(day)}
+                        className={`flex flex-col items-center justify-center gap-2 w-full rounded-lg py-2 h-[72px] transition-all duration-200 ${
+                          isActive
+                            ? "bg-neutral-950 text-white dark:bg-white dark:text-neutral-950"
+                            : isDateToday
+                              ? "bg-neutral-200 text-neutral-700 dark:bg-white/10 dark:text-neutral-200"
+                              : "text-neutral-500 hover:bg-neutral-100 dark:text-neutral-400 dark:hover:bg-white/[0.06]"
+                        }`}
+                      >
+                        <span
+                          className={`text-[12px] font-medium leading-none ${
+                            isActive ? "opacity-60" : "opacity-50"
+                          }`}
+                        >
+                          {DAY_LABELS[day]}
+                        </span>
+                        <span className="text-[16px] font-medium leading-none">{date.getDate()}</span>
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            </div>
+
+            {/* Title section */}
+            <div className="flex items-left justify-between px-4 pt-5 pb-3">
+              {/* LEFT: view toggle */}
+            <div className="text-left">
+                <p className="text-[10px] font-semibold uppercase tracking-[0.1em] text-neutral-500 dark:text-neutral-400">
+                  My Schedule
+                </p>
+                <h2 className="text-[16px] font-semibold text-neutral-950 dark:text-white leading-tight mt-0.5">
+                  Today&apos;s Task
+                </h2>
+              </div>
+              {/* RIGHT: eyebrow + title */}
+
+                  <button
+                type="button"
+                onClick={() => { setViewMode((v) => (v === "list" ? "timeline" : "list")); setEditMode(false); }}
+                className="inline-flex items-center justify-center gap-2 rounded-xl border border-neutral-950 border-[1.5px] bg-white py-2 text-[12px] w-[156px] font-semibold text-neutral-950 transition-all hover:bg-neutral-50 hover:border-neutral-400 active:scale-95 dark:border-white/10 dark:bg-neutral-900 dark:text-neutral-400 dark:hover:bg-white/5"
+              >
+                {viewMode === "timeline" ? (
+                  <><IconLayoutList size={20} strokeWidth={2} /> List View</>
+                ) : (
+                  <><IconTable size={20} strokeWidth={2} /> Timeline View</>
+                )}
+              </button>
+              
+            
+            </div>
+
+            {/* Task content */}
+            <div className="px-4">
+              <AnimatePresence mode="wait" initial={false}>
+                {viewMode === "list" ? (
+                  <motion.div
+                    key="list"
+                    initial={{ opacity: 0, y: 6 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    exit={{ opacity: 0, y: -4 }}
+                    transition={{ duration: 0.2, ease: "easeOut" }}
+                  >
+                    {/* Edit mode toggle */}
+                    {dayTasks.length > 0 && (
+                      <div className="flex justify-end mb-2">
+                        <button
+                          type="button"
+                          onClick={() => setEditMode((prev) => !prev)}
+                          className={`h-7 rounded-full px-3 text-[11px] font-semibold transition-colors ${
+                            editMode
+                              ? "bg-neutral-950 text-white dark:bg-white dark:text-neutral-950"
+                              : "text-neutral-400 hover:text-neutral-600 dark:text-neutral-500 dark:hover:text-neutral-300"
+                          }`}
+                        >
+                          {editMode ? "Done" : "Manage"}
+                        </button>
+                      </div>
+                    )}
+
+                    {dayTasks.length === 0 ? (
+                      <div className="rounded-2xl border border-dashed border-neutral-200 py-12 text-center text-[13px] text-neutral-400 dark:border-white/10 dark:text-neutral-500">
+                        {schedule.plans.length === 0
+                          ? "Create a plan first, then add activities."
+                          : "Nothing scheduled — tap + to add your first activity."}
+                      </div>
+                    ) : editMode ? (
+                      <DndContext sensors={sensors} onDragEnd={handleTasksDragEnd}>
+                        <SortableContext items={dayTasks.map((t) => t.id)} strategy={verticalListSortingStrategy}>
+                          <div className="flex flex-col gap-3 pb-4">
+                            {dayTasks.map((task) => (
+                              <SortableTaskCard key={task.id} task={task}>
+                                {(dragHandleProps) => (
+                                  <div className="w-full min-w-0 animate-panel-in">
+                                    {renderListViewTask(task, dragHandleProps)}
+                                  </div>
+                                )}
+                              </SortableTaskCard>
+                            ))}
+                          </div>
+                        </SortableContext>
+                      </DndContext>
+                    ) : (
+                      <div className="flex flex-col gap-3 pb-4">
+                        {dayTasks.map((task) => (
+                          <div key={task.id} className="animate-panel-in">
+                            {renderListViewTask(task)}
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </motion.div>
+                ) : (
+                  <motion.div
+                    key="timeline"
+                    initial={{ opacity: 0, y: 6 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    exit={{ opacity: 0, y: -4 }}
+                    transition={{ duration: 0.2, ease: "easeOut" }}
+                  >
+                    {dayTasks.length === 0 && (
+                      <div className="mb-3 rounded-2xl border border-dashed border-neutral-200 py-8 text-center text-[13px] text-neutral-400 dark:border-white/10 dark:text-neutral-500">
+                        Nothing scheduled — tap + to add your first activity.
+                      </div>
+                    )}
+                    <div
+                      ref={timelineScrollRef}
+                      className="calendar-scrollbar-none relative flex max-h-[72vh] overflow-y-auto overflow-x-hidden rounded-2xl border border-neutral-200/80 bg-white shadow-[0_2px_16px_rgba(0,0,0,0.05)] dark:border-white/[0.07] dark:bg-neutral-900"
+                    >
+                      {/* Hour labels */}
+                      <div
+                        className="sticky left-0 z-20 w-14 shrink-0 bg-white/95 pr-2 dark:bg-neutral-900/95 backdrop-blur-sm"
+                        style={{ height: timelineHeight }}
+                      >
+                        {timelineHours.map((hour, index) => (
+                          <span
+                            key={hour}
+                            className="absolute right-2 text-[10px] font-semibold text-neutral-400 dark:text-neutral-600"
+                            style={{
+                              top: TIMELINE_TOP_PADDING + index * HOUR_HEIGHT - (index === 0 ? 0 : 8),
+                            }}
+                          >
+                            {formatHourLabel(hour)}
+                          </span>
+                        ))}
+                      </div>
+                      {/* Grid + tasks */}
+                      <div
+                        className="relative min-w-0 flex-1 border-l border-neutral-100 dark:border-white/[0.05]"
+                        style={{ height: timelineHeight }}
+                      >
+                        {/* Grid lines */}
+                        <div className="absolute inset-0">
+                          {timelineHours.map((hour, index) => (
+                            <div
+                              key={`grid-${hour}`}
+                              className="absolute left-0 right-0 border-t border-neutral-100 dark:border-white/[0.05]"
+                              style={{ top: TIMELINE_TOP_PADDING + index * HOUR_HEIGHT }}
+                            />
+                          ))}
+                        </div>
+                        {/* Task cards */}
+                        <div className="absolute inset-0">
+                          {timelineTaskLayouts.map((layout) => (
+                            <div
+                              key={layout.task.id}
+                              className="absolute min-w-0 px-1.5 py-0.5 animate-panel-in"
+                              style={getTaskLaneStyle(layout)}
+                            >
+                              <div className="relative h-full min-h-[36px]">
+                                {renderTimelineTaskCard(
+                                  layout.task,
+                                  "h-full rounded-2xl p-2.5 w-full min-w-0 border overflow-hidden transition-colors duration-200",
+                                  layout.compact
+                                )}
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                        {/* Current time indicator */}
+                        {showCurrentTime && (
+                          <div
+                            className="pointer-events-none absolute left-0 right-0 z-30 flex -translate-y-1/2 items-center"
+                            style={{ top: currentTimeTop }}
+                          >
+                            <div className="-ml-[5px] h-2.5 w-2.5 rounded-full bg-red-500 shadow-[0_0_6px_rgba(239,68,68,0.5)]" />
+                            <div className="h-px flex-1 bg-red-500/80" />
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  </motion.div>
+                )}
+              </AnimatePresence>
+            </div>
+          </div>
+        )}
+
+        {/* ── Plan Tab ─────────────────────────────────────────────────────── */}
+        {activeTab === 1 && (
+          selectedPlan ? renderPlanDetail(selectedPlan) : renderPlanList()
         )}
       </div>
 
+      {/* ── Edit Plan Bottom Sheet ─────────────────────────────────────────── */}
+      <AnimatePresence>
+        {editingPlanId && (
+          <motion.div
+            key="edit-plan-sheet"
+            className="fixed inset-0 z-50 flex items-end justify-center"
+          >
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              transition={{ duration: 0.22 }}
+              className="absolute inset-0 bg-black/40 backdrop-blur-sm"
+              onClick={() => setEditingPlanId(null)}
+            />
+            <motion.div
+              initial={{ y: "100%" }}
+              animate={{ y: 0 }}
+              exit={{ y: "100%" }}
+              transition={{ type: "spring", stiffness: 380, damping: 30, mass: 0.9 }}
+              className="relative w-full max-w-lg bg-white dark:bg-neutral-900 rounded-t-[32px] shadow-[0_-8px_40px_rgba(0,0,0,0.12)] max-h-[80vh] overflow-y-auto"
+            >
+              <div className="sticky top-0 z-10 flex justify-center pt-3 pb-1 bg-white/95 dark:bg-neutral-900/95 backdrop-blur-sm rounded-t-[32px]">
+                <div className="h-1 w-10 rounded-full bg-neutral-300 dark:bg-white/20" />
+              </div>
+              <div className="space-y-4 p-5 pb-8">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="text-[10px] font-semibold uppercase tracking-[0.1em] text-neutral-400 dark:text-neutral-500">Edit</p>
+                    <h2 className="text-[18px] font-semibold text-neutral-950 dark:text-white mt-0.5">Plan Details</h2>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setEditingPlanId(null)}
+                    className="flex h-8 w-8 items-center justify-center rounded-xl border border-neutral-200 text-neutral-400 hover:bg-neutral-50 dark:border-white/10 dark:hover:bg-white/5"
+                  >
+                    <IconX size={16} />
+                  </button>
+                </div>
+                <div className="space-y-2.5">
+                  <input
+                    value={editPlanDraft.title}
+                    onChange={(e) => setEditPlanDraft((d) => ({ ...d, title: e.target.value }))}
+                    placeholder="Plan title"
+                    autoFocus
+                    className="h-11 w-full rounded-xl border border-neutral-200 bg-neutral-50 px-4 text-[15px] font-medium text-neutral-900 outline-none placeholder:text-neutral-400 focus:border-neutral-300 focus:bg-white dark:border-white/10 dark:bg-white/[0.04] dark:text-white dark:placeholder:text-neutral-500"
+                  />
+                  <input
+                    value={editPlanDraft.description}
+                    onChange={(e) => setEditPlanDraft((d) => ({ ...d, description: e.target.value }))}
+                    placeholder="Short description (optional)"
+                    className="h-11 w-full rounded-xl border border-neutral-200 bg-neutral-50 px-4 text-[15px] font-medium text-neutral-900 outline-none placeholder:text-neutral-400 focus:border-neutral-300 focus:bg-white dark:border-white/10 dark:bg-white/[0.04] dark:text-white dark:placeholder:text-neutral-500"
+                  />
+                  <div className="grid grid-cols-2 gap-2">
+                    <div>
+                      <p className="mb-1 text-[11px] font-semibold uppercase tracking-[0.08em] text-neutral-400 dark:text-neutral-500">Start date</p>
+                      <input
+                        type="date"
+                        value={editPlanDraft.startDate}
+                        onChange={(e) => setEditPlanDraft((d) => ({ ...d, startDate: e.target.value }))}
+                        className="h-10 w-full rounded-xl border border-neutral-200 bg-neutral-50 px-3 text-sm text-neutral-900 outline-none focus:border-neutral-300 dark:border-white/10 dark:bg-white/[0.04] dark:text-white"
+                      />
+                    </div>
+                    <div>
+                      <p className="mb-1 text-[11px] font-semibold uppercase tracking-[0.08em] text-neutral-400 dark:text-neutral-500">End date</p>
+                      <input
+                        type="date"
+                        value={editPlanDraft.endDate}
+                        onChange={(e) => setEditPlanDraft((d) => ({ ...d, endDate: e.target.value }))}
+                        className="h-10 w-full rounded-xl border border-neutral-200 bg-neutral-50 px-3 text-sm text-neutral-900 outline-none focus:border-neutral-300 dark:border-white/10 dark:bg-white/[0.04] dark:text-white"
+                      />
+                    </div>
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => handleSaveEditPlan(editingPlanId)}
+                  disabled={!editPlanDraft.title.trim()}
+                  className="h-12 w-full rounded-2xl bg-neutral-950 text-white text-[15px] font-semibold transition-all hover:bg-neutral-800 active:scale-[0.98] disabled:opacity-40 disabled:cursor-not-allowed dark:bg-white dark:text-neutral-950 dark:hover:bg-neutral-100"
+                >
+                  Save Changes
+                </button>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* ── Add Tracker Bottom Sheet ────────────────────────────────────────── */}
+      <AnimatePresence>
+        {addingTracker && addingTrackerForPlanId && (
+          <motion.div
+            key="add-tracker-sheet"
+            className="fixed inset-0 z-50 flex items-end justify-center"
+          >
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              transition={{ duration: 0.22 }}
+              className="absolute inset-0 bg-black/40 backdrop-blur-sm"
+              onClick={() => { setAddingTracker(false); setAddingTrackerForPlanId(null); }}
+            />
+            <motion.div
+              initial={{ y: "100%" }}
+              animate={{ y: 0 }}
+              exit={{ y: "100%" }}
+              transition={{ type: "spring", stiffness: 380, damping: 30, mass: 0.9 }}
+              className="relative w-full max-w-lg bg-white dark:bg-neutral-900 rounded-t-[32px] shadow-[0_-8px_40px_rgba(0,0,0,0.12)]"
+            >
+              <div className="sticky top-0 z-10 flex justify-center pt-3 pb-1 bg-white/95 dark:bg-neutral-900/95 backdrop-blur-sm rounded-t-[32px]">
+                <div className="h-1 w-10 rounded-full bg-neutral-300 dark:bg-white/20" />
+              </div>
+              <div className="space-y-4 p-5 pb-8">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="text-[10px] font-semibold uppercase tracking-[0.1em] text-neutral-400 dark:text-neutral-500">New</p>
+                    <h2 className="text-[18px] font-semibold text-neutral-950 dark:text-white mt-0.5">Create Tracker</h2>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => { setAddingTracker(false); setAddingTrackerForPlanId(null); }}
+                    className="flex h-8 w-8 items-center justify-center rounded-xl border border-neutral-200 text-neutral-400 hover:bg-neutral-50 dark:border-white/10 dark:hover:bg-white/5"
+                  >
+                    <IconX size={16} />
+                  </button>
+                </div>
+                <div className="space-y-2.5">
+                  <input
+                    value={newTrackerTitle}
+                    onChange={(e) => setNewTrackerTitle(e.target.value)}
+                    placeholder="Tracker name (e.g. Weight, Distance)"
+                    autoFocus
+                    onKeyDown={(e) => { if (e.key === "Enter" && newTrackerTitle.trim()) handleAddTracker(addingTrackerForPlanId); }}
+                    className="h-11 w-full rounded-xl border border-neutral-200 bg-neutral-50 px-4 text-[15px] font-medium text-neutral-900 outline-none placeholder:text-neutral-400 focus:border-neutral-300 focus:bg-white dark:border-white/10 dark:bg-white/[0.04] dark:text-white dark:placeholder:text-neutral-500"
+                  />
+                  <input
+                    value={newTrackerUnit}
+                    onChange={(e) => setNewTrackerUnit(e.target.value)}
+                    placeholder="Unit (e.g. kg, km, hr) — optional"
+                    className="h-11 w-full rounded-xl border border-neutral-200 bg-neutral-50 px-4 text-[15px] font-medium text-neutral-900 outline-none placeholder:text-neutral-400 focus:border-neutral-300 focus:bg-white dark:border-white/10 dark:bg-white/[0.04] dark:text-white dark:placeholder:text-neutral-500"
+                  />
+                </div>
+                <div className="rounded-2xl bg-neutral-50 dark:bg-white/[0.04] px-4 py-3">
+                  <p className="text-[11px] font-semibold text-neutral-400 dark:text-neutral-500 mb-1.5">Examples</p>
+                  <div className="flex flex-wrap gap-1.5">
+                    {[["Weight", "kg"], ["Distance", "km"], ["Study Hours", "hr"], ["Calories", "kcal"], ["Water", "ml"]].map(([name, unit]) => (
+                      <button
+                        key={name}
+                        type="button"
+                        onClick={() => { setNewTrackerTitle(name); setNewTrackerUnit(unit); }}
+                        className="rounded-full border border-neutral-200 bg-white px-2.5 py-1 text-[11px] font-semibold text-neutral-500 hover:border-neutral-300 dark:border-white/10 dark:bg-white/[0.04] dark:text-neutral-400 transition-colors"
+                      >
+                        {name} / {unit}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => handleAddTracker(addingTrackerForPlanId)}
+                  disabled={!newTrackerTitle.trim()}
+                  className="h-12 w-full rounded-2xl bg-neutral-950 text-white text-[15px] font-semibold transition-all hover:bg-neutral-800 active:scale-[0.98] disabled:opacity-40 disabled:cursor-not-allowed dark:bg-white dark:text-neutral-950 dark:hover:bg-neutral-100"
+                >
+                  Create Tracker
+                </button>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* ── Add Plan Bottom Sheet ───────────────────────────────────────────── */}
+      <AnimatePresence>
+        {addingPlan && (
+          <motion.div
+            key="add-plan-sheet"
+            className="fixed inset-0 z-50 flex items-end justify-center"
+          >
+            {/* Backdrop */}
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              transition={{ duration: 0.22 }}
+              className="absolute inset-0 bg-black/40 backdrop-blur-sm"
+              onClick={() => setAddingPlan(false)}
+            />
+            {/* Sheet */}
+            <motion.div
+              initial={{ y: "100%" }}
+              animate={{ y: 0 }}
+              exit={{ y: "100%" }}
+              transition={{ type: "spring", stiffness: 380, damping: 30, mass: 0.9 }}
+              className="relative w-full max-w-lg bg-white dark:bg-neutral-900 rounded-t-[32px] shadow-[0_-8px_40px_rgba(0,0,0,0.12)] max-h-[88vh] overflow-y-auto"
+            >
+              <div className="sticky top-0 z-10 flex justify-center pt-3 pb-1 bg-white/95 dark:bg-neutral-900/95 backdrop-blur-sm rounded-t-[32px]">
+                <div className="h-1 w-10 rounded-full bg-neutral-300 dark:bg-white/20" />
+              </div>
+              {renderAddPlanSheet()}
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* ── Bottom Nav ─────────────────────────────────────────────────────── */}
       <BottomNav
         activeTab={activeTab}
-        onTabChange={setActiveTab}
-        onAddTask={() => setAddTaskModalOpen(true)}
+        onTabChange={(tab) => { setActiveTab(tab); setSelectedPlanId(null); }}
+        onCreateTask={() => setAddTaskModalOpen(true)}
+        onCreatePlan={openAddPlan}
       />
+
+      {/* ── Modals ─────────────────────────────────────────────────────────── */}
       <AddTaskModal
         isOpen={addTaskModalOpen}
         onClose={() => setAddTaskModalOpen(false)}
         onSave={handleAddNewTask}
         plans={schedule.plans}
+        activeDay={activeDay}
+        initialPlanId={selectedPlanId}
+      />
+
+      <AddEntryModal
+        isOpen={!!entryTracker}
+        onClose={() => setEntryTracker(null)}
+        onSave={(value, date) => {
+          if (!entryTracker) return;
+          handleAddEntry({
+            planId: entryTracker.planId,
+            trackerId: entryTracker.id,
+            value,
+            date,
+          });
+        }}
+        metric={
+          entryTracker
+            ? { name: entryTracker.title, unit: entryTracker.unit ?? "" }
+            : undefined
+        }
       />
     </main>
   );
