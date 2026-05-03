@@ -107,7 +107,6 @@ export default function BottomNav({
                     bg-neutral-900
                     px-4
                     py-4
-                    shadow-[0_20px_60px_rgba(0,0,0,0.32)]
                     border
                     border-white/[0.08]
                   "
@@ -199,7 +198,6 @@ export default function BottomNav({
               rounded-full
               bg-black
               text-white
-              shadow-[0_12px_30px_rgba(0,0,0,0.16)]
               dark:bg-white
               dark:text-neutral-950
             "
@@ -237,7 +235,6 @@ export default function BottomNav({
               shadow-[0_12px_40px_rgba(0,0,0,0.06)]
               dark:border-white/[0.08]
               dark:bg-neutral-800
-              dark:shadow-[0_12px_40px_rgba(0,0,0,0.4)]
             "
           >
             {/* ACTIVITY */}

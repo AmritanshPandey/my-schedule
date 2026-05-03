@@ -30,6 +30,7 @@ import { SECTION_ICONS, getIconPickerStyle } from "@/components/SectionIcons";
 import {
   IconCheck,
   IconChevronLeft,
+  IconCalendar,
   IconChevronRight,
   IconClipboardList,
   IconEdit,
@@ -43,8 +44,36 @@ import {
 } from "@tabler/icons-react";
 import { DndContext, DragEndEvent, PointerSensor, useSensor, useSensors } from "@dnd-kit/core";
 import { SortableContext, useSortable, verticalListSortingStrategy } from "@dnd-kit/sortable";
+import BottomSheet from "@/components/ui/BottomSheet";
+import SheetHeader from "@/components/ui/SheetHeader";
+import Button from "@/components/ui/Button";
+import Input from "@/components/ui/Input";
 
 // ─── Constants ───────────────────────────────────────────────────────────────
+
+const PLAN_DURATION_PRESETS: { label: string; days: number | null }[] = [
+  { label: "15 days", days: 15 },
+  { label: "30 days", days: 30 },
+  { label: "60 days", days: 60 },
+  { label: "90 days", days: 90 },
+  { label: "Ongoing", days: null },
+];
+
+function todayISO(): string {
+  return new Date().toISOString().split("T")[0];
+}
+
+function addDaysISO(days: number): string {
+  const d = new Date();
+  d.setDate(d.getDate() + days);
+  return d.toISOString().split("T")[0];
+}
+
+function daysBetween(start: string, end: string): number | null {
+  if (!start || !end) return null;
+  const diff = Math.round((new Date(end).getTime() - new Date(start).getTime()) / 86400000);
+  return diff > 0 ? diff : null;
+}
 
 const TIMELINE_START_HOUR = 4;
 const TIMELINE_END_HOUR = 24;
@@ -295,7 +324,7 @@ export default function ScheduleApp() {
   const [selectedPlanId, setSelectedPlanId] = useState<string | null>(null);
   const [entryTracker, setEntryTracker] = useState<ProgressTracker | null>(null);
   const [weekOffset, setWeekOffset] = useState(0);
-  const [viewMode, setViewMode] = useState<"list" | "timeline">("list");
+  const [viewMode, setViewMode] = useState<"list" | "timeline">("timeline");
   const [editingTaskId, setEditingTaskId] = useState<string | null>(null);
   const [editingTask, setEditingTask] = useState<Omit<Task, "id">>(emptyTaskDraft());
 
@@ -335,21 +364,25 @@ export default function ScheduleApp() {
   }, [todayKey]);
 
   useEffect(() => {
-    if (!ready || activeDay !== todayKey || editMode) return;
-    const timeline = timelineScrollRef.current;
-    if (!timeline) return;
-    const timelineStartMinutes = TIMELINE_START_HOUR * 60;
-    const timelineEndMinutes = TIMELINE_END_HOUR * 60;
-    const clampedNow = clamp(getCurrentMinutes(), timelineStartMinutes, timelineEndMinutes);
-    const currentTop =
-      TIMELINE_TOP_PADDING + ((clampedNow - timelineStartMinutes) / 60) * HOUR_HEIGHT;
-    const targetTop = clamp(
-      currentTop - timeline.clientHeight * 0.35,
-      0,
-      timeline.scrollHeight - timeline.clientHeight
-    );
-    timeline.scrollTop = targetTop;
-  }, [activeDay, editMode, ready]);
+    if (!ready || activeTab !== 0 || viewMode !== "timeline" || activeDay !== todayKey || editMode) return;
+    // rAF ensures layout dimensions are available after the view mounts/animates in
+    const id = requestAnimationFrame(() => {
+      const timeline = timelineScrollRef.current;
+      if (!timeline) return;
+      const timelineStartMinutes = TIMELINE_START_HOUR * 60;
+      const timelineEndMinutes = TIMELINE_END_HOUR * 60;
+      const clampedNow = clamp(getCurrentMinutes(), timelineStartMinutes, timelineEndMinutes);
+      const currentTop =
+        TIMELINE_TOP_PADDING + ((clampedNow - timelineStartMinutes) / 60) * HOUR_HEIGHT;
+      const targetTop = clamp(
+        currentTop - timeline.clientHeight * 0.5,
+        0,
+        timeline.scrollHeight - timeline.clientHeight
+      );
+      timeline.scrollTop = targetTop;
+    });
+    return () => cancelAnimationFrame(id);
+  }, [activeDay, activeTab, editMode, ready, viewMode]);
 
   // ─── Handlers ──────────────────────────────────────────────────────────────
 
@@ -661,6 +694,10 @@ export default function ScheduleApp() {
     return `Ends ${formatPlanDate(plan.endDate ?? "")}`;
   }
 
+  function planDayCount(plan: Plan): number | null {
+    return daysBetween(plan.startDate ?? "", plan.endDate ?? "");
+  }
+
   function getTaskPresentation(task: Task) {
     const linkedPlan = schedule.plans.find((p) => p.id === task.planId) ?? null;
     return {
@@ -747,7 +784,7 @@ export default function ScheduleApp() {
     // xsmall: title only, centered
     if (cardSize === "xsmall") {
       return (
-        <div className={`${cardClassName} ${tone.cardBg} ${tone.cardBorder} ${tone.shadow}`}>
+        <div className={`${cardClassName} ${tone.cardBg} ${tone.cardBorder}`}>
           <div className="flex h-full items-center min-w-0">
             <span className={`text-[11px] font-semibold leading-none truncate ${tone.title}`}>
               {task.title}
@@ -760,7 +797,7 @@ export default function ScheduleApp() {
     // small: title + time, vertically centered as a group
     if (cardSize === "small") {
       return (
-        <div className={`${cardClassName} ${tone.cardBg} ${tone.cardBorder} ${tone.shadow}`}>
+        <div className={`${cardClassName} ${tone.cardBg} ${tone.cardBorder}`}>
           <div className="flex h-full flex-col justify-center gap-[3px] min-w-0">
             <span className={`text-[12px] font-semibold leading-tight truncate ${tone.title}`}>
               {task.title}
@@ -776,7 +813,7 @@ export default function ScheduleApp() {
     // medium: title + time/duration, no plan label
     if (cardSize === "medium") {
       return (
-        <div className={`${cardClassName} ${tone.cardBg} ${tone.cardBorder} ${tone.shadow}`}>
+        <div className={`${cardClassName} ${tone.cardBg} ${tone.cardBorder}`}>
           <div className="flex h-full flex-col justify-between min-w-0">
             <h3 className={`text-[13px] font-semibold leading-snug line-clamp-2 ${tone.title}`}>
               {task.title}
@@ -791,7 +828,7 @@ export default function ScheduleApp() {
 
     // large: full layout — plan label → title → time + duration
     return (
-      <div className={`${cardClassName} ${tone.cardBg} ${tone.cardBorder} ${tone.shadow}`}>
+      <div className={`${cardClassName} ${tone.cardBg} ${tone.cardBorder}`}>
         <div className="flex flex-col h-full min-w-0">
           {linkedPlan && (
             <p className="text-[10px] font-semibold uppercase tracking-[0.08em] text-neutral-400 dark:text-neutral-500 truncate mb-1.5 shrink-0">
@@ -897,31 +934,37 @@ export default function ScheduleApp() {
       );
     }
 
-    const { linkedPlan, color } = getTaskPresentation(task);
-    const tone = timelineCardStyles(color);
+    const { linkedPlan } = getTaskPresentation(task);
     const duration = formatTaskDuration(task.startTime, task.endTime);
 
     return (
       <div
-        className={`flex flex-col gap-1 rounded-2xl border bg-white px-4 py-3.5 shadow-[0_1px_6px_rgba(0,0,0,0.04)] transition-all duration-200 dark:bg-neutral-900 ${tone.cardBorder} ${editMode && dragHandleProps ? "cursor-grab active:cursor-grabbing" : ""}`}
+        className={`flex flex-col gap-2 rounded-2xl border border-neutral-200 bg-white px-4 py-4 transition-colors dark:border-white/[0.08] dark:bg-neutral-900 ${editMode && dragHandleProps ? "cursor-grab active:cursor-grabbing" : ""}`}
         {...(editMode && dragHandleProps ? { ...dragHandleProps.attributes, ...dragHandleProps.listeners } : {})}
       >
+        {linkedPlan && (
+          <p className="text-[11px] font-semibold uppercase tracking-[0.08em] text-neutral-400 dark:text-neutral-500">
+            {linkedPlan.title}
+          </p>
+        )}
         <div className="flex items-start justify-between gap-3">
           <div className="min-w-0 flex-1">
-            {linkedPlan && (
-              <p className="text-[10px] font-semibold uppercase tracking-[0.08em] text-neutral-400 dark:text-neutral-500 mb-1">
-                {linkedPlan.title}
-              </p>
-            )}
-            <p className="text-[17px] font-semibold leading-snug text-neutral-900 dark:text-white">
+            <p className="text-[20px] font-semibold leading-tight text-neutral-900 dark:text-white">
               {task.title}
             </p>
-            <p className={`text-[12px] font-medium mt-1 ${tone.time}`}>
-              {task.startTime} – {task.endTime}{duration && ` · ${duration}`}
-            </p>
+            <div className="flex items-center gap-2.5 mt-2">
+              <p className="text-[14px] font-medium text-neutral-500 dark:text-neutral-400">
+                {task.startTime} – {task.endTime}
+              </p>
+              {duration && (
+                <span className="text-[12px] font-medium px-2.5 py-0.5 rounded-full border border-neutral-200 text-neutral-500 dark:border-white/[0.08] dark:text-neutral-400">
+                  {duration}
+                </span>
+              )}
+            </div>
           </div>
           {editMode && (
-            <div className="flex shrink-0 items-center gap-0.5 -mt-0.5">
+            <div className="flex shrink-0 items-center gap-0.5">
               <button
                 type="button"
                 onClick={(e) => { e.stopPropagation(); startEditingTask(task); }}
@@ -997,38 +1040,20 @@ export default function ScheduleApp() {
   function renderAddPlanSheet() {
     return (
       <div className="space-y-4 p-5 pb-8">
-        <div className="flex items-center justify-between">
-          <div>
-            <p className="text-[10px] font-semibold uppercase tracking-[0.1em] text-neutral-400 dark:text-neutral-500">New</p>
-            <h2 className="text-[18px] font-semibold text-neutral-950 dark:text-white mt-0.5">Create Plan</h2>
-          </div>
-          <button
-            type="button"
-            onClick={() => setAddingPlan(false)}
-            className="flex h-8 w-8 items-center justify-center rounded-xl border border-neutral-200 text-neutral-400 hover:bg-neutral-50 dark:border-white/10 dark:hover:bg-white/5"
-          >
-            <IconX size={16} />
-          </button>
-        </div>
+        <SheetHeader eyebrow="New" title="Create Plan" onClose={() => setAddingPlan(false)} />
 
         <div className="space-y-2.5">
-          <input
+          <Input
             value={newPlanTitle}
             onChange={(e) => setNewPlanTitle(e.target.value)}
             placeholder="Plan title"
             autoFocus
             onKeyDown={(e) => { if (e.key === "Enter" && newPlanTitle.trim()) handleAddPlan(); }}
-            className="
-            h-11 w-full rounded-xl border border-neutral-200 bg-neutral-50 px-4 text-[15px] font-medium text-neutral-900 outline-none placeholder:text-neutral-400 transition-colors focus:border-neutral-300 focus:bg-white dark:border-white/10 dark:bg-white/[0.04] dark:text-white dark:placeholder:text-neutral-500 dark:focus:border-white/15 dark:focus:bg-white/[0.06]
-            "
           />
-          <input
+          <Input
             value={newPlanDescription}
             onChange={(e) => setNewPlanDescription(e.target.value)}
             placeholder="Short description (optional)"
-            className="
-            h-11 w-full rounded-xl border border-neutral-200 bg-neutral-50 px-4 text-[15px] font-medium text-neutral-900 outline-none placeholder:text-neutral-400 transition-colors focus:border-neutral-300 focus:bg-white dark:border-white/10 dark:bg-white/[0.04] dark:text-white dark:placeholder:text-neutral-500 dark:focus:border-white/15 dark:focus:bg-white/[0.06]
-            "
           />
           <div className="grid grid-cols-2 gap-2">
             <div>
@@ -1041,13 +1066,45 @@ export default function ScheduleApp() {
               />
             </div>
             <div>
-              <p className="mb-1 text-[11px] font-semibold uppercase tracking-[0.08em] text-neutral-400 dark:text-neutral-500">End date</p>
+              <p className="mb-1 text-[11px] font-semibold uppercase tracking-[0.08em] text-neutral-400 dark:text-neutral-500">
+                End date{(() => { const d = daysBetween(newPlanStartDate, newPlanEndDate); return d ? <span className="normal-case font-normal ml-1">({d} days)</span> : null; })()}
+              </p>
               <input
                 type="date"
                 value={newPlanEndDate}
                 onChange={(e) => setNewPlanEndDate(e.target.value)}
                 className="h-10 w-full rounded-xl border border-neutral-200 bg-neutral-50 px-3 text-sm text-neutral-900 outline-none focus:border-neutral-300 dark:border-white/10 dark:bg-white/[0.04] dark:text-white"
               />
+            </div>
+          </div>
+
+          {/* Duration presets */}
+          <div>
+            <p className="mb-2 text-[11px] font-semibold uppercase tracking-[0.08em] text-neutral-400 dark:text-neutral-500">Quick duration</p>
+            <div className="flex gap-2 flex-wrap">
+              {PLAN_DURATION_PRESETS.map(({ label, days }) => {
+                const today = todayISO();
+                const isActive = days !== null
+                  ? newPlanStartDate === today && newPlanEndDate === addDaysISO(days)
+                  : newPlanStartDate === today && !newPlanEndDate;
+                return (
+                  <button
+                    key={label}
+                    type="button"
+                    onClick={() => {
+                      setNewPlanStartDate(today);
+                      setNewPlanEndDate(days !== null ? addDaysISO(days) : "");
+                    }}
+                    className={`rounded-full border px-3 py-1.5 text-[13px] font-semibold transition-all ${
+                      isActive
+                        ? "border-neutral-950 bg-neutral-950 text-white dark:border-white dark:bg-white dark:text-neutral-900"
+                        : "border-neutral-200 bg-white text-neutral-600 hover:border-neutral-300 dark:border-white/10 dark:bg-white/[0.04] dark:text-neutral-300 dark:hover:border-white/20"
+                    }`}
+                  >
+                    {label}
+                  </button>
+                );
+              })}
             </div>
           </div>
         </div>
@@ -1083,7 +1140,7 @@ export default function ScheduleApp() {
             Progress trackers <span className="normal-case font-normal text-neutral-400">(optional)</span>
           </p>
           <div className="flex gap-2">
-            <input
+            <Input
               value={newPlanMetaInput}
               onChange={(e) => setNewPlanMetaInput(e.target.value)}
               onKeyDown={(e) => {
@@ -1097,9 +1154,6 @@ export default function ScheduleApp() {
                 }
               }}
               placeholder="e.g. Weight, Running Distance…"
-              className="
-              h-11 w-full rounded-xl border border-neutral-200 bg-neutral-50 px-4 text-[15px] font-medium text-neutral-900 outline-none placeholder:text-neutral-400 transition-colors focus:border-neutral-300 focus:bg-white dark:border-white/10 dark:bg-white/[0.04] dark:text-white dark:placeholder:text-neutral-500 dark:focus:border-white/15 dark:focus:bg-white/[0.06]
-              "
             />
             <button
               type="button"
@@ -1110,7 +1164,7 @@ export default function ScheduleApp() {
                   setNewPlanMetaInput("");
                 }
               }}
-              className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-neutral-200 text-neutral-500 hover:bg-neutral-50 dark:border-white/10 dark:text-neutral-400 dark:hover:bg-white/5"
+              className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl border border-neutral-200 text-neutral-500 hover:bg-neutral-50 dark:border-white/10 dark:text-neutral-400 dark:hover:bg-white/5"
             >
               <IconPlus size={16} />
             </button>
@@ -1136,14 +1190,9 @@ export default function ScheduleApp() {
           )}
         </div>
 
-        <button
-          type="button"
-          onClick={handleAddPlan}
-          disabled={!newPlanTitle.trim()}
-          className="h-12 w-full rounded-2xl bg-neutral-950 text-white text-[15px] font-semibold transition-all hover:bg-neutral-800 active:scale-[0.98] disabled:opacity-40 disabled:cursor-not-allowed dark:bg-white dark:text-neutral-950 dark:hover:bg-neutral-100"
-        >
+        <Button fullWidth onClick={handleAddPlan} disabled={!newPlanTitle.trim()}>
           Create New Plan
-        </button>
+        </Button>
       </div>
     );
   }
@@ -1201,45 +1250,51 @@ export default function ScheduleApp() {
                 key={plan.id}
                 type="button"
                 onClick={() => setSelectedPlanId(plan.id)}
-                className="w-full rounded-[24px] border border-neutral-200 bg-white p-5 text-left shadow-[0_2px_12px_rgba(0,0,0,0.04)] transition-all hover:border-neutral-300 hover:shadow-[0_4px_20px_rgba(0,0,0,0.07)] active:scale-[0.99] dark:border-white/10 dark:bg-neutral-900 dark:hover:border-white/20"
+                className="w-full rounded-[24px] border border-neutral-200 bg-white p-5 text-left transition-colors hover:border-neutral-300 active:scale-[0.99] dark:border-white/10 dark:bg-neutral-900 dark:hover:border-white/20"
               >
-                {/* Top row: icon + title */}
-                <div className="flex items-center gap-3">
-                  <div className={`h-10 w-10 shrink-0 rounded-xl flex items-center justify-center ${planAccent.tint} ${planAccent.icon}`}>
-                    <PlanIcon size={18} strokeWidth={1.8} />
+                {/* Top: large icon left + content right */}
+                <div className="flex items-start gap-4">
+                  <div className={`h-14 w-14 shrink-0 rounded-2xl flex items-center justify-center ${planAccent.tint} ${planAccent.icon}`}>
+                    <PlanIcon size={24} strokeWidth={1.6} />
                   </div>
-                  <h2 className="text-[17px] font-semibold text-neutral-950 dark:text-white leading-snug flex-1 min-w-0 truncate">
-                    {plan.title}
-                  </h2>
+                  <div className="flex-1 min-w-0 pt-0.5">
+                    <h2 className="text-[17px] font-semibold text-neutral-950 dark:text-white leading-snug">
+                      {plan.title}
+                    </h2>
+                    {(plan.startDate || plan.endDate) && (
+                      <div className="flex items-center gap-1.5 mt-1.5">
+                        <IconCalendar size={13} strokeWidth={1.8} className="shrink-0 text-neutral-400 dark:text-neutral-500" />
+                        <p className="text-[13px] text-neutral-400 dark:text-neutral-500">
+                          {formatPlanRange(plan)}
+                          {planDayCount(plan) !== null && (
+                            <span className="ml-1.5 text-[11px] font-semibold rounded-full border border-neutral-200 dark:border-white/10 px-1.5 py-0.5 text-neutral-400 dark:text-neutral-500">
+                              {planDayCount(plan)}d
+                            </span>
+                          )}
+                        </p>
+                      </div>
+                    )}
+                    {plan.description && (
+                      <p className="mt-1.5 text-[13px] leading-relaxed text-neutral-500 dark:text-neutral-400 line-clamp-2">
+                        {plan.description}
+                      </p>
+                    )}
+                  </div>
                 </div>
-
-                {/* Date range */}
-                {(plan.startDate || plan.endDate) && (
-                  <p className="mt-3 text-[12px] font-medium text-neutral-400 dark:text-neutral-500">
-                    {formatPlanRange(plan)}
-                  </p>
-                )}
-
-                {/* Description */}
-                {plan.description && (
-                  <p className="mt-2 text-[13px] leading-relaxed text-neutral-500 dark:text-neutral-400 line-clamp-2">
-                    {plan.description}
-                  </p>
-                )}
 
                 {/* Divider */}
                 <div className="mt-4 mb-3.5 border-t border-neutral-100 dark:border-white/[0.06]" />
 
-                {/* Bottom: counts */}
+                {/* Bottom: counts with icons */}
                 <div className="flex items-center gap-5">
-                  <span className="text-[12px] font-medium text-neutral-400 dark:text-neutral-500">
-                    {uniqueTasks.length} {uniqueTasks.length === 1 ? "activity" : "activities"}
+                  <span className="inline-flex items-center gap-1.5 text-[13px] font-medium text-neutral-400 dark:text-neutral-500">
+                    <IconClipboardList size={14} strokeWidth={1.8} />
+                    Tasks Linked: {uniqueTasks.length}
                   </span>
-                  {trackerCount > 0 && (
-                    <span className="text-[12px] font-medium text-neutral-400 dark:text-neutral-500">
-                      {trackerCount} {trackerCount === 1 ? "tracker" : "trackers"}
-                    </span>
-                  )}
+                  <span className="inline-flex items-center gap-1.5 text-[13px] font-medium text-neutral-400 dark:text-neutral-500">
+                    <IconTrendingUp size={14} strokeWidth={1.8} />
+                    Progress tracking: {trackerCount}
+                  </span>
                 </div>
               </button>
             );
@@ -1263,9 +1318,17 @@ export default function ScheduleApp() {
             {plan.title}
           </h1>
           {(plan.startDate || plan.endDate) && (
-            <p className="text-[16px] font-semibold text-neutral-500 dark:text-neutral-400">
-              {formatPlanRange(plan)}
-            </p>
+            <div className="flex items-center gap-2">
+              <IconCalendar size={16} strokeWidth={1.8} className="shrink-0 text-neutral-400 dark:text-neutral-500" />
+              <p className="text-[16px] font-semibold text-neutral-500 dark:text-neutral-400">
+                {formatPlanRange(plan)}
+              </p>
+              {planDayCount(plan) !== null && (
+                <span className="text-[12px] font-semibold rounded-full border border-neutral-200 dark:border-white/10 px-2 py-0.5 text-neutral-400 dark:text-neutral-500">
+                  {planDayCount(plan)}d
+                </span>
+              )}
+            </div>
           )}
           {plan.description && (
             <p className="text-[18px] leading-relaxed text-neutral-800 dark:text-neutral-200">
@@ -1345,7 +1408,7 @@ export default function ScheduleApp() {
                   setAddingTrackerForPlanId(plan.id);
                   setAddingTracker(true);
                 }}
-                className="mt-3 inline-flex items-center gap-1.5 rounded-full border border-neutral-200 px-4 py-2 text-[13px] font-semibold text-neutral-600 hover:bg-neutral-50 dark:border-white/10 dark:text-neutral-400 dark:hover:bg-white/[0.04] transition-colors"
+                className="mt-3 inline-flex items-center gap-1.5 rounded-xl border border-neutral-200 px-4 py-2 text-[13px] font-semibold text-neutral-600 hover:bg-neutral-50 dark:border-white/10 dark:text-neutral-400 dark:hover:bg-white/[0.04] transition-colors"
               >
                 <IconPlus size={16} strokeWidth={2} />
                 Create Tracker
@@ -1586,7 +1649,7 @@ export default function ScheduleApp() {
           <div>
             {/* Calendar */}
             <div className="px-4 pt-4">
-              <div className="rounded-2xl border border-neutral-200 bg-white px-4 py-3.5 shadow-[0_2px_12px_rgba(0,0,0,0.04)] dark:border-white/[0.08] dark:bg-neutral-900">
+              <div className="rounded-2xl border border-neutral-200 bg-white px-4 py-3.5 dark:border-white/[0.08] dark:bg-neutral-900">
                 <div className="mb-3 flex items-center justify-between">
                   <span className="text-[16px] font-semibold text-neutral-900 dark:text-white">
                     {weekLabel}
@@ -1659,9 +1722,9 @@ export default function ScheduleApp() {
                   className="inline-flex items-center justify-center gap-1.5 rounded-xl border border-neutral-200 bg-white px-3.5 h-9 text-[12px] font-semibold text-neutral-700 transition-all hover:bg-neutral-50 active:scale-95 dark:border-white/10 dark:bg-neutral-900 dark:text-neutral-400 dark:hover:bg-white/5"
                 >
                   {viewMode === "timeline" ? (
-                    <><IconLayoutList size={16} strokeWidth={2} /> List</>
+                    <>List <IconLayoutList size={16} strokeWidth={2} /></>
                   ) : (
-                    <><IconTable size={16} strokeWidth={2} /> Timeline</>
+                    <>Timeline <IconTable size={16} strokeWidth={2} /></>
                   )}
                 </button>
                 {dayTasks.length > 0 && viewMode === "list" && (
@@ -1761,7 +1824,7 @@ export default function ScheduleApp() {
                     )}
                     <div
                       ref={timelineScrollRef}
-                      className="calendar-scrollbar-none relative flex max-h-[72vh] overflow-y-auto overflow-x-hidden rounded-2xl border border-neutral-200/60 bg-white shadow-[0_4px_24px_rgba(0,0,0,0.06)] dark:border-white/[0.06] dark:bg-neutral-900"
+                      className="calendar-scrollbar-none relative flex max-h-[72vh] overflow-y-auto overflow-x-hidden rounded-2xl border border-neutral-200 bg-white dark:border-white/[0.08] dark:bg-neutral-900"
                     >
                       {/* Hour labels */}
                       <div
@@ -1814,7 +1877,7 @@ export default function ScheduleApp() {
                               className="absolute min-w-0 px-1.5 py-0.5 animate-panel-in"
                               style={getTaskLaneStyle(layout)}
                             >
-                              <div className="relative h-full min-h-[36px] rounded-2xl shadow-[0_2px_8px_rgba(0,0,0,0.07)] dark:shadow-[0_2px_10px_rgba(0,0,0,0.28)]">
+                              <div className="relative h-full min-h-[36px]">
                                 {renderTimelineTaskCard(
                                   layout.task,
                                   "h-full rounded-2xl p-2.5 w-full min-w-0 border overflow-hidden",
@@ -1850,211 +1913,140 @@ export default function ScheduleApp() {
       </div>
 
       {/* ── Edit Plan Bottom Sheet ─────────────────────────────────────────── */}
-      <AnimatePresence>
-        {editingPlanId && (
-          <motion.div
-            key="edit-plan-sheet"
-            className="fixed inset-0 z-50 flex items-end justify-center"
-          >
-            <motion.div
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              exit={{ opacity: 0 }}
-              transition={{ duration: 0.22 }}
-              className="absolute inset-0 bg-black/40 backdrop-blur-sm"
-              onClick={() => setEditingPlanId(null)}
+      <BottomSheet open={!!editingPlanId} onClose={() => setEditingPlanId(null)} maxHeight="80vh">
+        <div className="space-y-4 p-5 pb-8">
+          <SheetHeader eyebrow="Edit" title="Plan Details" onClose={() => setEditingPlanId(null)} />
+          <div className="space-y-2.5">
+            <Input
+              value={editPlanDraft.title}
+              onChange={(e) => setEditPlanDraft((d) => ({ ...d, title: e.target.value }))}
+              placeholder="Plan title"
+              autoFocus
             />
-            <motion.div
-              initial={{ y: "100%" }}
-              animate={{ y: 0 }}
-              exit={{ y: "100%" }}
-              transition={{ type: "spring", stiffness: 380, damping: 30, mass: 0.9 }}
-              className="relative w-full max-w-lg bg-white dark:bg-neutral-900 rounded-t-[32px] shadow-[0_-8px_40px_rgba(0,0,0,0.12)] max-h-[80vh] overflow-y-auto"
-            >
-              <div className="sticky top-0 z-10 flex justify-center pt-3 pb-1 bg-white/95 dark:bg-neutral-900/95 backdrop-blur-sm rounded-t-[32px]">
-                <div className="h-1 w-10 rounded-full bg-neutral-300 dark:bg-white/20" />
+            <Input
+              value={editPlanDraft.description}
+              onChange={(e) => setEditPlanDraft((d) => ({ ...d, description: e.target.value }))}
+              placeholder="Short description (optional)"
+            />
+            <div className="grid grid-cols-2 gap-2">
+              <div>
+                <p className="mb-1 text-[11px] font-semibold uppercase tracking-[0.08em] text-neutral-400 dark:text-neutral-500">Start date</p>
+                <input
+                  type="date"
+                  value={editPlanDraft.startDate}
+                  onChange={(e) => setEditPlanDraft((d) => ({ ...d, startDate: e.target.value }))}
+                  className="h-10 w-full rounded-xl border border-neutral-200 bg-neutral-50 px-3 text-sm text-neutral-900 outline-none focus:border-neutral-300 dark:border-white/10 dark:bg-white/[0.04] dark:text-white"
+                />
               </div>
-              <div className="space-y-4 p-5 pb-8">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <p className="text-[10px] font-semibold uppercase tracking-[0.1em] text-neutral-400 dark:text-neutral-500">Edit</p>
-                    <h2 className="text-[18px] font-semibold text-neutral-950 dark:text-white mt-0.5">Plan Details</h2>
-                  </div>
-                  <button
-                    type="button"
-                    onClick={() => setEditingPlanId(null)}
-                    className="flex h-8 w-8 items-center justify-center rounded-xl border border-neutral-200 text-neutral-400 hover:bg-neutral-50 dark:border-white/10 dark:hover:bg-white/5"
-                  >
-                    <IconX size={16} />
-                  </button>
-                </div>
-                <div className="space-y-2.5">
-                  <input
-                    value={editPlanDraft.title}
-                    onChange={(e) => setEditPlanDraft((d) => ({ ...d, title: e.target.value }))}
-                    placeholder="Plan title"
-                    autoFocus
-                    className="h-11 w-full rounded-xl border border-neutral-200 bg-neutral-50 px-4 text-[15px] font-medium text-neutral-900 outline-none placeholder:text-neutral-400 focus:border-neutral-300 focus:bg-white dark:border-white/10 dark:bg-white/[0.04] dark:text-white dark:placeholder:text-neutral-500"
-                  />
-                  <input
-                    value={editPlanDraft.description}
-                    onChange={(e) => setEditPlanDraft((d) => ({ ...d, description: e.target.value }))}
-                    placeholder="Short description (optional)"
-                    className="h-11 w-full rounded-xl border border-neutral-200 bg-neutral-50 px-4 text-[15px] font-medium text-neutral-900 outline-none placeholder:text-neutral-400 focus:border-neutral-300 focus:bg-white dark:border-white/10 dark:bg-white/[0.04] dark:text-white dark:placeholder:text-neutral-500"
-                  />
-                  <div className="grid grid-cols-2 gap-2">
-                    <div>
-                      <p className="mb-1 text-[11px] font-semibold uppercase tracking-[0.08em] text-neutral-400 dark:text-neutral-500">Start date</p>
-                      <input
-                        type="date"
-                        value={editPlanDraft.startDate}
-                        onChange={(e) => setEditPlanDraft((d) => ({ ...d, startDate: e.target.value }))}
-                        className="h-10 w-full rounded-xl border border-neutral-200 bg-neutral-50 px-3 text-sm text-neutral-900 outline-none focus:border-neutral-300 dark:border-white/10 dark:bg-white/[0.04] dark:text-white"
-                      />
-                    </div>
-                    <div>
-                      <p className="mb-1 text-[11px] font-semibold uppercase tracking-[0.08em] text-neutral-400 dark:text-neutral-500">End date</p>
-                      <input
-                        type="date"
-                        value={editPlanDraft.endDate}
-                        onChange={(e) => setEditPlanDraft((d) => ({ ...d, endDate: e.target.value }))}
-                        className="h-10 w-full rounded-xl border border-neutral-200 bg-neutral-50 px-3 text-sm text-neutral-900 outline-none focus:border-neutral-300 dark:border-white/10 dark:bg-white/[0.04] dark:text-white"
-                      />
-                    </div>
-                  </div>
-                </div>
-                <button
-                  type="button"
-                  onClick={() => handleSaveEditPlan(editingPlanId)}
-                  disabled={!editPlanDraft.title.trim()}
-                  className="h-12 w-full rounded-2xl bg-neutral-950 text-white text-[15px] font-semibold transition-all hover:bg-neutral-800 active:scale-[0.98] disabled:opacity-40 disabled:cursor-not-allowed dark:bg-white dark:text-neutral-950 dark:hover:bg-neutral-100"
-                >
-                  Save Changes
-                </button>
+              <div>
+                <p className="mb-1 text-[11px] font-semibold uppercase tracking-[0.08em] text-neutral-400 dark:text-neutral-500">
+                  End date{(() => { const d = daysBetween(editPlanDraft.startDate, editPlanDraft.endDate); return d ? <span className="normal-case font-normal ml-1">({d} days)</span> : null; })()}
+                </p>
+                <input
+                  type="date"
+                  value={editPlanDraft.endDate}
+                  onChange={(e) => setEditPlanDraft((d) => ({ ...d, endDate: e.target.value }))}
+                  className="h-10 w-full rounded-xl border border-neutral-200 bg-neutral-50 px-3 text-sm text-neutral-900 outline-none focus:border-neutral-300 dark:border-white/10 dark:bg-white/[0.04] dark:text-white"
+                />
               </div>
-            </motion.div>
-          </motion.div>
-        )}
-      </AnimatePresence>
+            </div>
+
+            {/* Duration presets */}
+            <div>
+              <p className="mb-2 text-[11px] font-semibold uppercase tracking-[0.08em] text-neutral-400 dark:text-neutral-500">Quick duration</p>
+              <div className="flex gap-2 flex-wrap">
+                {PLAN_DURATION_PRESETS.map(({ label, days }) => {
+                  const today = todayISO();
+                  const isActive = days !== null
+                    ? editPlanDraft.startDate === today && editPlanDraft.endDate === addDaysISO(days)
+                    : editPlanDraft.startDate === today && !editPlanDraft.endDate;
+                  return (
+                    <button
+                      key={label}
+                      type="button"
+                      onClick={() => setEditPlanDraft((d) => ({
+                        ...d,
+                        startDate: today,
+                        endDate: days !== null ? addDaysISO(days) : "",
+                      }))}
+                      className={`rounded-full border px-3 py-1.5 text-[13px] font-semibold transition-all ${
+                        isActive
+                          ? "border-neutral-950 bg-neutral-950 text-white dark:border-white dark:bg-white dark:text-neutral-900"
+                          : "border-neutral-200 bg-white text-neutral-600 hover:border-neutral-300 dark:border-white/10 dark:bg-white/[0.04] dark:text-neutral-300 dark:hover:border-white/20"
+                      }`}
+                    >
+                      {label}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          </div>
+          <Button
+            fullWidth
+            onClick={() => editingPlanId && handleSaveEditPlan(editingPlanId)}
+            disabled={!editPlanDraft.title.trim()}
+          >
+            Save Changes
+          </Button>
+        </div>
+      </BottomSheet>
 
       {/* ── Add Tracker Bottom Sheet ────────────────────────────────────────── */}
-      <AnimatePresence>
-        {addingTracker && addingTrackerForPlanId && (
-          <motion.div
-            key="add-tracker-sheet"
-            className="fixed inset-0 z-50 flex items-end justify-center"
-          >
-            <motion.div
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              exit={{ opacity: 0 }}
-              transition={{ duration: 0.22 }}
-              className="absolute inset-0 bg-black/40 backdrop-blur-sm"
-              onClick={() => { setAddingTracker(false); setAddingTrackerForPlanId(null); }}
+      <BottomSheet
+        open={addingTracker && !!addingTrackerForPlanId}
+        onClose={() => { setAddingTracker(false); setAddingTrackerForPlanId(null); }}
+        maxHeight="80vh"
+      >
+        <div className="space-y-4 p-5 pb-8">
+          <SheetHeader
+            eyebrow="New"
+            title="Create Tracker"
+            onClose={() => { setAddingTracker(false); setAddingTrackerForPlanId(null); }}
+          />
+          <div className="space-y-2.5">
+            <Input
+              value={newTrackerTitle}
+              onChange={(e) => setNewTrackerTitle(e.target.value)}
+              placeholder="Tracker name (e.g. Weight, Distance)"
+              autoFocus
+              onKeyDown={(e) => { if (e.key === "Enter" && newTrackerTitle.trim() && addingTrackerForPlanId) handleAddTracker(addingTrackerForPlanId); }}
             />
-            <motion.div
-              initial={{ y: "100%" }}
-              animate={{ y: 0 }}
-              exit={{ y: "100%" }}
-              transition={{ type: "spring", stiffness: 380, damping: 30, mass: 0.9 }}
-              className="relative w-full max-w-lg bg-white dark:bg-neutral-900 rounded-t-[32px] shadow-[0_-8px_40px_rgba(0,0,0,0.12)]"
-            >
-              <div className="sticky top-0 z-10 flex justify-center pt-3 pb-1 bg-white/95 dark:bg-neutral-900/95 backdrop-blur-sm rounded-t-[32px]">
-                <div className="h-1 w-10 rounded-full bg-neutral-300 dark:bg-white/20" />
-              </div>
-              <div className="space-y-4 p-5 pb-8">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <p className="text-[10px] font-semibold uppercase tracking-[0.1em] text-neutral-400 dark:text-neutral-500">New</p>
-                    <h2 className="text-[18px] font-semibold text-neutral-950 dark:text-white mt-0.5">Create Tracker</h2>
-                  </div>
-                  <button
-                    type="button"
-                    onClick={() => { setAddingTracker(false); setAddingTrackerForPlanId(null); }}
-                    className="flex h-8 w-8 items-center justify-center rounded-xl border border-neutral-200 text-neutral-400 hover:bg-neutral-50 dark:border-white/10 dark:hover:bg-white/5"
-                  >
-                    <IconX size={16} />
-                  </button>
-                </div>
-                <div className="space-y-2.5">
-                  <input
-                    value={newTrackerTitle}
-                    onChange={(e) => setNewTrackerTitle(e.target.value)}
-                    placeholder="Tracker name (e.g. Weight, Distance)"
-                    autoFocus
-                    onKeyDown={(e) => { if (e.key === "Enter" && newTrackerTitle.trim()) handleAddTracker(addingTrackerForPlanId); }}
-                    className="
-                   h-11 w-full rounded-xl border border-neutral-200 bg-neutral-50 px-4 text-[15px] font-medium text-neutral-900 outline-none placeholder:text-neutral-400 transition-colors focus:border-neutral-300 focus:bg-white dark:border-white/10 dark:bg-white/[0.04] dark:text-white dark:placeholder:text-neutral-500 dark:focus:border-white/15 dark:focus:bg-white/[0.06]"
-                  />
-                  <input
-                    value={newTrackerUnit}
-                    onChange={(e) => setNewTrackerUnit(e.target.value)}
-                    placeholder="Unit (e.g. kg, km, hr) — optional"
-                    className="
-                   h-11 w-full rounded-xl border border-neutral-200 bg-neutral-50 px-4 text-[15px] font-medium text-neutral-900 outline-none placeholder:text-neutral-400 transition-colors focus:border-neutral-300 focus:bg-white dark:border-white/10 dark:bg-white/[0.04] dark:text-white dark:placeholder:text-neutral-500 dark:focus:border-white/15 dark:focus:bg-white/[0.06]"
-                  />
-                </div>
-                <div className="rounded-2xl bg-neutral-50 dark:bg-white/[0.04] px-4 py-3">
-                  <p className="text-[11px] font-semibold text-neutral-400 dark:text-neutral-500 mb-1.5">Examples</p>
-                  <div className="flex flex-wrap gap-1.5">
-                    {[["Weight", "kg"], ["Distance", "km"], ["Study Hours", "hr"], ["Calories", "kcal"], ["Water", "ml"]].map(([name, unit]) => (
-                      <button
-                        key={name}
-                        type="button"
-                        onClick={() => { setNewTrackerTitle(name); setNewTrackerUnit(unit); }}
-                        className="rounded-full border border-neutral-200 bg-white px-2.5 py-1 text-[11px] font-semibold text-neutral-500 hover:border-neutral-300 dark:border-white/10 dark:bg-white/[0.04] dark:text-neutral-400 transition-colors"
-                      >
-                        {name} / {unit}
-                      </button>
-                    ))}
-                  </div>
-                </div>
+            <Input
+              value={newTrackerUnit}
+              onChange={(e) => setNewTrackerUnit(e.target.value)}
+              placeholder="Unit (e.g. kg, km, hr) — optional"
+            />
+          </div>
+          <div className="rounded-2xl bg-neutral-50 dark:bg-white/[0.04] px-4 py-3">
+            <p className="text-[11px] font-semibold text-neutral-400 dark:text-neutral-500 mb-1.5">Examples</p>
+            <div className="flex flex-wrap gap-1.5">
+              {[["Weight", "kg"], ["Distance", "km"], ["Study Hours", "hr"], ["Calories", "kcal"], ["Water", "ml"]].map(([name, unit]) => (
                 <button
+                  key={name}
                   type="button"
-                  onClick={() => handleAddTracker(addingTrackerForPlanId)}
-                  disabled={!newTrackerTitle.trim()}
-                  className="h-12 w-full rounded-2xl bg-neutral-950 text-white text-[15px] font-semibold transition-all hover:bg-neutral-800 active:scale-[0.98] disabled:opacity-40 disabled:cursor-not-allowed dark:bg-white dark:text-neutral-950 dark:hover:bg-neutral-100"
+                  onClick={() => { setNewTrackerTitle(name); setNewTrackerUnit(unit); }}
+                  className="rounded-full border border-neutral-200 bg-white px-2.5 py-1 text-[11px] font-semibold text-neutral-500 hover:border-neutral-300 dark:border-white/10 dark:bg-white/[0.04] dark:text-neutral-400 transition-colors"
                 >
-                  Create Tracker
+                  {name} / {unit}
                 </button>
-              </div>
-            </motion.div>
-          </motion.div>
-        )}
-      </AnimatePresence>
+              ))}
+            </div>
+          </div>
+          <Button
+            fullWidth
+            onClick={() => addingTrackerForPlanId && handleAddTracker(addingTrackerForPlanId)}
+            disabled={!newTrackerTitle.trim()}
+          >
+            Create Tracker
+          </Button>
+        </div>
+      </BottomSheet>
 
       {/* ── Add Plan Bottom Sheet ───────────────────────────────────────────── */}
-      <AnimatePresence>
-        {addingPlan && (
-          <motion.div
-            key="add-plan-sheet"
-            className="fixed inset-0 z-50 flex items-end justify-center"
-          >
-            {/* Backdrop */}
-            <motion.div
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              exit={{ opacity: 0 }}
-              transition={{ duration: 0.22 }}
-              className="absolute inset-0 bg-black/40 backdrop-blur-sm"
-              onClick={() => setAddingPlan(false)}
-            />
-            {/* Sheet */}
-            <motion.div
-              initial={{ y: "100%" }}
-              animate={{ y: 0 }}
-              exit={{ y: "100%" }}
-              transition={{ type: "spring", stiffness: 380, damping: 30, mass: 0.9 }}
-              className="relative w-full max-w-lg bg-white dark:bg-neutral-900 rounded-t-[32px] shadow-[0_-8px_40px_rgba(0,0,0,0.12)] max-h-[88vh] overflow-y-auto"
-            >
-              <div className="sticky top-0 z-10 flex justify-center pt-3 pb-1 bg-white/95 dark:bg-neutral-900/95 backdrop-blur-sm rounded-t-[32px]">
-                <div className="h-1 w-10 rounded-full bg-neutral-300 dark:bg-white/20" />
-              </div>
-              {renderAddPlanSheet()}
-            </motion.div>
-          </motion.div>
-        )}
-      </AnimatePresence>
+      <BottomSheet open={addingPlan} onClose={() => setAddingPlan(false)}>
+        {renderAddPlanSheet()}
+      </BottomSheet>
 
       {/* ── Bottom Nav ─────────────────────────────────────────────────────── */}
       <BottomNav

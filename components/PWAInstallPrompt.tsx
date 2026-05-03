@@ -194,7 +194,7 @@ export default function PWAInstallPrompt() {
       <div
         className={`fixed bottom-0 left-0 right-0 z-50 transition-transform duration-300 ease-out ${animateIn ? "translate-y-0" : "translate-y-full"}`}
       >
-        <div className="mx-auto max-w-lg rounded-t-[32px] bg-white shadow-[0_-8px_40px_rgba(0,0,0,0.12)] dark:bg-neutral-900">
+        <div className="mx-auto max-w-lg rounded-t-[32px] border-t border-neutral-200 bg-white dark:border-white/[0.08] dark:bg-neutral-900">
           {/* Drag handle */}
           <div className="flex justify-center pb-1 pt-3">
             <div className="h-1 w-10 rounded-full bg-neutral-300 dark:bg-white/20" />
