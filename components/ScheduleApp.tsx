@@ -5,8 +5,8 @@ import { AnimatePresence, motion } from "framer-motion";
 import ProgressChart from "@/components/ProgressChart";
 import AddEntryModal from "@/components/AddEntryModal";
 import AddTaskModal from "@/components/AddTaskModal";
+import AppHeader from "@/components/AppHeader";
 import BottomNav from "@/components/BottomNav";
-import ThemeToggle from "@/components/ThemeToggle";
 import TimeSlotPicker from "@/components/TimeSlotPicker";
 import {
   useScheduleDB,
@@ -28,8 +28,6 @@ import {
 } from "@/lib/colorSystem";
 import { SECTION_ICONS, getIconPickerStyle } from "@/components/SectionIcons";
 import {
-  IconArrowLeft,
-  IconCalendar,
   IconCheck,
   IconChevronLeft,
   IconChevronRight,
@@ -50,9 +48,9 @@ import { SortableContext, useSortable, verticalListSortingStrategy } from "@dnd-
 
 const TIMELINE_START_HOUR = 4;
 const TIMELINE_END_HOUR = 24;
-const HOUR_HEIGHT = 96;
-const TIMELINE_TOP_PADDING = 18;
-const TIMELINE_BOTTOM_PADDING = 32;
+const HOUR_HEIGHT = 112;
+const TIMELINE_TOP_PADDING = 20;
+const TIMELINE_BOTTOM_PADDING = 40;
 
 const JS_DAYS = [
   "sunday",
@@ -198,6 +196,34 @@ function formatEntryDate(iso: string): string {
 
 function clamp(value: number, min: number, max: number): number {
   return Math.min(Math.max(value, min), max);
+}
+
+type CardSize = "xsmall" | "small" | "medium" | "large";
+
+function computeCardSize(height: number, laneCount: number): CardSize {
+  // Usable content = card height − 24px (py-0.5×2 + p-2.5×2 padding)
+  // HOUR_HEIGHT = 112 → 30 min = 56px, 45 min = 84px, 60 min = 112px
+  // xsmall: title only         — card < 60px  (< ~32 min)
+  // small:  title + time       — card < 88px  (< ~47 min)
+  // medium: title + time+dur   — card < 108px (< ~58 min)
+  // large:  plan label + all   — card ≥ 108px (≥ 58 min)
+  let size: CardSize;
+  if (height < 60) size = "xsmall";
+  else if (height < 88) size = "small";
+  else if (height < 108) size = "medium";
+  else size = "large";
+
+  // Degrade one step per extra lane beyond 1
+  if (laneCount >= 3) {
+    if (size === "large") size = "small";
+    else size = "xsmall";
+  } else if (laneCount === 2) {
+    if (size === "large") size = "medium";
+    else if (size === "medium") size = "small";
+    else size = "xsmall";
+  }
+
+  return size;
 }
 
 function sortTasksByTime(tasks: Task[]): Task[] {
@@ -657,7 +683,6 @@ export default function ScheduleApp() {
           end: ce,
           top: TIMELINE_TOP_PADDING + ((cs - timelineStartMinutes) / 60) * HOUR_HEIGHT,
           height: ((ce - cs) / 60) * HOUR_HEIGHT,
-          compact: ((ce - cs) / 60) * HOUR_HEIGHT <= 60,
           lane: 0,
           laneCount: 1,
         };
@@ -713,66 +738,72 @@ export default function ScheduleApp() {
   function renderTimelineTaskCard(
     task: Task,
     cardClassName: string,
-    compact = false
+    cardSize: CardSize = "large"
   ) {
-    const { linkedPlan, iconName, color } = getTaskPresentation(task);
+    const { linkedPlan, color } = getTaskPresentation(task);
     const tone = timelineCardStyles(color);
-    const iconEntry = SECTION_ICONS.find((e) => e.name === iconName) ?? SECTION_ICONS[0];
-    const TaskIcon = iconEntry.icon;
     const duration = formatTaskDuration(task.startTime, task.endTime);
 
-    if (compact) {
+    // xsmall: title only, centered
+    if (cardSize === "xsmall") {
       return (
         <div className={`${cardClassName} ${tone.cardBg} ${tone.cardBorder} ${tone.shadow}`}>
-          <div className="flex h-full items-center gap-1.5 min-w-0">
-            <div className={`h-4 w-4 shrink-0 rounded-md flex items-center justify-center ${tone.iconBg} ${tone.iconText}`}>
-              <TaskIcon size={9} strokeWidth={2} />
-            </div>
-            <span className={`text-[11px] font-semibold leading-tight truncate flex-1 min-w-0 ${tone.title}`}>
+          <div className="flex h-full items-center min-w-0">
+            <span className={`text-[11px] font-semibold leading-none truncate ${tone.title}`}>
               {task.title}
             </span>
-            {duration && (
-              <span className={`shrink-0 text-[9px] font-semibold px-1 py-0.5 rounded-full border ${tone.durationBadge}`}>
-                {duration}
-              </span>
-            )}
           </div>
         </div>
       );
     }
 
-    return (
-      <div className={`${cardClassName} ${tone.cardBg} ${tone.cardBorder} ${tone.shadow}`}>
-        <div className="flex flex-col gap-1.5 h-full min-w-0">
-          <div className="flex items-center gap-1.5 flex-wrap">
-            <span className={`text-[10px] font-semibold tracking-tight ${tone.time}`}>
+    // small: title + time, vertically centered as a group
+    if (cardSize === "small") {
+      return (
+        <div className={`${cardClassName} ${tone.cardBg} ${tone.cardBorder} ${tone.shadow}`}>
+          <div className="flex h-full flex-col justify-center gap-[3px] min-w-0">
+            <span className={`text-[12px] font-semibold leading-tight truncate ${tone.title}`}>
+              {task.title}
+            </span>
+            <span className={`text-[9px] font-medium ${tone.time}`}>
               {task.startTime} – {task.endTime}
             </span>
-            {duration && (
-              <span className={`text-[9px] font-semibold px-1.5 py-0.5 rounded-full border ${tone.durationBadge}`}>
-                {duration}
-              </span>
-            )}
           </div>
-          <div className="flex items-center gap-1.5 min-w-0">
-            <div className={`h-5 w-5 shrink-0 rounded-md flex items-center justify-center ${tone.iconBg} ${tone.iconText}`}>
-              <TaskIcon size={11} strokeWidth={2} />
-            </div>
-            <h3 className={`text-[13px] font-semibold leading-snug break-words ${tone.title}`}>
+        </div>
+      );
+    }
+
+    // medium: title + time/duration, no plan label
+    if (cardSize === "medium") {
+      return (
+        <div className={`${cardClassName} ${tone.cardBg} ${tone.cardBorder} ${tone.shadow}`}>
+          <div className="flex h-full flex-col justify-between min-w-0">
+            <h3 className={`text-[13px] font-semibold leading-snug line-clamp-2 ${tone.title}`}>
               {task.title}
             </h3>
+            <p className={`text-[10px] font-medium shrink-0 ${tone.time}`}>
+              {task.startTime} – {task.endTime}{duration && ` · ${duration}`}
+            </p>
           </div>
-          {linkedPlan && (() => {
-            const planIc = SECTION_ICONS.find((i) => i.name === linkedPlan.emoji);
-            const PI = (planIc ?? SECTION_ICONS[0]).icon;
-            const pa = accentStyles(linkedPlan.color);
-            return (
-              <div className={`mt-auto inline-flex items-center gap-1 rounded-full px-1.5 py-0.5 text-[9px] font-semibold w-fit ${pa.tint} ${pa.text}`}>
-                <PI size={8} strokeWidth={2.5} />
-                {linkedPlan.title}
-              </div>
-            );
-          })()}
+        </div>
+      );
+    }
+
+    // large: full layout — plan label → title → time + duration
+    return (
+      <div className={`${cardClassName} ${tone.cardBg} ${tone.cardBorder} ${tone.shadow}`}>
+        <div className="flex flex-col h-full min-w-0">
+          {linkedPlan && (
+            <p className="text-[10px] font-semibold uppercase tracking-[0.08em] text-neutral-400 dark:text-neutral-500 truncate mb-1.5 shrink-0">
+              {linkedPlan.title}
+            </p>
+          )}
+          <h3 className={`text-[14px] font-semibold leading-snug flex-1 min-w-0 line-clamp-3 ${tone.title}`}>
+            {task.title}
+          </h3>
+          <p className={`text-[10px] font-medium mt-auto pt-1.5 shrink-0 ${tone.time}`}>
+            {task.startTime} – {task.endTime}{duration && ` · ${duration}`}
+          </p>
         </div>
       </div>
     );
@@ -866,66 +897,55 @@ export default function ScheduleApp() {
       );
     }
 
-    const { linkedPlan, iconName, color } = getTaskPresentation(task);
+    const { linkedPlan, color } = getTaskPresentation(task);
     const tone = timelineCardStyles(color);
-    const iconEntry = SECTION_ICONS.find((e) => e.name === iconName) ?? SECTION_ICONS[0];
-    const CardIcon = iconEntry.icon;
     const duration = formatTaskDuration(task.startTime, task.endTime);
 
     return (
       <div
-        className={`flex items-center gap-4 rounded-2xl border p-4 transition-all duration-200 ${tone.cardBg} ${tone.cardBorder} ${editMode && dragHandleProps ? "cursor-grab active:cursor-grabbing" : ""}`}
+        className={`flex flex-col gap-1 rounded-2xl border bg-white px-4 py-3.5 shadow-[0_1px_6px_rgba(0,0,0,0.04)] transition-all duration-200 dark:bg-neutral-900 ${tone.cardBorder} ${editMode && dragHandleProps ? "cursor-grab active:cursor-grabbing" : ""}`}
         {...(editMode && dragHandleProps ? { ...dragHandleProps.attributes, ...dragHandleProps.listeners } : {})}
       >
-        <div className={`h-12 w-12 shrink-0 rounded-full flex items-center justify-center ${tone.iconBg} ${tone.iconText}`}>
-          <CardIcon size={22} strokeWidth={1.8} />
-        </div>
-        <div className="min-w-0 flex-1">
-          <div className="flex items-center gap-2 min-w-0">
-            <span className={`text-[15px] font-semibold truncate flex-1 min-w-0 ${tone.title}`}>
-              {task.title}
-            </span>
-            {duration && (
-              <span className={`shrink-0 text-[10px] font-semibold px-2 py-0.5 rounded-full border ${tone.durationBadge}`}>
-                {duration}
-              </span>
+        <div className="flex items-start justify-between gap-3">
+          <div className="min-w-0 flex-1">
+            {linkedPlan && (
+              <p className="text-[10px] font-semibold uppercase tracking-[0.08em] text-neutral-400 dark:text-neutral-500 mb-1">
+                {linkedPlan.title}
+              </p>
             )}
-          </div>
-          <p className={`text-[12px] font-medium mt-0.5 ${tone.time}`}>
-            {task.startTime} – {task.endTime}
-          </p>
-          {linkedPlan && (
-            <p className="text-[10px] font-semibold tracking-widest uppercase text-neutral-400 dark:text-neutral-500 mt-0.5">
-              {linkedPlan.title}
+            <p className="text-[17px] font-semibold leading-snug text-neutral-900 dark:text-white">
+              {task.title}
             </p>
+            <p className={`text-[12px] font-medium mt-1 ${tone.time}`}>
+              {task.startTime} – {task.endTime}{duration && ` · ${duration}`}
+            </p>
+          </div>
+          {editMode && (
+            <div className="flex shrink-0 items-center gap-0.5 -mt-0.5">
+              <button
+                type="button"
+                onClick={(e) => { e.stopPropagation(); startEditingTask(task); }}
+                className="inline-flex h-8 w-8 items-center justify-center rounded-lg text-neutral-400 hover:text-neutral-700 dark:hover:text-neutral-200 transition-colors"
+              >
+                <IconEdit size={15} />
+              </button>
+              <button
+                type="button"
+                onClick={(e) => { e.stopPropagation(); handleDeleteTask(task.id); }}
+                className="inline-flex h-8 w-8 items-center justify-center rounded-lg text-neutral-400 hover:text-rose-500 dark:hover:text-rose-400 transition-colors"
+              >
+                <IconTrash size={15} />
+              </button>
+            </div>
           )}
         </div>
-        {editMode && (
-          <div className="flex shrink-0 items-center gap-0.5">
-            <button
-              type="button"
-              onClick={(e) => { e.stopPropagation(); startEditingTask(task); }}
-              className="inline-flex h-8 w-8 items-center justify-center rounded-lg text-neutral-400 hover:text-neutral-700 dark:hover:text-neutral-200 transition-colors"
-            >
-              <IconEdit size={15} />
-            </button>
-            <button
-              type="button"
-              onClick={(e) => { e.stopPropagation(); handleDeleteTask(task.id); }}
-              className="inline-flex h-8 w-8 items-center justify-center rounded-lg text-neutral-400 hover:text-rose-500 dark:hover:text-rose-400 transition-colors"
-            >
-              <IconTrash size={15} />
-            </button>
-          </div>
-        )}
       </div>
     );
   }
 
   function renderLinkedTaskCard(task: Task, activeDays: DayKey[]) {
-    const { iconName, color } = getTaskPresentation(task);
+    const { color } = getTaskPresentation(task);
     const tone = timelineCardStyles(color);
-    const Icon = (SECTION_ICONS.find((e) => e.name === iconName) ?? SECTION_ICONS[0]).icon;
     const duration = formatTaskDuration(task.startTime, task.endTime);
 
     return (
@@ -933,22 +953,25 @@ export default function ScheduleApp() {
         key={`${task.id}-${activeDays.join("")}`}
         className="flex items-center gap-3 px-1 py-3.5 border-b border-neutral-100 last:border-b-0 dark:border-white/[0.05]"
       >
-        <div className={`h-12 w-12 shrink-0 rounded-full flex items-center justify-center ${tone.iconBg} ${tone.iconText}`}>
-          <Icon size={20} strokeWidth={1.8} />
-        </div>
         <div className="flex-1 min-w-0">
-          <p className={`text-[14px] font-semibold leading-tight truncate ${tone.title}`}>{task.title}</p>
-          <div className="flex items-center gap-2 mt-0.5 flex-wrap">
-            <p className={`text-[12px] font-medium ${tone.time}`}>
-              {task.startTime} – {task.endTime}
+          <p className="text-[16px] font-semibold leading-tight text-neutral-900 dark:text-white">
+            {task.title}
+          </p>
+          <div className="flex items-center gap-2.5 mt-1.5 flex-wrap">
+            <p className={`text-[14px] font-medium shrink-0 text-neutral-700 dark:text-neutral-400 ${tone.time}`}>
+              {task.startTime} – {task.endTime}{duration && ` · ${duration}`}
             </p>
-            <div className="flex items-center gap-[3px]">
+            <div className="flex items-center gap-[8px]">
               {WEEKDAY_ORDER.map((day) => {
                 const isActive = activeDays.includes(day);
                 return (
                   <span
                     key={day}
-                    className={`text-[9px] font-bold ${isActive ? "text-neutral-700 dark:text-neutral-200" : "text-neutral-300 dark:text-neutral-700"}`}
+                    className={`text-[12px] font-bold px-1.5 py-1.5 rounded-[4px] transition-colors ${
+                      isActive
+                        ? "bg-neutral-950 text-white dark:bg-white dark:text-neutral-950"
+                        : "text-neutral-500 dark:text-neutral-500"
+                    }`}
                   >
                     {WEEKDAY_SHORT[day]}
                   </span>
@@ -957,20 +980,14 @@ export default function ScheduleApp() {
             </div>
           </div>
         </div>
-        <div className="flex items-center gap-1.5 shrink-0">
-          {duration && (
-            <span className={`text-[10px] font-semibold px-2 py-0.5 rounded-full border ${tone.durationBadge}`}>
-              {duration}
-            </span>
-          )}
-          <button
-            type="button"
-            onClick={() => handleDeleteLinkedTask(task, activeDays)}
-            className="h-7 w-7 flex items-center justify-center rounded-lg text-neutral-300 hover:text-rose-500 dark:text-neutral-700 dark:hover:text-rose-400 transition-colors"
-          >
-            <IconTrash size={13} />
-          </button>
-        </div>
+
+        <button
+          type="button"
+          onClick={() => handleDeleteLinkedTask(task, activeDays)}
+          className="h-8 w-8 shrink-0 flex items-center justify-center rounded-lg text-neutral-400 hover:text-rose-500 dark:text-neutral-600 dark:hover:text-rose-400 transition-colors"
+        >
+          <IconTrash size={20} />
+        </button>
       </div>
     );
   }
@@ -1001,13 +1018,17 @@ export default function ScheduleApp() {
             placeholder="Plan title"
             autoFocus
             onKeyDown={(e) => { if (e.key === "Enter" && newPlanTitle.trim()) handleAddPlan(); }}
-            className="h-11 w-full rounded-xl border border-neutral-200 bg-neutral-50 px-4 text-[15px] font-medium text-neutral-900 outline-none placeholder:text-neutral-400 focus:border-neutral-300 focus:bg-white dark:border-white/10 dark:bg-white/[0.04] dark:text-white dark:placeholder:text-neutral-500"
+            className="
+            h-11 w-full rounded-xl border border-neutral-200 bg-neutral-50 px-4 text-[15px] font-medium text-neutral-900 outline-none placeholder:text-neutral-400 transition-colors focus:border-neutral-300 focus:bg-white dark:border-white/10 dark:bg-white/[0.04] dark:text-white dark:placeholder:text-neutral-500 dark:focus:border-white/15 dark:focus:bg-white/[0.06]
+            "
           />
           <input
             value={newPlanDescription}
             onChange={(e) => setNewPlanDescription(e.target.value)}
             placeholder="Short description (optional)"
-            className="h-11 w-full rounded-xl border border-neutral-200 bg-neutral-50 px-4 text-[15px] font-medium text-neutral-900 outline-none placeholder:text-neutral-400 focus:border-neutral-300 focus:bg-white dark:border-white/10 dark:bg-white/[0.04] dark:text-white dark:placeholder:text-neutral-500"
+            className="
+            h-11 w-full rounded-xl border border-neutral-200 bg-neutral-50 px-4 text-[15px] font-medium text-neutral-900 outline-none placeholder:text-neutral-400 transition-colors focus:border-neutral-300 focus:bg-white dark:border-white/10 dark:bg-white/[0.04] dark:text-white dark:placeholder:text-neutral-500 dark:focus:border-white/15 dark:focus:bg-white/[0.06]
+            "
           />
           <div className="grid grid-cols-2 gap-2">
             <div>
@@ -1076,7 +1097,9 @@ export default function ScheduleApp() {
                 }
               }}
               placeholder="e.g. Weight, Running Distance…"
-              className="h-10 flex-1 rounded-xl border border-neutral-200 bg-neutral-50 px-3 text-sm text-neutral-900 outline-none placeholder:text-neutral-400 focus:border-neutral-300 focus:bg-white dark:border-white/10 dark:bg-white/[0.04] dark:text-white dark:placeholder:text-neutral-500"
+              className="
+              h-11 w-full rounded-xl border border-neutral-200 bg-neutral-50 px-4 text-[15px] font-medium text-neutral-900 outline-none placeholder:text-neutral-400 transition-colors focus:border-neutral-300 focus:bg-white dark:border-white/10 dark:bg-white/[0.04] dark:text-white dark:placeholder:text-neutral-500 dark:focus:border-white/15 dark:focus:bg-white/[0.06]
+              "
             />
             <button
               type="button"
@@ -1143,7 +1166,7 @@ export default function ScheduleApp() {
           <button
             type="button"
             onClick={() => setAddingPlan(true)}
-            className="shrink-0 inline-flex items-center gap-1.5 rounded-full border border-neutral-300 bg-white px-4 py-2 text-[13px] font-semibold text-neutral-700 transition-all hover:bg-neutral-50 hover:border-neutral-400 active:scale-95 dark:border-white/10 dark:bg-neutral-900 dark:text-neutral-300 dark:hover:bg-white/5"
+            className="inline-flex items-center justify-center gap-1.5 rounded-xl border border-neutral-200 bg-white px-3.5 h-9 text-[12px] font-semibold text-neutral-700 transition-all hover:bg-neutral-50 active:scale-95 dark:border-white/10 dark:bg-neutral-900 dark:text-neutral-400 dark:hover:bg-white/5"
           >
             <IconPlus size={14} strokeWidth={2.5} />
             Add New Plan
@@ -1164,42 +1187,60 @@ export default function ScheduleApp() {
         )}
 
         {/* Plan cards */}
-        <div className="space-y-4">
+        <div className="space-y-3">
           {schedule.plans.map((plan) => {
             const uniqueTasks = getUniquePlanTasks(plan.id);
             const trackerCount = schedule.progressTrackers.filter(
               (t) => t.planId === plan.id
             ).length;
+            const planAccent = accentStyles(plan.color);
+            const planIconEntry = SECTION_ICONS.find((e) => e.name === plan.emoji) ?? SECTION_ICONS[0];
+            const PlanIcon = planIconEntry.icon;
             return (
               <button
                 key={plan.id}
                 type="button"
                 onClick={() => setSelectedPlanId(plan.id)}
-                className="w-full rounded-[28px] border border-neutral-200 bg-white p-6 text-left shadow-[0_2px_16px_rgba(0,0,0,0.04)] transition-all hover:border-neutral-300 hover:shadow-[0_4px_24px_rgba(0,0,0,0.07)] dark:border-white/10 dark:bg-neutral-900 dark:hover:border-white/20"
+                className="w-full rounded-[24px] border border-neutral-200 bg-white p-5 text-left shadow-[0_2px_12px_rgba(0,0,0,0.04)] transition-all hover:border-neutral-300 hover:shadow-[0_4px_20px_rgba(0,0,0,0.07)] active:scale-[0.99] dark:border-white/10 dark:bg-neutral-900 dark:hover:border-white/20"
               >
-                <h2 className="text-[18px] font-semibold text-neutral-950 dark:text-white leading-snug">
-                  {plan.title}
-                </h2>
-                {plan.description && (
-                  <p className="mt-2 text-[13px] leading-relaxed text-neutral-500 dark:text-neutral-400 line-clamp-2">
-                    {plan.description}
-                  </p>
-                )}
-                <div className="mt-5 flex flex-wrap gap-x-5 gap-y-2">
-                  <span className="inline-flex items-center gap-1.5 text-[13px] font-medium text-neutral-500 dark:text-neutral-400">
-                    <IconClipboardList size={14} strokeWidth={1.8} />
-                    Tasks Linked: {uniqueTasks.length}
-                  </span>
-                  <span className="inline-flex items-center gap-1.5 text-[13px] font-medium text-neutral-500 dark:text-neutral-400">
-                    <IconTrendingUp size={14} strokeWidth={1.8} />
-                    Progress tracking: {trackerCount}
-                  </span>
+                {/* Top row: icon + title */}
+                <div className="flex items-center gap-3">
+                  <div className={`h-10 w-10 shrink-0 rounded-xl flex items-center justify-center ${planAccent.tint} ${planAccent.icon}`}>
+                    <PlanIcon size={18} strokeWidth={1.8} />
+                  </div>
+                  <h2 className="text-[17px] font-semibold text-neutral-950 dark:text-white leading-snug flex-1 min-w-0 truncate">
+                    {plan.title}
+                  </h2>
                 </div>
+
+                {/* Date range */}
                 {(plan.startDate || plan.endDate) && (
                   <p className="mt-3 text-[12px] font-medium text-neutral-400 dark:text-neutral-500">
                     {formatPlanRange(plan)}
                   </p>
                 )}
+
+                {/* Description */}
+                {plan.description && (
+                  <p className="mt-2 text-[13px] leading-relaxed text-neutral-500 dark:text-neutral-400 line-clamp-2">
+                    {plan.description}
+                  </p>
+                )}
+
+                {/* Divider */}
+                <div className="mt-4 mb-3.5 border-t border-neutral-100 dark:border-white/[0.06]" />
+
+                {/* Bottom: counts */}
+                <div className="flex items-center gap-5">
+                  <span className="text-[12px] font-medium text-neutral-400 dark:text-neutral-500">
+                    {uniqueTasks.length} {uniqueTasks.length === 1 ? "activity" : "activities"}
+                  </span>
+                  {trackerCount > 0 && (
+                    <span className="text-[12px] font-medium text-neutral-400 dark:text-neutral-500">
+                      {trackerCount} {trackerCount === 1 ? "tracker" : "trackers"}
+                    </span>
+                  )}
+                </div>
               </button>
             );
           })}
@@ -1216,42 +1257,6 @@ export default function ScheduleApp() {
 
     return (
       <div className="pb-32">
-        {/* TOP BAR */}
-        <div className="flex items-center justify-between px-4 py-4 border-b border-neutral-200 dark:border-white/[0.08]">
-          <button
-            type="button"
-            onClick={() => setSelectedPlanId(null)}
-            className="inline-flex items-center gap-1.5 text-[13px] font-semibold text-neutral-500 hover:text-neutral-900 dark:text-neutral-400 dark:hover:text-white transition-colors"
-          >
-            <IconArrowLeft size={20} strokeWidth={2} />
-            Plans
-          </button>
-          <div className="flex items-center gap-0.5">
-            <button
-              type="button"
-              onClick={() => {
-                setEditingPlanId(plan.id);
-                setEditPlanDraft({
-                  title: plan.title,
-                  description: plan.description ?? "",
-                  startDate: plan.startDate ?? "",
-                  endDate: plan.endDate ?? "",
-                });
-              }}
-              className="inline-flex h-9 w-9 items-center justify-center rounded-xl text-neutral-400 hover:bg-neutral-100 hover:text-neutral-700 dark:text-neutral-500 dark:hover:bg-white/[0.07] dark:hover:text-neutral-300 transition-colors"
-            >
-              <IconEdit size={20} strokeWidth={2} />
-            </button>
-            <button
-              type="button"
-              onClick={() => handleDeletePlan(plan.id)}
-              className="inline-flex h-9 w-9 items-center justify-center rounded-xl text-neutral-400 hover:bg-rose-50 hover:text-rose-500 dark:text-neutral-500 dark:hover:bg-rose-500/10 dark:hover:text-rose-400 transition-colors"
-            >
-              <IconTrash size={20} strokeWidth={2} />
-            </button>
-          </div>
-        </div>
-
         {/* HERO */}
         <div className="px-4 pt-6 space-y-3">
           <h1 className="text-[40px] font-bold leading-tight text-neutral-950 dark:text-white">
@@ -1271,7 +1276,7 @@ export default function ScheduleApp() {
 
         {/* LINKED TASKS */}
         <section className="mt-8 px-4">
-          <div className="flex items-end justify-between mb-4">
+          <div className="flex items-center justify-between mb-4">
             <div>
               <p className="text-[10px] font-semibold uppercase tracking-[0.1em] text-neutral-400 dark:text-neutral-500">
                 Linked
@@ -1285,7 +1290,7 @@ export default function ScheduleApp() {
               onClick={() => setAddTaskModalOpen(true)}
               className="inline-flex items-center gap-1.5 text-[13px] font-semibold text-neutral-500 hover:text-neutral-900 dark:text-neutral-400 dark:hover:text-white transition-colors"
             >
-              <IconPlus size={14} strokeWidth={2.5} />
+              <IconPlus size={16} strokeWidth={2} />
               Add Task
             </button>
           </div>
@@ -1324,7 +1329,7 @@ export default function ScheduleApp() {
               }}
               className="inline-flex items-center gap-1.5 text-[13px] font-semibold text-neutral-500 hover:text-neutral-900 dark:text-neutral-400 dark:hover:text-white transition-colors"
             >
-              <IconPlus size={14} strokeWidth={2.5} />
+              <IconPlus size={16} strokeWidth={2} />
               Add Tracker
             </button>
           </div>
@@ -1342,7 +1347,7 @@ export default function ScheduleApp() {
                 }}
                 className="mt-3 inline-flex items-center gap-1.5 rounded-full border border-neutral-200 px-4 py-2 text-[13px] font-semibold text-neutral-600 hover:bg-neutral-50 dark:border-white/10 dark:text-neutral-400 dark:hover:bg-white/[0.04] transition-colors"
               >
-                <IconPlus size={13} strokeWidth={2.5} />
+                <IconPlus size={16} strokeWidth={2} />
                 Create Tracker
               </button>
             </div>
@@ -1387,7 +1392,7 @@ export default function ScheduleApp() {
                               onClick={() => handleSaveEditTracker(tracker.id)}
                               className="inline-flex flex-1 h-9 items-center justify-center gap-1 rounded-xl bg-neutral-950 text-[13px] font-semibold text-white dark:bg-white dark:text-neutral-950"
                             >
-                              <IconCheck size={14} /> Save
+                              <IconCheck size={16} /> Save
                             </button>
                             <button
                               type="button"
@@ -1477,7 +1482,7 @@ export default function ScheduleApp() {
                             onClick={() => setEntryTracker(tracker)}
                             className="inline-flex items-center gap-1.5 text-[12px] font-semibold text-neutral-500 hover:text-neutral-900 dark:text-neutral-400 dark:hover:text-white transition-colors"
                           >
-                            <IconPlus size={12} strokeWidth={2.5} />
+                            <IconPlus size={12} strokeWidth={2} />
                             Add Entry
                           </button>
                         </div>
@@ -1516,7 +1521,7 @@ export default function ScheduleApp() {
                                     onClick={() => handleDeleteEntry(entry.id)}
                                     className="h-6 w-6 flex items-center justify-center rounded-lg text-neutral-300 hover:text-rose-500 dark:text-neutral-700 dark:hover:text-rose-400 transition-colors"
                                   >
-                                    <IconTrash size={13} />
+                                    <IconTrash size={16} strokeWidth={2} />
                                   </button>
                                 </div>
                               </div>
@@ -1544,13 +1549,34 @@ export default function ScheduleApp() {
     <main className="min-h-screen bg-neutral-50 text-neutral-900 dark:bg-neutral-950 dark:text-white">
 
       {/* ── Header ─────────────────────────────────────────────────────────── */}
-      <header className="sticky top-0 z-10 flex items-center justify-between px-4 py-4 border-b border-neutral-200 bg-white/85 backdrop-blur-sm dark:border-white/[0.08] dark:bg-neutral-950/85">
-        <div className="flex items-center">
-          <img src="/logo.svg" alt="PlanR" className="h-6 w-auto dark:hidden" />
-          <img src="/logo-dark.svg" alt="PlanR" className="hidden h-6 w-auto dark:block" />
-        </div>
-        <ThemeToggle />
-      </header>
+      {selectedPlan ? (
+        <AppHeader
+          back={{ label: "Plans", onBack: () => setSelectedPlanId(null) }}
+          actions={[
+            {
+              icon: IconEdit,
+              label: "Edit plan",
+              onClick: () => {
+                setEditingPlanId(selectedPlan.id);
+                setEditPlanDraft({
+                  title: selectedPlan.title,
+                  description: selectedPlan.description ?? "",
+                  startDate: selectedPlan.startDate ?? "",
+                  endDate: selectedPlan.endDate ?? "",
+                });
+              },
+            },
+            {
+              icon: IconTrash,
+              label: "Delete plan",
+              destructive: true,
+              onClick: () => handleDeletePlan(selectedPlan.id),
+            },
+          ]}
+        />
+      ) : (
+        <AppHeader />
+      )}
 
       {/* ── Content ────────────────────────────────────────────────────────── */}
       <div className="max-w-lg mx-auto pb-40">
@@ -1593,7 +1619,7 @@ export default function ScheduleApp() {
                         key={day}
                         type="button"
                         onClick={() => setActiveDay(day)}
-                        className={`flex flex-col items-center justify-center gap-2 w-full rounded-lg py-2 h-[72px] transition-all duration-200 ${
+                        className={`flex flex-col items-center justify-center gap-3 w-full rounded-lg py-2 h-[64px] transition-all duration-200 ${
                           isActive
                             ? "bg-neutral-950 text-white dark:bg-white dark:text-neutral-950"
                             : isDateToday
@@ -1608,7 +1634,7 @@ export default function ScheduleApp() {
                         >
                           {DAY_LABELS[day]}
                         </span>
-                        <span className="text-[16px] font-medium leading-none">{date.getDate()}</span>
+                        <span className="text-[14px] font-medium leading-none">{date.getDate()}</span>
                       </button>
                     );
                   })}
@@ -1617,9 +1643,8 @@ export default function ScheduleApp() {
             </div>
 
             {/* Title section */}
-            <div className="flex items-left justify-between px-4 pt-5 pb-3">
-              {/* LEFT: view toggle */}
-            <div className="text-left">
+            <div className="flex items-center justify-between px-4 pt-5 pb-3">
+              <div>
                 <p className="text-[10px] font-semibold uppercase tracking-[0.1em] text-neutral-500 dark:text-neutral-400">
                   My Schedule
                 </p>
@@ -1627,21 +1652,55 @@ export default function ScheduleApp() {
                   Today&apos;s Task
                 </h2>
               </div>
-              {/* RIGHT: eyebrow + title */}
-
-                  <button
-                type="button"
-                onClick={() => { setViewMode((v) => (v === "list" ? "timeline" : "list")); setEditMode(false); }}
-                className="inline-flex items-center justify-center gap-2 rounded-xl border border-neutral-950 border-[1.5px] bg-white py-2 text-[12px] w-[156px] font-semibold text-neutral-950 transition-all hover:bg-neutral-50 hover:border-neutral-400 active:scale-95 dark:border-white/10 dark:bg-neutral-900 dark:text-neutral-400 dark:hover:bg-white/5"
-              >
-                {viewMode === "timeline" ? (
-                  <><IconLayoutList size={20} strokeWidth={2} /> List View</>
-                ) : (
-                  <><IconTable size={20} strokeWidth={2} /> Timeline View</>
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => { setViewMode((v) => (v === "list" ? "timeline" : "list")); setEditMode(false); }}
+                  className="inline-flex items-center justify-center gap-1.5 rounded-xl border border-neutral-200 bg-white px-3.5 h-9 text-[12px] font-semibold text-neutral-700 transition-all hover:bg-neutral-50 active:scale-95 dark:border-white/10 dark:bg-neutral-900 dark:text-neutral-400 dark:hover:bg-white/5"
+                >
+                  {viewMode === "timeline" ? (
+                    <><IconLayoutList size={16} strokeWidth={2} /> List</>
+                  ) : (
+                    <><IconTable size={16} strokeWidth={2} /> Timeline</>
+                  )}
+                </button>
+                {dayTasks.length > 0 && viewMode === "list" && (
+                  <motion.button
+                    type="button"
+                    onClick={() => setEditMode((prev) => !prev)}
+                    whileTap={{ scale: 0.95 }}
+                    className={`inline-flex h-9 w-9 items-center justify-center rounded-xl border transition-all ${
+                      editMode
+                        ? "border-neutral-950 bg-neutral-950 text-white dark:border-white dark:bg-white dark:text-neutral-950"
+                        : "border-neutral-200 bg-white text-neutral-500 hover:bg-neutral-50 dark:border-white/10 dark:bg-neutral-900 dark:text-neutral-400 dark:hover:bg-white/5"
+                    }`}
+                  >
+                    <AnimatePresence mode="wait" initial={false}>
+                      {editMode ? (
+                        <motion.span
+                          key="check"
+                          initial={{ opacity: 0, scale: 0.8 }}
+                          animate={{ opacity: 1, scale: 1 }}
+                          exit={{ opacity: 0, scale: 0.8 }}
+                          transition={{ duration: 0.15 }}
+                        >
+                          <IconCheck size={16} strokeWidth={2.5} />
+                        </motion.span>
+                      ) : (
+                        <motion.span
+                          key="edit"
+                          initial={{ opacity: 0, scale: 0.8 }}
+                          animate={{ opacity: 1, scale: 1 }}
+                          exit={{ opacity: 0, scale: 0.8 }}
+                          transition={{ duration: 0.15 }}
+                        >
+                          <IconEdit size={16} strokeWidth={2} />
+                        </motion.span>
+                      )}
+                    </AnimatePresence>
+                  </motion.button>
                 )}
-              </button>
-              
-            
+              </div>
             </div>
 
             {/* Task content */}
@@ -1655,23 +1714,6 @@ export default function ScheduleApp() {
                     exit={{ opacity: 0, y: -4 }}
                     transition={{ duration: 0.2, ease: "easeOut" }}
                   >
-                    {/* Edit mode toggle */}
-                    {dayTasks.length > 0 && (
-                      <div className="flex justify-end mb-2">
-                        <button
-                          type="button"
-                          onClick={() => setEditMode((prev) => !prev)}
-                          className={`h-7 rounded-full px-3 text-[11px] font-semibold transition-colors ${
-                            editMode
-                              ? "bg-neutral-950 text-white dark:bg-white dark:text-neutral-950"
-                              : "text-neutral-400 hover:text-neutral-600 dark:text-neutral-500 dark:hover:text-neutral-300"
-                          }`}
-                        >
-                          {editMode ? "Done" : "Manage"}
-                        </button>
-                      </div>
-                    )}
-
                     {dayTasks.length === 0 ? (
                       <div className="rounded-2xl border border-dashed border-neutral-200 py-12 text-center text-[13px] text-neutral-400 dark:border-white/10 dark:text-neutral-500">
                         {schedule.plans.length === 0
@@ -1719,19 +1761,19 @@ export default function ScheduleApp() {
                     )}
                     <div
                       ref={timelineScrollRef}
-                      className="calendar-scrollbar-none relative flex max-h-[72vh] overflow-y-auto overflow-x-hidden rounded-2xl border border-neutral-200/80 bg-white shadow-[0_2px_16px_rgba(0,0,0,0.05)] dark:border-white/[0.07] dark:bg-neutral-900"
+                      className="calendar-scrollbar-none relative flex max-h-[72vh] overflow-y-auto overflow-x-hidden rounded-2xl border border-neutral-200/60 bg-white shadow-[0_4px_24px_rgba(0,0,0,0.06)] dark:border-white/[0.06] dark:bg-neutral-900"
                     >
                       {/* Hour labels */}
                       <div
-                        className="sticky left-0 z-20 w-14 shrink-0 bg-white/95 pr-2 dark:bg-neutral-900/95 backdrop-blur-sm"
+                        className="sticky left-0 z-20 w-[52px] shrink-0 bg-white/95 dark:bg-neutral-900/95 backdrop-blur-sm"
                         style={{ height: timelineHeight }}
                       >
                         {timelineHours.map((hour, index) => (
                           <span
                             key={hour}
-                            className="absolute right-2 text-[10px] font-semibold text-neutral-400 dark:text-neutral-600"
+                            className="absolute right-2 text-[10px] font-medium text-neutral-400 dark:text-neutral-500 tabular-nums"
                             style={{
-                              top: TIMELINE_TOP_PADDING + index * HOUR_HEIGHT - (index === 0 ? 0 : 8),
+                              top: TIMELINE_TOP_PADDING + index * HOUR_HEIGHT - (index === 0 ? 0 : 9),
                             }}
                           >
                             {formatHourLabel(hour)}
@@ -1740,16 +1782,27 @@ export default function ScheduleApp() {
                       </div>
                       {/* Grid + tasks */}
                       <div
-                        className="relative min-w-0 flex-1 border-l border-neutral-100 dark:border-white/[0.05]"
+                        className="relative min-w-0 flex-1 border-l border-neutral-100 dark:border-white/[0.04]"
                         style={{ height: timelineHeight }}
                       >
-                        {/* Grid lines */}
-                        <div className="absolute inset-0">
+                        {/* Hour grid lines */}
+                        <div className="absolute inset-0 pointer-events-none">
                           {timelineHours.map((hour, index) => (
                             <div
                               key={`grid-${hour}`}
-                              className="absolute left-0 right-0 border-t border-neutral-100 dark:border-white/[0.05]"
+                              className="absolute left-0 right-0 border-t border-neutral-100 dark:border-white/[0.04]"
                               style={{ top: TIMELINE_TOP_PADDING + index * HOUR_HEIGHT }}
+                            />
+                          ))}
+                          {/* Half-hour tick lines */}
+                          {timelineHours.slice(0, -1).map((hour, index) => (
+                            <div
+                              key={`half-${hour}`}
+                              className="absolute right-0 h-px bg-neutral-100/70 dark:bg-white/[0.025]"
+                              style={{
+                                top: TIMELINE_TOP_PADDING + index * HOUR_HEIGHT + HOUR_HEIGHT / 2,
+                                left: "10%",
+                              }}
                             />
                           ))}
                         </div>
@@ -1761,11 +1814,11 @@ export default function ScheduleApp() {
                               className="absolute min-w-0 px-1.5 py-0.5 animate-panel-in"
                               style={getTaskLaneStyle(layout)}
                             >
-                              <div className="relative h-full min-h-[36px]">
+                              <div className="relative h-full min-h-[36px] rounded-2xl shadow-[0_2px_8px_rgba(0,0,0,0.07)] dark:shadow-[0_2px_10px_rgba(0,0,0,0.28)]">
                                 {renderTimelineTaskCard(
                                   layout.task,
-                                  "h-full rounded-2xl p-2.5 w-full min-w-0 border overflow-hidden transition-colors duration-200",
-                                  layout.compact
+                                  "h-full rounded-2xl p-2.5 w-full min-w-0 border overflow-hidden",
+                                  computeCardSize(layout.height, layout.laneCount)
                                 )}
                               </div>
                             </div>
@@ -1777,8 +1830,8 @@ export default function ScheduleApp() {
                             className="pointer-events-none absolute left-0 right-0 z-30 flex -translate-y-1/2 items-center"
                             style={{ top: currentTimeTop }}
                           >
-                            <div className="-ml-[5px] h-2.5 w-2.5 rounded-full bg-red-500 shadow-[0_0_6px_rgba(239,68,68,0.5)]" />
-                            <div className="h-px flex-1 bg-red-500/80" />
+                            <div className="-ml-1 h-2 w-2 shrink-0 rounded-full bg-red-500 ring-[3px] ring-red-500/20 shadow-[0_0_8px_rgba(239,68,68,0.5)]" />
+                            <div className="h-px flex-1 bg-gradient-to-r from-red-400/80 to-red-400/0" />
                           </div>
                         )}
                       </div>
@@ -1930,13 +1983,15 @@ export default function ScheduleApp() {
                     placeholder="Tracker name (e.g. Weight, Distance)"
                     autoFocus
                     onKeyDown={(e) => { if (e.key === "Enter" && newTrackerTitle.trim()) handleAddTracker(addingTrackerForPlanId); }}
-                    className="h-11 w-full rounded-xl border border-neutral-200 bg-neutral-50 px-4 text-[15px] font-medium text-neutral-900 outline-none placeholder:text-neutral-400 focus:border-neutral-300 focus:bg-white dark:border-white/10 dark:bg-white/[0.04] dark:text-white dark:placeholder:text-neutral-500"
+                    className="
+                   h-11 w-full rounded-xl border border-neutral-200 bg-neutral-50 px-4 text-[15px] font-medium text-neutral-900 outline-none placeholder:text-neutral-400 transition-colors focus:border-neutral-300 focus:bg-white dark:border-white/10 dark:bg-white/[0.04] dark:text-white dark:placeholder:text-neutral-500 dark:focus:border-white/15 dark:focus:bg-white/[0.06]"
                   />
                   <input
                     value={newTrackerUnit}
                     onChange={(e) => setNewTrackerUnit(e.target.value)}
                     placeholder="Unit (e.g. kg, km, hr) — optional"
-                    className="h-11 w-full rounded-xl border border-neutral-200 bg-neutral-50 px-4 text-[15px] font-medium text-neutral-900 outline-none placeholder:text-neutral-400 focus:border-neutral-300 focus:bg-white dark:border-white/10 dark:bg-white/[0.04] dark:text-white dark:placeholder:text-neutral-500"
+                    className="
+                   h-11 w-full rounded-xl border border-neutral-200 bg-neutral-50 px-4 text-[15px] font-medium text-neutral-900 outline-none placeholder:text-neutral-400 transition-colors focus:border-neutral-300 focus:bg-white dark:border-white/10 dark:bg-white/[0.04] dark:text-white dark:placeholder:text-neutral-500 dark:focus:border-white/15 dark:focus:bg-white/[0.06]"
                   />
                 </div>
                 <div className="rounded-2xl bg-neutral-50 dark:bg-white/[0.04] px-4 py-3">

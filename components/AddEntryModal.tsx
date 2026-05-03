@@ -14,6 +14,8 @@ function todayISO(): string {
   return new Date().toISOString().split("T")[0];
 }
 
+const LABEL = "text-[11px] font-semibold uppercase tracking-[0.08em] text-neutral-400 dark:text-neutral-500";
+
 export default function AddEntryModal({ isOpen, onClose, onSave, metric }: AddEntryModalProps) {
   const [value, setValue] = useState("");
   const [date, setDate] = useState(todayISO);
@@ -44,30 +46,37 @@ export default function AddEntryModal({ isOpen, onClose, onSave, metric }: AddEn
 
   if (!isOpen) return null;
 
-  const label = metric
+  const metricLabel = metric
     ? `${metric.name}${metric.unit ? ` (${metric.unit})` : ""}`
     : "Value";
 
   return (
-    <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center">
-      <div className="absolute inset-0 bg-black/50 backdrop-blur-sm" onClick={handleClose} />
-      <div className="relative w-full max-w-sm mx-auto bg-white dark:bg-neutral-900 rounded-t-2xl sm:rounded-2xl shadow-2xl shadow-black/30 overflow-hidden">
-        <div className="flex items-center justify-between gap-3 px-5 py-4 border-b border-neutral-100 dark:border-white/[0.07]">
-          <span className="text-sm font-semibold text-neutral-900 dark:text-white">Log Entry</span>
-          <button
-            type="button"
-            onClick={handleClose}
-            className="flex h-7 w-7 items-center justify-center rounded-lg text-neutral-400 hover:bg-neutral-100 dark:hover:bg-white/[0.07] transition-colors"
-          >
-            <IconX size={16} />
-          </button>
+    <div className="fixed inset-0 z-50 flex items-end justify-center">
+      <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" onClick={handleClose} />
+      <div className="relative w-full max-w-lg bg-white dark:bg-neutral-900 rounded-t-[32px] shadow-[0_-8px_40px_rgba(0,0,0,0.12)] overflow-hidden">
+        {/* Handle */}
+        <div className="flex justify-center pt-3 pb-1">
+          <div className="h-1 w-10 rounded-full bg-neutral-300 dark:bg-white/20" />
         </div>
 
-        <div className="space-y-4 p-5">
+        <div className="space-y-4 px-5 pt-4 pb-8">
+          {/* Header */}
+          <div className="flex items-start justify-between gap-3">
+            <div>
+              <p className="text-[10px] font-semibold uppercase tracking-[0.1em] text-neutral-400 dark:text-neutral-500">Log</p>
+              <h2 className="text-[18px] font-semibold text-neutral-950 dark:text-white mt-0.5">New Entry</h2>
+            </div>
+            <button
+              type="button"
+              onClick={handleClose}
+              className="flex h-8 w-8 items-center justify-center rounded-xl border border-neutral-200 text-neutral-400 hover:bg-neutral-50 dark:border-white/10 dark:hover:bg-white/5 transition-colors"
+            >
+              <IconX size={16} />
+            </button>
+          </div>
+
           <div>
-            <label className="mb-1.5 block text-xs font-medium text-neutral-500 dark:text-neutral-400">
-              {label}
-            </label>
+            <p className={`mb-1.5 ${LABEL}`}>{metricLabel}</p>
             <input
               type="number"
               inputMode="decimal"
@@ -76,17 +85,19 @@ export default function AddEntryModal({ isOpen, onClose, onSave, metric }: AddEn
               onKeyDown={(e) => { if (e.key === "Enter") handleSave(); }}
               placeholder="0"
               autoFocus
-              className="h-11 w-full rounded-lg border border-neutral-200 bg-neutral-50 px-3 text-base text-neutral-900 outline-none transition-colors placeholder:text-neutral-400 focus:border-neutral-300 focus:bg-white dark:border-white/10 dark:bg-white/[0.04] dark:text-white dark:placeholder:text-neutral-500 dark:focus:border-white/20 dark:focus:bg-white/[0.08]"
+              className="
+              h-11 w-full rounded-xl border border-neutral-200 bg-neutral-50 px-4 text-[15px] font-medium text-neutral-900 outline-none placeholder:text-neutral-400 transition-colors focus:border-neutral-300 focus:bg-white dark:border-white/10 dark:bg-white/[0.04] dark:text-white dark:placeholder:text-neutral-500 dark:focus:border-white/15 dark:focus:bg-white/[0.06]"
             />
           </div>
 
           <div>
-            <label className="mb-1.5 block text-xs font-medium text-neutral-500 dark:text-neutral-400">Date</label>
+            <p className={`mb-1.5 ${LABEL}`}>Date</p>
             <input
               type="date"
               value={date}
               onChange={(e) => setDate(e.target.value)}
-              className="h-11 w-full rounded-lg border border-neutral-200 bg-neutral-50 px-3 text-sm text-neutral-900 outline-none transition-colors focus:border-neutral-300 focus:bg-white dark:border-white/10 dark:bg-white/[0.04] dark:text-white dark:focus:border-white/20 dark:focus:bg-white/[0.08]"
+              className="
+              h-11 w-full rounded-xl border border-neutral-200 bg-neutral-50 px-4 text-[15px] font-medium text-neutral-900 outline-none placeholder:text-neutral-400 transition-colors focus:border-neutral-300 focus:bg-white dark:border-white/10 dark:bg-white/[0.04] dark:text-white dark:placeholder:text-neutral-500 dark:focus:border-white/15 dark:focus:bg-white/[0.06]"
             />
           </div>
 
@@ -95,15 +106,15 @@ export default function AddEntryModal({ isOpen, onClose, onSave, metric }: AddEn
               type="button"
               onClick={handleSave}
               disabled={!value || isNaN(parseFloat(value))}
-              className="inline-flex flex-1 h-10 items-center justify-center gap-1.5 rounded-lg bg-neutral-900 text-sm font-medium text-white transition-all hover:bg-neutral-800 disabled:opacity-40 dark:bg-white dark:text-neutral-900 dark:hover:bg-neutral-100"
+              className="inline-flex flex-1 h-12 items-center justify-center gap-1.5 rounded-2xl bg-neutral-950 text-[15px] font-semibold text-white transition-all hover:bg-neutral-800 active:scale-[0.98] disabled:opacity-40 disabled:cursor-not-allowed dark:bg-white dark:text-neutral-900 dark:hover:bg-neutral-100"
             >
-              <IconCheck size={15} />
+              <IconCheck size={16} strokeWidth={2.5} />
               Save Entry
             </button>
             <button
               type="button"
               onClick={handleClose}
-              className="inline-flex h-10 items-center gap-1.5 rounded-lg border border-neutral-200 px-4 text-sm font-medium text-neutral-600 transition-colors hover:bg-neutral-50 dark:border-white/10 dark:text-neutral-400 dark:hover:bg-white/5"
+              className="inline-flex h-12 items-center px-5 rounded-2xl border border-neutral-200 text-[14px] font-semibold text-neutral-500 hover:bg-neutral-50 dark:border-white/10 dark:text-neutral-400 dark:hover:bg-white/5 transition-colors"
             >
               Cancel
             </button>

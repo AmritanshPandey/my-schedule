@@ -1,7 +1,6 @@
 "use client";
 
 import { useState } from "react";
-import { IconClock } from "@tabler/icons-react";
 import type { DayKey } from "@/lib/useScheduleDB";
 
 const REPEAT_DAYS: DayKey[] = ["sunday", "monday", "tuesday", "wednesday", "thursday", "friday", "saturday"];
@@ -78,7 +77,7 @@ function durationLabel(minutes: number | null): string {
 
 function chipClass(active: boolean): string {
   return active
-    ? "border-neutral-900 bg-neutral-200 text-neutral-950 shadow-sm dark:border-white dark:bg-white dark:text-neutral-900"
+    ? "border-neutral-900 bg-neutral-900 text-white shadow-sm dark:border-white dark:bg-white dark:text-neutral-900"
     : "border-neutral-200 bg-white text-neutral-500 hover:border-neutral-300 hover:text-neutral-800 dark:border-white/10 dark:bg-white/[0.04] dark:text-neutral-400 dark:hover:border-white/20 dark:hover:text-neutral-200";
 }
 
@@ -86,6 +85,8 @@ function sortDays(days: DayKey[]): DayKey[] {
   const unique = Array.from(new Set(days));
   return REPEAT_DAYS.filter((day) => unique.includes(day));
 }
+
+const LABEL = "text-[11px] font-semibold uppercase tracking-[0.08em] text-neutral-400 dark:text-neutral-500";
 
 export default function TimeSlotPicker({
   startTime,
@@ -136,52 +137,51 @@ export default function TimeSlotPicker({
 
   return (
     <section className="space-y-4">
+      {/* Section header */}
       <div className="flex items-center justify-between gap-3">
-        <p className="text-lg font-semibold text-neutral-950 dark:text-white">Time Slot</p>
-        <p className={`text-sm font-semibold ${currentDuration === null ? "text-neutral-400" : "text-neutral-900 dark:text-white"}`}>
+        <p className={LABEL}>Time Slot</p>
+        <p className={`text-[12px] font-semibold tabular-nums ${currentDuration === null ? "text-neutral-400 dark:text-neutral-500" : "text-neutral-700 dark:text-neutral-300"}`}>
           {durationText}
         </p>
       </div>
 
+      {/* Time inputs */}
       <div className="grid grid-cols-2 gap-3">
         <div>
-          <p className="mb-1.5 text-sm font-medium text-neutral-500 dark:text-neutral-400">Start</p>
-          <div className="relative">
-            <IconClock size={16} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-neutral-500 dark:text-neutral-400" />
-            <input
-              type="time"
-              value={startTime}
-              onChange={(e) => {
-                const value = e.target.value;
-                onStartChange(value);
-                if (selectedDuration !== null) {
-                  const start = inputToMinutes(value);
-                  if (start !== null) onEndChange(minutesToInput(start + selectedDuration));
-                }
-              }}
-              className="h-12 w-full rounded-full border border-neutral-200 bg-neutral-50 pl-10 pr-3 text-base font-medium text-neutral-700 outline-none transition-colors focus:border-neutral-300 focus:bg-white dark:border-white/10 dark:bg-white/[0.04] dark:text-white dark:focus:border-white/20 dark:focus:bg-white/[0.08]"
-            />
-          </div>
+          <p className={`mb-1.5 ${LABEL}`}>Start</p>
+          <input
+            type="time"
+            value={startTime}
+            onChange={(e) => {
+              const value = e.target.value;
+              onStartChange(value);
+              if (selectedDuration !== null) {
+                const start = inputToMinutes(value);
+                if (start !== null) onEndChange(minutesToInput(start + selectedDuration));
+              }
+            }}
+            className="h-11 w-full rounded-xl border border-neutral-200 bg-neutral-50 px-3 text-[14px] font-medium text-neutral-700 outline-none transition-colors focus:border-neutral-300 focus:bg-white dark:border-white/10 dark:bg-white/[0.04] dark:text-white dark:focus:border-white/20 dark:focus:bg-white/[0.08]"
+          />
         </div>
         <div>
-          <p className="mb-1.5 text-sm font-medium text-neutral-500 dark:text-neutral-400">End</p>
-          <div className="relative">
-            <IconClock size={16} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-neutral-500 dark:text-neutral-400" />
-            <input
-              type="time"
-              value={endTime}
-              onChange={(e) => {
-                setSelectedDuration(null);
-                onEndChange(e.target.value);
-              }}
-              className="h-12 w-full rounded-full border border-neutral-200 bg-neutral-50 pl-10 pr-3 text-base font-medium text-neutral-700 outline-none transition-colors focus:border-neutral-300 focus:bg-white dark:border-white/10 dark:bg-white/[0.04] dark:text-white dark:focus:border-white/20 dark:focus:bg-white/[0.08]"
-            />
-          </div>
+          <p className={`mb-1.5 ${LABEL}`}>End</p>
+          <input
+            type="time"
+            value={endTime}
+            onChange={(e) => {
+              setSelectedDuration(null);
+              onEndChange(e.target.value);
+            }}
+            className="
+            h-11 w-full rounded-xl border border-neutral-200 bg-neutral-50 px-4 text-[15px] font-medium text-neutral-900 outline-none placeholder:text-neutral-400 transition-colors focus:border-neutral-300 focus:bg-white dark:border-white/10 dark:bg-white/[0.04] dark:text-white dark:placeholder:text-neutral-500 dark:focus:border-white/15 dark:focus:bg-white/[0.06]
+            "
+          />
         </div>
       </div>
 
+      {/* Start presets */}
       <div className="space-y-2">
-        <p className="text-sm font-medium text-neutral-500 dark:text-neutral-400">Start</p>
+        <p className={LABEL}>Quick start</p>
         <div className="flex flex-wrap gap-2">
           {START_PRESETS.map((preset) => {
             const presetMinutes = preset.value === "now" ? null : preset.value;
@@ -191,7 +191,7 @@ export default function TimeSlotPicker({
                 key={preset.label}
                 type="button"
                 onClick={() => applyStart(preset.value === "now" ? currentMinutes() : preset.value)}
-                className={`h-8 rounded-full border px-3 text-sm font-semibold transition-colors ${chipClass(active)}`}
+                className={`h-8 rounded-full border px-3 text-[12px] font-semibold transition-colors ${chipClass(active)}`}
               >
                 {preset.label}
               </button>
@@ -200,28 +200,32 @@ export default function TimeSlotPicker({
         </div>
       </div>
 
+      {/* Duration presets */}
       <div className="space-y-2">
-        <p className="text-sm font-medium text-neutral-500 dark:text-neutral-400">Duration</p>
+        <p className={LABEL}>Duration</p>
         <div className="flex flex-wrap gap-2">
           {DURATION_OPTIONS.map((option) => (
             <button
               key={option.label}
               type="button"
               onClick={() => applyDuration(option.minutes)}
-              className={`h-8 rounded-full border px-3 text-sm font-semibold transition-colors ${chipClass(currentDuration === option.minutes)}`}
+              className={`h-8 rounded-full border px-3 text-[12px] font-semibold transition-colors ${chipClass(currentDuration === option.minutes)}`}
             >
               {option.label}
             </button>
           ))}
         </div>
-        <p className="text-xs text-neutral-500 dark:text-neutral-400">Pick a start time, then tap a duration for end-time.</p>
+        <p className="text-[11px] text-neutral-400 dark:text-neutral-500">
+          Pick a start time, then tap a duration to set end time.
+        </p>
       </div>
 
+      {/* Repeat */}
       {repeatDays && onRepeatDaysChange && (
         <div className="space-y-2">
           <div className="flex items-center justify-between gap-3">
-            <p className="text-sm font-medium text-neutral-500 dark:text-neutral-400">Repeat on</p>
-            <p className="text-xs font-medium text-neutral-400 dark:text-neutral-500">
+            <p className={LABEL}>Repeat on</p>
+            <p className="text-[11px] font-semibold text-neutral-400 dark:text-neutral-500">
               {allDaysSelected ? "All days" : `${repeatDays.length} ${repeatDays.length === 1 ? "day" : "days"}`}
             </p>
           </div>
@@ -229,7 +233,7 @@ export default function TimeSlotPicker({
             <button
               type="button"
               onClick={toggleAllDays}
-              className={`h-8 rounded-full border px-3 text-sm font-semibold transition-colors ${chipClass(!!allDaysSelected)}`}
+              className={`h-8 rounded-full border px-3 text-[12px] font-semibold transition-colors ${chipClass(!!allDaysSelected)}`}
             >
               All days
             </button>
@@ -238,7 +242,7 @@ export default function TimeSlotPicker({
                 key={day}
                 type="button"
                 onClick={() => toggleDay(day)}
-                className={`h-8 rounded-full border px-3 text-sm font-semibold transition-colors ${chipClass(!allDaysSelected && repeatDays.includes(day))}`}
+                className={`h-8 rounded-full border px-3 text-[12px] font-semibold transition-colors ${chipClass(!allDaysSelected && repeatDays.includes(day))}`}
               >
                 {DAY_LABELS[day]}
               </button>

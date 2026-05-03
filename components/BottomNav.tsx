@@ -104,10 +104,12 @@ export default function BottomNav({
                     items-start
                     gap-8
                     rounded-[24px]
-                    bg-black
+                    bg-neutral-900
                     px-4
                     py-4
-                    shadow-[0_20px_60px_rgba(0,0,0,0.24)]
+                    shadow-[0_20px_60px_rgba(0,0,0,0.32)]
+                    border
+                    border-white/[0.08]
                   "
                 >
                   {/* ADD ACTIVITY */}
@@ -117,32 +119,26 @@ export default function BottomNav({
                       setExpanded(false);
                       onCreateTask();
                     }}
-                    className="
-                      flex
-                      flex-col
-                      items-center
-                      gap-1
-                    "
+                    className="flex flex-col items-center gap-1.5"
                   >
                     <div
                       className="
                         flex
-                        h-[24px]
+                        h-[52px]
                         w-[64px]
                         items-center
                         justify-center
-                        rounded-[24px]
-                        bg-white/[0.06]
+                        rounded-[18px]
+                        bg-white/[0.08]
                       "
                     >
                       <IconCalendarPlus
-                        size={24}
+                        size={22}
                         strokeWidth={1.9}
                         className="text-white"
                       />
                     </div>
-
-                    <span className="text-[12px] font-medium text-white">
+                    <span className="text-[11px] font-semibold text-white/70">
                       Activity
                     </span>
                   </motion.button>
@@ -154,33 +150,27 @@ export default function BottomNav({
                       setExpanded(false);
                       onCreatePlan();
                     }}
-                    className="
-                      flex
-                      flex-col
-                      items-center
-                      gap-1
-                    "
+                    className="flex flex-col items-center gap-1.5"
                   >
                     <div
                       className="
                         flex
-                        h-[24px]
+                        h-[52px]
                         w-[64px]
                         items-center
                         justify-center
-                        rounded-[24px]
-                        bg-white/[0.06]
+                        rounded-[18px]
+                        bg-white/[0.08]
                       "
                     >
                       <IconClipboardPlus
-                        size={24}
+                        size={22}
                         strokeWidth={1.9}
                         className="text-white"
                       />
                     </div>
-
-                    <span className="text-[12px] font-medium text-white">
-                     New Plan
+                    <span className="text-[11px] font-semibold text-white/70">
+                      New Plan
                     </span>
                   </motion.button>
                 </div>
@@ -210,6 +200,8 @@ export default function BottomNav({
               bg-black
               text-white
               shadow-[0_12px_30px_rgba(0,0,0,0.16)]
+              dark:bg-white
+              dark:text-neutral-950
             "
           >
             <motion.div
@@ -243,6 +235,9 @@ export default function BottomNav({
               bg-white
               px-2
               shadow-[0_12px_40px_rgba(0,0,0,0.06)]
+              dark:border-white/[0.08]
+              dark:bg-neutral-800
+              dark:shadow-[0_12px_40px_rgba(0,0,0,0.4)]
             "
           >
             {/* ACTIVITY */}
@@ -265,8 +260,8 @@ export default function BottomNav({
                 duration-200
                 ${
                   activeTab === 0
-                    ? "bg-black/[0.04] text-neutral-950"
-                    : "text-neutral-500"
+                    ? "bg-black/[0.04] text-neutral-950 dark:bg-white/[0.08] dark:text-white"
+                    : "text-neutral-500 dark:text-neutral-500"
                 }
               `}
             >
@@ -303,8 +298,8 @@ export default function BottomNav({
                 duration-200
                 ${
                   activeTab === 1
-                    ? "bg-black/[0.04] text-neutral-950"
-                    : "text-neutral-500"
+                    ? "bg-black/[0.04] text-neutral-950 dark:bg-white/[0.08] dark:text-white"
+                    : "text-neutral-500 dark:text-neutral-500"
                 }
               `}
             >

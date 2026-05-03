@@ -194,35 +194,33 @@ export default function PWAInstallPrompt() {
       <div
         className={`fixed bottom-0 left-0 right-0 z-50 transition-transform duration-300 ease-out ${animateIn ? "translate-y-0" : "translate-y-full"}`}
       >
-        <div className="mx-auto max-w-lg rounded-t-3xl border-t border-neutral-200 bg-white shadow-2xl dark:border-white/10 dark:bg-neutral-900">
+        <div className="mx-auto max-w-lg rounded-t-[32px] bg-white shadow-[0_-8px_40px_rgba(0,0,0,0.12)] dark:bg-neutral-900">
           {/* Drag handle */}
           <div className="flex justify-center pb-1 pt-3">
-            <div className="h-1 w-9 rounded-full bg-neutral-300 dark:bg-neutral-700" />
+            <div className="h-1 w-10 rounded-full bg-neutral-300 dark:bg-white/20" />
           </div>
 
           <div className="space-y-5 px-5 pb-8 pt-4">
             {/* Header */}
             <div className="flex items-start justify-between gap-3">
               <div className="flex items-center gap-3">
-                <div className="flex h-12 w-12 shrink-0 items-center justify-center overflow-hidden rounded-2xl border border-neutral-100 bg-neutral-50 dark:border-white/10 dark:bg-neutral-800">
-                  <img src="/logo.svg" alt="Daily Planner" className="h-7 w-auto dark:hidden" />
-                  <img src="/logo-dark.svg" alt="Daily Planner" className="hidden h-7 w-auto dark:block" />
+                <div className="flex h-12 w-16 shrink-0 items-center pl-2 justify-center overflow-hidden rounded-2xl border border-neutral-200 bg-neutral-50 dark:border-white/10 dark:bg-neutral-800">
+                  <img src="/logo.svg" alt="PlanR" className="h-6 w-auto dark:hidden" />
+                  <img src="/logo-dark.svg" alt="PlanR" className="hidden h-6 w-auto dark:block" />
                 </div>
                 <div>
-                  <h2 className="text-[15px] font-semibold text-neutral-900 dark:text-white">
-                    Install Daily Planner
+                  <p className="text-[10px] font-semibold uppercase tracking-[0.1em] text-neutral-400 dark:text-neutral-500">Install</p>
+                  <h2 className="text-[18px] font-semibold text-neutral-950 dark:text-white mt-0.5">
+                    PlanR
                   </h2>
-                  <p className="mt-0.5 text-xs text-neutral-500 dark:text-neutral-400">
-                    Add to home screen for the best experience
-                  </p>
                 </div>
               </div>
               <button
                 onClick={dismiss}
-                className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-neutral-100 text-neutral-500 transition-colors hover:bg-neutral-200 dark:bg-white/10 dark:text-neutral-400 dark:hover:bg-white/20"
+                className="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl border border-neutral-200 text-neutral-400 hover:bg-neutral-50 dark:border-white/10 dark:text-neutral-500 dark:hover:bg-white/5 transition-colors"
                 aria-label="Dismiss"
               >
-                <IconX size={15} />
+                <IconX size={16} />
               </button>
             </div>
 
@@ -265,7 +263,7 @@ export default function PWAInstallPrompt() {
                     </p>
                     <button
                       onClick={handleNativeInstall}
-                      className="flex h-11 w-full items-center justify-center gap-2 rounded-xl bg-neutral-900 text-sm font-semibold text-white transition-all hover:opacity-90 active:scale-[0.98] dark:bg-white dark:text-neutral-900"
+                      className="flex h-12 w-full items-center justify-center gap-2 rounded-2xl bg-neutral-950 text-[15px] font-semibold text-white transition-all hover:bg-neutral-800 active:scale-[0.98] dark:bg-white dark:text-neutral-900 dark:hover:bg-neutral-100"
                     >
                       <IconDownload size={16} />
                       Install App
@@ -304,7 +302,7 @@ export default function PWAInstallPrompt() {
             {/* Dismiss link */}
             <button
               onClick={dismiss}
-              className="w-full py-1 text-center text-xs text-neutral-400 transition-colors hover:text-neutral-600 dark:text-neutral-500 dark:hover:text-neutral-300"
+              className="w-full py-1 text-center text-[12px] font-medium text-neutral-400 transition-colors hover:text-neutral-600 dark:text-neutral-500 dark:hover:text-neutral-300"
             >
               Maybe later
             </button>
