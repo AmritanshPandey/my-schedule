@@ -76,7 +76,7 @@ function daysBetween(start: string, end: string): number | null {
 }
 
 const TIMELINE_START_HOUR = 4;
-const TIMELINE_END_HOUR = 24;
+const TIMELINE_END_HOUR = 28; // extends to 4 AM next day for overnight tasks
 const HOUR_HEIGHT = 112;
 const TIMELINE_TOP_PADDING = 20;
 const TIMELINE_BOTTOM_PADDING = 40;
@@ -196,9 +196,11 @@ function inputValueToDisplayTime(value: string): string {
 
 function formatTaskDuration(startTime: string, endTime: string): string | null {
   const start = parseTimeToMinutes(startTime);
-  const end = parseTimeToMinutes(endTime);
-  if (start === null || end === null || end <= start) return null;
+  let end = parseTimeToMinutes(endTime);
+  if (start === null || end === null) return null;
+  if (end <= start) end += 1440; // overnight task
   const total = end - start;
+  if (total <= 0) return null;
   const hours = Math.floor(total / 60);
   const minutes = total % 60;
   if (hours > 0 && minutes > 0) return `${hours}h ${minutes}m`;
@@ -711,13 +713,18 @@ export default function ScheduleApp() {
     const intervals = tasks
       .map((task) => {
         const start = parseTimeToMinutes(task.startTime) ?? timelineStartMinutes;
-        const end = parseTimeToMinutes(task.endTime) ?? start + 30;
+        let end = parseTimeToMinutes(task.endTime) ?? start + 30;
+        // Overnight task: end time is on the next day
+        const isOvernight = end <= start;
+        if (isOvernight) end += 1440;
         const cs = clamp(start, timelineStartMinutes, timelineEndMinutes);
         const ce = clamp(Math.max(end, cs + 15), timelineStartMinutes, timelineEndMinutes);
         return {
           task,
           start: cs,
           end: ce,
+          isOvernight,
+          isTruncated: isOvernight && end > timelineEndMinutes,
           top: TIMELINE_TOP_PADDING + ((cs - timelineStartMinutes) / 60) * HOUR_HEIGHT,
           height: ((ce - cs) / 60) * HOUR_HEIGHT,
           lane: 0,
@@ -775,16 +782,19 @@ export default function ScheduleApp() {
   function renderTimelineTaskCard(
     task: Task,
     cardClassName: string,
-    cardSize: CardSize = "large"
+    cardSize: CardSize = "large",
+    isOvernight = false,
+    isTruncated = false
   ) {
     const { linkedPlan, color } = getTaskPresentation(task);
     const tone = timelineCardStyles(color);
     const duration = formatTaskDuration(task.startTime, task.endTime);
+    const base = `${cardClassName} ${tone.cardBg} ${tone.accentBar}`;
 
     // xsmall: title only, centered
     if (cardSize === "xsmall") {
       return (
-        <div className={`${cardClassName} ${tone.cardBg} ${tone.cardBorder}`}>
+        <div className={base}>
           <div className="flex h-full items-center min-w-0">
             <span className={`text-[11px] font-semibold leading-none truncate ${tone.title}`}>
               {task.title}
@@ -794,52 +804,56 @@ export default function ScheduleApp() {
       );
     }
 
-    // small: title + time, vertically centered as a group
+    // small: title + time, vertically centered
     if (cardSize === "small") {
       return (
-        <div className={`${cardClassName} ${tone.cardBg} ${tone.cardBorder}`}>
-          <div className="flex h-full flex-col justify-center gap-[3px] min-w-0">
+        <div className={base}>
+          <div className="flex h-full flex-col justify-center gap-[2px] min-w-0">
             <span className={`text-[12px] font-semibold leading-tight truncate ${tone.title}`}>
               {task.title}
             </span>
-            <span className={`text-[9px] font-medium ${tone.time}`}>
-              {task.startTime} – {task.endTime}
+            <span className={`text-[10px] font-medium ${tone.time}`}>
+              {task.startTime}{isOvernight ? " →" : ` – ${task.endTime}`}
             </span>
           </div>
         </div>
       );
     }
 
-    // medium: title + time/duration, no plan label
+    // medium: title + time/duration
     if (cardSize === "medium") {
       return (
-        <div className={`${cardClassName} ${tone.cardBg} ${tone.cardBorder}`}>
+        <div className={base}>
           <div className="flex h-full flex-col justify-between min-w-0">
             <h3 className={`text-[13px] font-semibold leading-snug line-clamp-2 ${tone.title}`}>
               {task.title}
             </h3>
-            <p className={`text-[10px] font-medium shrink-0 ${tone.time}`}>
-              {task.startTime} – {task.endTime}{duration && ` · ${duration}`}
+            <p className={`text-[11px] font-medium shrink-0 ${tone.time}`}>
+              {task.startTime}{isOvernight ? " → next day" : ` – ${task.endTime}`}
+              {duration && ` · ${duration}`}
+              {isTruncated && " ↓"}
             </p>
           </div>
         </div>
       );
     }
 
-    // large: full layout — plan label → title → time + duration
+    // large: plan label → title → time + duration
     return (
-      <div className={`${cardClassName} ${tone.cardBg} ${tone.cardBorder}`}>
+      <div className={base}>
         <div className="flex flex-col h-full min-w-0">
           {linkedPlan && (
-            <p className="text-[10px] font-semibold uppercase tracking-[0.08em] text-neutral-400 dark:text-neutral-500 truncate mb-1.5 shrink-0">
+            <p className={`text-[10px] font-semibold uppercase tracking-[0.08em] truncate mb-1 shrink-0 ${tone.planLabel}`}>
               {linkedPlan.title}
             </p>
           )}
           <h3 className={`text-[14px] font-semibold leading-snug flex-1 min-w-0 line-clamp-3 ${tone.title}`}>
             {task.title}
           </h3>
-          <p className={`text-[10px] font-medium mt-auto pt-1.5 shrink-0 ${tone.time}`}>
-            {task.startTime} – {task.endTime}{duration && ` · ${duration}`}
+          <p className={`text-[11px] font-medium mt-auto pt-1 shrink-0 ${tone.time}`}>
+            {task.startTime}{isOvernight ? " → next day" : ` – ${task.endTime}`}
+            {duration && ` · ${duration}`}
+            {isTruncated && " ↓"}
           </p>
         </div>
       </div>
@@ -1001,7 +1015,7 @@ export default function ScheduleApp() {
             {task.title}
           </p>
           <div className="flex items-center gap-2.5 mt-1.5 flex-wrap">
-            <p className={`text-[14px] font-medium shrink-0 text-neutral-700 dark:text-neutral-400 ${tone.time}`}>
+            <p className={`text-[14px] font-medium shrink-0 ${tone.time}`}>
               {task.startTime} – {task.endTime}{duration && ` · ${duration}`}
             </p>
             <div className="flex items-center gap-[8px]">
@@ -1822,79 +1836,100 @@ export default function ScheduleApp() {
                         Nothing scheduled — tap + to add your first activity.
                       </div>
                     )}
+                    {/* Google Calendar-style flat timeline */}
                     <div
                       ref={timelineScrollRef}
-                      className="calendar-scrollbar-none relative flex max-h-[72vh] overflow-y-auto overflow-x-hidden rounded-2xl border border-neutral-200 bg-white dark:border-white/[0.08] dark:bg-neutral-900"
+                      className="calendar-scrollbar-none relative flex max-h-[74vh] overflow-y-auto overflow-x-hidden"
                     >
-                      {/* Hour labels */}
+                      {/* Time column */}
                       <div
-                        className="sticky left-0 z-20 w-[52px] shrink-0 bg-white/95 dark:bg-neutral-900/95 backdrop-blur-sm"
+                        className="sticky left-0 z-20 w-[52px] shrink-0 bg-neutral-50 dark:bg-neutral-950"
                         style={{ height: timelineHeight }}
                       >
-                        {timelineHours.map((hour, index) => (
-                          <span
-                            key={hour}
-                            className="absolute right-2 text-[10px] font-medium text-neutral-400 dark:text-neutral-500 tabular-nums"
-                            style={{
-                              top: TIMELINE_TOP_PADDING + index * HOUR_HEIGHT - (index === 0 ? 0 : 9),
-                            }}
-                          >
-                            {formatHourLabel(hour)}
-                          </span>
-                        ))}
+                        {timelineHours.map((hour, index) => {
+                          const isMidnight = hour === 24;
+                          if (index === 0) return null; // skip first label
+                          return (
+                            <div
+                              key={hour}
+                              className="absolute right-0 pr-2 flex flex-col items-end"
+                              style={{ top: TIMELINE_TOP_PADDING + index * HOUR_HEIGHT - 7 }}
+                            >
+                              {isMidnight ? (
+                                <span className="text-[9px] font-bold text-neutral-300 dark:text-white/20 leading-none uppercase tracking-wide">
+                                  tmrw
+                                </span>
+                              ) : (
+                                <span className="text-[10px] font-medium text-neutral-400 dark:text-neutral-500 tabular-nums leading-none">
+                                  {formatHourLabel(hour)}
+                                </span>
+                              )}
+                            </div>
+                          );
+                        })}
                       </div>
+
                       {/* Grid + tasks */}
                       <div
-                        className="relative min-w-0 flex-1 border-l border-neutral-100 dark:border-white/[0.04]"
+                        className="relative min-w-0 flex-1 border-l border-neutral-200 dark:border-white/[0.08]"
                         style={{ height: timelineHeight }}
                       >
-                        {/* Hour grid lines */}
+                        {/* Grid lines */}
                         <div className="absolute inset-0 pointer-events-none">
-                          {timelineHours.map((hour, index) => (
-                            <div
-                              key={`grid-${hour}`}
-                              className="absolute left-0 right-0 border-t border-neutral-100 dark:border-white/[0.04]"
-                              style={{ top: TIMELINE_TOP_PADDING + index * HOUR_HEIGHT }}
-                            />
-                          ))}
-                          {/* Half-hour tick lines */}
-                          {timelineHours.slice(0, -1).map((hour, index) => (
-                            <div
-                              key={`half-${hour}`}
-                              className="absolute right-0 h-px bg-neutral-100/70 dark:bg-white/[0.025]"
-                              style={{
-                                top: TIMELINE_TOP_PADDING + index * HOUR_HEIGHT + HOUR_HEIGHT / 2,
-                                left: "10%",
-                              }}
-                            />
-                          ))}
+                          {timelineHours.map((hour, index) => {
+                            const isMidnight = hour === 24;
+                            return (
+                              <div key={`grid-${hour}`}>
+                                {/* Hour line */}
+                                <div
+                                  className={`absolute left-0 right-0 ${
+                                    isMidnight
+                                      ? "border-t-2 border-neutral-200 dark:border-white/[0.12]"
+                                      : "border-t border-neutral-100 dark:border-white/[0.05]"
+                                  }`}
+                                  style={{ top: TIMELINE_TOP_PADDING + index * HOUR_HEIGHT }}
+                                />
+                                {/* Half-hour dashed line */}
+                                {index < timelineHours.length - 1 && (
+                                  <div
+                                    className="absolute left-0 right-0 border-t border-dashed border-neutral-100 dark:border-white/[0.03]"
+                                    style={{ top: TIMELINE_TOP_PADDING + index * HOUR_HEIGHT + HOUR_HEIGHT / 2 }}
+                                  />
+                                )}
+                              </div>
+                            );
+                          })}
                         </div>
+
                         {/* Task cards */}
                         <div className="absolute inset-0">
                           {timelineTaskLayouts.map((layout) => (
                             <div
                               key={layout.task.id}
-                              className="absolute min-w-0 px-1.5 py-0.5 animate-panel-in"
+                              className="absolute min-w-0 px-1 py-[2px] animate-panel-in"
                               style={getTaskLaneStyle(layout)}
                             >
-                              <div className="relative h-full min-h-[36px]">
+                              <div className="relative h-full min-h-[24px]">
                                 {renderTimelineTaskCard(
                                   layout.task,
-                                  "h-full rounded-2xl p-2.5 w-full min-w-0 border overflow-hidden",
-                                  computeCardSize(layout.height, layout.laneCount)
+                                  "h-full rounded-lg px-2 py-1.5 w-full min-w-0 overflow-hidden",
+                                  computeCardSize(layout.height, layout.laneCount),
+                                  layout.isOvernight,
+                                  layout.isTruncated
                                 )}
                               </div>
                             </div>
                           ))}
                         </div>
+
                         {/* Current time indicator */}
                         {showCurrentTime && (
                           <div
-                            className="pointer-events-none absolute left-0 right-0 z-30 flex -translate-y-1/2 items-center"
+                            className="pointer-events-none absolute left-0 right-0 z-30 -translate-y-1/2 flex items-center"
                             style={{ top: currentTimeTop }}
                           >
-                            <div className="-ml-1 h-2 w-2 shrink-0 rounded-full bg-red-500 ring-[3px] ring-red-500/20 shadow-[0_0_8px_rgba(239,68,68,0.5)]" />
-                            <div className="h-px flex-1 bg-gradient-to-r from-red-400/80 to-red-400/0" />
+                            <div className="h-2.5 w-2.5 shrink-0 rounded-full bg-red-500 -ml-[5px]" />
+                            <div className="h-[2px] flex-1 bg-red-500" />
                           </div>
                         )}
                       </div>
