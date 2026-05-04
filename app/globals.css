@@ -4,21 +4,53 @@
 
 /* ── Native app feel ────────────────────────────────────────────────────────── */
 
-/* Prevent double-tap zoom and tap flash on all interactive elements */
+/* 1. Hide ALL scrollbars everywhere */
 * {
-  -webkit-tap-highlight-color: transparent;
+  scrollbar-width: none;         /* Firefox */
+  -ms-overflow-style: none;      /* IE / Edge */
+}
+*::-webkit-scrollbar {
+  display: none;                 /* Chrome / Safari / Opera */
 }
 
+/* 2. No tap flash, no text-size adjustment */
+* {
+  -webkit-tap-highlight-color: transparent;
+  -webkit-text-size-adjust: 100%;
+  text-size-adjust: 100%;
+}
+
+/* 3. Prevent long-press context menu on links/images (iOS) */
+a, img, button {
+  -webkit-touch-callout: none;
+}
+
+/* 4. Buttons and nav elements are not selectable, like native */
+button,
+[role="button"],
+nav,
+label {
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+/* 5. Touch action: manipulation on interactive elements — no double-tap zoom */
 button, a, [role="button"] {
   touch-action: manipulation;
 }
 
-/* Prevent pull-to-refresh and elastic overscroll on iOS */
+/* 6. Prevent pull-to-refresh and elastic overscroll on iOS */
 html, body {
   overscroll-behavior: none;
+  height: 100%;
 }
 
-/* Prevent iOS Safari from zooming into inputs (font-size < 16px triggers zoom) */
+/* 7. Smooth momentum scrolling in all scroll containers */
+* {
+  -webkit-overflow-scrolling: touch;
+}
+
+/* 8. Prevent iOS Safari from zooming into inputs (font-size < 16px triggers zoom) */
 input,
 select,
 textarea {

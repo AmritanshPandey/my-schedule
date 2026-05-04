@@ -4,6 +4,8 @@ import { useEffect, useRef, useState } from "react";
 import { ScheduleEntry } from "@/components/ScheduleItem";
 import type { AccentColor } from "@/lib/colorSystem";
 import { colorFromIcon, resolveAccentColor } from "@/lib/colorSystem";
+import type { GoalDirection } from "@/lib/trendUtils";
+export type { GoalDirection };
 
 export type DayKey = "monday" | "tuesday" | "wednesday" | "thursday" | "friday" | "saturday" | "sunday";
 export type PlanCategory = "fitness" | "learning" | "work" | "health" | "routine";
@@ -69,6 +71,7 @@ export interface ProgressTracker {
   title: string;
   type: "number";
   unit?: string;
+  goalDirection?: GoalDirection;
 }
 
 export interface MetricEntry {
@@ -228,12 +231,14 @@ function normalizeTracker(value: unknown): ProgressTracker | null {
   if (!value || typeof value !== "object") return null;
   const t = value as ProgressTracker;
   if (!t.id || !t.planId || !t.title) return null;
+  const gd = (t as ProgressTracker & { goalDirection?: unknown }).goalDirection;
   return {
     id: t.id,
     planId: t.planId,
     title: t.title,
     type: "number",
     unit: t.unit,
+    goalDirection: gd === "increase_good" || gd === "decrease_good" ? gd : undefined,
   };
 }
 

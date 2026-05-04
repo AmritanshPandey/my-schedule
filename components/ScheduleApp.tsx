@@ -13,6 +13,7 @@ import {
   DAYS,
   DAY_LABELS,
   DayKey,
+  GoalDirection,
   MetricEntry,
   Plan,
   ProgressTracker,
@@ -20,6 +21,8 @@ import {
   Task,
   categoryFromIcon,
 } from "@/lib/useScheduleDB";
+import { computeTrend } from "@/lib/trendUtils";
+import type { TrendResult } from "@/lib/trendUtils";
 import {
   accentStyles,
   colorFromIcon,
@@ -28,6 +31,10 @@ import {
 } from "@/lib/colorSystem";
 import { SECTION_ICONS, getIconPickerStyle } from "@/components/SectionIcons";
 import {
+  IconArrowDown,
+  IconArrowDownRight,
+  IconArrowUp,
+  IconArrowUpRight,
   IconCheck,
   IconChevronLeft,
   IconCalendar,
@@ -48,6 +55,61 @@ import BottomSheet from "@/components/ui/BottomSheet";
 import SheetHeader from "@/components/ui/SheetHeader";
 import Button from "@/components/ui/Button";
 import Input from "@/components/ui/Input";
+
+// ─── Trend helpers ───────────────────────────────────────────────────────────
+
+function TrendBadge({ trend }: { trend: TrendResult }) {
+  const isPositive = trend.state === "positive";
+  const isUp = trend.direction === "up";
+  const colorClass = isPositive
+    ? "text-emerald-600 dark:text-emerald-400"
+    : "text-rose-600 dark:text-rose-400";
+  const TrendIcon = isUp ? IconTrendingUp : IconTrendingDown;
+  const iconColor = isPositive ? "text-emerald-500" : "text-rose-500";
+  const pctText = trend.pct !== null ? ` · ${Math.abs(trend.pct).toFixed(1)}%` : "";
+  return (
+    <div className="flex items-center gap-1 mt-1.5">
+      <TrendIcon size={14} className={`${iconColor} shrink-0`} />
+      <p className={`text-[12px] font-medium ${colorClass}`}>
+        {isUp ? "Up" : "Down"}{pctText} from last entry
+      </p>
+    </div>
+  );
+}
+
+function GoalDirectionPicker({ value, onChange }: { value: GoalDirection; onChange: (v: GoalDirection) => void }) {
+  const opts: { value: GoalDirection; Icon: typeof IconArrowUp; label: string }[] = [
+    { value: "increase_good", Icon: IconArrowUp, label: "Increasing is good" },
+    { value: "decrease_good", Icon: IconArrowDown, label: "Decreasing is good" },
+  ];
+  return (
+    <div>
+      <p className="mb-1.5 text-[11px] font-semibold uppercase tracking-[0.08em] text-neutral-400 dark:text-neutral-500">
+        Goal direction
+      </p>
+      <div className="grid grid-cols-2 gap-1.5">
+        {opts.map((opt) => {
+          const sel = value === opt.value;
+          return (
+            <button
+              key={opt.value}
+              type="button"
+              onClick={() => onChange(opt.value)}
+              className={`flex items-center justify-center gap-1.5 rounded-xl border px-3 py-2.5 text-[13px] font-semibold transition-all ${
+                sel
+                  ? "border-neutral-950 bg-neutral-950 text-white dark:border-white dark:bg-white dark:text-neutral-900"
+                  : "border-neutral-200 bg-neutral-50 text-neutral-500 hover:border-neutral-300 dark:border-white/10 dark:bg-white/[0.04] dark:text-neutral-400 dark:hover:border-white/20"
+              }`}
+            >
+              <opt.Icon size={14} strokeWidth={2.5} className="shrink-0" />
+              <span>{opt.label}</span>
+            </button>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
 
 // ─── Constants ───────────────────────────────────────────────────────────────
 
@@ -343,10 +405,11 @@ export default function ScheduleApp() {
   const [addingTrackerForPlanId, setAddingTrackerForPlanId] = useState<string | null>(null);
   const [newTrackerTitle, setNewTrackerTitle] = useState("");
   const [newTrackerUnit, setNewTrackerUnit] = useState("");
+  const [newTrackerGoalDirection, setNewTrackerGoalDirection] = useState<GoalDirection>("increase_good");
   const [editingPlanId, setEditingPlanId] = useState<string | null>(null);
   const [editPlanDraft, setEditPlanDraft] = useState({ title: "", description: "", startDate: "", endDate: "" });
   const [editingTrackerId, setEditingTrackerId] = useState<string | null>(null);
-  const [editTrackerDraft, setEditTrackerDraft] = useState({ title: "", unit: "" });
+  const [editTrackerDraft, setEditTrackerDraft] = useState({ title: "", unit: "", goalDirection: "increase_good" as GoalDirection });
 
   const [nowMinutes, setNowMinutes] = useState(getCurrentMinutes);
   const timelineScrollRef = useRef<HTMLDivElement | null>(null);
@@ -573,10 +636,12 @@ export default function ScheduleApp() {
       title,
       type: "number",
       unit: newTrackerUnit.trim() || undefined,
+      goalDirection: newTrackerGoalDirection,
     };
     setSchedule((prev) => ({ ...prev, progressTrackers: [...prev.progressTrackers, tracker] }));
     setNewTrackerTitle("");
     setNewTrackerUnit("");
+    setNewTrackerGoalDirection("increase_good");
     setAddingTracker(false);
     setAddingTrackerForPlanId(null);
   }
@@ -596,7 +661,7 @@ export default function ScheduleApp() {
       ...prev,
       progressTrackers: prev.progressTrackers.map((t) =>
         t.id === trackerId
-          ? { ...t, title, unit: editTrackerDraft.unit.trim() || undefined }
+          ? { ...t, title, unit: editTrackerDraft.unit.trim() || undefined, goalDirection: editTrackerDraft.goalDirection }
           : t
       ),
     }));
@@ -907,7 +972,7 @@ export default function ScheduleApp() {
                   if (e.key === "Enter") saveEditingTask(task.id);
                   if (e.key === "Escape") cancelEditingTask();
                 }}
-                className="h-10 w-full rounded-xl border border-neutral-200 bg-neutral-50 px-3 text-sm text-neutral-900 outline-none placeholder:text-neutral-400 focus:border-neutral-300 focus:bg-white dark:border-white/10 dark:bg-white/[0.04] dark:text-white dark:placeholder:text-neutral-500"
+                className="h-10 w-full rounded-xl border border-neutral-200 bg-neutral-50 px-3 text-sm text-neutral-900 outline-none placeholder:text-neutral-400 focus:border-neutral-300 focus:bg-neutral-100 dark:border-white/10 dark:bg-white/[0.04] dark:text-white dark:placeholder:text-neutral-500 dark:focus:border-white/20 dark:focus:bg-white/[0.07] transition-colors"
               />
               <input
                 value={editingTask.description}
@@ -917,7 +982,7 @@ export default function ScheduleApp() {
                   if (e.key === "Enter") saveEditingTask(task.id);
                   if (e.key === "Escape") cancelEditingTask();
                 }}
-                className="h-10 w-full rounded-xl border border-neutral-200 bg-neutral-50 px-3 text-sm text-neutral-900 outline-none placeholder:text-neutral-400 focus:border-neutral-300 focus:bg-white dark:border-white/10 dark:bg-white/[0.04] dark:text-white dark:placeholder:text-neutral-500"
+                className="h-10 w-full rounded-xl border border-neutral-200 bg-neutral-50 px-3 text-sm text-neutral-900 outline-none placeholder:text-neutral-400 focus:border-neutral-300 focus:bg-neutral-100 dark:border-white/10 dark:bg-white/[0.04] dark:text-white dark:placeholder:text-neutral-500 dark:focus:border-white/20 dark:focus:bg-white/[0.07] transition-colors"
               />
             </div>
             <TimeSlotPicker
@@ -1435,9 +1500,10 @@ export default function ScheduleApp() {
                   .filter((e) => e.trackerId === tracker.id)
                   .sort((a, b) => a.date.localeCompare(b.date));
                 const lastTwo = entries.slice(-2);
-                const trend =
-                  lastTwo.length === 2 && lastTwo[0].value !== 0
-                    ? ((lastTwo[1].value - lastTwo[0].value) / Math.abs(lastTwo[0].value)) * 100
+                const goalDir = tracker.goalDirection ?? "increase_good";
+                const trendResult =
+                  lastTwo.length === 2
+                    ? computeTrend({ previous: lastTwo[0].value, current: lastTwo[1].value, goalDirection: goalDir })
                     : null;
                 const isEditingThisTracker = editingTrackerId === tracker.id;
 
@@ -1455,13 +1521,17 @@ export default function ScheduleApp() {
                             onChange={(e) => setEditTrackerDraft((d) => ({ ...d, title: e.target.value }))}
                             placeholder="Tracker name"
                             autoFocus
-                            className="h-10 w-full rounded-xl border border-neutral-200 bg-neutral-50 px-3 text-[14px] font-medium text-neutral-900 outline-none focus:border-neutral-400 focus:bg-white dark:border-white/10 dark:bg-white/[0.04] dark:text-white"
+                            className="h-10 w-full rounded-xl border border-neutral-200 bg-neutral-50 px-3 text-[14px] font-medium text-neutral-900 outline-none focus:border-neutral-400 focus:bg-neutral-100 dark:border-white/10 dark:bg-white/[0.04] dark:text-white dark:focus:border-white/20 dark:focus:bg-white/[0.07] transition-colors"
                           />
                           <input
                             value={editTrackerDraft.unit}
                             onChange={(e) => setEditTrackerDraft((d) => ({ ...d, unit: e.target.value }))}
                             placeholder="Unit (e.g. kg, km, hr)"
-                            className="h-10 w-full rounded-xl border border-neutral-200 bg-neutral-50 px-3 text-[14px] text-neutral-700 outline-none focus:border-neutral-400 focus:bg-white dark:border-white/10 dark:bg-white/[0.04] dark:text-neutral-300"
+                            className="h-10 w-full rounded-xl border border-neutral-200 bg-neutral-50 px-3 text-[14px] text-neutral-700 outline-none focus:border-neutral-400 focus:bg-neutral-100 dark:border-white/10 dark:bg-white/[0.04] dark:text-neutral-300 dark:focus:border-white/20 dark:focus:bg-white/[0.07] transition-colors"
+                          />
+                          <GoalDirectionPicker
+                            value={editTrackerDraft.goalDirection}
+                            onChange={(gd) => setEditTrackerDraft((d) => ({ ...d, goalDirection: gd }))}
                           />
                           <div className="flex gap-2 pt-1">
                             <button
@@ -1494,17 +1564,8 @@ export default function ScheduleApp() {
                                 </span>
                               )}
                             </h3>
-                            {trend !== null && (
-                              <div className="flex items-center gap-1 mt-1.5">
-                                {trend >= 0 ? (
-                                  <IconTrendingUp size={14} className="text-emerald-500 shrink-0" />
-                                ) : (
-                                  <IconTrendingDown size={14} className="text-rose-500 shrink-0" />
-                                )}
-                                <p className={`text-[12px] font-medium ${trend >= 0 ? "text-emerald-600 dark:text-emerald-400" : "text-rose-600 dark:text-rose-400"}`}>
-                                  Trending {trend >= 0 ? "up" : "down"} by {Math.abs(trend).toFixed(1)}% from last entry
-                                </p>
-                              </div>
+                            {trendResult !== null && trendResult.direction !== "neutral" && (
+                              <TrendBadge trend={trendResult} />
                             )}
                           </div>
                           <div className="flex items-center gap-0.5 shrink-0 -mt-0.5">
@@ -1512,7 +1573,7 @@ export default function ScheduleApp() {
                               type="button"
                               onClick={() => {
                                 setEditingTrackerId(tracker.id);
-                                setEditTrackerDraft({ title: tracker.title, unit: tracker.unit ?? "" });
+                                setEditTrackerDraft({ title: tracker.title, unit: tracker.unit ?? "", goalDirection: tracker.goalDirection ?? "increase_good" });
                               }}
                               className="h-8 w-8 flex items-center justify-center rounded-lg text-neutral-400 hover:text-neutral-700 dark:text-neutral-500 dark:hover:text-neutral-300 transition-colors"
                             >
@@ -1567,43 +1628,57 @@ export default function ScheduleApp() {
                           <p className="text-[12px] text-neutral-400 dark:text-neutral-500 pb-1">
                             Tap Add Entry to start tracking.
                           </p>
-                        ) : (
-                          entries
-                            .slice(-5)
-                            .reverse()
-                            .map((entry, index) => (
-                              <div
-                                key={entry.id}
-                                className="flex items-center justify-between py-2.5 border-b border-neutral-100 last:border-b-0 dark:border-white/[0.06]"
-                              >
-                                <div className="flex items-center gap-3">
-                                  <span className="text-[11px] font-bold text-neutral-300 dark:text-neutral-700 w-4 text-center tabular-nums">
-                                    {entries.length - index}
-                                  </span>
-                                  <p className="text-[13px] font-medium text-neutral-600 dark:text-neutral-300">
-                                    {formatEntryDate(entry.date)}
-                                  </p>
-                                </div>
-                                <div className="flex items-center gap-3">
-                                  <span className="text-[15px] font-semibold text-neutral-950 dark:text-white tabular-nums">
-                                    {entry.value}
-                                    {tracker.unit && (
-                                      <span className="text-[11px] font-medium text-neutral-400 ml-1">
-                                        {tracker.unit}
-                                      </span>
-                                    )}
-                                  </span>
-                                  <button
-                                    type="button"
-                                    onClick={() => handleDeleteEntry(entry.id)}
-                                    className="h-6 w-6 flex items-center justify-center rounded-lg text-neutral-300 hover:text-rose-500 dark:text-neutral-700 dark:hover:text-rose-400 transition-colors"
+                        ) : (() => {
+                            const recent = entries.slice(-5);
+                            return recent
+                              .slice()
+                              .reverse()
+                              .map((entry, index) => {
+                                const chronIdx = recent.length - 1 - index;
+                                const prev = chronIdx > 0 ? recent[chronIdx - 1] : null;
+                                const entryTrend = prev
+                                  ? computeTrend({ previous: prev.value, current: entry.value, goalDirection: goalDir })
+                                  : null;
+                                return (
+                                  <div
+                                    key={entry.id}
+                                    className="flex items-center justify-between py-2.5 border-b border-neutral-100 last:border-b-0 dark:border-white/[0.06]"
                                   >
-                                    <IconTrash size={16} strokeWidth={2} />
-                                  </button>
-                                </div>
-                              </div>
-                            ))
-                        )}
+                                    <div className="flex items-center gap-3">
+                                      <span className="text-[11px] font-bold text-neutral-300 dark:text-neutral-700 w-4 text-center tabular-nums">
+                                        {entries.length - index}
+                                      </span>
+                                      <p className="text-[13px] font-medium text-neutral-600 dark:text-neutral-300">
+                                        {formatEntryDate(entry.date)}
+                                      </p>
+                                    </div>
+                                    <div className="flex items-center gap-2">
+                                      {entryTrend && entryTrend.direction !== "neutral" && (
+                                        entryTrend.direction === "up"
+                                          ? <IconArrowUpRight size={13} strokeWidth={2.5} className={`shrink-0 ${entryTrend.state === "positive" ? "text-emerald-500" : "text-rose-500"}`} />
+                                          : <IconArrowDownRight size={13} strokeWidth={2.5} className={`shrink-0 ${entryTrend.state === "positive" ? "text-emerald-500" : "text-rose-500"}`} />
+                                      )}
+                                      <span className="text-[15px] font-semibold text-neutral-950 dark:text-white tabular-nums">
+                                        {entry.value}
+                                        {tracker.unit && (
+                                          <span className="text-[11px] font-medium text-neutral-400 ml-1">
+                                            {tracker.unit}
+                                          </span>
+                                        )}
+                                      </span>
+                                      <button
+                                        type="button"
+                                        onClick={() => handleDeleteEntry(entry.id)}
+                                        className="h-6 w-6 flex items-center justify-center rounded-lg text-neutral-300 hover:text-rose-500 dark:text-neutral-700 dark:hover:text-rose-400 transition-colors"
+                                      >
+                                        <IconTrash size={16} strokeWidth={2} />
+                                      </button>
+                                    </div>
+                                  </div>
+                                );
+                              });
+                          })()
+                        }
                       </div>
                     )}
                   </div>
@@ -2053,14 +2128,15 @@ export default function ScheduleApp() {
               placeholder="Unit (e.g. kg, km, hr) — optional"
             />
           </div>
+          <GoalDirectionPicker value={newTrackerGoalDirection} onChange={setNewTrackerGoalDirection} />
           <div className="rounded-2xl bg-neutral-50 dark:bg-white/[0.04] px-4 py-3">
             <p className="text-[11px] font-semibold text-neutral-400 dark:text-neutral-500 mb-1.5">Examples</p>
             <div className="flex flex-wrap gap-1.5">
-              {[["Weight", "kg"], ["Distance", "km"], ["Study Hours", "hr"], ["Calories", "kcal"], ["Water", "ml"]].map(([name, unit]) => (
+              {([["Weight", "kg", "decrease_good"], ["Distance", "km", "increase_good"], ["Study Hours", "hr", "increase_good"], ["Calories", "kcal", "increase_good"], ["Water", "ml", "increase_good"]] as [string, string, GoalDirection][]).map(([name, unit, gd]) => (
                 <button
                   key={name}
                   type="button"
-                  onClick={() => { setNewTrackerTitle(name); setNewTrackerUnit(unit); }}
+                  onClick={() => { setNewTrackerTitle(name); setNewTrackerUnit(unit); setNewTrackerGoalDirection(gd); }}
                   className="rounded-full border border-neutral-200 bg-white px-2.5 py-1 text-[11px] font-semibold text-neutral-500 hover:border-neutral-300 dark:border-white/10 dark:bg-white/[0.04] dark:text-neutral-400 transition-colors"
                 >
                   {name} / {unit}

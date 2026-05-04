@@ -63,7 +63,7 @@ export default function BottomNav({
         )}
       </AnimatePresence>
 
-      <div className="fixed inset-x-0 bottom-5 z-30 flex justify-center px-4">
+      <div className="fixed inset-x-0 z-30 flex justify-center px-4" style={{ bottom: "max(20px, calc(env(safe-area-inset-bottom) + 8px))" }}>
         <div ref={navRef} className="relative w-[360px]">
           {/* EXPANDED MENU */}
           <AnimatePresence>
