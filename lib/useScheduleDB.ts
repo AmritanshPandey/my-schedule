@@ -31,6 +31,14 @@ export interface Goal {
   deadline?: string;
 }
 
+export interface TaskCompletionEvent {
+  id: string;
+  taskId: string;
+  completedAt: string; // ISO 8601 timestamp
+  completionType: "task" | "subtask";
+  subtaskId?: string;
+}
+
 export interface Task {
   id: string;
   title: string;
@@ -40,6 +48,12 @@ export interface Task {
   icon: string;
   color: AccentColor;
   planId: string;
+  // ─── Completion state ───────────────────────────────────────
+  completed?: boolean;
+  completedAt?: string;               // ISO timestamp of last full completion
+  completedSubtaskIds?: string[];
+  completionHistory?: TaskCompletionEvent[]; // append-only event log
+  streakEnabled?: boolean;            // opt-in to streak tracking
 }
 
 export interface SummaryConfig {
@@ -82,6 +96,20 @@ export interface MetricEntry {
   date: string; // ISO "YYYY-MM-DD"
 }
 
+export interface Milestone {
+  id: string;
+  planId: string;
+  title: string;
+  description?: string;
+  targetDate?: string;       // ISO "YYYY-MM-DD"
+  estimatedDays?: number;
+  linkedTrackerId?: string;
+  completionStatus: "pending" | "completed";
+  completedDate?: string;    // ISO "YYYY-MM-DD"
+  notes?: string;
+  sortOrder: number;
+}
+
 export type Activity = Task;
 export type ProgressEntry = MetricEntry;
 
@@ -96,10 +124,11 @@ export interface Schedule {
   activities: DayActivities;
   progressTrackers: ProgressTracker[];
   metricEntries: MetricEntry[];
+  milestones: Milestone[];
 }
 
 const DB_NAME = "daily-planner";
-const DB_VERSION = 8;
+const DB_VERSION = 9;
 const STORE = "schedule";
 const RECORD_KEY = "data";
 
@@ -258,6 +287,26 @@ function trackersFromPlans(plans: Plan[], storedTrackers: ProgressTracker[]): Pr
   });
 }
 
+function normalizeMilestone(value: unknown): Milestone | null {
+  if (!value || typeof value !== "object") return null;
+  const m = value as Milestone;
+  if (!m.id || !m.planId || !m.title) return null;
+  const status = m.completionStatus === "completed" ? "completed" : "pending";
+  return {
+    id: m.id,
+    planId: m.planId,
+    title: m.title,
+    description: typeof m.description === "string" ? m.description : undefined,
+    targetDate: typeof m.targetDate === "string" ? m.targetDate : undefined,
+    estimatedDays: typeof m.estimatedDays === "number" ? m.estimatedDays : undefined,
+    linkedTrackerId: typeof m.linkedTrackerId === "string" ? m.linkedTrackerId : undefined,
+    completionStatus: status,
+    completedDate: typeof m.completedDate === "string" ? m.completedDate : undefined,
+    notes: typeof m.notes === "string" ? m.notes : undefined,
+    sortOrder: typeof m.sortOrder === "number" ? m.sortOrder : 0,
+  };
+}
+
 function normalizeMetricEntry(value: unknown, trackers: ProgressTracker[]): MetricEntry | null {
   if (!value || typeof value !== "object") return null;
   const e = value as MetricEntry;
@@ -285,6 +334,12 @@ function normalizeTasks(value: unknown, fallbackPlanId: string, fallbackIcon = "
         icon: task.icon || fallbackIcon,
         color: resolveAccentColor((task as Task & { color?: string }).color, task.icon || fallbackIcon),
         planId: task.planId || fallbackPlanId,
+        // Completion state — must be preserved across page reloads
+        ...(task.completed !== undefined && { completed: task.completed }),
+        ...(task.completedAt !== undefined && { completedAt: task.completedAt }),
+        ...(task.completedSubtaskIds !== undefined && { completedSubtaskIds: task.completedSubtaskIds }),
+        ...(task.completionHistory !== undefined && { completionHistory: task.completionHistory }),
+        ...(task.streakEnabled !== undefined && { streakEnabled: task.streakEnabled }),
       }];
     }
 
@@ -356,6 +411,9 @@ function migrate(raw: unknown): Schedule {
     const metricEntries: MetricEntry[] = Array.isArray(r.metricEntries)
       ? (r.metricEntries as unknown[]).map((entry) => normalizeMetricEntry(entry, progressTrackers)).filter((e): e is MetricEntry => e !== null)
       : [];
+    const milestones: Milestone[] = Array.isArray(r.milestones)
+      ? (r.milestones as unknown[]).map(normalizeMilestone).filter((m): m is Milestone => m !== null)
+      : [];
 
     return {
       plans,
@@ -364,6 +422,7 @@ function migrate(raw: unknown): Schedule {
       ) as DayActivities,
       progressTrackers,
       metricEntries,
+      milestones,
     };
   }
 
@@ -383,6 +442,7 @@ function migrate(raw: unknown): Schedule {
       ) as DayActivities,
       progressTrackers,
       metricEntries,
+      milestones: [],
     };
   }
 
@@ -408,12 +468,12 @@ function migrate(raw: unknown): Schedule {
   plans[0].items = Array.isArray(r.diet) ? (r.diet as ScheduleEntry[]) : [];
   plans[1].items = Array.isArray(r.workout) ? (r.workout as ScheduleEntry[]) : [];
 
-  return { plans, activities, progressTrackers, metricEntries };
+  return { plans, activities, progressTrackers, metricEntries, milestones: [] };
 }
 
 function emptyEmpty(): Schedule {
   const plans = defaultPlans();
-  return { plans, activities: emptyDayActivities(), progressTrackers: trackersFromPlans(plans, []), metricEntries: [] };
+  return { plans, activities: emptyDayActivities(), progressTrackers: trackersFromPlans(plans, []), metricEntries: [], milestones: [] };
 }
 
 export function useScheduleDB() {
@@ -436,15 +496,23 @@ export function useScheduleDB() {
   }, []);
 
   const isFirstRender = useRef(true);
+  const writeTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   useEffect(() => {
     if (!ready || !dbRef.current) return;
     if (isFirstRender.current) {
       isFirstRender.current = false;
       return;
     }
-    writeDB(dbRef.current, schedule).catch((err) =>
-      console.error("IndexedDB write failed:", err)
-    );
+    if (writeTimer.current) clearTimeout(writeTimer.current);
+    const db = dbRef.current;
+    writeTimer.current = setTimeout(() => {
+      writeDB(db, schedule).catch((err) =>
+        console.error("IndexedDB write failed:", err)
+      );
+    }, 500);
+    return () => {
+      if (writeTimer.current) clearTimeout(writeTimer.current);
+    };
   }, [schedule, ready]);
 
   function setSchedule(updater: (prev: Schedule) => Schedule) {

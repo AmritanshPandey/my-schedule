@@ -2,10 +2,11 @@
 
 import type { MetricEntry } from "@/lib/useScheduleDB";
 import type { AccentColor } from "@/lib/colorSystem";
+import { formatDateShort } from "@/lib/dateUtils";
 
 const STROKE: Record<AccentColor, string> = {
   blue:    "#3b82f6",
-  emerald: "#10b981",
+  emerald: "#22c55e",
   violet:  "#8b5cf6",
   pink:    "#ec4899",
   amber:   "#f59e0b",
@@ -14,7 +15,7 @@ const STROKE: Record<AccentColor, string> = {
 
 const AREA: Record<AccentColor, string> = {
   blue:    "rgba(59,130,246,0.12)",
-  emerald: "rgba(16,185,129,0.12)",
+  emerald: "rgba(34,197,94,0.12)",
   violet:  "rgba(139,92,246,0.12)",
   pink:    "rgba(236,72,153,0.12)",
   amber:   "rgba(245,158,11,0.12)",
@@ -33,10 +34,7 @@ const PAD = { top: 14, right: 14, bottom: 32, left: 44 };
 const chartW = W - PAD.left - PAD.right;
 const chartH = H - PAD.top - PAD.bottom;
 
-function fmtDate(iso: string): string {
-  const d = new Date(iso + "T00:00:00");
-  return d.toLocaleDateString("en-US", { month: "short", day: "numeric" });
-}
+const fmtDate = formatDateShort;
 
 function fmtVal(v: number): string {
   return Number.isInteger(v) ? String(v) : v.toFixed(1);

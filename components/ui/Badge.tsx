@@ -1,0 +1,90 @@
+"use client";
+
+import type { AccentColor } from "@/lib/colorSystem";
+
+// ── Accent-colored badge ──────────────────────────────────────────────────────
+
+const ACCENT_CLASSES: Record<AccentColor, string> = {
+  blue:    "bg-blue-500/10   text-blue-600   border-blue-500/25   dark:bg-blue-500/15   dark:text-blue-400   dark:border-blue-400/35",
+  emerald: "bg-green-500/10 text-green-600 border-green-500/25 dark:bg-green-500/15 dark:text-green-400 dark:border-green-400/35",
+  violet:  "bg-violet-500/10 text-violet-600  border-violet-500/25 dark:bg-violet-500/15  dark:text-violet-400  dark:border-violet-400/35",
+  pink:    "bg-pink-500/10   text-pink-600    border-pink-500/25   dark:bg-pink-500/15   dark:text-pink-400   dark:border-pink-400/35",
+  amber:   "bg-amber-500/10  text-amber-600   border-amber-500/25  dark:bg-amber-500/15  dark:text-amber-400  dark:border-amber-400/35",
+  cyan:    "bg-cyan-500/10   text-cyan-600    border-cyan-500/25   dark:bg-cyan-500/15   dark:text-cyan-400   dark:border-cyan-400/35",
+};
+
+interface AccentBadgeProps {
+  color: AccentColor;
+  icon?: React.ReactNode;
+  children: React.ReactNode;
+  className?: string;
+}
+
+export function AccentBadge({ color, icon, children, className = "" }: AccentBadgeProps) {
+  return (
+    <span
+      className={[
+        "inline-flex items-center gap-1 rounded-full border px-2.5 py-0.5 text-[11px] font-semibold",
+        ACCENT_CLASSES[color],
+        className,
+      ].join(" ")}
+    >
+      {icon}
+      {children}
+    </span>
+  );
+}
+
+// ── Neutral pill ──────────────────────────────────────────────────────────────
+// Used for duration labels, time ranges, counters, etc.
+
+interface PillProps {
+  children: React.ReactNode;
+  className?: string;
+}
+
+export function Pill({ children, className = "" }: PillProps) {
+  return (
+    <span
+      className={[
+        "inline-flex items-center rounded-full border border-neutral-200 px-2.5 py-0.5 text-[11px] font-semibold text-neutral-500",
+        "dark:border-white/[0.08] dark:text-neutral-400",
+        className,
+      ].join(" ")}
+    >
+      {children}
+    </span>
+  );
+}
+
+// ── Weekday pill ──────────────────────────────────────────────────────────────
+// Used in linked task rows to show which days a recurring task runs on.
+
+interface DayPillProps {
+  label: string;
+  active: boolean;
+}
+
+export function DayPill({ label, active }: DayPillProps) {
+  return (
+    <span
+      className={[
+        "flex h-[22px] w-[22px] shrink-0 items-center justify-center rounded-[5px] text-[11px] font-bold transition-colors",
+        active
+          ? "bg-neutral-950 text-white dark:bg-white dark:text-neutral-950"
+          : "text-neutral-400 dark:text-neutral-600",
+      ].join(" ")}
+    >
+      {label}
+    </span>
+  );
+}
+
+// ── Index-based badge color cycle (for meta fields) ───────────────────────────
+// Replaces inferBadgeClass() defined in ScheduleApp.tsx and PlanCard.tsx.
+
+const BADGE_CYCLE: AccentColor[] = ["blue", "emerald", "violet", "amber", "pink", "cyan"];
+
+export function cycleAccentColor(index: number): AccentColor {
+  return BADGE_CYCLE[index % BADGE_CYCLE.length];
+}

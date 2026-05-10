@@ -27,22 +27,14 @@ export default function BottomNav({
 
   const navRef = useRef<HTMLDivElement>(null);
 
-  // CLOSE ON OUTSIDE CLICK
   useEffect(() => {
-    function handleOutsideClick(event: MouseEvent) {
-      if (
-        navRef.current &&
-        !navRef.current.contains(event.target as Node)
-      ) {
+    function handleOutsideClick(e: MouseEvent) {
+      if (navRef.current && !navRef.current.contains(e.target as Node)) {
         setExpanded(false);
       }
     }
-
     document.addEventListener("mousedown", handleOutsideClick);
-
-    return () => {
-      document.removeEventListener("mousedown", handleOutsideClick);
-    };
+    return () => document.removeEventListener("mousedown", handleOutsideClick);
   }, []);
 
   return (
@@ -111,7 +103,7 @@ export default function BottomNav({
                     border-white/[0.08]
                   "
                 >
-                  {/* ADD ACTIVITY */}
+                  {/* ADD TASK */}
                   <motion.button
                     whileTap={{ scale: 0.95 }}
                     onClick={() => {
@@ -138,7 +130,7 @@ export default function BottomNav({
                       />
                     </div>
                     <span className="text-[11px] font-semibold text-white/70">
-                      Activity
+                      Task
                     </span>
                   </motion.button>
 
@@ -237,7 +229,7 @@ export default function BottomNav({
               dark:bg-neutral-800
             "
           >
-            {/* ACTIVITY */}
+            {/* TASKS */}
             <button
               type="button"
               onClick={() => {
@@ -268,7 +260,7 @@ export default function BottomNav({
               />
 
               <span className="text-[12px] font-medium leading-none">
-                Activity
+                Tasks
               </span>
             </button>
 

@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import type { DayKey } from "@/lib/useScheduleDB";
+import { parseTimeToMinutes, minutesToInputTime, currentMinutes } from "@/lib/timeUtils";
 
 const REPEAT_DAYS: DayKey[] = ["sunday", "monday", "tuesday", "wednesday", "thursday", "friday", "saturday"];
 
@@ -41,23 +42,12 @@ interface TimeSlotPickerProps {
   onRepeatDaysChange?: (days: DayKey[]) => void;
 }
 
+// inputToMinutes: parse "HH:MM" input format
 function inputToMinutes(value: string): number | null {
-  const match = value.match(/^(\d{2}):(\d{2})$/);
-  if (!match) return null;
-  return Number(match[1]) * 60 + Number(match[2]);
+  return parseTimeToMinutes(value);
 }
 
-function minutesToInput(value: number): string {
-  const clamped = Math.min(Math.max(value, 0), 23 * 60 + 59);
-  const hours = Math.floor(clamped / 60).toString().padStart(2, "0");
-  const minutes = (clamped % 60).toString().padStart(2, "0");
-  return `${hours}:${minutes}`;
-}
-
-function currentMinutes(): number {
-  const now = new Date();
-  return now.getHours() * 60 + now.getMinutes();
-}
+const minutesToInput = minutesToInputTime;
 
 function durationMinutes(startTime: string, endTime: string): number | null {
   const start = inputToMinutes(startTime);

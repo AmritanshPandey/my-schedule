@@ -1,5 +1,6 @@
 "use client";
 
+import { useEffect } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 
 interface BottomSheetProps {
@@ -20,10 +21,29 @@ export default function BottomSheet({
   maxHeight = "88vh",
   className = "",
 }: BottomSheetProps) {
+  // Esc to close + body scroll lock while open.
+  useEffect(() => {
+    if (!open) return;
+    function onKey(e: KeyboardEvent) {
+      if (e.key === "Escape") onClose();
+    }
+    const prevOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    window.addEventListener("keydown", onKey);
+    return () => {
+      document.body.style.overflow = prevOverflow;
+      window.removeEventListener("keydown", onKey);
+    };
+  }, [open, onClose]);
+
   return (
     <AnimatePresence>
       {open && (
-        <motion.div className="fixed inset-0 z-50 flex items-end justify-center">
+        <motion.div
+          className="fixed inset-0 z-50 flex items-end justify-center"
+          role="dialog"
+          aria-modal="true"
+        >
           {/* Backdrop */}
           <motion.div
             initial={{ opacity: 0 }}

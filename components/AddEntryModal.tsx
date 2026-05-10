@@ -1,11 +1,12 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { IconCheck } from "@tabler/icons-react";
 import BottomSheet from "@/components/ui/BottomSheet";
 import SheetHeader from "@/components/ui/SheetHeader";
 import Button from "@/components/ui/Button";
 import Input from "@/components/ui/Input";
+import { todayISO } from "@/lib/dateUtils";
 
 interface AddEntryModalProps {
   isOpen: boolean;
@@ -14,22 +15,9 @@ interface AddEntryModalProps {
   metric?: { name: string; unit: string };
 }
 
-function todayISO(): string {
-  return new Date().toISOString().split("T")[0];
-}
-
 export default function AddEntryModal({ isOpen, onClose, onSave, metric }: AddEntryModalProps) {
   const [value, setValue] = useState("");
   const [date, setDate] = useState(todayISO);
-
-  useEffect(() => {
-    if (!isOpen) return;
-    function onKey(e: KeyboardEvent) {
-      if (e.key === "Escape") onClose();
-    }
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-  }, [isOpen, onClose]);
 
   function handleSave() {
     const num = parseFloat(value);

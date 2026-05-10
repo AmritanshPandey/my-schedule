@@ -1,10 +1,11 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
-import ProgressChart from "@/components/ProgressChart";
 import AddEntryModal from "@/components/AddEntryModal";
-import AddTaskModal from "@/components/AddTaskModal";
+import { TaskSheet, type TaskSaveData } from "@/components/task/TaskSheet";
+import PlanDetailView from "@/components/plan/PlanDetailView";
+import { PlanCard } from "@/components/plan/PlanCard";
 import AppHeader from "@/components/AppHeader";
 import BottomNav from "@/components/BottomNav";
 import TimeSlotPicker from "@/components/TimeSlotPicker";
@@ -13,28 +14,20 @@ import {
   DAYS,
   DAY_LABELS,
   DayKey,
-  GoalDirection,
   MetricEntry,
+  Milestone,
   Plan,
   ProgressTracker,
   SummaryConfig,
   Task,
   categoryFromIcon,
 } from "@/lib/useScheduleDB";
-import { computeTrend } from "@/lib/trendUtils";
-import type { TrendResult } from "@/lib/trendUtils";
 import {
-  accentStyles,
   colorFromIcon,
-  resolveAccentColor,
   timelineCardStyles,
 } from "@/lib/colorSystem";
 import { SECTION_ICONS, getIconPickerStyle } from "@/components/SectionIcons";
 import {
-  IconArrowDown,
-  IconArrowDownRight,
-  IconArrowUp,
-  IconArrowUpRight,
   IconCheck,
   IconChevronLeft,
   IconCalendar,
@@ -42,11 +35,10 @@ import {
   IconClipboardList,
   IconEdit,
   IconLayoutList,
+  IconMinus,
   IconPlus,
   IconTable,
   IconTrash,
-  IconTrendingDown,
-  IconTrendingUp,
   IconX,
 } from "@tabler/icons-react";
 import { DndContext, DragEndEvent, PointerSensor, useSensor, useSensors } from "@dnd-kit/core";
@@ -55,61 +47,19 @@ import BottomSheet from "@/components/ui/BottomSheet";
 import SheetHeader from "@/components/ui/SheetHeader";
 import Button from "@/components/ui/Button";
 import Input from "@/components/ui/Input";
-
-// ─── Trend helpers ───────────────────────────────────────────────────────────
-
-function TrendBadge({ trend }: { trend: TrendResult }) {
-  const isPositive = trend.state === "positive";
-  const isUp = trend.direction === "up";
-  const colorClass = isPositive
-    ? "text-emerald-600 dark:text-emerald-400"
-    : "text-rose-600 dark:text-rose-400";
-  const TrendIcon = isUp ? IconTrendingUp : IconTrendingDown;
-  const iconColor = isPositive ? "text-emerald-500" : "text-rose-500";
-  const pctText = trend.pct !== null ? ` · ${Math.abs(trend.pct).toFixed(1)}%` : "";
-  return (
-    <div className="flex items-center gap-1 mt-1.5">
-      <TrendIcon size={14} className={`${iconColor} shrink-0`} />
-      <p className={`text-[12px] font-medium ${colorClass}`}>
-        {isUp ? "Up" : "Down"}{pctText} from last entry
-      </p>
-    </div>
-  );
-}
-
-function GoalDirectionPicker({ value, onChange }: { value: GoalDirection; onChange: (v: GoalDirection) => void }) {
-  const opts: { value: GoalDirection; Icon: typeof IconArrowUp; label: string }[] = [
-    { value: "increase_good", Icon: IconArrowUp, label: "Increasing is good" },
-    { value: "decrease_good", Icon: IconArrowDown, label: "Decreasing is good" },
-  ];
-  return (
-    <div>
-      <p className="mb-1.5 text-[11px] font-semibold uppercase tracking-[0.08em] text-neutral-400 dark:text-neutral-500">
-        Goal direction
-      </p>
-      <div className="grid grid-cols-2 gap-1.5">
-        {opts.map((opt) => {
-          const sel = value === opt.value;
-          return (
-            <button
-              key={opt.value}
-              type="button"
-              onClick={() => onChange(opt.value)}
-              className={`flex items-center justify-center gap-1.5 rounded-xl border px-3 py-2.5 text-[13px] font-semibold transition-all ${
-                sel
-                  ? "border-neutral-950 bg-neutral-950 text-white dark:border-white dark:bg-white dark:text-neutral-900"
-                  : "border-neutral-200 bg-neutral-50 text-neutral-500 hover:border-neutral-300 dark:border-white/10 dark:bg-white/[0.04] dark:text-neutral-400 dark:hover:border-white/20"
-              }`}
-            >
-              <opt.Icon size={14} strokeWidth={2.5} className="shrink-0" />
-              <span>{opt.label}</span>
-            </button>
-          );
-        })}
-      </div>
-    </div>
-  );
-}
+import { ListTaskCard } from "@/components/activity/ListTaskCard";
+import {
+  toggleTaskComplete,
+  toggleSubtaskComplete,
+  isTaskCompleted,
+  resolveTaskState,
+} from "@/lib/taskCompletion";
+import { createTask, updateTask, deleteTask, uid } from "@/lib/taskMutations";
+import { parseTimeToMinutes, formatDuration } from "@/lib/timeUtils";
+import { todayISO, daysBetween as daysBetweenUtil, formatDate } from "@/lib/dateUtils";
+import { getPlanCardStats } from "@/lib/planInsights";
+import { MainTitleSection, IconActionButton, CtaActionButton } from "@/components/ui/MainTitleSection";
+import { cycleAccentColor } from "@/components/ui/Badge";
 
 // ─── Constants ───────────────────────────────────────────────────────────────
 
@@ -121,27 +71,29 @@ const PLAN_DURATION_PRESETS: { label: string; days: number | null }[] = [
   { label: "Ongoing", days: null },
 ];
 
-function todayISO(): string {
-  return new Date().toISOString().split("T")[0];
-}
-
 function addDaysISO(days: number): string {
   const d = new Date();
   d.setDate(d.getDate() + days);
   return d.toISOString().split("T")[0];
 }
 
-function daysBetween(start: string, end: string): number | null {
-  if (!start || !end) return null;
-  const diff = Math.round((new Date(end).getTime() - new Date(start).getTime()) / 86400000);
-  return diff > 0 ? diff : null;
-}
+const daysBetween = daysBetweenUtil;
 
 const TIMELINE_START_HOUR = 4;
 const TIMELINE_END_HOUR = 28; // extends to 4 AM next day for overnight tasks
 const HOUR_HEIGHT = 112;
 const TIMELINE_TOP_PADDING = 20;
 const TIMELINE_BOTTOM_PADDING = 40;
+const TIMELINE_START_MINUTES = TIMELINE_START_HOUR * 60;
+const TIMELINE_END_MINUTES = TIMELINE_END_HOUR * 60;
+const TIMELINE_HEIGHT =
+  TIMELINE_TOP_PADDING +
+  (TIMELINE_END_HOUR - TIMELINE_START_HOUR) * HOUR_HEIGHT +
+  TIMELINE_BOTTOM_PADDING;
+const TIMELINE_HOURS: number[] = Array.from(
+  { length: TIMELINE_END_HOUR - TIMELINE_START_HOUR + 1 },
+  (_, i) => TIMELINE_START_HOUR + i
+);
 
 const JS_DAYS = [
   "sunday",
@@ -153,31 +105,10 @@ const JS_DAYS = [
   "saturday",
 ] as const;
 
-const WEEKDAY_ORDER: DayKey[] = [
-  "sunday",
-  "monday",
-  "tuesday",
-  "wednesday",
-  "thursday",
-  "friday",
-  "saturday",
-];
-
-const WEEKDAY_SHORT: Record<DayKey, string> = {
-  sunday: "Su",
-  monday: "Mo",
-  tuesday: "Tu",
-  wednesday: "We",
-  thursday: "Th",
-  friday: "Fr",
-  saturday: "Sa",
-};
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
-function uid() {
-  return Date.now().toString(36) + Math.random().toString(36).slice(2);
-}
+const formatPlanDate = formatDate;
 
 function inferUnit(label: string): string {
   const key = label.toLowerCase();
@@ -188,87 +119,16 @@ function inferUnit(label: string): string {
   return "";
 }
 
-function inferBadgeClass(index: number): string {
-  const cycle = [
-    "bg-blue-500/10 text-blue-600 border-blue-500/25 dark:bg-blue-500/15 dark:text-blue-400 dark:border-blue-400/35",
-    "bg-emerald-500/10 text-emerald-600 border-emerald-500/25 dark:bg-emerald-500/15 dark:text-emerald-400 dark:border-emerald-400/35",
-    "bg-violet-500/10 text-violet-600 border-violet-500/25 dark:bg-violet-500/15 dark:text-violet-400 dark:border-violet-400/35",
-    "bg-amber-500/10 text-amber-600 border-amber-500/25 dark:bg-amber-500/15 dark:text-amber-400 dark:border-amber-400/35",
-    "bg-pink-500/10 text-pink-600 border-pink-500/25 dark:bg-pink-500/15 dark:text-pink-400 dark:border-pink-400/35",
-  ];
-  return cycle[index % cycle.length];
-}
-
 function createSummaryFromMeta(metaFields: string[]): SummaryConfig[] {
   return metaFields.map((field, index) => ({
     label: field,
     metaKey: field,
     unit: inferUnit(field),
-    colorClass: inferBadgeClass(index),
+    colorClass: `accent-${cycleAccentColor(index)}`,
   }));
 }
 
-function emptyTaskDraft(): Omit<Task, "id"> {
-  return {
-    title: "",
-    description: "",
-    startTime: "",
-    endTime: "",
-    icon: "briefcase",
-    color: colorFromIcon("briefcase"),
-    planId: "",
-  };
-}
-
-function parseTimeToMinutes(value: string): number | null {
-  const raw = value.trim();
-  if (!raw) return null;
-  const twelveHour = raw.match(/^(\d{1,2}):(\d{2})\s*(AM|PM)$/i);
-  if (twelveHour) {
-    let hours = Number(twelveHour[1]);
-    const minutes = Number(twelveHour[2]);
-    const meridiem = twelveHour[3].toUpperCase();
-    if (meridiem === "PM" && hours !== 12) hours += 12;
-    if (meridiem === "AM" && hours === 12) hours = 0;
-    return hours * 60 + minutes;
-  }
-  const twentyFourHour = raw.match(/^(\d{1,2}):(\d{2})$/);
-  if (twentyFourHour) return Number(twentyFourHour[1]) * 60 + Number(twentyFourHour[2]);
-  return null;
-}
-
-function displayTimeToInputValue(value: string): string {
-  const minutes = parseTimeToMinutes(value);
-  if (minutes === null) return "";
-  const hours = Math.floor(minutes / 60).toString().padStart(2, "0");
-  const mins = (minutes % 60).toString().padStart(2, "0");
-  return `${hours}:${mins}`;
-}
-
-function inputValueToDisplayTime(value: string): string {
-  const match = value.match(/^(\d{2}):(\d{2})$/);
-  if (!match) return value.trim();
-  let hours = Number(match[1]);
-  const minutes = match[2];
-  const suffix = hours >= 12 ? "PM" : "AM";
-  if (hours === 0) hours = 12;
-  else if (hours > 12) hours -= 12;
-  return `${hours.toString().padStart(2, "0")}:${minutes} ${suffix}`;
-}
-
-function formatTaskDuration(startTime: string, endTime: string): string | null {
-  const start = parseTimeToMinutes(startTime);
-  let end = parseTimeToMinutes(endTime);
-  if (start === null || end === null) return null;
-  if (end <= start) end += 1440; // overnight task
-  const total = end - start;
-  if (total <= 0) return null;
-  const hours = Math.floor(total / 60);
-  const minutes = total % 60;
-  if (hours > 0 && minutes > 0) return `${hours}h ${minutes}m`;
-  if (hours > 0) return `${hours}h`;
-  return `${minutes}m`;
-}
+const formatTaskDuration = formatDuration;
 
 function formatHourLabel(hour24: number): string {
   const normalizedHour = hour24 % 24;
@@ -277,15 +137,6 @@ function formatHourLabel(hour24: number): string {
   return `${hour} ${suffix}`;
 }
 
-function formatPlanDate(iso: string): string {
-  const d = new Date(iso + "T00:00:00");
-  return d.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
-}
-
-function formatEntryDate(iso: string): string {
-  const d = new Date(iso + "T00:00:00");
-  return d.toLocaleDateString("en-US", { month: "short", day: "numeric" });
-}
 
 function clamp(value: number, min: number, max: number): number {
   return Math.min(Math.max(value, min), max);
@@ -294,16 +145,15 @@ function clamp(value: number, min: number, max: number): number {
 type CardSize = "xsmall" | "small" | "medium" | "large";
 
 function computeCardSize(height: number, laneCount: number): CardSize {
-  // Usable content = card height − 24px (py-0.5×2 + p-2.5×2 padding)
   // HOUR_HEIGHT = 112 → 30 min = 56px, 45 min = 84px, 60 min = 112px
-  // xsmall: title only         — card < 60px  (< ~32 min)
-  // small:  title + time       — card < 88px  (< ~47 min)
-  // medium: title + time+dur   — card < 108px (< ~58 min)
-  // large:  plan label + all   — card ≥ 108px (≥ 58 min)
+  // xsmall: title only              — card < 58px  (< ~31 min)
+  // small:  plan label + title      — card < 86px  (< ~46 min)
+  // medium: plan+title+time+dur     — card < 112px (< 60 min)
+  // large:  full layout, roomy      — card ≥ 112px (≥ 60 min)
   let size: CardSize;
-  if (height < 60) size = "xsmall";
-  else if (height < 88) size = "small";
-  else if (height < 108) size = "medium";
+  if (height < 58) size = "xsmall";
+  else if (height < 86) size = "small";
+  else if (height < 112) size = "medium";
   else size = "large";
 
   // Degrade one step per extra lane beyond 1
@@ -384,13 +234,15 @@ export default function ScheduleApp() {
   const [editMode, setEditMode] = useState(false);
   const [activeTab, setActiveTab] = useState(0);
 
-  const [addTaskModalOpen, setAddTaskModalOpen] = useState(false);
+  const [taskSheetOpen, setTaskSheetOpen] = useState(false);
+  const [taskSheetMode, setTaskSheetMode] = useState<"create" | "edit">("create");
+  const [taskSheetTask, setTaskSheetTask] = useState<Task | null>(null);
+  const [taskSheetPlanId, setTaskSheetPlanId] = useState<string | null>(null);
+
   const [selectedPlanId, setSelectedPlanId] = useState<string | null>(null);
   const [entryTracker, setEntryTracker] = useState<ProgressTracker | null>(null);
   const [weekOffset, setWeekOffset] = useState(0);
   const [viewMode, setViewMode] = useState<"list" | "timeline">("timeline");
-  const [editingTaskId, setEditingTaskId] = useState<string | null>(null);
-  const [editingTask, setEditingTask] = useState<Omit<Task, "id">>(emptyTaskDraft());
 
   const [addingPlan, setAddingPlan] = useState(false);
   const [newPlanTitle, setNewPlanTitle] = useState("");
@@ -401,15 +253,8 @@ export default function ScheduleApp() {
   const [newPlanMetaFields, setNewPlanMetaFields] = useState<string[]>([]);
   const [newPlanMetaInput, setNewPlanMetaInput] = useState("");
 
-  const [addingTracker, setAddingTracker] = useState(false);
-  const [addingTrackerForPlanId, setAddingTrackerForPlanId] = useState<string | null>(null);
-  const [newTrackerTitle, setNewTrackerTitle] = useState("");
-  const [newTrackerUnit, setNewTrackerUnit] = useState("");
-  const [newTrackerGoalDirection, setNewTrackerGoalDirection] = useState<GoalDirection>("increase_good");
   const [editingPlanId, setEditingPlanId] = useState<string | null>(null);
   const [editPlanDraft, setEditPlanDraft] = useState({ title: "", description: "", startDate: "", endDate: "" });
-  const [editingTrackerId, setEditingTrackerId] = useState<string | null>(null);
-  const [editTrackerDraft, setEditTrackerDraft] = useState({ title: "", unit: "", goalDirection: "increase_good" as GoalDirection });
 
   const [nowMinutes, setNowMinutes] = useState(getCurrentMinutes);
   const timelineScrollRef = useRef<HTMLDivElement | null>(null);
@@ -434,11 +279,9 @@ export default function ScheduleApp() {
     const id = requestAnimationFrame(() => {
       const timeline = timelineScrollRef.current;
       if (!timeline) return;
-      const timelineStartMinutes = TIMELINE_START_HOUR * 60;
-      const timelineEndMinutes = TIMELINE_END_HOUR * 60;
-      const clampedNow = clamp(getCurrentMinutes(), timelineStartMinutes, timelineEndMinutes);
+      const clampedNow = clamp(getCurrentMinutes(), TIMELINE_START_MINUTES, TIMELINE_END_MINUTES);
       const currentTop =
-        TIMELINE_TOP_PADDING + ((clampedNow - timelineStartMinutes) / 60) * HOUR_HEIGHT;
+        TIMELINE_TOP_PADDING + ((clampedNow - TIMELINE_START_MINUTES) / 60) * HOUR_HEIGHT;
       const targetTop = clamp(
         currentTop - timeline.clientHeight * 0.5,
         0,
@@ -451,84 +294,77 @@ export default function ScheduleApp() {
 
   // ─── Handlers ──────────────────────────────────────────────────────────────
 
-  function handleAddNewTask(task: Omit<Task, "id">, repeatDays: DayKey[] = [activeDay]) {
-    const plan = schedule.plans.find((p) => p.id === task.planId);
-    if (!plan) return;
-    const linkedTask: Omit<Task, "id"> = {
-      ...task,
-      planId: plan.id,
-      icon: plan.emoji,
-      color: plan.color,
-    };
-    const targetDays = Array.from(new Set(repeatDays.length > 0 ? repeatDays : [activeDay]));
-    setSchedule((prev) => ({
-      ...prev,
-      activities: targetDays.reduce(
-        (activities, day) => ({
-          ...activities,
-          [day]: [...activities[day], { ...linkedTask, id: uid() }],
-        }),
-        { ...prev.activities }
-      ),
-    }));
+  // ── TaskSheet open/close helpers ──────────────────────────────────────────
+
+  function openCreateSheet(initialPid?: string | null) {
+    setTaskSheetPlanId(initialPid ?? null);
+    setTaskSheetTask(null);
+    setTaskSheetMode("create");
+    setTaskSheetOpen(true);
+  }
+
+  function openEditSheet(task: Task) {
+    setTaskSheetTask(task);
+    setTaskSheetPlanId(task.planId);
+    setTaskSheetMode("edit");
+    setTaskSheetOpen(true);
+  }
+
+  function closeTaskSheet() {
+    setTaskSheetOpen(false);
+    setTaskSheetTask(null);
+    setTaskSheetPlanId(null);
+  }
+
+  // ── Unified create + edit save handler ────────────────────────────────────
+
+  function handleTaskSheetSave(data: TaskSaveData) {
+    if (data.taskId) {
+      // Edit mode
+      setSchedule(updateTask(data.taskId, activeDay, data.taskDraft, data.planItems));
+    } else {
+      // Create mode
+      setSchedule(createTask(data.taskDraft, data.repeatDays, data.planItems));
+    }
+    closeTaskSheet();
   }
 
   function handleDeleteTask(taskId: string) {
-    setSchedule((prev) => ({
-      ...prev,
-      activities: {
-        ...prev.activities,
-        [activeDay]: prev.activities[activeDay].filter((t) => t.id !== taskId),
-      },
-    }));
+    setSchedule(deleteTask(taskId, activeDay));
   }
 
-  function startEditingTask(task: Task) {
-    setEditingTaskId(task.id);
-    setEditingTask({
-      title: task.title,
-      description: task.description ?? "",
-      startTime: displayTimeToInputValue(task.startTime),
-      endTime: displayTimeToInputValue(task.endTime),
-      icon: task.icon,
-      color: resolveAccentColor(task.color, task.icon),
-      planId: task.planId,
-    });
-  }
+  const handleToggleTaskComplete = useCallback(
+    (taskId: string, allSubtaskIds: string[]) => {
+      setSchedule((prev) => ({
+        ...prev,
+        activities: {
+          ...prev.activities,
+          [activeDay]: prev.activities[activeDay].map((t) =>
+            t.id === taskId ? { ...t, ...toggleTaskComplete(t, allSubtaskIds) } : t
+          ),
+        },
+      }));
+    },
+    [activeDay, setSchedule]
+  );
 
-  function cancelEditingTask() {
-    setEditingTaskId(null);
-    setEditingTask(emptyTaskDraft());
-  }
-
-  function saveEditingTask(taskId: string) {
-    const title = editingTask.title.trim();
-    const startTime = inputValueToDisplayTime(editingTask.startTime);
-    const endTime = inputValueToDisplayTime(editingTask.endTime);
-    const plan = schedule.plans.find((p) => p.id === editingTask.planId);
-    if (!title || !startTime || !endTime || !plan) return;
-    setSchedule((prev) => ({
-      ...prev,
-      activities: {
-        ...prev.activities,
-        [activeDay]: prev.activities[activeDay].map((task) =>
-          task.id === taskId
-            ? {
-                ...task,
-                title,
-                description: editingTask.description?.trim() || undefined,
-                startTime,
-                endTime,
-                icon: plan.emoji,
-                color: plan.color,
-                planId: plan.id,
-              }
-            : task
-        ),
-      },
-    }));
-    cancelEditingTask();
-  }
+  const handleToggleSubtask = useCallback(
+    (taskId: string, subtaskId: string) => {
+      setSchedule((prev) => ({
+        ...prev,
+        activities: {
+          ...prev.activities,
+          [activeDay]: prev.activities[activeDay].map((t) => {
+            if (t.id !== taskId) return t;
+            const plan = prev.plans.find((p) => p.id === t.planId);
+            const totalSubtasks = plan?.items.length ?? 0;
+            return { ...t, ...toggleSubtaskComplete(t, subtaskId, totalSubtasks) };
+          }),
+        },
+      }));
+    },
+    [activeDay, setSchedule]
+  );
 
   function handleAddPlan() {
     const title = newPlanTitle.trim();
@@ -627,45 +463,12 @@ export default function ScheduleApp() {
     setAddingPlan(true);
   }
 
-  function handleAddTracker(planId: string) {
-    const title = newTrackerTitle.trim();
-    if (!title) return;
-    const tracker: ProgressTracker = {
-      id: uid(),
-      planId,
-      title,
-      type: "number",
-      unit: newTrackerUnit.trim() || undefined,
-      goalDirection: newTrackerGoalDirection,
-    };
-    setSchedule((prev) => ({ ...prev, progressTrackers: [...prev.progressTrackers, tracker] }));
-    setNewTrackerTitle("");
-    setNewTrackerUnit("");
-    setNewTrackerGoalDirection("increase_good");
-    setAddingTracker(false);
-    setAddingTrackerForPlanId(null);
-  }
-
   function handleDeleteTracker(trackerId: string) {
     setSchedule((prev) => ({
       ...prev,
       progressTrackers: prev.progressTrackers.filter((t) => t.id !== trackerId),
       metricEntries: prev.metricEntries.filter((e) => e.trackerId !== trackerId),
     }));
-  }
-
-  function handleSaveEditTracker(trackerId: string) {
-    const title = editTrackerDraft.title.trim();
-    if (!title) return;
-    setSchedule((prev) => ({
-      ...prev,
-      progressTrackers: prev.progressTrackers.map((t) =>
-        t.id === trackerId
-          ? { ...t, title, unit: editTrackerDraft.unit.trim() || undefined, goalDirection: editTrackerDraft.goalDirection }
-          : t
-      ),
-    }));
-    setEditingTrackerId(null);
   }
 
   function handleSaveEditPlan(planId: string) {
@@ -706,52 +509,98 @@ export default function ScheduleApp() {
     }));
   }
 
+  // ─── Milestone handlers ──────────────────────────────────────────────────
+
+  function handleAddMilestone(planId: string, data: Omit<Milestone, "id" | "planId">) {
+    const ms: Milestone = { id: uid(), planId, ...data };
+    setSchedule((prev) => ({ ...prev, milestones: [...(prev.milestones ?? []), ms] }));
+  }
+
+  function handleUpdateMilestone(id: string, data: Partial<Milestone>) {
+    setSchedule((prev) => ({
+      ...prev,
+      milestones: (prev.milestones ?? []).map((m) => (m.id === id ? { ...m, ...data } : m)),
+    }));
+  }
+
+  function handleDeleteMilestone(id: string) {
+    setSchedule((prev) => ({
+      ...prev,
+      milestones: (prev.milestones ?? []).filter((m) => m.id !== id),
+    }));
+  }
+
+  function handleCompleteMilestone(id: string) {
+    setSchedule((prev) => ({
+      ...prev,
+      milestones: (prev.milestones ?? []).map((m) =>
+        m.id === id
+          ? { ...m, completionStatus: "completed", completedDate: new Date().toISOString().split("T")[0] }
+          : m
+      ),
+    }));
+  }
+
   // ─── Derived data ──────────────────────────────────────────────────────────
 
-  const storedDayTasks = schedule.activities[activeDay];
-  const dayTasks = sortTasksByTime(storedDayTasks);
-
-  const timelineHours = Array.from(
-    { length: TIMELINE_END_HOUR - TIMELINE_START_HOUR + 1 },
-    (_, i) => TIMELINE_START_HOUR + i
+  const dayTasks = useMemo(
+    () => sortTasksByTime(schedule.activities[activeDay]),
+    [schedule.activities, activeDay]
   );
-  const timelineStartMinutes = TIMELINE_START_HOUR * 60;
-  const timelineEndMinutes = TIMELINE_END_HOUR * 60;
-  const timelineHeight =
-    TIMELINE_TOP_PADDING +
-    (TIMELINE_END_HOUR - TIMELINE_START_HOUR) * HOUR_HEIGHT +
-    TIMELINE_BOTTOM_PADDING;
+
+  // O(1) plan lookup — avoids .find() in every render loop iteration.
+  const plansById = useMemo(() => {
+    const m = new Map<string, Plan>();
+    for (const p of schedule.plans) m.set(p.id, p);
+    return m;
+  }, [schedule.plans]);
+
+  const dayProgress = useMemo(() => {
+    const total = dayTasks.length;
+    const done = dayTasks.filter((t) =>
+      isTaskCompleted(t, plansById.get(t.planId)?.items.length ?? 0)
+    ).length;
+    return { done, total, pct: total > 0 ? Math.round((done / total) * 100) : 0 };
+  }, [dayTasks, plansById]);
+
   const showCurrentTime =
     activeDay === todayKey &&
-    nowMinutes >= timelineStartMinutes &&
-    nowMinutes <= timelineEndMinutes;
+    nowMinutes >= TIMELINE_START_MINUTES &&
+    nowMinutes <= TIMELINE_END_MINUTES;
   const currentTimeTop =
-    TIMELINE_TOP_PADDING + ((nowMinutes - timelineStartMinutes) / 60) * HOUR_HEIGHT;
+    TIMELINE_TOP_PADDING + ((nowMinutes - TIMELINE_START_MINUTES) / 60) * HOUR_HEIGHT;
 
-  const weekDates = getWeekDates(weekOffset);
-  const todayMidnight = new Date();
-  todayMidnight.setHours(0, 0, 0, 0);
-  const weekLabel = weekDates[2].date.toLocaleDateString("en-US", {
-    month: "long",
-    year: "numeric",
-  });
+  const { weekDates, weekLabel, todayMidnightTime } = useMemo(() => {
+    const dates = getWeekDates(weekOffset);
+    const midnight = new Date();
+    midnight.setHours(0, 0, 0, 0);
+    return {
+      weekDates: dates,
+      weekLabel: dates[2].date.toLocaleDateString("en-US", { month: "long", year: "numeric" }),
+      todayMidnightTime: midnight.getTime(),
+    };
+  }, [weekOffset]);
 
-  const selectedPlan = selectedPlanId
-    ? schedule.plans.find((p) => p.id === selectedPlanId) ?? null
-    : null;
+  const selectedPlan = useMemo(
+    () => (selectedPlanId ? plansById.get(selectedPlanId) ?? null : null),
+    [selectedPlanId, plansById]
+  );
 
-  function getUniquePlanTasks(planId: string): Array<{ task: Task; activeDays: DayKey[] }> {
-    const seen = new Map<string, { task: Task; activeDays: DayKey[] }>();
-    for (const day of DAYS) {
-      for (const task of schedule.activities[day]) {
-        if (task.planId !== planId) continue;
-        const key = `${task.title.trim().toLowerCase()}|${task.startTime}|${task.endTime}`;
-        if (!seen.has(key)) seen.set(key, { task, activeDays: [day] });
-        else seen.get(key)!.activeDays.push(day);
+  const getUniquePlanTasks = useCallback(
+    (planId: string): Array<{ task: Task; activeDays: DayKey[] }> => {
+      const seen = new Map<string, { task: Task; activeDays: DayKey[] }>();
+      for (const day of DAYS) {
+        for (const task of schedule.activities[day]) {
+          if (task.planId !== planId) continue;
+          const key = `${task.title.trim().toLowerCase()}|${task.startTime}|${task.endTime}`;
+          if (!seen.has(key)) seen.set(key, { task, activeDays: [day] });
+          else seen.get(key)!.activeDays.push(day);
+        }
       }
-    }
-    return Array.from(seen.values());
-  }
+      return Array.from(seen.values());
+    },
+    [schedule.activities]
+  );
 
   function formatPlanRange(plan: Plan): string {
     if (!plan.startDate && !plan.endDate) return "No date range";
@@ -761,12 +610,9 @@ export default function ScheduleApp() {
     return `Ends ${formatPlanDate(plan.endDate ?? "")}`;
   }
 
-  function planDayCount(plan: Plan): number | null {
-    return daysBetween(plan.startDate ?? "", plan.endDate ?? "");
-  }
 
   function getTaskPresentation(task: Task) {
-    const linkedPlan = schedule.plans.find((p) => p.id === task.planId) ?? null;
+    const linkedPlan = task.planId ? plansById.get(task.planId) ?? null : null;
     return {
       linkedPlan,
       iconName: linkedPlan?.emoji ?? task.icon,
@@ -774,23 +620,22 @@ export default function ScheduleApp() {
     };
   }
 
-  function getTimelineTaskLayouts(tasks: Task[]) {
-    const intervals = tasks
+  const timelineTaskLayouts = useMemo(() => {
+    const intervals = dayTasks
       .map((task) => {
-        const start = parseTimeToMinutes(task.startTime) ?? timelineStartMinutes;
+        const start = parseTimeToMinutes(task.startTime) ?? TIMELINE_START_MINUTES;
         let end = parseTimeToMinutes(task.endTime) ?? start + 30;
-        // Overnight task: end time is on the next day
         const isOvernight = end <= start;
         if (isOvernight) end += 1440;
-        const cs = clamp(start, timelineStartMinutes, timelineEndMinutes);
-        const ce = clamp(Math.max(end, cs + 15), timelineStartMinutes, timelineEndMinutes);
+        const cs = clamp(start, TIMELINE_START_MINUTES, TIMELINE_END_MINUTES);
+        const ce = clamp(Math.max(end, cs + 15), TIMELINE_START_MINUTES, TIMELINE_END_MINUTES);
         return {
           task,
           start: cs,
           end: ce,
           isOvernight,
-          isTruncated: isOvernight && end > timelineEndMinutes,
-          top: TIMELINE_TOP_PADDING + ((cs - timelineStartMinutes) / 60) * HOUR_HEIGHT,
+          isTruncated: isOvernight && end > TIMELINE_END_MINUTES,
+          top: TIMELINE_TOP_PADDING + ((cs - TIMELINE_START_MINUTES) / 60) * HOUR_HEIGHT,
           height: ((ce - cs) / 60) * HOUR_HEIGHT,
           lane: 0,
           laneCount: 1,
@@ -819,9 +664,9 @@ export default function ScheduleApp() {
     });
     if (cluster.length > 0) finishCluster();
     return layouts;
-  }
+  }, [dayTasks]);
 
-  function getTaskLaneStyle(layout: ReturnType<typeof getTimelineTaskLayouts>[number]) {
+  function getTaskLaneStyle(layout: typeof timelineTaskLayouts[number]) {
     const gap = layout.laneCount > 1 ? 5 : 0;
     const width = 100 / layout.laneCount;
     return {
@@ -836,11 +681,17 @@ export default function ScheduleApp() {
 
   if (!ready) {
     return (
-      <main className="min-h-screen bg-neutral-50 flex items-center justify-center dark:bg-neutral-950">
-        <div className="h-5 w-5 rounded-full border-2 border-neutral-300 border-t-neutral-700 animate-spin dark:border-white/20 dark:border-t-white/60" />
+      <main className="min-h-screen bg-neutral-50 flex flex-col items-center justify-center gap-3 dark:bg-neutral-950">
+        <img src="/logo.svg" alt="PlanR" className="h-7 w-auto opacity-80 dark:hidden" />
+        <img src="/logo-dark.svg" alt="PlanR" className="hidden h-7 w-auto opacity-80 dark:block" />
+        <div className="h-1 w-24 overflow-hidden rounded-full bg-neutral-200 dark:bg-white/10">
+          <div className="h-full w-1/3 rounded-full bg-neutral-700 dark:bg-white/60 animate-loading-bar" />
+        </div>
       </main>
     );
   }
+
+  const editPlanDuration = daysBetween(editPlanDraft.startDate, editPlanDraft.endDate);
 
   // ─── Render helpers ────────────────────────────────────────────────────────
 
@@ -854,14 +705,66 @@ export default function ScheduleApp() {
     const { linkedPlan, color } = getTaskPresentation(task);
     const tone = timelineCardStyles(color);
     const duration = formatTaskDuration(task.startTime, task.endTime);
-    const base = `${cardClassName} ${tone.cardBg} ${tone.accentBar}`;
+    const totalSubtasks = linkedPlan?.items.length ?? 0;
+    const allSubtaskIds = linkedPlan?.items.map((i) => i.id) ?? [];
+    const taskState = resolveTaskState(task, totalSubtasks);
+    const done    = taskState === "completed";
+    const partial = taskState === "partial";
 
-    // xsmall: title only, centered
+    // Completed cards recede at card level — preserve color, just lower opacity
+    const base = `${cardClassName} ${tone.cardBg} ${tone.accentBar} transition-all duration-300${done ? " opacity-70" : ""}`;
+    const titleClass = `${tone.title}${done ? " line-through" : ""}`;
+
+    // ── Completion checkbox (medium + large) ──────────────────────────────────
+    const completionBtn = (cardSize === "large" || cardSize === "medium") ? (
+      <motion.button
+        type="button"
+        whileTap={{ scale: 0.82 }}
+        transition={{ type: "spring", stiffness: 500, damping: 25 }}
+        onClick={(e) => { e.stopPropagation(); handleToggleTaskComplete(task.id, allSubtaskIds); }}
+        aria-label={done ? "Mark incomplete" : "Mark complete"}
+        className={`absolute top-2 right-2 z-10 flex h-[20px] w-[20px] shrink-0 items-center justify-center rounded-[5px] border-2 transition-colors duration-200 ${
+          done || partial
+            ? "border-transparent bg-green-500"
+            : "border-neutral-500/50 bg-transparent dark:border-white/55"
+        }`}
+      >
+        <AnimatePresence mode="wait" initial={false}>
+          {done && (
+            <motion.span
+              key="check"
+              initial={{ opacity: 0, scale: 0.4, rotate: -15 }}
+              animate={{ opacity: 1, scale: 1, rotate: 0 }}
+              exit={{ opacity: 0, scale: 0.4 }}
+              transition={{ type: "spring", stiffness: 500, damping: 22 }}
+            >
+              <IconCheck size={10} strokeWidth={3} className="text-white" />
+            </motion.span>
+          )}
+          {partial && (
+            <motion.span
+              key="partial"
+              initial={{ opacity: 0, scale: 0.4 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.4 }}
+              transition={{ duration: 0.15 }}
+            >
+              <IconMinus size={10} strokeWidth={3} className="text-white" />
+            </motion.span>
+          )}
+        </AnimatePresence>
+      </motion.button>
+    ) : null;
+
+    // ── xsmall: title only — tap card to toggle ────────────────────────────
     if (cardSize === "xsmall") {
       return (
-        <div className={base}>
+        <div
+          className={`${base} cursor-pointer`}
+          onClick={() => handleToggleTaskComplete(task.id, allSubtaskIds)}
+        >
           <div className="flex h-full items-center min-w-0">
-            <span className={`text-[11px] font-semibold leading-none truncate ${tone.title}`}>
+            <span className={`text-[11px] font-semibold leading-none truncate ${titleClass}`}>
               {task.title}
             </span>
           </div>
@@ -869,247 +772,82 @@ export default function ScheduleApp() {
       );
     }
 
-    // small: title + time, vertically centered
+    // ── small: plan label + title — tap card to toggle ─────────────────────
     if (cardSize === "small") {
       return (
-        <div className={base}>
+        <div
+          className={`${base} cursor-pointer`}
+          onClick={() => handleToggleTaskComplete(task.id, allSubtaskIds)}
+        >
           <div className="flex h-full flex-col justify-center gap-[2px] min-w-0">
-            <span className={`text-[12px] font-semibold leading-tight truncate ${tone.title}`}>
+            {linkedPlan && (
+              <p className={`text-[8px] font-semibold uppercase tracking-[0.08em] truncate shrink-0 leading-none ${tone.planLabel}`}>
+                {linkedPlan.title}
+              </p>
+            )}
+            <span className={`text-[11px] font-semibold leading-snug truncate ${titleClass}`}>
               {task.title}
-            </span>
-            <span className={`text-[10px] font-medium ${tone.time}`}>
-              {task.startTime}{isOvernight ? " →" : ` – ${task.endTime}`}
             </span>
           </div>
         </div>
       );
     }
 
-    // medium: title + time/duration
+    // ── medium: plan label + title + time + duration ───────────────────────
     if (cardSize === "medium") {
       return (
-        <div className={base}>
-          <div className="flex h-full flex-col justify-between min-w-0">
-            <h3 className={`text-[13px] font-semibold leading-snug line-clamp-2 ${tone.title}`}>
+        <div className={`${base} relative`}>
+          {completionBtn}
+          <div className="flex h-full flex-col min-w-0 pr-7">
+            {linkedPlan && (
+              <p className={`text-[9px] font-semibold uppercase tracking-[0.08em] truncate shrink-0 leading-none mb-0.5 ${tone.planLabel}`}>
+                {linkedPlan.title}
+              </p>
+            )}
+            <h3 className={`text-[12px] font-semibold leading-snug flex-1 min-w-0 line-clamp-2 ${titleClass}`}>
               {task.title}
             </h3>
-            <p className={`text-[11px] font-medium shrink-0 ${tone.time}`}>
-              {task.startTime}{isOvernight ? " → next day" : ` – ${task.endTime}`}
-              {duration && ` · ${duration}`}
-              {isTruncated && " ↓"}
-            </p>
-          </div>
-        </div>
-      );
-    }
-
-    // large: plan label → title → time + duration
-    return (
-      <div className={base}>
-        <div className="flex flex-col h-full min-w-0">
-          {linkedPlan && (
-            <p className={`text-[10px] font-semibold uppercase tracking-[0.08em] truncate mb-1 shrink-0 ${tone.planLabel}`}>
-              {linkedPlan.title}
-            </p>
-          )}
-          <h3 className={`text-[14px] font-semibold leading-snug flex-1 min-w-0 line-clamp-3 ${tone.title}`}>
-            {task.title}
-          </h3>
-          <p className={`text-[11px] font-medium mt-auto pt-1 shrink-0 ${tone.time}`}>
-            {task.startTime}{isOvernight ? " → next day" : ` – ${task.endTime}`}
-            {duration && ` · ${duration}`}
-            {isTruncated && " ↓"}
-          </p>
-        </div>
-      </div>
-    );
-  }
-
-  function renderListViewTask(
-    task: Task,
-    dragHandleProps?: { attributes: Record<string, unknown>; listeners: Record<string, unknown> }
-  ) {
-    if (editingTaskId === task.id) {
-      return (
-        <div className="rounded-2xl w-full min-w-0 border border-neutral-200/80 bg-white shadow-sm dark:border-white/[0.08] dark:bg-neutral-900">
-          <div className="space-y-3 p-4">
-            <p className="text-[13px] font-semibold text-neutral-900 dark:text-white">Edit time block</p>
-            {schedule.plans.length > 0 && (
-              <div>
-                <p className="mb-1.5 text-[11px] font-semibold uppercase tracking-[0.08em] text-neutral-400 dark:text-neutral-500">Plan</p>
-                <div className="flex flex-wrap gap-1.5">
-                  {schedule.plans.map((plan) => {
-                    const ic = SECTION_ICONS.find((i) => i.name === plan.emoji);
-                    const PI = (ic ?? SECTION_ICONS[0]).icon;
-                    const sel = editingTask.planId === plan.id;
-                    return (
-                      <button
-                        key={plan.id}
-                        type="button"
-                        onClick={() =>
-                          setEditingTask((prev) => ({ ...prev, planId: plan.id, icon: plan.emoji, color: plan.color }))
-                        }
-                        className={`inline-flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-xs font-semibold transition-all ${
-                          sel
-                            ? `${accentStyles(plan.color).iconSolid} shadow-sm`
-                            : `${accentStyles(plan.color).tint} ${accentStyles(plan.color).text} hover:opacity-90`
-                        }`}
-                      >
-                        <PI size={11} strokeWidth={2} />
-                        {plan.title}
-                      </button>
-                    );
-                  })}
-                </div>
-              </div>
-            )}
-            <div className="space-y-2">
-              <input
-                value={editingTask.title}
-                onChange={(e) => setEditingTask((prev) => ({ ...prev, title: e.target.value }))}
-                placeholder="Task title"
-                onKeyDown={(e) => {
-                  if (e.key === "Enter") saveEditingTask(task.id);
-                  if (e.key === "Escape") cancelEditingTask();
-                }}
-                className="h-10 w-full rounded-xl border border-neutral-200 bg-neutral-50 px-3 text-sm text-neutral-900 outline-none placeholder:text-neutral-400 focus:border-neutral-300 focus:bg-neutral-100 dark:border-white/10 dark:bg-white/[0.04] dark:text-white dark:placeholder:text-neutral-500 dark:focus:border-white/20 dark:focus:bg-white/[0.07] transition-colors"
-              />
-              <input
-                value={editingTask.description}
-                onChange={(e) => setEditingTask((prev) => ({ ...prev, description: e.target.value }))}
-                placeholder="Description (optional)"
-                onKeyDown={(e) => {
-                  if (e.key === "Enter") saveEditingTask(task.id);
-                  if (e.key === "Escape") cancelEditingTask();
-                }}
-                className="h-10 w-full rounded-xl border border-neutral-200 bg-neutral-50 px-3 text-sm text-neutral-900 outline-none placeholder:text-neutral-400 focus:border-neutral-300 focus:bg-neutral-100 dark:border-white/10 dark:bg-white/[0.04] dark:text-white dark:placeholder:text-neutral-500 dark:focus:border-white/20 dark:focus:bg-white/[0.07] transition-colors"
-              />
-            </div>
-            <TimeSlotPicker
-              startTime={editingTask.startTime}
-              endTime={editingTask.endTime}
-              onStartChange={(startTime) => setEditingTask((prev) => ({ ...prev, startTime }))}
-              onEndChange={(endTime) => setEditingTask((prev) => ({ ...prev, endTime }))}
-              activeDay={activeDay}
-            />
-            <div className="flex gap-2 pt-1">
-              <button
-                type="button"
-                onClick={() => saveEditingTask(task.id)}
-                className="inline-flex flex-1 h-10 items-center justify-center gap-1.5 rounded-xl bg-neutral-950 px-4 text-sm font-semibold text-white transition-colors hover:bg-neutral-800 dark:bg-white dark:text-neutral-900"
-              >
-                <IconCheck size={15} /> Save
-              </button>
-              <button
-                type="button"
-                onClick={cancelEditingTask}
-                className="inline-flex h-10 items-center gap-1.5 rounded-xl border border-neutral-200 px-4 text-sm font-medium text-neutral-600 hover:bg-neutral-50 dark:border-white/10 dark:text-neutral-400 dark:hover:bg-white/5"
-              >
-                <IconX size={15} /> Cancel
-              </button>
-            </div>
-          </div>
-        </div>
-      );
-    }
-
-    const { linkedPlan } = getTaskPresentation(task);
-    const duration = formatTaskDuration(task.startTime, task.endTime);
-
-    return (
-      <div
-        className={`flex flex-col gap-2 rounded-2xl border border-neutral-200 bg-white px-4 py-4 transition-colors dark:border-white/[0.08] dark:bg-neutral-900 ${editMode && dragHandleProps ? "cursor-grab active:cursor-grabbing" : ""}`}
-        {...(editMode && dragHandleProps ? { ...dragHandleProps.attributes, ...dragHandleProps.listeners } : {})}
-      >
-        {linkedPlan && (
-          <p className="text-[11px] font-semibold uppercase tracking-[0.08em] text-neutral-400 dark:text-neutral-500">
-            {linkedPlan.title}
-          </p>
-        )}
-        <div className="flex items-start justify-between gap-3">
-          <div className="min-w-0 flex-1">
-            <p className="text-[20px] font-semibold leading-tight text-neutral-900 dark:text-white">
-              {task.title}
-            </p>
-            <div className="flex items-center gap-2.5 mt-2">
-              <p className="text-[14px] font-medium text-neutral-500 dark:text-neutral-400">
-                {task.startTime} – {task.endTime}
-              </p>
+            <div className="flex items-center gap-1 mt-auto flex-wrap">
+              <span className={`text-[10px] font-medium shrink-0 ${tone.time}`}>
+                {task.startTime}{isOvernight ? " →" : ` – ${task.endTime}`}
+                {isTruncated && " ↓"}
+              </span>
               {duration && (
-                <span className="text-[12px] font-medium px-2.5 py-0.5 rounded-full border border-neutral-200 text-neutral-500 dark:border-white/[0.08] dark:text-neutral-400">
+                <span className={`shrink-0 inline-flex items-center rounded-full px-1.5 py-[1px] text-[9px] font-semibold ${tone.durationBadge}`}>
                   {duration}
                 </span>
               )}
             </div>
           </div>
-          {editMode && (
-            <div className="flex shrink-0 items-center gap-0.5">
-              <button
-                type="button"
-                onClick={(e) => { e.stopPropagation(); startEditingTask(task); }}
-                className="inline-flex h-8 w-8 items-center justify-center rounded-lg text-neutral-400 hover:text-neutral-700 dark:hover:text-neutral-200 transition-colors"
-              >
-                <IconEdit size={15} />
-              </button>
-              <button
-                type="button"
-                onClick={(e) => { e.stopPropagation(); handleDeleteTask(task.id); }}
-                className="inline-flex h-8 w-8 items-center justify-center rounded-lg text-neutral-400 hover:text-rose-500 dark:hover:text-rose-400 transition-colors"
-              >
-                <IconTrash size={15} />
-              </button>
-            </div>
-          )}
         </div>
-      </div>
-    );
-  }
+      );
+    }
 
-  function renderLinkedTaskCard(task: Task, activeDays: DayKey[]) {
-    const { color } = getTaskPresentation(task);
-    const tone = timelineCardStyles(color);
-    const duration = formatTaskDuration(task.startTime, task.endTime);
-
+    // ── large: plan label → title → time + duration pill ──────────────────
     return (
-      <div
-        key={`${task.id}-${activeDays.join("")}`}
-        className="flex items-center gap-3 px-1 py-3.5 border-b border-neutral-100 last:border-b-0 dark:border-white/[0.05]"
-      >
-        <div className="flex-1 min-w-0">
-          <p className="text-[16px] font-semibold leading-tight text-neutral-900 dark:text-white">
-            {task.title}
-          </p>
-          <div className="flex items-center gap-2.5 mt-1.5 flex-wrap">
-            <p className={`text-[14px] font-medium shrink-0 ${tone.time}`}>
-              {task.startTime} – {task.endTime}{duration && ` · ${duration}`}
+      <div className={`${base} relative`}>
+        {completionBtn}
+        <div className="flex flex-col h-full min-w-0 pr-7">
+          {linkedPlan && (
+            <p className={`text-[9px] font-semibold uppercase tracking-[0.09em] truncate shrink-0 leading-none mb-0.5 ${tone.planLabel}`}>
+              {linkedPlan.title}
             </p>
-            <div className="flex items-center gap-[8px]">
-              {WEEKDAY_ORDER.map((day) => {
-                const isActive = activeDays.includes(day);
-                return (
-                  <span
-                    key={day}
-                    className={`text-[12px] font-bold px-1.5 py-1.5 rounded-[4px] transition-colors ${
-                      isActive
-                        ? "bg-neutral-950 text-white dark:bg-white dark:text-neutral-950"
-                        : "text-neutral-500 dark:text-neutral-500"
-                    }`}
-                  >
-                    {WEEKDAY_SHORT[day]}
-                  </span>
-                );
-              })}
-            </div>
+          )}
+          <h3 className={`text-[13px] font-semibold leading-snug flex-1 min-w-0 line-clamp-3 ${titleClass}`}>
+            {task.title}
+          </h3>
+          <div className="flex items-center gap-1.5 mt-auto pt-0.5 flex-wrap">
+            <span className={`text-[11px] font-medium shrink-0 ${tone.time}`}>
+              {task.startTime}{isOvernight ? " → next day" : ` – ${task.endTime}`}
+              {isTruncated && " ↓"}
+            </span>
+            {duration && (
+              <span className={`shrink-0 inline-flex items-center rounded-full px-2 py-[2px] text-[10px] font-semibold ${tone.durationBadge}`}>
+                {duration}
+              </span>
+            )}
           </div>
         </div>
-
-        <button
-          type="button"
-          onClick={() => handleDeleteLinkedTask(task, activeDays)}
-          className="h-8 w-8 shrink-0 flex items-center justify-center rounded-lg text-neutral-400 hover:text-rose-500 dark:text-neutral-600 dark:hover:text-rose-400 transition-colors"
-        >
-          <IconTrash size={20} />
-        </button>
       </div>
     );
   }
@@ -1117,6 +855,7 @@ export default function ScheduleApp() {
   // ─── Add Plan Sheet ────────────────────────────────────────────────────────
 
   function renderAddPlanSheet() {
+    const newPlanDuration = daysBetween(newPlanStartDate, newPlanEndDate);
     return (
       <div className="space-y-4 p-5 pb-8">
         <SheetHeader eyebrow="New" title="Create Plan" onClose={() => setAddingPlan(false)} />
@@ -1146,7 +885,7 @@ export default function ScheduleApp() {
             </div>
             <div>
               <p className="mb-1 text-[11px] font-semibold uppercase tracking-[0.08em] text-neutral-400 dark:text-neutral-500">
-                End date{(() => { const d = daysBetween(newPlanStartDate, newPlanEndDate); return d ? <span className="normal-case font-normal ml-1">({d} days)</span> : null; })()}
+                End date{newPlanDuration ? <span className="normal-case font-normal ml-1">({newPlanDuration} days)</span> : null}
               </p>
               <input
                 type="date"
@@ -1281,25 +1020,19 @@ export default function ScheduleApp() {
   function renderPlanList() {
     return (
       <div className="px-4 pt-5 pb-8">
-        {/* Title section */}
-        <div className="flex items-start justify-between gap-4 mb-6">
-          <div>
-            <p className="text-[10px] font-semibold uppercase tracking-[0.1em] text-neutral-500 dark:text-neutral-400">
-              Stay on track
-            </p>
-            <h1 className="mt-1 text-[22px] font-semibold text-neutral-950 dark:text-white leading-tight">
-              My Plans
-            </h1>
-          </div>
-          <button
-            type="button"
-            onClick={() => setAddingPlan(true)}
-            className="inline-flex items-center justify-center gap-1.5 rounded-xl border border-neutral-200 bg-white px-3.5 h-9 text-[12px] font-semibold text-neutral-700 transition-all hover:bg-neutral-50 active:scale-95 dark:border-white/10 dark:bg-neutral-900 dark:text-neutral-400 dark:hover:bg-white/5"
-          >
-            <IconPlus size={14} strokeWidth={2.5} />
-            Add New Plan
-          </button>
-        </div>
+        {/* Header */}
+        <MainTitleSection
+          label="Stay on track"
+          title="My Plans"
+          actions={
+            <CtaActionButton
+              label="Add New Plan"
+              icon={<IconPlus size={14} strokeWidth={2.5} />}
+              onClick={() => setAddingPlan(true)}
+            />
+          }
+          className="mb-6"
+        />
 
         {/* Empty state */}
         {schedule.plans.length === 0 && (
@@ -1309,7 +1042,7 @@ export default function ScheduleApp() {
             </div>
             <p className="text-[15px] font-semibold text-neutral-700 dark:text-neutral-300">No plans yet</p>
             <p className="mt-1 text-[13px] text-neutral-400 dark:text-neutral-500 max-w-[200px] mx-auto">
-              Create your first plan to organize activities and track progress.
+              Create your first plan to organize tasks and track progress.
             </p>
           </div>
         )}
@@ -1321,379 +1054,34 @@ export default function ScheduleApp() {
             const trackerCount = schedule.progressTrackers.filter(
               (t) => t.planId === plan.id
             ).length;
-            const planAccent = accentStyles(plan.color);
-            const planIconEntry = SECTION_ICONS.find((e) => e.name === plan.emoji) ?? SECTION_ICONS[0];
-            const PlanIcon = planIconEntry.icon;
+            const planIconEntry =
+              SECTION_ICONS.find((e) => e.name === plan.emoji) ?? SECTION_ICONS[0];
+            const { dayState, consistency } = getPlanCardStats(
+              plan,
+              schedule.activities,
+              todayKey
+            );
+            const dateRange =
+              plan.startDate || plan.endDate ? formatPlanRange(plan) : null;
+
             return (
-              <button
+              <PlanCard
                 key={plan.id}
-                type="button"
-                onClick={() => setSelectedPlanId(plan.id)}
-                className="w-full rounded-[24px] border border-neutral-200 bg-white p-5 text-left transition-colors hover:border-neutral-300 active:scale-[0.99] dark:border-white/10 dark:bg-neutral-900 dark:hover:border-white/20"
-              >
-                {/* Top: large icon left + content right */}
-                <div className="flex items-start gap-4">
-                  <div className={`h-14 w-14 shrink-0 rounded-2xl flex items-center justify-center ${planAccent.tint} ${planAccent.icon}`}>
-                    <PlanIcon size={24} strokeWidth={1.6} />
-                  </div>
-                  <div className="flex-1 min-w-0 pt-0.5">
-                    <h2 className="text-[17px] font-semibold text-neutral-950 dark:text-white leading-snug">
-                      {plan.title}
-                    </h2>
-                    {(plan.startDate || plan.endDate) && (
-                      <div className="flex items-center gap-1.5 mt-1.5">
-                        <IconCalendar size={13} strokeWidth={1.8} className="shrink-0 text-neutral-400 dark:text-neutral-500" />
-                        <p className="text-[13px] text-neutral-400 dark:text-neutral-500">
-                          {formatPlanRange(plan)}
-                          {planDayCount(plan) !== null && (
-                            <span className="ml-1.5 text-[11px] font-semibold rounded-full border border-neutral-200 dark:border-white/10 px-1.5 py-0.5 text-neutral-400 dark:text-neutral-500">
-                              {planDayCount(plan)}d
-                            </span>
-                          )}
-                        </p>
-                      </div>
-                    )}
-                    {plan.description && (
-                      <p className="mt-1.5 text-[13px] leading-relaxed text-neutral-500 dark:text-neutral-400 line-clamp-2">
-                        {plan.description}
-                      </p>
-                    )}
-                  </div>
-                </div>
-
-                {/* Divider */}
-                <div className="mt-4 mb-3.5 border-t border-neutral-100 dark:border-white/[0.06]" />
-
-                {/* Bottom: counts with icons */}
-                <div className="flex items-center gap-5">
-                  <span className="inline-flex items-center gap-1.5 text-[13px] font-medium text-neutral-400 dark:text-neutral-500">
-                    <IconClipboardList size={14} strokeWidth={1.8} />
-                    Tasks Linked: {uniqueTasks.length}
-                  </span>
-                  <span className="inline-flex items-center gap-1.5 text-[13px] font-medium text-neutral-400 dark:text-neutral-500">
-                    <IconTrendingUp size={14} strokeWidth={1.8} />
-                    Progress tracking: {trackerCount}
-                  </span>
-                </div>
-              </button>
+                plan={plan}
+                PlanIcon={planIconEntry.icon}
+                taskCount={uniqueTasks.length}
+                trackerCount={trackerCount}
+                dayState={dayState}
+                consistency={consistency}
+                dateRange={dateRange}
+                onSelect={() => setSelectedPlanId(plan.id)}
+              />
             );
           })}
         </div>
       </div>
     );
   }
-
-  // ─── Plan detail ───────────────────────────────────────────────────────────
-
-  function renderPlanDetail(plan: Plan) {
-    const uniqueTasks = getUniquePlanTasks(plan.id);
-    const trackers = schedule.progressTrackers.filter((t) => t.planId === plan.id);
-
-    return (
-      <div className="pb-32">
-        {/* HERO */}
-        <div className="px-4 pt-6 space-y-3">
-          <h1 className="text-[40px] font-bold leading-tight text-neutral-950 dark:text-white">
-            {plan.title}
-          </h1>
-          {(plan.startDate || plan.endDate) && (
-            <div className="flex items-center gap-2">
-              <IconCalendar size={16} strokeWidth={1.8} className="shrink-0 text-neutral-400 dark:text-neutral-500" />
-              <p className="text-[16px] font-semibold text-neutral-500 dark:text-neutral-400">
-                {formatPlanRange(plan)}
-              </p>
-              {planDayCount(plan) !== null && (
-                <span className="text-[12px] font-semibold rounded-full border border-neutral-200 dark:border-white/10 px-2 py-0.5 text-neutral-400 dark:text-neutral-500">
-                  {planDayCount(plan)}d
-                </span>
-              )}
-            </div>
-          )}
-          {plan.description && (
-            <p className="text-[18px] leading-relaxed text-neutral-800 dark:text-neutral-200">
-              {plan.description}
-            </p>
-          )}
-        </div>
-
-        {/* LINKED TASKS */}
-        <section className="mt-8 px-4">
-          <div className="flex items-center justify-between mb-4">
-            <div>
-              <p className="text-[10px] font-semibold uppercase tracking-[0.1em] text-neutral-400 dark:text-neutral-500">
-                Linked
-              </p>
-              <h2 className="text-[16px] font-semibold text-neutral-950 dark:text-white mt-0.5">
-                Planned Tasks
-              </h2>
-            </div>
-            <button
-              type="button"
-              onClick={() => setAddTaskModalOpen(true)}
-              className="inline-flex items-center gap-1.5 text-[13px] font-semibold text-neutral-500 hover:text-neutral-900 dark:text-neutral-400 dark:hover:text-white transition-colors"
-            >
-              <IconPlus size={16} strokeWidth={2} />
-              Add Task
-            </button>
-          </div>
-
-          <div className="rounded-[24px] border border-neutral-200 bg-white px-4 dark:border-white/[0.08] dark:bg-neutral-900">
-            {uniqueTasks.length === 0 ? (
-              <div className="py-10 text-center">
-                <p className="text-[14px] font-medium text-neutral-400 dark:text-neutral-500 max-w-[220px] mx-auto">
-                  Link activities to this plan to keep everything connected.
-                </p>
-              </div>
-            ) : (
-              uniqueTasks.map(({ task, activeDays }) =>
-                renderLinkedTaskCard(task, activeDays)
-              )
-            )}
-          </div>
-        </section>
-
-        {/* PROGRESS TRACKING */}
-        <section className="mt-8 px-4">
-          <div className="flex items-end justify-between mb-4">
-            <div>
-              <p className="text-[10px] font-semibold uppercase tracking-[0.1em] text-neutral-400 dark:text-neutral-500">
-                Plan Progress
-              </p>
-              <h2 className="text-[16px] font-semibold text-neutral-950 dark:text-white mt-0.5">
-                Metrics and trends
-              </h2>
-            </div>
-            <button
-              type="button"
-              onClick={() => {
-                setAddingTrackerForPlanId(plan.id);
-                setAddingTracker(true);
-              }}
-              className="inline-flex items-center gap-1.5 text-[13px] font-semibold text-neutral-500 hover:text-neutral-900 dark:text-neutral-400 dark:hover:text-white transition-colors"
-            >
-              <IconPlus size={16} strokeWidth={2} />
-              Add Tracker
-            </button>
-          </div>
-
-          {trackers.length === 0 ? (
-            <div className="rounded-[24px] border border-dashed border-neutral-200 py-10 text-center dark:border-white/[0.08]">
-              <p className="text-[14px] font-medium text-neutral-400 dark:text-neutral-500">
-                No progress trackers yet.
-              </p>
-              <button
-                type="button"
-                onClick={() => {
-                  setAddingTrackerForPlanId(plan.id);
-                  setAddingTracker(true);
-                }}
-                className="mt-3 inline-flex items-center gap-1.5 rounded-xl border border-neutral-200 px-4 py-2 text-[13px] font-semibold text-neutral-600 hover:bg-neutral-50 dark:border-white/10 dark:text-neutral-400 dark:hover:bg-white/[0.04] transition-colors"
-              >
-                <IconPlus size={16} strokeWidth={2} />
-                Create Tracker
-              </button>
-            </div>
-          ) : (
-            <div className="space-y-4">
-              {trackers.map((tracker) => {
-                const entries = schedule.metricEntries
-                  .filter((e) => e.trackerId === tracker.id)
-                  .sort((a, b) => a.date.localeCompare(b.date));
-                const lastTwo = entries.slice(-2);
-                const goalDir = tracker.goalDirection ?? "increase_good";
-                const trendResult =
-                  lastTwo.length === 2
-                    ? computeTrend({ previous: lastTwo[0].value, current: lastTwo[1].value, goalDirection: goalDir })
-                    : null;
-                const isEditingThisTracker = editingTrackerId === tracker.id;
-
-                return (
-                  <div
-                    key={tracker.id}
-                    className="rounded-[24px] border border-neutral-200 bg-white overflow-hidden dark:border-white/[0.08] dark:bg-neutral-900"
-                  >
-                    {/* Tracker header */}
-                    <div className="px-5 pt-5 pb-4">
-                      {isEditingThisTracker ? (
-                        <div className="space-y-2">
-                          <input
-                            value={editTrackerDraft.title}
-                            onChange={(e) => setEditTrackerDraft((d) => ({ ...d, title: e.target.value }))}
-                            placeholder="Tracker name"
-                            autoFocus
-                            className="h-10 w-full rounded-xl border border-neutral-200 bg-neutral-50 px-3 text-[14px] font-medium text-neutral-900 outline-none focus:border-neutral-400 focus:bg-neutral-100 dark:border-white/10 dark:bg-white/[0.04] dark:text-white dark:focus:border-white/20 dark:focus:bg-white/[0.07] transition-colors"
-                          />
-                          <input
-                            value={editTrackerDraft.unit}
-                            onChange={(e) => setEditTrackerDraft((d) => ({ ...d, unit: e.target.value }))}
-                            placeholder="Unit (e.g. kg, km, hr)"
-                            className="h-10 w-full rounded-xl border border-neutral-200 bg-neutral-50 px-3 text-[14px] text-neutral-700 outline-none focus:border-neutral-400 focus:bg-neutral-100 dark:border-white/10 dark:bg-white/[0.04] dark:text-neutral-300 dark:focus:border-white/20 dark:focus:bg-white/[0.07] transition-colors"
-                          />
-                          <GoalDirectionPicker
-                            value={editTrackerDraft.goalDirection}
-                            onChange={(gd) => setEditTrackerDraft((d) => ({ ...d, goalDirection: gd }))}
-                          />
-                          <div className="flex gap-2 pt-1">
-                            <button
-                              type="button"
-                              onClick={() => handleSaveEditTracker(tracker.id)}
-                              className="inline-flex flex-1 h-9 items-center justify-center gap-1 rounded-xl bg-neutral-950 text-[13px] font-semibold text-white dark:bg-white dark:text-neutral-950"
-                            >
-                              <IconCheck size={16} /> Save
-                            </button>
-                            <button
-                              type="button"
-                              onClick={() => setEditingTrackerId(null)}
-                              className="inline-flex h-9 px-4 items-center gap-1 rounded-xl border border-neutral-200 text-[13px] font-medium text-neutral-500 dark:border-white/10 dark:text-neutral-400"
-                            >
-                              Cancel
-                            </button>
-                          </div>
-                        </div>
-                      ) : (
-                        <div className="flex items-start justify-between gap-3">
-                          <div className="flex-1 min-w-0">
-                            <p className="text-[10px] font-semibold uppercase tracking-[0.1em] text-neutral-400 dark:text-neutral-500">
-                              Plan
-                            </p>
-                            <h3 className="text-[20px] font-semibold text-neutral-950 dark:text-white mt-0.5 leading-tight">
-                              {tracker.title}
-                              {tracker.unit && (
-                                <span className="ml-1.5 text-[15px] font-normal text-neutral-400">
-                                  ({tracker.unit})
-                                </span>
-                              )}
-                            </h3>
-                            {trendResult !== null && trendResult.direction !== "neutral" && (
-                              <TrendBadge trend={trendResult} />
-                            )}
-                          </div>
-                          <div className="flex items-center gap-0.5 shrink-0 -mt-0.5">
-                            <button
-                              type="button"
-                              onClick={() => {
-                                setEditingTrackerId(tracker.id);
-                                setEditTrackerDraft({ title: tracker.title, unit: tracker.unit ?? "", goalDirection: tracker.goalDirection ?? "increase_good" });
-                              }}
-                              className="h-8 w-8 flex items-center justify-center rounded-lg text-neutral-400 hover:text-neutral-700 dark:text-neutral-500 dark:hover:text-neutral-300 transition-colors"
-                            >
-                              <IconEdit size={16} strokeWidth={2} />
-                            </button>
-                            <button
-                              type="button"
-                              onClick={() => handleDeleteTracker(tracker.id)}
-                              className="h-8 w-8 flex items-center justify-center rounded-lg text-neutral-400 hover:text-rose-500 dark:text-neutral-500 dark:hover:text-rose-400 transition-colors"
-                            >
-                              <IconTrash size={16} strokeWidth={2} />
-                            </button>
-                          </div>
-                        </div>
-                      )}
-                    </div>
-
-                    {/* Chart */}
-                    {!isEditingThisTracker && (
-                      <div className="px-3 pb-3">
-                        {entries.length > 0 ? (
-                          <ProgressChart
-                            entries={entries}
-                            color={plan.color}
-                            metric={{ name: tracker.title, unit: tracker.unit ?? "" }}
-                          />
-                        ) : (
-                          <div className="rounded-xl bg-neutral-50 dark:bg-white/[0.03] py-8 text-center text-[13px] text-neutral-400 dark:text-neutral-500">
-                            No entries yet
-                          </div>
-                        )}
-                      </div>
-                    )}
-
-                    {/* Recent entries */}
-                    {!isEditingThisTracker && (
-                      <div className="border-t border-neutral-100 dark:border-white/[0.06] px-5 pb-5">
-                        <div className="flex items-center justify-between py-3.5">
-                          <p className="text-[12px] font-semibold text-neutral-500 dark:text-neutral-400">
-                            Recent entries
-                          </p>
-                          <button
-                            type="button"
-                            onClick={() => setEntryTracker(tracker)}
-                            className="inline-flex items-center gap-1.5 text-[12px] font-semibold text-neutral-500 hover:text-neutral-900 dark:text-neutral-400 dark:hover:text-white transition-colors"
-                          >
-                            <IconPlus size={12} strokeWidth={2} />
-                            Add Entry
-                          </button>
-                        </div>
-                        {entries.length === 0 ? (
-                          <p className="text-[12px] text-neutral-400 dark:text-neutral-500 pb-1">
-                            Tap Add Entry to start tracking.
-                          </p>
-                        ) : (() => {
-                            const recent = entries.slice(-5);
-                            return recent
-                              .slice()
-                              .reverse()
-                              .map((entry, index) => {
-                                const chronIdx = recent.length - 1 - index;
-                                const prev = chronIdx > 0 ? recent[chronIdx - 1] : null;
-                                const entryTrend = prev
-                                  ? computeTrend({ previous: prev.value, current: entry.value, goalDirection: goalDir })
-                                  : null;
-                                return (
-                                  <div
-                                    key={entry.id}
-                                    className="flex items-center justify-between py-2.5 border-b border-neutral-100 last:border-b-0 dark:border-white/[0.06]"
-                                  >
-                                    <div className="flex items-center gap-3">
-                                      <span className="text-[11px] font-bold text-neutral-300 dark:text-neutral-700 w-4 text-center tabular-nums">
-                                        {entries.length - index}
-                                      </span>
-                                      <p className="text-[13px] font-medium text-neutral-600 dark:text-neutral-300">
-                                        {formatEntryDate(entry.date)}
-                                      </p>
-                                    </div>
-                                    <div className="flex items-center gap-2">
-                                      {entryTrend && entryTrend.direction !== "neutral" && (
-                                        entryTrend.direction === "up"
-                                          ? <IconArrowUpRight size={13} strokeWidth={2.5} className={`shrink-0 ${entryTrend.state === "positive" ? "text-emerald-500" : "text-rose-500"}`} />
-                                          : <IconArrowDownRight size={13} strokeWidth={2.5} className={`shrink-0 ${entryTrend.state === "positive" ? "text-emerald-500" : "text-rose-500"}`} />
-                                      )}
-                                      <span className="text-[15px] font-semibold text-neutral-950 dark:text-white tabular-nums">
-                                        {entry.value}
-                                        {tracker.unit && (
-                                          <span className="text-[11px] font-medium text-neutral-400 ml-1">
-                                            {tracker.unit}
-                                          </span>
-                                        )}
-                                      </span>
-                                      <button
-                                        type="button"
-                                        onClick={() => handleDeleteEntry(entry.id)}
-                                        className="h-6 w-6 flex items-center justify-center rounded-lg text-neutral-300 hover:text-rose-500 dark:text-neutral-700 dark:hover:text-rose-400 transition-colors"
-                                      >
-                                        <IconTrash size={16} strokeWidth={2} />
-                                      </button>
-                                    </div>
-                                  </div>
-                                );
-                              });
-                          })()
-                        }
-                      </div>
-                    )}
-                  </div>
-                );
-              })}
-            </div>
-          )}
-        </section>
-      </div>
-    );
-  }
-
-  // ─── Timeline layouts ──────────────────────────────────────────────────────
-
-  const timelineTaskLayouts = getTimelineTaskLayouts(dayTasks);
 
   // ─── JSX ──────────────────────────────────────────────────────────────────
 
@@ -1733,7 +1121,7 @@ export default function ScheduleApp() {
       {/* ── Content ────────────────────────────────────────────────────────── */}
       <div className="max-w-lg mx-auto pb-40">
 
-        {/* ── Activity Tab ─────────────────────────────────────────────────── */}
+        {/* ── Tasks Tab ────────────────────────────────────────────────────── */}
         {activeTab === 0 && (
           <div>
             {/* Calendar */}
@@ -1743,19 +1131,28 @@ export default function ScheduleApp() {
                   <span className="text-[16px] font-semibold text-neutral-900 dark:text-white">
                     {weekLabel}
                   </span>
-                  <div className="flex items-center gap-0.5">
+                  <div className="flex items-center gap-1">
+                    {weekOffset !== 0 && (
+                      <button
+                        type="button"
+                        onClick={() => { setWeekOffset(0); setActiveDay(todayKey); }}
+                        className="inline-flex h-7 items-center rounded-lg px-2 text-[11px] font-semibold text-neutral-500 hover:bg-neutral-100 dark:text-neutral-400 dark:hover:bg-white/[0.07] transition-colors"
+                      >
+                        Today
+                      </button>
+                    )}
                     <button
                       type="button"
                       onClick={() => setWeekOffset((w) => w - 1)}
+                      aria-label="Previous week"
                       className="inline-flex h-7 w-7 items-center justify-center rounded-lg text-neutral-400 hover:bg-neutral-100 dark:text-neutral-500 dark:hover:bg-white/[0.07] transition-colors"
                     >
                       <IconChevronLeft size={20} strokeWidth={2} />
                     </button>
-                  
-              
                     <button
                       type="button"
                       onClick={() => setWeekOffset((w) => w + 1)}
+                      aria-label="Next week"
                       className="inline-flex h-7 w-7 items-center justify-center rounded-lg text-neutral-400 hover:bg-neutral-100 dark:text-neutral-500 dark:hover:bg-white/[0.07] transition-colors"
                     >
                       <IconChevronRight size={20} strokeWidth={2} />
@@ -1764,7 +1161,7 @@ export default function ScheduleApp() {
                 </div>
                 <div className="grid grid-cols-7 gap-1">
                   {weekDates.map(({ day, date }) => {
-                    const isDateToday = date.getTime() === todayMidnight.getTime();
+                    const isDateToday = date.getTime() === todayMidnightTime;
                     const isActive = day === activeDay;
                     return (
                       <button
@@ -1795,64 +1192,41 @@ export default function ScheduleApp() {
             </div>
 
             {/* Title section */}
-            <div className="flex items-center justify-between px-4 pt-5 pb-3">
-              <div>
-                <p className="text-[10px] font-semibold uppercase tracking-[0.1em] text-neutral-500 dark:text-neutral-400">
-                  My Schedule
-                </p>
-                <h2 className="text-[16px] font-semibold text-neutral-950 dark:text-white leading-tight mt-0.5">
-                  Today&apos;s Task
-                </h2>
-              </div>
-              <div className="flex items-center gap-2">
-                <button
-                  type="button"
-                  onClick={() => { setViewMode((v) => (v === "list" ? "timeline" : "list")); setEditMode(false); }}
-                  className="inline-flex items-center justify-center gap-1.5 rounded-xl border border-neutral-200 bg-white px-3.5 h-9 text-[12px] font-semibold text-neutral-700 transition-all hover:bg-neutral-50 active:scale-95 dark:border-white/10 dark:bg-neutral-900 dark:text-neutral-400 dark:hover:bg-white/5"
-                >
-                  {viewMode === "timeline" ? (
-                    <>List <IconLayoutList size={16} strokeWidth={2} /></>
-                  ) : (
-                    <>Timeline <IconTable size={16} strokeWidth={2} /></>
-                  )}
-                </button>
-                {dayTasks.length > 0 && viewMode === "list" && (
-                  <motion.button
-                    type="button"
-                    onClick={() => setEditMode((prev) => !prev)}
-                    whileTap={{ scale: 0.95 }}
-                    className={`inline-flex h-9 w-9 items-center justify-center rounded-xl border transition-all ${
-                      editMode
-                        ? "border-neutral-950 bg-neutral-950 text-white dark:border-white dark:bg-white dark:text-neutral-950"
-                        : "border-neutral-200 bg-white text-neutral-500 hover:bg-neutral-50 dark:border-white/10 dark:bg-neutral-900 dark:text-neutral-400 dark:hover:bg-white/5"
-                    }`}
-                  >
-                    <AnimatePresence mode="wait" initial={false}>
-                      {editMode ? (
-                        <motion.span
-                          key="check"
-                          initial={{ opacity: 0, scale: 0.8 }}
-                          animate={{ opacity: 1, scale: 1 }}
-                          exit={{ opacity: 0, scale: 0.8 }}
-                          transition={{ duration: 0.15 }}
-                        >
-                          <IconCheck size={16} strokeWidth={2.5} />
-                        </motion.span>
+            <div className="px-4 pt-5 pb-3">
+              <MainTitleSection
+                label="My Schedule"
+                title="Today's Tasks"
+                progressMeta={
+                  dayProgress.total > 0
+                    ? dayProgress.done === dayProgress.total
+                      ? "done"
+                      : { done: dayProgress.done, total: dayProgress.total }
+                    : undefined
+                }
+                progressBar={dayProgress.total > 0 ? { pct: dayProgress.pct } : undefined}
+                actions={
+                  <>
+                    <button
+                      type="button"
+                      onClick={() => { setViewMode((v) => (v === "list" ? "timeline" : "list")); setEditMode(false); }}
+                      className="inline-flex items-center justify-center gap-1.5 rounded-xl border border-neutral-200 bg-white px-3.5 h-9 text-[12px] font-semibold text-neutral-700 transition-all hover:bg-neutral-50 active:scale-95 dark:border-white/10 dark:bg-neutral-900 dark:text-neutral-400 dark:hover:bg-white/[0.06]"
+                    >
+                      {viewMode === "timeline" ? (
+                        <>List <IconLayoutList size={16} strokeWidth={2} /></>
                       ) : (
-                        <motion.span
-                          key="edit"
-                          initial={{ opacity: 0, scale: 0.8 }}
-                          animate={{ opacity: 1, scale: 1 }}
-                          exit={{ opacity: 0, scale: 0.8 }}
-                          transition={{ duration: 0.15 }}
-                        >
-                          <IconEdit size={16} strokeWidth={2} />
-                        </motion.span>
+                        <>Timeline <IconTable size={16} strokeWidth={2} /></>
                       )}
-                    </AnimatePresence>
-                  </motion.button>
-                )}
-              </div>
+                    </button>
+                    <IconActionButton
+                      icon={<IconEdit size={16} strokeWidth={2} />}
+                      saveIcon={<IconCheck size={16} strokeWidth={2.5} />}
+                      saving={editMode}
+                      onClick={() => setEditMode((prev) => !prev)}
+                      show={dayTasks.length > 0 && viewMode === "list"}
+                    />
+                  </>
+                }
+              />
             </div>
 
             {/* Task content */}
@@ -1867,10 +1241,18 @@ export default function ScheduleApp() {
                     transition={{ duration: 0.2, ease: "easeOut" }}
                   >
                     {dayTasks.length === 0 ? (
-                      <div className="rounded-2xl border border-dashed border-neutral-200 py-12 text-center text-[13px] text-neutral-400 dark:border-white/10 dark:text-neutral-500">
-                        {schedule.plans.length === 0
-                          ? "Create a plan first, then add activities."
-                          : "Nothing scheduled — tap + to add your first activity."}
+                      <div className="rounded-2xl border border-dashed border-neutral-200 py-10 text-center dark:border-white/10">
+                        <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-neutral-100 dark:bg-white/[0.06] mx-auto mb-3">
+                          <IconCalendar size={20} strokeWidth={1.8} className="text-neutral-400 dark:text-neutral-500" />
+                        </div>
+                        <p className="text-[14px] font-semibold text-neutral-600 dark:text-neutral-300">
+                          {schedule.plans.length === 0 ? "No plans yet" : "Nothing scheduled"}
+                        </p>
+                        <p className="mt-1 text-[12px] text-neutral-400 dark:text-neutral-500">
+                          {schedule.plans.length === 0
+                            ? "Create a plan first, then add tasks."
+                            : "Tap + to schedule your first task for this day."}
+                        </p>
                       </div>
                     ) : editMode ? (
                       <DndContext sensors={sensors} onDragEnd={handleTasksDragEnd}>
@@ -1879,8 +1261,20 @@ export default function ScheduleApp() {
                             {dayTasks.map((task) => (
                               <SortableTaskCard key={task.id} task={task}>
                                 {(dragHandleProps) => (
-                                  <div className="w-full min-w-0 animate-panel-in">
-                                    {renderListViewTask(task, dragHandleProps)}
+                                  <div
+                                    className="w-full min-w-0 animate-panel-in cursor-grab active:cursor-grabbing"
+                                    {...dragHandleProps.attributes}
+                                    {...dragHandleProps.listeners}
+                                  >
+                                    <ListTaskCard
+                                      task={task}
+                                      linkedPlan={task.planId ? plansById.get(task.planId) ?? null : null}
+                                      editMode
+                                      onToggleComplete={handleToggleTaskComplete}
+                                      onToggleSubtask={handleToggleSubtask}
+                                      onEdit={() => openEditSheet(task)}
+                                      onDelete={() => handleDeleteTask(task.id)}
+                                    />
                                   </div>
                                 )}
                               </SortableTaskCard>
@@ -1892,7 +1286,14 @@ export default function ScheduleApp() {
                       <div className="flex flex-col gap-3 pb-4">
                         {dayTasks.map((task) => (
                           <div key={task.id} className="animate-panel-in">
-                            {renderListViewTask(task)}
+                            <ListTaskCard
+                              task={task}
+                              linkedPlan={task.planId ? plansById.get(task.planId) ?? null : null}
+                              onToggleComplete={handleToggleTaskComplete}
+                              onToggleSubtask={handleToggleSubtask}
+                              onEdit={() => openEditSheet(task)}
+                              onDelete={() => handleDeleteTask(task.id)}
+                            />
                           </div>
                         ))}
                       </div>
@@ -1907,8 +1308,13 @@ export default function ScheduleApp() {
                     transition={{ duration: 0.2, ease: "easeOut" }}
                   >
                     {dayTasks.length === 0 && (
-                      <div className="mb-3 rounded-2xl border border-dashed border-neutral-200 py-8 text-center text-[13px] text-neutral-400 dark:border-white/10 dark:text-neutral-500">
-                        Nothing scheduled — tap + to add your first activity.
+                      <div className="mb-3 rounded-2xl border border-dashed border-neutral-200 py-8 text-center dark:border-white/10">
+                        <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-neutral-100 dark:bg-white/[0.06] mx-auto mb-2">
+                          <IconCalendar size={17} strokeWidth={1.8} className="text-neutral-400 dark:text-neutral-500" />
+                        </div>
+                        <p className="text-[13px] font-medium text-neutral-400 dark:text-neutral-500">
+                          Nothing scheduled — tap + to add a task.
+                        </p>
                       </div>
                     )}
                     {/* Google Calendar-style flat timeline */}
@@ -1919,9 +1325,9 @@ export default function ScheduleApp() {
                       {/* Time column */}
                       <div
                         className="sticky left-0 z-20 w-[52px] shrink-0 bg-neutral-50 dark:bg-neutral-950"
-                        style={{ height: timelineHeight }}
+                        style={{ height: TIMELINE_HEIGHT }}
                       >
-                        {timelineHours.map((hour, index) => {
+                        {TIMELINE_HOURS.map((hour, index) => {
                           const isMidnight = hour === 24;
                           if (index === 0) return null; // skip first label
                           return (
@@ -1947,11 +1353,11 @@ export default function ScheduleApp() {
                       {/* Grid + tasks */}
                       <div
                         className="relative min-w-0 flex-1 border-l border-neutral-200 dark:border-white/[0.08]"
-                        style={{ height: timelineHeight }}
+                        style={{ height: TIMELINE_HEIGHT }}
                       >
                         {/* Grid lines */}
                         <div className="absolute inset-0 pointer-events-none">
-                          {timelineHours.map((hour, index) => {
+                          {TIMELINE_HOURS.map((hour, index) => {
                             const isMidnight = hour === 24;
                             return (
                               <div key={`grid-${hour}`}>
@@ -1965,7 +1371,7 @@ export default function ScheduleApp() {
                                   style={{ top: TIMELINE_TOP_PADDING + index * HOUR_HEIGHT }}
                                 />
                                 {/* Half-hour dashed line */}
-                                {index < timelineHours.length - 1 && (
+                                {index < TIMELINE_HOURS.length - 1 && (
                                   <div
                                     className="absolute left-0 right-0 border-t border-dashed border-neutral-100 dark:border-white/[0.03]"
                                     style={{ top: TIMELINE_TOP_PADDING + index * HOUR_HEIGHT + HOUR_HEIGHT / 2 }}
@@ -1987,7 +1393,7 @@ export default function ScheduleApp() {
                               <div className="relative h-full min-h-[24px]">
                                 {renderTimelineTaskCard(
                                   layout.task,
-                                  "h-full rounded-lg px-2 py-1.5 w-full min-w-0 overflow-hidden",
+                                  "h-full rounded-xl px-2.5 py-2 w-full min-w-0 overflow-hidden",
                                   computeCardSize(layout.height, layout.laneCount),
                                   layout.isOvernight,
                                   layout.isTruncated
@@ -2018,7 +1424,49 @@ export default function ScheduleApp() {
 
         {/* ── Plan Tab ─────────────────────────────────────────────────────── */}
         {activeTab === 1 && (
-          selectedPlan ? renderPlanDetail(selectedPlan) : renderPlanList()
+          selectedPlan ? (
+            <PlanDetailView
+              plan={selectedPlan}
+              schedule={schedule}
+              milestones={schedule.milestones ?? []}
+              onAddTask={(planId) => openCreateSheet(planId)}
+              onEditTask={(task) => openEditSheet(task)}
+              onDeleteLinkedTask={handleDeleteLinkedTask}
+              onAddTracker={(planId, title, unit, goalDirection) => {
+                setSchedule((prev) => ({
+                  ...prev,
+                  progressTrackers: [
+                    ...prev.progressTrackers,
+                    {
+                      id: uid(),
+                      planId,
+                      title,
+                      type: "number",
+                      unit: unit || undefined,
+                      goalDirection,
+                    },
+                  ],
+                }));
+              }}
+              onUpdateTracker={(trackerId, data) => {
+                setSchedule((prev) => ({
+                  ...prev,
+                  progressTrackers: prev.progressTrackers.map((t) =>
+                    t.id === trackerId
+                      ? { ...t, ...data, unit: data.unit || undefined }
+                      : t
+                  ),
+                }));
+              }}
+              onDeleteTracker={handleDeleteTracker}
+              onOpenAddEntry={(tracker) => setEntryTracker(tracker)}
+              onDeleteEntry={handleDeleteEntry}
+              onAddMilestone={(data) => handleAddMilestone(selectedPlan.id, data)}
+              onUpdateMilestone={handleUpdateMilestone}
+              onDeleteMilestone={handleDeleteMilestone}
+              onCompleteMilestone={handleCompleteMilestone}
+            />
+          ) : renderPlanList()
         )}
       </div>
 
@@ -2050,7 +1498,7 @@ export default function ScheduleApp() {
               </div>
               <div>
                 <p className="mb-1 text-[11px] font-semibold uppercase tracking-[0.08em] text-neutral-400 dark:text-neutral-500">
-                  End date{(() => { const d = daysBetween(editPlanDraft.startDate, editPlanDraft.endDate); return d ? <span className="normal-case font-normal ml-1">({d} days)</span> : null; })()}
+                  End date{editPlanDuration ? <span className="normal-case font-normal ml-1">({editPlanDuration} days)</span> : null}
                 </p>
                 <input
                   type="date"
@@ -2102,58 +1550,6 @@ export default function ScheduleApp() {
         </div>
       </BottomSheet>
 
-      {/* ── Add Tracker Bottom Sheet ────────────────────────────────────────── */}
-      <BottomSheet
-        open={addingTracker && !!addingTrackerForPlanId}
-        onClose={() => { setAddingTracker(false); setAddingTrackerForPlanId(null); }}
-        maxHeight="80vh"
-      >
-        <div className="space-y-4 p-5 pb-8">
-          <SheetHeader
-            eyebrow="New"
-            title="Create Tracker"
-            onClose={() => { setAddingTracker(false); setAddingTrackerForPlanId(null); }}
-          />
-          <div className="space-y-2.5">
-            <Input
-              value={newTrackerTitle}
-              onChange={(e) => setNewTrackerTitle(e.target.value)}
-              placeholder="Tracker name (e.g. Weight, Distance)"
-              autoFocus
-              onKeyDown={(e) => { if (e.key === "Enter" && newTrackerTitle.trim() && addingTrackerForPlanId) handleAddTracker(addingTrackerForPlanId); }}
-            />
-            <Input
-              value={newTrackerUnit}
-              onChange={(e) => setNewTrackerUnit(e.target.value)}
-              placeholder="Unit (e.g. kg, km, hr) — optional"
-            />
-          </div>
-          <GoalDirectionPicker value={newTrackerGoalDirection} onChange={setNewTrackerGoalDirection} />
-          <div className="rounded-2xl bg-neutral-50 dark:bg-white/[0.04] px-4 py-3">
-            <p className="text-[11px] font-semibold text-neutral-400 dark:text-neutral-500 mb-1.5">Examples</p>
-            <div className="flex flex-wrap gap-1.5">
-              {([["Weight", "kg", "decrease_good"], ["Distance", "km", "increase_good"], ["Study Hours", "hr", "increase_good"], ["Calories", "kcal", "increase_good"], ["Water", "ml", "increase_good"]] as [string, string, GoalDirection][]).map(([name, unit, gd]) => (
-                <button
-                  key={name}
-                  type="button"
-                  onClick={() => { setNewTrackerTitle(name); setNewTrackerUnit(unit); setNewTrackerGoalDirection(gd); }}
-                  className="rounded-full border border-neutral-200 bg-white px-2.5 py-1 text-[11px] font-semibold text-neutral-500 hover:border-neutral-300 dark:border-white/10 dark:bg-white/[0.04] dark:text-neutral-400 transition-colors"
-                >
-                  {name} / {unit}
-                </button>
-              ))}
-            </div>
-          </div>
-          <Button
-            fullWidth
-            onClick={() => addingTrackerForPlanId && handleAddTracker(addingTrackerForPlanId)}
-            disabled={!newTrackerTitle.trim()}
-          >
-            Create Tracker
-          </Button>
-        </div>
-      </BottomSheet>
-
       {/* ── Add Plan Bottom Sheet ───────────────────────────────────────────── */}
       <BottomSheet open={addingPlan} onClose={() => setAddingPlan(false)}>
         {renderAddPlanSheet()}
@@ -2163,18 +1559,20 @@ export default function ScheduleApp() {
       <BottomNav
         activeTab={activeTab}
         onTabChange={(tab) => { setActiveTab(tab); setSelectedPlanId(null); }}
-        onCreateTask={() => setAddTaskModalOpen(true)}
+        onCreateTask={() => openCreateSheet()}
         onCreatePlan={openAddPlan}
       />
 
       {/* ── Modals ─────────────────────────────────────────────────────────── */}
-      <AddTaskModal
-        isOpen={addTaskModalOpen}
-        onClose={() => setAddTaskModalOpen(false)}
-        onSave={handleAddNewTask}
+      <TaskSheet
+        mode={taskSheetMode}
+        task={taskSheetTask}
         plans={schedule.plans}
         activeDay={activeDay}
-        initialPlanId={selectedPlanId}
+        isOpen={taskSheetOpen}
+        initialPlanId={taskSheetPlanId}
+        onClose={closeTaskSheet}
+        onSave={handleTaskSheetSave}
       />
 
       <AddEntryModal
