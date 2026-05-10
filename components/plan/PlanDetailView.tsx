@@ -587,7 +587,7 @@ export default function PlanDetailView({
           isCompleted
             ? "border-green-200/60 bg-green-50/40 dark:border-green-800/30 dark:bg-green-950/20"
             : isCurrentMilestone
-            ? "border-green-300 bg-white shadow-[0_0_0_3px_rgba(52,211,153,0.12)] dark:border-green-600/50 dark:bg-neutral-900"
+            ? "border-green-300 bg-white ring-2 ring-green-100 dark:border-green-600/50 dark:bg-neutral-900 dark:ring-green-900/40"
             : "border-neutral-200 bg-white dark:border-white/[0.08] dark:bg-neutral-900"
         }`}
       >
@@ -976,7 +976,7 @@ export default function PlanDetailView({
         <div className="relative flex rounded-2xl bg-neutral-100 dark:bg-white/[0.06] p-1">
           <motion.div
             layoutId="planTabIndicator"
-            className="absolute inset-1 rounded-xl bg-white shadow-sm dark:bg-neutral-800"
+            className="absolute inset-1 rounded-xl border border-neutral-200 bg-white dark:border-white/[0.08] dark:bg-neutral-800"
             style={{
               left: planTab === "planning" ? "4px" : "calc(50% + 2px)",
               right: planTab === "planning" ? "calc(50% + 2px)" : "4px",

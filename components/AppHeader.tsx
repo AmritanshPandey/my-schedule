@@ -1,7 +1,6 @@
 "use client";
 
-import { IconArrowLeft } from "@tabler/icons-react";
-import ThemeToggle from "@/components/ThemeToggle";
+import { IconArrowLeft, IconSettings2 } from "@tabler/icons-react";
 
 interface ActionItem {
   icon: React.ComponentType<{ size?: number; strokeWidth?: number; className?: string }>;
@@ -16,9 +15,10 @@ interface AppHeaderProps {
     onBack: () => void;
   };
   actions?: ActionItem[];
+  onOpenSettings?: () => void;
 }
 
-export default function AppHeader({ back, actions }: AppHeaderProps) {
+export default function AppHeader({ back, actions, onOpenSettings }: AppHeaderProps) {
   const isDetail = !!back;
 
   return (
@@ -64,7 +64,16 @@ export default function AppHeader({ back, actions }: AppHeaderProps) {
           })}
         </div>
       ) : (
-        !isDetail && <ThemeToggle />
+        !isDetail && onOpenSettings && (
+          <button
+            type="button"
+            onClick={onOpenSettings}
+            aria-label="Settings"
+            className="inline-flex h-9 w-9 items-center justify-center rounded-xl border border-neutral-200 bg-white text-neutral-500 transition-all hover:bg-neutral-50 hover:text-neutral-800 active:scale-95 dark:border-white/10 dark:bg-neutral-900 dark:text-neutral-400 dark:hover:bg-white/[0.07] dark:hover:text-neutral-200"
+          >
+            <IconSettings2 size={17} strokeWidth={2} />
+          </button>
+        )
       )}
     </header>
   );

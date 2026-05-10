@@ -7,6 +7,7 @@ import { TaskSheet, type TaskSaveData } from "@/components/task/TaskSheet";
 import PlanDetailView from "@/components/plan/PlanDetailView";
 import { PlanCard } from "@/components/plan/PlanCard";
 import AppHeader from "@/components/AppHeader";
+import { SettingsSheet } from "@/components/auth/SettingsSheet";
 import BottomNav from "@/components/BottomNav";
 import TimeSlotPicker from "@/components/TimeSlotPicker";
 import {
@@ -228,7 +229,7 @@ function SortableTaskCard({
 // ─── Main component ───────────────────────────────────────────────────────────
 
 export default function ScheduleApp() {
-  const { schedule, setSchedule, ready } = useScheduleDB();
+  const { schedule, setSchedule, ready, clearData } = useScheduleDB();
   const [todayKey, setTodayKey] = useState<DayKey>(() => JS_DAYS[new Date().getDay()]);
   const [activeDay, setActiveDay] = useState<DayKey>(() => JS_DAYS[new Date().getDay()]);
   const [editMode, setEditMode] = useState(false);
@@ -257,6 +258,7 @@ export default function ScheduleApp() {
   const [editPlanDraft, setEditPlanDraft] = useState({ title: "", description: "", startDate: "", endDate: "" });
 
   const [nowMinutes, setNowMinutes] = useState(getCurrentMinutes);
+  const [settingsOpen, setSettingsOpen] = useState(false);
   const timelineScrollRef = useRef<HTMLDivElement | null>(null);
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 8 } }));
 
@@ -940,7 +942,7 @@ export default function ScheduleApp() {
                   title={label}
                   onClick={() => setNewPlanIconName(name)}
                   className={`flex flex-col items-center justify-center gap-1 rounded-2xl py-3 transition-all duration-150 ${
-                    sel ? `${ic.solid} shadow-sm scale-[1.04]` : `${ic.tint} ${ic.text} hover:scale-[1.04]`
+                    sel ? `${ic.solid} scale-[1.04]` : `${ic.tint} ${ic.text} hover:scale-[1.04]`
                   }`}
                 >
                   <Icon size={18} strokeWidth={1.5} />
@@ -1115,8 +1117,10 @@ export default function ScheduleApp() {
           ]}
         />
       ) : (
-        <AppHeader />
+        <AppHeader onOpenSettings={() => setSettingsOpen(true)} />
       )}
+
+      <SettingsSheet open={settingsOpen} onClose={() => setSettingsOpen(false)} onClearData={clearData} />
 
       {/* ── Content ────────────────────────────────────────────────────────── */}
       <div className="max-w-lg mx-auto pb-40">

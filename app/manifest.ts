@@ -2,9 +2,9 @@ import type { MetadataRoute } from "next";
 
 export default function manifest(): MetadataRoute.Manifest {
   return {
-    name: "Daily Planner",
-    short_name: "Planner",
-    description: "A simple daily schedule planner",
+    name: "PlanR",
+    short_name: "PlanR",
+    description: "Goal-oriented planning with integrated progress tracking",
     start_url: "/",
     display: "standalone",
     background_color: "#030712",

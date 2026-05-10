@@ -51,8 +51,8 @@ export function groupDaysIntoWeeks(cells: DayCell[]): DayCell[][] {
  *
  * This ensures both high-performers and beginners get meaningful colour gradients.
  */
-export function normalizeIntensity(cells: DayCell[]): Map<string, 0 | 1 | 2 | 3 | 4> {
-  const result = new Map<string, 0 | 1 | 2 | 3 | 4>();
+export function normalizeIntensity(cells: DayCell[]): Map<string, 0 | 1 | 2 | 3 | 4 | 5> {
+  const result = new Map<string, 0 | 1 | 2 | 3 | 4 | 5>();
 
   const active = cells.filter((c) => c.date && !c.isOutsidePlan && !c.isFuture);
   const counts = active.map((c) => c.count);
@@ -64,10 +64,11 @@ export function normalizeIntensity(cells: DayCell[]): Map<string, 0 | 1 | 2 | 3 
       result.set(c.date, 0);
     } else {
       const ratio = c.count / maxCount;
-      if (ratio <= 0.2) result.set(c.date, 1);
-      else if (ratio <= 0.45) result.set(c.date, 2);
-      else if (ratio <= 0.75) result.set(c.date, 3);
-      else result.set(c.date, 4);
+      if (ratio <= 0.12) result.set(c.date, 1);
+      else if (ratio <= 0.30) result.set(c.date, 2);
+      else if (ratio <= 0.55) result.set(c.date, 3);
+      else if (ratio <= 0.80) result.set(c.date, 4);
+      else result.set(c.date, 5);
     }
   }
 

@@ -46,7 +46,7 @@ function PlanCardInner({
       whileHover={{ y: -2 }}
       whileTap={{ scale: 0.987 }}
       transition={{ type: "spring", stiffness: 420, damping: 30 }}
-      className="w-full rounded-3xl border border-neutral-200 bg-white px-5 pt-5 pb-4 text-left shadow-sm transition-shadow hover:shadow-md dark:border-white/[0.08] dark:bg-neutral-900 dark:shadow-none"
+      className="w-full rounded-3xl border border-neutral-200 bg-white px-5 pt-5 pb-4 text-left transition-colors hover:border-neutral-300 dark:border-white/[0.08] dark:bg-neutral-900 dark:hover:border-white/[0.14]"
     >
       {/* ── Top: icon + title ──────────────────────────────────────────────── */}
       <div className="flex items-start gap-3.5">

@@ -159,7 +159,7 @@ function MainTitleSectionInner({
         </div>
 
         {progressBar !== undefined && (
-          <div className="mt-1.5 h-[3px] max-w-[200px] overflow-hidden rounded-full bg-neutral-200 dark:bg-white/10">
+          <div className="mt-1.5 h-[8px] max-w-[200px] overflow-hidden rounded-full bg-neutral-200 dark:bg-white/10">
             <motion.div
               className="h-full rounded-full bg-green-500"
               initial={false}

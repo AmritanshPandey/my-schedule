@@ -6,6 +6,8 @@ import type { AccentColor } from "@/lib/colorSystem";
 import { colorFromIcon, resolveAccentColor } from "@/lib/colorSystem";
 import type { GoalDirection } from "@/lib/trendUtils";
 export type { GoalDirection };
+import { queueSync } from "@/lib/cloudSync";
+import { writeLocalLastUpdated } from "@/lib/localMeta";
 
 export type DayKey = "monday" | "tuesday" | "wednesday" | "thursday" | "friday" | "saturday" | "sunday";
 export type PlanCategory = "fitness" | "learning" | "work" | "health" | "routine";
@@ -481,6 +483,7 @@ export function useScheduleDB() {
   const [ready, setReady] = useState(false);
   const dbRef = useRef<IDBDatabase | null>(null);
 
+  // ── Load from IndexedDB on mount ──────────────────────────────────────────
   useEffect(() => {
     openDB()
       .then(async (db) => {
@@ -495,6 +498,23 @@ export function useScheduleDB() {
       });
   }, []);
 
+  // ── Cloud-merge listener ─────────────────────────────────────────────────
+  // When a cloud snapshot is newer than local data, cloudSync dispatches this
+  // event. We absorb the new state and persist it to IndexedDB.
+  useEffect(() => {
+    function handleCloudMerge(e: Event) {
+      const { schedule: cloudSchedule } = (e as CustomEvent<{ schedule: Schedule; lastUpdated: number }>).detail;
+      const migrated = migrate(cloudSchedule);
+      setScheduleState(migrated);
+      if (dbRef.current) {
+        writeDB(dbRef.current, migrated).catch(() => {});
+      }
+    }
+    window.addEventListener("cloud-sync-merge", handleCloudMerge);
+    return () => window.removeEventListener("cloud-sync-merge", handleCloudMerge);
+  }, []);
+
+  // ── Debounced IndexedDB write + cloud sync trigger ────────────────────────
   const isFirstRender = useRef(true);
   const writeTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   useEffect(() => {
@@ -505,10 +525,15 @@ export function useScheduleDB() {
     }
     if (writeTimer.current) clearTimeout(writeTimer.current);
     const db = dbRef.current;
+    const snap = schedule; // capture for closure
     writeTimer.current = setTimeout(() => {
-      writeDB(db, schedule).catch((err) =>
-        console.error("IndexedDB write failed:", err)
-      );
+      const now = Date.now();
+      writeDB(db, snap)
+        .then(() => {
+          writeLocalLastUpdated(now); // update local timestamp for cloud comparison
+          queueSync(snap);            // queue cloud backup (no-op for guests)
+        })
+        .catch((err) => console.error("IndexedDB write failed:", err));
     }, 500);
     return () => {
       if (writeTimer.current) clearTimeout(writeTimer.current);
@@ -519,5 +544,13 @@ export function useScheduleDB() {
     setScheduleState(updater);
   }
 
-  return { schedule, setSchedule, ready };
+  async function clearData(): Promise<void> {
+    const empty = emptyEmpty();
+    setScheduleState(empty);
+    if (dbRef.current) {
+      await writeDB(dbRef.current, empty).catch(() => {});
+    }
+  }
+
+  return { schedule, setSchedule, ready, clearData };
 }

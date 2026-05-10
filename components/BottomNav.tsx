@@ -224,7 +224,6 @@ export default function BottomNav({
               border-neutral-200/80
               bg-white
               px-2
-              shadow-[0_12px_40px_rgba(0,0,0,0.06)]
               dark:border-white/[0.08]
               dark:bg-neutral-800
             "
