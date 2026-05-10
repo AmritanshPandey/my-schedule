@@ -9,8 +9,6 @@ import {
   IconTrash,
   IconArrowUpRight,
   IconArrowDownRight,
-  IconTrendingUp,
-  IconTrendingDown,
   IconArrowUp,
   IconArrowDown,
 } from "@tabler/icons-react";
@@ -40,6 +38,7 @@ import { formatDuration, displayToInputTime, inputToDisplayTime } from "@/lib/ti
 import { formatDate, formatDateShort } from "@/lib/dateUtils";
 import { DayPill, Pill } from "@/components/ui/Badge";
 import { InternalSectionTitle, SectionTextAction } from "@/components/ui/InternalSectionTitle";
+import { TrackerTabs } from "@/components/ui/TrackerTabs";
 
 // ── Local constants ───────────────────────────────────────────────────────────
 
@@ -86,15 +85,14 @@ function TrendBadge({ trend }: { trend: TrendResult }) {
   const colorClass = isPositive
     ? "text-green-600 dark:text-green-400"
     : "text-rose-600 dark:text-rose-400";
-  const TrendIcon = isUp ? IconTrendingUp : IconTrendingDown;
-  const iconColor = isPositive ? "text-green-500" : "text-rose-500";
-  const pctText = trend.pct !== null ? ` · ${Math.abs(trend.pct).toFixed(1)}%` : "";
+  const ArrowIcon = isUp ? IconArrowUpRight : IconArrowDownRight;
+  const pctText = trend.pct !== null ? ` by ${Math.abs(trend.pct).toFixed(1)}%` : "";
   return (
-    <div className="flex items-center gap-1 mt-1.5">
-      <TrendIcon size={14} className={`${iconColor} shrink-0`} />
-      <p className={`text-[12px] font-medium ${colorClass}`}>
-        {isUp ? "Up" : "Down"}{pctText} from last entry
+    <div className={`inline-flex items-center gap-0.5 mt-1.5 ${colorClass}`}>
+      <p className="text-[12px] font-medium">
+        Trending {isUp ? "up" : "down"}{pctText}
       </p>
+      <ArrowIcon size={13} strokeWidth={2.5} className="shrink-0" />
     </div>
   );
 }
@@ -210,6 +208,9 @@ export default function PlanDetailView({
   const [newTrackerGoalDirection, setNewTrackerGoalDirection] =
     useState<GoalDirection>("increase_good");
 
+  // ── Selected tracker state ──────────────────────────────────────────────
+  const [selectedTrackerIdRaw, setSelectedTrackerId] = useState<string | null>(null);
+
   // ── Milestone sheet state ───────────────────────────────────────────────
   const [milestoneSheetOpen, setMilestoneSheetOpen] = useState(false);
   const [milestoneSheetMode, setMilestoneSheetMode] = useState<"create" | "edit">("create");
@@ -224,6 +225,18 @@ export default function PlanDetailView({
   const trackers = useMemo(
     () => schedule.progressTrackers.filter((t) => t.planId === plan.id),
     [plan.id, schedule.progressTrackers]
+  );
+
+  const selectedTrackerId = useMemo(() => {
+    if (trackers.length === 0) return null;
+    if (selectedTrackerIdRaw && trackers.some((t) => t.id === selectedTrackerIdRaw))
+      return selectedTrackerIdRaw;
+    return trackers[0].id;
+  }, [trackers, selectedTrackerIdRaw]);
+
+  const selectedTracker = useMemo(
+    () => (selectedTrackerId ? trackers.find((t) => t.id === selectedTrackerId) ?? null : null),
+    [trackers, selectedTrackerId]
   );
 
   const planMilestones = useMemo(
@@ -410,13 +423,10 @@ export default function PlanDetailView({
           ) : (
             <div className="flex items-start justify-between gap-3">
               <div className="flex-1 min-w-0">
-                <p className="text-[10px] font-semibold uppercase tracking-[0.1em] text-neutral-400 dark:text-neutral-500">
-                  Plan
-                </p>
-                <h3 className="text-[20px] font-semibold text-neutral-950 dark:text-white mt-0.5 leading-tight">
+                <h3 className="text-[20px] font-bold text-neutral-950 dark:text-white leading-tight">
                   {tracker.title}
                   {tracker.unit && (
-                    <span className="ml-1.5 text-[15px] font-normal text-neutral-400">
+                    <span className="ml-1.5 text-[15px] font-normal text-neutral-400 dark:text-neutral-500">
                       ({tracker.unit})
                     </span>
                   )}
@@ -510,14 +520,9 @@ export default function PlanDetailView({
                         key={entry.id}
                         className="flex items-center justify-between py-2.5 border-b border-neutral-100 last:border-b-0 dark:border-white/[0.06]"
                       >
-                        <div className="flex items-center gap-3">
-                          <span className="text-[11px] font-bold text-neutral-300 dark:text-neutral-700 w-4 text-center tabular-nums">
-                            {entries.length - index}
-                          </span>
-                          <p className="text-[13px] font-medium text-neutral-600 dark:text-neutral-300">
-                            {formatDateShort(entry.date)}
-                          </p>
-                        </div>
+                        <p className="text-[13px] font-medium text-neutral-500 dark:text-neutral-400">
+                          {formatDateShort(entry.date)}
+                        </p>
                         <div className="flex items-center gap-2">
                           {entryTrend && entryTrend.direction !== "neutral" && (
                             entryTrend.direction === "up" ? (
@@ -542,10 +547,10 @@ export default function PlanDetailView({
                               />
                             )
                           )}
-                          <span className="text-[15px] font-semibold text-neutral-950 dark:text-white tabular-nums">
+                          <span className="text-[14px] font-semibold text-neutral-950 dark:text-white tabular-nums">
                             {entry.value}
                             {tracker.unit && (
-                              <span className="text-[11px] font-medium text-neutral-400 ml-1">
+                              <span className="text-[11px] font-medium text-neutral-400 ml-0.5">
                                 {tracker.unit}
                               </span>
                             )}
@@ -555,7 +560,7 @@ export default function PlanDetailView({
                             onClick={() => onDeleteEntry(entry.id)}
                             className="h-6 w-6 flex items-center justify-center rounded-lg text-neutral-300 hover:text-rose-500 dark:text-neutral-700 dark:hover:text-rose-400 transition-colors"
                           >
-                            <IconTrash size={16} strokeWidth={2} />
+                            <IconTrash size={14} strokeWidth={2} />
                           </button>
                         </div>
                       </div>
@@ -714,16 +719,11 @@ export default function PlanDetailView({
     };
 
     return (
-      <div className="rounded-2xl border border-neutral-200 bg-white px-5 py-4 dark:border-white/[0.08] dark:bg-neutral-900">
+      <div className="rounded-[24px] border border-neutral-200 bg-white px-5 py-4 dark:border-white/[0.08] dark:bg-neutral-900">
         <div className="flex items-center justify-between mb-3">
-          <div>
-            <p className="text-[10px] font-semibold uppercase tracking-[0.1em] text-neutral-400 dark:text-neutral-500">
-              Overall
-            </p>
-            <h3 className="text-[16px] font-semibold text-neutral-950 dark:text-white mt-0.5">
-              Progress
-            </h3>
-          </div>
+          <h3 className="text-[16px] font-bold text-neutral-950 dark:text-white">
+            Overall Progress
+          </h3>
           <span className="text-[28px] font-bold text-green-500 tabular-nums leading-none">
             {overallPct}%
           </span>
@@ -835,32 +835,8 @@ export default function PlanDetailView({
         <section className="mt-8 px-4">
           <InternalSectionTitle title="Consistency" className="mb-4" />
 
-          <div className="rounded-[24px] border border-neutral-200 bg-white p-4 dark:border-white/[0.08] dark:bg-neutral-900 overflow-hidden">
-            <ConsistencyHeatmap
-              cells={roadmapStats.dailyCells}
-              streakDays={roadmapStats.streakDays}
-            />
-
-            <div className="flex items-center gap-6 mt-4 pt-4 border-t border-neutral-100 dark:border-white/[0.06]">
-              <div>
-                <p className="text-[10px] font-semibold uppercase tracking-wide text-neutral-400 dark:text-neutral-500">
-                  Streak
-                </p>
-                <p className="text-[18px] font-bold text-neutral-900 dark:text-white tabular-nums">
-                  {roadmapStats.streakDays}
-                  <span className="text-[13px] font-semibold text-neutral-400 ml-1">days</span>
-                </p>
-              </div>
-              <div>
-                <p className="text-[10px] font-semibold uppercase tracking-wide text-neutral-400 dark:text-neutral-500">
-                  Consistency
-                </p>
-                <p className="text-[18px] font-bold text-neutral-900 dark:text-white tabular-nums">
-                  {roadmapStats.consistencyPct}
-                  <span className="text-[13px] font-semibold text-neutral-400 ml-0.5">%</span>
-                </p>
-              </div>
-            </div>
+          <div className="rounded-[24px] border border-neutral-200 bg-white dark:border-white/[0.08] dark:bg-neutral-900 overflow-hidden">
+            <ConsistencyHeatmap cells={roadmapStats.dailyCells} />
           </div>
         </section>
 
@@ -893,7 +869,18 @@ export default function PlanDetailView({
               </button>
             </div>
           ) : (
-            <div className="space-y-4">{trackers.map(renderTrackerCard)}</div>
+            <>
+              {trackers.length > 1 && selectedTrackerId && (
+                <div className="mb-4">
+                  <TrackerTabs
+                    tabs={trackers.map((t) => ({ id: t.id, label: t.title }))}
+                    activeId={selectedTrackerId}
+                    onChange={setSelectedTrackerId}
+                  />
+                </div>
+              )}
+              {selectedTracker && renderTrackerCard(selectedTracker)}
+            </>
           )}
         </section>
       </motion.div>

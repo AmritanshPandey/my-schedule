@@ -263,7 +263,7 @@ export default function PWAInstallPrompt() {
                     </p>
                     <button
                       onClick={handleNativeInstall}
-                      className="flex h-12 w-full items-center justify-center gap-2 rounded-2xl bg-neutral-950 text-[15px] font-semibold text-white transition-all hover:bg-neutral-800 active:scale-[0.98] dark:bg-white dark:text-neutral-900 dark:hover:bg-neutral-100"
+                      className="flex h-12 w-full items-center justify-center gap-2 rounded-2xl bg-neutral-950 text-[14px] font-semibold text-white transition-all hover:bg-neutral-800 active:scale-[0.98] dark:bg-white dark:text-neutral-900 dark:hover:bg-neutral-100"
                     >
                       <IconDownload size={16} />
                       Install App

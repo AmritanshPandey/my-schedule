@@ -28,8 +28,8 @@ interface CheckboxProps {
 }
 
 function TaskCheckbox({ state, size = "lg", onChange }: CheckboxProps) {
-  const dim      = size === "lg" ? "w-7 h-7"      : "w-6 h-6";
-  const round    = size === "lg" ? "rounded-[8px]" : "rounded-[6px]";
+  const dim      = size === "lg" ? "w-5 h-5"      : "w-4 h-4";
+  const round    = size === "lg" ? "rounded-[6px]" : "rounded-[4px]";
   const iconSize = size === "lg" ? 14              : 12;
   const filled   = state === "completed" || state === "partial";
 
@@ -134,11 +134,13 @@ function ListTaskCardInner({
         <div className="flex items-start gap-4">
 
           {/* Checkbox */}
+          <div className="shrink-0 mt-2">
           <TaskCheckbox
             state={taskState}
             size="lg"
             onChange={() => onToggleComplete(task.id, allSubtaskIds)}
           />
+          </div>
 
           {/* Title + plan label */}
           <div className="flex-1 min-w-0 pt-0.5">
@@ -214,7 +216,7 @@ function ListTaskCardInner({
             initial={{ opacity: 0, y: 3 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.2 }}
-            className="shrink-0 w-10 text-right text-[15px] font-semibold tabular-nums text-neutral-500 dark:text-neutral-400"
+            className="shrink-0 w-10 text-right text-[14px] font-semibold tabular-nums text-neutral-500 dark:text-neutral-400"
           >
             {displayPct}%
           </motion.span>
@@ -223,7 +225,7 @@ function ListTaskCardInner({
         {/* ── Row 3: Time · Duration pill · Subtask count ───────────────────── */}
         <div className="mt-4 flex items-center gap-3">
           {(task.startTime || task.endTime) && (
-            <p className={`text-[15px] font-medium ${
+            <p className={`text-[14px] font-medium ${
               done ? "text-neutral-400 dark:text-neutral-500" : "text-neutral-600 dark:text-neutral-400"
             }`}>
               {task.startTime}
@@ -261,7 +263,7 @@ function ListTaskCardInner({
             <div className="px-5 pt-4 pb-5 space-y-4">
               {/* Description */}
               {task.description && (
-                <p className="text-[15px] leading-relaxed text-neutral-500 dark:text-neutral-400">
+                <p className="text-[14px] leading-relaxed text-neutral-500 dark:text-neutral-400">
                   {task.description}
                 </p>
               )}
@@ -294,7 +296,7 @@ function ListTaskCardInner({
                           <motion.p
                             animate={{ opacity: isDone ? 0.45 : 1 }}
                             transition={{ duration: 0.2 }}
-                            className={`flex-1 min-w-0 text-[15px] font-medium ${
+                            className={`flex-1 min-w-0 text-[14px] font-medium ${
                               isDone
                                 ? "text-neutral-400 line-through dark:text-neutral-500"
                                 : "text-neutral-700 dark:text-neutral-300"

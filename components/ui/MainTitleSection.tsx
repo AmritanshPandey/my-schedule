@@ -139,7 +139,7 @@ function MainTitleSectionInner({
         )}
 
         <div className="flex items-baseline gap-2 mt-0.5">
-          <h1 className="text-[22px] font-bold text-neutral-950 dark:text-white leading-tight">
+          <h1 className="text-[20px] font-bold text-neutral-950 dark:text-white leading-tight">
             {title}
           </h1>
 

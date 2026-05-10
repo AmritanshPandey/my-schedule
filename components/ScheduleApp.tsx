@@ -1040,7 +1040,7 @@ export default function ScheduleApp() {
             <div className="mb-3 flex h-12 w-12 items-center justify-center rounded-2xl bg-neutral-100 dark:bg-white/[0.07] mx-auto">
               <IconClipboardList size={22} className="text-neutral-400 dark:text-neutral-500" />
             </div>
-            <p className="text-[15px] font-semibold text-neutral-700 dark:text-neutral-300">No plans yet</p>
+            <p className="text-[14px] font-semibold text-neutral-700 dark:text-neutral-300">No plans yet</p>
             <p className="mt-1 text-[13px] text-neutral-400 dark:text-neutral-500 max-w-[200px] mx-auto">
               Create your first plan to organize tasks and track progress.
             </p>
@@ -1192,7 +1192,7 @@ export default function ScheduleApp() {
             </div>
 
             {/* Title section */}
-            <div className="px-4 pt-5 pb-3">
+            <div className="px-4 pt-5 pb-5">
               <MainTitleSection
                 label="My Schedule"
                 title="Today's Tasks"
