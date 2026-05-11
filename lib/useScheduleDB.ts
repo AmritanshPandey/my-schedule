@@ -474,13 +474,13 @@ function migrate(raw: unknown): Schedule {
 }
 
 function emptyEmpty(): Schedule {
-  const plans = defaultPlans();
-  return { plans, activities: emptyDayActivities(), progressTrackers: trackersFromPlans(plans, []), metricEntries: [], milestones: [] };
+  return { plans: [], activities: emptyDayActivities(), progressTrackers: [], metricEntries: [], milestones: [] };
 }
 
 export function useScheduleDB() {
   const [schedule, setScheduleState] = useState<Schedule>(emptyEmpty());
   const [ready, setReady] = useState(false);
+  const [isFirstLaunch, setIsFirstLaunch] = useState(false);
   const dbRef = useRef<IDBDatabase | null>(null);
 
   // ── Load from IndexedDB on mount ──────────────────────────────────────────
@@ -489,7 +489,12 @@ export function useScheduleDB() {
       .then(async (db) => {
         dbRef.current = db;
         const stored = await readDB(db);
-        if (stored) setScheduleState(migrate(stored));
+        if (stored) {
+          setScheduleState(migrate(stored));
+        } else {
+          // No stored data — true first launch
+          setIsFirstLaunch(true);
+        }
         setReady(true);
       })
       .catch((err) => {
@@ -552,5 +557,5 @@ export function useScheduleDB() {
     }
   }
 
-  return { schedule, setSchedule, ready, clearData };
+  return { schedule, setSchedule, ready, clearData, isFirstLaunch };
 }

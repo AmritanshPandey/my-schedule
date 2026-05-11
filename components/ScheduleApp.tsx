@@ -232,7 +232,7 @@ function SortableTaskCard({
 // ─── Main component ───────────────────────────────────────────────────────────
 
 export default function ScheduleApp() {
-  const { schedule, setSchedule, ready, clearData } = useScheduleDB();
+  const { schedule, setSchedule, ready, clearData, isFirstLaunch } = useScheduleDB();
   const [todayKey, setTodayKey] = useState<DayKey>(() => JS_DAYS[new Date().getDay()]);
   const [activeDay, setActiveDay] = useState<DayKey>(() => JS_DAYS[new Date().getDay()]);
   const [editMode, setEditMode] = useState(false);
@@ -270,6 +270,14 @@ export default function ScheduleApp() {
     const id = window.setInterval(() => setNowMinutes(getCurrentMinutes()), 60_000);
     return () => window.clearInterval(id);
   }, []);
+
+  // Auto-open templates on true first launch (no stored data)
+  useEffect(() => {
+    if (ready && isFirstLaunch) {
+      setActiveTab(2); // go to Plans tab
+      setTemplatesOpen(true);
+    }
+  }, [ready, isFirstLaunch]);
 
   useEffect(() => {
     const now = new Date();
