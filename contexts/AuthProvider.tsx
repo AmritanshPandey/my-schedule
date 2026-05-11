@@ -58,6 +58,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     // Initialize analytics once on mount — fire-and-forget, non-blocking.
     initializeAnalytics().catch(() => {});
 
+    if (!auth) {
+      // Firebase not configured (missing env vars) — run as guest.
+      setAuthLoading(false);
+      return;
+    }
+
     // ONE auth observer for the entire app lifetime.
     const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
       if (firebaseUser) {
@@ -79,11 +85,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const login = useCallback(async () => {
+    if (!auth) return;
     await signInWithPopup(auth, provider.current);
     // onAuthStateChanged fires automatically after login.
   }, []);
 
   const logout = useCallback(async () => {
+    if (!auth) return;
     // Best-effort flush before signing out.
     try {
       const schedule = getLastSchedule();

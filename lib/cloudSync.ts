@@ -44,6 +44,7 @@ let _skipNextSync = false; // prevents re-uploading data we just downloaded
 const _listeners = new Set<(s: SyncStatus) => void>();
 
 function firestoreRef(uid: string) {
+  if (!db) throw new Error("[CloudSync] Firestore not initialized");
   return doc(db, "users", uid, "data", "snapshot");
 }
 
