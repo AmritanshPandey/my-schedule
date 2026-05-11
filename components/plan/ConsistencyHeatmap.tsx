@@ -23,6 +23,7 @@ import {
   groupDaysIntoWeeks,
   normalizeIntensity,
   calculateCellSize,
+  isScrollable,
   resolveMonthLabels,
   resolveHeatmapMode,
   computeStreakFromCells,
@@ -237,12 +238,12 @@ function ConsistencyHeatmapInner({ cells }: ConsistencyHeatmapProps) {
   const mode          = useMemo(() => resolveHeatmapMode(weeks.length), [weeks.length]);
   const cfg           = MODE_CONFIG[mode];
   const intensityMap  = useMemo(() => normalizeIntensity(filteredCells), [filteredCells]);
-  const cellSize      = useMemo(() => calculateCellSize(containerWidth, weeks.length, mode), [containerWidth, weeks.length, mode]);
+  const cellSize      = useMemo(() => calculateCellSize(containerWidth, weeks.length), [containerWidth, weeks.length]);
   const monthLabels   = useMemo(() => resolveMonthLabels(weeks, mode), [weeks, mode]);
   const streak        = useMemo(() => computeStreakFromCells(filteredCells), [filteredCells]);
 
-  const isDense = mode === "dense";
-  const ready   = containerWidth > 0;
+  const needsScroll = useMemo(() => isScrollable(containerWidth, weeks.length, cellSize), [containerWidth, weeks.length, cellSize]);
+  const ready       = containerWidth > 0;
 
   // ── Handlers ───────────────────────────────────────────────────────────────
 
@@ -268,7 +269,7 @@ function ConsistencyHeatmapInner({ cells }: ConsistencyHeatmapProps) {
       {/* ── Grid ──────────────────────────────────────────────────────────── */}
       <div
         ref={containerRef}
-        className={`px-3 pb-1.5 ${isDense ? "overflow-x-auto" : "overflow-hidden"}`}
+        className={`px-3 pb-1.5 ${needsScroll ? "overflow-x-auto" : "overflow-hidden"}`}
         style={{ WebkitOverflowScrolling: "touch" } as React.CSSProperties}
       >
         <AnimatePresence mode="wait">
@@ -343,7 +344,7 @@ function ConsistencyHeatmapInner({ cells }: ConsistencyHeatmapProps) {
                               // Entry: staggered wave left → right, top → bottom
                               initial={{ opacity: 0, scale: 0.4 }}
                               animate={{
-                                opacity: cell.isOutsidePlan ? 0 : cell.isFuture ? 0.2 : 1,
+                                opacity: cell.isOutsidePlan ? 0.18 : cell.isFuture ? 0.25 : 1,
                                 scale: 1,
                               }}
                               whileHover={!skip ? {

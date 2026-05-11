@@ -12,8 +12,6 @@ export const RANGE_OPTIONS: RangeKey[] = ["7D", "30D", "90D", "1Y"];
 
 export interface ModeConfig {
   gap: number;
-  minCell: number;
-  maxCell: number;
   labelDays: number[];
   showMonthLabels: boolean;
   skipMonths: number;
@@ -22,24 +20,18 @@ export interface ModeConfig {
 export const MODE_CONFIG: Record<HeatmapMode, ModeConfig> = {
   compact: {
     gap: 2,
-    minCell: 12,
-    maxCell: 22,
     labelDays: [1, 3, 5],
     showMonthLabels: false,
     skipMonths: 1,
   },
   standard: {
     gap: 2,
-    minCell: 10,
-    maxCell: 16,
     labelDays: [1, 3, 5],
     showMonthLabels: true,
     skipMonths: 1,
   },
   dense: {
     gap: 2,
-    minCell: 8,
-    maxCell: 11,
     labelDays: [1, 3, 5],
     showMonthLabels: true,
     skipMonths: 2,

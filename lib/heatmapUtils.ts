@@ -1,12 +1,12 @@
 import type { DayCell } from "@/lib/roadmapEngine";
 import {
-  type HeatmapMode,
   type RangeKey,
   RANGE_WEEKS,
   MODE_CONFIG,
   DAY_LABEL_COL,
   DAY_LABEL_GAP,
   resolveHeatmapMode,
+  type HeatmapMode,
 } from "@/lib/heatmapMode";
 
 // Re-export so callers only need one import.
@@ -21,35 +21,12 @@ const MONTHS = [
 
 /**
  * Slice to the last `weeksNeeded * 7` cells (already week-aligned from the engine).
- * When fewer cells exist, pads the front with invisible out-of-plan spacers so
- * the full range grid always renders (e.g. 1Y always shows 53 week columns).
+ * Returns all cells when fewer exist — the grid sizes adaptively to whatever is there.
  */
 export function filterCellsByRange(allCells: DayCell[], range: RangeKey): DayCell[] {
   const cellsNeeded = RANGE_WEEKS[range] * 7;
-
-  if (allCells.length >= cellsNeeded) {
-    return allCells.slice(allCells.length - cellsNeeded);
-  }
-
-  // Pad the front with out-of-plan ghost cells to reach the full range width.
-  const padCount = cellsNeeded - allCells.length;
-  const anchor = allCells.length > 0
-    ? new Date(allCells[0].date + "T00:00:00")
-    : new Date();
-
-  const padding: DayCell[] = Array.from({ length: padCount }, (_, i) => {
-    const d = new Date(anchor);
-    d.setDate(d.getDate() - (padCount - i));
-    return {
-      date: d.toISOString().split("T")[0],
-      intensity: 0,
-      count: 0,
-      isFuture: false,
-      isOutsidePlan: true,
-    };
-  });
-
-  return [...padding, ...allCells];
+  if (allCells.length <= cellsNeeded) return allCells;
+  return allCells.slice(allCells.length - cellsNeeded);
 }
 
 // ── Grouping ──────────────────────────────────────────────────────────────────
@@ -100,28 +77,30 @@ export function normalizeIntensity(cells: DayCell[]): Map<string, 0 | 1 | 2 | 3 
 
 // ── Cell sizing ───────────────────────────────────────────────────────────────
 
+const CELL_GAP    = 2;
+const CELL_MIN    = 10; // accessibility floor — no smaller than this
+const CELL_MAX    = 26; // cap so cells don't become comically large on sparse ranges
+
 /**
- * Compute cell pixel width from the measured container width and visible week count.
- * Clamps to [minCell, maxCell] for the active mode.
- *
- * Formula:
- *   available = containerWidth − dayLabelCol − dayLabelGap
- *   totalGaps = (weekCount − 1) × gap
- *   raw       = (available − totalGaps) / weekCount
+ * Compute cell pixel size from the measured container width and visible week count.
+ * Cells grow to fill available width for small ranges (7D big, 30D medium, etc.)
+ * and shrink down to CELL_MIN for dense ranges — enabling horizontal scroll at 1Y.
  */
 export function calculateCellSize(
   containerWidth: number,
   weekCount: number,
-  mode: HeatmapMode
 ): number {
-  const { gap, minCell, maxCell } = MODE_CONFIG[mode];
-  if (containerWidth === 0 || weekCount === 0) return minCell;
+  if (containerWidth === 0 || weekCount === 0) return CELL_MIN;
+  const available  = containerWidth - DAY_LABEL_COL - DAY_LABEL_GAP;
+  const totalGaps  = Math.max(0, weekCount - 1) * CELL_GAP;
+  const raw        = (available - totalGaps) / weekCount;
+  return Math.max(CELL_MIN, Math.min(CELL_MAX, Math.floor(raw)));
+}
 
-  const available = containerWidth - DAY_LABEL_COL - DAY_LABEL_GAP;
-  const totalGaps = Math.max(0, weekCount - 1) * gap;
-  const raw = (available - totalGaps) / weekCount;
-
-  return Math.max(minCell, Math.min(maxCell, Math.floor(raw)));
+/** Whether the grid at this cell size will overflow the container. */
+export function isScrollable(containerWidth: number, weekCount: number, cellSize: number): boolean {
+  const gridWidth = DAY_LABEL_COL + DAY_LABEL_GAP + weekCount * cellSize + Math.max(0, weekCount - 1) * CELL_GAP;
+  return gridWidth > containerWidth;
 }
 
 // ── Month labels ──────────────────────────────────────────────────────────────
