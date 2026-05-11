@@ -7,6 +7,7 @@ import { DAYS } from "./useScheduleDB";
 import type { Task, Plan } from "./useScheduleDB";
 import type { DayKey } from "./useScheduleDB";
 import { isTaskCompleted } from "./taskCompletion";
+import { localISODate } from "./dateUtils";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -48,11 +49,11 @@ function buildCompletionDateSet(
       if (Array.isArray(task.completionHistory)) {
         for (const event of task.completionHistory) {
           if (event.completionType === "task") {
-            dates.add(event.completedAt.split("T")[0]);
+            dates.add(localISODate(new Date(event.completedAt)));
           }
         }
       } else if (task.completedAt && task.completed) {
-        dates.add(task.completedAt.split("T")[0]);
+        dates.add(localISODate(new Date(task.completedAt)));
       }
     }
   }

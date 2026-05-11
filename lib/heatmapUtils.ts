@@ -1,4 +1,5 @@
 import type { DayCell } from "@/lib/roadmapEngine";
+import { todayISO, localISODate } from "@/lib/dateUtils";
 import {
   type RangeKey,
   RANGE_WEEKS,
@@ -81,19 +82,22 @@ const CELL_GAP    = 2;
 const CELL_MIN    = 10;  // accessibility floor — no smaller than this
 const CELL_MAX    = 100; // high cap so 7D / 30D cells fill the container naturally
 
+// Reference week count used to fix cell size — keeps the grid height constant
+// across all range selections. 6M (26 weeks) fits on most phone screens without
+// scrolling and gives a comfortable cell size. Wider ranges (1Y) scroll horizontally
+// but never change the grid height.
+const SIZE_REF_WEEKS = 26;
+
 /**
- * Compute cell pixel size from the measured container width and visible week count.
- * Cells grow to fill available width for small ranges (7D big, 30D medium, etc.)
- * and shrink down to CELL_MIN for dense ranges — enabling horizontal scroll at 1Y.
+ * Compute a stable cell pixel size from the container width alone.
+ * Always sizes cells as if showing 6M (26 weeks) — height is identical across
+ * every range selection, only width changes when switching to 1Y.
  */
-export function calculateCellSize(
-  containerWidth: number,
-  weekCount: number,
-): number {
-  if (containerWidth === 0 || weekCount === 0) return CELL_MIN;
-  const available  = containerWidth - DAY_LABEL_COL - DAY_LABEL_GAP;
-  const totalGaps  = Math.max(0, weekCount - 1) * CELL_GAP;
-  const raw        = (available - totalGaps) / weekCount;
+export function calculateCellSize(containerWidth: number): number {
+  if (containerWidth === 0) return CELL_MIN;
+  const available = containerWidth - DAY_LABEL_COL - DAY_LABEL_GAP;
+  const totalGaps = Math.max(0, SIZE_REF_WEEKS - 1) * CELL_GAP;
+  const raw       = (available - totalGaps) / SIZE_REF_WEEKS;
   return Math.max(CELL_MIN, Math.min(CELL_MAX, Math.floor(raw)));
 }
 
@@ -161,7 +165,7 @@ export function resolveMonthLabels(
  * If today has no completions yet, counts backwards from yesterday.
  */
 export function computeStreakFromCells(cells: DayCell[]): number {
-  const todayStr = new Date().toISOString().split("T")[0];
+  const todayStr = todayISO();
 
   const completedSet = new Set(
     cells
@@ -180,7 +184,7 @@ export function computeStreakFromCells(cells: DayCell[]): number {
 
   let streak = 0;
   while (true) {
-    const ds = cursor.toISOString().split("T")[0];
+    const ds = localISODate(cursor);
     if (completedSet.has(ds)) {
       streak++;
       cursor.setDate(cursor.getDate() - 1);

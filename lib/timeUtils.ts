@@ -89,7 +89,8 @@ export function formatDuration(startTime: string, endTime: string): string | nul
   const start = parseTimeToMinutes(startTime);
   let end = parseTimeToMinutes(endTime);
   if (start === null || end === null) return null;
-  if (end <= start) end += 1440; // overnight
+  if (end === start) return "0m";
+  if (end < start) end += 1440; // overnight
   const total = end - start;
   if (total <= 0) return null;
   const h = Math.floor(total / 60);

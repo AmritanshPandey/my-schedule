@@ -1,14 +1,13 @@
 export type HeatmapMode = "compact" | "standard" | "dense";
-export type RangeKey = "7D" | "30D" | "90D" | "1Y";
+export type RangeKey = "30D" | "6M" | "1Y";
 
 export const RANGE_WEEKS: Record<RangeKey, number> = {
-  "7D":  2,
-  "30D": 5,
-  "90D": 14,
-  "1Y":  53,
+  "30D": 5,   //  ~1 month  — 35 cells
+  "6M":  26,  //  6 months  — 182 cells  (reference size for cell sizing)
+  "1Y":  52,  //  1 year    — 364 cells
 };
 
-export const RANGE_OPTIONS: RangeKey[] = ["7D", "30D", "90D", "1Y"];
+export const RANGE_OPTIONS: RangeKey[] = ["30D", "6M", "1Y"];
 
 export interface ModeConfig {
   gap: number;

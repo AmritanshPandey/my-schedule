@@ -61,8 +61,13 @@ let _onlineFn: (() => void) | null = null;
 function attachListeners() {
   _visibilityFn = () => {
     if (document.visibilityState === "hidden" && _pending) {
-      // Flush synchronously-ish before the browser may suspend the tab.
-      performSync(_pending);
+      // Use Web Locks API when available to extend tab lifetime during the flush.
+      const snap = _pending;
+      if ("locks" in navigator) {
+        navigator.locks.request("planr-sync-flush", { steal: true }, () => performSync(snap));
+      } else {
+        performSync(snap);
+      }
     } else if (document.visibilityState === "visible" && _pending) {
       scheduleSync(_pending, 3_000); // re-queue shortly after coming back
     }
@@ -244,6 +249,7 @@ async function performSync(schedule: Schedule): Promise<void> {
 
   _syncing = true;
   setStatus("syncing");
+  const pendingSnapshot = _pending; // capture so we can detect new edits during await
 
   const now = Date.now();
   try {
@@ -253,7 +259,8 @@ async function performSync(schedule: Schedule): Promise<void> {
       syncedAt: serverTimestamp(),
     });
     _lastSyncedAt = now;
-    _pending = null;
+    // Only clear _pending if no new edit arrived while we were awaiting setDoc
+    if (_pending === pendingSnapshot) _pending = null;
     setStatus("idle");
   } catch (err) {
     console.error("[CloudSync] performSync failed:", err);

@@ -14,6 +14,7 @@ import type { DayCell } from "@/lib/roadmapEngine";
 import {
   type RangeKey,
   RANGE_OPTIONS,
+  RANGE_WEEKS,
   MODE_CONFIG,
   DAY_LABEL_COL,
   DAY_LABEL_GAP,
@@ -28,6 +29,7 @@ import {
   resolveHeatmapMode,
   computeStreakFromCells,
 } from "@/lib/heatmapUtils";
+import { todayISO } from "@/lib/dateUtils";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -104,13 +106,15 @@ function cellColor(level: number): string {
 const RangePills = memo(function RangePills({
   value,
   onChange,
+  availableRanges,
 }: {
   value: RangeKey;
   onChange: (r: RangeKey) => void;
+  availableRanges: RangeKey[];
 }) {
   return (
     <div className="flex gap-0.5">
-      {RANGE_OPTIONS.map((r) => {
+      {availableRanges.map((r) => {
         const active = r === value;
         return (
           <motion.button
@@ -208,8 +212,22 @@ const CellTooltip = memo(function CellTooltip({ tooltip }: { tooltip: TooltipSta
 
 // ── Main component ────────────────────────────────────────────────────────────
 
+// A range pill is shown only when the grid has enough cells to be meaningful.
+// Threshold: plan cells must cover at least half of the range duration.
+function computeAvailableRanges(totalCells: number): RangeKey[] {
+  return RANGE_OPTIONS.filter((r) => totalCells * 2 >= RANGE_WEEKS[r] * 7);
+}
+
+function bestDefaultRange(available: RangeKey[]): RangeKey {
+  // Prefer 6M as the default view; fall back to whatever fits
+  if (available.includes("6M")) return "6M";
+  return available[available.length - 1] ?? "30D";
+}
+
 function ConsistencyHeatmapInner({ cells }: ConsistencyHeatmapProps) {
-  const [range, setRange]     = useState<RangeKey>("90D");
+  const [range, setRange] = useState<RangeKey>(() => {
+    return bestDefaultRange(computeAvailableRanges(cells.length));
+  });
   const [tooltip, setTooltip] = useState<TooltipState | null>(null);
   const [, forceUpdate]       = useState(0); // for dark-mode color refresh
 
@@ -236,14 +254,24 @@ function ConsistencyHeatmapInner({ cells }: ConsistencyHeatmapProps) {
 
   // ── Derived ────────────────────────────────────────────────────────────────
 
-  const today = useMemo(() => new Date().toISOString().split("T")[0], []);
+  const today = useMemo(() => todayISO(), []);
+
+  // Only expose range pills that the generated cell count can support.
+  const availableRanges = useMemo(() => computeAvailableRanges(cells.length), [cells.length]);
+
+  // Keep the selected range in sync with what's available (e.g. after plan edit).
+  useEffect(() => {
+    if (!availableRanges.includes(range)) {
+      setRange(bestDefaultRange(availableRanges));
+    }
+  }, [availableRanges, range]);
 
   const filteredCells = useMemo(() => filterCellsByRange(cells, range), [cells, range]);
   const weeks         = useMemo(() => groupDaysIntoWeeks(filteredCells), [filteredCells]);
   const mode          = useMemo(() => resolveHeatmapMode(weeks.length), [weeks.length]);
   const cfg           = MODE_CONFIG[mode];
   const intensityMap  = useMemo(() => normalizeIntensity(filteredCells), [filteredCells]);
-  const cellSize      = useMemo(() => calculateCellSize(containerWidth, weeks.length), [containerWidth, weeks.length]);
+  const cellSize      = useMemo(() => calculateCellSize(containerWidth), [containerWidth]);
   const monthLabels   = useMemo(() => resolveMonthLabels(weeks, mode), [weeks, mode]);
   const streak        = useMemo(() => computeStreakFromCells(filteredCells), [filteredCells]);
 
@@ -267,7 +295,7 @@ function ConsistencyHeatmapInner({ cells }: ConsistencyHeatmapProps) {
 
       {/* ── Header ────────────────────────────────────────────────────────── */}
       <div className="flex items-center justify-between gap-2 px-3 pb-2 pt-2.5">
-        <RangePills value={range} onChange={handleRangeChange} />
+        <RangePills value={range} onChange={handleRangeChange} availableRanges={availableRanges} />
         <StreakPill streak={streak} />
       </div>
 

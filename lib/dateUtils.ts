@@ -8,9 +8,17 @@
 
 // ── Today ─────────────────────────────────────────────────────────────────────
 
-/** Return today's date as an ISO string "YYYY-MM-DD". */
+/** Format a Date as "YYYY-MM-DD" using the local timezone, never UTC. */
+export function localISODate(d: Date): string {
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  return `${y}-${m}-${day}`;
+}
+
+/** Return today's date as an ISO string "YYYY-MM-DD" in the local timezone. */
 export function todayISO(): string {
-  return new Date().toISOString().split("T")[0];
+  return localISODate(new Date());
 }
 
 // ── Formatting ────────────────────────────────────────────────────────────────
@@ -69,5 +77,5 @@ export function daysBetween(start: string, end: string): number | null {
 export function addDaysToISO(iso: string, days: number): string {
   const d = new Date(iso + "T00:00:00");
   d.setDate(d.getDate() + days);
-  return d.toISOString().split("T")[0];
+  return localISODate(d);
 }

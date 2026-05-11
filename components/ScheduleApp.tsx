@@ -43,7 +43,7 @@ import {
   IconX,
 } from "@tabler/icons-react";
 import { DndContext, DragEndEvent, PointerSensor, useSensor, useSensors } from "@dnd-kit/core";
-import { SortableContext, useSortable, verticalListSortingStrategy } from "@dnd-kit/sortable";
+import { arrayMove, SortableContext, useSortable, verticalListSortingStrategy } from "@dnd-kit/sortable";
 import BottomSheet from "@/components/ui/BottomSheet";
 import SheetHeader from "@/components/ui/SheetHeader";
 import Button from "@/components/ui/Button";
@@ -78,8 +78,12 @@ const PLAN_DURATION_PRESETS: { label: string; days: number | null }[] = [
 function addDaysISO(days: number): string {
   const d = new Date();
   d.setDate(d.getDate() + days);
-  return d.toISOString().split("T")[0];
+  const y = d.getFullYear();
+  const mo = String(d.getMonth() + 1).padStart(2, "0");
+  const dy = String(d.getDate()).padStart(2, "0");
+  return `${y}-${mo}-${dy}`;
 }
+
 
 const daysBetween = daysBetweenUtil;
 
@@ -117,18 +121,24 @@ const formatPlanDate = formatDate;
 function inferUnit(label: string): string {
   const key = label.toLowerCase();
   if (key.includes("calorie")) return "kcal";
-  if (key.includes("protein") || key.includes("carb") || key.includes("fat")) return "g";
+  if (key.includes("protein") || key.includes("carb") || /\bfat\b/.test(key)) return "g";
   if (key.includes("duration") || key.includes("time")) return "min";
   if (key.includes("weight")) return "kg";
   return "";
 }
 
+function stableFieldHash(s: string): number {
+  let h = 0;
+  for (let i = 0; i < s.length; i++) h = (Math.imul(31, h) + s.charCodeAt(i)) | 0;
+  return Math.abs(h);
+}
+
 function createSummaryFromMeta(metaFields: string[]): SummaryConfig[] {
-  return metaFields.map((field, index) => ({
+  return metaFields.map((field) => ({
     label: field,
     metaKey: field,
     unit: inferUnit(field),
-    colorClass: `accent-${cycleAccentColor(index)}`,
+    colorClass: `accent-${cycleAccentColor(stableFieldHash(field))}`,
   }));
 }
 
@@ -160,9 +170,10 @@ function computeCardSize(height: number, laneCount: number): CardSize {
   else if (height < 112) size = "medium";
   else size = "large";
 
-  // Degrade one step per extra lane beyond 1
+  // Degrade by laneCount — medium height cards stay readable in multi-lane layouts
   if (laneCount >= 3) {
     if (size === "large") size = "small";
+    else if (size === "medium") size = "small";
     else size = "xsmall";
   } else if (laneCount === 2) {
     if (size === "large") size = "medium";
@@ -177,13 +188,21 @@ function sortTasksByTime(tasks: Task[]): Task[] {
   return [...tasks].sort((left, right) => {
     const lm = parseTimeToMinutes(left.startTime);
     const rm = parseTimeToMinutes(right.startTime);
-    if (lm === null && rm === null) return left.title.localeCompare(right.title);
+    if (lm === null && rm === null) {
+      const lso = left.sortOrder ?? Infinity;
+      const rso = right.sortOrder ?? Infinity;
+      return lso !== rso ? lso - rso : left.title.localeCompare(right.title);
+    }
     if (lm === null) return 1;
     if (rm === null) return -1;
     if (lm !== rm) return lm - rm;
     const le = parseTimeToMinutes(left.endTime) ?? lm;
     const re = parseTimeToMinutes(right.endTime) ?? rm;
-    return le - re;
+    if (le !== re) return le - re;
+    // Use sortOrder as stable tiebreaker for tasks with identical times
+    const lso = left.sortOrder ?? Infinity;
+    const rso = right.sortOrder ?? Infinity;
+    return lso !== rso ? lso - rso : left.title.localeCompare(right.title);
   });
 }
 
@@ -264,10 +283,74 @@ export default function ScheduleApp() {
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [templatesOpen, setTemplatesOpen] = useState(false);
   const timelineScrollRef = useRef<HTMLDivElement | null>(null);
-  const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 8 } }));
+  const hasUserScrolledTimelineRef = useRef(false);
+  const isAutoScrollingRef = useRef(false);
+  const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 12 } }));
 
   useEffect(() => {
-    const id = window.setInterval(() => setNowMinutes(getCurrentMinutes()), 60_000);
+    hasUserScrolledTimelineRef.current = false;
+  }, [activeDay]);
+
+  useEffect(() => {
+    if (
+      !ready ||
+      activeTab !== 0 ||
+      viewMode !== "timeline" ||
+      activeDay !== todayKey ||
+      editMode ||
+      hasUserScrolledTimelineRef.current
+    ) {
+      return;
+    }
+
+    const id = requestAnimationFrame(() => {
+      const timeline = timelineScrollRef.current;
+
+      if (!timeline) return;
+
+      const clampedNow = clamp(
+        getCurrentMinutes(),
+        TIMELINE_START_MINUTES,
+        TIMELINE_END_MINUTES
+      );
+
+      const currentTop =
+        TIMELINE_TOP_PADDING +
+        ((clampedNow - TIMELINE_START_MINUTES) / 60) * HOUR_HEIGHT;
+
+      const targetTop = clamp(
+        currentTop - timeline.clientHeight * 0.5,
+        0,
+        timeline.scrollHeight - timeline.clientHeight
+      );
+
+      isAutoScrollingRef.current = true;
+
+      timeline.scrollTo({
+        top: targetTop,
+        behavior: "smooth",
+      });
+
+      window.setTimeout(() => {
+        isAutoScrollingRef.current = false;
+      }, 450);
+    });
+
+    return () => cancelAnimationFrame(id);
+  }, [
+    ready,
+    activeTab,
+    viewMode,
+    activeDay,
+    todayKey,
+    editMode,
+  ]);
+
+
+  useEffect(() => {
+    const id = window.setInterval(() => {
+  setNowMinutes(getCurrentMinutes());
+}, 30_000);
     return () => window.clearInterval(id);
   }, []);
 
@@ -280,6 +363,12 @@ export default function ScheduleApp() {
   }, [ready, isFirstLaunch]);
 
   useEffect(() => {
+    // On tab wake after sleep, todayKey may be stale — correct it immediately.
+    const currentKey = JS_DAYS[new Date().getDay()];
+    if (todayKey !== currentKey) {
+      setTodayKey(currentKey);
+      return; // effect re-fires with the corrected key
+    }
     const now = new Date();
     const msUntilMidnight =
       new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1).getTime() - now.getTime();
@@ -287,24 +376,7 @@ export default function ScheduleApp() {
     return () => window.clearTimeout(id);
   }, [todayKey]);
 
-  useEffect(() => {
-    if (!ready || activeTab !== 0 || viewMode !== "timeline" || activeDay !== todayKey || editMode) return;
-    // rAF ensures layout dimensions are available after the view mounts/animates in
-    const id = requestAnimationFrame(() => {
-      const timeline = timelineScrollRef.current;
-      if (!timeline) return;
-      const clampedNow = clamp(getCurrentMinutes(), TIMELINE_START_MINUTES, TIMELINE_END_MINUTES);
-      const currentTop =
-        TIMELINE_TOP_PADDING + ((clampedNow - TIMELINE_START_MINUTES) / 60) * HOUR_HEIGHT;
-      const targetTop = clamp(
-        currentTop - timeline.clientHeight * 0.5,
-        0,
-        timeline.scrollHeight - timeline.clientHeight
-      );
-      timeline.scrollTop = targetTop;
-    });
-    return () => cancelAnimationFrame(id);
-  }, [activeDay, activeTab, editMode, ready, viewMode]);
+
 
   // ─── Handlers ──────────────────────────────────────────────────────────────
 
@@ -452,19 +524,17 @@ export default function ScheduleApp() {
 
   function handleReorderTasks(activeId: string, overId: string) {
     setSchedule((prev) => {
-      const tasks = prev.activities[activeDay];
-      const activeTask = tasks.find((t) => t.id === activeId);
-      const overTask = tasks.find((t) => t.id === overId);
-      if (!activeTask || !overTask) return prev;
+      const sorted = sortTasksByTime(prev.activities[activeDay]);
+      const activeIdx = sorted.findIndex((t) => t.id === activeId);
+      const overIdx = sorted.findIndex((t) => t.id === overId);
+      if (activeIdx === -1 || overIdx === -1) return prev;
+      const reordered = arrayMove(sorted, activeIdx, overIdx);
+      const updatedMap = new Map(reordered.map((t, i) => [t.id, { ...t, sortOrder: i * 1000 }]));
       return {
         ...prev,
         activities: {
           ...prev.activities,
-          [activeDay]: tasks.map((task) => {
-            if (task.id === activeId) return { ...task, startTime: overTask.startTime, endTime: overTask.endTime };
-            if (task.id === overId) return { ...task, startTime: activeTask.startTime, endTime: activeTask.endTime };
-            return task;
-          }),
+          [activeDay]: prev.activities[activeDay].map((t) => updatedMap.get(t.id) ?? t),
         },
       };
     });
@@ -498,12 +568,12 @@ export default function ScheduleApp() {
       plans: prev.plans.map((p) =>
         p.id === planId
           ? {
-              ...p,
-              title,
-              description: editPlanDraft.description.trim() || undefined,
-              startDate: editPlanDraft.startDate || undefined,
-              endDate: editPlanDraft.endDate || undefined,
-            }
+            ...p,
+            title,
+            description: editPlanDraft.description.trim() || undefined,
+            startDate: editPlanDraft.startDate || undefined,
+            endDate: editPlanDraft.endDate || undefined,
+          }
           : p
       ),
     }));
@@ -519,9 +589,9 @@ export default function ScheduleApp() {
           day,
           activeDays.includes(day)
             ? prev.activities[day].filter((t) => {
-                const k = `${t.title.trim().toLowerCase()}|${t.startTime}|${t.endTime}`;
-                return k !== matchKey || t.planId !== task.planId;
-              })
+              const k = `${t.title.trim().toLowerCase()}|${t.startTime}|${t.endTime}`;
+              return k !== matchKey || t.planId !== task.planId;
+            })
             : prev.activities[day],
         ])
       ) as typeof prev.activities,
@@ -554,7 +624,7 @@ export default function ScheduleApp() {
       ...prev,
       milestones: (prev.milestones ?? []).map((m) =>
         m.id === id
-          ? { ...m, completionStatus: "completed", completedDate: new Date().toISOString().split("T")[0] }
+          ? { ...m, completionStatus: "completed", completedDate: todayISO() }
           : m
       ),
     }));
@@ -598,7 +668,9 @@ export default function ScheduleApp() {
       weekLabel: dates[2].date.toLocaleDateString("en-US", { month: "long", year: "numeric" }),
       todayMidnightTime: midnight.getTime(),
     };
-  }, [weekOffset]);
+    // todayKey ensures todayMidnightTime is refreshed when the date rolls over
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [weekOffset, todayKey]);
 
   const selectedPlan = useMemo(
     () => (selectedPlanId ? plansById.get(selectedPlanId) ?? null : null),
@@ -727,7 +799,7 @@ export default function ScheduleApp() {
     const totalSubtasks = linkedPlan?.items.length ?? 0;
     const allSubtaskIds = linkedPlan?.items.map((i) => i.id) ?? [];
     const taskState = resolveTaskState(task, totalSubtasks);
-    const done    = taskState === "completed";
+    const done = taskState === "completed";
     const partial = taskState === "partial";
 
     // Completed cards recede at card level — preserve color, just lower opacity
@@ -742,11 +814,10 @@ export default function ScheduleApp() {
         transition={{ type: "spring", stiffness: 500, damping: 25 }}
         onClick={(e) => { e.stopPropagation(); handleToggleTaskComplete(task.id, allSubtaskIds); }}
         aria-label={done ? "Mark incomplete" : "Mark complete"}
-        className={`absolute top-2 right-2 z-10 flex h-[20px] w-[20px] shrink-0 items-center justify-center rounded-[5px] border-2 transition-colors duration-200 ${
-          done || partial
-            ? "border-transparent bg-green-500"
-            : "border-neutral-500/50 bg-transparent dark:border-white/55"
-        }`}
+        className={`absolute top-2 right-2 z-10 flex h-[20px] w-[20px] shrink-0 items-center justify-center rounded-[5px] border-2 transition-colors duration-200 ${done || partial
+          ? "border-transparent bg-green-500"
+          : "border-neutral-500/50 bg-transparent dark:border-white/55"
+          }`}
       >
         <AnimatePresence mode="wait" initial={false}>
           {done && (
@@ -932,11 +1003,10 @@ export default function ScheduleApp() {
                       setNewPlanStartDate(today);
                       setNewPlanEndDate(days !== null ? addDaysISO(days) : "");
                     }}
-                    className={`rounded-full border px-3 py-1.5 text-[13px] font-semibold transition-all ${
-                      isActive
-                        ? "border-neutral-950 bg-neutral-950 text-white dark:border-white dark:bg-white dark:text-neutral-900"
-                        : "border-neutral-200 bg-white text-neutral-600 hover:border-neutral-300 dark:border-white/10 dark:bg-white/[0.04] dark:text-neutral-300 dark:hover:border-white/20"
-                    }`}
+                    className={`rounded-full border px-3 py-1.5 text-[13px] font-semibold transition-all ${isActive
+                      ? "border-neutral-950 bg-neutral-950 text-white dark:border-white dark:bg-white dark:text-neutral-900"
+                      : "border-neutral-200 bg-white text-neutral-600 hover:border-neutral-300 dark:border-white/10 dark:bg-white/[0.04] dark:text-neutral-300 dark:hover:border-white/20"
+                      }`}
                   >
                     {label}
                   </button>
@@ -958,9 +1028,8 @@ export default function ScheduleApp() {
                   type="button"
                   title={label}
                   onClick={() => setNewPlanIconName(name)}
-                  className={`flex flex-col items-center justify-center gap-1 rounded-2xl py-3 transition-all duration-150 ${
-                    sel ? `${ic.solid} scale-[1.04]` : `${ic.tint} ${ic.text} hover:scale-[1.04]`
-                  }`}
+                  className={`flex flex-col items-center justify-center gap-1 rounded-2xl py-3 transition-all duration-150 ${sel ? `${ic.solid} scale-[1.04]` : `${ic.tint} ${ic.text} hover:scale-[1.04]`
+                    }`}
                 >
                   <Icon size={18} strokeWidth={1.5} />
                   <span className={`text-[9px] font-semibold leading-none ${sel ? "text-white/80" : ""}`}>
@@ -1206,18 +1275,16 @@ export default function ScheduleApp() {
                         key={day}
                         type="button"
                         onClick={() => setActiveDay(day)}
-                        className={`flex flex-col items-center justify-center gap-3 w-full rounded-lg py-2 h-[64px] transition-all duration-200 ${
-                          isActive
-                            ? "bg-neutral-950 text-white dark:bg-white dark:text-neutral-950"
-                            : isDateToday
-                              ? "bg-neutral-200 text-neutral-700 dark:bg-white/10 dark:text-neutral-200"
-                              : "text-neutral-500 hover:bg-neutral-100 dark:text-neutral-400 dark:hover:bg-white/[0.06]"
-                        }`}
+                        className={`flex flex-col items-center justify-center gap-3 w-full rounded-lg py-2 h-[64px] transition-all duration-200 ${isActive
+                          ? "bg-neutral-950 text-white dark:bg-white dark:text-neutral-950"
+                          : isDateToday
+                            ? "bg-neutral-200 text-neutral-700 dark:bg-white/10 dark:text-neutral-200"
+                            : "text-neutral-500 hover:bg-neutral-100 dark:text-neutral-400 dark:hover:bg-white/[0.06]"
+                          }`}
                       >
                         <span
-                          className={`text-[12px] font-medium leading-none ${
-                            isActive ? "opacity-60" : "opacity-50"
-                          }`}
+                          className={`text-[12px] font-medium leading-none ${isActive ? "opacity-60" : "opacity-50"
+                            }`}
                         >
                           {DAY_LABELS[day]}
                         </span>
@@ -1358,6 +1425,10 @@ export default function ScheduleApp() {
                     {/* Google Calendar-style flat timeline */}
                     <div
                       ref={timelineScrollRef}
+                      onScroll={() => {
+                        if (isAutoScrollingRef.current) return;
+                        hasUserScrolledTimelineRef.current = true;
+                      }}
                       className="calendar-scrollbar-none relative flex max-h-[74vh] overflow-y-auto overflow-x-hidden"
                     >
                       {/* Time column */}
@@ -1401,11 +1472,10 @@ export default function ScheduleApp() {
                               <div key={`grid-${hour}`}>
                                 {/* Hour line */}
                                 <div
-                                  className={`absolute left-0 right-0 ${
-                                    isMidnight
-                                      ? "border-t-2 border-neutral-200 dark:border-white/[0.12]"
-                                      : "border-t border-neutral-100 dark:border-white/[0.05]"
-                                  }`}
+                                  className={`absolute left-0 right-0 ${isMidnight
+                                    ? "border-t-2 border-neutral-200 dark:border-white/[0.12]"
+                                    : "border-t border-neutral-100 dark:border-white/[0.05]"
+                                    }`}
                                   style={{ top: TIMELINE_TOP_PADDING + index * HOUR_HEIGHT }}
                                 />
                                 {/* Half-hour dashed line */}
@@ -1565,11 +1635,10 @@ export default function ScheduleApp() {
                         startDate: today,
                         endDate: days !== null ? addDaysISO(days) : "",
                       }))}
-                      className={`rounded-full border px-3 py-1.5 text-[13px] font-semibold transition-all ${
-                        isActive
-                          ? "border-neutral-950 bg-neutral-950 text-white dark:border-white dark:bg-white dark:text-neutral-900"
-                          : "border-neutral-200 bg-white text-neutral-600 hover:border-neutral-300 dark:border-white/10 dark:bg-white/[0.04] dark:text-neutral-300 dark:hover:border-white/20"
-                      }`}
+                      className={`rounded-full border px-3 py-1.5 text-[13px] font-semibold transition-all ${isActive
+                        ? "border-neutral-950 bg-neutral-950 text-white dark:border-white dark:bg-white dark:text-neutral-900"
+                        : "border-neutral-200 bg-white text-neutral-600 hover:border-neutral-300 dark:border-white/10 dark:bg-white/[0.04] dark:text-neutral-300 dark:hover:border-white/20"
+                        }`}
                     >
                       {label}
                     </button>

@@ -6,11 +6,12 @@
 import type { Task, Milestone, Plan } from "./useScheduleDB";
 import { DAYS } from "./useScheduleDB";
 import type { DayKey } from "./useScheduleDB";
+import { localISODate } from "./dateUtils";
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
 export function isoDate(d: Date): string {
-  return d.toISOString().split("T")[0];
+  return localISODate(d);
 }
 
 export function addDays(d: Date, n: number): Date {
@@ -75,11 +76,11 @@ function buildCompletionMap(
       if (Array.isArray(task.completionHistory)) {
         for (const event of task.completionHistory) {
           if (event.completionType === "task") {
-            increment(event.completedAt.split("T")[0]);
+            increment(localISODate(new Date(event.completedAt)));
           }
         }
       } else if (task.completedAt && task.completed) {
-        increment(task.completedAt.split("T")[0]);
+        increment(localISODate(new Date(task.completedAt)));
       }
     }
   }
@@ -105,39 +106,60 @@ function buildPlanDailyCells(
 ): DayCell[] {
   const todayStr = isoDate(today);
 
-  // ── Determine the visible logical range (plan period) ─────────────────────
-  let logicalStart: Date;
-  if (planStart) {
-    logicalStart = new Date(planStart + "T00:00:00");
-  } else {
-    logicalStart = addDays(today, -90);
+  // ── Ongoing plans: rolling loop ───────────────────────────────────────────
+  // No end date → treat the entire 1-year look-back window as "inside the plan".
+  // Every cell is active (isOutsidePlan=false). Activity shows as grey if none,
+  // coloured if present — exactly like a GitHub contribution graph.
+  if (!planEnd) {
+    const displayStart = addDays(today, -364); // 52 full weeks back
+    const displayEnd   = today;
+
+    const gridStart = new Date(displayStart);
+    gridStart.setDate(gridStart.getDate() - gridStart.getDay());
+    const gridEnd = new Date(displayEnd);
+    gridEnd.setDate(gridEnd.getDate() + (6 - gridEnd.getDay()));
+
+    const cells: DayCell[] = [];
+    const cursor = new Date(gridStart);
+    while (cursor <= gridEnd) {
+      const dateStr  = isoDate(cursor);
+      const isFuture = dateStr > todayStr;
+      const count    = completionMap.get(dateStr) ?? 0;
+      let intensity: 0 | 1 | 2 | 3 = 0;
+      if (!isFuture) {
+        if (count === 1) intensity = 1;
+        else if (count <= 3) intensity = 2;
+        else if (count > 3) intensity = 3;
+      }
+      cells.push({ date: dateStr, intensity, count, isFuture, isOutsidePlan: false });
+      cursor.setDate(cursor.getDate() + 1);
+    }
+    return cells;
   }
 
-  let logicalEnd: Date;
-  if (planEnd) {
-    logicalEnd = new Date(planEnd + "T00:00:00");
-    // Show future dates up to plan end, but cap at today + 180 days
-    const futureCap = addDays(today, 180);
-    if (logicalEnd > futureCap) logicalEnd = futureCap;
-  } else {
-    logicalEnd = today;
-  }
+  // ── Fixed-duration plans: planStart → planEnd ─────────────────────────────
+  const planActiveStart = planStart
+    ? new Date(planStart + "T00:00:00")
+    : addDays(today, -90);
 
-  // Cap length at 2 years from start
-  const maxEnd = addDays(logicalStart, 730);
-  if (logicalEnd > maxEnd) logicalEnd = maxEnd;
+  let planActiveEnd = new Date(planEnd + "T00:00:00");
+  const futureCap = addDays(today, 180);
+  if (planActiveEnd > futureCap) planActiveEnd = futureCap;
+  if (planActiveEnd < planActiveStart) planActiveEnd = today;
 
-  // Ensure end >= start
-  if (logicalEnd < logicalStart) logicalEnd = today;
+  const planStartStr = isoDate(planActiveStart);
+  const planEndStr   = isoDate(planActiveEnd);
 
-  const logicalStartStr = isoDate(logicalStart);
-  const logicalEndStr = isoDate(logicalEnd);
+  // Cap to the most recent 2 years ending at planEnd for very long plans
+  let displayStart = new Date(planActiveStart);
+  const twoYearsBeforeEnd = addDays(planActiveEnd, -730);
+  if (displayStart < twoYearsBeforeEnd) displayStart = twoYearsBeforeEnd;
 
   // ── Pad to full week boundaries (Sunday = day 0) ──────────────────────────
-  const gridStart = new Date(logicalStart);
+  const gridStart = new Date(displayStart);
   gridStart.setDate(gridStart.getDate() - gridStart.getDay()); // back to Sunday
 
-  const gridEnd = new Date(logicalEnd);
+  const gridEnd = new Date(planActiveEnd);
   gridEnd.setDate(gridEnd.getDate() + (6 - gridEnd.getDay())); // forward to Saturday
 
   // ── Build cells ───────────────────────────────────────────────────────────
@@ -146,7 +168,7 @@ function buildPlanDailyCells(
 
   while (cursor <= gridEnd) {
     const dateStr = isoDate(cursor);
-    const isOutsidePlan = dateStr < logicalStartStr || dateStr > logicalEndStr;
+    const isOutsidePlan = dateStr < planStartStr || dateStr > planEndStr;
     const isFuture = dateStr > todayStr;
     const count = completionMap.get(dateStr) ?? 0;
 

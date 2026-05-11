@@ -56,6 +56,7 @@ export interface Task {
   completedSubtaskIds?: string[];
   completionHistory?: TaskCompletionEvent[]; // append-only event log
   streakEnabled?: boolean;            // opt-in to streak tracking
+  sortOrder?: number;                 // drag-reorder position within a day
 }
 
 export interface SummaryConfig {
@@ -342,6 +343,7 @@ function normalizeTasks(value: unknown, fallbackPlanId: string, fallbackIcon = "
         ...(task.completedSubtaskIds !== undefined && { completedSubtaskIds: task.completedSubtaskIds }),
         ...(task.completionHistory !== undefined && { completionHistory: task.completionHistory }),
         ...(task.streakEnabled !== undefined && { streakEnabled: task.streakEnabled }),
+        ...(task.sortOrder !== undefined && { sortOrder: task.sortOrder }),
       }];
     }
 
@@ -403,6 +405,15 @@ function migrate(raw: unknown): Schedule {
       .map((plan) => normalizePlan(plan))
       .filter((plan): plan is Plan => plan !== null);
     const plans = ensureActivityPlans(normalizedPlans, r.activities);
+    // Guard: if plans is still empty but raw activities contain tasks, add the
+    // legacy plan so those tasks aren't orphaned (hasAnyTasks may miss edge cases).
+    if (plans.length === 0) {
+      const hasRawTasks = DAYS.some((day) => {
+        const dayData = (r.activities as Record<string, unknown>)?.[day];
+        return Array.isArray(dayData) && dayData.length > 0;
+      });
+      if (hasRawTasks) plans.push(legacyActivityPlan());
+    }
     const fallbackPlanId = plans[0]?.id ?? legacyActivityPlan().id;
     const progressTrackers = trackersFromPlans(
       plans,
