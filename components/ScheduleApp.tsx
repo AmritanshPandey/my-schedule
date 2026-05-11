@@ -318,8 +318,10 @@ export default function ScheduleApp() {
         TIMELINE_TOP_PADDING +
         ((clampedNow - TIMELINE_START_MINUTES) / 60) * HOUR_HEIGHT;
 
+      const visibleCenterOffset = 140;
+
       const targetTop = clamp(
-        currentTop - timeline.clientHeight * 0.5,
+        currentTop - timeline.clientHeight / 2 + visibleCenterOffset,
         0,
         timeline.scrollHeight - timeline.clientHeight
       );
@@ -349,8 +351,8 @@ export default function ScheduleApp() {
 
   useEffect(() => {
     const id = window.setInterval(() => {
-  setNowMinutes(getCurrentMinutes());
-}, 30_000);
+      setNowMinutes(getCurrentMinutes());
+    }, 30_000);
     return () => window.clearInterval(id);
   }, []);
 
@@ -1429,7 +1431,7 @@ export default function ScheduleApp() {
                         if (isAutoScrollingRef.current) return;
                         hasUserScrolledTimelineRef.current = true;
                       }}
-                      className="calendar-scrollbar-none relative flex max-h-[74vh] overflow-y-auto overflow-x-hidden"
+                      className="calendar-scrollbar-none relative flex h-[calc(100vh-290px)] overflow-y-auto overflow-x-hidden"
                     >
                       {/* Time column */}
                       <div
