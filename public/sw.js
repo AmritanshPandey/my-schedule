@@ -1,5 +1,5 @@
-const CACHE = 'planr-v1';
-const PRECACHE = ['/', '/manifest.webmanifest'];
+const CACHE = 'planr-v2';
+const PRECACHE = ['/', '/manifest.json'];
 
 self.addEventListener('install', (e) => {
   self.skipWaiting();
@@ -28,6 +28,7 @@ self.addEventListener('fetch', (e) => {
     e.respondWith(
       fetch(request)
         .then((r) => {
+          // Clone synchronously before any async operation
           const clone = r.clone();
           caches.open(CACHE).then((c) => c.put(request, clone));
           return r;
@@ -42,7 +43,11 @@ self.addEventListener('fetch', (e) => {
     caches.match(request).then((cached) => {
       if (cached) return cached;
       return fetch(request).then((r) => {
-        if (r.ok) caches.open(CACHE).then((c) => c.put(request, r.clone()));
+        // Clone synchronously before passing into async cache.put
+        if (r.ok) {
+          const clone = r.clone();
+          caches.open(CACHE).then((c) => c.put(request, clone));
+        }
         return r;
       });
     })
