@@ -15,7 +15,7 @@ const nunito = Nunito({
 export const metadata: Metadata = {
   title: "PlanR",
   description: "Goal-oriented planning with integrated progress tracking",
-  manifest: "/manifest.webmanifest",
+  manifest: "/manifest.json",
   appleWebApp: {
     capable: true,
     statusBarStyle: "black-translucent",
