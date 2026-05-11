@@ -21,12 +21,35 @@ const MONTHS = [
 
 /**
  * Slice to the last `weeksNeeded * 7` cells (already week-aligned from the engine).
- * Returns the full array when fewer cells exist.
+ * When fewer cells exist, pads the front with invisible out-of-plan spacers so
+ * the full range grid always renders (e.g. 1Y always shows 53 week columns).
  */
 export function filterCellsByRange(allCells: DayCell[], range: RangeKey): DayCell[] {
   const cellsNeeded = RANGE_WEEKS[range] * 7;
-  if (allCells.length <= cellsNeeded) return allCells;
-  return allCells.slice(allCells.length - cellsNeeded);
+
+  if (allCells.length >= cellsNeeded) {
+    return allCells.slice(allCells.length - cellsNeeded);
+  }
+
+  // Pad the front with out-of-plan ghost cells to reach the full range width.
+  const padCount = cellsNeeded - allCells.length;
+  const anchor = allCells.length > 0
+    ? new Date(allCells[0].date + "T00:00:00")
+    : new Date();
+
+  const padding: DayCell[] = Array.from({ length: padCount }, (_, i) => {
+    const d = new Date(anchor);
+    d.setDate(d.getDate() - (padCount - i));
+    return {
+      date: d.toISOString().split("T")[0],
+      intensity: 0,
+      count: 0,
+      isFuture: false,
+      isOutsidePlan: true,
+    };
+  });
+
+  return [...padding, ...allCells];
 }
 
 // ── Grouping ──────────────────────────────────────────────────────────────────
