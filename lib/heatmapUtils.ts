@@ -78,8 +78,8 @@ export function normalizeIntensity(cells: DayCell[]): Map<string, 0 | 1 | 2 | 3 
 // ── Cell sizing ───────────────────────────────────────────────────────────────
 
 const CELL_GAP    = 2;
-const CELL_MIN    = 10; // accessibility floor — no smaller than this
-const CELL_MAX    = 26; // cap so cells don't become comically large on sparse ranges
+const CELL_MIN    = 10;  // accessibility floor — no smaller than this
+const CELL_MAX    = 100; // high cap so 7D / 30D cells fill the container naturally
 
 /**
  * Compute cell pixel size from the measured container width and visible week count.

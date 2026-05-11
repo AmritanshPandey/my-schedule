@@ -42,27 +42,32 @@ interface TooltipState {
   y: number;
 }
 
-// ── Color system — 6 levels (0 = ghost, 5 = peak) ─────────────────────────────
-// Light: near-invisible empty → rich emerald peak
-// Dark:  subtler base, luminous peak (creates glow feel)
+// ── Color system ──────────────────────────────────────────────────────────────
+// Level 0  = past, no activity  → dark visible square ("missed")
+// Level 1–5 = activity          → emerald gradient
+// Future cells and outside-plan cells are handled separately in the renderer.
 
 const CELL_LIGHT = [
-  "#f1f5f4",   // 0 ghost
-  "#d1fae5",   // 1 trace   — emerald-100
-  "#a7f3d0",   // 2 low     — emerald-200
-  "#6ee7b7",   // 3 medium  — emerald-300
-  "#10b981",   // 4 high    — emerald-500
-  "#059669",   // 5 peak    — emerald-600
+  "rgba(0,0,0,0.10)",  // 0 past / no activity — visible dark square
+  "#d1fae5",           // 1 trace   — emerald-100
+  "#a7f3d0",           // 2 low     — emerald-200
+  "#6ee7b7",           // 3 medium  — emerald-300
+  "#10b981",           // 4 high    — emerald-500
+  "#059669",           // 5 peak    — emerald-600
 ] as const;
 
 const CELL_DARK = [
-  "rgba(255,255,255,0.045)",  // 0 ghost
-  "rgba(6,78,59,0.55)",       // 1 trace   — emerald-950 blend
-  "rgba(6,78,59,0.85)",       // 2 low     — emerald-900
-  "rgba(4,120,87,0.80)",      // 3 medium  — emerald-700
-  "rgba(16,185,129,0.85)",    // 4 high    — emerald-500
-  "rgba(52,211,153,0.95)",    // 5 peak    — emerald-400
+  "rgba(255,255,255,0.10)",  // 0 past / no activity — visible dark square
+  "rgba(6,78,59,0.55)",      // 1 trace   — emerald-950 blend
+  "rgba(6,78,59,0.85)",      // 2 low     — emerald-900
+  "rgba(4,120,87,0.80)",     // 3 medium  — emerald-700
+  "rgba(16,185,129,0.85)",   // 4 high    — emerald-500
+  "rgba(52,211,153,0.95)",   // 5 peak    — emerald-400
 ] as const;
+
+// Future: scheduled but not yet happened — very subtle outline feel
+const FUTURE_LIGHT = "rgba(0,0,0,0.04)";
+const FUTURE_DARK  = "rgba(255,255,255,0.04)";
 
 // Today ring — stands out on any cell level
 const TODAY_RING = "ring-1 ring-emerald-500/70 dark:ring-emerald-400/80 ring-offset-[1.5px] ring-offset-white dark:ring-offset-neutral-900";
@@ -248,7 +253,7 @@ function ConsistencyHeatmapInner({ cells }: ConsistencyHeatmapProps) {
   // ── Handlers ───────────────────────────────────────────────────────────────
 
   const handleCellEnter = useCallback((e: React.PointerEvent, cell: DayCell) => {
-    if (!cell.date || cell.isOutsidePlan || cell.isFuture) return;
+    if (!cell.date || cell.isOutsidePlan) return;
     const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
     setTooltip({ date: cell.date, count: cell.count, x: rect.left + rect.width / 2, y: rect.top - 8 });
   }, []);
@@ -331,23 +336,25 @@ function ConsistencyHeatmapInner({ cells }: ConsistencyHeatmapProps) {
                     {weeks.map((week, wi) => (
                       <div key={wi} className="flex shrink-0 flex-col" style={{ gap: cfg.gap }}>
                         {week.map((cell, di) => {
-                          const skip    = cell.isOutsidePlan || cell.isFuture;
-                          const isToday = cell.date === today;
-                          const level   = skip ? 0 : (intensityMap.get(cell.date) ?? 0);
-                          const bg      = cellColor(level);
+                          const isToday  = cell.date === today;
+                          const dark     = isDarkMode();
+                          const interactive = !cell.isOutsidePlan && !cell.isFuture;
+
+                          // Color encodes state — no opacity tricks needed
+                          const bg = cell.isOutsidePlan
+                            ? "transparent"
+                            : cell.isFuture
+                              ? (dark ? FUTURE_DARK : FUTURE_LIGHT)
+                              : cellColor(intensityMap.get(cell.date) ?? 0);
 
                           return (
                             <motion.div
                               key={`${wi}-${di}`}
                               data-date={cell.date || undefined}
-                              data-count={!skip ? cell.count : undefined}
-                              // Entry: staggered wave left → right, top → bottom
+                              data-count={interactive ? cell.count : undefined}
                               initial={{ opacity: 0, scale: 0.4 }}
-                              animate={{
-                                opacity: cell.isOutsidePlan ? 0.18 : cell.isFuture ? 0.25 : 1,
-                                scale: 1,
-                              }}
-                              whileHover={!skip ? {
+                              animate={{ opacity: cell.isOutsidePlan ? 0 : 1, scale: 1 }}
+                              whileHover={interactive ? {
                                 scale: 1.35,
                                 filter: "brightness(1.45)",
                                 zIndex: 20,
