@@ -20,26 +20,26 @@ export interface ModeConfig {
 export const MODE_CONFIG: Record<HeatmapMode, ModeConfig> = {
   compact: {
     gap: 2,
-    labelDays: [1, 3, 5],
-    showMonthLabels: false,
+    labelDays: [0, 1, 2, 3, 4, 5, 6],
+    showMonthLabels: true,
     skipMonths: 1,
   },
   standard: {
     gap: 2,
-    labelDays: [1, 3, 5],
+    labelDays: [0, 1, 2, 3, 4, 5, 6],
     showMonthLabels: true,
     skipMonths: 1,
   },
   dense: {
     gap: 2,
-    labelDays: [1, 3, 5],
+    labelDays: [0, 1, 2, 3, 4, 5, 6],
     showMonthLabels: true,
-    skipMonths: 2,
+    skipMonths: 1,
   },
 };
 
-export const DAY_LABEL_COL = 18;
-export const DAY_LABEL_GAP = 3;
+export const DAY_LABEL_COL = 22;
+export const DAY_LABEL_GAP = 4;
 
 export function resolveHeatmapMode(weekCount: number): HeatmapMode {
   if (weekCount <= 3) return "compact";

@@ -296,7 +296,7 @@ function ConsistencyHeatmapInner({ cells }: ConsistencyHeatmapProps) {
                       style={{ height: cellSize }}
                     >
                       {cfg.labelDays.includes(i) && (
-                        <span className="text-[8px] font-medium leading-none text-neutral-400/70 dark:text-neutral-600">
+                        <span className="text-[9px] font-semibold leading-none text-neutral-400/80 dark:text-neutral-500">
                           {name}
                         </span>
                       )}
@@ -318,7 +318,7 @@ function ConsistencyHeatmapInner({ cells }: ConsistencyHeatmapProps) {
                         style={{ width: cellSize }}
                       >
                         {monthLabels[wi] && (
-                          <span className="whitespace-nowrap text-[8px] font-semibold leading-none text-neutral-400/80 dark:text-neutral-600">
+                          <span className="whitespace-nowrap text-[9px] font-semibold leading-none text-neutral-400/80 dark:text-neutral-500">
                             {monthLabels[wi]}
                           </span>
                         )}
