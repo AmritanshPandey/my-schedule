@@ -5,7 +5,7 @@
  * can pass it directly to setSchedule(). No component logic lives here.
  */
 
-import type { Schedule, Task, DayKey } from "./useScheduleDB";
+import { DAYS, type Schedule, type Task, type DayKey } from "./useScheduleDB";
 import type { ScheduleEntry } from "@/components/ScheduleItem";
 import { colorFromIcon } from "./colorSystem";
 
@@ -80,6 +80,47 @@ export function updateTask(
         t.id === taskId ? { ...t, ...updates } : t
       ),
     };
+    return { ...prev, plans, activities };
+  };
+}
+
+/**
+ * Updates a task's editable fields and the days it is visible on. Existing
+ * per-day completion state is preserved because only the supplied editable
+ * fields are merged into existing copies.
+ */
+export function updateTaskDays(
+  taskId: string,
+  updates: Omit<Task, "id">,
+  targetDays: DayKey[],
+  planItems: PlanItemsUpdate | null
+): (prev: Schedule) => Schedule {
+  const days = new Set(targetDays.length > 0 ? targetDays : ["monday" as DayKey]);
+
+  return (prev) => {
+    const plans = planItems
+      ? prev.plans.map((p) =>
+          p.id === planItems.planId ? { ...p, items: planItems.items } : p
+        )
+      : prev.plans;
+
+    const activities = Object.fromEntries(
+      DAYS.map((day) => {
+        const existingTasks = prev.activities[day];
+        const hasTask = existingTasks.some((t) => t.id === taskId);
+
+        if (!days.has(day)) {
+          return [day, existingTasks.filter((t) => t.id !== taskId)];
+        }
+
+        const updatedTasks = hasTask
+          ? existingTasks.map((t) => (t.id === taskId ? { ...t, ...updates } : t))
+          : [...existingTasks, { ...updates, id: taskId }];
+
+        return [day, updatedTasks];
+      })
+    ) as Schedule["activities"];
+
     return { ...prev, plans, activities };
   };
 }

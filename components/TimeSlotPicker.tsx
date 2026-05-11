@@ -56,6 +56,28 @@ function durationMinutes(startTime: string, endTime: string): number | null {
   return end - start;
 }
 
+function formatTimeDraft(value: string): string {
+  const digits = value.replace(/\D/g, "").slice(0, 4);
+  if (digits.length <= 2) return digits;
+  return `${digits.slice(0, 2)}:${digits.slice(2)}`;
+}
+
+function normalizeTimeDraft(value: string): string {
+  const digits = value.replace(/\D/g, "").slice(0, 4);
+  if (!digits) return "";
+
+  const hourDigits = digits.length <= 2 ? digits : digits.slice(0, digits.length - 2);
+  const minuteDigits = digits.length <= 2 ? "00" : digits.slice(-2);
+  const hours = Number(hourDigits);
+  const minutes = Number(minuteDigits);
+
+  if (!Number.isFinite(hours) || !Number.isFinite(minutes) || hours > 23 || minutes > 59) {
+    return "";
+  }
+
+  return `${String(hours).padStart(2, "0")}:${String(minutes).padStart(2, "0")}`;
+}
+
 function durationLabel(minutes: number | null): string {
   if (minutes === null) return "Set time";
   const hours = Math.floor(minutes / 60);
@@ -140,31 +162,48 @@ export default function TimeSlotPicker({
         <div>
           <p className={`mb-1.5 ${LABEL}`}>Start</p>
           <input
-            type="time"
+            type="text"
+            inputMode="numeric"
+            autoComplete="off"
+            enterKeyHint="next"
+            placeholder="09:00"
             value={startTime}
             onChange={(e) => {
-              const value = e.target.value;
+              const value = formatTimeDraft(e.target.value);
               onStartChange(value);
               if (selectedDuration !== null) {
                 const start = inputToMinutes(value);
                 if (start !== null) onEndChange(minutesToInput(start + selectedDuration));
               }
             }}
-            className="h-11 w-full rounded-xl border border-neutral-200 bg-neutral-50 px-3 text-[14px] font-medium text-neutral-700 outline-none transition-colors focus:border-neutral-300 focus:bg-white dark:border-white/10 dark:bg-white/[0.04] dark:text-white dark:focus:border-white/20 dark:focus:bg-white/[0.08]"
+            onBlur={(e) => {
+              const value = normalizeTimeDraft(e.target.value);
+              onStartChange(value);
+              if (selectedDuration !== null && value) {
+                const start = inputToMinutes(value);
+                if (start !== null) onEndChange(minutesToInput(start + selectedDuration));
+              }
+            }}
+            className="h-11 w-full min-w-0 appearance-none rounded-xl border border-neutral-200 bg-neutral-50 px-3 text-[16px] font-semibold tabular-nums text-neutral-700 outline-none transition-colors placeholder:text-neutral-400 focus:border-neutral-300 focus:bg-white dark:border-white/10 dark:bg-white/[0.04] dark:text-white dark:placeholder:text-neutral-600 dark:focus:border-white/20 dark:focus:bg-white/[0.08]"
           />
         </div>
         <div>
           <p className={`mb-1.5 ${LABEL}`}>End</p>
           <input
-            type="time"
+            type="text"
+            inputMode="numeric"
+            autoComplete="off"
+            enterKeyHint="done"
+            placeholder="10:00"
             value={endTime}
             onChange={(e) => {
               setSelectedDuration(null);
-              onEndChange(e.target.value);
+              onEndChange(formatTimeDraft(e.target.value));
             }}
-            className="
-            h-11 w-full rounded-xl border border-neutral-200 bg-neutral-50 px-4 text-[14px] font-medium text-neutral-900 outline-none placeholder:text-neutral-400 transition-colors focus:border-neutral-300 focus:bg-white dark:border-white/10 dark:bg-white/[0.04] dark:text-white dark:placeholder:text-neutral-500 dark:focus:border-white/15 dark:focus:bg-white/[0.06]
-            "
+            onBlur={(e) => {
+              onEndChange(normalizeTimeDraft(e.target.value));
+            }}
+            className="h-11 w-full min-w-0 appearance-none rounded-xl border border-neutral-200 bg-neutral-50 px-3 text-[16px] font-semibold tabular-nums text-neutral-900 outline-none transition-colors placeholder:text-neutral-400 focus:border-neutral-300 focus:bg-white dark:border-white/10 dark:bg-white/[0.04] dark:text-white dark:placeholder:text-neutral-600 dark:focus:border-white/15 dark:focus:bg-white/[0.06]"
           />
         </div>
       </div>
@@ -214,7 +253,7 @@ export default function TimeSlotPicker({
       {repeatDays && onRepeatDaysChange && (
         <div className="space-y-2">
           <div className="flex items-center justify-between gap-3">
-            <p className={LABEL}>Repeat on</p>
+            <p className={LABEL}>Visible on</p>
             <p className="text-[11px] font-semibold text-neutral-400 dark:text-neutral-500">
               {allDaysSelected ? "All days" : `${repeatDays.length} ${repeatDays.length === 1 ? "day" : "days"}`}
             </p>

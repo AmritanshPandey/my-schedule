@@ -5,6 +5,7 @@ import { AnimatePresence, motion } from "framer-motion";
 import AddEntryModal from "@/components/AddEntryModal";
 import { TaskSheet, type TaskSaveData } from "@/components/task/TaskSheet";
 import PlanDetailView from "@/components/plan/PlanDetailView";
+import type { MilestoneSaveData } from "@/components/plan/MilestoneSheet";
 import { PlanCard } from "@/components/plan/PlanCard";
 import AppHeader from "@/components/AppHeader";
 import { SettingsSheet } from "@/components/auth/SettingsSheet";
@@ -55,7 +56,7 @@ import {
   isTaskCompleted,
   resolveTaskState,
 } from "@/lib/taskCompletion";
-import { createTask, updateTask, deleteTask, uid } from "@/lib/taskMutations";
+import { createTask, updateTaskDays, deleteTask, uid } from "@/lib/taskMutations";
 import { applyTemplate } from "@/lib/templates";
 import { TemplatesSheet } from "@/components/TemplatesSheet";
 import type { Template } from "@/lib/templates";
@@ -64,6 +65,7 @@ import { todayISO, daysBetween as daysBetweenUtil, formatDate } from "@/lib/date
 import { getPlanCardStats } from "@/lib/planInsights";
 import { MainTitleSection, IconActionButton, CtaActionButton } from "@/components/ui/MainTitleSection";
 import { cycleAccentColor } from "@/components/ui/Badge";
+import { recalculateRoadmapTimeline } from "@/lib/roadmapDates";
 
 // ─── Constants ───────────────────────────────────────────────────────────────
 
@@ -409,7 +411,7 @@ export default function ScheduleApp() {
   function handleTaskSheetSave(data: TaskSaveData) {
     if (data.taskId) {
       // Edit mode
-      setSchedule(updateTask(data.taskId, activeDay, data.taskDraft, data.planItems));
+      setSchedule(updateTaskDays(data.taskId, data.taskDraft, data.repeatDays, data.planItems));
     } else {
       // Create mode
       setSchedule(createTask(data.taskDraft, data.repeatDays, data.planItems));
@@ -578,6 +580,13 @@ export default function ScheduleApp() {
           }
           : p
       ),
+      milestones: [
+        ...(prev.milestones ?? []).filter((m) => m.planId !== planId),
+        ...recalculateRoadmapTimeline(
+          (prev.milestones ?? []).filter((m) => m.planId === planId),
+          editPlanDraft.startDate || undefined
+        ),
+      ],
     }));
     setEditingPlanId(null);
   }
@@ -602,34 +611,101 @@ export default function ScheduleApp() {
 
   // ─── Milestone handlers ──────────────────────────────────────────────────
 
-  function handleAddMilestone(planId: string, data: Omit<Milestone, "id" | "planId">) {
-    const ms: Milestone = { id: uid(), planId, ...data };
-    setSchedule((prev) => ({ ...prev, milestones: [...(prev.milestones ?? []), ms] }));
+  function handleAddMilestone(planId: string, data: MilestoneSaveData) {
+    const now = new Date().toISOString();
+    const ms: Milestone = {
+      ...data,
+      id: uid(),
+      planId,
+      linkedActivities: data.linkedActivities ?? [],
+      linkedTrackers: data.linkedTrackers ?? [],
+      createdAt: now,
+      updatedAt: now,
+    };
+    setSchedule((prev) => {
+      const plan = prev.plans.find((p) => p.id === planId);
+      const otherMilestones = (prev.milestones ?? []).filter((m) => m.planId !== planId);
+      const planMilestones = [...(prev.milestones ?? []).filter((m) => m.planId === planId), ms];
+      const roadmapStartDate = planMilestones.length === 1 ? ms.startDate : plan?.startDate;
+      return {
+        ...prev,
+        milestones: [
+          ...otherMilestones,
+          ...recalculateRoadmapTimeline(planMilestones, roadmapStartDate),
+        ],
+      };
+    });
   }
 
   function handleUpdateMilestone(id: string, data: Partial<Milestone>) {
     setSchedule((prev) => ({
       ...prev,
-      milestones: (prev.milestones ?? []).map((m) => (m.id === id ? { ...m, ...data } : m)),
+      milestones: (() => {
+        const existing = (prev.milestones ?? []).find((m) => m.id === id);
+        if (!existing) return prev.milestones ?? [];
+        const plan = prev.plans.find((p) => p.id === existing.planId);
+        const otherMilestones = (prev.milestones ?? []).filter((m) => m.planId !== existing.planId);
+        const planMilestones = (prev.milestones ?? [])
+          .filter((m) => m.planId === existing.planId)
+          .map((m) => (m.id === id ? { ...m, ...data, updatedAt: new Date().toISOString() } : m));
+        const updatedMilestone = planMilestones.find((m) => m.id === id);
+        const roadmapStartDate = existing.sortOrder === 0 ? updatedMilestone?.startDate : plan?.startDate;
+        return [
+          ...otherMilestones,
+          ...recalculateRoadmapTimeline(planMilestones, roadmapStartDate),
+        ];
+      })(),
     }));
   }
 
   function handleDeleteMilestone(id: string) {
-    setSchedule((prev) => ({
-      ...prev,
-      milestones: (prev.milestones ?? []).filter((m) => m.id !== id),
-    }));
+    setSchedule((prev) => {
+      const existing = (prev.milestones ?? []).find((m) => m.id === id);
+      if (!existing) return prev;
+      const plan = prev.plans.find((p) => p.id === existing.planId);
+      const otherMilestones = (prev.milestones ?? []).filter((m) => m.planId !== existing.planId);
+      const planMilestones = (prev.milestones ?? []).filter(
+        (m) => m.planId === existing.planId && m.id !== id
+      );
+      return {
+        ...prev,
+        milestones: [
+          ...otherMilestones,
+          ...recalculateRoadmapTimeline(planMilestones, plan?.startDate),
+        ],
+      };
+    });
   }
 
   function handleCompleteMilestone(id: string) {
-    setSchedule((prev) => ({
-      ...prev,
-      milestones: (prev.milestones ?? []).map((m) =>
-        m.id === id
-          ? { ...m, completionStatus: "completed", completedDate: todayISO() }
-          : m
-      ),
-    }));
+    setSchedule((prev) => {
+      const existing = (prev.milestones ?? []).find((m) => m.id === id);
+      if (!existing) return prev;
+      const plan = prev.plans.find((p) => p.id === existing.planId);
+      const otherMilestones = (prev.milestones ?? []).filter((m) => m.planId !== existing.planId);
+      const completedAt = todayISO();
+      const planMilestones = (prev.milestones ?? [])
+        .filter((m) => m.planId === existing.planId)
+        .map((m) =>
+          m.id === id
+            ? {
+                ...m,
+                status: "completed" as const,
+                actualCompletedDate: completedAt,
+                completionStatus: "completed" as const,
+                completedDate: completedAt,
+                updatedAt: new Date().toISOString(),
+              }
+            : m
+        );
+      return {
+        ...prev,
+        milestones: [
+          ...otherMilestones,
+          ...recalculateRoadmapTimeline(planMilestones, plan?.startDate),
+        ],
+      };
+    });
   }
 
   // ─── Derived data ──────────────────────────────────────────────────────────
@@ -638,6 +714,16 @@ export default function ScheduleApp() {
     () => sortTasksByTime(schedule.activities[activeDay]),
     [schedule.activities, activeDay]
   );
+
+  const taskSheetActiveDays = useMemo(() => {
+    if (taskSheetMode !== "edit" || !taskSheetTask) return [activeDay];
+
+    const days = DAYS.filter((day) =>
+      schedule.activities[day].some((task) => task.id === taskSheetTask.id)
+    );
+
+    return days.length > 0 ? days : [activeDay];
+  }, [activeDay, schedule.activities, taskSheetMode, taskSheetTask]);
 
   // O(1) plan lookup — avoids .find() in every render loop iteration.
   const plansById = useMemo(() => {
@@ -1678,6 +1764,7 @@ export default function ScheduleApp() {
         task={taskSheetTask}
         plans={schedule.plans}
         activeDay={activeDay}
+        activeDays={taskSheetActiveDays}
         isOpen={taskSheetOpen}
         initialPlanId={taskSheetPlanId}
         onClose={closeTaskSheet}

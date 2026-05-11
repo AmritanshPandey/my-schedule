@@ -8,6 +8,8 @@ import type { GoalDirection } from "@/lib/trendUtils";
 export type { GoalDirection };
 import { queueSync } from "@/lib/cloudSync";
 import { writeLocalLastUpdated } from "@/lib/localMeta";
+import { calculateMilestoneEndDate, recalculateRoadmapTimeline } from "@/lib/roadmapDates";
+import { localISODate } from "@/lib/dateUtils";
 
 export type DayKey = "monday" | "tuesday" | "wednesday" | "thursday" | "friday" | "saturday" | "sunday";
 export type PlanCategory = "fitness" | "learning" | "work" | "health" | "routine";
@@ -104,11 +106,21 @@ export interface Milestone {
   planId: string;
   title: string;
   description?: string;
-  targetDate?: string;       // ISO "YYYY-MM-DD"
-  estimatedDays?: number;
-  linkedTrackerId?: string;
-  completionStatus: "pending" | "completed";
-  completedDate?: string;    // ISO "YYYY-MM-DD"
+  startDate: string;              // ISO "YYYY-MM-DD"
+  plannedDurationDays: number;
+  plannedEndDate: string;         // ISO "YYYY-MM-DD"
+  actualCompletedDate?: string;   // ISO "YYYY-MM-DD"
+  status: "upcoming" | "active" | "completed" | "delayed";
+  linkedActivities: string[];
+  linkedTrackers: string[];
+  createdAt: string;
+  updatedAt: string;
+  // Legacy fields retained for backward-compatible reads/writes.
+  targetDate?: string;            // deprecated: mirrors plannedEndDate
+  estimatedDays?: number;         // deprecated: mirrors plannedDurationDays
+  linkedTrackerId?: string;       // deprecated: first linkedTrackers item
+  completionStatus?: "pending" | "completed";
+  completedDate?: string;         // deprecated: mirrors actualCompletedDate
   notes?: string;
   sortOrder: number;
 }
@@ -292,19 +304,68 @@ function trackersFromPlans(plans: Plan[], storedTrackers: ProgressTracker[]): Pr
 
 function normalizeMilestone(value: unknown): Milestone | null {
   if (!value || typeof value !== "object") return null;
-  const m = value as Milestone;
-  if (!m.id || !m.planId || !m.title) return null;
-  const status = m.completionStatus === "completed" ? "completed" : "pending";
+  const m = value as Milestone & Record<string, unknown>;
+  if (typeof m.id !== "string" || typeof m.planId !== "string" || typeof m.title !== "string") return null;
+  const plannedDurationDays =
+    typeof m.plannedDurationDays === "number"
+      ? Math.max(1, Math.round(m.plannedDurationDays))
+      : typeof m.estimatedDays === "number"
+      ? Math.max(1, Math.round(m.estimatedDays))
+      : 7;
+  const startDate =
+    typeof m.startDate === "string"
+      ? m.startDate
+      : typeof m.targetDate === "string"
+      ? m.targetDate
+      : localISODate(new Date());
+  const plannedEndDate =
+    typeof m.plannedEndDate === "string"
+      ? m.plannedEndDate
+      : typeof m.targetDate === "string"
+      ? m.targetDate
+      : calculateMilestoneEndDate(startDate, plannedDurationDays);
+  const actualCompletedDate =
+    typeof m.actualCompletedDate === "string"
+      ? m.actualCompletedDate
+      : typeof m.completedDate === "string"
+      ? m.completedDate
+      : undefined;
+  const legacyCompleted = m.completionStatus === "completed";
+  const rawStatus = m.status;
+  const status =
+    actualCompletedDate || legacyCompleted
+      ? "completed"
+      : rawStatus === "upcoming" || rawStatus === "active" || rawStatus === "delayed"
+      ? rawStatus
+      : "upcoming";
+  const linkedTrackers = Array.isArray(m.linkedTrackers)
+    ? m.linkedTrackers.filter((id): id is string => typeof id === "string")
+    : typeof m.linkedTrackerId === "string"
+    ? [m.linkedTrackerId]
+    : [];
+  const linkedActivities = Array.isArray(m.linkedActivities)
+    ? m.linkedActivities.filter((id): id is string => typeof id === "string")
+    : [];
+  const now = new Date().toISOString();
   return {
     id: m.id,
     planId: m.planId,
     title: m.title,
     description: typeof m.description === "string" ? m.description : undefined,
-    targetDate: typeof m.targetDate === "string" ? m.targetDate : undefined,
-    estimatedDays: typeof m.estimatedDays === "number" ? m.estimatedDays : undefined,
-    linkedTrackerId: typeof m.linkedTrackerId === "string" ? m.linkedTrackerId : undefined,
-    completionStatus: status,
-    completedDate: typeof m.completedDate === "string" ? m.completedDate : undefined,
+    startDate,
+    plannedDurationDays,
+    plannedEndDate,
+    actualCompletedDate,
+    status,
+    linkedActivities,
+    linkedTrackers,
+    createdAt: typeof m.createdAt === "string" ? m.createdAt : now,
+    updatedAt: typeof m.updatedAt === "string" ? m.updatedAt : now,
+    targetDate: plannedEndDate,
+    estimatedDays: plannedDurationDays,
+    linkedTrackerId: linkedTrackers[0],
+    completionStatus: status === "completed" ? "completed" : "pending",
+    completedDate: actualCompletedDate,
     notes: typeof m.notes === "string" ? m.notes : undefined,
     sortOrder: typeof m.sortOrder === "number" ? m.sortOrder : 0,
   };
@@ -318,6 +379,13 @@ function normalizeMetricEntry(value: unknown, trackers: ProgressTracker[]): Metr
   const trackerId = e.trackerId || fallbackTracker?.id;
   if (!trackerId) return null;
   return { id: e.id, planId: e.planId, trackerId, value: e.value, date: e.date };
+}
+
+function normalizeMilestoneTimelines(plans: Plan[], milestones: Milestone[]): Milestone[] {
+  return plans.flatMap((plan) => {
+    const planMilestones = milestones.filter((milestone) => milestone.planId === plan.id);
+    return recalculateRoadmapTimeline(planMilestones, plan.startDate);
+  });
 }
 
 function normalizeTasks(value: unknown, fallbackPlanId: string, fallbackIcon = "briefcase", fallbackDescription?: string): Task[] {
@@ -427,6 +495,7 @@ function migrate(raw: unknown): Schedule {
     const milestones: Milestone[] = Array.isArray(r.milestones)
       ? (r.milestones as unknown[]).map(normalizeMilestone).filter((m): m is Milestone => m !== null)
       : [];
+    const normalizedMilestones = normalizeMilestoneTimelines(plans, milestones);
 
     return {
       plans,
@@ -435,7 +504,7 @@ function migrate(raw: unknown): Schedule {
       ) as DayActivities,
       progressTrackers,
       metricEntries,
-      milestones,
+      milestones: normalizedMilestones,
     };
   }
 

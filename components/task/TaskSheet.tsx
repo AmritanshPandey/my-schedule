@@ -43,6 +43,7 @@ export interface TaskSheetProps {
   task?: Task | null;
   plans: Plan[];
   activeDay: DayKey;
+  activeDays?: DayKey[];
   isOpen: boolean;
   initialPlanId?: string | null;
   onClose: () => void;
@@ -77,6 +78,10 @@ function subtaskDraftToEntry(d: SubtaskDraft): ScheduleEntry {
 
 const SECTION_LABEL =
   "text-[11px] font-semibold uppercase tracking-[0.08em] text-neutral-400 dark:text-neutral-500";
+
+function isValidInputTime(value: string): boolean {
+  return /^([01]\d|2[0-3]):[0-5]\d$/.test(value);
+}
 
 // ── Plan selector dropdown ────────────────────────────────────────────────────
 
@@ -244,6 +249,7 @@ export function TaskSheet({
   task,
   plans,
   activeDay,
+  activeDays,
   isOpen,
   initialPlanId,
   onClose,
@@ -267,12 +273,13 @@ export function TaskSheet({
 
     if (mode === "edit" && task) {
       const linkedPlan = plans.find((p) => p.id === task.planId);
+      const selectedDays = activeDays && activeDays.length > 0 ? activeDays : [activeDay];
       setPlanId(task.planId);
       setTitle(task.title);
       setDescription(task.description ?? "");
       setStartTime(displayToInputTime(task.startTime));
       setEndTime(displayToInputTime(task.endTime));
-      setRepeatDays([activeDay]);
+      setRepeatDays(selectedDays);
       setSubtasks(linkedPlan?.items.map(entryToSubtaskDraft) ?? []);
     } else {
       const pid = initialPlanId ?? plans[0]?.id ?? "";
@@ -314,8 +321,9 @@ export function TaskSheet({
   const canSave =
     !!selectedPlan &&
     title.trim().length > 0 &&
-    startTime.length > 0 &&
-    endTime.length > 0;
+    isValidInputTime(startTime) &&
+    isValidInputTime(endTime) &&
+    repeatDays.length > 0;
 
   function handleSave() {
     if (!canSave || !selectedPlan) return;
@@ -332,22 +340,12 @@ export function TaskSheet({
       icon: selectedPlan.emoji,
       color: selectedPlan.color,
       planId: selectedPlan.id,
-      // Preserve completion fields in edit mode
-      ...(mode === "edit" && task
-        ? {
-            completed: task.completed,
-            completedAt: task.completedAt,
-            completedSubtaskIds: task.completedSubtaskIds,
-            completionHistory: task.completionHistory,
-            streakEnabled: task.streakEnabled,
-          }
-        : {}),
     };
 
     onSave({
       taskDraft,
       taskId: mode === "edit" ? task?.id : undefined,
-      repeatDays: mode === "create" ? repeatDays : [activeDay],
+      repeatDays,
       planItems:
         validSubtasks.length > 0 || subtasks.length !== (selectedPlan.items.length)
           ? { planId: selectedPlan.id, items: validSubtasks }
@@ -401,8 +399,8 @@ export function TaskSheet({
             onStartChange={setStartTime}
             onEndChange={setEndTime}
             activeDay={activeDay}
-            repeatDays={mode === "create" ? repeatDays : undefined}
-            onRepeatDaysChange={mode === "create" ? setRepeatDays : undefined}
+            repeatDays={repeatDays}
+            onRepeatDaysChange={setRepeatDays}
           />
 
           {/* Subtasks section */}

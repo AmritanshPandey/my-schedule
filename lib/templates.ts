@@ -7,6 +7,7 @@ import type { Plan, Task, Milestone, Schedule, DayKey, PlanCategory } from "./us
 import type { AccentColor } from "./colorSystem";
 import { colorFromIcon } from "./colorSystem";
 import type { ScheduleEntry } from "@/components/ScheduleItem";
+import { recalculateRoadmapTimeline } from "@/lib/roadmapDates";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -306,14 +307,29 @@ export function applyTemplate(template: Template): (prev: Schedule) => Schedule 
     items: planItems,
   };
 
-  const milestones: Milestone[] = template.milestones.map((m, i) => ({
-    id: uid(),
-    planId,
-    title: m.title,
-    targetDate: addDays(today, m.offsetDays),
-    completionStatus: "pending",
-    sortOrder: i,
-  }));
+  const milestones: Milestone[] = recalculateRoadmapTimeline(
+    template.milestones.map((m, i) => {
+      const previousOffset = i === 0 ? 0 : template.milestones[i - 1].offsetDays;
+      const plannedDurationDays = Math.max(1, m.offsetDays - previousOffset);
+      const now = new Date().toISOString();
+      return {
+        id: uid(),
+        planId,
+        title: m.title,
+        startDate: todayISO,
+        plannedDurationDays,
+        plannedEndDate: todayISO,
+        status: "upcoming",
+        linkedActivities: [],
+        linkedTrackers: [],
+        createdAt: now,
+        updatedAt: now,
+        completionStatus: "pending",
+        sortOrder: i,
+      };
+    }),
+    todayISO
+  );
 
   // Build tasks — each TemplateTask becomes one Task per specified day
   // (same structure as createTask in taskMutations, but inlined here to avoid

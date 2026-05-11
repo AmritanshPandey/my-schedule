@@ -18,8 +18,9 @@ import SheetHeader from "@/components/ui/SheetHeader";
 import Button from "@/components/ui/Button";
 import Input from "@/components/ui/Input";
 import ConsistencyHeatmap from "@/components/plan/ConsistencyHeatmap";
-import MilestoneSheet from "@/components/plan/MilestoneSheet";
+import MilestoneSheet, { type MilestoneSaveData } from "@/components/plan/MilestoneSheet";
 import { computeRoadmapStats } from "@/lib/roadmapEngine";
+import { resolveMilestoneStatus } from "@/lib/roadmapDates";
 import { computeTrend } from "@/lib/trendUtils";
 import type { TrendResult } from "@/lib/trendUtils";
 import type {
@@ -165,7 +166,7 @@ interface PlanDetailViewProps {
   onOpenAddEntry: (tracker: ProgressTracker) => void;
   onDeleteEntry: (entryId: string) => void;
   // Milestone handlers
-  onAddMilestone: (data: Omit<Milestone, "id" | "planId">) => void;
+  onAddMilestone: (data: MilestoneSaveData) => void;
   onUpdateMilestone: (id: string, data: Partial<Milestone>) => void;
   onDeleteMilestone: (id: string) => void;
   onCompleteMilestone: (id: string) => void;
@@ -258,7 +259,10 @@ export default function PlanDetailView({
     [plan, schedule.activities, milestones]
   );
 
-  const dateRange = formatPlanRange(plan);
+  const roadmapEndDate = planMilestones[planMilestones.length - 1]?.plannedEndDate ?? plan.endDate;
+  const dateRange = plan.startDate && roadmapEndDate
+    ? `${formatPlanDate(plan.startDate)} – ${formatPlanDate(roadmapEndDate)}`
+    : formatPlanRange(plan);
 
   // ── Tracker handlers ────────────────────────────────────────────────────
 
@@ -297,7 +301,7 @@ export default function PlanDetailView({
     setMilestoneSheetOpen(true);
   }
 
-  function handleMilestoneSave(data: Omit<Milestone, "id" | "planId">) {
+  function handleMilestoneSave(data: MilestoneSaveData) {
     if (milestoneSheetMode === "edit" && editingMilestone) {
       onUpdateMilestone(editingMilestone.id, data);
     } else {
@@ -575,10 +579,12 @@ export default function PlanDetailView({
   }
 
   function renderMilestoneCard(m: Milestone, isCurrentMilestone: boolean) {
-    const isCompleted = m.completionStatus === "completed";
-    const dateLabel = m.targetDate ? formatDate(m.targetDate) : null;
-    const completedDateLabel = m.completedDate ? formatDate(m.completedDate) : null;
-    const daysLabel = m.estimatedDays ? `${m.estimatedDays} Days` : null;
+    const status = resolveMilestoneStatus(m);
+    const isCompleted = status === "completed";
+    const isDelayed = status === "delayed";
+    const completedDateLabel = m.actualCompletedDate ? formatDate(m.actualCompletedDate) : null;
+    const daysLabel = `${m.plannedDurationDays} Day${m.plannedDurationDays === 1 ? "" : "s"}`;
+    const rangeLabel = `${formatDate(m.startDate)} - ${formatDate(m.plannedEndDate)}`;
 
     return (
       <div
@@ -586,6 +592,8 @@ export default function PlanDetailView({
         className={`relative rounded-2xl border p-4 transition-all duration-200 ${
           isCompleted
             ? "border-green-200/60 bg-green-50/40 dark:border-green-800/30 dark:bg-green-950/20"
+            : isDelayed
+            ? "border-rose-300 bg-rose-50/40 dark:border-rose-700/40 dark:bg-rose-950/20"
             : isCurrentMilestone
             ? "border-green-300 bg-white ring-2 ring-green-100 dark:border-green-600/50 dark:bg-neutral-900 dark:ring-green-900/40"
             : "border-neutral-200 bg-white dark:border-white/[0.08] dark:bg-neutral-900"
@@ -597,6 +605,10 @@ export default function PlanDetailView({
             {isCompleted ? (
               <div className="w-6 h-6 rounded-full bg-green-500 flex items-center justify-center">
                 <IconCheck size={13} strokeWidth={3} className="text-white" />
+              </div>
+            ) : isDelayed ? (
+              <div className="w-6 h-6 rounded-full border-2 border-rose-500 bg-rose-100 dark:bg-rose-950 flex items-center justify-center">
+                <div className="w-2.5 h-2.5 rounded-full bg-rose-500" />
               </div>
             ) : isCurrentMilestone ? (
               <div className="relative w-6 h-6">
@@ -624,6 +636,16 @@ export default function PlanDetailView({
                   Completed
                 </span>
               )}
+              {isDelayed && (
+                <span className="inline-flex items-center rounded-full bg-rose-500/10 border border-rose-500/20 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-rose-600 dark:text-rose-400">
+                  Delayed
+                </span>
+              )}
+              {status === "upcoming" && (
+                <span className="inline-flex items-center rounded-full bg-neutral-500/10 border border-neutral-500/15 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-neutral-500 dark:text-neutral-400">
+                  Upcoming
+                </span>
+              )}
             </div>
 
             <p
@@ -649,16 +671,12 @@ export default function PlanDetailView({
                   Completed {completedDateLabel}
                 </span>
               )}
-              {!isCompleted && dateLabel && (
-                <span className="text-[11px] font-medium text-neutral-500 dark:text-neutral-400">
-                  Target: {dateLabel}
-                </span>
-              )}
-              {daysLabel && (
-                <span className="inline-flex items-center rounded-full border border-neutral-200 dark:border-white/[0.08] px-2 py-0.5 text-[10px] font-semibold text-neutral-400 dark:text-neutral-500">
-                  {daysLabel}
-                </span>
-              )}
+              <span className="text-[11px] font-medium text-neutral-500 dark:text-neutral-400">
+                {rangeLabel}
+              </span>
+              <span className="inline-flex items-center rounded-full border border-neutral-200 dark:border-white/[0.08] px-2 py-0.5 text-[10px] font-semibold text-neutral-400 dark:text-neutral-500">
+                {daysLabel}
+              </span>
             </div>
 
             {/* Mark done action for current milestone */}
@@ -696,50 +714,179 @@ export default function PlanDetailView({
     );
   }
 
-  // ── Overall Progress Bar ────────────────────────────────────────────────
+  // ── Overall Status Graph ────────────────────────────────────────────────
 
   function renderOverallProgressBar() {
     const { statusBarSegments, overallPct, statusSummary } = roadmapStats;
 
-    const segmentColorClass = (
+    const segmentMeta = (
       state: "success" | "warning" | "fail" | "future" | "none"
-    ): string => {
+    ): { bar: string; heightPct: number; label: string } => {
       switch (state) {
         case "success":
-          return "bg-green-500";
+          return { bar: "bg-green-500 shadow-[0_0_12px_rgba(34,197,94,0.22)]", heightPct: 100, label: "Strong day" };
         case "warning":
-          return "bg-amber-400";
+          return { bar: "bg-amber-400", heightPct: 68, label: "Light day" };
         case "fail":
-          return "bg-rose-400";
+          return { bar: "bg-rose-400", heightPct: 38, label: "Missed day" };
         case "future":
-          return "bg-neutral-200 dark:bg-white/10";
+          return { bar: "bg-neutral-200 dark:bg-white/10", heightPct: 20, label: "Upcoming" };
         default:
-          return "bg-neutral-100 dark:bg-white/[0.05]";
+          return { bar: "bg-neutral-100 dark:bg-white/[0.05]", heightPct: 12, label: "Outside plan" };
       }
     };
 
+    const counts = statusBarSegments.reduce(
+      (acc, segment) => {
+        acc[segment.state] += 1;
+        return acc;
+      },
+      { success: 0, warning: 0, fail: 0, future: 0, none: 0 }
+    );
+    const activeDays = counts.success + counts.warning;
+    const trackedDays = counts.success + counts.warning + counts.fail;
+    const activeDayLabel = `${activeDays}/${trackedDays || 0}`;
+    const recentSegments = statusBarSegments.slice(-14);
+    const recentActiveDays = recentSegments.filter((segment) =>
+      segment.state === "success" || segment.state === "warning"
+    ).length;
+    const ringRadius = 40;
+    const ringCircumference = 2 * Math.PI * ringRadius;
+    const scoreOffset = ringCircumference * (1 - Math.min(100, Math.max(0, overallPct)) / 100);
+    const scoreTone =
+      overallPct >= 75
+        ? {
+            stroke: "stroke-green-500",
+            text: "text-green-500",
+            badge: "border-green-500/20 bg-green-500/10 text-green-600 dark:text-green-400",
+            label: "Strong",
+          }
+        : overallPct >= 45
+        ? {
+            stroke: "stroke-amber-400",
+            text: "text-amber-500",
+            badge: "border-amber-500/20 bg-amber-500/10 text-amber-700 dark:text-amber-300",
+            label: "Steady",
+          }
+        : {
+            stroke: "stroke-rose-400",
+            text: "text-rose-500",
+            badge: "border-rose-500/20 bg-rose-500/10 text-rose-600 dark:text-rose-400",
+            label: "Needs Focus",
+          };
+
     return (
-      <div className="rounded-[24px] border border-neutral-200 bg-white px-5 py-4 dark:border-white/[0.08] dark:bg-neutral-900">
-        <div className="flex items-center justify-between mb-3">
-          <h3 className="text-[16px] font-bold text-neutral-950 dark:text-white">
-            Overall Progress
-          </h3>
-          <span className="text-[28px] font-bold text-green-500 tabular-nums leading-none">
-            {overallPct}%
-          </span>
+      <div className="overflow-hidden rounded-[28px] border border-neutral-200 bg-white dark:border-white/[0.08] dark:bg-neutral-900">
+        <div className="p-5">
+          <div className="flex items-center justify-between gap-4">
+            <div className="min-w-0">
+              <p className="text-[11px] font-semibold uppercase tracking-[0.08em] text-neutral-400 dark:text-neutral-500">
+                Overall Status
+              </p>
+              <h3 className="mt-1 text-[20px] font-black leading-tight text-neutral-950 dark:text-white">
+                Journey Health
+              </h3>
+              <span className={`mt-2 inline-flex rounded-full border px-2.5 py-1 text-[11px] font-bold ${scoreTone.badge}`}>
+                {scoreTone.label}
+              </span>
+            </div>
+
+            <div className="relative flex h-[104px] w-[104px] shrink-0 items-center justify-center">
+              <svg viewBox="0 0 100 100" className="absolute inset-0 h-full w-full -rotate-90">
+                <circle
+                  cx="50"
+                  cy="50"
+                  r={ringRadius}
+                  fill="none"
+                  strokeWidth="9"
+                  className="stroke-neutral-100 dark:stroke-white/[0.08]"
+                />
+                <circle
+                  cx="50"
+                  cy="50"
+                  r={ringRadius}
+                  fill="none"
+                  strokeWidth="9"
+                  strokeLinecap="round"
+                  strokeDasharray={ringCircumference}
+                  strokeDashoffset={scoreOffset}
+                  className={scoreTone.stroke}
+                />
+              </svg>
+              <div className="text-center">
+                <span className={`block text-[24px] font-bold tabular-nums leading-none ${scoreTone.text}`}>
+                  {overallPct}%
+                </span>
+             
+              </div>
+            </div>
+          </div>
+
+          <div className="mt-4 rounded-[24px] border border-neutral-200 bg-neutral-50 p-3 dark:border-white/[0.08] dark:bg-white/[0.03]">
+            <div className="relative h-[116px] overflow-hidden rounded-[18px] bg-white px-2 pb-3 pt-4 dark:bg-neutral-950/40">
+              <div className="pointer-events-none absolute inset-x-2 top-4 h-px bg-neutral-100 dark:bg-white/[0.06]" />
+              <div className="pointer-events-none absolute inset-x-2 top-1/2 h-px bg-neutral-100 dark:bg-white/[0.06]" />
+              <div className="pointer-events-none absolute inset-x-2 bottom-7 h-px bg-neutral-100 dark:bg-white/[0.06]" />
+              <div className="relative flex h-full items-end gap-[4px]">
+                {statusBarSegments.map((segment) => {
+                  const meta = segmentMeta(segment.state);
+                  return (
+                    <div
+                      key={segment.date}
+                      title={`${formatDateShort(segment.date)} · ${meta.label}`}
+                      className="flex min-w-[4px] flex-1 items-end justify-center"
+                    >
+                      <div
+                        className={`w-full rounded-t-full rounded-b-sm transition-transform duration-150 hover:scale-y-105 ${meta.bar}`}
+                        style={{ height: `${meta.heightPct}%` }}
+                      />
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+            <div className="mt-3 flex items-center justify-between gap-3 text-[11px] font-bold text-neutral-400 dark:text-neutral-500">
+              <span>{statusBarSegments[0] ? formatDateShort(statusBarSegments[0].date) : "Start"}</span>
+              <span>{statusBarSegments[statusBarSegments.length - 1] ? formatDateShort(statusBarSegments[statusBarSegments.length - 1].date) : "Today"}</span>
+            </div>
+          </div>
+
+          <div className="mt-3 grid grid-cols-3 gap-2">
+            {[
+              { label: "Active", value: activeDayLabel, valueClass: "text-neutral-950 dark:text-white" },
+              { label: "Missed", value: counts.fail, valueClass: "text-rose-500" },
+              { label: "14 Days", value: `${recentActiveDays}/14`, valueClass: "text-neutral-950 dark:text-white" },
+            ].map((item) => (
+              <div key={item.label} className="rounded-2xl border border-neutral-200 px-3 py-2.5 dark:border-white/[0.08]">
+                <p className="text-[10px] font-bold uppercase tracking-[0.08em] text-neutral-400 dark:text-neutral-500">
+                  {item.label}
+                </p>
+                <p className={`mt-1 text-[17px] font-black tabular-nums leading-none ${item.valueClass}`}>
+                  {item.value}
+                </p>
+              </div>
+            ))}
+          </div>
+
+          <div className="mt-3 flex flex-wrap gap-2">
+            {[
+              { label: "Strong", className: "bg-green-500" },
+              { label: "Light", className: "bg-amber-400" },
+              { label: "Missed", className: "bg-rose-400" },
+              { label: "Upcoming", className: "bg-neutral-300 dark:bg-white/15" },
+            ].map((item) => (
+              <span
+                key={item.label}
+                className="inline-flex items-center gap-1.5 rounded-full bg-neutral-50 px-2.5 py-1 text-[11px] font-bold text-neutral-500 dark:bg-white/[0.04] dark:text-neutral-400"
+              >
+                <span className={`h-2 w-2 rounded-full ${item.className}`} />
+                {item.label}
+              </span>
+            ))}
+          </div>
         </div>
 
-        {/* Segments bar */}
-        <div className="flex gap-[2px] overflow-hidden rounded-full">
-          {statusBarSegments.map((seg) => (
-            <div
-              key={seg.date}
-              className={`h-[20px] w-[4px] shrink-0 rounded-[2px] ${segmentColorClass(seg.state)}`}
-            />
-          ))}
-        </div>
-
-        <p className="mt-2 text-[12px] font-medium text-neutral-500 dark:text-neutral-400">
+        <p className="border-t border-neutral-100 px-5 py-3 text-[12px] font-semibold leading-relaxed text-neutral-500 dark:border-white/[0.06] dark:text-neutral-400">
           {statusSummary}
         </p>
       </div>
@@ -751,7 +898,7 @@ export default function PlanDetailView({
   function renderRoadmapOverview() {
     const { currentPhaseName, consistencyPct } = roadmapStats;
 
-    const endDateLabel = plan.endDate ? formatPlanDate(plan.endDate) : "Ongoing";
+    const endDateLabel = roadmapStats.targetDate ? formatPlanDate(roadmapStats.targetDate) : "Ongoing";
 
     const cards: { label: string; value: string }[] = [
       {
@@ -768,7 +915,7 @@ export default function PlanDetailView({
       },
       {
         label: "Target Date",
-        value: plan.endDate ? formatPlanDate(plan.endDate) : "—",
+        value: roadmapStats.targetDate ? formatPlanDate(roadmapStats.targetDate) : "—",
       },
     ];
 
@@ -891,7 +1038,7 @@ export default function PlanDetailView({
 
   function renderRoadmapTab() {
     const firstPendingIndex = planMilestones.findIndex(
-      (m) => m.completionStatus !== "completed"
+      (m) => resolveMilestoneStatus(m) !== "completed"
     );
 
     return (
@@ -937,10 +1084,17 @@ export default function PlanDetailView({
               </button>
             </div>
           ) : (
-            <div className="space-y-3">
-              {planMilestones.map((m, idx) =>
-                renderMilestoneCard(m, idx === firstPendingIndex)
-              )}
+            <div>
+              {planMilestones.map((m, idx) => (
+                <div key={m.id}>
+                  {renderMilestoneCard(m, idx === firstPendingIndex)}
+                  {idx < planMilestones.length - 1 && (
+                    <div className="flex justify-center py-2 text-neutral-300 dark:text-neutral-700">
+                      <IconArrowDown size={18} strokeWidth={2.5} />
+                    </div>
+                  )}
+                </div>
+              ))}
             </div>
           )}
         </section>
@@ -1017,6 +1171,8 @@ export default function PlanDetailView({
       <MilestoneSheet
         mode={milestoneSheetMode}
         milestone={editingMilestone}
+        milestones={planMilestones}
+        planStartDate={plan.startDate}
         isOpen={milestoneSheetOpen}
         onClose={() => setMilestoneSheetOpen(false)}
         onSave={handleMilestoneSave}

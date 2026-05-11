@@ -46,25 +46,25 @@ interface TooltipState {
 
 // ── Color system ──────────────────────────────────────────────────────────────
 // Level 0  = past, no activity  → dark visible square ("missed")
-// Level 1–5 = activity          → emerald gradient
+// Level 1–5 = activity          → green gradient
 // Future cells and outside-plan cells are handled separately in the renderer.
 
 const CELL_LIGHT = [
   "rgba(0,0,0,0.10)",  // 0 past / no activity — visible dark square
-  "#d1fae5",           // 1 trace   — emerald-100
-  "#a7f3d0",           // 2 low     — emerald-200
-  "#6ee7b7",           // 3 medium  — emerald-300
-  "#10b981",           // 4 high    — emerald-500
-  "#059669",           // 5 peak    — emerald-600
+  "#dcfce7",           // 1 trace   — green-100
+  "#bbf7d0",           // 2 low     — green-200
+  "#86efac",           // 3 medium  — green-300
+  "#22c55e",           // 4 high    — green-500
+  "#16a34a",           // 5 peak    — green-600
 ] as const;
 
 const CELL_DARK = [
   "rgba(255,255,255,0.10)",  // 0 past / no activity — visible dark square
-  "rgba(6,78,59,0.55)",      // 1 trace   — emerald-950 blend
-  "rgba(6,78,59,0.85)",      // 2 low     — emerald-900
-  "rgba(4,120,87,0.80)",     // 3 medium  — emerald-700
-  "rgba(16,185,129,0.85)",   // 4 high    — emerald-500
-  "rgba(52,211,153,0.95)",   // 5 peak    — emerald-400
+  "rgba(20,83,45,0.55)",     // 1 trace   — green-950 blend
+  "rgba(20,83,45,0.85)",     // 2 low     — green-900
+  "rgba(21,128,61,0.80)",    // 3 medium  — green-700
+  "rgba(34,197,94,0.85)",    // 4 high    — green-500
+  "rgba(74,222,128,0.95)",   // 5 peak    — green-400
 ] as const;
 
 // Future: scheduled but not yet happened — very subtle outline feel
@@ -72,7 +72,7 @@ const FUTURE_LIGHT = "rgba(0,0,0,0.04)";
 const FUTURE_DARK  = "rgba(255,255,255,0.04)";
 
 // Today ring — stands out on any cell level
-const TODAY_RING = "ring-1 ring-emerald-500/70 dark:ring-emerald-400/80 ring-offset-[1.5px] ring-offset-white dark:ring-offset-neutral-900";
+const TODAY_RING = "ring-1 ring-green-500/70 dark:ring-green-400/80 ring-offset-[1.5px] ring-offset-white dark:ring-offset-neutral-900";
 
 const CELL_RADIUS = 3;
 const MONTH_ROW_H  = 14; // px

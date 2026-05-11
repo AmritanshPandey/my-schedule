@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect } from "react";
+import { useEffect, useState, type CSSProperties } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 
 interface BottomSheetProps {
@@ -18,9 +18,37 @@ export default function BottomSheet({
   open,
   onClose,
   children,
-  maxHeight = "88vh",
+  maxHeight = "calc(var(--sheet-vh, 100dvh) - env(safe-area-inset-top) - 12px)",
   className = "",
 }: BottomSheetProps) {
+  const [viewportFrame, setViewportFrame] = useState({ height: 0, offsetTop: 0 });
+
+  useEffect(() => {
+    if (!open) {
+      setViewportFrame({ height: 0, offsetTop: 0 });
+      return;
+    }
+
+    const visualViewport = window.visualViewport;
+    if (!visualViewport) return;
+
+    const updateViewportFrame = () => {
+      setViewportFrame({
+        height: visualViewport.height,
+        offsetTop: visualViewport.offsetTop,
+      });
+    };
+
+    updateViewportFrame();
+    visualViewport.addEventListener("resize", updateViewportFrame);
+    visualViewport.addEventListener("scroll", updateViewportFrame);
+
+    return () => {
+      visualViewport.removeEventListener("resize", updateViewportFrame);
+      visualViewport.removeEventListener("scroll", updateViewportFrame);
+    };
+  }, [open]);
+
   // Esc to close + body scroll lock while open.
   useEffect(() => {
     if (!open) return;
@@ -36,11 +64,20 @@ export default function BottomSheet({
     };
   }, [open, onClose]);
 
+  const containerStyle = viewportFrame.height > 0
+    ? ({
+        "--sheet-vh": `${viewportFrame.height}px`,
+        height: `${viewportFrame.height}px`,
+        top: `${viewportFrame.offsetTop}px`,
+      } as CSSProperties)
+    : ({ "--sheet-vh": "100dvh", height: "100dvh" } as CSSProperties);
+
   return (
     <AnimatePresence>
       {open && (
         <motion.div
-          className="fixed inset-0 z-50 flex items-end justify-center"
+          className="fixed left-0 right-0 top-0 z-50 flex items-end justify-center overflow-hidden"
+          style={containerStyle}
           role="dialog"
           aria-modal="true"
         >
@@ -61,7 +98,7 @@ export default function BottomSheet({
             exit={{ y: "100%" }}
             transition={SPRING}
             style={{ maxHeight }}
-            className={`relative w-full max-w-lg overflow-y-auto rounded-t-[32px] border-t border-neutral-200 bg-white dark:border-white/[0.08] dark:bg-neutral-900 ${className}`}
+            className={`relative w-full max-w-lg overflow-y-auto overscroll-contain rounded-t-[32px] border-t border-neutral-200 bg-white pb-[env(safe-area-inset-bottom)] dark:border-white/[0.08] dark:bg-neutral-900 ${className}`}
           >
             {/* Drag handle */}
             <div className="sticky top-0 z-10 flex justify-center rounded-t-[32px] bg-white/95 pb-1 pt-3 backdrop-blur-sm dark:bg-neutral-900/95">

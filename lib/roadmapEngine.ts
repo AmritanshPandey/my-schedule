@@ -200,8 +200,12 @@ export function computeRoadmapStats(
 
   const completionMap = buildCompletionMap(planId, activities);
 
+  const planMilestones = milestones
+    .filter((m) => m.planId === planId)
+    .sort((a, b) => a.sortOrder - b.sortOrder);
+  const roadmapEnd = planMilestones[planMilestones.length - 1]?.plannedEndDate ?? plan.endDate ?? null;
   const planStart = plan.startDate ?? null;
-  const planEnd = plan.endDate ?? null;
+  const planEnd = roadmapEnd;
 
   // ── Daily cells spanning the plan period ──────────────────────────────────
   const dailyCells = buildPlanDailyCells(planStart, planEnd, completionMap, today);
@@ -258,16 +262,11 @@ export function computeRoadmapStats(
     }
   }
 
-  // ── Milestones ───────────────────────────────────────────────────────────
-  const planMilestones = milestones
-    .filter((m) => m.planId === planId)
-    .sort((a, b) => a.sortOrder - b.sortOrder);
-
   const completedMilestones = planMilestones.filter(
-    (m) => m.completionStatus === "completed"
+    (m) => m.status === "completed" || m.completionStatus === "completed"
   ).length;
   const totalMilestones = planMilestones.length;
-  const firstPending = planMilestones.find((m) => m.completionStatus !== "completed");
+  const firstPending = planMilestones.find((m) => m.status !== "completed" && m.completionStatus !== "completed");
   const currentPhaseName = firstPending?.title ?? null;
 
   // ── Overall % ────────────────────────────────────────────────────────────
@@ -299,6 +298,6 @@ export function computeRoadmapStats(
     currentPhaseName,
     completedMilestones,
     totalMilestones,
-    targetDate: planEnd,
+    targetDate: roadmapEnd,
   };
 }
