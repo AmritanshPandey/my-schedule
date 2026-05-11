@@ -274,7 +274,7 @@ export default function ScheduleApp() {
   // Auto-open templates on true first launch (no stored data)
   useEffect(() => {
     if (ready && isFirstLaunch) {
-      setActiveTab(2); // go to Plans tab
+      setActiveTab(1); // Plans tab
       setTemplatesOpen(true);
     }
   }, [ready, isFirstLaunch]);
@@ -440,8 +440,7 @@ export default function ScheduleApp() {
 
   function handleApplyTemplate(template: Template) {
     setSchedule(applyTemplate(template));
-    // Switch to the Plans tab so the user sees their new plan immediately
-    setActiveTab(2);
+    setActiveTab(1); // Plans tab
   }
 
   function handleDeleteEntry(entryId: string) {
