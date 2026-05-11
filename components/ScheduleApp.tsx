@@ -56,6 +56,9 @@ import {
   resolveTaskState,
 } from "@/lib/taskCompletion";
 import { createTask, updateTask, deleteTask, uid } from "@/lib/taskMutations";
+import { applyTemplate } from "@/lib/templates";
+import { TemplatesSheet } from "@/components/TemplatesSheet";
+import type { Template } from "@/lib/templates";
 import { parseTimeToMinutes, formatDuration } from "@/lib/timeUtils";
 import { todayISO, daysBetween as daysBetweenUtil, formatDate } from "@/lib/dateUtils";
 import { getPlanCardStats } from "@/lib/planInsights";
@@ -259,6 +262,7 @@ export default function ScheduleApp() {
 
   const [nowMinutes, setNowMinutes] = useState(getCurrentMinutes);
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const [templatesOpen, setTemplatesOpen] = useState(false);
   const timelineScrollRef = useRef<HTMLDivElement | null>(null);
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 8 } }));
 
@@ -424,6 +428,12 @@ export default function ScheduleApp() {
       ...prev,
       metricEntries: [...prev.metricEntries, { ...entry, id: uid() }],
     }));
+  }
+
+  function handleApplyTemplate(template: Template) {
+    setSchedule(applyTemplate(template));
+    // Switch to the Plans tab so the user sees their new plan immediately
+    setActiveTab(2);
   }
 
   function handleDeleteEntry(entryId: string) {
@@ -1038,19 +1048,35 @@ export default function ScheduleApp() {
 
         {/* Empty state */}
         {schedule.plans.length === 0 && (
-          <div className="rounded-[28px] border border-dashed border-neutral-200 p-10 text-center dark:border-white/10">
+          <div className="rounded-[28px] border border-dashed border-neutral-200 p-8 text-center dark:border-white/10">
             <div className="mb-3 flex h-12 w-12 items-center justify-center rounded-2xl bg-neutral-100 dark:bg-white/[0.07] mx-auto">
               <IconClipboardList size={22} className="text-neutral-400 dark:text-neutral-500" />
             </div>
-            <p className="text-[14px] font-semibold text-neutral-700 dark:text-neutral-300">No plans yet</p>
-            <p className="mt-1 text-[13px] text-neutral-400 dark:text-neutral-500 max-w-[200px] mx-auto">
-              Create your first plan to organize tasks and track progress.
+            <p className="text-[15px] font-bold text-neutral-700 dark:text-neutral-300">No plans yet</p>
+            <p className="mt-1 text-[13px] text-neutral-400 dark:text-neutral-500 max-w-[220px] mx-auto">
+              Start from scratch or pick a template with tasks and milestones ready to go.
             </p>
+            <button
+              type="button"
+              onClick={() => setTemplatesOpen(true)}
+              className="mt-4 inline-flex items-center gap-1.5 rounded-xl bg-neutral-900 px-4 py-2.5 text-[13px] font-bold text-white transition-opacity active:opacity-75 dark:bg-white dark:text-neutral-900"
+            >
+              Browse Templates
+            </button>
           </div>
         )}
 
         {/* Plan cards */}
         <div className="space-y-3">
+          {schedule.plans.length > 0 && (
+            <button
+              type="button"
+              onClick={() => setTemplatesOpen(true)}
+              className="w-full rounded-2xl border border-dashed border-neutral-200 py-3 text-[13px] font-semibold text-neutral-400 transition-colors hover:border-neutral-300 hover:text-neutral-600 dark:border-white/10 dark:text-neutral-500 dark:hover:border-white/20 dark:hover:text-neutral-300"
+            >
+              + Browse example templates
+            </button>
+          )}
           {schedule.plans.map((plan) => {
             const uniqueTasks = getUniquePlanTasks(plan.id);
             const trackerCount = schedule.progressTrackers.filter(
@@ -1121,6 +1147,7 @@ export default function ScheduleApp() {
       )}
 
       <SettingsSheet open={settingsOpen} onClose={() => setSettingsOpen(false)} onClearData={clearData} />
+      <TemplatesSheet open={templatesOpen} onClose={() => setTemplatesOpen(false)} onApply={handleApplyTemplate} />
 
       {/* ── Content ────────────────────────────────────────────────────────── */}
       <div className="max-w-lg mx-auto pb-40">
