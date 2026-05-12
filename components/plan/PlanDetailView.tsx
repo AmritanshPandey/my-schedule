@@ -783,15 +783,15 @@ export default function PlanDetailView({
               <p className="text-[11px] font-semibold uppercase tracking-[0.08em] text-neutral-400 dark:text-neutral-500">
                 Overall Status
               </p>
-              <h3 className="mt-1 text-[20px] font-black leading-tight text-neutral-950 dark:text-white">
+              {/* <h3 className="mt-1 text-[20px] font-black leading-tight text-neutral-950 dark:text-white">
                 Journey Health
               </h3>
               <span className={`mt-2 inline-flex rounded-full border px-2.5 py-1 text-[11px] font-bold ${scoreTone.badge}`}>
                 {scoreTone.label}
-              </span>
+              </span> */}
             </div>
 
-            <div className="relative flex h-[104px] w-[104px] shrink-0 items-center justify-center">
+            {/* <div className="relative flex h-[104px] w-[104px] shrink-0 items-center justify-center">
               <svg viewBox="0 0 100 100" className="absolute inset-0 h-full w-full -rotate-90">
                 <circle
                   cx="50"
@@ -819,10 +819,10 @@ export default function PlanDetailView({
                 </span>
              
               </div>
-            </div>
+            </div> */}
           </div>
 
-          <div className="mt-4 rounded-[24px] border border-neutral-200 bg-neutral-50 p-3 dark:border-white/[0.08] dark:bg-white/[0.03]">
+          {/* <div className="mt-4 rounded-[24px] border border-neutral-200 bg-neutral-50 p-3 dark:border-white/[0.08] dark:bg-white/[0.03]">
             <div className="relative h-[116px] overflow-hidden rounded-[18px] bg-white px-2 pb-3 pt-4 dark:bg-neutral-950/40">
               <div className="pointer-events-none absolute inset-x-2 top-4 h-px bg-neutral-100 dark:bg-white/[0.06]" />
               <div className="pointer-events-none absolute inset-x-2 top-1/2 h-px bg-neutral-100 dark:bg-white/[0.06]" />
@@ -849,7 +849,7 @@ export default function PlanDetailView({
               <span>{statusBarSegments[0] ? formatDateShort(statusBarSegments[0].date) : "Start"}</span>
               <span>{statusBarSegments[statusBarSegments.length - 1] ? formatDateShort(statusBarSegments[statusBarSegments.length - 1].date) : "Today"}</span>
             </div>
-          </div>
+          </div> */}
 
           <div className="mt-3 grid grid-cols-3 gap-2">
             {[
