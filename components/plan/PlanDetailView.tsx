@@ -17,7 +17,6 @@ import BottomSheet from "@/components/ui/BottomSheet";
 import SheetHeader from "@/components/ui/SheetHeader";
 import Button from "@/components/ui/Button";
 import Input from "@/components/ui/Input";
-import ConsistencyHeatmap from "@/components/plan/ConsistencyHeatmap";
 import MilestoneSheet, { type MilestoneSaveData } from "@/components/plan/MilestoneSheet";
 import { computeRoadmapStats } from "@/lib/roadmapEngine";
 import { resolveMilestoneStatus } from "@/lib/roadmapDates";
@@ -40,6 +39,8 @@ import { formatDate, formatDateShort } from "@/lib/dateUtils";
 import { DayPill, Pill } from "@/components/ui/Badge";
 import { InternalSectionTitle, SectionTextAction } from "@/components/ui/InternalSectionTitle";
 import { TrackerTabs } from "@/components/ui/TrackerTabs";
+
+
 
 // ── Local constants ───────────────────────────────────────────────────────────
 
@@ -124,11 +125,10 @@ function GoalDirectionPicker({
               key={opt.value}
               type="button"
               onClick={() => onChange(opt.value)}
-              className={`flex items-center justify-center gap-1.5 rounded-xl border px-3 py-2.5 text-[13px] font-semibold transition-all ${
-                sel
-                  ? "border-neutral-950 bg-neutral-950 text-white dark:border-white dark:bg-white dark:text-neutral-900"
-                  : "border-neutral-200 bg-neutral-50 text-neutral-500 hover:border-neutral-300 dark:border-white/10 dark:bg-white/[0.04] dark:text-neutral-400 dark:hover:border-white/20"
-              }`}
+              className={`flex items-center justify-center gap-1.5 rounded-xl border px-3 py-2.5 text-[13px] font-semibold transition-all ${sel
+                ? "border-neutral-950 bg-neutral-950 text-white dark:border-white dark:bg-white dark:text-neutral-900"
+                : "border-neutral-200 bg-neutral-50 text-neutral-500 hover:border-neutral-300 dark:border-white/10 dark:bg-white/[0.04] dark:text-neutral-400 dark:hover:border-white/20"
+                }`}
             >
               <opt.Icon size={14} strokeWidth={2.5} className="shrink-0" />
               <span>{opt.label}</span>
@@ -368,10 +368,10 @@ export default function PlanDetailView({
     const trendResult =
       lastTwo.length === 2
         ? computeTrend({
-            previous: lastTwo[0].value,
-            current: lastTwo[1].value,
-            goalDirection: goalDir,
-          })
+          previous: lastTwo[0].value,
+          current: lastTwo[1].value,
+          goalDirection: goalDir,
+        })
         : null;
     const isEditingThis = editingTrackerId === tracker.id;
 
@@ -514,10 +514,10 @@ export default function PlanDetailView({
                     const prev = chronIdx > 0 ? recent[chronIdx - 1] : null;
                     const entryTrend = prev
                       ? computeTrend({
-                          previous: prev.value,
-                          current: entry.value,
-                          goalDirection: goalDir,
-                        })
+                        previous: prev.value,
+                        current: entry.value,
+                        goalDirection: goalDir,
+                      })
                       : null;
                     return (
                       <div
@@ -533,21 +533,19 @@ export default function PlanDetailView({
                               <IconArrowUpRight
                                 size={13}
                                 strokeWidth={2.5}
-                                className={`shrink-0 ${
-                                  entryTrend.state === "positive"
-                                    ? "text-green-500"
-                                    : "text-rose-500"
-                                }`}
+                                className={`shrink-0 ${entryTrend.state === "positive"
+                                  ? "text-green-500"
+                                  : "text-rose-500"
+                                  }`}
                               />
                             ) : (
                               <IconArrowDownRight
                                 size={13}
                                 strokeWidth={2.5}
-                                className={`shrink-0 ${
-                                  entryTrend.state === "positive"
-                                    ? "text-green-500"
-                                    : "text-rose-500"
-                                }`}
+                                className={`shrink-0 ${entryTrend.state === "positive"
+                                  ? "text-green-500"
+                                  : "text-rose-500"
+                                  }`}
                               />
                             )
                           )}
@@ -589,15 +587,14 @@ export default function PlanDetailView({
     return (
       <div
         key={m.id}
-        className={`relative rounded-2xl border p-4 transition-all duration-200 ${
-          isCompleted
-            ? "border-green-200/60 bg-green-50/40 dark:border-green-800/30 dark:bg-green-950/20"
-            : isDelayed
+        className={`relative rounded-2xl border p-4 transition-all duration-200 ${isCompleted
+          ? "border-green-200/60 bg-green-50/40 dark:border-green-800/30 dark:bg-green-950/20"
+          : isDelayed
             ? "border-rose-300 bg-rose-50/40 dark:border-rose-700/40 dark:bg-rose-950/20"
             : isCurrentMilestone
-            ? "border-green-300 bg-white ring-2 ring-green-100 dark:border-green-600/50 dark:bg-neutral-900 dark:ring-green-900/40"
-            : "border-neutral-200 bg-white dark:border-white/[0.08] dark:bg-neutral-900"
-        }`}
+              ? "border-green-300 bg-white ring-2 ring-green-100 dark:border-green-600/50 dark:bg-neutral-900 dark:ring-green-900/40"
+              : "border-neutral-200 bg-white dark:border-white/[0.08] dark:bg-neutral-900"
+          }`}
       >
         <div className="flex items-start gap-3">
           {/* Status indicator */}
@@ -649,11 +646,10 @@ export default function PlanDetailView({
             </div>
 
             <p
-              className={`text-[15px] font-semibold leading-snug ${
-                isCompleted
-                  ? "text-neutral-400 line-through dark:text-neutral-500"
-                  : "text-neutral-900 dark:text-white"
-              }`}
+              className={`text-[15px] font-semibold leading-snug ${isCompleted
+                ? "text-neutral-400 line-through dark:text-neutral-500"
+                : "text-neutral-900 dark:text-white"
+                }`}
             >
               {m.title}
             </p>
@@ -714,184 +710,7 @@ export default function PlanDetailView({
     );
   }
 
-  // ── Overall Status Graph ────────────────────────────────────────────────
 
-  function renderOverallProgressBar() {
-    const { statusBarSegments, overallPct, statusSummary } = roadmapStats;
-
-    const segmentMeta = (
-      state: "success" | "warning" | "fail" | "future" | "none"
-    ): { bar: string; heightPct: number; label: string } => {
-      switch (state) {
-        case "success":
-          return { bar: "bg-green-500 shadow-[0_0_12px_rgba(34,197,94,0.22)]", heightPct: 100, label: "Strong day" };
-        case "warning":
-          return { bar: "bg-amber-400", heightPct: 68, label: "Light day" };
-        case "fail":
-          return { bar: "bg-rose-400", heightPct: 38, label: "Missed day" };
-        case "future":
-          return { bar: "bg-neutral-200 dark:bg-white/10", heightPct: 20, label: "Upcoming" };
-        default:
-          return { bar: "bg-neutral-100 dark:bg-white/[0.05]", heightPct: 12, label: "Outside plan" };
-      }
-    };
-
-    const counts = statusBarSegments.reduce(
-      (acc, segment) => {
-        acc[segment.state] += 1;
-        return acc;
-      },
-      { success: 0, warning: 0, fail: 0, future: 0, none: 0 }
-    );
-    const activeDays = counts.success + counts.warning;
-    const trackedDays = counts.success + counts.warning + counts.fail;
-    const activeDayLabel = `${activeDays}/${trackedDays || 0}`;
-    const recentSegments = statusBarSegments.slice(-14);
-    const recentActiveDays = recentSegments.filter((segment) =>
-      segment.state === "success" || segment.state === "warning"
-    ).length;
-    const ringRadius = 40;
-    const ringCircumference = 2 * Math.PI * ringRadius;
-    const scoreOffset = ringCircumference * (1 - Math.min(100, Math.max(0, overallPct)) / 100);
-    const scoreTone =
-      overallPct >= 75
-        ? {
-            stroke: "stroke-green-500",
-            text: "text-green-500",
-            badge: "border-green-500/20 bg-green-500/10 text-green-600 dark:text-green-400",
-            label: "Strong",
-          }
-        : overallPct >= 45
-        ? {
-            stroke: "stroke-amber-400",
-            text: "text-amber-500",
-            badge: "border-amber-500/20 bg-amber-500/10 text-amber-700 dark:text-amber-300",
-            label: "Steady",
-          }
-        : {
-            stroke: "stroke-rose-400",
-            text: "text-rose-500",
-            badge: "border-rose-500/20 bg-rose-500/10 text-rose-600 dark:text-rose-400",
-            label: "Needs Focus",
-          };
-
-    return (
-      <div className="overflow-hidden rounded-[28px] border border-neutral-200 bg-white dark:border-white/[0.08] dark:bg-neutral-900">
-        <div className="p-5">
-          <div className="flex items-center justify-between gap-4">
-            <div className="min-w-0">
-              <p className="text-[11px] font-semibold uppercase tracking-[0.08em] text-neutral-400 dark:text-neutral-500">
-                Overall Status
-              </p>
-              {/* <h3 className="mt-1 text-[20px] font-black leading-tight text-neutral-950 dark:text-white">
-                Journey Health
-              </h3>
-              <span className={`mt-2 inline-flex rounded-full border px-2.5 py-1 text-[11px] font-bold ${scoreTone.badge}`}>
-                {scoreTone.label}
-              </span> */}
-            </div>
-
-            {/* <div className="relative flex h-[104px] w-[104px] shrink-0 items-center justify-center">
-              <svg viewBox="0 0 100 100" className="absolute inset-0 h-full w-full -rotate-90">
-                <circle
-                  cx="50"
-                  cy="50"
-                  r={ringRadius}
-                  fill="none"
-                  strokeWidth="9"
-                  className="stroke-neutral-100 dark:stroke-white/[0.08]"
-                />
-                <circle
-                  cx="50"
-                  cy="50"
-                  r={ringRadius}
-                  fill="none"
-                  strokeWidth="9"
-                  strokeLinecap="round"
-                  strokeDasharray={ringCircumference}
-                  strokeDashoffset={scoreOffset}
-                  className={scoreTone.stroke}
-                />
-              </svg>
-              <div className="text-center">
-                <span className={`block text-[24px] font-bold tabular-nums leading-none ${scoreTone.text}`}>
-                  {overallPct}%
-                </span>
-             
-              </div>
-            </div> */}
-          </div>
-
-          {/* <div className="mt-4 rounded-[24px] border border-neutral-200 bg-neutral-50 p-3 dark:border-white/[0.08] dark:bg-white/[0.03]">
-            <div className="relative h-[116px] overflow-hidden rounded-[18px] bg-white px-2 pb-3 pt-4 dark:bg-neutral-950/40">
-              <div className="pointer-events-none absolute inset-x-2 top-4 h-px bg-neutral-100 dark:bg-white/[0.06]" />
-              <div className="pointer-events-none absolute inset-x-2 top-1/2 h-px bg-neutral-100 dark:bg-white/[0.06]" />
-              <div className="pointer-events-none absolute inset-x-2 bottom-7 h-px bg-neutral-100 dark:bg-white/[0.06]" />
-              <div className="relative flex h-full items-end gap-[4px]">
-                {statusBarSegments.map((segment) => {
-                  const meta = segmentMeta(segment.state);
-                  return (
-                    <div
-                      key={segment.date}
-                      title={`${formatDateShort(segment.date)} · ${meta.label}`}
-                      className="flex min-w-[4px] flex-1 items-end justify-center"
-                    >
-                      <div
-                        className={`w-full rounded-t-full rounded-b-sm transition-transform duration-150 hover:scale-y-105 ${meta.bar}`}
-                        style={{ height: `${meta.heightPct}%` }}
-                      />
-                    </div>
-                  );
-                })}
-              </div>
-            </div>
-            <div className="mt-3 flex items-center justify-between gap-3 text-[11px] font-bold text-neutral-400 dark:text-neutral-500">
-              <span>{statusBarSegments[0] ? formatDateShort(statusBarSegments[0].date) : "Start"}</span>
-              <span>{statusBarSegments[statusBarSegments.length - 1] ? formatDateShort(statusBarSegments[statusBarSegments.length - 1].date) : "Today"}</span>
-            </div>
-          </div> */}
-
-          <div className="mt-3 grid grid-cols-3 gap-2">
-            {[
-              { label: "Active", value: activeDayLabel, valueClass: "text-neutral-950 dark:text-white" },
-              { label: "Missed", value: counts.fail, valueClass: "text-rose-500" },
-              { label: "14 Days", value: `${recentActiveDays}/14`, valueClass: "text-neutral-950 dark:text-white" },
-            ].map((item) => (
-              <div key={item.label} className="rounded-2xl border border-neutral-200 px-3 py-2.5 dark:border-white/[0.08]">
-                <p className="text-[10px] font-bold uppercase tracking-[0.08em] text-neutral-400 dark:text-neutral-500">
-                  {item.label}
-                </p>
-                <p className={`mt-1 text-[17px] font-black tabular-nums leading-none ${item.valueClass}`}>
-                  {item.value}
-                </p>
-              </div>
-            ))}
-          </div>
-
-          <div className="mt-3 flex flex-wrap gap-2">
-            {[
-              { label: "Strong", className: "bg-green-500" },
-              { label: "Light", className: "bg-amber-400" },
-              { label: "Missed", className: "bg-rose-400" },
-              { label: "Upcoming", className: "bg-neutral-300 dark:bg-white/15" },
-            ].map((item) => (
-              <span
-                key={item.label}
-                className="inline-flex items-center gap-1.5 rounded-full bg-neutral-50 px-2.5 py-1 text-[11px] font-bold text-neutral-500 dark:bg-white/[0.04] dark:text-neutral-400"
-              >
-                <span className={`h-2 w-2 rounded-full ${item.className}`} />
-                {item.label}
-              </span>
-            ))}
-          </div>
-        </div>
-
-        <p className="border-t border-neutral-100 px-5 py-3 text-[12px] font-semibold leading-relaxed text-neutral-500 dark:border-white/[0.06] dark:text-neutral-400">
-          {statusSummary}
-        </p>
-      </div>
-    );
-  }
 
   // ── Roadmap overview 2×2 grid ────────────────────────────────────────────
 
@@ -904,10 +723,6 @@ export default function PlanDetailView({
       {
         label: "Current Phase",
         value: currentPhaseName ?? "Starting out",
-      },
-      {
-        label: "Consistency",
-        value: `${consistencyPct}%`,
       },
       {
         label: "Est. Completion",
@@ -978,14 +793,9 @@ export default function PlanDetailView({
           </div>
         </section>
 
-        {/* B. Consistency Heatmap */}
-        <section className="mt-8 px-4">
-          <InternalSectionTitle title="Consistency" className="mb-4" />
 
-          <div className="rounded-[24px] border border-neutral-200 bg-white dark:border-white/[0.08] dark:bg-neutral-900 overflow-hidden">
-            <ConsistencyHeatmap cells={roadmapStats.dailyCells} />
-          </div>
-        </section>
+
+        
 
         {/* C. Progress Tracking */}
         <section className="mt-8 px-4">
@@ -1049,8 +859,6 @@ export default function PlanDetailView({
         exit={{ opacity: 0, y: -6 }}
         transition={{ duration: 0.2, ease: "easeOut" }}
       >
-        {/* A. Overall Progress */}
-        <section className="mt-8 px-4">{renderOverallProgressBar()}</section>
 
         {/* B. Roadmap Overview */}
         <section className="mt-6 px-4">{renderRoadmapOverview()}</section>
@@ -1140,22 +948,20 @@ export default function PlanDetailView({
           <button
             type="button"
             onClick={() => setPlanTab("planning")}
-            className={`relative flex-1 py-2.5 rounded-xl text-[14px] font-semibold transition-colors duration-200 z-10 ${
-              planTab === "planning"
-                ? "text-neutral-950 dark:text-white"
-                : "text-neutral-500 dark:text-neutral-400"
-            }`}
+            className={`relative flex-1 py-2.5 rounded-xl text-[14px] font-semibold transition-colors duration-200 z-10 ${planTab === "planning"
+              ? "text-neutral-950 dark:text-white"
+              : "text-neutral-500 dark:text-neutral-400"
+              }`}
           >
             Planning
           </button>
           <button
             type="button"
             onClick={() => setPlanTab("roadmap")}
-            className={`relative flex-1 py-2.5 rounded-xl text-[14px] font-semibold transition-colors duration-200 z-10 ${
-              planTab === "roadmap"
-                ? "text-neutral-950 dark:text-white"
-                : "text-neutral-500 dark:text-neutral-400"
-            }`}
+            className={`relative flex-1 py-2.5 rounded-xl text-[14px] font-semibold transition-colors duration-200 z-10 ${planTab === "roadmap"
+              ? "text-neutral-950 dark:text-white"
+              : "text-neutral-500 dark:text-neutral-400"
+              }`}
           >
             Roadmap
           </button>
