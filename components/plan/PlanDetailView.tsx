@@ -39,6 +39,7 @@ import { formatDate, formatDateShort } from "@/lib/dateUtils";
 import { DayPill, Pill } from "@/components/ui/Badge";
 import { InternalSectionTitle, SectionTextAction } from "@/components/ui/InternalSectionTitle";
 import { TrackerTabs } from "@/components/ui/TrackerTabs";
+import ConsistencyOverview from "@/components/plan/ConsistencyOverview";
 
 
 
@@ -793,9 +794,16 @@ export default function PlanDetailView({
           </div>
         </section>
 
-
-
-        
+        {/* B. Weekly Consistency */}
+        <section className="mt-8 px-4">
+          <InternalSectionTitle title="Weekly Consistency" className="mb-4" />
+          <ConsistencyOverview
+            planId={plan.id}
+            activities={schedule.activities}
+            planStartDate={plan.startDate}
+            onAddTask={() => onAddTask(plan.id)}
+          />
+        </section>
 
         {/* C. Progress Tracking */}
         <section className="mt-8 px-4">
