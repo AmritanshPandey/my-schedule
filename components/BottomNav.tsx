@@ -92,7 +92,7 @@ export default function BottomNav({
                 animate={{ opacity: 1, y: 0, scale: 1 }}
                 exit={{ opacity: 0, y: 6, scale: 0.97 }}
                 transition={{ duration: 0.2, ease: [0.34, 1.1, 0.64, 1] }}
-                className="absolute left-1/2 top-1/2 z-30 flex -translate-x-1/2 -translate-y-[124px] flex-col items-center"
+                className="absolute left-1/2 top-1/2 z-30 flex -translate-x-1/2 -translate-y-[156px] flex-col items-center"
               >
                 <div className="flex items-start gap-6 rounded-[24px] border border-white/[0.10] bg-neutral-950/90 px-5 py-4 shadow-[0_20px_60px_-8px_rgba(0,0,0,0.55),inset_0_1px_0_rgba(255,255,255,0.08)] backdrop-blur-md">
                   {/* ADD TASK */}
@@ -177,7 +177,7 @@ export default function BottomNav({
             "
           >
             {/* LEFT: Tasks + Plan */}
-            <div className="flex items-center">
+            <div className="flex items-center gap-4">
               <button
                 type="button"
                 onClick={() => handleTabChange(0)}
@@ -204,7 +204,7 @@ export default function BottomNav({
             <div className="w-[52px] shrink-0" aria-hidden="true" />
 
             {/* RIGHT: Strategy + Settings */}
-            <div className="flex items-center">
+            <div className="flex items-center gap-4">
               <button
                 type="button"
                 onClick={() => handleTabChange(2)}
