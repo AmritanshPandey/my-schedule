@@ -226,45 +226,46 @@ export default function MilestoneSheet({
             placeholder="Brief description..."
           />
 
-          <div className="grid grid-cols-2 gap-2">
-            <div>
-              <p className="mb-1.5 text-[11px] font-semibold uppercase tracking-[0.08em] text-neutral-400 dark:text-neutral-500">
-                Start Date
-              </p>
-              <input
-                type="date"
-                value={draft.startDate}
-                disabled={!canEditStartDate}
-                onChange={(e) => setDraft((d) => ({ ...d, startDate: e.target.value }))}
-                className="h-11 w-full rounded-xl border border-neutral-200 bg-neutral-50 px-3 text-[16px] text-neutral-900 outline-none transition-colors focus:border-neutral-300 focus:bg-neutral-100 disabled:opacity-60 dark:border-white/10 dark:bg-white/[0.04] dark:text-white dark:focus:border-white/20 dark:focus:bg-white/[0.07]"
-              />
-            </div>
+          {/* Start Date — full width row */}
+          <div>
+            <p className="mb-1.5 text-[11px] font-semibold uppercase tracking-[0.08em] text-neutral-400 dark:text-neutral-500">
+              Start Date
+            </p>
+            <input
+              type="date"
+              value={draft.startDate}
+              disabled={!canEditStartDate}
+              onChange={(e) => setDraft((d) => ({ ...d, startDate: e.target.value }))}
+              className="h-11 w-full min-w-0 rounded-xl border border-neutral-200 bg-neutral-50 px-3 text-[16px] text-neutral-900 outline-none transition-colors focus:border-neutral-300 focus:bg-neutral-100 disabled:opacity-60 dark:border-white/10 dark:bg-white/[0.04] dark:text-white dark:focus:border-white/20 dark:focus:bg-white/[0.07]"
+            />
+          </div>
 
-            <div>
-              <p className="mb-1.5 text-[11px] font-semibold uppercase tracking-[0.08em] text-neutral-400 dark:text-neutral-500">
-                Duration
-              </p>
-              <div className="flex gap-1.5">
-                <input
-                  type="number"
-                  min="1"
-                  value={draft.durationValue}
-                  onChange={(e) => setDraft((d) => ({ ...d, durationValue: e.target.value }))}
-                  placeholder="14"
-                  className="h-11 min-w-0 flex-1 rounded-xl border border-neutral-200 bg-neutral-50 px-3 text-[16px] text-neutral-900 outline-none transition-colors focus:border-neutral-300 focus:bg-neutral-100 dark:border-white/10 dark:bg-white/[0.04] dark:text-white dark:focus:border-white/20 dark:focus:bg-white/[0.07]"
-                />
-                <select
-                  value={draft.durationType}
-                  onChange={(e) => setDraft((d) => ({ ...d, durationType: e.target.value as DurationType }))}
-                  className="h-11 w-[92px] rounded-xl border border-neutral-200 bg-neutral-50 px-2 text-[13px] font-semibold text-neutral-700 outline-none transition-colors focus:border-neutral-300 focus:bg-neutral-100 dark:border-white/10 dark:bg-white/[0.04] dark:text-neutral-200 dark:focus:border-white/20 dark:focus:bg-white/[0.07]"
-                >
-                  {DURATION_TYPES.map((type) => (
-                    <option key={type.value} value={type.value}>
-                      {type.label}
-                    </option>
-                  ))}
-                </select>
-              </div>
+          {/* Duration — full width row, number + unit in flex */}
+          <div>
+            <p className="mb-1.5 text-[11px] font-semibold uppercase tracking-[0.08em] text-neutral-400 dark:text-neutral-500">
+              Duration
+            </p>
+            <div className="flex gap-2">
+              <input
+                type="number"
+                min="1"
+                inputMode="numeric"
+                value={draft.durationValue}
+                onChange={(e) => setDraft((d) => ({ ...d, durationValue: e.target.value }))}
+                placeholder="14"
+                className="h-11 min-w-0 flex-1 rounded-xl border border-neutral-200 bg-neutral-50 px-3 text-[16px] text-neutral-900 outline-none transition-colors focus:border-neutral-300 focus:bg-neutral-100 dark:border-white/10 dark:bg-white/[0.04] dark:text-white dark:focus:border-white/20 dark:focus:bg-white/[0.07]"
+              />
+              <select
+                value={draft.durationType}
+                onChange={(e) => setDraft((d) => ({ ...d, durationType: e.target.value as DurationType }))}
+                className="h-11 w-[120px] shrink-0 rounded-xl border border-neutral-200 bg-neutral-50 px-3 text-[16px] font-semibold text-neutral-700 outline-none transition-colors focus:border-neutral-300 focus:bg-neutral-100 dark:border-white/10 dark:bg-white/[0.04] dark:text-neutral-200 dark:focus:border-white/20 dark:focus:bg-white/[0.07]"
+              >
+                {DURATION_TYPES.map((type) => (
+                  <option key={type.value} value={type.value}>
+                    {type.label}
+                  </option>
+                ))}
+              </select>
             </div>
           </div>
 

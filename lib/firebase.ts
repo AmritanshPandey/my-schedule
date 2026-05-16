@@ -21,6 +21,11 @@ import {
   type Analytics,
 } from "firebase/analytics";
 
+import {
+  getStorage,
+  type FirebaseStorage,
+} from "firebase/storage";
+
 const config = {
   apiKey:            process.env.NEXT_PUBLIC_FIREBASE_API_KEY,
   authDomain:        process.env.NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN,
@@ -49,6 +54,7 @@ if (isClient && isConfigured) {
 
 export const auth: Auth | null = _app ? getAuth(_app) : null;
 export const db: Firestore | null = _app ? getFirestore(_app) : null;
+export const storage: FirebaseStorage | null = _app ? getStorage(_app) : null;
 
 export async function initializeAnalytics(): Promise<Analytics | null> {
   if (!isClient || !_app) return null;

@@ -7,16 +7,17 @@ import { AnimatePresence, motion } from "framer-motion";
 
 interface InternalSectionTitleProps {
   title: string;
-  /** Right-side actions (icon buttons, text links, etc.) */
+  /** Right-side icon actions */
   actions?: React.ReactNode;
+  /** Optional segmented tabs rendered below the title row */
+  tabs?: React.ReactNode;
   className?: string;
 }
 
-// ── Icon action button (+ / ✏️ / ✓) ──────────────────────────────────────────
+// ── Icon button (36×36) ───────────────────────────────────────────────────────
 
 interface SectionIconButtonProps {
   icon: React.ReactNode;
-  /** Replaces icon when saving=true (e.g. checkmark instead of pencil) */
   saveIcon?: React.ReactNode;
   saving?: boolean;
   onClick: () => void;
@@ -37,10 +38,10 @@ export function SectionIconButton({
       whileTap={{ scale: 0.88 }}
       transition={{ type: "spring", stiffness: 450, damping: 22 }}
       aria-label={label}
-      className={`inline-flex h-8 w-8 items-center justify-center rounded-xl border transition-colors ${
+      className={`inline-flex h-[34px] w-[34px] items-center justify-center rounded-[9px] transition-colors ${
         saving
-          ? "border-neutral-950 bg-neutral-950 text-white dark:border-white dark:bg-white dark:text-neutral-950"
-          : "border-neutral-200 bg-white text-neutral-500 hover:bg-neutral-50 dark:border-white/10 dark:bg-neutral-900 dark:text-neutral-400 dark:hover:bg-white/[0.06]"
+          ? "bg-neutral-950 text-white dark:bg-white dark:text-neutral-950"
+          : "bg-transparent text-neutral-700 hover:bg-neutral-100 dark:text-neutral-300 dark:hover:bg-white/[0.06]"
       }`}
     >
       <AnimatePresence mode="wait" initial={false}>
@@ -58,7 +59,7 @@ export function SectionIconButton({
   );
 }
 
-// ── Text link action (e.g. "+ Add Task") ─────────────────────────────────────
+// ── Text link action ──────────────────────────────────────────────────────────
 
 interface SectionTextActionProps {
   label: string;
@@ -71,7 +72,7 @@ export function SectionTextAction({ label, icon, onClick }: SectionTextActionPro
     <button
       type="button"
       onClick={onClick}
-      className="inline-flex items-center gap-1.5 text-[13px] font-semibold text-neutral-500 hover:text-neutral-900 dark:text-neutral-400 dark:hover:text-white transition-colors"
+      className="inline-flex items-center gap-1.5 text-[13px] font-semibold text-neutral-500 transition-colors hover:text-neutral-900 dark:text-neutral-400 dark:hover:text-white"
     >
       {icon}
       {label}
@@ -84,18 +85,22 @@ export function SectionTextAction({ label, icon, onClick }: SectionTextActionPro
 function InternalSectionTitleInner({
   title,
   actions,
+  tabs,
   className = "",
 }: InternalSectionTitleProps) {
   return (
-    <div className={`flex items-center justify-between gap-3 ${className}`}>
-      <h2 className="text-[18px] font-bold text-neutral-950 dark:text-white leading-tight">
-        {title}
-      </h2>
-      {actions && (
-        <div className="flex items-center gap-1.5 shrink-0">
-          {actions}
-        </div>
-      )}
+    <div className={className}>
+      <div className="flex items-center justify-between gap-3">
+        <h2 className="text-[17px] font-bold leading-tight tracking-[-0.35px] text-neutral-950 dark:text-white">
+          {title}
+        </h2>
+        {actions && (
+          <div className="flex shrink-0 items-center gap-1">
+            {actions}
+          </div>
+        )}
+      </div>
+      {tabs && <div className="mt-3">{tabs}</div>}
     </div>
   );
 }

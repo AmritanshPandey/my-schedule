@@ -4,6 +4,7 @@ import "./globals.css";
 import ServiceWorkerRegistration from "@/components/ServiceWorkerRegistration";
 import PWAInstallPrompt from "@/components/PWAInstallPrompt";
 import ViewportStability from "@/components/ViewportStability";
+import LandscapeBlocker from "@/components/LandscapeBlocker";
 import { AuthProvider } from "@/contexts/AuthProvider";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
 
@@ -49,11 +50,22 @@ export default function RootLayout({
       <head>
         <script
           dangerouslySetInnerHTML={{
-            __html: `(function(){try{var apply=function(dark){document.documentElement.classList.toggle('dark',dark);document.documentElement.style.colorScheme=dark?'dark':'light';};var t=localStorage.getItem('theme');apply(t==='dark'||(!t&&window.matchMedia('(prefers-color-scheme: dark)').matches));window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change',function(e){if(!localStorage.getItem('theme'))apply(e.matches);});}catch(e){}})();`,
+            __html: `(function(){try{
+var apply=function(dark){document.documentElement.classList.toggle('dark',dark);document.documentElement.style.colorScheme=dark?'dark':'light';};
+var t=localStorage.getItem('theme');
+apply(t==='dark'||(!t&&window.matchMedia('(prefers-color-scheme: dark)').matches));
+window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change',function(e){if(!localStorage.getItem('theme'))apply(e.matches);});
+try{
+  var nav=navigator;
+  var lowEnd=(nav.hardwareConcurrency!=null&&nav.hardwareConcurrency<=2)||(nav.deviceMemory!=null&&nav.deviceMemory<=2)||((nav.connection||{}).saveData===true)||window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  if(lowEnd)document.documentElement.classList.add('reduce-blur');
+}catch(e2){}
+}catch(e){}})();`,
           }}
         />
       </head>
       <body className="min-h-full flex flex-col bg-neutral-50 text-neutral-900 dark:bg-neutral-950 dark:text-white font-sans" style={{ paddingTop: "env(safe-area-inset-top)", paddingLeft: "env(safe-area-inset-left)", paddingRight: "env(safe-area-inset-right)" }}>
+        <LandscapeBlocker />
         <ViewportStability />
         <ServiceWorkerRegistration />
         <PWAInstallPrompt />

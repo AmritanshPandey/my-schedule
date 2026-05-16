@@ -257,6 +257,7 @@ export function TaskSheet({
 }: TaskSheetProps) {
   // ── Form state ─────────────────────────────────────────────────────────────
   const [planId, setPlanId] = useState("");
+  const [taskType, setTaskType] = useState<"normal" | "routine">("normal");
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
   const [startTime, setStartTime] = useState("");
@@ -275,15 +276,19 @@ export function TaskSheet({
       const linkedPlan = plans.find((p) => p.id === task.planId);
       const selectedDays = activeDays && activeDays.length > 0 ? activeDays : [activeDay];
       setPlanId(task.planId);
+      setTaskType(task.taskType ?? "normal");
       setTitle(task.title);
       setDescription(task.description ?? "");
       setStartTime(displayToInputTime(task.startTime));
       setEndTime(displayToInputTime(task.endTime));
       setRepeatDays(selectedDays);
-      setSubtasks(linkedPlan?.items.map(entryToSubtaskDraft) ?? []);
+      // Load per-task subtasks; fall back to plan template for tasks created before this fix
+      const taskSubtasks = task.subtasks ?? linkedPlan?.items ?? [];
+      setSubtasks(taskSubtasks.map(entryToSubtaskDraft));
     } else {
       const pid = initialPlanId ?? plans[0]?.id ?? "";
       setPlanId(pid);
+      setTaskType("normal");
       setTitle("");
       setDescription("");
       setStartTime("");
@@ -340,14 +345,18 @@ export function TaskSheet({
       icon: selectedPlan.emoji,
       color: selectedPlan.color,
       planId: selectedPlan.id,
+      taskType,
+      // Store subtasks on the task itself so each task has an independent list
+      subtasks: validSubtasks.length > 0 ? validSubtasks : undefined,
     };
 
     onSave({
       taskDraft,
       taskId: mode === "edit" ? task?.id : undefined,
       repeatDays,
+      // Routine task steps are task-level only — never sync back to the plan template
       planItems:
-        validSubtasks.length > 0 || subtasks.length !== (selectedPlan.items.length)
+        mode === "create" && taskType === "normal" && (validSubtasks.length > 0 || subtasks.length !== selectedPlan.items.length)
           ? { planId: selectedPlan.id, items: validSubtasks }
           : null,
     });
@@ -366,6 +375,27 @@ export function TaskSheet({
         <SheetHeader eyebrow={eyebrow} title={headingTitle} onClose={handleClose} />
 
         <div className="mt-4 space-y-5">
+          {/* Task type toggle */}
+          <div>
+            <p className={`mb-1.5 ${SECTION_LABEL}`}>Type</p>
+            <div className="grid grid-cols-2 gap-2">
+              {(["normal", "routine"] as const).map((type) => (
+                <button
+                  key={type}
+                  type="button"
+                  onClick={() => setTaskType(type)}
+                  className={`h-10 rounded-xl text-[14px] font-semibold transition-colors ${
+                    taskType === type
+                      ? "bg-neutral-900 text-white dark:bg-white dark:text-neutral-950"
+                      : "border border-neutral-200 bg-white text-neutral-500 dark:border-white/10 dark:bg-white/[0.04] dark:text-neutral-400"
+                  }`}
+                >
+                  {type === "normal" ? "Normal" : "Routine"}
+                </button>
+              ))}
+            </div>
+          </div>
+
           {/* Plan selector */}
           <PlanSelector
             plans={plans}
@@ -403,10 +433,12 @@ export function TaskSheet({
             onRepeatDaysChange={setRepeatDays}
           />
 
-          {/* Subtasks section */}
+          {/* Subtasks / Routine Steps section */}
           {selectedPlan && (
             <section className="space-y-3">
-              <p className={SECTION_LABEL}>Subtasks</p>
+              <p className={SECTION_LABEL}>
+                {taskType === "routine" ? "Routine Steps" : "Subtasks"}
+              </p>
 
               <AnimatePresence initial={false}>
                 {subtasks.map((s, i) => (
@@ -434,7 +466,7 @@ export function TaskSheet({
                 className="flex h-10 w-full items-center gap-2 rounded-xl border border-dashed border-neutral-200 px-3 text-[13px] font-semibold text-neutral-400 transition-colors hover:border-neutral-300 hover:text-neutral-600 dark:border-white/10 dark:text-neutral-500 dark:hover:border-white/20 dark:hover:text-neutral-300"
               >
                 <IconPlus size={14} strokeWidth={2.5} />
-                Add Subtask
+                {taskType === "routine" ? "Add Step" : "Add Subtask"}
               </button>
             </section>
           )}

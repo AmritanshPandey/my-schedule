@@ -34,14 +34,11 @@ export function resolveAccentColor(color: string | undefined, icon: string): Acc
   return colorFromIcon(icon);
 }
 
-// WCAG AA contrast ratios (verified):
-// Light mode — dark-700 text on color-100 bg: all ≥ 5.2:1 ✓
-// Dark mode  — color-300 text on color-950/50 bg: all ≥ 5.0:1 ✓
-// Title uses neutral-900/white: 15:1+ in both modes ✓
 export function timelineCardStyles(color: string) {
   const token = VALID_COLORS.includes(color as AccentColor) ? (color as AccentColor) : "cyan";
   const styles: Record<AccentColor, {
     cardBg: string;
+    blockBorder: string;
     accentBar: string;
     title: string;
     planLabel: string;
@@ -52,70 +49,76 @@ export function timelineCardStyles(color: string) {
     durationBadge: string;
   }> = {
     blue: {
-      cardBg: "bg-blue-100 dark:bg-blue-950/60",
+      cardBg: "bg-blue-50/90 dark:bg-blue-950/45",
+      blockBorder: "border border-blue-200/60 dark:border-blue-700/30",
       accentBar: "border-l-[3px] border-l-blue-500 dark:border-l-blue-400",
       title: "text-neutral-900 dark:text-white",
-      planLabel: "text-neutral-500 dark:text-neutral-400",
-      time: "text-neutral-600 dark:text-neutral-400",
+      planLabel: "text-blue-700/75 dark:text-blue-300/75",
+      time: "text-neutral-500 dark:text-neutral-400",
       dot: "bg-blue-500",
       iconBg: "bg-blue-500",
       iconText: "text-white",
-      durationBadge: "bg-blue-200 text-blue-800 dark:bg-blue-400/20 dark:text-blue-200",
+      durationBadge: "bg-blue-100 text-blue-700 dark:bg-blue-400/15 dark:text-blue-300",
     },
     violet: {
-      cardBg: "bg-violet-100 dark:bg-violet-950/60",
+      cardBg: "bg-violet-50/90 dark:bg-violet-950/45",
+      blockBorder: "border border-violet-200/60 dark:border-violet-700/30",
       accentBar: "border-l-[3px] border-l-violet-500 dark:border-l-violet-400",
       title: "text-neutral-900 dark:text-white",
-      planLabel: "text-neutral-500 dark:text-neutral-400",
-      time: "text-neutral-600 dark:text-neutral-400",
+      planLabel: "text-violet-700/75 dark:text-violet-300/75",
+      time: "text-neutral-500 dark:text-neutral-400",
       dot: "bg-violet-500",
       iconBg: "bg-violet-500",
       iconText: "text-white",
-      durationBadge: "bg-violet-200 text-violet-800 dark:bg-violet-400/20 dark:text-violet-200",
+      durationBadge: "bg-violet-100 text-violet-700 dark:bg-violet-400/15 dark:text-violet-300",
     },
     pink: {
-      cardBg: "bg-pink-100 dark:bg-pink-950/60",
+      cardBg: "bg-pink-50/90 dark:bg-pink-950/45",
+      blockBorder: "border border-pink-200/60 dark:border-pink-700/30",
       accentBar: "border-l-[3px] border-l-pink-500 dark:border-l-pink-400",
       title: "text-neutral-900 dark:text-white",
-      planLabel: "text-neutral-500 dark:text-neutral-400",
-      time: "text-neutral-600 dark:text-neutral-400",
+      planLabel: "text-pink-700/75 dark:text-pink-300/75",
+      time: "text-neutral-500 dark:text-neutral-400",
       dot: "bg-pink-500",
       iconBg: "bg-pink-500",
       iconText: "text-white",
-      durationBadge: "bg-pink-200 text-pink-800 dark:bg-pink-400/20 dark:text-pink-200",
+      durationBadge: "bg-pink-100 text-pink-700 dark:bg-pink-400/15 dark:text-pink-300",
     },
     amber: {
-      cardBg: "bg-amber-100 dark:bg-amber-950/60",
+      cardBg: "bg-amber-50/90 dark:bg-amber-950/45",
+      blockBorder: "border border-amber-200/60 dark:border-amber-700/30",
       accentBar: "border-l-[3px] border-l-amber-500 dark:border-l-amber-400",
       title: "text-neutral-900 dark:text-white",
-      planLabel: "text-neutral-500 dark:text-neutral-400",
-      time: "text-neutral-600 dark:text-neutral-400",
+      planLabel: "text-amber-700/75 dark:text-amber-300/75",
+      time: "text-neutral-500 dark:text-neutral-400",
       dot: "bg-amber-500",
       iconBg: "bg-amber-500",
       iconText: "text-white",
-      durationBadge: "bg-amber-200 text-amber-800 dark:bg-amber-400/20 dark:text-amber-200",
+      durationBadge: "bg-amber-100 text-amber-700 dark:bg-amber-400/15 dark:text-amber-300",
     },
     emerald: {
-      cardBg: "bg-green-100 dark:bg-green-950/60",
+      cardBg: "bg-green-50/90 dark:bg-green-950/45",
+      blockBorder: "border border-green-200/60 dark:border-green-700/30",
       accentBar: "border-l-[3px] border-l-green-500 dark:border-l-green-400",
       title: "text-neutral-900 dark:text-white",
-      planLabel: "text-neutral-500 dark:text-neutral-400",
-      time: "text-neutral-600 dark:text-neutral-400",
+      planLabel: "text-green-700/75 dark:text-green-300/75",
+      time: "text-neutral-500 dark:text-neutral-400",
       dot: "bg-green-500",
       iconBg: "bg-green-500",
       iconText: "text-white",
-      durationBadge: "bg-green-200 text-green-800 dark:bg-green-400/20 dark:text-green-200",
+      durationBadge: "bg-green-100 text-green-700 dark:bg-green-400/15 dark:text-green-300",
     },
     cyan: {
-      cardBg: "bg-cyan-100 dark:bg-cyan-950/60",
+      cardBg: "bg-cyan-50/90 dark:bg-cyan-950/45",
+      blockBorder: "border border-cyan-200/60 dark:border-cyan-700/30",
       accentBar: "border-l-[3px] border-l-cyan-500 dark:border-l-cyan-400",
       title: "text-neutral-900 dark:text-white",
-      planLabel: "text-neutral-500 dark:text-neutral-400",
-      time: "text-neutral-600 dark:text-neutral-400",
+      planLabel: "text-cyan-700/75 dark:text-cyan-300/75",
+      time: "text-neutral-500 dark:text-neutral-400",
       dot: "bg-cyan-500",
       iconBg: "bg-cyan-500",
       iconText: "text-white",
-      durationBadge: "bg-cyan-200 text-cyan-800 dark:bg-cyan-400/20 dark:text-cyan-200",
+      durationBadge: "bg-cyan-100 text-cyan-700 dark:bg-cyan-400/15 dark:text-cyan-300",
     },
   };
 

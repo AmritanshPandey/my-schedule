@@ -1,5 +1,6 @@
 "use client";
 
+import { motion } from "framer-motion";
 import { IconArrowLeft, IconSettings2 } from "@tabler/icons-react";
 
 interface ActionItem {
@@ -21,60 +22,82 @@ interface AppHeaderProps {
 export default function AppHeader({ back, actions, onOpenSettings }: AppHeaderProps) {
   const isDetail = !!back;
 
-  return (
-    <header className="sticky top-0 z-10 flex items-center justify-between px-4 py-4 border-b border-neutral-200 bg-white/85 backdrop-blur-sm dark:border-white/[0.08] dark:bg-neutral-950/85">
-      {isDetail ? (
-        /* Detail mode — back arrow + label */
-        <button
-          type="button"
-          onClick={back.onBack}
-          className="inline-flex items-center gap-1.5 text-[13px] font-semibold text-neutral-500 hover:text-neutral-900 dark:text-neutral-400 dark:hover:text-white transition-colors"
-        >
-          <IconArrowLeft size={18} strokeWidth={2} />
-          {back.label}
-        </button>
-      ) : (
-        /* Root mode — logo */
-        <div className="flex items-center">
-          <img src="/logo.svg" alt="PlanR" className="h-6 w-auto dark:hidden" />
-          <img src="/logo-dark.svg" alt="PlanR" className="hidden h-6 w-auto dark:block" />
-        </div>
-      )}
+  if (isDetail) {
+    return (
+      <header className="sticky top-0 z-10 flex flex-col bg-neutral-950/90 backdrop-blur-md">
+        {/* Top accent line */}
+        <div className="h-[1.5px] bg-gradient-to-r from-neutral-500/40 via-neutral-500/15 to-transparent" />
 
-      {/* Right side */}
-      {isDetail && actions && actions.length > 0 ? (
-        <div className="flex items-center gap-0.5">
-          {actions.map((action, i) => {
-            const Icon = action.icon;
-            return (
-              <button
-                key={i}
-                type="button"
-                onClick={action.onClick}
-                aria-label={action.label}
-                className={`inline-flex h-9 w-9 items-center justify-center rounded-xl transition-colors ${
-                  action.destructive
-                    ? "text-neutral-400 hover:bg-rose-50 hover:text-rose-500 dark:text-neutral-500 dark:hover:bg-rose-500/10 dark:hover:text-rose-400"
-                    : "text-neutral-400 hover:bg-neutral-100 hover:text-neutral-700 dark:text-neutral-500 dark:hover:bg-white/[0.07] dark:hover:text-neutral-300"
-                }`}
-              >
-                <Icon size={20} strokeWidth={2} />
-              </button>
-            );
-          })}
-        </div>
-      ) : (
-        !isDetail && onOpenSettings && (
-          <button
+        {/* Main row */}
+        <div className="flex items-center gap-3 px-4 pt-4 pb-4">
+          {/* Back button */}
+          <motion.button
             type="button"
-            onClick={onOpenSettings}
-            aria-label="Settings"
-            className="inline-flex h-9 w-9 items-center justify-center rounded-xl border border-neutral-200 bg-white text-neutral-500 transition-all hover:bg-neutral-50 hover:text-neutral-800 active:scale-95 dark:border-white/10 dark:bg-neutral-900 dark:text-neutral-400 dark:hover:bg-white/[0.07] dark:hover:text-neutral-200"
+            whileTap={{ scale: 0.86 }}
+            onClick={back.onBack}
+            aria-label={`Back to ${back.label}`}
+            className="shrink-0 flex h-9 w-9 items-center justify-center rounded-full bg-white/[0.07] text-white/60 active:text-white transition-colors"
           >
-            <IconSettings2 size={17} strokeWidth={2} />
-          </button>
-        )
-      )}
+            <IconArrowLeft size={17} strokeWidth={2.2} />
+          </motion.button>
+
+          {/* Back label */}
+          <div className="flex-1 min-w-0">
+            <p className="text-[16px] font-bold text-white/30 mb-0.5">
+              {back.label}
+            </p>
+          </div>
+
+          {/* Action buttons */}
+          {actions && actions.length > 0 && (
+            <div className="shrink-0 flex items-center gap-1.5">
+              {actions.map((action, i) => {
+                const Icon = action.icon;
+                return (
+                  <motion.button
+                    key={i}
+                    type="button"
+                    whileTap={{ scale: 0.86 }}
+                    onClick={action.onClick}
+                    aria-label={action.label}
+                    className={`flex h-9 w-9 items-center justify-center rounded-full bg-white/[0.07] transition-colors ${
+                      action.destructive
+                        ? "text-white/40 active:bg-rose-500/15 active:text-rose-400"
+                        : "text-white/50 active:text-white"
+                    }`}
+                  >
+                    <Icon size={16} strokeWidth={2.2} />
+                  </motion.button>
+                );
+              })}
+            </div>
+          )}
+        </div>
+
+        {/* Bottom border */}
+        <div className="h-px bg-white/[0.06]" />
+      </header>
+    );
+  }
+
+  // ── Root mode — glassmorphism header ─────────────────────────────────────────
+  return (
+    <header
+      className="
+        sticky top-0 z-10 flex items-center justify-between px-4 py-3.5
+        border-b border-neutral-200/60 bg-white/80 backdrop-blur-md
+        shadow-[0_1px_3px_rgba(0,0,0,0.04),0_4px_20px_rgba(0,0,0,0.04)]
+        dark:border-white/[0.07] dark:bg-neutral-950/82
+        dark:shadow-[0_1px_0_rgba(255,255,255,0.03),0_4px_20px_rgba(0,0,0,0.28)]
+      "
+    >
+      {/* Logo */}
+      <div className="flex items-center">
+        <img src="/logo.svg" alt="PlanR" className="h-6 w-auto dark:hidden" />
+        <img src="/logo-dark.svg" alt="PlanR" className="hidden h-6 w-auto dark:block" />
+      </div>
+
+    
     </header>
   );
 }

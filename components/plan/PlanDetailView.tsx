@@ -37,9 +37,9 @@ import { timelineCardStyles, accentStyles } from "@/lib/colorSystem";
 import { formatDuration, displayToInputTime, inputToDisplayTime } from "@/lib/timeUtils";
 import { formatDate, formatDateShort } from "@/lib/dateUtils";
 import { DayPill, Pill } from "@/components/ui/Badge";
-import { InternalSectionTitle, SectionTextAction } from "@/components/ui/InternalSectionTitle";
+import { InternalSectionTitle, SectionIconButton } from "@/components/ui/InternalSectionTitle";
 import { TrackerTabs } from "@/components/ui/TrackerTabs";
-import ConsistencyOverview from "@/components/plan/ConsistencyOverview";
+import AccuracyCalendar from "@/components/plan/AccuracyCalendar";
 
 
 
@@ -218,6 +218,11 @@ export default function PlanDetailView({
   const [milestoneSheetMode, setMilestoneSheetMode] = useState<"create" | "edit">("create");
   const [editingMilestone, setEditingMilestone] = useState<Milestone | null>(null);
 
+  // ── Section edit modes ──────────────────────────────────────────────────
+  const [tasksEditMode, setTasksEditMode] = useState(false);
+  const [milestonesEditMode, setMilestonesEditMode] = useState(false);
+  const [trackersEditMode, setTrackersEditMode] = useState(false);
+
   // ── Derived data ────────────────────────────────────────────────────────
   const uniqueTasks = useMemo(
     () => getUniquePlanTasks(plan.id, schedule.activities),
@@ -318,6 +323,7 @@ export default function PlanDetailView({
   function renderLinkedTaskRow(task: Task, activeDays: DayKey[]) {
     const tone = timelineCardStyles(plan.color);
     const duration = formatDuration(task.startTime, task.endTime);
+    const subtaskCount = task.subtasks?.length ?? 0;
 
     return (
       <div
@@ -325,9 +331,17 @@ export default function PlanDetailView({
         className="flex items-center gap-3 px-1 py-3.5 border-b border-neutral-100 last:border-b-0 dark:border-white/[0.05]"
       >
         <div className="flex-1 min-w-0">
-          <p className="text-[16px] font-semibold leading-tight text-neutral-900 dark:text-white">
-            {task.title}
-          </p>
+          <div className="flex items-center gap-2">
+            <p className="text-[16px] font-semibold leading-tight text-neutral-900 dark:text-white">
+              {task.title}
+            </p>
+            {subtaskCount > 0 && (
+              <span className="inline-flex shrink-0 items-center gap-1 text-[12px] font-semibold text-neutral-400 dark:text-neutral-500">
+                <IconCheck size={11} strokeWidth={2.5} />
+                {subtaskCount}
+              </span>
+            )}
+          </div>
           <div className="flex items-center gap-2.5 mt-1.5 flex-wrap">
             <p className={`text-[13px] font-medium shrink-0 ${tone.time}`}>
               {task.startTime} – {task.endTime}
@@ -340,22 +354,24 @@ export default function PlanDetailView({
             </div>
           </div>
         </div>
-        <div className="flex items-center gap-0.5 shrink-0">
-          <button
-            type="button"
-            onClick={() => onEditTask(task)}
-            className="h-8 w-8 flex items-center justify-center rounded-lg text-neutral-400 hover:text-neutral-700 dark:text-neutral-600 dark:hover:text-neutral-300 transition-colors"
-          >
-            <IconEdit size={16} strokeWidth={2} />
-          </button>
-          <button
-            type="button"
-            onClick={() => onDeleteLinkedTask(task, activeDays)}
-            className="h-8 w-8 flex items-center justify-center rounded-lg text-neutral-400 hover:text-rose-500 dark:text-neutral-600 dark:hover:text-rose-400 transition-colors"
-          >
-            <IconTrash size={16} strokeWidth={2} />
-          </button>
-        </div>
+        {tasksEditMode && (
+          <div className="flex items-center gap-0.5 shrink-0">
+            <button
+              type="button"
+              onClick={() => onEditTask(task)}
+              className="h-8 w-8 flex items-center justify-center rounded-lg text-neutral-400 hover:text-neutral-700 dark:text-neutral-600 dark:hover:text-neutral-300 transition-colors"
+            >
+              <IconEdit size={16} strokeWidth={2} />
+            </button>
+            <button
+              type="button"
+              onClick={() => onDeleteLinkedTask(task, activeDays)}
+              className="h-8 w-8 flex items-center justify-center rounded-lg text-neutral-400 hover:text-rose-500 dark:text-neutral-600 dark:hover:text-rose-400 transition-colors"
+            >
+              <IconTrash size={16} strokeWidth={2} />
+            </button>
+          </div>
+        )}
       </div>
     );
   }
@@ -440,29 +456,31 @@ export default function PlanDetailView({
                   <TrendBadge trend={trendResult} />
                 )}
               </div>
-              <div className="flex items-center gap-0.5 shrink-0 -mt-0.5">
-                <button
-                  type="button"
-                  onClick={() => {
-                    setEditingTrackerId(tracker.id);
-                    setEditTrackerDraft({
-                      title: tracker.title,
-                      unit: tracker.unit ?? "",
-                      goalDirection: tracker.goalDirection ?? "increase_good",
-                    });
-                  }}
-                  className="h-8 w-8 flex items-center justify-center rounded-lg text-neutral-400 hover:text-neutral-700 dark:text-neutral-500 dark:hover:text-neutral-300 transition-colors"
-                >
-                  <IconEdit size={16} strokeWidth={2} />
-                </button>
-                <button
-                  type="button"
-                  onClick={() => onDeleteTracker(tracker.id)}
-                  className="h-8 w-8 flex items-center justify-center rounded-lg text-neutral-400 hover:text-rose-500 dark:text-neutral-500 dark:hover:text-rose-400 transition-colors"
-                >
-                  <IconTrash size={16} strokeWidth={2} />
-                </button>
-              </div>
+              {trackersEditMode && (
+                <div className="flex items-center gap-0.5 shrink-0 -mt-0.5">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setEditingTrackerId(tracker.id);
+                      setEditTrackerDraft({
+                        title: tracker.title,
+                        unit: tracker.unit ?? "",
+                        goalDirection: tracker.goalDirection ?? "increase_good",
+                      });
+                    }}
+                    className="h-8 w-8 flex items-center justify-center rounded-lg text-neutral-400 hover:text-neutral-700 dark:text-neutral-500 dark:hover:text-neutral-300 transition-colors"
+                  >
+                    <IconEdit size={16} strokeWidth={2} />
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => onDeleteTracker(tracker.id)}
+                    className="h-8 w-8 flex items-center justify-center rounded-lg text-neutral-400 hover:text-rose-500 dark:text-neutral-500 dark:hover:text-rose-400 transition-colors"
+                  >
+                    <IconTrash size={16} strokeWidth={2} />
+                  </button>
+                </div>
+              )}
             </div>
           )}
         </div>
@@ -558,13 +576,15 @@ export default function PlanDetailView({
                               </span>
                             )}
                           </span>
-                          <button
-                            type="button"
-                            onClick={() => onDeleteEntry(entry.id)}
-                            className="h-6 w-6 flex items-center justify-center rounded-lg text-neutral-300 hover:text-rose-500 dark:text-neutral-700 dark:hover:text-rose-400 transition-colors"
-                          >
-                            <IconTrash size={14} strokeWidth={2} />
-                          </button>
+                          {trackersEditMode && (
+                            <button
+                              type="button"
+                              onClick={() => onDeleteEntry(entry.id)}
+                              className="h-6 w-6 flex items-center justify-center rounded-lg text-neutral-300 hover:text-rose-500 dark:text-neutral-700 dark:hover:text-rose-400 transition-colors"
+                            >
+                              <IconTrash size={14} strokeWidth={2} />
+                            </button>
+                          )}
                         </div>
                       </div>
                     );
@@ -577,179 +597,197 @@ export default function PlanDetailView({
     );
   }
 
-  function renderMilestoneCard(m: Milestone, isCurrentMilestone: boolean) {
+  function renderMilestoneCard(m: Milestone, isCurrentMilestone: boolean, isLast: boolean) {
     const status = resolveMilestoneStatus(m);
     const isCompleted = status === "completed";
-    const isDelayed = status === "delayed";
-    const completedDateLabel = m.actualCompletedDate ? formatDate(m.actualCompletedDate) : null;
     const daysLabel = `${m.plannedDurationDays} Day${m.plannedDurationDays === 1 ? "" : "s"}`;
-    const rangeLabel = `${formatDate(m.startDate)} - ${formatDate(m.plannedEndDate)}`;
+    const rangeLabel = `${formatDate(m.startDate)} – ${formatDate(m.plannedEndDate)}`;
 
     return (
-      <div
-        key={m.id}
-        className={`relative rounded-2xl border p-4 transition-all duration-200 ${isCompleted
-          ? "border-green-200/60 bg-green-50/40 dark:border-green-800/30 dark:bg-green-950/20"
-          : isDelayed
-            ? "border-rose-300 bg-rose-50/40 dark:border-rose-700/40 dark:bg-rose-950/20"
-            : isCurrentMilestone
-              ? "border-green-300 bg-white ring-2 ring-green-100 dark:border-green-600/50 dark:bg-neutral-900 dark:ring-green-900/40"
-              : "border-neutral-200 bg-white dark:border-white/[0.08] dark:bg-neutral-900"
+      <div className="relative flex gap-[14px] px-1 pt-[14px] pb-[18px]">
+        {/* Connector line to next item */}
+        {!isLast && (
+          <div
+            className={`absolute w-0 ${
+              isCompleted
+                ? "border-l-2 border-solid border-green-500"
+                : "border-l-2 border-dashed border-green-200 dark:border-green-800/60"
+            }`}
+            style={{ top: 44, bottom: 0, left: 17 }}
+          />
+        )}
+
+        {/* Marker */}
+        <div
+          aria-label={isCompleted ? "Completed" : isCurrentMilestone ? "In progress" : "Upcoming"}
+          className={`relative z-10 mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-full ring-4 ring-white dark:ring-neutral-950 ${
+            isCompleted
+              ? "bg-green-500 text-white"
+              : isCurrentMilestone
+                ? "border-2 border-green-500 bg-green-100 dark:bg-green-950"
+                : "border-[2.5px] border-green-500 bg-white dark:bg-neutral-950"
           }`}
-      >
-        <div className="flex items-start gap-3">
-          {/* Status indicator */}
-          <div className="shrink-0 mt-0.5">
-            {isCompleted ? (
-              <div className="w-6 h-6 rounded-full bg-green-500 flex items-center justify-center">
-                <IconCheck size={13} strokeWidth={3} className="text-white" />
-              </div>
-            ) : isDelayed ? (
-              <div className="w-6 h-6 rounded-full border-2 border-rose-500 bg-rose-100 dark:bg-rose-950 flex items-center justify-center">
-                <div className="w-2.5 h-2.5 rounded-full bg-rose-500" />
-              </div>
-            ) : isCurrentMilestone ? (
-              <div className="relative w-6 h-6">
-                <div className="absolute inset-0 rounded-full bg-green-400 opacity-30 animate-ping" />
-                <div className="relative w-6 h-6 rounded-full border-2 border-green-500 bg-green-100 dark:bg-green-950 flex items-center justify-center">
-                  <div className="w-2.5 h-2.5 rounded-full bg-green-500" />
-                </div>
-              </div>
-            ) : (
-              <div className="w-6 h-6 rounded-full border-2 border-neutral-300 dark:border-neutral-600" />
-            )}
-          </div>
+        >
+          {isCompleted ? (
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round">
+              <polyline points="20,6 9,17 4,12" />
+            </svg>
+          ) : isCurrentMilestone ? (
+            <div className="h-[9px] w-[9px] rounded-full bg-green-500" />
+          ) : null}
+        </div>
 
-          {/* Content */}
-          <div className="flex-1 min-w-0">
-            {/* Labels */}
-            <div className="flex items-center gap-2 mb-1 flex-wrap">
-              {isCurrentMilestone && (
-                <span className="inline-flex items-center rounded-full bg-green-500/10 border border-green-500/25 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-green-600 dark:text-green-400">
-                  Current Milestone
-                </span>
-              )}
-              {isCompleted && (
-                <span className="inline-flex items-center rounded-full bg-green-500/10 border border-green-500/20 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-green-600 dark:text-green-400">
-                  Completed
-                </span>
-              )}
-              {isDelayed && (
-                <span className="inline-flex items-center rounded-full bg-rose-500/10 border border-rose-500/20 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-rose-600 dark:text-rose-400">
-                  Delayed
-                </span>
-              )}
-              {status === "upcoming" && (
-                <span className="inline-flex items-center rounded-full bg-neutral-500/10 border border-neutral-500/15 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-neutral-500 dark:text-neutral-400">
-                  Upcoming
-                </span>
-              )}
-            </div>
-
-            <p
-              className={`text-[15px] font-semibold leading-snug ${isCompleted
-                ? "text-neutral-400 line-through dark:text-neutral-500"
-                : "text-neutral-900 dark:text-white"
-                }`}
-            >
-              {m.title}
+        {/* Body */}
+        <div className="flex-1 min-w-0">
+          {isCurrentMilestone && (
+            <p className="mb-0.5 text-[12px] font-bold tracking-[-0.1px] text-green-600 dark:text-green-400">
+              Current Milestone
             </p>
+          )}
+          <p className={`mb-1 text-[16px] leading-snug tracking-[-0.3px] ${
+            isCompleted
+              ? "font-semibold line-through text-neutral-400 dark:text-neutral-500"
+              : "font-bold text-neutral-950 dark:text-white"
+          }`}>
+            {m.title}
+          </p>
+          <div className="flex flex-wrap items-center gap-2">
+            <span className={`text-[12.5px] font-medium ${
+              isCompleted ? "text-neutral-400 dark:text-neutral-500" : "text-neutral-500 dark:text-neutral-400"
+            }`}>
+              {rangeLabel}
+            </span>
+            <span className={`inline-flex shrink-0 items-center whitespace-nowrap rounded-full border px-[10px] py-[3px] text-[10.5px] font-bold ${
+              isCurrentMilestone && !isCompleted
+                ? "border-neutral-950 bg-neutral-950 text-neutral-50 dark:border-white dark:bg-white dark:text-neutral-950"
+                : "border-neutral-200 text-neutral-500 dark:border-white/[0.12] dark:text-neutral-400"
+            }`}>
+              {daysLabel}
+            </span>
+          </div>
+        </div>
 
-            {m.description && (
-              <p className="mt-0.5 text-[12px] text-neutral-500 dark:text-neutral-400 leading-relaxed">
-                {m.description}
-              </p>
-            )}
-
-            {/* Date & duration info */}
-            <div className="flex items-center gap-2 mt-1.5 flex-wrap">
-              {isCompleted && completedDateLabel && (
-                <span className="text-[11px] font-medium text-neutral-400 dark:text-neutral-500">
-                  Completed {completedDateLabel}
-                </span>
-              )}
-              <span className="text-[11px] font-medium text-neutral-500 dark:text-neutral-400">
-                {rangeLabel}
-              </span>
-              <span className="inline-flex items-center rounded-full border border-neutral-200 dark:border-white/[0.08] px-2 py-0.5 text-[10px] font-semibold text-neutral-400 dark:text-neutral-500">
-                {daysLabel}
-              </span>
-            </div>
-
-            {/* Mark done action for current milestone */}
+        {/* Right-side actions */}
+        {(isCurrentMilestone || milestonesEditMode) && (
+          <div className="flex shrink-0 items-center gap-0.5 self-start pt-0.5">
             {isCurrentMilestone && (
               <button
                 type="button"
                 onClick={() => onCompleteMilestone(m.id)}
-                className="mt-2.5 inline-flex items-center gap-1.5 rounded-xl bg-green-500 px-3 py-1.5 text-[12px] font-semibold text-white hover:bg-green-600 transition-colors active:scale-95"
+                aria-label={`Mark ${m.title} as done`}
+                className="mr-1 inline-flex items-center gap-1.5 rounded-md px-1.5 py-1.5 text-[13px] font-bold text-green-600 transition-opacity hover:opacity-75 dark:text-green-400"
               >
-                <IconCheck size={13} strokeWidth={3} />
-                Mark it Done
+                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round">
+                  <polyline points="20,6 9,17 4,12" />
+                </svg>
+                Mark Done
               </button>
             )}
+            {milestonesEditMode && (
+              <>
+                <button
+                  type="button"
+                  onClick={() => openEditMilestone(m)}
+                  className="flex h-7 w-7 items-center justify-center rounded-lg text-neutral-300 transition-colors hover:text-neutral-600 dark:text-neutral-700 dark:hover:text-neutral-300"
+                >
+                  <IconEdit size={14} strokeWidth={2} />
+                </button>
+                <button
+                  type="button"
+                  onClick={() => onDeleteMilestone(m.id)}
+                  className="flex h-7 w-7 items-center justify-center rounded-lg text-neutral-300 transition-colors hover:text-rose-500 dark:text-neutral-700 dark:hover:text-rose-400"
+                >
+                  <IconTrash size={14} strokeWidth={2} />
+                </button>
+              </>
+            )}
           </div>
-
-          {/* Edit/Delete */}
-          <div className="flex items-center gap-0.5 shrink-0">
-            <button
-              type="button"
-              onClick={() => openEditMilestone(m)}
-              className="h-7 w-7 flex items-center justify-center rounded-lg text-neutral-300 hover:text-neutral-600 dark:text-neutral-700 dark:hover:text-neutral-300 transition-colors"
-            >
-              <IconEdit size={14} strokeWidth={2} />
-            </button>
-            <button
-              type="button"
-              onClick={() => onDeleteMilestone(m.id)}
-              className="h-7 w-7 flex items-center justify-center rounded-lg text-neutral-300 hover:text-rose-500 dark:text-neutral-700 dark:hover:text-rose-400 transition-colors"
-            >
-              <IconTrash size={14} strokeWidth={2} />
-            </button>
-          </div>
-        </div>
+        )}
       </div>
     );
   }
 
 
 
-  // ── Roadmap overview 2×2 grid ────────────────────────────────────────────
+  // ── Roadmap overview ─────────────────────────────────────────────────────
 
   function renderRoadmapOverview() {
-    const { currentPhaseName, consistencyPct } = roadmapStats;
+    const { currentPhaseName, consistencyPct, overallPct, statusSummary, statusBarSegments } = roadmapStats;
+    const targetLabel = roadmapStats.targetDate ? formatPlanDate(roadmapStats.targetDate) : "—";
 
-    const endDateLabel = roadmapStats.targetDate ? formatPlanDate(roadmapStats.targetDate) : "Ongoing";
-
-    const cards: { label: string; value: string }[] = [
-      {
-        label: "Current Phase",
-        value: currentPhaseName ?? "Starting out",
-      },
-      {
-        label: "Est. Completion",
-        value: endDateLabel,
-      },
-      {
-        label: "Target Date",
-        value: roadmapStats.targetDate ? formatPlanDate(roadmapStats.targetDate) : "—",
-      },
-    ];
+    // Last 28 days only — readable on any screen width
+    const allBars = statusBarSegments.length > 0
+      ? statusBarSegments
+      : Array(28).fill({ state: "none" as const });
+    const dayStrip = allBars.slice(-28);
 
     return (
-      <div className="grid grid-cols-2 gap-3">
-        {cards.map((card) => (
-          <div
-            key={card.label}
-            className="rounded-2xl border border-neutral-200 bg-white px-4 py-3.5 dark:border-white/[0.08] dark:bg-neutral-900"
-          >
-            <p className="text-[10px] font-semibold uppercase tracking-[0.08em] text-neutral-400 dark:text-neutral-500">
-              {card.label}
+      <div className="space-y-[10px]">
+        {/* Overall Progress card */}
+        <div className="rounded-2xl border border-neutral-200 bg-white px-[18px] pt-[18px] pb-4 dark:border-white/[0.08] dark:bg-neutral-900">
+          {/* Header row */}
+          <div className="flex items-center justify-between mb-3">
+            <p className="text-[17px] font-bold tracking-[-0.4px] text-neutral-950 dark:text-white">
+              Overall Progress
             </p>
-            <p className="mt-1 text-[15px] font-semibold text-neutral-900 dark:text-white leading-snug">
-              {card.value}
+            <p className="text-[18px] font-extrabold tracking-[-0.5px] text-green-600 dark:text-green-400">
+              {overallPct}%
             </p>
           </div>
-        ))}
+
+          {/* Smooth animated fill bar */}
+          <div className="relative h-[10px] rounded-full bg-neutral-100 dark:bg-white/[0.08] overflow-hidden mb-3">
+            <motion.div
+              className="absolute inset-y-0 left-0 rounded-full bg-gradient-to-r from-green-600 via-green-500 to-emerald-400"
+              initial={{ width: "0%" }}
+              animate={{ width: `${Math.max(overallPct, overallPct > 0 ? 2 : 0)}%` }}
+              transition={{ duration: 0.9, ease: [0.25, 0.46, 0.45, 0.94], delay: 0.1 }}
+            />
+          </div>
+
+          {/* Day activity strip — last 28 days */}
+          <div className="flex gap-[3px] mb-3">
+            {dayStrip.map((seg, i) => (
+              <div
+                key={i}
+                className={
+                  "flex-1 min-w-0 h-[6px] rounded-full " + (
+                    seg.state === "success" ? "bg-green-500" :
+                    seg.state === "warning" ? "bg-amber-400" :
+                    seg.state === "fail"    ? "bg-rose-400" :
+                    "bg-neutral-100 dark:bg-white/[0.07]"
+                  )
+                }
+              />
+            ))}
+          </div>
+
+          <p className="text-[13px] font-medium text-neutral-500 dark:text-neutral-400">
+            {statusSummary}
+          </p>
+        </div>
+
+        {/* 2×2 stats grid */}
+        <div className="grid grid-cols-2 gap-[10px]">
+          {([
+            { label: "Current Phase",  value: currentPhaseName ?? "Starting out" },
+            { label: "Consistency",    value: `${consistencyPct}%` },
+            { label: "Predicted Date", value: targetLabel },
+            { label: "Target Date",    value: targetLabel },
+          ] as { label: string; value: string }[]).map(({ label, value }) => (
+            <div
+              key={label}
+              className="rounded-[14px] border border-neutral-200 bg-neutral-50 px-[14px] py-3 dark:border-white/[0.08] dark:bg-white/[0.03]"
+            >
+              <p className="mb-1.5 text-[10px] font-bold uppercase tracking-[0.7px] text-neutral-400 dark:text-neutral-500">
+                {label}
+              </p>
+              <p className="text-[19px] font-extrabold leading-[1.1] tracking-[-0.5px] text-neutral-950 dark:text-white">
+                {value}
+              </p>
+            </div>
+          ))}
+        </div>
       </div>
     );
   }
@@ -765,17 +803,29 @@ export default function PlanDetailView({
         exit={{ opacity: 0, y: -6 }}
         transition={{ duration: 0.2, ease: "easeOut" }}
       >
-        {/* A. Planned Tasks */}
+
+        {/* B. Planned Tasks */}
         <section className="mt-8 px-4">
           <InternalSectionTitle
             title="Planned Tasks"
             className="mb-4"
             actions={
-              <SectionTextAction
-                label="Add Task"
-                icon={<IconPlus size={15} strokeWidth={2} />}
-                onClick={() => onAddTask(plan.id)}
-              />
+              <>
+                <SectionIconButton
+                  icon={<IconPlus size={16} strokeWidth={2.2} />}
+                  onClick={() => onAddTask(plan.id)}
+                  label="Add task"
+                />
+                {uniqueTasks.length > 0 && (
+                  <SectionIconButton
+                    icon={<IconEdit size={15} strokeWidth={2} />}
+                    saveIcon={<IconCheck size={15} strokeWidth={2.5} />}
+                    saving={tasksEditMode}
+                    onClick={() => setTasksEditMode((v) => !v)}
+                    label={tasksEditMode ? "Done editing" : "Edit tasks"}
+                  />
+                )}
+              </>
             }
           />
 
@@ -794,13 +844,13 @@ export default function PlanDetailView({
           </div>
         </section>
 
-        {/* B. Weekly Consistency */}
+        {/* B. Accuracy Calendar */}
         <section className="mt-8 px-4">
-          <InternalSectionTitle title="Weekly Consistency" className="mb-4" />
-          <ConsistencyOverview
+          <AccuracyCalendar
             planId={plan.id}
             activities={schedule.activities}
             planStartDate={plan.startDate}
+            planEndDate={plan.endDate}
             onAddTask={() => onAddTask(plan.id)}
           />
         </section>
@@ -811,11 +861,22 @@ export default function PlanDetailView({
             title="Progress Tracking"
             className="mb-4"
             actions={
-              <SectionTextAction
-                label="Add Tracker"
-                icon={<IconPlus size={15} strokeWidth={2} />}
-                onClick={() => setAddingTracker(true)}
-              />
+              <>
+                <SectionIconButton
+                  icon={<IconPlus size={16} strokeWidth={2.2} />}
+                  onClick={() => setAddingTracker(true)}
+                  label="Add tracker"
+                />
+                {trackers.length > 0 && (
+                  <SectionIconButton
+                    icon={<IconEdit size={15} strokeWidth={2} />}
+                    saveIcon={<IconCheck size={15} strokeWidth={2.5} />}
+                    saving={trackersEditMode}
+                    onClick={() => setTrackersEditMode((v) => !v)}
+                    label={trackersEditMode ? "Done editing" : "Edit trackers"}
+                  />
+                )}
+              </>
             }
           />
 
@@ -867,48 +928,62 @@ export default function PlanDetailView({
         exit={{ opacity: 0, y: -6 }}
         transition={{ duration: 0.2, ease: "easeOut" }}
       >
-
-        {/* B. Roadmap Overview */}
+        {/* Overview: Overall Progress + Stats grid */}
         <section className="mt-6 px-4">{renderRoadmapOverview()}</section>
 
-        {/* C. Milestones */}
+        {/* Milestones */}
         <section className="mt-8 px-4">
-          <InternalSectionTitle
-            title="Milestones"
-            className="mb-4"
-            actions={
-              <SectionTextAction
-                label="Add Milestone"
-                icon={<IconPlus size={15} strokeWidth={2} />}
+          <div className="mb-2 flex items-center justify-between px-1">
+            <h2 className="text-[22px] font-extrabold tracking-[-0.7px] text-neutral-950 dark:text-white">
+              Milestones
+            </h2>
+            <div className="flex gap-1">
+              <button
+                type="button"
                 onClick={openAddMilestone}
-              />
-            }
-          />
+                className="flex h-[34px] w-[34px] items-center justify-center rounded-[9px] bg-transparent text-neutral-700 transition-colors hover:bg-neutral-100 dark:text-neutral-300 dark:hover:bg-white/[0.06]"
+              >
+                <IconPlus size={18} strokeWidth={2.2} />
+              </button>
+              {planMilestones.length > 0 && (
+                <button
+                  type="button"
+                  onClick={() => setMilestonesEditMode((v) => !v)}
+                  className={`flex h-[34px] w-[34px] items-center justify-center rounded-[9px] transition-colors ${
+                    milestonesEditMode
+                      ? "bg-neutral-950 text-white dark:bg-white dark:text-neutral-950"
+                      : "bg-transparent text-neutral-700 hover:bg-neutral-100 dark:text-neutral-300 dark:hover:bg-white/[0.06]"
+                  }`}
+                >
+                  {milestonesEditMode ? (
+                    <IconCheck size={17} strokeWidth={2.5} />
+                  ) : (
+                    <IconEdit size={17} strokeWidth={2} />
+                  )}
+                </button>
+              )}
+            </div>
+          </div>
 
           {planMilestones.length === 0 ? (
             <div className="rounded-[24px] border border-dashed border-neutral-200 py-12 text-center dark:border-white/[0.08]">
-              <p className="text-[14px] font-medium text-neutral-400 dark:text-neutral-500 max-w-[220px] mx-auto">
+              <p className="mx-auto max-w-[220px] text-[14px] font-medium text-neutral-400 dark:text-neutral-500">
                 Add milestones to track your progress journey.
               </p>
               <button
                 type="button"
                 onClick={openAddMilestone}
-                className="mt-3 inline-flex items-center gap-1.5 rounded-xl border border-neutral-200 px-4 py-2 text-[13px] font-semibold text-neutral-600 hover:bg-neutral-50 dark:border-white/10 dark:text-neutral-400 dark:hover:bg-white/[0.04] transition-colors"
+                className="mt-3 inline-flex items-center gap-1.5 rounded-xl border border-neutral-200 px-4 py-2 text-[13px] font-semibold text-neutral-600 transition-colors hover:bg-neutral-50 dark:border-white/10 dark:text-neutral-400 dark:hover:bg-white/[0.04]"
               >
                 <IconPlus size={16} strokeWidth={2} />
                 Add First Milestone
               </button>
             </div>
           ) : (
-            <div>
+            <div role="list">
               {planMilestones.map((m, idx) => (
-                <div key={m.id}>
-                  {renderMilestoneCard(m, idx === firstPendingIndex)}
-                  {idx < planMilestones.length - 1 && (
-                    <div className="flex justify-center py-2 text-neutral-300 dark:text-neutral-700">
-                      <IconArrowDown size={18} strokeWidth={2.5} />
-                    </div>
-                  )}
+                <div key={m.id} role="listitem">
+                  {renderMilestoneCard(m, idx === firstPendingIndex, idx === planMilestones.length - 1)}
                 </div>
               ))}
             </div>

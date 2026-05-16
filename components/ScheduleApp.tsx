@@ -2,15 +2,21 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
+import dynamic from "next/dynamic";
 import AddEntryModal from "@/components/AddEntryModal";
 import { TaskSheet, type TaskSaveData } from "@/components/task/TaskSheet";
-import PlanDetailView from "@/components/plan/PlanDetailView";
 import type { MilestoneSaveData } from "@/components/plan/MilestoneSheet";
 import { PlanCard } from "@/components/plan/PlanCard";
 import AppHeader from "@/components/AppHeader";
-import { SettingsSheet } from "@/components/auth/SettingsSheet";
 import BottomNav from "@/components/BottomNav";
 import TimeSlotPicker from "@/components/TimeSlotPicker";
+
+// ── Deferred heavy components (separate JS chunks, loaded on demand) ──────────
+const PlanDetailView = dynamic(() => import("@/components/plan/PlanDetailView"), { ssr: false });
+const SettingsSheet = dynamic(() => import("@/components/auth/SettingsSheet").then(m => ({ default: m.SettingsSheet })), { ssr: false });
+const TemplatesSheet = dynamic(() => import("@/components/TemplatesSheet").then(m => ({ default: m.TemplatesSheet })), { ssr: false });
+const SessionSheet = dynamic(() => import("@/components/activity/SessionSheet"), { ssr: false });
+const StrategySpace = dynamic(() => import("@/components/strategy/StrategySpace"), { ssr: false });
 import {
   useScheduleDB,
   DAYS,
@@ -20,10 +26,14 @@ import {
   Milestone,
   Plan,
   ProgressTracker,
+  Ritual,
+  RITUAL_COLORS,
+  RitualColor,
   SummaryConfig,
   Task,
   categoryFromIcon,
 } from "@/lib/useScheduleDB";
+import RitualOverlayLayer from "@/components/timeline/RitualOverlayLayer";
 import {
   colorFromIcon,
   timelineCardStyles,
@@ -50,6 +60,10 @@ import SheetHeader from "@/components/ui/SheetHeader";
 import Button from "@/components/ui/Button";
 import Input from "@/components/ui/Input";
 import { ListTaskCard } from "@/components/activity/ListTaskCard";
+import { CurrentTimeLayer } from "@/components/timeline/CurrentTimeLayer";
+import type { StrategyAsset } from "@/lib/useScheduleDB";
+import { uploadStrategyPdf, deleteStrategyPdf } from "@/lib/strategyStorage";
+import { useAuth } from "@/contexts/AuthProvider";
 import {
   toggleTaskComplete,
   toggleSubtaskComplete,
@@ -58,7 +72,6 @@ import {
 } from "@/lib/taskCompletion";
 import { createTask, updateTaskDays, deleteTask, uid } from "@/lib/taskMutations";
 import { applyTemplate } from "@/lib/templates";
-import { TemplatesSheet } from "@/components/TemplatesSheet";
 import type { Template } from "@/lib/templates";
 import { parseTimeToMinutes, formatDuration } from "@/lib/timeUtils";
 import { todayISO, daysBetween as daysBetweenUtil, formatDate } from "@/lib/dateUtils";
@@ -66,6 +79,8 @@ import { getPlanCardStats } from "@/lib/planInsights";
 import { MainTitleSection, IconActionButton, CtaActionButton } from "@/components/ui/MainTitleSection";
 import { cycleAccentColor } from "@/components/ui/Badge";
 import { recalculateRoadmapTimeline } from "@/lib/roadmapDates";
+import { haptic } from "@/lib/haptics";
+import type { ScheduleEntry } from "@/components/ScheduleItem";
 
 // ─── Constants ───────────────────────────────────────────────────────────────
 
@@ -91,9 +106,9 @@ const daysBetween = daysBetweenUtil;
 
 const TIMELINE_START_HOUR = 4;
 const TIMELINE_END_HOUR = 28; // extends to 4 AM next day for overnight tasks
-const HOUR_HEIGHT = 112;
-const TIMELINE_TOP_PADDING = 20;
-const TIMELINE_BOTTOM_PADDING = 40;
+const HOUR_HEIGHT = 64;
+const TIMELINE_TOP_PADDING = 12;
+const TIMELINE_BOTTOM_PADDING = 48;
 const TIMELINE_START_MINUTES = TIMELINE_START_HOUR * 60;
 const TIMELINE_END_MINUTES = TIMELINE_END_HOUR * 60;
 const TIMELINE_HEIGHT =
@@ -146,6 +161,23 @@ function createSummaryFromMeta(metaFields: string[]): SummaryConfig[] {
 
 const formatTaskDuration = formatDuration;
 
+function formatTimeDraft(value: string): string {
+  const digits = value.replace(/\D/g, "").slice(0, 4);
+  if (digits.length <= 2) return digits;
+  return `${digits.slice(0, 2)}:${digits.slice(2)}`;
+}
+
+function normalizeTimeDraft(value: string): string {
+  const digits = value.replace(/\D/g, "").slice(0, 4);
+  if (!digits) return "";
+  const hourDigits = digits.length <= 2 ? digits : digits.slice(0, digits.length - 2);
+  const minuteDigits = digits.length <= 2 ? "00" : digits.slice(-2);
+  const hours = Number(hourDigits);
+  const minutes = Number(minuteDigits);
+  if (!Number.isFinite(hours) || !Number.isFinite(minutes) || hours > 23 || minutes > 59) return "";
+  return `${String(hours).padStart(2, "0")}:${String(minutes).padStart(2, "0")}`;
+}
+
 function formatHourLabel(hour24: number): string {
   const normalizedHour = hour24 % 24;
   const suffix = normalizedHour >= 12 ? "PM" : "AM";
@@ -161,18 +193,18 @@ function clamp(value: number, min: number, max: number): number {
 type CardSize = "xsmall" | "small" | "medium" | "large";
 
 function computeCardSize(height: number, laneCount: number): CardSize {
-  // HOUR_HEIGHT = 112 → 30 min = 56px, 45 min = 84px, 60 min = 112px
-  // xsmall: title only              — card < 58px  (< ~31 min)
-  // small:  plan label + title      — card < 86px  (< ~46 min)
-  // medium: plan+title+time+dur     — card < 112px (< 60 min)
-  // large:  full layout, roomy      — card ≥ 112px (≥ 60 min)
+  // HOUR_HEIGHT = 64 → 30min=32px, 45min=48px, 60min=64px, 90min=96px
+  // xsmall: title chip only         — card < 32px  (< ~30 min)
+  // small:  plan label + title      — card < 48px  (< ~45 min)
+  // medium: plan+title+time         — card < 64px  (< ~60 min)
+  // large:  full layout with gutter — card ≥ 64px  (≥ 60 min)
   let size: CardSize;
-  if (height < 58) size = "xsmall";
-  else if (height < 86) size = "small";
-  else if (height < 112) size = "medium";
+  if (height < 32) size = "xsmall";
+  else if (height < 48) size = "small";
+  else if (height < 64) size = "medium";
   else size = "large";
 
-  // Degrade by laneCount — medium height cards stay readable in multi-lane layouts
+  // Degrade for multi-lane layouts to preserve readability at narrower widths
   if (laneCount >= 3) {
     if (size === "large") size = "small";
     else if (size === "medium") size = "small";
@@ -254,6 +286,7 @@ function SortableTaskCard({
 
 export default function ScheduleApp() {
   const { schedule, setSchedule, ready, clearData, isFirstLaunch } = useScheduleDB();
+  const { user } = useAuth();
   const [todayKey, setTodayKey] = useState<DayKey>(() => JS_DAYS[new Date().getDay()]);
   const [activeDay, setActiveDay] = useState<DayKey>(() => JS_DAYS[new Date().getDay()]);
   const [editMode, setEditMode] = useState(false);
@@ -269,6 +302,8 @@ export default function ScheduleApp() {
   const [weekOffset, setWeekOffset] = useState(0);
   const [viewMode, setViewMode] = useState<"list" | "timeline">("timeline");
 
+  const [strategyUploadOpen, setStrategyUploadOpen] = useState(false);
+
   const [addingPlan, setAddingPlan] = useState(false);
   const [newPlanTitle, setNewPlanTitle] = useState("");
   const [newPlanDescription, setNewPlanDescription] = useState("");
@@ -281,9 +316,12 @@ export default function ScheduleApp() {
   const [editingPlanId, setEditingPlanId] = useState<string | null>(null);
   const [editPlanDraft, setEditPlanDraft] = useState({ title: "", description: "", startDate: "", endDate: "" });
 
-  const [nowMinutes, setNowMinutes] = useState(getCurrentMinutes);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [templatesOpen, setTemplatesOpen] = useState(false);
+  const [sessionTask, setSessionTask] = useState<Task | null>(null);
+  const [ritualsOpen, setRitualsOpen] = useState(false);
+  const [completedRitualIds, setCompletedRitualIds] = useState<Set<string>>(new Set());
+  const [ritualDraft, setRitualDraft] = useState({ title: "", time: "08:00", days: [] as DayKey[], color: "" as RitualColor | "" });
   const timelineScrollRef = useRef<HTMLDivElement | null>(null);
   const hasUserScrolledTimelineRef = useRef(false);
   const isAutoScrollingRef = useRef(false);
@@ -351,12 +389,6 @@ export default function ScheduleApp() {
   ]);
 
 
-  useEffect(() => {
-    const id = window.setInterval(() => {
-      setNowMinutes(getCurrentMinutes());
-    }, 30_000);
-    return () => window.clearInterval(id);
-  }, []);
 
   // Auto-open templates on true first launch (no stored data)
   useEffect(() => {
@@ -425,6 +457,7 @@ export default function ScheduleApp() {
 
   const handleToggleTaskComplete = useCallback(
     (taskId: string, allSubtaskIds: string[]) => {
+      haptic("medium");
       setSchedule((prev) => ({
         ...prev,
         activities: {
@@ -440,14 +473,14 @@ export default function ScheduleApp() {
 
   const handleToggleSubtask = useCallback(
     (taskId: string, subtaskId: string) => {
+      haptic("light");
       setSchedule((prev) => ({
         ...prev,
         activities: {
           ...prev.activities,
           [activeDay]: prev.activities[activeDay].map((t) => {
             if (t.id !== taskId) return t;
-            const plan = prev.plans.find((p) => p.id === t.planId);
-            const totalSubtasks = plan?.items.length ?? 0;
+            const totalSubtasks = t.subtasks?.length ?? 0;
             return { ...t, ...toggleSubtaskComplete(t, subtaskId, totalSubtasks) };
           }),
         },
@@ -492,6 +525,71 @@ export default function ScheduleApp() {
     setNewPlanMetaFields([]);
     setNewPlanMetaInput("");
     setAddingPlan(false);
+  }
+
+  function handleSaveRitual() {
+    const title = ritualDraft.title.trim();
+    if (!title || !ritualDraft.time) return;
+    const newRitual: Ritual = {
+      id: uid(),
+      title,
+      time: ritualDraft.time,
+      repeatDays: ritualDraft.days.length > 0 ? ritualDraft.days : undefined,
+      color: ritualDraft.color || undefined,
+    };
+    setSchedule((prev) => ({ ...prev, rituals: [...(prev.rituals ?? []), newRitual] }));
+    setRitualDraft({ title: "", time: "08:00", days: [], color: "" });
+  }
+
+  function handleDeleteRitual(id: string) {
+    setSchedule((prev) => ({ ...prev, rituals: (prev.rituals ?? []).filter((r) => r.id !== id) }));
+  }
+
+  function handleToggleRitualComplete(id: string) {
+    setCompletedRitualIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id); else next.add(id);
+      return next;
+    });
+  }
+
+  // ── Strategy handlers ─────────────────────────────────────────────────────
+
+  async function handleAddStrategy(
+    data: Omit<StrategyAsset, "id" | "createdAt" | "updatedAt">,
+    pdfBytes?: Uint8Array,
+  ) {
+    const now = new Date().toISOString();
+    const id = uid();
+    let asset: StrategyAsset = { ...data, id, createdAt: now, updatedAt: now };
+
+    // If authenticated and PDF bytes provided, upload to Storage first.
+    if (user && pdfBytes && data.type === "pdf") {
+      try {
+        const pdfUrl = await uploadStrategyPdf(user.uid, id, pdfBytes);
+        asset = { ...asset, pdfUrl };
+      } catch (err) {
+        console.error("[Strategy] Storage upload failed:", err);
+        // Fall back to base64 so the asset is still saved locally.
+        let binary = "";
+        pdfBytes.forEach((b) => (binary += String.fromCharCode(b)));
+        asset = { ...asset, pdfData: btoa(binary) };
+      }
+    }
+
+    setSchedule((prev) => ({ ...prev, strategies: [...(prev.strategies ?? []), asset] }));
+  }
+
+  function handleDeleteStrategy(id: string) {
+    const asset = schedule.strategies?.find((s) => s.id === id);
+    // Clean up Storage file if it exists.
+    if (user && asset?.pdfUrl) {
+      deleteStrategyPdf(user.uid, id).catch(() => {});
+    }
+    setSchedule((prev) => ({
+      ...prev,
+      strategies: (prev.strategies ?? []).filter((s) => s.id !== id),
+    }));
   }
 
   function handleDeletePlan(planId: string) {
@@ -735,17 +833,10 @@ export default function ScheduleApp() {
   const dayProgress = useMemo(() => {
     const total = dayTasks.length;
     const done = dayTasks.filter((t) =>
-      isTaskCompleted(t, plansById.get(t.planId)?.items.length ?? 0)
+      isTaskCompleted(t, t.subtasks?.length ?? 0)
     ).length;
     return { done, total, pct: total > 0 ? Math.round((done / total) * 100) : 0 };
   }, [dayTasks, plansById]);
-
-  const showCurrentTime =
-    activeDay === todayKey &&
-    nowMinutes >= TIMELINE_START_MINUTES &&
-    nowMinutes <= TIMELINE_END_MINUTES;
-  const currentTimeTop =
-    TIMELINE_TOP_PADDING + ((nowMinutes - TIMELINE_START_MINUTES) / 60) * HOUR_HEIGHT;
 
   const { weekDates, weekLabel, todayMidnightTime } = useMemo(() => {
     const dates = getWeekDates(weekOffset);
@@ -763,6 +854,11 @@ export default function ScheduleApp() {
   const selectedPlan = useMemo(
     () => (selectedPlanId ? plansById.get(selectedPlanId) ?? null : null),
     [selectedPlanId, plansById]
+  );
+
+  const sessionLinkedPlan = useMemo(
+    () => (sessionTask?.planId ? plansById.get(sessionTask.planId) ?? null : null),
+    [sessionTask, plansById]
   );
 
   const getUniquePlanTasks = useCallback(
@@ -846,7 +942,7 @@ export default function ScheduleApp() {
   }, [dayTasks]);
 
   function getTaskLaneStyle(layout: typeof timelineTaskLayouts[number]) {
-    const gap = layout.laneCount > 1 ? 5 : 0;
+    const gap = layout.laneCount > 1 ? 3 : 0;
     const width = 100 / layout.laneCount;
     return {
       top: layout.top,
@@ -884,28 +980,29 @@ export default function ScheduleApp() {
     const { linkedPlan, color } = getTaskPresentation(task);
     const tone = timelineCardStyles(color);
     const duration = formatTaskDuration(task.startTime, task.endTime);
-    const totalSubtasks = linkedPlan?.items.length ?? 0;
-    const allSubtaskIds = linkedPlan?.items.map((i) => i.id) ?? [];
+    const totalSubtasks = task.subtasks?.length ?? 0;
+    const allSubtaskIds = task.subtasks?.map((i) => i.id) ?? [];
     const taskState = resolveTaskState(task, totalSubtasks);
     const done = taskState === "completed";
     const partial = taskState === "partial";
 
-    // Completed cards recede at card level — preserve color, just lower opacity
-    const base = `${cardClassName} ${tone.cardBg} ${tone.accentBar} transition-all duration-300${done ? " opacity-70" : ""}`;
-    const titleClass = `${tone.title}${done ? " line-through" : ""}`;
+    // Completed blocks recede — preserve color identity, lower opacity
+    const base = `${cardClassName} ${tone.cardBg} ${tone.blockBorder} ${tone.accentBar} transition-all duration-300${done ? " opacity-[0.52]" : ""}`;
+    const titleClass = `${tone.title}${done ? " line-through decoration-neutral-400/50 dark:decoration-white/30" : ""}`;
 
-    // ── Completion checkbox (medium + large) ──────────────────────────────────
-    const completionBtn = (cardSize === "large" || cardSize === "medium") ? (
+    // ── Checkbox (small / medium / large) ─────────────────────────────────
+    const checkbox = (cardSize !== "xsmall") ? (
       <motion.button
         type="button"
-        whileTap={{ scale: 0.82 }}
+        whileTap={{ scale: 0.80 }}
         transition={{ type: "spring", stiffness: 500, damping: 25 }}
         onClick={(e) => { e.stopPropagation(); handleToggleTaskComplete(task.id, allSubtaskIds); }}
         aria-label={done ? "Mark incomplete" : "Mark complete"}
-        className={`absolute top-2 right-2 z-10 flex h-[20px] w-[20px] shrink-0 items-center justify-center rounded-[5px] border-2 transition-colors duration-200 ${done || partial
-          ? "border-transparent bg-green-500"
-          : "border-neutral-500/50 bg-transparent dark:border-white/55"
-          }`}
+        className={`absolute top-1.5 right-1.5 z-10 flex h-[17px] w-[17px] shrink-0 items-center justify-center rounded-[4px] border-[1.5px] transition-colors duration-200 ${
+          done || partial
+            ? "border-transparent bg-green-500"
+            : "border-neutral-400/45 bg-transparent dark:border-white/35"
+        }`}
       >
         <AnimatePresence mode="wait" initial={false}>
           {done && (
@@ -916,7 +1013,7 @@ export default function ScheduleApp() {
               exit={{ opacity: 0, scale: 0.4 }}
               transition={{ type: "spring", stiffness: 500, damping: 22 }}
             >
-              <IconCheck size={10} strokeWidth={3} className="text-white" />
+              <IconCheck size={9} strokeWidth={3} className="text-white" />
             </motion.span>
           )}
           {partial && (
@@ -927,14 +1024,14 @@ export default function ScheduleApp() {
               exit={{ opacity: 0, scale: 0.4 }}
               transition={{ duration: 0.15 }}
             >
-              <IconMinus size={10} strokeWidth={3} className="text-white" />
+              <IconMinus size={9} strokeWidth={3} className="text-white" />
             </motion.span>
           )}
         </AnimatePresence>
       </motion.button>
     ) : null;
 
-    // ── xsmall: title only — tap card to toggle ────────────────────────────
+    // ── xsmall (< 32px): title chip + tap to toggle ────────────────────────
     if (cardSize === "xsmall") {
       return (
         <div
@@ -942,7 +1039,7 @@ export default function ScheduleApp() {
           onClick={() => handleToggleTaskComplete(task.id, allSubtaskIds)}
         >
           <div className="flex h-full items-center min-w-0">
-            <span className={`text-[11px] font-semibold leading-none truncate ${titleClass}`}>
+            <span className={`text-[10px] font-semibold leading-none truncate ${titleClass}`}>
               {task.title}
             </span>
           </div>
@@ -950,16 +1047,14 @@ export default function ScheduleApp() {
       );
     }
 
-    // ── small: plan label + title — tap card to toggle ─────────────────────
+    // ── small (32–48px): plan label + title + checkbox ─────────────────────
     if (cardSize === "small") {
       return (
-        <div
-          className={`${base} cursor-pointer`}
-          onClick={() => handleToggleTaskComplete(task.id, allSubtaskIds)}
-        >
-          <div className="flex h-full flex-col justify-center gap-[2px] min-w-0">
+        <div className={`${base} relative cursor-pointer`} onClick={() => { haptic("light"); handleToggleTaskComplete(task.id, allSubtaskIds); }}>
+          {checkbox}
+          <div className="flex h-full flex-col justify-center gap-[2px] min-w-0 pr-5">
             {linkedPlan && (
-              <p className={`text-[8px] font-semibold uppercase tracking-[0.08em] truncate shrink-0 leading-none ${tone.planLabel}`}>
+              <p className={`text-[8px] font-bold uppercase tracking-[0.07em] truncate shrink-0 leading-none ${tone.planLabel}`}>
                 {linkedPlan.title}
               </p>
             )}
@@ -971,27 +1066,27 @@ export default function ScheduleApp() {
       );
     }
 
-    // ── medium: plan label + title + time + duration ───────────────────────
+    // ── medium (48–64px): plan + title + time row ──────────────────────────
     if (cardSize === "medium") {
       return (
-        <div className={`${base} relative`}>
-          {completionBtn}
-          <div className="flex h-full flex-col min-w-0 pr-7">
+        <div className={`${base} relative cursor-pointer`} onClick={() => { haptic("light"); handleToggleTaskComplete(task.id, allSubtaskIds); }}>
+          {checkbox}
+          <div className="flex h-full flex-col min-w-0 pr-5">
             {linkedPlan && (
-              <p className={`text-[9px] font-semibold uppercase tracking-[0.08em] truncate shrink-0 leading-none mb-0.5 ${tone.planLabel}`}>
+              <p className={`text-[8px] font-bold uppercase tracking-[0.07em] truncate shrink-0 leading-none mb-[2px] ${tone.planLabel}`}>
                 {linkedPlan.title}
               </p>
             )}
-            <h3 className={`text-[12px] font-semibold leading-snug flex-1 min-w-0 line-clamp-2 ${titleClass}`}>
+            <h3 className={`text-[11px] font-semibold leading-snug flex-1 min-w-0 line-clamp-2 ${titleClass}`}>
               {task.title}
             </h3>
-            <div className="flex items-center gap-1 mt-auto flex-wrap">
-              <span className={`text-[10px] font-medium shrink-0 ${tone.time}`}>
+            <div className="flex items-center gap-1 shrink-0">
+              <span className={`text-[9px] font-medium leading-none shrink-0 ${tone.time}`}>
                 {task.startTime}{isOvernight ? " →" : ` – ${task.endTime}`}
                 {isTruncated && " ↓"}
               </span>
               {duration && (
-                <span className={`shrink-0 inline-flex items-center rounded-full px-1.5 py-[1px] text-[9px] font-semibold ${tone.durationBadge}`}>
+                <span className={`shrink-0 rounded-full px-1.5 py-[1px] text-[8px] font-bold ${tone.durationBadge}`}>
                   {duration}
                 </span>
               )}
@@ -1001,26 +1096,26 @@ export default function ScheduleApp() {
       );
     }
 
-    // ── large: plan label → title → time + duration pill ──────────────────
+    // ── large (≥ 64px): full time block layout ─────────────────────────────
     return (
-      <div className={`${base} relative`}>
-        {completionBtn}
-        <div className="flex flex-col h-full min-w-0 pr-7">
+      <div className={`${base} relative cursor-pointer`} onClick={() => { haptic("light"); handleToggleTaskComplete(task.id, allSubtaskIds); }}>
+        {checkbox}
+        <div className="flex flex-col h-full min-w-0 pr-6">
           {linkedPlan && (
-            <p className={`text-[9px] font-semibold uppercase tracking-[0.09em] truncate shrink-0 leading-none mb-0.5 ${tone.planLabel}`}>
+            <p className={`text-[9px] font-bold uppercase tracking-[0.07em] truncate shrink-0 leading-none mb-1 ${tone.planLabel}`}>
               {linkedPlan.title}
             </p>
           )}
-          <h3 className={`text-[13px] font-semibold leading-snug flex-1 min-w-0 line-clamp-3 ${titleClass}`}>
+          <h3 className={`text-[13px] font-semibold leading-snug flex-1 min-w-0 line-clamp-2 ${titleClass}`}>
             {task.title}
           </h3>
-          <div className="flex items-center gap-1.5 mt-auto pt-0.5 flex-wrap">
-            <span className={`text-[11px] font-medium shrink-0 ${tone.time}`}>
-              {task.startTime}{isOvernight ? " → next day" : ` – ${task.endTime}`}
+          <div className="flex items-center gap-1.5 mt-auto shrink-0 flex-wrap">
+            <span className={`text-[10px] font-medium shrink-0 ${tone.time}`}>
+              {task.startTime}{isOvernight ? " → next" : ` – ${task.endTime}`}
               {isTruncated && " ↓"}
             </span>
             {duration && (
-              <span className={`shrink-0 inline-flex items-center rounded-full px-2 py-[2px] text-[10px] font-semibold ${tone.durationBadge}`}>
+              <span className={`shrink-0 rounded-full px-2 py-[2px] text-[9px] font-bold ${tone.durationBadge}`}>
                 {duration}
               </span>
             )}
@@ -1058,7 +1153,7 @@ export default function ScheduleApp() {
                 type="date"
                 value={newPlanStartDate}
                 onChange={(e) => setNewPlanStartDate(e.target.value)}
-                className="h-10 w-full rounded-xl border border-neutral-200 bg-neutral-50 px-3 text-sm text-neutral-900 outline-none focus:border-neutral-300 dark:border-white/10 dark:bg-white/[0.04] dark:text-white"
+                className="h-11 w-full min-w-0 rounded-xl border border-neutral-200 bg-neutral-50 px-3 text-[16px] text-neutral-900 outline-none transition-colors focus:border-neutral-300 focus:bg-neutral-100 dark:border-white/10 dark:bg-white/[0.04] dark:text-white dark:focus:border-white/20 dark:focus:bg-white/[0.07]"
               />
             </div>
             <div>
@@ -1069,7 +1164,7 @@ export default function ScheduleApp() {
                 type="date"
                 value={newPlanEndDate}
                 onChange={(e) => setNewPlanEndDate(e.target.value)}
-                className="h-10 w-full rounded-xl border border-neutral-200 bg-neutral-50 px-3 text-sm text-neutral-900 outline-none focus:border-neutral-300 dark:border-white/10 dark:bg-white/[0.04] dark:text-white"
+                className="h-11 w-full min-w-0 rounded-xl border border-neutral-200 bg-neutral-50 px-3 text-[16px] text-neutral-900 outline-none transition-colors focus:border-neutral-300 focus:bg-neutral-100 dark:border-white/10 dark:bg-white/[0.04] dark:text-white dark:focus:border-white/20 dark:focus:bg-white/[0.07]"
               />
             </div>
           </div>
@@ -1266,7 +1361,7 @@ export default function ScheduleApp() {
                 dayState={dayState}
                 consistency={consistency}
                 dateRange={dateRange}
-                onSelect={() => setSelectedPlanId(plan.id)}
+                onSelect={() => { haptic("light"); setSelectedPlanId(plan.id); }}
               />
             );
           })}
@@ -1315,10 +1410,17 @@ export default function ScheduleApp() {
 
       {/* ── Content ────────────────────────────────────────────────────────── */}
       <div className="max-w-lg mx-auto pb-40">
+        <AnimatePresence mode="wait" initial={false}>
 
         {/* ── Tasks Tab ────────────────────────────────────────────────────── */}
         {activeTab === 0 && (
-          <div>
+          <motion.div
+            key="tab-tasks"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            transition={{ duration: 0.12, ease: "easeOut" }}
+          >
             {/* Calendar */}
             <div className="px-4 pt-4">
               <div className="rounded-2xl border border-neutral-200 bg-white px-4 py-3.5 dark:border-white/[0.08] dark:bg-neutral-900">
@@ -1338,7 +1440,7 @@ export default function ScheduleApp() {
                     )}
                     <button
                       type="button"
-                      onClick={() => setWeekOffset((w) => w - 1)}
+                      onClick={() => { haptic("light"); setWeekOffset((w) => w - 1); }}
                       aria-label="Previous week"
                       className="inline-flex h-7 w-7 items-center justify-center rounded-lg text-neutral-400 hover:bg-neutral-100 dark:text-neutral-500 dark:hover:bg-white/[0.07] transition-colors"
                     >
@@ -1346,7 +1448,7 @@ export default function ScheduleApp() {
                     </button>
                     <button
                       type="button"
-                      onClick={() => setWeekOffset((w) => w + 1)}
+                      onClick={() => { haptic("light"); setWeekOffset((w) => w + 1); }}
                       aria-label="Next week"
                       className="inline-flex h-7 w-7 items-center justify-center rounded-lg text-neutral-400 hover:bg-neutral-100 dark:text-neutral-500 dark:hover:bg-white/[0.07] transition-colors"
                     >
@@ -1362,21 +1464,41 @@ export default function ScheduleApp() {
                       <button
                         key={day}
                         type="button"
-                        onClick={() => setActiveDay(day)}
-                        className={`flex flex-col items-center justify-center gap-3 w-full rounded-lg py-2 h-[64px] transition-all duration-200 ${isActive
-                          ? "bg-neutral-950 text-white dark:bg-white dark:text-neutral-950"
-                          : isDateToday
-                            ? "bg-neutral-200 text-neutral-700 dark:bg-white/10 dark:text-neutral-200"
-                            : "text-neutral-500 hover:bg-neutral-100 dark:text-neutral-400 dark:hover:bg-white/[0.06]"
-                          }`}
+                        onClick={() => { haptic("light"); setActiveDay(day); }}
+                        className={`relative flex flex-col items-center justify-center gap-2.5 w-full h-[64px] rounded-lg focus-visible:outline-none ${
+                          isActive
+                            ? "bg-neutral-950 dark:bg-white"
+                            : "hover:bg-neutral-100 dark:hover:bg-white/[0.06]"
+                        }`}
                       >
-                        <span
-                          className={`text-[12px] font-medium leading-none ${isActive ? "opacity-60" : "opacity-50"
-                            }`}
+                        {isActive && (
+                          <motion.div
+                            layoutId="weekDayActive"
+                            className="absolute inset-0 rounded-lg bg-neutral-950 dark:bg-white"
+                            style={{ willChange: "transform" }}
+                            transition={{ type: "spring", stiffness: 420, damping: 32, mass: 0.5 }}
+                          />
+                        )}
+                        <motion.div
+                          whileTap={{ scale: 0.88 }}
+                          transition={{ type: "spring", stiffness: 500, damping: 30 }}
+                          className="relative z-10 flex flex-col items-center gap-2.5"
                         >
-                          {DAY_LABELS[day]}
-                        </span>
-                        <span className="text-[14px] font-medium leading-none">{date.getDate()}</span>
+                          <span className={`text-[11px] font-semibold leading-none tracking-wide ${
+                            isActive ? "text-white/60 dark:text-neutral-950/60" : isDateToday ? "text-rose-500" : "text-neutral-400 dark:text-neutral-500"
+                          }`}>
+                            {DAY_LABELS[day]}
+                          </span>
+                          <span className={`text-[14px] font-semibold leading-none tabular-nums ${
+                            isActive
+                              ? "text-white dark:text-neutral-950"
+                              : isDateToday
+                              ? "text-rose-500"
+                              : "text-neutral-700 dark:text-neutral-200"
+                          }`}>
+                            {date.getDate()}
+                          </span>
+                        </motion.div>
                       </button>
                     );
                   })}
@@ -1384,6 +1506,14 @@ export default function ScheduleApp() {
               </div>
             </div>
 
+            <AnimatePresence mode="wait" initial={false}>
+            <motion.div
+              key={activeDay}
+              initial={{ opacity: 0, y: 3 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0 }}
+              transition={{ duration: 0.12, ease: "easeOut" }}
+            >
             {/* Title section */}
             <div className="px-4 pt-5 pb-5">
               <MainTitleSection
@@ -1402,14 +1532,23 @@ export default function ScheduleApp() {
                     <button
                       type="button"
                       onClick={() => { setViewMode((v) => (v === "list" ? "timeline" : "list")); setEditMode(false); }}
-                      className="inline-flex items-center justify-center gap-1.5 rounded-xl border border-neutral-200 bg-white px-3.5 h-9 text-[12px] font-semibold text-neutral-700 transition-all hover:bg-neutral-50 active:scale-95 dark:border-white/10 dark:bg-neutral-900 dark:text-neutral-400 dark:hover:bg-white/[0.06]"
+                      className="inline-flex items-center gap-2 rounded-full border-[1.5px] border-neutral-200 bg-white px-3.5 min-h-[44px] py-[9px] text-[13px] font-semibold tracking-[-0.15px] text-neutral-700 transition-colors hover:bg-neutral-100 active:scale-[0.97] dark:border-white/10 dark:bg-neutral-900 dark:text-neutral-400 dark:hover:bg-white/[0.07]"
                     >
                       {viewMode === "timeline" ? (
-                        <>List <IconLayoutList size={16} strokeWidth={2} /></>
+                        <>List <IconLayoutList size={15} strokeWidth={2} /></>
                       ) : (
-                        <>Timeline <IconTable size={16} strokeWidth={2} /></>
+                        <>Timeline <IconTable size={15} strokeWidth={2} /></>
                       )}
                     </button>
+                    {viewMode === "timeline" && (
+                      <button
+                        type="button"
+                        onClick={() => setRitualsOpen(true)}
+                        className="inline-flex items-center gap-1.5 rounded-full border-[1.5px] border-neutral-200 bg-white px-3.5 min-h-[44px] py-[9px] text-[13px] font-semibold tracking-[-0.15px] text-neutral-500 transition-colors hover:bg-neutral-100 active:scale-[0.97] dark:border-white/10 dark:bg-neutral-900 dark:text-neutral-400 dark:hover:bg-white/[0.07]"
+                      >
+                        Rituals
+                      </button>
+                    )}
                     <IconActionButton
                       icon={<IconEdit size={16} strokeWidth={2} />}
                       saveIcon={<IconCheck size={16} strokeWidth={2.5} />}
@@ -1477,18 +1616,26 @@ export default function ScheduleApp() {
                       </DndContext>
                     ) : (
                       <div className="flex flex-col gap-3 pb-4">
-                        {dayTasks.map((task) => (
-                          <div key={task.id} className="animate-panel-in">
-                            <ListTaskCard
-                              task={task}
-                              linkedPlan={task.planId ? plansById.get(task.planId) ?? null : null}
-                              onToggleComplete={handleToggleTaskComplete}
-                              onToggleSubtask={handleToggleSubtask}
-                              onEdit={() => openEditSheet(task)}
-                              onDelete={() => handleDeleteTask(task.id)}
-                            />
-                          </div>
-                        ))}
+                        {dayTasks.map((task) => {
+                          const linkedPlan = task.planId ? plansById.get(task.planId) ?? null : null;
+                          return (
+                            <div key={task.id} className="animate-panel-in">
+                              <ListTaskCard
+                                task={task}
+                                linkedPlan={linkedPlan}
+                                onToggleComplete={handleToggleTaskComplete}
+                                onToggleSubtask={handleToggleSubtask}
+                                onEdit={() => openEditSheet(task)}
+                                onDelete={() => handleDeleteTask(task.id)}
+                                onOpenRoutine={
+                                  task.taskType === "routine" && (task.subtasks?.length ?? 0) > 0
+                                    ? () => setSessionTask(task)
+                                    : undefined
+                                }
+                              />
+                            </div>
+                          );
+                        })}
                       </div>
                     )}
                   </motion.div>
@@ -1510,35 +1657,35 @@ export default function ScheduleApp() {
                         </p>
                       </div>
                     )}
-                    {/* Google Calendar-style flat timeline */}
+                    {/* Premium execution timeline */}
                     <div
                       ref={timelineScrollRef}
                       onScroll={() => {
                         if (isAutoScrollingRef.current) return;
                         hasUserScrolledTimelineRef.current = true;
                       }}
-                      className="calendar-scrollbar-none relative flex h-[calc(100vh-290px)] overflow-y-auto overflow-x-hidden"
+                      className="calendar-scrollbar-none relative flex h-[calc(100vh-280px)] overflow-y-auto overflow-x-hidden"
                     >
                       {/* Time column */}
                       <div
-                        className="sticky left-0 z-20 w-[52px] shrink-0 bg-neutral-50 dark:bg-neutral-950"
+                        className="sticky left-0 z-20 w-[44px] shrink-0 bg-neutral-50 dark:bg-neutral-950"
                         style={{ height: TIMELINE_HEIGHT }}
                       >
                         {TIMELINE_HOURS.map((hour, index) => {
                           const isMidnight = hour === 24;
-                          if (index === 0) return null; // skip first label
+                          if (index === 0) return null;
                           return (
                             <div
                               key={hour}
                               className="absolute right-0 pr-2 flex flex-col items-end"
-                              style={{ top: TIMELINE_TOP_PADDING + index * HOUR_HEIGHT - 7 }}
+                              style={{ top: TIMELINE_TOP_PADDING + index * HOUR_HEIGHT - 6 }}
                             >
                               {isMidnight ? (
-                                <span className="text-[9px] font-bold text-neutral-300 dark:text-white/20 leading-none uppercase tracking-wide">
+                                <span className="text-[8px] font-bold text-neutral-300 dark:text-white/20 leading-none uppercase tracking-wide">
                                   tmrw
                                 </span>
                               ) : (
-                                <span className="text-[10px] font-medium text-neutral-400 dark:text-neutral-500 tabular-nums leading-none">
+                                <span className="text-[9px] font-semibold text-neutral-400 dark:text-neutral-500 tabular-nums leading-none">
                                   {formatHourLabel(hour)}
                                 </span>
                               )}
@@ -1549,7 +1696,7 @@ export default function ScheduleApp() {
 
                       {/* Grid + tasks */}
                       <div
-                        className="relative min-w-0 flex-1 border-l border-neutral-200 dark:border-white/[0.08]"
+                        className="relative min-w-0 flex-1 border-l border-neutral-200/80 dark:border-white/[0.07]"
                         style={{ height: TIMELINE_HEIGHT }}
                       >
                         {/* Grid lines */}
@@ -1558,18 +1705,17 @@ export default function ScheduleApp() {
                             const isMidnight = hour === 24;
                             return (
                               <div key={`grid-${hour}`}>
-                                {/* Hour line */}
                                 <div
-                                  className={`absolute left-0 right-0 ${isMidnight
-                                    ? "border-t-2 border-neutral-200 dark:border-white/[0.12]"
-                                    : "border-t border-neutral-100 dark:border-white/[0.05]"
-                                    }`}
+                                  className={`absolute left-0 right-0 ${
+                                    isMidnight
+                                      ? "border-t border-neutral-200 dark:border-white/[0.10]"
+                                      : "border-t border-neutral-100/90 dark:border-white/[0.05]"
+                                  }`}
                                   style={{ top: TIMELINE_TOP_PADDING + index * HOUR_HEIGHT }}
                                 />
-                                {/* Half-hour dashed line */}
                                 {index < TIMELINE_HOURS.length - 1 && (
                                   <div
-                                    className="absolute left-0 right-0 border-t border-dashed border-neutral-100 dark:border-white/[0.03]"
+                                    className="absolute left-0 right-0 border-t border-dashed border-neutral-100/60 dark:border-white/[0.025]"
                                     style={{ top: TIMELINE_TOP_PADDING + index * HOUR_HEIGHT + HOUR_HEIGHT / 2 }}
                                   />
                                 )}
@@ -1578,18 +1724,18 @@ export default function ScheduleApp() {
                           })}
                         </div>
 
-                        {/* Task cards */}
+                        {/* Task blocks */}
                         <div className="absolute inset-0">
                           {timelineTaskLayouts.map((layout) => (
                             <div
                               key={layout.task.id}
-                              className="absolute min-w-0 px-1 py-[2px] animate-panel-in"
+                              className="absolute min-w-0 px-0.5 py-[2px] animate-panel-in"
                               style={getTaskLaneStyle(layout)}
                             >
-                              <div className="relative h-full min-h-[24px]">
+                              <div className="relative h-full min-h-[20px]">
                                 {renderTimelineTaskCard(
                                   layout.task,
-                                  "h-full rounded-xl px-2.5 py-2 w-full min-w-0 overflow-hidden",
+                                  "h-full rounded-[8px] px-2 py-1.5 w-full min-w-0 overflow-hidden",
                                   computeCardSize(layout.height, layout.laneCount),
                                   layout.isOvernight,
                                   layout.isTruncated
@@ -1599,28 +1745,48 @@ export default function ScheduleApp() {
                           ))}
                         </div>
 
-                        {/* Current time indicator */}
-                        {showCurrentTime && (
-                          <div
-                            className="pointer-events-none absolute left-0 right-0 z-30 -translate-y-1/2 flex items-center"
-                            style={{ top: currentTimeTop }}
-                          >
-                            <div className="h-2.5 w-2.5 shrink-0 rounded-full bg-red-500 -ml-[5px]" />
-                            <div className="h-[2px] flex-1 bg-red-500" />
-                          </div>
-                        )}
+                        {/* Ritual overlay — floats above task blocks */}
+                        <RitualOverlayLayer
+                          rituals={schedule.rituals ?? []}
+                          activeDay={activeDay}
+                          timelineStartMinutes={TIMELINE_START_MINUTES}
+                          timelineEndMinutes={TIMELINE_END_MINUTES}
+                          timelineTopPadding={TIMELINE_TOP_PADDING}
+                          hourHeight={HOUR_HEIGHT}
+                          completedIds={completedRitualIds}
+                          onToggleComplete={handleToggleRitualComplete}
+                        />
+
+                        {/* Current time — isolated layer, owns its own 30s interval */}
+                        <CurrentTimeLayer
+                          activeDay={activeDay}
+                          todayKey={todayKey}
+                          timelineStartMinutes={TIMELINE_START_MINUTES}
+                          timelineEndMinutes={TIMELINE_END_MINUTES}
+                          timelineTopPadding={TIMELINE_TOP_PADDING}
+                          hourHeight={HOUR_HEIGHT}
+                        />
                       </div>
                     </div>
                   </motion.div>
                 )}
               </AnimatePresence>
             </div>
-          </div>
+            </motion.div>
+            </AnimatePresence>
+          </motion.div>
         )}
 
         {/* ── Plan Tab ─────────────────────────────────────────────────────── */}
         {activeTab === 1 && (
-          selectedPlan ? (
+          <motion.div
+            key="tab-plans"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            transition={{ duration: 0.12, ease: "easeOut" }}
+          >
+          {selectedPlan ? (
             <PlanDetailView
               plan={selectedPlan}
               schedule={schedule}
@@ -1662,8 +1828,30 @@ export default function ScheduleApp() {
               onDeleteMilestone={handleDeleteMilestone}
               onCompleteMilestone={handleCompleteMilestone}
             />
-          ) : renderPlanList()
+          ) : renderPlanList()}
+          </motion.div>
         )}
+        {/* ── Strategy Tab ───────────────────────────────────────────────── */}
+        {activeTab === 2 && (
+          <motion.div
+            key="tab-strategy"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            transition={{ duration: 0.12, ease: "easeOut" }}
+            className="flex flex-col h-full"
+          >
+            <StrategySpace
+              strategies={schedule.strategies ?? []}
+              uploadOpen={strategyUploadOpen}
+              onUploadOpen={() => setStrategyUploadOpen(true)}
+              onUploadClose={() => setStrategyUploadOpen(false)}
+              onAdd={handleAddStrategy}
+              onDelete={handleDeleteStrategy}
+            />
+          </motion.div>
+        )}
+        </AnimatePresence>
       </div>
 
       {/* ── Edit Plan Bottom Sheet ─────────────────────────────────────────── */}
@@ -1689,7 +1877,7 @@ export default function ScheduleApp() {
                   type="date"
                   value={editPlanDraft.startDate}
                   onChange={(e) => setEditPlanDraft((d) => ({ ...d, startDate: e.target.value }))}
-                  className="h-10 w-full rounded-xl border border-neutral-200 bg-neutral-50 px-3 text-sm text-neutral-900 outline-none focus:border-neutral-300 dark:border-white/10 dark:bg-white/[0.04] dark:text-white"
+                  className="h-11 w-full min-w-0 rounded-xl border border-neutral-200 bg-neutral-50 px-3 text-[16px] text-neutral-900 outline-none transition-colors focus:border-neutral-300 focus:bg-neutral-100 dark:border-white/10 dark:bg-white/[0.04] dark:text-white dark:focus:border-white/20 dark:focus:bg-white/[0.07]"
                 />
               </div>
               <div>
@@ -1700,7 +1888,7 @@ export default function ScheduleApp() {
                   type="date"
                   value={editPlanDraft.endDate}
                   onChange={(e) => setEditPlanDraft((d) => ({ ...d, endDate: e.target.value }))}
-                  className="h-10 w-full rounded-xl border border-neutral-200 bg-neutral-50 px-3 text-sm text-neutral-900 outline-none focus:border-neutral-300 dark:border-white/10 dark:bg-white/[0.04] dark:text-white"
+                  className="h-11 w-full min-w-0 rounded-xl border border-neutral-200 bg-neutral-50 px-3 text-[16px] text-neutral-900 outline-none transition-colors focus:border-neutral-300 focus:bg-neutral-100 dark:border-white/10 dark:bg-white/[0.04] dark:text-white dark:focus:border-white/20 dark:focus:bg-white/[0.07]"
                 />
               </div>
             </div>
@@ -1750,12 +1938,147 @@ export default function ScheduleApp() {
         {renderAddPlanSheet()}
       </BottomSheet>
 
+      {/* ── Rituals Management Sheet ────────────────────────────────────────── */}
+      <BottomSheet open={ritualsOpen} onClose={() => setRitualsOpen(false)}>
+        <div className="px-5 pt-2 pb-8 space-y-5">
+          <SheetHeader eyebrow="Timeline" title="Rituals" onClose={() => setRitualsOpen(false)} />
+
+          {/* Existing rituals */}
+          {(schedule.rituals ?? []).length > 0 && (
+            <div className="space-y-2">
+              {(schedule.rituals ?? []).map((ritual) => {
+                const dotColor = ritual.color
+                  ? ({
+                      rose: "bg-rose-400", sky: "bg-sky-400", violet: "bg-violet-400",
+                      amber: "bg-amber-400", emerald: "bg-emerald-400", fuchsia: "bg-fuchsia-400",
+                    } as Record<RitualColor, string>)[ritual.color]
+                  : "bg-neutral-400";
+                const days = ritual.repeatDays?.map((d) => DAY_LABELS[d]).join(" ") ?? "Every day";
+                return (
+                  <div
+                    key={ritual.id}
+                    className="flex items-center gap-3 rounded-2xl border border-neutral-200/70 bg-neutral-50 px-4 py-3.5 dark:border-white/[0.07] dark:bg-white/[0.03]"
+                  >
+                    <span className={`h-2.5 w-2.5 rounded-full shrink-0 ${dotColor}`} />
+                    <div className="flex-1 min-w-0">
+                      <p className="text-[14px] font-semibold text-neutral-900 dark:text-white">{ritual.title}</p>
+                      <p className="text-[11px] font-medium text-neutral-400 dark:text-neutral-500">{ritual.time} · {days}</p>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => handleDeleteRitual(ritual.id)}
+                      className="shrink-0 flex h-8 w-8 items-center justify-center rounded-xl text-neutral-400 hover:text-rose-500 transition-colors dark:hover:text-rose-400"
+                    >
+                      <IconTrash size={15} strokeWidth={1.8} />
+                    </button>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+
+          {/* Add new ritual form */}
+          <div className="space-y-4">
+            <p className="text-[11px] font-bold uppercase tracking-[0.09em] text-neutral-400 dark:text-neutral-500">
+              {(schedule.rituals ?? []).length === 0 ? "Add your first ritual" : "Add ritual"}
+            </p>
+
+            <Input
+              value={ritualDraft.title}
+              onChange={(e) => setRitualDraft((d) => ({ ...d, title: e.target.value }))}
+              placeholder="e.g. Skin care, Vitamins, Stretch…"
+              onKeyDown={(e) => { if (e.key === "Enter") handleSaveRitual(); }}
+            />
+
+            {/* Time */}
+            <div>
+              <p className="mb-1.5 text-[11px] font-semibold uppercase tracking-[0.08em] text-neutral-400 dark:text-neutral-500">Time</p>
+              <input
+                type="text"
+                inputMode="numeric"
+                autoComplete="off"
+                placeholder="08:00"
+                value={ritualDraft.time}
+                onChange={(e) => setRitualDraft((d) => ({ ...d, time: formatTimeDraft(e.target.value) }))}
+                onBlur={(e) => setRitualDraft((d) => ({ ...d, time: normalizeTimeDraft(e.target.value) || d.time }))}
+                className="h-11 w-full appearance-none rounded-xl border border-neutral-200 bg-neutral-50 px-3 text-[16px] font-semibold tabular-nums text-neutral-700 outline-none transition-colors placeholder:text-neutral-400 focus:border-neutral-300 focus:bg-white dark:border-white/10 dark:bg-white/[0.04] dark:text-white dark:placeholder:text-neutral-600 dark:focus:border-white/20 dark:focus:bg-white/[0.08]"
+              />
+            </div>
+
+            {/* Color */}
+            <div>
+              <p className="mb-2 text-[11px] font-semibold uppercase tracking-[0.08em] text-neutral-400 dark:text-neutral-500">Color</p>
+              <div className="flex items-center gap-2.5">
+                {RITUAL_COLORS.map((c) => {
+                  const dotClass = {
+                    rose: "bg-rose-400", sky: "bg-sky-400", violet: "bg-violet-400",
+                    amber: "bg-amber-400", emerald: "bg-emerald-400", fuchsia: "bg-fuchsia-400",
+                  }[c];
+                  const selected = ritualDraft.color === c;
+                  return (
+                    <button
+                      key={c}
+                      type="button"
+                      onClick={() => setRitualDraft((d) => ({ ...d, color: d.color === c ? "" : c }))}
+                      className={`h-7 w-7 rounded-full transition-all ${dotClass} ${selected ? "ring-2 ring-offset-2 ring-neutral-600 dark:ring-offset-neutral-950 dark:ring-white/60" : "opacity-55 hover:opacity-90"}`}
+                    />
+                  );
+                })}
+              </div>
+            </div>
+
+            {/* Repeat days — pill style matching Task sheet */}
+            <div className="space-y-2">
+              <div className="flex items-center justify-between gap-3">
+                <p className="text-[11px] font-semibold uppercase tracking-[0.08em] text-neutral-400 dark:text-neutral-500">Repeat days</p>
+                <p className="text-[11px] font-semibold text-neutral-400 dark:text-neutral-500">
+                  {ritualDraft.days.length === 0 ? "Every day" : `${ritualDraft.days.length} ${ritualDraft.days.length === 1 ? "day" : "days"}`}
+                </p>
+              </div>
+              <div className="flex flex-wrap gap-2">
+                {DAYS.map((day) => {
+                  const sel = ritualDraft.days.includes(day);
+                  return (
+                    <button
+                      key={day}
+                      type="button"
+                      onClick={() => setRitualDraft((d) => ({
+                        ...d,
+                        days: sel ? d.days.filter((x) => x !== day) : [...d.days, day],
+                      }))}
+                      className={`h-8 rounded-full border px-3 text-[12px] font-semibold transition-colors ${
+                        sel
+                          ? "border-neutral-900 bg-neutral-900 text-white dark:border-white dark:bg-white dark:text-neutral-900"
+                          : "border-neutral-200 bg-white text-neutral-500 hover:border-neutral-300 hover:text-neutral-800 dark:border-white/10 dark:bg-white/[0.04] dark:text-neutral-400 dark:hover:border-white/20 dark:hover:text-neutral-200"
+                      }`}
+                    >
+                      {DAY_LABELS[day]}
+                    </button>
+                  );
+                })}
+              </div>
+              <p className="text-[11px] text-neutral-400 dark:text-neutral-500">Leave empty to repeat every day.</p>
+            </div>
+
+            <Button
+              fullWidth
+              onClick={handleSaveRitual}
+              disabled={!ritualDraft.title.trim() || !ritualDraft.time}
+            >
+              Add Ritual
+            </Button>
+          </div>
+        </div>
+      </BottomSheet>
+
       {/* ── Bottom Nav ─────────────────────────────────────────────────────── */}
       <BottomNav
         activeTab={activeTab}
         onTabChange={(tab) => { setActiveTab(tab); setSelectedPlanId(null); }}
         onCreateTask={() => openCreateSheet()}
         onCreatePlan={openAddPlan}
+        onCreateStrategy={() => { setActiveTab(2); setStrategyUploadOpen(true); }}
+        onOpenSettings={() => setSettingsOpen(true)}
       />
 
       {/* ── Modals ─────────────────────────────────────────────────────────── */}
@@ -1788,6 +2111,21 @@ export default function ScheduleApp() {
             ? { name: entryTracker.title, unit: entryTracker.unit ?? "" }
             : undefined
         }
+      />
+
+      <SessionSheet
+        isOpen={!!sessionTask}
+        task={sessionTask}
+        linkedPlan={sessionLinkedPlan}
+        onClose={() => setSessionTask(null)}
+        onComplete={(taskId, allIds) => {
+          handleToggleTaskComplete(taskId, allIds);
+          setSessionTask(null);
+        }}
+        onEdit={() => {
+          if (sessionTask) openEditSheet(sessionTask);
+          setSessionTask(null);
+        }}
       />
     </main>
   );

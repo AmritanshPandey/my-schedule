@@ -59,6 +59,8 @@ export interface Task {
   completionHistory?: TaskCompletionEvent[]; // append-only event log
   streakEnabled?: boolean;            // opt-in to streak tracking
   sortOrder?: number;                 // drag-reorder position within a day
+  subtasks?: ScheduleEntry[];         // per-task subtask list (overrides plan.items)
+  taskType?: "normal" | "routine";    // undefined treated as "normal"
 }
 
 export interface SummaryConfig {
@@ -125,6 +127,34 @@ export interface Milestone {
   sortOrder: number;
 }
 
+export interface StrategyAsset {
+  id: string;
+  type: "html" | "pdf";
+  title: string;
+  description?: string;
+  htmlContent?: string;
+  pdfData?: string;       // base64 local fallback (guest users)
+  pdfUrl?: string;        // Firebase Storage download URL (authenticated users)
+  thumbnail?: string;
+  createdAt: string;
+  updatedAt: string;
+  tags?: string[];
+  planId?: string;
+}
+
+export const RITUAL_COLORS = ["rose", "sky", "violet", "amber", "emerald", "fuchsia"] as const;
+export type RitualColor = typeof RITUAL_COLORS[number];
+
+export interface Ritual {
+  id: string;
+  title: string;
+  time: string;           // "HH:MM" 24-hour
+  duration?: number;      // minutes (display only)
+  repeatDays?: DayKey[];  // undefined / empty = every day
+  color?: RitualColor;
+  notes?: string;
+}
+
 export type Activity = Task;
 export type ProgressEntry = MetricEntry;
 
@@ -140,6 +170,8 @@ export interface Schedule {
   progressTrackers: ProgressTracker[];
   metricEntries: MetricEntry[];
   milestones: Milestone[];
+  rituals: Ritual[];
+  strategies: StrategyAsset[];
 }
 
 const DB_NAME = "daily-planner";
@@ -412,6 +444,7 @@ function normalizeTasks(value: unknown, fallbackPlanId: string, fallbackIcon = "
         ...(task.completionHistory !== undefined && { completionHistory: task.completionHistory }),
         ...(task.streakEnabled !== undefined && { streakEnabled: task.streakEnabled }),
         ...(task.sortOrder !== undefined && { sortOrder: task.sortOrder }),
+        ...(Array.isArray(task.subtasks) && task.subtasks.length > 0 && { subtasks: task.subtasks }),
       }];
     }
 
@@ -497,6 +530,14 @@ function migrate(raw: unknown): Schedule {
       : [];
     const normalizedMilestones = normalizeMilestoneTimelines(plans, milestones);
 
+    const rituals: Ritual[] = Array.isArray(r.rituals)
+      ? (r.rituals as Ritual[]).filter((ri) => ri && typeof ri.id === "string" && typeof ri.title === "string" && typeof ri.time === "string")
+      : [];
+
+    const strategies: StrategyAsset[] = Array.isArray(r.strategies)
+      ? (r.strategies as StrategyAsset[]).filter((s) => s && typeof s.id === "string" && typeof s.type === "string" && typeof s.title === "string")
+      : [];
+
     return {
       plans,
       activities: Object.fromEntries(
@@ -505,6 +546,8 @@ function migrate(raw: unknown): Schedule {
       progressTrackers,
       metricEntries,
       milestones: normalizedMilestones,
+      rituals,
+      strategies,
     };
   }
 
@@ -525,6 +568,8 @@ function migrate(raw: unknown): Schedule {
       progressTrackers,
       metricEntries,
       milestones: [],
+      rituals: [],
+      strategies: [],
     };
   }
 
@@ -550,11 +595,11 @@ function migrate(raw: unknown): Schedule {
   plans[0].items = Array.isArray(r.diet) ? (r.diet as ScheduleEntry[]) : [];
   plans[1].items = Array.isArray(r.workout) ? (r.workout as ScheduleEntry[]) : [];
 
-  return { plans, activities, progressTrackers, metricEntries, milestones: [] };
+  return { plans, activities, progressTrackers, metricEntries, milestones: [], rituals: [], strategies: [] };
 }
 
 function emptyEmpty(): Schedule {
-  return { plans: [], activities: emptyDayActivities(), progressTrackers: [], metricEntries: [], milestones: [] };
+  return { plans: [], activities: emptyDayActivities(), progressTrackers: [], metricEntries: [], milestones: [], rituals: [], strategies: [] };
 }
 
 export function useScheduleDB() {

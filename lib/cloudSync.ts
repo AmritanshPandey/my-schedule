@@ -155,13 +155,21 @@ export function queueSync(schedule: Schedule): void {
 
 /**
  * Immediately push current data to cloud (e.g., on logout or app close).
- * No-op for guest users.
+ * No-op for guest users. Waits for any in-progress sync to finish first.
  */
 export async function flushNow(schedule: Schedule): Promise<void> {
   if (!_uid) return;
   if (_timer) {
     clearTimeout(_timer);
     _timer = null;
+  }
+  // If a sync is already in flight, wait for it to finish (poll with short delay)
+  // before pushing the latest snapshot so the logout flush isn't silently skipped.
+  if (_syncing) {
+    await new Promise<void>((resolve) => {
+      const check = () => (_syncing ? setTimeout(check, 50) : resolve());
+      check();
+    });
   }
   await performSync(schedule);
 }
@@ -186,7 +194,10 @@ export async function mergeCloudIfNewer(
     if (data.lastUpdated <= localLastUpdated) return false;
 
     // Cloud is newer → notify useScheduleDB to absorb the data.
-    // Mark _skipNextSync so absorbing the cloud data doesn't re-upload it.
+    // Cancel any pending local sync first — the local data is stale and must
+    // not overwrite the cloud data we're about to absorb.
+    if (_timer) { clearTimeout(_timer); _timer = null; }
+    _pending = null;
     _skipNextSync = true;
 
     const event = new CustomEvent<CloudSnapshot>("cloud-sync-merge", {
@@ -212,8 +223,11 @@ function scheduleSync(schedule: Schedule, delayMs: number) {
   }, delayMs);
 }
 
-// Trim completionHistory older than 90 days before writing to Firestore.
-// Keeps the document well under Firestore's 1 MB limit for heavy users.
+// Trim payload before writing to Firestore (1 MB document limit).
+// - completionHistory: drop events older than 90 days
+// - strategies.pdfData: strip binary blobs entirely (base64 PDF = multi-MB,
+//   would blow the limit on its own). HTML content is text and stays.
+//   PDF files remain local-only until Firebase Storage is wired up.
 function trimForSync(schedule: Schedule): Schedule {
   const cutoff = new Date();
   cutoff.setDate(cutoff.getDate() - 90);
@@ -232,6 +246,7 @@ function trimForSync(schedule: Schedule): Schedule {
         })),
       ])
     ) as Schedule["activities"],
+    strategies: (schedule.strategies ?? []).map(({ pdfData: _dropped, ...rest }) => rest),
   };
 }
 
