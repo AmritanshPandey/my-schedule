@@ -95,7 +95,7 @@ function TrendBadge({ trend }: { trend: TrendResult }) {
       <p className="text-[12px] font-medium">
         Trending {isUp ? "up" : "down"}{pctText}
       </p>
-      <ArrowIcon size={13} strokeWidth={2.5} className="shrink-0" />
+      <ArrowIcon size={12} strokeWidth={1.5} className="shrink-0" />
     </div>
   );
 }
@@ -131,7 +131,7 @@ function GoalDirectionPicker({
                 : "border-neutral-200 bg-neutral-50 text-neutral-500 hover:border-neutral-300 dark:border-white/10 dark:bg-white/[0.04] dark:text-neutral-400 dark:hover:border-white/20"
                 }`}
             >
-              <opt.Icon size={14} strokeWidth={2.5} className="shrink-0" />
+              <opt.Icon size={16} strokeWidth={1.5} className="shrink-0" />
               <span>{opt.label}</span>
             </button>
           );
@@ -337,7 +337,7 @@ export default function PlanDetailView({
             </p>
             {subtaskCount > 0 && (
               <span className="inline-flex shrink-0 items-center gap-1 text-[12px] font-semibold text-neutral-400 dark:text-neutral-500">
-                <IconCheck size={11} strokeWidth={2.5} />
+                <IconCheck size={12} strokeWidth={1.5} />
                 {subtaskCount}
               </span>
             )}
@@ -550,8 +550,8 @@ export default function PlanDetailView({
                           {entryTrend && entryTrend.direction !== "neutral" && (
                             entryTrend.direction === "up" ? (
                               <IconArrowUpRight
-                                size={13}
-                                strokeWidth={2.5}
+                                size={16}
+                                strokeWidth={1.5}
                                 className={`shrink-0 ${entryTrend.state === "positive"
                                   ? "text-green-500"
                                   : "text-rose-500"
@@ -559,8 +559,8 @@ export default function PlanDetailView({
                               />
                             ) : (
                               <IconArrowDownRight
-                                size={13}
-                                strokeWidth={2.5}
+                                size={16}
+                                strokeWidth={1.5}
                                 className={`shrink-0 ${entryTrend.state === "positive"
                                   ? "text-green-500"
                                   : "text-rose-500"
@@ -582,7 +582,7 @@ export default function PlanDetailView({
                               onClick={() => onDeleteEntry(entry.id)}
                               className="h-6 w-6 flex items-center justify-center rounded-lg text-neutral-300 hover:text-rose-500 dark:text-neutral-700 dark:hover:text-rose-400 transition-colors"
                             >
-                              <IconTrash size={14} strokeWidth={2} />
+                              <IconTrash size={16} strokeWidth={1.5} />
                             </button>
                           )}
                         </div>
@@ -727,10 +727,10 @@ export default function PlanDetailView({
         <div className="rounded-2xl border border-neutral-200 bg-white px-[18px] pt-[18px] pb-4 dark:border-white/[0.08] dark:bg-neutral-900">
           {/* Header row */}
           <div className="flex items-center justify-between mb-3">
-            <p className="text-[17px] font-bold tracking-[-0.4px] text-neutral-950 dark:text-white">
+            <p className="text-[16px] font-bold tracking-[-0.4px] text-neutral-950 dark:text-white">
               Overall Progress
             </p>
-            <p className="text-[18px] font-extrabold tracking-[-0.5px] text-green-600 dark:text-green-400">
+            <p className="text-[20px] font-extrabold tracking-[-0.5px] text-green-600 dark:text-green-400">
               {overallPct}%
             </p>
           </div>
@@ -812,14 +812,14 @@ export default function PlanDetailView({
             actions={
               <>
                 <SectionIconButton
-                  icon={<IconPlus size={16} strokeWidth={2.2} />}
+                  icon={<IconPlus size={20} strokeWidth={2} />}
                   onClick={() => onAddTask(plan.id)}
                   label="Add task"
                 />
                 {uniqueTasks.length > 0 && (
                   <SectionIconButton
-                    icon={<IconEdit size={15} strokeWidth={2} />}
-                    saveIcon={<IconCheck size={15} strokeWidth={2.5} />}
+                    icon={<IconEdit size={20} strokeWidth={2} />}
+                    saveIcon={<IconCheck size={20} strokeWidth={2} />}
                     saving={tasksEditMode}
                     onClick={() => setTasksEditMode((v) => !v)}
                     label={tasksEditMode ? "Done editing" : "Edit tasks"}
@@ -863,14 +863,14 @@ export default function PlanDetailView({
             actions={
               <>
                 <SectionIconButton
-                  icon={<IconPlus size={16} strokeWidth={2.2} />}
+                  icon={<IconPlus size={20} strokeWidth={2} />}
                   onClick={() => setAddingTracker(true)}
                   label="Add tracker"
                 />
                 {trackers.length > 0 && (
                   <SectionIconButton
-                    icon={<IconEdit size={15} strokeWidth={2} />}
-                    saveIcon={<IconCheck size={15} strokeWidth={2.5} />}
+                    icon={<IconEdit size={20} strokeWidth={2} />}
+                    saveIcon={<IconCheck size={20} strokeWidth={2} />}
                     saving={trackersEditMode}
                     onClick={() => setTrackersEditMode((v) => !v)}
                     label={trackersEditMode ? "Done editing" : "Edit trackers"}
@@ -943,7 +943,7 @@ export default function PlanDetailView({
                 onClick={openAddMilestone}
                 className="flex h-[34px] w-[34px] items-center justify-center rounded-[9px] bg-transparent text-neutral-700 transition-colors hover:bg-neutral-100 dark:text-neutral-300 dark:hover:bg-white/[0.06]"
               >
-                <IconPlus size={18} strokeWidth={2.2} />
+                <IconPlus size={20} strokeWidth={2} />
               </button>
               {planMilestones.length > 0 && (
                 <button
@@ -956,9 +956,9 @@ export default function PlanDetailView({
                   }`}
                 >
                   {milestonesEditMode ? (
-                    <IconCheck size={17} strokeWidth={2.5} />
+                    <IconCheck size={20} strokeWidth={2} />
                   ) : (
-                    <IconEdit size={17} strokeWidth={2} />
+                    <IconEdit size={20} strokeWidth={2} />
                   )}
                 </button>
               )}
@@ -975,7 +975,7 @@ export default function PlanDetailView({
                 onClick={openAddMilestone}
                 className="mt-3 inline-flex items-center gap-1.5 rounded-xl border border-neutral-200 px-4 py-2 text-[13px] font-semibold text-neutral-600 transition-colors hover:bg-neutral-50 dark:border-white/10 dark:text-neutral-400 dark:hover:bg-white/[0.04]"
               >
-                <IconPlus size={16} strokeWidth={2} />
+                <IconPlus size={16} strokeWidth={1.5} />
                 Add First Milestone
               </button>
             </div>

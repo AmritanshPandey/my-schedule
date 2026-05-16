@@ -91,7 +91,7 @@ function InternalSectionTitleInner({
   return (
     <div className={className}>
       <div className="flex items-center justify-between gap-3">
-        <h2 className="text-[17px] font-bold leading-tight tracking-[-0.35px] text-neutral-950 dark:text-white">
+        <h2 className="text-[20px] font-bold leading-tight tracking-[-0.35px] text-neutral-950 dark:text-white">
           {title}
         </h2>
         {actions && (

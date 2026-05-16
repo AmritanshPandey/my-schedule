@@ -1,7 +1,7 @@
 "use client";
 
 import { motion } from "framer-motion";
-import { IconArrowLeft, IconSettings2 } from "@tabler/icons-react";
+import { IconArrowLeft, IconChevronLeft, IconSettings2 } from "@tabler/icons-react";
 
 interface ActionItem {
   icon: React.ComponentType<{ size?: number; strokeWidth?: number; className?: string }>;
@@ -29,21 +29,21 @@ export default function AppHeader({ back, actions, onOpenSettings }: AppHeaderPr
         <div className="h-[1.5px] bg-gradient-to-r from-neutral-500/40 via-neutral-500/15 to-transparent" />
 
         {/* Main row */}
-        <div className="flex items-center gap-3 px-4 pt-4 pb-4">
+        <div className="flex items-center gap-1 px-4 pt-4 pb-4">
           {/* Back button */}
           <motion.button
             type="button"
             whileTap={{ scale: 0.86 }}
             onClick={back.onBack}
             aria-label={`Back to ${back.label}`}
-            className="shrink-0 flex h-9 w-9 items-center justify-center rounded-full bg-white/[0.07] text-white/60 active:text-white transition-colors"
+            className="shrink-0 flex h-9 w-9 items-center justify-center  text-white/60 active:text-white transition-colors"
           >
-            <IconArrowLeft size={17} strokeWidth={2.2} />
+            <IconChevronLeft size={24} strokeWidth={1.5} />
           </motion.button>
 
           {/* Back label */}
           <div className="flex-1 min-w-0">
-            <p className="text-[16px] font-bold text-white/30 mb-0.5">
+            <p className="text-[16px] font-bold text-white/60">
               {back.label}
             </p>
           </div>
@@ -66,7 +66,7 @@ export default function AppHeader({ back, actions, onOpenSettings }: AppHeaderPr
                         : "text-white/50 active:text-white"
                     }`}
                   >
-                    <Icon size={16} strokeWidth={2.2} />
+                    <Icon size={20} strokeWidth={2} />
                   </motion.button>
                 );
               })}

@@ -26,10 +26,10 @@ export default function LandscapeBlocker() {
         </svg>
       </div>
       <div>
-        <p className="text-[17px] font-bold tracking-[-0.01em] text-white">
+        <p className="text-[20px] font-bold tracking-[-0.01em] text-white">
           Rotate to portrait
         </p>
-        <p className="mt-1.5 text-[13px] leading-relaxed text-neutral-500">
+        <p className="mt-1.5 text-[12px] leading-relaxed text-neutral-500">
           PlanR is designed for portrait mode
         </p>
       </div>

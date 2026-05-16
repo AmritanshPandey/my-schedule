@@ -79,7 +79,7 @@ export default function StrategyHeader({
             )}
           </div>
           {/* Title */}
-          <p className="text-[17px] font-bold text-white leading-snug truncate tracking-tight">
+          <p className="text-[16px] font-bold text-white leading-snug truncate tracking-tight">
             {asset.title}
           </p>
         </div>

@@ -83,7 +83,7 @@ export default function StrategySpace({ strategies, uploadOpen, onUploadOpen, on
               <IconBrain size={36} strokeWidth={1.4} className="text-neutral-400 dark:text-neutral-500" />
             </div>
             <div>
-              <p className="text-[17px] font-semibold text-neutral-700 dark:text-neutral-200">
+              <p className="text-[16px] font-semibold text-neutral-700 dark:text-neutral-200">
                 Your strategies live here
               </p>
               <p className="mt-1.5 text-[14px] leading-relaxed text-neutral-400 max-w-[260px]">

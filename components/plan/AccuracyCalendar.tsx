@@ -153,7 +153,7 @@ export default function AccuracyCalendar({
     return (
       <div className="rounded-[24px] border border-dashed border-neutral-200 dark:border-white/[0.08] py-10 px-6 text-center">
         <div className="w-10 h-10 rounded-xl bg-neutral-100 dark:bg-white/[0.06] flex items-center justify-center mx-auto mb-3">
-          <IconLayoutGrid size={18} strokeWidth={1.8} className="text-neutral-400 dark:text-neutral-500" />
+          <IconLayoutGrid size={24} strokeWidth={1.8} className="text-neutral-400 dark:text-neutral-500" />
         </div>
         <p className="text-[14px] font-semibold text-neutral-900 dark:text-white mb-1">
           No linked tasks yet
@@ -166,7 +166,7 @@ export default function AccuracyCalendar({
           onClick={onAddTask}
           className="inline-flex items-center gap-1.5 rounded-xl border border-neutral-200 px-4 py-2 text-[13px] font-semibold text-neutral-600 hover:bg-neutral-50 dark:border-white/10 dark:text-neutral-400 dark:hover:bg-white/[0.04] transition-colors"
         >
-          <IconPlus size={15} strokeWidth={2.5} />
+          <IconPlus size={16} strokeWidth={1.5} />
           Add Activity
         </button>
       </div>
@@ -180,10 +180,8 @@ export default function AccuracyCalendar({
       {/* Section header — eyebrow + title + month accuracy */}
       <div className="flex items-start justify-between mb-3">
         <div>
-          <p className="text-[9.5px] font-bold uppercase tracking-[0.08em] text-neutral-400 dark:text-neutral-500">
-            Activity
-          </p>
-          <h3 className="text-[16px] font-extrabold tracking-tight leading-tight text-neutral-950 dark:text-white mt-0.5">
+        
+          <h3 className="text-[20px] font-bold leading-tight tracking-[-0.35px] text-neutral-950 dark:text-white mb-1">
             Accuracy
           </h3>
         </div>
@@ -209,7 +207,7 @@ export default function AccuracyCalendar({
               onClick={prevMonth}
               className="w-7 h-7 rounded-[7px] flex items-center justify-center text-neutral-600 dark:text-neutral-400 hover:bg-neutral-100 dark:hover:bg-white/[0.06] transition-colors"
             >
-              <IconChevronLeft size={16} strokeWidth={2.2} />
+              <IconChevronLeft size={24} strokeWidth={2} />
             </button>
             <p className="text-[15px] font-bold tracking-[-0.3px] text-neutral-900 dark:text-white">
               {MONTHS[month]} {year}
@@ -219,7 +217,7 @@ export default function AccuracyCalendar({
               onClick={nextMonth}
               className="w-7 h-7 rounded-[7px] flex items-center justify-center text-neutral-600 dark:text-neutral-400 hover:bg-neutral-100 dark:hover:bg-white/[0.06] transition-colors"
             >
-              <IconChevronRight size={16} strokeWidth={2.2} />
+              <IconChevronRight size={24} strokeWidth={2} />
             </button>
           </div>
 
@@ -262,49 +260,52 @@ export default function AccuracyCalendar({
           </AnimatePresence>
 
           {/* Stats row */}
-          <div className="grid grid-cols-4 gap-2 mt-[18px] pt-4 border-t border-neutral-100 dark:border-white/[0.06]">
-            <div>
-              <p className="text-[22px] font-extrabold leading-none tabular-nums text-emerald-600 dark:text-emerald-400">
-                {stats.completed}
-              </p>
-              <p className="text-[11px] font-medium text-neutral-400 dark:text-neutral-500 mt-1.5">
-                Completed
-              </p>
-            </div>
-            <div>
-              <p className="text-[22px] font-extrabold leading-none tabular-nums text-red-500 dark:text-red-400">
-                {stats.missed}
-              </p>
-              <p className="text-[11px] font-medium text-neutral-400 dark:text-neutral-500 mt-1.5">
-                Missed
-              </p>
-            </div>
-            <div>
-              <p className="text-[22px] font-extrabold leading-none tabular-nums text-neutral-400 dark:text-neutral-500">
-                {stats.upcoming}
-              </p>
-              <p className="text-[11px] font-medium text-neutral-400 dark:text-neutral-500 mt-1.5">
-                Remaining
-              </p>
-            </div>
-            <div>
-              <p className="text-[22px] font-extrabold leading-none tabular-nums text-neutral-950 dark:text-white">
-                {stats.accuracy}%
-              </p>
-              <p className="text-[11px] font-medium text-neutral-400 dark:text-neutral-500 mt-1.5">
-                Accuracy
-              </p>
-            </div>
-          </div>
+         <div className="grid grid-cols-4 gap-2 mt-[18px] pt-4 border-t border-neutral-100 dark:border-white/[0.06]">
+  <div className="text-center">
+    <p className="text-[22px] font-extrabold leading-none tabular-nums text-emerald-600 dark:text-emerald-400">
+      {stats.completed}
+    </p>
+    <p className="text-[11px] font-medium text-neutral-400 dark:text-neutral-500 mt-1.5">
+      Completed
+    </p>
+  </div>
+
+  <div className="text-center">
+    <p className="text-[22px] font-extrabold leading-none tabular-nums text-red-500 dark:text-red-400">
+      {stats.missed}
+    </p>
+    <p className="text-[11px] font-medium text-neutral-400 dark:text-neutral-500 mt-1.5">
+      Missed
+    </p>
+  </div>
+
+  <div className="text-center">
+    <p className="text-[22px] font-extrabold leading-none tabular-nums text-neutral-400 dark:text-neutral-500">
+      {stats.upcoming}
+    </p>
+    <p className="text-[11px] font-medium text-neutral-400 dark:text-neutral-500 mt-1.5">
+      Remaining
+    </p>
+  </div>
+
+  <div className="text-center">
+    <p className="text-[22px] font-extrabold leading-none tabular-nums text-neutral-950 dark:text-white">
+      {stats.accuracy}%
+    </p>
+    <p className="text-[11px] font-medium text-neutral-400 dark:text-neutral-500 mt-1.5">
+      Accuracy
+    </p>
+  </div>
+</div>
         </div>
 
         {/* Legend */}
         <div className="flex flex-wrap gap-x-4 gap-y-2 justify-center px-4 pt-3.5 pb-4 border-t border-neutral-100 dark:border-white/[0.06] mt-4">
           {[
-            { label: "Completed", cls: "bg-emerald-100 dark:bg-emerald-500/[0.18]" },
-            { label: "Missed",    cls: "bg-red-100 dark:bg-red-500/[0.18]" },
-            { label: "Partial",   cls: "bg-amber-100 dark:bg-amber-500/[0.18]" },
-            { label: "Upcoming",  cls: "bg-neutral-100 border border-neutral-200 dark:bg-white/[0.05] dark:border-white/[0.08]" },
+            { label: "Completed", cls: "bg-emerald-500 dark:bg-emerald-400" },
+            { label: "Missed",    cls: "bg-red-500 dark:bg-red-400" },
+            { label: "Partial",   cls: "bg-amber-500 dark:bg-amber-400" },
+            { label: "Upcoming",  cls: "bg-neutral-100 border border-neutral-200 dark:bg-white/[0.1] dark:border-white/[0.05]" },
           ].map(({ label, cls }) => (
             <div key={label} className="flex items-center gap-1.5">
               <div className={`w-3 h-3 rounded-[3px] shrink-0 ${cls}`} />

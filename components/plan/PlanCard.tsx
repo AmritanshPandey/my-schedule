@@ -173,11 +173,11 @@ function PlanCardInner({
         />
 
         <div className="min-w-0 flex-1 pt-0.5">
-          <h2 className="text-[17px] font-bold leading-snug text-neutral-950 dark:text-white line-clamp-2">
+          <h2 className="text-[16px] font-bold leading-snug text-neutral-950 dark:text-white line-clamp-2">
             {plan.title}
           </h2>
           {plan.description && (
-            <p className="mt-0.5 text-[13px] leading-relaxed text-neutral-500 dark:text-neutral-400 line-clamp-2">
+            <p className="mt-0.5 text-[12px] leading-relaxed text-neutral-500 dark:text-neutral-400 line-clamp-2">
               {plan.description}
             </p>
           )}

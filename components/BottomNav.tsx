@@ -82,7 +82,7 @@ export default function BottomNav({
         className="fixed inset-x-0 z-30 flex justify-center px-4"
         style={{ bottom: "max(20px, calc(env(safe-area-inset-bottom) + 8px))" }}
       >
-        <div ref={navRef} className="relative w-[360px]">
+        <div ref={navRef} className="relative w-full max-w-md">
 
           {/* ── EXPANDED CREATE MENU ─────────────────────────────────────── */}
           <AnimatePresence>
@@ -103,7 +103,7 @@ export default function BottomNav({
                     aria-label="Add task"
                   >
                     <div className="flex h-[52px] w-[60px] items-center justify-center rounded-[18px] bg-white/[0.09]">
-                      <IconCalendarPlus size={22} strokeWidth={1.9} className="text-white" />
+                      <IconCalendarPlus size={24} strokeWidth={2} className="text-white" />
                     </div>
                     <span className="text-[11px] font-semibold text-white/75">Task</span>
                   </motion.button>
@@ -116,7 +116,7 @@ export default function BottomNav({
                     aria-label="Add plan"
                   >
                     <div className="flex h-[52px] w-[60px] items-center justify-center rounded-[18px] bg-white/[0.09]">
-                      <IconClipboardPlus size={22} strokeWidth={1.9} className="text-white" />
+                      <IconClipboardPlus size={24} strokeWidth={2} className="text-white" />
                     </div>
                     <span className="text-[11px] font-semibold text-white/75">Plan</span>
                   </motion.button>
@@ -129,7 +129,7 @@ export default function BottomNav({
                     aria-label="Add strategy"
                   >
                     <div className="flex h-[52px] w-[60px] items-center justify-center rounded-[18px] bg-white/[0.09]">
-                      <IconUpload size={22} strokeWidth={1.9} className="text-white" />
+                      <IconUpload size={24} strokeWidth={2} className="text-white" />
                     </div>
                     <span className="text-[11px] font-semibold text-white/75">Strategy</span>
                   </motion.button>
@@ -160,7 +160,7 @@ export default function BottomNav({
               animate={{ rotate: expanded ? 45 : 0 }}
               transition={{ duration: 0.2, ease: [0.34, 1.1, 0.64, 1] }}
             >
-              <IconPlus size={22} strokeWidth={2.2} />
+              <IconPlus size={24} strokeWidth={2} />
             </motion.div>
           </motion.button>
 
@@ -185,7 +185,7 @@ export default function BottomNav({
                 aria-label="Tasks"
                 aria-current={activeTab === 0 ? "page" : undefined}
               >
-                <IconCalendarEvent size={21} strokeWidth={2} />
+                <IconCalendarEvent size={20} strokeWidth={2} />
                 <span className="text-[10.5px] font-medium leading-none">Tasks</span>
               </button>
               <button
@@ -195,7 +195,7 @@ export default function BottomNav({
                 aria-label="Plan"
                 aria-current={activeTab === 1 ? "page" : undefined}
               >
-                <IconClipboardData size={21} strokeWidth={2} />
+                <IconClipboardData size={20} strokeWidth={2} />
                 <span className="text-[10.5px] font-medium leading-none">Plan</span>
               </button>
             </div>
@@ -212,7 +212,7 @@ export default function BottomNav({
                 aria-label="Strategy"
                 aria-current={activeTab === 2 ? "page" : undefined}
               >
-                <IconBrain size={21} strokeWidth={2} />
+                <IconBrain size={20} strokeWidth={2} />
                 <span className="text-[10.5px] font-medium leading-none">Strategy</span>
               </button>
               <button
@@ -221,7 +221,7 @@ export default function BottomNav({
                 className={tabClass(false)}
                 aria-label="Settings"
               >
-                <IconSettings size={21} strokeWidth={2} />
+                <IconSettings size={20} strokeWidth={2} />
                 <span className="text-[10.5px] font-medium leading-none">Settings</span>
               </button>
             </div>
