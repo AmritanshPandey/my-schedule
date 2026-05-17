@@ -157,8 +157,14 @@ function SyncRow() {
   }, [status]);
 
   async function handleSyncNow() {
+    if (syncing || status === "syncing") return;
     const schedule = getLastSchedule();
-    if (!schedule || syncing || status === "syncing") return;
+    if (!schedule) {
+      // No data loaded yet — nothing to push
+      setStatus("error");
+      setTimeout(() => setStatus(getSyncStatus()), 2000);
+      return;
+    }
     setSyncing(true);
     try {
       await flushNow(schedule);

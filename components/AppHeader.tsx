@@ -24,7 +24,7 @@ export default function AppHeader({ back, actions }: AppHeaderProps) {
 
   if (isDetail) {
     return (
-      <header className="sticky top-0 z-10 flex flex-col bg-neutral-950/90 backdrop-blur-md">
+      <header className="sticky top-0 z-40 flex flex-col bg-neutral-950/90 backdrop-blur-md">
         {/* Top accent line */}
         <div className="h-[1.5px] bg-gradient-to-r from-neutral-500/40 via-neutral-500/15 to-transparent" />
 
@@ -84,7 +84,7 @@ export default function AppHeader({ back, actions }: AppHeaderProps) {
   return (
     <header
       className="
-        sticky top-0 z-10 flex items-center justify-between px-4 py-3.5
+        sticky top-0 z-40 flex items-center justify-between px-4 py-3.5
         border-b border-neutral-200/60 bg-white/80 backdrop-blur-md
         shadow-[0_1px_3px_rgba(0,0,0,0.04),0_4px_20px_rgba(0,0,0,0.04)]
         dark:border-white/[0.07] dark:bg-neutral-950/82

@@ -16,7 +16,7 @@ const PlanDetailView = dynamic(() => import("@/components/plan/PlanDetailView"),
 const SettingsSheet = dynamic(() => import("@/components/auth/SettingsSheet").then(m => ({ default: m.SettingsSheet })), { ssr: false });
 const TemplatesSheet = dynamic(() => import("@/components/TemplatesSheet").then(m => ({ default: m.TemplatesSheet })), { ssr: false });
 const SessionSheet = dynamic(() => import("@/components/activity/SessionSheet"), { ssr: false });
-const StrategySpace = dynamic(() => import("@/components/strategy/StrategySpace"), { ssr: false });
+const RitualView = dynamic(() => import("@/components/activity/RitualView"), { ssr: false });
 import {
   useScheduleDB,
   DAYS,
@@ -60,6 +60,7 @@ import SheetHeader from "@/components/ui/SheetHeader";
 import Button from "@/components/ui/Button";
 import Input from "@/components/ui/Input";
 import { ListTaskCard } from "@/components/activity/ListTaskCard";
+import TodayRitualsBar from "@/components/activity/TodayRitualsBar";
 import { CurrentTimeLayer } from "@/components/timeline/CurrentTimeLayer";
 import type { StrategyAsset } from "@/lib/useScheduleDB";
 import { uploadStrategyPdf, deleteStrategyPdf } from "@/lib/strategyStorage";
@@ -302,7 +303,7 @@ export default function ScheduleApp() {
   const [weekOffset, setWeekOffset] = useState(0);
   const [viewMode, setViewMode] = useState<"list" | "timeline">("timeline");
 
-  const [strategyUploadOpen, setStrategyUploadOpen] = useState(false);
+  const [taskSheetInitialType, setTaskSheetInitialType] = useState<"normal" | "routine">("normal");
 
   const [addingPlan, setAddingPlan] = useState(false);
   const [newPlanTitle, setNewPlanTitle] = useState("");
@@ -319,9 +320,8 @@ export default function ScheduleApp() {
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [templatesOpen, setTemplatesOpen] = useState(false);
   const [sessionTask, setSessionTask] = useState<Task | null>(null);
-  const [ritualsOpen, setRitualsOpen] = useState(false);
   const [completedRitualIds, setCompletedRitualIds] = useState<Set<string>>(new Set());
-  const [ritualDraft, setRitualDraft] = useState({ title: "", time: "08:00", days: [] as DayKey[], color: "" as RitualColor | "" });
+  const [ritualAddOpen, setRitualAddOpen] = useState(false);
   const timelineScrollRef = useRef<HTMLDivElement | null>(null);
   const hasUserScrolledTimelineRef = useRef(false);
   const isAutoScrollingRef = useRef(false);
@@ -422,6 +422,15 @@ export default function ScheduleApp() {
     setTaskSheetPlanId(initialPid ?? null);
     setTaskSheetTask(null);
     setTaskSheetMode("create");
+    setTaskSheetInitialType("normal");
+    setTaskSheetOpen(true);
+  }
+
+  function openCreateRoutineSheet() {
+    setTaskSheetPlanId(null);
+    setTaskSheetTask(null);
+    setTaskSheetMode("create");
+    setTaskSheetInitialType("routine");
     setTaskSheetOpen(true);
   }
 
@@ -527,18 +536,11 @@ export default function ScheduleApp() {
     setAddingPlan(false);
   }
 
-  function handleSaveRitual() {
-    const title = ritualDraft.title.trim();
-    if (!title || !ritualDraft.time) return;
-    const newRitual: Ritual = {
-      id: uid(),
-      title,
-      time: ritualDraft.time,
-      repeatDays: ritualDraft.days.length > 0 ? ritualDraft.days : undefined,
-      color: ritualDraft.color || undefined,
-    };
-    setSchedule((prev) => ({ ...prev, rituals: [...(prev.rituals ?? []), newRitual] }));
-    setRitualDraft({ title: "", time: "08:00", days: [], color: "" });
+  function handleAddRitual(data: Omit<Ritual, "id">) {
+    setSchedule((prev) => ({
+      ...prev,
+      rituals: [...(prev.rituals ?? []), { ...data, id: uid() }],
+    }));
   }
 
   function handleDeleteRitual(id: string) {
@@ -1540,15 +1542,6 @@ export default function ScheduleApp() {
                         <>Timeline <IconTable size={15} strokeWidth={2} /></>
                       )}
                     </button>
-                    {viewMode === "timeline" && (
-                      <button
-                        type="button"
-                        onClick={() => setRitualsOpen(true)}
-                        className="inline-flex items-center gap-1.5 rounded-full border-[1.5px] border-neutral-200 bg-white px-3.5 min-h-[44px] py-[9px] text-[13px] font-semibold tracking-[-0.15px] text-neutral-500 transition-colors hover:bg-neutral-100 active:scale-[0.97] dark:border-white/10 dark:bg-neutral-900 dark:text-neutral-400 dark:hover:bg-white/[0.07]"
-                      >
-                        Rituals
-                      </button>
-                    )}
                     <IconActionButton
                       icon={<IconEdit size={16} strokeWidth={2} />}
                       saveIcon={<IconCheck size={16} strokeWidth={2.5} />}
@@ -1563,6 +1556,12 @@ export default function ScheduleApp() {
 
             {/* Task content */}
             <div className="px-4">
+              <TodayRitualsBar
+                rituals={schedule.rituals ?? []}
+                activeDay={activeDay}
+                completedIds={completedRitualIds}
+                onToggle={handleToggleRitualComplete}
+              />
               <AnimatePresence mode="wait" initial={false}>
                 {viewMode === "list" ? (
                   <motion.div
@@ -1827,27 +1826,29 @@ export default function ScheduleApp() {
               onUpdateMilestone={handleUpdateMilestone}
               onDeleteMilestone={handleDeleteMilestone}
               onCompleteMilestone={handleCompleteMilestone}
+              onAddStrategy={handleAddStrategy}
+              onDeleteStrategy={handleDeleteStrategy}
             />
           ) : renderPlanList()}
           </motion.div>
         )}
-        {/* ── Strategy Tab ───────────────────────────────────────────────── */}
+        {/* ── Ritual Tab ─────────────────────────────────────────────────── */}
         {activeTab === 2 && (
           <motion.div
-            key="tab-strategy"
+            key="tab-rituals"
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
             transition={{ duration: 0.12, ease: "easeOut" }}
-            className="flex flex-col h-full"
           >
-            <StrategySpace
-              strategies={schedule.strategies ?? []}
-              uploadOpen={strategyUploadOpen}
-              onUploadOpen={() => setStrategyUploadOpen(true)}
-              onUploadClose={() => setStrategyUploadOpen(false)}
-              onAdd={handleAddStrategy}
-              onDelete={handleDeleteStrategy}
+            <RitualView
+              rituals={schedule.rituals ?? []}
+              completedIds={completedRitualIds}
+              onToggleComplete={handleToggleRitualComplete}
+              onAdd={handleAddRitual}
+              onDelete={handleDeleteRitual}
+              addOpen={ritualAddOpen}
+              onAddOpenChange={setRitualAddOpen}
             />
           </motion.div>
         )}
@@ -1938,146 +1939,13 @@ export default function ScheduleApp() {
         {renderAddPlanSheet()}
       </BottomSheet>
 
-      {/* ── Rituals Management Sheet ────────────────────────────────────────── */}
-      <BottomSheet open={ritualsOpen} onClose={() => setRitualsOpen(false)}>
-        <div className="px-5 pt-2 pb-8 space-y-5">
-          <SheetHeader eyebrow="Timeline" title="Rituals" onClose={() => setRitualsOpen(false)} />
-
-          {/* Existing rituals */}
-          {(schedule.rituals ?? []).length > 0 && (
-            <div className="space-y-2">
-              {(schedule.rituals ?? []).map((ritual) => {
-                const dotColor = ritual.color
-                  ? ({
-                      rose: "bg-rose-400", sky: "bg-sky-400", violet: "bg-violet-400",
-                      amber: "bg-amber-400", emerald: "bg-emerald-400", fuchsia: "bg-fuchsia-400",
-                    } as Record<RitualColor, string>)[ritual.color]
-                  : "bg-neutral-400";
-                const days = ritual.repeatDays?.map((d) => DAY_LABELS[d]).join(" ") ?? "Every day";
-                return (
-                  <div
-                    key={ritual.id}
-                    className="flex items-center gap-3 rounded-2xl border border-neutral-200/70 bg-neutral-50 px-4 py-3.5 dark:border-white/[0.07] dark:bg-white/[0.03]"
-                  >
-                    <span className={`h-2.5 w-2.5 rounded-full shrink-0 ${dotColor}`} />
-                    <div className="flex-1 min-w-0">
-                      <p className="text-[14px] font-semibold text-neutral-900 dark:text-white">{ritual.title}</p>
-                      <p className="text-[11px] font-medium text-neutral-400 dark:text-neutral-500">{ritual.time} · {days}</p>
-                    </div>
-                    <button
-                      type="button"
-                      onClick={() => handleDeleteRitual(ritual.id)}
-                      className="shrink-0 flex h-8 w-8 items-center justify-center rounded-xl text-neutral-400 hover:text-rose-500 transition-colors dark:hover:text-rose-400"
-                    >
-                      <IconTrash size={15} strokeWidth={1.8} />
-                    </button>
-                  </div>
-                );
-              })}
-            </div>
-          )}
-
-          {/* Add new ritual form */}
-          <div className="space-y-4">
-            <p className="text-[11px] font-bold uppercase tracking-[0.09em] text-neutral-400 dark:text-neutral-500">
-              {(schedule.rituals ?? []).length === 0 ? "Add your first ritual" : "Add ritual"}
-            </p>
-
-            <Input
-              value={ritualDraft.title}
-              onChange={(e) => setRitualDraft((d) => ({ ...d, title: e.target.value }))}
-              placeholder="e.g. Skin care, Vitamins, Stretch…"
-              onKeyDown={(e) => { if (e.key === "Enter") handleSaveRitual(); }}
-            />
-
-            {/* Time */}
-            <div>
-              <p className="mb-1.5 text-[11px] font-semibold uppercase tracking-[0.08em] text-neutral-400 dark:text-neutral-500">Time</p>
-              <input
-                type="text"
-                inputMode="numeric"
-                autoComplete="off"
-                placeholder="08:00"
-                value={ritualDraft.time}
-                onChange={(e) => setRitualDraft((d) => ({ ...d, time: formatTimeDraft(e.target.value) }))}
-                onBlur={(e) => setRitualDraft((d) => ({ ...d, time: normalizeTimeDraft(e.target.value) || d.time }))}
-                className="h-11 w-full appearance-none rounded-xl border border-neutral-200 bg-neutral-50 px-3 text-[16px] font-semibold tabular-nums text-neutral-700 outline-none transition-colors placeholder:text-neutral-400 focus:border-neutral-300 focus:bg-white dark:border-white/10 dark:bg-white/[0.04] dark:text-white dark:placeholder:text-neutral-600 dark:focus:border-white/20 dark:focus:bg-white/[0.08]"
-              />
-            </div>
-
-            {/* Color */}
-            <div>
-              <p className="mb-2 text-[11px] font-semibold uppercase tracking-[0.08em] text-neutral-400 dark:text-neutral-500">Color</p>
-              <div className="flex items-center gap-2.5">
-                {RITUAL_COLORS.map((c) => {
-                  const dotClass = {
-                    rose: "bg-rose-400", sky: "bg-sky-400", violet: "bg-violet-400",
-                    amber: "bg-amber-400", emerald: "bg-emerald-400", fuchsia: "bg-fuchsia-400",
-                  }[c];
-                  const selected = ritualDraft.color === c;
-                  return (
-                    <button
-                      key={c}
-                      type="button"
-                      onClick={() => setRitualDraft((d) => ({ ...d, color: d.color === c ? "" : c }))}
-                      className={`h-7 w-7 rounded-full transition-all ${dotClass} ${selected ? "ring-2 ring-offset-2 ring-neutral-600 dark:ring-offset-neutral-950 dark:ring-white/60" : "opacity-55 hover:opacity-90"}`}
-                    />
-                  );
-                })}
-              </div>
-            </div>
-
-            {/* Repeat days — pill style matching Task sheet */}
-            <div className="space-y-2">
-              <div className="flex items-center justify-between gap-3">
-                <p className="text-[11px] font-semibold uppercase tracking-[0.08em] text-neutral-400 dark:text-neutral-500">Repeat days</p>
-                <p className="text-[11px] font-semibold text-neutral-400 dark:text-neutral-500">
-                  {ritualDraft.days.length === 0 ? "Every day" : `${ritualDraft.days.length} ${ritualDraft.days.length === 1 ? "day" : "days"}`}
-                </p>
-              </div>
-              <div className="flex flex-wrap gap-2">
-                {DAYS.map((day) => {
-                  const sel = ritualDraft.days.includes(day);
-                  return (
-                    <button
-                      key={day}
-                      type="button"
-                      onClick={() => setRitualDraft((d) => ({
-                        ...d,
-                        days: sel ? d.days.filter((x) => x !== day) : [...d.days, day],
-                      }))}
-                      className={`h-8 rounded-full border px-3 text-[12px] font-semibold transition-colors ${
-                        sel
-                          ? "border-neutral-900 bg-neutral-900 text-white dark:border-white dark:bg-white dark:text-neutral-900"
-                          : "border-neutral-200 bg-white text-neutral-500 hover:border-neutral-300 hover:text-neutral-800 dark:border-white/10 dark:bg-white/[0.04] dark:text-neutral-400 dark:hover:border-white/20 dark:hover:text-neutral-200"
-                      }`}
-                    >
-                      {DAY_LABELS[day]}
-                    </button>
-                  );
-                })}
-              </div>
-              <p className="text-[11px] text-neutral-400 dark:text-neutral-500">Leave empty to repeat every day.</p>
-            </div>
-
-            <Button
-              fullWidth
-              onClick={handleSaveRitual}
-              disabled={!ritualDraft.title.trim() || !ritualDraft.time}
-            >
-              Add Ritual
-            </Button>
-          </div>
-        </div>
-      </BottomSheet>
-
       {/* ── Bottom Nav ─────────────────────────────────────────────────────── */}
       <BottomNav
         activeTab={activeTab}
         onTabChange={(tab) => { setActiveTab(tab); setSelectedPlanId(null); }}
         onCreateTask={() => openCreateSheet()}
         onCreatePlan={openAddPlan}
-        onCreateStrategy={() => { setActiveTab(2); setStrategyUploadOpen(true); }}
+        onCreateRitual={() => { setActiveTab(2); setRitualAddOpen(true); }}
         onOpenSettings={() => setSettingsOpen(true)}
       />
 
@@ -2090,6 +1958,7 @@ export default function ScheduleApp() {
         activeDays={taskSheetActiveDays}
         isOpen={taskSheetOpen}
         initialPlanId={taskSheetPlanId}
+        initialTaskType={taskSheetInitialType}
         onClose={closeTaskSheet}
         onSave={handleTaskSheetSave}
       />

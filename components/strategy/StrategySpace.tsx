@@ -122,37 +122,26 @@ export default function StrategySpace({ strategies, uploadOpen, onUploadOpen, on
                   transition-all duration-150 active:scale-[0.99]
                 `}
               >
-                {/* Colored accent bar */}
-                <div className={`absolute left-0 inset-y-0 w-[3px] ${
-                  asset.type === "html" ? "bg-sky-400" : "bg-violet-400"
-                }`} />
-
                 <div
                   role="button"
                   tabIndex={0}
-                  className="w-full text-left px-5 py-4 pl-6 cursor-pointer"
+                  className="w-full text-left px-5 py-4 cursor-pointer"
                   onClick={() => { haptic("light"); setViewingAsset(asset); }}
                   onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { haptic("light"); setViewingAsset(asset); } }}
                 >
                   <div className="flex items-start gap-3">
                     {/* Icon */}
-                    <div className={`shrink-0 flex h-10 w-10 items-center justify-center rounded-xl ${
-                      asset.type === "html"
-                        ? "bg-sky-500/10"
-                        : "bg-violet-500/10"
-                    }`}>
+                    <div className="shrink-0 flex h-10 w-10 items-center justify-center rounded-xl bg-neutral-100 dark:bg-white/[0.07]">
                       {asset.type === "html"
-                        ? <IconCode size={18} className="text-sky-500" />
-                        : <IconFileText size={18} className="text-violet-500" />
+                        ? <IconCode size={18} className="text-neutral-500 dark:text-neutral-400" />
+                        : <IconFileText size={18} className="text-neutral-500 dark:text-neutral-400" />
                       }
                     </div>
 
                     {/* Info */}
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-2">
-                        <span className={`text-[10px] font-bold uppercase tracking-wider ${
-                          asset.type === "html" ? "text-sky-500" : "text-violet-500"
-                        }`}>
+                        <span className="text-[10px] font-bold uppercase tracking-wider text-neutral-400 dark:text-neutral-500">
                           {asset.type}
                         </span>
                       </div>

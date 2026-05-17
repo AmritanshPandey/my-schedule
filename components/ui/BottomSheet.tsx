@@ -37,6 +37,14 @@ export default function BottomSheet({
         height: visualViewport.height,
         offsetTop: visualViewport.offsetTop,
       });
+      // When the keyboard opens and shrinks the viewport, scroll the focused
+      // input into view so it isn't hidden behind the keyboard.
+      const active = document.activeElement as HTMLElement | null;
+      if (active && active !== document.body) {
+        requestAnimationFrame(() =>
+          active.scrollIntoView({ block: "nearest", behavior: "smooth" })
+        );
+      }
     };
 
     updateViewportFrame();

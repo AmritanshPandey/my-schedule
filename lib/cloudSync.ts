@@ -144,11 +144,11 @@ export async function deleteCloudData(): Promise<void> {
  * Safe to call on every IndexedDB write.
  */
 export function queueSync(schedule: Schedule): void {
+  _lastSchedule = schedule; // always track latest so flushNow / Sync Now always has data
   if (!_uid || _skipNextSync) {
     _skipNextSync = false;
     return;
   }
-  _lastSchedule = schedule;
   _pending = schedule;
   scheduleSync(schedule, DEBOUNCE_MS);
 }

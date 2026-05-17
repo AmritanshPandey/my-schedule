@@ -9,8 +9,7 @@ import {
   IconCalendarPlus,
   IconClipboardPlus,
   IconPlus,
-  IconBrain,
-  IconUpload,
+  IconSun,
   IconSettings,
 } from "@tabler/icons-react";
 
@@ -19,7 +18,7 @@ interface BottomNavProps {
   onTabChange: (tab: number) => void;
   onCreateTask: () => void;
   onCreatePlan: () => void;
-  onCreateStrategy: () => void;
+  onCreateRitual: () => void;
   onOpenSettings: () => void;
 }
 
@@ -28,7 +27,7 @@ export default function BottomNav({
   onTabChange,
   onCreateTask,
   onCreatePlan,
-  onCreateStrategy,
+  onCreateRitual,
   onOpenSettings,
 }: BottomNavProps) {
   const [expanded, setExpanded] = useState(false);
@@ -73,13 +72,13 @@ export default function BottomNav({
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
             transition={{ duration: 0.16, ease: "easeOut" }}
-            className="fixed inset-0 z-20 bg-black/[0.03] dark:bg-black/[0.12]"
+            className="fixed inset-0 z-[38] bg-black/[0.03] dark:bg-black/[0.12]"
           />
         )}
       </AnimatePresence>
 
       <div
-        className="fixed inset-x-0 z-30 flex justify-center px-4"
+        className="fixed inset-x-0 z-40 flex justify-center px-4"
         style={{ bottom: "max(20px, calc(env(safe-area-inset-bottom) + 8px))" }}
       >
         <div ref={navRef} className="relative w-full max-w-md">
@@ -121,17 +120,17 @@ export default function BottomNav({
                     <span className="text-[11px] font-semibold text-white/75">Plan</span>
                   </motion.button>
 
-                  {/* UPLOAD STRATEGY */}
+                  {/* ADD ROUTINE */}
                   <motion.button
                     whileTap={{ scale: 0.95 }}
-                    onClick={() => { haptic("medium"); setExpanded(false); onCreateStrategy(); }}
+                    onClick={() => { haptic("medium"); setExpanded(false); onCreateRitual(); }}
                     className="flex flex-col items-center gap-1.5"
-                    aria-label="Add strategy"
+                    aria-label="Add ritual"
                   >
                     <div className="flex h-[52px] w-[60px] items-center justify-center rounded-[18px] bg-white/[0.09]">
-                      <IconUpload size={24} strokeWidth={2} className="text-white" />
+                      <IconSun size={24} strokeWidth={2} className="text-white" />
                     </div>
-                    <span className="text-[11px] font-semibold text-white/75">Strategy</span>
+                    <span className="text-[11px] font-semibold text-white/75">Ritual</span>
                   </motion.button>
                 </div>
               </motion.div>
@@ -169,62 +168,58 @@ export default function BottomNav({
             role="navigation"
             aria-label="Main navigation"
             className="
-              relative flex h-[68px] w-full items-center justify-between rounded-full px-2
+              relative flex h-[68px] w-full items-center justify-evenly rounded-full px-2
               border border-neutral-200/70 bg-white/80 backdrop-blur-md
               shadow-[inset_0_1px_0_rgba(255,255,255,0.95),0_8px_32px_-4px_rgba(0,0,0,0.12),0_2px_8px_-2px_rgba(0,0,0,0.06)]
               dark:border-white/[0.09] dark:bg-neutral-900/82
               dark:shadow-[inset_0_1px_0_rgba(255,255,255,0.05),0_8px_32px_-4px_rgba(0,0,0,0.55)]
             "
           >
-            {/* LEFT: Tasks + Plan */}
-            <div className="flex items-center gap-4">
-              <button
-                type="button"
-                onClick={() => handleTabChange(0)}
-                className={tabClass(activeTab === 0)}
-                aria-label="Tasks"
-                aria-current={activeTab === 0 ? "page" : undefined}
-              >
-                <IconCalendarEvent size={20} strokeWidth={2} />
-                <span className="text-[10.5px] font-medium leading-none">Tasks</span>
-              </button>
-              <button
-                type="button"
-                onClick={() => handleTabChange(1)}
-                className={tabClass(activeTab === 1)}
-                aria-label="Plan"
-                aria-current={activeTab === 1 ? "page" : undefined}
-              >
-                <IconClipboardData size={20} strokeWidth={2} />
-                <span className="text-[10.5px] font-medium leading-none">Plan</span>
-              </button>
-            </div>
+            <button
+              type="button"
+              onClick={() => handleTabChange(0)}
+              className={tabClass(activeTab === 0)}
+              aria-label="Tasks"
+              aria-current={activeTab === 0 ? "page" : undefined}
+            >
+              <IconCalendarEvent size={20} strokeWidth={2} />
+              <span className="text-[10.5px] font-medium leading-none">Tasks</span>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => handleTabChange(1)}
+              className={tabClass(activeTab === 1)}
+              aria-label="Plan"
+              aria-current={activeTab === 1 ? "page" : undefined}
+            >
+              <IconClipboardData size={20} strokeWidth={2} />
+              <span className="text-[10.5px] font-medium leading-none">Plan</span>
+            </button>
 
             {/* CENTER SPACER (plus button lives here absolutely) */}
             <div className="w-[52px] shrink-0" aria-hidden="true" />
 
-            {/* RIGHT: Strategy + Settings */}
-            <div className="flex items-center gap-4">
-              <button
-                type="button"
-                onClick={() => handleTabChange(2)}
-                className={tabClass(activeTab === 2)}
-                aria-label="Strategy"
-                aria-current={activeTab === 2 ? "page" : undefined}
-              >
-                <IconBrain size={20} strokeWidth={2} />
-                <span className="text-[10.5px] font-medium leading-none">Strategy</span>
-              </button>
-              <button
-                type="button"
-                onClick={() => { haptic("light"); setExpanded(false); onOpenSettings(); }}
-                className={tabClass(false)}
-                aria-label="Settings"
-              >
-                <IconSettings size={20} strokeWidth={2} />
-                <span className="text-[10.5px] font-medium leading-none">Settings</span>
-              </button>
-            </div>
+            <button
+              type="button"
+              onClick={() => handleTabChange(2)}
+              className={tabClass(activeTab === 2)}
+              aria-label="Ritual"
+              aria-current={activeTab === 2 ? "page" : undefined}
+            >
+              <IconSun size={20} strokeWidth={2} />
+              <span className="text-[10.5px] font-medium leading-none">Ritual</span>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => { haptic("light"); setExpanded(false); onOpenSettings(); }}
+              className={tabClass(false)}
+              aria-label="Settings"
+            >
+              <IconSettings size={20} strokeWidth={2} />
+              <span className="text-[10.5px] font-medium leading-none">Settings</span>
+            </button>
           </nav>
 
         </div>

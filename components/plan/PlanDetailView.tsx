@@ -11,6 +11,10 @@ import {
   IconArrowDownRight,
   IconArrowUp,
   IconArrowDown,
+  IconBrain,
+  IconCode,
+  IconFileText,
+  IconCalendar,
 } from "@tabler/icons-react";
 import ProgressChart from "@/components/ProgressChart";
 import BottomSheet from "@/components/ui/BottomSheet";
@@ -31,6 +35,7 @@ import type {
   DayKey,
   GoalDirection,
   MetricEntry,
+  StrategyAsset,
 } from "@/lib/useScheduleDB";
 import { DAYS } from "@/lib/useScheduleDB";
 import { timelineCardStyles, accentStyles } from "@/lib/colorSystem";
@@ -40,6 +45,8 @@ import { DayPill, Pill } from "@/components/ui/Badge";
 import { InternalSectionTitle, SectionIconButton } from "@/components/ui/InternalSectionTitle";
 import { TrackerTabs } from "@/components/ui/TrackerTabs";
 import AccuracyCalendar from "@/components/plan/AccuracyCalendar";
+import StrategyViewer from "@/components/strategy/StrategyViewer";
+import StrategyUpload from "@/components/strategy/StrategyUpload";
 
 
 
@@ -171,6 +178,9 @@ interface PlanDetailViewProps {
   onUpdateMilestone: (id: string, data: Partial<Milestone>) => void;
   onDeleteMilestone: (id: string) => void;
   onCompleteMilestone: (id: string) => void;
+  // Strategy handlers
+  onAddStrategy: (data: Omit<StrategyAsset, "id" | "createdAt" | "updatedAt">, pdfBytes?: Uint8Array) => void;
+  onDeleteStrategy: (id: string) => void;
 }
 
 // ── Component ─────────────────────────────────────────────────────────────────
@@ -191,6 +201,8 @@ export default function PlanDetailView({
   onUpdateMilestone,
   onDeleteMilestone,
   onCompleteMilestone,
+  onAddStrategy,
+  onDeleteStrategy,
 }: PlanDetailViewProps) {
   // ── Tab state ───────────────────────────────────────────────────────────
   const [planTab, setPlanTab] = useState<"planning" | "roadmap">("planning");
@@ -217,6 +229,10 @@ export default function PlanDetailView({
   const [milestoneSheetOpen, setMilestoneSheetOpen] = useState(false);
   const [milestoneSheetMode, setMilestoneSheetMode] = useState<"create" | "edit">("create");
   const [editingMilestone, setEditingMilestone] = useState<Milestone | null>(null);
+
+  // ── Strategy state ──────────────────────────────────────────────────────
+  const [viewingStrategy, setViewingStrategy] = useState<StrategyAsset | null>(null);
+  const [strategyUploadOpen, setStrategyUploadOpen] = useState(false);
 
   // ── Section edit modes ──────────────────────────────────────────────────
   const [tasksEditMode, setTasksEditMode] = useState(false);
@@ -263,6 +279,11 @@ export default function PlanDetailView({
         plan
       ),
     [plan, schedule.activities, milestones]
+  );
+
+  const planStrategies = useMemo(
+    () => (schedule.strategies ?? []).filter((s) => s.planId === plan.id),
+    [plan.id, schedule.strategies]
   );
 
   const roadmapEndDate = planMilestones[planMilestones.length - 1]?.plannedEndDate ?? plan.endDate;
@@ -909,6 +930,92 @@ export default function PlanDetailView({
             </>
           )}
         </section>
+
+        {/* D. Strategy */}
+        <section className="mt-8 px-4">
+          <InternalSectionTitle
+            title="Strategy"
+            className="mb-4"
+            actions={
+              <SectionIconButton
+                icon={<IconBrain size={20} strokeWidth={2} />}
+                onClick={() => setStrategyUploadOpen(true)}
+                label="Add strategy"
+              />
+            }
+          />
+
+          {planStrategies.length === 0 ? (
+            <div className="rounded-[24px] border border-dashed border-neutral-200 py-10 text-center dark:border-white/[0.08]">
+              <p className="text-[14px] font-medium text-neutral-400 dark:text-neutral-500">
+                No strategies added yet.
+              </p>
+              <button
+                type="button"
+                onClick={() => setStrategyUploadOpen(true)}
+                className="mt-3 inline-flex items-center gap-1.5 rounded-xl border border-neutral-200 px-4 py-2 text-[13px] font-semibold text-neutral-600 transition-colors hover:bg-neutral-50 dark:border-white/10 dark:text-neutral-400 dark:hover:bg-white/[0.04]"
+              >
+                <IconPlus size={16} strokeWidth={2} />
+                Upload Strategy
+              </button>
+            </div>
+          ) : (
+            <div className="space-y-3">
+              {planStrategies.map((asset) => (
+                <div
+                  key={asset.id}
+                  className="relative rounded-[22px] border border-neutral-200/80 bg-white dark:border-white/[0.08] dark:bg-neutral-900"
+                >
+                  <div
+                    role="button"
+                    tabIndex={0}
+                    className="w-full cursor-pointer px-5 py-4 text-left"
+                    onClick={() => setViewingStrategy(asset)}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter" || e.key === " ") setViewingStrategy(asset);
+                    }}
+                  >
+                    <div className="flex items-start gap-3">
+                      <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-neutral-100 dark:bg-white/[0.07]">
+                        {asset.type === "html"
+                          ? <IconCode size={18} className="text-neutral-500 dark:text-neutral-400" />
+                          : <IconFileText size={18} className="text-neutral-500 dark:text-neutral-400" />
+                        }
+                      </div>
+                      <div className="min-w-0 flex-1">
+                        <span className="text-[10px] font-bold uppercase tracking-wider text-neutral-400 dark:text-neutral-500">
+                          {asset.type}
+                        </span>
+                        <p className="mt-0.5 text-[16px] font-semibold leading-snug text-neutral-900 dark:text-white">
+                          {asset.title}
+                        </p>
+                        {asset.description && (
+                          <p className="mt-0.5 line-clamp-2 text-[13px] text-neutral-400">
+                            {asset.description}
+                          </p>
+                        )}
+                        <div className="mt-2 flex items-center gap-1.5 text-[11px] text-neutral-400">
+                          <IconCalendar size={11} strokeWidth={2} />
+                          {new Date(asset.createdAt).toLocaleDateString("en-US", {
+                            month: "short", day: "numeric", year: "numeric",
+                          })}
+                        </div>
+                      </div>
+                      <motion.button
+                        type="button"
+                        whileTap={{ scale: 0.85 }}
+                        onClick={(e) => { e.stopPropagation(); onDeleteStrategy(asset.id); }}
+                        className="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl text-neutral-300 transition-colors hover:text-rose-400 dark:text-neutral-600"
+                      >
+                        <IconTrash size={15} strokeWidth={2} />
+                      </motion.button>
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </section>
       </motion.div>
     );
   }
@@ -1063,7 +1170,11 @@ export default function PlanDetailView({
         milestones={planMilestones}
         planStartDate={plan.startDate}
         isOpen={milestoneSheetOpen}
-        onClose={() => setMilestoneSheetOpen(false)}
+        onClose={() => {
+          setMilestoneSheetOpen(false);
+          setEditingMilestone(null);
+          setMilestoneSheetMode("create");
+        }}
         onSave={handleMilestoneSave}
       />
 
@@ -1143,6 +1254,22 @@ export default function PlanDetailView({
           </Button>
         </div>
       </BottomSheet>
+
+      {/* Strategy upload sheet */}
+      <StrategyUpload
+        isOpen={strategyUploadOpen}
+        onClose={() => setStrategyUploadOpen(false)}
+        onSave={(data, pdfBytes) => {
+          onAddStrategy({ ...data, planId: plan.id }, pdfBytes);
+          setStrategyUploadOpen(false);
+        }}
+      />
+
+      {/* Strategy viewer */}
+      <StrategyViewer
+        asset={viewingStrategy}
+        onClose={() => setViewingStrategy(null)}
+      />
     </div>
   );
 }

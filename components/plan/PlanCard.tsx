@@ -224,9 +224,11 @@ function PlanCardInner({
           </span>
         )}
 
-        <span className="shrink-0 text-[11px] font-semibold tabular-nums text-neutral-400 dark:text-neutral-500">
-          {plan.startDate && !plan.endDate ? "Ongoing" : dateRange ? "" : null}
-        </span>
+        {plan.startDate && !plan.endDate && (
+          <span className="shrink-0 text-[11px] font-semibold tabular-nums text-neutral-400 dark:text-neutral-500">
+            Ongoing
+          </span>
+        )}
       </div>
     </motion.button>
   );

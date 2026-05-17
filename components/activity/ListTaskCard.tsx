@@ -158,6 +158,8 @@ function ListTaskCardInner({
   // Expand only shows the subtask checklist — description is always inline now
   const canExpand   = hasSubtasks && !isRoutine;
   const displayPct  = hasSubtasks ? pct : 0;
+  // Show 100% bar for done tasks that have no subtasks (confirms completion visually)
+  const barPct      = done && !hasSubtasks ? 100 : displayPct;
 
   // Card tap: open routine for routine tasks; toggle complete otherwise
   function handleCardTap() {
@@ -308,25 +310,25 @@ function ListTaskCardInner({
             </p>
           )}
 
-          {/* ── Row 2: Progress bar — only when subtasks exist ───────────── */}
-          {hasSubtasks && (
+          {/* ── Row 2: Progress bar — subtasks show partial, done shows 100% ─ */}
+          {(hasSubtasks || done) && (
             <div className="mt-4 flex items-center gap-3">
               <div className="relative flex-1 h-2.5 overflow-hidden rounded-full" style={{ backgroundColor: "rgb(229 231 235)" }}>
                 <motion.div
                   className="absolute inset-y-0 left-0 rounded-full bg-green-500"
                   initial={false}
-                  animate={{ width: `${displayPct}%` }}
+                  animate={{ width: `${barPct}%` }}
                   transition={{ duration: 0.5, ease: [0.22, 1, 0.36, 1] }}
                 />
               </div>
               <motion.span
-                key={displayPct}
+                key={barPct}
                 initial={{ opacity: 0, y: 3 }}
                 animate={{ opacity: 1, y: 0 }}
                 transition={{ duration: 0.2 }}
                 className="shrink-0 w-10 text-right text-[14px] font-semibold tabular-nums text-neutral-500 dark:text-neutral-400"
               >
-                {displayPct}%
+                {barPct}%
               </motion.span>
             </div>
           )}

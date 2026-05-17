@@ -46,6 +46,7 @@ export interface TaskSheetProps {
   activeDays?: DayKey[];
   isOpen: boolean;
   initialPlanId?: string | null;
+  initialTaskType?: "normal" | "routine";
   onClose: () => void;
   onSave: (data: TaskSaveData) => void;
 }
@@ -252,6 +253,7 @@ export function TaskSheet({
   activeDays,
   isOpen,
   initialPlanId,
+  initialTaskType,
   onClose,
   onSave,
 }: TaskSheetProps) {
@@ -288,7 +290,7 @@ export function TaskSheet({
     } else {
       const pid = initialPlanId ?? plans[0]?.id ?? "";
       setPlanId(pid);
-      setTaskType("normal");
+      setTaskType(initialTaskType ?? "normal");
       setTitle("");
       setDescription("");
       setStartTime("");

@@ -1,6 +1,6 @@
 "use client";
 
-import { forwardRef } from "react";
+import { forwardRef, useEffect, useRef } from "react";
 
 interface InputProps extends React.InputHTMLAttributes<HTMLInputElement> {
   label?: string;
@@ -13,13 +13,32 @@ const LABEL =
   "mb-1.5 block text-[11px] font-semibold uppercase tracking-[0.08em] text-neutral-400 dark:text-neutral-500";
 
 const Input = forwardRef<HTMLInputElement, InputProps>(function Input(
-  { label, className = "", ...props },
+  { label, className = "", autoFocus, ...props },
   ref
 ) {
+  const innerRef = useRef<HTMLInputElement>(null);
+
+  // Delay focus by ~300 ms so the sheet spring animation completes before the
+  // keyboard opens. Native autoFocus fires on mount (mid-animation) and causes
+  // the sheet to jump as the viewport shrinks for the keyboard simultaneously.
+  useEffect(() => {
+    if (!autoFocus) return;
+    const t = setTimeout(() => innerRef.current?.focus(), 300);
+    return () => clearTimeout(t);
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
   return (
     <div className="w-full">
       {label && <label className={LABEL}>{label}</label>}
-      <input ref={ref} {...props} className={`${BASE} ${className}`} />
+      <input
+        ref={(el) => {
+          innerRef.current = el;
+          if (typeof ref === "function") ref(el);
+          else if (ref) (ref as React.MutableRefObject<HTMLInputElement | null>).current = el;
+        }}
+        {...props}
+        className={`${BASE} ${className}`}
+      />
     </div>
   );
 });
