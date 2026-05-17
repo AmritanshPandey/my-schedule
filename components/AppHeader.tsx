@@ -1,7 +1,7 @@
 "use client";
 
 import { motion } from "framer-motion";
-import { IconArrowLeft, IconChevronLeft, IconSettings2 } from "@tabler/icons-react";
+import { IconChevronLeft } from "@tabler/icons-react";
 
 interface ActionItem {
   icon: React.ComponentType<{ size?: number; strokeWidth?: number; className?: string }>;
@@ -19,7 +19,7 @@ interface AppHeaderProps {
   onOpenSettings?: () => void;
 }
 
-export default function AppHeader({ back, actions, onOpenSettings }: AppHeaderProps) {
+export default function AppHeader({ back, actions }: AppHeaderProps) {
   const isDetail = !!back;
 
   if (isDetail) {
