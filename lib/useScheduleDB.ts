@@ -93,6 +93,7 @@ export interface ProgressTracker {
   type: "number";
   unit?: string;
   goalDirection?: GoalDirection;
+  goalValue?: number;
 }
 
 export interface MetricEntry {
@@ -164,6 +165,11 @@ function emptyDayActivities(): DayActivities {
   return Object.fromEntries(DAYS.map((d) => [d, []])) as unknown as DayActivities;
 }
 
+export interface RitualCompletion {
+  ritualId: string;
+  date: string; // ISO "YYYY-MM-DD"
+}
+
 export interface Schedule {
   plans: Plan[];
   activities: DayActivities;
@@ -172,6 +178,7 @@ export interface Schedule {
   milestones: Milestone[];
   rituals: Ritual[];
   strategies: StrategyAsset[];
+  ritualCompletions: RitualCompletion[];
 }
 
 const DB_NAME = "daily-planner";
@@ -538,6 +545,15 @@ function migrate(raw: unknown): Schedule {
       ? (r.strategies as StrategyAsset[]).filter((s) => s && typeof s.id === "string" && typeof s.type === "string" && typeof s.title === "string")
       : [];
 
+    const ritualCompletions: RitualCompletion[] = Array.isArray(r.ritualCompletions)
+      ? (r.ritualCompletions as unknown[]).filter(
+          (c): c is RitualCompletion =>
+            c !== null && typeof c === "object" &&
+            typeof (c as RitualCompletion).ritualId === "string" &&
+            typeof (c as RitualCompletion).date === "string"
+        )
+      : [];
+
     return {
       plans,
       activities: Object.fromEntries(
@@ -548,6 +564,7 @@ function migrate(raw: unknown): Schedule {
       milestones: normalizedMilestones,
       rituals,
       strategies,
+      ritualCompletions,
     };
   }
 
@@ -570,6 +587,7 @@ function migrate(raw: unknown): Schedule {
       milestones: [],
       rituals: [],
       strategies: [],
+      ritualCompletions: [],
     };
   }
 
@@ -595,11 +613,11 @@ function migrate(raw: unknown): Schedule {
   plans[0].items = Array.isArray(r.diet) ? (r.diet as ScheduleEntry[]) : [];
   plans[1].items = Array.isArray(r.workout) ? (r.workout as ScheduleEntry[]) : [];
 
-  return { plans, activities, progressTrackers, metricEntries, milestones: [], rituals: [], strategies: [] };
+  return { plans, activities, progressTrackers, metricEntries, milestones: [], rituals: [], strategies: [], ritualCompletions: [] };
 }
 
 function emptyEmpty(): Schedule {
-  return { plans: [], activities: emptyDayActivities(), progressTrackers: [], metricEntries: [], milestones: [], rituals: [], strategies: [] };
+  return { plans: [], activities: emptyDayActivities(), progressTrackers: [], metricEntries: [], milestones: [], rituals: [], strategies: [], ritualCompletions: [] };
 }
 
 export function useScheduleDB() {

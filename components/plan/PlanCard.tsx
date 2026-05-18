@@ -7,8 +7,10 @@ import {
   IconCheck,
   IconClipboardList,
   IconFlame,
+  IconPlus,
 } from "@tabler/icons-react";
 import type { Plan } from "@/lib/useScheduleDB";
+import { haptic } from "@/lib/haptics";
 import type { AccentColor } from "@/lib/colorSystem";
 import type { PlanDayState } from "@/lib/planInsights";
 import { accentStyles } from "@/lib/colorSystem";
@@ -118,6 +120,7 @@ interface PlanCardProps {
   consistency: number;
   dateRange: string | null;
   onSelect: () => void;
+  onQuickLog?: () => void;
 }
 
 // ── Component ─────────────────────────────────────────────────────────────────
@@ -131,6 +134,7 @@ function PlanCardInner({
   consistency,
   dateRange,
   onSelect,
+  onQuickLog,
 }: PlanCardProps) {
   const accent = accentStyles(plan.color);
   const stroke = ACCENT_STROKE[plan.color as AccentColor] ?? ACCENT_STROKE.cyan;
@@ -196,11 +200,21 @@ function PlanCardInner({
 
       {/* ── Row 3: insight chip ──────────────────────────────────────────── */}
       <div className="mt-3.5 flex items-center gap-2">
-        <div className="flex items-center gap-1.5 rounded-xl bg-neutral-50 dark:bg-white/[0.04] px-3 py-2 text-[12px] font-semibold text-neutral-500 dark:text-neutral-400">
+        <div className="flex flex-1 items-center gap-1.5 rounded-xl bg-neutral-50 dark:bg-white/[0.04] px-3 py-2 text-[12px] font-semibold text-neutral-500 dark:text-neutral-400">
           <IconClipboardList size={12} strokeWidth={2.2} className="shrink-0" />
           {taskCount} task{taskCount !== 1 ? "s" : ""}
           {trackerCount > 0 && <span className="text-neutral-400 dark:text-neutral-600"> · {trackerCount} tracked</span>}
         </div>
+        {onQuickLog && trackerCount > 0 && (
+          <button
+            type="button"
+            onClick={(e) => { e.stopPropagation(); haptic("light"); onQuickLog(); }}
+            className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border border-neutral-200 text-neutral-500 transition-colors hover:bg-neutral-50 active:scale-95 dark:border-white/10 dark:text-neutral-400 dark:hover:bg-white/[0.06]"
+            aria-label="Log entry"
+          >
+            <IconPlus size={14} strokeWidth={2.5} />
+          </button>
+        )}
       </div>
 
       {/* ── Divider ──────────────────────────────────────────────────────── */}

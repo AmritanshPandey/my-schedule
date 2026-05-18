@@ -26,6 +26,7 @@ interface ProgressChartProps {
   entries: MetricEntry[]; // already sorted by date asc
   color: AccentColor;
   metric: { name: string; unit: string };
+  goalValue?: number;
 }
 
 const W = 400;
@@ -40,15 +41,15 @@ function fmtVal(v: number): string {
   return Number.isInteger(v) ? String(v) : v.toFixed(1);
 }
 
-export default function ProgressChart({ entries, color, metric }: ProgressChartProps) {
+export default function ProgressChart({ entries, color, metric, goalValue }: ProgressChartProps) {
   const stroke = STROKE[color] ?? STROKE.cyan;
   const area = AREA[color] ?? AREA.cyan;
 
   if (entries.length === 0) return null;
 
   const values = entries.map((e) => e.value);
-  const rawMin = Math.min(...values);
-  const rawMax = Math.max(...values);
+  const rawMin = Math.min(...values, ...(goalValue !== undefined ? [goalValue] : []));
+  const rawMax = Math.max(...values, ...(goalValue !== undefined ? [goalValue] : []));
   const padding = rawMax === rawMin ? Math.max(rawMax * 0.1, 1) : 0;
   const minVal = rawMin - padding;
   const maxVal = rawMax + padding;
@@ -131,6 +132,26 @@ export default function ProgressChart({ entries, color, metric }: ProgressChartP
           strokeLinecap="round"
           strokeLinejoin="round"
         />
+
+        {/* Goal line */}
+        {goalValue !== undefined && (() => {
+          const gy = PAD.top + chartH - ((goalValue - minVal) / valRange) * chartH;
+          return (
+            <g>
+              <line
+                x1={PAD.left} y1={gy.toFixed(1)}
+                x2={W - PAD.right} y2={gy.toFixed(1)}
+                stroke={stroke} strokeWidth={1.5}
+                strokeDasharray="4 3" strokeOpacity={0.55}
+              />
+              <text
+                x={W - PAD.right - 2} y={gy - 4}
+                textAnchor="end" fontSize={8}
+                fill={stroke} fillOpacity={0.65}
+              >Goal</text>
+            </g>
+          );
+        })()}
 
         {/* Dots */}
         {pts.map((p, i) => (

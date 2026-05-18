@@ -15,6 +15,7 @@ import {
 import BottomSheet from "@/components/ui/BottomSheet";
 import { useAuth } from "@/contexts/AuthProvider";
 import { getSyncStatus, getLastSyncedAt, getLastSchedule, onSyncStatusChange, flushNow, deleteCloudData, type SyncStatus } from "@/lib/cloudSync";
+import type { Schedule } from "@/lib/useScheduleDB";
 
 // ── Theme helpers ─────────────────────────────────────────────────────────────
 
@@ -136,7 +137,7 @@ function AppearanceRow() {
 
 // ── Sync row with manual trigger ──────────────────────────────────────────────
 
-function SyncRow() {
+function SyncRow({ schedule }: { schedule: Schedule }) {
   const [status, setStatus] = useState<SyncStatus>(getSyncStatus());
   const [lastSyncedAt, setLastSyncedAt] = useState(getLastSyncedAt());
   const [syncing, setSyncing] = useState(false);
@@ -158,16 +159,12 @@ function SyncRow() {
 
   async function handleSyncNow() {
     if (syncing || status === "syncing") return;
-    const schedule = getLastSchedule();
-    if (!schedule) {
-      // No data loaded yet — nothing to push
-      setStatus("error");
-      setTimeout(() => setStatus(getSyncStatus()), 2000);
-      return;
-    }
+    // Prefer the live schedule from props; fall back to whatever queueSync last saw.
+    const snap = schedule ?? getLastSchedule();
+    if (!snap) return;
     setSyncing(true);
     try {
-      await flushNow(schedule);
+      await flushNow(snap);
       setLastSyncedAt(getLastSyncedAt());
     } finally {
       setSyncing(false);
@@ -334,9 +331,10 @@ interface SettingsSheetProps {
   open: boolean;
   onClose: () => void;
   onClearData: () => Promise<void>;
+  schedule: Schedule;
 }
 
-export function SettingsSheet({ open, onClose, onClearData }: SettingsSheetProps) {
+export function SettingsSheet({ open, onClose, onClearData, schedule }: SettingsSheetProps) {
   const { user, isGuest, authLoading, login, logout } = useAuth();
   const [busy, setBusy] = useState(false);
 
@@ -443,7 +441,7 @@ export function SettingsSheet({ open, onClose, onClearData }: SettingsSheetProps
         <SettingsCard>
           {!isGuest && (
             <>
-              <SyncRow />
+              <SyncRow schedule={schedule} />
               <Divider />
             </>
           )}

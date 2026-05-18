@@ -2,19 +2,14 @@
 
 import { memo } from "react";
 import { AnimatePresence, motion } from "framer-motion";
-
-// ── Types ─────────────────────────────────────────────────────────────────────
+import { SectionTitle } from "@/components/ui/Typography";
 
 interface InternalSectionTitleProps {
   title: string;
-  /** Right-side icon actions */
   actions?: React.ReactNode;
-  /** Optional segmented tabs rendered below the title row */
   tabs?: React.ReactNode;
   className?: string;
 }
-
-// ── Icon button (36×36) ───────────────────────────────────────────────────────
 
 interface SectionIconButtonProps {
   icon: React.ReactNode;
@@ -59,8 +54,6 @@ export function SectionIconButton({
   );
 }
 
-// ── Text link action ──────────────────────────────────────────────────────────
-
 interface SectionTextActionProps {
   label: string;
   icon?: React.ReactNode;
@@ -80,8 +73,6 @@ export function SectionTextAction({ label, icon, onClick }: SectionTextActionPro
   );
 }
 
-// ── Main component ────────────────────────────────────────────────────────────
-
 function InternalSectionTitleInner({
   title,
   actions,
@@ -91,9 +82,7 @@ function InternalSectionTitleInner({
   return (
     <div className={className}>
       <div className="flex items-center justify-between gap-3">
-        <h2 className="text-[20px] font-bold leading-tight tracking-[-0.35px] text-neutral-950 dark:text-white">
-          {title}
-        </h2>
+        <SectionTitle>{title}</SectionTitle>
         {actions && (
           <div className="flex shrink-0 items-center gap-1">
             {actions}

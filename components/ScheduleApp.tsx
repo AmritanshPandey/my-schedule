@@ -27,6 +27,7 @@ import {
   Plan,
   ProgressTracker,
   Ritual,
+  RitualCompletion,
   RITUAL_COLORS,
   RitualColor,
   SummaryConfig,
@@ -61,6 +62,7 @@ import Button from "@/components/ui/Button";
 import Input from "@/components/ui/Input";
 import { ListTaskCard } from "@/components/activity/ListTaskCard";
 import TodayRitualsBar from "@/components/activity/TodayRitualsBar";
+import ConfirmSheet from "@/components/ui/ConfirmSheet";
 import { CurrentTimeLayer } from "@/components/timeline/CurrentTimeLayer";
 import type { StrategyAsset } from "@/lib/useScheduleDB";
 import { uploadStrategyPdf, deleteStrategyPdf } from "@/lib/strategyStorage";
@@ -75,7 +77,7 @@ import { createTask, updateTaskDays, deleteTask, uid } from "@/lib/taskMutations
 import { applyTemplate } from "@/lib/templates";
 import type { Template } from "@/lib/templates";
 import { parseTimeToMinutes, formatDuration } from "@/lib/timeUtils";
-import { todayISO, daysBetween as daysBetweenUtil, formatDate } from "@/lib/dateUtils";
+import { todayISO, daysBetween as daysBetweenUtil, formatDate, addDaysToISO } from "@/lib/dateUtils";
 import { getPlanCardStats } from "@/lib/planInsights";
 import { MainTitleSection, IconActionButton, CtaActionButton } from "@/components/ui/MainTitleSection";
 import { cycleAccentColor } from "@/components/ui/Badge";
@@ -320,8 +322,25 @@ export default function ScheduleApp() {
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [templatesOpen, setTemplatesOpen] = useState(false);
   const [sessionTask, setSessionTask] = useState<Task | null>(null);
-  const [completedRitualIds, setCompletedRitualIds] = useState<Set<string>>(new Set());
+  const completedRitualIds = useMemo(() => {
+    const today = todayISO();
+    return new Set(
+      (schedule.ritualCompletions ?? [])
+        .filter((c) => c.date === today)
+        .map((c) => c.ritualId)
+    );
+  }, [schedule.ritualCompletions]);
   const [ritualAddOpen, setRitualAddOpen] = useState(false);
+  const [confirmState, setConfirmState] = useState<{
+    title: string;
+    description: string;
+    onConfirm: () => void;
+  } | null>(null);
+
+  function openConfirm(title: string, description: string, fn: () => void) {
+    setConfirmState({ title, description, onConfirm: fn });
+  }
+
   const timelineScrollRef = useRef<HTMLDivElement | null>(null);
   const hasUserScrolledTimelineRef = useRef(false);
   const isAutoScrollingRef = useRef(false);
@@ -461,7 +480,12 @@ export default function ScheduleApp() {
   }
 
   function handleDeleteTask(taskId: string) {
-    setSchedule(deleteTask(taskId, activeDay));
+    const task = schedule.activities[activeDay].find((t) => t.id === taskId);
+    openConfirm(
+      `Delete "${task?.title ?? "task"}"?`,
+      "This action cannot be undone.",
+      () => setSchedule(deleteTask(taskId, activeDay))
+    );
   }
 
   const handleToggleTaskComplete = useCallback(
@@ -544,14 +568,26 @@ export default function ScheduleApp() {
   }
 
   function handleDeleteRitual(id: string) {
-    setSchedule((prev) => ({ ...prev, rituals: (prev.rituals ?? []).filter((r) => r.id !== id) }));
+    const ritual = (schedule.rituals ?? []).find((r) => r.id === id);
+    openConfirm(
+      `Delete "${ritual?.title ?? "ritual"}"?`,
+      "This ritual will be removed from your daily practice.",
+      () => setSchedule((prev) => ({ ...prev, rituals: (prev.rituals ?? []).filter((r) => r.id !== id) }))
+    );
   }
 
   function handleToggleRitualComplete(id: string) {
-    setCompletedRitualIds((prev) => {
-      const next = new Set(prev);
-      if (next.has(id)) next.delete(id); else next.add(id);
-      return next;
+    const today = todayISO();
+    haptic("light");
+    setSchedule((prev) => {
+      const completions = prev.ritualCompletions ?? [];
+      const exists = completions.some((c) => c.ritualId === id && c.date === today);
+      return {
+        ...prev,
+        ritualCompletions: exists
+          ? completions.filter((c) => !(c.ritualId === id && c.date === today))
+          : [...completions, { ritualId: id, date: today }],
+      };
     });
   }
 
@@ -584,27 +620,39 @@ export default function ScheduleApp() {
 
   function handleDeleteStrategy(id: string) {
     const asset = schedule.strategies?.find((s) => s.id === id);
-    // Clean up Storage file if it exists.
-    if (user && asset?.pdfUrl) {
-      deleteStrategyPdf(user.uid, id).catch(() => {});
-    }
-    setSchedule((prev) => ({
-      ...prev,
-      strategies: (prev.strategies ?? []).filter((s) => s.id !== id),
-    }));
+    openConfirm(
+      `Delete "${asset?.title ?? "strategy"}"?`,
+      "The strategy document will be permanently removed.",
+      () => {
+        if (user && asset?.pdfUrl) {
+          deleteStrategyPdf(user.uid, id).catch(() => {});
+        }
+        setSchedule((prev) => ({
+          ...prev,
+          strategies: (prev.strategies ?? []).filter((s) => s.id !== id),
+        }));
+      }
+    );
   }
 
   function handleDeletePlan(planId: string) {
-    setSchedule((prev) => ({
-      ...prev,
-      plans: prev.plans.filter((plan) => plan.id !== planId),
-      activities: Object.fromEntries(
-        DAYS.map((day) => [day, prev.activities[day].filter((t) => t.planId !== planId)])
-      ) as typeof prev.activities,
-      metricEntries: prev.metricEntries.filter((e) => e.planId !== planId),
-      progressTrackers: prev.progressTrackers.filter((t) => t.planId !== planId),
-    }));
-    setSelectedPlanId((cur) => (cur === planId ? null : cur));
+    const plan = schedule.plans.find((p) => p.id === planId);
+    openConfirm(
+      `Delete "${plan?.title ?? "plan"}"?`,
+      "All tasks, trackers, and entries linked to this plan will also be deleted.",
+      () => {
+        setSchedule((prev) => ({
+          ...prev,
+          plans: prev.plans.filter((p) => p.id !== planId),
+          activities: Object.fromEntries(
+            DAYS.map((day) => [day, prev.activities[day].filter((t) => t.planId !== planId)])
+          ) as typeof prev.activities,
+          metricEntries: prev.metricEntries.filter((e) => e.planId !== planId),
+          progressTrackers: prev.progressTrackers.filter((t) => t.planId !== planId),
+        }));
+        setSelectedPlanId((cur) => (cur === planId ? null : cur));
+      }
+    );
   }
 
   function handleAddEntry(entry: Omit<MetricEntry, "id">) {
@@ -620,10 +668,14 @@ export default function ScheduleApp() {
   }
 
   function handleDeleteEntry(entryId: string) {
-    setSchedule((prev) => ({
-      ...prev,
-      metricEntries: prev.metricEntries.filter((e) => e.id !== entryId),
-    }));
+    openConfirm(
+      "Delete this entry?",
+      "The logged value will be permanently removed.",
+      () => setSchedule((prev) => ({
+        ...prev,
+        metricEntries: prev.metricEntries.filter((e) => e.id !== entryId),
+      }))
+    );
   }
 
   function handleReorderTasks(activeId: string, overId: string) {
@@ -657,11 +709,16 @@ export default function ScheduleApp() {
   }
 
   function handleDeleteTracker(trackerId: string) {
-    setSchedule((prev) => ({
-      ...prev,
-      progressTrackers: prev.progressTrackers.filter((t) => t.id !== trackerId),
-      metricEntries: prev.metricEntries.filter((e) => e.trackerId !== trackerId),
-    }));
+    const tracker = schedule.progressTrackers.find((t) => t.id === trackerId);
+    openConfirm(
+      `Delete "${tracker?.title ?? "tracker"}"?`,
+      "All logged entries for this tracker will also be deleted.",
+      () => setSchedule((prev) => ({
+        ...prev,
+        progressTrackers: prev.progressTrackers.filter((t) => t.id !== trackerId),
+        metricEntries: prev.metricEntries.filter((e) => e.trackerId !== trackerId),
+      }))
+    );
   }
 
   function handleSaveEditPlan(planId: string) {
@@ -693,20 +750,26 @@ export default function ScheduleApp() {
 
   function handleDeleteLinkedTask(task: Task, activeDays: DayKey[]) {
     const matchKey = `${task.title.trim().toLowerCase()}|${task.startTime}|${task.endTime}`;
-    setSchedule((prev) => ({
-      ...prev,
-      activities: Object.fromEntries(
-        DAYS.map((day) => [
-          day,
-          activeDays.includes(day)
-            ? prev.activities[day].filter((t) => {
-              const k = `${t.title.trim().toLowerCase()}|${t.startTime}|${t.endTime}`;
-              return k !== matchKey || t.planId !== task.planId;
-            })
-            : prev.activities[day],
-        ])
-      ) as typeof prev.activities,
-    }));
+    openConfirm(
+      `Delete "${task.title}"?`,
+      activeDays.length > 1
+        ? `This task appears on ${activeDays.length} days and will be removed from all of them.`
+        : "This task will be removed from the plan.",
+      () => setSchedule((prev) => ({
+        ...prev,
+        activities: Object.fromEntries(
+          DAYS.map((day) => [
+            day,
+            activeDays.includes(day)
+              ? prev.activities[day].filter((t) => {
+                const k = `${t.title.trim().toLowerCase()}|${t.startTime}|${t.endTime}`;
+                return k !== matchKey || t.planId !== task.planId;
+              })
+              : prev.activities[day],
+          ])
+        ) as typeof prev.activities,
+      }))
+    );
   }
 
   // ─── Milestone handlers ──────────────────────────────────────────────────
@@ -759,22 +822,27 @@ export default function ScheduleApp() {
   }
 
   function handleDeleteMilestone(id: string) {
-    setSchedule((prev) => {
-      const existing = (prev.milestones ?? []).find((m) => m.id === id);
-      if (!existing) return prev;
-      const plan = prev.plans.find((p) => p.id === existing.planId);
-      const otherMilestones = (prev.milestones ?? []).filter((m) => m.planId !== existing.planId);
-      const planMilestones = (prev.milestones ?? []).filter(
-        (m) => m.planId === existing.planId && m.id !== id
-      );
-      return {
-        ...prev,
-        milestones: [
-          ...otherMilestones,
-          ...recalculateRoadmapTimeline(planMilestones, plan?.startDate),
-        ],
-      };
-    });
+    const milestone = (schedule.milestones ?? []).find((m) => m.id === id);
+    openConfirm(
+      `Delete "${milestone?.title ?? "milestone"}"?`,
+      "This milestone will be permanently removed from the roadmap.",
+      () => setSchedule((prev) => {
+        const existing = (prev.milestones ?? []).find((m) => m.id === id);
+        if (!existing) return prev;
+        const plan = prev.plans.find((p) => p.id === existing.planId);
+        const otherMilestones = (prev.milestones ?? []).filter((m) => m.planId !== existing.planId);
+        const planMilestones = (prev.milestones ?? []).filter(
+          (m) => m.planId === existing.planId && m.id !== id
+        );
+        return {
+          ...prev,
+          milestones: [
+            ...otherMilestones,
+            ...recalculateRoadmapTimeline(planMilestones, plan?.startDate),
+          ],
+        };
+      })
+    );
   }
 
   function handleCompleteMilestone(id: string) {
@@ -807,6 +875,25 @@ export default function ScheduleApp() {
       };
     });
   }
+
+  // ─── Ritual week history ──────────────────────────────────────────────────
+
+  const ritualWeekHistory = useMemo(() => {
+    const today = todayISO();
+    const rituals = schedule.rituals ?? [];
+    const completions = schedule.ritualCompletions ?? [];
+    const SHORT = ["Su", "Mo", "Tu", "We", "Th", "Fr", "Sa"];
+    return Array.from({ length: 7 }, (_, i) => {
+      const date = addDaysToISO(today, i - 6);
+      const jsDay = new Date(date + "T00:00:00").getDay();
+      const dayKey = JS_DAYS[jsDay];
+      const due = rituals.filter(
+        (r) => !r.repeatDays || r.repeatDays.length === 0 || r.repeatDays.includes(dayKey)
+      ).length;
+      const done = completions.filter((c) => c.date === date).length;
+      return { date, label: SHORT[jsDay], isToday: date === today, completedCount: done, dueCount: due };
+    });
+  }, [schedule.rituals, schedule.ritualCompletions]);
 
   // ─── Derived data ──────────────────────────────────────────────────────────
 
@@ -1353,6 +1440,9 @@ export default function ScheduleApp() {
             const dateRange =
               plan.startDate || plan.endDate ? formatPlanRange(plan) : null;
 
+            const firstTracker = schedule.progressTrackers.find(
+              (t) => t.planId === plan.id
+            );
             return (
               <PlanCard
                 key={plan.id}
@@ -1364,6 +1454,7 @@ export default function ScheduleApp() {
                 consistency={consistency}
                 dateRange={dateRange}
                 onSelect={() => { haptic("light"); setSelectedPlanId(plan.id); }}
+                onQuickLog={firstTracker ? () => setEntryTracker(firstTracker) : undefined}
               />
             );
           })}
@@ -1407,7 +1498,7 @@ export default function ScheduleApp() {
         <AppHeader onOpenSettings={() => setSettingsOpen(true)} />
       )}
 
-      <SettingsSheet open={settingsOpen} onClose={() => setSettingsOpen(false)} onClearData={clearData} />
+      <SettingsSheet open={settingsOpen} onClose={() => setSettingsOpen(false)} onClearData={clearData} schedule={schedule} />
       <TemplatesSheet open={templatesOpen} onClose={() => setTemplatesOpen(false)} onApply={handleApplyTemplate} />
 
       {/* ── Content ────────────────────────────────────────────────────────── */}
@@ -1849,6 +1940,7 @@ export default function ScheduleApp() {
               onDelete={handleDeleteRitual}
               addOpen={ritualAddOpen}
               onAddOpenChange={setRitualAddOpen}
+              // weekHistory={ritualWeekHistory}
             />
           </motion.div>
         )}
@@ -1995,6 +2087,14 @@ export default function ScheduleApp() {
           if (sessionTask) openEditSheet(sessionTask);
           setSessionTask(null);
         }}
+      />
+
+      <ConfirmSheet
+        open={!!confirmState}
+        onClose={() => setConfirmState(null)}
+        onConfirm={confirmState?.onConfirm ?? (() => {})}
+        title={confirmState?.title ?? ""}
+        description={confirmState?.description}
       />
     </main>
   );

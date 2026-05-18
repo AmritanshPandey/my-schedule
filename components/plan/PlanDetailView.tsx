@@ -15,7 +15,13 @@ import {
   IconCode,
   IconFileText,
   IconCalendar,
+  IconRepeat,
+  IconClock,
+  IconChevronRight,
+  IconListCheck,
+  IconAlertTriangle,
 } from "@tabler/icons-react";
+import { haptic } from "@/lib/haptics";
 import ProgressChart from "@/components/ProgressChart";
 import BottomSheet from "@/components/ui/BottomSheet";
 import SheetHeader from "@/components/ui/SheetHeader";
@@ -38,10 +44,10 @@ import type {
   StrategyAsset,
 } from "@/lib/useScheduleDB";
 import { DAYS } from "@/lib/useScheduleDB";
-import { timelineCardStyles, accentStyles } from "@/lib/colorSystem";
-import { formatDuration, displayToInputTime, inputToDisplayTime } from "@/lib/timeUtils";
+import { timelineCardStyles } from "@/lib/colorSystem";
+import { formatDuration } from "@/lib/timeUtils";
 import { formatDate, formatDateShort } from "@/lib/dateUtils";
-import { DayPill, Pill } from "@/components/ui/Badge";
+import { DayPill } from "@/components/ui/Badge";
 import { InternalSectionTitle, SectionIconButton } from "@/components/ui/InternalSectionTitle";
 import { TrackerTabs } from "@/components/ui/TrackerTabs";
 import AccuracyCalendar from "@/components/plan/AccuracyCalendar";
@@ -167,7 +173,7 @@ interface PlanDetailViewProps {
   ) => void;
   onUpdateTracker: (
     trackerId: string,
-    data: { title: string; unit: string; goalDirection: GoalDirection }
+    data: { title: string; unit: string; goalDirection: GoalDirection; goalValue?: number }
   ) => void;
   onDeleteTracker: (trackerId: string) => void;
   // Entry handlers
@@ -205,14 +211,19 @@ export default function PlanDetailView({
   onDeleteStrategy,
 }: PlanDetailViewProps) {
   // ── Tab state ───────────────────────────────────────────────────────────
-  const [planTab, setPlanTab] = useState<"planning" | "roadmap">("planning");
+  const [planTab, setPlanTab] = useState<"planning" | "roadmap" | "strategy">("planning");
 
   // ── Tracker edit state ──────────────────────────────────────────────────
   const [editingTrackerId, setEditingTrackerId] = useState<string | null>(null);
-  const [editTrackerDraft, setEditTrackerDraft] = useState({
+  const [editTrackerDraft, setEditTrackerDraft] = useState<{
+    title: string;
+    unit: string;
+    goalDirection: GoalDirection;
+    goalValue?: number;
+  }>({
     title: "",
     unit: "",
-    goalDirection: "increase_good" as GoalDirection,
+    goalDirection: "increase_good",
   });
 
   // ── Add tracker state ───────────────────────────────────────────────────
@@ -234,9 +245,13 @@ export default function PlanDetailView({
   const [viewingStrategy, setViewingStrategy] = useState<StrategyAsset | null>(null);
   const [strategyUploadOpen, setStrategyUploadOpen] = useState(false);
 
+  // ── Task detail sheet ────────────────────────────────────────────────────
+  const [viewingTask, setViewingTask] = useState<{ task: Task; activeDays: DayKey[] } | null>(null);
+
+  // ── Milestone detail sheet ───────────────────────────────────────────────
+  const [viewingMilestone, setViewingMilestone] = useState<Milestone | null>(null);
+
   // ── Section edit modes ──────────────────────────────────────────────────
-  const [tasksEditMode, setTasksEditMode] = useState(false);
-  const [milestonesEditMode, setMilestonesEditMode] = useState(false);
   const [trackersEditMode, setTrackersEditMode] = useState(false);
 
   // ── Derived data ────────────────────────────────────────────────────────
@@ -310,6 +325,7 @@ export default function PlanDetailView({
       title,
       unit: editTrackerDraft.unit.trim(),
       goalDirection: editTrackerDraft.goalDirection,
+      goalValue: editTrackerDraft.goalValue,
     });
     setEditingTrackerId(null);
   }
@@ -345,55 +361,54 @@ export default function PlanDetailView({
     const tone = timelineCardStyles(plan.color);
     const duration = formatDuration(task.startTime, task.endTime);
     const subtaskCount = task.subtasks?.length ?? 0;
+    const isRoutine = task.taskType === "routine";
+    const hasTime = task.startTime || task.endTime;
 
     return (
-      <div
+      <button
         key={`${task.id}-${activeDays.join("")}`}
-        className="flex items-center gap-3 px-1 py-3.5 border-b border-neutral-100 last:border-b-0 dark:border-white/[0.05]"
+        type="button"
+        onClick={() => setViewingTask({ task, activeDays })}
+        className="w-full flex items-center gap-3 px-1 py-3.5 border-b border-neutral-100 last:border-b-0 dark:border-white/[0.05] text-left transition-colors active:bg-neutral-50 dark:active:bg-white/[0.03]"
       >
         <div className="flex-1 min-w-0">
-          <div className="flex items-center gap-2">
-            <p className="text-[16px] font-semibold leading-tight text-neutral-900 dark:text-white">
-              {task.title}
-            </p>
+          {/* Line 1: Title */}
+          <p className="text-[16px] font-semibold leading-tight text-neutral-900 dark:text-white">
+            {task.title}
+          </p>
+          {/* Line 2: Time + duration + subtask count */}
+          <div className="flex items-center gap-2 mt-1.5 flex-wrap">
+            {hasTime && (
+              <p className={`text-[13px] font-medium shrink-0 ${tone.time}`}>
+                {task.startTime}{task.endTime && ` – ${task.endTime}`}
+                {duration && ` · ${duration}`}
+              </p>
+            )}
             {subtaskCount > 0 && (
               <span className="inline-flex shrink-0 items-center gap-1 text-[12px] font-semibold text-neutral-400 dark:text-neutral-500">
-                <IconCheck size={12} strokeWidth={1.5} />
+                <IconListCheck size={13} strokeWidth={2} />
                 {subtaskCount}
               </span>
             )}
           </div>
-          <div className="flex items-center gap-2.5 mt-1.5 flex-wrap">
-            <p className={`text-[13px] font-medium shrink-0 ${tone.time}`}>
-              {task.startTime} – {task.endTime}
-              {duration && ` · ${duration}`}
-            </p>
-            <div className="flex items-center gap-[5px]">
-              {WEEKDAY_ORDER.map((day) => (
-                <DayPill key={day} label={WEEKDAY_SHORT[day]} active={activeDays.includes(day)} />
-              ))}
+          {/* Line 3: Routine badge (only for routine tasks) */}
+          {isRoutine && (
+            <div className="mt-1.5">
+              <span className="inline-flex items-center gap-1 rounded-full bg-amber-50 px-2 py-0.5 text-[11px] font-bold text-amber-600 dark:bg-amber-900/25 dark:text-amber-400">
+                <IconRepeat size={10} strokeWidth={2.5} />
+                Routine
+              </span>
             </div>
+          )}
+          {/* Line 4: Active days */}
+          <div className="flex items-center gap-[5px] mt-2">
+            {WEEKDAY_ORDER.map((day) => (
+              <DayPill key={day} label={WEEKDAY_SHORT[day]} active={activeDays.includes(day)} />
+            ))}
           </div>
         </div>
-        {tasksEditMode && (
-          <div className="flex items-center gap-0.5 shrink-0">
-            <button
-              type="button"
-              onClick={() => onEditTask(task)}
-              className="h-8 w-8 flex items-center justify-center rounded-lg text-neutral-400 hover:text-neutral-700 dark:text-neutral-600 dark:hover:text-neutral-300 transition-colors"
-            >
-              <IconEdit size={16} strokeWidth={2} />
-            </button>
-            <button
-              type="button"
-              onClick={() => onDeleteLinkedTask(task, activeDays)}
-              className="h-8 w-8 flex items-center justify-center rounded-lg text-neutral-400 hover:text-rose-500 dark:text-neutral-600 dark:hover:text-rose-400 transition-colors"
-            >
-              <IconTrash size={16} strokeWidth={2} />
-            </button>
-          </div>
-        )}
-      </div>
+        <IconChevronRight size={16} strokeWidth={2} className="shrink-0 text-neutral-300 dark:text-neutral-600" />
+      </button>
     );
   }
 
@@ -437,6 +452,19 @@ export default function PlanDetailView({
                   setEditTrackerDraft((d) => ({ ...d, unit: e.target.value }))
                 }
                 placeholder="Unit (e.g. kg, km, hr)"
+                className="h-10 w-full rounded-xl border border-neutral-200 bg-neutral-50 px-3 text-[14px] text-neutral-700 outline-none focus:border-neutral-400 focus:bg-neutral-100 dark:border-white/10 dark:bg-white/[0.04] dark:text-neutral-300 dark:focus:border-white/20 dark:focus:bg-white/[0.07] transition-colors"
+              />
+              <input
+                type="number"
+                inputMode="decimal"
+                value={editTrackerDraft.goalValue ?? ""}
+                onChange={(e) =>
+                  setEditTrackerDraft((d) => ({
+                    ...d,
+                    goalValue: e.target.value ? Number(e.target.value) : undefined,
+                  }))
+                }
+                placeholder={`Goal value${editTrackerDraft.unit ? ` (${editTrackerDraft.unit})` : ""} — optional`}
                 className="h-10 w-full rounded-xl border border-neutral-200 bg-neutral-50 px-3 text-[14px] text-neutral-700 outline-none focus:border-neutral-400 focus:bg-neutral-100 dark:border-white/10 dark:bg-white/[0.04] dark:text-neutral-300 dark:focus:border-white/20 dark:focus:bg-white/[0.07] transition-colors"
               />
               <GoalDirectionPicker
@@ -487,6 +515,7 @@ export default function PlanDetailView({
                         title: tracker.title,
                         unit: tracker.unit ?? "",
                         goalDirection: tracker.goalDirection ?? "increase_good",
+                        goalValue: tracker.goalValue,
                       });
                     }}
                     className="h-8 w-8 flex items-center justify-center rounded-lg text-neutral-400 hover:text-neutral-700 dark:text-neutral-500 dark:hover:text-neutral-300 transition-colors"
@@ -514,6 +543,7 @@ export default function PlanDetailView({
                 entries={entries}
                 color={plan.color}
                 metric={{ name: tracker.title, unit: tracker.unit ?? "" }}
+                goalValue={tracker.goalValue}
               />
             ) : (
               <div className="rounded-xl bg-neutral-50 dark:bg-white/[0.03] py-8 text-center text-[13px] text-neutral-400 dark:text-neutral-500">
@@ -523,12 +553,38 @@ export default function PlanDetailView({
           </div>
         )}
 
-        {/* Recent entries */}
+        {/* Stats strip */}
+        {!isEditingThis && entries.length > 0 && (() => {
+          const last = entries[entries.length - 1];
+          const avg = entries.reduce((s, e) => s + e.value, 0) / entries.length;
+          const unit = tracker.unit ? ` ${tracker.unit}` : "";
+          const fmtAvg = Number.isInteger(avg) ? String(avg) : avg.toFixed(1);
+          return (
+            <div className="flex items-stretch divide-x divide-neutral-100 border-t border-neutral-100 dark:divide-white/[0.06] dark:border-white/[0.06]">
+              {[
+                { label: "Last",   value: `${last.value}${unit}` },
+                { label: "Avg",    value: `${fmtAvg}${unit}` },
+                { label: "Logged", value: `${entries.length}` },
+              ].map(({ label, value }) => (
+                <div key={label} className="flex-1 px-4 py-3 text-center">
+                  <p className="text-[10px] font-semibold uppercase tracking-[0.08em] text-neutral-400 dark:text-neutral-500">
+                    {label}
+                  </p>
+                  <p className="mt-0.5 text-[15px] font-bold tabular-nums text-neutral-950 dark:text-white">
+                    {value}
+                  </p>
+                </div>
+              ))}
+            </div>
+          );
+        })()}
+
+        {/* All entries */}
         {!isEditingThis && (
           <div className="border-t border-neutral-100 dark:border-white/[0.06] px-5 pb-5">
             <div className="flex items-center justify-between py-3.5">
               <p className="text-[12px] font-semibold text-neutral-500 dark:text-neutral-400">
-                Recent entries
+                {entries.length > 0 ? `${entries.length} entr${entries.length === 1 ? "y" : "ies"}` : "Entries"}
               </p>
               <button
                 type="button"
@@ -544,73 +600,61 @@ export default function PlanDetailView({
                 Tap Add Entry to start tracking.
               </p>
             ) : (
-              (() => {
-                const recent = entries.slice(-5);
-                return recent
-                  .slice()
-                  .reverse()
-                  .map((entry, index) => {
-                    const chronIdx = recent.length - 1 - index;
-                    const prev = chronIdx > 0 ? recent[chronIdx - 1] : null;
-                    const entryTrend = prev
-                      ? computeTrend({
-                        previous: prev.value,
-                        current: entry.value,
-                        goalDirection: goalDir,
-                      })
-                      : null;
-                    return (
-                      <div
-                        key={entry.id}
-                        className="flex items-center justify-between py-2.5 border-b border-neutral-100 last:border-b-0 dark:border-white/[0.06]"
-                      >
-                        <p className="text-[13px] font-medium text-neutral-500 dark:text-neutral-400">
-                          {formatDateShort(entry.date)}
-                        </p>
-                        <div className="flex items-center gap-2">
-                          {entryTrend && entryTrend.direction !== "neutral" && (
-                            entryTrend.direction === "up" ? (
-                              <IconArrowUpRight
-                                size={16}
-                                strokeWidth={1.5}
-                                className={`shrink-0 ${entryTrend.state === "positive"
-                                  ? "text-green-500"
-                                  : "text-rose-500"
-                                  }`}
-                              />
-                            ) : (
-                              <IconArrowDownRight
-                                size={16}
-                                strokeWidth={1.5}
-                                className={`shrink-0 ${entryTrend.state === "positive"
-                                  ? "text-green-500"
-                                  : "text-rose-500"
-                                  }`}
-                              />
-                            )
+              <div className={entries.length > 6 ? "max-h-[280px] overflow-y-auto overscroll-contain" : ""}>
+                {[...entries].reverse().map((entry, index) => {
+                  const chronIdx = entries.length - 1 - index;
+                  const prev = chronIdx > 0 ? entries[chronIdx - 1] : null;
+                  const entryTrend = prev
+                    ? computeTrend({
+                      previous: prev.value,
+                      current: entry.value,
+                      goalDirection: goalDir,
+                    })
+                    : null;
+                  return (
+                    <div
+                      key={entry.id}
+                      className="flex items-center justify-between py-2.5 border-b border-neutral-100 last:border-b-0 dark:border-white/[0.06]"
+                    >
+                      <p className="text-[13px] font-medium text-neutral-500 dark:text-neutral-400">
+                        {formatDateShort(entry.date)}
+                      </p>
+                      <div className="flex items-center gap-2">
+                        {entryTrend && entryTrend.direction !== "neutral" && (
+                          entryTrend.direction === "up" ? (
+                            <IconArrowUpRight
+                              size={16}
+                              strokeWidth={1.5}
+                              className={`shrink-0 ${entryTrend.state === "positive" ? "text-green-500" : "text-rose-500"}`}
+                            />
+                          ) : (
+                            <IconArrowDownRight
+                              size={16}
+                              strokeWidth={1.5}
+                              className={`shrink-0 ${entryTrend.state === "positive" ? "text-green-500" : "text-rose-500"}`}
+                            />
+                          )
+                        )}
+                        <span className="text-[14px] font-semibold text-neutral-950 dark:text-white tabular-nums">
+                          {entry.value}
+                          {tracker.unit && (
+                            <span className="text-[11px] font-medium text-neutral-400 ml-0.5">
+                              {tracker.unit}
+                            </span>
                           )}
-                          <span className="text-[14px] font-semibold text-neutral-950 dark:text-white tabular-nums">
-                            {entry.value}
-                            {tracker.unit && (
-                              <span className="text-[11px] font-medium text-neutral-400 ml-0.5">
-                                {tracker.unit}
-                              </span>
-                            )}
-                          </span>
-                          {trackersEditMode && (
-                            <button
-                              type="button"
-                              onClick={() => onDeleteEntry(entry.id)}
-                              className="h-6 w-6 flex items-center justify-center rounded-lg text-neutral-300 hover:text-rose-500 dark:text-neutral-700 dark:hover:text-rose-400 transition-colors"
-                            >
-                              <IconTrash size={16} strokeWidth={1.5} />
-                            </button>
-                          )}
-                        </div>
+                        </span>
+                        <button
+                          type="button"
+                          onClick={() => onDeleteEntry(entry.id)}
+                          className="h-6 w-6 flex items-center justify-center rounded-lg text-neutral-300 hover:text-rose-500 dark:text-neutral-700 dark:hover:text-rose-400 transition-colors"
+                        >
+                          <IconTrash size={14} strokeWidth={1.5} />
+                        </button>
                       </div>
-                    );
-                  });
-              })()
+                    </div>
+                  );
+                })}
+              </div>
             )}
           </div>
         )}
@@ -618,21 +662,29 @@ export default function PlanDetailView({
     );
   }
 
-  function renderMilestoneCard(m: Milestone, isCurrentMilestone: boolean, isLast: boolean) {
+  function renderMilestoneCard(m: Milestone, isLast: boolean) {
     const status = resolveMilestoneStatus(m);
     const isCompleted = status === "completed";
+    const isActive   = status === "active";
+    const isDelayed  = status === "delayed";
     const daysLabel = `${m.plannedDurationDays} Day${m.plannedDurationDays === 1 ? "" : "s"}`;
     const rangeLabel = `${formatDate(m.startDate)} – ${formatDate(m.plannedEndDate)}`;
 
     return (
-      <div className="relative flex gap-[14px] px-1 pt-[14px] pb-[18px]">
+      <button
+        type="button"
+        onClick={() => { haptic("light"); setViewingMilestone(m); }}
+        className="relative w-full flex gap-[14px] px-1 pt-[14px] pb-[18px] text-left"
+      >
         {/* Connector line to next item */}
         {!isLast && (
           <div
             className={`absolute w-0 ${
               isCompleted
                 ? "border-l-2 border-solid border-green-500"
-                : "border-l-2 border-dashed border-green-200 dark:border-green-800/60"
+                : isDelayed
+                  ? "border-l-2 border-dashed border-amber-400 dark:border-amber-600"
+                  : "border-l-2 border-dashed border-green-200 dark:border-green-800/60"
             }`}
             style={{ top: 44, bottom: 0, left: 17 }}
           />
@@ -640,29 +692,38 @@ export default function PlanDetailView({
 
         {/* Marker */}
         <div
-          aria-label={isCompleted ? "Completed" : isCurrentMilestone ? "In progress" : "Upcoming"}
+          aria-hidden="true"
           className={`relative z-10 mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-full ring-4 ring-white dark:ring-neutral-950 ${
             isCompleted
               ? "bg-green-500 text-white"
-              : isCurrentMilestone
-                ? "border-2 border-green-500 bg-green-100 dark:bg-green-950"
-                : "border-[2.5px] border-green-500 bg-white dark:bg-neutral-950"
+              : isDelayed
+                ? "border-2 border-amber-500 bg-amber-50 dark:bg-amber-950/30"
+                : isActive
+                  ? "border-2 border-green-500 bg-green-100 dark:bg-green-950"
+                  : "border-[2.5px] border-green-500 bg-white dark:bg-neutral-950"
           }`}
         >
           {isCompleted ? (
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round">
               <polyline points="20,6 9,17 4,12" />
             </svg>
-          ) : isCurrentMilestone ? (
+          ) : isDelayed ? (
+            <IconAlertTriangle size={11} strokeWidth={2.5} className="text-amber-500" />
+          ) : isActive ? (
             <div className="h-[9px] w-[9px] rounded-full bg-green-500" />
           ) : null}
         </div>
 
         {/* Body */}
         <div className="flex-1 min-w-0">
-          {isCurrentMilestone && (
+          {isActive && (
             <p className="mb-0.5 text-[12px] font-bold tracking-[-0.1px] text-green-600 dark:text-green-400">
               Current Milestone
+            </p>
+          )}
+          {isDelayed && (
+            <p className="mb-0.5 text-[12px] font-bold tracking-[-0.1px] text-amber-600 dark:text-amber-400">
+              Overdue
             </p>
           )}
           <p className={`mb-1 text-[16px] leading-snug tracking-[-0.3px] ${
@@ -679,52 +740,19 @@ export default function PlanDetailView({
               {rangeLabel}
             </span>
             <span className={`inline-flex shrink-0 items-center whitespace-nowrap rounded-full border px-[10px] py-[3px] text-[10.5px] font-bold ${
-              isCurrentMilestone && !isCompleted
+              isActive
                 ? "border-neutral-950 bg-neutral-950 text-neutral-50 dark:border-white dark:bg-white dark:text-neutral-950"
-                : "border-neutral-200 text-neutral-500 dark:border-white/[0.12] dark:text-neutral-400"
+                : isDelayed
+                  ? "border-amber-400/60 bg-amber-50 text-amber-700 dark:border-amber-500/30 dark:bg-amber-500/10 dark:text-amber-400"
+                  : "border-neutral-200 text-neutral-500 dark:border-white/[0.12] dark:text-neutral-400"
             }`}>
               {daysLabel}
             </span>
           </div>
         </div>
 
-        {/* Right-side actions */}
-        {(isCurrentMilestone || milestonesEditMode) && (
-          <div className="flex shrink-0 items-center gap-0.5 self-start pt-0.5">
-            {isCurrentMilestone && (
-              <button
-                type="button"
-                onClick={() => onCompleteMilestone(m.id)}
-                aria-label={`Mark ${m.title} as done`}
-                className="mr-1 inline-flex items-center gap-1.5 rounded-md px-1.5 py-1.5 text-[13px] font-bold text-green-600 transition-opacity hover:opacity-75 dark:text-green-400"
-              >
-                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round">
-                  <polyline points="20,6 9,17 4,12" />
-                </svg>
-                Mark Done
-              </button>
-            )}
-            {milestonesEditMode && (
-              <>
-                <button
-                  type="button"
-                  onClick={() => openEditMilestone(m)}
-                  className="flex h-7 w-7 items-center justify-center rounded-lg text-neutral-300 transition-colors hover:text-neutral-600 dark:text-neutral-700 dark:hover:text-neutral-300"
-                >
-                  <IconEdit size={14} strokeWidth={2} />
-                </button>
-                <button
-                  type="button"
-                  onClick={() => onDeleteMilestone(m.id)}
-                  className="flex h-7 w-7 items-center justify-center rounded-lg text-neutral-300 transition-colors hover:text-rose-500 dark:text-neutral-700 dark:hover:text-rose-400"
-                >
-                  <IconTrash size={14} strokeWidth={2} />
-                </button>
-              </>
-            )}
-          </div>
-        )}
-      </div>
+        <IconChevronRight size={16} strokeWidth={2} className="shrink-0 self-center text-neutral-300 dark:text-neutral-600" />
+      </button>
     );
   }
 
@@ -813,6 +841,112 @@ export default function PlanDetailView({
     );
   }
 
+  // ── Strategy tab ────────────────────────────────────────────────────────
+
+  function renderStrategyTab() {
+    return (
+      <motion.div
+        key="strategy"
+        initial={{ opacity: 0, y: 8 }}
+        animate={{ opacity: 1, y: 0 }}
+        exit={{ opacity: 0, y: -6 }}
+        transition={{ duration: 0.22, ease: "easeOut" }}
+        className="pb-32"
+      >
+        <div className="mt-6 flex items-center justify-between px-4 mb-4">
+          <p className="text-[11px] font-bold uppercase tracking-[0.09em] text-neutral-400 dark:text-neutral-500">
+            {planStrategies.length === 0 ? "No strategies yet" : `${planStrategies.length} strateg${planStrategies.length === 1 ? "y" : "ies"}`}
+          </p>
+          <button
+            type="button"
+            onClick={() => setStrategyUploadOpen(true)}
+            className="inline-flex items-center gap-1.5 rounded-xl border border-neutral-200 px-3 py-1.5 text-[12px] font-semibold text-neutral-600 transition-colors hover:bg-neutral-50 dark:border-white/10 dark:text-neutral-400 dark:hover:bg-white/[0.04]"
+          >
+            <IconPlus size={14} strokeWidth={2.5} />
+            Add
+          </button>
+        </div>
+
+        {planStrategies.length === 0 ? (
+          <div className="mx-4 rounded-[24px] border border-dashed border-neutral-200 py-14 text-center dark:border-white/[0.08]">
+            <div className="flex h-14 w-14 items-center justify-center rounded-[20px] bg-neutral-100 dark:bg-white/[0.06] mx-auto mb-3">
+              <IconBrain size={26} strokeWidth={1.5} className="text-neutral-400 dark:text-neutral-500" />
+            </div>
+            <p className="text-[15px] font-semibold text-neutral-600 dark:text-neutral-300">
+              No strategies yet
+            </p>
+            <p className="mt-1 text-[13px] text-neutral-400 dark:text-neutral-500 max-w-[220px] mx-auto">
+              Upload PDFs or paste notes to guide this plan.
+            </p>
+            <button
+              type="button"
+              onClick={() => setStrategyUploadOpen(true)}
+              className="mt-4 inline-flex items-center gap-1.5 rounded-xl border border-neutral-200 px-4 py-2 text-[13px] font-semibold text-neutral-600 transition-colors hover:bg-neutral-50 dark:border-white/10 dark:text-neutral-400 dark:hover:bg-white/[0.04]"
+            >
+              <IconPlus size={15} strokeWidth={2} />
+              Upload Strategy
+            </button>
+          </div>
+        ) : (
+          <div className="space-y-3 px-4">
+            {planStrategies.map((asset) => (
+              <div
+                key={asset.id}
+                className="relative rounded-[22px] border border-neutral-200/80 bg-white dark:border-white/[0.08] dark:bg-neutral-900"
+              >
+                <div
+                  role="button"
+                  tabIndex={0}
+                  className="w-full cursor-pointer px-5 py-4 text-left"
+                  onClick={() => setViewingStrategy(asset)}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter" || e.key === " ") setViewingStrategy(asset);
+                  }}
+                >
+                  <div className="flex items-start gap-3">
+                    <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-neutral-100 dark:bg-white/[0.07]">
+                      {asset.type === "html"
+                        ? <IconCode size={18} className="text-neutral-500 dark:text-neutral-400" />
+                        : <IconFileText size={18} className="text-neutral-500 dark:text-neutral-400" />
+                      }
+                    </div>
+                    <div className="min-w-0 flex-1">
+                      <span className="text-[10px] font-bold uppercase tracking-wider text-neutral-400 dark:text-neutral-500">
+                        {asset.type}
+                      </span>
+                      <p className="mt-0.5 text-[16px] font-semibold leading-snug text-neutral-900 dark:text-white">
+                        {asset.title}
+                      </p>
+                      {asset.description && (
+                        <p className="mt-0.5 line-clamp-2 text-[13px] text-neutral-400">
+                          {asset.description}
+                        </p>
+                      )}
+                      <div className="mt-2 flex items-center gap-1.5 text-[11px] text-neutral-400">
+                        <IconCalendar size={11} strokeWidth={2} />
+                        {new Date(asset.createdAt).toLocaleDateString("en-US", {
+                          month: "short", day: "numeric", year: "numeric",
+                        })}
+                      </div>
+                    </div>
+                    <motion.button
+                      type="button"
+                      whileTap={{ scale: 0.85 }}
+                      onClick={(e) => { e.stopPropagation(); onDeleteStrategy(asset.id); }}
+                      className="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl text-neutral-300 transition-colors hover:text-rose-400 dark:text-neutral-600"
+                    >
+                      <IconTrash size={15} strokeWidth={2} />
+                    </motion.button>
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </motion.div>
+    );
+  }
+
   // ── Planning tab ────────────────────────────────────────────────────────
 
   function renderPlanningTab() {
@@ -831,22 +965,11 @@ export default function PlanDetailView({
             title="Planned Tasks"
             className="mb-4"
             actions={
-              <>
-                <SectionIconButton
-                  icon={<IconPlus size={20} strokeWidth={2} />}
-                  onClick={() => onAddTask(plan.id)}
-                  label="Add task"
-                />
-                {uniqueTasks.length > 0 && (
-                  <SectionIconButton
-                    icon={<IconEdit size={20} strokeWidth={2} />}
-                    saveIcon={<IconCheck size={20} strokeWidth={2} />}
-                    saving={tasksEditMode}
-                    onClick={() => setTasksEditMode((v) => !v)}
-                    label={tasksEditMode ? "Done editing" : "Edit tasks"}
-                  />
-                )}
-              </>
+              <SectionIconButton
+                icon={<IconPlus size={20} strokeWidth={2} />}
+                onClick={() => onAddTask(plan.id)}
+                label="Add task"
+              />
             }
           />
 
@@ -931,91 +1054,6 @@ export default function PlanDetailView({
           )}
         </section>
 
-        {/* D. Strategy */}
-        <section className="mt-8 px-4">
-          <InternalSectionTitle
-            title="Strategy"
-            className="mb-4"
-            actions={
-              <SectionIconButton
-                icon={<IconBrain size={20} strokeWidth={2} />}
-                onClick={() => setStrategyUploadOpen(true)}
-                label="Add strategy"
-              />
-            }
-          />
-
-          {planStrategies.length === 0 ? (
-            <div className="rounded-[24px] border border-dashed border-neutral-200 py-10 text-center dark:border-white/[0.08]">
-              <p className="text-[14px] font-medium text-neutral-400 dark:text-neutral-500">
-                No strategies added yet.
-              </p>
-              <button
-                type="button"
-                onClick={() => setStrategyUploadOpen(true)}
-                className="mt-3 inline-flex items-center gap-1.5 rounded-xl border border-neutral-200 px-4 py-2 text-[13px] font-semibold text-neutral-600 transition-colors hover:bg-neutral-50 dark:border-white/10 dark:text-neutral-400 dark:hover:bg-white/[0.04]"
-              >
-                <IconPlus size={16} strokeWidth={2} />
-                Upload Strategy
-              </button>
-            </div>
-          ) : (
-            <div className="space-y-3">
-              {planStrategies.map((asset) => (
-                <div
-                  key={asset.id}
-                  className="relative rounded-[22px] border border-neutral-200/80 bg-white dark:border-white/[0.08] dark:bg-neutral-900"
-                >
-                  <div
-                    role="button"
-                    tabIndex={0}
-                    className="w-full cursor-pointer px-5 py-4 text-left"
-                    onClick={() => setViewingStrategy(asset)}
-                    onKeyDown={(e) => {
-                      if (e.key === "Enter" || e.key === " ") setViewingStrategy(asset);
-                    }}
-                  >
-                    <div className="flex items-start gap-3">
-                      <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-neutral-100 dark:bg-white/[0.07]">
-                        {asset.type === "html"
-                          ? <IconCode size={18} className="text-neutral-500 dark:text-neutral-400" />
-                          : <IconFileText size={18} className="text-neutral-500 dark:text-neutral-400" />
-                        }
-                      </div>
-                      <div className="min-w-0 flex-1">
-                        <span className="text-[10px] font-bold uppercase tracking-wider text-neutral-400 dark:text-neutral-500">
-                          {asset.type}
-                        </span>
-                        <p className="mt-0.5 text-[16px] font-semibold leading-snug text-neutral-900 dark:text-white">
-                          {asset.title}
-                        </p>
-                        {asset.description && (
-                          <p className="mt-0.5 line-clamp-2 text-[13px] text-neutral-400">
-                            {asset.description}
-                          </p>
-                        )}
-                        <div className="mt-2 flex items-center gap-1.5 text-[11px] text-neutral-400">
-                          <IconCalendar size={11} strokeWidth={2} />
-                          {new Date(asset.createdAt).toLocaleDateString("en-US", {
-                            month: "short", day: "numeric", year: "numeric",
-                          })}
-                        </div>
-                      </div>
-                      <motion.button
-                        type="button"
-                        whileTap={{ scale: 0.85 }}
-                        onClick={(e) => { e.stopPropagation(); onDeleteStrategy(asset.id); }}
-                        className="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl text-neutral-300 transition-colors hover:text-rose-400 dark:text-neutral-600"
-                      >
-                        <IconTrash size={15} strokeWidth={2} />
-                      </motion.button>
-                    </div>
-                  </div>
-                </div>
-              ))}
-            </div>
-          )}
-        </section>
       </motion.div>
     );
   }
@@ -1023,9 +1061,6 @@ export default function PlanDetailView({
   // ── Roadmap tab ─────────────────────────────────────────────────────────
 
   function renderRoadmapTab() {
-    const firstPendingIndex = planMilestones.findIndex(
-      (m) => resolveMilestoneStatus(m) !== "completed"
-    );
 
     return (
       <motion.div
@@ -1044,32 +1079,13 @@ export default function PlanDetailView({
             <h2 className="text-[22px] font-extrabold tracking-[-0.7px] text-neutral-950 dark:text-white">
               Milestones
             </h2>
-            <div className="flex gap-1">
-              <button
-                type="button"
-                onClick={openAddMilestone}
-                className="flex h-[34px] w-[34px] items-center justify-center rounded-[9px] bg-transparent text-neutral-700 transition-colors hover:bg-neutral-100 dark:text-neutral-300 dark:hover:bg-white/[0.06]"
-              >
-                <IconPlus size={20} strokeWidth={2} />
-              </button>
-              {planMilestones.length > 0 && (
-                <button
-                  type="button"
-                  onClick={() => setMilestonesEditMode((v) => !v)}
-                  className={`flex h-[34px] w-[34px] items-center justify-center rounded-[9px] transition-colors ${
-                    milestonesEditMode
-                      ? "bg-neutral-950 text-white dark:bg-white dark:text-neutral-950"
-                      : "bg-transparent text-neutral-700 hover:bg-neutral-100 dark:text-neutral-300 dark:hover:bg-white/[0.06]"
-                  }`}
-                >
-                  {milestonesEditMode ? (
-                    <IconCheck size={20} strokeWidth={2} />
-                  ) : (
-                    <IconEdit size={20} strokeWidth={2} />
-                  )}
-                </button>
-              )}
-            </div>
+            <button
+              type="button"
+              onClick={openAddMilestone}
+              className="flex h-[34px] w-[34px] items-center justify-center rounded-[9px] bg-transparent text-neutral-700 transition-colors hover:bg-neutral-100 dark:text-neutral-300 dark:hover:bg-white/[0.06]"
+            >
+              <IconPlus size={20} strokeWidth={2} />
+            </button>
           </div>
 
           {planMilestones.length === 0 ? (
@@ -1090,7 +1106,7 @@ export default function PlanDetailView({
             <div role="list">
               {planMilestones.map((m, idx) => (
                 <div key={m.id} role="listitem">
-                  {renderMilestoneCard(m, idx === firstPendingIndex, idx === planMilestones.length - 1)}
+                  {renderMilestoneCard(m, idx === planMilestones.length - 1)}
                 </div>
               ))}
             </div>
@@ -1127,40 +1143,41 @@ export default function PlanDetailView({
       <div className="mx-4 mt-6">
         <div className="relative flex rounded-2xl bg-neutral-100 dark:bg-white/[0.06] p-1">
           <motion.div
-            layoutId="planTabIndicator"
-            className="absolute inset-1 rounded-xl border border-neutral-200 bg-white dark:border-white/[0.08] dark:bg-neutral-800"
+            className="absolute rounded-xl border border-neutral-200 bg-white dark:border-white/[0.08] dark:bg-neutral-800"
             style={{
-              left: planTab === "planning" ? "4px" : "calc(50% + 2px)",
-              right: planTab === "planning" ? "calc(50% + 2px)" : "4px",
+              top: "4px",
+              bottom: "4px",
+              left: "4px",
+              width: "calc((100% - 8px) / 3)",
+              willChange: "transform",
             }}
+            animate={{ x: `${(planTab === "planning" ? 0 : planTab === "roadmap" ? 1 : 2) * 100}%` }}
             transition={{ type: "spring", stiffness: 400, damping: 30, mass: 0.8 }}
           />
-          <button
-            type="button"
-            onClick={() => setPlanTab("planning")}
-            className={`relative flex-1 py-2.5 rounded-xl text-[14px] font-semibold transition-colors duration-200 z-10 ${planTab === "planning"
-              ? "text-neutral-950 dark:text-white"
-              : "text-neutral-500 dark:text-neutral-400"
+          {(["planning", "roadmap", "strategy"] as const).map((tab) => (
+            <button
+              key={tab}
+              type="button"
+              onClick={() => setPlanTab(tab)}
+              className={`relative flex-1 py-2.5 rounded-xl text-[13px] font-semibold transition-colors duration-200 z-10 capitalize ${
+                planTab === tab
+                  ? "text-neutral-950 dark:text-white"
+                  : "text-neutral-500 dark:text-neutral-400"
               }`}
-          >
-            Planning
-          </button>
-          <button
-            type="button"
-            onClick={() => setPlanTab("roadmap")}
-            className={`relative flex-1 py-2.5 rounded-xl text-[14px] font-semibold transition-colors duration-200 z-10 ${planTab === "roadmap"
-              ? "text-neutral-950 dark:text-white"
-              : "text-neutral-500 dark:text-neutral-400"
-              }`}
-          >
-            Roadmap
-          </button>
+            >
+              {tab === "planning" ? "Planning" : tab === "roadmap" ? "Roadmap" : "Strategy"}
+            </button>
+          ))}
         </div>
       </div>
 
       {/* Tab content */}
       <AnimatePresence mode="wait">
-        {planTab === "planning" ? renderPlanningTab() : renderRoadmapTab()}
+        {planTab === "planning"
+          ? renderPlanningTab()
+          : planTab === "roadmap"
+          ? renderRoadmapTab()
+          : renderStrategyTab()}
       </AnimatePresence>
 
       {/* Milestone sheet */}
@@ -1270,6 +1287,222 @@ export default function PlanDetailView({
         asset={viewingStrategy}
         onClose={() => setViewingStrategy(null)}
       />
+
+      {/* Milestone detail sheet */}
+      <BottomSheet open={!!viewingMilestone} onClose={() => setViewingMilestone(null)} maxHeight="85vh">
+        {viewingMilestone && (() => {
+          const m = viewingMilestone;
+          const status = resolveMilestoneStatus(m);
+          const isCompleted = status === "completed";
+          const isDelayed   = status === "delayed";
+          const isActive    = status === "active";
+
+          return (
+            <div className="px-5 pb-8 pt-4">
+              {/* Status badge */}
+              {(isCompleted || isDelayed || isActive) && (
+                <div className="mb-3">
+                  <span className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[12px] font-bold ${
+                    isDelayed
+                      ? "bg-amber-50 text-amber-700 dark:bg-amber-900/20 dark:text-amber-400"
+                      : "bg-green-50 text-green-700 dark:bg-green-900/20 dark:text-green-400"
+                  }`}>
+                    {isDelayed
+                      ? <IconAlertTriangle size={12} strokeWidth={2.5} />
+                      : <IconCheck size={12} strokeWidth={2.5} />
+                    }
+                    {isCompleted ? "Completed" : isDelayed ? "Overdue" : "In Progress"}
+                  </span>
+                </div>
+              )}
+
+              {/* Title */}
+              <h2 className={`mb-5 text-[22px] font-bold leading-snug ${
+                isCompleted
+                  ? "text-neutral-400 line-through dark:text-neutral-500"
+                  : "text-neutral-900 dark:text-white"
+              }`}>
+                {m.title}
+              </h2>
+
+              {/* Meta */}
+              <div className="space-y-3 mb-5">
+                <div className="flex items-center gap-3">
+                  <IconCalendar size={16} strokeWidth={1.8} className="shrink-0 text-neutral-400" />
+                  <span className="text-[15px] font-medium text-neutral-700 dark:text-neutral-300">
+                    {formatDate(m.startDate)} – {formatDate(m.plannedEndDate)}
+                    <span className="ml-2 text-[13px] text-neutral-400">
+                      · {m.plannedDurationDays} day{m.plannedDurationDays === 1 ? "" : "s"}
+                    </span>
+                  </span>
+                </div>
+                {isCompleted && m.actualCompletedDate && (
+                  <div className="flex items-center gap-3">
+                    <IconCheck size={16} strokeWidth={2} className="shrink-0 text-green-500" />
+                    <span className="text-[15px] font-medium text-neutral-700 dark:text-neutral-300">
+                      Completed {formatDate(m.actualCompletedDate)}
+                    </span>
+                  </div>
+                )}
+              </div>
+
+              {/* Description */}
+              {m.description && (
+                <div className="mb-5">
+                  <p className="mb-1.5 text-[11px] font-bold uppercase tracking-[0.08em] text-neutral-400 dark:text-neutral-500">
+                    Description
+                  </p>
+                  <p className="text-[15px] leading-relaxed text-neutral-700 dark:text-neutral-300">
+                    {m.description}
+                  </p>
+                </div>
+              )}
+
+              {/* Notes */}
+              {m.notes && (
+                <div className="mb-5">
+                  <p className="mb-1.5 text-[11px] font-bold uppercase tracking-[0.08em] text-neutral-400 dark:text-neutral-500">
+                    Notes
+                  </p>
+                  <p className="text-[15px] leading-relaxed text-neutral-700 dark:text-neutral-300">
+                    {m.notes}
+                  </p>
+                </div>
+              )}
+
+              {/* Mark Done — any non-completed milestone */}
+              {!isCompleted && (
+                <button
+                  type="button"
+                  onClick={() => { onCompleteMilestone(m.id); setViewingMilestone(null); }}
+                  className="mb-3 flex w-full items-center justify-center gap-2 rounded-2xl bg-green-600 py-3.5 text-[15px] font-semibold text-white transition-colors hover:bg-green-700"
+                >
+                  <IconCheck size={16} strokeWidth={2.5} />
+                  Mark as Done
+                </button>
+              )}
+
+              {/* Edit + Delete */}
+              <div className="flex gap-3">
+                <button
+                  type="button"
+                  onClick={() => { onDeleteMilestone(m.id); setViewingMilestone(null); }}
+                  className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl border border-neutral-200 text-neutral-400 transition-colors hover:border-rose-200 hover:text-rose-500 dark:border-white/10 dark:text-neutral-500"
+                >
+                  <IconTrash size={18} strokeWidth={1.8} />
+                </button>
+                <button
+                  type="button"
+                  onClick={() => { setViewingMilestone(null); openEditMilestone(m); }}
+                  className="flex h-12 flex-1 items-center justify-center gap-2 rounded-2xl bg-neutral-900 text-[15px] font-semibold text-white dark:bg-white dark:text-neutral-900"
+                >
+                  <IconEdit size={16} strokeWidth={2} />
+                  Edit Milestone
+                </button>
+              </div>
+            </div>
+          );
+        })()}
+      </BottomSheet>
+
+      {/* Task detail sheet */}
+      <BottomSheet open={!!viewingTask} onClose={() => setViewingTask(null)} maxHeight="85vh">
+        {viewingTask && (() => {
+          const { task, activeDays: taskDays } = viewingTask;
+          const duration = formatDuration(task.startTime, task.endTime);
+          const subtaskCount = task.subtasks?.length ?? 0;
+          const isRoutine = task.taskType === "routine";
+
+          return (
+            <div className="px-5 pb-8 pt-4">
+              {/* Type badge */}
+              {isRoutine && (
+                <div className="mb-3">
+                  <span className="inline-flex items-center gap-1.5 rounded-full bg-amber-50 px-2.5 py-1 text-[12px] font-bold text-amber-600 dark:bg-amber-900/20 dark:text-amber-400">
+                    <IconRepeat size={12} strokeWidth={2.5} />
+                    Routine Task
+                  </span>
+                </div>
+              )}
+
+              {/* Title */}
+              <h2 className="mb-5 text-[22px] font-bold leading-snug text-neutral-900 dark:text-white">
+                {task.title}
+              </h2>
+
+              {/* Meta info */}
+              <div className="space-y-3 mb-6">
+                {(task.startTime || task.endTime) && (
+                  <div className="flex items-center gap-3">
+                    <IconClock size={16} strokeWidth={1.8} className="shrink-0 text-neutral-400" />
+                    <span className="text-[15px] font-medium text-neutral-700 dark:text-neutral-300">
+                      {task.startTime}{task.endTime && ` – ${task.endTime}`}
+                      {duration && (
+                        <span className="ml-1.5 text-[13px] text-neutral-400">· {duration}</span>
+                      )}
+                    </span>
+                  </div>
+                )}
+                <div className="flex items-start gap-3">
+                  <IconCalendar size={16} strokeWidth={1.8} className="mt-[3px] shrink-0 text-neutral-400" />
+                  <div className="flex flex-wrap gap-[5px]">
+                    {WEEKDAY_ORDER.map((day) => (
+                      <DayPill key={day} label={WEEKDAY_SHORT[day]} active={taskDays.includes(day)} />
+                    ))}
+                  </div>
+                </div>
+              </div>
+
+              {/* Subtasks */}
+              {subtaskCount > 0 && (
+                <div className="mb-6">
+                  <p className="mb-2.5 text-[11px] font-bold uppercase tracking-[0.08em] text-neutral-400 dark:text-neutral-500">
+                    Subtasks · {subtaskCount}
+                  </p>
+                  <div className="space-y-1.5">
+                    {task.subtasks?.map((st) => (
+                      <div
+                        key={st.id}
+                        className="flex items-center gap-2.5 rounded-xl bg-neutral-50 px-3.5 py-2.5 dark:bg-white/[0.04]"
+                      >
+                        <div className="h-4 w-4 shrink-0 rounded-[4px] border-[1.5px] border-neutral-300 dark:border-white/20" />
+                        <span className="text-[14px] font-medium text-neutral-700 dark:text-neutral-300">
+                          {st.task}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Actions */}
+              <div className="flex gap-3">
+                <button
+                  type="button"
+                  onClick={() => {
+                    onDeleteLinkedTask(task, taskDays);
+                    setViewingTask(null);
+                  }}
+                  className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl border border-neutral-200 text-neutral-400 transition-colors hover:border-rose-200 hover:text-rose-500 dark:border-white/10 dark:text-neutral-500"
+                >
+                  <IconTrash size={18} strokeWidth={1.8} />
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    onEditTask(task);
+                    setViewingTask(null);
+                  }}
+                  className="flex h-12 flex-1 items-center justify-center gap-2 rounded-2xl bg-neutral-900 text-[15px] font-semibold text-white dark:bg-white dark:text-neutral-900"
+                >
+                  <IconEdit size={16} strokeWidth={2} />
+                  Edit Task
+                </button>
+              </div>
+            </div>
+          );
+        })()}
+      </BottomSheet>
     </div>
   );
 }

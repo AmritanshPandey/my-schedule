@@ -95,7 +95,7 @@ export default function BottomSheet({
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
             transition={{ duration: 0.22 }}
-            className="absolute inset-0 bg-black/40 backdrop-blur-sm"
+            className="absolute inset-0 bg-black/40"
             onClick={onClose}
           />
 
@@ -105,11 +105,11 @@ export default function BottomSheet({
             animate={{ y: 0 }}
             exit={{ y: "100%" }}
             transition={SPRING}
-            style={{ maxHeight }}
+            style={{ maxHeight, willChange: "transform" }}
             className={`relative w-full max-w-lg overflow-y-auto overscroll-contain rounded-t-[32px] border-t border-neutral-200 bg-white pb-[env(safe-area-inset-bottom)] dark:border-white/[0.08] dark:bg-neutral-900 ${className}`}
           >
             {/* Drag handle */}
-            <div className="sticky top-0 z-10 flex justify-center rounded-t-[32px] bg-white/95 pb-1 pt-3 backdrop-blur-sm dark:bg-neutral-900/95">
+            <div className="sticky top-0 z-10 flex justify-center rounded-t-[32px] bg-white/95 pb-1 pt-3 dark:bg-neutral-900/95">
               <div className="h-1 w-10 rounded-full bg-neutral-300 dark:bg-white/20" />
             </div>
 

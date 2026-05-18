@@ -18,6 +18,7 @@ import { formatDate } from "@/lib/dateUtils";
 export interface MilestoneSaveData {
   title: string;
   description?: string;
+  notes?: string;
   startDate: string;
   plannedDurationDays: number;
   plannedEndDate: string;
@@ -46,6 +47,7 @@ interface MilestoneSheetProps {
 interface DraftState {
   title: string;
   description: string;
+  notes: string;
   startDate: string;
   durationValue: string;
   durationType: DurationType;
@@ -86,6 +88,7 @@ function emptyDraft(startDate: string): DraftState {
   return {
     title: "",
     description: "",
+    notes: "",
     startDate,
     durationValue: "7",
     durationType: "days",
@@ -97,6 +100,7 @@ function milestoneToDraft(milestone: Milestone): DraftState {
   return {
     title: milestone.title,
     description: milestone.description ?? "",
+    notes: milestone.notes ?? "",
     startDate: milestone.startDate,
     durationValue: duration.durationValue,
     durationType: duration.durationType,
@@ -181,6 +185,7 @@ export default function MilestoneSheet({
     onSave({
       title,
       description: draft.description.trim() || undefined,
+      notes: draft.notes.trim() || undefined,
       startDate: draft.startDate,
       plannedDurationDays,
       plannedEndDate,
@@ -224,6 +229,13 @@ export default function MilestoneSheet({
             value={draft.description}
             onChange={(e) => setDraft((d) => ({ ...d, description: e.target.value }))}
             placeholder="Brief description..."
+          />
+
+          <Input
+            label="Notes (optional)"
+            value={draft.notes}
+            onChange={(e) => setDraft((d) => ({ ...d, notes: e.target.value }))}
+            placeholder="Any additional notes..."
           />
 
           {/* Start Date — full width row */}

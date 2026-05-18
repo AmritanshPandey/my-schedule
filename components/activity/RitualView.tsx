@@ -12,6 +12,8 @@ import type { Ritual, RitualColor, DayKey } from "@/lib/useScheduleDB";
 import { DAYS, DAY_LABELS, RITUAL_COLORS } from "@/lib/useScheduleDB";
 import { haptic } from "@/lib/haptics";
 import BottomSheet from "@/components/ui/BottomSheet";
+import { PageTitle, Eyebrow, SheetTitle, typography } from "@/components/ui/Typography";
+import { ICON } from "@/components/ui/Icon";
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -74,14 +76,11 @@ export default function RitualView({
   const [time, setTime] = useState("08:00");
   const [color, setColor] = useState<RitualColor | "">("");
   const [days, setDays] = useState<DayKey[]>([]);
-  const [deleteConfirm, setDeleteConfirm] = useState<string | null>(null);
-
   const completedToday = rituals.filter((r) => completedIds.has(r.id)).length;
   const total = rituals.length;
   const pct = total > 0 ? Math.round((completedToday / total) * 100) : 0;
   const allDone = total > 0 && completedToday === total;
 
-  // Sort by time, completed sink to bottom
   const sorted = useMemo(() => {
     return [...rituals].sort((a, b) => {
       const aDone = completedIds.has(a.id) ? 1 : 0;
@@ -109,15 +108,8 @@ export default function RitualView({
   }
 
   function handleDelete(id: string) {
-    if (deleteConfirm === id) {
-      haptic("medium");
-      onDelete(id);
-      setDeleteConfirm(null);
-    } else {
-      haptic("light");
-      setDeleteConfirm(id);
-      setTimeout(() => setDeleteConfirm(null), 3000);
-    }
+    haptic("light");
+    onDelete(id);
   }
 
   function handleCloseSheet() {
@@ -137,22 +129,18 @@ export default function RitualView({
         {/* ── Header ───────────────────────────────────────────────────────── */}
         <div className="mb-6">
           <div className="mb-1 flex items-center gap-2">
-            <IconSun size={16} className="text-neutral-400" strokeWidth={1.8} />
-            <span className="text-[11px] font-bold uppercase tracking-[0.1em] text-neutral-400">
-              Daily Practice
-            </span>
+            
+            <Eyebrow as="span">Daily Practice</Eyebrow>
           </div>
           <div className="mb-4 flex items-center justify-between">
-            <h1 className="text-[28px] font-bold leading-tight text-neutral-900 dark:text-white">
-              Rituals
-            </h1>
+            <PageTitle>Rituals</PageTitle>
             <motion.button
               type="button"
               whileTap={{ scale: 0.9 }}
               onClick={() => { haptic("medium"); onAddOpenChange(true); }}
               className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-neutral-900 text-white dark:bg-white dark:text-neutral-950"
             >
-              <IconPlus size={18} strokeWidth={2.5} />
+              <IconPlus {...ICON.action} />
             </motion.button>
           </div>
 
@@ -160,7 +148,7 @@ export default function RitualView({
           {total > 0 && (
             <div>
               <div className="mb-1.5 flex items-center justify-between">
-                <span className="text-[12px] font-semibold text-neutral-400 dark:text-neutral-500">
+                <span className={`${typography.caption} font-semibold`}>
                   {allDone ? "All done today 🎉" : `${completedToday} of ${total} done`}
                 </span>
                 <span className="text-[12px] font-bold tabular-nums text-neutral-500 dark:text-neutral-400">
@@ -187,7 +175,7 @@ export default function RitualView({
             className="flex flex-col items-center gap-4 pt-16 text-center"
           >
             <div className="flex h-20 w-20 items-center justify-center rounded-[28px] bg-neutral-100 dark:bg-white/[0.06]">
-              <IconSun size={36} strokeWidth={1.4} className="text-neutral-400 dark:text-neutral-500" />
+              <IconSun {...ICON.hero} className="text-neutral-400 dark:text-neutral-500" />
             </div>
             <div>
               <p className="text-[16px] font-semibold text-neutral-700 dark:text-neutral-200">
@@ -203,7 +191,7 @@ export default function RitualView({
               onClick={() => { haptic("medium"); onAddOpenChange(true); }}
               className="mt-2 inline-flex items-center gap-2 rounded-full bg-neutral-900 px-5 py-2.5 text-[14px] font-semibold text-white dark:bg-white dark:text-neutral-950"
             >
-              <IconPlus size={16} strokeWidth={2.5} />
+              <IconPlus {...ICON.action} />
               Add First Ritual
             </motion.button>
           </motion.div>
@@ -246,7 +234,7 @@ export default function RitualView({
                       }`}
                     >
                       {done ? (
-                        <IconCheck size={14} strokeWidth={2.5} className="text-white" />
+                        <IconCheck size={ICON.inline.size} strokeWidth={2.5} className="text-white" />
                       ) : (
                         <span className={`h-3 w-3 rounded-full ${dot}`} />
                       )}
@@ -261,7 +249,7 @@ export default function RitualView({
                       }`}>
                         {ritual.title}
                       </p>
-                      <p className="mt-0.5 text-[12px] font-medium text-neutral-400 dark:text-neutral-500">
+                      <p className={`mt-0.5 ${typography.caption}`}>
                         {ritual.time} · {dayLabel}
                       </p>
                     </div>
@@ -271,21 +259,11 @@ export default function RitualView({
                       type="button"
                       whileTap={{ scale: 0.84 }}
                       onClick={() => handleDelete(ritual.id)}
-                      className={`shrink-0 flex h-8 w-8 items-center justify-center rounded-xl transition-colors ${
-                        deleteConfirm === ritual.id
-                          ? "bg-rose-500/15 text-rose-500"
-                          : "text-neutral-300 hover:text-rose-400 dark:text-neutral-600"
-                      }`}
+                      className="shrink-0 flex h-8 w-8 items-center justify-center rounded-xl text-neutral-300 transition-colors hover:text-rose-400 dark:text-neutral-600"
                     >
-                      <IconTrash size={15} strokeWidth={1.8} />
+                      <IconTrash {...ICON.subtle} />
                     </motion.button>
                   </div>
-
-                  {deleteConfirm === ritual.id && (
-                    <p className="px-4 pb-3 text-[12px] font-medium text-rose-500">
-                      Tap delete again to confirm.
-                    </p>
-                  )}
                 </div>
               </motion.div>
             );
@@ -296,9 +274,7 @@ export default function RitualView({
       {/* ── Add Ritual Sheet ─────────────────────────────────────────────────── */}
       <BottomSheet open={addOpen} onClose={handleCloseSheet}>
         <div className="px-5 pb-6 pt-2">
-          <h2 className="mb-5 text-[18px] font-bold text-neutral-900 dark:text-white">
-            New Ritual
-          </h2>
+          <SheetTitle className="mb-5">New Ritual</SheetTitle>
 
           <div className="space-y-4">
             {/* Title */}
@@ -312,9 +288,7 @@ export default function RitualView({
 
             {/* Time */}
             <div>
-              <p className="mb-1.5 text-[11px] font-semibold uppercase tracking-[0.08em] text-neutral-400 dark:text-neutral-500">
-                Time
-              </p>
+              <p className={`mb-1.5 ${typography.eyebrow}`}>Time</p>
               <input
                 type="text"
                 inputMode="numeric"
@@ -329,9 +303,7 @@ export default function RitualView({
 
             {/* Color */}
             <div>
-              <p className="mb-2 text-[11px] font-semibold uppercase tracking-[0.08em] text-neutral-400 dark:text-neutral-500">
-                Color
-              </p>
+              <p className={`mb-2 ${typography.eyebrow}`}>Color</p>
               <div className="flex items-center gap-2.5">
                 {RITUAL_COLORS.map((c) => (
                   <button
@@ -351,10 +323,8 @@ export default function RitualView({
             {/* Repeat days */}
             <div className="space-y-2">
               <div className="flex items-center justify-between gap-3">
-                <p className="text-[11px] font-semibold uppercase tracking-[0.08em] text-neutral-400 dark:text-neutral-500">
-                  Repeat days
-                </p>
-                <p className="text-[11px] font-semibold text-neutral-400 dark:text-neutral-500">
+                <p className={typography.eyebrow}>Repeat days</p>
+                <p className={typography.eyebrow}>
                   {days.length === 0 ? "Every day" : `${days.length} ${days.length === 1 ? "day" : "days"}`}
                 </p>
               </div>
@@ -387,7 +357,7 @@ export default function RitualView({
               disabled={!canAdd}
               className="flex w-full items-center justify-center gap-2 rounded-2xl bg-neutral-900 py-3.5 text-[15px] font-bold text-white transition-opacity disabled:opacity-40 dark:bg-white dark:text-neutral-950"
             >
-              <IconPlus size={18} strokeWidth={2.5} />
+              <IconPlus {...ICON.action} />
               Add Ritual
             </motion.button>
           </div>

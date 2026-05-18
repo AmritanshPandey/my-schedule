@@ -3,42 +3,36 @@
 import { memo } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import { IconCheck, IconClipboardList } from "@tabler/icons-react";
-
-// ── Types ─────────────────────────────────────────────────────────────────────
+import { Eyebrow, PageTitle } from "@/components/ui/Typography";
+import { ICON } from "@/components/ui/Icon";
 
 type ProgressMeta =
   | { done: number; total: number }
   | "done";
 
 interface MainTitleSectionProps {
-  /** Small uppercase eyebrow label, e.g. "MY SCHEDULE" */
   label?: string;
-  /** Primary section heading */
   title: string;
-  /** Use 20px title instead of 24px (for secondary surfaces) */
+  /** Use smaller title variant (20px) instead of the default (28px) */
   smallTitle?: boolean;
-  /** Inline progress counter or "done" for completed state */
   progressMeta?: ProgressMeta;
-  /** Animated progress bar. Pass pct = 0–100. */
   progressBar?: { pct: number };
-  /** Right-aligned action area */
   actions?: React.ReactNode;
   className?: string;
 }
 
-// ── Exported action atoms ─────────────────────────────────────────────────────
-
-/** Toggle between two labelled views (e.g. Timeline / List). Shows the view you'll switch TO. */
-interface ViewToggleButtonProps {
+export function ViewToggleButton({
+  options,
+  value,
+  onChange,
+}: {
   options: [
     { label: string; icon: React.ReactNode; value: string },
     { label: string; icon: React.ReactNode; value: string },
   ];
   value: string;
   onChange: (v: string) => void;
-}
-
-export function ViewToggleButton({ options, value, onChange }: ViewToggleButtonProps) {
+}) {
   const other = options.find((o) => o.value !== value) ?? options[1];
   return (
     <button
@@ -52,22 +46,19 @@ export function ViewToggleButton({ options, value, onChange }: ViewToggleButtonP
   );
 }
 
-/** Animated edit / save square icon button (40×40). Filled black in save mode. */
-interface IconActionButtonProps {
-  icon: React.ReactNode;
-  saveIcon?: React.ReactNode;
-  saving?: boolean;
-  onClick: () => void;
-  show?: boolean;
-}
-
 export function IconActionButton({
   icon,
   saveIcon,
   saving = false,
   onClick,
   show = true,
-}: IconActionButtonProps) {
+}: {
+  icon: React.ReactNode;
+  saveIcon?: React.ReactNode;
+  saving?: boolean;
+  onClick: () => void;
+  show?: boolean;
+}) {
   if (!show) return null;
   return (
     <motion.button
@@ -96,14 +87,15 @@ export function IconActionButton({
   );
 }
 
-/** CTA pill button with leading icon, e.g. "+ Add New Plan". */
-interface CtaActionButtonProps {
+export function CtaActionButton({
+  label,
+  icon,
+  onClick,
+}: {
   label: string;
   icon?: React.ReactNode;
   onClick: () => void;
-}
-
-export function CtaActionButton({ label, icon, onClick }: CtaActionButtonProps) {
+}) {
   return (
     <button
       type="button"
@@ -115,8 +107,6 @@ export function CtaActionButton({ label, icon, onClick }: CtaActionButtonProps) 
     </button>
   );
 }
-
-// ── Main component ────────────────────────────────────────────────────────────
 
 function MainTitleSectionInner({
   label,
@@ -135,35 +125,26 @@ function MainTitleSectionInner({
 
   return (
     <div className={className}>
-      {/* Title row + actions */}
       <div className="flex items-center justify-between gap-3">
         <div className="min-w-0">
-          {label && (
-            <p className="mb-2 text-[10.5px] font-bold uppercase leading-none tracking-[1.2px] text-neutral-400 dark:text-neutral-500">
-              {label}
-            </p>
-          )}
+          {label && <Eyebrow className="mb-2">{label}</Eyebrow>}
           <div className="flex items-baseline gap-[9px]">
-            <h1
-              className={`leading-tight text-neutral-950 dark:text-white ${
-                smallTitle
-                  ? "text-[20px] font-extrabold tracking-[-0.5px]"
-                  : "text-[24px] font-extrabold tracking-[-0.7px]"
-              }`}
+            <PageTitle
+              className={smallTitle ? "text-[20px] tracking-[-0.5px]" : ""}
             >
               {title}
-            </h1>
+            </PageTitle>
 
             {isDone && (
               <span className="inline-flex shrink-0 items-center gap-1 text-[13px] font-bold leading-none tracking-[-0.1px] text-green-500 dark:text-green-400">
-                <IconCheck size={13} strokeWidth={2.5} />
+                <IconCheck {...ICON.badge} strokeWidth={2.5} />
                 Done
               </span>
             )}
 
             {counter && (
               <span className="inline-flex shrink-0 items-center gap-1 tabular-nums text-[13px] font-bold leading-none tracking-[-0.1px] text-neutral-400 dark:text-neutral-500">
-                <IconClipboardList size={12} strokeWidth={1.8} />
+                <IconClipboardList {...ICON.badge} strokeWidth={1.8} />
                 {counter.done}/{counter.total}
               </span>
             )}
@@ -177,7 +158,6 @@ function MainTitleSectionInner({
         )}
       </div>
 
-      {/* Full-width progress bar */}
       {progressBar !== undefined && (
         <div className="mt-[10px] h-[4px] w-full overflow-hidden rounded-[2px] bg-neutral-100 dark:bg-white/[0.08]">
           <motion.div
