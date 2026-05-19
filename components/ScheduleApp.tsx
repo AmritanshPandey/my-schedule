@@ -27,7 +27,6 @@ import {
   Plan,
   ProgressTracker,
   Ritual,
-  RitualCompletion,
   RITUAL_COLORS,
   RitualColor,
   SummaryConfig,
@@ -1940,7 +1939,7 @@ export default function ScheduleApp() {
               onDelete={handleDeleteRitual}
               addOpen={ritualAddOpen}
               onAddOpenChange={setRitualAddOpen}
-              // weekHistory={ritualWeekHistory}
+              weekHistory={ritualWeekHistory}
             />
           </motion.div>
         )}

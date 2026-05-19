@@ -49,6 +49,16 @@ function normalizeTimeDraft(raw: string): string {
   return `${String(h).padStart(2, "0")}:${String(m).padStart(2, "0")}`;
 }
 
+// ── Types ─────────────────────────────────────────────────────────────────────
+
+interface WeekDay {
+  date: string;
+  label: string;
+  isToday: boolean;
+  completedCount: number;
+  dueCount: number;
+}
+
 // ── Props ─────────────────────────────────────────────────────────────────────
 
 interface RitualViewProps {
@@ -59,6 +69,7 @@ interface RitualViewProps {
   onDelete: (id: string) => void;
   addOpen: boolean;
   onAddOpenChange: (open: boolean) => void;
+  weekHistory?: WeekDay[];
 }
 
 // ── Component ─────────────────────────────────────────────────────────────────
@@ -71,6 +82,7 @@ export default function RitualView({
   onDelete,
   addOpen,
   onAddOpenChange,
+  weekHistory,
 }: RitualViewProps) {
   const [title, setTitle] = useState("");
   const [time, setTime] = useState("08:00");
@@ -162,6 +174,45 @@ export default function RitualView({
                   animate={{ width: `${pct}%` }}
                   transition={{ duration: 0.5, ease: [0.22, 1, 0.36, 1] }}
                 />
+              </div>
+            </div>
+          )}
+
+          {/* 7-day consistency strip */}
+          {weekHistory && weekHistory.length > 0 && (
+            <div className="mt-4 rounded-2xl border border-neutral-100 bg-neutral-50 px-4 py-3 dark:border-white/[0.06] dark:bg-white/[0.03]">
+              <p className={`mb-2.5 ${typography.eyebrow}`}>Last 7 days</p>
+              <div className="flex items-end justify-between gap-1">
+                {weekHistory.map((day) => {
+                  const filled = day.dueCount > 0
+                    ? Math.round((day.completedCount / day.dueCount) * 100)
+                    : null;
+                  const allComplete = filled === 100;
+
+                  return (
+                    <div key={day.date} className="flex flex-1 flex-col items-center gap-1.5">
+                      {/* Bar */}
+                      <div className="relative flex h-8 w-full max-w-[28px] items-end overflow-hidden rounded-md bg-neutral-100 dark:bg-white/[0.06]">
+                        {filled !== null && filled > 0 && (
+                          <motion.div
+                            className={`w-full rounded-md ${allComplete ? "bg-emerald-400 dark:bg-emerald-500" : "bg-neutral-300 dark:bg-neutral-600"}`}
+                            initial={{ height: 0 }}
+                            animate={{ height: `${filled}%` }}
+                            transition={{ duration: 0.5, ease: [0.22, 1, 0.36, 1] }}
+                          />
+                        )}
+                      </div>
+                      {/* Day label */}
+                      <span className={`text-[10px] font-semibold tabular-nums leading-none ${
+                        day.isToday
+                          ? "text-neutral-900 dark:text-white"
+                          : "text-neutral-400 dark:text-neutral-600"
+                      }`}>
+                        {day.label}
+                      </span>
+                    </div>
+                  );
+                })}
               </div>
             </div>
           )}
