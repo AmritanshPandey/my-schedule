@@ -545,12 +545,18 @@ function migrate(raw: unknown): Schedule {
       ? (r.strategies as StrategyAsset[]).filter((s) => s && typeof s.id === "string" && typeof s.type === "string" && typeof s.title === "string")
       : [];
 
+    const cutoff = (() => {
+      const d = new Date();
+      d.setDate(d.getDate() - 90);
+      return d.toISOString().slice(0, 10);
+    })();
     const ritualCompletions: RitualCompletion[] = Array.isArray(r.ritualCompletions)
       ? (r.ritualCompletions as unknown[]).filter(
           (c): c is RitualCompletion =>
             c !== null && typeof c === "object" &&
             typeof (c as RitualCompletion).ritualId === "string" &&
-            typeof (c as RitualCompletion).date === "string"
+            typeof (c as RitualCompletion).date === "string" &&
+            (c as RitualCompletion).date >= cutoff
         )
       : [];
 

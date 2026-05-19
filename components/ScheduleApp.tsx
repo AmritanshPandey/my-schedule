@@ -9,7 +9,6 @@ import type { MilestoneSaveData } from "@/components/plan/MilestoneSheet";
 import { PlanCard } from "@/components/plan/PlanCard";
 import AppHeader from "@/components/AppHeader";
 import BottomNav from "@/components/BottomNav";
-import TimeSlotPicker from "@/components/TimeSlotPicker";
 
 // ── Deferred heavy components (separate JS chunks, loaded on demand) ──────────
 const PlanDetailView = dynamic(() => import("@/components/plan/PlanDetailView"), { ssr: false });
@@ -27,8 +26,6 @@ import {
   Plan,
   ProgressTracker,
   Ritual,
-  RITUAL_COLORS,
-  RitualColor,
   SummaryConfig,
   Task,
   categoryFromIcon,
@@ -82,7 +79,6 @@ import { MainTitleSection, IconActionButton, CtaActionButton } from "@/component
 import { cycleAccentColor } from "@/components/ui/Badge";
 import { recalculateRoadmapTimeline } from "@/lib/roadmapDates";
 import { haptic } from "@/lib/haptics";
-import type { ScheduleEntry } from "@/components/ScheduleItem";
 
 // ─── Constants ───────────────────────────────────────────────────────────────
 
@@ -162,23 +158,6 @@ function createSummaryFromMeta(metaFields: string[]): SummaryConfig[] {
 }
 
 const formatTaskDuration = formatDuration;
-
-function formatTimeDraft(value: string): string {
-  const digits = value.replace(/\D/g, "").slice(0, 4);
-  if (digits.length <= 2) return digits;
-  return `${digits.slice(0, 2)}:${digits.slice(2)}`;
-}
-
-function normalizeTimeDraft(value: string): string {
-  const digits = value.replace(/\D/g, "").slice(0, 4);
-  if (!digits) return "";
-  const hourDigits = digits.length <= 2 ? digits : digits.slice(0, digits.length - 2);
-  const minuteDigits = digits.length <= 2 ? "00" : digits.slice(-2);
-  const hours = Number(hourDigits);
-  const minutes = Number(minuteDigits);
-  if (!Number.isFinite(hours) || !Number.isFinite(minutes) || hours > 23 || minutes > 59) return "";
-  return `${String(hours).padStart(2, "0")}:${String(minutes).padStart(2, "0")}`;
-}
 
 function formatHourLabel(hour24: number): string {
   const normalizedHour = hour24 % 24;
@@ -444,14 +423,6 @@ export default function ScheduleApp() {
     setTaskSheetOpen(true);
   }
 
-  function openCreateRoutineSheet() {
-    setTaskSheetPlanId(null);
-    setTaskSheetTask(null);
-    setTaskSheetMode("create");
-    setTaskSheetInitialType("routine");
-    setTaskSheetOpen(true);
-  }
-
   function openEditSheet(task: Task) {
     setTaskSheetTask(task);
     setTaskSheetPlanId(task.planId);
@@ -577,7 +548,6 @@ export default function ScheduleApp() {
 
   function handleToggleRitualComplete(id: string) {
     const today = todayISO();
-    haptic("light");
     setSchedule((prev) => {
       const completions = prev.ritualCompletions ?? [];
       const exists = completions.some((c) => c.ritualId === id && c.date === today);
@@ -1241,7 +1211,7 @@ export default function ScheduleApp() {
                 type="date"
                 value={newPlanStartDate}
                 onChange={(e) => setNewPlanStartDate(e.target.value)}
-                className="h-11 w-full min-w-0 rounded-xl border border-neutral-200 bg-neutral-50 px-3 text-[16px] text-neutral-900 outline-none transition-colors focus:border-neutral-300 focus:bg-neutral-100 dark:border-white/10 dark:bg-white/[0.04] dark:text-white dark:focus:border-white/20 dark:focus:bg-white/[0.07]"
+                className="h-11 w-full min-w-0 rounded-xl border border-neutral-200 bg-neutral-50 px-3 text-[16px] text-neutral-900 outline-none transition-colors focus:border-neutral-300 focus:bg-neutral-100 dark:border-white/10 dark:bg-white/[0.04] dark:text-white dark:focus:border-white/20 dark:focus:bg-white/[0.07] dark:[color-scheme:dark]"
               />
             </div>
             <div>
@@ -1252,7 +1222,7 @@ export default function ScheduleApp() {
                 type="date"
                 value={newPlanEndDate}
                 onChange={(e) => setNewPlanEndDate(e.target.value)}
-                className="h-11 w-full min-w-0 rounded-xl border border-neutral-200 bg-neutral-50 px-3 text-[16px] text-neutral-900 outline-none transition-colors focus:border-neutral-300 focus:bg-neutral-100 dark:border-white/10 dark:bg-white/[0.04] dark:text-white dark:focus:border-white/20 dark:focus:bg-white/[0.07]"
+                className="h-11 w-full min-w-0 rounded-xl border border-neutral-200 bg-neutral-50 px-3 text-[16px] text-neutral-900 outline-none transition-colors focus:border-neutral-300 focus:bg-neutral-100 dark:border-white/10 dark:bg-white/[0.04] dark:text-white dark:focus:border-white/20 dark:focus:bg-white/[0.07] dark:[color-scheme:dark]"
               />
             </div>
           </div>
@@ -1969,7 +1939,7 @@ export default function ScheduleApp() {
                   type="date"
                   value={editPlanDraft.startDate}
                   onChange={(e) => setEditPlanDraft((d) => ({ ...d, startDate: e.target.value }))}
-                  className="h-11 w-full min-w-0 rounded-xl border border-neutral-200 bg-neutral-50 px-3 text-[16px] text-neutral-900 outline-none transition-colors focus:border-neutral-300 focus:bg-neutral-100 dark:border-white/10 dark:bg-white/[0.04] dark:text-white dark:focus:border-white/20 dark:focus:bg-white/[0.07]"
+                  className="h-11 w-full min-w-0 rounded-xl border border-neutral-200 bg-neutral-50 px-3 text-[16px] text-neutral-900 outline-none transition-colors focus:border-neutral-300 focus:bg-neutral-100 dark:border-white/10 dark:bg-white/[0.04] dark:text-white dark:focus:border-white/20 dark:focus:bg-white/[0.07] dark:[color-scheme:dark]"
                 />
               </div>
               <div>
@@ -1980,7 +1950,7 @@ export default function ScheduleApp() {
                   type="date"
                   value={editPlanDraft.endDate}
                   onChange={(e) => setEditPlanDraft((d) => ({ ...d, endDate: e.target.value }))}
-                  className="h-11 w-full min-w-0 rounded-xl border border-neutral-200 bg-neutral-50 px-3 text-[16px] text-neutral-900 outline-none transition-colors focus:border-neutral-300 focus:bg-neutral-100 dark:border-white/10 dark:bg-white/[0.04] dark:text-white dark:focus:border-white/20 dark:focus:bg-white/[0.07]"
+                  className="h-11 w-full min-w-0 rounded-xl border border-neutral-200 bg-neutral-50 px-3 text-[16px] text-neutral-900 outline-none transition-colors focus:border-neutral-300 focus:bg-neutral-100 dark:border-white/10 dark:bg-white/[0.04] dark:text-white dark:focus:border-white/20 dark:focus:bg-white/[0.07] dark:[color-scheme:dark]"
                 />
               </div>
             </div>

@@ -143,13 +143,15 @@ function PlanCardInner({
 
 
   return (
-    <motion.button
-      type="button"
+    <motion.div
+      role="button"
+      tabIndex={0}
       onClick={onSelect}
+      onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); onSelect(); } }}
       whileHover={{ y: -2 }}
       whileTap={{ scale: 0.985 }}
       transition={{ type: "spring", stiffness: 420, damping: 30 }}
-      className="w-full rounded-3xl border border-neutral-200 bg-white px-5 pt-5 pb-4 text-left transition-colors hover:border-neutral-300 dark:border-white/[0.08] dark:bg-neutral-900 dark:hover:border-white/[0.14]"
+      className="w-full cursor-pointer rounded-3xl border border-neutral-200 bg-white px-5 pt-5 pb-4 text-left transition-colors hover:border-neutral-300 dark:border-white/[0.08] dark:bg-neutral-900 dark:hover:border-white/[0.14]"
     >
       {/* ── Row 1: status chip ───────────────────────────────────────────── */}
       <motion.div
@@ -244,7 +246,7 @@ function PlanCardInner({
           </span>
         )}
       </div>
-    </motion.button>
+    </motion.div>
   );
 }
 
