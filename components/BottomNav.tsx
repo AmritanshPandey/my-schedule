@@ -5,6 +5,7 @@ import { haptic } from "@/lib/haptics";
 import { AnimatePresence, motion } from "framer-motion";
 import {
   IconCalendarEvent,
+  IconChartBar,
   IconClipboardData,
   IconCalendarPlus,
   IconClipboardPlus,
@@ -120,17 +121,17 @@ export default function BottomNav({
                     <span className="text-[11px] font-semibold text-white/75">Plan</span>
                   </motion.button>
 
-                  {/* ADD ROUTINE */}
+                  {/* ADD HABIT */}
                   <motion.button
                     whileTap={{ scale: 0.95 }}
                     onClick={() => { haptic("medium"); setExpanded(false); onCreateRitual(); }}
                     className="flex flex-col items-center gap-1.5"
-                    aria-label="Add routine"
+                    aria-label="Add habit"
                   >
                     <div className="flex h-[52px] w-[60px] items-center justify-center rounded-[18px] bg-white/[0.09]">
                       <IconRepeat size={24} strokeWidth={2} className="text-white" />
                     </div>
-                    <span className="text-[11px] font-semibold text-white/75">Routine</span>
+                    <span className="text-[11px] font-semibold text-white/75">Habit</span>
                   </motion.button>
                 </div>
               </motion.div>
@@ -179,22 +180,22 @@ export default function BottomNav({
               type="button"
               onClick={() => handleTabChange(0)}
               className={tabClass(activeTab === 0)}
-              aria-label="Tasks"
+              aria-label="Today"
               aria-current={activeTab === 0 ? "page" : undefined}
             >
               <IconCalendarEvent size={20} strokeWidth={2} />
-              <span className="text-[10.5px] font-medium leading-none">Tasks</span>
+              <span className="text-[10.5px] font-medium leading-none">Today</span>
             </button>
 
             <button
               type="button"
               onClick={() => handleTabChange(1)}
               className={tabClass(activeTab === 1)}
-              aria-label="Plan"
+              aria-label="Plans"
               aria-current={activeTab === 1 ? "page" : undefined}
             >
               <IconClipboardData size={20} strokeWidth={2} />
-              <span className="text-[10.5px] font-medium leading-none">Plan</span>
+              <span className="text-[10.5px] font-medium leading-none">Plans</span>
             </button>
 
             {/* CENTER SPACER (plus button lives here absolutely) */}
@@ -204,11 +205,11 @@ export default function BottomNav({
               type="button"
               onClick={() => handleTabChange(2)}
               className={tabClass(activeTab === 2)}
-              aria-label="Routine"
+              aria-label="Review"
               aria-current={activeTab === 2 ? "page" : undefined}
             >
-              <IconRepeat size={20} strokeWidth={2} />
-              <span className="text-[10.5px] font-medium leading-none">Routine</span>
+              <IconChartBar size={20} strokeWidth={2} />
+              <span className="text-[10.5px] font-medium leading-none">Review</span>
             </button>
 
             <button

@@ -12,7 +12,8 @@ export interface AITask {
 export type AIActionResult =
   | { type: "create_plan"; payload: { title: string; description: string; emoji: string; color: string; startDate?: string; endDate?: string; tasks?: AITask[] } }
   | { type: "create_ritual"; payload: { title: string; time: string; duration: number; repeatDays: DayKey[]; color: RitualColor } }
-  | { type: "create_strategy"; payload: { title: string; description: string; htmlContent: string } };
+  | { type: "create_strategy"; payload: { title: string; description: string; htmlContent: string } }
+  | { type: "suggest_milestones"; payload: { milestones: Array<{ title: string; description: string; targetDate?: string }> } };
 
 export const OLLAMA_URL_KEY = "planr_ollama_url";
 export const OLLAMA_MODEL_KEY = "planr_ollama_model";
@@ -81,6 +82,17 @@ After your conversational response, output a SINGLE JSON code block:
 \`\`\`
 The htmlContent must be a complete, self-contained HTML string. Escape any double-quotes inside it as \\". Only one JSON block per response.`,
 };
+
+export const PLAN_COACH_PROMPT = `You are an AI coach inside PlanR. Help the user develop and refine their plan through conversation.
+
+Be concise, supportive, and specific to the plan details provided. Ask one clarifying question at a time.
+When you have enough context to suggest milestones, include them as a JSON block at the END of your reply:
+\`\`\`json
+{"type":"suggest_milestones","payload":{"milestones":[{"title":"Week 1: ...","description":"one sentence","targetDate":"YYYY-MM-DD"}]}}
+\`\`\`
+Only output the JSON block when you have enough context to make specific suggestions.
+Suggest 3–5 milestones spaced across the plan duration. Keep milestone titles concise (3–6 words).
+ONE JSON block maximum per reply. Do not explain the JSON.`;
 
 export function buildPlanContext(plan: Plan | undefined): string {
   if (!plan) return "";
@@ -260,6 +272,23 @@ export function parseAIAction(text: string): AIActionResult | null {
           title: String(p.title),
           description: String(p.description ?? ""),
           htmlContent: String(p.htmlContent ?? ""),
+        },
+      };
+    }
+    if (parsed.type === "suggest_milestones") {
+      const raw = Array.isArray((parsed.payload as Record<string, unknown>)?.milestones)
+        ? (parsed.payload as Record<string, unknown>).milestones as unknown[]
+        : [];
+      return {
+        type: "suggest_milestones",
+        payload: {
+          milestones: raw
+            .filter((m): m is Record<string, unknown> => typeof m === "object" && m !== null && typeof (m as Record<string, unknown>).title === "string")
+            .map((m) => ({
+              title: String(m.title),
+              description: typeof m.description === "string" ? m.description : "",
+              targetDate: typeof m.targetDate === "string" ? m.targetDate : undefined,
+            })),
         },
       };
     }
