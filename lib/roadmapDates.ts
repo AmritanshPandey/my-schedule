@@ -54,7 +54,7 @@ export function recalculateRoadmapTimeline(
 
   return sorted.map((milestone, index) => {
     const plannedDurationDays = normalizeDurationDays(milestone.plannedDurationDays ?? milestone.estimatedDays);
-    const startDate = index === 0 ? cursor : cursor;
+    const startDate = cursor;
     const plannedEndDate = calculateMilestoneEndDate(startDate, plannedDurationDays);
     const actualCompletedDate = milestone.actualCompletedDate ?? milestone.completedDate;
     const status = resolveMilestoneStatus({
