@@ -55,6 +55,7 @@ async function* streamOllamaAction(
   model: string,
   systemPrompt: string,
   userMessage: string,
+  signal?: AbortSignal,
 ): AsyncGenerator<string> {
   let response: Response;
   try {
@@ -70,8 +71,10 @@ async function* streamOllamaAction(
         stream: true,
         options: OLLAMA_OPTIONS_FOCUSED,
       }),
+      signal,
     });
-  } catch {
+  } catch (err) {
+    if (err instanceof Error && err.name === "AbortError") throw err;
     throw new Error("Ollama not reachable — is it running? Start with: ollama serve");
   }
 
@@ -126,9 +129,10 @@ export function streamGenerateTasks(
   baseUrl: string,
   model: string,
   plan: { title: string; description?: string },
+  signal?: AbortSignal,
 ): AsyncGenerator<string> {
   const userMessage = `Generate tasks for: "${plan.title}"${plan.description ? `. ${plan.description}` : ""}`;
-  return streamOllamaAction(baseUrl, model, TASK_GEN_PROMPT, userMessage);
+  return streamOllamaAction(baseUrl, model, TASK_GEN_PROMPT, userMessage, signal);
 }
 
 export function parseGeneratedTasks(text: string): AIGeneratedTask[] {
@@ -178,6 +182,7 @@ export function streamGenerateMilestones(
   baseUrl: string,
   model: string,
   plan: { title: string; description?: string; startDate?: string; endDate?: string },
+  signal?: AbortSignal,
 ): AsyncGenerator<string> {
   const context = [
     `Plan: "${plan.title}"`,
@@ -185,7 +190,7 @@ export function streamGenerateMilestones(
     plan.startDate ? `Start: ${plan.startDate}` : "",
     plan.endDate ? `End: ${plan.endDate}` : "",
   ].filter(Boolean).join(". ");
-  return streamOllamaAction(baseUrl, model, MILESTONE_GEN_PROMPT, `Generate milestones for: ${context}`);
+  return streamOllamaAction(baseUrl, model, MILESTONE_GEN_PROMPT, `Generate milestones for: ${context}`, signal);
 }
 
 export function parseGeneratedMilestones(text: string): AIGeneratedMilestone[] {

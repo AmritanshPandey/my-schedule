@@ -745,6 +745,7 @@ export default function ScheduleApp() {
           ) as typeof prev.activities,
           metricEntries: prev.metricEntries.filter((e) => e.planId !== planId),
           progressTrackers: prev.progressTrackers.filter((t) => t.planId !== planId),
+          milestones: prev.milestones.filter((m) => m.planId !== planId),
         }));
         setSelectedPlanId((cur) => (cur === planId ? null : cur));
       }
@@ -989,7 +990,7 @@ export default function ScheduleApp() {
       const done = completions.filter((c) => c.date === date).length;
       return { date, label: SHORT[jsDay], isToday: date === today, completedCount: done, dueCount: due };
     });
-  }, [schedule.rituals, schedule.ritualCompletions]);
+  }, [schedule.rituals, schedule.ritualCompletions, todayKey]);
 
   // ─── Derived data ──────────────────────────────────────────────────────────
 

@@ -58,6 +58,7 @@ import {
   type AIGeneratedMilestone,
 } from "@/lib/aiActions";
 import { streamOllamaChat, parseAIAction, PLAN_COACH_PROMPT, buildPlanContext } from "@/lib/ai";
+import { getCoachSkillPrompt, detectCoachSkill, SKILL_LABELS } from "@/lib/coachSkills";
 import AIActionSheet, { type ResultItem } from "@/components/ai/AIActionSheet";
 
 
@@ -91,9 +92,9 @@ function getUniquePlanTasks(
   for (const day of DAYS) {
     for (const task of activities[day]) {
       if (task.planId !== planId) continue;
-      const key = `${task.title.trim().toLowerCase()}|${task.startTime}|${task.endTime}`;
-      if (!seen.has(key)) seen.set(key, { task, activeDays: [day] });
-      else seen.get(key)!.activeDays.push(day);
+
+      if (!seen.has(task.id)) seen.set(task.id, { task, activeDays: [day] });
+      else seen.get(task.id)!.activeDays.push(day);
     }
   }
   return Array.from(seen.values());
@@ -302,6 +303,12 @@ export default function PlanDetailView({
   const [milestonesGenerating, setMilestonesGenerating] = useState(false);
   const [acceptedMilestoneIds, setAcceptedMilestoneIds] = useState<Set<string>>(new Set());
   const chatEndRef = useRef<HTMLDivElement>(null);
+  const coachAbortRef = useRef<AbortController | null>(null);
+
+  useEffect(() => {
+    return () => { coachAbortRef.current?.abort(); };
+  }, []);
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
 
   // ── Task detail sheet ────────────────────────────────────────────────────
   const [viewingTask, setViewingTask] = useState<{ task: Task; activeDays: DayKey[] } | null>(null);
@@ -421,14 +428,26 @@ export default function PlanDetailView({
     const newMessages = [...coachMessages, userMsg];
     setCoachMessages(newMessages);
     setCoachInput("");
+    if (textareaRef.current) textareaRef.current.style.height = "auto";
     setCoachStreaming(true);
     const assistantIdx = newMessages.length;
     setCoachMessages((prev) => [...prev, { role: "assistant", content: "" }]);
+    coachAbortRef.current?.abort();
+    const controller = new AbortController();
+    coachAbortRef.current = controller;
+
     let accumulated = "";
     try {
-      const systemPrompt = `${PLAN_COACH_PROMPT}\n\n${buildPlanContext(plan)}`;
-      const history = newMessages.map((m) => ({ role: m.role, content: m.content }));
-      for await (const chunk of streamOllamaChat(ollamaUrl, ollamaModel, history, systemPrompt)) {
+      const skillPrompt = getCoachSkillPrompt(plan);
+      const systemPrompt = [PLAN_COACH_PROMPT, skillPrompt, buildPlanContext(plan)].filter(Boolean).join("\n\n");
+      // Strip JSON blocks from assistant messages so milestone JSON doesn't leak into context
+      const history = newMessages.map((m) => ({
+        role: m.role,
+        content: m.role === "assistant"
+          ? m.content.replace(/```json[\s\S]*?```/g, "").trim()
+          : m.content,
+      }));
+      for await (const chunk of streamOllamaChat(ollamaUrl, ollamaModel, history, systemPrompt, false, controller.signal)) {
         accumulated += chunk;
         setCoachMessages((prev) => {
           const updated = [...prev];
@@ -444,12 +463,16 @@ export default function PlanDetailView({
           return updated;
         });
       }
-    } catch {
-      setCoachMessages((prev) => {
-        const updated = [...prev];
-        updated[assistantIdx] = { role: "assistant", content: "Sorry, I couldn't reach the AI. Is Ollama running?" };
-        return updated;
-      });
+    } catch (err) {
+      if (err instanceof Error && err.name === "AbortError") {
+        setCoachMessages((prev) => prev.slice(0, -1));
+      } else {
+        setCoachMessages((prev) => {
+          const updated = [...prev];
+          updated[assistantIdx] = { role: "assistant", content: "Sorry, I couldn't reach the AI. Is Ollama running?" };
+          return updated;
+        });
+      }
     } finally {
       setCoachStreaming(false);
       setTimeout(() => chatEndRef.current?.scrollIntoView({ behavior: "smooth" }), 50);
@@ -458,6 +481,11 @@ export default function PlanDetailView({
 
   async function handleAutoGenerateMilestones() {
     if (!ollamaUrl || !ollamaModel || milestonesGenerating) return;
+
+    coachAbortRef.current?.abort();
+    const controller = new AbortController();
+    coachAbortRef.current = controller;
+
     setMilestonesGenerating(true);
     const msgIdx = coachMessages.length;
     setCoachMessages((prev) => [...prev, { role: "assistant", content: "Generating milestones…" }]);
@@ -466,7 +494,7 @@ export default function PlanDetailView({
       for await (const chunk of streamGenerateMilestones(ollamaUrl, ollamaModel, {
         title: plan.title, description: plan.description,
         startDate: plan.startDate, endDate: plan.endDate,
-      })) {
+      }, controller.signal)) {
         accumulated += chunk;
       }
       const milestones = parseGeneratedMilestones(accumulated);
@@ -477,12 +505,14 @@ export default function PlanDetailView({
           : { role: "assistant", content: "Couldn't generate milestones. Try describing your plan goals in the chat." };
         return updated;
       });
-    } catch {
-      setCoachMessages((prev) => {
-        const updated = [...prev];
-        updated[msgIdx] = { role: "assistant", content: "Couldn't reach AI. Is Ollama running?" };
-        return updated;
-      });
+    } catch (err) {
+      if (!(err instanceof Error && err.name === "AbortError")) {
+        setCoachMessages((prev) => {
+          const updated = [...prev];
+          updated[msgIdx] = { role: "assistant", content: "Couldn't reach AI. Is Ollama running?" };
+          return updated;
+        });
+      }
     } finally {
       setMilestonesGenerating(false);
       setTimeout(() => chatEndRef.current?.scrollIntoView({ behavior: "smooth" }), 50);
@@ -1036,8 +1066,8 @@ export default function PlanDetailView({
           </div>
         ) : (
           <>
-            {/* Auto-generate button */}
-            <div className="shrink-0 px-4 pt-4 pb-3">
+            {/* Auto-generate button + skill badge */}
+            <div className="shrink-0 flex items-center gap-2 px-4 pt-4 pb-3">
               <button
                 type="button"
                 onClick={handleAutoGenerateMilestones}
@@ -1047,6 +1077,14 @@ export default function PlanDetailView({
                 <IconSparkles size={13} strokeWidth={2} className={milestonesGenerating ? "animate-pulse text-violet-500" : ""} />
                 {milestonesGenerating ? "Generating…" : "Auto-generate milestones"}
               </button>
+              {(() => {
+                const skill = detectCoachSkill(plan);
+                return skill ? (
+                  <span className="text-[11px] font-medium text-neutral-400 dark:text-neutral-500">
+                    {SKILL_LABELS[skill]} Coach
+                  </span>
+                ) : null;
+              })()}
             </div>
 
             {/* Messages */}
@@ -1120,16 +1158,23 @@ export default function PlanDetailView({
 
             {/* Input */}
             <div className="shrink-0 border-t border-neutral-100 px-4 pb-4 pt-3 dark:border-white/[0.06]">
-              <div className="flex gap-2">
-                <input
+              <div className="flex items-end gap-2">
+                <textarea
+                  ref={textareaRef}
                   value={coachInput}
-                  onChange={(e) => setCoachInput(e.target.value)}
+                  rows={1}
+                  onChange={(e) => {
+                    setCoachInput(e.target.value);
+                    e.target.style.height = "auto";
+                    e.target.style.height = Math.min(e.target.scrollHeight, 120) + "px";
+                  }}
                   onKeyDown={(e) => {
                     if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); handleSendCoachMessage(); }
                   }}
                   placeholder="Ask about your plan…"
                   disabled={coachStreaming}
-                  className="flex-1 rounded-xl border border-neutral-200 bg-neutral-50 px-4 py-2.5 text-[14px] text-neutral-900 outline-none placeholder:text-neutral-400 focus:border-neutral-300 focus:bg-white disabled:opacity-60 dark:border-white/10 dark:bg-white/[0.04] dark:text-white dark:placeholder:text-neutral-600 dark:focus:border-white/20 dark:focus:bg-white/[0.07]"
+                  className="flex-1 resize-none overflow-y-auto rounded-xl border border-neutral-200 bg-neutral-50 px-4 py-2.5 text-[14px] text-neutral-900 outline-none placeholder:text-neutral-400 focus:border-neutral-300 focus:bg-white disabled:opacity-60 dark:border-white/10 dark:bg-white/[0.04] dark:text-white dark:placeholder:text-neutral-600 dark:focus:border-white/20 dark:focus:bg-white/[0.07]"
+                  style={{ minHeight: "44px", maxHeight: "120px" }}
                 />
                 <motion.button
                   type="button"
