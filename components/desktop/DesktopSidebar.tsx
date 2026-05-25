@@ -11,7 +11,7 @@ import {
   IconSettings,
 } from "@tabler/icons-react";
 import { haptic } from "@/lib/haptics";
-import { checkOllamaConnection } from "@/lib/ai";
+import { checkModelStatus } from "@/lib/ai";
 
 interface DesktopSidebarProps {
   activeTab: number;
@@ -89,22 +89,8 @@ export default function DesktopSidebar({
 
     async function check() {
       setStatus("checking");
-      try {
-        const models = await checkOllamaConnection(ollamaUrl);
-        if (cancelled) return;
-        // Parse "name:tag" — treat missing tag or ":latest" as wildcard on the tag side
-        const [wantName, wantTag] = ollamaModel.toLowerCase().split(":");
-        const found = models.some((m) => {
-          const [name, tag = "latest"] = m.toLowerCase().split(":");
-          if (name !== wantName) return false;
-          // If user specified a tag (not latest), require exact tag match
-          if (wantTag && wantTag !== "latest") return tag === wantTag;
-          return true;
-        });
-        setStatus(found ? "connected" : "no-model");
-      } catch {
-        if (!cancelled) setStatus("offline");
-      }
+      const result = await checkModelStatus(ollamaUrl, ollamaModel);
+      if (!cancelled) setStatus(result);
     }
 
     void check();

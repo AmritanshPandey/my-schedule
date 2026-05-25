@@ -990,8 +990,8 @@ export default function PlanDetailView({
           {([
             { label: "Current Phase",  value: currentPhaseName ?? "Starting out" },
             { label: "Consistency",    value: `${consistencyPct}%` },
-            { label: "Predicted Date", value: targetLabel },
-            { label: "Target Date",    value: targetLabel },
+            { label: "Days Left", value: roadmapStats.targetDate ? String(Math.max(0, Math.ceil((new Date(roadmapStats.targetDate).getTime() - Date.now()) / 86_400_000))) : "—" },
+            { label: "Target Date",   value: targetLabel },
           ] as { label: string; value: string }[]).map(({ label, value }) => (
             <div
               key={label}
