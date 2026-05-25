@@ -30,6 +30,7 @@ import {
   Plan,
   ProgressTracker,
   Ritual,
+  Schedule,
   SummaryConfig,
   Task,
   categoryFromIcon,
@@ -64,9 +65,6 @@ import { ListTaskCard } from "@/components/activity/ListTaskCard";
 import TodayRitualsBar from "@/components/activity/TodayRitualsBar";
 import ConfirmSheet from "@/components/ui/ConfirmSheet";
 import { CurrentTimeLayer } from "@/components/timeline/CurrentTimeLayer";
-import type { StrategyAsset } from "@/lib/useScheduleDB";
-import { uploadStrategyPdf, deleteStrategyPdf } from "@/lib/strategyStorage";
-import { useAuth } from "@/contexts/AuthProvider";
 import {
   toggleTaskComplete,
   toggleSubtaskComplete,
@@ -248,11 +246,140 @@ function SortableTaskCard({
   );
 }
 
+// ─── Week Summary (Review tab) ────────────────────────────────────────────────
+
+type RitualWeekDay = { date: string; label: string; isToday: boolean; completedCount: number; dueCount: number };
+
+function WeekSummary({
+  schedule,
+  todayKey,
+  ritualWeekHistory,
+}: {
+  schedule: Schedule;
+  todayKey: DayKey;
+  ritualWeekHistory: RitualWeekDay[];
+}) {
+  const thisWeekDates = useMemo(() => {
+    const today = new Date();
+    const dow = today.getDay();
+    const daysToMon = dow === 0 ? 6 : dow - 1;
+    const monday = new Date(today);
+    monday.setDate(today.getDate() - daysToMon);
+    monday.setHours(0, 0, 0, 0);
+    return DAYS.map((day, i) => {
+      const d = new Date(monday);
+      d.setDate(monday.getDate() + i);
+      return { day, date: d };
+    });
+  }, []);
+
+  const todayMidnight = useMemo(() => {
+    const d = new Date();
+    d.setHours(0, 0, 0, 0);
+    return d;
+  }, []);
+
+  const dayStats = useMemo(
+    () =>
+      thisWeekDates.map(({ day, date }) => {
+        const tasks = schedule.activities[day] ?? [];
+        const total = tasks.length;
+        const done = tasks.filter((t) => isTaskCompleted(t, t.subtasks?.length ?? 0)).length;
+        return {
+          day,
+          label: DAY_LABELS[day],
+          total,
+          done,
+          isPastOrToday: date <= todayMidnight,
+          isToday: day === todayKey,
+        };
+      }),
+    [schedule.activities, thisWeekDates, todayMidnight, todayKey]
+  );
+
+  const trackedDays = dayStats.filter((d) => d.isPastOrToday);
+  const totalDone = trackedDays.reduce((s, d) => s + d.done, 0);
+  const totalScheduled = trackedDays.reduce((s, d) => s + d.total, 0);
+  const weekPct = totalScheduled > 0 ? Math.round((totalDone / totalScheduled) * 100) : 0;
+
+  const ritualDone = ritualWeekHistory.reduce((s, d) => s + d.completedCount, 0);
+  const ritualDue = ritualWeekHistory.reduce((s, d) => s + d.dueCount, 0);
+  const ritualPct = ritualDue > 0 ? Math.round((ritualDone / ritualDue) * 100) : 0;
+
+  return (
+    <div className="rounded-2xl border border-neutral-200 bg-white dark:border-white/[0.08] dark:bg-neutral-900 px-4 py-4 mb-6">
+      <p className="text-[11px] font-bold uppercase tracking-[0.08em] text-neutral-400 dark:text-neutral-500 mb-3">
+        This Week
+      </p>
+
+      {/* Day completion strip */}
+      <div className="grid grid-cols-7 gap-1.5 mb-4">
+        {dayStats.map(({ day, label, total, done, isPastOrToday, isToday }) => {
+          const pct = total > 0 ? Math.round((done / total) * 100) : 0;
+          return (
+            <div key={day} className="flex flex-col items-center gap-1.5">
+              <span className={`text-[9px] font-semibold leading-none ${
+                isToday
+                  ? "text-emerald-500 dark:text-emerald-400"
+                  : "text-neutral-400 dark:text-neutral-500"
+              }`}>
+                {label}
+              </span>
+              <div className="w-full h-[5px] rounded-full bg-neutral-100 dark:bg-white/[0.06] overflow-hidden">
+                {total > 0 && isPastOrToday && (
+                  <div
+                    className={`h-full rounded-full ${
+                      pct === 100
+                        ? "bg-emerald-500"
+                        : pct >= 50
+                        ? "bg-amber-400"
+                        : "bg-rose-400"
+                    }`}
+                    style={{ width: `${Math.max(pct, pct > 0 ? 10 : 0)}%` }}
+                  />
+                )}
+              </div>
+              <span className={`text-[9px] tabular-nums leading-none ${
+                isToday
+                  ? "font-bold text-neutral-700 dark:text-neutral-300"
+                  : "text-neutral-400 dark:text-neutral-500"
+              }`}>
+                {total > 0 && isPastOrToday ? `${done}/${total}` : "·"}
+              </span>
+            </div>
+          );
+        })}
+      </div>
+
+      {/* Stats */}
+      <div className="grid grid-cols-2 gap-2">
+        <div className="rounded-xl bg-neutral-50 dark:bg-white/[0.03] px-3 py-2.5">
+          <p className="mb-0.5 text-[10px] font-semibold uppercase tracking-[0.06em] text-neutral-400 dark:text-neutral-500">
+            Tasks done
+          </p>
+          <p className="text-[20px] font-extrabold tabular-nums leading-none text-neutral-950 dark:text-white">
+            {weekPct}
+            <span className="text-[12px] font-semibold text-neutral-400 dark:text-neutral-500">%</span>
+          </p>
+        </div>
+        <div className="rounded-xl bg-neutral-50 dark:bg-white/[0.03] px-3 py-2.5">
+          <p className="mb-0.5 text-[10px] font-semibold uppercase tracking-[0.06em] text-neutral-400 dark:text-neutral-500">
+            Habits done
+          </p>
+          <p className="text-[20px] font-extrabold tabular-nums leading-none text-neutral-950 dark:text-white">
+            {ritualPct}
+            <span className="text-[12px] font-semibold text-neutral-400 dark:text-neutral-500">%</span>
+          </p>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // ─── Main component ───────────────────────────────────────────────────────────
 
 export default function ScheduleApp() {
   const { schedule, setSchedule, ready, clearData, isFirstLaunch } = useScheduleDB();
-  const { user } = useAuth();
   const [todayKey, setTodayKey] = useState<DayKey>(() => JS_DAYS[new Date().getDay()]);
   const [activeDay, setActiveDay] = useState<DayKey>(() => JS_DAYS[new Date().getDay()]);
   const [editMode, setEditMode] = useState(false);
@@ -574,37 +701,6 @@ export default function ScheduleApp() {
     });
   }
 
-  // ── Strategy handlers ─────────────────────────────────────────────────────
-
-  async function handleAddStrategy(
-    data: Omit<StrategyAsset, "id" | "createdAt" | "updatedAt">,
-    pdfBytes?: Uint8Array,
-  ) {
-    const now = new Date().toISOString();
-    const id = uid();
-    let asset: StrategyAsset = { ...data, id, createdAt: now, updatedAt: now };
-
-    // If authenticated and PDF bytes provided, upload to Storage first.
-    if (user && pdfBytes && data.type === "pdf") {
-      try {
-        const pdfUrl = await uploadStrategyPdf(user.uid, id, pdfBytes);
-        asset = { ...asset, pdfUrl };
-      } catch (err) {
-        console.error("[Strategy] Storage upload failed:", err);
-        // Fall back to base64 so the asset is still saved locally.
-        let binary = "";
-        pdfBytes.forEach((b) => (binary += String.fromCharCode(b)));
-        asset = { ...asset, pdfData: btoa(binary) };
-      }
-    }
-
-    setSchedule((prev) => ({ ...prev, strategies: [...(prev.strategies ?? []), asset] }));
-  }
-
-  function handleGenerateStrategy(_plan: Plan) {
-    // Strategy generation via AI chat removed — use inline AI actions instead
-  }
-
   function handleAddGeneratedTasks(tasks: AIGeneratedTask[], planId: string) {
     const plan = schedule.plans.find((p) => p.id === planId);
     if (!plan) return;
@@ -625,23 +721,6 @@ export default function ScheduleApp() {
       }
       return { ...prev, activities: updatedActivities };
     });
-  }
-
-  function handleDeleteStrategy(id: string) {
-    const asset = schedule.strategies?.find((s) => s.id === id);
-    openConfirm(
-      `Delete "${asset?.title ?? "strategy"}"?`,
-      "The strategy document will be permanently removed.",
-      () => {
-        if (user && asset?.pdfUrl) {
-          deleteStrategyPdf(user.uid, id).catch(() => {});
-        }
-        setSchedule((prev) => ({
-          ...prev,
-          strategies: (prev.strategies ?? []).filter((s) => s.id !== id),
-        }));
-      }
-    );
   }
 
   function handleDeletePlan(planId: string) {
@@ -2094,9 +2173,6 @@ export default function ScheduleApp() {
               onUpdateMilestone={handleUpdateMilestone}
               onDeleteMilestone={handleDeleteMilestone}
               onCompleteMilestone={handleCompleteMilestone}
-              onAddStrategy={handleAddStrategy}
-              onDeleteStrategy={handleDeleteStrategy}
-              onGenerateStrategy={handleGenerateStrategy}
               ollamaUrl={ollamaUrl}
               ollamaModel={ollamaModel}
               onAddGeneratedTasks={handleAddGeneratedTasks}
@@ -2105,7 +2181,7 @@ export default function ScheduleApp() {
           </div>
           </motion.div>
         )}
-        {/* ── Ritual Tab ─────────────────────────────────────────────────── */}
+        {/* ── Review Tab ─────────────────────────────────────────────────── */}
         {activeTab === 2 && (
           <motion.div
             key="tab-rituals"
@@ -2115,6 +2191,13 @@ export default function ScheduleApp() {
             transition={{ duration: 0.12, ease: "easeOut" }}
           >
             <div className="lg:px-8">
+              <div className="px-4 pt-5 pb-0 lg:px-0 lg:pt-4">
+                <WeekSummary
+                  schedule={schedule}
+                  todayKey={todayKey}
+                  ritualWeekHistory={ritualWeekHistory}
+                />
+              </div>
               <RitualView
                 rituals={schedule.rituals ?? []}
                 completedIds={completedRitualIds}

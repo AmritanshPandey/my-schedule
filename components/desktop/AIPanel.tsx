@@ -32,6 +32,7 @@ const ACTION_LABELS: Record<AIActionResult["type"], string> = {
   create_plan: "New Plan",
   create_ritual: "New Ritual",
   create_strategy: "New Strategy",
+  suggest_milestones: "Milestones",
 };
 
 function ThinkingDots() {
@@ -228,7 +229,8 @@ function ActionCard({ action, onApply }: { action: AIActionResult; onApply: (upd
     return <PlanDraftCard action={action} onApply={onApply} />;
   }
 
-  const title = action.type === "create_ritual" ? action.payload.title : action.payload.title;
+  if (action.type === "suggest_milestones") return null;
+  const title = action.payload.title;
   const htmlExcerpt =
     action.type === "create_strategy" && action.payload.htmlContent
       ? action.payload.htmlContent

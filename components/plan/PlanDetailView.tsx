@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import {
   IconCheck,
@@ -11,9 +11,6 @@ import {
   IconArrowDownRight,
   IconArrowUp,
   IconArrowDown,
-  IconBrain,
-  IconCode,
-  IconFileText,
   IconCalendar,
   IconRepeat,
   IconClock,
@@ -21,6 +18,7 @@ import {
   IconListCheck,
   IconAlertTriangle,
   IconSparkles,
+  IconSend,
 } from "@tabler/icons-react";
 import { haptic } from "@/lib/haptics";
 import ProgressChart from "@/components/ProgressChart";
@@ -42,7 +40,6 @@ import type {
   DayKey,
   GoalDirection,
   MetricEntry,
-  StrategyAsset,
 } from "@/lib/useScheduleDB";
 import { DAYS } from "@/lib/useScheduleDB";
 import { timelineCardStyles } from "@/lib/colorSystem";
@@ -52,13 +49,15 @@ import { DayPill } from "@/components/ui/Badge";
 import { InternalSectionTitle, SectionIconButton } from "@/components/ui/InternalSectionTitle";
 import { TrackerTabs } from "@/components/ui/TrackerTabs";
 import AccuracyCalendar from "@/components/plan/AccuracyCalendar";
-import StrategyViewer from "@/components/strategy/StrategyViewer";
-import StrategyUpload from "@/components/strategy/StrategyUpload";
 import {
   streamGenerateTasks,
   parseGeneratedTasks,
   type AIGeneratedTask,
+  streamGenerateMilestones,
+  parseGeneratedMilestones,
+  type AIGeneratedMilestone,
 } from "@/lib/aiActions";
+import { streamOllamaChat, parseAIAction, PLAN_COACH_PROMPT, buildPlanContext } from "@/lib/ai";
 import AIActionSheet, { type ResultItem } from "@/components/ai/AIActionSheet";
 
 
@@ -191,10 +190,6 @@ interface PlanDetailViewProps {
   onUpdateMilestone: (id: string, data: Partial<Milestone>) => void;
   onDeleteMilestone: (id: string) => void;
   onCompleteMilestone: (id: string) => void;
-  // Strategy handlers
-  onAddStrategy: (data: Omit<StrategyAsset, "id" | "createdAt" | "updatedAt">, pdfBytes?: Uint8Array) => void;
-  onDeleteStrategy: (id: string) => void;
-  onGenerateStrategy?: (plan: Plan) => void;
   // AI
   ollamaUrl?: string;
   ollamaModel?: string;
@@ -219,9 +214,6 @@ export default function PlanDetailView({
   onUpdateMilestone,
   onDeleteMilestone,
   onCompleteMilestone,
-  onAddStrategy,
-  onDeleteStrategy,
-  onGenerateStrategy,
   ollamaUrl,
   ollamaModel,
   onAddGeneratedTasks,
@@ -294,9 +286,22 @@ export default function PlanDetailView({
   const [milestoneSheetMode, setMilestoneSheetMode] = useState<"create" | "edit">("create");
   const [editingMilestone, setEditingMilestone] = useState<Milestone | null>(null);
 
-  // ── Strategy state ──────────────────────────────────────────────────────
-  const [viewingStrategy, setViewingStrategy] = useState<StrategyAsset | null>(null);
-  const [strategyUploadOpen, setStrategyUploadOpen] = useState(false);
+  // ── AI Coach state ──────────────────────────────────────────────────────
+  type ChatMessage = {
+    role: "user" | "assistant";
+    content: string;
+    suggestedMilestones?: AIGeneratedMilestone[];
+  };
+  const [coachMessages, setCoachMessages] = useState<ChatMessage[]>(() =>
+    ollamaUrl && ollamaModel
+      ? [{ role: "assistant" as const, content: `I'm here to help you build out "${plan.title}". What's your main goal for this plan?` }]
+      : []
+  );
+  const [coachInput, setCoachInput] = useState("");
+  const [coachStreaming, setCoachStreaming] = useState(false);
+  const [milestonesGenerating, setMilestonesGenerating] = useState(false);
+  const [acceptedMilestoneIds, setAcceptedMilestoneIds] = useState<Set<string>>(new Set());
+  const chatEndRef = useRef<HTMLDivElement>(null);
 
   // ── Task detail sheet ────────────────────────────────────────────────────
   const [viewingTask, setViewingTask] = useState<{ task: Task; activeDays: DayKey[] } | null>(null);
@@ -349,10 +354,12 @@ export default function PlanDetailView({
     [plan, schedule.activities, milestones]
   );
 
-  const planStrategies = useMemo(
-    () => (schedule.strategies ?? []).filter((s) => s.planId === plan.id),
-    [plan.id, schedule.strategies]
-  );
+  // Greet when Ollama becomes available mid-session (was unconfigured at mount)
+  useEffect(() => {
+    if (ollamaUrl && ollamaModel && coachMessages.length === 0) {
+      setCoachMessages([{ role: "assistant", content: `I'm here to help you build out "${plan.title}". What's your main goal for this plan?` }]);
+    }
+  }, [ollamaUrl, ollamaModel]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const roadmapEndDate = planMilestones[planMilestones.length - 1]?.plannedEndDate ?? plan.endDate;
   const dateRange = plan.startDate && roadmapEndDate
@@ -404,6 +411,115 @@ export default function PlanDetailView({
       // Assign sortOrder = current length
       onAddMilestone({ ...data, sortOrder: planMilestones.length });
     }
+  }
+
+  // ── AI Coach handlers ───────────────────────────────────────────────────
+
+  async function handleSendCoachMessage() {
+    if (!ollamaUrl || !ollamaModel || !coachInput.trim() || coachStreaming) return;
+    const userMsg: ChatMessage = { role: "user", content: coachInput.trim() };
+    const newMessages = [...coachMessages, userMsg];
+    setCoachMessages(newMessages);
+    setCoachInput("");
+    setCoachStreaming(true);
+    const assistantIdx = newMessages.length;
+    setCoachMessages((prev) => [...prev, { role: "assistant", content: "" }]);
+    let accumulated = "";
+    try {
+      const systemPrompt = `${PLAN_COACH_PROMPT}\n\n${buildPlanContext(plan)}`;
+      const history = newMessages.map((m) => ({ role: m.role, content: m.content }));
+      for await (const chunk of streamOllamaChat(ollamaUrl, ollamaModel, history, systemPrompt)) {
+        accumulated += chunk;
+        setCoachMessages((prev) => {
+          const updated = [...prev];
+          updated[assistantIdx] = { role: "assistant", content: accumulated };
+          return updated;
+        });
+      }
+      const action = parseAIAction(accumulated);
+      if (action?.type === "suggest_milestones") {
+        setCoachMessages((prev) => {
+          const updated = [...prev];
+          updated[assistantIdx] = { role: "assistant", content: accumulated, suggestedMilestones: action.payload.milestones };
+          return updated;
+        });
+      }
+    } catch {
+      setCoachMessages((prev) => {
+        const updated = [...prev];
+        updated[assistantIdx] = { role: "assistant", content: "Sorry, I couldn't reach the AI. Is Ollama running?" };
+        return updated;
+      });
+    } finally {
+      setCoachStreaming(false);
+      setTimeout(() => chatEndRef.current?.scrollIntoView({ behavior: "smooth" }), 50);
+    }
+  }
+
+  async function handleAutoGenerateMilestones() {
+    if (!ollamaUrl || !ollamaModel || milestonesGenerating) return;
+    setMilestonesGenerating(true);
+    const msgIdx = coachMessages.length;
+    setCoachMessages((prev) => [...prev, { role: "assistant", content: "Generating milestones…" }]);
+    let accumulated = "";
+    try {
+      for await (const chunk of streamGenerateMilestones(ollamaUrl, ollamaModel, {
+        title: plan.title, description: plan.description,
+        startDate: plan.startDate, endDate: plan.endDate,
+      })) {
+        accumulated += chunk;
+      }
+      const milestones = parseGeneratedMilestones(accumulated);
+      setCoachMessages((prev) => {
+        const updated = [...prev];
+        updated[msgIdx] = milestones.length > 0
+          ? { role: "assistant", content: `Here are ${milestones.length} milestone suggestions for "${plan.title}":`, suggestedMilestones: milestones }
+          : { role: "assistant", content: "Couldn't generate milestones. Try describing your plan goals in the chat." };
+        return updated;
+      });
+    } catch {
+      setCoachMessages((prev) => {
+        const updated = [...prev];
+        updated[msgIdx] = { role: "assistant", content: "Couldn't reach AI. Is Ollama running?" };
+        return updated;
+      });
+    } finally {
+      setMilestonesGenerating(false);
+      setTimeout(() => chatEndRef.current?.scrollIntoView({ behavior: "smooth" }), 50);
+    }
+  }
+
+  function handleAcceptMilestone(msgIdx: number, mIdx: number, milestone: AIGeneratedMilestone) {
+    const key = `${msgIdx}-${mIdx}`;
+    if (acceptedMilestoneIds.has(key)) return;
+    const today = new Date().toISOString().slice(0, 10);
+    const startDate = plan.startDate ?? today;
+    const targetDate = milestone.targetDate;
+    const plannedEndDate = targetDate ?? today;
+    const plannedDurationDays = targetDate
+      ? Math.max(1, Math.ceil((new Date(targetDate).getTime() - new Date(startDate).getTime()) / 86_400_000))
+      : 30;
+    onAddMilestone({
+      title: milestone.title,
+      description: milestone.description || "",
+      startDate,
+      plannedDurationDays,
+      plannedEndDate,
+      status: "upcoming",
+      linkedActivities: [],
+      linkedTrackers: [],
+      sortOrder: planMilestones.length + acceptedMilestoneIds.size,
+      targetDate,
+    } as MilestoneSaveData);
+    setAcceptedMilestoneIds((prev) => new Set([...prev, key]));
+  }
+
+  function handleAcceptAllMilestones(msgIdx: number, milestones: AIGeneratedMilestone[]) {
+    milestones.forEach((m, mIdx) => {
+      if (!acceptedMilestoneIds.has(`${msgIdx}-${mIdx}`)) {
+        handleAcceptMilestone(msgIdx, mIdx, m);
+      }
+    });
   }
 
   // ─────────────────────────────────────────────────────────────────────────
@@ -894,9 +1010,10 @@ export default function PlanDetailView({
     );
   }
 
-  // ── Strategy tab ────────────────────────────────────────────────────────
+  // ── AI Coach tab ─────────────────────────────────────────────────────────
 
   function renderStrategyTab() {
+    const noOllama = !ollamaUrl || !ollamaModel;
     return (
       <motion.div
         key="strategy"
@@ -904,109 +1021,128 @@ export default function PlanDetailView({
         animate={{ opacity: 1, y: 0 }}
         exit={{ opacity: 0, y: -6 }}
         transition={{ duration: 0.22, ease: "easeOut" }}
-        className="pb-32"
+        className="flex flex-col"
+        style={{ height: "clamp(360px, calc(100vh - 300px), 640px)" }}
       >
-        <div className="mt-6 flex items-center justify-between px-4 mb-4">
-          <p className="text-[11px] font-bold uppercase tracking-[0.09em] text-neutral-400 dark:text-neutral-500">
-            {planStrategies.length === 0 ? "No strategies yet" : `${planStrategies.length} strateg${planStrategies.length === 1 ? "y" : "ies"}`}
-          </p>
-          <div className="flex items-center gap-2">
-            {onGenerateStrategy && (
-              <button
-                type="button"
-                onClick={() => { haptic("light"); onGenerateStrategy(plan); }}
-                className="hidden lg:inline-flex items-center gap-1.5 rounded-xl px-3 py-1.5 text-[12px] font-semibold text-violet-600 transition-colors hover:bg-violet-50 dark:text-violet-400 dark:hover:bg-violet-500/10"
-              >
-                <IconSparkles size={13} strokeWidth={2} />
-                Generate with AI
-              </button>
-            )}
-            <button
-              type="button"
-              onClick={() => setStrategyUploadOpen(true)}
-              className="inline-flex items-center gap-1.5 rounded-xl border border-neutral-200 px-3 py-1.5 text-[12px] font-semibold text-neutral-600 transition-colors hover:bg-neutral-50 dark:border-white/10 dark:text-neutral-400 dark:hover:bg-white/[0.04]"
-            >
-              <IconPlus size={14} strokeWidth={2.5} />
-              Add
-            </button>
-          </div>
-        </div>
-
-        {planStrategies.length === 0 ? (
-          <div className="mx-4 rounded-[24px] border border-dashed border-neutral-200 py-14 text-center dark:border-white/[0.08]">
-            <div className="flex h-14 w-14 items-center justify-center rounded-[20px] bg-neutral-100 dark:bg-white/[0.06] mx-auto mb-3">
-              <IconBrain size={26} strokeWidth={1.5} className="text-neutral-400 dark:text-neutral-500" />
+        {noOllama ? (
+          <div className="flex flex-col items-center justify-center gap-3 py-16 text-center px-4">
+            <div className="flex h-14 w-14 items-center justify-center rounded-[20px] bg-neutral-100 dark:bg-white/[0.06] mx-auto">
+              <IconSparkles size={24} strokeWidth={1.5} className="text-neutral-400 dark:text-neutral-500" />
             </div>
-            <p className="text-[15px] font-semibold text-neutral-600 dark:text-neutral-300">
-              No strategies yet
+            <p className="text-[15px] font-semibold text-neutral-700 dark:text-neutral-200">AI Coach</p>
+            <p className="text-[13px] text-neutral-400 dark:text-neutral-500 max-w-[220px] mx-auto leading-relaxed">
+              Connect an AI model in Settings to start coaching sessions for this plan.
             </p>
-            <p className="mt-1 text-[13px] text-neutral-400 dark:text-neutral-500 max-w-[220px] mx-auto">
-              Upload PDFs or paste notes to guide this plan.
-            </p>
-            <button
-              type="button"
-              onClick={() => setStrategyUploadOpen(true)}
-              className="mt-4 inline-flex items-center gap-1.5 rounded-xl border border-neutral-200 px-4 py-2 text-[13px] font-semibold text-neutral-600 transition-colors hover:bg-neutral-50 dark:border-white/10 dark:text-neutral-400 dark:hover:bg-white/[0.04]"
-            >
-              <IconPlus size={15} strokeWidth={2} />
-              Upload Strategy
-            </button>
           </div>
         ) : (
-          <div className="space-y-3 px-4">
-            {planStrategies.map((asset) => (
-              <div
-                key={asset.id}
-                className="relative rounded-[22px] border border-neutral-200/80 bg-white dark:border-white/[0.08] dark:bg-neutral-900"
+          <>
+            {/* Auto-generate button */}
+            <div className="shrink-0 px-4 pt-4 pb-3">
+              <button
+                type="button"
+                onClick={handleAutoGenerateMilestones}
+                disabled={milestonesGenerating || coachStreaming}
+                className="inline-flex items-center gap-1.5 rounded-xl border border-neutral-200 px-3 py-1.5 text-[12px] font-semibold text-neutral-600 transition-colors hover:bg-neutral-50 disabled:opacity-50 dark:border-white/10 dark:text-neutral-400 dark:hover:bg-white/[0.04]"
               >
-                <div
-                  role="button"
-                  tabIndex={0}
-                  className="w-full cursor-pointer px-5 py-4 text-left"
-                  onClick={() => setViewingStrategy(asset)}
-                  onKeyDown={(e) => {
-                    if (e.key === "Enter" || e.key === " ") setViewingStrategy(asset);
-                  }}
-                >
-                  <div className="flex items-start gap-3">
-                    <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-neutral-100 dark:bg-white/[0.07]">
-                      {asset.type === "html"
-                        ? <IconCode size={18} className="text-neutral-500 dark:text-neutral-400" />
-                        : <IconFileText size={18} className="text-neutral-500 dark:text-neutral-400" />
-                      }
+                <IconSparkles size={13} strokeWidth={2} className={milestonesGenerating ? "animate-pulse text-violet-500" : ""} />
+                {milestonesGenerating ? "Generating…" : "Auto-generate milestones"}
+              </button>
+            </div>
+
+            {/* Messages */}
+            <div className="flex-1 overflow-y-auto space-y-3 px-4 pb-2" style={{ scrollbarWidth: "none" } as React.CSSProperties}>
+              {coachMessages.map((msg, msgIdx) => (
+                <div key={msgIdx}>
+                  <div className={`flex ${msg.role === "user" ? "justify-end" : "justify-start"}`}>
+                    <div className={`max-w-[85%] rounded-2xl px-4 py-2.5 text-[14px] leading-relaxed ${
+                      msg.role === "user"
+                        ? "rounded-br-md bg-neutral-900 text-white dark:bg-white dark:text-neutral-900"
+                        : "rounded-bl-md bg-neutral-100 text-neutral-800 dark:bg-white/[0.06] dark:text-neutral-200"
+                    }`}>
+                      {msg.content.replace(/```(?:json)?\s*\{[\s\S]*?\}\s*```/g, "").trim() || (coachStreaming && msgIdx === coachMessages.length - 1 ? "···" : "")}
                     </div>
-                    <div className="min-w-0 flex-1">
-                      <span className="text-[10px] font-bold uppercase tracking-wider text-neutral-400 dark:text-neutral-500">
-                        {asset.type}
-                      </span>
-                      <p className="mt-0.5 text-[16px] font-semibold leading-snug text-neutral-900 dark:text-white">
-                        {asset.title}
+                  </div>
+
+                  {msg.suggestedMilestones && msg.suggestedMilestones.length > 0 && (
+                    <div className="mt-2 rounded-2xl border border-neutral-200 bg-neutral-50 p-3 dark:border-white/[0.08] dark:bg-white/[0.03]">
+                      <p className="mb-2 text-[10px] font-bold uppercase tracking-wider text-neutral-400 dark:text-neutral-500">
+                        Suggested milestones
                       </p>
-                      {asset.description && (
-                        <p className="mt-0.5 line-clamp-2 text-[13px] text-neutral-400">
-                          {asset.description}
-                        </p>
+                      {msg.suggestedMilestones.map((m, mIdx) => {
+                        const key = `${msgIdx}-${mIdx}`;
+                        const accepted = acceptedMilestoneIds.has(key);
+                        return (
+                          <div key={mIdx} className="flex items-center gap-3 border-b border-neutral-100 py-2 last:border-0 dark:border-white/[0.05]">
+                            <div className="min-w-0 flex-1">
+                              <p className="text-[13px] font-semibold text-neutral-800 dark:text-neutral-200">{m.title}</p>
+                              {m.targetDate && (
+                                <p className="text-[11px] text-neutral-400 dark:text-neutral-500">{m.targetDate}</p>
+                              )}
+                            </div>
+                            <button
+                              type="button"
+                              onClick={() => handleAcceptMilestone(msgIdx, mIdx, m)}
+                              disabled={accepted}
+                              className={`shrink-0 rounded-full border px-2.5 py-0.5 text-[12px] font-semibold transition-colors ${
+                                accepted
+                                  ? "border-emerald-200 bg-emerald-50 text-emerald-600 dark:border-emerald-500/30 dark:bg-emerald-500/[0.07] dark:text-emerald-400"
+                                  : "border-neutral-300 text-neutral-600 hover:border-neutral-400 dark:border-white/10 dark:text-neutral-400 dark:hover:border-white/20"
+                              }`}
+                            >
+                              {accepted ? "✓ Added" : "+ Add"}
+                            </button>
+                          </div>
+                        );
+                      })}
+                      {msg.suggestedMilestones.filter((_, i) => !acceptedMilestoneIds.has(`${msgIdx}-${i}`)).length > 1 && (
+                        <button
+                          type="button"
+                          onClick={() => handleAcceptAllMilestones(msgIdx, msg.suggestedMilestones!)}
+                          className="mt-2 w-full rounded-xl bg-neutral-900 py-2 text-[13px] font-semibold text-white dark:bg-white dark:text-neutral-900"
+                        >
+                          Add all remaining milestones
+                        </button>
                       )}
-                      <div className="mt-2 flex items-center gap-1.5 text-[11px] text-neutral-400">
-                        <IconCalendar size={11} strokeWidth={2} />
-                        {new Date(asset.createdAt).toLocaleDateString("en-US", {
-                          month: "short", day: "numeric", year: "numeric",
-                        })}
-                      </div>
                     </div>
-                    <motion.button
-                      type="button"
-                      whileTap={{ scale: 0.85 }}
-                      onClick={(e) => { e.stopPropagation(); onDeleteStrategy(asset.id); }}
-                      className="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl text-neutral-300 transition-colors hover:text-rose-400 dark:text-neutral-600"
-                    >
-                      <IconTrash size={15} strokeWidth={2} />
-                    </motion.button>
+                  )}
+                </div>
+              ))}
+
+              {coachStreaming && (
+                <div className="flex justify-start">
+                  <div className="rounded-2xl rounded-bl-md bg-neutral-100 px-4 py-2.5 text-neutral-500 dark:bg-white/[0.06] dark:text-neutral-400">
+                    <span className="animate-pulse text-[18px] tracking-widest">···</span>
                   </div>
                 </div>
+              )}
+              <div ref={chatEndRef} />
+            </div>
+
+            {/* Input */}
+            <div className="shrink-0 border-t border-neutral-100 px-4 pb-4 pt-3 dark:border-white/[0.06]">
+              <div className="flex gap-2">
+                <input
+                  value={coachInput}
+                  onChange={(e) => setCoachInput(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); handleSendCoachMessage(); }
+                  }}
+                  placeholder="Ask about your plan…"
+                  disabled={coachStreaming}
+                  className="flex-1 rounded-xl border border-neutral-200 bg-neutral-50 px-4 py-2.5 text-[14px] text-neutral-900 outline-none placeholder:text-neutral-400 focus:border-neutral-300 focus:bg-white disabled:opacity-60 dark:border-white/10 dark:bg-white/[0.04] dark:text-white dark:placeholder:text-neutral-600 dark:focus:border-white/20 dark:focus:bg-white/[0.07]"
+                />
+                <motion.button
+                  type="button"
+                  whileTap={{ scale: 0.9 }}
+                  onClick={handleSendCoachMessage}
+                  disabled={coachStreaming || !coachInput.trim()}
+                  className="flex h-[44px] w-[44px] shrink-0 items-center justify-center rounded-xl bg-neutral-900 text-white transition-opacity disabled:opacity-40 dark:bg-white dark:text-neutral-900"
+                >
+                  <IconSend size={17} strokeWidth={2} />
+                </motion.button>
               </div>
-            ))}
-          </div>
+            </div>
+          </>
         )}
       </motion.div>
     );
@@ -1267,7 +1403,7 @@ export default function PlanDetailView({
                   : "text-neutral-500 dark:text-neutral-400"
               }`}
             >
-              {tab === "planning" ? "Planning" : tab === "roadmap" ? "Roadmap" : "Strategy"}
+              {tab === "planning" ? "Planning" : tab === "roadmap" ? "Roadmap" : "Coach"}
             </button>
           ))}
         </div>
@@ -1373,22 +1509,6 @@ export default function PlanDetailView({
           </Button>
         </div>
       </BottomSheet>
-
-      {/* Strategy upload sheet */}
-      <StrategyUpload
-        isOpen={strategyUploadOpen}
-        onClose={() => setStrategyUploadOpen(false)}
-        onSave={(data, pdfBytes) => {
-          onAddStrategy({ ...data, planId: plan.id }, pdfBytes);
-          setStrategyUploadOpen(false);
-        }}
-      />
-
-      {/* Strategy viewer */}
-      <StrategyViewer
-        asset={viewingStrategy}
-        onClose={() => setViewingStrategy(null)}
-      />
 
       {/* Milestone detail sheet */}
       <BottomSheet open={!!viewingMilestone} onClose={() => setViewingMilestone(null)} maxHeight="85vh">
