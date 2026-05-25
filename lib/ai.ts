@@ -139,6 +139,7 @@ export async function* streamOllamaChat(
   messages: { role: "user" | "assistant"; content: string }[],
   systemPrompt: string,
   isStrategy = false,
+  signal?: AbortSignal,
 ): AsyncGenerator<string> {
   const allMessages = [
     { role: "system" as const, content: systemPrompt },
@@ -155,6 +156,7 @@ export async function* streamOllamaChat(
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ model, messages: allMessages, stream: true, options }),
+      signal,
     });
   } catch {
     throw new Error("Ollama not reachable — is it running? Start with: ollama serve");
@@ -303,4 +305,29 @@ export async function checkOllamaConnection(baseUrl: string): Promise<string[]> 
   if (!response.ok) throw new Error(`HTTP ${response.status}`);
   const data = await response.json() as { models?: { name: string }[] };
   return (data.models ?? []).map((m) => m.name);
+}
+
+/**
+ * Returns "connected" if the model exists on disk, "no-model" if the server
+ * is up but the model is missing, or "offline" if the server is unreachable.
+ */
+export async function checkModelStatus(
+  baseUrl: string,
+  model: string,
+): Promise<"connected" | "no-model" | "offline"> {
+  try {
+    // /api/show is the definitive check — 200 means model is present, 404 means it isn't
+    const res = await fetch(`${baseUrl}/api/show`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ name: model }),
+      cache: "no-store",
+    });
+    if (res.ok) return "connected";
+    if (res.status === 404) return "no-model";
+    // Any other non-ok response from a live server still means server is up
+    return "no-model";
+  } catch {
+    return "offline";
+  }
 }

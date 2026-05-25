@@ -423,7 +423,7 @@ export default function ScheduleApp() {
         .filter((c) => c.date === today)
         .map((c) => c.ritualId)
     );
-  }, [schedule.ritualCompletions]);
+  }, [schedule.ritualCompletions, todayKey]);
   const [ritualAddOpen, setRitualAddOpen] = useState(false);
   const canAddRitual = (schedule.rituals ?? []).length < 8;
   const [confirmState, setConfirmState] = useState<{
@@ -580,11 +580,19 @@ export default function ScheduleApp() {
   }
 
   function handleDeleteTask(taskId: string) {
-    const task = schedule.activities[activeDay].find((t) => t.id === taskId);
+    const task = Object.values(schedule.activities).flat().find((t) => t.id === taskId);
     openConfirm(
       `Delete "${task?.title ?? "task"}"?`,
       "This action cannot be undone.",
-      () => setSchedule(deleteTask(taskId, activeDay))
+      () => setSchedule((prev) => ({
+        ...prev,
+        activities: Object.fromEntries(
+          Object.entries(prev.activities).map(([day, tasks]) => [
+            day,
+            (tasks as typeof prev.activities[typeof activeDay]).filter((t) => t.id !== taskId),
+          ])
+        ) as typeof prev.activities,
+      }))
     );
   }
 

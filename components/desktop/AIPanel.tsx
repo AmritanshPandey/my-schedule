@@ -318,6 +318,11 @@ export function AIPanel({ ollamaUrl, ollamaModel, context, plans, rituals, activ
   const bottomRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const didAutoSend = useRef(false);
+  const abortRef = useRef<AbortController | null>(null);
+
+  useEffect(() => {
+    return () => { abortRef.current?.abort(); };
+  }, []);
 
   const model = ollamaModel || DEFAULT_OLLAMA_MODEL;
 
@@ -343,12 +348,16 @@ export function AIPanel({ ollamaUrl, ollamaModel, context, plans, rituals, activ
 
     const history = [...messages, userMessage].map((m) => ({
       role: m.role as "user" | "assistant",
-      content: m.text,
+      content: m.role === "assistant" ? stripJsonBlocks(m.text) : m.text,
     }));
+
+    abortRef.current?.abort();
+    const controller = new AbortController();
+    abortRef.current = controller;
 
     let fullText = "";
     try {
-      for await (const chunk of streamOllamaChat(ollamaUrl, model, history, systemPrompt, context === "strategy")) {
+      for await (const chunk of streamOllamaChat(ollamaUrl, model, history, systemPrompt, context === "strategy", controller.signal)) {
         fullText += chunk;
         setMessages((prev) => {
           const updated = [...prev];
@@ -365,9 +374,13 @@ export function AIPanel({ ollamaUrl, ollamaModel, context, plans, rituals, activ
         });
       }
     } catch (err) {
-      const msg = err instanceof Error ? err.message : "Unknown error";
-      setError(msg);
-      setMessages((prev) => prev.slice(0, -1));
+      if (err instanceof Error && err.name === "AbortError") {
+        setMessages((prev) => prev.slice(0, -1));
+      } else {
+        const msg = err instanceof Error ? err.message : "Unknown error";
+        setError(msg);
+        setMessages((prev) => prev.slice(0, -1));
+      }
     } finally {
       setStreaming(false);
       setTimeout(() => inputRef.current?.focus(), 50);
