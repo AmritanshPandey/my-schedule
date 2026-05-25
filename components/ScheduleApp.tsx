@@ -680,7 +680,11 @@ export default function ScheduleApp() {
     openConfirm(
       `Delete "${ritual?.title ?? "routine"}"?`,
       "This routine will be removed from your daily practice.",
-      () => setSchedule((prev) => ({ ...prev, rituals: (prev.rituals ?? []).filter((r) => r.id !== id) }))
+      () => setSchedule((prev) => ({
+        ...prev,
+        rituals: (prev.rituals ?? []).filter((r) => r.id !== id),
+        ritualCompletions: (prev.ritualCompletions ?? []).filter((c) => c.ritualId !== id),
+      }))
     );
   }
 
@@ -846,7 +850,6 @@ export default function ScheduleApp() {
   }
 
   function handleDeleteLinkedTask(task: Task, activeDays: DayKey[]) {
-    const matchKey = `${task.title.trim().toLowerCase()}|${task.startTime}|${task.endTime}`;
     openConfirm(
       `Delete "${task.title}"?`,
       activeDays.length > 1
@@ -857,12 +860,7 @@ export default function ScheduleApp() {
         activities: Object.fromEntries(
           DAYS.map((day) => [
             day,
-            activeDays.includes(day)
-              ? prev.activities[day].filter((t) => {
-                const k = `${t.title.trim().toLowerCase()}|${t.startTime}|${t.endTime}`;
-                return k !== matchKey || t.planId !== task.planId;
-              })
-              : prev.activities[day],
+            prev.activities[day].filter((t) => t.id !== task.id),
           ])
         ) as typeof prev.activities,
       }))
