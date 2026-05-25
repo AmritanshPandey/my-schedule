@@ -20,6 +20,7 @@ const SettingsSheet = dynamic(() => import("@/components/auth/SettingsSheet").th
 const TemplatesSheet = dynamic(() => import("@/components/TemplatesSheet").then(m => ({ default: m.TemplatesSheet })), { ssr: false });
 const SessionSheet = dynamic(() => import("@/components/activity/SessionSheet"), { ssr: false });
 const RitualView = dynamic(() => import("@/components/activity/RitualView"), { ssr: false });
+const ReviewView = dynamic(() => import("@/components/ReviewView"), { ssr: false });
 import {
   useScheduleDB,
   DAYS,
@@ -2188,23 +2189,16 @@ export default function ScheduleApp() {
           </div>
           </motion.div>
         )}
-        {/* ── Review Tab ─────────────────────────────────────────────────── */}
+        {/* ── Routine Tab ────────────────────────────────────────────────── */}
         {activeTab === 2 && (
           <motion.div
-            key="tab-rituals"
+            key="tab-routine"
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
             transition={{ duration: 0.12, ease: "easeOut" }}
           >
             <div className="lg:px-8">
-              <div className="px-4 pt-5 pb-0 lg:px-0 lg:pt-4">
-                <WeekSummary
-                  schedule={schedule}
-                  todayKey={todayKey}
-                  ritualWeekHistory={ritualWeekHistory}
-                />
-              </div>
               <RitualView
                 rituals={schedule.rituals ?? []}
                 completedIds={completedRitualIds}
@@ -2219,6 +2213,23 @@ export default function ScheduleApp() {
                 weekHistory={ritualWeekHistory}
               />
             </div>
+          </motion.div>
+        )}
+
+        {/* ── Review Tab ─────────────────────────────────────────────────── */}
+        {activeTab === 3 && (
+          <motion.div
+            key="tab-review"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            transition={{ duration: 0.12, ease: "easeOut" }}
+          >
+            <ReviewView
+              schedule={schedule}
+              todayKey={todayKey}
+              ritualWeekHistory={ritualWeekHistory}
+            />
           </motion.div>
         )}
         </AnimatePresence>

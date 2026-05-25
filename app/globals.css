@@ -96,6 +96,20 @@ textarea {
   animation: loading-bar 1.4s cubic-bezier(0.4, 0, 0.2, 1) infinite;
 }
 
+@keyframes ai-fab-spin {
+  from { transform: rotate(0deg); }
+  to   { transform: rotate(360deg); }
+}
+
+.ai-fab-rainbow-ring {
+  background: conic-gradient(
+    from 0deg,
+    #f59e0b, #f97316, #ec4899, #8b5cf6, #3b82f6, #06b6d4, #10b981, #f59e0b
+  );
+  animation: ai-fab-spin 5s linear infinite;
+  border-radius: 9999px;
+}
+
 .calendar-scrollbar-none {
   scrollbar-width: none;
 }
