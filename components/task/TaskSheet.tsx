@@ -3,28 +3,32 @@
 import { useEffect, useRef, useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import {
+  IconArrowLeft,
   IconCheck,
-  IconChevronDown,
+  IconCopy,
   IconGripVertical,
   IconPlus,
+  IconSparkles,
   IconTrash,
   IconX,
 } from "@tabler/icons-react";
+import { streamGenerateSubtasks, parseGeneratedSubtasks } from "@/lib/aiActions";
+import AIActionSheet, { type ResultItem } from "@/components/ai/AIActionSheet";
 import BottomSheet from "@/components/ui/BottomSheet";
 import SheetHeader from "@/components/ui/SheetHeader";
 import Button from "@/components/ui/Button";
 import Input from "@/components/ui/Input";
 import TimeSlotPicker from "@/components/TimeSlotPicker";
 import type { DayKey, Plan, Task } from "@/lib/useScheduleDB";
+import { DAYS, DAY_LABELS } from "@/lib/useScheduleDB";
 import type { ScheduleEntry } from "@/components/ScheduleItem";
-import { accentStyles } from "@/lib/colorSystem";
-import { SECTION_ICONS } from "@/components/SectionIcons";
 import {
   uid,
   displayToInputTime,
   inputToDisplayTime,
   createSubtask,
 } from "@/lib/taskMutations";
+import { PlanSelector } from "./PlanSelector";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -46,9 +50,12 @@ export interface TaskSheetProps {
   activeDays?: DayKey[];
   isOpen: boolean;
   initialPlanId?: string | null;
-  initialTaskType?: "normal" | "routine";
+  initialTaskType?: "task" | "session";
+  ollamaUrl?: string;
+  ollamaModel?: string;
   onClose: () => void;
   onSave: (data: TaskSaveData) => void;
+  onDuplicate?: (data: TaskSaveData) => void;
 }
 
 // ── Local subtask draft ───────────────────────────────────────────────────────
@@ -82,125 +89,6 @@ const SECTION_LABEL =
 
 function isValidInputTime(value: string): boolean {
   return /^([01]\d|2[0-3]):[0-5]\d$/.test(value);
-}
-
-// ── Plan selector dropdown ────────────────────────────────────────────────────
-
-interface PlanSelectorProps {
-  plans: Plan[];
-  selectedId: string;
-  onSelect: (plan: Plan) => void;
-}
-
-function PlanSelector({ plans, selectedId, onSelect }: PlanSelectorProps) {
-  const [open, setOpen] = useState(false);
-  const ref = useRef<HTMLDivElement>(null);
-  const selected = plans.find((p) => p.id === selectedId) ?? null;
-  const accent = selected ? accentStyles(selected.color) : null;
-  const icon = selected
-    ? (SECTION_ICONS.find((i) => i.name === selected.emoji) ?? SECTION_ICONS[0]).icon
-    : null;
-  const Icon = icon;
-
-  useEffect(() => {
-    function handler(e: MouseEvent) {
-      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
-    }
-    document.addEventListener("mousedown", handler);
-    return () => document.removeEventListener("mousedown", handler);
-  }, []);
-
-  if (plans.length === 0) {
-    return (
-      <div className="rounded-2xl border border-dashed border-neutral-200 p-5 text-center dark:border-white/10">
-        <p className="text-[14px] font-semibold text-neutral-700 dark:text-neutral-300">Create a plan first</p>
-        <p className="mt-1 text-[12px] text-neutral-400 dark:text-neutral-500">
-          Tasks need a parent plan.
-        </p>
-      </div>
-    );
-  }
-
-  return (
-    <div ref={ref} className="relative">
-      <p className={`mb-1.5 ${SECTION_LABEL}`}>Plan</p>
-      <button
-        type="button"
-        onClick={() => setOpen((v) => !v)}
-        className="flex h-11 w-full items-center gap-3 rounded-xl border border-neutral-200 bg-neutral-50 px-3 text-left transition-colors dark:border-white/10 dark:bg-white/[0.04]"
-      >
-        {selected && Icon && accent ? (
-          <>
-            <div className={`h-6 w-6 shrink-0 rounded-lg flex items-center justify-center ${accent.tint} ${accent.icon}`}>
-              <Icon size={13} strokeWidth={2} />
-            </div>
-            <span className="flex-1 text-[14px] font-semibold text-neutral-900 dark:text-white truncate">
-              {selected.title}
-            </span>
-          </>
-        ) : (
-          <span className="flex-1 text-[14px] font-medium text-neutral-400 dark:text-neutral-500">
-            Select a plan…
-          </span>
-        )}
-        <IconChevronDown
-          size={16}
-          strokeWidth={2}
-          className={`shrink-0 text-neutral-400 transition-transform duration-150 ${open ? "rotate-180" : ""}`}
-        />
-      </button>
-
-      <AnimatePresence>
-        {open && (
-          <motion.div
-            initial={{ opacity: 0, y: -4 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: -4 }}
-            transition={{ duration: 0.15 }}
-            className="absolute left-0 right-0 top-[calc(100%+4px)] z-10 overflow-hidden rounded-2xl border border-neutral-200 bg-white dark:border-white/10 dark:bg-neutral-900"
-          >
-            <div className="max-h-[220px] overflow-y-auto">
-              {plans.map((plan, i) => {
-                const ic = SECTION_ICONS.find((s) => s.name === plan.emoji) ?? SECTION_ICONS[0];
-                const PlanIcon = ic.icon;
-                const pa = accentStyles(plan.color);
-                const sel = selectedId === plan.id;
-                return (
-                  <button
-                    key={plan.id}
-                    type="button"
-                    onClick={() => { onSelect(plan); setOpen(false); }}
-                    className={`flex w-full items-center gap-3 px-3 py-2.5 text-left transition-colors ${
-                      i > 0 ? "border-t border-neutral-100 dark:border-white/[0.05]" : ""
-                    } ${sel ? "bg-neutral-50 dark:bg-white/[0.04]" : "hover:bg-neutral-50 dark:hover:bg-white/[0.04]"}`}
-                  >
-                    <div className={`h-7 w-7 shrink-0 rounded-lg flex items-center justify-center ${pa.tint} ${pa.icon}`}>
-                      <PlanIcon size={14} strokeWidth={2} />
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <p className="text-[14px] font-semibold text-neutral-900 dark:text-white truncate">
-                        {plan.title}
-                      </p>
-                      {plan.description && (
-                        <p className="text-[11px] text-neutral-400 dark:text-neutral-500 truncate">
-                          {plan.description}
-                        </p>
-                      )}
-                    </div>
-                    {sel && (
-                      <div className={`h-4 w-4 shrink-0 rounded-full flex items-center justify-center ${pa.tint} ${pa.icon}`}>
-                        <IconCheck size={10} strokeWidth={3} />
-                      </div>
-                    )}
-                  </button>
-                );
-              })}
-            </div>
-          </motion.div>
-        )}
-      </AnimatePresence>
-    </div>
-  );
 }
 
 // ── Subtask row ───────────────────────────────────────────────────────────────
@@ -254,12 +142,16 @@ export function TaskSheet({
   isOpen,
   initialPlanId,
   initialTaskType,
+  ollamaUrl,
+  ollamaModel,
   onClose,
   onSave,
+  onDuplicate,
 }: TaskSheetProps) {
   // ── Form state ─────────────────────────────────────────────────────────────
   const [planId, setPlanId] = useState("");
-  const [taskType, setTaskType] = useState<"normal" | "routine">("normal");
+  const [expandSheetOpen, setExpandSheetOpen] = useState(false);
+  const [taskType, setTaskType] = useState<"task" | "session">("task");
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
   const [startTime, setStartTime] = useState("");
@@ -267,6 +159,8 @@ export function TaskSheet({
   const [repeatDays, setRepeatDays] = useState<DayKey[]>([activeDay]);
   const [subtasks, setSubtasks] = useState<SubtaskDraft[]>([]);
   const [focusNewSubtask, setFocusNewSubtask] = useState(false);
+  const [duplicateStep, setDuplicateStep] = useState<"idle" | "picking">("idle");
+  const [duplicateDays, setDuplicateDays] = useState<DayKey[]>([]);
 
   const titleRef = useRef<HTMLInputElement>(null);
 
@@ -278,7 +172,7 @@ export function TaskSheet({
       const linkedPlan = plans.find((p) => p.id === task.planId);
       const selectedDays = activeDays && activeDays.length > 0 ? activeDays : [activeDay];
       setPlanId(task.planId);
-      setTaskType(task.taskType ?? "normal");
+      setTaskType(task.taskType ?? "task");
       setTitle(task.title);
       setDescription(task.description ?? "");
       setStartTime(displayToInputTime(task.startTime));
@@ -290,23 +184,22 @@ export function TaskSheet({
     } else {
       const pid = initialPlanId ?? plans[0]?.id ?? "";
       setPlanId(pid);
-      setTaskType(initialTaskType ?? "normal");
+      setTaskType(initialTaskType ?? "task");
       setTitle("");
       setDescription("");
       setStartTime("");
       setEndTime("");
       setRepeatDays([activeDay]);
-      const linkedPlan = plans.find((p) => p.id === pid);
-      setSubtasks(linkedPlan?.items.map(entryToSubtaskDraft) ?? []);
+      setSubtasks([]);
     }
     setFocusNewSubtask(false);
+    setDuplicateStep("idle");
     setTimeout(() => titleRef.current?.focus(), 80);
   }, [isOpen]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // ── When plan changes (create mode), load its subtasks ────────────────────
   function handleSelectPlan(plan: Plan) {
     setPlanId(plan.id);
-    setSubtasks(plan.items.map(entryToSubtaskDraft));
+    if (mode === "create") setSubtasks([]);
   }
 
   // ── Subtask management ─────────────────────────────────────────────────────
@@ -321,6 +214,28 @@ export function TaskSheet({
 
   function removeSubtask(id: string) {
     setSubtasks((prev) => prev.filter((s) => s.id !== id));
+  }
+
+  async function* subtaskStream(goal: string, picks: string[]): AsyncGenerator<string> {
+    if (!ollamaUrl || !ollamaModel || !title.trim()) return;
+    const hints = [goal.trim(), ...picks].filter(Boolean).join(". ");
+    yield* streamGenerateSubtasks(
+      ollamaUrl,
+      ollamaModel,
+      hints ? `${title.trim()} — ${hints}` : title.trim(),
+      selectedPlan?.title,
+    );
+  }
+
+  function parseSubtaskResults(raw: string): ResultItem[] {
+    return parseGeneratedSubtasks(raw).map((s, i) => ({ id: String(i), label: s }));
+  }
+
+  function commitSubtasks(items: ResultItem[]) {
+    setSubtasks((prev) => [
+      ...prev,
+      ...items.map((r) => ({ id: uid(), title: r.label, duration: "" })),
+    ]);
   }
 
   // ── Save ───────────────────────────────────────────────────────────────────
@@ -356,12 +271,41 @@ export function TaskSheet({
       taskDraft,
       taskId: mode === "edit" ? task?.id : undefined,
       repeatDays,
-      // Routine task steps are task-level only — never sync back to the plan template
+      // Only update the plan template if the user explicitly added subtasks
       planItems:
-        mode === "create" && taskType === "normal" && (validSubtasks.length > 0 || subtasks.length !== selectedPlan.items.length)
+        mode === "create" && taskType === "task" && validSubtasks.length > 0
           ? { planId: selectedPlan.id, items: validSubtasks }
           : null,
     });
+  }
+
+  function openDuplicatePicker() {
+    setDuplicateDays(repeatDays);
+    setDuplicateStep("picking");
+  }
+
+  function confirmDuplicate() {
+    if (!canSave || !selectedPlan || !onDuplicate) return;
+    const validSubtasks = subtasks
+      .filter((s) => s.title.trim().length > 0)
+      .map(subtaskDraftToEntry);
+    onDuplicate({
+      taskDraft: {
+        title: `Copy of ${title.trim()}`,
+        description: description.trim() || undefined,
+        startTime: inputToDisplayTime(startTime),
+        endTime: inputToDisplayTime(endTime),
+        icon: selectedPlan.emoji,
+        color: selectedPlan.color,
+        planId: selectedPlan.id,
+        taskType,
+        subtasks: validSubtasks.length > 0 ? validSubtasks : undefined,
+      },
+      taskId: undefined,
+      repeatDays: duplicateDays.length > 0 ? duplicateDays : repeatDays,
+      planItems: null,
+    });
+    setDuplicateStep("idle");
   }
 
   function handleClose() {
@@ -372,119 +316,240 @@ export function TaskSheet({
   const headingTitle = mode === "create" ? "New Task" : (task?.title ?? "Task");
 
   return (
-    <BottomSheet open={isOpen} onClose={handleClose}>
-      <div className="flex flex-col px-5 pb-6 pt-4">
-        <SheetHeader eyebrow={eyebrow} title={headingTitle} onClose={handleClose} />
+    <BottomSheet open={isOpen} onClose={duplicateStep === "picking" ? () => setDuplicateStep("idle") : handleClose}>
+      <AnimatePresence mode="wait" initial={false}>
 
-        <div className="mt-4 space-y-5">
-          {/* Task type toggle */}
-          <div>
-            <p className={`mb-1.5 ${SECTION_LABEL}`}>Type</p>
-            <div className="grid grid-cols-2 gap-2">
-              {(["normal", "routine"] as const).map((type) => (
-                <button
-                  key={type}
-                  type="button"
-                  onClick={() => setTaskType(type)}
-                  className={`h-10 rounded-xl text-[14px] font-semibold transition-colors ${
-                    taskType === type
-                      ? "bg-neutral-900 text-white dark:bg-white dark:text-neutral-950"
-                      : "border border-neutral-200 bg-white text-neutral-500 dark:border-white/10 dark:bg-white/[0.04] dark:text-neutral-400"
-                  }`}
-                >
-                  {type === "normal" ? "Normal" : "Routine"}
-                </button>
-              ))}
-            </div>
-          </div>
-
-          {/* Plan selector */}
-          <PlanSelector
-            plans={plans}
-            selectedId={planId}
-            onSelect={handleSelectPlan}
-          />
-
-          {/* Title */}
-          <Input
-            ref={titleRef}
-            label="Title"
-            value={title}
-            onChange={(e) => setTitle(e.target.value)}
-            placeholder="What are you working on?"
-            onKeyDown={(e) => { if (e.key === "Enter") handleSave(); }}
-          />
-
-          {/* Description */}
-          <Input
-            label="Note (optional)"
-            value={description}
-            onChange={(e) => setDescription(e.target.value)}
-            placeholder="Short note or context…"
-            onKeyDown={(e) => { if (e.key === "Enter") handleSave(); }}
-          />
-
-          {/* Time slot + repeat days */}
-          <TimeSlotPicker
-            startTime={startTime}
-            endTime={endTime}
-            onStartChange={setStartTime}
-            onEndChange={setEndTime}
-            activeDay={activeDay}
-            repeatDays={repeatDays}
-            onRepeatDaysChange={setRepeatDays}
-          />
-
-          {/* Subtasks / Routine Steps section */}
-          {selectedPlan && (
-            <section className="space-y-3">
-              <p className={SECTION_LABEL}>
-                {taskType === "routine" ? "Routine Steps" : "Subtasks"}
-              </p>
-
-              <AnimatePresence initial={false}>
-                {subtasks.map((s, i) => (
-                  <motion.div
-                    key={s.id}
-                    initial={{ opacity: 0, height: 0 }}
-                    animate={{ opacity: 1, height: "auto" }}
-                    exit={{ opacity: 0, height: 0 }}
-                    transition={{ duration: 0.18, ease: "easeInOut" }}
-                    style={{ overflow: "hidden" }}
-                  >
-                    <SubtaskRow
-                      draft={s}
-                      autoFocus={focusNewSubtask && i === subtasks.length - 1}
-                      onChange={(updated) => updateSubtask(s.id, updated)}
-                      onDelete={() => removeSubtask(s.id)}
-                    />
-                  </motion.div>
-                ))}
-              </AnimatePresence>
-
+        {/* ── Duplicate day-picker ─────────────────────────────────────────── */}
+        {duplicateStep === "picking" && (
+          <motion.div
+            key="picker"
+            initial={{ opacity: 0, x: 32 }}
+            animate={{ opacity: 1, x: 0 }}
+            exit={{ opacity: 0, x: 32 }}
+            transition={{ duration: 0.2, ease: [0.22, 1, 0.36, 1] }}
+            className="flex flex-col px-5 pb-6 pt-4"
+          >
+            {/* Header */}
+            <div className="mb-5 flex items-center gap-3">
               <button
                 type="button"
-                onClick={addSubtask}
-                className="flex h-10 w-full items-center gap-2 rounded-xl border border-dashed border-neutral-200 px-3 text-[13px] font-semibold text-neutral-400 transition-colors hover:border-neutral-300 hover:text-neutral-600 dark:border-white/10 dark:text-neutral-500 dark:hover:border-white/20 dark:hover:text-neutral-300"
+                onClick={() => setDuplicateStep("idle")}
+                className="flex h-9 w-9 items-center justify-center rounded-full bg-neutral-100 text-neutral-600 dark:bg-white/[0.07] dark:text-neutral-300"
               >
-                <IconPlus size={14} strokeWidth={2.5} />
-                {taskType === "routine" ? "Add Step" : "Add Subtask"}
+                <IconArrowLeft size={18} strokeWidth={2} />
               </button>
-            </section>
-          )}
-        </div>
+              <p className="text-[18px] font-bold text-neutral-900 dark:text-white">Duplicate Task</p>
+            </div>
 
-        {/* Sticky footer */}
-        <div className="mt-6 flex gap-2">
-          <Button fullWidth onClick={handleSave} disabled={!canSave}>
-            <IconCheck size={16} strokeWidth={2.5} />
-            {mode === "create" ? "Add Task" : "Save Changes"}
-          </Button>
-          <Button variant="secondary" onClick={handleClose}>
-            <IconX size={15} />
-          </Button>
-        </div>
-      </div>
+            {/* Title preview */}
+            <div className="mb-5 rounded-2xl border border-neutral-200 bg-neutral-50 px-4 py-3 dark:border-white/[0.08] dark:bg-white/[0.03]">
+              <p className="mb-0.5 text-[11px] font-bold uppercase tracking-[0.08em] text-neutral-400">New title</p>
+              <p className="text-[15px] font-semibold text-neutral-900 dark:text-white">Copy of {title}</p>
+            </div>
+
+            {/* Day selector */}
+            <div className="mb-6">
+              <p className="mb-2.5 text-[11px] font-bold uppercase tracking-[0.08em] text-neutral-500 dark:text-neutral-400">Copy to days</p>
+              <div className="flex flex-wrap gap-2">
+                {DAYS.map((day) => {
+                  const sel = duplicateDays.includes(day);
+                  return (
+                    <button
+                      key={day}
+                      type="button"
+                      onClick={() =>
+                        setDuplicateDays((prev) =>
+                          sel ? prev.filter((d) => d !== day) : [...prev, day]
+                        )
+                      }
+                      className={`h-9 rounded-full px-4 text-[13px] font-semibold transition-colors ${
+                        sel
+                          ? "bg-neutral-900 text-white dark:bg-white dark:text-neutral-950"
+                          : "border border-neutral-200 bg-white text-neutral-500 dark:border-white/10 dark:bg-white/[0.04] dark:text-neutral-400"
+                      }`}
+                    >
+                      {DAY_LABELS[day]}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+
+            <Button fullWidth onClick={confirmDuplicate} disabled={duplicateDays.length === 0}>
+              <IconCopy size={15} />
+              Create Copy
+            </Button>
+          </motion.div>
+        )}
+
+        {/* ── Main form ───────────────────────────────────────────────────── */}
+        {duplicateStep === "idle" && (
+          <motion.div
+            key="form"
+            initial={{ opacity: 0, x: -32 }}
+            animate={{ opacity: 1, x: 0 }}
+            exit={{ opacity: 0, x: -32 }}
+            transition={{ duration: 0.2, ease: [0.22, 1, 0.36, 1] }}
+            className="flex flex-col px-5 pb-6 pt-4"
+          >
+            <SheetHeader eyebrow={eyebrow} title={headingTitle} onClose={handleClose} />
+
+            <div className="mt-4 space-y-5">
+              {/* Task type toggle */}
+              <div>
+                <p className={`mb-1.5 ${SECTION_LABEL}`}>Type</p>
+                <div className="grid grid-cols-2 gap-2">
+                  {(["task", "session"] as const).map((type) => (
+                    <button
+                      key={type}
+                      type="button"
+                      onClick={() => setTaskType(type)}
+                      className={`h-10 rounded-xl text-[14px] font-semibold transition-colors ${
+                        taskType === type
+                          ? "bg-neutral-900 text-white dark:bg-white dark:text-neutral-950"
+                          : "border border-neutral-200 bg-white text-neutral-500 dark:border-white/10 dark:bg-white/[0.04] dark:text-neutral-400"
+                      }`}
+                    >
+                      {type === "task" ? "Task" : "Session"}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* Plan selector */}
+              <PlanSelector
+                plans={plans}
+                selectedId={planId}
+                onSelect={handleSelectPlan}
+              />
+
+              {/* Title */}
+              <Input
+                ref={titleRef}
+                label="Title"
+                value={title}
+                onChange={(e) => setTitle(e.target.value)}
+                placeholder="What are you working on?"
+                onKeyDown={(e) => { if (e.key === "Enter") handleSave(); }}
+              />
+
+              {/* Description */}
+              <Input
+                label="Note (optional)"
+                value={description}
+                onChange={(e) => setDescription(e.target.value)}
+                placeholder="Short note or context…"
+                onKeyDown={(e) => { if (e.key === "Enter") handleSave(); }}
+              />
+
+              {/* Time slot + repeat days */}
+              <TimeSlotPicker
+                startTime={startTime}
+                endTime={endTime}
+                onStartChange={setStartTime}
+                onEndChange={setEndTime}
+                activeDay={activeDay}
+                repeatDays={repeatDays}
+                onRepeatDaysChange={setRepeatDays}
+              />
+
+              {/* Subtasks / Session Steps */}
+              {selectedPlan && (
+                <section className="space-y-3">
+                  <div className="flex items-center justify-between">
+                    <p className={SECTION_LABEL}>
+                      {taskType === "session" ? "Session Steps" : "Subtasks"}
+                    </p>
+                    {ollamaUrl && ollamaModel && title.trim().length > 0 && (
+                      <button
+                        type="button"
+                        onClick={() => setExpandSheetOpen(true)}
+                        className="flex items-center gap-1 rounded-lg px-2 py-1 text-[12px] font-semibold text-emerald-600 transition-colors hover:bg-emerald-50 dark:text-emerald-400 dark:hover:bg-emerald-500/10"
+                      >
+                        <IconSparkles size={12} strokeWidth={2} />
+                        Expand
+                      </button>
+                    )}
+                  </div>
+
+                  <AnimatePresence initial={false}>
+                    {subtasks.map((s, i) => (
+                      <motion.div
+                        key={s.id}
+                        initial={{ opacity: 0, height: 0 }}
+                        animate={{ opacity: 1, height: "auto" }}
+                        exit={{ opacity: 0, height: 0 }}
+                        transition={{ duration: 0.18, ease: "easeInOut" }}
+                        style={{ overflow: "hidden" }}
+                      >
+                        <SubtaskRow
+                          draft={s}
+                          autoFocus={focusNewSubtask && i === subtasks.length - 1}
+                          onChange={(updated) => updateSubtask(s.id, updated)}
+                          onDelete={() => removeSubtask(s.id)}
+                        />
+                      </motion.div>
+                    ))}
+                  </AnimatePresence>
+
+                  <button
+                    type="button"
+                    onClick={addSubtask}
+                    className="flex h-10 w-full items-center gap-2 rounded-xl border border-dashed border-neutral-200 px-3 text-[13px] font-semibold text-neutral-400 transition-colors hover:border-neutral-300 hover:text-neutral-600 dark:border-white/10 dark:text-neutral-500 dark:hover:border-white/20 dark:hover:text-neutral-300"
+                  >
+                    <IconPlus size={14} strokeWidth={2.5} />
+                    {taskType === "session" ? "Add Step" : "Add Subtask"}
+                  </button>
+                </section>
+              )}
+            </div>
+
+            {/* Footer */}
+            <div className="mt-6 space-y-2">
+              <div className="flex gap-2">
+                <Button fullWidth onClick={handleSave} disabled={!canSave}>
+                  <IconCheck size={16} strokeWidth={2.5} />
+                  {mode === "create" ? "Add Task" : "Save Changes"}
+                </Button>
+                <Button variant="secondary" onClick={handleClose}>
+                  <IconX size={15} />
+                </Button>
+              </div>
+              {mode === "edit" && onDuplicate && (
+                <Button variant="secondary" fullWidth onClick={openDuplicatePicker} disabled={!canSave}>
+                  <IconCopy size={15} />
+                  Duplicate
+                </Button>
+              )}
+            </div>
+          </motion.div>
+        )}
+
+      </AnimatePresence>
+
+      {/* AI expand subtasks sheet */}
+      {ollamaUrl && ollamaModel && (
+        <AIActionSheet
+          open={expandSheetOpen}
+          onClose={() => setExpandSheetOpen(false)}
+          title="Expand Task"
+          contextLabel={title.trim() || undefined}
+          inputPlaceholder="Any specific focus? e.g. beginner-friendly, step-by-step breakdown…"
+          quickPicks={[
+            "Step-by-step",
+            "Be specific",
+            "Include timing",
+            "Keep it simple",
+            "Practical steps",
+          ]}
+          ctaLabel="Build Steps"
+          resultSingular="step"
+          resultPlural="steps"
+          onGenerate={subtaskStream}
+          onParseResults={parseSubtaskResults}
+          onAdd={commitSubtasks}
+        />
+      )}
     </BottomSheet>
   );
 }

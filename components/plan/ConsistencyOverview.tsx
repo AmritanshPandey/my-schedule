@@ -184,7 +184,7 @@ export default function ConsistencyOverview({
           </div>
 
           {/* Progress bar */}
-          <div className="h-2 rounded-full bg-neutral-100 dark:bg-white/[0.07] overflow-hidden">
+          <div className="h-2 rounded-full bg-neutral-200 dark:bg-white/[0.07] overflow-hidden">
             <motion.div
               className={`h-full rounded-full ${barColor(thisWeekPct)}`}
               initial={{ width: "0%" }}
@@ -260,7 +260,7 @@ export default function ConsistencyOverview({
                     }`}>
                       {week.scheduled > 0 ? `${week.pct}%` : "—"}
                     </p>
-                    <div className="mt-2 h-1 rounded-full bg-neutral-100 dark:bg-white/[0.07] overflow-hidden">
+                    <div className="mt-2 h-1 rounded-full bg-neutral-200 dark:bg-white/[0.07] overflow-hidden">
                       <motion.div
                         className={`h-full rounded-full ${barColor(week.pct)}`}
                         initial={{ width: "0%" }}

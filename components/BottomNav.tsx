@@ -9,7 +9,7 @@ import {
   IconCalendarPlus,
   IconClipboardPlus,
   IconPlus,
-  IconSun,
+  IconRepeat,
   IconSettings,
 } from "@tabler/icons-react";
 
@@ -125,12 +125,12 @@ export default function BottomNav({
                     whileTap={{ scale: 0.95 }}
                     onClick={() => { haptic("medium"); setExpanded(false); onCreateRitual(); }}
                     className="flex flex-col items-center gap-1.5"
-                    aria-label="Add ritual"
+                    aria-label="Add routine"
                   >
                     <div className="flex h-[52px] w-[60px] items-center justify-center rounded-[18px] bg-white/[0.09]">
-                      <IconSun size={24} strokeWidth={2} className="text-white" />
+                      <IconRepeat size={24} strokeWidth={2} className="text-white" />
                     </div>
-                    <span className="text-[11px] font-semibold text-white/75">Ritual</span>
+                    <span className="text-[11px] font-semibold text-white/75">Routine</span>
                   </motion.button>
                 </div>
               </motion.div>
@@ -204,11 +204,11 @@ export default function BottomNav({
               type="button"
               onClick={() => handleTabChange(2)}
               className={tabClass(activeTab === 2)}
-              aria-label="Ritual"
+              aria-label="Routine"
               aria-current={activeTab === 2 ? "page" : undefined}
             >
-              <IconSun size={20} strokeWidth={2} />
-              <span className="text-[10.5px] font-medium leading-none">Ritual</span>
+              <IconRepeat size={20} strokeWidth={2} />
+              <span className="text-[10.5px] font-medium leading-none">Routine</span>
             </button>
 
             <button

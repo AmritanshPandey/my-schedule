@@ -11,6 +11,10 @@ const COLOR_DOTS: Record<RitualColor, string> = {
   amber:   "bg-amber-400",
   emerald: "bg-emerald-400",
   fuchsia: "bg-fuchsia-400",
+  orange:  "bg-orange-400",
+  cyan:    "bg-cyan-400",
+  indigo:  "bg-indigo-400",
+  teal:    "bg-teal-400",
 };
 
 interface RitualStripProps {
@@ -25,29 +29,24 @@ export default function RitualStrip({ ritual, completed, onToggle }: RitualStrip
   return (
     <motion.button
       type="button"
-      whileTap={{ scale: 0.94 }}
+      whileTap={{ scale: 0.82 }}
       transition={{ type: "spring", stiffness: 500, damping: 28 }}
       onClick={onToggle}
+      title={ritual.title}
       className={`
-        pointer-events-auto inline-flex items-center gap-1.5
-        h-[24px] shrink-0 rounded-full
-        px-2.5
-        bg-white/80 backdrop-blur-sm
-        border border-neutral-200/60
-        shadow-[0_1px_4px_0_rgba(0,0,0,0.06)]
-        dark:bg-neutral-900/75 dark:border-white/[0.09] dark:shadow-none
-        transition-opacity duration-200 select-none
-        ${completed ? "opacity-40" : "opacity-100"}
+        pointer-events-auto
+        flex items-center justify-center
+        h-4 w-4 shrink-0 rounded-full cursor-pointer
+        shadow-[0_1px_4px_0_rgba(0,0,0,0.22)]
+        hover:brightness-110 active:brightness-95
+        transition-all duration-150 select-none
+        ${completed ? "opacity-50" : "opacity-100"}
+        ${dot}
       `}
     >
-      {completed ? (
-        <IconCheck size={8} strokeWidth={3} className="text-green-500 shrink-0" />
-      ) : (
-        <span className={`h-[7px] w-[7px] rounded-full shrink-0 ${dot}`} />
+      {completed && (
+        <IconCheck size={8} strokeWidth={3.5} className="text-white/90" />
       )}
-      <span className="text-[10px] font-semibold leading-none text-neutral-700 dark:text-neutral-200 whitespace-nowrap">
-        {ritual.title}
-      </span>
     </motion.button>
   );
 }

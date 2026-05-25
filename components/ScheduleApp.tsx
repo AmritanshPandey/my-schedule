@@ -9,6 +9,10 @@ import type { MilestoneSaveData } from "@/components/plan/MilestoneSheet";
 import { PlanCard } from "@/components/plan/PlanCard";
 import AppHeader from "@/components/AppHeader";
 import BottomNav from "@/components/BottomNav";
+import DesktopSidebar from "@/components/desktop/DesktopSidebar";
+import { WeekGrid } from "@/components/desktop/WeekGrid";
+import { QuickAddPanel } from "@/components/desktop/QuickAddPanel";
+import { OLLAMA_URL_KEY, OLLAMA_MODEL_KEY, DEFAULT_OLLAMA_URL, DEFAULT_OLLAMA_MODEL } from "@/lib/ai";
 
 // ── Deferred heavy components (separate JS chunks, loaded on demand) ──────────
 const PlanDetailView = dynamic(() => import("@/components/plan/PlanDetailView"), { ssr: false });
@@ -69,7 +73,8 @@ import {
   isTaskCompleted,
   resolveTaskState,
 } from "@/lib/taskCompletion";
-import { createTask, updateTaskDays, deleteTask, uid } from "@/lib/taskMutations";
+import { createTask, updateTaskDays, deleteTask, uid, sortTasksByTime } from "@/lib/taskMutations";
+import type { AIGeneratedTask } from "@/lib/aiActions";
 import { applyTemplate } from "@/lib/templates";
 import type { Template } from "@/lib/templates";
 import { parseTimeToMinutes, formatDuration } from "@/lib/timeUtils";
@@ -117,6 +122,7 @@ const TIMELINE_HOURS: number[] = Array.from(
   { length: TIMELINE_END_HOUR - TIMELINE_START_HOUR + 1 },
   (_, i) => TIMELINE_START_HOUR + i
 );
+const RITUAL_LANE_WIDTH = 80;
 
 const JS_DAYS = [
   "sunday",
@@ -199,27 +205,6 @@ function computeCardSize(height: number, laneCount: number): CardSize {
   return size;
 }
 
-function sortTasksByTime(tasks: Task[]): Task[] {
-  return [...tasks].sort((left, right) => {
-    const lm = parseTimeToMinutes(left.startTime);
-    const rm = parseTimeToMinutes(right.startTime);
-    if (lm === null && rm === null) {
-      const lso = left.sortOrder ?? Infinity;
-      const rso = right.sortOrder ?? Infinity;
-      return lso !== rso ? lso - rso : left.title.localeCompare(right.title);
-    }
-    if (lm === null) return 1;
-    if (rm === null) return -1;
-    if (lm !== rm) return lm - rm;
-    const le = parseTimeToMinutes(left.endTime) ?? lm;
-    const re = parseTimeToMinutes(right.endTime) ?? rm;
-    if (le !== re) return le - re;
-    // Use sortOrder as stable tiebreaker for tasks with identical times
-    const lso = left.sortOrder ?? Infinity;
-    const rso = right.sortOrder ?? Infinity;
-    return lso !== rso ? lso - rso : left.title.localeCompare(right.title);
-  });
-}
 
 function getCurrentMinutes(): number {
   const now = new Date();
@@ -273,6 +258,7 @@ export default function ScheduleApp() {
   const [editMode, setEditMode] = useState(false);
   const [activeTab, setActiveTab] = useState(0);
 
+  const [toastMessage, setToastMessage] = useState<string | null>(null);
   const [taskSheetOpen, setTaskSheetOpen] = useState(false);
   const [taskSheetMode, setTaskSheetMode] = useState<"create" | "edit">("create");
   const [taskSheetTask, setTaskSheetTask] = useState<Task | null>(null);
@@ -282,8 +268,11 @@ export default function ScheduleApp() {
   const [entryTracker, setEntryTracker] = useState<ProgressTracker | null>(null);
   const [weekOffset, setWeekOffset] = useState(0);
   const [viewMode, setViewMode] = useState<"list" | "timeline">("timeline");
+  const [calendarView, setCalendarView] = useState<"1day" | "3day" | "7day" | "custom3">("7day");
+  const [customDays, setCustomDays] = useState<DayKey[]>(["monday", "wednesday", "friday"]);
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
 
-  const [taskSheetInitialType, setTaskSheetInitialType] = useState<"normal" | "routine">("normal");
+  const [taskSheetInitialType, setTaskSheetInitialType] = useState<"task" | "session">("task");
 
   const [addingPlan, setAddingPlan] = useState(false);
   const [newPlanTitle, setNewPlanTitle] = useState("");
@@ -309,11 +298,19 @@ export default function ScheduleApp() {
     );
   }, [schedule.ritualCompletions]);
   const [ritualAddOpen, setRitualAddOpen] = useState(false);
+  const canAddRitual = (schedule.rituals ?? []).length < 8;
   const [confirmState, setConfirmState] = useState<{
     title: string;
     description: string;
     onConfirm: () => void;
   } | null>(null);
+
+  const [ollamaUrl, setOllamaUrl] = useState(() =>
+    typeof window !== "undefined" ? (localStorage.getItem(OLLAMA_URL_KEY) ?? DEFAULT_OLLAMA_URL) : DEFAULT_OLLAMA_URL
+  );
+  const [ollamaModel, setOllamaModel] = useState(() =>
+    typeof window !== "undefined" ? (localStorage.getItem(OLLAMA_MODEL_KEY) ?? DEFAULT_OLLAMA_MODEL) : DEFAULT_OLLAMA_MODEL
+  );
 
   function openConfirm(title: string, description: string, fn: () => void) {
     setConfirmState({ title, description, onConfirm: fn });
@@ -327,6 +324,12 @@ export default function ScheduleApp() {
   useEffect(() => {
     hasUserScrolledTimelineRef.current = false;
   }, [activeDay]);
+
+  useEffect(() => {
+    if (!toastMessage) return;
+    const t = setTimeout(() => setToastMessage(null), 2500);
+    return () => clearTimeout(t);
+  }, [toastMessage]);
 
   useEffect(() => {
     if (
@@ -419,7 +422,7 @@ export default function ScheduleApp() {
     setTaskSheetPlanId(initialPid ?? null);
     setTaskSheetTask(null);
     setTaskSheetMode("create");
-    setTaskSheetInitialType("normal");
+    setTaskSheetInitialType("task");
     setTaskSheetOpen(true);
   }
 
@@ -540,10 +543,21 @@ export default function ScheduleApp() {
   function handleDeleteRitual(id: string) {
     const ritual = (schedule.rituals ?? []).find((r) => r.id === id);
     openConfirm(
-      `Delete "${ritual?.title ?? "ritual"}"?`,
-      "This ritual will be removed from your daily practice.",
+      `Delete "${ritual?.title ?? "routine"}"?`,
+      "This routine will be removed from your daily practice.",
       () => setSchedule((prev) => ({ ...prev, rituals: (prev.rituals ?? []).filter((r) => r.id !== id) }))
     );
+  }
+
+  function handleUpdateRitual(id: string, data: Omit<Ritual, "id">) {
+    setSchedule((prev) => ({
+      ...prev,
+      rituals: (prev.rituals ?? []).map((r) => r.id === id ? { ...r, ...data, id } : r),
+    }));
+  }
+
+  function handleReorderRituals(reordered: Ritual[]) {
+    setSchedule((prev) => ({ ...prev, rituals: reordered }));
   }
 
   function handleToggleRitualComplete(id: string) {
@@ -585,6 +599,32 @@ export default function ScheduleApp() {
     }
 
     setSchedule((prev) => ({ ...prev, strategies: [...(prev.strategies ?? []), asset] }));
+  }
+
+  function handleGenerateStrategy(_plan: Plan) {
+    // Strategy generation via AI chat removed — use inline AI actions instead
+  }
+
+  function handleAddGeneratedTasks(tasks: AIGeneratedTask[], planId: string) {
+    const plan = schedule.plans.find((p) => p.id === planId);
+    if (!plan) return;
+    setSchedule((prev) => {
+      const updatedActivities = { ...prev.activities };
+      for (const t of tasks) {
+        const task: Task = {
+          id: uid(),
+          title: t.title,
+          startTime: t.startTime,
+          endTime: t.endTime,
+          icon: t.icon || plan.emoji,
+          color: colorFromIcon(t.icon) ?? plan.color ?? "cyan",
+          planId,
+          subtasks: t.subtasks.map((s) => ({ id: uid(), task: s })),
+        };
+        updatedActivities[t.day] = [...(updatedActivities[t.day] ?? []), task];
+      }
+      return { ...prev, activities: updatedActivities };
+    });
   }
 
   function handleDeleteStrategy(id: string) {
@@ -908,6 +948,35 @@ export default function ScheduleApp() {
     // todayKey ensures todayMidnightTime is refreshed when the date rolls over
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [weekOffset, todayKey]);
+
+  function navigateByDays(n: number) {
+    const idx = DAYS.indexOf(activeDay);
+    const total = idx + n;
+    if (total < 0) {
+      setWeekOffset((w) => w - 1);
+      setActiveDay(DAYS[7 + total] as DayKey);
+    } else if (total >= 7) {
+      setWeekOffset((w) => w + 1);
+      setActiveDay(DAYS[total - 7] as DayKey);
+    } else {
+      setActiveDay(DAYS[total] as DayKey);
+    }
+  }
+
+  const visibleDates = useMemo(() => {
+    if (calendarView === "7day") return weekDates;
+    if (calendarView === "1day") {
+      const found = weekDates.find((d) => d.day === activeDay);
+      return found ? [found] : weekDates.slice(0, 1);
+    }
+    if (calendarView === "3day") {
+      const idx = weekDates.findIndex((d) => d.day === activeDay);
+      const start = Math.max(0, Math.min(4, idx - 1));
+      return weekDates.slice(start, start + 3);
+    }
+    // custom3
+    return weekDates.filter((d) => customDays.includes(d.day));
+  }, [calendarView, weekDates, activeDay, customDays]);
 
   const selectedPlan = useMemo(
     () => (selectedPlanId ? plansById.get(selectedPlanId) ?? null : null),
@@ -1347,8 +1416,19 @@ export default function ScheduleApp() {
   // ─── Plan list ─────────────────────────────────────────────────────────────
 
   function renderPlanList() {
+    const planStatsList = schedule.plans.map((p) =>
+      getPlanCardStats(p, schedule.activities, todayKey)
+    );
+    const onTrackCount = planStatsList.filter(
+      (s) => s.consistency >= 70 || s.dayState === "complete"
+    ).length;
+    const atRiskCount = planStatsList.filter(
+      (s) => s.consistency >= 35 && s.consistency < 70
+    ).length;
+    const needsWorkCount = planStatsList.filter((s) => s.consistency < 35).length;
+
     return (
-      <div className="px-4 pt-5 pb-8">
+      <div className="px-4 pt-5 pb-8 lg:px-10 lg:pt-8 lg:pb-10">
         {/* Header */}
         <MainTitleSection
           label="Stay on track"
@@ -1362,6 +1442,32 @@ export default function ScheduleApp() {
           }
           className="mb-6"
         />
+
+        {/* Desktop stat strip */}
+        {schedule.plans.length > 0 && (
+          <div className="hidden lg:flex gap-3 mb-7">
+            <div className="flex items-center gap-2.5 rounded-2xl border border-neutral-200 bg-white px-4 py-3 dark:border-white/[0.08] dark:bg-neutral-900">
+              <span className="text-[22px] font-black tabular-nums text-neutral-900 dark:text-white leading-none">{schedule.plans.length}</span>
+              <span className="text-[12px] font-semibold text-neutral-400 dark:text-neutral-500 leading-tight">Total<br/>Plans</span>
+            </div>
+            <div className="flex items-center gap-2.5 rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-3 dark:border-emerald-500/20 dark:bg-emerald-500/[0.07]">
+              <span className="text-[22px] font-black tabular-nums text-emerald-700 dark:text-emerald-400 leading-none">{onTrackCount}</span>
+              <span className="text-[12px] font-semibold text-emerald-600/70 dark:text-emerald-500/70 leading-tight">On<br/>Track</span>
+            </div>
+            {atRiskCount > 0 && (
+              <div className="flex items-center gap-2.5 rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 dark:border-amber-500/20 dark:bg-amber-500/[0.07]">
+                <span className="text-[22px] font-black tabular-nums text-amber-700 dark:text-amber-400 leading-none">{atRiskCount}</span>
+                <span className="text-[12px] font-semibold text-amber-600/70 dark:text-amber-500/70 leading-tight">At<br/>Risk</span>
+              </div>
+            )}
+            {needsWorkCount > 0 && (
+              <div className="flex items-center gap-2.5 rounded-2xl border border-rose-200 bg-rose-50 px-4 py-3 dark:border-rose-500/20 dark:bg-rose-500/[0.07]">
+                <span className="text-[22px] font-black tabular-nums text-rose-700 dark:text-rose-400 leading-none">{needsWorkCount}</span>
+                <span className="text-[12px] font-semibold text-rose-600/70 dark:text-rose-500/70 leading-tight">Needs<br/>Focus</span>
+              </div>
+            )}
+          </div>
+        )}
 
         {/* Empty state */}
         {schedule.plans.length === 0 && (
@@ -1383,13 +1489,13 @@ export default function ScheduleApp() {
           </div>
         )}
 
-        {/* Plan cards */}
-        <div className="space-y-3">
+        {/* Plan cards — 2-col grid on desktop */}
+        <div className="space-y-3 lg:grid lg:grid-cols-2 xl:grid-cols-3 lg:gap-4 lg:space-y-0">
           {schedule.plans.length > 0 && (
             <button
               type="button"
               onClick={() => setTemplatesOpen(true)}
-              className="w-full rounded-2xl border border-dashed border-neutral-200 py-3 text-[13px] font-semibold text-neutral-400 transition-colors hover:border-neutral-300 hover:text-neutral-600 dark:border-white/10 dark:text-neutral-500 dark:hover:border-white/20 dark:hover:text-neutral-300"
+              className="w-full rounded-2xl border border-dashed border-neutral-200 py-3 text-[13px] font-semibold text-neutral-400 transition-colors hover:border-neutral-300 hover:text-neutral-600 dark:border-white/10 dark:text-neutral-500 dark:hover:border-white/20 dark:hover:text-neutral-300 lg:hidden"
             >
               + Browse example templates
             </button>
@@ -1428,6 +1534,17 @@ export default function ScheduleApp() {
             );
           })}
         </div>
+
+        {/* Desktop-only template link */}
+        {schedule.plans.length > 0 && (
+          <button
+            type="button"
+            onClick={() => setTemplatesOpen(true)}
+            className="hidden lg:flex mt-5 w-full items-center justify-center rounded-2xl border border-dashed border-neutral-200 py-3 text-[13px] font-semibold text-neutral-400 transition-colors hover:border-neutral-300 hover:text-neutral-600 dark:border-white/10 dark:text-neutral-500 dark:hover:border-white/20 dark:hover:text-neutral-300"
+          >
+            + Browse example templates
+          </button>
+        )}
       </div>
     );
   }
@@ -1435,43 +1552,71 @@ export default function ScheduleApp() {
   // ─── JSX ──────────────────────────────────────────────────────────────────
 
   return (
-    <main className="min-h-screen bg-neutral-50 text-neutral-900 dark:bg-neutral-950 dark:text-white">
+    <main className="min-h-screen bg-neutral-50 text-neutral-900 dark:bg-neutral-950 dark:text-white lg:flex lg:h-screen lg:overflow-hidden">
 
-      {/* ── Header ─────────────────────────────────────────────────────────── */}
-      {selectedPlan ? (
-        <AppHeader
-          back={{ label: "Plans", onBack: () => setSelectedPlanId(null) }}
-          actions={[
-            {
-              icon: IconEdit,
-              label: "Edit plan",
-              onClick: () => {
-                setEditingPlanId(selectedPlan.id);
-                setEditPlanDraft({
-                  title: selectedPlan.title,
-                  description: selectedPlan.description ?? "",
-                  startDate: selectedPlan.startDate ?? "",
-                  endDate: selectedPlan.endDate ?? "",
-                });
+      {/* ── Desktop sidebar (hidden on mobile) ─────────────────────────────── */}
+      <DesktopSidebar
+        activeTab={activeTab}
+        collapsed={sidebarCollapsed}
+        ollamaUrl={ollamaUrl}
+        ollamaModel={ollamaModel}
+        onTabChange={(tab) => { setActiveTab(tab); setSelectedPlanId(null); }}
+        onToggleCollapse={() => setSidebarCollapsed((v) => !v)}
+        onCreateTask={() => openCreateSheet()}
+        onCreatePlan={openAddPlan}
+        onCreateRitual={() => { setActiveTab(2); if (canAddRitual) setRitualAddOpen(true); }}
+        onOpenSettings={() => setSettingsOpen(true)}
+      />
+
+      {/* ── Main scrollable column ──────────────────────────────────────────── */}
+      <div className="flex min-h-0 flex-1 flex-col lg:overflow-hidden">
+
+      {/* ── Header (mobile only) ────────────────────────────────────────────── */}
+      <div className="lg:hidden">
+        {selectedPlan ? (
+          <AppHeader
+            back={{ label: "Plans", onBack: () => setSelectedPlanId(null) }}
+            actions={[
+              {
+                icon: IconEdit,
+                label: "Edit plan",
+                onClick: () => {
+                  setEditingPlanId(selectedPlan.id);
+                  setEditPlanDraft({
+                    title: selectedPlan.title,
+                    description: selectedPlan.description ?? "",
+                    startDate: selectedPlan.startDate ?? "",
+                    endDate: selectedPlan.endDate ?? "",
+                  });
+                },
               },
-            },
-            {
-              icon: IconTrash,
-              label: "Delete plan",
-              destructive: true,
-              onClick: () => handleDeletePlan(selectedPlan.id),
-            },
-          ]}
-        />
-      ) : (
-        <AppHeader onOpenSettings={() => setSettingsOpen(true)} />
-      )}
+              {
+                icon: IconTrash,
+                label: "Delete plan",
+                destructive: true,
+                onClick: () => handleDeletePlan(selectedPlan.id),
+              },
+            ]}
+          />
+        ) : (
+          <AppHeader onOpenSettings={() => setSettingsOpen(true)} />
+        )}
+      </div>
 
-      <SettingsSheet open={settingsOpen} onClose={() => setSettingsOpen(false)} onClearData={clearData} schedule={schedule} />
+      <SettingsSheet
+        open={settingsOpen}
+        onClose={() => {
+          setSettingsOpen(false);
+          setOllamaUrl(localStorage.getItem(OLLAMA_URL_KEY) ?? DEFAULT_OLLAMA_URL);
+          setOllamaModel(localStorage.getItem(OLLAMA_MODEL_KEY) ?? DEFAULT_OLLAMA_MODEL);
+        }}
+        onClearData={clearData}
+        schedule={schedule}
+      />
       <TemplatesSheet open={templatesOpen} onClose={() => setTemplatesOpen(false)} onApply={handleApplyTemplate} />
 
       {/* ── Content ────────────────────────────────────────────────────────── */}
-      <div className="max-w-lg mx-auto pb-40">
+      <div className="max-w-full pb-40 lg:flex-1 lg:max-w-none lg:overflow-y-auto lg:pb-0">
         <AnimatePresence mode="wait" initial={false}>
 
         {/* ── Tasks Tab ────────────────────────────────────────────────────── */}
@@ -1482,7 +1627,63 @@ export default function ScheduleApp() {
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
             transition={{ duration: 0.12, ease: "easeOut" }}
+            className="lg:flex lg:h-full lg:overflow-hidden"
           >
+            {/* ── Desktop: WeekGrid + QuickAddPanel ─────────────────────────── */}
+            <div className="hidden lg:flex lg:flex-1 lg:overflow-hidden">
+              <div className="flex-1 overflow-hidden">
+                <WeekGrid
+                  schedule={schedule}
+                  plansById={plansById}
+                  weekDates={visibleDates}
+                  todayKey={todayKey}
+                  weekLabel={weekLabel}
+                  activeDay={activeDay}
+                  calendarView={calendarView}
+                  customDays={customDays}
+                  onDaySelect={setActiveDay}
+                  onWeekPrev={() => {
+                    if (calendarView === "1day") navigateByDays(-1);
+                    else if (calendarView === "3day") navigateByDays(-3);
+                    else setWeekOffset((w) => w - 1);
+                  }}
+                  onWeekNext={() => {
+                    if (calendarView === "1day") navigateByDays(1);
+                    else if (calendarView === "3day") navigateByDays(3);
+                    else setWeekOffset((w) => w + 1);
+                  }}
+                  onWeekToday={() => { setWeekOffset(0); setActiveDay(todayKey); }}
+                  onCalendarViewChange={setCalendarView}
+                  onCustomDaysChange={setCustomDays}
+                  onEditTask={openEditSheet}
+                  onToggleTaskComplete={handleToggleTaskComplete}
+                  plans={schedule.plans}
+                  onInlineAdd={(data) => setSchedule(createTask(data.taskDraft, data.repeatDays, data.planItems))}
+                />
+              </div>
+              <div
+                className="shrink-0 border-l border-neutral-200/80 bg-white transition-[width] duration-200 dark:border-white/[0.08] dark:bg-neutral-950"
+                style={{
+                  width:
+                    calendarView === "1day"   ? "clamp(580px, 46%, 840px)" :
+                    calendarView === "3day"   ? "clamp(500px, 41%, 720px)" :
+                    calendarView === "custom3"
+                      ? customDays.length <= 2 ? "clamp(580px, 46%, 840px)"
+                        : customDays.length <= 4 ? "clamp(500px, 41%, 720px)"
+                        : "clamp(420px, 35%, 580px)"
+                    : /* 7day */                 "clamp(420px, 35%, 580px)",
+                }}
+              >
+                <QuickAddPanel
+                  plans={schedule.plans}
+                  activeDay={activeDay}
+                  onSave={handleTaskSheetSave}
+                />
+              </div>
+            </div>
+
+            {/* ── Mobile: calendar strip + day task list ────────────────────── */}
+            <div className="lg:hidden">
             {/* Calendar */}
             <div className="px-4 pt-4">
               <div className="rounded-2xl border border-neutral-200 bg-white px-4 py-3.5 dark:border-white/[0.08] dark:bg-neutral-900">
@@ -1687,7 +1888,7 @@ export default function ScheduleApp() {
                                 onEdit={() => openEditSheet(task)}
                                 onDelete={() => handleDeleteTask(task.id)}
                                 onOpenRoutine={
-                                  task.taskType === "routine" && (task.subtasks?.length ?? 0) > 0
+                                  task.taskType === "session" && (task.subtasks?.length ?? 0) > 0
                                     ? () => setSessionTask(task)
                                     : undefined
                                 }
@@ -1753,6 +1954,23 @@ export default function ScheduleApp() {
                         })}
                       </div>
 
+                      {/* Ritual lane — dedicated column, pills start here and never cover task titles */}
+                      <div
+                        className="relative shrink-0 overflow-visible"
+                        style={{ width: RITUAL_LANE_WIDTH, height: TIMELINE_HEIGHT }}
+                      >
+                        <RitualOverlayLayer
+                          rituals={schedule.rituals ?? []}
+                          activeDay={activeDay}
+                          timelineStartMinutes={TIMELINE_START_MINUTES}
+                          timelineEndMinutes={TIMELINE_END_MINUTES}
+                          timelineTopPadding={TIMELINE_TOP_PADDING}
+                          hourHeight={HOUR_HEIGHT}
+                          completedIds={completedRitualIds}
+                          onToggleComplete={handleToggleRitualComplete}
+                        />
+                      </div>
+
                       {/* Grid + tasks */}
                       <div
                         className="relative min-w-0 flex-1 border-l border-neutral-200/80 dark:border-white/[0.07]"
@@ -1804,18 +2022,6 @@ export default function ScheduleApp() {
                           ))}
                         </div>
 
-                        {/* Ritual overlay — floats above task blocks */}
-                        <RitualOverlayLayer
-                          rituals={schedule.rituals ?? []}
-                          activeDay={activeDay}
-                          timelineStartMinutes={TIMELINE_START_MINUTES}
-                          timelineEndMinutes={TIMELINE_END_MINUTES}
-                          timelineTopPadding={TIMELINE_TOP_PADDING}
-                          hourHeight={HOUR_HEIGHT}
-                          completedIds={completedRitualIds}
-                          onToggleComplete={handleToggleRitualComplete}
-                        />
-
                         {/* Current time — isolated layer, owns its own 30s interval */}
                         <CurrentTimeLayer
                           activeDay={activeDay}
@@ -1833,6 +2039,7 @@ export default function ScheduleApp() {
             </div>
             </motion.div>
             </AnimatePresence>
+            </div>{/* end lg:hidden mobile section */}
           </motion.div>
         )}
 
@@ -1845,6 +2052,7 @@ export default function ScheduleApp() {
             exit={{ opacity: 0 }}
             transition={{ duration: 0.12, ease: "easeOut" }}
           >
+          <div className={selectedPlan ? "lg:mx-auto lg:max-w-3xl lg:px-8" : ""}>
           {selectedPlan ? (
             <PlanDetailView
               plan={selectedPlan}
@@ -1888,8 +2096,13 @@ export default function ScheduleApp() {
               onCompleteMilestone={handleCompleteMilestone}
               onAddStrategy={handleAddStrategy}
               onDeleteStrategy={handleDeleteStrategy}
+              onGenerateStrategy={handleGenerateStrategy}
+              ollamaUrl={ollamaUrl}
+              ollamaModel={ollamaModel}
+              onAddGeneratedTasks={handleAddGeneratedTasks}
             />
           ) : renderPlanList()}
+          </div>
           </motion.div>
         )}
         {/* ── Ritual Tab ─────────────────────────────────────────────────── */}
@@ -1901,16 +2114,21 @@ export default function ScheduleApp() {
             exit={{ opacity: 0 }}
             transition={{ duration: 0.12, ease: "easeOut" }}
           >
-            <RitualView
-              rituals={schedule.rituals ?? []}
-              completedIds={completedRitualIds}
-              onToggleComplete={handleToggleRitualComplete}
-              onAdd={handleAddRitual}
-              onDelete={handleDeleteRitual}
-              addOpen={ritualAddOpen}
-              onAddOpenChange={setRitualAddOpen}
-              weekHistory={ritualWeekHistory}
-            />
+            <div className="lg:px-8">
+              <RitualView
+                rituals={schedule.rituals ?? []}
+                completedIds={completedRitualIds}
+                ritualCompletions={schedule.ritualCompletions ?? []}
+                onToggleComplete={handleToggleRitualComplete}
+                onAdd={handleAddRitual}
+                onUpdate={handleUpdateRitual}
+                onDelete={handleDeleteRitual}
+                onReorder={handleReorderRituals}
+                addOpen={ritualAddOpen}
+                onAddOpenChange={setRitualAddOpen}
+                weekHistory={ritualWeekHistory}
+              />
+            </div>
           </motion.div>
         )}
         </AnimatePresence>
@@ -2000,15 +2218,17 @@ export default function ScheduleApp() {
         {renderAddPlanSheet()}
       </BottomSheet>
 
-      {/* ── Bottom Nav ─────────────────────────────────────────────────────── */}
-      <BottomNav
-        activeTab={activeTab}
-        onTabChange={(tab) => { setActiveTab(tab); setSelectedPlanId(null); }}
-        onCreateTask={() => openCreateSheet()}
-        onCreatePlan={openAddPlan}
-        onCreateRitual={() => { setActiveTab(2); setRitualAddOpen(true); }}
-        onOpenSettings={() => setSettingsOpen(true)}
-      />
+      {/* ── Bottom Nav (mobile only) ───────────────────────────────────────── */}
+      <div className="lg:hidden">
+        <BottomNav
+          activeTab={activeTab}
+          onTabChange={(tab) => { setActiveTab(tab); setSelectedPlanId(null); }}
+          onCreateTask={() => openCreateSheet()}
+          onCreatePlan={openAddPlan}
+          onCreateRitual={() => { setActiveTab(2); if (canAddRitual) setRitualAddOpen(true); }}
+          onOpenSettings={() => setSettingsOpen(true)}
+        />
+      </div>
 
       {/* ── Modals ─────────────────────────────────────────────────────────── */}
       <TaskSheet
@@ -2020,8 +2240,25 @@ export default function ScheduleApp() {
         isOpen={taskSheetOpen}
         initialPlanId={taskSheetPlanId}
         initialTaskType={taskSheetInitialType}
+        ollamaUrl={ollamaUrl}
+        ollamaModel={ollamaModel}
         onClose={closeTaskSheet}
         onSave={handleTaskSheetSave}
+        onDuplicate={(data) => {
+          const newId = uid();
+          const newTask: Task = { ...data.taskDraft, id: newId };
+          const days = data.repeatDays.length > 0 ? data.repeatDays : [activeDay];
+          setSchedule((prev) => ({
+            ...prev,
+            activities: days.reduce(
+              (acc, day) => ({ ...acc, [day]: [...acc[day], newTask] }),
+              { ...prev.activities }
+            ),
+          }));
+          closeTaskSheet();
+          setToastMessage("Task duplicated");
+          setTimeout(() => openEditSheet(newTask), 350);
+        }}
       />
 
       <AddEntryModal
@@ -2065,6 +2302,23 @@ export default function ScheduleApp() {
         title={confirmState?.title ?? ""}
         description={confirmState?.description}
       />
+
+      {/* ── Toast ───────────────────────────────────────────────────────────── */}
+      <AnimatePresence>
+        {toastMessage && (
+          <motion.div
+            initial={{ opacity: 0, y: 12, scale: 0.95 }}
+            animate={{ opacity: 1, y: 0, scale: 1 }}
+            exit={{ opacity: 0, y: 12, scale: 0.95 }}
+            transition={{ duration: 0.2, ease: [0.22, 1, 0.36, 1] }}
+            className="fixed bottom-28 lg:bottom-6 left-1/2 z-50 -translate-x-1/2 rounded-full bg-neutral-900 px-5 py-2.5 text-[14px] font-semibold text-white shadow-lg dark:bg-white dark:text-neutral-900"
+          >
+            {toastMessage}
+          </motion.div>
+        )}
+      </AnimatePresence>
+      </div>{/* end main scrollable column */}
+
     </main>
   );
 }

@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import {
   IconCheck,
@@ -20,6 +20,7 @@ import {
   IconChevronRight,
   IconListCheck,
   IconAlertTriangle,
+  IconSparkles,
 } from "@tabler/icons-react";
 import { haptic } from "@/lib/haptics";
 import ProgressChart from "@/components/ProgressChart";
@@ -53,6 +54,12 @@ import { TrackerTabs } from "@/components/ui/TrackerTabs";
 import AccuracyCalendar from "@/components/plan/AccuracyCalendar";
 import StrategyViewer from "@/components/strategy/StrategyViewer";
 import StrategyUpload from "@/components/strategy/StrategyUpload";
+import {
+  streamGenerateTasks,
+  parseGeneratedTasks,
+  type AIGeneratedTask,
+} from "@/lib/aiActions";
+import AIActionSheet, { type ResultItem } from "@/components/ai/AIActionSheet";
 
 
 
@@ -187,6 +194,11 @@ interface PlanDetailViewProps {
   // Strategy handlers
   onAddStrategy: (data: Omit<StrategyAsset, "id" | "createdAt" | "updatedAt">, pdfBytes?: Uint8Array) => void;
   onDeleteStrategy: (id: string) => void;
+  onGenerateStrategy?: (plan: Plan) => void;
+  // AI
+  ollamaUrl?: string;
+  ollamaModel?: string;
+  onAddGeneratedTasks?: (tasks: AIGeneratedTask[], planId: string) => void;
 }
 
 // ── Component ─────────────────────────────────────────────────────────────────
@@ -209,9 +221,50 @@ export default function PlanDetailView({
   onCompleteMilestone,
   onAddStrategy,
   onDeleteStrategy,
+  onGenerateStrategy,
+  ollamaUrl,
+  ollamaModel,
+  onAddGeneratedTasks,
 }: PlanDetailViewProps) {
   // ── Tab state ───────────────────────────────────────────────────────────
   const [planTab, setPlanTab] = useState<"planning" | "roadmap" | "strategy">("planning");
+
+  // ── AI task generation state ────────────────────────────────────────────
+  const [genSheetOpen, setGenSheetOpen] = useState(false);
+  // Stores full AIGeneratedTask objects keyed by id so we can commit with subtasks intact
+  const parsedTasksRef = useRef<Record<string, AIGeneratedTask>>({});
+
+  async function* genTasksStream(goal: string, picks: string[]): AsyncGenerator<string> {
+    if (!ollamaUrl || !ollamaModel) return;
+    const contextHints = [goal.trim(), ...picks].filter(Boolean).join(". ");
+    yield* streamGenerateTasks(ollamaUrl, ollamaModel, {
+      title: plan.title,
+      description: contextHints || plan.description,
+    });
+  }
+
+  function parseTaskResults(raw: string): ResultItem[] {
+    const tasks = parseGeneratedTasks(raw);
+    parsedTasksRef.current = {};
+    return tasks.map((t, i) => {
+      const id = String(i);
+      parsedTasksRef.current[id] = t;
+      return {
+        id,
+        label: t.title,
+        meta: `${t.day.charAt(0).toUpperCase() + t.day.slice(1)} · ${t.startTime}–${t.endTime}${t.subtasks.length > 0 ? ` · ${t.subtasks.length} subtasks` : ""}`,
+        badge: t.icon,
+      };
+    });
+  }
+
+  function commitTasks(items: ResultItem[]) {
+    if (!onAddGeneratedTasks) return;
+    const tasks = items
+      .map((r) => parsedTasksRef.current[r.id])
+      .filter(Boolean) as AIGeneratedTask[];
+    if (tasks.length > 0) onAddGeneratedTasks(tasks, plan.id);
+  }
 
   // ── Tracker edit state ──────────────────────────────────────────────────
   const [editingTrackerId, setEditingTrackerId] = useState<string | null>(null);
@@ -361,7 +414,7 @@ export default function PlanDetailView({
     const tone = timelineCardStyles(plan.color);
     const duration = formatDuration(task.startTime, task.endTime);
     const subtaskCount = task.subtasks?.length ?? 0;
-    const isRoutine = task.taskType === "routine";
+    const isRoutine = task.taskType === "session";
     const hasTime = task.startTime || task.endTime;
 
     return (
@@ -785,7 +838,7 @@ export default function PlanDetailView({
           </div>
 
           {/* Smooth animated fill bar */}
-          <div className="relative h-[10px] rounded-full bg-neutral-100 dark:bg-white/[0.08] overflow-hidden mb-3">
+          <div className="relative h-[10px] rounded-full bg-neutral-200 dark:bg-white/[0.08] overflow-hidden mb-3">
             <motion.div
               className="absolute inset-y-0 left-0 rounded-full bg-gradient-to-r from-green-600 via-green-500 to-emerald-400"
               initial={{ width: "0%" }}
@@ -804,7 +857,7 @@ export default function PlanDetailView({
                     seg.state === "success" ? "bg-green-500" :
                     seg.state === "warning" ? "bg-amber-400" :
                     seg.state === "fail"    ? "bg-rose-400" :
-                    "bg-neutral-100 dark:bg-white/[0.07]"
+                    "bg-neutral-200 dark:bg-white/[0.07]"
                   )
                 }
               />
@@ -857,14 +910,26 @@ export default function PlanDetailView({
           <p className="text-[11px] font-bold uppercase tracking-[0.09em] text-neutral-400 dark:text-neutral-500">
             {planStrategies.length === 0 ? "No strategies yet" : `${planStrategies.length} strateg${planStrategies.length === 1 ? "y" : "ies"}`}
           </p>
-          <button
-            type="button"
-            onClick={() => setStrategyUploadOpen(true)}
-            className="inline-flex items-center gap-1.5 rounded-xl border border-neutral-200 px-3 py-1.5 text-[12px] font-semibold text-neutral-600 transition-colors hover:bg-neutral-50 dark:border-white/10 dark:text-neutral-400 dark:hover:bg-white/[0.04]"
-          >
-            <IconPlus size={14} strokeWidth={2.5} />
-            Add
-          </button>
+          <div className="flex items-center gap-2">
+            {onGenerateStrategy && (
+              <button
+                type="button"
+                onClick={() => { haptic("light"); onGenerateStrategy(plan); }}
+                className="hidden lg:inline-flex items-center gap-1.5 rounded-xl px-3 py-1.5 text-[12px] font-semibold text-violet-600 transition-colors hover:bg-violet-50 dark:text-violet-400 dark:hover:bg-violet-500/10"
+              >
+                <IconSparkles size={13} strokeWidth={2} />
+                Generate with AI
+              </button>
+            )}
+            <button
+              type="button"
+              onClick={() => setStrategyUploadOpen(true)}
+              className="inline-flex items-center gap-1.5 rounded-xl border border-neutral-200 px-3 py-1.5 text-[12px] font-semibold text-neutral-600 transition-colors hover:bg-neutral-50 dark:border-white/10 dark:text-neutral-400 dark:hover:bg-white/[0.04]"
+            >
+              <IconPlus size={14} strokeWidth={2.5} />
+              Add
+            </button>
+          </div>
         </div>
 
         {planStrategies.length === 0 ? (
@@ -965,11 +1030,23 @@ export default function PlanDetailView({
             title="Planned Tasks"
             className="mb-4"
             actions={
-              <SectionIconButton
-                icon={<IconPlus size={20} strokeWidth={2} />}
-                onClick={() => onAddTask(plan.id)}
-                label="Add task"
-              />
+              <div className="flex items-center gap-1">
+                {ollamaUrl && ollamaModel && onAddGeneratedTasks && (
+                  <button
+                    type="button"
+                    onClick={() => setGenSheetOpen(true)}
+                    className="flex items-center gap-1.5 rounded-xl px-3 py-1.5 text-[12px] font-semibold text-emerald-600 transition-colors hover:bg-emerald-50 dark:text-emerald-400 dark:hover:bg-emerald-500/10"
+                  >
+                    <IconSparkles size={13} strokeWidth={2} />
+                    Plan with AI
+                  </button>
+                )}
+                <SectionIconButton
+                  icon={<IconPlus size={20} strokeWidth={2} />}
+                  onClick={() => onAddTask(plan.id)}
+                  label="Add task"
+                />
+              </div>
             }
           />
 
@@ -987,6 +1064,31 @@ export default function PlanDetailView({
             )}
           </div>
         </section>
+
+        {/* AI task generation sheet */}
+        {ollamaUrl && ollamaModel && (
+          <AIActionSheet
+            open={genSheetOpen}
+            onClose={() => setGenSheetOpen(false)}
+            title="Plan Tasks"
+            contextLabel={`for ${plan.title}`}
+            inputPlaceholder="What's your main goal? e.g. Pass GMAT by June, build a daily habit…"
+            quickPicks={[
+              "Morning sessions",
+              "Spread across the week",
+              "Include weekends",
+              "Intensive schedule",
+              "Review sessions",
+              "Light start",
+            ]}
+            ctaLabel="Build Tasks"
+            resultSingular="task"
+            resultPlural="tasks"
+            onGenerate={genTasksStream}
+            onParseResults={parseTaskResults}
+            onAdd={commitTasks}
+          />
+        )}
 
         {/* B. Accuracy Calendar */}
         <section className="mt-8 px-4">
@@ -1411,7 +1513,7 @@ export default function PlanDetailView({
           const { task, activeDays: taskDays } = viewingTask;
           const duration = formatDuration(task.startTime, task.endTime);
           const subtaskCount = task.subtasks?.length ?? 0;
-          const isRoutine = task.taskType === "routine";
+          const isRoutine = task.taskType === "session";
 
           return (
             <div className="px-5 pb-8 pt-4">

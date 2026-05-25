@@ -6,6 +6,7 @@
  */
 
 import { DAYS, type Schedule, type Task, type DayKey } from "./useScheduleDB";
+import { parseTimeToMinutes } from "./timeUtils";
 import type { ScheduleEntry } from "@/components/ScheduleItem";
 import { colorFromIcon } from "./colorSystem";
 
@@ -152,3 +153,26 @@ export function createSubtask(title: string, duration?: string): ScheduleEntry {
 // ── Plan icon → color helper (re-exported for TaskSheet) ─────────────────────
 
 export { colorFromIcon };
+
+// ── Task sort ─────────────────────────────────────────────────────────────────
+
+export function sortTasksByTime(tasks: Task[]): Task[] {
+  return [...tasks].sort((left, right) => {
+    const lm = parseTimeToMinutes(left.startTime);
+    const rm = parseTimeToMinutes(right.startTime);
+    if (lm === null && rm === null) {
+      const lso = left.sortOrder ?? Infinity;
+      const rso = right.sortOrder ?? Infinity;
+      return lso !== rso ? lso - rso : left.title.localeCompare(right.title);
+    }
+    if (lm === null) return 1;
+    if (rm === null) return -1;
+    if (lm !== rm) return lm - rm;
+    const le = parseTimeToMinutes(left.endTime) ?? lm;
+    const re = parseTimeToMinutes(right.endTime) ?? rm;
+    if (le !== re) return le - re;
+    const lso = left.sortOrder ?? Infinity;
+    const rso = right.sortOrder ?? Infinity;
+    return lso !== rso ? lso - rso : left.title.localeCompare(right.title);
+  });
+}

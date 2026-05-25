@@ -11,11 +11,18 @@ import {
   IconCheck,
   IconX,
   IconAlertTriangle,
+  IconSparkles,
+  IconWifi,
+  IconWifiOff,
+  IconRefresh,
+  IconChevronDown,
+  IconTerminal2,
 } from "@tabler/icons-react";
 import BottomSheet from "@/components/ui/BottomSheet";
 import { useAuth } from "@/contexts/AuthProvider";
 import { getSyncStatus, getLastSyncedAt, getLastSchedule, onSyncStatusChange, flushNow, deleteCloudData, type SyncStatus } from "@/lib/cloudSync";
 import type { Schedule } from "@/lib/useScheduleDB";
+import { checkOllamaConnection, OLLAMA_URL_KEY, OLLAMA_MODEL_KEY, DEFAULT_OLLAMA_URL, DEFAULT_OLLAMA_MODEL } from "@/lib/ai";
 
 // ── Theme helpers ─────────────────────────────────────────────────────────────
 
@@ -325,6 +332,181 @@ function GoogleLogo() {
   );
 }
 
+// ── Ollama AI settings ────────────────────────────────────────────────────────
+
+const SETUP_STEPS = [
+  { cmd: "brew install ollama", desc: "Install Ollama" },
+  { cmd: "ollama serve", desc: "Start the server" },
+  { cmd: "ollama pull gemma4:e2b", desc: "Download a model" },
+  { cmd: "ollama list", desc: "See downloaded models" },
+];
+
+function OllamaRow() {
+  const [url, setUrl] = useState(() => localStorage.getItem(OLLAMA_URL_KEY) ?? DEFAULT_OLLAMA_URL);
+  const [model, setModel] = useState(() => localStorage.getItem(OLLAMA_MODEL_KEY) ?? DEFAULT_OLLAMA_MODEL);
+  const [availableModels, setAvailableModels] = useState<string[]>([]);
+  const [fetching, setFetching] = useState(false);
+  const [fetchError, setFetchError] = useState(false);
+  const [showSetup, setShowSetup] = useState(false);
+
+  function saveUrl(v: string) {
+    const val = v.trim() || DEFAULT_OLLAMA_URL;
+    localStorage.setItem(OLLAMA_URL_KEY, val);
+    setUrl(val);
+  }
+
+  function saveModel(v: string) {
+    const val = v.trim() || DEFAULT_OLLAMA_MODEL;
+    localStorage.setItem(OLLAMA_MODEL_KEY, val);
+    setModel(val);
+  }
+
+  async function fetchModels(targetUrl = url) {
+    setFetching(true);
+    setFetchError(false);
+    try {
+      const models = await checkOllamaConnection(targetUrl);
+      setAvailableModels(models);
+      if (models.length > 0 && !models.includes(model)) {
+        saveModel(models[0]);
+      }
+    } catch {
+      setFetchError(true);
+      setAvailableModels([]);
+    } finally {
+      setFetching(false);
+    }
+  }
+
+  useEffect(() => { void fetchModels(); }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
+  return (
+    <div className="px-4 py-3.5">
+      {/* Header */}
+      <div className="mb-3 flex items-center gap-3">
+        <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl border border-neutral-100 bg-neutral-50 text-neutral-500 dark:border-white/[0.06] dark:bg-white/[0.04] dark:text-neutral-400">
+          <IconSparkles size={15} strokeWidth={2} />
+        </div>
+        <span className="flex-1 text-[13px] font-semibold text-neutral-800 dark:text-white">
+          AI Assistant (Ollama)
+        </span>
+        {fetching && (
+          <span className="h-3.5 w-3.5 animate-spin rounded-full border-2 border-neutral-200 border-t-neutral-500 dark:border-neutral-700 dark:border-t-neutral-400" />
+        )}
+        {!fetching && (
+          <span className={`h-2 w-2 rounded-full ${availableModels.length > 0 ? "bg-emerald-500" : "bg-neutral-300 dark:bg-neutral-600"}`} />
+        )}
+      </div>
+
+      <div className="flex flex-col gap-2.5">
+        {/* Server URL */}
+        <div>
+          <p className="mb-1 text-[11px] font-semibold text-neutral-400 dark:text-neutral-500">Server URL</p>
+          <input
+            type="text"
+            value={url}
+            onChange={(e) => setUrl(e.target.value)}
+            onBlur={(e) => { saveUrl(e.target.value); void fetchModels(e.target.value.trim() || DEFAULT_OLLAMA_URL); }}
+            placeholder={DEFAULT_OLLAMA_URL}
+            className="h-9 w-full rounded-xl border border-neutral-200 bg-neutral-50 px-3 text-[12px] font-medium text-neutral-900 outline-none transition-colors focus:border-neutral-300 focus:bg-white dark:border-white/[0.08] dark:bg-white/[0.04] dark:text-white dark:focus:border-white/20 dark:focus:bg-white/[0.07]"
+          />
+        </div>
+
+        {/* Model — dropdown if models fetched, text input fallback */}
+        <div>
+          <div className="mb-1 flex items-center justify-between">
+            <p className="text-[11px] font-semibold text-neutral-400 dark:text-neutral-500">Model</p>
+            <button
+              type="button"
+              onClick={() => void fetchModels()}
+              disabled={fetching}
+              className="flex items-center gap-1 text-[10px] font-medium text-neutral-400 transition-colors hover:text-neutral-600 disabled:opacity-40 dark:hover:text-neutral-300"
+            >
+              <IconRefresh size={10} strokeWidth={2} className={fetching ? "animate-spin" : ""} />
+              Refresh
+            </button>
+          </div>
+
+          {availableModels.length > 0 ? (
+            <div className="relative">
+              <select
+                value={model}
+                onChange={(e) => saveModel(e.target.value)}
+                className="h-9 w-full appearance-none rounded-xl border border-neutral-200 bg-neutral-50 px-3 pr-8 text-[12px] font-medium text-neutral-900 outline-none transition-colors focus:border-neutral-300 focus:bg-white dark:border-white/[0.08] dark:bg-neutral-900 dark:text-white dark:focus:border-white/20"
+              >
+                {availableModels.map((m) => (
+                  <option key={m} value={m}>{m}</option>
+                ))}
+              </select>
+              <IconChevronDown size={12} strokeWidth={2} className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-neutral-400" />
+            </div>
+          ) : (
+            <input
+              type="text"
+              value={model}
+              onChange={(e) => setModel(e.target.value)}
+              onBlur={(e) => saveModel(e.target.value)}
+              placeholder={DEFAULT_OLLAMA_MODEL}
+              className="h-9 w-full rounded-xl border border-neutral-200 bg-neutral-50 px-3 text-[12px] font-medium text-neutral-900 outline-none transition-colors focus:border-neutral-300 focus:bg-white dark:border-white/[0.08] dark:bg-white/[0.04] dark:text-white dark:focus:border-white/20 dark:focus:bg-white/[0.07]"
+            />
+          )}
+
+          {fetchError && (
+            <p className="mt-1 flex items-center gap-1 text-[10px] text-rose-500 dark:text-rose-400">
+              <IconWifiOff size={10} strokeWidth={2} />
+              Can&apos;t reach Ollama — is it running?
+            </p>
+          )}
+          {availableModels.length > 0 && (
+            <p className="mt-1 text-[10px] text-emerald-500 dark:text-emerald-400">
+              {availableModels.length} model{availableModels.length !== 1 ? "s" : ""} available
+            </p>
+          )}
+        </div>
+
+        {/* Setup instructions */}
+        <div className="rounded-xl border border-neutral-200 dark:border-white/[0.08]">
+          <button
+            type="button"
+            onClick={() => setShowSetup((v) => !v)}
+            className="flex w-full items-center gap-2 px-3 py-2.5 text-left"
+          >
+            <IconTerminal2 size={12} strokeWidth={2} className="shrink-0 text-neutral-400" />
+            <span className="flex-1 text-[11px] font-semibold text-neutral-500 dark:text-neutral-400">
+              Setup instructions
+            </span>
+            <motion.span animate={{ rotate: showSetup ? 180 : 0 }} transition={{ duration: 0.2 }}>
+              <IconChevronDown size={11} strokeWidth={2} className="text-neutral-400" />
+            </motion.span>
+          </button>
+          <AnimatePresence initial={false}>
+            {showSetup && (
+              <motion.div
+                initial={{ height: 0, opacity: 0 }}
+                animate={{ height: "auto", opacity: 1 }}
+                exit={{ height: 0, opacity: 0 }}
+                transition={{ duration: 0.2, ease: "easeInOut" }}
+                className="overflow-hidden"
+              >
+                <div className="flex flex-col gap-1.5 border-t border-neutral-100 px-3 pb-3 pt-2.5 dark:border-white/[0.06]">
+                  {SETUP_STEPS.map(({ cmd, desc }) => (
+                    <div key={cmd}>
+                      <p className="text-[10px] text-neutral-400 dark:text-neutral-500">{desc}</p>
+                      <code className="block rounded-lg bg-neutral-100 px-2.5 py-1.5 font-mono text-[11px] text-neutral-700 dark:bg-white/[0.06] dark:text-neutral-300">
+                        {cmd}
+                      </code>
+                    </div>
+                  ))}
+                </div>
+              </motion.div>
+            )}
+          </AnimatePresence>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // ── Main sheet ────────────────────────────────────────────────────────────────
 
 interface SettingsSheetProps {
@@ -349,7 +531,7 @@ export function SettingsSheet({ open, onClose, onClearData, schedule }: Settings
   }
 
   return (
-    <BottomSheet open={open} onClose={onClose}>
+    <BottomSheet open={open} onClose={onClose} desktopWidth="max-w-[560px]">
       <div
         className="px-5 pt-3"
         style={{ paddingBottom: "max(40px, calc(env(safe-area-inset-bottom) + 24px))" }}
@@ -434,6 +616,12 @@ export function SettingsSheet({ open, onClose, onClearData, schedule }: Settings
         <SectionLabel>Preferences</SectionLabel>
         <SettingsCard>
           <AppearanceRow />
+        </SettingsCard>
+
+        {/* ── AI Assistant ─────────────────────────────────────────────────── */}
+        <SectionLabel>AI Assistant</SectionLabel>
+        <SettingsCard>
+          <OllamaRow />
         </SettingsCard>
 
         {/* ── Data ─────────────────────────────────────────────────────────── */}

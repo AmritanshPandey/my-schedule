@@ -12,6 +12,10 @@ const COLOR_DOT: Record<RitualColor, string> = {
   amber:   "bg-amber-400",
   emerald: "bg-emerald-400",
   fuchsia: "bg-fuchsia-400",
+  orange:  "bg-orange-400",
+  cyan:    "bg-cyan-400",
+  indigo:  "bg-indigo-400",
+  teal:    "bg-teal-400",
 };
 
 interface TodayRitualsBarProps {
@@ -40,13 +44,13 @@ export default function TodayRitualsBar({
     <div className="mb-3">
       <div className="mb-1.5 flex items-center justify-between px-0.5">
         <span className="text-[11px] font-bold uppercase tracking-[0.08em] text-neutral-400 dark:text-neutral-500">
-          Rituals
+          Routines
         </span>
         <span className="text-[11px] font-semibold tabular-nums text-neutral-400 dark:text-neutral-500">
           {doneCount}/{todayRituals.length}
         </span>
       </div>
-      <div className="flex gap-2 overflow-x-auto pb-0.5 [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden">
+      <div className="flex gap-2 overflow-x-auto pb-0.5 [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden" style={{ touchAction: "pan-x" }}>
         {todayRituals.map((ritual) => {
           const done = completedIds.has(ritual.id);
           const dot = ritual.color ? COLOR_DOT[ritual.color] : "bg-neutral-300 dark:bg-neutral-600";

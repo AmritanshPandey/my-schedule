@@ -11,6 +11,7 @@ import {
 } from "firebase/auth";
 
 import {
+  initializeFirestore,
   getFirestore,
   type Firestore,
 } from "firebase/firestore";
@@ -48,12 +49,17 @@ const isConfigured = !!(
 );
 
 let _app: FirebaseApp | null = null;
+let _db: Firestore | null = null;
 if (isClient && isConfigured) {
-  _app = getApps().length > 0 ? getApp() : initializeApp(config);
+  const isNew = getApps().length === 0;
+  _app = isNew ? initializeApp(config) : getApp();
+  _db = isNew
+    ? initializeFirestore(_app, { ignoreUndefinedProperties: true })
+    : getFirestore(_app);
 }
 
 export const auth: Auth | null = _app ? getAuth(_app) : null;
-export const db: Firestore | null = _app ? getFirestore(_app) : null;
+export const db: Firestore | null = _db;
 export const storage: FirebaseStorage | null = _app ? getStorage(_app) : null;
 
 export async function initializeAnalytics(): Promise<Analytics | null> {

@@ -125,24 +125,30 @@ function ListTaskCardInner({
   }
 
   // ── Derived state ───────────────────────────────────────────────────────────
-  const isRoutine = task.taskType === "routine";
+  const isRoutine = task.taskType === "session";
 
   const subtasks: ScheduleEntry[] = useMemo(() => task.subtasks ?? [], [task.subtasks]);
-  // Plan fallback only for normal tasks (routine items are always task-level)
-  const routineItems: ScheduleEntry[] = useMemo(
+  // For session tasks, steps are always task-level. For task type, fall back to
+  // the plan template when no task-level subtasks have been saved yet.
+  const templateItems: ScheduleEntry[] = useMemo(
     () => (!isRoutine && !task.subtasks?.length && linkedPlan ? linkedPlan.items : []),
     [isRoutine, task.subtasks, linkedPlan]
   );
-  const allSubtaskIds = useMemo(() => subtasks.map((s) => s.id), [subtasks]);
+  // Unified list of checkable items for this task
+  const effectiveItems: ScheduleEntry[] = useMemo(
+    () => (isRoutine ? subtasks : (subtasks.length > 0 ? subtasks : templateItems)),
+    [isRoutine, subtasks, templateItems]
+  );
+  const allSubtaskIds = useMemo(() => effectiveItems.map((s) => s.id), [effectiveItems]);
 
   const { completedCount, totalCount, pct } = useMemo(
-    () => calculateTaskProgress(task, isRoutine ? 0 : subtasks.length),
-    [task, isRoutine, subtasks.length]
+    () => calculateTaskProgress(task, isRoutine ? 0 : effectiveItems.length),
+    [task, isRoutine, effectiveItems.length]
   );
-  // Routine tasks are never "partial" — pass 0 subtasks to skip that branch
+  // Session tasks are never "partial" — pass 0 subtasks to skip that branch
   const taskState = useMemo(
-    () => resolveTaskState(task, isRoutine ? 0 : subtasks.length),
-    [task, isRoutine, subtasks.length]
+    () => resolveTaskState(task, isRoutine ? 0 : effectiveItems.length),
+    [task, isRoutine, effectiveItems.length]
   );
   const done = taskState === "completed";
 
@@ -151,21 +157,22 @@ function ListTaskCardInner({
     [task.startTime, task.endTime]
   );
 
-  const hasSubtasks = !isRoutine && subtasks.length > 0;
-  const hasRoutine  = isRoutine ? subtasks.length > 0 : routineItems.length > 0;
-  const hasItems    = hasSubtasks || hasRoutine;
-  const itemCount   = isRoutine ? subtasks.length : (hasSubtasks ? subtasks.length : routineItems.length);
-  // Expand only shows the subtask checklist — description is always inline now
-  const canExpand   = hasSubtasks && !isRoutine;
-  const displayPct  = hasSubtasks ? pct : 0;
-  // Show 100% bar for done tasks that have no subtasks (confirms completion visually)
-  const barPct      = done && !hasSubtasks ? 100 : displayPct;
+  const hasEffectiveItems = effectiveItems.length > 0;
+  const hasRoutine = isRoutine && subtasks.length > 0;
+  const canExpand  = !isRoutine && hasEffectiveItems;
+  const itemCount  = effectiveItems.length;
+  const displayPct = canExpand ? pct : 0;
+  // Show 100% bar for done tasks with no expandable items (confirms completion visually)
+  const barPct = done && !canExpand ? 100 : displayPct;
 
-  // Card tap: open routine for routine tasks; toggle complete otherwise
+  // Card tap: open session sheet for session tasks, expand for tasks with
+  // subtasks, or toggle complete for plain tasks with nothing to show.
   function handleCardTap() {
     haptic("light");
     if (isRoutine && onOpenRoutine) {
       onOpenRoutine();
+    } else if (canExpand) {
+      setExpanded((v) => !v);
     } else {
       onToggleComplete(task.id, allSubtaskIds);
     }
@@ -207,7 +214,7 @@ function ListTaskCardInner({
         dragElastic={{ left: 0, right: 0.05 }}
         dragMomentum={false}
         onDragEnd={handleDragEnd}
-        style={{ x: editMode ? 0 : dragX }}
+        style={{ x: editMode ? 0 : dragX, touchAction: "pan-y" }}
         transition={{ layout: { duration: 0.22, ease: "easeInOut" } }}
         className={`relative z-10 rounded-[24px] bg-white dark:bg-neutral-900 border transition-colors duration-300 ${
           done
@@ -310,8 +317,8 @@ function ListTaskCardInner({
             </p>
           )}
 
-          {/* ── Row 2: Progress bar — subtasks show partial, done shows 100% ─ */}
-          {(hasSubtasks || done) && (
+          {/* ── Row 2: Progress bar — items show partial, done shows 100% ─ */}
+          {(canExpand || done) && (
             <div className="mt-4 flex items-center gap-3">
               <div className="relative flex-1 h-2.5 overflow-hidden rounded-full" style={{ backgroundColor: "rgb(229 231 235)" }}>
                 <motion.div
@@ -348,13 +355,13 @@ function ListTaskCardInner({
                 {duration}
               </span>
             )}
-            {hasSubtasks && (
+            {canExpand && (
               <span className="ml-auto inline-flex items-center gap-1.5 text-[14px] font-semibold text-neutral-500 dark:text-neutral-400 tabular-nums">
                 {completedCount}/{totalCount}
                 <IconListCheck size={16} strokeWidth={2} />
               </span>
             )}
-            {(isRoutine ? hasRoutine : (!hasSubtasks && hasRoutine)) && (
+            {hasRoutine && (
               <span className="ml-auto inline-flex items-center gap-1.5 text-[13px] font-semibold text-neutral-400 dark:text-neutral-500">
                 <IconListCheck size={15} strokeWidth={2} />
                 {itemCount} items
@@ -377,49 +384,47 @@ function ListTaskCardInner({
               <div className="mx-5 border-t border-neutral-100 dark:border-white/[0.05]" />
 
               <div className="px-5 pt-4 pb-5">
-                {hasSubtasks && !isRoutine && (
-                  <div className="flex gap-0">
-                    <div className="w-[3px] rounded-full bg-neutral-200 dark:bg-white/[0.08] shrink-0 mr-4" />
-                    <div className="flex-1 space-y-2.5">
-                      {subtasks.map((subtask) => {
-                        const isDone = (task.completedSubtaskIds ?? []).includes(subtask.id);
-                        const detail = subtaskDetailPill(subtask);
-                        return (
-                          <div
-                            key={subtask.id}
-                            className={`flex items-center gap-3 rounded-2xl px-4 py-3.5 transition-colors duration-200 ${
+                <div className="flex gap-0">
+                  <div className="w-[3px] rounded-full bg-neutral-200 dark:bg-white/[0.08] shrink-0 mr-4" />
+                  <div className="flex-1 space-y-2.5">
+                    {effectiveItems.map((item) => {
+                      const isDone = (task.completedSubtaskIds ?? []).includes(item.id);
+                      const detail = subtaskDetailPill(item);
+                      return (
+                        <div
+                          key={item.id}
+                          className={`flex items-center gap-3 rounded-2xl px-4 py-3.5 transition-colors duration-200 ${
+                            isDone
+                              ? "bg-neutral-50 dark:bg-white/[0.02]"
+                              : "bg-neutral-100/70 dark:bg-white/[0.03]"
+                          }`}
+                        >
+                          <TaskCheckbox
+                            state={isDone ? "completed" : "incomplete"}
+                            size="md"
+                            onChange={() => onToggleSubtask(task.id, item.id)}
+                          />
+                          <motion.p
+                            animate={{ opacity: isDone ? 0.45 : 1 }}
+                            transition={{ duration: 0.2 }}
+                            className={`flex-1 min-w-0 text-[14px] font-medium ${
                               isDone
-                                ? "bg-neutral-50 dark:bg-white/[0.02]"
-                                : "bg-neutral-100/70 dark:bg-white/[0.03]"
+                                ? "text-neutral-400 line-through dark:text-neutral-500"
+                                : "text-neutral-700 dark:text-neutral-300"
                             }`}
                           >
-                            <TaskCheckbox
-                              state={isDone ? "completed" : "incomplete"}
-                              size="md"
-                              onChange={() => onToggleSubtask(task.id, subtask.id)}
-                            />
-                            <motion.p
-                              animate={{ opacity: isDone ? 0.45 : 1 }}
-                              transition={{ duration: 0.2 }}
-                              className={`flex-1 min-w-0 text-[14px] font-medium ${
-                                isDone
-                                  ? "text-neutral-400 line-through dark:text-neutral-500"
-                                  : "text-neutral-700 dark:text-neutral-300"
-                              }`}
-                            >
-                              {subtask.task}
-                            </motion.p>
-                            {detail && (
-                              <span className="shrink-0 inline-flex items-center rounded-full border border-neutral-300 bg-white px-3 py-1 text-[13px] font-semibold text-neutral-500 dark:border-white/[0.10] dark:bg-transparent dark:text-neutral-400">
-                                {detail}
-                              </span>
-                            )}
-                          </div>
-                        );
-                      })}
-                    </div>
+                            {item.task}
+                          </motion.p>
+                          {detail && (
+                            <span className="shrink-0 inline-flex items-center rounded-full border border-neutral-300 bg-white px-3 py-1 text-[13px] font-semibold text-neutral-500 dark:border-white/[0.10] dark:bg-transparent dark:text-neutral-400">
+                              {detail}
+                            </span>
+                          )}
+                        </div>
+                      );
+                    })}
                   </div>
-                )}
+                </div>
               </div>
             </motion.div>
           )}

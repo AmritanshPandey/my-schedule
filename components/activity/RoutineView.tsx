@@ -44,7 +44,7 @@ export default function RoutineView({
 
     for (const day of DAYS) {
       for (const task of activities[day]) {
-        if (task.taskType !== "routine") continue;
+        if (task.taskType !== "session") continue;
         const key = task.title.trim().toLowerCase();
         const existing = seen.get(key);
         if (existing) {

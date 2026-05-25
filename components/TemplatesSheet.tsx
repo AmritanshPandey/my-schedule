@@ -132,7 +132,7 @@ function TemplatesSheetInner({ open, onClose, onApply }: TemplatesSheetProps) {
   }
 
   return (
-    <BottomSheet open={open} onClose={onClose} maxHeight="92vh">
+    <BottomSheet open={open} onClose={onClose} maxHeight="92vh" desktopWidth="max-w-[640px]">
       <div className="px-5 pb-8 pt-2">
         {/* Header */}
         <div className="flex items-start justify-between mb-5">

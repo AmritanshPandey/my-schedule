@@ -60,7 +60,7 @@ export interface Task {
   streakEnabled?: boolean;            // opt-in to streak tracking
   sortOrder?: number;                 // drag-reorder position within a day
   subtasks?: ScheduleEntry[];         // per-task subtask list (overrides plan.items)
-  taskType?: "normal" | "routine";    // undefined treated as "normal"
+  taskType?: "task" | "session";       // undefined treated as "task"
 }
 
 export interface SummaryConfig {
@@ -143,7 +143,7 @@ export interface StrategyAsset {
   planId?: string;
 }
 
-export const RITUAL_COLORS = ["rose", "sky", "violet", "amber", "emerald", "fuchsia"] as const;
+export const RITUAL_COLORS = ["rose", "sky", "violet", "amber", "emerald", "fuchsia", "orange", "cyan", "indigo", "teal"] as const;
 export type RitualColor = typeof RITUAL_COLORS[number];
 
 export interface Ritual {
@@ -154,6 +154,7 @@ export interface Ritual {
   repeatDays?: DayKey[];  // undefined / empty = every day
   color?: RitualColor;
   notes?: string;
+  sortOrder?: number;     // drag-reorder position
 }
 
 export type Activity = Task;
@@ -435,15 +436,21 @@ function normalizeTasks(value: unknown, fallbackPlanId: string, fallbackIcon = "
 
     if ("startTime" in item && "endTime" in item && "title" in item && "icon" in item) {
       const task = item as Task;
+      const rawType: string | undefined = task.taskType;
+      const taskType: Task["taskType"] =
+        rawType === "session" || rawType === "routine" ? "session" :
+        rawType === "task" || rawType === "normal" ? "task" :
+        undefined;
       return [{
         id: task.id,
         title: task.title,
-        description: task.description,
+        ...(task.description !== undefined && { description: task.description }),
         startTime: task.startTime,
         endTime: task.endTime,
         icon: task.icon || fallbackIcon,
         color: resolveAccentColor((task as Task & { color?: string }).color, task.icon || fallbackIcon),
         planId: task.planId || fallbackPlanId,
+        ...(taskType !== undefined && { taskType }),
         // Completion state — must be preserved across page reloads
         ...(task.completed !== undefined && { completed: task.completed }),
         ...(task.completedAt !== undefined && { completedAt: task.completedAt }),
