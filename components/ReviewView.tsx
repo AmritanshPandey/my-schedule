@@ -492,35 +492,76 @@ function PlanHealthSection({
 // Section 5 — Metrics Log
 // ─────────────────────────────────────────────────────────────────────────────
 
+/** Consecutive-day streak from a newest-first sorted entry array. */
+function calcStreak(sortedEntries: { date: string }[]): number {
+  if (sortedEntries.length === 0) return 0;
+  let streak = 1;
+  for (let i = 1; i < sortedEntries.length; i++) {
+    const prev = new Date(sortedEntries[i - 1].date + "T00:00:00");
+    const curr = new Date(sortedEntries[i].date + "T00:00:00");
+    const diffDays = Math.round((prev.getTime() - curr.getTime()) / 86_400_000);
+    if (diffDays === 1) streak++;
+    else break;
+  }
+  return streak;
+}
+
+/** Human-readable "last logged" label. */
+function lastLoggedLabel(isoDate: string): string {
+  const diffDays = Math.round(
+    (Date.now() - new Date(isoDate + "T00:00:00").getTime()) / 86_400_000
+  );
+  if (diffDays === 0) return "Today";
+  if (diffDays === 1) return "Yesterday";
+  return `${diffDays}d ago`;
+}
+
 function MetricsLogSection({ schedule }: { schedule: Schedule }) {
   const trackerGroups = useMemo(() => {
     const trackers = schedule.progressTrackers ?? [];
+    // Sort all entries newest-first; limit scan to last 80 entries
     const entries = [...(schedule.metricEntries ?? [])]
       .sort((a, b) => b.date.localeCompare(a.date))
-      .slice(0, 40);
+      .slice(0, 80);
 
-    return trackers
-      .map((tracker) => {
-        const trackerEntries = entries.filter((e) => e.trackerId === tracker.id);
-        if (trackerEntries.length === 0) return null;
+    return trackers.flatMap((tracker) => {
+      const trackerEntries = entries.filter((e) => e.trackerId === tracker.id);
+      if (trackerEntries.length === 0) return [];
 
-        const recent = trackerEntries.slice(0, 15);
-        const plan = schedule.plans.find((p) => p.id === tracker.planId);
+      const recent = trackerEntries.slice(0, 15);
+      const plan = schedule.plans.find((p) => p.id === tracker.planId);
 
-        // Trend: compare average of last 3 vs previous 3
-        let trend: ReturnType<typeof computeTrend> | null = null;
-        if (trackerEntries.length >= 4 && tracker.goalDirection) {
-          const curr = trackerEntries.slice(0, 3).reduce((s, e) => s + e.value, 0) / 3;
-          const prev = trackerEntries.slice(3, 6).reduce((s, e) => s + e.value, 0) /
-            Math.min(3, trackerEntries.slice(3, 6).length);
-          if (prev > 0) {
-            trend = computeTrend({ previous: prev, current: curr, goalDirection: tracker.goalDirection });
-          }
+      // Trend: compare average of last 3 vs previous 3
+      let trend: ReturnType<typeof computeTrend> | null = null;
+      if (trackerEntries.length >= 4 && tracker.goalDirection) {
+        const curr = trackerEntries.slice(0, 3).reduce((s, e) => s + e.value, 0) / 3;
+        const prev = trackerEntries.slice(3, 6).reduce((s, e) => s + e.value, 0) /
+          Math.min(3, trackerEntries.slice(3, 6).length);
+        if (prev > 0) {
+          trend = computeTrend({ previous: prev, current: curr, goalDirection: tracker.goalDirection });
         }
+      }
 
-        return { tracker, entries: recent, plan, trend };
-      })
-      .filter(Boolean) as NonNullable<ReturnType<typeof trackers.map>[number]>[];
+      // Streak (consecutive days)
+      const streak = calcStreak(trackerEntries);
+
+      // Days since last log
+      const daysSinceLabel = lastLoggedLabel(trackerEntries[0].date);
+
+      // Goal progress (0–1) — only when goalValue is set
+      let goalPct: number | null = null;
+      if (tracker.goalValue && tracker.goalValue > 0 && trackerEntries.length > 0) {
+        const lastVal = trackerEntries[0].value;
+        if (tracker.goalDirection === "decrease_good") {
+          // Progress = how close to the goal from above; cap at 100%
+          goalPct = Math.min(1, tracker.goalValue / Math.max(lastVal, 0.001));
+        } else {
+          goalPct = Math.min(1, lastVal / tracker.goalValue);
+        }
+      }
+
+      return [{ tracker, entries: recent, plan, trend, streak, daysSinceLabel, goalPct }];
+    });
   }, [schedule.progressTrackers, schedule.metricEntries, schedule.plans]);
 
   if (trackerGroups.length === 0) {
@@ -535,19 +576,37 @@ function MetricsLogSection({ schedule }: { schedule: Schedule }) {
   return (
     <div className="rounded-2xl border border-neutral-200 bg-white dark:border-white/[0.08] dark:bg-neutral-900 px-4 py-4">
       <SectionLabel>Metrics Log</SectionLabel>
-      <div className="space-y-4">
-        {trackerGroups.map(({ tracker, entries, plan, trend }) => (
+      <div className="space-y-5">
+        {trackerGroups.map(({ tracker, entries, plan, trend, streak, daysSinceLabel, goalPct }) => (
           <div key={tracker.id}>
-            {/* Tracker header */}
-            <div className="flex items-center justify-between mb-1.5">
-              <div>
-                <p className="text-[12px] font-bold text-neutral-800 dark:text-neutral-200">{tracker.title}</p>
-                {plan && (
-                  <p className="text-[10px] text-neutral-400 dark:text-neutral-500">{plan.title}</p>
-                )}
+            {/* ── Tracker header ── */}
+            <div className="flex items-start justify-between mb-1.5 gap-2">
+              <div className="min-w-0">
+                <div className="flex items-center gap-1.5 flex-wrap">
+                  <p className="text-[13px] font-bold text-neutral-800 dark:text-neutral-200">
+                    {tracker.title}{tracker.unit ? ` (${tracker.unit})` : ""}
+                  </p>
+                  {/* Streak badge */}
+                  {streak >= 2 && (
+                    <span className="inline-flex items-center gap-0.5 rounded-full bg-amber-500/10 px-1.5 py-0.5 text-[10px] font-semibold text-amber-600 dark:bg-amber-400/15 dark:text-amber-400">
+                      <IconFlame size={10} strokeWidth={2.5} />
+                      {streak}d streak
+                    </span>
+                  )}
+                </div>
+                {/* Plan name + last logged */}
+                <div className="flex items-center gap-1.5 mt-0.5 flex-wrap">
+                  {plan && (
+                    <p className="text-[11px] text-neutral-400 dark:text-neutral-500">{plan.title}</p>
+                  )}
+                  <span className="text-[11px] text-neutral-300 dark:text-neutral-600">·</span>
+                  <p className="text-[11px] text-neutral-400 dark:text-neutral-500">{daysSinceLabel}</p>
+                </div>
               </div>
+
+              {/* Trend badge */}
               {trend && trend.direction !== "neutral" && (
-                <span className={`flex items-center gap-0.5 text-[11px] font-semibold ${
+                <span className={`shrink-0 flex items-center gap-0.5 text-[11px] font-semibold ${
                   trend.state === "positive" ? "text-emerald-600 dark:text-emerald-400" : "text-rose-500 dark:text-rose-400"
                 }`}>
                   {trend.direction === "up"
@@ -557,13 +616,40 @@ function MetricsLogSection({ schedule }: { schedule: Schedule }) {
                 </span>
               )}
               {trend && trend.direction === "neutral" && (
-                <span className="flex items-center gap-0.5 text-[11px] font-semibold text-neutral-400">
+                <span className="shrink-0 flex items-center gap-0.5 text-[11px] font-semibold text-neutral-400">
                   <IconMinus size={11} strokeWidth={2.5} />
                   Stable
                 </span>
               )}
             </div>
-            {/* Entry rows */}
+
+            {/* ── Goal progress bar ── */}
+            {goalPct !== null && (
+              <div className="mb-2">
+                <div className="flex items-center justify-between mb-0.5">
+                  <span className="text-[10px] text-neutral-400 dark:text-neutral-500">
+                    Goal: {tracker.goalValue}{tracker.unit ? ` ${tracker.unit}` : ""}
+                  </span>
+                  <span className="text-[10px] font-semibold text-neutral-600 dark:text-neutral-300">
+                    {Math.round(goalPct * 100)}%
+                  </span>
+                </div>
+                <div className="h-1.5 w-full overflow-hidden rounded-full bg-neutral-100 dark:bg-white/[0.07]">
+                  <div
+                    className={`h-full rounded-full transition-all ${
+                      goalPct >= 0.8
+                        ? "bg-emerald-500"
+                        : goalPct >= 0.5
+                        ? "bg-amber-400"
+                        : "bg-rose-400"
+                    }`}
+                    style={{ width: `${Math.round(goalPct * 100)}%` }}
+                  />
+                </div>
+              </div>
+            )}
+
+            {/* ── Entry rows ── */}
             <div className="space-y-0.5">
               {entries.map((entry) => (
                 <div key={entry.id} className="flex items-center justify-between rounded-lg px-2.5 py-1.5 odd:bg-neutral-50 dark:odd:bg-white/[0.02]">

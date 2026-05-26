@@ -200,97 +200,6 @@ interface PlanDetailViewProps {
   onAddGeneratedTasks?: (tasks: AIGeneratedTask[], planId: string) => void;
 }
 
-// ── AI desktop teaser (mobile-only strip + bottom sheet) ─────────────────────
-
-function AIMobileTeaser() {
-  const [open, setOpen] = useState(false);
-
-  const models = [
-    { name: "gemma4:2b", ram: "12–16 GB", speed: "Faster, lighter" },
-    { name: "gemma4:4b", ram: "16–24 GB", speed: "Smarter, richer" },
-  ];
-
-  const steps = [
-    { n: 1, text: "Download & install Ollama from ollama.com" },
-    { n: 2, text: 'Open Terminal and run: ollama serve' },
-    { n: 3, text: "Pull your model, e.g. ollama pull gemma4:2b" },
-    { n: 4, text: "Open PlanR on desktop → Settings → paste server URL and model name" },
-    { n: 5, text: "Done — AI Coach and task generation are ready" },
-  ];
-
-  return (
-    <>
-      <div className="mx-4 mt-5 flex items-center gap-2.5 rounded-2xl border border-violet-100 bg-violet-50/70 px-3.5 py-3 lg:hidden dark:border-violet-500/20 dark:bg-violet-500/10">
-        <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-violet-100 dark:bg-violet-500/20">
-          <IconSparkles size={14} strokeWidth={2} className="text-violet-500 dark:text-violet-400" />
-        </div>
-        <p className="flex-1 text-[12.5px] font-medium text-violet-700 dark:text-violet-300">
-          AI features available on desktop
-        </p>
-        <button
-          type="button"
-          onClick={() => setOpen(true)}
-          className="shrink-0 text-[12px] font-bold text-violet-600 active:opacity-60 dark:text-violet-400"
-        >
-          Learn more
-        </button>
-      </div>
-
-      <BottomSheet open={open} onClose={() => setOpen(false)} desktopWidth="max-w-[480px]">
-        <div className="px-5 pb-8 pt-3">
-          <div className="mb-6 flex items-center gap-3">
-            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl bg-gradient-to-br from-violet-500 to-pink-500">
-              <IconSparkles size={18} strokeWidth={2} className="text-white" />
-            </div>
-            <div>
-              <p className="text-[16px] font-bold text-neutral-900 dark:text-white">AI on Desktop</p>
-              <p className="text-[12px] text-neutral-400 dark:text-neutral-500">Powered by Ollama — runs locally, free</p>
-            </div>
-          </div>
-
-          <p className="mb-3 text-[11px] font-bold uppercase tracking-[0.08em] text-neutral-400 dark:text-neutral-500">
-            How to set up
-          </p>
-          <div className="mb-5 space-y-2.5">
-            {steps.map((s) => (
-              <div key={s.n} className="flex items-start gap-3">
-                <span className="mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-neutral-100 text-[11px] font-bold text-neutral-500 dark:bg-white/[0.08] dark:text-neutral-400">
-                  {s.n}
-                </span>
-                <p className="text-[13px] leading-snug text-neutral-700 dark:text-neutral-300">{s.text}</p>
-              </div>
-            ))}
-          </div>
-
-          <p className="mb-3 text-[11px] font-bold uppercase tracking-[0.08em] text-neutral-400 dark:text-neutral-500">
-            Recommended models
-          </p>
-          <div className="mb-5 space-y-2">
-            {models.map((m) => (
-              <div
-                key={m.name}
-                className="flex items-center justify-between rounded-xl border border-neutral-100 bg-neutral-50 px-4 py-3 dark:border-white/[0.07] dark:bg-white/[0.03]"
-              >
-                <div>
-                  <p className="font-mono text-[13px] font-bold text-neutral-900 dark:text-white">{m.name}</p>
-                  <p className="text-[11px] text-neutral-400 dark:text-neutral-500">{m.speed}</p>
-                </div>
-                <span className="rounded-lg border border-neutral-200 bg-white px-2.5 py-1 text-[11px] font-semibold text-neutral-600 dark:border-white/[0.08] dark:bg-white/[0.05] dark:text-neutral-400">
-                  {m.ram} RAM
-                </span>
-              </div>
-            ))}
-          </div>
-
-          <p className="text-[12px] leading-relaxed text-neutral-400 dark:text-neutral-500">
-            Ollama runs models entirely on your device — no data leaves your machine. gemma4:2b is a great starting point if you have 12 GB or more of RAM.
-          </p>
-        </div>
-      </BottomSheet>
-    </>
-  );
-}
-
 // ── Component ─────────────────────────────────────────────────────────────────
 
 export default function PlanDetailView({
@@ -1617,9 +1526,6 @@ export default function PlanDetailView({
           </p>
         )}
       </div>
-
-      {/* AI teaser strip — mobile only */}
-      <AIMobileTeaser />
 
       {/* Segmented tab switcher — mobile: 2 tabs, desktop: 3 tabs */}
       <div className="mx-4 mt-6">

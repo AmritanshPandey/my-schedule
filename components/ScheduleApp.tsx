@@ -21,6 +21,7 @@ const TemplatesSheet = dynamic(() => import("@/components/TemplatesSheet").then(
 const SessionSheet = dynamic(() => import("@/components/activity/SessionSheet"), { ssr: false });
 const RitualView = dynamic(() => import("@/components/activity/RitualView"), { ssr: false });
 const ReviewView = dynamic(() => import("@/components/ReviewView"), { ssr: false });
+const TrackerQuickBar = dynamic(() => import("@/components/TrackerQuickBar"), { ssr: false });
 import {
   useScheduleDB,
   DAYS,
@@ -121,7 +122,7 @@ const TIMELINE_HOURS: number[] = Array.from(
   { length: TIMELINE_END_HOUR - TIMELINE_START_HOUR + 1 },
   (_, i) => TIMELINE_START_HOUR + i
 );
-const RITUAL_LANE_WIDTH = 80;
+const RITUAL_LANE_WIDTH = 28;
 
 const JS_DAYS = [
   "sunday",
@@ -1015,6 +1016,20 @@ export default function ScheduleApp() {
     return m;
   }, [schedule.plans]);
 
+  // Trackers to surface on Today tab — only plans with an active milestone, or plans with no milestones at all
+  const activePlanTrackers = useMemo(() => {
+    const activePlanIds = new Set(
+      schedule.plans
+        .filter((p) => {
+          const planMilestones = schedule.milestones.filter((m) => m.planId === p.id);
+          if (planMilestones.length === 0) return true; // no milestones → still show
+          return planMilestones.some((m) => m.status === "active");
+        })
+        .map((p) => p.id)
+    );
+    return schedule.progressTrackers.filter((t) => activePlanIds.has(t.planId));
+  }, [schedule.plans, schedule.milestones, schedule.progressTrackers]);
+
   const dayProgress = useMemo(() => {
     const total = dayTasks.length;
     const done = dayTasks.filter((t) =>
@@ -1690,6 +1705,7 @@ export default function ScheduleApp() {
         )}
       </div>
 
+
       <SettingsSheet
         open={settingsOpen}
         onClose={() => {
@@ -1909,6 +1925,13 @@ export default function ScheduleApp() {
                 activeDay={activeDay}
                 completedIds={completedRitualIds}
                 onToggle={handleToggleRitualComplete}
+              />
+              <TrackerQuickBar
+                trackers={activePlanTrackers}
+                plans={schedule.plans}
+                metricEntries={schedule.metricEntries}
+                onLog={(tracker) => setEntryTracker(tracker)}
+                onNavigate={(planId) => { setActiveTab(1); setSelectedPlanId(planId); }}
               />
               <AnimatePresence mode="wait" initial={false}>
                 {viewMode === "list" ? (
@@ -2327,7 +2350,6 @@ export default function ScheduleApp() {
           onCreateTask={() => openCreateSheet()}
           onCreatePlan={openAddPlan}
           onCreateRitual={() => { setActiveTab(2); if (canAddRitual) setRitualAddOpen(true); }}
-          onOpenSettings={() => setSettingsOpen(true)}
         />
       </div>
 

@@ -11,7 +11,6 @@ import {
   IconClipboardPlus,
   IconPlus,
   IconRepeat,
-  IconSettings,
 } from "@tabler/icons-react";
 
 interface BottomNavProps {
@@ -20,7 +19,6 @@ interface BottomNavProps {
   onCreateTask: () => void;
   onCreatePlan: () => void;
   onCreateRitual: () => void;
-  onOpenSettings: () => void;
 }
 
 export default function BottomNav({
@@ -29,7 +27,6 @@ export default function BottomNav({
   onCreateTask,
   onCreatePlan,
   onCreateRitual,
-  onOpenSettings,
 }: BottomNavProps) {
   const [expanded, setExpanded] = useState(false);
   const navRef = useRef<HTMLDivElement>(null);
@@ -205,21 +202,22 @@ export default function BottomNav({
               type="button"
               onClick={() => handleTabChange(2)}
               className={tabClass(activeTab === 2)}
-              aria-label="Review"
+              aria-label="Routine"
               aria-current={activeTab === 2 ? "page" : undefined}
             >
-              <IconChartBar size={20} strokeWidth={2} />
-              <span className="text-[10.5px] font-medium leading-none">Review</span>
+              <IconRepeat size={20} strokeWidth={2} />
+              <span className="text-[10.5px] font-medium leading-none">Routine</span>
             </button>
 
             <button
               type="button"
-              onClick={() => { haptic("light"); setExpanded(false); onOpenSettings(); }}
-              className={tabClass(false)}
-              aria-label="Settings"
+              onClick={() => handleTabChange(3)}
+              className={tabClass(activeTab === 3)}
+              aria-label="Review"
+              aria-current={activeTab === 3 ? "page" : undefined}
             >
-              <IconSettings size={20} strokeWidth={2} />
-              <span className="text-[10.5px] font-medium leading-none">Settings</span>
+              <IconChartBar size={20} strokeWidth={2} />
+              <span className="text-[10.5px] font-medium leading-none">Review</span>
             </button>
           </nav>
 

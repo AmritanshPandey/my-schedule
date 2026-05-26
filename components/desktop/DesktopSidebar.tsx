@@ -8,6 +8,7 @@ import {
   IconChevronRight,
   IconClipboardData,
   IconPlus,
+  IconRepeat,
   IconSettings,
 } from "@tabler/icons-react";
 import { haptic } from "@/lib/haptics";
@@ -27,9 +28,10 @@ interface DesktopSidebarProps {
 }
 
 const NAV_ITEMS = [
-  { tab: 0, label: "Today",  Icon: IconCalendarEvent },
-  { tab: 1, label: "Plans",  Icon: IconClipboardData },
-  { tab: 2, label: "Review", Icon: IconChartBar },
+  { tab: 0, label: "Today",   Icon: IconCalendarEvent },
+  { tab: 1, label: "Plans",   Icon: IconClipboardData },
+  { tab: 2, label: "Routine", Icon: IconRepeat },
+  { tab: 3, label: "Review",  Icon: IconChartBar },
 ] as const;
 
 type ConnectionStatus = "checking" | "connected" | "no-model" | "offline";
@@ -102,7 +104,8 @@ export default function DesktopSidebar({
     haptic("medium");
     if (activeTab === 0) onCreateTask();
     else if (activeTab === 1) onCreatePlan();
-    else onCreateRitual();
+    else if (activeTab === 2) onCreateRitual();
+    // tab 3 (Review) has no create action
   }
 
   // Short display name for the model — strip tag if generic
@@ -163,22 +166,24 @@ export default function DesktopSidebar({
         })}
       </nav>
 
-      {/* ── Create button ────────────────────────────────────────────────────── */}
-      <div className={`pb-2 ${collapsed ? "px-2" : "px-2"}`}>
-        <button
-          type="button"
-          onClick={handleCreate}
-          title={collapsed ? (activeTab === 1 ? "New Plan" : activeTab === 2 ? "New Habit" : "New Task") : undefined}
-          className={`flex w-full items-center rounded-lg bg-neutral-900 py-2 text-white transition-opacity hover:opacity-90 dark:bg-white dark:text-neutral-950 ${collapsed ? "justify-center px-0" : "gap-2 px-3"}`}
-        >
-          <IconPlus size={15} strokeWidth={2.5} />
-          {!collapsed && (
-            <span className="text-[13px] font-semibold">
-              {activeTab === 1 ? "New Plan" : activeTab === 2 ? "New Habit" : "New Task"}
-            </span>
-          )}
-        </button>
-      </div>
+      {/* ── Create button (hidden on Review tab) ─────────────────────────────── */}
+      {activeTab !== 3 && (
+        <div className={`pb-2 ${collapsed ? "px-2" : "px-2"}`}>
+          <button
+            type="button"
+            onClick={handleCreate}
+            title={collapsed ? (activeTab === 1 ? "New Plan" : activeTab === 2 ? "New Habit" : "New Task") : undefined}
+            className={`flex w-full items-center rounded-lg bg-neutral-900 py-2 text-white transition-opacity hover:opacity-90 dark:bg-white dark:text-neutral-950 ${collapsed ? "justify-center px-0" : "gap-2 px-3"}`}
+          >
+            <IconPlus size={15} strokeWidth={2.5} />
+            {!collapsed && (
+              <span className="text-[13px] font-semibold">
+                {activeTab === 1 ? "New Plan" : activeTab === 2 ? "New Habit" : "New Task"}
+              </span>
+            )}
+          </button>
+        </div>
+      )}
 
       {/* ── Bottom: AI status + settings + collapse ───────────────────────────── */}
       <div className={`border-t border-neutral-100 dark:border-white/[0.05] py-2 ${collapsed ? "px-2" : "px-2"}`}>

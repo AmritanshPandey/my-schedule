@@ -110,6 +110,67 @@ textarea {
   border-radius: 9999px;
 }
 
+/* ── AI promo announcement bar ───────────────────────────────────────────────
+   Three-layer effect: shifting gradient base + fine noise texture + sweep.  */
+
+@keyframes ai-promo-shift {
+  0%   { background-position: 0% 50%; }
+  50%  { background-position: 100% 50%; }
+  100% { background-position: 0% 50%; }
+}
+
+@keyframes ai-promo-sweep {
+  0%   { transform: translateX(-140%) skewX(-12deg); opacity: 0; }
+  10%  { opacity: 1; }
+  90%  { opacity: 1; }
+  100% { transform: translateX(240%) skewX(-12deg); opacity: 0; }
+}
+
+/* Base gradient — slow-shifting purple/violet */
+.ai-promo-bar {
+  background: linear-gradient(
+    110deg,
+    #2e1065,
+    #4c1d95,
+    #5b21b6,
+    #6d28d9,
+    #7c3aed,
+    #8b5cf6,
+    #a78bfa,
+    #8b5cf6,
+    #6d28d9,
+    #4c1d95,
+    #2e1065
+  );
+  background-size: 300% 100%;
+  animation: ai-promo-shift 8s ease infinite;
+}
+
+/* Subtle grain/noise for shader depth — SVG turbulence via data-URI */
+.ai-promo-noise {
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='200' height='200'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.75' numOctaves='4' stitchTiles='stitch'/%3E%3CfeColorMatrix type='saturate' values='0'/%3E%3C/filter%3E%3Crect width='200' height='200' filter='url(%23n)' opacity='0.06'/%3E%3C/svg%3E");
+  background-repeat: repeat;
+  background-size: 160px 160px;
+  mix-blend-mode: overlay;
+}
+
+/* Angled shine sweep */
+.ai-promo-sweep::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(
+    90deg,
+    transparent 0%,
+    rgba(255, 255, 255, 0.08) 30%,
+    rgba(255, 255, 255, 0.22) 50%,
+    rgba(255, 255, 255, 0.08) 70%,
+    transparent 100%
+  );
+  animation: ai-promo-sweep 4s ease-in-out infinite;
+  animation-delay: 1s;
+}
+
 .calendar-scrollbar-none {
   scrollbar-width: none;
 }
