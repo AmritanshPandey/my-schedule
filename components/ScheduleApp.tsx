@@ -20,6 +20,8 @@ const SettingsSheet = dynamic(() => import("@/components/auth/SettingsSheet").th
 const TemplatesSheet = dynamic(() => import("@/components/TemplatesSheet").then(m => ({ default: m.TemplatesSheet })), { ssr: false });
 const SessionSheet = dynamic(() => import("@/components/activity/SessionSheet"), { ssr: false });
 const RitualView = dynamic(() => import("@/components/activity/RitualView"), { ssr: false });
+const ReviewView = dynamic(() => import("@/components/ReviewView"), { ssr: false });
+const TrackerQuickBar = dynamic(() => import("@/components/TrackerQuickBar"), { ssr: false });
 import {
   useScheduleDB,
   DAYS,
@@ -120,7 +122,7 @@ const TIMELINE_HOURS: number[] = Array.from(
   { length: TIMELINE_END_HOUR - TIMELINE_START_HOUR + 1 },
   (_, i) => TIMELINE_START_HOUR + i
 );
-const RITUAL_LANE_WIDTH = 80;
+const RITUAL_LANE_WIDTH = 28;
 
 const JS_DAYS = [
   "sunday",
@@ -680,7 +682,11 @@ export default function ScheduleApp() {
     openConfirm(
       `Delete "${ritual?.title ?? "routine"}"?`,
       "This routine will be removed from your daily practice.",
-      () => setSchedule((prev) => ({ ...prev, rituals: (prev.rituals ?? []).filter((r) => r.id !== id) }))
+      () => setSchedule((prev) => ({
+        ...prev,
+        rituals: (prev.rituals ?? []).filter((r) => r.id !== id),
+        ritualCompletions: (prev.ritualCompletions ?? []).filter((c) => c.ritualId !== id),
+      }))
     );
   }
 
@@ -745,6 +751,7 @@ export default function ScheduleApp() {
           ) as typeof prev.activities,
           metricEntries: prev.metricEntries.filter((e) => e.planId !== planId),
           progressTrackers: prev.progressTrackers.filter((t) => t.planId !== planId),
+          milestones: prev.milestones.filter((m) => m.planId !== planId),
         }));
         setSelectedPlanId((cur) => (cur === planId ? null : cur));
       }
@@ -845,7 +852,6 @@ export default function ScheduleApp() {
   }
 
   function handleDeleteLinkedTask(task: Task, activeDays: DayKey[]) {
-    const matchKey = `${task.title.trim().toLowerCase()}|${task.startTime}|${task.endTime}`;
     openConfirm(
       `Delete "${task.title}"?`,
       activeDays.length > 1
@@ -856,12 +862,7 @@ export default function ScheduleApp() {
         activities: Object.fromEntries(
           DAYS.map((day) => [
             day,
-            activeDays.includes(day)
-              ? prev.activities[day].filter((t) => {
-                const k = `${t.title.trim().toLowerCase()}|${t.startTime}|${t.endTime}`;
-                return k !== matchKey || t.planId !== task.planId;
-              })
-              : prev.activities[day],
+            prev.activities[day].filter((t) => t.id !== task.id),
           ])
         ) as typeof prev.activities,
       }))
@@ -989,7 +990,7 @@ export default function ScheduleApp() {
       const done = completions.filter((c) => c.date === date).length;
       return { date, label: SHORT[jsDay], isToday: date === today, completedCount: done, dueCount: due };
     });
-  }, [schedule.rituals, schedule.ritualCompletions]);
+  }, [schedule.rituals, schedule.ritualCompletions, todayKey]);
 
   // ─── Derived data ──────────────────────────────────────────────────────────
 
@@ -1014,6 +1015,20 @@ export default function ScheduleApp() {
     for (const p of schedule.plans) m.set(p.id, p);
     return m;
   }, [schedule.plans]);
+
+  // Trackers to surface on Today tab — only plans with an active milestone, or plans with no milestones at all
+  const activePlanTrackers = useMemo(() => {
+    const activePlanIds = new Set(
+      schedule.plans
+        .filter((p) => {
+          const planMilestones = schedule.milestones.filter((m) => m.planId === p.id);
+          if (planMilestones.length === 0) return true; // no milestones → still show
+          return planMilestones.some((m) => m.status === "active");
+        })
+        .map((p) => p.id)
+    );
+    return schedule.progressTrackers.filter((t) => activePlanIds.has(t.planId));
+  }, [schedule.plans, schedule.milestones, schedule.progressTrackers]);
 
   const dayProgress = useMemo(() => {
     const total = dayTasks.length;
@@ -1690,6 +1705,7 @@ export default function ScheduleApp() {
         )}
       </div>
 
+
       <SettingsSheet
         open={settingsOpen}
         onClose={() => {
@@ -1909,6 +1925,13 @@ export default function ScheduleApp() {
                 activeDay={activeDay}
                 completedIds={completedRitualIds}
                 onToggle={handleToggleRitualComplete}
+              />
+              <TrackerQuickBar
+                trackers={activePlanTrackers}
+                plans={schedule.plans}
+                metricEntries={schedule.metricEntries}
+                onLog={(tracker) => setEntryTracker(tracker)}
+                onNavigate={(planId) => { setActiveTab(1); setSelectedPlanId(planId); }}
               />
               <AnimatePresence mode="wait" initial={false}>
                 {viewMode === "list" ? (
@@ -2189,23 +2212,16 @@ export default function ScheduleApp() {
           </div>
           </motion.div>
         )}
-        {/* ── Review Tab ─────────────────────────────────────────────────── */}
+        {/* ── Routine Tab ────────────────────────────────────────────────── */}
         {activeTab === 2 && (
           <motion.div
-            key="tab-rituals"
+            key="tab-routine"
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
             transition={{ duration: 0.12, ease: "easeOut" }}
           >
             <div className="lg:px-8">
-              <div className="px-4 pt-5 pb-0 lg:px-0 lg:pt-4">
-                <WeekSummary
-                  schedule={schedule}
-                  todayKey={todayKey}
-                  ritualWeekHistory={ritualWeekHistory}
-                />
-              </div>
               <RitualView
                 rituals={schedule.rituals ?? []}
                 completedIds={completedRitualIds}
@@ -2220,6 +2236,23 @@ export default function ScheduleApp() {
                 weekHistory={ritualWeekHistory}
               />
             </div>
+          </motion.div>
+        )}
+
+        {/* ── Review Tab ─────────────────────────────────────────────────── */}
+        {activeTab === 3 && (
+          <motion.div
+            key="tab-review"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            transition={{ duration: 0.12, ease: "easeOut" }}
+          >
+            <ReviewView
+              schedule={schedule}
+              todayKey={todayKey}
+              ritualWeekHistory={ritualWeekHistory}
+            />
           </motion.div>
         )}
         </AnimatePresence>
@@ -2317,7 +2350,6 @@ export default function ScheduleApp() {
           onCreateTask={() => openCreateSheet()}
           onCreatePlan={openAddPlan}
           onCreateRitual={() => { setActiveTab(2); if (canAddRitual) setRitualAddOpen(true); }}
-          onOpenSettings={() => setSettingsOpen(true)}
         />
       </div>
 

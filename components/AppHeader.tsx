@@ -1,7 +1,7 @@
 "use client";
 
 import { motion } from "framer-motion";
-import { IconChevronLeft } from "@tabler/icons-react";
+import { IconChevronLeft, IconSettings } from "@tabler/icons-react";
 
 interface ActionItem {
   icon: React.ComponentType<{ size?: number; strokeWidth?: number; className?: string }>;
@@ -19,7 +19,7 @@ interface AppHeaderProps {
   onOpenSettings?: () => void;
 }
 
-export default function AppHeader({ back, actions }: AppHeaderProps) {
+export default function AppHeader({ back, actions, onOpenSettings }: AppHeaderProps) {
   const isDetail = !!back;
 
   if (isDetail) {
@@ -97,7 +97,18 @@ export default function AppHeader({ back, actions }: AppHeaderProps) {
         <img src="/logo-dark.svg" alt="PlanR" className="hidden h-6 w-auto dark:block" />
       </div>
 
-    
+      {/* Settings gear */}
+      {onOpenSettings && (
+        <motion.button
+          type="button"
+          whileTap={{ scale: 0.86 }}
+          onClick={onOpenSettings}
+          aria-label="Settings"
+          className="flex h-9 w-9 items-center justify-center rounded-full text-neutral-400 transition-colors active:text-neutral-700 dark:text-neutral-500 dark:active:text-white"
+        >
+          <IconSettings size={20} strokeWidth={1.8} />
+        </motion.button>
+      )}
     </header>
   );
 }

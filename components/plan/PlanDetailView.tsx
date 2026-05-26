@@ -19,7 +19,10 @@ import {
   IconAlertTriangle,
   IconSparkles,
   IconSend,
+  IconPlayerStop,
+  IconCopy,
 } from "@tabler/icons-react";
+import ReactMarkdown from "react-markdown";
 import { haptic } from "@/lib/haptics";
 import ProgressChart from "@/components/ProgressChart";
 import BottomSheet from "@/components/ui/BottomSheet";
@@ -58,6 +61,7 @@ import {
   type AIGeneratedMilestone,
 } from "@/lib/aiActions";
 import { streamOllamaChat, parseAIAction, PLAN_COACH_PROMPT, buildPlanContext } from "@/lib/ai";
+import { getCoachSkillPrompt, detectCoachSkill, SKILL_LABELS } from "@/lib/coachSkills";
 import AIActionSheet, { type ResultItem } from "@/components/ai/AIActionSheet";
 
 
@@ -91,9 +95,9 @@ function getUniquePlanTasks(
   for (const day of DAYS) {
     for (const task of activities[day]) {
       if (task.planId !== planId) continue;
-      const key = `${task.title.trim().toLowerCase()}|${task.startTime}|${task.endTime}`;
-      if (!seen.has(key)) seen.set(key, { task, activeDays: [day] });
-      else seen.get(key)!.activeDays.push(day);
+
+      if (!seen.has(task.id)) seen.set(task.id, { task, activeDays: [day] });
+      else seen.get(task.id)!.activeDays.push(day);
     }
   }
   return Array.from(seen.values());
@@ -301,7 +305,14 @@ export default function PlanDetailView({
   const [coachStreaming, setCoachStreaming] = useState(false);
   const [milestonesGenerating, setMilestonesGenerating] = useState(false);
   const [acceptedMilestoneIds, setAcceptedMilestoneIds] = useState<Set<string>>(new Set());
+  const [copiedMsgIdx, setCopiedMsgIdx] = useState<number | null>(null);
   const chatEndRef = useRef<HTMLDivElement>(null);
+  const coachAbortRef = useRef<AbortController | null>(null);
+
+  useEffect(() => {
+    return () => { coachAbortRef.current?.abort(); };
+  }, []);
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
 
   // ── Task detail sheet ────────────────────────────────────────────────────
   const [viewingTask, setViewingTask] = useState<{ task: Task; activeDays: DayKey[] } | null>(null);
@@ -421,14 +432,26 @@ export default function PlanDetailView({
     const newMessages = [...coachMessages, userMsg];
     setCoachMessages(newMessages);
     setCoachInput("");
+    if (textareaRef.current) textareaRef.current.style.height = "auto";
     setCoachStreaming(true);
     const assistantIdx = newMessages.length;
     setCoachMessages((prev) => [...prev, { role: "assistant", content: "" }]);
+    coachAbortRef.current?.abort();
+    const controller = new AbortController();
+    coachAbortRef.current = controller;
+
     let accumulated = "";
     try {
-      const systemPrompt = `${PLAN_COACH_PROMPT}\n\n${buildPlanContext(plan)}`;
-      const history = newMessages.map((m) => ({ role: m.role, content: m.content }));
-      for await (const chunk of streamOllamaChat(ollamaUrl, ollamaModel, history, systemPrompt)) {
+      const skillPrompt = getCoachSkillPrompt(plan);
+      const systemPrompt = [PLAN_COACH_PROMPT, skillPrompt, buildPlanContext(plan)].filter(Boolean).join("\n\n");
+      // Strip JSON blocks from assistant messages so milestone JSON doesn't leak into context
+      const history = newMessages.map((m) => ({
+        role: m.role,
+        content: m.role === "assistant"
+          ? m.content.replace(/```json[\s\S]*?```/g, "").trim()
+          : m.content,
+      }));
+      for await (const chunk of streamOllamaChat(ollamaUrl, ollamaModel, history, systemPrompt, false, controller.signal)) {
         accumulated += chunk;
         setCoachMessages((prev) => {
           const updated = [...prev];
@@ -444,12 +467,17 @@ export default function PlanDetailView({
           return updated;
         });
       }
-    } catch {
-      setCoachMessages((prev) => {
-        const updated = [...prev];
-        updated[assistantIdx] = { role: "assistant", content: "Sorry, I couldn't reach the AI. Is Ollama running?" };
-        return updated;
-      });
+    } catch (err) {
+      if (err instanceof Error && err.name === "AbortError") {
+        // Keep partial content if any was streamed; otherwise remove the empty bubble
+        if (!accumulated) setCoachMessages((prev) => prev.slice(0, -1));
+      } else {
+        setCoachMessages((prev) => {
+          const updated = [...prev];
+          updated[assistantIdx] = { role: "assistant", content: "Sorry, I couldn't reach the AI. Is Ollama running?" };
+          return updated;
+        });
+      }
     } finally {
       setCoachStreaming(false);
       setTimeout(() => chatEndRef.current?.scrollIntoView({ behavior: "smooth" }), 50);
@@ -458,6 +486,11 @@ export default function PlanDetailView({
 
   async function handleAutoGenerateMilestones() {
     if (!ollamaUrl || !ollamaModel || milestonesGenerating) return;
+
+    coachAbortRef.current?.abort();
+    const controller = new AbortController();
+    coachAbortRef.current = controller;
+
     setMilestonesGenerating(true);
     const msgIdx = coachMessages.length;
     setCoachMessages((prev) => [...prev, { role: "assistant", content: "Generating milestones…" }]);
@@ -466,7 +499,7 @@ export default function PlanDetailView({
       for await (const chunk of streamGenerateMilestones(ollamaUrl, ollamaModel, {
         title: plan.title, description: plan.description,
         startDate: plan.startDate, endDate: plan.endDate,
-      })) {
+      }, controller.signal)) {
         accumulated += chunk;
       }
       const milestones = parseGeneratedMilestones(accumulated);
@@ -477,12 +510,14 @@ export default function PlanDetailView({
           : { role: "assistant", content: "Couldn't generate milestones. Try describing your plan goals in the chat." };
         return updated;
       });
-    } catch {
-      setCoachMessages((prev) => {
-        const updated = [...prev];
-        updated[msgIdx] = { role: "assistant", content: "Couldn't reach AI. Is Ollama running?" };
-        return updated;
-      });
+    } catch (err) {
+      if (!(err instanceof Error && err.name === "AbortError")) {
+        setCoachMessages((prev) => {
+          const updated = [...prev];
+          updated[msgIdx] = { role: "assistant", content: "Couldn't reach AI. Is Ollama running?" };
+          return updated;
+        });
+      }
     } finally {
       setMilestonesGenerating(false);
       setTimeout(() => chatEndRef.current?.scrollIntoView({ behavior: "smooth" }), 50);
@@ -1036,8 +1071,8 @@ export default function PlanDetailView({
           </div>
         ) : (
           <>
-            {/* Auto-generate button */}
-            <div className="shrink-0 px-4 pt-4 pb-3">
+            {/* Auto-generate button + skill badge */}
+            <div className="shrink-0 flex items-center gap-2 px-4 pt-4 pb-3">
               <button
                 type="button"
                 onClick={handleAutoGenerateMilestones}
@@ -1047,99 +1082,212 @@ export default function PlanDetailView({
                 <IconSparkles size={13} strokeWidth={2} className={milestonesGenerating ? "animate-pulse text-violet-500" : ""} />
                 {milestonesGenerating ? "Generating…" : "Auto-generate milestones"}
               </button>
+              {(() => {
+                const skill = detectCoachSkill(plan);
+                return skill ? (
+                  <span className="text-[11px] font-medium text-neutral-400 dark:text-neutral-500">
+                    {SKILL_LABELS[skill]} Coach
+                  </span>
+                ) : null;
+              })()}
             </div>
 
             {/* Messages */}
-            <div className="flex-1 overflow-y-auto space-y-3 px-4 pb-2" style={{ scrollbarWidth: "none" } as React.CSSProperties}>
-              {coachMessages.map((msg, msgIdx) => (
-                <div key={msgIdx}>
-                  <div className={`flex ${msg.role === "user" ? "justify-end" : "justify-start"}`}>
-                    <div className={`max-w-[85%] rounded-2xl px-4 py-2.5 text-[14px] leading-relaxed ${
-                      msg.role === "user"
-                        ? "rounded-br-md bg-neutral-900 text-white dark:bg-white dark:text-neutral-900"
-                        : "rounded-bl-md bg-neutral-100 text-neutral-800 dark:bg-white/[0.06] dark:text-neutral-200"
-                    }`}>
-                      {msg.content.replace(/```(?:json)?\s*\{[\s\S]*?\}\s*```/g, "").trim() || (coachStreaming && msgIdx === coachMessages.length - 1 ? "···" : "")}
-                    </div>
-                  </div>
+            <div className="flex-1 overflow-y-auto space-y-4 px-4 pb-2" style={{ scrollbarWidth: "none" } as React.CSSProperties}>
+              {coachMessages.map((msg, msgIdx) => {
+                const isStreamingThis = coachStreaming && msgIdx === coachMessages.length - 1 && msg.role === "assistant";
+                const cleanText = msg.content.replace(/```(?:json)?\s*\{[\s\S]*?\}\s*```/g, "").trim();
+                const isUser = msg.role === "user";
 
-                  {msg.suggestedMilestones && msg.suggestedMilestones.length > 0 && (
-                    <div className="mt-2 rounded-2xl border border-neutral-200 bg-neutral-50 p-3 dark:border-white/[0.08] dark:bg-white/[0.03]">
-                      <p className="mb-2 text-[10px] font-bold uppercase tracking-wider text-neutral-400 dark:text-neutral-500">
-                        Suggested milestones
-                      </p>
-                      {msg.suggestedMilestones.map((m, mIdx) => {
-                        const key = `${msgIdx}-${mIdx}`;
-                        const accepted = acceptedMilestoneIds.has(key);
-                        return (
-                          <div key={mIdx} className="flex items-center gap-3 border-b border-neutral-100 py-2 last:border-0 dark:border-white/[0.05]">
-                            <div className="min-w-0 flex-1">
-                              <p className="text-[13px] font-semibold text-neutral-800 dark:text-neutral-200">{m.title}</p>
-                              {m.targetDate && (
-                                <p className="text-[11px] text-neutral-400 dark:text-neutral-500">{m.targetDate}</p>
-                              )}
-                            </div>
-                            <button
-                              type="button"
-                              onClick={() => handleAcceptMilestone(msgIdx, mIdx, m)}
-                              disabled={accepted}
-                              className={`shrink-0 rounded-full border px-2.5 py-0.5 text-[12px] font-semibold transition-colors ${
-                                accepted
-                                  ? "border-emerald-200 bg-emerald-50 text-emerald-600 dark:border-emerald-500/30 dark:bg-emerald-500/[0.07] dark:text-emerald-400"
-                                  : "border-neutral-300 text-neutral-600 hover:border-neutral-400 dark:border-white/10 dark:text-neutral-400 dark:hover:border-white/20"
-                              }`}
+                return (
+                  <div key={msgIdx}>
+                    {isUser ? (
+                      /* ── User bubble ── */
+                      <div className="flex justify-end">
+                        <div className="max-w-[80%] rounded-2xl rounded-br-sm bg-neutral-900 px-4 py-2.5 text-[14px] leading-relaxed text-white dark:bg-white dark:text-neutral-900">
+                          {msg.content}
+                        </div>
+                      </div>
+                    ) : (
+                      /* ── AI message ── */
+                      <div className="group">
+                        <div className="text-[14px] leading-[1.7] text-neutral-800 dark:text-neutral-200">
+                          {cleanText ? (
+                            <ReactMarkdown
+                              components={{
+                                p: ({ children }) => <p className="mb-2 last:mb-0">{children}</p>,
+                                strong: ({ children }) => <strong className="font-semibold">{children}</strong>,
+                                em: ({ children }) => <em className="italic">{children}</em>,
+                                ul: ({ children }) => <ul className="my-1.5 list-disc space-y-0.5 pl-4">{children}</ul>,
+                                ol: ({ children }) => <ol className="my-1.5 list-decimal space-y-0.5 pl-4">{children}</ol>,
+                                li: ({ children }) => <li>{children}</li>,
+                                h1: ({ children }) => <h1 className="mb-1.5 mt-2 text-[15px] font-bold">{children}</h1>,
+                                h2: ({ children }) => <h2 className="mb-1 mt-2 text-[14px] font-semibold">{children}</h2>,
+                                h3: ({ children }) => <h3 className="mb-0.5 mt-1.5 text-[13px] font-semibold">{children}</h3>,
+                                code: ({ children, className }) =>
+                                  className
+                                    ? <code className="my-2 block overflow-x-auto rounded-lg bg-neutral-100 px-3 py-2 font-mono text-[12px] dark:bg-white/[0.06]">{children}</code>
+                                    : <code className="rounded bg-neutral-100 px-1 py-0.5 font-mono text-[12px] dark:bg-white/[0.06]">{children}</code>,
+                              }}
                             >
-                              {accepted ? "✓ Added" : "+ Add"}
-                            </button>
-                          </div>
-                        );
-                      })}
-                      {msg.suggestedMilestones.filter((_, i) => !acceptedMilestoneIds.has(`${msgIdx}-${i}`)).length > 1 && (
-                        <button
-                          type="button"
-                          onClick={() => handleAcceptAllMilestones(msgIdx, msg.suggestedMilestones!)}
-                          className="mt-2 w-full rounded-xl bg-neutral-900 py-2 text-[13px] font-semibold text-white dark:bg-white dark:text-neutral-900"
-                        >
-                          Add all remaining milestones
-                        </button>
-                      )}
-                    </div>
-                  )}
-                </div>
-              ))}
+                              {cleanText}
+                            </ReactMarkdown>
+                          ) : (
+                            isStreamingThis && (
+                              <span className="inline-flex items-center gap-0.5">
+                                <span className="h-1.5 w-1.5 animate-bounce rounded-full bg-neutral-400 dark:bg-neutral-500 [animation-delay:0ms]" />
+                                <span className="h-1.5 w-1.5 animate-bounce rounded-full bg-neutral-400 dark:bg-neutral-500 [animation-delay:150ms]" />
+                                <span className="h-1.5 w-1.5 animate-bounce rounded-full bg-neutral-400 dark:bg-neutral-500 [animation-delay:300ms]" />
+                              </span>
+                            )
+                          )}
+                          {isStreamingThis && cleanText && (
+                            <span className="ml-0.5 inline-block h-[1em] w-[2px] translate-y-[2px] animate-pulse rounded-sm bg-neutral-500 dark:bg-neutral-400" />
+                          )}
+                        </div>
 
-              {coachStreaming && (
-                <div className="flex justify-start">
-                  <div className="rounded-2xl rounded-bl-md bg-neutral-100 px-4 py-2.5 text-neutral-500 dark:bg-white/[0.06] dark:text-neutral-400">
-                    <span className="animate-pulse text-[18px] tracking-widest">···</span>
+                        {/* Starter prompts — shown under the greeting only */}
+                        {msgIdx === 0 && coachMessages.length === 1 && (() => {
+                          const skill = detectCoachSkill(plan);
+                          const prompts: Record<string, string[]> = {
+                            running:   ["How do I build mileage safely?", "What should my long run look like?", "Help me train for a race"],
+                            fitness:   ["Design a weekly training split", "How do I track progress?", "What should I prioritize first?"],
+                            diet:      ["Help me calculate my calories", "Build a meal prep strategy", "How do I stay consistent?"],
+                            gmat_prep: ["Where should I start?", "How do I improve my Quant score?", "Make me a 3-month plan"],
+                            study:     ["Build me a study schedule", "How do I retain information?", "I have 4 weeks until my exam"],
+                            work:      ["Help me set career milestones", "How do I prioritize better?", "Map out my next 6 months"],
+                            health:    ["How do I improve my sleep?", "Build a daily wellness routine", "Help me reduce stress"],
+                            habit:     ["I keep failing at this habit", "Make a 30-day plan", "How do I make this stick?"],
+                          };
+                          const chips = skill ? prompts[skill] : ["Help me plan this out", "What should I focus on first?", "Suggest milestones"];
+                          return (
+                            <div className="mt-3 flex flex-wrap gap-1.5">
+                              {chips.map((chip) => (
+                                <button
+                                  key={chip}
+                                  type="button"
+                                  onClick={() => {
+                                    setCoachInput(chip);
+                                    setTimeout(() => textareaRef.current?.focus(), 0);
+                                  }}
+                                  className="rounded-full border border-neutral-200 bg-neutral-50 px-3 py-1 text-[12px] font-medium text-neutral-600 transition-colors hover:border-neutral-300 hover:bg-white dark:border-white/10 dark:bg-white/[0.03] dark:text-neutral-400 dark:hover:border-white/20 dark:hover:bg-white/[0.06]"
+                                >
+                                  {chip}
+                                </button>
+                              ))}
+                            </div>
+                          );
+                        })()}
+
+                        {/* Copy button */}
+                        {cleanText && !isStreamingThis && (
+                          <button
+                            type="button"
+                            onClick={() => {
+                              void navigator.clipboard.writeText(cleanText);
+                              setCopiedMsgIdx(msgIdx);
+                              setTimeout(() => setCopiedMsgIdx(null), 2000);
+                            }}
+                            className="mt-1.5 flex items-center gap-1 text-[11px] text-neutral-300 opacity-0 transition-all group-hover:opacity-100 hover:text-neutral-500 dark:text-neutral-600 dark:hover:text-neutral-400"
+                          >
+                            {copiedMsgIdx === msgIdx
+                              ? <><IconCheck size={11} strokeWidth={2.5} /><span>Copied</span></>
+                              : <><IconCopy size={11} strokeWidth={2} /><span>Copy</span></>
+                            }
+                          </button>
+                        )}
+                      </div>
+                    )}
+
+                    {/* Milestone suggestion cards */}
+                    {msg.suggestedMilestones && msg.suggestedMilestones.length > 0 && (
+                      <div className="mt-3 rounded-2xl border border-neutral-200 bg-neutral-50 p-3 dark:border-white/[0.08] dark:bg-white/[0.03]">
+                        <p className="mb-2 text-[10px] font-bold uppercase tracking-wider text-neutral-400 dark:text-neutral-500">
+                          Suggested milestones
+                        </p>
+                        {msg.suggestedMilestones.map((m, mIdx) => {
+                          const key = `${msgIdx}-${mIdx}`;
+                          const accepted = acceptedMilestoneIds.has(key);
+                          return (
+                            <div key={mIdx} className="flex items-center gap-3 border-b border-neutral-100 py-2 last:border-0 dark:border-white/[0.05]">
+                              <div className="min-w-0 flex-1">
+                                <p className="text-[13px] font-semibold text-neutral-800 dark:text-neutral-200">{m.title}</p>
+                                {m.targetDate && (
+                                  <p className="text-[11px] text-neutral-400 dark:text-neutral-500">{m.targetDate}</p>
+                                )}
+                              </div>
+                              <button
+                                type="button"
+                                onClick={() => handleAcceptMilestone(msgIdx, mIdx, m)}
+                                disabled={accepted}
+                                className={`shrink-0 rounded-full border px-2.5 py-0.5 text-[12px] font-semibold transition-colors ${
+                                  accepted
+                                    ? "border-emerald-200 bg-emerald-50 text-emerald-600 dark:border-emerald-500/30 dark:bg-emerald-500/[0.07] dark:text-emerald-400"
+                                    : "border-neutral-300 text-neutral-600 hover:border-neutral-400 dark:border-white/10 dark:text-neutral-400 dark:hover:border-white/20"
+                                }`}
+                              >
+                                {accepted ? "✓ Added" : "+ Add"}
+                              </button>
+                            </div>
+                          );
+                        })}
+                        {msg.suggestedMilestones.filter((_, i) => !acceptedMilestoneIds.has(`${msgIdx}-${i}`)).length > 1 && (
+                          <button
+                            type="button"
+                            onClick={() => handleAcceptAllMilestones(msgIdx, msg.suggestedMilestones!)}
+                            className="mt-2 w-full rounded-xl bg-neutral-900 py-2 text-[13px] font-semibold text-white dark:bg-white dark:text-neutral-900"
+                          >
+                            Add all remaining milestones
+                          </button>
+                        )}
+                      </div>
+                    )}
                   </div>
-                </div>
-              )}
+                );
+              })}
               <div ref={chatEndRef} />
             </div>
 
             {/* Input */}
             <div className="shrink-0 border-t border-neutral-100 px-4 pb-4 pt-3 dark:border-white/[0.06]">
-              <div className="flex gap-2">
-                <input
+              <div className="flex items-end gap-2">
+                <textarea
+                  ref={textareaRef}
                   value={coachInput}
-                  onChange={(e) => setCoachInput(e.target.value)}
+                  rows={1}
+                  onChange={(e) => {
+                    setCoachInput(e.target.value);
+                    e.target.style.height = "auto";
+                    e.target.style.height = Math.min(e.target.scrollHeight, 120) + "px";
+                  }}
                   onKeyDown={(e) => {
                     if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); handleSendCoachMessage(); }
                   }}
                   placeholder="Ask about your plan…"
                   disabled={coachStreaming}
-                  className="flex-1 rounded-xl border border-neutral-200 bg-neutral-50 px-4 py-2.5 text-[14px] text-neutral-900 outline-none placeholder:text-neutral-400 focus:border-neutral-300 focus:bg-white disabled:opacity-60 dark:border-white/10 dark:bg-white/[0.04] dark:text-white dark:placeholder:text-neutral-600 dark:focus:border-white/20 dark:focus:bg-white/[0.07]"
+                  className="flex-1 resize-none overflow-y-auto rounded-xl border border-neutral-200 bg-neutral-50 px-4 py-2.5 text-[14px] text-neutral-900 outline-none placeholder:text-neutral-400 focus:border-neutral-300 focus:bg-white disabled:opacity-60 dark:border-white/10 dark:bg-white/[0.04] dark:text-white dark:placeholder:text-neutral-600 dark:focus:border-white/20 dark:focus:bg-white/[0.07]"
+                  style={{ minHeight: "44px", maxHeight: "120px" }}
                 />
-                <motion.button
-                  type="button"
-                  whileTap={{ scale: 0.9 }}
-                  onClick={handleSendCoachMessage}
-                  disabled={coachStreaming || !coachInput.trim()}
-                  className="flex h-[44px] w-[44px] shrink-0 items-center justify-center rounded-xl bg-neutral-900 text-white transition-opacity disabled:opacity-40 dark:bg-white dark:text-neutral-900"
-                >
-                  <IconSend size={17} strokeWidth={2} />
-                </motion.button>
+                {coachStreaming ? (
+                  <motion.button
+                    type="button"
+                    whileTap={{ scale: 0.9 }}
+                    onClick={() => coachAbortRef.current?.abort()}
+                    className="flex h-[44px] w-[44px] shrink-0 items-center justify-center rounded-xl bg-neutral-200 text-neutral-700 transition-colors hover:bg-neutral-300 dark:bg-white/[0.1] dark:text-neutral-300 dark:hover:bg-white/[0.15]"
+                  >
+                    <IconPlayerStop size={16} strokeWidth={1.5} />
+                  </motion.button>
+                ) : (
+                  <motion.button
+                    type="button"
+                    whileTap={{ scale: 0.9 }}
+                    onClick={handleSendCoachMessage}
+                    disabled={!coachInput.trim()}
+                    className="flex h-[44px] w-[44px] shrink-0 items-center justify-center rounded-xl bg-neutral-900 text-white transition-opacity disabled:opacity-40 dark:bg-white dark:text-neutral-900"
+                  >
+                    <IconSend size={17} strokeWidth={2} />
+                  </motion.button>
+                )}
               </div>
             </div>
           </>
@@ -1171,10 +1319,12 @@ export default function PlanDetailView({
                   <button
                     type="button"
                     onClick={() => setGenSheetOpen(true)}
-                    className="flex items-center gap-1.5 rounded-xl px-3 py-1.5 text-[12px] font-semibold text-emerald-600 transition-colors hover:bg-emerald-50 dark:text-emerald-400 dark:hover:bg-emerald-500/10"
+                    className="hidden lg:flex items-center gap-1.5 rounded-xl border border-violet-200 bg-violet-50 px-3 py-1.5 text-[12px] font-semibold active:scale-95 active:opacity-80 transition-transform duration-100 dark:border-violet-500/20 dark:bg-violet-500/10"
                   >
-                    <IconSparkles size={13} strokeWidth={2} />
-                    Plan with AI
+                    <IconSparkles size={13} strokeWidth={2} className="text-violet-500 dark:text-violet-400" />
+                    <span className="bg-gradient-to-r from-violet-600 to-pink-500 bg-clip-text text-transparent dark:from-violet-400 dark:to-pink-400">
+                      Plan with AI
+                    </span>
                   </button>
                 )}
                 <SectionIconButton
@@ -1377,18 +1527,36 @@ export default function PlanDetailView({
         )}
       </div>
 
-      {/* Segmented tab switcher */}
+      {/* Segmented tab switcher — mobile: 2 tabs, desktop: 3 tabs */}
       <div className="mx-4 mt-6">
-        <div className="relative flex rounded-2xl bg-neutral-100 dark:bg-white/[0.06] p-1">
+
+        {/* ── Mobile: Planning + Roadmap only ─────────────────────────────── */}
+        <div className="relative flex rounded-2xl bg-neutral-100 dark:bg-white/[0.06] p-1 lg:hidden">
           <motion.div
             className="absolute rounded-xl border border-neutral-200 bg-white dark:border-white/[0.08] dark:bg-neutral-800"
-            style={{
-              top: "4px",
-              bottom: "4px",
-              left: "4px",
-              width: "calc((100% - 8px) / 3)",
-              willChange: "transform",
-            }}
+            style={{ top: "4px", bottom: "4px", left: "4px", width: "calc((100% - 8px) / 2)", willChange: "transform" }}
+            animate={{ x: `${(planTab === "roadmap" ? 1 : 0) * 100}%` }}
+            transition={{ type: "spring", stiffness: 400, damping: 30, mass: 0.8 }}
+          />
+          {(["planning", "roadmap"] as const).map((tab) => (
+            <button
+              key={tab}
+              type="button"
+              onClick={() => setPlanTab(tab)}
+              className={`relative flex-1 py-2.5 rounded-xl text-[13px] font-semibold transition-colors duration-200 z-10 ${
+                planTab === tab ? "text-neutral-950 dark:text-white" : "text-neutral-500 dark:text-neutral-400"
+              }`}
+            >
+              {tab === "planning" ? "Planning" : "Roadmap"}
+            </button>
+          ))}
+        </div>
+
+        {/* ── Desktop: Planning + Roadmap + Coach ─────────────────────────── */}
+        <div className="relative hidden rounded-2xl bg-neutral-100 dark:bg-white/[0.06] p-1 lg:flex">
+          <motion.div
+            className="absolute rounded-xl border border-neutral-200 bg-white dark:border-white/[0.08] dark:bg-neutral-800"
+            style={{ top: "4px", bottom: "4px", left: "4px", width: "calc((100% - 8px) / 3)", willChange: "transform" }}
             animate={{ x: `${(planTab === "planning" ? 0 : planTab === "roadmap" ? 1 : 2) * 100}%` }}
             transition={{ type: "spring", stiffness: 400, damping: 30, mass: 0.8 }}
           />
@@ -1398,15 +1566,14 @@ export default function PlanDetailView({
               type="button"
               onClick={() => setPlanTab(tab)}
               className={`relative flex-1 py-2.5 rounded-xl text-[13px] font-semibold transition-colors duration-200 z-10 capitalize ${
-                planTab === tab
-                  ? "text-neutral-950 dark:text-white"
-                  : "text-neutral-500 dark:text-neutral-400"
+                planTab === tab ? "text-neutral-950 dark:text-white" : "text-neutral-500 dark:text-neutral-400"
               }`}
             >
               {tab === "planning" ? "Planning" : tab === "roadmap" ? "Roadmap" : "Coach"}
             </button>
           ))}
         </div>
+
       </div>
 
       {/* Tab content */}

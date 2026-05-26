@@ -79,38 +79,50 @@ export function AIFab({
         </BottomSheet>
       )}
 
-      {/* ── FAB button (mobile only — desktop uses sidebar AI panel) ────── */}
-      <motion.button
-        type="button"
-        onClick={() => setOpen(!open)}
-        whileTap={{ scale: 0.93 }}
-        className="fixed bottom-20 right-4 z-50 flex h-13 w-13 items-center justify-center rounded-full bg-neutral-900 shadow-lg transition-colors hover:bg-neutral-800 dark:bg-white dark:hover:bg-neutral-100 lg:hidden"
-        aria-label={open ? "Close AI assistant" : "Open AI assistant"}
-      >
-        <AnimatePresence mode="wait" initial={false}>
-          {open ? (
-            <motion.span
-              key="close"
-              initial={{ rotate: -45, opacity: 0 }}
-              animate={{ rotate: 0, opacity: 1 }}
-              exit={{ rotate: 45, opacity: 0 }}
-              transition={{ duration: 0.15 }}
-            >
-              <IconX size={20} strokeWidth={2} className="text-white dark:text-neutral-900" />
-            </motion.span>
-          ) : (
-            <motion.span
-              key="open"
-              initial={{ rotate: 45, opacity: 0 }}
-              animate={{ rotate: 0, opacity: 1 }}
-              exit={{ rotate: -45, opacity: 0 }}
-              transition={{ duration: 0.15 }}
-            >
-              <IconSparkles size={20} strokeWidth={2} className="text-white dark:text-neutral-900" />
-            </motion.span>
-          )}
-        </AnimatePresence>
-      </motion.button>
+      {/* ── FAB button — hidden; AI is desktop-only ────────────────────── */}
+      <div className="fixed bottom-20 right-4 z-50 hidden">
+        {/* Spinning rainbow ring */}
+        <div
+          aria-hidden="true"
+          className={`absolute -inset-[2.5px] ai-fab-rainbow-ring transition-opacity duration-300 ${open ? "opacity-50" : "opacity-90"}`}
+        />
+        {/* Soft ambient glow */}
+        <div
+          aria-hidden="true"
+          className={`absolute -inset-1 ai-fab-rainbow-ring blur-[5px] transition-opacity duration-300 ${open ? "opacity-15" : "opacity-35"}`}
+        />
+        <motion.button
+          type="button"
+          onClick={() => setOpen(!open)}
+          whileTap={{ scale: 0.93 }}
+          className="relative z-10 flex h-13 w-13 items-center justify-center rounded-full bg-neutral-950 shadow-lg dark:bg-neutral-900"
+          aria-label={open ? "Close AI assistant" : "Open AI assistant"}
+        >
+          <AnimatePresence mode="wait" initial={false}>
+            {open ? (
+              <motion.span
+                key="close"
+                initial={{ rotate: -45, opacity: 0 }}
+                animate={{ rotate: 0, opacity: 1 }}
+                exit={{ rotate: 45, opacity: 0 }}
+                transition={{ duration: 0.15 }}
+              >
+                <IconX size={20} strokeWidth={2} className="text-white" />
+              </motion.span>
+            ) : (
+              <motion.span
+                key="open"
+                initial={{ rotate: 45, opacity: 0 }}
+                animate={{ rotate: 0, opacity: 1 }}
+                exit={{ rotate: -45, opacity: 0 }}
+                transition={{ duration: 0.15 }}
+              >
+                <IconSparkles size={20} strokeWidth={2} className="text-white" />
+              </motion.span>
+            )}
+          </AnimatePresence>
+        </motion.button>
+      </div>
     </>
   );
 }

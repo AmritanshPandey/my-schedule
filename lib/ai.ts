@@ -158,7 +158,8 @@ export async function* streamOllamaChat(
       body: JSON.stringify({ model, messages: allMessages, stream: true, options }),
       signal,
     });
-  } catch {
+  } catch (err) {
+    if (err instanceof Error && err.name === "AbortError") throw err;
     throw new Error("Ollama not reachable — is it running? Start with: ollama serve");
   }
 
