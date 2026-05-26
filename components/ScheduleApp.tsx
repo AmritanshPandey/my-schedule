@@ -17,6 +17,7 @@ import { OLLAMA_URL_KEY, OLLAMA_MODEL_KEY, DEFAULT_OLLAMA_URL, DEFAULT_OLLAMA_MO
 
 // ── Deferred heavy components (separate JS chunks, loaded on demand) ──────────
 const PlanDetailView = dynamic(() => import("@/components/plan/PlanDetailView"), { ssr: false });
+const AIPlanCreatorSheet = dynamic(() => import("@/components/plan/AIPlanCreatorSheet"), { ssr: false });
 const SettingsSheet = dynamic(() => import("@/components/auth/SettingsSheet").then(m => ({ default: m.SettingsSheet })), { ssr: false });
 const TemplatesSheet = dynamic(() => import("@/components/TemplatesSheet").then(m => ({ default: m.TemplatesSheet })), { ssr: false });
 const SessionSheet = dynamic(() => import("@/components/activity/SessionSheet"), { ssr: false });
@@ -41,7 +42,9 @@ import {
 import RitualOverlayLayer from "@/components/timeline/RitualOverlayLayer";
 import {
   colorFromIcon,
+  resolveAccentColor,
   timelineCardStyles,
+  type AccentColor,
 } from "@/lib/colorSystem";
 import { SECTION_ICONS, getIconPickerStyle } from "@/components/SectionIcons";
 import {
@@ -54,6 +57,7 @@ import {
   IconLayoutList,
   IconMinus,
   IconPlus,
+  IconSparkles,
   IconTable,
   IconTrash,
   IconX,
@@ -408,6 +412,7 @@ export default function ScheduleApp() {
   const [taskSheetInitialType, setTaskSheetInitialType] = useState<"task" | "session">("task");
 
   const [addingPlan, setAddingPlan] = useState(false);
+  const [aiPlanCreating, setAiPlanCreating] = useState(false);
   const [newPlanTitle, setNewPlanTitle] = useState("");
   const [newPlanDescription, setNewPlanDescription] = useState("");
   const [newPlanStartDate, setNewPlanStartDate] = useState("");
@@ -719,14 +724,17 @@ export default function ScheduleApp() {
     });
   }
 
-  function handleAddGeneratedTasks(tasks: AIGeneratedTask[], planId: string) {
+  function handleAddGeneratedTasks(tasks: AIGeneratedTask[], planId: string, milestoneId?: string) {
     const plan = schedule.plans.find((p) => p.id === planId);
     if (!plan) return;
     setSchedule((prev) => {
       const updatedActivities = { ...prev.activities };
+      const newTaskIds: string[] = [];
       for (const t of tasks) {
+        const taskId = uid();
+        newTaskIds.push(taskId);
         const task: Task = {
-          id: uid(),
+          id: taskId,
           title: t.title,
           startTime: t.startTime,
           endTime: t.endTime,
@@ -737,8 +745,26 @@ export default function ScheduleApp() {
         };
         updatedActivities[t.day] = [...(updatedActivities[t.day] ?? []), task];
       }
-      return { ...prev, activities: updatedActivities };
+      const updatedMilestones = milestoneId
+        ? (prev.milestones ?? []).map((m) =>
+            m.id === milestoneId
+              ? { ...m, linkedActivities: [...(m.linkedActivities ?? []), ...newTaskIds] }
+              : m
+          )
+        : (prev.milestones ?? []);
+      return { ...prev, activities: updatedActivities, milestones: updatedMilestones };
     });
+  }
+
+  function handleLinkTrackerToMilestone(milestoneId: string, trackerId: string) {
+    setSchedule((prev) => ({
+      ...prev,
+      milestones: (prev.milestones ?? []).map((m) =>
+        m.id === milestoneId
+          ? { ...m, linkedTrackers: [...new Set([...(m.linkedTrackers ?? []), trackerId])] }
+          : m
+      ),
+    }));
   }
 
   function handleDeletePlan(planId: string) {
@@ -815,6 +841,43 @@ export default function ScheduleApp() {
     setAddingPlan(true);
   }
 
+  function handleCreateAIPlan(data: import("@/components/plan/AIPlanCreatorSheet").AIPlanCreatorData) {
+    const planId = uid();
+    const plan: Plan = {
+      id: planId,
+      title: data.title,
+      description: data.description || undefined,
+      startDate: data.startDate || undefined,
+      endDate: data.endDate || undefined,
+      category: categoryFromIcon(data.emoji),
+      emoji: data.emoji,
+      color: resolveAccentColor(data.color, data.emoji),
+      items: [],
+      metaFields: [],
+      summary: [],
+    };
+    setSchedule((prev) => {
+      const updatedActivities = { ...prev.activities };
+      for (const t of data.tasks) {
+        const task: Task = {
+          id: uid(),
+          title: t.title,
+          startTime: t.startTime,
+          endTime: t.endTime,
+          icon: t.icon || plan.emoji,
+          color: resolveAccentColor(colorFromIcon(t.icon ?? ""), plan.color ?? "cyan"),
+          planId,
+          subtasks: (t.subtasks ?? []).map((s) => ({ id: uid(), task: s })),
+        };
+        const day = t.day as DayKey;
+        updatedActivities[day] = [...(updatedActivities[day] ?? []), task];
+      }
+      return { ...prev, plans: [...prev.plans, plan], activities: updatedActivities };
+    });
+    setAiPlanCreating(false);
+    setSelectedPlanId(planId);
+  }
+
   function handleDeleteTracker(trackerId: string) {
     const tracker = schedule.progressTrackers.find((t) => t.id === trackerId);
     openConfirm(
@@ -879,7 +942,7 @@ export default function ScheduleApp() {
     const now = new Date().toISOString();
     const ms: Milestone = {
       ...data,
-      id: uid(),
+      id: data.id ?? uid(),
       planId,
       linkedActivities: data.linkedActivities ?? [],
       linkedTrackers: data.linkedTrackers ?? [],
@@ -1540,11 +1603,26 @@ export default function ScheduleApp() {
           label="Stay on track"
           title="My Plans"
           actions={
-            <CtaActionButton
-              label="Add New Plan"
-              icon={<IconPlus size={14} strokeWidth={2.5} />}
-              onClick={() => setAddingPlan(true)}
-            />
+            <div className="flex items-center gap-2">
+              {ollamaUrl && ollamaModel && (
+                <button
+                  type="button"
+                  onClick={() => setAiPlanCreating(true)}
+                  className="ai-btn group relative overflow-hidden rounded-full border border-violet-500/50 bg-violet-500/10 px-4 py-2.5 shadow-[0_0_14px_rgba(139,92,246,0.25)] transition-all active:scale-[0.97] hover:border-violet-400/70 hover:shadow-[0_0_22px_rgba(139,92,246,0.45)] dark:border-violet-500/40 dark:bg-violet-500/[0.08]"
+                >
+                  <div className="pointer-events-none absolute inset-0 -translate-x-full skew-x-[-15deg] bg-gradient-to-r from-transparent via-white/15 to-transparent transition-transform duration-700 group-hover:translate-x-[250%]" />
+                  <span className="relative flex items-center gap-2 text-[13px] font-bold">
+                    <IconSparkles size={14} strokeWidth={2} className="text-violet-400 dark:text-violet-400" />
+                    <span className="bg-gradient-to-r from-violet-400 to-pink-400 bg-clip-text text-transparent">Plan with AI</span>
+                  </span>
+                </button>
+              )}
+              <CtaActionButton
+                label="Add New Plan"
+                icon={<IconPlus size={14} strokeWidth={2.5} />}
+                onClick={() => setAddingPlan(true)}
+              />
+            </div>
           }
           className="mb-6"
         />
@@ -2199,13 +2277,13 @@ export default function ScheduleApp() {
               onAddTask={(planId) => openCreateSheet(planId)}
               onEditTask={(task) => openEditSheet(task)}
               onDeleteLinkedTask={handleDeleteLinkedTask}
-              onAddTracker={(planId, title, unit, goalDirection) => {
+              onAddTracker={(planId, title, unit, goalDirection, id) => {
                 setSchedule((prev) => ({
                   ...prev,
                   progressTrackers: [
                     ...prev.progressTrackers,
                     {
-                      id: uid(),
+                      id: id ?? uid(),
                       planId,
                       title,
                       type: "number",
@@ -2235,6 +2313,7 @@ export default function ScheduleApp() {
               ollamaUrl={ollamaUrl}
               ollamaModel={ollamaModel}
               onAddGeneratedTasks={handleAddGeneratedTasks}
+              onLinkTrackerToMilestone={handleLinkTrackerToMilestone}
             />
           ) : renderPlanList()}
           </div>
@@ -2369,6 +2448,16 @@ export default function ScheduleApp() {
       <BottomSheet open={addingPlan} onClose={() => setAddingPlan(false)}>
         {renderAddPlanSheet()}
       </BottomSheet>
+
+      {/* ── AI Plan Creator Sheet ──────────────────────────────────────────── */}
+      <AIPlanCreatorSheet
+        open={aiPlanCreating}
+        onClose={() => setAiPlanCreating(false)}
+        onCreatePlan={handleCreateAIPlan}
+        ollamaUrl={ollamaUrl}
+        ollamaModel={ollamaModel}
+        existingPlans={schedule.plans.map((p) => ({ title: p.title, category: p.category, description: p.description }))}
+      />
 
       {/* ── Bottom Nav (mobile only) ───────────────────────────────────────── */}
       <div className="lg:hidden">
