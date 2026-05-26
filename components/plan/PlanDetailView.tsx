@@ -626,9 +626,11 @@ export default function PlanDetailView({
     const today = new Date().toISOString().slice(0, 10);
     const startDate = plan.startDate ?? today;
     const targetDate = milestone.targetDate;
-    const plannedEndDate = targetDate ?? today;
-    const plannedDurationDays = targetDate
-      ? Math.max(1, Math.ceil((new Date(targetDate).getTime() - new Date(startDate).getTime()) / 86_400_000))
+    const targetMs = targetDate ? new Date(targetDate).getTime() : NaN;
+    const hasValidTarget = Number.isFinite(targetMs);
+    const plannedEndDate = hasValidTarget ? targetDate! : today;
+    const plannedDurationDays = hasValidTarget
+      ? Math.max(1, Math.ceil((targetMs - new Date(startDate).getTime()) / 86_400_000))
       : 30;
     onAddMilestone({
       id: milestoneId,
@@ -668,9 +670,11 @@ export default function PlanDetailView({
       const today = new Date().toISOString().slice(0, 10);
       const startDate = plan.startDate ?? today;
       const targetDate = m.targetDate;
-      const plannedEndDate = targetDate ?? today;
-      const plannedDurationDays = targetDate
-        ? Math.max(1, Math.ceil((new Date(targetDate).getTime() - new Date(startDate).getTime()) / 86_400_000))
+      const targetMs = targetDate ? new Date(targetDate).getTime() : NaN;
+      const hasValidTarget = Number.isFinite(targetMs);
+      const plannedEndDate = hasValidTarget ? targetDate! : today;
+      const plannedDurationDays = hasValidTarget
+        ? Math.max(1, Math.ceil((targetMs - new Date(startDate).getTime()) / 86_400_000))
         : 30;
       onAddMilestone({
         title: m.title,
