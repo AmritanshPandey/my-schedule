@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo } from "react";
+import { useMemo, useState, useCallback, useRef } from "react";
 import {
   IconArrowUp,
   IconArrowDown,
@@ -12,6 +12,8 @@ import {
   IconRepeat,
   IconClipboardData,
   IconChartBar,
+  IconSparkles,
+  IconRefresh,
 } from "@tabler/icons-react";
 import type { Schedule, DayKey } from "@/lib/useScheduleDB";
 import { DAYS, DAY_LABELS } from "@/lib/useScheduleDB";
@@ -19,6 +21,13 @@ import { isTaskCompleted } from "@/lib/taskCompletion";
 import { calculateConsistency } from "@/lib/planInsights";
 import { computeTrend } from "@/lib/trendUtils";
 import { todayISO, addDaysToISO, localISODate } from "@/lib/dateUtils";
+import { streamWeeklyInsight } from "@/lib/aiActions";
+import {
+  OLLAMA_URL_KEY,
+  OLLAMA_MODEL_KEY,
+  DEFAULT_OLLAMA_URL,
+  DEFAULT_OLLAMA_MODEL,
+} from "@/lib/ai";
 
 // ── Shared type (mirrored from ScheduleApp.tsx) ───────────────────────────────
 
@@ -65,6 +74,197 @@ function SectionLabel({ children, icon: Icon }: { children: React.ReactNode; ico
       <p className="text-[11px] font-bold uppercase tracking-[0.08em] text-neutral-400 dark:text-neutral-500">
         {children}
       </p>
+    </div>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Weekly AI Insight — context builder + card
+// ─────────────────────────────────────────────────────────────────────────────
+
+/** Build a compact, token-efficient stats summary for the Ollama prompt. */
+function buildWeeklyContext(
+  schedule: Schedule,
+  todayKey: DayKey,
+  ritualWeekHistory: RitualWeekDay[],
+): string {
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  const monday = getMondayOf(today);
+
+  const dayStats = DAYS.map((day, i) => {
+    const d = new Date(monday);
+    d.setDate(monday.getDate() + i);
+    const tasks = schedule.activities[day] ?? [];
+    const total = tasks.length;
+    const done = tasks.filter((t) => isTaskCompleted(t, t.subtasks?.length ?? 0)).length;
+    return { day, label: DAY_LABELS[day], total, done, isPastOrToday: d <= today };
+  });
+
+  const tracked = dayStats.filter((d) => d.isPastOrToday);
+  const totalDone = tracked.reduce((s, d) => s + d.done, 0);
+  const totalScheduled = tracked.reduce((s, d) => s + d.total, 0);
+  const weekPct = totalScheduled > 0 ? Math.round((totalDone / totalScheduled) * 100) : 0;
+
+  const ritualDone = ritualWeekHistory.reduce((s, d) => s + d.completedCount, 0);
+  const ritualDue = ritualWeekHistory.reduce((s, d) => s + d.dueCount, 0);
+  const ritualPct = ritualDue > 0 ? Math.round((ritualDone / ritualDue) * 100) : 0;
+
+  const dayBreakdown = tracked
+    .filter((d) => d.total > 0)
+    .map((d) => `${d.label}: ${d.done}/${d.total}`)
+    .join(", ");
+
+  const planLines = schedule.plans
+    .filter((plan) => DAYS.some((d) => (schedule.activities[d] ?? []).some((t) => t.planId === plan.id)))
+    .map((plan) => {
+      const consistency = calculateConsistency(plan.id, schedule.activities, plan);
+      const milestones = (schedule.milestones ?? []).filter((m) => m.planId === plan.id);
+      const completedMs = milestones.filter((m) => m.status === "completed").length;
+      const delayedMs = milestones.filter((m) => m.status === "delayed").length;
+      return `"${plan.title}" consistency:${consistency}%${
+        milestones.length > 0 ? ` milestones:${completedMs}/${milestones.length}` : ""
+      }${delayedMs > 0 ? ` (${delayedMs} delayed)` : ""}`;
+    })
+    .join("; ");
+
+  const sortedEntries = [...(schedule.metricEntries ?? [])].sort((a, b) => b.date.localeCompare(a.date));
+  const metricLines = (schedule.progressTrackers ?? [])
+    .map((tracker) => {
+      const recent = sortedEntries.filter((e) => e.trackerId === tracker.id).slice(0, 3);
+      if (recent.length === 0) return null;
+      const latest = recent[0].value;
+      const goal = tracker.goalValue ? ` goal:${tracker.goalValue}${tracker.unit ?? ""}` : "";
+      const dir = tracker.goalDirection === "decrease_good" ? "↓" : "↑";
+      return `${tracker.title}: ${latest}${tracker.unit ?? ""} (${dir} target${goal})`;
+    })
+    .filter((s): s is string => s !== null)
+    .join("; ");
+
+  return [
+    `Week tasks: ${totalDone}/${totalScheduled} (${weekPct}%)${dayBreakdown ? ` — ${dayBreakdown}` : ""}`,
+    `Habits: ${ritualDone}/${ritualDue} (${ritualPct}%)`,
+    planLines ? `Plans: ${planLines}` : null,
+    metricLines ? `Metrics: ${metricLines}` : null,
+  ]
+    .filter((s): s is string => s !== null)
+    .join(". ");
+}
+
+function WeeklyAIInsightCard({
+  schedule,
+  todayKey,
+  ritualWeekHistory,
+}: ReviewViewProps) {
+  const [text, setText] = useState("");
+  const [isLoading, setIsLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [hasGenerated, setHasGenerated] = useState(false);
+  const abortRef = useRef<AbortController | null>(null);
+
+  const generate = useCallback(async () => {
+    abortRef.current?.abort();
+    const ctrl = new AbortController();
+    abortRef.current = ctrl;
+
+    const baseUrl =
+      typeof window !== "undefined"
+        ? (localStorage.getItem(OLLAMA_URL_KEY) ?? DEFAULT_OLLAMA_URL)
+        : DEFAULT_OLLAMA_URL;
+    const model =
+      typeof window !== "undefined"
+        ? (localStorage.getItem(OLLAMA_MODEL_KEY) ?? DEFAULT_OLLAMA_MODEL)
+        : DEFAULT_OLLAMA_MODEL;
+
+    setText("");
+    setError(null);
+    setIsLoading(true);
+    setHasGenerated(true);
+
+    try {
+      const context = buildWeeklyContext(schedule, todayKey, ritualWeekHistory);
+      const stream = streamWeeklyInsight(baseUrl, model, context, ctrl.signal);
+      for await (const chunk of stream) {
+        if (ctrl.signal.aborted) break;
+        setText((prev) => prev + chunk);
+      }
+    } catch (err) {
+      if (err instanceof Error && err.name === "AbortError") return;
+      setError(err instanceof Error ? err.message : "Could not reach Ollama");
+    } finally {
+      setIsLoading(false);
+    }
+  }, [schedule, todayKey, ritualWeekHistory]);
+
+  return (
+    <div className="mb-4 rounded-2xl border border-violet-200 bg-gradient-to-br from-violet-50 to-white px-4 py-4 dark:border-violet-500/20 dark:from-violet-500/[0.07] dark:to-transparent">
+      {/* Header row */}
+      <div className="mb-3 flex items-center justify-between">
+        <div className="flex items-center gap-1.5">
+          <IconSparkles size={13} strokeWidth={2.2} className="text-violet-500 dark:text-violet-400" />
+          <p className="text-[11px] font-bold uppercase tracking-[0.08em] text-violet-500 dark:text-violet-400">
+            AI Insight
+          </p>
+        </div>
+        {hasGenerated && !isLoading && (
+          <button
+            type="button"
+            onClick={generate}
+            className="flex items-center gap-1 rounded-lg px-2 py-1 text-[11px] font-medium text-neutral-400 transition-colors hover:text-violet-500 dark:text-neutral-500 dark:hover:text-violet-400"
+          >
+            <IconRefresh size={11} strokeWidth={2} />
+            Refresh
+          </button>
+        )}
+      </div>
+
+      {/* Pre-generate prompt */}
+      {!hasGenerated && (
+        <div className="flex items-center gap-3">
+          <p className="flex-1 text-[13px] leading-snug text-neutral-500 dark:text-neutral-400">
+            Get a personalized coaching summary — your strengths, blind spots, and one action to improve this week.
+          </p>
+          <button
+            type="button"
+            onClick={generate}
+            className="shrink-0 rounded-xl bg-violet-600 px-3.5 py-2 text-[13px] font-semibold text-white transition-opacity hover:opacity-90 active:opacity-80"
+          >
+            Generate
+          </button>
+        </div>
+      )}
+
+      {/* Streaming / loading */}
+      {isLoading && (
+        <div>
+          {text ? (
+            <p className="text-[14px] leading-relaxed text-neutral-800 dark:text-neutral-200">
+              {text}
+              <span className="animate-pulse opacity-60">▋</span>
+            </p>
+          ) : (
+            <div className="flex items-center gap-1.5">
+              <span className="inline-block h-1.5 w-1.5 animate-bounce rounded-full bg-violet-400 [animation-delay:-0.3s]" />
+              <span className="inline-block h-1.5 w-1.5 animate-bounce rounded-full bg-violet-400 [animation-delay:-0.15s]" />
+              <span className="inline-block h-1.5 w-1.5 animate-bounce rounded-full bg-violet-400" />
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Final text */}
+      {!isLoading && text && !error && (
+        <p className="text-[14px] leading-relaxed text-neutral-800 dark:text-neutral-200">{text}</p>
+      )}
+
+      {/* Error */}
+      {!isLoading && error && (
+        <p className="text-[13px] text-rose-500 dark:text-rose-400">
+          {error.includes("not reachable") || error.includes("fetch")
+            ? "Ollama is offline. Start it with: ollama serve"
+            : error}
+        </p>
+      )}
     </div>
   );
 }
@@ -685,6 +885,12 @@ function MetricsLogSection({ schedule }: { schedule: Schedule }) {
 export default function ReviewView({ schedule, todayKey, ritualWeekHistory }: ReviewViewProps) {
   return (
     <div className="px-4 pt-5 pb-24 lg:px-8 lg:pt-6 lg:pb-10">
+      {/* AI Insight — full width, above the grid */}
+      <WeeklyAIInsightCard
+        schedule={schedule}
+        todayKey={todayKey}
+        ritualWeekHistory={ritualWeekHistory}
+      />
       {/* Desktop: 2-column grid for the four insight cards */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 mb-4">
         <ThisWeekSection schedule={schedule} todayKey={todayKey} ritualWeekHistory={ritualWeekHistory} />

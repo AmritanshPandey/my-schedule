@@ -231,3 +231,26 @@ export function streamGenerateMilestoneTasks(
   ].join(" ");
   return streamOllamaAction(baseUrl, model, MILESTONE_TASK_GEN_PROMPT, userMessage, signal);
 }
+
+// ── Weekly insight generation ─────────────────────────────────────────────────
+
+const WEEKLY_INSIGHT_PROMPT = `You are a personal performance coach reviewing someone's week. Write exactly 2-3 sentences of coaching insight as plain prose — no bullet points, no markdown, no lists. Cover: (1) the strongest or weakest execution area this week, (2) which plan or habit needs the most attention, (3) one concrete action to take next. Be direct, specific, and encouraging. Never start with "I" or a generic greeting.`;
+
+/**
+ * Streams a 2-3 sentence weekly coaching insight based on the week's stats.
+ * `weekContext` should be a compact summary string (built by the caller from schedule data).
+ */
+export function streamWeeklyInsight(
+  baseUrl: string,
+  model: string,
+  weekContext: string,
+  signal?: AbortSignal,
+): AsyncGenerator<string> {
+  return streamOllamaAction(
+    baseUrl,
+    model,
+    WEEKLY_INSIGHT_PROMPT,
+    `Weekly stats:\n${weekContext}\n\nProvide your coaching insight:`,
+    signal,
+  );
+}
