@@ -233,6 +233,69 @@ function getWeekDates(offset: number): Array<{ day: DayKey; date: Date }> {
   });
 }
 
+// ─── Stat tile ───────────────────────────────────────────────────────────────
+
+type StatTileColorScheme = "neutral" | "emerald" | "amber" | "rose";
+
+const STAT_TILE_STYLES: Record<
+  StatTileColorScheme,
+  { tile: string; iconBg: string; icon: string; value: string; label: string }
+> = {
+  neutral: {
+    tile:    "border-neutral-200 bg-white dark:border-white/[0.08] dark:bg-neutral-900",
+    iconBg:  "bg-neutral-100 dark:bg-white/[0.06]",
+    icon:    "text-neutral-500 dark:text-neutral-400",
+    value:   "text-neutral-900 dark:text-white",
+    label:   "text-neutral-400 dark:text-neutral-500",
+  },
+  emerald: {
+    tile:    "border-emerald-200 bg-emerald-50 dark:border-emerald-500/20 dark:bg-emerald-500/[0.07]",
+    iconBg:  "bg-emerald-100 dark:bg-emerald-500/[0.15]",
+    icon:    "text-emerald-600 dark:text-emerald-400",
+    value:   "text-emerald-700 dark:text-emerald-400",
+    label:   "text-emerald-600/70 dark:text-emerald-500/70",
+  },
+  amber: {
+    tile:    "border-amber-200 bg-amber-50 dark:border-amber-500/20 dark:bg-amber-500/[0.07]",
+    iconBg:  "bg-amber-100 dark:bg-amber-500/[0.15]",
+    icon:    "text-amber-600 dark:text-amber-400",
+    value:   "text-amber-700 dark:text-amber-400",
+    label:   "text-amber-600/70 dark:text-amber-500/70",
+  },
+  rose: {
+    tile:    "border-rose-200 bg-rose-50 dark:border-rose-500/20 dark:bg-rose-500/[0.07]",
+    iconBg:  "bg-rose-100 dark:bg-rose-500/[0.15]",
+    icon:    "text-rose-600 dark:text-rose-400",
+    value:   "text-rose-700 dark:text-rose-400",
+    label:   "text-rose-600/70 dark:text-rose-500/70",
+  },
+};
+
+function StatTile({
+  icon: Icon,
+  value,
+  label,
+  colorScheme = "neutral",
+}: {
+  icon: React.ComponentType<{ size?: number; strokeWidth?: number; className?: string }>;
+  value: number;
+  label: string;
+  colorScheme?: StatTileColorScheme;
+}) {
+  const s = STAT_TILE_STYLES[colorScheme];
+  return (
+    <div className={`flex items-center gap-3 rounded-2xl border px-4 py-3 ${s.tile}`}>
+      <div className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-xl ${s.iconBg}`}>
+        <Icon size={17} strokeWidth={colorScheme === "neutral" ? 1.8 : 2} className={s.icon} />
+      </div>
+      <div>
+        <p className={`text-[24px] font-black tabular-nums leading-none ${s.value}`}>{value}</p>
+        <p className={`mt-0.5 text-[11px] font-semibold ${s.label}`}>{label}</p>
+      </div>
+    </div>
+  );
+}
+
 // ─── Sortable wrappers ────────────────────────────────────────────────────────
 
 function SortableTaskCard({
@@ -1630,50 +1693,10 @@ export default function ScheduleApp() {
         {/* Desktop stat strip */}
         {schedule.plans.length > 0 && (
           <div className="hidden lg:flex gap-3 mb-7">
-            {/* Total */}
-            <div className="flex items-center gap-3 rounded-2xl border border-neutral-200 bg-white px-4 py-3 dark:border-white/[0.08] dark:bg-neutral-900">
-              <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-neutral-100 dark:bg-white/[0.06]">
-                <IconClipboardData size={17} strokeWidth={1.8} className="text-neutral-500 dark:text-neutral-400" />
-              </div>
-              <div>
-                <p className="text-[24px] font-black tabular-nums leading-none text-neutral-900 dark:text-white">{schedule.plans.length}</p>
-                <p className="mt-0.5 text-[11px] font-semibold text-neutral-400 dark:text-neutral-500">Total Plans</p>
-              </div>
-            </div>
-            {/* On Track */}
-            <div className="flex items-center gap-3 rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-3 dark:border-emerald-500/20 dark:bg-emerald-500/[0.07]">
-              <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-emerald-100 dark:bg-emerald-500/[0.15]">
-                <IconCheck size={17} strokeWidth={2.5} className="text-emerald-600 dark:text-emerald-400" />
-              </div>
-              <div>
-                <p className="text-[24px] font-black tabular-nums leading-none text-emerald-700 dark:text-emerald-400">{onTrackCount}</p>
-                <p className="mt-0.5 text-[11px] font-semibold text-emerald-600/70 dark:text-emerald-500/70">On Track</p>
-              </div>
-            </div>
-            {/* At Risk */}
-            {atRiskCount > 0 && (
-              <div className="flex items-center gap-3 rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 dark:border-amber-500/20 dark:bg-amber-500/[0.07]">
-                <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-amber-100 dark:bg-amber-500/[0.15]">
-                  <IconAlertTriangle size={17} strokeWidth={2} className="text-amber-600 dark:text-amber-400" />
-                </div>
-                <div>
-                  <p className="text-[24px] font-black tabular-nums leading-none text-amber-700 dark:text-amber-400">{atRiskCount}</p>
-                  <p className="mt-0.5 text-[11px] font-semibold text-amber-600/70 dark:text-amber-500/70">At Risk</p>
-                </div>
-              </div>
-            )}
-            {/* Needs Focus */}
-            {needsWorkCount > 0 && (
-              <div className="flex items-center gap-3 rounded-2xl border border-rose-200 bg-rose-50 px-4 py-3 dark:border-rose-500/20 dark:bg-rose-500/[0.07]">
-                <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-rose-100 dark:bg-rose-500/[0.15]">
-                  <IconAlertCircle size={17} strokeWidth={2} className="text-rose-600 dark:text-rose-400" />
-                </div>
-                <div>
-                  <p className="text-[24px] font-black tabular-nums leading-none text-rose-700 dark:text-rose-400">{needsWorkCount}</p>
-                  <p className="mt-0.5 text-[11px] font-semibold text-rose-600/70 dark:text-rose-500/70">Needs Focus</p>
-                </div>
-              </div>
-            )}
+            <StatTile icon={IconClipboardData} value={schedule.plans.length} label="Total Plans" colorScheme="neutral" />
+            <StatTile icon={IconCheck}         value={onTrackCount}           label="On Track"    colorScheme="emerald" />
+            {atRiskCount   > 0 && <StatTile icon={IconAlertTriangle} value={atRiskCount}   label="At Risk"     colorScheme="amber" />}
+            {needsWorkCount > 0 && <StatTile icon={IconAlertCircle}  value={needsWorkCount} label="Needs Focus" colorScheme="rose"  />}
           </div>
         )}
 
