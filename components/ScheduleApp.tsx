@@ -24,6 +24,8 @@ const SessionSheet = dynamic(() => import("@/components/activity/SessionSheet"),
 const RitualView = dynamic(() => import("@/components/activity/RitualView"), { ssr: false });
 const ReviewView = dynamic(() => import("@/components/ReviewView"), { ssr: false });
 const TrackerQuickBar = dynamic(() => import("@/components/TrackerQuickBar"), { ssr: false });
+import WhatNextCard from "@/components/WhatNextCard";
+import StreakAlertChips from "@/components/StreakAlertChips";
 import {
   useScheduleDB,
   DAYS,
@@ -457,6 +459,7 @@ export default function ScheduleApp() {
   const [activeDay, setActiveDay] = useState<DayKey>(() => JS_DAYS[new Date().getDay()]);
   const [editMode, setEditMode] = useState(false);
   const [activeTab, setActiveTab] = useState(0);
+  const [whatNextDismissed, setWhatNextDismissed] = useState(false);
 
   const [toastMessage, setToastMessage] = useState<string | null>(null);
   const [taskSheetOpen, setTaskSheetOpen] = useState(false);
@@ -598,6 +601,11 @@ export default function ScheduleApp() {
       setTemplatesOpen(true);
     }
   }, [ready, isFirstLaunch]);
+
+  // Reset "What's Next" dismissal whenever the user navigates to a new day
+  useEffect(() => {
+    setWhatNextDismissed(false);
+  }, [activeDay]);
 
   useEffect(() => {
     // On tab wake after sleep, todayKey may be stale — correct it immediately.
@@ -1167,6 +1175,40 @@ export default function ScheduleApp() {
     ).length;
     return { done, total, pct: total > 0 ? Math.round((done / total) * 100) : 0 };
   }, [dayTasks, plansById]);
+
+  // ── Today Command Center derived data ──────────────────────────────────────
+
+  /** Reverse map: task ID → the Milestone it's linked to (if any) */
+  const taskToMilestoneMap = useMemo(() => {
+    const map = new Map<string, Milestone>();
+    for (const m of schedule.milestones ?? []) {
+      for (const taskId of m.linkedActivities ?? []) {
+        map.set(taskId, m);
+      }
+    }
+    return map;
+  }, [schedule.milestones]);
+
+  /** First uncompleted task for today, sorted by time — drives What's Next card */
+  const nextTask = useMemo(() => {
+    if (activeDay !== todayKey) return null;
+    return dayTasks.find((t) => !isTaskCompleted(t, t.subtasks?.length ?? 0)) ?? null;
+  }, [dayTasks, activeDay, todayKey]);
+
+  /** Rituals due on the active day (for summary line) */
+  const todayDueRituals = useMemo(
+    () =>
+      (schedule.rituals ?? []).filter(
+        (r) =>
+          !r.repeatDays || r.repeatDays.length === 0 || r.repeatDays.includes(activeDay as DayKey)
+      ),
+    [schedule.rituals, activeDay]
+  );
+  const todayRitualsTotal = todayDueRituals.length;
+  const todayRitualsDone = useMemo(
+    () => todayDueRituals.filter((r) => completedRitualIds.has(r.id)).length,
+    [todayDueRituals, completedRitualIds]
+  );
 
   const { weekDates, weekLabel, todayMidnightTime } = useMemo(() => {
     const dates = getWeekDates(weekOffset);
@@ -2012,7 +2054,11 @@ export default function ScheduleApp() {
             {/* Title section */}
             <div className="px-4 pt-5 pb-5">
               <MainTitleSection
-                label="My Schedule"
+                label={
+                  activeDay === todayKey && (dayProgress.total > 0 || todayRitualsTotal > 0)
+                    ? `${dayProgress.done}/${dayProgress.total} tasks · ${todayRitualsDone}/${todayRitualsTotal} rituals`
+                    : "My Schedule"
+                }
                 title="Today's Tasks"
                 progressMeta={
                   dayProgress.total > 0
@@ -2049,6 +2095,35 @@ export default function ScheduleApp() {
 
             {/* Task content */}
             <div className="px-4">
+              {/* What's Next card — only on today, only when there's an uncompleted task */}
+              <AnimatePresence>
+                {activeDay === todayKey && nextTask && !whatNextDismissed &&
+                  plansById.get(nextTask.planId) && (
+                  <WhatNextCard
+                    task={nextTask}
+                    plan={plansById.get(nextTask.planId)!}
+                    milestone={taskToMilestoneMap.get(nextTask.id)}
+                    onMarkDone={() =>
+                      handleToggleTaskComplete(
+                        nextTask.id,
+                        nextTask.subtasks?.map((s) => s.id) ?? []
+                      )
+                    }
+                    onDismissDay={() => setWhatNextDismissed(true)}
+                  />
+                )}
+              </AnimatePresence>
+
+              {/* Streak-at-risk chips — only on today */}
+              {activeDay === todayKey && (
+                <StreakAlertChips
+                  rituals={schedule.rituals ?? []}
+                  activeDay={activeDay as DayKey}
+                  completedRitualIds={completedRitualIds}
+                  ritualCompletions={schedule.ritualCompletions ?? []}
+                />
+              )}
+
               <TodayRitualsBar
                 rituals={schedule.rituals ?? []}
                 activeDay={activeDay}
@@ -2117,6 +2192,7 @@ export default function ScheduleApp() {
                       <div className="flex flex-col gap-3 pb-4">
                         {dayTasks.map((task) => {
                           const linkedPlan = task.planId ? plansById.get(task.planId) ?? null : null;
+                          const linkedMilestone = taskToMilestoneMap.get(task.id);
                           return (
                             <div key={task.id} className="animate-panel-in">
                               <ListTaskCard
@@ -2132,6 +2208,13 @@ export default function ScheduleApp() {
                                     : undefined
                                 }
                               />
+                              {linkedMilestone && (
+                                <div className="mt-[-6px] px-1 pb-0.5">
+                                  <span className="inline-flex items-center gap-1 rounded-b-xl bg-violet-50 px-2.5 py-1 text-[11px] font-semibold text-violet-600 dark:bg-violet-500/[0.1] dark:text-violet-400">
+                                    → {linkedMilestone.title}
+                                  </span>
+                                </div>
+                              )}
                             </div>
                           );
                         })}
