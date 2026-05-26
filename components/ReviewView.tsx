@@ -8,6 +8,10 @@ import {
   IconTrendingUp,
   IconTrendingDown,
   IconFlame,
+  IconCalendarWeek,
+  IconRepeat,
+  IconClipboardData,
+  IconChartBar,
 } from "@tabler/icons-react";
 import type { Schedule, DayKey } from "@/lib/useScheduleDB";
 import { DAYS, DAY_LABELS } from "@/lib/useScheduleDB";
@@ -52,11 +56,16 @@ function getMondayOf(d: Date): Date {
 
 // ── Section label ─────────────────────────────────────────────────────────────
 
-function SectionLabel({ children }: { children: React.ReactNode }) {
+type IconComponent = React.ComponentType<{ size?: number; strokeWidth?: number; className?: string }>;
+
+function SectionLabel({ children, icon: Icon }: { children: React.ReactNode; icon?: IconComponent }) {
   return (
-    <p className="mb-3 text-[11px] font-bold uppercase tracking-[0.08em] text-neutral-400 dark:text-neutral-500">
-      {children}
-    </p>
+    <div className="mb-3 flex items-center gap-1.5">
+      {Icon && <Icon size={13} strokeWidth={2.2} className="text-neutral-400 dark:text-neutral-500" />}
+      <p className="text-[11px] font-bold uppercase tracking-[0.08em] text-neutral-400 dark:text-neutral-500">
+        {children}
+      </p>
+    </div>
   );
 }
 
@@ -114,7 +123,7 @@ function ThisWeekSection({
 
   return (
     <div className="rounded-2xl border border-neutral-200 bg-white dark:border-white/[0.08] dark:bg-neutral-900 px-4 py-4">
-      <SectionLabel>This Week</SectionLabel>
+      <SectionLabel icon={IconCalendarWeek}>This Week</SectionLabel>
 
       {/* Day strip */}
       <div className="grid grid-cols-7 gap-1.5 mb-4">
@@ -245,7 +254,7 @@ function ExecutionTrendSection({ schedule }: { schedule: Schedule }) {
   return (
     <div className="rounded-2xl border border-neutral-200 bg-white dark:border-white/[0.08] dark:bg-neutral-900 px-4 py-4">
       <div className="flex items-center justify-between mb-3">
-        <SectionLabel>Execution Trend</SectionLabel>
+        <SectionLabel icon={IconTrendingUp}>Execution Trend</SectionLabel>
         {delta !== 0 && (
           <span className={`flex items-center gap-0.5 text-[11px] font-bold ${
             delta > 0 ? "text-emerald-600 dark:text-emerald-400" : "text-rose-500 dark:text-rose-400"
@@ -343,7 +352,7 @@ function HabitConsistencySection({
   if (ritualsWithStats.length === 0) {
     return (
       <div className="rounded-2xl border border-neutral-200 bg-white dark:border-white/[0.08] dark:bg-neutral-900 px-4 py-4">
-        <SectionLabel>Habit Consistency</SectionLabel>
+        <SectionLabel icon={IconRepeat}>Habit Consistency</SectionLabel>
         <p className="text-[13px] text-neutral-400 dark:text-neutral-500">No habits yet. Add some in the Routine tab.</p>
       </div>
     );
@@ -351,7 +360,7 @@ function HabitConsistencySection({
 
   return (
     <div className="rounded-2xl border border-neutral-200 bg-white dark:border-white/[0.08] dark:bg-neutral-900 px-4 py-4">
-      <SectionLabel>Habit Consistency</SectionLabel>
+      <SectionLabel icon={IconRepeat}>Habit Consistency</SectionLabel>
       <div className="space-y-3">
         {ritualsWithStats.map(({ ritual, dots, streak }) => (
           <div key={ritual.id} className="flex items-center gap-3">
@@ -422,7 +431,7 @@ function PlanHealthSection({
   if (planCards.length === 0) {
     return (
       <div className="rounded-2xl border border-neutral-200 bg-white dark:border-white/[0.08] dark:bg-neutral-900 px-4 py-4">
-        <SectionLabel>Plan Health</SectionLabel>
+        <SectionLabel icon={IconClipboardData}>Plan Health</SectionLabel>
         <p className="text-[13px] text-neutral-400 dark:text-neutral-500">No active plans. Create one in the Plans tab.</p>
       </div>
     );
@@ -430,7 +439,7 @@ function PlanHealthSection({
 
   return (
     <div className="rounded-2xl border border-neutral-200 bg-white dark:border-white/[0.08] dark:bg-neutral-900 px-4 py-4">
-      <SectionLabel>Plan Health</SectionLabel>
+      <SectionLabel icon={IconClipboardData}>Plan Health</SectionLabel>
       <div className="space-y-2.5">
         {planCards.map(({ plan, completedMs, totalMs, consistency, delayedMs }) => {
           const msPct = totalMs > 0 ? Math.round((completedMs / totalMs) * 100) : null;
@@ -567,7 +576,7 @@ function MetricsLogSection({ schedule }: { schedule: Schedule }) {
   if (trackerGroups.length === 0) {
     return (
       <div className="rounded-2xl border border-neutral-200 bg-white dark:border-white/[0.08] dark:bg-neutral-900 px-4 py-4">
-        <SectionLabel>Metrics Log</SectionLabel>
+        <SectionLabel icon={IconChartBar}>Metrics Log</SectionLabel>
         <p className="text-[13px] text-neutral-400 dark:text-neutral-500">No metrics logged yet. Add entries from a plan&apos;s tracker.</p>
       </div>
     );
@@ -575,7 +584,7 @@ function MetricsLogSection({ schedule }: { schedule: Schedule }) {
 
   return (
     <div className="rounded-2xl border border-neutral-200 bg-white dark:border-white/[0.08] dark:bg-neutral-900 px-4 py-4">
-      <SectionLabel>Metrics Log</SectionLabel>
+      <SectionLabel icon={IconChartBar}>Metrics Log</SectionLabel>
       <div className="space-y-5">
         {trackerGroups.map(({ tracker, entries, plan, trend, streak, daysSinceLabel, goalPct }) => (
           <div key={tracker.id}>
@@ -675,14 +684,16 @@ function MetricsLogSection({ schedule }: { schedule: Schedule }) {
 
 export default function ReviewView({ schedule, todayKey, ritualWeekHistory }: ReviewViewProps) {
   return (
-    <div className="lg:px-8">
-      <div className="px-4 pt-5 pb-24 lg:px-0 lg:pt-4 space-y-4 max-w-2xl">
+    <div className="px-4 pt-5 pb-24 lg:px-8 lg:pt-6 lg:pb-10">
+      {/* Desktop: 2-column grid for the four insight cards */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 mb-4">
         <ThisWeekSection schedule={schedule} todayKey={todayKey} ritualWeekHistory={ritualWeekHistory} />
         <ExecutionTrendSection schedule={schedule} />
         <HabitConsistencySection schedule={schedule} ritualWeekHistory={ritualWeekHistory} />
         <PlanHealthSection schedule={schedule} todayKey={todayKey} />
-        <MetricsLogSection schedule={schedule} />
       </div>
+      {/* Metrics Log — full width */}
+      <MetricsLogSection schedule={schedule} />
     </div>
   );
 }
