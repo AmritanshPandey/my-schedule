@@ -208,3 +208,26 @@ export function parseGeneratedMilestones(text: string): AIGeneratedMilestone[] {
       targetDate: typeof m.targetDate === "string" ? m.targetDate : undefined,
     }));
 }
+
+// ── Milestone-scoped task generation ─────────────────────────────────────────
+
+const MILESTONE_TASK_GEN_PROMPT = `You are a task planner. Generate 4-6 concrete weekly tasks that directly help achieve a specific milestone.
+Output ONLY a raw JSON array — no explanation, no markdown fences, no preamble.
+[{"title":"...","day":"monday","startTime":"07:00","endTime":"08:00","icon":"barbell","subtasks":["Step 1","Step 2"]},...]
+Icons (pick most relevant): run, school, book, sleep, star, briefcase, car, brain, barbell, code, heart, music, palette, plane, chefhat, coin, camera, users, leaf, pencil, yoga, bike, mountain, droplet, moodsmile, flame, language, pill, bolt, dna
+Days: monday tuesday wednesday thursday friday saturday sunday
+Times: HH:MM 24-hour. Spread tasks across the week. Each task needs 2-3 subtasks.`;
+
+export function streamGenerateMilestoneTasks(
+  baseUrl: string,
+  model: string,
+  milestone: { title: string; description?: string },
+  plan: { title: string; description?: string },
+  signal?: AbortSignal,
+): AsyncGenerator<string> {
+  const userMessage = [
+    `Generate tasks for milestone: "${milestone.title}"${milestone.description ? ` — ${milestone.description}` : ""}.`,
+    `Part of plan: "${plan.title}"${plan.description ? ` (${plan.description})` : ""}.`,
+  ].join(" ");
+  return streamOllamaAction(baseUrl, model, MILESTONE_TASK_GEN_PROMPT, userMessage, signal);
+}

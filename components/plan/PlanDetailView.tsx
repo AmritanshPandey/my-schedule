@@ -59,10 +59,13 @@ import {
   streamGenerateMilestones,
   parseGeneratedMilestones,
   type AIGeneratedMilestone,
+  streamGenerateMilestoneTasks,
 } from "@/lib/aiActions";
-import { streamOllamaChat, parseAIAction, PLAN_COACH_PROMPT, buildPlanContext } from "@/lib/ai";
+import { streamOllamaChat, parseAIAction, PLAN_COACH_PROMPT, buildCoachContext } from "@/lib/ai";
 import { getCoachSkillPrompt, detectCoachSkill, SKILL_LABELS } from "@/lib/coachSkills";
 import AIActionSheet, { type ResultItem } from "@/components/ai/AIActionSheet";
+import { detectMeasurableGoal, type MeasurableGoal } from "@/lib/milestoneIntelligence";
+import { uid } from "@/lib/taskMutations";
 
 
 
@@ -164,6 +167,38 @@ function GoalDirectionPicker({
   );
 }
 
+// ── AI Coach streaming status ─────────────────────────────────────────────────
+
+const COACH_STATUS_PHRASES = [
+  "Thinking…",
+  "Analyzing your plan…",
+  "Processing…",
+  "Crafting response…",
+  "Finalizing…",
+];
+
+function CoachStreamingStatus() {
+  const [idx, setIdx] = useState(0);
+  useEffect(() => {
+    const id = setInterval(() => setIdx((p) => (p + 1) % COACH_STATUS_PHRASES.length), 1400);
+    return () => clearInterval(id);
+  }, []);
+  return (
+    <AnimatePresence mode="wait">
+      <motion.span
+        key={COACH_STATUS_PHRASES[idx]}
+        initial={{ opacity: 0, y: 3 }}
+        animate={{ opacity: 1, y: 0 }}
+        exit={{ opacity: 0, y: -3 }}
+        transition={{ duration: 0.22 }}
+        className="shimmer-text text-[13px] font-medium"
+      >
+        {COACH_STATUS_PHRASES[idx]}
+      </motion.span>
+    </AnimatePresence>
+  );
+}
+
 // ── Props ─────────────────────────────────────────────────────────────────────
 
 interface PlanDetailViewProps {
@@ -179,7 +214,8 @@ interface PlanDetailViewProps {
     planId: string,
     title: string,
     unit: string,
-    goalDirection: GoalDirection
+    goalDirection: GoalDirection,
+    id?: string
   ) => void;
   onUpdateTracker: (
     trackerId: string,
@@ -197,7 +233,8 @@ interface PlanDetailViewProps {
   // AI
   ollamaUrl?: string;
   ollamaModel?: string;
-  onAddGeneratedTasks?: (tasks: AIGeneratedTask[], planId: string) => void;
+  onAddGeneratedTasks?: (tasks: AIGeneratedTask[], planId: string, milestoneId?: string) => void;
+  onLinkTrackerToMilestone?: (milestoneId: string, trackerId: string) => void;
 }
 
 // ── Component ─────────────────────────────────────────────────────────────────
@@ -221,6 +258,7 @@ export default function PlanDetailView({
   ollamaUrl,
   ollamaModel,
   onAddGeneratedTasks,
+  onLinkTrackerToMilestone,
 }: PlanDetailViewProps) {
   // ── Tab state ───────────────────────────────────────────────────────────
   const [planTab, setPlanTab] = useState<"planning" | "roadmap" | "strategy">("planning");
@@ -262,6 +300,43 @@ export default function PlanDetailView({
     if (tasks.length > 0) onAddGeneratedTasks(tasks, plan.id);
   }
 
+  // Milestone-scoped task generation
+  async function* genMilestoneTasksStream(_goal: string, _picks: string[]): AsyncGenerator<string> {
+    if (!ollamaUrl || !ollamaModel || !postMilestoneContext) return;
+    yield* streamGenerateMilestoneTasks(
+      ollamaUrl,
+      ollamaModel,
+      { title: postMilestoneContext.title, description: postMilestoneContext.description },
+      { title: plan.title, description: plan.description },
+    );
+  }
+
+  function parseMilestoneTaskResults(raw: string): ResultItem[] {
+    const tasks = parseGeneratedTasks(raw);
+    parsedMilestoneTasksRef.current = {};
+    return tasks.map((t, i) => {
+      const id = String(i);
+      parsedMilestoneTasksRef.current[id] = t;
+      return {
+        id,
+        label: t.title,
+        meta: `${t.day.charAt(0).toUpperCase() + t.day.slice(1)} · ${t.startTime}–${t.endTime}${t.subtasks.length > 0 ? ` · ${t.subtasks.length} subtasks` : ""}`,
+        badge: t.icon,
+      };
+    });
+  }
+
+  function commitMilestoneTasks(items: ResultItem[]) {
+    if (!onAddGeneratedTasks || !postMilestoneContext) return;
+    const tasks = items
+      .map((r) => parsedMilestoneTasksRef.current[r.id])
+      .filter(Boolean) as AIGeneratedTask[];
+    if (tasks.length > 0) {
+      onAddGeneratedTasks(tasks, plan.id, postMilestoneContext.milestoneId);
+      setMilestoneTasksAdded(true);
+    }
+  }
+
   // ── Tracker edit state ──────────────────────────────────────────────────
   const [editingTrackerId, setEditingTrackerId] = useState<string | null>(null);
   const [editTrackerDraft, setEditTrackerDraft] = useState<{
@@ -294,6 +369,7 @@ export default function PlanDetailView({
   type ChatMessage = {
     role: "user" | "assistant";
     content: string;
+    type?: "confirmation";
     suggestedMilestones?: AIGeneratedMilestone[];
   };
   const [coachMessages, setCoachMessages] = useState<ChatMessage[]>(() =>
@@ -306,6 +382,21 @@ export default function PlanDetailView({
   const [milestonesGenerating, setMilestonesGenerating] = useState(false);
   const [acceptedMilestoneIds, setAcceptedMilestoneIds] = useState<Set<string>>(new Set());
   const [copiedMsgIdx, setCopiedMsgIdx] = useState<number | null>(null);
+
+  // ── Post-milestone CTA state ────────────────────────────────────────────
+  const [postMilestoneContext, setPostMilestoneContext] = useState<{
+    milestoneId: string;
+    title: string;
+    description?: string;
+    msgKey: string;
+  } | null>(null);
+  const [postMilestoneTrackerSuggestion, setPostMilestoneTrackerSuggestion] =
+    useState<MeasurableGoal | null>(null);
+  const [milestoneGenSheetOpen, setMilestoneGenSheetOpen] = useState(false);
+  const [milestoneTasksAdded, setMilestoneTasksAdded] = useState(false);
+  const [milestoneTrackerAdded, setMilestoneTrackerAdded] = useState(false);
+  // Parsed tasks ref for milestone-scoped generation (separate from plan-level ref)
+  const parsedMilestoneTasksRef = useRef<Record<string, AIGeneratedTask>>({});
   const chatEndRef = useRef<HTMLDivElement>(null);
   const coachAbortRef = useRef<AbortController | null>(null);
 
@@ -443,7 +534,11 @@ export default function PlanDetailView({
     let accumulated = "";
     try {
       const skillPrompt = getCoachSkillPrompt(plan);
-      const systemPrompt = [PLAN_COACH_PROMPT, skillPrompt, buildPlanContext(plan)].filter(Boolean).join("\n\n");
+      const systemPrompt = [
+        PLAN_COACH_PROMPT,
+        skillPrompt,
+        buildCoachContext(plan, { tasks: uniqueTasks, milestones: planMilestones, trackers }),
+      ].filter(Boolean).join("\n\n");
       // Strip JSON blocks from assistant messages so milestone JSON doesn't leak into context
       const history = newMessages.map((m) => ({
         role: m.role,
@@ -527,14 +622,18 @@ export default function PlanDetailView({
   function handleAcceptMilestone(msgIdx: number, mIdx: number, milestone: AIGeneratedMilestone) {
     const key = `${msgIdx}-${mIdx}`;
     if (acceptedMilestoneIds.has(key)) return;
+    const milestoneId = uid();
     const today = new Date().toISOString().slice(0, 10);
     const startDate = plan.startDate ?? today;
     const targetDate = milestone.targetDate;
-    const plannedEndDate = targetDate ?? today;
-    const plannedDurationDays = targetDate
-      ? Math.max(1, Math.ceil((new Date(targetDate).getTime() - new Date(startDate).getTime()) / 86_400_000))
+    const targetMs = targetDate ? new Date(targetDate).getTime() : NaN;
+    const hasValidTarget = Number.isFinite(targetMs);
+    const plannedEndDate = hasValidTarget ? targetDate! : today;
+    const plannedDurationDays = hasValidTarget
+      ? Math.max(1, Math.ceil((targetMs - new Date(startDate).getTime()) / 86_400_000))
       : 30;
     onAddMilestone({
+      id: milestoneId,
       title: milestone.title,
       description: milestone.description || "",
       startDate,
@@ -547,14 +646,63 @@ export default function PlanDetailView({
       targetDate,
     } as MilestoneSaveData);
     setAcceptedMilestoneIds((prev) => new Set([...prev, key]));
+    // Set up post-milestone CTA
+    setPostMilestoneContext({
+      milestoneId,
+      title: milestone.title,
+      description: milestone.description,
+      msgKey: key,
+    });
+    setPostMilestoneTrackerSuggestion(
+      detectMeasurableGoal(milestone.title, milestone.description)
+    );
+    setMilestoneTasksAdded(false);
+    setMilestoneTrackerAdded(false);
+    setTimeout(() => chatEndRef.current?.scrollIntoView({ behavior: "smooth" }), 50);
   }
 
   function handleAcceptAllMilestones(msgIdx: number, milestones: AIGeneratedMilestone[]) {
-    milestones.forEach((m, mIdx) => {
-      if (!acceptedMilestoneIds.has(`${msgIdx}-${mIdx}`)) {
-        handleAcceptMilestone(msgIdx, mIdx, m);
-      }
+    const remaining = milestones.filter((_, i) => !acceptedMilestoneIds.has(`${msgIdx}-${i}`));
+    remaining.forEach((m, i) => {
+      const realIdx = milestones.indexOf(m);
+      const key = `${msgIdx}-${realIdx}`;
+      if (acceptedMilestoneIds.has(key)) return;
+      const today = new Date().toISOString().slice(0, 10);
+      const startDate = plan.startDate ?? today;
+      const targetDate = m.targetDate;
+      const targetMs = targetDate ? new Date(targetDate).getTime() : NaN;
+      const hasValidTarget = Number.isFinite(targetMs);
+      const plannedEndDate = hasValidTarget ? targetDate! : today;
+      const plannedDurationDays = hasValidTarget
+        ? Math.max(1, Math.ceil((targetMs - new Date(startDate).getTime()) / 86_400_000))
+        : 30;
+      onAddMilestone({
+        title: m.title,
+        description: m.description || "",
+        startDate,
+        plannedDurationDays,
+        plannedEndDate,
+        status: "upcoming",
+        linkedActivities: [],
+        linkedTrackers: [],
+        sortOrder: planMilestones.length + acceptedMilestoneIds.size + i,
+        targetDate,
+      } as MilestoneSaveData);
     });
+    setAcceptedMilestoneIds((prev) => {
+      const next = new Set(prev);
+      milestones.forEach((_, i) => next.add(`${msgIdx}-${i}`));
+      return next;
+    });
+    setCoachMessages((prev) => [
+      ...prev,
+      {
+        role: "assistant",
+        type: "confirmation",
+        content: `All ${remaining.length} milestone${remaining.length !== 1 ? "s" : ""} added to your roadmap. Head to the **Roadmap** tab to see them.`,
+      },
+    ]);
+    setTimeout(() => chatEndRef.current?.scrollIntoView({ behavior: "smooth" }), 50);
   }
 
   // ─────────────────────────────────────────────────────────────────────────
@@ -953,6 +1101,22 @@ export default function PlanDetailView({
               {daysLabel}
             </span>
           </div>
+          {/* Linked tasks + tracker badges */}
+          {((m.linkedActivities?.length ?? 0) > 0 || (m.linkedTrackers?.length ?? 0) > 0) && (
+            <div className="mt-1.5 flex items-center gap-2">
+              {(m.linkedActivities?.length ?? 0) > 0 && (
+                <span className="flex items-center gap-1 text-[11px] font-semibold text-emerald-600 dark:text-emerald-400">
+                  <IconCheck size={11} strokeWidth={2.5} />
+                  {m.linkedActivities!.length} task{m.linkedActivities!.length !== 1 ? "s" : ""}
+                </span>
+              )}
+              {(m.linkedTrackers?.length ?? 0) > 0 && (
+                <span className="flex items-center gap-1 text-[11px] font-semibold text-violet-600 dark:text-violet-400">
+                  📊 {m.linkedTrackers!.length} tracker{m.linkedTrackers!.length !== 1 ? "s" : ""}
+                </span>
+              )}
+            </div>
+          )}
         </div>
 
         <IconChevronRight size={16} strokeWidth={2} className="shrink-0 self-center text-neutral-300 dark:text-neutral-600" />
@@ -1077,10 +1241,15 @@ export default function PlanDetailView({
                 type="button"
                 onClick={handleAutoGenerateMilestones}
                 disabled={milestonesGenerating || coachStreaming}
-                className="inline-flex items-center gap-1.5 rounded-xl border border-neutral-200 px-3 py-1.5 text-[12px] font-semibold text-neutral-600 transition-colors hover:bg-neutral-50 disabled:opacity-50 dark:border-white/10 dark:text-neutral-400 dark:hover:bg-white/[0.04]"
+                className="group relative overflow-hidden rounded-full border border-violet-500/40 bg-violet-500/[0.07] px-3 py-1.5 shadow-[0_0_8px_rgba(139,92,246,0.18)] transition-all active:scale-95 hover:border-violet-400/60 hover:shadow-[0_0_14px_rgba(139,92,246,0.35)] disabled:opacity-50 disabled:shadow-none dark:border-violet-500/30 dark:bg-violet-500/[0.06]"
               >
-                <IconSparkles size={13} strokeWidth={2} className={milestonesGenerating ? "animate-pulse text-violet-500" : ""} />
-                {milestonesGenerating ? "Generating…" : "Auto-generate milestones"}
+                <div className="pointer-events-none absolute inset-0 -translate-x-full skew-x-[-15deg] bg-gradient-to-r from-transparent via-white/12 to-transparent transition-transform duration-700 group-hover:translate-x-[250%]" />
+                <span className="relative flex items-center gap-1.5 text-[12px] font-semibold">
+                  <IconSparkles size={13} strokeWidth={2} className={milestonesGenerating ? "animate-pulse text-violet-400" : "text-violet-400"} />
+                  <span className="bg-gradient-to-r from-violet-400 to-pink-400 bg-clip-text text-transparent">
+                    {milestonesGenerating ? "Generating…" : "Auto-generate milestones"}
+                  </span>
+                </span>
               </button>
               {(() => {
                 const skill = detectCoachSkill(plan);
@@ -1108,6 +1277,28 @@ export default function PlanDetailView({
                           {msg.content}
                         </div>
                       </div>
+                    ) : msg.type === "confirmation" ? (
+                      /* ── Confirmation bubble ── */
+                      <motion.div
+                        initial={{ opacity: 0, y: 6, scale: 0.97 }}
+                        animate={{ opacity: 1, y: 0, scale: 1 }}
+                        transition={{ duration: 0.2, ease: [0.22, 1, 0.36, 1] }}
+                        className="flex items-start gap-2"
+                      >
+                        <div className="mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-emerald-100 dark:bg-emerald-500/20">
+                          <IconCheck size={11} strokeWidth={3} className="text-emerald-600 dark:text-emerald-400" />
+                        </div>
+                        <div className="rounded-2xl rounded-tl-sm border border-emerald-100 bg-emerald-50 px-3.5 py-2.5 text-[13px] leading-relaxed text-emerald-800 dark:border-emerald-500/20 dark:bg-emerald-500/10 dark:text-emerald-300">
+                          <ReactMarkdown
+                            components={{
+                              p: ({ children }) => <p className="mb-0">{children}</p>,
+                              strong: ({ children }) => <strong className="font-semibold">{children}</strong>,
+                            }}
+                          >
+                            {msg.content}
+                          </ReactMarkdown>
+                        </div>
+                      </motion.div>
                     ) : (
                       /* ── AI message ── */
                       <div className="group">
@@ -1133,13 +1324,7 @@ export default function PlanDetailView({
                               {cleanText}
                             </ReactMarkdown>
                           ) : (
-                            isStreamingThis && (
-                              <span className="inline-flex items-center gap-0.5">
-                                <span className="h-1.5 w-1.5 animate-bounce rounded-full bg-neutral-400 dark:bg-neutral-500 [animation-delay:0ms]" />
-                                <span className="h-1.5 w-1.5 animate-bounce rounded-full bg-neutral-400 dark:bg-neutral-500 [animation-delay:150ms]" />
-                                <span className="h-1.5 w-1.5 animate-bounce rounded-full bg-neutral-400 dark:bg-neutral-500 [animation-delay:300ms]" />
-                              </span>
-                            )
+                            isStreamingThis && <CoachStreamingStatus />
                           )}
                           {isStreamingThis && cleanText && (
                             <span className="ml-0.5 inline-block h-[1em] w-[2px] translate-y-[2px] animate-pulse rounded-sm bg-neutral-500 dark:bg-neutral-400" />
@@ -1245,6 +1430,77 @@ export default function PlanDetailView({
                   </div>
                 );
               })}
+              {/* Post-milestone CTA card */}
+              {postMilestoneContext && !(milestoneTasksAdded && (milestoneTrackerAdded || !postMilestoneTrackerSuggestion)) && (
+                <motion.div
+                  initial={{ opacity: 0, y: 8, scale: 0.97 }}
+                  animate={{ opacity: 1, y: 0, scale: 1 }}
+                  exit={{ opacity: 0, y: -6, scale: 0.97 }}
+                  transition={{ duration: 0.22, ease: [0.22, 1, 0.36, 1] }}
+                  className="rounded-2xl border border-violet-200 bg-violet-50 p-4 dark:border-violet-500/20 dark:bg-violet-500/[0.06]"
+                >
+                  <div className="mb-3 flex items-start gap-2">
+                    <div className="mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-violet-100 dark:bg-violet-500/20">
+                      <IconCheck size={11} strokeWidth={3} className="text-violet-600 dark:text-violet-400" />
+                    </div>
+                    <div className="min-w-0">
+                      <p className="text-[13px] font-semibold text-violet-900 dark:text-violet-200 leading-tight">
+                        "{postMilestoneContext.title}" added
+                      </p>
+                      <p className="mt-0.5 text-[11px] text-violet-600 dark:text-violet-400">
+                        What would you like to do next?
+                      </p>
+                    </div>
+                  </div>
+                  <div className="space-y-2">
+                    {!milestoneTasksAdded && (
+                      <button
+                        type="button"
+                        onClick={() => setMilestoneGenSheetOpen(true)}
+                        className="w-full rounded-xl bg-violet-600 py-2.5 text-[13px] font-semibold text-white transition-opacity hover:opacity-90 active:opacity-80"
+                      >
+                        ⚡ Generate tasks for this milestone
+                      </button>
+                    )}
+                    {milestoneTasksAdded && (
+                      <div className="flex items-center gap-2 rounded-xl bg-emerald-50 px-3 py-2.5 dark:bg-emerald-500/[0.08]">
+                        <IconCheck size={13} strokeWidth={2.5} className="shrink-0 text-emerald-600 dark:text-emerald-400" />
+                        <p className="text-[13px] font-medium text-emerald-700 dark:text-emerald-300">Tasks added to your plan</p>
+                      </div>
+                    )}
+                    {postMilestoneTrackerSuggestion && !milestoneTrackerAdded && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          if (!postMilestoneTrackerSuggestion || !postMilestoneContext) return;
+                          const trackerId = uid();
+                          const { goalDirection, unit } = postMilestoneTrackerSuggestion;
+                          onAddTracker(plan.id, postMilestoneContext.title, unit, goalDirection, trackerId);
+                          onLinkTrackerToMilestone?.(postMilestoneContext.milestoneId, trackerId);
+                          setMilestoneTrackerAdded(true);
+                        }}
+                        className="w-full rounded-xl border border-violet-200 py-2.5 text-[13px] font-semibold text-violet-700 transition-colors hover:bg-violet-100 active:bg-violet-100 dark:border-violet-500/20 dark:text-violet-300 dark:hover:bg-violet-500/[0.1]"
+                      >
+                        📊 Add tracker: {postMilestoneContext.title} ({postMilestoneTrackerSuggestion.unit}{postMilestoneTrackerSuggestion.goalDirection === "decrease_good" ? " ↓" : " ↑"})
+                      </button>
+                    )}
+                    {postMilestoneTrackerSuggestion && milestoneTrackerAdded && (
+                      <div className="flex items-center gap-2 rounded-xl bg-emerald-50 px-3 py-2.5 dark:bg-emerald-500/[0.08]">
+                        <IconCheck size={13} strokeWidth={2.5} className="shrink-0 text-emerald-600 dark:text-emerald-400" />
+                        <p className="text-[13px] font-medium text-emerald-700 dark:text-emerald-300">Tracker added</p>
+                      </div>
+                    )}
+                    <button
+                      type="button"
+                      onClick={() => setPostMilestoneContext(null)}
+                      className="w-full rounded-xl py-2 text-[12px] font-medium text-neutral-400 transition-colors hover:text-neutral-600 dark:text-neutral-500 dark:hover:text-neutral-300"
+                    >
+                      Skip
+                    </button>
+                  </div>
+                </motion.div>
+              )}
+
               <div ref={chatEndRef} />
             </div>
 
@@ -1319,11 +1575,12 @@ export default function PlanDetailView({
                   <button
                     type="button"
                     onClick={() => setGenSheetOpen(true)}
-                    className="hidden lg:flex items-center gap-1.5 rounded-xl border border-violet-200 bg-violet-50 px-3 py-1.5 text-[12px] font-semibold active:scale-95 active:opacity-80 transition-transform duration-100 dark:border-violet-500/20 dark:bg-violet-500/10"
+                    className="group relative hidden overflow-hidden rounded-full border border-violet-500/40 bg-violet-500/[0.07] px-3 py-1.5 shadow-[0_0_8px_rgba(139,92,246,0.18)] transition-all active:scale-95 hover:border-violet-400/60 hover:shadow-[0_0_14px_rgba(139,92,246,0.35)] lg:flex dark:border-violet-500/30 dark:bg-violet-500/[0.06]"
                   >
-                    <IconSparkles size={13} strokeWidth={2} className="text-violet-500 dark:text-violet-400" />
-                    <span className="bg-gradient-to-r from-violet-600 to-pink-500 bg-clip-text text-transparent dark:from-violet-400 dark:to-pink-400">
-                      Plan with AI
+                    <div className="pointer-events-none absolute inset-0 -translate-x-full skew-x-[-15deg] bg-gradient-to-r from-transparent via-white/12 to-transparent transition-transform duration-700 group-hover:translate-x-[250%]" />
+                    <span className="relative flex items-center gap-1.5 text-[12px] font-semibold">
+                      <IconSparkles size={13} strokeWidth={2} className="text-violet-400" />
+                      <span className="bg-gradient-to-r from-violet-400 to-pink-400 bg-clip-text text-transparent">Plan with AI</span>
                     </span>
                   </button>
                 )}
@@ -1351,7 +1608,7 @@ export default function PlanDetailView({
           </div>
         </section>
 
-        {/* AI task generation sheet */}
+        {/* AI task generation sheet (plan-level) */}
         {ollamaUrl && ollamaModel && (
           <AIActionSheet
             open={genSheetOpen}
@@ -1373,6 +1630,29 @@ export default function PlanDetailView({
             onGenerate={genTasksStream}
             onParseResults={parseTaskResults}
             onAdd={commitTasks}
+          />
+        )}
+
+        {/* AI task generation sheet (milestone-scoped) */}
+        {ollamaUrl && ollamaModel && postMilestoneContext && (
+          <AIActionSheet
+            open={milestoneGenSheetOpen}
+            onClose={() => setMilestoneGenSheetOpen(false)}
+            title="Milestone Tasks"
+            contextLabel={`for "${postMilestoneContext.title}"`}
+            inputPlaceholder="Any focus area? e.g. mornings only, progressive load, quick wins…"
+            quickPicks={[
+              "Morning sessions",
+              "Spread across the week",
+              "Progressive build-up",
+              "Include checkpoints",
+            ]}
+            ctaLabel="Build Tasks"
+            resultSingular="task"
+            resultPlural="tasks"
+            onGenerate={genMilestoneTasksStream}
+            onParseResults={parseMilestoneTaskResults}
+            onAdd={commitMilestoneTasks}
           />
         )}
 

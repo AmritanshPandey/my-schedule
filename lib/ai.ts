@@ -83,16 +83,19 @@ After your conversational response, output a SINGLE JSON code block:
 The htmlContent must be a complete, self-contained HTML string. Escape any double-quotes inside it as \\". Only one JSON block per response.`,
 };
 
-export const PLAN_COACH_PROMPT = `You are an AI coach inside PlanR. Help the user develop and refine their plan through conversation.
+export const PLAN_COACH_PROMPT = `You are a coaching AI inside PlanR, dedicated exclusively to the user's plan.
 
-Be concise, supportive, and specific to the plan details provided. Ask one clarifying question at a time.
-When you have enough context to suggest milestones, include them as a JSON block at the END of your reply:
+RULES — follow these strictly:
+- STAY ON TOPIC: Every response must relate directly to this specific plan. If asked anything unrelated, redirect: "I'm here to coach you on this plan — let's keep our session focused."
+- BE CONCISE: 2–4 sentences per reply. No walls of text. End with exactly one question or one action.
+- BE SPECIFIC: Reference the plan's actual tasks, milestones, and dates in your replies. Avoid generic advice.
+- USE CONTEXT: Plan details, scheduled tasks, milestones, and trackers are provided below. Reference them.
+
+When you have enough context to suggest milestones, append this JSON at the END of your reply (never mid-reply):
 \`\`\`json
-{"type":"suggest_milestones","payload":{"milestones":[{"title":"Week 1: ...","description":"one sentence","targetDate":"YYYY-MM-DD"}]}}
+{"type":"suggest_milestones","payload":{"milestones":[{"title":"Short title","description":"one sentence","targetDate":"YYYY-MM-DD"}]}}
 \`\`\`
-Only output the JSON block when you have enough context to make specific suggestions.
-Suggest 3–5 milestones spaced across the plan duration. Keep milestone titles concise (3–6 words).
-ONE JSON block maximum per reply. Do not explain the JSON.`;
+Only when context is sufficient. 3–5 milestones. Keep titles 3–6 words. ONE JSON block. Do not explain it.`;
 
 export function buildPlanContext(plan: Plan | undefined): string {
   if (!plan) return "";
@@ -101,6 +104,63 @@ export function buildPlanContext(plan: Plan | undefined): string {
   if (plan.startDate) parts.push(`Started: ${plan.startDate}`);
   if (plan.endDate) parts.push(`Target end: ${plan.endDate}`);
   return parts.join(". ");
+}
+
+export function buildCoachContext(
+  plan: Plan,
+  opts: {
+    tasks?: Array<{ task: { title: string; startTime: string; endTime: string }; activeDays: string[] }>;
+    milestones?: Array<{
+      title: string;
+      status: string;
+      plannedEndDate?: string;
+      targetDate?: string;
+      linkedActivities?: string[];
+      linkedTrackers?: string[];
+    }>;
+    trackers?: Array<{ title: string; unit?: string; goalDirection?: string; goalValue?: number }>;
+  } = {},
+): string {
+  const parts: string[] = [];
+
+  const basic = [`Plan: "${plan.title}"`, `Category: ${plan.category}`];
+  if (plan.description) basic.push(`Description: ${plan.description}`);
+  if (plan.startDate) basic.push(`Start: ${plan.startDate}`);
+  if (plan.endDate) basic.push(`End: ${plan.endDate}`);
+  parts.push(basic.join(". "));
+
+  if (opts.tasks && opts.tasks.length > 0) {
+    const lines = opts.tasks.slice(0, 8).map(({ task, activeDays }) =>
+      `- ${task.title} (${activeDays.join("/")}, ${task.startTime}–${task.endTime})`
+    );
+    parts.push(`Scheduled activities:\n${lines.join("\n")}`);
+  }
+
+  if (opts.milestones && opts.milestones.length > 0) {
+    const lines = opts.milestones.map((m) => {
+      const date = m.plannedEndDate || m.targetDate || "";
+      const taskCount = m.linkedActivities?.length ?? 0;
+      const trackerCount = m.linkedTrackers?.length ?? 0;
+      const linked =
+        taskCount > 0 || trackerCount > 0
+          ? ` — ${taskCount} task${taskCount !== 1 ? "s" : ""} linked, ${trackerCount} tracker${trackerCount !== 1 ? "s" : ""} linked`
+          : " — no tasks yet";
+      return `- [${m.status}] ${m.title}${date ? ` → ${date}` : ""}${linked}`;
+    });
+    parts.push(`Milestones:\n${lines.join("\n")}`);
+  }
+
+  if (opts.trackers && opts.trackers.length > 0) {
+    const lines = opts.trackers.map((t) => {
+      const goal = t.goalValue !== undefined
+        ? `goal ${t.goalValue}${t.unit ? ` ${t.unit}` : ""}`
+        : t.goalDirection === "increase_good" ? "trending up" : "trending down";
+      return `- ${t.title}${t.unit ? ` (${t.unit})` : ""}: ${goal}`;
+    });
+    parts.push(`Trackers:\n${lines.join("\n")}`);
+  }
+
+  return parts.join("\n\n");
 }
 
 export function buildSystemPrompt(

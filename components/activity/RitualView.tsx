@@ -11,6 +11,9 @@ import {
   IconSunrise,
   IconSunset,
   IconTrash,
+  IconCalendarEvent,
+  IconChartLine,
+  IconFlame,
 } from "@tabler/icons-react";
 import type { Ritual, RitualColor, RitualCompletion, DayKey } from "@/lib/useScheduleDB";
 import { DAYS } from "@/lib/useScheduleDB";
@@ -225,7 +228,7 @@ export default function RitualView({
 
   return (
     <>
-      <div className="px-4 pb-6 pt-6 lg:px-0 lg:pb-6 lg:pt-5">
+      <div className="px-4 pb-6 pt-6 lg:px-8 lg:pb-10 lg:pt-6 lg:max-w-4xl">
 
         {/* ── Header ───────────────────────────────────────────────────────── */}
         <MainTitleSection
@@ -300,13 +303,19 @@ export default function RitualView({
         {rituals.length > 0 && (
           <div className="hidden lg:grid lg:grid-cols-3 gap-3 mb-5">
             <div className="rounded-2xl border border-neutral-200 bg-white px-4 py-3.5 dark:border-white/[0.08] dark:bg-neutral-900">
-              <p className="text-[11px] font-semibold uppercase tracking-wider text-neutral-400 dark:text-neutral-500">Showing</p>
-              <p className="mt-1 text-[28px] font-black tabular-nums leading-none text-neutral-900 dark:text-white">{total}</p>
+              <div className="flex items-center gap-1.5 mb-1">
+                <IconCalendarEvent size={12} strokeWidth={2} className="text-neutral-400 dark:text-neutral-500" />
+                <p className="text-[11px] font-semibold uppercase tracking-wider text-neutral-400 dark:text-neutral-500">Showing</p>
+              </div>
+              <p className="text-[28px] font-black tabular-nums leading-none text-neutral-900 dark:text-white">{total}</p>
               <p className="mt-0.5 text-[12px] text-neutral-400 dark:text-neutral-500">for {DAY_SHORT[selectedDay]}</p>
             </div>
             <div className={`rounded-2xl border px-4 py-3.5 ${allDone && showProgress ? "border-emerald-200 bg-emerald-50 dark:border-emerald-500/20 dark:bg-emerald-500/[0.07]" : "border-neutral-200 bg-white dark:border-white/[0.08] dark:bg-neutral-900"}`}>
-              <p className="text-[11px] font-semibold uppercase tracking-wider text-neutral-400 dark:text-neutral-500">Today</p>
-              <p className={`mt-1 text-[28px] font-black tabular-nums leading-none ${allDone && showProgress ? "text-emerald-600 dark:text-emerald-400" : "text-neutral-900 dark:text-white"}`}>
+              <div className="flex items-center gap-1.5 mb-1">
+                <IconCheck size={12} strokeWidth={2.5} className={allDone && showProgress ? "text-emerald-500" : "text-neutral-400 dark:text-neutral-500"} />
+                <p className="text-[11px] font-semibold uppercase tracking-wider text-neutral-400 dark:text-neutral-500">Today</p>
+              </div>
+              <p className={`text-[28px] font-black tabular-nums leading-none ${allDone && showProgress ? "text-emerald-600 dark:text-emerald-400" : "text-neutral-900 dark:text-white"}`}>
                 {pct}<span className="text-[16px] font-bold">%</span>
               </p>
               <p className={`mt-0.5 text-[12px] ${allDone && showProgress ? "text-emerald-600/70 dark:text-emerald-500/70" : "text-neutral-400 dark:text-neutral-500"}`}>
@@ -315,16 +324,22 @@ export default function RitualView({
             </div>
             {weekAvg !== null ? (
               <div className="rounded-2xl border border-neutral-200 bg-white px-4 py-3.5 dark:border-white/[0.08] dark:bg-neutral-900">
-                <p className="text-[11px] font-semibold uppercase tracking-wider text-neutral-400 dark:text-neutral-500">7-day avg</p>
-                <p className="mt-1 text-[28px] font-black tabular-nums leading-none text-neutral-900 dark:text-white">
+                <div className="flex items-center gap-1.5 mb-1">
+                  <IconChartLine size={12} strokeWidth={2} className="text-neutral-400 dark:text-neutral-500" />
+                  <p className="text-[11px] font-semibold uppercase tracking-wider text-neutral-400 dark:text-neutral-500">7-day avg</p>
+                </div>
+                <p className="text-[28px] font-black tabular-nums leading-none text-neutral-900 dark:text-white">
                   {weekAvg}<span className="text-[16px] font-bold">%</span>
                 </p>
                 <p className="mt-0.5 text-[12px] text-neutral-400 dark:text-neutral-500">completion rate</p>
               </div>
             ) : (
               <div className="rounded-2xl border border-neutral-200 bg-white px-4 py-3.5 dark:border-white/[0.08] dark:bg-neutral-900">
-                <p className="text-[11px] font-semibold uppercase tracking-wider text-neutral-400 dark:text-neutral-500">Streak</p>
-                <p className="mt-1 text-[28px] font-black tabular-nums leading-none text-neutral-900 dark:text-white">—</p>
+                <div className="flex items-center gap-1.5 mb-1">
+                  <IconFlame size={12} strokeWidth={2} className="text-neutral-400 dark:text-neutral-500" />
+                  <p className="text-[11px] font-semibold uppercase tracking-wider text-neutral-400 dark:text-neutral-500">Streak</p>
+                </div>
+                <p className="text-[28px] font-black tabular-nums leading-none text-neutral-900 dark:text-white">—</p>
                 <p className="mt-0.5 text-[12px] text-neutral-400 dark:text-neutral-500">complete more days</p>
               </div>
             )}

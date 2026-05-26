@@ -10,12 +10,14 @@ import { PlanCard } from "@/components/plan/PlanCard";
 import AppHeader from "@/components/AppHeader";
 import BottomNav from "@/components/BottomNav";
 import DesktopSidebar from "@/components/desktop/DesktopSidebar";
+import ThemeToggle from "@/components/ThemeToggle";
 import { WeekGrid } from "@/components/desktop/WeekGrid";
 import { QuickAddPanel } from "@/components/desktop/QuickAddPanel";
 import { OLLAMA_URL_KEY, OLLAMA_MODEL_KEY, DEFAULT_OLLAMA_URL, DEFAULT_OLLAMA_MODEL } from "@/lib/ai";
 
 // ── Deferred heavy components (separate JS chunks, loaded on demand) ──────────
 const PlanDetailView = dynamic(() => import("@/components/plan/PlanDetailView"), { ssr: false });
+const AIPlanCreatorSheet = dynamic(() => import("@/components/plan/AIPlanCreatorSheet"), { ssr: false });
 const SettingsSheet = dynamic(() => import("@/components/auth/SettingsSheet").then(m => ({ default: m.SettingsSheet })), { ssr: false });
 const TemplatesSheet = dynamic(() => import("@/components/TemplatesSheet").then(m => ({ default: m.TemplatesSheet })), { ssr: false });
 const SessionSheet = dynamic(() => import("@/components/activity/SessionSheet"), { ssr: false });
@@ -40,7 +42,9 @@ import {
 import RitualOverlayLayer from "@/components/timeline/RitualOverlayLayer";
 import {
   colorFromIcon,
+  resolveAccentColor,
   timelineCardStyles,
+  type AccentColor,
 } from "@/lib/colorSystem";
 import { SECTION_ICONS, getIconPickerStyle } from "@/components/SectionIcons";
 import {
@@ -53,9 +57,13 @@ import {
   IconLayoutList,
   IconMinus,
   IconPlus,
+  IconSparkles,
   IconTable,
   IconTrash,
   IconX,
+  IconAlertTriangle,
+  IconAlertCircle,
+  IconClipboardData,
 } from "@tabler/icons-react";
 import { DndContext, DragEndEvent, PointerSensor, useSensor, useSensors } from "@dnd-kit/core";
 import { arrayMove, SortableContext, useSortable, verticalListSortingStrategy } from "@dnd-kit/sortable";
@@ -223,6 +231,69 @@ function getWeekDates(offset: number): Array<{ day: DayKey; date: Date }> {
     d.setDate(monday.getDate() + i);
     return { day, date: d };
   });
+}
+
+// ─── Stat tile ───────────────────────────────────────────────────────────────
+
+type StatTileColorScheme = "neutral" | "emerald" | "amber" | "rose";
+
+const STAT_TILE_STYLES: Record<
+  StatTileColorScheme,
+  { tile: string; iconBg: string; icon: string; value: string; label: string }
+> = {
+  neutral: {
+    tile:    "border-neutral-200 bg-white dark:border-white/[0.08] dark:bg-neutral-900",
+    iconBg:  "bg-neutral-100 dark:bg-white/[0.06]",
+    icon:    "text-neutral-500 dark:text-neutral-400",
+    value:   "text-neutral-900 dark:text-white",
+    label:   "text-neutral-400 dark:text-neutral-500",
+  },
+  emerald: {
+    tile:    "border-emerald-200 bg-emerald-50 dark:border-emerald-500/20 dark:bg-emerald-500/[0.07]",
+    iconBg:  "bg-emerald-100 dark:bg-emerald-500/[0.15]",
+    icon:    "text-emerald-600 dark:text-emerald-400",
+    value:   "text-emerald-700 dark:text-emerald-400",
+    label:   "text-emerald-600/70 dark:text-emerald-500/70",
+  },
+  amber: {
+    tile:    "border-amber-200 bg-amber-50 dark:border-amber-500/20 dark:bg-amber-500/[0.07]",
+    iconBg:  "bg-amber-100 dark:bg-amber-500/[0.15]",
+    icon:    "text-amber-600 dark:text-amber-400",
+    value:   "text-amber-700 dark:text-amber-400",
+    label:   "text-amber-600/70 dark:text-amber-500/70",
+  },
+  rose: {
+    tile:    "border-rose-200 bg-rose-50 dark:border-rose-500/20 dark:bg-rose-500/[0.07]",
+    iconBg:  "bg-rose-100 dark:bg-rose-500/[0.15]",
+    icon:    "text-rose-600 dark:text-rose-400",
+    value:   "text-rose-700 dark:text-rose-400",
+    label:   "text-rose-600/70 dark:text-rose-500/70",
+  },
+};
+
+function StatTile({
+  icon: Icon,
+  value,
+  label,
+  colorScheme = "neutral",
+}: {
+  icon: React.ComponentType<{ size?: number; strokeWidth?: number; className?: string }>;
+  value: number;
+  label: string;
+  colorScheme?: StatTileColorScheme;
+}) {
+  const s = STAT_TILE_STYLES[colorScheme];
+  return (
+    <div className={`flex items-center gap-3 rounded-2xl border px-4 py-3 ${s.tile}`}>
+      <div className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-xl ${s.iconBg}`}>
+        <Icon size={17} strokeWidth={colorScheme === "neutral" ? 1.8 : 2} className={s.icon} />
+      </div>
+      <div>
+        <p className={`text-[24px] font-black tabular-nums leading-none ${s.value}`}>{value}</p>
+        <p className={`mt-0.5 text-[11px] font-semibold ${s.label}`}>{label}</p>
+      </div>
+    </div>
+  );
 }
 
 // ─── Sortable wrappers ────────────────────────────────────────────────────────
@@ -404,6 +475,7 @@ export default function ScheduleApp() {
   const [taskSheetInitialType, setTaskSheetInitialType] = useState<"task" | "session">("task");
 
   const [addingPlan, setAddingPlan] = useState(false);
+  const [aiPlanCreating, setAiPlanCreating] = useState(false);
   const [newPlanTitle, setNewPlanTitle] = useState("");
   const [newPlanDescription, setNewPlanDescription] = useState("");
   const [newPlanStartDate, setNewPlanStartDate] = useState("");
@@ -715,14 +787,17 @@ export default function ScheduleApp() {
     });
   }
 
-  function handleAddGeneratedTasks(tasks: AIGeneratedTask[], planId: string) {
+  function handleAddGeneratedTasks(tasks: AIGeneratedTask[], planId: string, milestoneId?: string) {
     const plan = schedule.plans.find((p) => p.id === planId);
     if (!plan) return;
     setSchedule((prev) => {
       const updatedActivities = { ...prev.activities };
+      const newTaskIds: string[] = [];
       for (const t of tasks) {
+        const taskId = uid();
+        newTaskIds.push(taskId);
         const task: Task = {
-          id: uid(),
+          id: taskId,
           title: t.title,
           startTime: t.startTime,
           endTime: t.endTime,
@@ -733,8 +808,26 @@ export default function ScheduleApp() {
         };
         updatedActivities[t.day] = [...(updatedActivities[t.day] ?? []), task];
       }
-      return { ...prev, activities: updatedActivities };
+      const updatedMilestones = milestoneId
+        ? (prev.milestones ?? []).map((m) =>
+            m.id === milestoneId
+              ? { ...m, linkedActivities: [...(m.linkedActivities ?? []), ...newTaskIds] }
+              : m
+          )
+        : (prev.milestones ?? []);
+      return { ...prev, activities: updatedActivities, milestones: updatedMilestones };
     });
+  }
+
+  function handleLinkTrackerToMilestone(milestoneId: string, trackerId: string) {
+    setSchedule((prev) => ({
+      ...prev,
+      milestones: (prev.milestones ?? []).map((m) =>
+        m.id === milestoneId
+          ? { ...m, linkedTrackers: [...new Set([...(m.linkedTrackers ?? []), trackerId])] }
+          : m
+      ),
+    }));
   }
 
   function handleDeletePlan(planId: string) {
@@ -811,6 +904,43 @@ export default function ScheduleApp() {
     setAddingPlan(true);
   }
 
+  function handleCreateAIPlan(data: import("@/components/plan/AIPlanCreatorSheet").AIPlanCreatorData) {
+    const planId = uid();
+    const plan: Plan = {
+      id: planId,
+      title: data.title,
+      description: data.description || undefined,
+      startDate: data.startDate || undefined,
+      endDate: data.endDate || undefined,
+      category: categoryFromIcon(data.emoji),
+      emoji: data.emoji,
+      color: resolveAccentColor(data.color, data.emoji),
+      items: [],
+      metaFields: [],
+      summary: [],
+    };
+    setSchedule((prev) => {
+      const updatedActivities = { ...prev.activities };
+      for (const t of data.tasks) {
+        const task: Task = {
+          id: uid(),
+          title: t.title,
+          startTime: t.startTime,
+          endTime: t.endTime,
+          icon: t.icon || plan.emoji,
+          color: colorFromIcon(t.icon) ?? plan.color ?? "cyan",
+          planId,
+          subtasks: (t.subtasks ?? []).map((s) => ({ id: uid(), task: s })),
+        };
+        const day = t.day as DayKey;
+        updatedActivities[day] = [...(updatedActivities[day] ?? []), task];
+      }
+      return { ...prev, plans: [...prev.plans, plan], activities: updatedActivities };
+    });
+    setAiPlanCreating(false);
+    setSelectedPlanId(planId);
+  }
+
   function handleDeleteTracker(trackerId: string) {
     const tracker = schedule.progressTrackers.find((t) => t.id === trackerId);
     openConfirm(
@@ -875,7 +1005,7 @@ export default function ScheduleApp() {
     const now = new Date().toISOString();
     const ms: Milestone = {
       ...data,
-      id: uid(),
+      id: data.id ?? uid(),
       planId,
       linkedActivities: data.linkedActivities ?? [],
       linkedTrackers: data.linkedTrackers ?? [],
@@ -1536,11 +1666,26 @@ export default function ScheduleApp() {
           label="Stay on track"
           title="My Plans"
           actions={
-            <CtaActionButton
-              label="Add New Plan"
-              icon={<IconPlus size={14} strokeWidth={2.5} />}
-              onClick={() => setAddingPlan(true)}
-            />
+            <div className="flex items-center gap-2">
+              {ollamaUrl && ollamaModel && (
+                <button
+                  type="button"
+                  onClick={() => setAiPlanCreating(true)}
+                  className="ai-btn group relative overflow-hidden rounded-full border border-violet-500/50 bg-violet-500/10 px-4 py-2.5 shadow-[0_0_14px_rgba(139,92,246,0.25)] transition-all active:scale-[0.97] hover:border-violet-400/70 hover:shadow-[0_0_22px_rgba(139,92,246,0.45)] dark:border-violet-500/40 dark:bg-violet-500/[0.08]"
+                >
+                  <div className="pointer-events-none absolute inset-0 -translate-x-full skew-x-[-15deg] bg-gradient-to-r from-transparent via-white/15 to-transparent transition-transform duration-700 group-hover:translate-x-[250%]" />
+                  <span className="relative flex items-center gap-2 text-[13px] font-bold">
+                    <IconSparkles size={14} strokeWidth={2} className="text-violet-400 dark:text-violet-400" />
+                    <span className="bg-gradient-to-r from-violet-400 to-pink-400 bg-clip-text text-transparent">Plan with AI</span>
+                  </span>
+                </button>
+              )}
+              <CtaActionButton
+                label="Add New Plan"
+                icon={<IconPlus size={14} strokeWidth={2.5} />}
+                onClick={() => setAddingPlan(true)}
+              />
+            </div>
           }
           className="mb-6"
         />
@@ -1548,26 +1693,10 @@ export default function ScheduleApp() {
         {/* Desktop stat strip */}
         {schedule.plans.length > 0 && (
           <div className="hidden lg:flex gap-3 mb-7">
-            <div className="flex items-center gap-2.5 rounded-2xl border border-neutral-200 bg-white px-4 py-3 dark:border-white/[0.08] dark:bg-neutral-900">
-              <span className="text-[22px] font-black tabular-nums text-neutral-900 dark:text-white leading-none">{schedule.plans.length}</span>
-              <span className="text-[12px] font-semibold text-neutral-400 dark:text-neutral-500 leading-tight">Total<br/>Plans</span>
-            </div>
-            <div className="flex items-center gap-2.5 rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-3 dark:border-emerald-500/20 dark:bg-emerald-500/[0.07]">
-              <span className="text-[22px] font-black tabular-nums text-emerald-700 dark:text-emerald-400 leading-none">{onTrackCount}</span>
-              <span className="text-[12px] font-semibold text-emerald-600/70 dark:text-emerald-500/70 leading-tight">On<br/>Track</span>
-            </div>
-            {atRiskCount > 0 && (
-              <div className="flex items-center gap-2.5 rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 dark:border-amber-500/20 dark:bg-amber-500/[0.07]">
-                <span className="text-[22px] font-black tabular-nums text-amber-700 dark:text-amber-400 leading-none">{atRiskCount}</span>
-                <span className="text-[12px] font-semibold text-amber-600/70 dark:text-amber-500/70 leading-tight">At<br/>Risk</span>
-              </div>
-            )}
-            {needsWorkCount > 0 && (
-              <div className="flex items-center gap-2.5 rounded-2xl border border-rose-200 bg-rose-50 px-4 py-3 dark:border-rose-500/20 dark:bg-rose-500/[0.07]">
-                <span className="text-[22px] font-black tabular-nums text-rose-700 dark:text-rose-400 leading-none">{needsWorkCount}</span>
-                <span className="text-[12px] font-semibold text-rose-600/70 dark:text-rose-500/70 leading-tight">Needs<br/>Focus</span>
-              </div>
-            )}
+            <StatTile icon={IconClipboardData} value={schedule.plans.length} label="Total Plans" colorScheme="neutral" />
+            <StatTile icon={IconCheck}         value={onTrackCount}           label="On Track"    colorScheme="emerald" />
+            {atRiskCount   > 0 && <StatTile icon={IconAlertTriangle} value={atRiskCount}   label="At Risk"     colorScheme="amber" />}
+            {needsWorkCount > 0 && <StatTile icon={IconAlertCircle}  value={needsWorkCount} label="Needs Focus" colorScheme="rose"  />}
           </div>
         )}
 
@@ -2171,13 +2300,13 @@ export default function ScheduleApp() {
               onAddTask={(planId) => openCreateSheet(planId)}
               onEditTask={(task) => openEditSheet(task)}
               onDeleteLinkedTask={handleDeleteLinkedTask}
-              onAddTracker={(planId, title, unit, goalDirection) => {
+              onAddTracker={(planId, title, unit, goalDirection, id) => {
                 setSchedule((prev) => ({
                   ...prev,
                   progressTrackers: [
                     ...prev.progressTrackers,
                     {
-                      id: uid(),
+                      id: id ?? uid(),
                       planId,
                       title,
                       type: "number",
@@ -2207,6 +2336,7 @@ export default function ScheduleApp() {
               ollamaUrl={ollamaUrl}
               ollamaModel={ollamaModel}
               onAddGeneratedTasks={handleAddGeneratedTasks}
+              onLinkTrackerToMilestone={handleLinkTrackerToMilestone}
             />
           ) : renderPlanList()}
           </div>
@@ -2342,6 +2472,16 @@ export default function ScheduleApp() {
         {renderAddPlanSheet()}
       </BottomSheet>
 
+      {/* ── AI Plan Creator Sheet ──────────────────────────────────────────── */}
+      <AIPlanCreatorSheet
+        open={aiPlanCreating}
+        onClose={() => setAiPlanCreating(false)}
+        onCreatePlan={handleCreateAIPlan}
+        ollamaUrl={ollamaUrl}
+        ollamaModel={ollamaModel}
+        existingPlans={schedule.plans.map((p) => ({ title: p.title, category: p.category, description: p.description }))}
+      />
+
       {/* ── Bottom Nav (mobile only) ───────────────────────────────────────── */}
       <div className="lg:hidden">
         <BottomNav
@@ -2441,6 +2581,11 @@ export default function ScheduleApp() {
         )}
       </AnimatePresence>
       </div>{/* end main scrollable column */}
+
+      {/* ── Theme toggle FAB — desktop only ────────────────────────────────── */}
+      <div className="fixed bottom-6 right-6 z-50 hidden lg:block">
+        <ThemeToggle />
+      </div>
 
     </main>
   );
