@@ -28,6 +28,7 @@ import {
   DEFAULT_OLLAMA_URL,
   DEFAULT_OLLAMA_MODEL,
 } from "@/lib/ai";
+import MilestoneTimeline from "@/components/MilestoneTimeline";
 
 // ── Shared type (mirrored from ScheduleApp.tsx) ───────────────────────────────
 
@@ -897,6 +898,10 @@ export default function ReviewView({ schedule, todayKey, ritualWeekHistory }: Re
         <ExecutionTrendSection schedule={schedule} />
         <HabitConsistencySection schedule={schedule} ritualWeekHistory={ritualWeekHistory} />
         <PlanHealthSection schedule={schedule} todayKey={todayKey} />
+      </div>
+      {/* Milestone Roadmap — full width */}
+      <div className="mb-4">
+        <MilestoneTimeline schedule={schedule} />
       </div>
       {/* Metrics Log — full width */}
       <MetricsLogSection schedule={schedule} />
