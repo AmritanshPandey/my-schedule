@@ -928,7 +928,7 @@ export default function ScheduleApp() {
           startTime: t.startTime,
           endTime: t.endTime,
           icon: t.icon || plan.emoji,
-          color: resolveAccentColor(colorFromIcon(t.icon ?? ""), plan.color ?? "cyan"),
+          color: colorFromIcon(t.icon) ?? plan.color ?? "cyan",
           planId,
           subtasks: (t.subtasks ?? []).map((s) => ({ id: uid(), task: s })),
         };

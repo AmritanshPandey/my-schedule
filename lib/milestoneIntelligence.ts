@@ -65,7 +65,7 @@ const INCREASE_KEYWORDS = [
 // ── Pattern: number followed by unit (e.g. "5kg", "10 reps", "30 minutes") ──
 
 const MEASURABLE_PATTERN =
-  /(\d+(?:\.\d+)?)\s*(kgs?|kilograms?|lbs?|pounds?|kms?|kilometers?|miles?|mi|mins?|minutes?|hrs?|hours?|reps?|sets?|steps?|pages?|books?|%|x|times?)\b/i;
+  /(\d+(?:\.\d+)?)\s*(kgs?|kilograms?|lbs?|pounds?|kms?|kilometers?|miles?|mi|mins?|minutes?|hrs?|hours?|reps?|sets?|steps?|pages?|books?|%|x|times?)(?:\b|(?=\s|$))/i;
 
 function normalizeUnit(raw: string): string {
   return UNIT_MAP[raw.toLowerCase()] ?? raw.toLowerCase();

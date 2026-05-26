@@ -152,7 +152,7 @@ export function buildCoachContext(
 
   if (opts.trackers && opts.trackers.length > 0) {
     const lines = opts.trackers.map((t) => {
-      const goal = t.goalValue
+      const goal = t.goalValue !== undefined
         ? `goal ${t.goalValue}${t.unit ? ` ${t.unit}` : ""}`
         : t.goalDirection === "increase_good" ? "trending up" : "trending down";
       return `- ${t.title}${t.unit ? ` (${t.unit})` : ""}: ${goal}`;
