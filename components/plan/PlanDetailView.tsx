@@ -1564,51 +1564,7 @@ export default function PlanDetailView({
         transition={{ duration: 0.2, ease: "easeOut" }}
       >
 
-        {/* B. Planned Tasks */}
-        <section className="mt-8 px-4">
-          <InternalSectionTitle
-            title="Planned Tasks"
-            className="mb-4"
-            actions={
-              <div className="flex items-center gap-1">
-                {ollamaUrl && ollamaModel && onAddGeneratedTasks && (
-                  <button
-                    type="button"
-                    onClick={() => setGenSheetOpen(true)}
-                    className="group relative hidden overflow-hidden rounded-full border border-violet-500/40 bg-violet-500/[0.07] px-3 py-1.5 shadow-[0_0_8px_rgba(139,92,246,0.18)] transition-all active:scale-95 hover:border-violet-400/60 hover:shadow-[0_0_14px_rgba(139,92,246,0.35)] lg:flex dark:border-violet-500/30 dark:bg-violet-500/[0.06]"
-                  >
-                    <div className="pointer-events-none absolute inset-0 -translate-x-full skew-x-[-15deg] bg-gradient-to-r from-transparent via-white/12 to-transparent transition-transform duration-700 group-hover:translate-x-[250%]" />
-                    <span className="relative flex items-center gap-1.5 text-[12px] font-semibold">
-                      <IconSparkles size={13} strokeWidth={2} className="text-violet-400" />
-                      <span className="bg-gradient-to-r from-violet-400 to-pink-400 bg-clip-text text-transparent">Plan with AI</span>
-                    </span>
-                  </button>
-                )}
-                <SectionIconButton
-                  icon={<IconPlus size={20} strokeWidth={2} />}
-                  onClick={() => onAddTask(plan.id)}
-                  label="Add task"
-                />
-              </div>
-            }
-          />
-
-          <div className="rounded-[24px] border border-neutral-200 bg-white px-4 dark:border-white/[0.08] dark:bg-neutral-900">
-            {uniqueTasks.length === 0 ? (
-              <div className="py-10 text-center">
-                <p className="text-[14px] font-medium text-neutral-400 dark:text-neutral-500 max-w-[220px] mx-auto">
-                  Link tasks to this plan to keep everything connected.
-                </p>
-              </div>
-            ) : (
-              uniqueTasks.map(({ task, activeDays }) =>
-                renderLinkedTaskRow(task, activeDays)
-              )
-            )}
-          </div>
-        </section>
-
-        {/* AI task generation sheet (plan-level) */}
+        {/* AI sheets — rendered as overlays, position in tree doesn't matter */}
         {ollamaUrl && ollamaModel && (
           <AIActionSheet
             open={genSheetOpen}
@@ -1632,8 +1588,6 @@ export default function PlanDetailView({
             onAdd={commitTasks}
           />
         )}
-
-        {/* AI task generation sheet (milestone-scoped) */}
         {ollamaUrl && ollamaModel && postMilestoneContext && (
           <AIActionSheet
             open={milestoneGenSheetOpen}
@@ -1656,71 +1610,127 @@ export default function PlanDetailView({
           />
         )}
 
-        {/* B. Accuracy Calendar */}
-        <section className="mt-8 px-4">
-          <AccuracyCalendar
-            planId={plan.id}
-            activities={schedule.activities}
-            planStartDate={plan.startDate}
-            planEndDate={plan.endDate}
-            onAddTask={() => onAddTask(plan.id)}
-          />
-        </section>
+        {/* 2-column grid on desktop: left = tasks + tracking, right = accuracy */}
+        <div className="mt-8 lg:grid lg:grid-cols-2 lg:gap-6 lg:px-4">
 
-        {/* C. Progress Tracking */}
-        <section className="mt-8 px-4">
-          <InternalSectionTitle
-            title="Progress Tracking"
-            className="mb-4"
-            actions={
-              <>
-                <SectionIconButton
-                  icon={<IconPlus size={20} strokeWidth={2} />}
-                  onClick={() => setAddingTracker(true)}
-                  label="Add tracker"
-                />
-                {trackers.length > 0 && (
-                  <SectionIconButton
-                    icon={<IconEdit size={20} strokeWidth={2} />}
-                    saveIcon={<IconCheck size={20} strokeWidth={2} />}
-                    saving={trackersEditMode}
-                    onClick={() => setTrackersEditMode((v) => !v)}
-                    label={trackersEditMode ? "Done editing" : "Edit trackers"}
-                  />
+          {/* ── LEFT column: Planned Tasks + Progress Tracking ── */}
+          <div className="flex flex-col gap-8">
+
+            {/* Planned Tasks */}
+            <section className="px-4 lg:px-0">
+              <InternalSectionTitle
+                title="Planned Tasks"
+                className="mb-4"
+                actions={
+                  <div className="flex items-center gap-1">
+                    {ollamaUrl && ollamaModel && onAddGeneratedTasks && (
+                      <button
+                        type="button"
+                        onClick={() => setGenSheetOpen(true)}
+                        className="group relative hidden overflow-hidden rounded-full border border-violet-500/40 bg-violet-500/[0.07] px-3 py-1.5 shadow-[0_0_8px_rgba(139,92,246,0.18)] transition-all active:scale-95 hover:border-violet-400/60 hover:shadow-[0_0_14px_rgba(139,92,246,0.35)] lg:flex dark:border-violet-500/30 dark:bg-violet-500/[0.06]"
+                      >
+                        <div className="pointer-events-none absolute inset-0 -translate-x-full skew-x-[-15deg] bg-gradient-to-r from-transparent via-white/12 to-transparent transition-transform duration-700 group-hover:translate-x-[250%]" />
+                        <span className="relative flex items-center gap-1.5 text-[12px] font-semibold">
+                          <IconSparkles size={13} strokeWidth={2} className="text-violet-400" />
+                          <span className="bg-gradient-to-r from-violet-400 to-pink-400 bg-clip-text text-transparent">Plan with AI</span>
+                        </span>
+                      </button>
+                    )}
+                    <SectionIconButton
+                      icon={<IconPlus size={20} strokeWidth={2} />}
+                      onClick={() => onAddTask(plan.id)}
+                      label="Add task"
+                    />
+                  </div>
+                }
+              />
+
+              <div className="rounded-[24px] border border-neutral-200 bg-white px-4 dark:border-white/[0.08] dark:bg-neutral-900">
+                {uniqueTasks.length === 0 ? (
+                  <div className="py-10 text-center">
+                    <p className="text-[14px] font-medium text-neutral-400 dark:text-neutral-500 max-w-[220px] mx-auto">
+                      Link tasks to this plan to keep everything connected.
+                    </p>
+                  </div>
+                ) : (
+                  uniqueTasks.map(({ task, activeDays }) =>
+                    renderLinkedTaskRow(task, activeDays)
+                  )
                 )}
-              </>
-            }
-          />
+              </div>
+            </section>
 
-          {trackers.length === 0 ? (
-            <div className="rounded-[24px] border border-dashed border-neutral-200 py-10 text-center dark:border-white/[0.08]">
-              <p className="text-[14px] font-medium text-neutral-400 dark:text-neutral-500">
-                No progress trackers yet.
-              </p>
-              <button
-                type="button"
-                onClick={() => setAddingTracker(true)}
-                className="mt-3 inline-flex items-center gap-1.5 rounded-xl border border-neutral-200 px-4 py-2 text-[13px] font-semibold text-neutral-600 hover:bg-neutral-50 dark:border-white/10 dark:text-neutral-400 dark:hover:bg-white/[0.04] transition-colors"
-              >
-                <IconPlus size={16} strokeWidth={2} />
-                Create Tracker
-              </button>
-            </div>
-          ) : (
-            <>
-              {trackers.length > 1 && selectedTrackerId && (
-                <div className="mb-4">
-                  <TrackerTabs
-                    tabs={trackers.map((t) => ({ id: t.id, label: t.title }))}
-                    activeId={selectedTrackerId}
-                    onChange={setSelectedTrackerId}
-                  />
+            {/* Progress Tracking */}
+            <section className="px-4 lg:px-0">
+              <InternalSectionTitle
+                title="Progress Tracking"
+                className="mb-4"
+                actions={
+                  <>
+                    <SectionIconButton
+                      icon={<IconPlus size={20} strokeWidth={2} />}
+                      onClick={() => setAddingTracker(true)}
+                      label="Add tracker"
+                    />
+                    {trackers.length > 0 && (
+                      <SectionIconButton
+                        icon={<IconEdit size={20} strokeWidth={2} />}
+                        saveIcon={<IconCheck size={20} strokeWidth={2} />}
+                        saving={trackersEditMode}
+                        onClick={() => setTrackersEditMode((v) => !v)}
+                        label={trackersEditMode ? "Done editing" : "Edit trackers"}
+                      />
+                    )}
+                  </>
+                }
+              />
+
+              {trackers.length === 0 ? (
+                <div className="rounded-[24px] border border-dashed border-neutral-200 py-10 text-center dark:border-white/[0.08]">
+                  <p className="text-[14px] font-medium text-neutral-400 dark:text-neutral-500">
+                    No progress trackers yet.
+                  </p>
+                  <button
+                    type="button"
+                    onClick={() => setAddingTracker(true)}
+                    className="mt-3 inline-flex items-center gap-1.5 rounded-xl border border-neutral-200 px-4 py-2 text-[13px] font-semibold text-neutral-600 hover:bg-neutral-50 dark:border-white/10 dark:text-neutral-400 dark:hover:bg-white/[0.04] transition-colors"
+                  >
+                    <IconPlus size={16} strokeWidth={2} />
+                    Create Tracker
+                  </button>
                 </div>
+              ) : (
+                <>
+                  {trackers.length > 1 && selectedTrackerId && (
+                    <div className="mb-4">
+                      <TrackerTabs
+                        tabs={trackers.map((t) => ({ id: t.id, label: t.title }))}
+                        activeId={selectedTrackerId}
+                        onChange={setSelectedTrackerId}
+                      />
+                    </div>
+                  )}
+                  {selectedTracker && renderTrackerCard(selectedTracker)}
+                </>
               )}
-              {selectedTracker && renderTrackerCard(selectedTracker)}
-            </>
-          )}
-        </section>
+            </section>
+
+          </div>
+
+          {/* ── RIGHT column: Accuracy Calendar ── */}
+          <div className="mt-8 lg:mt-0">
+            <section className="px-4 lg:sticky lg:top-4 lg:px-0">
+              <AccuracyCalendar
+                planId={plan.id}
+                activities={schedule.activities}
+                planStartDate={plan.startDate}
+                planEndDate={plan.endDate}
+                onAddTask={() => onAddTask(plan.id)}
+              />
+            </section>
+          </div>
+
+        </div>
 
       </motion.div>
     );
