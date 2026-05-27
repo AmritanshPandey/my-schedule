@@ -1704,7 +1704,7 @@ export default function ScheduleApp() {
     const needsWorkCount = planStatsList.filter((s) => s.consistency < 35).length;
 
     return (
-      <div className="px-4 pt-5 pb-8 lg:px-10 lg:pt-8 lg:pb-10">
+      <div className="px-4 pt-5 pb-8 lg:px-8 lg:pt-8 lg:pb-10">
         {/* Header */}
         <MainTitleSection
           label="Stay on track"
@@ -1715,13 +1715,12 @@ export default function ScheduleApp() {
                 <button
                   type="button"
                   onClick={() => setAiPlanCreating(true)}
-                  className="group relative overflow-hidden rounded-full px-4 min-h-[44px] py-[10px] text-[13px] font-bold tracking-[-0.15px] text-white shadow-[0_2px_12px_rgba(109,40,217,0.5)] transition-all active:scale-[0.97] hover:shadow-[0_2px_20px_rgba(109,40,217,0.65)] hover:brightness-110"
-                  style={{ background: "linear-gradient(135deg, #6d28d9 0%, #7c3aed 50%, #a855f7 100%)" }}
+                  className="group relative overflow-hidden rounded-full border border-violet-600/60 bg-violet-600/[0.12] px-4 min-h-[44px] py-[10px] shadow-[0_0_14px_rgba(109,40,217,0.2)] transition-all active:scale-[0.97] hover:border-violet-500/80 hover:bg-violet-600/[0.18] hover:shadow-[0_0_22px_rgba(109,40,217,0.35)] dark:border-violet-500/40 dark:bg-violet-500/[0.08] dark:hover:border-violet-400/60 dark:hover:bg-violet-500/[0.14]"
                 >
-                  <div className="pointer-events-none absolute inset-0 -translate-x-full skew-x-[-15deg] bg-gradient-to-r from-transparent via-white/20 to-transparent transition-transform duration-700 group-hover:translate-x-[250%]" />
-                  <span className="relative flex items-center gap-2">
-                    <IconSparkles size={14} strokeWidth={2} />
-                    Plan with AI
+                  <div className="pointer-events-none absolute inset-0 -translate-x-full skew-x-[-15deg] bg-gradient-to-r from-transparent via-white/15 to-transparent transition-transform duration-700 group-hover:translate-x-[250%]" />
+                  <span className="relative flex items-center gap-2 text-[13px] font-bold tracking-[-0.15px]">
+                    <IconSparkles size={14} strokeWidth={2} className="text-violet-600 dark:text-violet-400" />
+                    <span className="bg-[linear-gradient(135deg,#5b21b6,#7c3aed)] bg-clip-text text-transparent dark:bg-[linear-gradient(135deg,#c4b5fd,#f0abfc)]">Plan with AI</span>
                   </span>
                 </button>
               )}
@@ -2055,7 +2054,7 @@ export default function ScheduleApp() {
               transition={{ duration: 0.12, ease: "easeOut" }}
             >
             {/* Title section */}
-            <div className="px-4 pt-5 pb-5">
+            <div className="px-4 pt-5 pb-5 lg:px-8 lg:pt-8">
               <MainTitleSection
                 label={
                   activeDay === todayKey && (dayProgress.total > 0 || todayRitualsTotal > 0)
@@ -2213,7 +2212,7 @@ export default function ScheduleApp() {
                               />
                               {linkedMilestone && (
                                 <div className="mt-[-6px] px-1 pb-0.5">
-                                  <span className="inline-flex items-center gap-1 rounded-b-xl bg-violet-50 px-2.5 py-1 text-[11px] font-semibold text-violet-600 dark:bg-violet-500/[0.1] dark:text-violet-400">
+                                  <span className="inline-flex items-center gap-1 rounded-b-xl bg-neutral-100 px-2.5 py-1 text-[11px] font-semibold text-neutral-600 dark:bg-white/[0.08] dark:text-neutral-300">
                                     → {linkedMilestone.title}
                                   </span>
                                 </div>

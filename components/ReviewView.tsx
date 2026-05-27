@@ -200,12 +200,12 @@ function WeeklyAIInsightCard({
   }, [schedule, todayKey, ritualWeekHistory]);
 
   return (
-    <div className="mb-4 rounded-2xl border border-violet-200 bg-gradient-to-br from-violet-50 to-white px-4 py-4 dark:border-violet-500/20 dark:from-violet-500/[0.07] dark:to-transparent">
+    <div className="mb-4 rounded-2xl border border-neutral-200/70 bg-white px-5 py-5 shadow-[0_1px_3px_rgba(0,0,0,0.05),0_2px_8px_rgba(0,0,0,0.04)] dark:border-white/[0.07] dark:bg-neutral-900 dark:shadow-[0_1px_3px_rgba(0,0,0,0.3)]">
       {/* Header row */}
       <div className="mb-3 flex items-center justify-between">
         <div className="flex items-center gap-1.5">
-          <IconSparkles size={13} strokeWidth={2.2} className="text-violet-500 dark:text-violet-400" />
-          <p className="text-[11px] font-bold uppercase tracking-[0.08em] text-violet-500 dark:text-violet-400">
+          <IconSparkles size={13} strokeWidth={2.2} className="text-neutral-500 dark:text-neutral-400" />
+          <p className="text-[11px] font-bold uppercase tracking-[0.08em] text-neutral-500 dark:text-neutral-400">
             AI Insight
           </p>
         </div>
@@ -213,7 +213,7 @@ function WeeklyAIInsightCard({
           <button
             type="button"
             onClick={generate}
-            className="flex items-center gap-1 rounded-lg px-2 py-1 text-[11px] font-medium text-neutral-400 transition-colors hover:text-violet-500 dark:text-neutral-500 dark:hover:text-violet-400"
+            className="flex items-center gap-1 rounded-lg px-2 py-1 text-[11px] font-medium text-neutral-400 transition-colors hover:text-neutral-700 dark:text-neutral-500 dark:hover:text-neutral-200"
           >
             <IconRefresh size={11} strokeWidth={2} />
             Refresh
@@ -230,7 +230,7 @@ function WeeklyAIInsightCard({
           <button
             type="button"
             onClick={generate}
-            className="shrink-0 rounded-xl bg-violet-600 px-3.5 py-2 text-[13px] font-semibold text-white transition-opacity hover:opacity-90 active:opacity-80"
+            className="shrink-0 rounded-xl bg-neutral-900 px-3.5 py-2 text-[13px] font-semibold text-white transition-opacity hover:opacity-90 active:opacity-80 dark:bg-white dark:text-neutral-900"
           >
             Generate
           </button>
@@ -247,9 +247,9 @@ function WeeklyAIInsightCard({
             </p>
           ) : (
             <div className="flex items-center gap-1.5">
-              <span className="inline-block h-1.5 w-1.5 animate-bounce rounded-full bg-violet-400 [animation-delay:-0.3s]" />
-              <span className="inline-block h-1.5 w-1.5 animate-bounce rounded-full bg-violet-400 [animation-delay:-0.15s]" />
-              <span className="inline-block h-1.5 w-1.5 animate-bounce rounded-full bg-violet-400" />
+              <span className="inline-block h-1.5 w-1.5 animate-bounce rounded-full bg-neutral-400 dark:bg-neutral-500 [animation-delay:-0.3s]" />
+              <span className="inline-block h-1.5 w-1.5 animate-bounce rounded-full bg-neutral-400 dark:bg-neutral-500 [animation-delay:-0.15s]" />
+              <span className="inline-block h-1.5 w-1.5 animate-bounce rounded-full bg-neutral-400 dark:bg-neutral-500" />
             </div>
           )}
         </div>
@@ -325,7 +325,7 @@ function ThisWeekSection({
   const ritualPct = ritualDue > 0 ? Math.round((ritualDone / ritualDue) * 100) : 0;
 
   return (
-    <div className="rounded-2xl border border-neutral-200/70 bg-white shadow-[0_1px_3px_rgba(0,0,0,0.05),0_2px_8px_rgba(0,0,0,0.04)] dark:border-white/[0.07] dark:bg-neutral-900 dark:shadow-[0_1px_3px_rgba(0,0,0,0.3)] px-4 py-4">
+    <div className="rounded-2xl border border-neutral-200/70 bg-white shadow-[0_1px_3px_rgba(0,0,0,0.05),0_2px_8px_rgba(0,0,0,0.04)] dark:border-white/[0.07] dark:bg-neutral-900 dark:shadow-[0_1px_3px_rgba(0,0,0,0.3)] px-5 py-5">
       <SectionLabel icon={IconCalendarWeek}>This Week</SectionLabel>
 
       {/* Day strip */}
@@ -455,7 +455,7 @@ function ExecutionTrendSection({ schedule }: { schedule: Schedule }) {
   const maxPct = Math.max(...weeks.map((w) => w.pct), 10);
 
   return (
-    <div className="rounded-2xl border border-neutral-200/70 bg-white shadow-[0_1px_3px_rgba(0,0,0,0.05),0_2px_8px_rgba(0,0,0,0.04)] dark:border-white/[0.07] dark:bg-neutral-900 dark:shadow-[0_1px_3px_rgba(0,0,0,0.3)] px-4 py-4">
+    <div className="rounded-2xl border border-neutral-200/70 bg-white shadow-[0_1px_3px_rgba(0,0,0,0.05),0_2px_8px_rgba(0,0,0,0.04)] dark:border-white/[0.07] dark:bg-neutral-900 dark:shadow-[0_1px_3px_rgba(0,0,0,0.3)] px-5 py-5">
       <div className="flex items-center justify-between mb-3">
         <SectionLabel icon={IconTrendingUp}>Execution Trend</SectionLabel>
         {delta !== 0 && (
@@ -554,7 +554,7 @@ function HabitConsistencySection({
 
   if (ritualsWithStats.length === 0) {
     return (
-      <div className="rounded-2xl border border-neutral-200/70 bg-white shadow-[0_1px_3px_rgba(0,0,0,0.05),0_2px_8px_rgba(0,0,0,0.04)] dark:border-white/[0.07] dark:bg-neutral-900 dark:shadow-[0_1px_3px_rgba(0,0,0,0.3)] px-4 py-4">
+      <div className="rounded-2xl border border-neutral-200/70 bg-white shadow-[0_1px_3px_rgba(0,0,0,0.05),0_2px_8px_rgba(0,0,0,0.04)] dark:border-white/[0.07] dark:bg-neutral-900 dark:shadow-[0_1px_3px_rgba(0,0,0,0.3)] px-5 py-5">
         <SectionLabel icon={IconRepeat}>Habit Consistency</SectionLabel>
         <p className="text-[13px] text-neutral-400 dark:text-neutral-500">No habits yet. Add some in the Routine tab.</p>
       </div>
@@ -562,7 +562,7 @@ function HabitConsistencySection({
   }
 
   return (
-    <div className="rounded-2xl border border-neutral-200/70 bg-white shadow-[0_1px_3px_rgba(0,0,0,0.05),0_2px_8px_rgba(0,0,0,0.04)] dark:border-white/[0.07] dark:bg-neutral-900 dark:shadow-[0_1px_3px_rgba(0,0,0,0.3)] px-4 py-4">
+    <div className="rounded-2xl border border-neutral-200/70 bg-white shadow-[0_1px_3px_rgba(0,0,0,0.05),0_2px_8px_rgba(0,0,0,0.04)] dark:border-white/[0.07] dark:bg-neutral-900 dark:shadow-[0_1px_3px_rgba(0,0,0,0.3)] px-5 py-5">
       <SectionLabel icon={IconRepeat}>Habit Consistency</SectionLabel>
       <div className="space-y-3">
         {ritualsWithStats.map(({ ritual, dots, streak }) => (
@@ -633,7 +633,7 @@ function PlanHealthSection({
 
   if (planCards.length === 0) {
     return (
-      <div className="rounded-2xl border border-neutral-200/70 bg-white shadow-[0_1px_3px_rgba(0,0,0,0.05),0_2px_8px_rgba(0,0,0,0.04)] dark:border-white/[0.07] dark:bg-neutral-900 dark:shadow-[0_1px_3px_rgba(0,0,0,0.3)] px-4 py-4">
+      <div className="rounded-2xl border border-neutral-200/70 bg-white shadow-[0_1px_3px_rgba(0,0,0,0.05),0_2px_8px_rgba(0,0,0,0.04)] dark:border-white/[0.07] dark:bg-neutral-900 dark:shadow-[0_1px_3px_rgba(0,0,0,0.3)] px-5 py-5">
         <SectionLabel icon={IconClipboardData}>Plan Health</SectionLabel>
         <p className="text-[13px] text-neutral-400 dark:text-neutral-500">No active plans. Create one in the Plans tab.</p>
       </div>
@@ -641,7 +641,7 @@ function PlanHealthSection({
   }
 
   return (
-    <div className="rounded-2xl border border-neutral-200/70 bg-white shadow-[0_1px_3px_rgba(0,0,0,0.05),0_2px_8px_rgba(0,0,0,0.04)] dark:border-white/[0.07] dark:bg-neutral-900 dark:shadow-[0_1px_3px_rgba(0,0,0,0.3)] px-4 py-4">
+    <div className="rounded-2xl border border-neutral-200/70 bg-white shadow-[0_1px_3px_rgba(0,0,0,0.05),0_2px_8px_rgba(0,0,0,0.04)] dark:border-white/[0.07] dark:bg-neutral-900 dark:shadow-[0_1px_3px_rgba(0,0,0,0.3)] px-5 py-5">
       <SectionLabel icon={IconClipboardData}>Plan Health</SectionLabel>
       <div className="space-y-2.5">
         {planCards.map(({ plan, completedMs, totalMs, consistency, delayedMs }) => {
@@ -1042,7 +1042,7 @@ function MetricsLogSection({ schedule }: { schedule: Schedule }) {
 
   if (trackerGroups.length === 0) {
     return (
-      <div className="rounded-2xl border border-neutral-200/70 bg-white shadow-[0_1px_3px_rgba(0,0,0,0.05),0_2px_8px_rgba(0,0,0,0.04)] dark:border-white/[0.07] dark:bg-neutral-900 dark:shadow-[0_1px_3px_rgba(0,0,0,0.3)] px-4 py-4">
+      <div className="rounded-2xl border border-neutral-200/70 bg-white shadow-[0_1px_3px_rgba(0,0,0,0.05),0_2px_8px_rgba(0,0,0,0.04)] dark:border-white/[0.07] dark:bg-neutral-900 dark:shadow-[0_1px_3px_rgba(0,0,0,0.3)] px-5 py-5">
         <SectionLabel icon={IconChartBar}>Metrics Log</SectionLabel>
         <p className="text-[13px] text-neutral-400 dark:text-neutral-500">No metrics logged yet. Add entries from a plan&apos;s tracker.</p>
       </div>
@@ -1073,7 +1073,7 @@ function MetricsLogSection({ schedule }: { schedule: Schedule }) {
           return (
             <div
               key={tracker.id}
-              className="flex flex-col rounded-2xl border border-neutral-200 bg-white px-4 py-4 dark:border-white/[0.08] dark:bg-neutral-900"
+              className="flex flex-col rounded-2xl border border-neutral-200 bg-white px-5 py-5 dark:border-white/[0.08] dark:bg-neutral-900"
             >
               {/* ── Card header: name + trend ── */}
               <div className="mb-3 flex items-start justify-between gap-2">
@@ -1222,18 +1222,18 @@ export default function ReviewView({ schedule, todayKey, ritualWeekHistory, onOp
         <button
           type="button"
           onClick={onOpenWeeklyPlan}
-          className="mb-4 flex w-full items-center justify-between rounded-2xl border border-violet-200 bg-violet-50 px-4 py-3 transition-colors hover:bg-violet-100 dark:border-violet-500/20 dark:bg-violet-500/[0.07] dark:hover:bg-violet-500/[0.12]"
+          className="mb-4 flex w-full items-center justify-between rounded-2xl border border-neutral-200/70 bg-white px-4 py-3 transition-colors hover:bg-neutral-50 dark:border-white/[0.07] dark:bg-white/[0.03] dark:hover:bg-white/[0.06]"
         >
           <div className="flex items-center gap-2">
-            <IconCalendarPlus size={15} strokeWidth={2} className="text-violet-500 dark:text-violet-400" />
-            <span className="text-[13px] font-semibold text-violet-700 dark:text-violet-300">
+            <IconCalendarPlus size={15} strokeWidth={2} className="text-neutral-500 dark:text-neutral-400" />
+            <span className="text-[13px] font-semibold text-neutral-900 dark:text-white">
               Plan Next Week
             </span>
-            <span className="text-[12px] text-violet-500/70 dark:text-violet-400/70">
+            <span className="text-[12px] text-neutral-400 dark:text-neutral-500">
               · AI task suggestions based on this week
             </span>
           </div>
-          <span className="text-[13px] text-violet-400 dark:text-violet-500">→</span>
+          <span className="text-[13px] text-neutral-400 dark:text-neutral-500">→</span>
         </button>
       )}
       {/* Desktop: 2-column grid for the four insight cards */}

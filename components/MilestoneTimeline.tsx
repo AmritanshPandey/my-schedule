@@ -47,7 +47,7 @@ function dotClasses(status: MilestoneStatus, selected: boolean): string {
       : status === "delayed"
       ? "bg-rose-400 border-rose-400"
       : status === "active"
-      ? "bg-violet-500 border-violet-500"
+      ? "bg-blue-500 border-blue-500"
       : "border-neutral-300 bg-white dark:border-neutral-600 dark:bg-neutral-800";
   return `${base} ${scale} ${color}`;
 }
@@ -58,7 +58,7 @@ function statusBadgeClasses(status: MilestoneStatus): string {
   if (status === "delayed")
     return "bg-rose-50 text-rose-600 dark:bg-rose-500/10 dark:text-rose-400";
   if (status === "active")
-    return "bg-violet-50 text-violet-700 dark:bg-violet-500/10 dark:text-violet-400";
+    return "bg-blue-50 text-blue-700 dark:bg-blue-500/10 dark:text-blue-400";
   return "bg-neutral-100 text-neutral-600 dark:bg-white/[0.05] dark:text-neutral-400";
 }
 
@@ -234,7 +234,7 @@ export default function MilestoneTimeline({ schedule }: MilestoneTimelineProps) 
 
   if (planRows.length === 0) {
     return (
-      <div className="rounded-2xl border border-neutral-200/70 bg-white shadow-[0_1px_3px_rgba(0,0,0,0.05),0_2px_8px_rgba(0,0,0,0.04)] dark:border-white/[0.07] dark:bg-neutral-900 dark:shadow-[0_1px_3px_rgba(0,0,0,0.3)] px-4 py-4">
+      <div className="rounded-2xl border border-neutral-200/70 bg-white shadow-[0_1px_3px_rgba(0,0,0,0.05),0_2px_8px_rgba(0,0,0,0.04)] dark:border-white/[0.07] dark:bg-neutral-900 dark:shadow-[0_1px_3px_rgba(0,0,0,0.3)] px-5 py-5">
         <div className="mb-3 flex items-center gap-1.5">
           <IconMap2 size={13} strokeWidth={2.2} className="text-neutral-400 dark:text-neutral-500" />
           <p className="text-[11px] font-bold uppercase tracking-[0.08em] text-neutral-400 dark:text-neutral-500">
@@ -255,7 +255,7 @@ export default function MilestoneTimeline({ schedule }: MilestoneTimelineProps) 
   return (
     <div className="rounded-2xl border border-neutral-200/70 bg-white shadow-[0_1px_3px_rgba(0,0,0,0.05),0_2px_8px_rgba(0,0,0,0.04)] dark:border-white/[0.07] dark:bg-neutral-900 dark:shadow-[0_1px_3px_rgba(0,0,0,0.3)] py-4">
       {/* Section header */}
-      <div className="mb-2 flex items-center gap-1.5 px-4">
+      <div className="mb-3 flex items-center gap-1.5 px-4">
         <IconMap2 size={13} strokeWidth={2.2} className="text-neutral-400 dark:text-neutral-500" />
         <p className="text-[11px] font-bold uppercase tracking-[0.08em] text-neutral-400 dark:text-neutral-500">
           Milestone Roadmap
@@ -361,7 +361,7 @@ export default function MilestoneTimeline({ schedule }: MilestoneTimelineProps) 
         {(
           [
             { cls: "bg-emerald-500", label: "Completed" },
-            { cls: "bg-violet-500", label: "Active" },
+            { cls: "bg-blue-500", label: "Active" },
             { cls: "bg-rose-400", label: "Delayed" },
             {
               cls: "border border-neutral-300 bg-white dark:border-neutral-600 dark:bg-neutral-800",
