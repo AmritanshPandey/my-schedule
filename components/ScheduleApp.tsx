@@ -1715,12 +1715,13 @@ export default function ScheduleApp() {
                 <button
                   type="button"
                   onClick={() => setAiPlanCreating(true)}
-                  className="ai-btn group relative overflow-hidden rounded-full border border-violet-500/50 bg-violet-500/10 px-4 py-2.5 shadow-[0_0_14px_rgba(139,92,246,0.25)] transition-all active:scale-[0.97] hover:border-violet-400/70 hover:shadow-[0_0_22px_rgba(139,92,246,0.45)] dark:border-violet-500/40 dark:bg-violet-500/[0.08]"
+                  className="group relative overflow-hidden rounded-full px-4 min-h-[44px] py-[10px] text-[13px] font-bold tracking-[-0.15px] text-white shadow-[0_2px_12px_rgba(109,40,217,0.5)] transition-all active:scale-[0.97] hover:shadow-[0_2px_20px_rgba(109,40,217,0.65)] hover:brightness-110"
+                  style={{ background: "linear-gradient(135deg, #6d28d9 0%, #7c3aed 50%, #a855f7 100%)" }}
                 >
-                  <div className="pointer-events-none absolute inset-0 -translate-x-full skew-x-[-15deg] bg-gradient-to-r from-transparent via-white/15 to-transparent transition-transform duration-700 group-hover:translate-x-[250%]" />
-                  <span className="relative flex items-center gap-2 text-[13px] font-bold">
-                    <IconSparkles size={14} strokeWidth={2} className="text-violet-400 dark:text-violet-400" />
-                    <span className="bg-gradient-to-r from-violet-400 to-pink-400 bg-clip-text text-transparent">Plan with AI</span>
+                  <div className="pointer-events-none absolute inset-0 -translate-x-full skew-x-[-15deg] bg-gradient-to-r from-transparent via-white/20 to-transparent transition-transform duration-700 group-hover:translate-x-[250%]" />
+                  <span className="relative flex items-center gap-2">
+                    <IconSparkles size={14} strokeWidth={2} />
+                    Plan with AI
                   </span>
                 </button>
               )}
