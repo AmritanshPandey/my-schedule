@@ -14,6 +14,7 @@ import {
   IconChartBar,
   IconSparkles,
   IconRefresh,
+  IconCalendarPlus,
 } from "@tabler/icons-react";
 import type { Schedule, DayKey } from "@/lib/useScheduleDB";
 import { DAYS, DAY_LABELS } from "@/lib/useScheduleDB";
@@ -46,6 +47,7 @@ interface ReviewViewProps {
   schedule: Schedule;
   todayKey: DayKey;
   ritualWeekHistory: RitualWeekDay[];
+  onOpenWeeklyPlan?: () => void;
 }
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -883,7 +885,7 @@ function MetricsLogSection({ schedule }: { schedule: Schedule }) {
 // Root ReviewView component
 // ─────────────────────────────────────────────────────────────────────────────
 
-export default function ReviewView({ schedule, todayKey, ritualWeekHistory }: ReviewViewProps) {
+export default function ReviewView({ schedule, todayKey, ritualWeekHistory, onOpenWeeklyPlan }: ReviewViewProps) {
   return (
     <div className="px-4 pt-5 pb-24 lg:px-8 lg:pt-6 lg:pb-10">
       {/* AI Insight — full width, above the grid */}
@@ -892,6 +894,25 @@ export default function ReviewView({ schedule, todayKey, ritualWeekHistory }: Re
         todayKey={todayKey}
         ritualWeekHistory={ritualWeekHistory}
       />
+      {/* Plan Next Week trigger */}
+      {onOpenWeeklyPlan && (
+        <button
+          type="button"
+          onClick={onOpenWeeklyPlan}
+          className="mb-4 flex w-full items-center justify-between rounded-2xl border border-violet-200 bg-violet-50 px-4 py-3 transition-colors hover:bg-violet-100 dark:border-violet-500/20 dark:bg-violet-500/[0.07] dark:hover:bg-violet-500/[0.12]"
+        >
+          <div className="flex items-center gap-2">
+            <IconCalendarPlus size={15} strokeWidth={2} className="text-violet-500 dark:text-violet-400" />
+            <span className="text-[13px] font-semibold text-violet-700 dark:text-violet-300">
+              Plan Next Week
+            </span>
+            <span className="text-[12px] text-violet-500/70 dark:text-violet-400/70">
+              · AI task suggestions based on this week
+            </span>
+          </div>
+          <span className="text-[13px] text-violet-400 dark:text-violet-500">→</span>
+        </button>
+      )}
       {/* Desktop: 2-column grid for the four insight cards */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 mb-4">
         <ThisWeekSection schedule={schedule} todayKey={todayKey} ritualWeekHistory={ritualWeekHistory} />

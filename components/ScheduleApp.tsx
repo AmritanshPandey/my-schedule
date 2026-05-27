@@ -23,6 +23,7 @@ const TemplatesSheet = dynamic(() => import("@/components/TemplatesSheet").then(
 const SessionSheet = dynamic(() => import("@/components/activity/SessionSheet"), { ssr: false });
 const RitualView = dynamic(() => import("@/components/activity/RitualView"), { ssr: false });
 const ReviewView = dynamic(() => import("@/components/ReviewView"), { ssr: false });
+const WeeklyPlanSheet = dynamic(() => import("@/components/WeeklyPlanSheet"), { ssr: false });
 const TrackerQuickBar = dynamic(() => import("@/components/TrackerQuickBar"), { ssr: false });
 import WhatNextCard from "@/components/WhatNextCard";
 import StreakAlertChips from "@/components/StreakAlertChips";
@@ -492,6 +493,7 @@ export default function ScheduleApp() {
 
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [templatesOpen, setTemplatesOpen] = useState(false);
+  const [weeklyPlanOpen, setWeeklyPlanOpen] = useState(false);
   const [sessionTask, setSessionTask] = useState<Task | null>(null);
   const completedRitualIds = useMemo(() => {
     const today = todayISO();
@@ -2465,6 +2467,7 @@ export default function ScheduleApp() {
               schedule={schedule}
               todayKey={todayKey}
               ritualWeekHistory={ritualWeekHistory}
+              onOpenWeeklyPlan={() => setWeeklyPlanOpen(true)}
             />
           </motion.div>
         )}
@@ -2647,6 +2650,16 @@ export default function ScheduleApp() {
         onConfirm={confirmState?.onConfirm ?? (() => {})}
         title={confirmState?.title ?? ""}
         description={confirmState?.description}
+      />
+
+      {/* ── Weekly Plan Sheet ────────────────────────────────────────────────── */}
+      <WeeklyPlanSheet
+        open={weeklyPlanOpen}
+        onClose={() => setWeeklyPlanOpen(false)}
+        schedule={schedule}
+        ollamaUrl={ollamaUrl}
+        ollamaModel={ollamaModel}
+        onAddTasks={(tasks, planId) => handleAddGeneratedTasks(tasks, planId)}
       />
 
       {/* ── Toast ───────────────────────────────────────────────────────────── */}
