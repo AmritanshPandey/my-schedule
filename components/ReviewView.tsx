@@ -701,8 +701,170 @@ function PlanHealthSection({
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Section 5 — Metrics Log
+// Section 5 — Metrics Log  (sparkline + collapsible entries)
 // ─────────────────────────────────────────────────────────────────────────────
+
+// ── SVG sparkline ──────────────────────────────────────────────────────────
+
+interface SparklineEntry {
+  date: string;
+  value: number;
+}
+
+function TrackerSparkline({
+  entries,
+  goalValue,
+  goalDirection,
+  unit,
+  trendState,
+}: {
+  entries: SparklineEntry[];          // newest-first from caller; reversed inside
+  goalValue?: number | null;
+  goalDirection?: "increase_good" | "decrease_good" | null;
+  unit?: string;
+  trendState?: "positive" | "negative" | "neutral" | null;
+}) {
+  // Need ≥ 2 points to draw a line
+  if (entries.length < 2) return null;
+
+  // Display oldest → newest (left → right)
+  const pts = [...entries].reverse();
+  const values = pts.map((e) => e.value);
+
+  const W = 300;
+  const H = 64;
+  const PX = 6;  // horizontal padding
+  const PY = 10; // vertical padding
+
+  const minV = Math.min(...values);
+  const maxV = Math.max(...values);
+  const rangeV = maxV === minV ? 1 : maxV - minV;
+
+  const toX = (i: number) =>
+    PX + (i / (values.length - 1)) * (W - 2 * PX);
+  const toY = (v: number) =>
+    H - PY - ((v - minV) / rangeV) * (H - 2 * PY);
+
+  // Line color based on trend
+  const lineColor =
+    trendState === "positive"
+      ? "#10b981"   // emerald-500
+      : trendState === "negative"
+      ? "#f43f5e"   // rose-500
+      : "#8b5cf6";  // violet-500 (neutral / no trend)
+
+  // Build polyline point string
+  const linePoints = values.map((v, i) => `${toX(i)},${toY(v)}`).join(" ");
+
+  // Area polygon: baseline → line → back to baseline
+  const areaPoints =
+    `${toX(0)},${H - PY} ` +
+    linePoints +
+    ` ${toX(values.length - 1)},${H - PY}`;
+
+  // Goal line
+  const goalInRange =
+    goalValue !== undefined &&
+    goalValue !== null &&
+    goalValue >= minV - rangeV * 0.1 &&
+    goalValue <= maxV + rangeV * 0.1;
+  const goalY = goalInRange ? toY(goalValue as number) : null;
+
+  // Latest dot position + value
+  const latestX = toX(values.length - 1);
+  const latestY = toY(values[values.length - 1]);
+  const latestVal = values[values.length - 1];
+
+  // Date range labels
+  const fmtDate = (iso: string) =>
+    new Date(iso + "T00:00:00").toLocaleDateString("en-US", {
+      month: "short",
+      day: "numeric",
+    });
+  const firstLabel = fmtDate(pts[0].date);
+  const lastLabel = fmtDate(pts[pts.length - 1].date);
+
+  // Clamp label anchor so it doesn't overflow
+  const labelAnchor = latestX > W - 36 ? "end" : "start";
+  const labelX = labelAnchor === "end" ? latestX - 5 : latestX + 5;
+  const labelY = Math.max(latestY - 5, 8);
+
+  return (
+    <div className="mt-2 overflow-hidden rounded-xl bg-neutral-50 px-2 pt-1 pb-0 dark:bg-white/[0.025]">
+      <svg
+        viewBox={`0 0 ${W} ${H}`}
+        className="w-full"
+        style={{ height: 64, display: "block" }}
+        aria-hidden
+      >
+        {/* Area fill */}
+        <polygon points={areaPoints} fill={lineColor} opacity="0.07" />
+
+        {/* Goal line */}
+        {goalY !== null && (
+          <line
+            x1={PX} y1={goalY}
+            x2={W - PX} y2={goalY}
+            stroke="#8b5cf6"
+            strokeWidth="1"
+            strokeDasharray="4 3"
+            opacity="0.45"
+          />
+        )}
+
+        {/* Main line */}
+        <polyline
+          points={linePoints}
+          fill="none"
+          stroke={lineColor}
+          strokeWidth="1.8"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+        />
+
+        {/* Latest dot */}
+        <circle cx={latestX} cy={latestY} r="3.5" fill={lineColor} />
+        <circle cx={latestX} cy={latestY} r="5.5" fill={lineColor} opacity="0.18" />
+
+        {/* Latest value label */}
+        <text
+          x={labelX}
+          y={labelY}
+          fontSize="8.5"
+          fontWeight="700"
+          fill={lineColor}
+          textAnchor={labelAnchor}
+        >
+          {latestVal}
+          {unit ? ` ${unit}` : ""}
+        </text>
+
+        {/* Goal value label */}
+        {goalY !== null && goalValue !== null && (
+          <text
+            x={W - PX - 2}
+            y={Math.max((goalY as number) - 3, 8)}
+            fontSize="7"
+            fill="#8b5cf6"
+            textAnchor="end"
+            opacity="0.65"
+          >
+            goal {goalValue}
+            {unit ? ` ${unit}` : ""}
+          </text>
+        )}
+      </svg>
+
+      {/* Date range footer */}
+      <div className="flex justify-between px-0.5 pb-1.5">
+        <span className="text-[9px] text-neutral-400 dark:text-neutral-600">{firstLabel}</span>
+        <span className="text-[9px] text-neutral-400 dark:text-neutral-600">{lastLabel}</span>
+      </div>
+    </div>
+  );
+}
+
+
 
 /** Consecutive-day streak from a newest-first sorted entry array. */
 function calcStreak(sortedEntries: { date: string }[]): number {
@@ -729,6 +891,15 @@ function lastLoggedLabel(isoDate: string): string {
 }
 
 function MetricsLogSection({ schedule }: { schedule: Schedule }) {
+  const [expandedIds, setExpandedIds] = useState<Set<string>>(new Set());
+
+  const toggleExpand = (id: string) =>
+    setExpandedIds((prev) => {
+      const next = new Set(prev);
+      next.has(id) ? next.delete(id) : next.add(id);
+      return next;
+    });
+
   const trackerGroups = useMemo(() => {
     const trackers = schedule.progressTrackers ?? [];
     // Sort all entries newest-first; limit scan to last 80 entries
@@ -861,19 +1032,46 @@ function MetricsLogSection({ schedule }: { schedule: Schedule }) {
               </div>
             )}
 
-            {/* ── Entry rows ── */}
-            <div className="space-y-0.5">
-              {entries.map((entry) => (
-                <div key={entry.id} className="flex items-center justify-between rounded-lg px-2.5 py-1.5 odd:bg-neutral-50 dark:odd:bg-white/[0.02]">
-                  <span className="text-[11px] text-neutral-500 dark:text-neutral-400">
-                    {new Date(entry.date + "T00:00:00").toLocaleDateString("en-US", { month: "short", day: "numeric" })}
-                  </span>
-                  <span className="text-[12px] font-semibold tabular-nums text-neutral-800 dark:text-neutral-200">
-                    {entry.value}{tracker.unit ? ` ${tracker.unit}` : ""}
-                  </span>
-                </div>
-              ))}
-            </div>
+            {/* ── Sparkline chart ── */}
+            <TrackerSparkline
+              entries={entries}
+              goalValue={tracker.goalValue}
+              goalDirection={tracker.goalDirection}
+              unit={tracker.unit}
+              trendState={trend?.state ?? null}
+            />
+
+            {/* ── Collapsible raw entries ── */}
+            <button
+              type="button"
+              onClick={() => toggleExpand(tracker.id)}
+              className="mt-1.5 flex items-center gap-1 text-[10.5px] font-medium text-neutral-400 transition-colors hover:text-neutral-600 dark:text-neutral-500 dark:hover:text-neutral-300"
+            >
+              {expandedIds.has(tracker.id)
+                ? `Hide entries ↑`
+                : `Show ${entries.length} entries ↓`}
+            </button>
+            {expandedIds.has(tracker.id) && (
+              <div className="mt-1 space-y-0.5">
+                {entries.map((entry) => (
+                  <div
+                    key={entry.id}
+                    className="flex items-center justify-between rounded-lg px-2.5 py-1.5 odd:bg-neutral-50 dark:odd:bg-white/[0.02]"
+                  >
+                    <span className="text-[11px] text-neutral-500 dark:text-neutral-400">
+                      {new Date(entry.date + "T00:00:00").toLocaleDateString("en-US", {
+                        month: "short",
+                        day: "numeric",
+                      })}
+                    </span>
+                    <span className="text-[12px] font-semibold tabular-nums text-neutral-800 dark:text-neutral-200">
+                      {entry.value}
+                      {tracker.unit ? ` ${tracker.unit}` : ""}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
         ))}
       </div>
