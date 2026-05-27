@@ -732,9 +732,9 @@ function TrackerSparkline({
   const values = pts.map((e) => e.value);
 
   const W = 300;
-  const H = 64;
+  const H = 80;
   const PX = 6;  // horizontal padding
-  const PY = 10; // vertical padding
+  const PY = 12; // vertical padding
 
   const minV = Math.min(...values);
   const maxV = Math.max(...values);
@@ -794,7 +794,7 @@ function TrackerSparkline({
       <svg
         viewBox={`0 0 ${W} ${H}`}
         className="w-full"
-        style={{ height: 64, display: "block" }}
+        style={{ height: 80, display: "block" }}
         aria-hidden
       >
         {/* Area fill */}
@@ -999,7 +999,6 @@ function MetricsLogSection({ schedule }: { schedule: Schedule }) {
 
   const trackerGroups = useMemo(() => {
     const trackers = schedule.progressTrackers ?? [];
-    // Sort all entries newest-first; limit scan to last 80 entries
     const entries = [...(schedule.metricEntries ?? [])]
       .sort((a, b) => b.date.localeCompare(a.date))
       .slice(0, 80);
@@ -1011,7 +1010,6 @@ function MetricsLogSection({ schedule }: { schedule: Schedule }) {
       const recent = trackerEntries.slice(0, 15);
       const plan = schedule.plans.find((p) => p.id === tracker.planId);
 
-      // Trend: compare average of last 3 vs previous 3
       let trend: ReturnType<typeof computeTrend> | null = null;
       if (trackerEntries.length >= 4 && tracker.goalDirection) {
         const curr = trackerEntries.slice(0, 3).reduce((s, e) => s + e.value, 0) / 3;
@@ -1022,27 +1020,19 @@ function MetricsLogSection({ schedule }: { schedule: Schedule }) {
         }
       }
 
-      // Streak (consecutive days)
       const streak = calcStreak(trackerEntries);
-
-      // Days since last log
       const daysSinceLabel = lastLoggedLabel(trackerEntries[0].date);
 
-      // Goal progress (0–1) — only when goalValue is set
       let goalPct: number | null = null;
-      if (tracker.goalValue && tracker.goalValue > 0 && trackerEntries.length > 0) {
+      if (tracker.goalValue != null && tracker.goalValue >= 0 && trackerEntries.length > 0) {
         const lastVal = trackerEntries[0].value;
-        if (tracker.goalDirection === "decrease_good") {
-          // Progress = how close to the goal from above; cap at 100%
-          goalPct = Math.min(1, tracker.goalValue / Math.max(lastVal, 0.001));
-        } else {
-          goalPct = Math.min(1, lastVal / tracker.goalValue);
-        }
+        goalPct = tracker.goalDirection === "decrease_good"
+          ? Math.min(1, tracker.goalValue / Math.max(lastVal, 0.001))
+          : Math.min(1, lastVal / Math.max(tracker.goalValue, 0.001));
       }
 
-      // Pace-to-goal prediction
       const pace =
-        tracker.goalValue && tracker.goalValue > 0 && tracker.goalDirection
+        tracker.goalValue != null && tracker.goalValue >= 0 && tracker.goalDirection
           ? calcPaceToGoal(trackerEntries, tracker.goalValue, tracker.goalDirection)
           : null;
 
@@ -1060,130 +1050,155 @@ function MetricsLogSection({ schedule }: { schedule: Schedule }) {
   }
 
   return (
-    <div className="rounded-2xl border border-neutral-200 bg-white dark:border-white/[0.08] dark:bg-neutral-900 px-4 py-4">
-      <SectionLabel icon={IconChartBar}>Metrics Log</SectionLabel>
-      <div className="space-y-5">
-        {trackerGroups.map(({ tracker, entries, plan, trend, streak, daysSinceLabel, goalPct, pace }) => (
-          <div key={tracker.id}>
-            {/* ── Tracker header ── */}
-            <div className="flex items-start justify-between mb-1.5 gap-2">
-              <div className="min-w-0">
-                <div className="flex items-center gap-1.5 flex-wrap">
-                  <p className="text-[13px] font-bold text-neutral-800 dark:text-neutral-200">
-                    {tracker.title}{tracker.unit ? ` (${tracker.unit})` : ""}
-                  </p>
-                  {/* Streak badge */}
-                  {streak >= 2 && (
-                    <span className="inline-flex items-center gap-0.5 rounded-full bg-amber-500/10 px-1.5 py-0.5 text-[10px] font-semibold text-amber-600 dark:bg-amber-400/15 dark:text-amber-400">
-                      <IconFlame size={10} strokeWidth={2.5} />
-                      {streak}d streak
-                    </span>
-                  )}
-                </div>
-                {/* Plan name + last logged */}
-                <div className="flex items-center gap-1.5 mt-0.5 flex-wrap">
-                  {plan && (
-                    <p className="text-[11px] text-neutral-400 dark:text-neutral-500">{plan.title}</p>
-                  )}
-                  <span className="text-[11px] text-neutral-300 dark:text-neutral-600">·</span>
-                  <p className="text-[11px] text-neutral-400 dark:text-neutral-500">{daysSinceLabel}</p>
-                </div>
-              </div>
+    <div>
+      {/* Section header */}
+      <div className="mb-3 flex items-center gap-1.5">
+        <IconChartBar size={13} strokeWidth={2.2} className="text-neutral-400 dark:text-neutral-500" />
+        <p className="text-[11px] font-bold uppercase tracking-[0.08em] text-neutral-400 dark:text-neutral-500">
+          Metrics Log
+        </p>
+      </div>
 
-              {/* Trend badge */}
-              {trend && trend.direction !== "neutral" && (
-                <span className={`shrink-0 flex items-center gap-0.5 text-[11px] font-semibold ${
-                  trend.state === "positive" ? "text-emerald-600 dark:text-emerald-400" : "text-rose-500 dark:text-rose-400"
-                }`}>
-                  {trend.direction === "up"
-                    ? <IconArrowUp size={11} strokeWidth={2.5} />
-                    : <IconArrowDown size={11} strokeWidth={2.5} />}
-                  {trend.pct !== null ? `${Math.abs(trend.pct).toFixed(0)}%` : ""}
-                </span>
-              )}
-              {trend && trend.direction === "neutral" && (
-                <span className="shrink-0 flex items-center gap-0.5 text-[11px] font-semibold text-neutral-400">
-                  <IconMinus size={11} strokeWidth={2.5} />
-                  Stable
-                </span>
-              )}
-            </div>
+      {/* One card per tracker in a responsive grid */}
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+        {trackerGroups.map(({ tracker, entries, plan, trend, streak, daysSinceLabel, goalPct, pace }) => {
+          const currentVal = entries[0]?.value;
+          const trendColorClass =
+            trend?.state === "positive"
+              ? "text-emerald-600 dark:text-emerald-400"
+              : trend?.state === "negative"
+              ? "text-rose-500 dark:text-rose-400"
+              : "text-neutral-400 dark:text-neutral-500";
 
-            {/* ── Goal progress bar ── */}
-            {goalPct !== null && (
-              <div className="mb-2">
-                <div className="flex items-center justify-between mb-0.5">
-                  <span className="text-[10px] text-neutral-400 dark:text-neutral-500">
-                    Goal: {tracker.goalValue}{tracker.unit ? ` ${tracker.unit}` : ""}
-                  </span>
-                  <span className="text-[10px] font-semibold text-neutral-600 dark:text-neutral-300">
-                    {Math.round(goalPct * 100)}%
-                  </span>
-                </div>
-                <div className="h-1.5 w-full overflow-hidden rounded-full bg-neutral-100 dark:bg-white/[0.07]">
-                  <div
-                    className={`h-full rounded-full transition-all ${
-                      goalPct >= 0.8
-                        ? "bg-emerald-500"
-                        : goalPct >= 0.5
-                        ? "bg-amber-400"
-                        : "bg-rose-400"
-                    }`}
-                    style={{ width: `${Math.round(goalPct * 100)}%` }}
-                  />
-                </div>
-              </div>
-            )}
-
-            {/* ── Pace-to-goal prediction ── */}
-            {pace && pace.status !== "no_data" && (
-              <p className={`-mt-1 mb-2 text-[11px] font-medium ${pace.colorClass}`}>
-                {pace.label}
-              </p>
-            )}
-
-            {/* ── Sparkline chart ── */}
-            <TrackerSparkline
-              entries={entries}
-              goalValue={tracker.goalValue}
-              goalDirection={tracker.goalDirection}
-              unit={tracker.unit}
-              trendState={trend?.state ?? null}
-            />
-
-            {/* ── Collapsible raw entries ── */}
-            <button
-              type="button"
-              onClick={() => toggleExpand(tracker.id)}
-              className="mt-1.5 flex items-center gap-1 text-[10.5px] font-medium text-neutral-400 transition-colors hover:text-neutral-600 dark:text-neutral-500 dark:hover:text-neutral-300"
+          return (
+            <div
+              key={tracker.id}
+              className="flex flex-col rounded-2xl border border-neutral-200 bg-white px-4 py-4 dark:border-white/[0.08] dark:bg-neutral-900"
             >
-              {expandedIds.has(tracker.id)
-                ? `Hide entries ↑`
-                : `Show ${entries.length} entries ↓`}
-            </button>
-            {expandedIds.has(tracker.id) && (
-              <div className="mt-1 space-y-0.5">
-                {entries.map((entry) => (
-                  <div
-                    key={entry.id}
-                    className="flex items-center justify-between rounded-lg px-2.5 py-1.5 odd:bg-neutral-50 dark:odd:bg-white/[0.02]"
-                  >
-                    <span className="text-[11px] text-neutral-500 dark:text-neutral-400">
-                      {new Date(entry.date + "T00:00:00").toLocaleDateString("en-US", {
-                        month: "short",
-                        day: "numeric",
-                      })}
+              {/* ── Card header: name + trend ── */}
+              <div className="mb-3 flex items-start justify-between gap-2">
+                <div className="min-w-0 flex-1">
+                  <div className="flex flex-wrap items-center gap-1.5">
+                    <p className="text-[13px] font-bold text-neutral-800 dark:text-neutral-200">
+                      {tracker.title}
+                    </p>
+                    {streak >= 2 && (
+                      <span className="inline-flex items-center gap-0.5 rounded-full bg-amber-500/10 px-1.5 py-0.5 text-[10px] font-semibold text-amber-600 dark:bg-amber-400/15 dark:text-amber-400">
+                        <IconFlame size={10} strokeWidth={2.5} />
+                        {streak}d
+                      </span>
+                    )}
+                  </div>
+                  {plan && (
+                    <p className="truncate text-[11px] text-neutral-400 dark:text-neutral-500">{plan.title}</p>
+                  )}
+                </div>
+                {/* Trend direction badge */}
+                {trend && trend.direction !== "neutral" && (
+                  <span className={`flex shrink-0 items-center gap-0.5 text-[11px] font-semibold ${trendColorClass}`}>
+                    {trend.direction === "up"
+                      ? <IconArrowUp size={11} strokeWidth={2.5} />
+                      : <IconArrowDown size={11} strokeWidth={2.5} />}
+                    {trend.pct !== null ? `${Math.abs(trend.pct).toFixed(0)}%` : ""}
+                  </span>
+                )}
+                {trend?.direction === "neutral" && (
+                  <span className="flex shrink-0 items-center gap-0.5 text-[11px] font-semibold text-neutral-400">
+                    <IconMinus size={11} strokeWidth={2.5} />
+                    Stable
+                  </span>
+                )}
+              </div>
+
+              {/* ── Current value (hero number) ── */}
+              <div className="mb-1 flex items-end gap-1.5">
+                <span className="text-[30px] font-extrabold tabular-nums leading-none text-neutral-950 dark:text-white">
+                  {currentVal ?? "—"}
+                </span>
+                {tracker.unit && (
+                  <span className="mb-0.5 text-[14px] font-semibold text-neutral-400 dark:text-neutral-500">
+                    {tracker.unit}
+                  </span>
+                )}
+                <span className="mb-0.5 ml-auto text-[11px] text-neutral-400 dark:text-neutral-500">
+                  {daysSinceLabel}
+                </span>
+              </div>
+
+              {/* ── Sparkline — the main visual ── */}
+              <TrackerSparkline
+                entries={entries}
+                goalValue={tracker.goalValue}
+                goalDirection={tracker.goalDirection}
+                unit={tracker.unit}
+                trendState={trend?.state ?? null}
+              />
+
+              {/* ── Goal progress bar ── */}
+              {goalPct !== null && (
+                <div className="mt-3">
+                  <div className="mb-1 flex items-center justify-between">
+                    <span className="text-[10px] text-neutral-400 dark:text-neutral-500">
+                      Goal: {tracker.goalValue}{tracker.unit ? ` ${tracker.unit}` : ""}
                     </span>
-                    <span className="text-[12px] font-semibold tabular-nums text-neutral-800 dark:text-neutral-200">
-                      {entry.value}
-                      {tracker.unit ? ` ${tracker.unit}` : ""}
+                    <span className="text-[10px] font-semibold text-neutral-600 dark:text-neutral-300">
+                      {Math.round(goalPct * 100)}%
                     </span>
                   </div>
-                ))}
-              </div>
-            )}
-          </div>
-        ))}
+                  <div className="h-1.5 w-full overflow-hidden rounded-full bg-neutral-100 dark:bg-white/[0.07]">
+                    <div
+                      className={`h-full rounded-full transition-all ${
+                        goalPct >= 0.8 ? "bg-emerald-500" : goalPct >= 0.5 ? "bg-amber-400" : "bg-rose-400"
+                      }`}
+                      style={{ width: `${Math.round(goalPct * 100)}%` }}
+                    />
+                  </div>
+                </div>
+              )}
+
+              {/* ── Pace prediction ── */}
+              {pace && pace.status !== "no_data" && (
+                <p className={`mt-1.5 text-[11px] font-medium ${pace.colorClass}`}>
+                  {pace.label}
+                </p>
+              )}
+
+              {/* ── Collapsible raw entries ── */}
+              <button
+                type="button"
+                onClick={() => toggleExpand(tracker.id)}
+                aria-expanded={expandedIds.has(tracker.id)}
+                aria-controls={`metric-entries-${tracker.id}`}
+                className="mt-2.5 flex items-center gap-1 text-[10.5px] font-medium text-neutral-400 transition-colors hover:text-neutral-600 dark:text-neutral-500 dark:hover:text-neutral-300"
+              >
+                {expandedIds.has(tracker.id)
+                  ? "Hide entries ↑"
+                  : `Show ${entries.length} entries ↓`}
+              </button>
+              {expandedIds.has(tracker.id) && (
+                <div id={`metric-entries-${tracker.id}`} className="mt-1 space-y-0.5">
+                  {entries.map((entry) => (
+                    <div
+                      key={entry.id}
+                      className="flex items-center justify-between rounded-lg px-2.5 py-1.5 odd:bg-neutral-50 dark:odd:bg-white/[0.02]"
+                    >
+                      <span className="text-[11px] text-neutral-500 dark:text-neutral-400">
+                        {new Date(entry.date + "T00:00:00").toLocaleDateString("en-US", {
+                          month: "short",
+                          day: "numeric",
+                        })}
+                      </span>
+                      <span className="text-[12px] font-semibold tabular-nums text-neutral-800 dark:text-neutral-200">
+                        {entry.value}
+                        {tracker.unit ? ` ${tracker.unit}` : ""}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          );
+        })}
       </div>
     </div>
   );
