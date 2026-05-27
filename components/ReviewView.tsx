@@ -866,6 +866,103 @@ function TrackerSparkline({
 
 
 
+// ── Pace-to-goal prediction ───────────────────────────────────────────────────
+
+interface PaceResult {
+  status: "reached" | "on_track" | "off_track" | "no_data";
+  etaDays: number | null;
+  label: string;
+  colorClass: string;
+}
+
+/**
+ * Linear-regression estimate of when a tracker will reach its goalValue.
+ * Uses the most recent ≤14 entries (newest-first from caller).
+ */
+function calcPaceToGoal(
+  entries: { date: string; value: number }[],
+  goalValue: number,
+  goalDirection: "increase_good" | "decrease_good",
+): PaceResult {
+  const NO_DATA: PaceResult = {
+    status: "no_data",
+    etaDays: null,
+    label: "Add more entries to see pace",
+    colorClass: "text-neutral-400 dark:text-neutral-500",
+  };
+
+  if (entries.length < 3) return NO_DATA;
+
+  const current = entries[0].value;
+
+  // Already reached?
+  const reached =
+    goalDirection === "decrease_good" ? current <= goalValue : current >= goalValue;
+  if (reached)
+    return {
+      status: "reached",
+      etaDays: 0,
+      label: "🎉 Goal reached!",
+      colorClass: "text-emerald-600 dark:text-emerald-400",
+    };
+
+  // Oldest → newest for regression
+  const pts = entries.slice(0, 14).reverse();
+  const t0 = new Date(pts[0].date + "T00:00:00").getTime();
+  const xs = pts.map((e) =>
+    Math.round((new Date(e.date + "T00:00:00").getTime() - t0) / 86_400_000)
+  );
+  const ys = pts.map((e) => e.value);
+  const n = pts.length;
+
+  if (xs[xs.length - 1] === 0) return NO_DATA;
+
+  const meanX = xs.reduce((s, x) => s + x, 0) / n;
+  const meanY = ys.reduce((s, y) => s + y, 0) / n;
+  const num = xs.reduce((s, x, i) => s + (x - meanX) * (ys[i] - meanY), 0);
+  const den = xs.reduce((s, x) => s + (x - meanX) ** 2, 0);
+  const slope = den === 0 ? 0 : num / den; // units per day
+
+  if (Math.abs(slope) < 0.0005) return NO_DATA;
+
+  const daysToGoal = (goalValue - current) / slope;
+
+  if (daysToGoal < 0)
+    return {
+      status: "off_track",
+      etaDays: null,
+      label: "Trending away from goal",
+      colorClass: "text-rose-500 dark:text-rose-400",
+    };
+
+  // Human-readable ETA
+  const d = Math.ceil(daysToGoal);
+  const etaLabel =
+    d <= 1
+      ? "~1 day"
+      : d <= 13
+      ? `~${d} days`
+      : d <= 59
+      ? `~${Math.ceil(d / 7)} week${Math.ceil(d / 7) !== 1 ? "s" : ""}`
+      : d <= 364
+      ? `~${Math.ceil(d / 30)} month${Math.ceil(d / 30) !== 1 ? "s" : ""}`
+      : "over a year away";
+
+  const colorClass =
+    d <= 30
+      ? "text-emerald-600 dark:text-emerald-400"
+      : d <= 90
+      ? "text-amber-600 dark:text-amber-400"
+      : "text-neutral-500 dark:text-neutral-400";
+
+  return {
+    status: "on_track",
+    etaDays: d,
+    label: `At this pace → ${etaLabel} to goal`,
+    colorClass,
+  };
+}
+
 /** Consecutive-day streak from a newest-first sorted entry array. */
 function calcStreak(sortedEntries: { date: string }[]): number {
   if (sortedEntries.length === 0) return 0;
@@ -943,7 +1040,13 @@ function MetricsLogSection({ schedule }: { schedule: Schedule }) {
         }
       }
 
-      return [{ tracker, entries: recent, plan, trend, streak, daysSinceLabel, goalPct }];
+      // Pace-to-goal prediction
+      const pace =
+        tracker.goalValue && tracker.goalValue > 0 && tracker.goalDirection
+          ? calcPaceToGoal(trackerEntries, tracker.goalValue, tracker.goalDirection)
+          : null;
+
+      return [{ tracker, entries: recent, plan, trend, streak, daysSinceLabel, goalPct, pace }];
     });
   }, [schedule.progressTrackers, schedule.metricEntries, schedule.plans]);
 
@@ -960,7 +1063,7 @@ function MetricsLogSection({ schedule }: { schedule: Schedule }) {
     <div className="rounded-2xl border border-neutral-200 bg-white dark:border-white/[0.08] dark:bg-neutral-900 px-4 py-4">
       <SectionLabel icon={IconChartBar}>Metrics Log</SectionLabel>
       <div className="space-y-5">
-        {trackerGroups.map(({ tracker, entries, plan, trend, streak, daysSinceLabel, goalPct }) => (
+        {trackerGroups.map(({ tracker, entries, plan, trend, streak, daysSinceLabel, goalPct, pace }) => (
           <div key={tracker.id}>
             {/* ── Tracker header ── */}
             <div className="flex items-start justify-between mb-1.5 gap-2">
@@ -1030,6 +1133,13 @@ function MetricsLogSection({ schedule }: { schedule: Schedule }) {
                   />
                 </div>
               </div>
+            )}
+
+            {/* ── Pace-to-goal prediction ── */}
+            {pace && pace.status !== "no_data" && (
+              <p className={`-mt-1 mb-2 text-[11px] font-medium ${pace.colorClass}`}>
+                {pace.label}
+              </p>
             )}
 
             {/* ── Sparkline chart ── */}
