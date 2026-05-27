@@ -606,7 +606,12 @@ export default function PlanDetailView({
         return updated;
       });
     } catch (err) {
-      if (!(err instanceof Error && err.name === "AbortError")) {
+      if (err instanceof Error && err.name === "AbortError") {
+        // Remove the "Generating milestones…" placeholder — stream was cancelled
+        setCoachMessages((prev) =>
+          prev.filter((m, i) => !(i === msgIdx && m.content === "Generating milestones…"))
+        );
+      } else {
         setCoachMessages((prev) => {
           const updated = [...prev];
           updated[msgIdx] = { role: "assistant", content: "Couldn't reach AI. Is Ollama running?" };
