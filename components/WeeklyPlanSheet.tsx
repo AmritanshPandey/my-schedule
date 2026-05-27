@@ -9,6 +9,7 @@ import { DAYS, DAY_LABELS } from "@/lib/useScheduleDB";
 import { isTaskCompleted } from "@/lib/taskCompletion";
 import type { AIGeneratedTask } from "@/lib/aiActions";
 import { streamWeeklyPlan, parseGeneratedTasks } from "@/lib/aiActions";
+import { localISODate } from "@/lib/dateUtils";
 
 // ── Props ─────────────────────────────────────────────────────────────────────
 
@@ -48,7 +49,7 @@ interface WeeklySummary {
 function buildWeeklySummary(schedule: Schedule): WeeklySummary {
   const today = new Date();
   today.setHours(0, 0, 0, 0);
-  const todayISO = today.toISOString().slice(0, 10);
+  const todayISO = localISODate(today);
   const monday = getMondayOf(today);
 
   // Incomplete tasks from past days this week (skip today and future)
@@ -91,7 +92,7 @@ function buildWeeklySummary(schedule: Schedule): WeeklySummary {
     const d = new Date(monday);
     d.setDate(monday.getDate() + i);
     if (d >= today) return;
-    const dateISO = d.toISOString().slice(0, 10);
+    const dateISO = localISODate(d);
     const jsDay = JS_DAYS[d.getDay()];
     for (const ritual of schedule.rituals ?? []) {
       const isDue =
