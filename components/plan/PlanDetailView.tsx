@@ -704,7 +704,7 @@ export default function PlanDetailView({
       {
         role: "assistant",
         type: "confirmation",
-        content: `All ${remaining.length} milestone${remaining.length !== 1 ? "s" : ""} added to your roadmap. Head to the **Roadmap** tab to see them.`,
+        content: `All ${remaining.length} milestone${remaining.length !== 1 ? "s" : ""} added. Head to the **Milestones** tab to see them.`,
       },
     ]);
     setTimeout(() => chatEndRef.current?.scrollIntoView({ behavior: "smooth" }), 50);
@@ -1842,7 +1842,7 @@ export default function PlanDetailView({
                 planTab === tab ? "text-neutral-950 dark:text-white" : "text-neutral-500 dark:text-neutral-400"
               }`}
             >
-              {tab === "planning" ? "Planning" : "Roadmap"}
+              {tab === "planning" ? "Tasks" : "Milestones"}
             </button>
           ))}
         </div>
@@ -1864,7 +1864,7 @@ export default function PlanDetailView({
                 planTab === tab ? "text-neutral-950 dark:text-white" : "text-neutral-500 dark:text-neutral-400"
               }`}
             >
-              {tab === "planning" ? "Planning" : tab === "roadmap" ? "Roadmap" : "Coach"}
+              {tab === "planning" ? "Tasks" : tab === "roadmap" ? "Milestones" : "Coach"}
             </button>
           ))}
         </div>
