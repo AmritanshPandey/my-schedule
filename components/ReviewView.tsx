@@ -1024,15 +1024,15 @@ function MetricsLogSection({ schedule }: { schedule: Schedule }) {
       const daysSinceLabel = lastLoggedLabel(trackerEntries[0].date);
 
       let goalPct: number | null = null;
-      if (tracker.goalValue && tracker.goalValue > 0 && trackerEntries.length > 0) {
+      if (tracker.goalValue != null && tracker.goalValue >= 0 && trackerEntries.length > 0) {
         const lastVal = trackerEntries[0].value;
         goalPct = tracker.goalDirection === "decrease_good"
           ? Math.min(1, tracker.goalValue / Math.max(lastVal, 0.001))
-          : Math.min(1, lastVal / tracker.goalValue);
+          : Math.min(1, lastVal / Math.max(tracker.goalValue, 0.001));
       }
 
       const pace =
-        tracker.goalValue && tracker.goalValue > 0 && tracker.goalDirection
+        tracker.goalValue != null && tracker.goalValue >= 0 && tracker.goalDirection
           ? calcPaceToGoal(trackerEntries, tracker.goalValue, tracker.goalDirection)
           : null;
 
