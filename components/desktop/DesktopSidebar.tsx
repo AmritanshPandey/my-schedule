@@ -123,10 +123,10 @@ export default function DesktopSidebar({
     "text-neutral-400 dark:text-neutral-500";
 
   return (
-    <aside className={`hidden lg:flex h-full shrink-0 flex-col bg-white transition-[width] duration-200 dark:bg-neutral-900 border-r border-neutral-100 dark:border-white/[0.05] ${collapsed ? "w-[56px]" : "w-[220px]"}`}>
+    <aside className={`hidden lg:flex h-full shrink-0 flex-col bg-[#F7F7F9] transition-[width] duration-200 dark:bg-[#18181C] border-r border-neutral-200/60 dark:border-white/[0.05] ${collapsed ? "w-[64px]" : "w-[232px]"}`}>
 
       {/* ── Logo ─────────────────────────────────────────────────────────────── */}
-      <div className={`flex h-[60px] shrink-0 items-center ${collapsed ? "justify-center px-0" : "px-5"}`}>
+      <div className={`flex h-[62px] shrink-0 items-center ${collapsed ? "justify-center px-0" : "px-5"}`}>
         {collapsed ? (
           <LogoMark className="fill-neutral-900 dark:fill-white" />
         ) : (
@@ -138,7 +138,7 @@ export default function DesktopSidebar({
       </div>
 
       {/* ── Nav ──────────────────────────────────────────────────────────────── */}
-      <nav className={`flex-1 space-y-0.5 py-2 ${collapsed ? "px-2" : "px-2"}`}>
+      <nav className={`flex-1 space-y-0.5 py-2 ${collapsed ? "px-2" : "px-2.5"}`}>
         {NAV_ITEMS.map(({ tab, label, Icon }) => {
           const active = activeTab === tab;
           return (
@@ -147,17 +147,17 @@ export default function DesktopSidebar({
               type="button"
               onClick={() => { haptic("light"); onTabChange(tab); }}
               title={collapsed ? label : undefined}
-              className={`relative flex w-full items-center rounded-lg transition-all ${
-                collapsed ? "justify-center px-0 py-2.5" : "gap-3 px-3 py-2 text-left"
+              className={`relative flex w-full items-center rounded-xl transition-all duration-150 ${
+                collapsed ? "justify-center px-0 py-3" : "gap-3 px-3.5 py-2.5 text-left"
               } ${
                 active
-                  ? "bg-neutral-100 text-neutral-900 dark:bg-white/[0.08] dark:text-white"
-                  : "text-neutral-400 hover:bg-neutral-50 hover:text-neutral-700 dark:text-neutral-500 dark:hover:bg-white/[0.04] dark:hover:text-neutral-300"
+                  ? "bg-white text-neutral-900 shadow-[0_1px_4px_rgba(0,0,0,0.07),0_0_0_1px_rgba(0,0,0,0.04)] dark:bg-white/[0.09] dark:text-white dark:shadow-none dark:ring-1 dark:ring-white/[0.07]"
+                  : "text-neutral-500 hover:bg-white/70 hover:text-neutral-700 dark:text-neutral-500 dark:hover:bg-white/[0.05] dark:hover:text-neutral-300"
               }`}
             >
-              <Icon size={17} strokeWidth={active ? 2.2 : 1.8} className="shrink-0" />
+              <Icon size={17} strokeWidth={active ? 2.2 : 1.75} className="shrink-0" />
               {!collapsed && (
-                <span className={`text-[13px] font-semibold ${active ? "text-neutral-900 dark:text-white" : ""}`}>
+                <span className={`text-[13px] ${active ? "font-bold text-neutral-900 dark:text-white" : "font-medium"}`}>
                   {label}
                 </span>
               )}
@@ -168,12 +168,12 @@ export default function DesktopSidebar({
 
       {/* ── Create button (hidden on Review tab) ─────────────────────────────── */}
       {activeTab !== 3 && (
-        <div className={`pb-2 ${collapsed ? "px-2" : "px-2"}`}>
+        <div className={`pb-2 ${collapsed ? "px-2" : "px-2.5"}`}>
           <button
             type="button"
             onClick={handleCreate}
             title={collapsed ? (activeTab === 1 ? "New Plan" : activeTab === 2 ? "New Habit" : "New Task") : undefined}
-            className={`flex w-full items-center rounded-lg bg-neutral-900 py-2 text-white transition-opacity hover:opacity-90 dark:bg-white dark:text-neutral-950 ${collapsed ? "justify-center px-0" : "gap-2 px-3"}`}
+            className={`flex w-full items-center rounded-xl bg-neutral-900 py-2.5 text-white transition-all hover:bg-neutral-800 active:scale-[0.98] dark:bg-white dark:text-neutral-950 dark:hover:bg-neutral-100 ${collapsed ? "justify-center px-0" : "gap-2 px-3.5"}`}
           >
             <IconPlus size={15} strokeWidth={2.5} />
             {!collapsed && (
@@ -186,14 +186,14 @@ export default function DesktopSidebar({
       )}
 
       {/* ── Bottom: AI status + settings + collapse ───────────────────────────── */}
-      <div className={`border-t border-neutral-100 dark:border-white/[0.05] py-2 ${collapsed ? "px-2" : "px-2"}`}>
+      <div className={`border-t border-neutral-200/50 dark:border-white/[0.05] py-2 ${collapsed ? "px-2" : "px-2.5"}`}>
 
         {/* AI status row — click to re-check */}
         <button
           type="button"
           onClick={() => { haptic("light"); setCheckTick((n) => n + 1); }}
           title={collapsed ? statusLabel : `AI: ${statusLabel} — click to refresh`}
-          className={`flex w-full items-center rounded-lg py-2 transition-colors hover:bg-neutral-50 dark:hover:bg-white/[0.04] ${collapsed ? "justify-center px-0" : "gap-2.5 px-3"}`}
+          className={`flex w-full items-center rounded-xl py-2 transition-colors hover:bg-white/70 dark:hover:bg-white/[0.04] ${collapsed ? "justify-center px-0" : "gap-2.5 px-3.5"}`}
         >
           <StatusDot status={status} />
           {!collapsed && (
@@ -208,10 +208,10 @@ export default function DesktopSidebar({
           type="button"
           onClick={() => { haptic("light"); onOpenSettings(); }}
           title={collapsed ? "Settings" : undefined}
-          className={`flex w-full items-center rounded-lg py-2 text-neutral-400 transition-colors hover:bg-neutral-50 hover:text-neutral-700 dark:text-neutral-500 dark:hover:bg-white/[0.04] dark:hover:text-neutral-300 ${collapsed ? "justify-center px-0" : "gap-3 px-3"}`}
+          className={`flex w-full items-center rounded-xl py-2 text-neutral-500 transition-colors hover:bg-white/70 hover:text-neutral-700 dark:text-neutral-500 dark:hover:bg-white/[0.04] dark:hover:text-neutral-300 ${collapsed ? "justify-center px-0" : "gap-3 px-3.5"}`}
         >
           <IconSettings size={16} strokeWidth={1.8} className="shrink-0" />
-          {!collapsed && <span className="text-[13px] font-semibold">Settings</span>}
+          {!collapsed && <span className="text-[13px] font-medium">Settings</span>}
         </button>
 
         {/* Collapse toggle */}
@@ -219,7 +219,7 @@ export default function DesktopSidebar({
           type="button"
           onClick={() => { haptic("light"); onToggleCollapse(); }}
           title={collapsed ? "Expand" : "Collapse"}
-          className={`mt-0.5 flex w-full items-center rounded-lg py-2 text-neutral-300 transition-colors hover:bg-neutral-50 hover:text-neutral-500 dark:text-neutral-700 dark:hover:bg-white/[0.04] dark:hover:text-neutral-400 ${collapsed ? "justify-center px-0" : "gap-3 px-3"}`}
+          className={`mt-0.5 flex w-full items-center rounded-xl py-2 text-neutral-400 transition-colors hover:bg-white/70 hover:text-neutral-500 dark:text-neutral-700 dark:hover:bg-white/[0.04] dark:hover:text-neutral-500 ${collapsed ? "justify-center px-0" : "gap-3 px-3.5"}`}
         >
           {collapsed
             ? <IconChevronRight size={15} strokeWidth={2} />

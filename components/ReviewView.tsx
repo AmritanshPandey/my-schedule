@@ -325,7 +325,7 @@ function ThisWeekSection({
   const ritualPct = ritualDue > 0 ? Math.round((ritualDone / ritualDue) * 100) : 0;
 
   return (
-    <div className="rounded-2xl border border-neutral-200 bg-white dark:border-white/[0.08] dark:bg-neutral-900 px-4 py-4">
+    <div className="rounded-2xl border border-neutral-200/70 bg-white shadow-[0_1px_3px_rgba(0,0,0,0.05),0_2px_8px_rgba(0,0,0,0.04)] dark:border-white/[0.07] dark:bg-neutral-900 dark:shadow-[0_1px_3px_rgba(0,0,0,0.3)] px-4 py-4">
       <SectionLabel icon={IconCalendarWeek}>This Week</SectionLabel>
 
       {/* Day strip */}
@@ -455,7 +455,7 @@ function ExecutionTrendSection({ schedule }: { schedule: Schedule }) {
   const maxPct = Math.max(...weeks.map((w) => w.pct), 10);
 
   return (
-    <div className="rounded-2xl border border-neutral-200 bg-white dark:border-white/[0.08] dark:bg-neutral-900 px-4 py-4">
+    <div className="rounded-2xl border border-neutral-200/70 bg-white shadow-[0_1px_3px_rgba(0,0,0,0.05),0_2px_8px_rgba(0,0,0,0.04)] dark:border-white/[0.07] dark:bg-neutral-900 dark:shadow-[0_1px_3px_rgba(0,0,0,0.3)] px-4 py-4">
       <div className="flex items-center justify-between mb-3">
         <SectionLabel icon={IconTrendingUp}>Execution Trend</SectionLabel>
         {delta !== 0 && (
@@ -554,7 +554,7 @@ function HabitConsistencySection({
 
   if (ritualsWithStats.length === 0) {
     return (
-      <div className="rounded-2xl border border-neutral-200 bg-white dark:border-white/[0.08] dark:bg-neutral-900 px-4 py-4">
+      <div className="rounded-2xl border border-neutral-200/70 bg-white shadow-[0_1px_3px_rgba(0,0,0,0.05),0_2px_8px_rgba(0,0,0,0.04)] dark:border-white/[0.07] dark:bg-neutral-900 dark:shadow-[0_1px_3px_rgba(0,0,0,0.3)] px-4 py-4">
         <SectionLabel icon={IconRepeat}>Habit Consistency</SectionLabel>
         <p className="text-[13px] text-neutral-400 dark:text-neutral-500">No habits yet. Add some in the Routine tab.</p>
       </div>
@@ -562,7 +562,7 @@ function HabitConsistencySection({
   }
 
   return (
-    <div className="rounded-2xl border border-neutral-200 bg-white dark:border-white/[0.08] dark:bg-neutral-900 px-4 py-4">
+    <div className="rounded-2xl border border-neutral-200/70 bg-white shadow-[0_1px_3px_rgba(0,0,0,0.05),0_2px_8px_rgba(0,0,0,0.04)] dark:border-white/[0.07] dark:bg-neutral-900 dark:shadow-[0_1px_3px_rgba(0,0,0,0.3)] px-4 py-4">
       <SectionLabel icon={IconRepeat}>Habit Consistency</SectionLabel>
       <div className="space-y-3">
         {ritualsWithStats.map(({ ritual, dots, streak }) => (
@@ -633,7 +633,7 @@ function PlanHealthSection({
 
   if (planCards.length === 0) {
     return (
-      <div className="rounded-2xl border border-neutral-200 bg-white dark:border-white/[0.08] dark:bg-neutral-900 px-4 py-4">
+      <div className="rounded-2xl border border-neutral-200/70 bg-white shadow-[0_1px_3px_rgba(0,0,0,0.05),0_2px_8px_rgba(0,0,0,0.04)] dark:border-white/[0.07] dark:bg-neutral-900 dark:shadow-[0_1px_3px_rgba(0,0,0,0.3)] px-4 py-4">
         <SectionLabel icon={IconClipboardData}>Plan Health</SectionLabel>
         <p className="text-[13px] text-neutral-400 dark:text-neutral-500">No active plans. Create one in the Plans tab.</p>
       </div>
@@ -641,7 +641,7 @@ function PlanHealthSection({
   }
 
   return (
-    <div className="rounded-2xl border border-neutral-200 bg-white dark:border-white/[0.08] dark:bg-neutral-900 px-4 py-4">
+    <div className="rounded-2xl border border-neutral-200/70 bg-white shadow-[0_1px_3px_rgba(0,0,0,0.05),0_2px_8px_rgba(0,0,0,0.04)] dark:border-white/[0.07] dark:bg-neutral-900 dark:shadow-[0_1px_3px_rgba(0,0,0,0.3)] px-4 py-4">
       <SectionLabel icon={IconClipboardData}>Plan Health</SectionLabel>
       <div className="space-y-2.5">
         {planCards.map(({ plan, completedMs, totalMs, consistency, delayedMs }) => {
@@ -1042,7 +1042,7 @@ function MetricsLogSection({ schedule }: { schedule: Schedule }) {
 
   if (trackerGroups.length === 0) {
     return (
-      <div className="rounded-2xl border border-neutral-200 bg-white dark:border-white/[0.08] dark:bg-neutral-900 px-4 py-4">
+      <div className="rounded-2xl border border-neutral-200/70 bg-white shadow-[0_1px_3px_rgba(0,0,0,0.05),0_2px_8px_rgba(0,0,0,0.04)] dark:border-white/[0.07] dark:bg-neutral-900 dark:shadow-[0_1px_3px_rgba(0,0,0,0.3)] px-4 py-4">
         <SectionLabel icon={IconChartBar}>Metrics Log</SectionLabel>
         <p className="text-[13px] text-neutral-400 dark:text-neutral-500">No metrics logged yet. Add entries from a plan&apos;s tracker.</p>
       </div>

@@ -1828,7 +1828,7 @@ export default function ScheduleApp() {
   // ─── JSX ──────────────────────────────────────────────────────────────────
 
   return (
-    <main className="min-h-screen bg-neutral-50 text-neutral-900 dark:bg-neutral-950 dark:text-white lg:flex lg:h-screen lg:overflow-hidden">
+    <main className="min-h-screen bg-[#F2F2F7] text-neutral-900 dark:bg-[#111115] dark:text-white lg:flex lg:h-screen lg:overflow-hidden">
 
       {/* ── Desktop sidebar (hidden on mobile) ─────────────────────────────── */}
       <DesktopSidebar
@@ -2253,7 +2253,7 @@ export default function ScheduleApp() {
                     >
                       {/* Time column */}
                       <div
-                        className="sticky left-0 z-20 w-[44px] shrink-0 bg-neutral-50 dark:bg-neutral-950"
+                        className="sticky left-0 z-20 w-[44px] shrink-0 bg-[#F2F2F7] dark:bg-[#111115]"
                         style={{ height: TIMELINE_HEIGHT }}
                       >
                         {TIMELINE_HOURS.map((hour, index) => {
