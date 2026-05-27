@@ -1167,6 +1167,8 @@ function MetricsLogSection({ schedule }: { schedule: Schedule }) {
               <button
                 type="button"
                 onClick={() => toggleExpand(tracker.id)}
+                aria-expanded={expandedIds.has(tracker.id)}
+                aria-controls={`metric-entries-${tracker.id}`}
                 className="mt-2.5 flex items-center gap-1 text-[10.5px] font-medium text-neutral-400 transition-colors hover:text-neutral-600 dark:text-neutral-500 dark:hover:text-neutral-300"
               >
                 {expandedIds.has(tracker.id)
@@ -1174,7 +1176,7 @@ function MetricsLogSection({ schedule }: { schedule: Schedule }) {
                   : `Show ${entries.length} entries ↓`}
               </button>
               {expandedIds.has(tracker.id) && (
-                <div className="mt-1 space-y-0.5">
+                <div id={`metric-entries-${tracker.id}`} className="mt-1 space-y-0.5">
                   {entries.map((entry) => (
                     <div
                       key={entry.id}
