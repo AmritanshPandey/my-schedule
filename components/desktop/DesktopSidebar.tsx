@@ -7,6 +7,7 @@ import {
   IconChevronLeft,
   IconChevronRight,
   IconClipboardData,
+  IconLayoutDashboard,
   IconPlus,
   IconRepeat,
   IconSettings,
@@ -28,10 +29,11 @@ interface DesktopSidebarProps {
 }
 
 const NAV_ITEMS = [
-  { tab: 0, label: "Today",   Icon: IconCalendarEvent },
-  { tab: 1, label: "Plans",   Icon: IconClipboardData },
-  { tab: 2, label: "Routine", Icon: IconRepeat },
-  { tab: 3, label: "Review",  Icon: IconChartBar },
+  { tab: 0, label: "Today",    Icon: IconCalendarEvent },
+  { tab: 1, label: "Plans",    Icon: IconClipboardData },
+  { tab: 2, label: "Routine",  Icon: IconRepeat },
+  { tab: 3, label: "Review",   Icon: IconChartBar },
+  { tab: 4, label: "Overview", Icon: IconLayoutDashboard },
 ] as const;
 
 type ConnectionStatus = "checking" | "connected" | "no-model" | "offline";
@@ -151,7 +153,7 @@ export default function DesktopSidebar({
                 collapsed ? "justify-center px-0 py-3" : "gap-3 px-3.5 py-2.5 text-left"
               } ${
                 active
-                  ? "bg-white text-neutral-900 shadow-[0_1px_4px_rgba(0,0,0,0.07),0_0_0_1px_rgba(0,0,0,0.04)] dark:bg-white/[0.09] dark:text-white dark:shadow-none dark:ring-1 dark:ring-white/[0.07]"
+                  ? "bg-white text-neutral-900 dark:bg-white/[0.09] dark:text-white dark:ring-1 dark:ring-white/[0.07]"
                   : "text-neutral-500 hover:bg-white/70 hover:text-neutral-700 dark:text-neutral-500 dark:hover:bg-white/[0.05] dark:hover:text-neutral-300"
               }`}
             >
@@ -167,7 +169,7 @@ export default function DesktopSidebar({
       </nav>
 
       {/* ── Create button (hidden on Review tab) ─────────────────────────────── */}
-      {activeTab !== 3 && (
+      {activeTab !== 3 && activeTab !== 4 && (
         <div className={`pb-2 ${collapsed ? "px-2" : "px-2.5"}`}>
           <button
             type="button"

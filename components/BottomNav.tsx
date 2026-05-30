@@ -9,6 +9,7 @@ import {
   IconClipboardData,
   IconCalendarPlus,
   IconClipboardPlus,
+  IconLayoutDashboard,
   IconPlus,
   IconRepeat,
 } from "@tabler/icons-react";
@@ -52,7 +53,7 @@ export default function BottomNav({
   }
 
   const tabClass = (active: boolean) => `
-    flex h-[56px] w-[64px] flex-col items-center justify-center gap-[2px]
+    flex h-[56px] w-[52px] flex-col items-center justify-center gap-[2px]
     rounded-full transition-all duration-200
     ${active
       ? "bg-black/[0.05] text-neutral-950 dark:bg-white/[0.10] dark:text-white"
@@ -91,7 +92,7 @@ export default function BottomNav({
                 transition={{ duration: 0.2, ease: [0.34, 1.1, 0.64, 1] }}
                 className="absolute left-1/2 top-1/2 z-30 flex -translate-x-1/2 -translate-y-[156px] flex-col items-center"
               >
-                <div className="flex items-start gap-6 rounded-[24px] border border-white/[0.10] bg-neutral-950 px-5 py-4 shadow-[0_20px_60px_-8px_rgba(0,0,0,0.55),inset_0_1px_0_rgba(255,255,255,0.08)]">
+                <div className="flex items-start gap-6 rounded-[24px] border border-white/[0.10] bg-neutral-950 px-5 py-4">
                   {/* ADD TASK */}
                   <motion.button
                     whileTap={{ scale: 0.95 }}
@@ -148,9 +149,7 @@ export default function BottomNav({
               -translate-x-1/2 -translate-y-1/2
               items-center justify-center rounded-full
               bg-neutral-950 text-white
-              shadow-[0_4px_16px_rgba(0,0,0,0.28),inset_0_1px_0_rgba(255,255,255,0.10)]
               dark:bg-white dark:text-neutral-950
-              dark:shadow-[0_4px_16px_rgba(0,0,0,0.4),inset_0_1px_0_rgba(255,255,255,0.3)]
             "
           >
             <motion.div
@@ -168,9 +167,7 @@ export default function BottomNav({
             className="
               relative flex h-[68px] w-full items-center justify-evenly rounded-full px-2
               border border-neutral-200/70 bg-white
-              shadow-[inset_0_1px_0_rgba(255,255,255,0.95),0_8px_32px_-4px_rgba(0,0,0,0.12),0_2px_8px_-2px_rgba(0,0,0,0.06)]
               dark:border-white/[0.09] dark:bg-neutral-900
-              dark:shadow-[inset_0_1px_0_rgba(255,255,255,0.05),0_8px_32px_-4px_rgba(0,0,0,0.55)]
             "
           >
             <button
@@ -218,6 +215,17 @@ export default function BottomNav({
             >
               <IconChartBar size={20} strokeWidth={2} />
               <span className="text-[10.5px] font-medium leading-none">Review</span>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => handleTabChange(4)}
+              className={tabClass(activeTab === 4)}
+              aria-label="Overview"
+              aria-current={activeTab === 4 ? "page" : undefined}
+            >
+              <IconLayoutDashboard size={20} strokeWidth={2} />
+              <span className="text-[10.5px] font-medium leading-none">Overview</span>
             </button>
           </nav>
 
