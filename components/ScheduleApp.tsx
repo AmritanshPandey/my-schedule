@@ -13,7 +13,9 @@ import DesktopSidebar from "@/components/desktop/DesktopSidebar";
 import ThemeToggle from "@/components/ThemeToggle";
 import { WeekGrid } from "@/components/desktop/WeekGrid";
 import { QuickAddPanel } from "@/components/desktop/QuickAddPanel";
-import { OLLAMA_URL_KEY, OLLAMA_MODEL_KEY, DEFAULT_OLLAMA_URL, DEFAULT_OLLAMA_MODEL } from "@/lib/ai";
+import { AIFab } from "@/components/desktop/AIFab";
+import { checkOllamaConnection, OLLAMA_URL_KEY, OLLAMA_MODEL_KEY, DEFAULT_OLLAMA_URL, DEFAULT_OLLAMA_MODEL } from "@/lib/ai";
+import type { AIActionResult } from "@/lib/ai";
 
 // ── Deferred heavy components (separate JS chunks, loaded on demand) ──────────
 const PlanDetailView = dynamic(() => import("@/components/plan/PlanDetailView"), { ssr: false });
@@ -23,7 +25,7 @@ const TemplatesSheet = dynamic(() => import("@/components/TemplatesSheet").then(
 const SessionSheet = dynamic(() => import("@/components/activity/SessionSheet"), { ssr: false });
 const RitualView = dynamic(() => import("@/components/activity/RitualView"), { ssr: false });
 const ReviewView = dynamic(() => import("@/components/ReviewView"), { ssr: false });
-const WeeklyPlanSheet = dynamic(() => import("@/components/WeeklyPlanSheet"), { ssr: false });
+const OverviewDashboard = dynamic(() => import("@/components/OverviewDashboard"), { ssr: false });
 const TrackerQuickBar = dynamic(() => import("@/components/TrackerQuickBar"), { ssr: false });
 import WhatNextCard from "@/components/WhatNextCard";
 import StreakAlertChips from "@/components/StreakAlertChips";
@@ -35,9 +37,11 @@ import {
   MetricEntry,
   Milestone,
   Plan,
+  PlanCoachMessage,
   ProgressTracker,
   Ritual,
   Schedule,
+  StrategyAsset,
   SummaryConfig,
   Task,
   categoryFromIcon,
@@ -64,7 +68,6 @@ import {
   IconTable,
   IconTrash,
   IconX,
-  IconAlertTriangle,
   IconAlertCircle,
   IconClipboardData,
 } from "@tabler/icons-react";
@@ -238,63 +241,24 @@ function getWeekDates(offset: number): Array<{ day: DayKey; date: Date }> {
 
 // ─── Stat tile ───────────────────────────────────────────────────────────────
 
-type StatTileColorScheme = "neutral" | "emerald" | "amber" | "rose";
-
-const STAT_TILE_STYLES: Record<
-  StatTileColorScheme,
-  { tile: string; iconBg: string; icon: string; value: string; label: string }
-> = {
-  neutral: {
-    tile:    "border-neutral-200 bg-white dark:border-white/[0.08] dark:bg-neutral-900",
-    iconBg:  "bg-neutral-100 dark:bg-white/[0.06]",
-    icon:    "text-neutral-500 dark:text-neutral-400",
-    value:   "text-neutral-900 dark:text-white",
-    label:   "text-neutral-400 dark:text-neutral-500",
-  },
-  emerald: {
-    tile:    "border-emerald-200 bg-emerald-50 dark:border-emerald-500/20 dark:bg-emerald-500/[0.07]",
-    iconBg:  "bg-emerald-100 dark:bg-emerald-500/[0.15]",
-    icon:    "text-emerald-600 dark:text-emerald-400",
-    value:   "text-emerald-700 dark:text-emerald-400",
-    label:   "text-emerald-600/70 dark:text-emerald-500/70",
-  },
-  amber: {
-    tile:    "border-amber-200 bg-amber-50 dark:border-amber-500/20 dark:bg-amber-500/[0.07]",
-    iconBg:  "bg-amber-100 dark:bg-amber-500/[0.15]",
-    icon:    "text-amber-600 dark:text-amber-400",
-    value:   "text-amber-700 dark:text-amber-400",
-    label:   "text-amber-600/70 dark:text-amber-500/70",
-  },
-  rose: {
-    tile:    "border-rose-200 bg-rose-50 dark:border-rose-500/20 dark:bg-rose-500/[0.07]",
-    iconBg:  "bg-rose-100 dark:bg-rose-500/[0.15]",
-    icon:    "text-rose-600 dark:text-rose-400",
-    value:   "text-rose-700 dark:text-rose-400",
-    label:   "text-rose-600/70 dark:text-rose-500/70",
-  },
-};
-
 function StatTile({
   icon: Icon,
   value,
   label,
-  colorScheme = "neutral",
 }: {
   icon: React.ComponentType<{ size?: number; strokeWidth?: number; className?: string }>;
   value: number;
   label: string;
-  colorScheme?: StatTileColorScheme;
 }) {
-  const s = STAT_TILE_STYLES[colorScheme];
   return (
-    <div className={`flex items-center gap-3 rounded-2xl border px-4 py-3 ${s.tile}`}>
-      <div className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-xl ${s.iconBg}`}>
-        <Icon size={17} strokeWidth={colorScheme === "neutral" ? 1.8 : 2} className={s.icon} />
+    <div className="h-[98px] rounded-2xl border border-neutral-200 bg-white px-4 py-3.5 dark:border-white/[0.08] dark:bg-neutral-900">
+      <div className="mb-1 flex items-center gap-1.5">
+        <Icon size={12} strokeWidth={2} className="text-neutral-400 dark:text-neutral-500" />
+        <p className="text-[11px] font-semibold uppercase tracking-wider text-neutral-400 dark:text-neutral-500">
+          {label}
+        </p>
       </div>
-      <div>
-        <p className={`text-[24px] font-black tabular-nums leading-none ${s.value}`}>{value}</p>
-        <p className={`mt-0.5 text-[11px] font-semibold ${s.label}`}>{label}</p>
-      </div>
+      <p className="text-[28px] font-black tabular-nums leading-none text-neutral-900 dark:text-white">{value}</p>
     </div>
   );
 }
@@ -480,6 +444,8 @@ export default function ScheduleApp() {
 
   const [addingPlan, setAddingPlan] = useState(false);
   const [aiPlanCreating, setAiPlanCreating] = useState(false);
+  const [aiOpen, setAiOpen] = useState(false);
+  const [aiInitialMessage, setAiInitialMessage] = useState("");
   const [newPlanTitle, setNewPlanTitle] = useState("");
   const [newPlanDescription, setNewPlanDescription] = useState("");
   const [newPlanStartDate, setNewPlanStartDate] = useState("");
@@ -493,7 +459,6 @@ export default function ScheduleApp() {
 
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [templatesOpen, setTemplatesOpen] = useState(false);
-  const [weeklyPlanOpen, setWeeklyPlanOpen] = useState(false);
   const [sessionTask, setSessionTask] = useState<Task | null>(null);
   const completedRitualIds = useMemo(() => {
     const today = todayISO();
@@ -518,6 +483,25 @@ export default function ScheduleApp() {
     typeof window !== "undefined" ? (localStorage.getItem(OLLAMA_MODEL_KEY) ?? DEFAULT_OLLAMA_MODEL) : DEFAULT_OLLAMA_MODEL
   );
 
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    let cancelled = false;
+
+    async function syncInstalledModel() {
+      try {
+        const models = await checkOllamaConnection(ollamaUrl);
+        if (cancelled || models.length === 0 || models.includes(ollamaModel)) return;
+        localStorage.setItem(OLLAMA_MODEL_KEY, models[0]);
+        setOllamaModel(models[0]);
+      } catch {
+        // Ollama may be offline; keep the saved model and let the status UI show it.
+      }
+    }
+
+    void syncInstalledModel();
+    return () => { cancelled = true; };
+  }, [ollamaUrl, ollamaModel]);
+
   function openConfirm(title: string, description: string, fn: () => void) {
     setConfirmState({ title, description, onConfirm: fn });
   }
@@ -526,6 +510,15 @@ export default function ScheduleApp() {
   const hasUserScrolledTimelineRef = useRef(false);
   const isAutoScrollingRef = useRef(false);
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 12 } }));
+
+  const handleUpdateCoachMessages = useCallback((planId: string, messages: PlanCoachMessage[]) => {
+    setSchedule((prev) => ({
+      ...prev,
+      plans: prev.plans.map((p) =>
+        p.id === planId ? { ...p, coachMessages: messages } : p
+      ),
+    }));
+  }, [setSchedule]);
 
   useEffect(() => {
     hasUserScrolledTimelineRef.current = false;
@@ -914,7 +907,7 @@ export default function ScheduleApp() {
     setAddingPlan(true);
   }
 
-  function handleCreateAIPlan(data: import("@/components/plan/AIPlanCreatorSheet").AIPlanCreatorData) {
+  function createPlanFromAIAction(data: import("@/components/plan/AIPlanCreatorSheet").AIPlanCreatorData) {
     const planId = uid();
     const plan: Plan = {
       id: planId,
@@ -947,8 +940,66 @@ export default function ScheduleApp() {
       }
       return { ...prev, plans: [...prev.plans, plan], activities: updatedActivities };
     });
-    setAiPlanCreating(false);
     setSelectedPlanId(planId);
+    return planId;
+  }
+
+  function handleCreateAIPlan(data: import("@/components/plan/AIPlanCreatorSheet").AIPlanCreatorData) {
+    createPlanFromAIAction(data);
+    setAiPlanCreating(false);
+  }
+
+  function handleApplyAction(action: AIActionResult) {
+    if (action.type === "create_plan") {
+      createPlanFromAIAction({
+        title: action.payload.title,
+        description: action.payload.description,
+        emoji: action.payload.emoji,
+        color: action.payload.color,
+        startDate: action.payload.startDate,
+        endDate: action.payload.endDate,
+        tasks: action.payload.tasks ?? [],
+      });
+      setToastMessage(`Created plan “${action.payload.title}”`);
+      return;
+    }
+
+    if (action.type === "create_ritual") {
+      const ritual: Ritual = {
+        id: uid(),
+        title: action.payload.title,
+        time: action.payload.time,
+        duration: action.payload.duration,
+        repeatDays: action.payload.repeatDays,
+        color: action.payload.color,
+        sortOrder: (schedule.rituals ?? []).length,
+      };
+      setSchedule((prev) => ({
+        ...prev,
+        rituals: [...(prev.rituals ?? []), ritual],
+      }));
+      setActiveTab(2);
+      setToastMessage(`Added ritual “${action.payload.title}”`);
+      return;
+    }
+
+    if (action.type === "create_strategy") {
+      const strategy: StrategyAsset = {
+        id: uid(),
+        type: "html",
+        title: action.payload.title,
+        description: action.payload.description || undefined,
+        htmlContent: action.payload.htmlContent,
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+      };
+      setSchedule((prev) => ({
+        ...prev,
+        strategies: [...prev.strategies, strategy],
+      }));
+      setToastMessage(`Saved strategy “${action.payload.title}”`);
+      return;
+    }
   }
 
   function handleDeleteTracker(trackerId: string) {
@@ -1656,7 +1707,7 @@ export default function ScheduleApp() {
                   setNewPlanMetaInput("");
                 }
               }}
-              className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl border border-neutral-200 text-neutral-500 hover:bg-neutral-50 dark:border-white/10 dark:text-neutral-400 dark:hover:bg-white/5"
+              className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl border border-neutral-200 text-neutral-500 hover:bg-neutral-100 dark:border-white/10 dark:text-neutral-400 dark:hover:bg-white/[0.07]"
             >
               <IconPlus size={16} />
             </button>
@@ -1702,25 +1753,27 @@ export default function ScheduleApp() {
       (s) => s.consistency >= 35 && s.consistency < 70
     ).length;
     const needsWorkCount = planStatsList.filter((s) => s.consistency < 35).length;
+    const needsFocusCount = atRiskCount + needsWorkCount;
 
     return (
-      <div className="px-4 pt-5 pb-8 lg:px-8 lg:pt-8 lg:pb-10">
+      <div className="px-4 pt-5 pb-8 lg:mx-auto lg:max-w-4xl lg:px-8 lg:pt-6 lg:pb-10">
         {/* Header */}
         <MainTitleSection
           label="Stay on track"
           title="My Plans"
           actions={
-            <div className="flex items-center gap-2">
+            <div className="flex flex-wrap items-center gap-2">
               {ollamaUrl && ollamaModel && (
                 <button
                   type="button"
                   onClick={() => setAiPlanCreating(true)}
-                  className="group relative overflow-hidden rounded-full border border-violet-600/60 bg-violet-600/[0.12] px-4 min-h-[44px] py-[10px] shadow-[0_0_14px_rgba(109,40,217,0.2)] transition-all active:scale-[0.97] hover:border-violet-500/80 hover:bg-violet-600/[0.18] hover:shadow-[0_0_22px_rgba(109,40,217,0.35)] dark:border-violet-500/40 dark:bg-violet-500/[0.08] dark:hover:border-violet-400/60 dark:hover:bg-violet-500/[0.14]"
+                  className="group relative inline-flex h-[44px] overflow-hidden rounded-full bg-gradient-to-r from-fuchsia-500 via-pink-500 to-orange-400 transition-all active:scale-95 hover:opacity-95"
                 >
-                  <div className="pointer-events-none absolute inset-0 -translate-x-full skew-x-[-15deg] bg-gradient-to-r from-transparent via-white/15 to-transparent transition-transform duration-700 group-hover:translate-x-[250%]" />
-                  <span className="relative flex items-center gap-2 text-[13px] font-bold tracking-[-0.15px]">
-                    <IconSparkles size={14} strokeWidth={2} className="text-violet-600 dark:text-violet-400" />
-                    <span className="bg-[linear-gradient(135deg,#5b21b6,#7c3aed)] bg-clip-text text-transparent dark:bg-[linear-gradient(135deg,#c4b5fd,#f0abfc)]">Plan with AI</span>
+                  <span className="relative inline-flex h-full items-center gap-2 overflow-hidden rounded-full bg-white/95 px-4 text-[13px] font-bold text-neutral-950 shadow-sm shadow-black/10 transition-colors duration-200 hover:bg-white dark:bg-neutral-950/95 dark:text-white dark:shadow-black/30 dark:hover:bg-neutral-900">
+                    <span className="inline-flex h-7 w-7 items-center justify-center rounded-full bg-gradient-to-r from-fuchsia-500 via-pink-500 to-orange-400 text-white shadow-sm shadow-pink-500/30">
+                      <IconSparkles size={12} strokeWidth={1.5} />
+                    </span>
+                    <span>Plan with AI</span>
                   </span>
                 </button>
               )}
@@ -1736,11 +1789,10 @@ export default function ScheduleApp() {
 
         {/* Desktop stat strip */}
         {schedule.plans.length > 0 && (
-          <div className="hidden lg:flex gap-3 mb-7">
-            <StatTile icon={IconClipboardData} value={schedule.plans.length} label="Total Plans" colorScheme="neutral" />
-            <StatTile icon={IconCheck}         value={onTrackCount}           label="On Track"    colorScheme="emerald" />
-            {atRiskCount   > 0 && <StatTile icon={IconAlertTriangle} value={atRiskCount}   label="At Risk"     colorScheme="amber" />}
-            {needsWorkCount > 0 && <StatTile icon={IconAlertCircle}  value={needsWorkCount} label="Needs Focus" colorScheme="rose"  />}
+          <div className="mb-5 hidden grid-cols-3 gap-3 lg:grid">
+            <StatTile icon={IconClipboardData} value={schedule.plans.length} label="Total Plans" />
+            <StatTile icon={IconCheck} value={onTrackCount} label="On Track" />
+            <StatTile icon={IconAlertCircle} value={needsFocusCount} label="Needs Focus" />
           </div>
         )}
 
@@ -1764,8 +1816,8 @@ export default function ScheduleApp() {
           </div>
         )}
 
-        {/* Plan cards — 2-col grid on desktop */}
-        <div className="space-y-3 lg:grid lg:grid-cols-2 xl:grid-cols-3 lg:gap-4 lg:space-y-0">
+        {/* Plan cards */}
+        <div className="space-y-3">
           {schedule.plans.length > 0 && (
             <button
               type="button"
@@ -2007,7 +2059,7 @@ export default function ScheduleApp() {
                         className={`relative flex flex-col items-center justify-center gap-2.5 w-full h-[64px] rounded-lg focus-visible:outline-none ${
                           isActive
                             ? "bg-neutral-950 dark:bg-white"
-                            : "hover:bg-neutral-100 dark:hover:bg-white/[0.06]"
+                            : "hover:bg-neutral-100 dark:hover:bg-white/[0.07]"
                         }`}
                       >
                         {isActive && (
@@ -2376,7 +2428,7 @@ export default function ScheduleApp() {
             exit={{ opacity: 0 }}
             transition={{ duration: 0.12, ease: "easeOut" }}
           >
-          <div className={selectedPlan ? "lg:mx-auto lg:max-w-3xl lg:px-8" : ""}>
+          <div className={selectedPlan ? "lg:mx-auto lg:max-w-4xl" : ""}>
           {selectedPlan ? (
             <PlanDetailView
               plan={selectedPlan}
@@ -2422,6 +2474,7 @@ export default function ScheduleApp() {
               ollamaModel={ollamaModel}
               onAddGeneratedTasks={handleAddGeneratedTasks}
               onLinkTrackerToMilestone={handleLinkTrackerToMilestone}
+              onUpdateCoachMessages={handleUpdateCoachMessages}
             />
           ) : renderPlanList()}
           </div>
@@ -2436,21 +2489,19 @@ export default function ScheduleApp() {
             exit={{ opacity: 0 }}
             transition={{ duration: 0.12, ease: "easeOut" }}
           >
-            <div className="lg:px-8">
-              <RitualView
-                rituals={schedule.rituals ?? []}
-                completedIds={completedRitualIds}
-                ritualCompletions={schedule.ritualCompletions ?? []}
-                onToggleComplete={handleToggleRitualComplete}
-                onAdd={handleAddRitual}
-                onUpdate={handleUpdateRitual}
-                onDelete={handleDeleteRitual}
-                onReorder={handleReorderRituals}
-                addOpen={ritualAddOpen}
-                onAddOpenChange={setRitualAddOpen}
-                weekHistory={ritualWeekHistory}
-              />
-            </div>
+            <RitualView
+              rituals={schedule.rituals ?? []}
+              completedIds={completedRitualIds}
+              ritualCompletions={schedule.ritualCompletions ?? []}
+              onToggleComplete={handleToggleRitualComplete}
+              onAdd={handleAddRitual}
+              onUpdate={handleUpdateRitual}
+              onDelete={handleDeleteRitual}
+              onReorder={handleReorderRituals}
+              addOpen={ritualAddOpen}
+              onAddOpenChange={setRitualAddOpen}
+              weekHistory={ritualWeekHistory}
+            />
           </motion.div>
         )}
 
@@ -2467,7 +2518,23 @@ export default function ScheduleApp() {
               schedule={schedule}
               todayKey={todayKey}
               ritualWeekHistory={ritualWeekHistory}
-              onOpenWeeklyPlan={() => setWeeklyPlanOpen(true)}
+            />
+          </motion.div>
+        )}
+
+        {/* ── Overview Tab ───────────────────────────────────────────────── */}
+        {activeTab === 4 && (
+          <motion.div
+            key="tab-overview"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            transition={{ duration: 0.12, ease: "easeOut" }}
+          >
+            <OverviewDashboard
+              schedule={schedule}
+              todayKey={todayKey}
+              onNavigate={(tab) => { setActiveTab(tab); setSelectedPlanId(null); }}
             />
           </motion.div>
         )}
@@ -2652,16 +2719,6 @@ export default function ScheduleApp() {
         description={confirmState?.description}
       />
 
-      {/* ── Weekly Plan Sheet ────────────────────────────────────────────────── */}
-      <WeeklyPlanSheet
-        open={weeklyPlanOpen}
-        onClose={() => setWeeklyPlanOpen(false)}
-        schedule={schedule}
-        ollamaUrl={ollamaUrl}
-        ollamaModel={ollamaModel}
-        onAddTasks={(tasks, planId) => handleAddGeneratedTasks(tasks, planId)}
-      />
-
       {/* ── Toast ───────────────────────────────────────────────────────────── */}
       <AnimatePresence>
         {toastMessage && (
@@ -2670,7 +2727,7 @@ export default function ScheduleApp() {
             animate={{ opacity: 1, y: 0, scale: 1 }}
             exit={{ opacity: 0, y: 12, scale: 0.95 }}
             transition={{ duration: 0.2, ease: [0.22, 1, 0.36, 1] }}
-            className="fixed bottom-28 lg:bottom-6 left-1/2 z-50 -translate-x-1/2 rounded-full bg-neutral-900 px-5 py-2.5 text-[14px] font-semibold text-white shadow-lg dark:bg-white dark:text-neutral-900"
+            className="fixed bottom-28 lg:bottom-6 left-1/2 z-50 -translate-x-1/2 rounded-full bg-neutral-900 px-5 py-2.5 text-[14px] font-semibold text-white dark:bg-white dark:text-neutral-900"
           >
             {toastMessage}
           </motion.div>
@@ -2678,8 +2735,27 @@ export default function ScheduleApp() {
       </AnimatePresence>
       </div>{/* end main scrollable column */}
 
-      {/* ── Theme toggle FAB — desktop only ────────────────────────────────── */}
-      <div className="fixed bottom-6 right-6 z-50 hidden lg:block">
+      {/* ── AI FAB (Plans + Routine tabs, desktop only) ───────────────────── */}
+      {(activeTab === 1 || activeTab === 2) && (
+        <AIFab
+          ollamaUrl={ollamaUrl}
+          ollamaModel={ollamaModel}
+          context={activeTab === 1 ? (selectedPlan ? "strategy" : "plans") : "routine"}
+          plans={schedule.plans}
+          rituals={schedule.rituals ?? []}
+          activePlan={selectedPlan ?? undefined}
+          initialMessage={aiInitialMessage || undefined}
+          open={aiOpen || undefined}
+          onOpenChange={(v) => {
+            setAiOpen(v);
+            if (!v) setAiInitialMessage("");
+          }}
+          onApplyAction={handleApplyAction}
+        />
+      )}
+
+      {/* ── Theme toggle — desktop top right ────────────────────────────────── */}
+      <div className="fixed top-6 right-6 z-50 hidden lg:block">
         <ThemeToggle />
       </div>
 
