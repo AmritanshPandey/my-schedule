@@ -29,11 +29,11 @@ interface DesktopSidebarProps {
 }
 
 const NAV_ITEMS = [
+  { tab: 4, label: "Overview", Icon: IconLayoutDashboard },
   { tab: 0, label: "Today",    Icon: IconCalendarEvent },
   { tab: 1, label: "Plans",    Icon: IconClipboardData },
   { tab: 2, label: "Routine",  Icon: IconRepeat },
   { tab: 3, label: "Review",   Icon: IconChartBar },
-  { tab: 4, label: "Overview", Icon: IconLayoutDashboard },
 ] as const;
 
 type ConnectionStatus = "checking" | "connected" | "no-model" | "offline";

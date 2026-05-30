@@ -172,6 +172,17 @@ export default function BottomNav({
           >
             <button
               type="button"
+              onClick={() => handleTabChange(4)}
+              className={tabClass(activeTab === 4)}
+              aria-label="Overview"
+              aria-current={activeTab === 4 ? "page" : undefined}
+            >
+              <IconLayoutDashboard size={20} strokeWidth={2} />
+              <span className="text-[10.5px] font-medium leading-none">Overview</span>
+            </button>
+
+            <button
+              type="button"
               onClick={() => handleTabChange(0)}
               className={tabClass(activeTab === 0)}
               aria-label="Today"
@@ -180,6 +191,9 @@ export default function BottomNav({
               <IconCalendarEvent size={20} strokeWidth={2} />
               <span className="text-[10.5px] font-medium leading-none">Today</span>
             </button>
+
+            {/* CENTER SPACER (plus button lives here absolutely) */}
+            <div className="w-[52px] shrink-0" aria-hidden="true" />
 
             <button
               type="button"
@@ -192,9 +206,6 @@ export default function BottomNav({
               <span className="text-[10.5px] font-medium leading-none">Plans</span>
             </button>
 
-            {/* CENTER SPACER (plus button lives here absolutely) */}
-            <div className="w-[52px] shrink-0" aria-hidden="true" />
-
             <button
               type="button"
               onClick={() => handleTabChange(2)}
@@ -204,28 +215,6 @@ export default function BottomNav({
             >
               <IconRepeat size={20} strokeWidth={2} />
               <span className="text-[10.5px] font-medium leading-none">Routine</span>
-            </button>
-
-            <button
-              type="button"
-              onClick={() => handleTabChange(3)}
-              className={tabClass(activeTab === 3)}
-              aria-label="Review"
-              aria-current={activeTab === 3 ? "page" : undefined}
-            >
-              <IconChartBar size={20} strokeWidth={2} />
-              <span className="text-[10.5px] font-medium leading-none">Review</span>
-            </button>
-
-            <button
-              type="button"
-              onClick={() => handleTabChange(4)}
-              className={tabClass(activeTab === 4)}
-              aria-label="Overview"
-              aria-current={activeTab === 4 ? "page" : undefined}
-            >
-              <IconLayoutDashboard size={20} strokeWidth={2} />
-              <span className="text-[10.5px] font-medium leading-none">Overview</span>
             </button>
           </nav>
 
