@@ -323,23 +323,40 @@ export default function OverviewDashboard({
                 exit={{ opacity: 0, y: -70, scale: 0.94 }}
                 transition={{ duration: 0.22, ease: [0.25, 0.46, 0.45, 0.94] }}
               >
-                {/* Stack container — pb creates room for peeking cards below */}
-                <div className="relative pb-5">
-                  {/* Card 3 (deepest) */}
+                {/*
+                  Stack container:
+                  paddingTop creates visible space for peeking cards.
+                  Shadow cards anchor top=0/top-[18px] and extend to bottom-0,
+                  so they fill the container and only their top edges are visible
+                  above the front card (which starts after the padding).
+                */}
+                <div
+                  className="relative"
+                  style={{
+                    paddingTop: incompleteTasks.length >= 3 ? 40 : incompleteTasks.length >= 2 ? 20 : 0,
+                  }}
+                >
+                  {/* Card 3 — deepest, full width, starts at very top */}
                   {incompleteTasks.length >= 3 && (
-                    <div className="absolute inset-x-5 top-2.5 bottom-0 rounded-2xl border border-emerald-200/20 bg-emerald-50/30 dark:border-emerald-500/[0.06] dark:bg-emerald-900/[0.06]" style={{ zIndex: 0 }} />
+                    <div
+                      className="absolute inset-x-2 top-0 bottom-0 rounded-2xl border border-emerald-200/25 bg-emerald-50/35 dark:border-emerald-500/[0.07] dark:bg-emerald-900/[0.07]"
+                      style={{ zIndex: 0 }}
+                    />
                   )}
-                  {/* Card 2 (middle) */}
+                  {/* Card 2 — middle, starts 18px below card 3 */}
                   {incompleteTasks.length >= 2 && (
-                    <div className="absolute inset-x-2.5 top-1.5 bottom-0 rounded-2xl border border-emerald-200/40 bg-emerald-50/55 dark:border-emerald-500/[0.10] dark:bg-emerald-900/[0.10]" style={{ zIndex: 1 }} />
+                    <div
+                      className="absolute inset-x-1 bottom-0 rounded-2xl border border-emerald-200/45 bg-emerald-50/60 dark:border-emerald-500/[0.11] dark:bg-emerald-900/[0.11]"
+                      style={{ zIndex: 1, top: incompleteTasks.length >= 3 ? 18 : 0 }}
+                    />
                   )}
 
-                  {/* Front card — draggable */}
+                  {/* Front card — draggable, sits above shadow cards */}
                   <motion.div
                     className="relative z-10 cursor-grab rounded-2xl border border-emerald-200/70 bg-gradient-to-br from-emerald-50 to-white px-5 py-5 shadow-[0_2px_16px_rgba(16,185,129,0.13)] dark:border-emerald-500/20 dark:from-emerald-900/20 dark:to-neutral-900 active:cursor-grabbing"
                     drag="y"
-                    dragConstraints={{ top: -220, bottom: 30 }}
-                    dragElastic={{ top: 0.45, bottom: 0.12 }}
+                    dragConstraints={{ top: -220, bottom: 20 }}
+                    dragElastic={{ top: 0.45, bottom: 0.1 }}
                     dragMomentum={false}
                     onDragEnd={(_, info) => {
                       if (info.offset.y < -55) {
@@ -349,13 +366,13 @@ export default function OverviewDashboard({
                     }}
                     style={{ touchAction: "pan-x" }}
                   >
-                    {/* Header */}
+                    {/* Header row */}
                     <div className="flex items-center justify-between mb-2.5">
                       <div className="flex items-center gap-1.5">
                         <IconBolt size={13} strokeWidth={2.5} className="text-emerald-600 dark:text-emerald-400" />
                         <span className="text-[12px] font-bold text-emerald-600 dark:text-emerald-400">Next up</span>
                       </div>
-                      <div className="flex items-center gap-2.5">
+                      <div className="flex items-center gap-2">
                         {incompleteTasks.length > 1 && (
                           <span className="text-[11px] font-semibold text-neutral-400 dark:text-neutral-500">
                             {incompleteTasks.length} left
@@ -393,34 +410,19 @@ export default function OverviewDashboard({
                     )}
                     {!incompleteTasks[0].startTime && <div className="mb-4" />}
 
-                    {/* Actions */}
-                    <div className="flex items-center gap-3">
-                      <motion.button
-                        type="button"
-                        whileTap={{ scale: 0.95 }}
-                        onClick={() => {
-                          haptic("medium");
-                          onMarkTaskDone(incompleteTasks[0].id, incompleteTasks[0].subtasks?.map((s) => s.id) ?? []);
-                        }}
-                        className="flex items-center gap-2 rounded-full bg-neutral-900 px-5 py-2.5 text-[13px] font-bold text-white dark:bg-white dark:text-neutral-900"
-                      >
-                        <IconCheck size={14} strokeWidth={2.5} />
-                        Mark Done
-                      </motion.button>
-                      <button
-                        type="button"
-                        onClick={() => { haptic("light"); setSkippedIds((prev) => new Set([...prev, incompleteTasks[0].id])); }}
-                        className="text-[13px] font-semibold text-neutral-500 dark:text-neutral-400"
-                      >
-                        Focus Later
-                      </button>
-                    </div>
-
-                    {incompleteTasks.length > 1 && (
-                      <p className="mt-3 text-center text-[10.5px] text-neutral-400 dark:text-neutral-500">
-                        Swipe up to skip ↑
-                      </p>
-                    )}
+                    {/* Mark Done only */}
+                    <motion.button
+                      type="button"
+                      whileTap={{ scale: 0.95 }}
+                      onClick={() => {
+                        haptic("medium");
+                        onMarkTaskDone(incompleteTasks[0].id, incompleteTasks[0].subtasks?.map((s) => s.id) ?? []);
+                      }}
+                      className="flex items-center gap-2 rounded-full bg-emerald-600 px-6 py-2.5 text-[13px] font-bold text-white shadow-[0_2px_8px_rgba(16,185,129,0.4)] transition-opacity hover:opacity-90"
+                    >
+                      <IconCheck size={14} strokeWidth={2.5} />
+                      Mark Done
+                    </motion.button>
                   </motion.div>
                 </div>
               </motion.div>
