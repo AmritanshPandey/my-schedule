@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   IconArrowRight,
@@ -29,19 +29,27 @@ interface OverviewDashboardProps {
   schedule: Schedule;
   todayKey: DayKey;
   onNavigate: (tab: number) => void;
-  // Mobile Next Up card
-  whatNextDismissed: boolean;
   onMarkTaskDone: (taskId: string, subtaskIds: string[]) => void;
-  onDismissWhatNext: () => void;
   completedRitualIds: Set<string>;
   onLogTracker: (tracker: ProgressTracker) => void;
 }
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
+function parseHM(t: string): [number, number] | null {
+  const match = t.match(/^(\d{1,2}):(\d{2})/);
+  if (!match) return null;
+  const h = parseInt(match[1], 10);
+  const m = parseInt(match[2], 10);
+  if (isNaN(h) || isNaN(m)) return null;
+  return [h, m];
+}
+
 function formatTime(t?: string): string {
   if (!t) return "";
-  const [h, m] = t.split(":").map(Number);
+  const hm = parseHM(t);
+  if (!hm) return t;
+  const [h, m] = hm;
   const ampm = h >= 12 ? "PM" : "AM";
   const hour = h % 12 || 12;
   return m === 0 ? `${hour} ${ampm}` : `${hour}:${String(m).padStart(2, "0")} ${ampm}`;
@@ -49,9 +57,10 @@ function formatTime(t?: string): string {
 
 function calcDuration(start?: string, end?: string): string {
   if (!start || !end) return "";
-  const [sh, sm] = start.split(":").map(Number);
-  const [eh, em] = end.split(":").map(Number);
-  const mins = (eh * 60 + em) - (sh * 60 + sm);
+  const shm = parseHM(start);
+  const ehm = parseHM(end);
+  if (!shm || !ehm) return "";
+  const mins = (ehm[0] * 60 + ehm[1]) - (shm[0] * 60 + shm[1]);
   if (mins <= 0) return "";
   const h = Math.floor(mins / 60);
   const m = mins % 60;
@@ -159,9 +168,11 @@ const STATUS_CFG: Record<PlanStatus, { label: string; text: string; dot: string;
 
 export default function OverviewDashboard({
   schedule, todayKey, onNavigate,
-  whatNextDismissed, onMarkTaskDone, onDismissWhatNext,
-  completedRitualIds, onLogTracker,
+  onMarkTaskDone, completedRitualIds, onLogTracker,
 }: OverviewDashboardProps) {
+  // Per-task skip set — persists while on this day
+  const [skippedIds, setSkippedIds] = useState<Set<string>>(new Set());
+  useEffect(() => { setSkippedIds(new Set()); }, [todayKey]);
   const todayISO = localISODate(new Date());
 
   // ── Shared computed data ──────────────────────────────────────────────────
@@ -188,6 +199,12 @@ export default function OverviewDashboard({
   }, [schedule, todayKey, todayISO]);
 
   const todayTasks = useMemo(() => schedule.activities[todayKey] ?? [], [schedule, todayKey]);
+
+  // Incomplete tasks not yet skipped — used by the swipeable stack
+  const incompleteTasks = useMemo(() =>
+    todayTasks.filter((t) => !isTaskCompleted(t, t.subtasks?.length ?? 0) && !skippedIds.has(t.id)),
+    [todayTasks, skippedIds]
+  );
 
   const { todayRituals, ritualsDone } = useMemo(() => {
     const dayIdx = new Date(todayISO + "T00:00:00").getDay();
@@ -242,15 +259,6 @@ export default function OverviewDashboard({
     return items;
   }, [schedule]);
 
-  // ── Mobile — Next Up data ──────────────────────────────────────────────────
-
-  const { nextTask, upcomingTask, nextPlan } = useMemo(() => {
-    const incomplete = todayTasks.filter((t) => !isTaskCompleted(t, t.subtasks?.length ?? 0));
-    const next = incomplete[0] ?? null;
-    const upcoming = incomplete[1] ?? null;
-    const plan = next ? schedule.plans.find((p) => p.id === next.planId) ?? null : null;
-    return { nextTask: next, upcomingTask: upcoming, nextPlan: plan };
-  }, [todayTasks, schedule.plans]);
 
   // ── Mobile — Weekly activity for first plan ────────────────────────────────
 
@@ -288,9 +296,9 @@ export default function OverviewDashboard({
       ════════════════════════════════════════════════════════════════════════ */}
       <div className="lg:hidden">
 
-        {/* ── 1. Hero "Next Up" stacked card ───────────────────────────────── */}
-        <div className="px-4 pt-5 mb-4">
-          {/* Task count + View All row */}
+        {/* ── 1. Task count + swipeable card stack ─────────────────────────── */}
+        <div className="px-4 pt-5 mb-5">
+          {/* Count row */}
           <div className="flex items-center justify-between mb-3">
             <div className="flex items-center gap-1.5 text-[13px] font-medium text-neutral-500 dark:text-neutral-400">
               <IconClipboardList size={14} strokeWidth={2} className="shrink-0" />
@@ -306,122 +314,129 @@ export default function OverviewDashboard({
             </button>
           </div>
 
+          {/* ── Swipeable card stack ── */}
           <AnimatePresence mode="wait">
-            {nextTask && !whatNextDismissed ? (
-              /* Stacked card effect */
-              <motion.div
-                key="next-up"
-                initial={{ opacity: 0, y: 8 }}
-                animate={{ opacity: 1, y: 0 }}
-                exit={{ opacity: 0, y: -8 }}
-                transition={{ duration: 0.22 }}
-                className="relative"
+            {incompleteTasks.length > 0 ? (
+              <motion.div key={incompleteTasks[0].id}
+                initial={{ opacity: 0, y: 8, scale: 0.98 }}
+                animate={{ opacity: 1, y: 0, scale: 1 }}
+                exit={{ opacity: 0, y: -70, scale: 0.94 }}
+                transition={{ duration: 0.22, ease: [0.25, 0.46, 0.45, 0.94] }}
               >
-                {/* Shadow cards (depth effect) */}
-                <div className="absolute inset-x-3 -bottom-2 h-full rounded-2xl border border-emerald-200/40 bg-emerald-50/60 dark:border-emerald-500/10 dark:bg-emerald-900/10" style={{ zIndex: 1 }} />
-                <div className="absolute inset-x-5 -bottom-4 h-full rounded-2xl border border-emerald-200/20 bg-emerald-50/30 dark:border-emerald-500/05 dark:bg-emerald-900/05" style={{ zIndex: 0 }} />
+                {/* Stack container — pb creates room for peeking cards below */}
+                <div className="relative pb-5">
+                  {/* Card 3 (deepest) */}
+                  {incompleteTasks.length >= 3 && (
+                    <div className="absolute inset-x-5 top-2.5 bottom-0 rounded-2xl border border-emerald-200/20 bg-emerald-50/30 dark:border-emerald-500/[0.06] dark:bg-emerald-900/[0.06]" style={{ zIndex: 0 }} />
+                  )}
+                  {/* Card 2 (middle) */}
+                  {incompleteTasks.length >= 2 && (
+                    <div className="absolute inset-x-2.5 top-1.5 bottom-0 rounded-2xl border border-emerald-200/40 bg-emerald-50/55 dark:border-emerald-500/[0.10] dark:bg-emerald-900/[0.10]" style={{ zIndex: 1 }} />
+                  )}
 
-                {/* Main card */}
-                <div className="relative z-10 rounded-2xl border border-emerald-200/70 bg-gradient-to-br from-emerald-50 to-white px-5 py-5 shadow-[0_2px_12px_rgba(16,185,129,0.12)] dark:border-emerald-500/20 dark:from-emerald-900/20 dark:to-neutral-900">
-                  {/* Header row */}
-                  <div className="flex items-center justify-between mb-3">
-                    <div className="flex items-center gap-1.5">
-                      <IconBolt size={13} strokeWidth={2.5} className="text-emerald-600 dark:text-emerald-400" />
-                      <span className="text-[12px] font-bold text-emerald-600 dark:text-emerald-400">Next up</span>
+                  {/* Front card — draggable */}
+                  <motion.div
+                    className="relative z-10 cursor-grab rounded-2xl border border-emerald-200/70 bg-gradient-to-br from-emerald-50 to-white px-5 py-5 shadow-[0_2px_16px_rgba(16,185,129,0.13)] dark:border-emerald-500/20 dark:from-emerald-900/20 dark:to-neutral-900 active:cursor-grabbing"
+                    drag="y"
+                    dragConstraints={{ top: -220, bottom: 30 }}
+                    dragElastic={{ top: 0.45, bottom: 0.12 }}
+                    dragMomentum={false}
+                    onDragEnd={(_, info) => {
+                      if (info.offset.y < -55) {
+                        haptic("light");
+                        setSkippedIds((prev) => new Set([...prev, incompleteTasks[0].id]));
+                      }
+                    }}
+                    style={{ touchAction: "pan-x" }}
+                  >
+                    {/* Header */}
+                    <div className="flex items-center justify-between mb-2.5">
+                      <div className="flex items-center gap-1.5">
+                        <IconBolt size={13} strokeWidth={2.5} className="text-emerald-600 dark:text-emerald-400" />
+                        <span className="text-[12px] font-bold text-emerald-600 dark:text-emerald-400">Next up</span>
+                      </div>
+                      <div className="flex items-center gap-2.5">
+                        {incompleteTasks.length > 1 && (
+                          <span className="text-[11px] font-semibold text-neutral-400 dark:text-neutral-500">
+                            {incompleteTasks.length} left
+                          </span>
+                        )}
+                        {calcDuration(incompleteTasks[0].startTime, incompleteTasks[0].endTime) && (
+                          <span className="text-[12px] font-semibold text-neutral-400 dark:text-neutral-500">
+                            {calcDuration(incompleteTasks[0].startTime, incompleteTasks[0].endTime)}
+                          </span>
+                        )}
+                      </div>
                     </div>
-                    {calcDuration(nextTask.startTime, nextTask.endTime) && (
-                      <span className="text-[12px] font-semibold text-neutral-400 dark:text-neutral-500">
-                        {calcDuration(nextTask.startTime, nextTask.endTime)}
-                      </span>
-                    )}
-                  </div>
 
-                  {/* Task title */}
-                  <p className="text-[20px] font-extrabold leading-tight text-neutral-950 dark:text-white mb-1">
-                    {nextTask.title}
-                  </p>
+                    {/* Task title */}
+                    <p className="text-[21px] font-extrabold leading-tight text-neutral-950 dark:text-white">
+                      {incompleteTasks[0].title}
+                    </p>
 
-                  {/* Time + plan tag */}
-                  <div className="flex items-center gap-2 mb-4">
-                    {nextTask.startTime && (
-                      <span className="text-[13px] font-semibold text-emerald-600 dark:text-emerald-400">
-                        {formatTime(nextTask.startTime)}{nextTask.endTime ? ` - ${formatTime(nextTask.endTime)}` : ""}
-                      </span>
-                    )}
-                    {nextPlan && (
-                      <span className="rounded-full bg-neutral-100 px-2.5 py-0.5 text-[11.5px] font-semibold text-neutral-600 dark:bg-white/[0.08] dark:text-neutral-400">
-                        {nextPlan.emoji} {nextPlan.title}
-                      </span>
-                    )}
-                  </div>
+                    {/* Plan name */}
+                    {(() => {
+                      const p = schedule.plans.find((pl) => pl.id === incompleteTasks[0].planId);
+                      return p ? (
+                        <p className="mt-0.5 text-[13px] font-semibold text-emerald-600 dark:text-emerald-400">
+                          {p.emoji} {p.title}
+                        </p>
+                      ) : null;
+                    })()}
 
-                  {/* Action buttons */}
-                  <div className="flex items-center gap-3">
-                    <motion.button
-                      type="button"
-                      whileTap={{ scale: 0.96 }}
-                      onClick={() => {
-                        haptic("medium");
-                        onMarkTaskDone(nextTask.id, nextTask.subtasks?.map((s) => s.id) ?? []);
-                      }}
-                      className="flex items-center gap-2 rounded-full bg-neutral-900 px-5 py-2.5 text-[13px] font-bold text-white dark:bg-white dark:text-neutral-900"
-                    >
-                      <IconCheck size={14} strokeWidth={2.5} />
-                      Mark Done
-                    </motion.button>
-                    <button
-                      type="button"
-                      onClick={() => { haptic("light"); onDismissWhatNext(); }}
-                      className="text-[13px] font-semibold text-neutral-500 dark:text-neutral-400"
-                    >
-                      Focus Later
-                    </button>
-                  </div>
+                    {/* Time */}
+                    {incompleteTasks[0].startTime && (
+                      <p className="mt-1 mb-4 text-[13px] text-neutral-500 dark:text-neutral-400">
+                        {formatTime(incompleteTasks[0].startTime)}
+                        {incompleteTasks[0].endTime ? ` — ${formatTime(incompleteTasks[0].endTime)}` : ""}
+                      </p>
+                    )}
+                    {!incompleteTasks[0].startTime && <div className="mb-4" />}
+
+                    {/* Actions */}
+                    <div className="flex items-center gap-3">
+                      <motion.button
+                        type="button"
+                        whileTap={{ scale: 0.95 }}
+                        onClick={() => {
+                          haptic("medium");
+                          onMarkTaskDone(incompleteTasks[0].id, incompleteTasks[0].subtasks?.map((s) => s.id) ?? []);
+                        }}
+                        className="flex items-center gap-2 rounded-full bg-neutral-900 px-5 py-2.5 text-[13px] font-bold text-white dark:bg-white dark:text-neutral-900"
+                      >
+                        <IconCheck size={14} strokeWidth={2.5} />
+                        Mark Done
+                      </motion.button>
+                      <button
+                        type="button"
+                        onClick={() => { haptic("light"); setSkippedIds((prev) => new Set([...prev, incompleteTasks[0].id])); }}
+                        className="text-[13px] font-semibold text-neutral-500 dark:text-neutral-400"
+                      >
+                        Focus Later
+                      </button>
+                    </div>
+
+                    {incompleteTasks.length > 1 && (
+                      <p className="mt-3 text-center text-[10.5px] text-neutral-400 dark:text-neutral-500">
+                        Swipe up to skip ↑
+                      </p>
+                    )}
+                  </motion.div>
                 </div>
               </motion.div>
             ) : (
-              <motion.div
-                key="all-done"
-                initial={{ opacity: 0 }}
-                animate={{ opacity: 1 }}
-                className="rounded-2xl border border-neutral-200/70 bg-white px-5 py-5 dark:border-white/[0.07] dark:bg-neutral-900"
-              >
+              <motion.div key="all-done" initial={{ opacity: 0 }} animate={{ opacity: 1 }}
+                className="rounded-2xl border border-neutral-200/70 bg-white px-5 py-5 dark:border-white/[0.07] dark:bg-neutral-900">
                 <p className="text-[15px] font-bold text-neutral-900 dark:text-white">
                   {tasksTotal === 0 ? "No tasks today" : "You're all caught up! ✓"}
                 </p>
                 <p className="mt-0.5 text-[13px] text-neutral-400 dark:text-neutral-500">
-                  {tasksTotal === 0 ? "Head to Today to add tasks." : "All tasks for today are done."}
+                  {tasksTotal === 0 ? "Head to Today to add tasks." : "Great work — all tasks done."}
                 </p>
               </motion.div>
             )}
           </AnimatePresence>
         </div>
-
-        {/* ── 2. Upcoming task row ──────────────────────────────────────────── */}
-        {upcomingTask && !whatNextDismissed && (
-          <div className="mx-4 mb-4">
-            <div className="flex items-center justify-between rounded-2xl border border-neutral-200/70 bg-white px-4 py-3 shadow-[0_1px_3px_rgba(0,0,0,0.04)] dark:border-white/[0.07] dark:bg-neutral-900">
-              <div className="min-w-0 flex-1">
-                <span className="text-[12.5px] text-neutral-500 dark:text-neutral-400">Upcoming: </span>
-                <span className="text-[12.5px] font-semibold text-neutral-800 dark:text-neutral-200 truncate">
-                  {upcomingTask.title.length > 22 ? upcomingTask.title.slice(0, 22) + "…" : upcomingTask.title}
-                </span>
-                {upcomingTask.startTime && (
-                  <span className="ml-2 text-[12.5px] font-semibold text-neutral-500 dark:text-neutral-400">
-                    {formatTime(upcomingTask.startTime)}
-                  </span>
-                )}
-              </div>
-              <button
-                type="button"
-                onClick={() => { haptic("light"); onNavigate(0); }}
-                className="ml-3 shrink-0 rounded-full border border-neutral-200 px-3 py-1 text-[11.5px] font-semibold text-neutral-600 dark:border-white/[0.10] dark:text-neutral-400"
-              >
-                View all
-              </button>
-            </div>
-          </div>
-        )}
 
         {/* ── 3. Weekly Activity card ───────────────────────────────────────── */}
         {weeklyActivity && (

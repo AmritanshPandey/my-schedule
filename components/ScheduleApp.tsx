@@ -21,6 +21,8 @@ import type { AIActionResult } from "@/lib/ai";
 const PlanDetailView = dynamic(() => import("@/components/plan/PlanDetailView"), { ssr: false });
 const AIPlanCreatorSheet = dynamic(() => import("@/components/plan/AIPlanCreatorSheet"), { ssr: false });
 const SettingsSheet = dynamic(() => import("@/components/auth/SettingsSheet").then(m => ({ default: m.SettingsSheet })), { ssr: false });
+const SettingsView = dynamic(() => import("@/components/SettingsView").then(m => ({ default: m.SettingsView })), { ssr: false });
+const AIOnboarding = dynamic(() => import("@/components/ai/AIOnboarding"), { ssr: false });
 const TemplatesSheet = dynamic(() => import("@/components/TemplatesSheet").then(m => ({ default: m.TemplatesSheet })), { ssr: false });
 const SessionSheet = dynamic(() => import("@/components/activity/SessionSheet"), { ssr: false });
 const RitualView = dynamic(() => import("@/components/activity/RitualView"), { ssr: false });
@@ -1945,6 +1947,7 @@ export default function ScheduleApp() {
         onCreatePlan={openAddPlan}
         onCreateRitual={() => { setActiveTab(2); if (canAddRitual) setRitualAddOpen(true); }}
         onOpenSettings={() => setSettingsOpen(true)}
+        onOpenSettingsTab={() => setActiveTab(5)}
       />
 
       {/* ── Main scrollable column ──────────────────────────────────────────── */}
@@ -1978,7 +1981,7 @@ export default function ScheduleApp() {
             ]}
           />
         ) : (
-          <AppHeader onOpenSettings={() => setSettingsOpen(true)} onNotes={() => {}} />
+          <AppHeader onOpenSettings={() => setActiveTab(5)} onNotes={() => {}} />
         )}
       </div>
 
@@ -2524,11 +2527,26 @@ export default function ScheduleApp() {
               schedule={schedule}
               todayKey={todayKey}
               onNavigate={(tab) => { setActiveTab(tab); setSelectedPlanId(null); }}
-              whatNextDismissed={whatNextDismissed}
               onMarkTaskDone={(id, subtaskIds) => handleToggleTaskComplete(id, subtaskIds)}
-              onDismissWhatNext={() => setWhatNextDismissed(true)}
               completedRitualIds={completedRitualIds}
               onLogTracker={(tracker) => setEntryTracker(tracker)}
+            />
+          </motion.div>
+        )}
+
+        {/* ── Settings Tab ─────────────────────────────────────────────────── */}
+        {activeTab === 5 && (
+          <motion.div
+            key="tab-settings"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            transition={{ duration: 0.12, ease: "easeOut" }}
+          >
+            <SettingsView
+              schedule={schedule}
+              onClearData={clearData}
+              onClose={() => setActiveTab(0)}
             />
           </motion.div>
         )}
@@ -2767,6 +2785,9 @@ export default function ScheduleApp() {
       <div className="fixed top-6 right-6 z-50 hidden lg:block">
         <ThemeToggle />
       </div>
+
+      {/* ── AI onboarding — shown once when app opens ─────────────────────── */}
+      <AIOnboarding />
 
     </main>
   );
