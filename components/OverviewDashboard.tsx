@@ -360,7 +360,7 @@ export default function OverviewDashboard({
 
                   {/* Front card — draggable */}
                   <motion.div
-                    className="relative z-10 cursor-grab rounded-2xl border border-emerald-200/70 bg-gradient-to-br from-emerald-50 to-white px-5 py-5 shadow-[0_2px_16px_rgba(16,185,129,0.13)] dark:border-emerald-500/30 dark:bg-[#243D30] active:cursor-grabbing"
+                    className="relative z-10 cursor-grab rounded-2xl border border-emerald-200/70 bg-gradient-to-br from-emerald-50 to-white px-5 py-5 shadow-[0_2px_16px_rgba(16,185,129,0.13)] dark:bg-none dark:bg-[#243D30] dark:border-emerald-500/30 active:cursor-grabbing"
                     drag="y"
                     dragConstraints={{ top: -220, bottom: 20 }}
                     dragElastic={{ top: 0.45, bottom: 0.1 }}
