@@ -13,7 +13,7 @@ import DesktopSidebar from "@/components/desktop/DesktopSidebar";
 import ThemeToggle from "@/components/ThemeToggle";
 import { WeekGrid } from "@/components/desktop/WeekGrid";
 import { QuickAddPanel } from "@/components/desktop/QuickAddPanel";
-import { AIFab } from "@/components/desktop/AIFab";
+import AIAssistant from "@/components/ai/AIAssistant";
 import { checkOllamaConnection, OLLAMA_URL_KEY, OLLAMA_MODEL_KEY, DEFAULT_OLLAMA_URL, DEFAULT_OLLAMA_MODEL } from "@/lib/ai";
 import type { AIActionResult } from "@/lib/ai";
 
@@ -89,6 +89,7 @@ import {
 } from "@/lib/taskCompletion";
 import { createTask, updateTaskDays, deleteTask, uid, sortTasksByTime } from "@/lib/taskMutations";
 import type { AIGeneratedTask } from "@/lib/aiActions";
+import { applyScheduleRules } from "@/lib/scheduleRules";
 import { applyTemplate } from "@/lib/templates";
 import type { Template } from "@/lib/templates";
 import { parseTimeToMinutes, formatDuration } from "@/lib/timeUtils";
@@ -793,10 +794,19 @@ export default function ScheduleApp() {
   function handleAddGeneratedTasks(tasks: AIGeneratedTask[], planId: string, milestoneId?: string) {
     const plan = schedule.plans.find((p) => p.id === planId);
     if (!plan) return;
+
+    // Rule engine: validate + resolve overlaps before committing to state
+    const { valid, conflicts } = applyScheduleRules(tasks, schedule.activities);
+
+    if (conflicts.length > 0) {
+      const adjusted = conflicts.map((c) => `"${c.taskTitle}" moved to ${c.adjustedStart}`).join(", ");
+      setToastMessage(`Adjusted ${conflicts.length} task${conflicts.length > 1 ? "s" : ""} to avoid overlaps: ${adjusted}`);
+    }
+
     setSchedule((prev) => {
       const updatedActivities = { ...prev.activities };
       const newTaskIds: string[] = [];
-      for (const t of tasks) {
+      for (const t of valid) {
         const taskId = uid();
         newTaskIds.push(taskId);
         const task: Task = {
@@ -960,7 +970,7 @@ export default function ScheduleApp() {
         endDate: action.payload.endDate,
         tasks: action.payload.tasks ?? [],
       });
-      setToastMessage(`Created plan “${action.payload.title}”`);
+      setToastMessage(`Created plan "${action.payload.title}"`);
       return;
     }
 
@@ -979,7 +989,7 @@ export default function ScheduleApp() {
         rituals: [...(prev.rituals ?? []), ritual],
       }));
       setActiveTab(2);
-      setToastMessage(`Added ritual “${action.payload.title}”`);
+      setToastMessage(`Added ritual "${action.payload.title}"`);
       return;
     }
 
@@ -997,8 +1007,50 @@ export default function ScheduleApp() {
         ...prev,
         strategies: [...prev.strategies, strategy],
       }));
-      setToastMessage(`Saved strategy “${action.payload.title}”`);
+      setToastMessage(`Saved strategy "${action.payload.title}"`);
       return;
+    }
+
+    if (action.type === "suggest_milestones") {
+      const milestones = action.payload.milestones;
+      if (!milestones.length) return;
+      const planId = selectedPlanId ?? schedule.plans[0]?.id;
+      if (!planId) return;
+      const now = new Date().toISOString();
+      const today = todayISO();
+      setSchedule((prev) => {
+        const plan = prev.plans.find((p) => p.id === planId);
+        const otherMilestones = (prev.milestones ?? []).filter((m) => m.planId !== planId);
+        const existing = (prev.milestones ?? []).filter((m) => m.planId === planId);
+        const newMilestones = milestones.map((m, i) => ({
+          id: uid(),
+          planId,
+          title: m.title,
+          description: m.description || undefined,
+          startDate: m.targetDate ?? today,
+          plannedDurationDays: 14,
+          plannedEndDate: m.targetDate ?? today,
+          status: "upcoming" as const,
+          linkedActivities: [],
+          linkedTrackers: [],
+          createdAt: now,
+          updatedAt: now,
+          targetDate: m.targetDate ?? today,
+          estimatedDays: 14,
+          completionStatus: "pending" as const,
+          sortOrder: existing.length + i,
+        }));
+        return {
+          ...prev,
+          milestones: [
+            ...otherMilestones,
+            ...recalculateRoadmapTimeline([...existing, ...newMilestones], plan?.startDate),
+          ],
+        };
+      });
+      setToastMessage(`Added ${milestones.length} milestone${milestones.length > 1 ? "s" : ""} to roadmap`);
+      setActiveTab(1);
+      if (planId) setSelectedPlanId(planId);
     }
   }
 
@@ -1926,7 +1978,7 @@ export default function ScheduleApp() {
             ]}
           />
         ) : (
-          <AppHeader onOpenSettings={() => setSettingsOpen(true)} />
+          <AppHeader onOpenSettings={() => setSettingsOpen(true)} onNotes={() => {}} />
         )}
       </div>
 
@@ -2012,19 +2064,20 @@ export default function ScheduleApp() {
 
             {/* ── Mobile: calendar strip + day task list ────────────────────── */}
             <div className="lg:hidden">
-            {/* Calendar */}
+            {/* Calendar — redesigned date picker */}
             <div className="px-4 pt-4">
-              <div className="rounded-2xl border border-neutral-200 bg-white px-4 py-3.5 dark:border-white/[0.08] dark:bg-neutral-900">
+              <div className="rounded-2xl border border-neutral-200 bg-white px-4 pt-4 pb-3 dark:border-white/[0.08] dark:bg-neutral-900">
+                {/* Month header row */}
                 <div className="mb-3 flex items-center justify-between">
-                  <span className="text-[16px] font-semibold text-neutral-900 dark:text-white">
+                  <span className="text-[17px] font-bold text-neutral-900 dark:text-white">
                     {weekLabel}
                   </span>
-                  <div className="flex items-center gap-1">
+                  <div className="flex items-center gap-0.5">
                     {weekOffset !== 0 && (
                       <button
                         type="button"
                         onClick={() => { setWeekOffset(0); setActiveDay(todayKey); }}
-                        className="inline-flex h-7 items-center rounded-lg px-2 text-[11px] font-semibold text-neutral-500 hover:bg-neutral-100 dark:text-neutral-400 dark:hover:bg-white/[0.07] transition-colors"
+                        className="mr-1 inline-flex h-7 items-center rounded-lg px-2 text-[11px] font-semibold text-emerald-600 dark:text-emerald-400"
                       >
                         Today
                       </button>
@@ -2033,20 +2086,21 @@ export default function ScheduleApp() {
                       type="button"
                       onClick={() => { haptic("light"); setWeekOffset((w) => w - 1); }}
                       aria-label="Previous week"
-                      className="inline-flex h-7 w-7 items-center justify-center rounded-lg text-neutral-400 hover:bg-neutral-100 dark:text-neutral-500 dark:hover:bg-white/[0.07] transition-colors"
+                      className="inline-flex h-8 w-8 items-center justify-center rounded-full text-neutral-400 hover:bg-neutral-100 dark:text-neutral-500 dark:hover:bg-white/[0.07] transition-colors"
                     >
-                      <IconChevronLeft size={20} strokeWidth={2} />
+                      <IconChevronLeft size={18} strokeWidth={2} />
                     </button>
                     <button
                       type="button"
                       onClick={() => { haptic("light"); setWeekOffset((w) => w + 1); }}
                       aria-label="Next week"
-                      className="inline-flex h-7 w-7 items-center justify-center rounded-lg text-neutral-400 hover:bg-neutral-100 dark:text-neutral-500 dark:hover:bg-white/[0.07] transition-colors"
+                      className="inline-flex h-8 w-8 items-center justify-center rounded-full text-neutral-400 hover:bg-neutral-100 dark:text-neutral-500 dark:hover:bg-white/[0.07] transition-colors"
                     >
-                      <IconChevronRight size={20} strokeWidth={2} />
+                      <IconChevronRight size={18} strokeWidth={2} />
                     </button>
                   </div>
                 </div>
+                {/* Day strip */}
                 <div className="grid grid-cols-7 gap-1">
                   {weekDates.map(({ day, date }) => {
                     const isDateToday = date.getTime() === todayMidnightTime;
@@ -2056,16 +2110,12 @@ export default function ScheduleApp() {
                         key={day}
                         type="button"
                         onClick={() => { haptic("light"); setActiveDay(day); }}
-                        className={`relative flex flex-col items-center justify-center gap-2.5 w-full h-[64px] rounded-lg focus-visible:outline-none ${
-                          isActive
-                            ? "bg-neutral-950 dark:bg-white"
-                            : "hover:bg-neutral-100 dark:hover:bg-white/[0.07]"
-                        }`}
+                        className="relative flex flex-col items-center justify-center gap-1 w-full rounded-xl py-2 focus-visible:outline-none"
                       >
                         {isActive && (
                           <motion.div
                             layoutId="weekDayActive"
-                            className="absolute inset-0 rounded-lg bg-neutral-950 dark:bg-white"
+                            className="absolute inset-0 rounded-xl bg-neutral-950 dark:bg-white"
                             style={{ willChange: "transform" }}
                             transition={{ type: "spring", stiffness: 420, damping: 32, mass: 0.5 }}
                           />
@@ -2073,19 +2123,19 @@ export default function ScheduleApp() {
                         <motion.div
                           whileTap={{ scale: 0.88 }}
                           transition={{ type: "spring", stiffness: 500, damping: 30 }}
-                          className="relative z-10 flex flex-col items-center gap-2.5"
+                          className="relative z-10 flex flex-col items-center gap-1"
                         >
-                          <span className={`text-[11px] font-semibold leading-none tracking-wide ${
-                            isActive ? "text-white/60 dark:text-neutral-950/60" : isDateToday ? "text-rose-500" : "text-neutral-400 dark:text-neutral-500"
+                          <span className={`text-[10.5px] font-medium leading-none ${
+                            isActive ? "text-white/60 dark:text-neutral-950/60" : isDateToday ? "text-emerald-500" : "text-neutral-400 dark:text-neutral-500"
                           }`}>
                             {DAY_LABELS[day]}
                           </span>
-                          <span className={`text-[14px] font-semibold leading-none tabular-nums ${
+                          <span className={`text-[15px] font-bold leading-none tabular-nums ${
                             isActive
                               ? "text-white dark:text-neutral-950"
                               : isDateToday
-                              ? "text-rose-500"
-                              : "text-neutral-700 dark:text-neutral-200"
+                              ? "text-emerald-500"
+                              : "text-neutral-800 dark:text-neutral-200"
                           }`}>
                             {date.getDate()}
                           </span>
@@ -2106,13 +2156,8 @@ export default function ScheduleApp() {
               transition={{ duration: 0.12, ease: "easeOut" }}
             >
             {/* Title section */}
-            <div className="px-4 pt-5 pb-5 lg:px-8 lg:pt-8">
+            <div className="px-4 pt-5 pb-4 lg:px-8 lg:pt-8">
               <MainTitleSection
-                label={
-                  activeDay === todayKey && (dayProgress.total > 0 || todayRitualsTotal > 0)
-                    ? `${dayProgress.done}/${dayProgress.total} tasks · ${todayRitualsDone}/${todayRitualsTotal} rituals`
-                    : "My Schedule"
-                }
                 title="Today's Tasks"
                 progressMeta={
                   dayProgress.total > 0
@@ -2122,74 +2167,17 @@ export default function ScheduleApp() {
                     : undefined
                 }
                 progressBar={dayProgress.total > 0 ? { pct: dayProgress.pct } : undefined}
-                actions={
-                  <>
-                    <button
-                      type="button"
-                      onClick={() => { setViewMode((v) => (v === "list" ? "timeline" : "list")); setEditMode(false); }}
-                      className="inline-flex items-center gap-2 rounded-full border-[1.5px] border-neutral-200 bg-white px-3.5 min-h-[44px] py-[9px] text-[13px] font-semibold tracking-[-0.15px] text-neutral-700 transition-colors hover:bg-neutral-100 active:scale-[0.97] dark:border-white/10 dark:bg-neutral-900 dark:text-neutral-400 dark:hover:bg-white/[0.07]"
-                    >
-                      {viewMode === "timeline" ? (
-                        <>List <IconLayoutList size={15} strokeWidth={2} /></>
-                      ) : (
-                        <>Timeline <IconTable size={15} strokeWidth={2} /></>
-                      )}
-                    </button>
-                    <IconActionButton
-                      icon={<IconEdit size={16} strokeWidth={2} />}
-                      saveIcon={<IconCheck size={16} strokeWidth={2.5} />}
-                      saving={editMode}
-                      onClick={() => setEditMode((prev) => !prev)}
-                      show={dayTasks.length > 0 && viewMode === "list"}
-                    />
-                  </>
-                }
               />
             </div>
 
             {/* Task content */}
             <div className="px-4">
-              {/* What's Next card — only on today, only when there's an uncompleted task */}
-              <AnimatePresence>
-                {activeDay === todayKey && nextTask && !whatNextDismissed &&
-                  plansById.get(nextTask.planId) && (
-                  <WhatNextCard
-                    task={nextTask}
-                    plan={plansById.get(nextTask.planId)!}
-                    milestone={taskToMilestoneMap.get(nextTask.id)}
-                    onMarkDone={() =>
-                      handleToggleTaskComplete(
-                        nextTask.id,
-                        nextTask.subtasks?.map((s) => s.id) ?? []
-                      )
-                    }
-                    onDismissDay={() => setWhatNextDismissed(true)}
-                  />
-                )}
-              </AnimatePresence>
-
-              {/* Streak-at-risk chips — only on today */}
-              {activeDay === todayKey && (
-                <StreakAlertChips
-                  rituals={schedule.rituals ?? []}
-                  activeDay={activeDay as DayKey}
-                  completedRitualIds={completedRitualIds}
-                  ritualCompletions={schedule.ritualCompletions ?? []}
-                />
-              )}
-
+              {/* Rituals strip */}
               <TodayRitualsBar
                 rituals={schedule.rituals ?? []}
                 activeDay={activeDay}
                 completedIds={completedRitualIds}
                 onToggle={handleToggleRitualComplete}
-              />
-              <TrackerQuickBar
-                trackers={activePlanTrackers}
-                plans={schedule.plans}
-                metricEntries={schedule.metricEntries}
-                onLog={(tracker) => setEntryTracker(tracker)}
-                onNavigate={(planId) => { setActiveTab(1); setSelectedPlanId(planId); }}
               />
               <AnimatePresence mode="wait" initial={false}>
                 {viewMode === "list" ? (
@@ -2301,6 +2289,7 @@ export default function ScheduleApp() {
                         hasUserScrolledTimelineRef.current = true;
                       }}
                       className="calendar-scrollbar-none relative flex h-[calc(100vh-280px)] overflow-y-auto overflow-x-hidden"
+                      style={{ willChange: "transform" }}
                     >
                       {/* Time column */}
                       <div
@@ -2350,7 +2339,7 @@ export default function ScheduleApp() {
                       {/* Grid + tasks */}
                       <div
                         className="relative min-w-0 flex-1 border-l border-neutral-200/80 dark:border-white/[0.07]"
-                        style={{ height: TIMELINE_HEIGHT }}
+                        style={{ height: TIMELINE_HEIGHT, contain: "layout style" }}
                       >
                         {/* Grid lines */}
                         <div className="absolute inset-0 pointer-events-none">
@@ -2383,7 +2372,7 @@ export default function ScheduleApp() {
                             <div
                               key={layout.task.id}
                               className="absolute min-w-0 px-0.5 py-[2px] animate-panel-in"
-                              style={getTaskLaneStyle(layout)}
+                              style={{ ...getTaskLaneStyle(layout), willChange: "opacity" }}
                             >
                               <div className="relative h-full min-h-[20px]">
                                 {renderTimelineTaskCard(
@@ -2535,6 +2524,11 @@ export default function ScheduleApp() {
               schedule={schedule}
               todayKey={todayKey}
               onNavigate={(tab) => { setActiveTab(tab); setSelectedPlanId(null); }}
+              whatNextDismissed={whatNextDismissed}
+              onMarkTaskDone={(id, subtaskIds) => handleToggleTaskComplete(id, subtaskIds)}
+              onDismissWhatNext={() => setWhatNextDismissed(true)}
+              completedRitualIds={completedRitualIds}
+              onLogTracker={(tracker) => setEntryTracker(tracker)}
             />
           </motion.div>
         )}
@@ -2735,24 +2729,39 @@ export default function ScheduleApp() {
       </AnimatePresence>
       </div>{/* end main scrollable column */}
 
-      {/* ── AI FAB (Plans + Routine tabs, desktop only) ───────────────────── */}
-      {(activeTab === 1 || activeTab === 2) && (
-        <AIFab
-          ollamaUrl={ollamaUrl}
-          ollamaModel={ollamaModel}
-          context={activeTab === 1 ? (selectedPlan ? "strategy" : "plans") : "routine"}
-          plans={schedule.plans}
-          rituals={schedule.rituals ?? []}
-          activePlan={selectedPlan ?? undefined}
-          initialMessage={aiInitialMessage || undefined}
-          open={aiOpen || undefined}
-          onOpenChange={(v) => {
-            setAiOpen(v);
-            if (!v) setAiInitialMessage("");
-          }}
-          onApplyAction={handleApplyAction}
-        />
-      )}
+      {/* ── AI Assistant — available on all tabs ─────────────────────────── */}
+      <AIAssistant
+        open={aiOpen}
+        onClose={() => { setAiOpen(false); setAiInitialMessage(""); }}
+        plans={schedule.plans}
+        schedule={schedule}
+        initialPlanId={selectedPlanId}
+        ollamaUrl={ollamaUrl}
+        ollamaModel={ollamaModel}
+        onAddGeneratedTasks={handleAddGeneratedTasks}
+        onApplyAction={handleApplyAction}
+        onNavigateToPlan={(planId) => { setActiveTab(1); setSelectedPlanId(planId); setAiOpen(false); }}
+      />
+
+      {/* ── AI trigger button (floating, mobile + desktop) ────────────────── */}
+      <AnimatePresence>
+        {!aiOpen && (
+          <motion.button
+            key="ai-fab"
+            type="button"
+            initial={{ opacity: 0, scale: 0.8, y: 8 }}
+            animate={{ opacity: 1, scale: 1, y: 0 }}
+            exit={{ opacity: 0, scale: 0.8, y: 8 }}
+            transition={{ type: "spring", stiffness: 400, damping: 28 }}
+            whileTap={{ scale: 0.92 }}
+            onClick={() => setAiOpen(true)}
+            aria-label="Open AI Assistant"
+            className="fixed bottom-24 right-4 z-40 lg:bottom-8 lg:right-8 flex h-12 w-12 items-center justify-center rounded-full bg-gradient-to-br from-violet-500 via-fuchsia-500 to-pink-500 text-white shadow-lg shadow-fuchsia-500/30 transition-shadow hover:shadow-xl hover:shadow-fuchsia-500/40"
+          >
+            <IconSparkles size={20} strokeWidth={2} />
+          </motion.button>
+        )}
+      </AnimatePresence>
 
       {/* ── Theme toggle — desktop top right ────────────────────────────────── */}
       <div className="fixed top-6 right-6 z-50 hidden lg:block">

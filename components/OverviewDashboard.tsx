@@ -1,21 +1,22 @@
 "use client";
 
 import { useMemo } from "react";
-import { motion } from "framer-motion";
+import { motion, AnimatePresence } from "framer-motion";
 import {
   IconArrowRight,
+  IconBolt,
   IconBrain,
   IconCalendarEvent,
-  IconChartBar,
   IconCheck,
   IconClipboardData,
   IconClipboardList,
   IconMap2,
+  IconPlus,
   IconRepeat,
   IconTarget,
   IconTrendingUp,
 } from "@tabler/icons-react";
-import type { Schedule, DayKey, Plan, RitualCompletion, Ritual } from "@/lib/useScheduleDB";
+import type { Schedule, DayKey, Task, Plan, ProgressTracker, RitualCompletion, Ritual } from "@/lib/useScheduleDB";
 import { isTaskCompleted } from "@/lib/taskCompletion";
 import { getPlanCardStats } from "@/lib/planInsights";
 import { accentStyles } from "@/lib/colorSystem";
@@ -28,6 +29,12 @@ interface OverviewDashboardProps {
   schedule: Schedule;
   todayKey: DayKey;
   onNavigate: (tab: number) => void;
+  // Mobile Next Up card
+  whatNextDismissed: boolean;
+  onMarkTaskDone: (taskId: string, subtaskIds: string[]) => void;
+  onDismissWhatNext: () => void;
+  completedRitualIds: Set<string>;
+  onLogTracker: (tracker: ProgressTracker) => void;
 }
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -38,6 +45,19 @@ function formatTime(t?: string): string {
   const ampm = h >= 12 ? "PM" : "AM";
   const hour = h % 12 || 12;
   return m === 0 ? `${hour} ${ampm}` : `${hour}:${String(m).padStart(2, "0")} ${ampm}`;
+}
+
+function calcDuration(start?: string, end?: string): string {
+  if (!start || !end) return "";
+  const [sh, sm] = start.split(":").map(Number);
+  const [eh, em] = end.split(":").map(Number);
+  const mins = (eh * 60 + em) - (sh * 60 + sm);
+  if (mins <= 0) return "";
+  const h = Math.floor(mins / 60);
+  const m = mins % 60;
+  if (h === 0) return `${m}m`;
+  if (m === 0) return `${h} hr`;
+  return `${h} hr ${m}m`;
 }
 
 function calcRitualStreak(
@@ -56,7 +76,7 @@ function calcRitualStreak(
     const scheduled =
       !ritual.repeatDays ||
       ritual.repeatDays.length === 0 ||
-      ritual.repeatDays.includes(["sun","mon","tue","wed","thu","fri","sat"][dayOfWeek] as DayKey);
+      ritual.repeatDays.includes(["sunday","monday","tuesday","wednesday","thursday","friday","saturday"][dayOfWeek] as DayKey);
     if (scheduled) {
       if (done.has(cursor)) streak++;
       else break;
@@ -95,7 +115,7 @@ function Sparkline({ values, color }: { values: number[]; color: string }) {
 
 const CARD = "rounded-2xl border border-neutral-200/70 bg-white shadow-[0_1px_3px_rgba(0,0,0,0.05),0_2px_8px_rgba(0,0,0,0.04)] dark:border-white/[0.07] dark:bg-neutral-900 dark:shadow-[0_1px_3px_rgba(0,0,0,0.3)]";
 
-// ── Stat tile ─────────────────────────────────────────────────────────────────
+// ── Stat tile (desktop only) ──────────────────────────────────────────────────
 
 type TileColor = "emerald" | "amber" | "rose" | "neutral";
 
@@ -137,46 +157,46 @@ const STATUS_CFG: Record<PlanStatus, { label: string; text: string; dot: string;
 
 // ── Main component ────────────────────────────────────────────────────────────
 
-export default function OverviewDashboard({ schedule, todayKey, onNavigate }: OverviewDashboardProps) {
+export default function OverviewDashboard({
+  schedule, todayKey, onNavigate,
+  whatNextDismissed, onMarkTaskDone, onDismissWhatNext,
+  completedRitualIds, onLogTracker,
+}: OverviewDashboardProps) {
   const todayISO = localISODate(new Date());
 
-  // ── Computed data ─────────────────────────────────────────────────────────
+  // ── Shared computed data ──────────────────────────────────────────────────
 
   const { tasksDone, tasksTotal, weeklyPct, longestStreak } = useMemo(() => {
     const todayTasks = schedule.activities[todayKey] ?? [];
     const done = todayTasks.filter((t) => isTaskCompleted(t, t.subtasks?.length ?? 0)).length;
-
     let weekTotal = 0; let weekDays = 0;
     for (let i = 0; i < 7; i++) {
       const iso = addDaysToISO(todayISO, -i);
-      const dk = ["sun","mon","tue","wed","thu","fri","sat"][new Date(iso + "T00:00:00").getDay()] as DayKey;
+      const dk = ["sunday","monday","tuesday","wednesday","thursday","friday","saturday"][new Date(iso + "T00:00:00").getDay()] as DayKey;
       const dt = schedule.activities[dk] ?? [];
       if (dt.length > 0) {
         weekTotal += Math.round((dt.filter((t) => isTaskCompleted(t, t.subtasks?.length ?? 0)).length / dt.length) * 100);
         weekDays++;
       }
     }
-
     let longest = 0;
     for (const r of schedule.rituals ?? []) {
       const s = calcRitualStreak(r.id, schedule.ritualCompletions ?? [], r, todayISO);
       if (s > longest) longest = s;
     }
-
     return { tasksDone: done, tasksTotal: todayTasks.length, weeklyPct: weekDays > 0 ? Math.round(weekTotal / weekDays) : 0, longestStreak: longest };
   }, [schedule, todayKey, todayISO]);
 
   const todayTasks = useMemo(() => schedule.activities[todayKey] ?? [], [schedule, todayKey]);
 
-  const { todayRituals, completedTodayIds } = useMemo(() => {
+  const { todayRituals, ritualsDone } = useMemo(() => {
     const dayIdx = new Date(todayISO + "T00:00:00").getDay();
-    const da = ["sun","mon","tue","wed","thu","fri","sat"][dayIdx] as DayKey;
+    const da = ["sunday","monday","tuesday","wednesday","thursday","friday","saturday"][dayIdx] as DayKey;
     const tr = (schedule.rituals ?? []).filter(
       (r) => !r.repeatDays || r.repeatDays.length === 0 || r.repeatDays.includes(da)
     );
-    const ids = new Set((schedule.ritualCompletions ?? []).filter((c) => c.date === todayISO).map((c) => c.ritualId));
-    return { todayRituals: tr, completedTodayIds: ids };
-  }, [schedule, todayISO]);
+    return { todayRituals: tr, ritualsDone: tr.filter((r) => completedRitualIds.has(r.id)).length };
+  }, [schedule, todayISO, completedRitualIds]);
 
   const planStats = useMemo(() =>
     schedule.plans.map((plan) => {
@@ -222,6 +242,36 @@ export default function OverviewDashboard({ schedule, todayKey, onNavigate }: Ov
     return items;
   }, [schedule]);
 
+  // ── Mobile — Next Up data ──────────────────────────────────────────────────
+
+  const { nextTask, upcomingTask, nextPlan } = useMemo(() => {
+    const incomplete = todayTasks.filter((t) => !isTaskCompleted(t, t.subtasks?.length ?? 0));
+    const next = incomplete[0] ?? null;
+    const upcoming = incomplete[1] ?? null;
+    const plan = next ? schedule.plans.find((p) => p.id === next.planId) ?? null : null;
+    return { nextTask: next, upcomingTask: upcoming, nextPlan: plan };
+  }, [todayTasks, schedule.plans]);
+
+  // ── Mobile — Weekly activity for first plan ────────────────────────────────
+
+  const weeklyActivity = useMemo(() => {
+    const plan = schedule.plans[0] ?? null;
+    if (!plan) return null;
+    const DAYS_ORDER: DayKey[] = ["monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday"];
+    const DAY_LABELS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
+    const days = DAYS_ORDER.map((dk, i) => {
+      const tasks = (schedule.activities[dk] ?? []).filter((t) => t.planId === plan.id);
+      const total = tasks.length;
+      const done = tasks.filter((t) => isTaskCompleted(t, t.subtasks?.length ?? 0)).length;
+      return { label: DAY_LABELS[i], total, done, pct: total > 0 ? Math.round((done / total) * 100) : 0 };
+    });
+    const totalTasks = days.reduce((s, d) => s + d.total, 0);
+    const totalDone = days.reduce((s, d) => s + d.done, 0);
+    const tasksPct = totalTasks > 0 ? Math.round((totalDone / totalTasks) * 100) : 0;
+    const habitsPct = todayRituals.length > 0 ? Math.round((ritualsDone / todayRituals.length) * 100) : 0;
+    return { plan, days, tasksPct, habitsPct };
+  }, [schedule, todayRituals, ritualsDone]);
+
   // ── Derived colors ────────────────────────────────────────────────────────
 
   const taskColor: TileColor = tasksTotal === 0 ? "neutral" : tasksDone === tasksTotal ? "emerald" : tasksDone > 0 ? "amber" : "neutral";
@@ -231,96 +281,332 @@ export default function OverviewDashboard({ schedule, todayKey, onNavigate }: Ov
   // ── Render ────────────────────────────────────────────────────────────────
 
   return (
-    <div className="px-4 pt-5 pb-24 lg:px-6 lg:pt-6 lg:pb-8">
+    <div className="pb-24 lg:px-6 lg:pt-6 lg:pb-8">
 
-      {/* ── Page title ─────────────────────────────────────────────────────── */}
-      <div className="mb-5">
-        <p className="text-[11px] font-bold uppercase tracking-[0.08em] text-neutral-400 dark:text-neutral-500">
-          {new Date().toLocaleDateString("en-US", { weekday: "long", month: "long", day: "numeric" })}
-        </p>
-        <h1 className="mt-0.5 text-[26px] font-extrabold leading-tight text-neutral-950 dark:text-white">
-          Overview
-        </h1>
+      {/* ═══════════════════════════════════════════════════════════════════════
+          MOBILE LAYOUT (< lg) — Reference design
+      ════════════════════════════════════════════════════════════════════════ */}
+      <div className="lg:hidden">
+
+        {/* ── 1. Hero "Next Up" stacked card ───────────────────────────────── */}
+        <div className="px-4 pt-5 mb-4">
+          {/* Task count + View All row */}
+          <div className="flex items-center justify-between mb-3">
+            <div className="flex items-center gap-1.5 text-[13px] font-medium text-neutral-500 dark:text-neutral-400">
+              <IconClipboardList size={14} strokeWidth={2} className="shrink-0" />
+              <span className="font-bold text-neutral-900 dark:text-white">{tasksDone}/{tasksTotal}</span>
+              <span>tasks done</span>
+            </div>
+            <button
+              type="button"
+              onClick={() => { haptic("light"); onNavigate(0); }}
+              className="text-[13px] font-semibold text-emerald-600 dark:text-emerald-400"
+            >
+              View All →
+            </button>
+          </div>
+
+          <AnimatePresence mode="wait">
+            {nextTask && !whatNextDismissed ? (
+              /* Stacked card effect */
+              <motion.div
+                key="next-up"
+                initial={{ opacity: 0, y: 8 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: -8 }}
+                transition={{ duration: 0.22 }}
+                className="relative"
+              >
+                {/* Shadow cards (depth effect) */}
+                <div className="absolute inset-x-3 -bottom-2 h-full rounded-2xl border border-emerald-200/40 bg-emerald-50/60 dark:border-emerald-500/10 dark:bg-emerald-900/10" style={{ zIndex: 1 }} />
+                <div className="absolute inset-x-5 -bottom-4 h-full rounded-2xl border border-emerald-200/20 bg-emerald-50/30 dark:border-emerald-500/05 dark:bg-emerald-900/05" style={{ zIndex: 0 }} />
+
+                {/* Main card */}
+                <div className="relative z-10 rounded-2xl border border-emerald-200/70 bg-gradient-to-br from-emerald-50 to-white px-5 py-5 shadow-[0_2px_12px_rgba(16,185,129,0.12)] dark:border-emerald-500/20 dark:from-emerald-900/20 dark:to-neutral-900">
+                  {/* Header row */}
+                  <div className="flex items-center justify-between mb-3">
+                    <div className="flex items-center gap-1.5">
+                      <IconBolt size={13} strokeWidth={2.5} className="text-emerald-600 dark:text-emerald-400" />
+                      <span className="text-[12px] font-bold text-emerald-600 dark:text-emerald-400">Next up</span>
+                    </div>
+                    {calcDuration(nextTask.startTime, nextTask.endTime) && (
+                      <span className="text-[12px] font-semibold text-neutral-400 dark:text-neutral-500">
+                        {calcDuration(nextTask.startTime, nextTask.endTime)}
+                      </span>
+                    )}
+                  </div>
+
+                  {/* Task title */}
+                  <p className="text-[20px] font-extrabold leading-tight text-neutral-950 dark:text-white mb-1">
+                    {nextTask.title}
+                  </p>
+
+                  {/* Time + plan tag */}
+                  <div className="flex items-center gap-2 mb-4">
+                    {nextTask.startTime && (
+                      <span className="text-[13px] font-semibold text-emerald-600 dark:text-emerald-400">
+                        {formatTime(nextTask.startTime)}{nextTask.endTime ? ` - ${formatTime(nextTask.endTime)}` : ""}
+                      </span>
+                    )}
+                    {nextPlan && (
+                      <span className="rounded-full bg-neutral-100 px-2.5 py-0.5 text-[11.5px] font-semibold text-neutral-600 dark:bg-white/[0.08] dark:text-neutral-400">
+                        {nextPlan.emoji} {nextPlan.title}
+                      </span>
+                    )}
+                  </div>
+
+                  {/* Action buttons */}
+                  <div className="flex items-center gap-3">
+                    <motion.button
+                      type="button"
+                      whileTap={{ scale: 0.96 }}
+                      onClick={() => {
+                        haptic("medium");
+                        onMarkTaskDone(nextTask.id, nextTask.subtasks?.map((s) => s.id) ?? []);
+                      }}
+                      className="flex items-center gap-2 rounded-full bg-neutral-900 px-5 py-2.5 text-[13px] font-bold text-white dark:bg-white dark:text-neutral-900"
+                    >
+                      <IconCheck size={14} strokeWidth={2.5} />
+                      Mark Done
+                    </motion.button>
+                    <button
+                      type="button"
+                      onClick={() => { haptic("light"); onDismissWhatNext(); }}
+                      className="text-[13px] font-semibold text-neutral-500 dark:text-neutral-400"
+                    >
+                      Focus Later
+                    </button>
+                  </div>
+                </div>
+              </motion.div>
+            ) : (
+              <motion.div
+                key="all-done"
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                className="rounded-2xl border border-neutral-200/70 bg-white px-5 py-5 dark:border-white/[0.07] dark:bg-neutral-900"
+              >
+                <p className="text-[15px] font-bold text-neutral-900 dark:text-white">
+                  {tasksTotal === 0 ? "No tasks today" : "You're all caught up! ✓"}
+                </p>
+                <p className="mt-0.5 text-[13px] text-neutral-400 dark:text-neutral-500">
+                  {tasksTotal === 0 ? "Head to Today to add tasks." : "All tasks for today are done."}
+                </p>
+              </motion.div>
+            )}
+          </AnimatePresence>
+        </div>
+
+        {/* ── 2. Upcoming task row ──────────────────────────────────────────── */}
+        {upcomingTask && !whatNextDismissed && (
+          <div className="mx-4 mb-4">
+            <div className="flex items-center justify-between rounded-2xl border border-neutral-200/70 bg-white px-4 py-3 shadow-[0_1px_3px_rgba(0,0,0,0.04)] dark:border-white/[0.07] dark:bg-neutral-900">
+              <div className="min-w-0 flex-1">
+                <span className="text-[12.5px] text-neutral-500 dark:text-neutral-400">Upcoming: </span>
+                <span className="text-[12.5px] font-semibold text-neutral-800 dark:text-neutral-200 truncate">
+                  {upcomingTask.title.length > 22 ? upcomingTask.title.slice(0, 22) + "…" : upcomingTask.title}
+                </span>
+                {upcomingTask.startTime && (
+                  <span className="ml-2 text-[12.5px] font-semibold text-neutral-500 dark:text-neutral-400">
+                    {formatTime(upcomingTask.startTime)}
+                  </span>
+                )}
+              </div>
+              <button
+                type="button"
+                onClick={() => { haptic("light"); onNavigate(0); }}
+                className="ml-3 shrink-0 rounded-full border border-neutral-200 px-3 py-1 text-[11.5px] font-semibold text-neutral-600 dark:border-white/[0.10] dark:text-neutral-400"
+              >
+                View all
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* ── 3. Weekly Activity card ───────────────────────────────────────── */}
+        {weeklyActivity && (
+          <div className="mx-4 mb-4">
+            <div className={`${CARD} px-5 py-4`}>
+              {/* Header */}
+              <div className="flex items-center gap-2 mb-4">
+                <IconCalendarEvent size={14} strokeWidth={2} className="text-neutral-400 dark:text-neutral-500 shrink-0" />
+                <p className="text-[13px] font-bold text-neutral-800 dark:text-neutral-200 truncate">
+                  {weeklyActivity.plan.emoji} {weeklyActivity.plan.title}
+                </p>
+              </div>
+
+              {/* 7-day bars */}
+              <div className="flex items-end justify-between gap-1 mb-3">
+                {weeklyActivity.days.map(({ label, total, done, pct }) => {
+                  const barColor =
+                    total === 0 ? "bg-neutral-200 dark:bg-white/[0.08]" :
+                    pct >= 70 ? "bg-emerald-500" :
+                    pct >= 40 ? "bg-amber-400" : "bg-rose-400";
+                  return (
+                    <div key={label} className="flex flex-1 flex-col items-center gap-1">
+                      <span className="text-[10px] font-medium text-neutral-400 dark:text-neutral-500">{label}</span>
+                      {/* Bar track */}
+                      <div className="w-full rounded-full bg-neutral-100 dark:bg-white/[0.07]" style={{ height: 4 }}>
+                        <div
+                          className={`h-full rounded-full transition-all ${barColor}`}
+                          style={{ width: total > 0 ? `${pct}%` : "0%" }}
+                        />
+                      </div>
+                      <span className="text-[9.5px] font-semibold tabular-nums text-neutral-500 dark:text-neutral-400">
+                        {done}/{total}
+                      </span>
+                    </div>
+                  );
+                })}
+              </div>
+
+              {/* Stats row */}
+              <div className="flex gap-3">
+                <div className="flex-1 rounded-xl bg-neutral-50 dark:bg-white/[0.04] px-3 py-2.5">
+                  <p className="text-[10px] font-bold uppercase tracking-[0.07em] text-neutral-400 dark:text-neutral-500 mb-1">Tasks Done</p>
+                  <p className="text-[22px] font-extrabold leading-none tabular-nums text-neutral-900 dark:text-white">
+                    {weeklyActivity.tasksPct}<span className="text-[14px] font-bold">%</span>
+                  </p>
+                </div>
+                <div className="flex-1 rounded-xl bg-neutral-50 dark:bg-white/[0.04] px-3 py-2.5">
+                  <p className="text-[10px] font-bold uppercase tracking-[0.07em] text-neutral-400 dark:text-neutral-500 mb-1">Habits Done</p>
+                  <p className="text-[22px] font-extrabold leading-none tabular-nums text-neutral-900 dark:text-white">
+                    {weeklyActivity.habitsPct}<span className="text-[14px] font-bold">%</span>
+                  </p>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* ── 4. Active Tracking list ───────────────────────────────────────── */}
+        <div className="mx-4 mb-4">
+          <div className={`${CARD} px-5 py-4`}>
+            <div className="flex items-center gap-2 mb-3">
+              <IconTarget size={14} strokeWidth={2} className="text-neutral-400 dark:text-neutral-500 shrink-0" />
+              <p className="text-[13px] font-bold text-neutral-700 dark:text-neutral-300">Active Tracking</p>
+            </div>
+
+            {trackerData.length === 0 ? (
+              <div className="flex items-center justify-between py-1">
+                <p className="text-[13px] text-neutral-400 dark:text-neutral-500">No trackers yet</p>
+                <button
+                  type="button"
+                  onClick={() => { haptic("light"); onNavigate(1); }}
+                  className="text-[12px] font-semibold text-emerald-600 dark:text-emerald-400"
+                >
+                  Set up →
+                </button>
+              </div>
+            ) : (
+              <div className="space-y-0 divide-y divide-neutral-100 dark:divide-white/[0.05]">
+                {trackerData.map(({ tracker, latest, plan }) => {
+                  const accent = accentStyles(plan?.color ?? "cyan");
+                  return (
+                    <div key={tracker.id} className="flex items-center gap-3 py-3 first:pt-0 last:pb-0">
+                      <span className={`h-3 w-3 shrink-0 rounded-full ${accent.dot}`} />
+                      <div className="min-w-0 flex-1">
+                        <p className="text-[14px] font-semibold text-neutral-900 dark:text-white leading-tight">{tracker.title}</p>
+                        <p className="text-[12px] text-neutral-400 dark:text-neutral-500 leading-tight">
+                          {latest ? `${latest.value}${tracker.unit ? ` ${tracker.unit}` : ""}` : "No entries yet"}
+                        </p>
+                      </div>
+                      <motion.button
+                        type="button"
+                        whileTap={{ scale: 0.88 }}
+                        onClick={() => { haptic("light"); onLogTracker(tracker); }}
+                        className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-neutral-900 text-white dark:bg-white dark:text-neutral-900"
+                      >
+                        <IconPlus size={16} strokeWidth={2.5} />
+                      </motion.button>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+        </div>
+
+        {/* ── 5. What's Possible nudges ─────────────────────────────────────── */}
+        {nudges.length > 0 && (
+          <div className="mx-4 mb-4">
+            <div className={`${CARD} px-5 py-4`}>
+              <p className="text-[11px] font-bold uppercase tracking-[0.08em] text-neutral-400 dark:text-neutral-500 mb-3">What's Possible</p>
+              <div className="space-y-2">
+                {nudges.map((nudge) => {
+                  const NudgeIcon = nudge.icon;
+                  return (
+                    <motion.button
+                      key={nudge.title}
+                      type="button"
+                      onClick={() => { haptic("light"); onNavigate(nudge.tab); }}
+                      whileTap={{ scale: 0.987 }}
+                      className="flex w-full items-start gap-3 rounded-xl border border-neutral-100 bg-neutral-50 px-3.5 py-3 text-left dark:border-white/[0.05] dark:bg-white/[0.03]"
+                    >
+                      <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-neutral-200/60 dark:bg-white/[0.07]">
+                        <NudgeIcon size={15} strokeWidth={1.8} className="text-neutral-600 dark:text-neutral-400" />
+                      </div>
+                      <div className="min-w-0 flex-1">
+                        <p className="text-[12.5px] font-bold text-neutral-900 dark:text-white">{nudge.title}</p>
+                        <p className="mt-0.5 text-[11px] leading-snug text-neutral-400 dark:text-neutral-500">{nudge.desc}</p>
+                      </div>
+                      <IconArrowRight size={13} strokeWidth={2} className="mt-0.5 shrink-0 text-neutral-300 dark:text-neutral-600" />
+                    </motion.button>
+                  );
+                })}
+              </div>
+            </div>
+          </div>
+        )}
       </div>
 
       {/* ═══════════════════════════════════════════════════════════════════════
-          MOBILE LAYOUT (< lg)
+          DESKTOP BENTO GRID (≥ lg) — unchanged
       ════════════════════════════════════════════════════════════════════════ */}
-      <div className="lg:hidden space-y-4">
+      <div className="hidden lg:block px-6 pt-6">
+        <div className="mb-5">
+          <p className="text-[11px] font-bold uppercase tracking-[0.08em] text-neutral-400 dark:text-neutral-500">
+            {new Date().toLocaleDateString("en-US", { weekday: "long", month: "long", day: "numeric" })}
+          </p>
+          <h1 className="mt-0.5 text-[26px] font-extrabold leading-tight text-neutral-950 dark:text-white">Overview</h1>
+        </div>
 
-        {/* Stat tiles — 3-col on mobile */}
-        <div className="grid grid-cols-3 gap-3">
+        <div className="grid grid-cols-4 gap-4">
           <StatTile
             value={tasksTotal === 0 ? "—" : `${tasksDone}/${tasksTotal}`}
-            label="Tasks" sub={tasksDone === tasksTotal && tasksTotal > 0 ? "All done" : `${tasksTotal - tasksDone} left`}
+            label="Tasks Today"
+            sub={tasksDone === tasksTotal && tasksTotal > 0 ? "All done ✓" : tasksTotal > 0 ? `${tasksTotal - tasksDone} remaining` : "No tasks today"}
             color={taskColor} onClick={() => onNavigate(0)}
           />
           <StatTile
-            value={`${weeklyPct}%`} label="Pace"
-            sub={weeklyPct >= 70 ? "Strong" : weeklyPct >= 40 ? "Going" : "—"}
+            value={`${weeklyPct}%`} label="Weekly Pace"
+            sub={weeklyPct >= 70 ? "Strong week" : weeklyPct >= 40 ? "Keep going" : weeklyPct > 0 ? "Room to improve" : "No data yet"}
             color={weekColor} onClick={() => onNavigate(3)}
           />
           <StatTile
-            value={longestStreak === 0 ? "—" : `${longestStreak}d`} label="Streak"
-            sub={longestStreak >= 7 ? "On fire 🔥" : longestStreak === 0 ? "No streak" : "Keep it"}
+            value={longestStreak === 0 ? "—" : `${longestStreak}d`} label="Best Streak"
+            sub={longestStreak >= 7 ? "On fire 🔥" : longestStreak >= 3 ? "Keep it going" : longestStreak === 0 ? "No streaks yet" : "Building up"}
             color={streakColor} onClick={() => onNavigate(2)}
           />
-        </div>
 
-        {/* Today card */}
-        <TodayCard
-          todayTasks={todayTasks} todayRituals={todayRituals}
-          completedTodayIds={completedTodayIds} todayISO={todayISO}
-          schedule={schedule} onNavigate={onNavigate}
-        />
+          {/* Row 1–2, col 4: Plan Health (row-span-2) */}
+          <div className="row-span-2">
+            <PlanHealthCard planStats={planStats} onNavigate={onNavigate} tall />
+          </div>
 
-        {/* Plan health */}
-        <PlanHealthCard planStats={planStats} onNavigate={onNavigate} />
+          {/* Row 2, cols 1–3: Today's execution */}
+          <div className="col-span-3">
+            <TodayCard
+              todayTasks={todayTasks} todayRituals={todayRituals}
+              completedTodayIds={completedRitualIds} todayISO={todayISO}
+              schedule={schedule} onNavigate={onNavigate}
+            />
+          </div>
 
-        {/* Bottom */}
-        <BottomCard trackerData={trackerData} nudges={nudges} onNavigate={onNavigate} />
-      </div>
-
-      {/* ═══════════════════════════════════════════════════════════════════════
-          DESKTOP BENTO GRID (≥ lg)
-      ════════════════════════════════════════════════════════════════════════ */}
-      <div className="hidden lg:grid lg:grid-cols-4 lg:gap-4">
-
-        {/* Row 1, cols 1–3: 3 stat tiles */}
-        <StatTile
-          value={tasksTotal === 0 ? "—" : `${tasksDone}/${tasksTotal}`}
-          label="Tasks Today"
-          sub={tasksDone === tasksTotal && tasksTotal > 0 ? "All done ✓" : tasksTotal > 0 ? `${tasksTotal - tasksDone} remaining` : "No tasks today"}
-          color={taskColor} onClick={() => onNavigate(0)}
-        />
-        <StatTile
-          value={`${weeklyPct}%`} label="Weekly Pace"
-          sub={weeklyPct >= 70 ? "Strong week" : weeklyPct >= 40 ? "Keep going" : weeklyPct > 0 ? "Room to improve" : "No data yet"}
-          color={weekColor} onClick={() => onNavigate(3)}
-        />
-        <StatTile
-          value={longestStreak === 0 ? "—" : `${longestStreak}d`} label="Best Streak"
-          sub={longestStreak >= 7 ? "On fire 🔥" : longestStreak >= 3 ? "Keep it going" : longestStreak === 0 ? "No streaks yet" : "Building up"}
-          color={streakColor} onClick={() => onNavigate(2)}
-        />
-
-        {/* Row 1–2, col 4: Plan Health (row-span-2) */}
-        <div className="row-span-2">
-          <PlanHealthCard planStats={planStats} onNavigate={onNavigate} tall />
-        </div>
-
-        {/* Row 2, cols 1–3: Today's execution */}
-        <div className="col-span-3">
-          <TodayCard
-            todayTasks={todayTasks} todayRituals={todayRituals}
-            completedTodayIds={completedTodayIds} todayISO={todayISO}
-            schedule={schedule} onNavigate={onNavigate}
-          />
-        </div>
-
-        {/* Row 3, col-span-4: Trackers + Discovery */}
-        <div className="col-span-4">
-          <BottomCard trackerData={trackerData} nudges={nudges} onNavigate={onNavigate} />
+          {/* Row 3, col-span-4: Trackers + Discovery */}
+          <div className="col-span-4">
+            <BottomCard trackerData={trackerData} nudges={nudges} onNavigate={onNavigate} />
+          </div>
         </div>
       </div>
     </div>
@@ -328,87 +614,70 @@ export default function OverviewDashboard({ schedule, todayKey, onNavigate }: Ov
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Today's Execution card
+// Desktop sub-components (unchanged)
 // ─────────────────────────────────────────────────────────────────────────────
 
 function TodayCard({
   todayTasks, todayRituals, completedTodayIds, todayISO, schedule, onNavigate,
 }: {
-  todayTasks: ReturnType<typeof Array.prototype.map>;
+  todayTasks: Task[];
   todayRituals: Ritual[];
   completedTodayIds: Set<string>;
   todayISO: string;
   schedule: Schedule;
   onNavigate: (tab: number) => void;
 }) {
-  const tasks = todayTasks as NonNullable<Schedule["activities"][DayKey]>;
   const ritualsDone = todayRituals.filter((r) => completedTodayIds.has(r.id)).length;
-
   return (
     <div className={`${CARD} px-5 py-5 h-full`}>
       <div className="flex items-center justify-between mb-4">
         <p className="text-[11px] font-bold uppercase tracking-[0.08em] text-neutral-400 dark:text-neutral-500">Today</p>
-        <button
-          type="button" onClick={() => { haptic("light"); onNavigate(0); }}
-          className="flex items-center gap-1 text-[11px] font-semibold text-neutral-400 hover:text-neutral-700 dark:hover:text-neutral-200 transition-colors"
-        >
+        <button type="button" onClick={() => { haptic("light"); onNavigate(0); }}
+          className="flex items-center gap-1 text-[11px] font-semibold text-neutral-400 hover:text-neutral-700 dark:hover:text-neutral-200 transition-colors">
           Open <IconArrowRight size={11} strokeWidth={2.5} />
         </button>
       </div>
-
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 lg:gap-6">
-        {/* Tasks */}
         <div>
           <div className="flex items-center justify-between mb-2.5">
             <p className="text-[12px] font-semibold text-neutral-600 dark:text-neutral-300">
               Tasks
-              {tasks.length > 0 && (
+              {todayTasks.length > 0 && (
                 <span className="ml-1.5 text-neutral-400 dark:text-neutral-500 font-normal">
-                  {tasks.filter((t) => isTaskCompleted(t, t.subtasks?.length ?? 0)).length}/{tasks.length}
+                  {todayTasks.filter((t) => isTaskCompleted(t, t.subtasks?.length ?? 0)).length}/{todayTasks.length}
                 </span>
               )}
             </p>
           </div>
-          {tasks.length === 0 ? (
+          {todayTasks.length === 0 ? (
             <div className="flex items-center gap-2 py-2">
               <IconCalendarEvent size={14} strokeWidth={1.5} className="text-neutral-300 dark:text-neutral-600 shrink-0" />
               <p className="text-[12px] text-neutral-400 dark:text-neutral-500">No tasks scheduled</p>
             </div>
           ) : (
             <div className="space-y-2.5">
-              {tasks.slice(0, 5).map((task) => {
+              {todayTasks.slice(0, 5).map((task) => {
                 const done = isTaskCompleted(task, task.subtasks?.length ?? 0);
                 return (
                   <div key={task.id} className="flex items-center gap-2.5">
-                    <div className={`flex h-4.5 w-4.5 shrink-0 items-center justify-center rounded-full border-[1.5px] transition-colors ${done ? "border-emerald-500 bg-emerald-500" : "border-neutral-300 dark:border-neutral-600"}`}>
+                    <div className={`flex h-[18px] w-[18px] shrink-0 items-center justify-center rounded-full border-[1.5px] ${done ? "border-emerald-500 bg-emerald-500" : "border-neutral-300 dark:border-neutral-600"}`}>
                       {done && <IconCheck size={9} strokeWidth={3} className="text-white" />}
                     </div>
-                    <div className="min-w-0 flex-1">
-                      <p className={`truncate text-[13px] font-semibold leading-snug ${done ? "text-neutral-400 line-through dark:text-neutral-600" : "text-neutral-900 dark:text-white"}`}>
-                        {task.title}
-                      </p>
-                      {task.startTime && (
-                        <p className="text-[11px] text-neutral-400 dark:text-neutral-500 leading-none mt-0.5">
-                          {formatTime(task.startTime)}{task.endTime ? ` – ${formatTime(task.endTime)}` : ""}
-                        </p>
-                      )}
-                    </div>
+                    <p className={`truncate text-[13px] font-semibold ${done ? "text-neutral-400 line-through dark:text-neutral-600" : "text-neutral-900 dark:text-white"}`}>
+                      {task.title}
+                    </p>
                   </div>
                 );
               })}
-              {tasks.length > 5 && (
-                <button
-                  type="button" onClick={() => { haptic("light"); onNavigate(0); }}
-                  className="text-[11.5px] font-semibold text-neutral-400 hover:text-neutral-600 dark:hover:text-neutral-300"
-                >
-                  +{tasks.length - 5} more
+              {todayTasks.length > 5 && (
+                <button type="button" onClick={() => { haptic("light"); onNavigate(0); }}
+                  className="text-[11.5px] font-semibold text-neutral-400 hover:text-neutral-600 dark:hover:text-neutral-300">
+                  +{todayTasks.length - 5} more
                 </button>
               )}
             </div>
           )}
         </div>
-
-        {/* Rituals */}
         <div>
           <div className="flex items-center justify-between mb-2.5">
             <p className="text-[12px] font-semibold text-neutral-600 dark:text-neutral-300">
@@ -431,14 +700,9 @@ function TodayCard({
                 return (
                   <div key={ritual.id} className="flex items-center gap-2.5">
                     <span className={`h-2 w-2 shrink-0 rounded-full ${done ? "bg-emerald-500" : accent.dot}`} />
-                    <p className={`min-w-0 flex-1 truncate text-[13px] font-medium leading-snug ${done ? "line-through text-neutral-400 dark:text-neutral-600" : "text-neutral-800 dark:text-neutral-200"}`}>
+                    <p className={`min-w-0 flex-1 truncate text-[13px] font-medium ${done ? "line-through text-neutral-400 dark:text-neutral-600" : "text-neutral-800 dark:text-neutral-200"}`}>
                       {ritual.title}
                     </p>
-                    {ritual.time && (
-                      <span className="shrink-0 text-[11px] text-neutral-400 dark:text-neutral-500">
-                        {formatTime(ritual.time)}
-                      </span>
-                    )}
                   </div>
                 );
               })}
@@ -449,10 +713,6 @@ function TodayCard({
     </div>
   );
 }
-
-// ─────────────────────────────────────────────────────────────────────────────
-// Plan Health card
-// ─────────────────────────────────────────────────────────────────────────────
 
 function PlanHealthCard({
   planStats, onNavigate, tall,
@@ -465,19 +725,13 @@ function PlanHealthCard({
     <div className={`${CARD} px-5 py-5 ${tall ? "h-full flex flex-col" : ""}`}>
       <div className="flex items-center justify-between mb-4">
         <p className="text-[11px] font-bold uppercase tracking-[0.08em] text-neutral-400 dark:text-neutral-500">
-          Plans
-          {planStats.length > 0 && (
-            <span className="ml-1.5 font-normal normal-case text-[11px]">({planStats.length})</span>
-          )}
+          Plans {planStats.length > 0 && <span className="font-normal normal-case">({planStats.length})</span>}
         </p>
-        <button
-          type="button" onClick={() => { haptic("light"); onNavigate(1); }}
-          className="flex items-center gap-1 text-[11px] font-semibold text-neutral-400 hover:text-neutral-700 dark:hover:text-neutral-200 transition-colors"
-        >
+        <button type="button" onClick={() => { haptic("light"); onNavigate(1); }}
+          className="flex items-center gap-1 text-[11px] font-semibold text-neutral-400 hover:text-neutral-700 dark:hover:text-neutral-200 transition-colors">
           Open <IconArrowRight size={11} strokeWidth={2.5} />
         </button>
       </div>
-
       {planStats.length === 0 ? (
         <div className="flex flex-col items-center justify-center py-6 text-center gap-3 flex-1">
           <IconClipboardData size={28} strokeWidth={1.3} className="text-neutral-200 dark:text-neutral-700" />
@@ -485,10 +739,8 @@ function PlanHealthCard({
             <p className="text-[13px] font-semibold text-neutral-500 dark:text-neutral-400">No plans yet</p>
             <p className="text-[11.5px] text-neutral-400 dark:text-neutral-500 mt-0.5">Create a plan to start tracking</p>
           </div>
-          <button
-            type="button" onClick={() => { haptic("light"); onNavigate(1); }}
-            className="rounded-xl bg-neutral-900 px-4 py-1.5 text-[12px] font-semibold text-white dark:bg-white dark:text-neutral-900"
-          >
+          <button type="button" onClick={() => { haptic("light"); onNavigate(1); }}
+            className="rounded-xl bg-neutral-900 px-4 py-1.5 text-[12px] font-semibold text-white dark:bg-white dark:text-neutral-900">
             + New Plan
           </button>
         </div>
@@ -498,13 +750,8 @@ function PlanHealthCard({
             const accent = accentStyles(plan.color ?? "cyan");
             const cfg = STATUS_CFG[status];
             return (
-              <motion.button
-                key={plan.id}
-                type="button"
-                onClick={() => { haptic("light"); onNavigate(1); }}
-                whileTap={{ scale: 0.987 }}
-                className={`w-full rounded-xl border-l-[3px] ${accent.leftBorder} bg-neutral-50 px-3.5 py-3 text-left dark:bg-white/[0.03]`}
-              >
+              <motion.button key={plan.id} type="button" onClick={() => { haptic("light"); onNavigate(1); }} whileTap={{ scale: 0.987 }}
+                className={`w-full rounded-xl border-l-[3px] ${accent.leftBorder} bg-neutral-50 px-3.5 py-3 text-left dark:bg-white/[0.03]`}>
                 <div className="flex items-center justify-between gap-2 mb-2">
                   <div className="flex items-center gap-2 min-w-0">
                     <span className="text-[14px] leading-none shrink-0">{plan.emoji}</span>
@@ -516,12 +763,9 @@ function PlanHealthCard({
                   </div>
                 </div>
                 <div className="h-1 w-full overflow-hidden rounded-full bg-neutral-200 dark:bg-white/[0.08]">
-                  <motion.div
-                    className={`h-full rounded-full ${accent.dot}`}
-                    initial={{ width: 0 }}
-                    animate={{ width: `${consistency}%` }}
-                    transition={{ duration: 0.6, ease: [0.25, 0.46, 0.45, 0.94], delay: 0.1 }}
-                  />
+                  <motion.div className={`h-full rounded-full ${accent.dot}`}
+                    initial={{ width: 0 }} animate={{ width: `${consistency}%` }}
+                    transition={{ duration: 0.6, ease: [0.25, 0.46, 0.45, 0.94], delay: 0.1 }} />
                 </div>
                 <div className="mt-1.5 flex items-center justify-between">
                   <span className="flex items-center gap-1 text-[11px] text-neutral-400 dark:text-neutral-500">
@@ -539,31 +783,23 @@ function PlanHealthCard({
   );
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// Bottom card: Tracker Pulse + What's Possible
-// ─────────────────────────────────────────────────────────────────────────────
-
 function BottomCard({
   trackerData, nudges, onNavigate,
 }: {
-  trackerData: { tracker: Schedule["progressTrackers"][0]; latest: Schedule["metricEntries"][0] | undefined; sparkValues: number[]; plan: Plan | undefined }[];
+  trackerData: { tracker: ProgressTracker; latest: Schedule["metricEntries"][0] | undefined; sparkValues: number[]; plan: Plan | undefined }[];
   nudges: { icon: React.ElementType; title: string; desc: string; tab: number }[];
   onNavigate: (tab: number) => void;
 }) {
   const hasTrackers = trackerData.length > 0;
   const hasNudges = nudges.length > 0;
-
   return (
     <div className={`${CARD} px-5 py-5`}>
-      {/* Tracker Pulse */}
       {hasTrackers && (
         <div className={hasNudges ? "mb-5" : ""}>
           <div className="flex items-center justify-between mb-3">
             <p className="text-[11px] font-bold uppercase tracking-[0.08em] text-neutral-400 dark:text-neutral-500">Tracker Pulse</p>
-            <button
-              type="button" onClick={() => { haptic("light"); onNavigate(1); }}
-              className="flex items-center gap-1 text-[11px] font-semibold text-neutral-400 hover:text-neutral-700 dark:hover:text-neutral-200 transition-colors"
-            >
+            <button type="button" onClick={() => { haptic("light"); onNavigate(1); }}
+              className="flex items-center gap-1 text-[11px] font-semibold text-neutral-400 hover:text-neutral-700 dark:hover:text-neutral-200 transition-colors">
               View all <IconArrowRight size={11} strokeWidth={2.5} />
             </button>
           </div>
@@ -571,29 +807,17 @@ function BottomCard({
             {trackerData.map(({ tracker, latest, sparkValues, plan }) => {
               const accent = accentStyles(plan?.color ?? "cyan");
               return (
-                <button
-                  key={tracker.id}
-                  type="button"
-                  onClick={() => { haptic("light"); onNavigate(1); }}
-                  className="flex w-[148px] shrink-0 flex-col rounded-xl border border-neutral-100 bg-neutral-50 px-3.5 py-3 text-left active:scale-[0.98] transition-transform dark:border-white/[0.05] dark:bg-white/[0.03]"
-                >
+                <button key={tracker.id} type="button" onClick={() => { haptic("light"); onNavigate(1); }}
+                  className="flex w-[148px] shrink-0 flex-col rounded-xl border border-neutral-100 bg-neutral-50 px-3.5 py-3 text-left active:scale-[0.98] transition-transform dark:border-white/[0.05] dark:bg-white/[0.03]">
                   <div className="flex items-center gap-1.5 mb-1.5">
                     <span className={`h-1.5 w-1.5 shrink-0 rounded-full ${accent.dot}`} />
                     <p className="truncate text-[11px] font-semibold text-neutral-500 dark:text-neutral-400">{tracker.title}</p>
                   </div>
                   <div className="flex items-baseline gap-1 mb-1">
-                    <span className="text-[22px] font-extrabold leading-none tabular-nums text-neutral-900 dark:text-white">
-                      {latest ? latest.value : "—"}
-                    </span>
-                    {tracker.unit && (
-                      <span className="text-[11px] font-medium text-neutral-400 dark:text-neutral-500">{tracker.unit}</span>
-                    )}
+                    <span className="text-[22px] font-extrabold leading-none tabular-nums text-neutral-900 dark:text-white">{latest ? latest.value : "—"}</span>
+                    {tracker.unit && <span className="text-[11px] font-medium text-neutral-400 dark:text-neutral-500">{tracker.unit}</span>}
                   </div>
-                  {sparkValues.length >= 2 ? (
-                    <Sparkline values={sparkValues} color={plan?.color ?? "cyan"} />
-                  ) : (
-                    <p className="text-[10px] text-neutral-300 dark:text-neutral-600 mt-1">Not enough data</p>
-                  )}
+                  {sparkValues.length >= 2 ? <Sparkline values={sparkValues} color={plan?.color ?? "cyan"} /> : <p className="text-[10px] text-neutral-300 dark:text-neutral-600 mt-1">Not enough data</p>}
                   <p className="mt-1 truncate text-[10px] text-neutral-400 dark:text-neutral-500">{plan?.emoji} {plan?.title}</p>
                 </button>
               );
@@ -601,8 +825,6 @@ function BottomCard({
           </div>
         </div>
       )}
-
-      {/* What's Possible */}
       {hasNudges && (
         <div>
           <p className="text-[11px] font-bold uppercase tracking-[0.08em] text-neutral-400 dark:text-neutral-500 mb-3">
@@ -612,13 +834,8 @@ function BottomCard({
             {nudges.map((nudge) => {
               const NudgeIcon = nudge.icon;
               return (
-                <motion.button
-                  key={nudge.title}
-                  type="button"
-                  onClick={() => { haptic("light"); onNavigate(nudge.tab); }}
-                  whileTap={{ scale: 0.987 }}
-                  className="flex items-start gap-3 rounded-xl border border-neutral-100 bg-neutral-50 px-4 py-3 text-left dark:border-white/[0.05] dark:bg-white/[0.03]"
-                >
+                <motion.button key={nudge.title} type="button" onClick={() => { haptic("light"); onNavigate(nudge.tab); }} whileTap={{ scale: 0.987 }}
+                  className="flex items-start gap-3 rounded-xl border border-neutral-100 bg-neutral-50 px-4 py-3 text-left dark:border-white/[0.05] dark:bg-white/[0.03]">
                   <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-neutral-200/60 dark:bg-white/[0.07]">
                     <NudgeIcon size={15} strokeWidth={1.8} className="text-neutral-600 dark:text-neutral-400" />
                   </div>
@@ -633,23 +850,13 @@ function BottomCard({
           </div>
         </div>
       )}
-
-      {/* Power user: all set */}
       {!hasTrackers && !hasNudges && (
         <div className="flex items-center gap-3 py-2">
           <span className="text-[24px]">🎉</span>
           <div>
             <p className="text-[14px] font-bold text-neutral-900 dark:text-white">You're all set</p>
-            <p className="text-[12px] text-neutral-400 dark:text-neutral-500">Using every feature PlanR has to offer. Keep building.</p>
+            <p className="text-[12px] text-neutral-400 dark:text-neutral-500">Using every feature PlanR has to offer.</p>
           </div>
-        </div>
-      )}
-
-      {/* No trackers but no nudges either — shouldn't happen but fallback */}
-      {!hasTrackers && !hasNudges && nudges.length === 0 && trackerData.length === 0 && (
-        <div className="flex items-center gap-3">
-          <IconChartBar size={20} strokeWidth={1.5} className="text-neutral-300 dark:text-neutral-600" />
-          <p className="text-[12px] text-neutral-400 dark:text-neutral-500">Add trackers and plans to see insights here.</p>
         </div>
       )}
     </div>
