@@ -307,14 +307,14 @@ export default function OverviewDashboard({
             <div className="flex items-center gap-1.5 text-[13px] font-medium text-neutral-500 dark:text-neutral-400">
               <IconClipboardList size={14} strokeWidth={2} className="shrink-0" />
               <span className="font-bold text-neutral-900 dark:text-white">{tasksDone}/{tasksTotal}</span>
-              <span>tasks done</span>
+              <span>Tasks Done</span>
             </div>
             <button
               type="button"
               onClick={() => { haptic("light"); setShowAllTasks((v) => !v); }}
-              className="text-[13px] font-semibold text-emerald-600 dark:text-emerald-400"
+              className="text-[14px] font-bold text-neutral-600 dark:text-neutral-300"
             >
-              {showAllTasks ? "Hide ↑" : "View All →"}
+              {showAllTasks ? "Hide ↑" : "View All"}
             </button>
           </div>
 
@@ -343,24 +343,24 @@ export default function OverviewDashboard({
                     paddingTop: incompleteTasks.length >= 3 ? 40 : incompleteTasks.length >= 2 ? 20 : 0,
                   }}
                 >
-                  {/* Card 3 — deepest, full width, starts at very top */}
+                  {/* Card 3 — deepest */}
                   {incompleteTasks.length >= 3 && (
                     <div
-                      className="absolute inset-x-2 top-0 bottom-0 rounded-2xl border border-emerald-200/25 bg-emerald-50/35 dark:border-emerald-500/[0.07] dark:bg-emerald-900/[0.07]"
+                      className="absolute inset-x-2 top-0 bottom-0 rounded-2xl border border-emerald-200/25 bg-emerald-50/35 dark:border-emerald-500/20 dark:bg-[#1A2B22]"
                       style={{ zIndex: 0 }}
                     />
                   )}
-                  {/* Card 2 — middle, starts 18px below card 3 */}
+                  {/* Card 2 — middle */}
                   {incompleteTasks.length >= 2 && (
                     <div
-                      className="absolute inset-x-1 bottom-0 rounded-2xl border border-emerald-200/45 bg-emerald-50/60 dark:border-emerald-500/[0.11] dark:bg-emerald-900/[0.11]"
+                      className="absolute inset-x-1 bottom-0 rounded-2xl border border-emerald-200/45 bg-emerald-50/60 dark:border-emerald-500/25 dark:bg-[#1E3028]"
                       style={{ zIndex: 1, top: incompleteTasks.length >= 3 ? 18 : 0 }}
                     />
                   )}
 
-                  {/* Front card — draggable, sits above shadow cards */}
+                  {/* Front card — draggable */}
                   <motion.div
-                    className="relative z-10 cursor-grab rounded-2xl border border-emerald-200/70 bg-gradient-to-br from-emerald-50 to-white px-5 py-5 shadow-[0_2px_16px_rgba(16,185,129,0.13)] dark:border-emerald-500/20 dark:from-emerald-900/20 dark:to-neutral-900 active:cursor-grabbing"
+                    className="relative z-10 cursor-grab rounded-2xl border border-emerald-200/70 bg-gradient-to-br from-emerald-50 to-white px-5 py-5 shadow-[0_2px_16px_rgba(16,185,129,0.13)] dark:border-emerald-500/30 dark:bg-[#243D30] active:cursor-grabbing"
                     drag="y"
                     dragConstraints={{ top: -220, bottom: 20 }}
                     dragElastic={{ top: 0.45, bottom: 0.1 }}
@@ -382,12 +382,12 @@ export default function OverviewDashboard({
                       </div>
                       <div className="flex items-center gap-2">
                         {incompleteTasks.length > 1 && (
-                          <span className="text-[11px] font-semibold text-neutral-400 dark:text-neutral-500">
+                          <span className="text-[11px] font-semibold text-neutral-400 dark:text-emerald-200/50">
                             {incompleteTasks.length} left
                           </span>
                         )}
                         {calcDuration(incompleteTasks[0].startTime, incompleteTasks[0].endTime) && (
-                          <span className="text-[12px] font-semibold text-neutral-400 dark:text-neutral-500">
+                          <span className="text-[12px] font-semibold text-neutral-400 dark:text-emerald-200/50">
                             {calcDuration(incompleteTasks[0].startTime, incompleteTasks[0].endTime)}
                           </span>
                         )}
@@ -411,7 +411,7 @@ export default function OverviewDashboard({
 
                     {/* Time */}
                     {incompleteTasks[0].startTime && (
-                      <p className="mt-1 mb-4 text-[13px] text-neutral-500 dark:text-neutral-400">
+                      <p className="mt-1 mb-4 text-[13px] text-neutral-500 dark:text-emerald-200/60">
                         {formatTime(incompleteTasks[0].startTime)}
                         {incompleteTasks[0].endTime ? ` — ${formatTime(incompleteTasks[0].endTime)}` : ""}
                       </p>
