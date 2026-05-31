@@ -1817,7 +1817,7 @@ export default function ScheduleApp() {
           title="My Plans"
           actions={
             <div className="flex flex-wrap items-center gap-2">
-              {ollamaUrl && ollamaModel && (
+              {(
                 <button
                   type="button"
                   onClick={() => setAiPlanCreating(true)}
@@ -1999,7 +1999,11 @@ export default function ScheduleApp() {
       <TemplatesSheet open={templatesOpen} onClose={() => setTemplatesOpen(false)} onApply={handleApplyTemplate} />
 
       {/* ── Content ────────────────────────────────────────────────────────── */}
-      <div className="max-w-full pb-40 lg:flex-1 lg:max-w-none lg:overflow-y-auto lg:pb-0">
+      {/* paddingTop offsets the fixed header (64px) + iOS safe-area inset on mobile */}
+      <div
+        className="max-w-full pb-40 lg:pt-0 lg:flex-1 lg:max-w-none lg:overflow-y-auto lg:pb-0"
+        style={{ paddingTop: "calc(64px + env(safe-area-inset-top, 0px))" }}
+      >
         <AnimatePresence mode="wait" initial={false}>
 
         {/* ── Tasks Tab ────────────────────────────────────────────────────── */}
