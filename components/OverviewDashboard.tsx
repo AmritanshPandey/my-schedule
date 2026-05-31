@@ -1,7 +1,11 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { motion, AnimatePresence } from "framer-motion";
+import {
+  motion, AnimatePresence,
+  useMotionValue, useTransform,
+  animate as animateValue,
+} from "framer-motion";
 import {
   IconArrowRight,
   IconBolt,
@@ -124,6 +128,131 @@ function Sparkline({ values, color }: { values: number[]; color: string }) {
 
 const CARD = "rounded-2xl border border-neutral-200/70 bg-white shadow-[0_1px_3px_rgba(0,0,0,0.05),0_2px_8px_rgba(0,0,0,0.04)] dark:border-white/[0.07] dark:bg-neutral-900 dark:shadow-[0_1px_3px_rgba(0,0,0,0.3)]";
 
+// ── Next Up draggable card ────────────────────────────────────────────────────
+
+function NextUpCard({
+  tasks,
+  plans,
+  onMarkDone,
+  onSkip,
+}: {
+  tasks: Task[];
+  plans: Plan[];
+  onMarkDone: (id: string, subtaskIds: string[]) => void;
+  onSkip: (id: string) => void;
+}) {
+  const task = tasks[0];
+  const plan = plans.find((p) => p.id === task.planId) ?? null;
+
+  // Motion value drives rotation + opacity during drag
+  const y = useMotionValue(0);
+  const rotate = useTransform(y, [-200, 0, 30], [15, 0, -3]);
+  const cardOpacity = useTransform(y, [-90, -20, 0], [0, 0.35, 1]);
+
+  async function skipCard() {
+    haptic("light");
+    await animateValue(y, -420, { duration: 0.32, ease: [0.4, 0, 1, 1] });
+    onSkip(task.id);
+  }
+
+  async function completeCard() {
+    haptic("medium");
+    await animateValue(y, -80, { duration: 0.2, ease: [0.4, 0, 0.2, 1] });
+    onMarkDone(task.id, task.subtasks?.map((s) => s.id) ?? []);
+  }
+
+  return (
+    <div
+      className="relative"
+      style={{ paddingTop: tasks.length >= 3 ? 40 : tasks.length >= 2 ? 20 : 0 }}
+    >
+      {/* Card 3 — deepest */}
+      {tasks.length >= 3 && (
+        <div
+          className="absolute inset-x-2 top-0 bottom-0 rounded-2xl border border-emerald-200/25 bg-emerald-50/35 dark:border-emerald-500/20 dark:bg-[#1A2B22]"
+          style={{ zIndex: 0 }}
+        />
+      )}
+      {/* Card 2 — middle */}
+      {tasks.length >= 2 && (
+        <div
+          className="absolute inset-x-1 bottom-0 rounded-2xl border border-emerald-200/45 bg-emerald-50/60 dark:border-emerald-500/25 dark:bg-[#1E3028]"
+          style={{ zIndex: 1, top: tasks.length >= 3 ? 18 : 0 }}
+        />
+      )}
+
+      {/* Draggable front card */}
+      <motion.div
+        className="relative z-10 cursor-grab rounded-2xl border border-emerald-200/70 bg-gradient-to-br from-emerald-50 to-white px-5 py-5 dark:border-emerald-500/30 dark:bg-none dark:bg-[#243D30] active:cursor-grabbing"
+        style={{ y, rotate, opacity: cardOpacity, touchAction: "pan-x" }}
+        drag="y"
+        dragConstraints={{ top: -420, bottom: 20 }}
+        dragElastic={{ top: 0.5, bottom: 0.08 }}
+        dragMomentum={false}
+        onDragEnd={(_, info) => {
+          if (info.offset.y < -55 || info.velocity.y < -400) {
+            void skipCard();
+          } else {
+            // Snap back with spring
+            void animateValue(y, 0, { type: "spring", stiffness: 420, damping: 32 });
+          }
+        }}
+      >
+        {/* Header */}
+        <div className="flex items-center justify-between mb-2.5">
+          <div className="flex items-center gap-1.5">
+            <IconBolt size={13} strokeWidth={2.5} className="text-emerald-600 dark:text-emerald-400" />
+            <span className="text-[12px] font-bold text-emerald-600 dark:text-emerald-400">Next up</span>
+          </div>
+          <div className="flex items-center gap-2">
+            {tasks.length > 1 && (
+              <span className="text-[11px] font-semibold text-neutral-400 dark:text-emerald-200/50">
+                {tasks.length} left
+              </span>
+            )}
+            {calcDuration(task.startTime, task.endTime) && (
+              <span className="text-[12px] font-semibold text-neutral-400 dark:text-emerald-200/50">
+                {calcDuration(task.startTime, task.endTime)}
+              </span>
+            )}
+          </div>
+        </div>
+
+        {/* Task title */}
+        <p className="text-[21px] font-extrabold leading-tight text-neutral-950 dark:text-white">
+          {task.title}
+        </p>
+
+        {/* Plan name */}
+        {plan && (
+          <p className="mt-0.5 text-[13px] font-semibold text-emerald-600 dark:text-emerald-400">
+            {plan.emoji} {plan.title}
+          </p>
+        )}
+
+        {/* Time */}
+        {task.startTime ? (
+          <p className="mt-1 mb-4 text-[13px] text-neutral-500 dark:text-emerald-200/60">
+            {formatTime(task.startTime)}{task.endTime ? ` — ${formatTime(task.endTime)}` : ""}
+          </p>
+        ) : (
+          <div className="mb-4" />
+        )}
+
+        {/* Mark Done */}
+        <motion.button
+          type="button"
+          whileTap={{ scale: 0.95 }}
+          onClick={() => void completeCard()}
+          className="rounded-full bg-emerald-600 px-6 py-2.5 text-[13px] font-bold text-white transition-opacity hover:opacity-90"
+        >
+          Mark Done
+        </motion.button>
+      </motion.div>
+    </div>
+  );
+}
+
 // ── Stat tile (desktop only) ──────────────────────────────────────────────────
 
 type TileColor = "emerald" | "amber" | "rose" | "neutral";
@@ -173,8 +302,6 @@ export default function OverviewDashboard({
   // Per-task skip set — persists while on this day
   const [skippedIds, setSkippedIds] = useState<Set<string>>(new Set());
   useEffect(() => { setSkippedIds(new Set()); }, [todayKey]);
-  // Rotate exit only when card is skipped (not marked done)
-  const [skipExit, setSkipExit] = useState(false);
   // Inline task list toggle
   const [showAllTasks, setShowAllTasks] = useState(false);
   const todayISO = localISODate(new Date());
@@ -319,120 +446,20 @@ export default function OverviewDashboard({
           </div>
 
           {/* ── Swipeable card stack ── */}
-          <AnimatePresence mode="wait">
+          <AnimatePresence mode="sync">
             {incompleteTasks.length > 0 ? (
-              <motion.div key={incompleteTasks[0].id}
-                initial={{ opacity: 0, y: 8, scale: 0.98, rotate: 0 }}
-                animate={{ opacity: 1, y: 0, scale: 1, rotate: 0 }}
-                exit={skipExit
-                  ? { opacity: 0, y: -60, rotate: 14, scale: 0.88, transition: { duration: 0.28 } }
-                  : { opacity: 0, y: -50, scale: 0.95, rotate: 0, transition: { duration: 0.2 } }
-                }
-                transition={{ duration: 0.22, ease: [0.25, 0.46, 0.45, 0.94] }}
+              <motion.div
+                key={incompleteTasks[0].id}
+                initial={{ opacity: 0, y: 22, scale: 0.94 }}
+                animate={{ opacity: 1, y: 0, scale: 1 }}
+                transition={{ type: "spring", stiffness: 360, damping: 26 }}
               >
-                {/*
-                  Stack container:
-                  paddingTop creates visible space for peeking cards.
-                  Shadow cards anchor top=0/top-[18px] and extend to bottom-0,
-                  so they fill the container and only their top edges are visible
-                  above the front card (which starts after the padding).
-                */}
-                <div
-                  className="relative"
-                  style={{
-                    paddingTop: incompleteTasks.length >= 3 ? 40 : incompleteTasks.length >= 2 ? 20 : 0,
-                  }}
-                >
-                  {/* Card 3 — deepest */}
-                  {incompleteTasks.length >= 3 && (
-                    <div
-                      className="absolute inset-x-2 top-0 bottom-0 rounded-2xl border border-emerald-200/25 bg-emerald-50/35 dark:border-emerald-500/20 dark:bg-[#1A2B22]"
-                      style={{ zIndex: 0 }}
-                    />
-                  )}
-                  {/* Card 2 — middle */}
-                  {incompleteTasks.length >= 2 && (
-                    <div
-                      className="absolute inset-x-1 bottom-0 rounded-2xl border border-emerald-200/45 bg-emerald-50/60 dark:border-emerald-500/25 dark:bg-[#1E3028]"
-                      style={{ zIndex: 1, top: incompleteTasks.length >= 3 ? 18 : 0 }}
-                    />
-                  )}
-
-                  {/* Front card — draggable */}
-                  <motion.div
-                    className="relative z-10 cursor-grab rounded-2xl border border-emerald-200/70 bg-gradient-to-br from-emerald-50 to-white px-5 py-5 shadow-[0_2px_16px_rgba(16,185,129,0.13)] dark:bg-none dark:bg-[#243D30] dark:border-emerald-500/30 active:cursor-grabbing"
-                    drag="y"
-                    dragConstraints={{ top: -220, bottom: 20 }}
-                    dragElastic={{ top: 0.45, bottom: 0.1 }}
-                    dragMomentum={false}
-                    onDragEnd={(_, info) => {
-                      if (info.offset.y < -55) {
-                        haptic("light");
-                        setSkipExit(true);
-                        setSkippedIds((prev) => new Set([...prev, incompleteTasks[0].id]));
-                      }
-                    }}
-                    style={{ touchAction: "pan-x" }}
-                  >
-                    {/* Header row */}
-                    <div className="flex items-center justify-between mb-2.5">
-                      <div className="flex items-center gap-1.5">
-                        <IconBolt size={13} strokeWidth={2.5} className="text-emerald-600 dark:text-emerald-400" />
-                        <span className="text-[12px] font-bold text-emerald-600 dark:text-emerald-400">Next up</span>
-                      </div>
-                      <div className="flex items-center gap-2">
-                        {incompleteTasks.length > 1 && (
-                          <span className="text-[11px] font-semibold text-neutral-400 dark:text-emerald-200/50">
-                            {incompleteTasks.length} left
-                          </span>
-                        )}
-                        {calcDuration(incompleteTasks[0].startTime, incompleteTasks[0].endTime) && (
-                          <span className="text-[12px] font-semibold text-neutral-400 dark:text-emerald-200/50">
-                            {calcDuration(incompleteTasks[0].startTime, incompleteTasks[0].endTime)}
-                          </span>
-                        )}
-                      </div>
-                    </div>
-
-                    {/* Task title */}
-                    <p className="text-[21px] font-extrabold leading-tight text-neutral-950 dark:text-white">
-                      {incompleteTasks[0].title}
-                    </p>
-
-                    {/* Plan name */}
-                    {(() => {
-                      const p = schedule.plans.find((pl) => pl.id === incompleteTasks[0].planId);
-                      return p ? (
-                        <p className="mt-0.5 text-[13px] font-semibold text-emerald-600 dark:text-emerald-400">
-                          {p.emoji} {p.title}
-                        </p>
-                      ) : null;
-                    })()}
-
-                    {/* Time */}
-                    {incompleteTasks[0].startTime && (
-                      <p className="mt-1 mb-4 text-[13px] text-neutral-500 dark:text-emerald-200/60">
-                        {formatTime(incompleteTasks[0].startTime)}
-                        {incompleteTasks[0].endTime ? ` — ${formatTime(incompleteTasks[0].endTime)}` : ""}
-                      </p>
-                    )}
-                    {!incompleteTasks[0].startTime && <div className="mb-4" />}
-
-                    {/* Mark Done — no icon */}
-                    <motion.button
-                      type="button"
-                      whileTap={{ scale: 0.95 }}
-                      onClick={() => {
-                        haptic("medium");
-                        setSkipExit(false);
-                        onMarkTaskDone(incompleteTasks[0].id, incompleteTasks[0].subtasks?.map((s) => s.id) ?? []);
-                      }}
-                      className="rounded-full bg-emerald-600 px-6 py-2.5 text-[13px] font-bold text-white transition-opacity hover:opacity-90"
-                    >
-                      Mark Done
-                    </motion.button>
-                  </motion.div>
-                </div>
+                <NextUpCard
+                  tasks={incompleteTasks}
+                  plans={schedule.plans}
+                  onMarkDone={onMarkTaskDone}
+                  onSkip={(id) => setSkippedIds((prev) => new Set([...prev, id]))}
+                />
               </motion.div>
             ) : (
               <motion.div key="all-done" initial={{ opacity: 0 }} animate={{ opacity: 1 }}
