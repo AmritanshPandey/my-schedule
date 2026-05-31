@@ -427,7 +427,7 @@ export default function OverviewDashboard({
                         setSkipExit(false);
                         onMarkTaskDone(incompleteTasks[0].id, incompleteTasks[0].subtasks?.map((s) => s.id) ?? []);
                       }}
-                      className="rounded-full bg-emerald-600 px-6 py-2.5 text-[13px] font-bold text-white shadow-[0_2px_8px_rgba(16,185,129,0.4)] transition-opacity hover:opacity-90"
+                      className="rounded-full bg-emerald-600 px-6 py-2.5 text-[13px] font-bold text-white transition-opacity hover:opacity-90"
                     >
                       Mark Done
                     </motion.button>
