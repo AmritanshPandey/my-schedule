@@ -173,6 +173,10 @@ export default function OverviewDashboard({
   // Per-task skip set — persists while on this day
   const [skippedIds, setSkippedIds] = useState<Set<string>>(new Set());
   useEffect(() => { setSkippedIds(new Set()); }, [todayKey]);
+  // Rotate exit only when card is skipped (not marked done)
+  const [skipExit, setSkipExit] = useState(false);
+  // Inline task list toggle
+  const [showAllTasks, setShowAllTasks] = useState(false);
   const todayISO = localISODate(new Date());
 
   // ── Shared computed data ──────────────────────────────────────────────────
@@ -307,10 +311,10 @@ export default function OverviewDashboard({
             </div>
             <button
               type="button"
-              onClick={() => { haptic("light"); onNavigate(0); }}
+              onClick={() => { haptic("light"); setShowAllTasks((v) => !v); }}
               className="text-[13px] font-semibold text-emerald-600 dark:text-emerald-400"
             >
-              View All →
+              {showAllTasks ? "Hide ↑" : "View All →"}
             </button>
           </div>
 
@@ -318,9 +322,12 @@ export default function OverviewDashboard({
           <AnimatePresence mode="wait">
             {incompleteTasks.length > 0 ? (
               <motion.div key={incompleteTasks[0].id}
-                initial={{ opacity: 0, y: 8, scale: 0.98 }}
-                animate={{ opacity: 1, y: 0, scale: 1 }}
-                exit={{ opacity: 0, y: -70, scale: 0.94 }}
+                initial={{ opacity: 0, y: 8, scale: 0.98, rotate: 0 }}
+                animate={{ opacity: 1, y: 0, scale: 1, rotate: 0 }}
+                exit={skipExit
+                  ? { opacity: 0, y: -60, rotate: 14, scale: 0.88, transition: { duration: 0.28 } }
+                  : { opacity: 0, y: -50, scale: 0.95, rotate: 0, transition: { duration: 0.2 } }
+                }
                 transition={{ duration: 0.22, ease: [0.25, 0.46, 0.45, 0.94] }}
               >
                 {/*
@@ -361,6 +368,7 @@ export default function OverviewDashboard({
                     onDragEnd={(_, info) => {
                       if (info.offset.y < -55) {
                         haptic("light");
+                        setSkipExit(true);
                         setSkippedIds((prev) => new Set([...prev, incompleteTasks[0].id]));
                       }
                     }}
@@ -410,17 +418,17 @@ export default function OverviewDashboard({
                     )}
                     {!incompleteTasks[0].startTime && <div className="mb-4" />}
 
-                    {/* Mark Done only */}
+                    {/* Mark Done — no icon */}
                     <motion.button
                       type="button"
                       whileTap={{ scale: 0.95 }}
                       onClick={() => {
                         haptic("medium");
+                        setSkipExit(false);
                         onMarkTaskDone(incompleteTasks[0].id, incompleteTasks[0].subtasks?.map((s) => s.id) ?? []);
                       }}
-                      className="flex items-center gap-2 rounded-full bg-emerald-600 px-6 py-2.5 text-[13px] font-bold text-white shadow-[0_2px_8px_rgba(16,185,129,0.4)] transition-opacity hover:opacity-90"
+                      className="rounded-full bg-emerald-600 px-6 py-2.5 text-[13px] font-bold text-white shadow-[0_2px_8px_rgba(16,185,129,0.4)] transition-opacity hover:opacity-90"
                     >
-                      <IconCheck size={14} strokeWidth={2.5} />
                       Mark Done
                     </motion.button>
                   </motion.div>
@@ -435,6 +443,45 @@ export default function OverviewDashboard({
                 <p className="mt-0.5 text-[13px] text-neutral-400 dark:text-neutral-500">
                   {tasksTotal === 0 ? "Head to Today to add tasks." : "Great work — all tasks done."}
                 </p>
+              </motion.div>
+            )}
+          </AnimatePresence>
+
+          {/* ── Inline task list (View All) ── */}
+          <AnimatePresence>
+            {showAllTasks && todayTasks.length > 0 && (
+              <motion.div
+                initial={{ opacity: 0, height: 0 }}
+                animate={{ opacity: 1, height: "auto" }}
+                exit={{ opacity: 0, height: 0 }}
+                transition={{ duration: 0.22, ease: "easeOut" }}
+                className="overflow-hidden"
+              >
+                <div className={`${CARD} mt-3 divide-y divide-neutral-100 dark:divide-white/[0.05]`}>
+                  {todayTasks.map((task) => {
+                    const done = isTaskCompleted(task, task.subtasks?.length ?? 0);
+                    const plan = schedule.plans.find((p) => p.id === task.planId);
+                    return (
+                      <div key={task.id} className="flex items-center gap-3 px-4 py-3">
+                        <div className={`flex h-5 w-5 shrink-0 items-center justify-center rounded-full border-[1.5px] ${done ? "border-emerald-500 bg-emerald-500" : "border-neutral-300 dark:border-neutral-600"}`}>
+                          {done && <IconCheck size={9} strokeWidth={3} className="text-white" />}
+                        </div>
+                        <div className="min-w-0 flex-1">
+                          <p className={`text-[13px] font-semibold leading-snug ${done ? "text-neutral-400 line-through dark:text-neutral-600" : "text-neutral-900 dark:text-white"}`}>
+                            {task.title}
+                          </p>
+                          {(task.startTime || plan) && (
+                            <p className="text-[11px] text-neutral-400 dark:text-neutral-500 mt-0.5">
+                              {task.startTime && formatTime(task.startTime)}
+                              {task.startTime && plan && " · "}
+                              {plan && `${plan.emoji} ${plan.title}`}
+                            </p>
+                          )}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
               </motion.div>
             )}
           </AnimatePresence>
