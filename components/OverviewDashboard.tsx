@@ -1,17 +1,17 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import {
-  motion, AnimatePresence,
-  useMotionValue, useTransform,
-  animate as animateValue,
-} from "framer-motion";
+import { motion, AnimatePresence, useMotionValue, useTransform, animate as motionAnimate, type MotionValue } from "framer-motion";
 import {
   IconArrowRight,
+  IconArrowUpRight,
   IconBolt,
+  IconListCheck,
   IconBrain,
   IconCalendarEvent,
   IconCheck,
+  IconChevronRight,
+  IconClipboardCheck,
   IconClipboardData,
   IconClipboardList,
   IconMap2,
@@ -19,11 +19,17 @@ import {
   IconRepeat,
   IconTarget,
   IconTrendingUp,
+  IconTrendingDown,
+  IconMinus,
+  IconActivity,
 } from "@tabler/icons-react";
 import type { Schedule, DayKey, Task, Plan, ProgressTracker, RitualCompletion, Ritual } from "@/lib/useScheduleDB";
 import { isTaskCompleted } from "@/lib/taskCompletion";
 import { getPlanCardStats } from "@/lib/planInsights";
 import { accentStyles } from "@/lib/colorSystem";
+import { AI_ENABLED } from "@/lib/featureFlags";
+import ExecutionTrendCard from "@/components/ExecutionTrendCard";
+import { getTrendDirection, getTrendState, type TrendDirection, type TrendState } from "@/lib/trendUtils";
 import { localISODate, addDaysToISO } from "@/lib/dateUtils";
 import { haptic } from "@/lib/haptics";
 
@@ -34,6 +40,7 @@ interface OverviewDashboardProps {
   todayKey: DayKey;
   onNavigate: (tab: number) => void;
   onMarkTaskDone: (taskId: string, subtaskIds: string[]) => void;
+  onOpenSubtasks?: (taskId: string) => void;
   completedRitualIds: Set<string>;
   onLogTracker: (tracker: ProgressTracker) => void;
 }
@@ -57,20 +64,6 @@ function formatTime(t?: string): string {
   const ampm = h >= 12 ? "PM" : "AM";
   const hour = h % 12 || 12;
   return m === 0 ? `${hour} ${ampm}` : `${hour}:${String(m).padStart(2, "0")} ${ampm}`;
-}
-
-function calcDuration(start?: string, end?: string): string {
-  if (!start || !end) return "";
-  const shm = parseHM(start);
-  const ehm = parseHM(end);
-  if (!shm || !ehm) return "";
-  const mins = (ehm[0] * 60 + ehm[1]) - (shm[0] * 60 + shm[1]);
-  if (mins <= 0) return "";
-  const h = Math.floor(mins / 60);
-  const m = mins % 60;
-  if (h === 0) return `${m}m`;
-  if (m === 0) return `${h} hr`;
-  return `${h} hr ${m}m`;
 }
 
 function calcRitualStreak(
@@ -124,134 +117,216 @@ function Sparkline({ values, color }: { values: number[]; color: string }) {
   );
 }
 
-// ── Shared card shell ─────────────────────────────────────────────────────────
+// ── Trend arrow ───────────────────────────────────────────────────────────────
+// Direction = which way the metric moved; state = good/bad relative to the goal.
 
-const CARD = "rounded-2xl border border-neutral-200/70 bg-white shadow-[0_1px_3px_rgba(0,0,0,0.05),0_2px_8px_rgba(0,0,0,0.04)] dark:border-white/[0.07] dark:bg-neutral-900 dark:shadow-[0_1px_3px_rgba(0,0,0,0.3)]";
+function TrendArrow({ direction, state }: { direction: TrendDirection; state: TrendState }) {
+  const Icon = direction === "up" ? IconTrendingUp : direction === "down" ? IconTrendingDown : IconMinus;
+  const color =
+    state === "positive" ? "text-emerald-500" :
+    state === "negative" ? "text-rose-500" :
+    "text-neutral-400 dark:text-neutral-500";
+  return <Icon size={17} strokeWidth={2.5} className={`shrink-0 ${color}`} />;
+}
 
-// ── Next Up draggable card ────────────────────────────────────────────────────
+// ── Swipeable card stack ──────────────────────────────────────────────────────
+// One shared motion value (`y`) drives the front card AND the cards behind it,
+// so the whole stack recalculates depth in realtime as you drag — the back
+// cards rise and scale forward to "anticipate" becoming the active card.
 
-function NextUpCard({
+type StackTask = { id: string; title: string; planId?: string; startTime?: string; endTime?: string; subtasks?: { id: string }[]; completedSubtaskIds?: string[] };
+
+// Full-precision time — "07:00 AM" — matching the reference card.
+function formatTimeFull(t?: string): string {
+  if (!t) return "";
+  const hm = parseHM(t);
+  if (!hm) return t;
+  const [h, m] = hm;
+  const ampm = h >= 12 ? "PM" : "AM";
+  const hour = h % 12 || 12;
+  return `${String(hour).padStart(2, "0")}:${String(m).padStart(2, "0")} ${ampm}`;
+}
+
+// Duration spelled out — "2 hr 30 m".
+function formatDur(start?: string, end?: string): string {
+  if (!start || !end) return "";
+  const shm = parseHM(start);
+  const ehm = parseHM(end);
+  if (!shm || !ehm) return "";
+  const mins = (ehm[0] * 60 + ehm[1]) - (shm[0] * 60 + shm[1]);
+  if (mins <= 0) return "";
+  const h = Math.floor(mins / 60);
+  const m = mins % 60;
+  if (h === 0) return `${m} m`;
+  if (m === 0) return `${h} hr`;
+  return `${h} hr ${m} m`;
+}
+
+// Resting geometry for the cards behind the front one (depth 0 = next, 1 = after).
+// restY magnitude is matched to the container's paddingTop so the deepest card
+// sits flush at the top and the stack reads as a single tight pile.
+const PEEK = [
+  { restY: -16, restScale: 0.955, activeY: -6, activeScale: 0.985, opacity: [0.85, 1] as const },
+  { restY: -32, restScale: 0.912, activeY: -20, activeScale: 0.95, opacity: [0.6, 0.9] as const },
+];
+const PAD_TOP = [0, 0, 16, 32]; // by clamped task count (1, 2, 3+)
+
+function BackgroundCard({ progress, depth, top }: { progress: MotionValue<number>; depth: 0 | 1; top: number }) {
+  const cfg = PEEK[depth];
+  const y = useTransform(progress, [0, 1], [cfg.restY, cfg.activeY]);
+  const scale = useTransform(progress, [0, 1], [cfg.restScale, cfg.activeScale]);
+  const opacity = useTransform(progress, [0, 1], [cfg.opacity[0], cfg.opacity[1]]);
+  // Anchored to the FRONT card's box (top: padTop) — not the padded container —
+  // so the visible peek equals exactly |restY| with no extra height bleed.
+  return (
+    <motion.div
+      aria-hidden
+      className="absolute left-0 right-0 bottom-0 rounded-3xl border border-emerald-200/50 bg-gradient-to-br from-emerald-50/80 to-white dark:border-emerald-500/[0.12] dark:from-emerald-900/[0.14] dark:to-neutral-900"
+      style={{ top, y, scale, opacity, transformOrigin: "top center", zIndex: depth === 0 ? 2 : 1, willChange: "transform" }}
+    />
+  );
+}
+
+function SwipeableCardStack({
   tasks,
   plans,
   onMarkDone,
   onSkip,
+  onOpenSubtasks,
 }: {
-  tasks: Task[];
+  tasks: StackTask[];
   plans: Plan[];
-  onMarkDone: (id: string, subtaskIds: string[]) => void;
-  onSkip: (id: string) => void;
+  onMarkDone: (task: StackTask) => void;
+  onSkip: (task: StackTask) => void;
+  onOpenSubtasks?: (taskId: string) => void;
 }) {
-  const task = tasks[0];
-  const plan = plans.find((p) => p.id === task.planId) ?? null;
-
-  // Motion value drives rotation + opacity during drag
   const y = useMotionValue(0);
-  const rotate = useTransform(y, [-200, 0, 30], [15, 0, -3]);
-  const cardOpacity = useTransform(y, [-90, -20, 0], [0, 0.35, 1]);
+  const [busy, setBusy] = useState(false);
 
-  async function skipCard() {
-    haptic("light");
-    await animateValue(y, -420, { duration: 0.32, ease: [0.4, 0, 1, 1] });
-    onSkip(task.id);
-  }
+  // Drag commitment: 0 at rest → 1 once dragged a full card-height up.
+  const progress = useTransform(y, [-120, 0], [1, 0]);
+  // Front card physics — tilts and fades as it lifts off the stack.
+  const rotate = useTransform(y, [-220, -60, 0, 20], [9, 4, 0, -2]);
+  const frontOpacity = useTransform(y, [-200, -70, 0], [0, 0.65, 1]);
 
-  async function completeCard() {
-    haptic("medium");
-    await animateValue(y, -80, { duration: 0.2, ease: [0.4, 0, 0.2, 1] });
-    onMarkDone(task.id, task.subtasks?.map((s) => s.id) ?? []);
+  const front = tasks[0];
+  const count = tasks.length;
+  const duration = formatDur(front.startTime, front.endTime);
+  const chip = plans.find((p) => p.id === front.planId)?.title;
+  const padTop = PAD_TOP[Math.min(count, 3)];
+  const subTotal = front.subtasks?.length ?? 0;
+  const subDone = subTotal > 0
+    ? (front.completedSubtaskIds ?? []).filter((id) => front.subtasks!.some((s) => s.id === id)).length
+    : 0;
+
+  async function dismiss(type: "skip" | "done") {
+    if (busy) return;
+    setBusy(true);
+    haptic(type === "done" ? "medium" : "light");
+    await motionAnimate(y, -460, { duration: 0.32, ease: [0.36, 0, 0.66, -0.1] });
+    if (type === "done") onMarkDone(front);
+    else onSkip(front);
+    y.set(0);
+    setBusy(false);
   }
 
   return (
-    <div
-      className="relative"
-      style={{ paddingTop: tasks.length >= 3 ? 40 : tasks.length >= 2 ? 20 : 0 }}
-    >
-      {/* Card 3 — deepest */}
-      {tasks.length >= 3 && (
-        <div
-          className="absolute inset-x-2 top-0 bottom-0 rounded-2xl border border-emerald-200/25 bg-emerald-50/35 dark:border-emerald-500/20 dark:bg-[#1A2B22]"
-          style={{ zIndex: 0 }}
-        />
-      )}
-      {/* Card 2 — middle */}
-      {tasks.length >= 2 && (
-        <div
-          className="absolute inset-x-1 bottom-0 rounded-2xl border border-emerald-200/45 bg-emerald-50/60 dark:border-emerald-500/25 dark:bg-[#1E3028]"
-          style={{ zIndex: 1, top: tasks.length >= 3 ? 18 : 0 }}
-        />
-      )}
+    <div className="relative" style={{ paddingTop: padTop }}>
+      {/* Cards behind — motion-driven depth */}
+      {count >= 3 && <BackgroundCard progress={progress} depth={1} top={padTop} />}
+      {count >= 2 && <BackgroundCard progress={progress} depth={0} top={padTop} />}
 
-      {/* Draggable front card */}
+      {/* Front card — draggable */}
       <motion.div
-        className="relative z-10 cursor-grab rounded-2xl border border-emerald-200/70 bg-gradient-to-br from-emerald-50 to-white px-5 py-5 dark:border-emerald-500/30 dark:bg-none dark:bg-[#243D30] active:cursor-grabbing"
-        style={{ y, rotate, opacity: cardOpacity, touchAction: "pan-x" }}
-        drag="y"
-        dragConstraints={{ top: -420, bottom: 20 }}
-        dragElastic={{ top: 0.5, bottom: 0.08 }}
+        className="relative z-10 cursor-grab touch-pan-x rounded-3xl border border-emerald-200/70 bg-gradient-to-br from-emerald-50 to-white px-5 py-5 dark:border-emerald-500/20 dark:from-emerald-900/20 dark:to-neutral-900 active:cursor-grabbing"
+        style={{ y, rotate, opacity: frontOpacity, willChange: "transform" }}
+        drag={busy ? false : "y"}
+        dragConstraints={{ top: -460, bottom: 18 }}
+        dragElastic={{ top: 0.55, bottom: 0.08 }}
         dragMomentum={false}
         onDragEnd={(_, info) => {
-          if (info.offset.y < -55 || info.velocity.y < -400) {
-            void skipCard();
+          if (info.offset.y < -55 || info.velocity.y < -420) {
+            void dismiss("skip");
           } else {
-            // Snap back with spring
-            void animateValue(y, 0, { type: "spring", stiffness: 420, damping: 32 });
+            void motionAnimate(y, 0, { type: "spring", stiffness: 440, damping: 34 });
           }
         }}
       >
-        {/* Header */}
-        <div className="flex items-center justify-between mb-2.5">
-          <div className="flex items-center gap-1.5">
-            <IconBolt size={13} strokeWidth={2.5} className="text-emerald-600 dark:text-emerald-400" />
-            <span className="text-[12px] font-bold text-emerald-600 dark:text-emerald-400">Next up</span>
-          </div>
-          <div className="flex items-center gap-2">
-            {tasks.length > 1 && (
-              <span className="text-[11px] font-semibold text-neutral-400 dark:text-emerald-200/50">
-                {tasks.length} left
-              </span>
-            )}
-            {calcDuration(task.startTime, task.endTime) && (
-              <span className="text-[12px] font-semibold text-neutral-400 dark:text-emerald-200/50">
-                {calcDuration(task.startTime, task.endTime)}
-              </span>
-            )}
-          </div>
-        </div>
+        {/* Content keyed per task so the next card fades/scales forward on swap */}
+        <AnimatePresence mode="popLayout" initial={false}>
+          <motion.div
+            key={front.id}
+            initial={{ opacity: 0, scale: 0.97 }}
+            animate={{ opacity: 1, scale: 1 }}
+            transition={{ duration: 0.26, ease: [0.25, 0.46, 0.45, 0.94] }}
+          >
+            {/* Header row */}
+            <div className="flex items-center justify-between mb-3">
+              <div className="flex items-center gap-1.5">
+                <IconBolt size={16} strokeWidth={2.5} className="text-emerald-600 dark:text-emerald-400" />
+                <span className="text-[14px] font-bold text-emerald-600 dark:text-emerald-400">Next up</span>
+              </div>
+              <div className="flex items-center gap-2.5">
+                {subTotal > 0 && onOpenSubtasks && (
+                  <button
+                    type="button"
+                    onPointerDownCapture={(e) => e.stopPropagation()}
+                    onClick={(e) => { e.stopPropagation(); haptic("light"); onOpenSubtasks(front.id); }}
+                    className="inline-flex items-center gap-1.5 rounded-full border border-emerald-200/80 bg-white/70 px-2.5 py-1 text-[12px] font-bold tabular-nums text-emerald-700 dark:border-emerald-500/30 dark:bg-white/[0.06] dark:text-emerald-300"
+                  >
+                    <IconListCheck size={13} strokeWidth={2.2} />
+                    {subDone}/{subTotal}
+                    <IconArrowUpRight size={13} strokeWidth={2.4} />
+                  </button>
+                )}
+                {duration && (
+                  <span className="text-[14px] font-bold text-emerald-600 dark:text-emerald-400">
+                    {duration}
+                  </span>
+                )}
+              </div>
+            </div>
 
-        {/* Task title */}
-        <p className="text-[21px] font-extrabold leading-tight text-neutral-950 dark:text-white">
-          {task.title}
-        </p>
+            {/* Task title */}
+            <p className="text-[22px] font-extrabold leading-tight text-neutral-950 dark:text-white">
+              {front.title}
+            </p>
 
-        {/* Plan name */}
-        {plan && (
-          <p className="mt-0.5 text-[13px] font-semibold text-emerald-600 dark:text-emerald-400">
-            {plan.emoji} {plan.title}
-          </p>
-        )}
+            {/* Time + category chip */}
+            <div className="mt-1.5 mb-5 flex items-center gap-2.5">
+              {front.startTime && (
+                <span className="text-[14px] font-medium text-emerald-600 dark:text-emerald-400">
+                  {formatTimeFull(front.startTime)}
+                  {front.endTime ? ` - ${formatTimeFull(front.endTime)}` : ""}
+                </span>
+              )}
+              {chip && (
+                <span className="rounded-full border border-neutral-200 bg-white px-3 py-0.5 text-[13px] font-semibold text-neutral-600 dark:border-white/[0.12] dark:bg-white/[0.06] dark:text-neutral-300">
+                  {chip}
+                </span>
+              )}
+            </div>
 
-        {/* Time */}
-        {task.startTime ? (
-          <p className="mt-1 mb-4 text-[13px] text-neutral-500 dark:text-emerald-200/60">
-            {formatTime(task.startTime)}{task.endTime ? ` — ${formatTime(task.endTime)}` : ""}
-          </p>
-        ) : (
-          <div className="mb-4" />
-        )}
-
-        {/* Mark Done */}
-        <motion.button
-          type="button"
-          whileTap={{ scale: 0.95 }}
-          onClick={() => void completeCard()}
-          className="rounded-full bg-emerald-600 px-6 py-2.5 text-[13px] font-bold text-white transition-opacity hover:opacity-90"
-        >
-          Mark Done
-        </motion.button>
+            {/* Action */}
+            <motion.button
+              type="button"
+              whileTap={{ scale: 0.96 }}
+              onClick={() => void dismiss("done")}
+              className="flex items-center gap-2 rounded-full bg-emerald-600 px-6 py-3 text-[15px] font-bold text-white"
+            >
+              <IconCheck size={18} strokeWidth={3} />
+              Mark Done
+            </motion.button>
+          </motion.div>
+        </AnimatePresence>
       </motion.div>
     </div>
   );
 }
+
+// ── Shared card shell ─────────────────────────────────────────────────────────
+
+const CARD = "rounded-2xl border border-neutral-200/70 bg-white dark:border-white/[0.07] dark:bg-neutral-900";
 
 // ── Stat tile (desktop only) ──────────────────────────────────────────────────
 
@@ -297,7 +372,7 @@ const STATUS_CFG: Record<PlanStatus, { label: string; text: string; dot: string;
 
 export default function OverviewDashboard({
   schedule, todayKey, onNavigate,
-  onMarkTaskDone, completedRitualIds, onLogTracker,
+  onMarkTaskDone, onOpenSubtasks, completedRitualIds, onLogTracker,
 }: OverviewDashboardProps) {
   // Per-task skip set — persists while on this day
   const [skippedIds, setSkippedIds] = useState<Set<string>>(new Set());
@@ -337,14 +412,13 @@ export default function OverviewDashboard({
     [todayTasks, skippedIds]
   );
 
-  const { todayRituals, ritualsDone } = useMemo(() => {
+  const todayRituals = useMemo(() => {
     const dayIdx = new Date(todayISO + "T00:00:00").getDay();
     const da = ["sunday","monday","tuesday","wednesday","thursday","friday","saturday"][dayIdx] as DayKey;
-    const tr = (schedule.rituals ?? []).filter(
+    return (schedule.rituals ?? []).filter(
       (r) => !r.repeatDays || r.repeatDays.length === 0 || r.repeatDays.includes(da)
     );
-    return { todayRituals: tr, ritualsDone: tr.filter((r) => completedRitualIds.has(r.id)).length };
-  }, [schedule, todayISO, completedRitualIds]);
+  }, [schedule, todayISO]);
 
   const planStats = useMemo(() =>
     schedule.plans.map((plan) => {
@@ -361,9 +435,22 @@ export default function OverviewDashboard({
       const entries = (schedule.metricEntries ?? [])
         .filter((e) => e.trackerId === tracker.id)
         .sort((a, b) => b.date.localeCompare(a.date));
+      const latest = entries[0];
+      const previous = entries[1];
+      // Trend vs the prior entry; state colored against the tracker's goal.
+      const trend: { direction: TrendDirection; state: TrendState } | null =
+        latest && previous
+          ? {
+              direction: getTrendDirection(previous.value, latest.value),
+              state: tracker.goalDirection
+                ? getTrendState({ previous: previous.value, current: latest.value, goalDirection: tracker.goalDirection })
+                : "neutral",
+            }
+          : null;
       return {
         tracker,
-        latest: entries[0],
+        latest,
+        trend,
         sparkValues: entries.slice(0, 7).reverse().map((e) => e.value),
         plan: schedule.plans.find((p) => p.id === tracker.planId),
       };
@@ -379,7 +466,7 @@ export default function OverviewDashboard({
       items.push({ icon: IconClipboardData, title: "Create your first plan", desc: "Break goals into trackable tasks with milestones and progress.", tab: 1 });
     if (schedule.plans.length > 0 && !hasMilestones)
       items.push({ icon: IconMap2, title: "Map your milestones", desc: "Give plans concrete checkpoints and target dates.", tab: 1 });
-    if (schedule.plans.length > 0 && !hasCoach)
+    if (AI_ENABLED && schedule.plans.length > 0 && !hasCoach)
       items.push({ icon: IconBrain, title: "Try the AI Coach", desc: "Get task suggestions and weekly coaching — runs locally.", tab: 1 });
     if (schedule.plans.length > 0 && (schedule.progressTrackers ?? []).length === 0)
       items.push({ icon: IconTrendingUp, title: "Track your progress", desc: "Add metrics to plans and log daily values to see trends.", tab: 1 });
@@ -391,31 +478,56 @@ export default function OverviewDashboard({
   }, [schedule]);
 
 
-  // ── Mobile — Weekly activity for first plan ────────────────────────────────
+  // ── Mobile — Whole-week activity across every plan ─────────────────────────
 
   const weeklyActivity = useMemo(() => {
-    const plan = schedule.plans[0] ?? null;
-    if (!plan) return null;
     const DAYS_ORDER: DayKey[] = ["monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday"];
     const DAY_LABELS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
+    // Monday of the current week → real dates for each weekday.
+    const todayIdx = new Date(todayISO + "T00:00:00").getDay(); // 0=Sun..6=Sat
+    const monday = addDaysToISO(todayISO, -((todayIdx + 6) % 7));
+
+    // Tasks: weekday templates, all plans combined.
     const days = DAYS_ORDER.map((dk, i) => {
-      const tasks = (schedule.activities[dk] ?? []).filter((t) => t.planId === plan.id);
+      const tasks = schedule.activities[dk] ?? [];
       const total = tasks.length;
       const done = tasks.filter((t) => isTaskCompleted(t, t.subtasks?.length ?? 0)).length;
-      return { label: DAY_LABELS[i], total, done, pct: total > 0 ? Math.round((done / total) * 100) : 0 };
+      const isToday = addDaysToISO(monday, i) === todayISO;
+      return { label: DAY_LABELS[i], total, done, isToday, pct: total > 0 ? Math.round((done / total) * 100) : 0 };
     });
     const totalTasks = days.reduce((s, d) => s + d.total, 0);
     const totalDone = days.reduce((s, d) => s + d.done, 0);
     const tasksPct = totalTasks > 0 ? Math.round((totalDone / totalTasks) * 100) : 0;
-    const habitsPct = todayRituals.length > 0 ? Math.round((ritualsDone / todayRituals.length) * 100) : 0;
-    return { plan, days, tasksPct, habitsPct };
-  }, [schedule, todayRituals, ritualsDone]);
+
+    // Habits: completion is per-date, so count scheduled vs done up to today.
+    const doneSet = new Set((schedule.ritualCompletions ?? []).map((c) => `${c.ritualId}|${c.date}`));
+    let habitTotal = 0, habitDone = 0;
+    DAYS_ORDER.forEach((dk, i) => {
+      const date = addDaysToISO(monday, i);
+      if (date > todayISO) return; // future days aren't actionable yet
+      const scheduled = (schedule.rituals ?? []).filter(
+        (r) => !r.repeatDays || r.repeatDays.length === 0 || r.repeatDays.includes(dk)
+      );
+      habitTotal += scheduled.length;
+      habitDone += scheduled.filter((r) => doneSet.has(`${r.id}|${date}`)).length;
+    });
+    const habitsPct = habitTotal > 0 ? Math.round((habitDone / habitTotal) * 100) : 0;
+
+    if (totalTasks === 0 && habitTotal === 0) return null;
+    return { days, tasksPct, habitsPct };
+  }, [schedule, todayISO]);
 
   // ── Derived colors ────────────────────────────────────────────────────────
 
   const taskColor: TileColor = tasksTotal === 0 ? "neutral" : tasksDone === tasksTotal ? "emerald" : tasksDone > 0 ? "amber" : "neutral";
   const weekColor: TileColor = weeklyPct >= 70 ? "emerald" : weeklyPct >= 40 ? "amber" : weeklyPct > 0 ? "rose" : "neutral";
   const streakColor: TileColor = longestStreak >= 3 ? "amber" : "neutral";
+
+  // Any tasks scheduled across the week (not just today) — gates execution analytics.
+  const hasScheduledTasks = useMemo(
+    () => Object.values(schedule.activities).some((a) => (a?.length ?? 0) > 0),
+    [schedule.activities]
+  );
 
   // ── Render ────────────────────────────────────────────────────────────────
 
@@ -431,34 +543,31 @@ export default function OverviewDashboard({
         <div className="px-4 pt-5 mb-5">
           {/* Count row */}
           <div className="flex items-center justify-between mb-3">
-            <div className="flex items-center gap-1.5 text-[13px] font-medium text-neutral-500 dark:text-neutral-400">
-              <IconClipboardList size={14} strokeWidth={2} className="shrink-0" />
+            <div className="flex items-center gap-1.5 text-[14px] text-neutral-400 dark:text-neutral-500">
+              <IconClipboardCheck size={16} strokeWidth={2} className="shrink-0" />
               <span className="font-bold text-neutral-900 dark:text-white">{tasksDone}/{tasksTotal}</span>
-              <span>Tasks Done</span>
+              <span className="font-medium">Tasks Done</span>
             </div>
             <button
               type="button"
               onClick={() => { haptic("light"); setShowAllTasks((v) => !v); }}
-              className="text-[14px] font-bold text-neutral-600 dark:text-neutral-300"
+              className="flex items-center gap-0.5 text-[14px] font-bold text-neutral-900 dark:text-white"
             >
-              {showAllTasks ? "Hide ↑" : "View All"}
+              {showAllTasks ? "Hide" : "View All"}
+              <IconChevronRight size={16} strokeWidth={2.5} className="shrink-0" />
             </button>
           </div>
 
           {/* ── Swipeable card stack ── */}
-          <AnimatePresence mode="sync">
+          <AnimatePresence mode="wait">
             {incompleteTasks.length > 0 ? (
-              <motion.div
-                key={incompleteTasks[0].id}
-                initial={{ opacity: 0, y: 22, scale: 0.94 }}
-                animate={{ opacity: 1, y: 0, scale: 1 }}
-                transition={{ type: "spring", stiffness: 360, damping: 26 }}
-              >
-                <NextUpCard
+              <motion.div key="stack" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
+                <SwipeableCardStack
                   tasks={incompleteTasks}
                   plans={schedule.plans}
-                  onMarkDone={onMarkTaskDone}
-                  onSkip={(id) => setSkippedIds((prev) => new Set([...prev, id]))}
+                  onMarkDone={(t) => onMarkTaskDone(t.id, t.subtasks?.map((s) => s.id) ?? [])}
+                  onSkip={(t) => setSkippedIds((prev) => new Set([...prev, t.id]))}
+                  onOpenSubtasks={onOpenSubtasks}
                 />
               </motion.div>
             ) : (
@@ -522,22 +631,22 @@ export default function OverviewDashboard({
               <div className="flex items-center gap-2 mb-4">
                 <IconCalendarEvent size={14} strokeWidth={2} className="text-neutral-400 dark:text-neutral-500 shrink-0" />
                 <p className="text-[13px] font-bold text-neutral-800 dark:text-neutral-200 truncate">
-                  {weeklyActivity.plan.emoji} {weeklyActivity.plan.title}
+                  This Week
                 </p>
               </div>
 
               {/* 7-day bars */}
               <div className="flex items-end justify-between gap-1 mb-3">
-                {weeklyActivity.days.map(({ label, total, done, pct }) => {
+                {weeklyActivity.days.map(({ label, total, done, pct, isToday }) => {
                   const barColor =
                     total === 0 ? "bg-neutral-200 dark:bg-white/[0.08]" :
                     pct >= 70 ? "bg-emerald-500" :
                     pct >= 40 ? "bg-amber-400" : "bg-rose-400";
                   return (
                     <div key={label} className="flex flex-1 flex-col items-center gap-1">
-                      <span className="text-[10px] font-medium text-neutral-400 dark:text-neutral-500">{label}</span>
+                      <span className={`text-[10px] ${isToday ? "font-bold text-emerald-600 dark:text-emerald-400" : "font-medium text-neutral-400 dark:text-neutral-500"}`}>{label}</span>
                       {/* Bar track */}
-                      <div className="w-full rounded-full bg-neutral-100 dark:bg-white/[0.07]" style={{ height: 4 }}>
+                      <div className={`w-full rounded-full ${isToday ? "ring-1 ring-emerald-400/40" : ""} bg-neutral-100 dark:bg-white/[0.07]`} style={{ height: 4 }}>
                         <div
                           className={`h-full rounded-full transition-all ${barColor}`}
                           style={{ width: total > 0 ? `${pct}%` : "0%" }}
@@ -570,6 +679,13 @@ export default function OverviewDashboard({
           </div>
         )}
 
+        {/* ── 3b. Execution trend (8-week analytics) ─────────────────────────── */}
+        {hasScheduledTasks && (
+          <div className="mx-4 mb-4">
+            <ExecutionTrendCard schedule={schedule} />
+          </div>
+        )}
+
         {/* ── 4. Active Tracking list ───────────────────────────────────────── */}
         <div className="mx-4 mb-4">
           <div className={`${CARD} px-5 py-4`}>
@@ -590,25 +706,32 @@ export default function OverviewDashboard({
                 </button>
               </div>
             ) : (
-              <div className="space-y-0 divide-y divide-neutral-100 dark:divide-white/[0.05]">
-                {trackerData.map(({ tracker, latest, plan }) => {
+              <div className="space-y-2.5">
+                {trackerData.map(({ tracker, latest, trend, plan }) => {
                   const accent = accentStyles(plan?.color ?? "cyan");
                   return (
-                    <div key={tracker.id} className="flex items-center gap-3 py-3 first:pt-0 last:pb-0">
+                    <div
+                      key={tracker.id}
+                      className="flex items-center gap-3 rounded-xl border border-neutral-200/70 px-4 py-3 dark:border-white/[0.07]"
+                    >
                       <span className={`h-3 w-3 shrink-0 rounded-full ${accent.dot}`} />
                       <div className="min-w-0 flex-1">
-                        <p className="text-[14px] font-semibold text-neutral-900 dark:text-white leading-tight">{tracker.title}</p>
-                        <p className="text-[12px] text-neutral-400 dark:text-neutral-500 leading-tight">
-                          {latest ? `${latest.value}${tracker.unit ? ` ${tracker.unit}` : ""}` : "No entries yet"}
+                        <div className="flex items-center gap-1.5">
+                          <p className="truncate text-[15px] font-bold text-neutral-900 dark:text-white leading-tight">{tracker.title}</p>
+                          {trend && <TrendArrow direction={trend.direction} state={trend.state} />}
+                        </div>
+                        <p className="text-[13px] font-medium text-neutral-400 dark:text-neutral-500 leading-tight mt-0.5">
+                          {latest ? `${latest.value}${tracker.unit ?? ""}` : "No entries yet"}
                         </p>
                       </div>
                       <motion.button
                         type="button"
-                        whileTap={{ scale: 0.88 }}
+                        whileTap={{ scale: 0.9 }}
+                        aria-label={`Log ${tracker.title}`}
                         onClick={() => { haptic("light"); onLogTracker(tracker); }}
-                        className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-neutral-900 text-white dark:bg-white dark:text-neutral-900"
+                        className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-neutral-900 text-white dark:bg-white dark:text-neutral-900"
                       >
-                        <IconPlus size={16} strokeWidth={2.5} />
+                        <IconPlus size={18} strokeWidth={2.5} />
                       </motion.button>
                     </div>
                   );
@@ -694,7 +817,14 @@ export default function OverviewDashboard({
             />
           </div>
 
-          {/* Row 3, col-span-4: Trackers + Discovery */}
+          {/* Row 3, col-span-4: Execution trend analytics */}
+          {hasScheduledTasks && (
+            <div className="col-span-4">
+              <ExecutionTrendCard schedule={schedule} />
+            </div>
+          )}
+
+          {/* Row 4, col-span-4: Trackers + Discovery */}
           <div className="col-span-4">
             <BottomCard trackerData={trackerData} nudges={nudges} onNavigate={onNavigate} />
           </div>

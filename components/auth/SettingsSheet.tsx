@@ -17,12 +17,16 @@ import {
   IconRefresh,
   IconChevronDown,
   IconTerminal2,
+  IconCopy,
+  IconInfoCircle,
 } from "@tabler/icons-react";
 import BottomSheet from "@/components/ui/BottomSheet";
 import { useAuth } from "@/contexts/AuthProvider";
 import { getSyncStatus, getLastSyncedAt, getLastSchedule, onSyncStatusChange, flushNow, deleteCloudData, type SyncStatus } from "@/lib/cloudSync";
 import type { Schedule } from "@/lib/useScheduleDB";
-import { checkOllamaConnection, OLLAMA_URL_KEY, OLLAMA_MODEL_KEY, DEFAULT_OLLAMA_URL, DEFAULT_OLLAMA_MODEL } from "@/lib/ai";
+import { OLLAMA_URL_KEY, OLLAMA_MODEL_KEY, DEFAULT_OLLAMA_URL, DEFAULT_OLLAMA_MODEL, checkOllamaConnection, checkModelStatus } from "@/lib/ai";
+import { AISettingsSheet } from "@/components/ai/AISettingsSheet";
+import { AI_ENABLED } from "@/lib/featureFlags";
 
 // ── Theme helpers ─────────────────────────────────────────────────────────────
 
@@ -282,7 +286,7 @@ function ClearDataRow({ onClearData, onDone }: ClearDataRowProps) {
               <button
                 type="button"
                 onClick={() => setPhase("idle")}
-                className="flex flex-1 items-center justify-center gap-1.5 rounded-xl border border-neutral-200 bg-white py-2 text-[12px] font-semibold text-neutral-600 transition-colors hover:bg-neutral-50 dark:border-white/[0.08] dark:bg-white/[0.04] dark:text-neutral-400 dark:hover:bg-white/[0.08]"
+                className="flex flex-1 items-center justify-center gap-1.5 rounded-xl border border-neutral-200 bg-white py-2 text-[12px] font-semibold text-neutral-600 transition-colors hover:bg-neutral-100 dark:border-white/[0.08] dark:bg-white/[0.04] dark:text-neutral-400 dark:hover:bg-white/[0.08]"
               >
                 <IconX size={12} strokeWidth={2.5} />
                 Cancel
@@ -336,9 +340,9 @@ function GoogleLogo() {
 
 const SETUP_STEPS = [
   { cmd: "brew install ollama", desc: "Install Ollama" },
-  { cmd: "ollama serve", desc: "Start the server" },
-  { cmd: "ollama pull gemma4:e2b", desc: "Download a model" },
-  { cmd: "ollama list", desc: "See downloaded models" },
+  { cmd: "ollama serve --cors \"<your-origin>\"", desc: "Start the server and allow browser access" },
+  { cmd: `ollama pull ${DEFAULT_OLLAMA_MODEL}`, desc: "Download the default model, or use any model you prefer based on your configuration" },
+  { cmd: "ollama list", desc: "Verify installed models" },
 ];
 
 function OllamaRow() {
@@ -347,7 +351,20 @@ function OllamaRow() {
   const [availableModels, setAvailableModels] = useState<string[]>([]);
   const [fetching, setFetching] = useState(false);
   const [fetchError, setFetchError] = useState(false);
+  const [connectionError, setConnectionError] = useState<string | null>(null);
+  const [manualMode, setManualMode] = useState(false);
+  const [serverStatus, setServerStatus] = useState<"idle" | "checking" | "online" | "offline">("idle");
+  const [modelStatus, setModelStatus] = useState<"unchecked" | "connected" | "no-model" | "offline">("unchecked");
+  const [testing, setTesting] = useState(false);
   const [showSetup, setShowSetup] = useState(false);
+  const [copiedKey, setCopiedKey] = useState<string | null>(null);
+  const [currentOrigin, setCurrentOrigin] = useState("https://your-firebase-app.web.app");
+
+  useEffect(() => {
+    if (typeof window !== "undefined") {
+      setCurrentOrigin(window.location.origin);
+    }
+  }, []);
 
   function saveUrl(v: string) {
     const val = v.trim() || DEFAULT_OLLAMA_URL;
@@ -361,27 +378,67 @@ function OllamaRow() {
     setModel(val);
   }
 
+  function getOllamaServeCommand() {
+    return `ollama serve --cors "${currentOrigin}"`;
+  }
+
+  async function copyToClipboard(text: string, key: string) {
+    try {
+      await navigator.clipboard.writeText(text);
+      setCopiedKey(key);
+      window.setTimeout(() => setCopiedKey((current) => (current === key ? null : current)), 1800);
+    } catch {
+      // ignore clipboard failures
+    }
+  }
+
   async function fetchModels(targetUrl = url) {
     setFetching(true);
     setFetchError(false);
+    setConnectionError(null);
     try {
       const models = await checkOllamaConnection(targetUrl);
       setAvailableModels(models);
-      if (models.length > 0 && !models.includes(model)) {
+      if (!manualMode && models.length > 0 && !models.includes(model)) {
         saveModel(models[0]);
       }
-    } catch {
+    } catch (err) {
       setFetchError(true);
       setAvailableModels([]);
+      setConnectionError(err instanceof Error ? err.message : String(err));
     } finally {
       setFetching(false);
+    }
+  }
+
+  async function testConnection(targetUrl = url, targetModel = model) {
+    setTesting(true);
+    setServerStatus("checking");
+    setModelStatus("unchecked");
+    setFetchError(false);
+    setConnectionError(null);
+    try {
+      const status = await checkModelStatus(targetUrl, targetModel);
+      setServerStatus(status === "offline" ? "offline" : "online");
+      setModelStatus(status);
+      if (status === "offline") {
+        setFetchError(true);
+        setConnectionError("Ollama is not reachable from this browser. Check the server URL and CORS settings.");
+      }
+    } catch (err) {
+      setServerStatus("offline");
+      setModelStatus("offline");
+      setFetchError(true);
+      setConnectionError(err instanceof Error ? err.message : String(err));
+    } finally {
+      setTesting(false);
     }
   }
 
   useEffect(() => { void fetchModels(); }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   return (
-    <div className="px-4 py-3.5">
+    <div className="hidden sm:block px-4 py-3.5">
       {/* Header */}
       <div className="mb-3 flex items-center gap-3">
         <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl border border-neutral-100 bg-neutral-50 text-neutral-500 dark:border-white/[0.06] dark:bg-white/[0.04] dark:text-neutral-400">
@@ -414,20 +471,52 @@ function OllamaRow() {
 
         {/* Model — dropdown if models fetched, text input fallback */}
         <div>
-          <div className="mb-1 flex items-center justify-between">
-            <p className="text-[11px] font-semibold text-neutral-400 dark:text-neutral-500">Model</p>
-            <button
-              type="button"
-              onClick={() => void fetchModels()}
-              disabled={fetching}
-              className="flex items-center gap-1 text-[10px] font-medium text-neutral-400 transition-colors hover:text-neutral-600 disabled:opacity-40 dark:hover:text-neutral-300"
-            >
-              <IconRefresh size={10} strokeWidth={2} className={fetching ? "animate-spin" : ""} />
-              Refresh
-            </button>
+          <div className="mb-1 flex items-center justify-between gap-3">
+            <div>
+              <p className="text-[11px] font-semibold text-neutral-400 dark:text-neutral-500">Model</p>
+              <p className="text-[10px] text-neutral-500 dark:text-neutral-400">
+                {manualMode ? "Enter the model name manually." : "Choose a detected model or switch to manual entry."}
+              </p>
+            </div>
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={() => void fetchModels()}
+                disabled={fetching}
+                className="rounded-xl border border-neutral-200 bg-neutral-50 px-3 py-1.5 text-[10px] font-semibold text-neutral-600 transition-colors hover:border-neutral-300 hover:bg-white dark:border-white/[0.08] dark:bg-white/[0.04] dark:text-white dark:hover:border-white/20 dark:hover:bg-white/[0.08] disabled:opacity-50"
+              >
+                Refresh
+              </button>
+              <button
+                type="button"
+                onClick={() => void testConnection()}
+                disabled={testing}
+                className="rounded-xl border border-neutral-200 bg-neutral-50 px-3 py-1.5 text-[10px] font-semibold text-neutral-600 transition-colors hover:border-neutral-300 hover:bg-white dark:border-white/[0.08] dark:bg-white/[0.04] dark:text-white dark:hover:border-white/20 dark:hover:bg-white/[0.08] disabled:opacity-50"
+              >
+                {testing ? "Checking…" : "Test"}
+              </button>
+              {availableModels.length > 0 && (
+                <button
+                  type="button"
+                  onClick={() => setManualMode((v) => !v)}
+                  className="rounded-xl border border-neutral-200 bg-neutral-50 px-3 py-1.5 text-[10px] font-semibold text-neutral-600 transition-colors hover:border-neutral-300 hover:bg-white dark:border-white/[0.08] dark:bg-white/[0.04] dark:text-white dark:hover:border-white/20 dark:hover:bg-white/[0.08]"
+                >
+                  {manualMode ? "Use detected" : "Manual"}
+                </button>
+              )}
+            </div>
           </div>
 
-          {availableModels.length > 0 ? (
+          {manualMode || availableModels.length === 0 ? (
+            <input
+              type="text"
+              value={model}
+              onChange={(e) => setModel(e.target.value)}
+              onBlur={(e) => saveModel(e.target.value)}
+              placeholder={DEFAULT_OLLAMA_MODEL}
+              className="h-9 w-full rounded-xl border border-neutral-200 bg-neutral-50 px-3 text-[12px] font-medium text-neutral-900 outline-none transition-colors focus:border-neutral-300 focus:bg-white dark:border-white/[0.08] dark:bg-white/[0.04] dark:text-white dark:focus:border-white/20 dark:focus:bg-white/[0.07]"
+            />
+          ) : (
             <div className="relative">
               <select
                 value={model}
@@ -440,21 +529,43 @@ function OllamaRow() {
               </select>
               <IconChevronDown size={12} strokeWidth={2} className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-neutral-400" />
             </div>
-          ) : (
-            <input
-              type="text"
-              value={model}
-              onChange={(e) => setModel(e.target.value)}
-              onBlur={(e) => saveModel(e.target.value)}
-              placeholder={DEFAULT_OLLAMA_MODEL}
-              className="h-9 w-full rounded-xl border border-neutral-200 bg-neutral-50 px-3 text-[12px] font-medium text-neutral-900 outline-none transition-colors focus:border-neutral-300 focus:bg-white dark:border-white/[0.08] dark:bg-white/[0.04] dark:text-white dark:focus:border-white/20 dark:focus:bg-white/[0.07]"
-            />
           )}
 
-          {fetchError && (
+          {serverStatus !== "idle" && (
+            <p className={`mt-1 flex items-center gap-1 text-[10px] ${serverStatus === "offline" ? "text-rose-500 dark:text-rose-400" : "text-emerald-500 dark:text-emerald-400"}`}>
+              {serverStatus === "checking" ? (
+                <IconRefresh size={10} strokeWidth={2} className="animate-spin" />
+              ) : serverStatus === "offline" ? (
+                <IconWifiOff size={10} strokeWidth={2} />
+              ) : (
+                <IconCheck size={10} strokeWidth={2} />
+              )}
+              {serverStatus === "checking"
+                ? "Checking Ollama connection..."
+                : modelStatus === "connected"
+                ? "Ollama reachable and model connected."
+                : modelStatus === "no-model"
+                ? "Ollama reachable, but model is not installed."
+                : "Ollama is offline; check the server URL and run ollama serve."}
+            </p>
+          )}
+
+          {connectionError && (
+            <p className="mt-1 text-[10px] text-rose-500 dark:text-rose-400">
+              <span className="mr-1 inline-flex h-2.5 w-2.5 rounded-full bg-rose-500" />
+              {connectionError}
+            </p>
+          )}
+          {fetchError && !connectionError && (
             <p className="mt-1 flex items-center gap-1 text-[10px] text-rose-500 dark:text-rose-400">
               <IconWifiOff size={10} strokeWidth={2} />
-              Can&apos;t reach Ollama — is it running?
+              Can&apos;t reach Ollama — is it running? You can still save a model name manually.
+            </p>
+          )}
+          {!fetchError && availableModels.length === 0 && serverStatus === "idle" && (
+            <p className="mt-1 flex items-center gap-1 text-[10px] text-yellow-500 dark:text-yellow-400">
+              <IconInfoCircle size={10} strokeWidth={2} />
+              Server is reachable, but no models were returned. Use manual model entry if needed.
             </p>
           )}
           {availableModels.length > 0 && (
@@ -462,6 +573,18 @@ function OllamaRow() {
               {availableModels.length} model{availableModels.length !== 1 ? "s" : ""} available
             </p>
           )}
+
+          <div className="mt-3 rounded-2xl border border-neutral-200 bg-neutral-50 p-3 text-[11px] text-neutral-700 dark:border-white/[0.08] dark:bg-neutral-950 dark:text-neutral-300">
+            <p className="font-semibold text-neutral-900 dark:text-white">Your deployed origin</p>
+            <p className="mt-1 text-[10px] text-neutral-500 dark:text-neutral-400">
+              Use this origin for Ollama CORS so the Firebase-hosted app can reach the local server.
+            </p>
+            <p className="mt-2 font-mono break-all text-[10px] text-neutral-800 dark:text-neutral-200">{currentOrigin}</p>
+            <p className="mt-3 text-[10px] text-neutral-500 dark:text-neutral-400">Recommended Ollama command:</p>
+            <code className="mt-1 block w-full overflow-x-auto rounded-xl bg-neutral-100 px-3 py-2 font-mono text-[10px] text-neutral-700 dark:bg-white/[0.06] dark:text-neutral-300">
+              {getOllamaServeCommand()}
+            </code>
+          </div>
         </div>
 
         {/* Setup instructions */}
@@ -488,15 +611,68 @@ function OllamaRow() {
                 transition={{ duration: 0.2, ease: "easeInOut" }}
                 className="overflow-hidden"
               >
-                <div className="flex flex-col gap-1.5 border-t border-neutral-100 px-3 pb-3 pt-2.5 dark:border-white/[0.06]">
-                  {SETUP_STEPS.map(({ cmd, desc }) => (
-                    <div key={cmd}>
-                      <p className="text-[10px] text-neutral-400 dark:text-neutral-500">{desc}</p>
-                      <code className="block rounded-lg bg-neutral-100 px-2.5 py-1.5 font-mono text-[11px] text-neutral-700 dark:bg-white/[0.06] dark:text-neutral-300">
-                        {cmd}
-                      </code>
+                <div className="border-t border-neutral-100 px-3 pb-3 pt-2.5 dark:border-white/[0.06]">
+                  <div className="mb-3 flex items-center justify-between gap-3">
+                    <div>
+                      <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-neutral-400 dark:text-neutral-500">
+                        Run these commands in Terminal
+                      </p>
+                      <p className="text-[10px] text-neutral-500 dark:text-neutral-400">
+                        Local Ollama must allow requests from this app origin.
+                      </p>
+                      <p className="mt-1 text-[10px] text-neutral-600 dark:text-neutral-300">
+                        Origin: <span className="font-mono">{currentOrigin}</span>
+                      </p>
                     </div>
-                  ))}
+                    <button
+                      type="button"
+                      onClick={() => copyToClipboard(
+                        [
+                          "brew install ollama",
+                          getOllamaServeCommand(),
+                          `ollama pull ${DEFAULT_OLLAMA_MODEL}`,
+                          "ollama list",
+                        ].join("\n"),
+                        "all",
+                      )}
+                      className="inline-flex items-center gap-1.5 rounded-xl border border-neutral-200 bg-neutral-50 px-3 py-1.5 text-[10px] font-semibold uppercase text-neutral-600 transition-colors hover:border-neutral-300 hover:bg-white dark:border-white/[0.08] dark:bg-white/[0.04] dark:text-white dark:hover:border-white/20 dark:hover:bg-white/[0.08]"
+                    >
+                      <IconCopy size={12} strokeWidth={2} />
+                      {copiedKey === "all" ? "Copied!" : "Copy all"}
+                    </button>
+                  </div>
+                  <div className="grid gap-3">
+                    {SETUP_STEPS.map(({ cmd, desc }, index) => {
+                      const resolvedCmd = cmd.includes("<your-origin>") ? getOllamaServeCommand() : cmd;
+                      const stepNumber = index + 1;
+                      const key = `step-${index}`;
+                      return (
+                        <div key={key} className="rounded-2xl border border-neutral-200 bg-neutral-50 p-3 dark:border-white/[0.08] dark:bg-neutral-950">
+                          <div className="mb-1 flex items-center justify-between gap-3">
+                            <div>
+                              <p className="text-[11px] font-semibold text-neutral-900 dark:text-white">Step {stepNumber}</p>
+                              <p className="text-[10px] text-neutral-500 dark:text-neutral-400">{desc}</p>
+                            </div>
+                            <button
+                              type="button"
+                              onClick={() => void copyToClipboard(resolvedCmd, key)}
+                              className="inline-flex items-center gap-1 rounded-xl border border-neutral-200 bg-white px-2.5 py-1 text-[10px] font-semibold text-neutral-600 transition-colors hover:border-neutral-300 hover:bg-neutral-50 dark:border-white/[0.08] dark:bg-white/[0.04] dark:text-white dark:hover:border-white/20 dark:hover:bg-white/[0.08]"
+                            >
+                              <IconCopy size={12} strokeWidth={2} />
+                              {copiedKey === key ? "Copied" : "Copy"}
+                            </button>
+                          </div>
+                          <code className="block w-full overflow-x-auto rounded-xl bg-neutral-100 px-3 py-2 font-mono text-[11px] text-neutral-700 dark:bg-white/[0.06] dark:text-neutral-300">
+                            {resolvedCmd}
+                          </code>
+                        </div>
+                      );
+                    })}
+                    <div className="rounded-2xl border border-amber-200 bg-amber-50 p-3 text-[10px] text-amber-700 dark:border-amber-500/20 dark:bg-amber-500/10 dark:text-amber-200">
+                      <p className="font-semibold">Need remote hosting support?</p>
+                      <p className="mt-1">If your app is deployed from Firebase or any HTTPS origin, use the exact origin shown in the second command so Ollama allows browser requests.</p>
+                    </div>
+                  </div>
                 </div>
               </motion.div>
             )}
@@ -519,6 +695,7 @@ interface SettingsSheetProps {
 export function SettingsSheet({ open, onClose, onClearData, schedule }: SettingsSheetProps) {
   const { user, isGuest, authLoading, login, logout } = useAuth();
   const [busy, setBusy] = useState(false);
+  const [aiSettingsOpen, setAiSettingsOpen] = useState(false);
 
   async function handleLogin() {
     setBusy(true);
@@ -618,11 +795,30 @@ export function SettingsSheet({ open, onClose, onClearData, schedule }: Settings
           <AppearanceRow />
         </SettingsCard>
 
-        {/* ── AI Assistant ─────────────────────────────────────────────────── */}
-        <SectionLabel>AI Assistant</SectionLabel>
-        <SettingsCard>
-          <OllamaRow />
-        </SettingsCard>
+        {/* ── AI (hidden while AI is disabled) ─────────────────────────────── */}
+        {AI_ENABLED && (
+          <>
+            <SectionLabel>AI</SectionLabel>
+            <SettingsCard>
+              <button
+                type="button"
+                onClick={() => setAiSettingsOpen(true)}
+                className="flex w-full items-center gap-3 px-4 py-3.5 text-left transition-colors hover:bg-neutral-50 dark:hover:bg-white/[0.03]"
+              >
+                <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-violet-500 via-fuchsia-500 to-pink-500">
+                  <IconSparkles size={14} strokeWidth={2} className="text-white" />
+                </div>
+                <div className="min-w-0 flex-1">
+                  <p className="text-[13px] font-semibold text-neutral-800 dark:text-white">AI Configuration</p>
+                  <p className="text-[11px] text-neutral-400 dark:text-neutral-500">Ollama, embedded models, routing</p>
+                </div>
+                <IconChevronDown size={14} strokeWidth={2} className="-rotate-90 text-neutral-400" />
+              </button>
+            </SettingsCard>
+
+            <AISettingsSheet open={aiSettingsOpen} onClose={() => setAiSettingsOpen(false)} />
+          </>
+        )}
 
         {/* ── Data ─────────────────────────────────────────────────────────── */}
         <SectionLabel>Data</SectionLabel>

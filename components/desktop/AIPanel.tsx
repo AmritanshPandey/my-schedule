@@ -26,6 +26,7 @@ interface AIPanelProps {
   activePlan?: Plan;
   initialMessage?: string;
   onApplyAction: (result: AIActionResult) => void;
+  onClose?: () => void;
 }
 
 const ACTION_LABELS: Record<AIActionResult["type"], string> = {
@@ -89,7 +90,7 @@ function PlanDraftCard({ action, onApply }: { action: Extract<AIActionResult, { 
       initial={{ opacity: 0, y: 8 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.25, ease: "easeOut" }}
-      className="mt-2 w-full rounded-2xl border border-neutral-200 bg-white p-4 shadow-sm dark:border-white/[0.10] dark:bg-neutral-900"
+      className="mt-2 w-full rounded-2xl border border-neutral-200 bg-white p-4 dark:border-white/[0.10] dark:bg-neutral-900"
     >
       <div className="mb-3 flex items-center gap-1.5">
         <span className="rounded-md bg-emerald-100 px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wide text-emerald-700 dark:bg-emerald-500/20 dark:text-emerald-400">
@@ -216,7 +217,7 @@ function PlanDraftCard({ action, onApply }: { action: Extract<AIActionResult, { 
           type: "create_plan",
           payload: { title: title.trim(), description: desc.trim(), emoji: iconName, color, startDate: startDate || undefined, endDate: endDate || undefined, tasks },
         })}
-        className="w-full rounded-xl bg-emerald-600 py-2 text-[13px] font-bold text-white shadow-sm transition-colors hover:bg-emerald-500 disabled:opacity-40 dark:bg-emerald-500 dark:hover:bg-emerald-400"
+        className="w-full rounded-xl bg-emerald-600 py-2 text-[13px] font-bold text-white transition-colors hover:bg-emerald-500 disabled:opacity-40 dark:bg-emerald-500 dark:hover:bg-emerald-400"
       >
         Create Plan{tasks.length > 0 ? ` + ${tasks.length} task${tasks.length !== 1 ? "s" : ""}` : ""}
       </motion.button>
@@ -246,7 +247,7 @@ function ActionCard({ action, onApply }: { action: AIActionResult; onApply: (upd
       initial={{ opacity: 0, y: 6 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.25, ease: "easeOut" }}
-      className="mt-2 rounded-2xl border border-emerald-200/60 bg-gradient-to-br from-emerald-50 to-white p-3 shadow-sm dark:border-emerald-500/20 dark:from-emerald-500/10 dark:to-neutral-900"
+      className="mt-2 rounded-2xl border border-emerald-200/60 bg-gradient-to-br from-emerald-50 to-white p-3 dark:border-emerald-500/20 dark:from-emerald-500/10 dark:to-neutral-900"
     >
       <div className="flex items-start justify-between gap-2">
         <div className="min-w-0 flex-1">
@@ -264,7 +265,7 @@ function ActionCard({ action, onApply }: { action: AIActionResult; onApply: (upd
           type="button"
           onClick={() => onApply()}
           whileTap={{ scale: 0.93 }}
-          className="shrink-0 rounded-xl bg-emerald-600 px-3 py-1.5 text-[12px] font-bold text-white shadow-sm transition-opacity hover:bg-emerald-500 dark:bg-emerald-500 dark:hover:bg-emerald-400"
+          className="shrink-0 rounded-xl bg-emerald-600 px-3 py-1.5 text-[12px] font-bold text-white transition-opacity hover:bg-emerald-500 dark:bg-emerald-500 dark:hover:bg-emerald-400"
         >
           Apply
         </motion.button>
@@ -309,7 +310,7 @@ function stripJsonBlocks(text: string): string {
   return text.replace(/```json[\s\S]*?```/g, "").trim();
 }
 
-export function AIPanel({ ollamaUrl, ollamaModel, context, plans, rituals, activePlan, initialMessage, onApplyAction }: AIPanelProps) {
+export function AIPanel({ ollamaUrl, ollamaModel, context, plans, rituals, activePlan, initialMessage, onApplyAction, onClose }: AIPanelProps) {
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState("");
   const [streaming, setStreaming] = useState(false);
@@ -397,34 +398,49 @@ export function AIPanel({ ollamaUrl, ollamaModel, context, plans, rituals, activ
   const contextLabel = context === "plans" ? "Plans" : context === "strategy" ? "Strategy" : "Routine";
 
   return (
-    <div className="flex h-full w-full flex-col overflow-hidden">
-      {/* Header */}
-      <div className="flex h-[60px] shrink-0 items-center gap-2.5 border-b border-neutral-100 px-4 dark:border-white/[0.06]">
-        <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-gradient-to-br from-emerald-400/20 to-emerald-600/20 ring-1 ring-emerald-500/20 dark:from-emerald-500/20 dark:to-emerald-700/20">
-          <IconSparkles size={13} strokeWidth={2} className="text-emerald-600 dark:text-emerald-400" />
+    <div className="flex h-full w-full flex-col overflow-hidden rounded-[30px] bg-neutral-950 text-white shadow-[0_40px_120px_rgba(15,23,42,0.35)] ring-1 ring-white/5">
+      <div className="flex h-[76px] shrink-0 items-center justify-between gap-3 border-b border-white/10 bg-neutral-950/95 px-4 shadow-sm shadow-black/10 backdrop-blur">
+        <div className="flex items-center gap-3">
+          <div className="flex h-10 w-10 items-center justify-center rounded-3xl bg-blue-500/10 ring-1 ring-blue-500/15 dark:bg-blue-500/10">
+            <IconSparkles size={18} strokeWidth={2} className="text-blue-600 dark:text-blue-300" />
+          </div>
+          <div className="min-w-0">
+            <p className="truncate text-sm font-semibold text-neutral-900 dark:text-white">AI Assistant</p>
+            <p className="truncate text-[12px] text-neutral-500 dark:text-neutral-400">
+              {contextLabel}{activePlan ? ` · ${activePlan.title}` : ""} · {model}
+            </p>
+          </div>
         </div>
-        <div className="flex-1">
-          <p className="text-[13px] font-bold text-neutral-900 dark:text-white">AI Assistant</p>
-          <p className="text-[10px] text-neutral-400 dark:text-neutral-500">
-            {contextLabel}{activePlan ? ` · ${activePlan.title}` : ""} · {model}
-          </p>
-        </div>
-        <AnimatePresence>
-          {messages.length > 0 && (
-            <motion.button
-              initial={{ opacity: 0, scale: 0.8 }}
-              animate={{ opacity: 1, scale: 1 }}
-              exit={{ opacity: 0, scale: 0.8 }}
+
+        <div className="flex items-center gap-2">
+          <AnimatePresence>
+            {messages.length > 0 && (
+              <motion.button
+                initial={{ opacity: 0, scale: 0.8 }}
+                animate={{ opacity: 1, scale: 1 }}
+                exit={{ opacity: 0, scale: 0.8 }}
+                type="button"
+                onClick={() => { setMessages([]); setError(null); }}
+                title="New chat"
+                whileTap={{ scale: 0.92 }}
+                className="flex h-9 w-9 items-center justify-center rounded-2xl border border-neutral-200 bg-white text-neutral-500 transition-colors hover:border-blue-200 hover:text-blue-700 dark:border-white/[0.08] dark:bg-neutral-950 dark:text-neutral-300 dark:hover:border-blue-500/20 dark:hover:text-blue-300"
+              >
+                <IconEraser size={14} strokeWidth={2} />
+              </motion.button>
+            )}
+          </AnimatePresence>
+
+          {onClose && (
+            <button
               type="button"
-              onClick={() => { setMessages([]); setError(null); }}
-              title="New chat"
-              whileTap={{ scale: 0.9 }}
-              className="flex h-7 w-7 items-center justify-center rounded-lg text-neutral-400 transition-colors hover:bg-neutral-100 hover:text-neutral-700 dark:hover:bg-white/[0.08] dark:hover:text-neutral-300"
+              onClick={onClose}
+              aria-label="Close AI assistant"
+              className="flex h-9 w-9 items-center justify-center rounded-2xl border border-neutral-200 bg-white text-neutral-500 transition-colors hover:border-neutral-300 hover:text-neutral-900 dark:border-white/[0.08] dark:bg-neutral-950 dark:text-neutral-300 dark:hover:border-white/20 dark:hover:text-white"
             >
-              <IconEraser size={14} strokeWidth={2} />
-            </motion.button>
+              <IconX size={16} strokeWidth={2} />
+            </button>
           )}
-        </AnimatePresence>
+        </div>
       </div>
 
       {/* Error banner */}
@@ -471,16 +487,16 @@ export function AIPanel({ ollamaUrl, ollamaModel, context, plans, rituals, activ
                 initial={{ scale: 0.7, opacity: 0 }}
                 animate={{ scale: 1, opacity: 1 }}
                 transition={{ delay: 0.05, type: "spring", stiffness: 260, damping: 20 }}
-                className="flex h-11 w-11 items-center justify-center rounded-2xl bg-gradient-to-br from-emerald-100 to-emerald-50 ring-1 ring-emerald-200/60 dark:from-emerald-500/20 dark:to-emerald-700/10 dark:ring-emerald-500/20"
+                className="flex h-11 w-11 items-center justify-center rounded-3xl bg-white/10 ring-1 ring-white/10"
               >
-                <IconBrain size={20} strokeWidth={1.5} className="text-emerald-600 dark:text-emerald-400" />
+                <IconBrain size={20} strokeWidth={1.5} className="text-white" />
               </motion.div>
 
               <motion.p
                 initial={{ opacity: 0, y: 6 }}
                 animate={{ opacity: 1, y: 0 }}
                 transition={{ delay: 0.1 }}
-                className="text-[13px] font-semibold text-neutral-700 dark:text-neutral-300"
+                className="text-[13px] font-semibold text-white/90"
               >
                 What would you like to build?
               </motion.p>
@@ -495,12 +511,17 @@ export function AIPanel({ ollamaUrl, ollamaModel, context, plans, rituals, activ
                     type="button"
                     onClick={() => void handleSend(prompt)}
                     disabled={streaming}
-                    whileHover={{ x: 2 }}
+                    whileHover={streaming ? {} : { x: 2 }}
                     whileTap={{ scale: 0.98 }}
-                    className="flex items-center justify-between rounded-xl border border-neutral-200 bg-white px-3 py-2.5 text-left text-[12px] font-medium text-neutral-600 shadow-sm transition-colors hover:border-emerald-200 hover:bg-emerald-50/50 hover:text-emerald-700 dark:border-white/[0.08] dark:bg-white/[0.03] dark:text-neutral-300 dark:hover:border-emerald-500/30 dark:hover:bg-emerald-500/10 dark:hover:text-emerald-300"
+                    className="flex items-center justify-between rounded-full border border-white/10 bg-white/5 px-4 py-3 text-left text-[13px] font-medium text-white shadow-sm shadow-black/20 transition hover:border-white/20 hover:bg-white/10"
                   >
-                    {prompt}
-                    <IconArrowRight size={12} strokeWidth={2} className="ml-2 shrink-0 opacity-40" />
+                    <span className="flex items-center gap-3">
+                      <span className="inline-flex h-9 w-9 items-center justify-center rounded-full bg-white/10 text-white">
+                        <IconSparkles size={14} strokeWidth={2} />
+                      </span>
+                      {prompt}
+                    </span>
+                    <IconArrowRight size={14} strokeWidth={2} className="ml-2 shrink-0 text-white/70" />
                   </motion.button>
                 ))}
               </div>
@@ -521,6 +542,9 @@ export function AIPanel({ ollamaUrl, ollamaModel, context, plans, rituals, activ
 
         {messages.map((msg, i) => {
           const isStreamingThis = streaming && i === messages.length - 1 && msg.role === "assistant";
+          const bubbleClass = msg.role === "user"
+            ? "ml-auto rounded-[26px] rounded-br-[10px] bg-blue-600 text-white shadow-blue-600/20"
+            : "mr-auto rounded-[26px] rounded-bl-[10px] border border-white/10 bg-white/5 text-white shadow-black/20";
           return (
             <motion.div
               key={i}
@@ -530,11 +554,7 @@ export function AIPanel({ ollamaUrl, ollamaModel, context, plans, rituals, activ
               className={`mb-3 flex ${msg.role === "user" ? "justify-end" : "justify-start"}`}
             >
               <div className={`max-w-[85%] ${msg.role === "user" ? "items-end" : "items-start"} flex flex-col`}>
-                <div className={`rounded-2xl px-3.5 py-2.5 text-[13px] leading-relaxed ${
-                  msg.role === "user"
-                    ? "bg-gradient-to-br from-neutral-900 to-neutral-800 text-white shadow-sm dark:from-white dark:to-neutral-100 dark:text-neutral-900"
-                    : "border border-neutral-200/80 bg-white text-neutral-800 shadow-sm dark:border-white/[0.08] dark:bg-white/[0.06] dark:text-neutral-200"
-                }`}>
+                <div className={`rounded-[26px] px-4 py-3 text-[13px] leading-relaxed ${bubbleClass}`}>
                   {msg.role === "user" ? (
                     msg.text
                   ) : msg.text ? (
@@ -562,12 +582,12 @@ export function AIPanel({ ollamaUrl, ollamaModel, context, plans, rituals, activ
       </div>
 
       {/* Input */}
-      <div className="shrink-0 border-t border-neutral-100 px-3 py-3 dark:border-white/[0.06]">
+      <div className="shrink-0 border-t border-white/10 px-3 py-3">
         <motion.div
-          animate={focused ? { boxShadow: "0 0 0 2px rgba(16,185,129,0.25)" } : { boxShadow: "0 0 0 0px rgba(16,185,129,0)" }}
+          animate={focused ? { boxShadow: "0 0 0 2px rgba(59,130,246,0.16)" } : { boxShadow: "0 0 0 0px rgba(59,130,246,0)" }}
           transition={{ duration: 0.15 }}
-          className="flex items-end gap-2 rounded-2xl border border-neutral-200 bg-neutral-50 px-3 py-2 transition-colors dark:border-white/[0.10] dark:bg-white/[0.04]"
-          style={{ borderColor: focused ? "rgba(16,185,129,0.4)" : undefined }}
+          className="flex items-center gap-2 rounded-[28px] border border-white/10 bg-white/5 px-3 py-2 shadow-sm shadow-black/20 transition-colors"
+          style={{ borderColor: focused ? "rgba(59,130,246,0.25)" : undefined }}
         >
           <textarea
             ref={inputRef}
@@ -584,7 +604,7 @@ export function AIPanel({ ollamaUrl, ollamaModel, context, plans, rituals, activ
             placeholder={`Ask about ${contextLabel.toLowerCase()}…`}
             rows={1}
             disabled={streaming}
-            className="flex-1 resize-none bg-transparent text-[13px] text-neutral-900 outline-none placeholder:text-neutral-400 disabled:opacity-50 dark:text-white dark:placeholder:text-neutral-500"
+            className="flex-1 resize-none bg-transparent text-[13px] text-white outline-none placeholder:text-white/50 disabled:opacity-50"
             style={{ minHeight: "22px", maxHeight: "80px" }}
           />
           <motion.button
@@ -593,12 +613,12 @@ export function AIPanel({ ollamaUrl, ollamaModel, context, plans, rituals, activ
             disabled={!input.trim() || streaming}
             whileTap={{ scale: 0.88 }}
             whileHover={input.trim() && !streaming ? { scale: 1.08 } : {}}
-            className="mb-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-xl bg-emerald-600 text-white shadow-sm transition-opacity disabled:opacity-30 hover:bg-emerald-500 dark:bg-emerald-500 dark:hover:bg-emerald-400"
+            className="mb-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-2xl bg-blue-600 text-white transition-opacity disabled:opacity-30 hover:bg-blue-500"
           >
             <IconSend size={13} strokeWidth={2.5} />
           </motion.button>
         </motion.div>
-        <p className="mt-1.5 text-[10px] text-neutral-400 dark:text-neutral-600">
+        <p className="mt-1.5 text-[10px] text-white/50">
           Shift+Enter for new line · Enter to send
         </p>
       </div>

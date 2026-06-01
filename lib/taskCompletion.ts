@@ -8,6 +8,16 @@
 
 import type { Task, TaskCompletionEvent } from "./useScheduleDB";
 import { uid } from "./taskMutations";
+import { localISODate } from "./dateUtils";
+
+// Drop today's whole-task completion events so unchecking actually reverses
+// progress in the append-only history (keeps prior days' history intact).
+function stripTodayTaskEvents(history: TaskCompletionEvent[] | undefined): TaskCompletionEvent[] {
+  const today = localISODate(new Date());
+  return (history ?? []).filter(
+    (ev) => !(ev.completionType === "task" && localISODate(new Date(ev.completedAt)) === today)
+  );
+}
 
 // ── Event factory ────────────────────────────────────────────────────────────
 
@@ -87,6 +97,7 @@ export function toggleTaskComplete(
       completed: false,
       completedAt: undefined,
       completedSubtaskIds: [],
+      completionHistory: stripTodayTaskEvents(task.completionHistory),
     };
   }
 
@@ -141,10 +152,11 @@ export function toggleSubtaskComplete(
     };
   }
 
-  // Marking subtask incomplete
+  // Marking subtask incomplete — also drop today's auto-task completion event
   return {
     completedSubtaskIds: next,
     completed: false,
     completedAt: undefined,
+    completionHistory: stripTodayTaskEvents(history),
   };
 }

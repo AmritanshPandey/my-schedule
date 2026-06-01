@@ -140,6 +140,7 @@ export function accentStyles(color: string) {
     cardAccent: string;
     action: string;
     badge: string;
+    glowRing: string;
   }> = {
     blue: {
       text: "text-blue-600 dark:text-blue-400",
@@ -154,6 +155,7 @@ export function accentStyles(color: string) {
       cardAccent: "border-t-[3px] border-t-blue-500 dark:border-t-blue-400",
       action: "hover:text-blue-600 dark:hover:text-blue-400",
       badge: "bg-blue-500/10 text-blue-600 border-blue-500/25 dark:bg-blue-500/15 dark:text-blue-400 dark:border-blue-400/35",
+      glowRing: "ring-2 ring-blue-400/70 shadow-[0_0_0_1px_rgba(59,130,246,0.5),0_4px_16px_-2px_rgba(59,130,246,0.45)]",
     },
     emerald: {
       text: "text-green-600 dark:text-green-400",
@@ -168,6 +170,7 @@ export function accentStyles(color: string) {
       cardAccent: "border-t-[3px] border-t-green-500 dark:border-t-green-400",
       action: "hover:text-green-600 dark:hover:text-green-400",
       badge: "bg-green-500/10 text-green-600 border-green-500/25 dark:bg-green-500/15 dark:text-green-400 dark:border-green-400/35",
+      glowRing: "ring-2 ring-green-400/70 shadow-[0_0_0_1px_rgba(16,185,129,0.5),0_4px_16px_-2px_rgba(16,185,129,0.45)]",
     },
     violet: {
       text: "text-violet-600 dark:text-violet-400",
@@ -182,6 +185,7 @@ export function accentStyles(color: string) {
       cardAccent: "border-t-[3px] border-t-violet-500 dark:border-t-violet-400",
       action: "hover:text-violet-600 dark:hover:text-violet-400",
       badge: "bg-violet-500/10 text-violet-600 border-violet-500/25 dark:bg-violet-500/15 dark:text-violet-400 dark:border-violet-400/35",
+      glowRing: "ring-2 ring-violet-400/70 shadow-[0_0_0_1px_rgba(139,92,246,0.5),0_4px_16px_-2px_rgba(139,92,246,0.45)]",
     },
     pink: {
       text: "text-pink-600 dark:text-pink-400",
@@ -196,6 +200,7 @@ export function accentStyles(color: string) {
       cardAccent: "border-t-[3px] border-t-pink-500 dark:border-t-pink-400",
       action: "hover:text-pink-600 dark:hover:text-pink-400",
       badge: "bg-pink-500/10 text-pink-600 border-pink-500/25 dark:bg-pink-500/15 dark:text-pink-400 dark:border-pink-400/35",
+      glowRing: "ring-2 ring-pink-400/70 shadow-[0_0_0_1px_rgba(236,72,153,0.5),0_4px_16px_-2px_rgba(236,72,153,0.45)]",
     },
     amber: {
       text: "text-amber-600 dark:text-amber-400",
@@ -210,6 +215,7 @@ export function accentStyles(color: string) {
       cardAccent: "border-t-[3px] border-t-amber-500 dark:border-t-amber-400",
       action: "hover:text-amber-600 dark:hover:text-amber-400",
       badge: "bg-amber-500/10 text-amber-600 border-amber-500/25 dark:bg-amber-500/15 dark:text-amber-400 dark:border-amber-400/35",
+      glowRing: "ring-2 ring-amber-400/70 shadow-[0_0_0_1px_rgba(245,158,11,0.5),0_4px_16px_-2px_rgba(245,158,11,0.45)]",
     },
     cyan: {
       text: "text-cyan-600 dark:text-cyan-400",
@@ -224,6 +230,7 @@ export function accentStyles(color: string) {
       cardAccent: "border-t-[3px] border-t-cyan-500 dark:border-t-cyan-400",
       action: "hover:text-cyan-600 dark:hover:text-cyan-400",
       badge: "bg-cyan-500/10 text-cyan-600 border-cyan-500/25 dark:bg-cyan-500/15 dark:text-cyan-400 dark:border-cyan-400/35",
+      glowRing: "ring-2 ring-cyan-400/70 shadow-[0_0_0_1px_rgba(6,182,212,0.5),0_4px_16px_-2px_rgba(6,182,212,0.45)]",
     },
   };
 

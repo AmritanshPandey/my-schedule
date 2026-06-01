@@ -276,7 +276,7 @@ export default function AIActionSheet({
                 onClick={handleGenerate}
                 disabled={phase === "loading"}
                 whileTap={phase !== "loading" ? { scale: 0.97 } : undefined}
-                className="flex w-full items-center justify-center gap-2 rounded-2xl bg-emerald-500 py-3.5 text-[14px] font-bold text-white shadow-sm transition-all hover:bg-emerald-600 disabled:cursor-default disabled:opacity-70 dark:bg-emerald-500 dark:hover:bg-emerald-400"
+                className="flex w-full items-center justify-center gap-2 rounded-2xl bg-emerald-500 py-3.5 text-[14px] font-bold text-white transition-all hover:bg-emerald-600 disabled:cursor-default disabled:opacity-70 dark:bg-emerald-500 dark:hover:bg-emerald-400"
               >
                 {phase === "loading" ? (
                   <>

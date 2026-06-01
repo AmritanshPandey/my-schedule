@@ -16,6 +16,7 @@ import { QuickAddPanel } from "@/components/desktop/QuickAddPanel";
 import AIAssistant from "@/components/ai/AIAssistant";
 import { checkOllamaConnection, OLLAMA_URL_KEY, OLLAMA_MODEL_KEY, DEFAULT_OLLAMA_URL, DEFAULT_OLLAMA_MODEL } from "@/lib/ai";
 import type { AIActionResult } from "@/lib/ai";
+import { AI_ENABLED } from "@/lib/featureFlags";
 
 // ── Deferred heavy components (separate JS chunks, loaded on demand) ──────────
 const PlanDetailView = dynamic(() => import("@/components/plan/PlanDetailView"), { ssr: false });
@@ -23,8 +24,10 @@ const AIPlanCreatorSheet = dynamic(() => import("@/components/plan/AIPlanCreator
 const SettingsSheet = dynamic(() => import("@/components/auth/SettingsSheet").then(m => ({ default: m.SettingsSheet })), { ssr: false });
 const SettingsView = dynamic(() => import("@/components/SettingsView").then(m => ({ default: m.SettingsView })), { ssr: false });
 const AIOnboarding = dynamic(() => import("@/components/ai/AIOnboarding"), { ssr: false });
+const NotesView = dynamic(() => import("@/components/notes/NotesView"), { ssr: false });
 const TemplatesSheet = dynamic(() => import("@/components/TemplatesSheet").then(m => ({ default: m.TemplatesSheet })), { ssr: false });
 const SessionSheet = dynamic(() => import("@/components/activity/SessionSheet"), { ssr: false });
+const SubtasksSheet = dynamic(() => import("@/components/activity/SubtasksSheet"), { ssr: false });
 const RitualView = dynamic(() => import("@/components/activity/RitualView"), { ssr: false });
 const ReviewView = dynamic(() => import("@/components/ReviewView"), { ssr: false });
 const OverviewDashboard = dynamic(() => import("@/components/OverviewDashboard"), { ssr: false });
@@ -38,6 +41,7 @@ import {
   DayKey,
   MetricEntry,
   Milestone,
+  Note,
   Plan,
   PlanCoachMessage,
   ProgressTracker,
@@ -72,6 +76,7 @@ import {
   IconX,
   IconAlertCircle,
   IconClipboardData,
+  IconStack2,
 } from "@tabler/icons-react";
 import { DndContext, DragEndEvent, PointerSensor, useSensor, useSensors } from "@dnd-kit/core";
 import { arrayMove, SortableContext, useSortable, verticalListSortingStrategy } from "@dnd-kit/sortable";
@@ -83,6 +88,8 @@ import { ListTaskCard } from "@/components/activity/ListTaskCard";
 import TodayRitualsBar from "@/components/activity/TodayRitualsBar";
 import ConfirmSheet from "@/components/ui/ConfirmSheet";
 import { CurrentTimeLayer } from "@/components/timeline/CurrentTimeLayer";
+import { CurrentTaskHighlightLayer } from "@/components/timeline/CurrentTaskHighlightLayer";
+import { taskLaneStyle } from "@/lib/timeline/taskLaneStyle";
 import {
   toggleTaskComplete,
   toggleSubtaskComplete,
@@ -126,7 +133,7 @@ const daysBetween = daysBetweenUtil;
 
 const TIMELINE_START_HOUR = 4;
 const TIMELINE_END_HOUR = 28; // extends to 4 AM next day for overnight tasks
-const HOUR_HEIGHT = 64;
+const HOUR_HEIGHT = 96;
 const TIMELINE_TOP_PADDING = 12;
 const TIMELINE_BOTTOM_PADDING = 48;
 const TIMELINE_START_MINUTES = TIMELINE_START_HOUR * 60;
@@ -189,6 +196,11 @@ function formatHourLabel(hour24: number): string {
   return `${hour} ${suffix}`;
 }
 
+function formatHalfHourLabel(hour24: number): string {
+  const hour = hour24 % 12 || 12;
+  return `${hour}:30`;
+}
+
 
 function clamp(value: number, min: number, max: number): number {
   return Math.min(Math.max(value, min), max);
@@ -197,26 +209,26 @@ function clamp(value: number, min: number, max: number): number {
 type CardSize = "xsmall" | "small" | "medium" | "large";
 
 function computeCardSize(height: number, laneCount: number): CardSize {
-  // HOUR_HEIGHT = 64 → 30min=32px, 45min=48px, 60min=64px, 90min=96px
-  // xsmall: title chip only         — card < 32px  (< ~30 min)
-  // small:  plan label + title      — card < 48px  (< ~45 min)
-  // medium: plan+title+time         — card < 64px  (< ~60 min)
-  // large:  full layout with gutter — card ≥ 64px  (≥ 60 min)
+  // HOUR_HEIGHT = 96 → 20min=32px, 30min=48px, 40min=64px, 60min=96px
+  // xsmall: title chip only         — card < 32px  (< ~20 min)
+  // small:  plan label + title      — card < 48px  (< ~30 min)
+  // medium: plan+title+time         — card < 64px  (< ~40 min)
+  // large:  full layout with gutter — card ≥ 64px  (≥ ~40 min)
   let size: CardSize;
   if (height < 32) size = "xsmall";
   else if (height < 48) size = "small";
   else if (height < 64) size = "medium";
   else size = "large";
 
-  // Degrade for multi-lane layouts to preserve readability at narrower widths
+  // Degrade for multi-lane layouts to preserve readability at narrower widths.
+  // Floor at "small" (plan label + title stay legible) — never collapse an
+  // overlapping card to a title-only "xsmall" chip just because it's narrow.
   if (laneCount >= 3) {
-    if (size === "large") size = "small";
-    else if (size === "medium") size = "small";
-    else size = "xsmall";
+    // Cap at "small"; only genuinely tiny (<30min) blocks stay "xsmall".
+    if (size !== "xsmall") size = "small";
   } else if (laneCount === 2) {
+    // Drop the largest a step, but never go below "small".
     if (size === "large") size = "medium";
-    else if (size === "medium") size = "small";
-    else size = "xsmall";
   }
 
   return size;
@@ -463,6 +475,9 @@ export default function ScheduleApp() {
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [templatesOpen, setTemplatesOpen] = useState(false);
   const [sessionTask, setSessionTask] = useState<Task | null>(null);
+  // Task whose subtasks are shown in the bottom sheet — stored by id+day so the
+  // sheet always reflects the live task (completion updates create new objects).
+  const [subtasksRef, setSubtasksRef] = useState<{ id: string; day: DayKey } | null>(null);
   const completedRitualIds = useMemo(() => {
     const today = todayISO();
     return new Set(
@@ -677,13 +692,13 @@ export default function ScheduleApp() {
   }
 
   const handleToggleTaskComplete = useCallback(
-    (taskId: string, allSubtaskIds: string[]) => {
+    (taskId: string, allSubtaskIds: string[], day: DayKey = activeDay) => {
       haptic("medium");
       setSchedule((prev) => ({
         ...prev,
         activities: {
           ...prev.activities,
-          [activeDay]: prev.activities[activeDay].map((t) =>
+          [day]: (prev.activities[day] ?? []).map((t) =>
             t.id === taskId ? { ...t, ...toggleTaskComplete(t, allSubtaskIds) } : t
           ),
         },
@@ -693,13 +708,13 @@ export default function ScheduleApp() {
   );
 
   const handleToggleSubtask = useCallback(
-    (taskId: string, subtaskId: string) => {
+    (taskId: string, subtaskId: string, day: DayKey = activeDay) => {
       haptic("light");
       setSchedule((prev) => ({
         ...prev,
         activities: {
           ...prev.activities,
-          [activeDay]: prev.activities[activeDay].map((t) => {
+          [day]: (prev.activities[day] ?? []).map((t) => {
             if (t.id !== taskId) return t;
             const totalSubtasks = t.subtasks?.length ?? 0;
             return { ...t, ...toggleSubtaskComplete(t, subtaskId, totalSubtasks) };
@@ -791,6 +806,27 @@ export default function ScheduleApp() {
           : [...completions, { ritualId: id, date: today }],
       };
     });
+  }
+
+  // ── Notes ───────────────────────────────────────────────────────────────────
+  function handleCreateNote(): string {
+    const now = new Date().toISOString();
+    const note: Note = { id: uid(), title: "", body: "", createdAt: now, updatedAt: now };
+    setSchedule((prev) => ({ ...prev, notes: [note, ...(prev.notes ?? [])] }));
+    return note.id;
+  }
+
+  function handleUpdateNote(id: string, patch: Partial<Pick<Note, "title" | "body">>) {
+    setSchedule((prev) => ({
+      ...prev,
+      notes: (prev.notes ?? []).map((n) =>
+        n.id === id ? { ...n, ...patch, updatedAt: new Date().toISOString() } : n
+      ),
+    }));
+  }
+
+  function handleDeleteNote(id: string) {
+    setSchedule((prev) => ({ ...prev, notes: (prev.notes ?? []).filter((n) => n.id !== id) }));
   }
 
   function handleAddGeneratedTasks(tasks: AIGeneratedTask[], planId: string, milestoneId?: string) {
@@ -1414,6 +1450,7 @@ export default function ScheduleApp() {
         const ce = clamp(Math.max(end, cs + 15), TIMELINE_START_MINUTES, TIMELINE_END_MINUTES);
         return {
           task,
+          color: getTaskPresentation(task).color,
           start: cs,
           end: ce,
           isOvernight,
@@ -1449,16 +1486,6 @@ export default function ScheduleApp() {
     return layouts;
   }, [dayTasks]);
 
-  function getTaskLaneStyle(layout: typeof timelineTaskLayouts[number]) {
-    const gap = layout.laneCount > 1 ? 3 : 0;
-    const width = 100 / layout.laneCount;
-    return {
-      top: layout.top,
-      height: layout.height,
-      left: `calc(${layout.lane * width}% + ${layout.lane > 0 ? gap / 2 : 0}px)`,
-      width: `calc(${width}% - ${layout.laneCount > 1 ? gap : 0}px)`,
-    };
-  }
 
   // ─── Loading ───────────────────────────────────────────────────────────────
 
@@ -1493,10 +1520,13 @@ export default function ScheduleApp() {
     const taskState = resolveTaskState(task, totalSubtasks);
     const done = taskState === "completed";
     const partial = taskState === "partial";
+    const isSession = task.taskType === "session";
 
-    // Completed blocks recede — preserve color identity, lower opacity
-    const base = `${cardClassName} ${tone.cardBg} ${tone.blockBorder} ${tone.accentBar} transition-all duration-300${done ? " opacity-[0.52]" : ""}`;
-    const titleClass = `${tone.title}${done ? " line-through decoration-neutral-400/50 dark:decoration-white/30" : ""}`;
+    // Completed blocks read as "filed away", not broken: keep the tinted bg
+    // (color identity) but neutralize the loud accent rail and recede slightly.
+    const rail = done ? "border-l-[3px] border-l-neutral-300 dark:border-l-white/15" : tone.accentBar;
+    const base = `${cardClassName} ${tone.cardBg} ${tone.blockBorder} ${rail} transition-all duration-300${done ? " opacity-[0.65]" : ""}`;
+    const titleClass = `${tone.title}${done ? " line-through decoration-neutral-400/50 dark:decoration-white/30 text-neutral-500 dark:text-white/55" : ""}`;
 
     // ── Checkbox (small / medium / large) ─────────────────────────────────
     const checkbox = (cardSize !== "xsmall") ? (
@@ -1566,9 +1596,12 @@ export default function ScheduleApp() {
                 {linkedPlan.title}
               </p>
             )}
-            <span className={`text-[11px] font-semibold leading-snug truncate ${titleClass}`}>
-              {task.title}
-            </span>
+            <div className="flex min-w-0 items-center gap-1">
+              {isSession && <IconStack2 size={11} strokeWidth={2} className={`shrink-0 ${tone.planLabel}`} />}
+              <span className={`text-[11px] font-semibold leading-snug truncate ${titleClass}`}>
+                {task.title}
+              </span>
+            </div>
           </div>
         </div>
       );
@@ -1585,9 +1618,12 @@ export default function ScheduleApp() {
                 {linkedPlan.title}
               </p>
             )}
-            <h3 className={`text-[11px] font-semibold leading-snug flex-1 min-w-0 line-clamp-2 ${titleClass}`}>
-              {task.title}
-            </h3>
+            <div className="flex flex-1 min-w-0 items-start gap-1">
+              {isSession && <IconStack2 size={11} strokeWidth={2} className={`mt-[1px] shrink-0 ${tone.planLabel}`} />}
+              <h3 className={`text-[11px] font-semibold leading-snug min-w-0 line-clamp-2 ${titleClass}`}>
+                {task.title}
+              </h3>
+            </div>
             <div className="flex items-center gap-1 shrink-0">
               <span className={`text-[9px] font-medium leading-none shrink-0 ${tone.time}`}>
                 {task.startTime}{isOvernight ? " →" : ` – ${task.endTime}`}
@@ -1614,9 +1650,12 @@ export default function ScheduleApp() {
               {linkedPlan.title}
             </p>
           )}
-          <h3 className={`text-[13px] font-semibold leading-snug flex-1 min-w-0 line-clamp-2 ${titleClass}`}>
-            {task.title}
-          </h3>
+          <div className="flex flex-1 min-w-0 items-start gap-1">
+            {isSession && <IconStack2 size={12} strokeWidth={2} className={`mt-[1px] shrink-0 ${tone.planLabel}`} />}
+            <h3 className={`text-[13px] font-semibold leading-snug min-w-0 line-clamp-2 ${titleClass}`}>
+              {task.title}
+            </h3>
+          </div>
           <div className="flex items-center gap-1.5 mt-auto shrink-0 flex-wrap">
             <span className={`text-[10px] font-medium shrink-0 ${tone.time}`}>
               {task.startTime}{isOvernight ? " → next" : ` – ${task.endTime}`}
@@ -1816,27 +1855,11 @@ export default function ScheduleApp() {
           label="Stay on track"
           title="My Plans"
           actions={
-            <div className="flex flex-wrap items-center gap-2">
-              {(
-                <button
-                  type="button"
-                  onClick={() => setAiPlanCreating(true)}
-                  className="group relative inline-flex h-[44px] overflow-hidden rounded-full bg-gradient-to-r from-fuchsia-500 via-pink-500 to-orange-400 transition-all active:scale-95 hover:opacity-95"
-                >
-                  <span className="relative inline-flex h-full items-center gap-2 overflow-hidden rounded-full bg-white/95 px-4 text-[13px] font-bold text-neutral-950 shadow-sm shadow-black/10 transition-colors duration-200 hover:bg-white dark:bg-neutral-950/95 dark:text-white dark:shadow-black/30 dark:hover:bg-neutral-900">
-                    <span className="inline-flex h-7 w-7 items-center justify-center rounded-full bg-gradient-to-r from-fuchsia-500 via-pink-500 to-orange-400 text-white shadow-sm shadow-pink-500/30">
-                      <IconSparkles size={12} strokeWidth={1.5} />
-                    </span>
-                    <span>Plan with AI</span>
-                  </span>
-                </button>
-              )}
-              <CtaActionButton
-                label="Add New Plan"
-                icon={<IconPlus size={14} strokeWidth={2.5} />}
-                onClick={() => setAddingPlan(true)}
-              />
-            </div>
+            <CtaActionButton
+              label="Add New Plan"
+              icon={<IconPlus size={14} strokeWidth={2.5} />}
+              onClick={() => setAddingPlan(true)}
+            />
           }
           className="mb-6"
         />
@@ -1933,7 +1956,7 @@ export default function ScheduleApp() {
   // ─── JSX ──────────────────────────────────────────────────────────────────
 
   return (
-    <main className="min-h-screen bg-[#F2F2F7] text-neutral-900 dark:bg-[#111115] dark:text-white lg:flex lg:h-screen lg:overflow-hidden">
+    <main className="min-h-screen bg-[#F5F5F5] text-neutral-900 dark:bg-[#111111] dark:text-white lg:flex lg:h-screen lg:overflow-hidden">
 
       {/* ── Desktop sidebar (hidden on mobile) ─────────────────────────────── */}
       <DesktopSidebar
@@ -1948,6 +1971,7 @@ export default function ScheduleApp() {
         onCreateRitual={() => { setActiveTab(2); if (canAddRitual) setRitualAddOpen(true); }}
         onOpenSettings={() => setSettingsOpen(true)}
         onOpenSettingsTab={() => setActiveTab(5)}
+        onOpenNotes={() => { setSelectedPlanId(null); setActiveTab(6); }}
       />
 
       {/* ── Main scrollable column ──────────────────────────────────────────── */}
@@ -1981,7 +2005,7 @@ export default function ScheduleApp() {
             ]}
           />
         ) : (
-          <AppHeader onOpenSettings={() => setActiveTab(5)} onNotes={() => {}} />
+          <AppHeader onOpenSettings={() => setActiveTab(5)} onNotes={() => setActiveTab(6)} />
         )}
       </div>
 
@@ -2071,20 +2095,22 @@ export default function ScheduleApp() {
 
             {/* ── Mobile: calendar strip + day task list ────────────────────── */}
             <div className="lg:hidden">
-            {/* Calendar — redesigned date picker */}
+
+            {/* ── Calendar card ─────────────────────────────────────────────── */}
             <div className="px-4 pt-4">
-              <div className="rounded-2xl border border-neutral-200 bg-white px-4 pt-4 pb-3 dark:border-white/[0.08] dark:bg-neutral-900">
-                {/* Month header row */}
-                <div className="mb-3 flex items-center justify-between">
-                  <span className="text-[17px] font-bold text-neutral-900 dark:text-white">
+              <div className="rounded-[20px] border border-neutral-200 bg-white px-4 pt-4 pb-4 dark:border-white/[0.08] dark:bg-neutral-900">
+
+                {/* Month + nav row */}
+                <div className="mb-4 flex items-center justify-between">
+                  <span className="text-[20px] font-bold tracking-[-0.3px] text-neutral-900 dark:text-white">
                     {weekLabel}
                   </span>
-                  <div className="flex items-center gap-0.5">
+                  <div className="flex items-center gap-1">
                     {weekOffset !== 0 && (
                       <button
                         type="button"
                         onClick={() => { setWeekOffset(0); setActiveDay(todayKey); }}
-                        className="mr-1 inline-flex h-7 items-center rounded-lg px-2 text-[11px] font-semibold text-emerald-600 dark:text-emerald-400"
+                        className="mr-0.5 text-[12px] font-semibold text-emerald-600 dark:text-emerald-400"
                       >
                         Today
                       </button>
@@ -2093,22 +2119,23 @@ export default function ScheduleApp() {
                       type="button"
                       onClick={() => { haptic("light"); setWeekOffset((w) => w - 1); }}
                       aria-label="Previous week"
-                      className="inline-flex h-8 w-8 items-center justify-center rounded-full text-neutral-400 hover:bg-neutral-100 dark:text-neutral-500 dark:hover:bg-white/[0.07] transition-colors"
+                      className="flex h-8 w-8 items-center justify-center rounded-full text-neutral-500 hover:bg-neutral-100 dark:text-neutral-400 dark:hover:bg-white/[0.07]"
                     >
-                      <IconChevronLeft size={18} strokeWidth={2} />
+                      <IconChevronLeft size={16} strokeWidth={2} />
                     </button>
                     <button
                       type="button"
                       onClick={() => { haptic("light"); setWeekOffset((w) => w + 1); }}
                       aria-label="Next week"
-                      className="inline-flex h-8 w-8 items-center justify-center rounded-full text-neutral-400 hover:bg-neutral-100 dark:text-neutral-500 dark:hover:bg-white/[0.07] transition-colors"
+                      className="flex h-8 w-8 items-center justify-center rounded-full text-neutral-500 hover:bg-neutral-100 dark:text-neutral-400 dark:hover:bg-white/[0.07]"
                     >
-                      <IconChevronRight size={18} strokeWidth={2} />
+                      <IconChevronRight size={16} strokeWidth={2} />
                     </button>
                   </div>
                 </div>
+
                 {/* Day strip */}
-                <div className="grid grid-cols-7 gap-1">
+                <div className="grid grid-cols-7 gap-0.5">
                   {weekDates.map(({ day, date }) => {
                     const isDateToday = date.getTime() === todayMidnightTime;
                     const isActive = day === activeDay;
@@ -2117,27 +2144,32 @@ export default function ScheduleApp() {
                         key={day}
                         type="button"
                         onClick={() => { haptic("light"); setActiveDay(day); }}
-                        className="relative flex flex-col items-center justify-center gap-1 w-full rounded-xl py-2 focus-visible:outline-none"
+                        className="relative flex flex-col items-center focus-visible:outline-none"
                       >
+                        {/* Active day: tall black pill */}
                         {isActive && (
                           <motion.div
-                            layoutId="weekDayActive"
-                            className="absolute inset-0 rounded-xl bg-neutral-950 dark:bg-white"
+                            layoutId="weekDayPill"
+                            className="absolute inset-0 rounded-[14px] bg-neutral-950 dark:bg-white"
                             style={{ willChange: "transform" }}
-                            transition={{ type: "spring", stiffness: 420, damping: 32, mass: 0.5 }}
+                            transition={{ type: "spring", stiffness: 380, damping: 30, mass: 0.6 }}
                           />
                         )}
                         <motion.div
-                          whileTap={{ scale: 0.88 }}
-                          transition={{ type: "spring", stiffness: 500, damping: 30 }}
-                          className="relative z-10 flex flex-col items-center gap-1"
+                          whileTap={{ scale: 0.90 }}
+                          transition={{ type: "spring", stiffness: 500, damping: 28 }}
+                          className="relative z-10 flex flex-col items-center gap-2 w-full py-3"
                         >
-                          <span className={`text-[10.5px] font-medium leading-none ${
-                            isActive ? "text-white/60 dark:text-neutral-950/60" : isDateToday ? "text-emerald-500" : "text-neutral-400 dark:text-neutral-500"
+                          <span className={`text-[11px] font-semibold leading-none ${
+                            isActive
+                              ? "text-white/55 dark:text-neutral-900/55"
+                              : isDateToday
+                              ? "text-emerald-500"
+                              : "text-neutral-400 dark:text-neutral-500"
                           }`}>
                             {DAY_LABELS[day]}
                           </span>
-                          <span className={`text-[15px] font-bold leading-none tabular-nums ${
+                          <span className={`text-[18px] font-bold leading-none tabular-nums ${
                             isActive
                               ? "text-white dark:text-neutral-950"
                               : isDateToday
@@ -2162,19 +2194,35 @@ export default function ScheduleApp() {
               exit={{ opacity: 0 }}
               transition={{ duration: 0.12, ease: "easeOut" }}
             >
-            {/* Title section */}
-            <div className="px-4 pt-5 pb-4 lg:px-8 lg:pt-8">
-              <MainTitleSection
-                title="Today's Tasks"
-                progressMeta={
-                  dayProgress.total > 0
-                    ? dayProgress.done === dayProgress.total
-                      ? "done"
-                      : { done: dayProgress.done, total: dayProgress.total }
-                    : undefined
-                }
-                progressBar={dayProgress.total > 0 ? { pct: dayProgress.pct } : undefined}
-              />
+
+            {/* ── Title + progress ──────────────────────────────────────────── */}
+            <div className="px-4 pt-5 pb-2">
+              {/* Title row */}
+              <div className="flex items-center justify-between">
+                <h1 className="text-[24px] font-bold leading-tight tracking-[-0.8px] text-neutral-900 dark:text-white">
+                  Today's Task
+                </h1>
+                {dayProgress.total > 0 && (
+                  <div className="flex items-center gap-1.5 text-neutral-400 dark:text-neutral-500">
+                    <IconClipboardList size={16} strokeWidth={1.8} />
+                    <span className="text-[14px] font-bold tabular-nums text-neutral-500 dark:text-neutral-400">
+                      {dayProgress.done}/{dayProgress.total}
+                    </span>
+                  </div>
+                )}
+              </div>
+
+              {/* Progress bar */}
+              {dayProgress.total > 0 && (
+                <div className="mt-3 h-[6px] w-full overflow-hidden rounded-full bg-neutral-150 dark:bg-white/[0.08]" style={{ backgroundColor: "rgba(0,0,0,0.07)" }}>
+                  <motion.div
+                    className="h-full rounded-full bg-emerald-500"
+                    initial={false}
+                    animate={{ width: `${dayProgress.pct}%` }}
+                    transition={{ duration: 0.5, ease: [0.34, 1.1, 0.64, 1] }}
+                  />
+                </div>
+              )}
             </div>
 
             {/* Task content */}
@@ -2251,11 +2299,7 @@ export default function ScheduleApp() {
                                 onToggleSubtask={handleToggleSubtask}
                                 onEdit={() => openEditSheet(task)}
                                 onDelete={() => handleDeleteTask(task.id)}
-                                onOpenRoutine={
-                                  task.taskType === "session" && (task.subtasks?.length ?? 0) > 0
-                                    ? () => setSessionTask(task)
-                                    : undefined
-                                }
+                                onOpenSubtasks={() => setSubtasksRef({ id: task.id, day: activeDay })}
                               />
                               {linkedMilestone && (
                                 <div className="mt-[-6px] px-1 pb-0.5">
@@ -2300,26 +2344,41 @@ export default function ScheduleApp() {
                     >
                       {/* Time column */}
                       <div
-                        className="sticky left-0 z-20 w-[44px] shrink-0 bg-[#F2F2F7] dark:bg-[#111115]"
+                        className="sticky left-0 z-20 w-[44px] shrink-0 bg-[#F5F5F5] dark:bg-[#111111]"
                         style={{ height: TIMELINE_HEIGHT }}
                       >
                         {TIMELINE_HOURS.map((hour, index) => {
                           const isMidnight = hour === 24;
-                          if (index === 0) return null;
+                          const isLast = index === TIMELINE_HOURS.length - 1;
                           return (
-                            <div
-                              key={hour}
-                              className="absolute right-0 pr-2 flex flex-col items-end"
-                              style={{ top: TIMELINE_TOP_PADDING + index * HOUR_HEIGHT - 6 }}
-                            >
-                              {isMidnight ? (
-                                <span className="text-[8px] font-bold text-neutral-300 dark:text-white/20 leading-none uppercase tracking-wide">
-                                  tmrw
-                                </span>
-                              ) : (
-                                <span className="text-[9px] font-semibold text-neutral-400 dark:text-neutral-500 tabular-nums leading-none">
-                                  {formatHourLabel(hour)}
-                                </span>
+                            <div key={hour}>
+                              {/* Hour label (4 AM not shown — sits under the top padding) */}
+                              {index > 0 && (
+                                <div
+                                  className="absolute right-0 pr-2 flex flex-col items-end"
+                                  style={{ top: TIMELINE_TOP_PADDING + index * HOUR_HEIGHT - 6 }}
+                                >
+                                  {isMidnight ? (
+                                    <span className="text-[8px] font-bold text-neutral-300 dark:text-white/20 leading-none uppercase tracking-wide">
+                                      tmrw
+                                    </span>
+                                  ) : (
+                                    <span className="text-[9px] font-semibold text-neutral-400 dark:text-neutral-500 tabular-nums leading-none">
+                                      {formatHourLabel(hour)}
+                                    </span>
+                                  )}
+                                </div>
+                              )}
+                              {/* Half-hour label */}
+                              {!isLast && (
+                                <div
+                                  className="absolute right-0 pr-2"
+                                  style={{ top: TIMELINE_TOP_PADDING + index * HOUR_HEIGHT + HOUR_HEIGHT / 2 - 5 }}
+                                >
+                                  <span className="text-[8px] font-medium text-neutral-300 dark:text-neutral-600 tabular-nums leading-none">
+                                    {formatHalfHourLabel(hour)}
+                                  </span>
+                                </div>
                               )}
                             </div>
                           );
@@ -2364,7 +2423,7 @@ export default function ScheduleApp() {
                                 />
                                 {index < TIMELINE_HOURS.length - 1 && (
                                   <div
-                                    className="absolute left-0 right-0 border-t border-dashed border-neutral-100/60 dark:border-white/[0.025]"
+                                    className="absolute left-0 right-0 border-t border-dashed border-neutral-200/70 dark:border-white/[0.045]"
                                     style={{ top: TIMELINE_TOP_PADDING + index * HOUR_HEIGHT + HOUR_HEIGHT / 2 }}
                                   />
                                 )}
@@ -2379,7 +2438,7 @@ export default function ScheduleApp() {
                             <div
                               key={layout.task.id}
                               className="absolute min-w-0 px-0.5 py-[2px] animate-panel-in"
-                              style={{ ...getTaskLaneStyle(layout), willChange: "opacity" }}
+                              style={{ ...taskLaneStyle(layout), willChange: "opacity" }}
                             >
                               <div className="relative h-full min-h-[20px]">
                                 {renderTimelineTaskCard(
@@ -2393,6 +2452,15 @@ export default function ScheduleApp() {
                             </div>
                           ))}
                         </div>
+
+                        {/* Current-task glow — isolated layer, hugs the active block */}
+                        <CurrentTaskHighlightLayer
+                          layouts={timelineTaskLayouts}
+                          activeDay={activeDay}
+                          todayKey={todayKey}
+                          timelineStartMinutes={TIMELINE_START_MINUTES}
+                          timelineEndMinutes={TIMELINE_END_MINUTES}
+                        />
 
                         {/* Current time — isolated layer, owns its own 30s interval */}
                         <CurrentTimeLayer
@@ -2433,7 +2501,7 @@ export default function ScheduleApp() {
               onAddTask={(planId) => openCreateSheet(planId)}
               onEditTask={(task) => openEditSheet(task)}
               onDeleteLinkedTask={handleDeleteLinkedTask}
-              onAddTracker={(planId, title, unit, goalDirection, id) => {
+              onAddTracker={(planId, title, unit, goalDirection, id, goalValue) => {
                 setSchedule((prev) => ({
                   ...prev,
                   progressTrackers: [
@@ -2445,6 +2513,7 @@ export default function ScheduleApp() {
                       type: "number",
                       unit: unit || undefined,
                       goalDirection,
+                      goalValue,
                     },
                   ],
                 }));
@@ -2531,7 +2600,8 @@ export default function ScheduleApp() {
               schedule={schedule}
               todayKey={todayKey}
               onNavigate={(tab) => { setActiveTab(tab); setSelectedPlanId(null); }}
-              onMarkTaskDone={(id, subtaskIds) => handleToggleTaskComplete(id, subtaskIds)}
+              onMarkTaskDone={(id, subtaskIds) => handleToggleTaskComplete(id, subtaskIds, todayKey)}
+              onOpenSubtasks={(id) => setSubtasksRef({ id, day: todayKey })}
               completedRitualIds={completedRitualIds}
               onLogTracker={(tracker) => setEntryTracker(tracker)}
             />
@@ -2554,6 +2624,7 @@ export default function ScheduleApp() {
             />
           </motion.div>
         )}
+
         </AnimatePresence>
       </div>
 
@@ -2641,15 +2712,17 @@ export default function ScheduleApp() {
         {renderAddPlanSheet()}
       </BottomSheet>
 
-      {/* ── AI Plan Creator Sheet ──────────────────────────────────────────── */}
-      <AIPlanCreatorSheet
-        open={aiPlanCreating}
-        onClose={() => setAiPlanCreating(false)}
-        onCreatePlan={handleCreateAIPlan}
-        ollamaUrl={ollamaUrl}
-        ollamaModel={ollamaModel}
-        existingPlans={schedule.plans.map((p) => ({ title: p.title, category: p.category, description: p.description }))}
-      />
+      {/* ── AI Plan Creator Sheet (hidden while AI is disabled) ────────────── */}
+      {AI_ENABLED && (
+        <AIPlanCreatorSheet
+          open={aiPlanCreating}
+          onClose={() => setAiPlanCreating(false)}
+          onCreatePlan={handleCreateAIPlan}
+          ollamaUrl={ollamaUrl}
+          ollamaModel={ollamaModel}
+          existingPlans={schedule.plans.map((p) => ({ title: p.title, category: p.category, description: p.description }))}
+        />
+      )}
 
       {/* ── Bottom Nav (mobile only) ───────────────────────────────────────── */}
       <div className="lg:hidden">
@@ -2661,6 +2734,29 @@ export default function ScheduleApp() {
           onCreateRitual={() => { setActiveTab(2); if (canAddRitual) setRitualAddOpen(true); }}
         />
       </div>
+
+      {/* ── Notes — full-screen overlay (own header + Back) ────────────────── */}
+      <AnimatePresence>
+        {activeTab === 6 && (
+          <motion.div
+            key="notes-overlay"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            transition={{ duration: 0.15, ease: "easeOut" }}
+            className="fixed inset-0 z-50 bg-white dark:bg-neutral-950"
+            style={{ paddingTop: "env(safe-area-inset-top, 0px)" }}
+          >
+            <NotesView
+              notes={schedule.notes}
+              onCreate={handleCreateNote}
+              onUpdate={handleUpdateNote}
+              onDelete={handleDeleteNote}
+              onClose={() => setActiveTab(0)}
+            />
+          </motion.div>
+        )}
+      </AnimatePresence>
 
       {/* ── Modals ─────────────────────────────────────────────────────────── */}
       <TaskSheet
@@ -2727,6 +2823,21 @@ export default function ScheduleApp() {
         }}
       />
 
+      {(() => {
+        const st = subtasksRef ? (schedule.activities[subtasksRef.day] ?? []).find((t) => t.id === subtasksRef.id) ?? null : null;
+        return (
+          <SubtasksSheet
+            open={!!subtasksRef}
+            task={st}
+            linkedPlan={st?.planId ? plansById.get(st.planId) ?? null : null}
+            onClose={() => setSubtasksRef(null)}
+            onToggleSubtask={(taskId, subId) => handleToggleSubtask(taskId, subId, subtasksRef?.day)}
+            onToggleComplete={(taskId, ids) => handleToggleTaskComplete(taskId, ids, subtasksRef?.day)}
+            onEdit={st ? () => { openEditSheet(st); setSubtasksRef(null); } : undefined}
+          />
+        );
+      })()}
+
       <ConfirmSheet
         open={!!confirmState}
         onClose={() => setConfirmState(null)}
@@ -2751,39 +2862,43 @@ export default function ScheduleApp() {
       </AnimatePresence>
       </div>{/* end main scrollable column */}
 
-      {/* ── AI Assistant — available on all tabs ─────────────────────────── */}
-      <AIAssistant
-        open={aiOpen}
-        onClose={() => { setAiOpen(false); setAiInitialMessage(""); }}
-        plans={schedule.plans}
-        schedule={schedule}
-        initialPlanId={selectedPlanId}
-        ollamaUrl={ollamaUrl}
-        ollamaModel={ollamaModel}
-        onAddGeneratedTasks={handleAddGeneratedTasks}
-        onApplyAction={handleApplyAction}
-        onNavigateToPlan={(planId) => { setActiveTab(1); setSelectedPlanId(planId); setAiOpen(false); }}
-      />
+      {/* ── AI Assistant — available on all tabs (hidden while AI is disabled) ── */}
+      {AI_ENABLED && (
+        <AIAssistant
+          open={aiOpen}
+          onClose={() => { setAiOpen(false); setAiInitialMessage(""); }}
+          plans={schedule.plans}
+          schedule={schedule}
+          initialPlanId={selectedPlanId}
+          ollamaUrl={ollamaUrl}
+          ollamaModel={ollamaModel}
+          onAddGeneratedTasks={handleAddGeneratedTasks}
+          onApplyAction={handleApplyAction}
+          onNavigateToPlan={(planId) => { setActiveTab(1); setSelectedPlanId(planId); setAiOpen(false); }}
+        />
+      )}
 
       {/* ── AI trigger button (floating, mobile + desktop) ────────────────── */}
-      <AnimatePresence>
-        {!aiOpen && (
-          <motion.button
-            key="ai-fab"
-            type="button"
-            initial={{ opacity: 0, scale: 0.8, y: 8 }}
-            animate={{ opacity: 1, scale: 1, y: 0 }}
-            exit={{ opacity: 0, scale: 0.8, y: 8 }}
-            transition={{ type: "spring", stiffness: 400, damping: 28 }}
-            whileTap={{ scale: 0.92 }}
-            onClick={() => setAiOpen(true)}
-            aria-label="Open AI Assistant"
-            className="fixed bottom-24 right-4 z-40 lg:bottom-8 lg:right-8 flex h-12 w-12 items-center justify-center rounded-full bg-gradient-to-br from-violet-500 via-fuchsia-500 to-pink-500 text-white shadow-lg shadow-fuchsia-500/30 transition-shadow hover:shadow-xl hover:shadow-fuchsia-500/40"
-          >
-            <IconSparkles size={20} strokeWidth={2} />
-          </motion.button>
-        )}
-      </AnimatePresence>
+      {AI_ENABLED && (
+        <AnimatePresence>
+          {!aiOpen && (
+            <motion.button
+              key="ai-fab"
+              type="button"
+              initial={{ opacity: 0, scale: 0.8, y: 8 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.8, y: 8 }}
+              transition={{ type: "spring", stiffness: 400, damping: 28 }}
+              whileTap={{ scale: 0.92 }}
+              onClick={() => setAiOpen(true)}
+              aria-label="Open AI Assistant"
+              className="fixed bottom-24 right-4 z-40 lg:bottom-8 lg:right-8 flex h-12 w-12 items-center justify-center rounded-full bg-gradient-to-br from-violet-500 via-fuchsia-500 to-pink-500 text-white shadow-lg shadow-fuchsia-500/30 transition-shadow hover:shadow-xl hover:shadow-fuchsia-500/40"
+            >
+              <IconSparkles size={20} strokeWidth={2} />
+            </motion.button>
+          )}
+        </AnimatePresence>
+      )}
 
       {/* ── Theme toggle — desktop top right ────────────────────────────────── */}
       <div className="fixed top-6 right-6 z-50 hidden lg:block">
@@ -2791,7 +2906,7 @@ export default function ScheduleApp() {
       </div>
 
       {/* ── AI onboarding — shown once when app opens ─────────────────────── */}
-      <AIOnboarding />
+      {AI_ENABLED && <AIOnboarding />}
 
     </main>
   );

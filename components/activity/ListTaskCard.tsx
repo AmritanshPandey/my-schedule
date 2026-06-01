@@ -2,7 +2,7 @@
 
 import { memo, useMemo, useState } from "react";
 import { motion, AnimatePresence, useMotionValue, useTransform, animate } from "framer-motion";
-import { IconCheck, IconChevronDown, IconEdit, IconListCheck, IconMinus, IconTrash } from "@tabler/icons-react";
+import { IconArrowUpRight, IconCheck, IconChevronDown, IconEdit, IconListCheck, IconMinus, IconTrash } from "@tabler/icons-react";
 import type { Task, Plan } from "@/lib/useScheduleDB";
 import type { ScheduleEntry, MetaField } from "@/components/ScheduleItem";
 import { calculateTaskProgress, resolveTaskState } from "@/lib/taskCompletion";
@@ -24,6 +24,12 @@ const PLAN_DOT: Record<string, string> = {
 // ── Subtask detail pill text ──────────────────────────────────────────────────
 
 function subtaskDetailPill(entry: ScheduleEntry): string | null {
+  const info = entry.info?.trim() || entry.note?.trim();
+  const details = [] as string[];
+  if (info) details.push(info);
+  if (entry.duration) details.push(entry.duration);
+  if (details.length > 0) return details.join(" · ");
+
   const meta = (entry as ScheduleEntry & { meta?: MetaField[] }).meta;
   if (meta && meta.length > 0) return meta.map((m) => m.value).join(" | ");
   if (entry.time) return entry.time;
@@ -95,6 +101,8 @@ export interface ListTaskCardProps {
   onEdit: () => void;
   onDelete: () => void;
   onOpenRoutine?: () => void;
+  /** Open the subtasks/session bottom sheet (preferred over inline expand). */
+  onOpenSubtasks?: () => void;
 }
 
 const SWIPE_THRESHOLD = 72;
@@ -108,6 +116,7 @@ function ListTaskCardInner({
   onEdit,
   onDelete,
   onOpenRoutine,
+  onOpenSubtasks,
 }: ListTaskCardProps) {
   const [expanded, setExpanded] = useState(false);
 
@@ -169,7 +178,9 @@ function ListTaskCardInner({
   // subtasks, or toggle complete for plain tasks with nothing to show.
   function handleCardTap() {
     haptic("light");
-    if (isRoutine && onOpenRoutine) {
+    if ((canExpand || hasRoutine) && onOpenSubtasks) {
+      onOpenSubtasks();
+    } else if (isRoutine && onOpenRoutine) {
       onOpenRoutine();
     } else if (canExpand) {
       setExpanded((v) => !v);
@@ -282,6 +293,17 @@ function ListTaskCardInner({
                     <IconTrash size={16} />
                   </button>
                 </div>
+              ) : (canExpand || hasRoutine) && onOpenSubtasks ? (
+                <button
+                  type="button"
+                  onClick={(e) => { e.stopPropagation(); onOpenSubtasks(); }}
+                  aria-label="Open subtasks"
+                  className="inline-flex items-center gap-1.5 rounded-full bg-neutral-100 px-3 py-2 text-[13px] font-bold tabular-nums text-neutral-600 transition-colors hover:bg-neutral-200 dark:bg-white/[0.07] dark:text-neutral-300 dark:hover:bg-white/[0.12]"
+                >
+                  <IconListCheck size={15} strokeWidth={2} />
+                  {completedCount}/{totalCount || itemCount}
+                  <IconArrowUpRight size={15} strokeWidth={2.2} />
+                </button>
               ) : isRoutine && hasRoutine && onOpenRoutine ? (
                 <button
                   type="button"

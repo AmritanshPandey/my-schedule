@@ -70,6 +70,13 @@ export interface SummaryConfig {
   colorClass?: string;
 }
 
+export interface PlanCoachMessage {
+  role: "user" | "assistant";
+  content: string;
+  type?: "confirmation";
+  suggestedMilestones?: Array<{ title: string; description: string; targetDate?: string }>;
+}
+
 export interface Plan {
   id: string;
   title: string;
@@ -84,6 +91,7 @@ export interface Plan {
   summary?: SummaryConfig[];
   goals?: Goal[];
   metric?: { name: string; unit: string };
+  coachMessages?: PlanCoachMessage[];
 }
 
 export interface ProgressTracker {
@@ -171,6 +179,15 @@ export interface RitualCompletion {
   date: string; // ISO "YYYY-MM-DD"
 }
 
+export interface Note {
+  id: string;
+  title: string;
+  body: string;          // markdown source (paragraphs + "- [ ]" checklists)
+  createdAt: string;     // ISO
+  updatedAt: string;     // ISO
+  pinned?: boolean;
+}
+
 export interface Schedule {
   plans: Plan[];
   activities: DayActivities;
@@ -180,10 +197,11 @@ export interface Schedule {
   rituals: Ritual[];
   strategies: StrategyAsset[];
   ritualCompletions: RitualCompletion[];
+  notes: Note[];
 }
 
 const DB_NAME = "daily-planner";
-const DB_VERSION = 9;
+const DB_VERSION = 10;
 const STORE = "schedule";
 const RECORD_KEY = "data";
 
@@ -289,6 +307,35 @@ function normalizePlan(value: unknown): Plan | null {
     rawMetric && typeof rawMetric === "object" && "name" in rawMetric
       ? { name: String((rawMetric as { name: unknown }).name ?? ""), unit: String((rawMetric as { unit?: unknown }).unit ?? "") }
       : undefined;
+  const rawCoachMessages = (value as { coachMessages?: unknown }).coachMessages;
+  const coachMessages: PlanCoachMessage[] = Array.isArray(rawCoachMessages)
+    ? rawCoachMessages
+        .filter((m): m is Record<string, unknown> =>
+          !!m &&
+          typeof m === "object" &&
+          ((m as Record<string, unknown>).role === "user" || (m as Record<string, unknown>).role === "assistant") &&
+          typeof (m as Record<string, unknown>).content === "string"
+        )
+        .map((m) => {
+          const suggestedMilestones = Array.isArray(m.suggestedMilestones)
+            ? m.suggestedMilestones
+                .filter((s): s is Record<string, unknown> =>
+                  !!s && typeof s === "object" && typeof (s as Record<string, unknown>).title === "string"
+                )
+                .map((s) => ({
+                  title: String(s.title),
+                  description: typeof s.description === "string" ? s.description : "",
+                  targetDate: typeof s.targetDate === "string" ? s.targetDate : undefined,
+                }))
+            : undefined;
+          return {
+            role: m.role as "user" | "assistant",
+            content: String(m.content),
+            type: m.type === "confirmation" ? "confirmation" : undefined,
+            suggestedMilestones,
+          };
+        })
+    : [];
 
   return {
     id: p.id,
@@ -304,6 +351,7 @@ function normalizePlan(value: unknown): Plan | null {
     summary: Array.isArray(p.summary) ? p.summary : [],
     goals: Array.isArray(p.goals) ? p.goals : [],
     metric,
+    coachMessages,
   };
 }
 
@@ -323,6 +371,7 @@ function normalizeTracker(value: unknown): ProgressTracker | null {
     type: "number",
     unit: t.unit,
     goalDirection: gd === "increase_good" || gd === "decrease_good" ? gd : undefined,
+    goalValue: typeof t.goalValue === "number" && Number.isFinite(t.goalValue) ? t.goalValue : undefined,
   };
 }
 
@@ -552,6 +601,8 @@ function migrate(raw: unknown): Schedule {
       ? (r.strategies as StrategyAsset[]).filter((s) => s && typeof s.id === "string" && typeof s.type === "string" && typeof s.title === "string")
       : [];
 
+    const notes = normalizeNotes(r.notes);
+
     const cutoff = (() => {
       const d = new Date();
       d.setDate(d.getDate() - 90);
@@ -578,6 +629,7 @@ function migrate(raw: unknown): Schedule {
       rituals,
       strategies,
       ritualCompletions,
+      notes,
     };
   }
 
@@ -601,6 +653,7 @@ function migrate(raw: unknown): Schedule {
       rituals: [],
       strategies: [],
       ritualCompletions: [],
+      notes: normalizeNotes(r.notes),
     };
   }
 
@@ -626,11 +679,28 @@ function migrate(raw: unknown): Schedule {
   plans[0].items = Array.isArray(r.diet) ? (r.diet as ScheduleEntry[]) : [];
   plans[1].items = Array.isArray(r.workout) ? (r.workout as ScheduleEntry[]) : [];
 
-  return { plans, activities, progressTrackers, metricEntries, milestones: [], rituals: [], strategies: [], ritualCompletions: [] };
+  return { plans, activities, progressTrackers, metricEntries, milestones: [], rituals: [], strategies: [], ritualCompletions: [], notes: normalizeNotes(r.notes) };
+}
+
+function normalizeNotes(raw: unknown): Note[] {
+  if (!Array.isArray(raw)) return [];
+  return (raw as unknown[])
+    .filter((n): n is Record<string, unknown> =>
+      n !== null && typeof n === "object" &&
+      typeof (n as Record<string, unknown>).id === "string"
+    )
+    .map((n) => ({
+      id: String(n.id),
+      title: typeof n.title === "string" ? n.title : "",
+      body: typeof n.body === "string" ? n.body : "",
+      createdAt: typeof n.createdAt === "string" ? n.createdAt : new Date().toISOString(),
+      updatedAt: typeof n.updatedAt === "string" ? n.updatedAt : new Date().toISOString(),
+      pinned: typeof n.pinned === "boolean" ? n.pinned : undefined,
+    }));
 }
 
 function emptyEmpty(): Schedule {
-  return { plans: [], activities: emptyDayActivities(), progressTrackers: [], metricEntries: [], milestones: [], rituals: [], strategies: [], ritualCompletions: [] };
+  return { plans: [], activities: emptyDayActivities(), progressTrackers: [], metricEntries: [], milestones: [], rituals: [], strategies: [], ritualCompletions: [], notes: [] };
 }
 
 export function useScheduleDB() {

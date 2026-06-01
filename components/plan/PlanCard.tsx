@@ -151,7 +151,7 @@ function PlanCardInner({
       whileHover={{ y: -2 }}
       whileTap={{ scale: 0.985 }}
       transition={{ type: "spring", stiffness: 420, damping: 30 }}
-      className="w-full cursor-pointer rounded-3xl border border-neutral-200/70 bg-white px-5 pt-5 pb-4 text-left shadow-[0_1px_3px_rgba(0,0,0,0.05),0_4px_12px_rgba(0,0,0,0.04)] transition-all hover:border-neutral-300/80 hover:shadow-[0_2px_8px_rgba(0,0,0,0.07),0_8px_24px_rgba(0,0,0,0.06)] dark:border-white/[0.07] dark:bg-neutral-900 dark:shadow-[0_1px_3px_rgba(0,0,0,0.3),0_4px_12px_rgba(0,0,0,0.2)] dark:hover:border-white/[0.12]"
+      className="w-full cursor-pointer rounded-3xl border border-neutral-200/70 bg-white px-5 pt-5 pb-4 text-left transition-all hover:border-neutral-300/80 dark:border-white/[0.07] dark:bg-neutral-900 dark:hover:border-white/[0.12]"
     >
       {/* ── Row 1: status chip ───────────────────────────────────────────── */}
       <motion.div

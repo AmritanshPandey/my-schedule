@@ -60,6 +60,7 @@ export function AIFab({
       activePlan={activePlan}
       initialMessage={initialMessage}
       onApplyAction={(result) => { onApplyAction(result); setOpen(false); }}
+      onClose={() => setOpen(false)}
     />
   );
 
@@ -79,8 +80,16 @@ export function AIFab({
         </BottomSheet>
       )}
 
+      {isDesktop && open && (
+        <div className="fixed bottom-24 right-6 z-50 flex w-[26rem] max-w-[95vw] flex-col overflow-hidden rounded-[30px] border border-white/10 bg-neutral-950/95 shadow-[0_30px_80px_rgba(15,23,42,0.28)] backdrop-blur">
+          <div className="h-[74vh] min-h-[520px] overflow-hidden">
+            {panel}
+          </div>
+        </div>
+      )}
+
       {/* ── FAB button — hidden; AI is desktop-only ────────────────────── */}
-      <div className="fixed bottom-20 right-4 z-50 hidden">
+      <div className="fixed bottom-20 right-4 z-50 hidden lg:block">
         {/* Spinning rainbow ring */}
         <div
           aria-hidden="true"
@@ -95,7 +104,7 @@ export function AIFab({
           type="button"
           onClick={() => setOpen(!open)}
           whileTap={{ scale: 0.93 }}
-          className="relative z-10 flex h-13 w-13 items-center justify-center rounded-full bg-neutral-950 shadow-lg dark:bg-neutral-900"
+          className="relative z-10 flex h-13 w-13 items-center justify-center rounded-full bg-white/85 text-neutral-950 shadow-[0_20px_60px_rgba(15,23,42,0.16)] ring-1 ring-white/40 transition-colors duration-200 hover:bg-white dark:bg-neutral-950/95 dark:text-white dark:ring-white/10"
           aria-label={open ? "Close AI assistant" : "Open AI assistant"}
         >
           <AnimatePresence mode="wait" initial={false}>
@@ -107,7 +116,7 @@ export function AIFab({
                 exit={{ rotate: 45, opacity: 0 }}
                 transition={{ duration: 0.15 }}
               >
-                <IconX size={20} strokeWidth={2} className="text-white" />
+                <IconX size={20} strokeWidth={2} className="text-neutral-950 dark:text-white" />
               </motion.span>
             ) : (
               <motion.span
@@ -117,7 +126,7 @@ export function AIFab({
                 exit={{ rotate: -45, opacity: 0 }}
                 transition={{ duration: 0.15 }}
               >
-                <IconSparkles size={20} strokeWidth={2} className="text-white" />
+                <IconSparkles size={20} strokeWidth={2} className="text-neutral-950 dark:text-white" />
               </motion.span>
             )}
           </AnimatePresence>

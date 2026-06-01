@@ -228,7 +228,7 @@ export default function RitualView({
 
   return (
     <>
-      <div className="px-4 pb-6 pt-6 lg:px-8 lg:pb-10 lg:pt-6 lg:max-w-4xl">
+      <div className="px-4 pb-6 pt-6 lg:mx-auto lg:max-w-4xl lg:px-8 lg:pb-10 lg:pt-6">
 
         {/* ── Header ───────────────────────────────────────────────────────── */}
         <MainTitleSection

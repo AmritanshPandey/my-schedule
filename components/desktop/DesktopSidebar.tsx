@@ -8,12 +8,15 @@ import {
   IconChevronRight,
   IconClipboardData,
   IconLayoutDashboard,
+  IconPencil,
   IconPlus,
   IconRepeat,
   IconSettings,
 } from "@tabler/icons-react";
 import { haptic } from "@/lib/haptics";
 import { checkModelStatus } from "@/lib/ai";
+import { useAIRuntime } from "@/lib/ai/useAIRuntime";
+import { AI_ENABLED } from "@/lib/featureFlags";
 
 interface DesktopSidebarProps {
   activeTab: number;
@@ -26,6 +29,8 @@ interface DesktopSidebarProps {
   onCreatePlan: () => void;
   onCreateRitual: () => void;
   onOpenSettings: () => void;
+  onOpenSettingsTab?: () => void;
+  onOpenNotes?: () => void;
 }
 
 const NAV_ITEMS = [
@@ -83,9 +88,12 @@ export default function DesktopSidebar({
   onCreatePlan,
   onCreateRitual,
   onOpenSettings,
+  onOpenSettingsTab,
+  onOpenNotes,
 }: DesktopSidebarProps) {
   const [status, setStatus] = useState<ConnectionStatus>("checking");
   const [checkTick, setCheckTick] = useState(0);
+  const runtime = useAIRuntime();
 
   // Check connection on mount, when url/model changes, on manual refresh, and every 15s
   useEffect(() => {
@@ -110,18 +118,49 @@ export default function DesktopSidebar({
     // tab 3 (Review) has no create action
   }
 
-  // Short display name for the model — strip tag if generic
+  // Short display name for the Ollama model — strip tag if generic
   const modelShort = ollamaModel.replace(/:latest$/, "");
 
-  const statusLabel =
-    status === "connected" ? modelShort :
-    status === "checking"  ? "Connecting…" :
-    status === "no-model"  ? "Model not found" :
-    "Ollama offline";
+  // When Ollama isn't connected, surface the on-device model that's actually
+  // running instead of "Ollama offline". Capability tier stands in for the model
+  // name (we never show raw model IDs to users).
+  const capLabel = runtime.capabilityLevel === "standard" ? "Standard" : "Basic";
+  // A cached model is effectively ready even while it loads from disk (instant),
+  // so treat it as ready and never show a "preparing" state for it.
+  const embeddedReady = runtime.enabled && (runtime.status === "ready" || runtime.modelCached);
+  const embeddedLoading =
+    runtime.enabled && !runtime.modelCached &&
+    (runtime.status === "enabling" || runtime.status === "downloading");
+
+  let displayStatus: ConnectionStatus;
+  let statusLabel: string;
+
+  if (status === "connected") {
+    displayStatus = "connected";
+    statusLabel = modelShort;
+  } else if (status === "checking") {
+    displayStatus = "checking";
+    statusLabel = "Connecting…";
+  } else if (embeddedReady) {
+    displayStatus = "connected";
+    statusLabel = `${capLabel} · On-device`;
+  } else if (embeddedLoading) {
+    displayStatus = "checking";
+    statusLabel =
+      runtime.status === "downloading"
+        ? `Downloading AI… ${runtime.downloadProgress}%`
+        : "Starting AI…";
+  } else if (status === "no-model") {
+    displayStatus = "no-model";
+    statusLabel = "Model not found";
+  } else {
+    displayStatus = "offline";
+    statusLabel = "AI offline";
+  }
 
   const statusColor =
-    status === "connected" ? "text-emerald-600 dark:text-emerald-400" :
-    status === "no-model"  ? "text-amber-600 dark:text-amber-400" :
+    displayStatus === "connected" ? "text-emerald-600 dark:text-emerald-400" :
+    displayStatus === "no-model"  ? "text-amber-600 dark:text-amber-400" :
     "text-neutral-400 dark:text-neutral-500";
 
   return (
@@ -190,25 +229,40 @@ export default function DesktopSidebar({
       {/* ── Bottom: AI status + settings + collapse ───────────────────────────── */}
       <div className={`border-t border-neutral-200/50 dark:border-white/[0.05] py-2 ${collapsed ? "px-2" : "px-2.5"}`}>
 
-        {/* AI status row — click to re-check */}
-        <button
-          type="button"
-          onClick={() => { haptic("light"); setCheckTick((n) => n + 1); }}
-          title={collapsed ? statusLabel : `AI: ${statusLabel} — click to refresh`}
-          className={`flex w-full items-center rounded-xl py-2 transition-colors hover:bg-white/70 dark:hover:bg-white/[0.04] ${collapsed ? "justify-center px-0" : "gap-2.5 px-3.5"}`}
-        >
-          <StatusDot status={status} />
-          {!collapsed && (
-            <span className={`truncate text-[12px] font-semibold transition-colors ${statusColor}`}>
-              {statusLabel}
-            </span>
-          )}
-        </button>
+        {/* AI status row — click to re-check (hidden while AI is disabled) */}
+        {AI_ENABLED && (
+          <button
+            type="button"
+            onClick={() => { haptic("light"); setCheckTick((n) => n + 1); }}
+            title={collapsed ? statusLabel : `AI: ${statusLabel} — click to refresh`}
+            className={`flex w-full items-center rounded-xl py-2 transition-colors hover:bg-white/70 dark:hover:bg-white/[0.04] ${collapsed ? "justify-center px-0" : "gap-2.5 px-3.5"}`}
+          >
+            <StatusDot status={displayStatus} />
+            {!collapsed && (
+              <span className={`truncate text-[12px] font-semibold transition-colors ${statusColor}`}>
+                {statusLabel}
+              </span>
+            )}
+          </button>
+        )}
+
+        {/* Notes */}
+        {onOpenNotes && (
+          <button
+            type="button"
+            onClick={() => { haptic("light"); onOpenNotes(); }}
+            title={collapsed ? "Notes" : undefined}
+            className={`flex w-full items-center rounded-xl py-2 transition-colors hover:bg-white/70 dark:hover:bg-white/[0.04] ${collapsed ? "justify-center px-0" : "gap-3 px-3.5"} ${activeTab === 6 ? "text-neutral-900 dark:text-white" : "text-neutral-500 hover:text-neutral-700 dark:text-neutral-500 dark:hover:text-neutral-300"}`}
+          >
+            <IconPencil size={16} strokeWidth={1.8} className="shrink-0" />
+            {!collapsed && <span className="text-[13px] font-medium">Notes</span>}
+          </button>
+        )}
 
         {/* Settings */}
         <button
           type="button"
-          onClick={() => { haptic("light"); onOpenSettings(); }}
+          onClick={() => { haptic("light"); if (onOpenSettingsTab) onOpenSettingsTab(); else onOpenSettings(); }}
           title={collapsed ? "Settings" : undefined}
           className={`flex w-full items-center rounded-xl py-2 text-neutral-500 transition-colors hover:bg-white/70 hover:text-neutral-700 dark:text-neutral-500 dark:hover:bg-white/[0.04] dark:hover:text-neutral-300 ${collapsed ? "justify-center px-0" : "gap-3 px-3.5"}`}
         >

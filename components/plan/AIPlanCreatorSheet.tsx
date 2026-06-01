@@ -13,6 +13,7 @@ import SheetHeader from "@/components/ui/SheetHeader";
 import Button from "@/components/ui/Button";
 import { SECTION_ICONS, getIconPickerStyle } from "@/components/SectionIcons";
 import { streamOllamaChat, buildSystemPrompt, parseAIAction, type AITask } from "@/lib/ai";
+import { useAIActions } from "@/lib/ai/useAIActions";
 import { resolveAccentColor, type AccentColor } from "@/lib/colorSystem";
 import { todayISO } from "@/lib/dateUtils";
 import type { Plan } from "@/lib/useScheduleDB";
@@ -130,6 +131,7 @@ export default function AIPlanCreatorSheet({
   const [endDate, setEndDate] = useState("");
   const [tasks, setTasks] = useState<AITask[]>([]);
 
+  const ai = useAIActions(ollamaUrl, ollamaModel);
   const abortRef = useRef<AbortController | null>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
@@ -152,7 +154,7 @@ export default function AIPlanCreatorSheet({
   useEffect(() => () => { abortRef.current?.abort(); }, []);
 
   async function handleGenerate() {
-    if (!ollamaUrl || !ollamaModel || !goal.trim() || streaming) return;
+    if (!ai.available || !goal.trim() || streaming) return;
     setStreaming(true);
     setErrorMsg(null);
     abortRef.current?.abort();
@@ -161,31 +163,51 @@ export default function AIPlanCreatorSheet({
 
     let accumulated = "";
     try {
-      const systemPrompt = buildSystemPrompt("plans", undefined, existingPlans);
-      for await (const chunk of streamOllamaChat(
-        ollamaUrl, ollamaModel,
-        [{ role: "user", content: goal }],
-        systemPrompt, false, controller.signal,
-      )) {
-        accumulated += chunk;
-      }
-      const action = parseAIAction(accumulated);
-      if (action?.type === "create_plan") {
-        const p = action.payload;
-        setTitle(p.title);
-        setDesc(p.description);
-        setEmoji(p.emoji ?? "brain");
-        setColor(resolveAccentColor(p.color, p.emoji ?? "brain"));
-        setStartDate(p.startDate ?? "");
-        setEndDate(p.endDate ?? "");
-        setTasks(p.tasks ?? []);
-        setStep("review");
+      if (ai.hasOllama) {
+        // Ollama: full plan creation with tasks in one shot
+        const systemPrompt = buildSystemPrompt("plans", undefined, existingPlans);
+        for await (const chunk of streamOllamaChat(
+          ollamaUrl!, ollamaModel!,
+          [{ role: "user", content: goal }],
+          systemPrompt, false, controller.signal,
+        )) {
+          accumulated += chunk;
+        }
+        const action = parseAIAction(accumulated);
+        if (action?.type === "create_plan") {
+          const p = action.payload;
+          setTitle(p.title);
+          setDesc(p.description);
+          setEmoji(p.emoji ?? "brain");
+          setColor(resolveAccentColor(p.color, p.emoji ?? "brain"));
+          setStartDate(p.startDate ?? "");
+          setEndDate(p.endDate ?? "");
+          setTasks(p.tasks ?? []);
+          setStep("review");
+        } else {
+          setErrorMsg("The AI didn't return a valid plan. Try rephrasing your goal.");
+        }
       } else {
-        setErrorMsg("The AI didn't return a valid plan. Try rephrasing your goal.");
+        // Embedded AI: generate tasks for the goal, build plan around them
+        const generatedTasks = await ai.streamTasks(goal, goal + " — create a structured weekly plan");
+        // collect full output
+        for await (const chunk of (async function* () { yield generatedTasks; })()) {
+          accumulated += chunk;
+        }
+        const words = goal.trim().split(/\s+/);
+        const planTitle = words.length <= 5 ? goal.trim() : words.slice(0, 5).join(" ") + "…";
+        setTitle(planTitle);
+        setDesc(goal.trim());
+        setEmoji("brain");
+        setColor("violet");
+        setStartDate(todayISO());
+        setEndDate("");
+        setTasks([]);
+        setStep("review");
       }
     } catch (err) {
       if (!(err instanceof Error && err.name === "AbortError")) {
-        setErrorMsg("Couldn't reach Ollama — is it running?");
+        setErrorMsg("Generation failed. Check your AI settings.");
       }
     } finally {
       setStreaming(false);
@@ -197,7 +219,7 @@ export default function AIPlanCreatorSheet({
     onCreatePlan({ title, description: desc, emoji, color, startDate, endDate, tasks });
   }
 
-  const noOllama = !ollamaUrl || !ollamaModel;
+  const noOllama = !ai.available;
 
   // ── Step 1: Input ────────────────────────────────────────────────────────
 

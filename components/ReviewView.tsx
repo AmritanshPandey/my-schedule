@@ -1,12 +1,10 @@
 "use client";
 
-import { useMemo, useState, useCallback, useRef } from "react";
+import { useMemo, useState, useCallback, useRef, useEffect } from "react";
 import {
   IconArrowUp,
   IconArrowDown,
   IconMinus,
-  IconTrendingUp,
-  IconTrendingDown,
   IconFlame,
   IconCalendarWeek,
   IconRepeat,
@@ -14,7 +12,6 @@ import {
   IconChartBar,
   IconSparkles,
   IconRefresh,
-  IconCalendarPlus,
 } from "@tabler/icons-react";
 import type { Schedule, DayKey } from "@/lib/useScheduleDB";
 import { DAYS, DAY_LABELS } from "@/lib/useScheduleDB";
@@ -30,6 +27,7 @@ import {
   DEFAULT_OLLAMA_MODEL,
 } from "@/lib/ai";
 import MilestoneTimeline from "@/components/MilestoneTimeline";
+import ExecutionTrendCard from "@/components/ExecutionTrendCard";
 
 // ── Shared type (mirrored from ScheduleApp.tsx) ───────────────────────────────
 
@@ -47,7 +45,6 @@ interface ReviewViewProps {
   schedule: Schedule;
   todayKey: DayKey;
   ritualWeekHistory: RitualWeekDay[];
-  onOpenWeeklyPlan?: () => void;
 }
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -118,18 +115,40 @@ function buildWeeklyContext(
     .map((d) => `${d.label}: ${d.done}/${d.total}`)
     .join(", ");
 
-  const planLines = schedule.plans
+  const planSummaries = schedule.plans
     .filter((plan) => DAYS.some((d) => (schedule.activities[d] ?? []).some((t) => t.planId === plan.id)))
     .map((plan) => {
       const consistency = calculateConsistency(plan.id, schedule.activities, plan);
       const milestones = (schedule.milestones ?? []).filter((m) => m.planId === plan.id);
       const completedMs = milestones.filter((m) => m.status === "completed").length;
       const delayedMs = milestones.filter((m) => m.status === "delayed").length;
-      return `"${plan.title}" consistency:${consistency}%${
-        milestones.length > 0 ? ` milestones:${completedMs}/${milestones.length}` : ""
-      }${delayedMs > 0 ? ` (${delayedMs} delayed)` : ""}`;
-    })
+      const attentionScore = delayedMs * 1000 + (100 - consistency);
+      return {
+        title: plan.title,
+        consistency,
+        milestoneText: milestones.length > 0 ? `milestones:${completedMs}/${milestones.length}` : "",
+        delayedMs,
+        attentionScore,
+      };
+    });
+
+  const planLines = planSummaries
+    .map((plan) =>
+      `"${plan.title}" consistency:${plan.consistency}%${plan.milestoneText ? ` ${plan.milestoneText}` : ""}${
+        plan.delayedMs > 0 ? ` (${plan.delayedMs} delayed)` : ""
+      }`
+    )
     .join("; ");
+
+  const priorityPlan = planSummaries.length > 0
+    ? planSummaries.reduce((best, next) => (next.attentionScore > best.attentionScore ? next : best))
+    : null;
+
+  const priorityLine = priorityPlan
+    ? `Priority: "${priorityPlan.title}" needs attention (consistency ${priorityPlan.consistency}%${
+        priorityPlan.delayedMs > 0 ? `, ${priorityPlan.delayedMs} delayed milestone${priorityPlan.delayedMs === 1 ? "" : "s"}` : ""
+      }).`
+    : null;
 
   const sortedEntries = [...(schedule.metricEntries ?? [])].sort((a, b) => b.date.localeCompare(a.date));
   const metricLines = (schedule.progressTrackers ?? [])
@@ -148,6 +167,7 @@ function buildWeeklyContext(
     `Week tasks: ${totalDone}/${totalScheduled} (${weekPct}%)${dayBreakdown ? ` — ${dayBreakdown}` : ""}`,
     `Habits: ${ritualDone}/${ritualDue} (${ritualPct}%)`,
     planLines ? `Plans: ${planLines}` : null,
+    priorityLine,
     metricLines ? `Metrics: ${metricLines}` : null,
   ]
     .filter((s): s is string => s !== null)
@@ -199,8 +219,16 @@ function WeeklyAIInsightCard({
     }
   }, [schedule, todayKey, ritualWeekHistory]);
 
+  useEffect(() => {
+    if (hasGenerated) {
+      setHasGenerated(false);
+      setText("");
+      setError(null);
+    }
+  }, [schedule, todayKey, ritualWeekHistory]);
+
   return (
-    <div className="mb-4 rounded-2xl border border-neutral-200/70 bg-white px-5 py-5 shadow-[0_1px_3px_rgba(0,0,0,0.05),0_2px_8px_rgba(0,0,0,0.04)] dark:border-white/[0.07] dark:bg-neutral-900 dark:shadow-[0_1px_3px_rgba(0,0,0,0.3)]">
+    <div className="mb-4 rounded-2xl border border-neutral-200/70 bg-white px-5 py-5 dark:border-white/[0.07] dark:bg-neutral-900">
       {/* Header row */}
       <div className="mb-3 flex items-center justify-between">
         <div className="flex items-center gap-1.5">
@@ -325,7 +353,7 @@ function ThisWeekSection({
   const ritualPct = ritualDue > 0 ? Math.round((ritualDone / ritualDue) * 100) : 0;
 
   return (
-    <div className="rounded-2xl border border-neutral-200/70 bg-white shadow-[0_1px_3px_rgba(0,0,0,0.05),0_2px_8px_rgba(0,0,0,0.04)] dark:border-white/[0.07] dark:bg-neutral-900 dark:shadow-[0_1px_3px_rgba(0,0,0,0.3)] px-5 py-5">
+    <div className="rounded-2xl border border-neutral-200/70 bg-white dark:border-white/[0.07] dark:bg-neutral-900 px-5 py-5">
       <SectionLabel icon={IconCalendarWeek}>This Week</SectionLabel>
 
       {/* Day strip */}
@@ -383,127 +411,9 @@ function ThisWeekSection({
 // ─────────────────────────────────────────────────────────────────────────────
 
 function ExecutionTrendSection({ schedule }: { schedule: Schedule }) {
-  const weeks = useMemo(() => {
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
-
-    return Array.from({ length: 8 }, (_, i) => {
-      // Week i: 0 = most recent (current), 7 = oldest
-      const offsetDays = (7 - i) * 7;
-      const weekMonday = getMondayOf(new Date(today.getTime() - (offsetDays - 0) * 86_400_000 + (i === 0 ? 0 : 0)));
-
-      // Build actual monday for each historical week
-      const mon = new Date(today);
-      mon.setDate(today.getDate() - (7 - i) * 7);
-      const actualMonday = getMondayOf(mon);
-      const actualSunday = new Date(actualMonday);
-      actualSunday.setDate(actualMonday.getDate() + 6);
-
-      const monStr = localISODate(actualMonday);
-      const sunStr = localISODate(actualSunday);
-      const todayStr = localISODate(today);
-
-      let total = 0;
-      let done = 0;
-
-      for (const day of DAYS) {
-        for (const task of schedule.activities[day] ?? []) {
-          if (Array.isArray(task.completionHistory)) {
-            for (const event of task.completionHistory) {
-              if (event.completionType === "task") {
-                const d = localISODate(new Date(event.completedAt));
-                if (d >= monStr && d <= sunStr) done++;
-              }
-            }
-          }
-          // Count as total if the task existed during this week window
-          // Use a heuristic: always count scheduled tasks for current week
-        }
-      }
-
-      // Count total scheduled tasks per day for each weekday
-      for (const day of DAYS) {
-        // Only count tasks for current active week (index 7)
-        if (i === 7) {
-          total += (schedule.activities[day] ?? []).length;
-        }
-      }
-
-      // For historical weeks: use completionHistory event count as proxy for done,
-      // and derive total from how many tasks existed (approximation: current count)
-      if (i < 7) {
-        total = 0;
-        for (const day of DAYS) {
-          total += (schedule.activities[day] ?? []).length;
-        }
-      }
-
-      const pct = total > 0 ? Math.round((done / total) * 100) : 0;
-      const isCurrentWeek = i === 7;
-      const isFuture = monStr > todayStr;
-
-      // Short week label: "May 12"
-      const label = actualMonday.toLocaleDateString("en-US", { month: "short", day: "numeric" });
-
-      return { monStr, sunStr, pct, done, total, isCurrentWeek, isFuture, label };
-    });
-  }, [schedule.activities]);
-
-  const prevWeek = weeks[weeks.length - 2];
-  const currWeek = weeks[weeks.length - 1];
-  const delta = currWeek.pct - prevWeek.pct;
-  const maxPct = Math.max(...weeks.map((w) => w.pct), 10);
-
-  return (
-    <div className="rounded-2xl border border-neutral-200/70 bg-white shadow-[0_1px_3px_rgba(0,0,0,0.05),0_2px_8px_rgba(0,0,0,0.04)] dark:border-white/[0.07] dark:bg-neutral-900 dark:shadow-[0_1px_3px_rgba(0,0,0,0.3)] px-5 py-5">
-      <div className="flex items-center justify-between mb-3">
-        <SectionLabel icon={IconTrendingUp}>Execution Trend</SectionLabel>
-        {delta !== 0 && (
-          <span className={`flex items-center gap-0.5 text-[11px] font-bold ${
-            delta > 0 ? "text-emerald-600 dark:text-emerald-400" : "text-rose-500 dark:text-rose-400"
-          }`}>
-            {delta > 0 ? <IconTrendingUp size={13} strokeWidth={2} /> : <IconTrendingDown size={13} strokeWidth={2} />}
-            {delta > 0 ? "+" : ""}{delta}% vs last week
-          </span>
-        )}
-      </div>
-
-      {/* Bar chart */}
-      <div className="flex items-end gap-1.5 h-[60px]">
-        {weeks.map((week, i) => {
-          const barH = maxPct > 0 ? Math.max(4, Math.round((week.pct / maxPct) * 52)) : 4;
-          const color = week.pct >= 80
-            ? "bg-emerald-500"
-            : week.pct >= 50
-            ? "bg-amber-400"
-            : week.pct > 0
-            ? "bg-rose-400"
-            : "bg-neutral-200 dark:bg-white/[0.07]";
-
-          return (
-            <div key={i} className="flex flex-1 flex-col items-center gap-1">
-              <div className="relative w-full flex items-end justify-center" style={{ height: 52 }}>
-                <div
-                  className={`w-full rounded-t-[3px] transition-all ${color} ${week.isCurrentWeek ? "opacity-100" : "opacity-70"}`}
-                  style={{ height: barH }}
-                />
-              </div>
-              <span className={`text-[8.5px] leading-none tabular-nums ${
-                week.isCurrentWeek ? "font-bold text-neutral-700 dark:text-neutral-300" : "text-neutral-400 dark:text-neutral-600"
-              }`}>
-                {week.pct > 0 ? `${week.pct}%` : "—"}
-              </span>
-            </div>
-          );
-        })}
-      </div>
-
-      <div className="mt-1 flex justify-between">
-        <span className="text-[9px] text-neutral-400 dark:text-neutral-600">{weeks[0].label}</span>
-        <span className="text-[9px] text-neutral-400 dark:text-neutral-600">This week</span>
-      </div>
-    </div>
-  );
+  // Logic lives in the shared ExecutionTrendCard / computeExecutionTrend util,
+  // so Overview and Review stay in sync.
+  return <ExecutionTrendCard schedule={schedule} />;
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -554,7 +464,7 @@ function HabitConsistencySection({
 
   if (ritualsWithStats.length === 0) {
     return (
-      <div className="rounded-2xl border border-neutral-200/70 bg-white shadow-[0_1px_3px_rgba(0,0,0,0.05),0_2px_8px_rgba(0,0,0,0.04)] dark:border-white/[0.07] dark:bg-neutral-900 dark:shadow-[0_1px_3px_rgba(0,0,0,0.3)] px-5 py-5">
+      <div className="rounded-2xl border border-neutral-200/70 bg-white dark:border-white/[0.07] dark:bg-neutral-900 px-5 py-5">
         <SectionLabel icon={IconRepeat}>Habit Consistency</SectionLabel>
         <p className="text-[13px] text-neutral-400 dark:text-neutral-500">No habits yet. Add some in the Routine tab.</p>
       </div>
@@ -562,7 +472,7 @@ function HabitConsistencySection({
   }
 
   return (
-    <div className="rounded-2xl border border-neutral-200/70 bg-white shadow-[0_1px_3px_rgba(0,0,0,0.05),0_2px_8px_rgba(0,0,0,0.04)] dark:border-white/[0.07] dark:bg-neutral-900 dark:shadow-[0_1px_3px_rgba(0,0,0,0.3)] px-5 py-5">
+    <div className="rounded-2xl border border-neutral-200/70 bg-white dark:border-white/[0.07] dark:bg-neutral-900 px-5 py-5">
       <SectionLabel icon={IconRepeat}>Habit Consistency</SectionLabel>
       <div className="space-y-3">
         {ritualsWithStats.map(({ ritual, dots, streak }) => (
@@ -633,7 +543,7 @@ function PlanHealthSection({
 
   if (planCards.length === 0) {
     return (
-      <div className="rounded-2xl border border-neutral-200/70 bg-white shadow-[0_1px_3px_rgba(0,0,0,0.05),0_2px_8px_rgba(0,0,0,0.04)] dark:border-white/[0.07] dark:bg-neutral-900 dark:shadow-[0_1px_3px_rgba(0,0,0,0.3)] px-5 py-5">
+      <div className="rounded-2xl border border-neutral-200/70 bg-white dark:border-white/[0.07] dark:bg-neutral-900 px-5 py-5">
         <SectionLabel icon={IconClipboardData}>Plan Health</SectionLabel>
         <p className="text-[13px] text-neutral-400 dark:text-neutral-500">No active plans. Create one in the Plans tab.</p>
       </div>
@@ -641,7 +551,7 @@ function PlanHealthSection({
   }
 
   return (
-    <div className="rounded-2xl border border-neutral-200/70 bg-white shadow-[0_1px_3px_rgba(0,0,0,0.05),0_2px_8px_rgba(0,0,0,0.04)] dark:border-white/[0.07] dark:bg-neutral-900 dark:shadow-[0_1px_3px_rgba(0,0,0,0.3)] px-5 py-5">
+    <div className="rounded-2xl border border-neutral-200/70 bg-white dark:border-white/[0.07] dark:bg-neutral-900 px-5 py-5">
       <SectionLabel icon={IconClipboardData}>Plan Health</SectionLabel>
       <div className="space-y-2.5">
         {planCards.map(({ plan, completedMs, totalMs, consistency, delayedMs }) => {
@@ -1042,7 +952,7 @@ function MetricsLogSection({ schedule }: { schedule: Schedule }) {
 
   if (trackerGroups.length === 0) {
     return (
-      <div className="rounded-2xl border border-neutral-200/70 bg-white shadow-[0_1px_3px_rgba(0,0,0,0.05),0_2px_8px_rgba(0,0,0,0.04)] dark:border-white/[0.07] dark:bg-neutral-900 dark:shadow-[0_1px_3px_rgba(0,0,0,0.3)] px-5 py-5">
+      <div className="rounded-2xl border border-neutral-200/70 bg-white dark:border-white/[0.07] dark:bg-neutral-900 px-5 py-5">
         <SectionLabel icon={IconChartBar}>Metrics Log</SectionLabel>
         <p className="text-[13px] text-neutral-400 dark:text-neutral-500">No metrics logged yet. Add entries from a plan&apos;s tracker.</p>
       </div>
@@ -1208,34 +1118,15 @@ function MetricsLogSection({ schedule }: { schedule: Schedule }) {
 // Root ReviewView component
 // ─────────────────────────────────────────────────────────────────────────────
 
-export default function ReviewView({ schedule, todayKey, ritualWeekHistory, onOpenWeeklyPlan }: ReviewViewProps) {
+export default function ReviewView({ schedule, todayKey, ritualWeekHistory }: ReviewViewProps) {
   return (
-    <div className="px-4 pt-5 pb-24 lg:px-8 lg:pt-6 lg:pb-10">
+    <div className="px-4 pt-5 pb-24 lg:mx-auto lg:max-w-4xl lg:px-8 lg:pt-6 lg:pb-10">
       {/* AI Insight — full width, above the grid */}
       <WeeklyAIInsightCard
         schedule={schedule}
         todayKey={todayKey}
         ritualWeekHistory={ritualWeekHistory}
       />
-      {/* Plan Next Week trigger */}
-      {onOpenWeeklyPlan && (
-        <button
-          type="button"
-          onClick={onOpenWeeklyPlan}
-          className="mb-4 flex w-full items-center justify-between rounded-2xl border border-neutral-200/70 bg-white px-4 py-3 transition-colors hover:bg-neutral-50 dark:border-white/[0.07] dark:bg-white/[0.03] dark:hover:bg-white/[0.06]"
-        >
-          <div className="flex items-center gap-2">
-            <IconCalendarPlus size={15} strokeWidth={2} className="text-neutral-500 dark:text-neutral-400" />
-            <span className="text-[13px] font-semibold text-neutral-900 dark:text-white">
-              Plan Next Week
-            </span>
-            <span className="text-[12px] text-neutral-400 dark:text-neutral-500">
-              · AI task suggestions based on this week
-            </span>
-          </div>
-          <span className="text-[13px] text-neutral-400 dark:text-neutral-500">→</span>
-        </button>
-      )}
       {/* Desktop: 2-column grid for the four insight cards */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 mb-4">
         <ThisWeekSection schedule={schedule} todayKey={todayKey} ritualWeekHistory={ritualWeekHistory} />

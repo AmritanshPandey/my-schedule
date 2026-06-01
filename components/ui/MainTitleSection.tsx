@@ -100,7 +100,7 @@ export function CtaActionButton({
     <button
       type="button"
       onClick={onClick}
-      className="inline-flex items-center gap-2 rounded-full border-[1.5px] border-neutral-200 bg-white px-4 min-h-[44px] py-[10px] text-[13px] font-bold tracking-[-0.15px] text-neutral-700 transition-colors hover:bg-neutral-100 active:scale-[0.97] dark:border-white/10 dark:bg-neutral-900 dark:text-neutral-400 dark:hover:bg-white/[0.07]"
+      className="inline-flex items-center gap-2 rounded-full border-[1.5px] border-neutral-200 bg-white px-4 min-h-[44px] py-[10px] text-[13px] font-bold text-neutral-700 transition-colors hover:bg-neutral-100 active:scale-[0.97] dark:border-white/15 dark:bg-neutral-900 dark:text-neutral-300 dark:hover:bg-neutral-800"
     >
       {icon}
       <span>{label}</span>
@@ -125,8 +125,8 @@ function MainTitleSectionInner({
 
   return (
     <div className={className}>
-      <div className="flex items-center justify-between gap-3">
-        <div className="min-w-0">
+      <div className="flex flex-row items-center justify-between gap-3">
+        <div className="min-w-0 flex-1">
           {label && <Eyebrow className="mb-2">{label}</Eyebrow>}
           <div className="flex items-baseline gap-[9px]">
             <PageTitle

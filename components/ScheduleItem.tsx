@@ -11,6 +11,7 @@ export interface ScheduleEntry {
   id: string;
   time?: string;
   task: string;
+  info?: string;
   note?: string;
   meta?: MetaField[];
   date?: string;

@@ -175,7 +175,6 @@ export default function StrategyPdfReader({ pdfData, pdfUrl, onPageChange }: Str
                     width={pageWidth}
                     renderTextLayer={false}
                     renderAnnotationLayer={false}
-                    className="shadow-[0_2px_24px_rgba(0,0,0,0.5)]"
                   />
                 </div>
               ))}

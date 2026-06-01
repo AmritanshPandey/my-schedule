@@ -40,7 +40,7 @@ interface WeekGridProps {
   onCalendarViewChange: (v: CalendarView) => void;
   onCustomDaysChange: (days: DayKey[]) => void;
   onEditTask: (task: Task) => void;
-  onToggleTaskComplete: (taskId: string, allSubtaskIds: string[]) => void;
+  onToggleTaskComplete: (taskId: string, allSubtaskIds: string[], day: DayKey) => void;
   onInlineAdd: (data: TaskSaveData) => void;
 }
 
@@ -159,7 +159,7 @@ export function WeekGrid({
                 }}
                 className={`rounded-md px-2.5 py-1 text-[11px] font-semibold transition-all ${
                   calendarView === v
-                    ? "bg-white text-neutral-900 shadow-sm dark:bg-neutral-800 dark:text-white"
+                    ? "bg-white text-neutral-900 dark:bg-neutral-800 dark:text-white"
                     : "text-neutral-400 hover:text-neutral-700 dark:text-neutral-500 dark:hover:text-neutral-200"
                 }`}
               >
@@ -205,7 +205,7 @@ export function WeekGrid({
               animate={{ opacity: 1, y: 0 }}
               exit={{ opacity: 0, y: -6 }}
               transition={{ duration: 0.15, ease: [0.22, 1, 0.36, 1] }}
-              className="absolute left-0 right-0 top-full border-b border-neutral-200 bg-white px-4 py-3 shadow-md dark:border-white/[0.08] dark:bg-neutral-900"
+              className="absolute left-0 right-0 top-full border-b border-neutral-200 bg-white px-4 py-3 dark:border-white/[0.08] dark:bg-neutral-900"
             >
               <p className="mb-2 text-[10px] font-semibold uppercase tracking-wider text-neutral-400 dark:text-neutral-500">
                 Pick days · {customDays.length} selected
@@ -285,7 +285,7 @@ export function WeekGrid({
                       key={task.id}
                       task={task}
                       plan={plansById.get(task.planId) ?? null}
-                      onToggleComplete={onToggleTaskComplete}
+                      onToggleComplete={(id, subs) => onToggleTaskComplete(id, subs, day)}
                       onEdit={onEditTask}
                     />
                   ))}

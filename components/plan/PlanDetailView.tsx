@@ -43,6 +43,7 @@ import type {
   DayKey,
   GoalDirection,
   MetricEntry,
+  PlanCoachMessage,
 } from "@/lib/useScheduleDB";
 import { DAYS } from "@/lib/useScheduleDB";
 import { timelineCardStyles } from "@/lib/colorSystem";
@@ -53,16 +54,15 @@ import { InternalSectionTitle, SectionIconButton } from "@/components/ui/Interna
 import { TrackerTabs } from "@/components/ui/TrackerTabs";
 import AccuracyCalendar from "@/components/plan/AccuracyCalendar";
 import {
-  streamGenerateTasks,
   parseGeneratedTasks,
   type AIGeneratedTask,
-  streamGenerateMilestones,
   parseGeneratedMilestones,
   type AIGeneratedMilestone,
-  streamGenerateMilestoneTasks,
 } from "@/lib/aiActions";
 import { streamOllamaChat, parseAIAction, PLAN_COACH_PROMPT, buildCoachContext } from "@/lib/ai";
+import { useAIActions } from "@/lib/ai/useAIActions";
 import { getCoachSkillPrompt, detectCoachSkill, SKILL_LABELS } from "@/lib/coachSkills";
+import { AI_ENABLED } from "@/lib/featureFlags";
 import AIActionSheet, { type ResultItem } from "@/components/ai/AIActionSheet";
 import { detectMeasurableGoal, type MeasurableGoal } from "@/lib/milestoneIntelligence";
 import { uid } from "@/lib/taskMutations";
@@ -215,7 +215,8 @@ interface PlanDetailViewProps {
     title: string,
     unit: string,
     goalDirection: GoalDirection,
-    id?: string
+    id?: string,
+    goalValue?: number
   ) => void;
   onUpdateTracker: (
     trackerId: string,
@@ -235,6 +236,7 @@ interface PlanDetailViewProps {
   ollamaModel?: string;
   onAddGeneratedTasks?: (tasks: AIGeneratedTask[], planId: string, milestoneId?: string) => void;
   onLinkTrackerToMilestone?: (milestoneId: string, trackerId: string) => void;
+  onUpdateCoachMessages?: (planId: string, messages: PlanCoachMessage[]) => void;
 }
 
 // ── Component ─────────────────────────────────────────────────────────────────
@@ -259,9 +261,13 @@ export default function PlanDetailView({
   ollamaModel,
   onAddGeneratedTasks,
   onLinkTrackerToMilestone,
+  onUpdateCoachMessages,
 }: PlanDetailViewProps) {
   // ── Tab state ───────────────────────────────────────────────────────────
   const [planTab, setPlanTab] = useState<"planning" | "roadmap" | "strategy">("planning");
+
+  // ── Unified AI actions (routes to Ollama or embedded automatically) ─────
+  const ai = useAIActions(ollamaUrl, ollamaModel);
 
   // ── AI task generation state ────────────────────────────────────────────
   const [genSheetOpen, setGenSheetOpen] = useState(false);
@@ -269,12 +275,8 @@ export default function PlanDetailView({
   const parsedTasksRef = useRef<Record<string, AIGeneratedTask>>({});
 
   async function* genTasksStream(goal: string, picks: string[]): AsyncGenerator<string> {
-    if (!ollamaUrl || !ollamaModel) return;
     const contextHints = [goal.trim(), ...picks].filter(Boolean).join(". ");
-    yield* streamGenerateTasks(ollamaUrl, ollamaModel, {
-      title: plan.title,
-      description: contextHints || plan.description,
-    });
+    yield* ai.streamTasks(plan.title, contextHints || plan.description);
   }
 
   function parseTaskResults(raw: string): ResultItem[] {
@@ -302,10 +304,8 @@ export default function PlanDetailView({
 
   // Milestone-scoped task generation
   async function* genMilestoneTasksStream(_goal: string, _picks: string[]): AsyncGenerator<string> {
-    if (!ollamaUrl || !ollamaModel || !postMilestoneContext) return;
-    yield* streamGenerateMilestoneTasks(
-      ollamaUrl,
-      ollamaModel,
+    if (!postMilestoneContext) return;
+    yield* ai.streamMilestoneTasks(
       { title: postMilestoneContext.title, description: postMilestoneContext.description },
       { title: plan.title, description: plan.description },
     );
@@ -354,6 +354,7 @@ export default function PlanDetailView({
   const [addingTracker, setAddingTracker] = useState(false);
   const [newTrackerTitle, setNewTrackerTitle] = useState("");
   const [newTrackerUnit, setNewTrackerUnit] = useState("");
+  const [newTrackerGoalValue, setNewTrackerGoalValue] = useState("");
   const [newTrackerGoalDirection, setNewTrackerGoalDirection] =
     useState<GoalDirection>("increase_good");
 
@@ -366,17 +367,16 @@ export default function PlanDetailView({
   const [editingMilestone, setEditingMilestone] = useState<Milestone | null>(null);
 
   // ── AI Coach state ──────────────────────────────────────────────────────
-  type ChatMessage = {
-    role: "user" | "assistant";
-    content: string;
-    type?: "confirmation";
-    suggestedMilestones?: AIGeneratedMilestone[];
+  type ChatMessage = PlanCoachMessage;
+  const initialCoachMessages = (targetPlan: Plan): ChatMessage[] => {
+    if (targetPlan.coachMessages && targetPlan.coachMessages.length > 0) {
+      return targetPlan.coachMessages;
+    }
+    return ai.hasOllama
+      ? [{ role: "assistant", content: `I'm here to help you build out "${targetPlan.title}". What's your main goal for this plan?` }]
+      : [];
   };
-  const [coachMessages, setCoachMessages] = useState<ChatMessage[]>(() =>
-    ollamaUrl && ollamaModel
-      ? [{ role: "assistant" as const, content: `I'm here to help you build out "${plan.title}". What's your main goal for this plan?` }]
-      : []
-  );
+  const [coachMessages, setCoachMessages] = useState<ChatMessage[]>(() => initialCoachMessages(plan));
   const [coachInput, setCoachInput] = useState("");
   const [coachStreaming, setCoachStreaming] = useState(false);
   const [milestonesGenerating, setMilestonesGenerating] = useState(false);
@@ -399,9 +399,13 @@ export default function PlanDetailView({
   const parsedMilestoneTasksRef = useRef<Record<string, AIGeneratedTask>>({});
   const chatEndRef = useRef<HTMLDivElement>(null);
   const coachAbortRef = useRef<AbortController | null>(null);
+  const coachPersistTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
-    return () => { coachAbortRef.current?.abort(); };
+    return () => {
+      coachAbortRef.current?.abort();
+      if (coachPersistTimerRef.current) clearTimeout(coachPersistTimerRef.current);
+    };
   }, []);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
@@ -458,10 +462,28 @@ export default function PlanDetailView({
 
   // Greet when Ollama becomes available mid-session (was unconfigured at mount)
   useEffect(() => {
-    if (ollamaUrl && ollamaModel && coachMessages.length === 0) {
+    if (ai.hasOllama && coachMessages.length === 0) {
       setCoachMessages([{ role: "assistant", content: `I'm here to help you build out "${plan.title}". What's your main goal for this plan?` }]);
     }
   }, [ollamaUrl, ollamaModel]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  useEffect(() => {
+    setCoachMessages(initialCoachMessages(plan));
+    setAcceptedMilestoneIds(new Set());
+    setPostMilestoneContext(null);
+  }, [plan.id]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  useEffect(() => {
+    if (!onUpdateCoachMessages) return;
+    if (coachPersistTimerRef.current) clearTimeout(coachPersistTimerRef.current);
+    const messagesToPersist = coachMessages.filter((msg) => msg.content.trim().length > 0);
+    coachPersistTimerRef.current = setTimeout(() => {
+      onUpdateCoachMessages(plan.id, messagesToPersist);
+    }, 300);
+    return () => {
+      if (coachPersistTimerRef.current) clearTimeout(coachPersistTimerRef.current);
+    };
+  }, [coachMessages, plan.id]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const roadmapEndDate = planMilestones[planMilestones.length - 1]?.plannedEndDate ?? plan.endDate;
   const dateRange = plan.startDate && roadmapEndDate
@@ -473,9 +495,11 @@ export default function PlanDetailView({
   function handleAddTracker() {
     const title = newTrackerTitle.trim();
     if (!title) return;
-    onAddTracker(plan.id, title, newTrackerUnit.trim(), newTrackerGoalDirection);
+    const goalValue = newTrackerGoalValue.trim() ? Number(newTrackerGoalValue) : undefined;
+    onAddTracker(plan.id, title, newTrackerUnit.trim(), newTrackerGoalDirection, undefined, Number.isFinite(goalValue) ? goalValue : undefined);
     setNewTrackerTitle("");
     setNewTrackerUnit("");
+    setNewTrackerGoalValue("");
     setNewTrackerGoalDirection("increase_good");
     setAddingTracker(false);
   }
@@ -518,7 +542,7 @@ export default function PlanDetailView({
   // ── AI Coach handlers ───────────────────────────────────────────────────
 
   async function handleSendCoachMessage() {
-    if (!ollamaUrl || !ollamaModel || !coachInput.trim() || coachStreaming) return;
+    if (!ai.hasOllama || !coachInput.trim() || coachStreaming) return;
     const userMsg: ChatMessage = { role: "user", content: coachInput.trim() };
     const newMessages = [...coachMessages, userMsg];
     setCoachMessages(newMessages);
@@ -546,7 +570,7 @@ export default function PlanDetailView({
           ? m.content.replace(/```json[\s\S]*?```/g, "").trim()
           : m.content,
       }));
-      for await (const chunk of streamOllamaChat(ollamaUrl, ollamaModel, history, systemPrompt, false, controller.signal)) {
+      for await (const chunk of streamOllamaChat(ollamaUrl ?? "", ollamaModel ?? "", history, systemPrompt, false, controller.signal)) {
         accumulated += chunk;
         setCoachMessages((prev) => {
           const updated = [...prev];
@@ -580,7 +604,7 @@ export default function PlanDetailView({
   }
 
   async function handleAutoGenerateMilestones() {
-    if (!ollamaUrl || !ollamaModel || milestonesGenerating) return;
+    if (!ai.available || milestonesGenerating) return;
 
     coachAbortRef.current?.abort();
     const controller = new AbortController();
@@ -591,7 +615,7 @@ export default function PlanDetailView({
     setCoachMessages((prev) => [...prev, { role: "assistant", content: "Generating milestones…" }]);
     let accumulated = "";
     try {
-      for await (const chunk of streamGenerateMilestones(ollamaUrl, ollamaModel, {
+      for await (const chunk of ai.streamMilestones({
         title: plan.title, description: plan.description,
         startDate: plan.startDate, endDate: plan.endDate,
       }, controller.signal)) {
@@ -607,14 +631,13 @@ export default function PlanDetailView({
       });
     } catch (err) {
       if (err instanceof Error && err.name === "AbortError") {
-        // Remove the "Generating milestones…" placeholder — stream was cancelled
         setCoachMessages((prev) =>
           prev.filter((m, i) => !(i === msgIdx && m.content === "Generating milestones…"))
         );
       } else {
         setCoachMessages((prev) => {
           const updated = [...prev];
-          updated[msgIdx] = { role: "assistant", content: "Couldn't reach AI. Is Ollama running?" };
+          updated[msgIdx] = { role: "assistant", content: "Couldn't generate milestones. Try again." };
           return updated;
         });
       }
@@ -1217,7 +1240,7 @@ export default function PlanDetailView({
   // ── AI Coach tab ─────────────────────────────────────────────────────────
 
   function renderStrategyTab() {
-    const noOllama = !ollamaUrl || !ollamaModel;
+    const noOllama = !ai.hasOllama;
     return (
       <motion.div
         key="strategy"
@@ -1225,7 +1248,7 @@ export default function PlanDetailView({
         animate={{ opacity: 1, y: 0 }}
         exit={{ opacity: 0, y: -6 }}
         transition={{ duration: 0.22, ease: "easeOut" }}
-        className="flex flex-col"
+        className="mx-4 mt-6 flex flex-col lg:mx-8"
         style={{ height: "clamp(360px, calc(100vh - 300px), 640px)" }}
       >
         {noOllama ? (
@@ -1246,14 +1269,13 @@ export default function PlanDetailView({
                 type="button"
                 onClick={handleAutoGenerateMilestones}
                 disabled={milestonesGenerating || coachStreaming}
-                className="group relative overflow-hidden rounded-full border border-violet-500/40 bg-violet-500/[0.07] px-3 py-1.5 shadow-[0_0_8px_rgba(139,92,246,0.18)] transition-all active:scale-95 hover:border-violet-400/60 hover:shadow-[0_0_14px_rgba(139,92,246,0.35)] disabled:opacity-50 disabled:shadow-none dark:border-violet-500/30 dark:bg-violet-500/[0.06]"
+                className="group relative inline-flex rounded-full p-[1px] bg-gradient-to-r from-fuchsia-500 via-pink-500 to-orange-400 transition-all hover:opacity-95 active:scale-95 disabled:opacity-60"
               >
-                <div className="pointer-events-none absolute inset-0 -translate-x-full skew-x-[-15deg] bg-gradient-to-r from-transparent via-white/12 to-transparent transition-transform duration-700 group-hover:translate-x-[250%]" />
-                <span className="relative flex items-center gap-1.5 text-[12px] font-semibold">
-                  <IconSparkles size={13} strokeWidth={2} className={milestonesGenerating ? "animate-pulse text-violet-400" : "text-violet-400"} />
-                  <span className="bg-gradient-to-r from-violet-400 to-pink-400 bg-clip-text text-transparent">
-                    {milestonesGenerating ? "Generating…" : "Auto-generate milestones"}
+                <span className="relative inline-flex items-center gap-2 overflow-hidden rounded-full bg-white/95 px-3 py-2 text-[12px] font-semibold text-neutral-950 shadow-sm shadow-black/10 transition-colors duration-200 hover:bg-white dark:bg-neutral-950/95 dark:text-white dark:shadow-black/30">
+                  <span className="inline-flex h-8 w-8 items-center justify-center rounded-full bg-gradient-to-r from-fuchsia-500 via-pink-500 to-orange-400 text-white shadow-sm shadow-pink-500/30">
+                    <IconSparkles size={14} strokeWidth={2} className={milestonesGenerating ? "animate-pulse" : ""} />
                   </span>
+                  {milestonesGenerating ? "Generating…" : "Auto-generate milestones"}
                 </span>
               </button>
               {(() => {
@@ -1570,7 +1592,7 @@ export default function PlanDetailView({
       >
 
         {/* AI sheets — rendered as overlays, position in tree doesn't matter */}
-        {ollamaUrl && ollamaModel && (
+        {ai.available && (
           <AIActionSheet
             open={genSheetOpen}
             onClose={() => setGenSheetOpen(false)}
@@ -1593,7 +1615,7 @@ export default function PlanDetailView({
             onAdd={commitTasks}
           />
         )}
-        {ollamaUrl && ollamaModel && postMilestoneContext && (
+        {ai.available && postMilestoneContext && (
           <AIActionSheet
             open={milestoneGenSheetOpen}
             onClose={() => setMilestoneGenSheetOpen(false)}
@@ -1615,32 +1637,18 @@ export default function PlanDetailView({
           />
         )}
 
-        {/* 2-column grid on desktop: left = tasks + tracking, right = accuracy */}
-        <div className="mt-8 lg:grid lg:grid-cols-2 lg:gap-6 lg:px-4">
+        {/* Single-column stack keeps all cards the same width. */}
+        <div className="mt-6 flex flex-col gap-8">
 
-          {/* ── LEFT column: Planned Tasks + Progress Tracking ── */}
           <div className="flex flex-col gap-8">
 
             {/* Planned Tasks */}
-            <section className="px-4 lg:px-0">
+            <section className="px-4 lg:px-8">
               <InternalSectionTitle
                 title="Planned Tasks"
                 className="mb-4"
                 actions={
                   <div className="flex items-center gap-1">
-                    {ollamaUrl && ollamaModel && onAddGeneratedTasks && (
-                      <button
-                        type="button"
-                        onClick={() => setGenSheetOpen(true)}
-                        className="group relative hidden overflow-hidden rounded-full border border-violet-500/40 bg-violet-500/[0.07] px-3 py-1.5 shadow-[0_0_8px_rgba(139,92,246,0.18)] transition-all active:scale-95 hover:border-violet-400/60 hover:shadow-[0_0_14px_rgba(139,92,246,0.35)] lg:flex dark:border-violet-500/30 dark:bg-violet-500/[0.06]"
-                      >
-                        <div className="pointer-events-none absolute inset-0 -translate-x-full skew-x-[-15deg] bg-gradient-to-r from-transparent via-white/12 to-transparent transition-transform duration-700 group-hover:translate-x-[250%]" />
-                        <span className="relative flex items-center gap-1.5 text-[12px] font-semibold">
-                          <IconSparkles size={13} strokeWidth={2} className="text-violet-400" />
-                          <span className="bg-gradient-to-r from-violet-400 to-pink-400 bg-clip-text text-transparent">Plan with AI</span>
-                        </span>
-                      </button>
-                    )}
                     <SectionIconButton
                       icon={<IconPlus size={20} strokeWidth={2} />}
                       onClick={() => onAddTask(plan.id)}
@@ -1666,7 +1674,7 @@ export default function PlanDetailView({
             </section>
 
             {/* Progress Tracking */}
-            <section className="px-4 lg:px-0">
+            <section className="px-4 lg:px-8">
               <InternalSectionTitle
                 title="Progress Tracking"
                 className="mb-4"
@@ -1691,7 +1699,7 @@ export default function PlanDetailView({
               />
 
               {trackers.length === 0 ? (
-                <div className="rounded-[24px] border border-dashed border-neutral-200 py-10 text-center dark:border-white/[0.08]">
+                <div className="rounded-[24px] border border-neutral-200 bg-white py-10 text-center dark:border-white/[0.08] dark:bg-neutral-900">
                   <p className="text-[14px] font-medium text-neutral-400 dark:text-neutral-500">
                     No progress trackers yet.
                   </p>
@@ -1722,9 +1730,9 @@ export default function PlanDetailView({
 
           </div>
 
-          {/* ── RIGHT column: Accuracy Calendar ── */}
-          <div className="mt-8 lg:mt-0">
-            <section className="px-4 lg:sticky lg:top-4 lg:px-0">
+          {/* Accuracy Calendar */}
+          <div>
+            <section className="px-4 lg:px-8">
               <AccuracyCalendar
                 planId={plan.id}
                 activities={schedule.activities}
@@ -1754,10 +1762,10 @@ export default function PlanDetailView({
         transition={{ duration: 0.2, ease: "easeOut" }}
       >
         {/* Overview: Overall Progress + Stats grid */}
-        <section className="mt-6 px-4">{renderRoadmapOverview()}</section>
+        <section className="mt-6 px-4 lg:px-8">{renderRoadmapOverview()}</section>
 
         {/* Milestones */}
-        <section className="mt-8 px-4">
+        <section className="mt-8 px-4 lg:px-8">
           <div className="mb-2 flex items-center justify-between px-1">
             <h2 className="text-[22px] font-extrabold tracking-[-0.7px] text-neutral-950 dark:text-white">
               Milestones
@@ -1806,7 +1814,7 @@ export default function PlanDetailView({
   return (
     <div className="pb-32">
       {/* Plan info */}
-      <div className="px-4 pt-6 space-y-2">
+      <div className="px-4 pt-6 space-y-2 lg:px-8">
         <h1 className="text-[32px] font-bold leading-tight text-neutral-950 dark:text-white">
           {plan.title}
         </h1>
@@ -1823,7 +1831,7 @@ export default function PlanDetailView({
       </div>
 
       {/* Segmented tab switcher — mobile: 2 tabs, desktop: 3 tabs */}
-      <div className="mx-4 mt-6">
+      <div className="mx-4 mt-6 lg:mx-8">
 
         {/* ── Mobile: Planning + Roadmap only ─────────────────────────────── */}
         <div className="relative flex rounded-2xl bg-neutral-100 dark:bg-white/[0.06] p-1 lg:hidden">
@@ -1847,26 +1855,36 @@ export default function PlanDetailView({
           ))}
         </div>
 
-        {/* ── Desktop: Planning + Roadmap + Coach ─────────────────────────── */}
+        {/* ── Desktop: Planning + Roadmap (+ Coach when AI enabled) ────────── */}
         <div className="relative hidden rounded-2xl bg-neutral-100 dark:bg-white/[0.06] p-1 lg:flex">
-          <motion.div
-            className="absolute rounded-xl border border-neutral-200 bg-white dark:border-white/[0.08] dark:bg-neutral-800"
-            style={{ top: "4px", bottom: "4px", left: "4px", width: "calc((100% - 8px) / 3)", willChange: "transform" }}
-            animate={{ x: `${(planTab === "planning" ? 0 : planTab === "roadmap" ? 1 : 2) * 100}%` }}
-            transition={{ type: "spring", stiffness: 400, damping: 30, mass: 0.8 }}
-          />
-          {(["planning", "roadmap", "strategy"] as const).map((tab) => (
-            <button
-              key={tab}
-              type="button"
-              onClick={() => setPlanTab(tab)}
-              className={`relative flex-1 py-2.5 rounded-xl text-[13px] font-semibold transition-colors duration-200 z-10 capitalize ${
-                planTab === tab ? "text-neutral-950 dark:text-white" : "text-neutral-500 dark:text-neutral-400"
-              }`}
-            >
-              {tab === "planning" ? "Tasks" : tab === "roadmap" ? "Milestones" : "Coach"}
-            </button>
-          ))}
+          {(() => {
+            const desktopTabs = (AI_ENABLED
+              ? ["planning", "roadmap", "strategy"]
+              : ["planning", "roadmap"]) as Array<"planning" | "roadmap" | "strategy">;
+            const activeIndex = desktopTabs.indexOf(planTab);
+            return (
+              <>
+                <motion.div
+                  className="absolute rounded-xl border border-neutral-200 bg-white dark:border-white/[0.08] dark:bg-neutral-800"
+                  style={{ top: "4px", bottom: "4px", left: "4px", width: `calc((100% - 8px) / ${desktopTabs.length})`, willChange: "transform" }}
+                  animate={{ x: `${Math.max(activeIndex, 0) * 100}%` }}
+                  transition={{ type: "spring", stiffness: 400, damping: 30, mass: 0.8 }}
+                />
+                {desktopTabs.map((tab) => (
+                  <button
+                    key={tab}
+                    type="button"
+                    onClick={() => setPlanTab(tab)}
+                    className={`relative flex-1 py-2.5 rounded-xl text-[13px] font-semibold transition-colors duration-200 z-10 capitalize ${
+                      planTab === tab ? "text-neutral-950 dark:text-white" : "text-neutral-500 dark:text-neutral-400"
+                    }`}
+                  >
+                    {tab === "planning" ? "Tasks" : tab === "roadmap" ? "Milestones" : "Coach"}
+                  </button>
+                ))}
+              </>
+            );
+          })()}
         </div>
 
       </div>
@@ -1877,7 +1895,9 @@ export default function PlanDetailView({
           ? renderPlanningTab()
           : planTab === "roadmap"
           ? renderRoadmapTab()
-          : renderStrategyTab()}
+          : AI_ENABLED
+          ? renderStrategyTab()
+          : renderPlanningTab()}
       </AnimatePresence>
 
       {/* Milestone sheet */}
@@ -1902,6 +1922,7 @@ export default function PlanDetailView({
           setAddingTracker(false);
           setNewTrackerTitle("");
           setNewTrackerUnit("");
+          setNewTrackerGoalValue("");
           setNewTrackerGoalDirection("increase_good");
         }}
         maxHeight="80vh"
@@ -1914,6 +1935,7 @@ export default function PlanDetailView({
               setAddingTracker(false);
               setNewTrackerTitle("");
               setNewTrackerUnit("");
+              setNewTrackerGoalValue("");
               setNewTrackerGoalDirection("increase_good");
             }}
           />
@@ -1931,6 +1953,13 @@ export default function PlanDetailView({
               value={newTrackerUnit}
               onChange={(e) => setNewTrackerUnit(e.target.value)}
               placeholder="Unit (e.g. kg, km, hr) — optional"
+            />
+            <Input
+              type="number"
+              inputMode="decimal"
+              value={newTrackerGoalValue}
+              onChange={(e) => setNewTrackerGoalValue(e.target.value)}
+              placeholder={`Goal value${newTrackerUnit.trim() ? ` (${newTrackerUnit.trim()})` : ""} — optional`}
             />
           </div>
           <GoalDirectionPicker

@@ -3,6 +3,15 @@
 import { useEffect, useRef, useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import {
+  DndContext,
+  DragEndEvent,
+  PointerSensor,
+  useSensor,
+  useSensors,
+} from "@dnd-kit/core";
+import { arrayMove, SortableContext, useSortable, verticalListSortingStrategy } from "@dnd-kit/sortable";
+import { CSS } from "@dnd-kit/utilities";
+import {
   IconArrowLeft,
   IconCheck,
   IconCopy,
@@ -14,6 +23,10 @@ import {
 } from "@tabler/icons-react";
 import { streamGenerateSubtasks, parseGeneratedSubtasks } from "@/lib/aiActions";
 import AIActionSheet, { type ResultItem } from "@/components/ai/AIActionSheet";
+import { useAIRuntime } from "@/lib/ai/useAIRuntime";
+import { resolveAIRoute } from "@/lib/ai/runtime";
+import { AI_ENABLED } from "@/lib/featureFlags";
+import { getDeviceCapabilities } from "@/lib/performance/detectLowEndDevice";
 import BottomSheet from "@/components/ui/BottomSheet";
 import SheetHeader from "@/components/ui/SheetHeader";
 import Button from "@/components/ui/Button";
@@ -63,13 +76,15 @@ export interface TaskSheetProps {
 interface SubtaskDraft {
   id: string;
   title: string;
-  duration: string;
+  info?: string;
+  duration?: string;
 }
 
 function entryToSubtaskDraft(e: ScheduleEntry): SubtaskDraft {
   return {
     id: e.id,
     title: e.task,
+    info: e.info ?? "",
     duration: e.duration ?? "",
   };
 }
@@ -78,7 +93,8 @@ function subtaskDraftToEntry(d: SubtaskDraft): ScheduleEntry {
   return {
     id: d.id,
     task: d.title.trim(),
-    duration: d.duration.trim() || undefined,
+    info: (d.info ?? "").trim() || undefined,
+    duration: (d.duration ?? "").trim() || undefined,
   };
 }
 
@@ -100,25 +116,47 @@ interface SubtaskRowProps {
   autoFocus?: boolean;
 }
 
-function SubtaskRow({ draft, onChange, onDelete, autoFocus }: SubtaskRowProps) {
+function SortableSubtaskRow({ draft, onChange, onDelete, autoFocus }: SubtaskRowProps) {
+  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: draft.id });
+
   return (
-    <div className="flex items-center gap-2 group">
-      <IconGripVertical
-        size={14}
-        className="shrink-0 text-neutral-300 dark:text-white/20"
-      />
+    <div
+      ref={setNodeRef}
+      style={{
+        transform: CSS.Transform.toString(transform),
+        transition,
+        opacity: isDragging ? 0.7 : 1,
+      }}
+      className="flex items-center gap-2 group"
+    >
+      <button
+        type="button"
+        {...attributes}
+        {...listeners}
+        className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl text-neutral-300 transition-colors hover:text-neutral-500 dark:text-white/20 dark:hover:text-white"
+      >
+        <IconGripVertical size={14} />
+      </button>
+      <div className="min-w-0 flex-1 space-y-1">
+        <input
+          autoFocus={autoFocus}
+          value={draft.title ?? ""}
+          onChange={(e) => onChange({ ...draft, title: e.target.value })}
+          placeholder="Name"
+          className="h-10 w-full rounded-xl border border-neutral-200 bg-neutral-50 px-3 text-[14px] font-medium text-neutral-900 outline-none placeholder:text-neutral-400 transition-colors focus:border-neutral-300 focus:bg-white dark:border-white/10 dark:bg-white/[0.04] dark:text-white dark:placeholder:text-neutral-500 dark:focus:border-white/20 dark:focus:bg-white/[0.07]"
+        />
+        <input
+          value={draft.info ?? ""}
+          onChange={(e) => onChange({ ...draft, info: e.target.value })}
+          placeholder="Info"
+          className="h-8 w-full rounded-xl border border-neutral-200 bg-neutral-50 px-3 text-[13px] text-neutral-500 outline-none placeholder:text-neutral-400 transition-colors focus:border-neutral-300 focus:bg-white dark:border-white/10 dark:bg-white/[0.04] dark:text-neutral-400 dark:placeholder:text-neutral-500 dark:focus:border-white/20 dark:focus:bg-white/[0.07]"
+        />
+      </div>
       <input
-        autoFocus={autoFocus}
-        value={draft.title}
-        onChange={(e) => onChange({ ...draft, title: e.target.value })}
-        placeholder="Subtask title"
-        className="h-10 flex-1 min-w-0 rounded-xl border border-neutral-200 bg-neutral-50 px-3 text-[14px] font-medium text-neutral-900 outline-none placeholder:text-neutral-400 transition-colors focus:border-neutral-300 focus:bg-white dark:border-white/10 dark:bg-white/[0.04] dark:text-white dark:placeholder:text-neutral-500 dark:focus:border-white/20 dark:focus:bg-white/[0.07]"
-      />
-      <input
-        value={draft.duration}
+        value={draft.duration ?? ""}
         onChange={(e) => onChange({ ...draft, duration: e.target.value })}
         placeholder="5min"
-        className="h-10 w-[72px] shrink-0 rounded-xl border border-neutral-200 bg-neutral-50 px-3 text-center text-[13px] font-semibold text-neutral-700 outline-none placeholder:text-neutral-400 transition-colors focus:border-neutral-300 focus:bg-white dark:border-white/10 dark:bg-white/[0.04] dark:text-neutral-300 dark:placeholder:text-neutral-600 dark:focus:border-white/20 dark:focus:bg-white/[0.07]"
+        className="h-10 w-[72px] shrink-0 rounded-xl border border-neutral-200 bg-neutral-50 px-3 text-center text-[13px] font-semibold text-sky-700 outline-none placeholder:text-neutral-400 transition-colors focus:border-neutral-300 focus:bg-white dark:border-white/10 dark:bg-white/[0.04] dark:text-sky-300 dark:placeholder:text-neutral-500 dark:focus:border-white/20 dark:focus:bg-white/[0.07]"
       />
       <button
         type="button"
@@ -148,6 +186,18 @@ export function TaskSheet({
   onSave,
   onDuplicate,
 }: TaskSheetProps) {
+  // ── AI routing ────────────────────────────────────────────────────────────
+  const aiRuntime = useAIRuntime();
+  const { tier, isDesktop } = getDeviceCapabilities();
+  const aiRoute = resolveAIRoute("generate-subtasks", {
+    tier,
+    isDesktop,
+    ollamaConnected: !!(ollamaUrl && ollamaModel),
+    aiEnabled: aiRuntime.enabled,
+  });
+  // AI is globally hidden for now — gate the "Expand" affordance behind the flag.
+  const canExpand = AI_ENABLED && aiRoute.backend !== "none";
+
   // ── Form state ─────────────────────────────────────────────────────────────
   const [planId, setPlanId] = useState("");
   const [expandSheetOpen, setExpandSheetOpen] = useState(false);
@@ -204,7 +254,7 @@ export function TaskSheet({
 
   // ── Subtask management ─────────────────────────────────────────────────────
   function addSubtask() {
-    setSubtasks((prev) => [...prev, { id: uid(), title: "", duration: "" }]);
+    setSubtasks((prev) => [...prev, { id: uid(), title: "", info: "", duration: "" }]);
     setFocusNewSubtask(true);
   }
 
@@ -216,15 +266,34 @@ export function TaskSheet({
     setSubtasks((prev) => prev.filter((s) => s.id !== id));
   }
 
+  const subtaskSensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 8 } }));
+
+  function handleSubtasksDragEnd(event: DragEndEvent) {
+    const { active, over } = event;
+    if (!over || active.id === over.id) return;
+
+    setSubtasks((prev) => {
+      const oldIndex = prev.findIndex((s) => s.id === active.id);
+      const newIndex = prev.findIndex((s) => s.id === over.id);
+      if (oldIndex === -1 || newIndex === -1) return prev;
+      return arrayMove(prev, oldIndex, newIndex);
+    });
+  }
+
   async function* subtaskStream(goal: string, picks: string[]): AsyncGenerator<string> {
-    if (!ollamaUrl || !ollamaModel || !title.trim()) return;
+    if (!title.trim()) return;
     const hints = [goal.trim(), ...picks].filter(Boolean).join(". ");
-    yield* streamGenerateSubtasks(
-      ollamaUrl,
-      ollamaModel,
-      hints ? `${title.trim()} — ${hints}` : title.trim(),
-      selectedPlan?.title,
-    );
+    const taskLabel = hints ? `${title.trim()} — ${hints}` : title.trim();
+
+    if (aiRoute.backend === "ollama" && ollamaUrl && ollamaModel) {
+      yield* streamGenerateSubtasks(ollamaUrl, ollamaModel, taskLabel, selectedPlan?.title);
+      return;
+    }
+
+    if (aiRoute.backend === "transformers") {
+      const results = await aiRuntime.generateSubtasks(taskLabel, selectedPlan?.title);
+      yield JSON.stringify(results);
+    }
   }
 
   function parseSubtaskResults(raw: string): ResultItem[] {
@@ -234,7 +303,7 @@ export function TaskSheet({
   function commitSubtasks(items: ResultItem[]) {
     setSubtasks((prev) => [
       ...prev,
-      ...items.map((r) => ({ id: uid(), title: r.label, duration: "" })),
+      ...items.map((r) => ({ id: uid(), title: r.label, info: "", duration: "" })),
     ]);
   }
 
@@ -460,7 +529,7 @@ export function TaskSheet({
                     <p className={SECTION_LABEL}>
                       {taskType === "session" ? "Session Steps" : "Subtasks"}
                     </p>
-                    {ollamaUrl && ollamaModel && title.trim().length > 0 && (
+                    {canExpand && title.trim().length > 0 && (
                       <button
                         type="button"
                         onClick={() => setExpandSheetOpen(true)}
@@ -472,25 +541,27 @@ export function TaskSheet({
                     )}
                   </div>
 
-                  <AnimatePresence initial={false}>
-                    {subtasks.map((s, i) => (
-                      <motion.div
-                        key={s.id}
-                        initial={{ opacity: 0, height: 0 }}
-                        animate={{ opacity: 1, height: "auto" }}
-                        exit={{ opacity: 0, height: 0 }}
-                        transition={{ duration: 0.18, ease: "easeInOut" }}
-                        style={{ overflow: "hidden" }}
-                      >
-                        <SubtaskRow
-                          draft={s}
-                          autoFocus={focusNewSubtask && i === subtasks.length - 1}
-                          onChange={(updated) => updateSubtask(s.id, updated)}
-                          onDelete={() => removeSubtask(s.id)}
-                        />
-                      </motion.div>
-                    ))}
-                  </AnimatePresence>
+                  <DndContext sensors={subtaskSensors} onDragEnd={handleSubtasksDragEnd}>
+                    <SortableContext items={subtasks.map((s) => s.id)} strategy={verticalListSortingStrategy}>
+                      {subtasks.map((s, i) => (
+                        <motion.div
+                          key={s.id}
+                          layout
+                          initial={{ opacity: 0, height: 0 }}
+                          animate={{ opacity: 1, height: "auto" }}
+                          transition={{ duration: 0.18, ease: "easeInOut" }}
+                          style={{ overflow: "hidden" }}
+                        >
+                          <SortableSubtaskRow
+                            draft={s}
+                            autoFocus={focusNewSubtask && i === subtasks.length - 1}
+                            onChange={(updated) => updateSubtask(s.id, updated)}
+                            onDelete={() => removeSubtask(s.id)}
+                          />
+                        </motion.div>
+                      ))}
+                    </SortableContext>
+                  </DndContext>
 
                   <button
                     type="button"
@@ -528,7 +599,7 @@ export function TaskSheet({
       </AnimatePresence>
 
       {/* AI expand subtasks sheet */}
-      {ollamaUrl && ollamaModel && (
+      {canExpand && (
         <AIActionSheet
           open={expandSheetOpen}
           onClose={() => setExpandSheetOpen(false)}

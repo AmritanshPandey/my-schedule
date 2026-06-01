@@ -1,6 +1,7 @@
 "use client";
 
-import { memo, useEffect, useState } from "react";
+import { memo } from "react";
+import { useNowMinutes } from "@/lib/timeline/useNowMinutes";
 
 interface CurrentTimeLayerProps {
   activeDay: string;
@@ -9,11 +10,6 @@ interface CurrentTimeLayerProps {
   timelineEndMinutes: number;
   timelineTopPadding: number;
   hourHeight: number;
-}
-
-function getCurrentMinutes(): number {
-  const now = new Date();
-  return now.getHours() * 60 + now.getMinutes();
 }
 
 /**
@@ -28,12 +24,7 @@ function CurrentTimeLayerInner({
   timelineTopPadding,
   hourHeight,
 }: CurrentTimeLayerProps) {
-  const [nowMinutes, setNowMinutes] = useState(getCurrentMinutes);
-
-  useEffect(() => {
-    const id = window.setInterval(() => setNowMinutes(getCurrentMinutes()), 30_000);
-    return () => window.clearInterval(id);
-  }, []);
+  const nowMinutes = useNowMinutes();
 
   const visible =
     activeDay === todayKey &&

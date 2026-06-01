@@ -53,7 +53,7 @@ export default function BottomNav({
   }
 
   const tabClass = (active: boolean) => `
-    flex h-[56px] w-[52px] flex-col items-center justify-center gap-[2px]
+    flex h-[56px] w-[64px] flex-col items-center justify-center gap-[2px]
     rounded-full transition-all duration-200
     ${active
       ? "bg-black/[0.05] text-neutral-950 dark:bg-white/[0.10] dark:text-white"
