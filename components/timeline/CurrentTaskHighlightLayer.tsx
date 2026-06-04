@@ -49,12 +49,12 @@ function CurrentTaskHighlightLayerInner({
     return null;
   }
 
-  const current = layouts.filter(
-    (l) =>
-      nowMinutes >= l.start &&
-      nowMinutes < l.end &&
-      resolveTaskState(l.task, l.task.subtasks?.length ?? 0) !== "completed"
-  );
+  const current = layouts.filter((l) => {
+    if (nowMinutes < l.start || nowMinutes >= l.end) return false;
+    // Resolved (completed or missed) blocks aren't "happening" — no glow.
+    const st = resolveTaskState(l.task, l.task.subtasks?.length ?? 0);
+    return st !== "completed" && st !== "missed";
+  });
 
   if (current.length === 0) return null;
 

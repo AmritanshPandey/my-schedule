@@ -1,20 +1,18 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { motion, AnimatePresence, useMotionValue, useTransform, animate as motionAnimate, type MotionValue } from "framer-motion";
 import {
-  IconArrowRight,
   IconArrowUpRight,
   IconBolt,
   IconListCheck,
-  IconBrain,
   IconCalendarEvent,
   IconCheck,
+  IconX,
   IconChevronRight,
-  IconClipboardCheck,
-  IconClipboardData,
+  IconChecklist,
   IconClipboardList,
-  IconMap2,
+  IconFlame,
   IconPlus,
   IconRepeat,
   IconTarget,
@@ -23,11 +21,10 @@ import {
   IconMinus,
   IconActivity,
 } from "@tabler/icons-react";
-import type { Schedule, DayKey, Task, Plan, ProgressTracker, RitualCompletion, Ritual } from "@/lib/useScheduleDB";
-import { isTaskCompleted } from "@/lib/taskCompletion";
+import type { Schedule, DayKey, Task, Plan, ProgressTracker } from "@/lib/useScheduleDB";
+import { isTaskCompleted, isTaskResolved } from "@/lib/taskCompletion";
 import { getPlanCardStats } from "@/lib/planInsights";
 import { accentStyles } from "@/lib/colorSystem";
-import { AI_ENABLED } from "@/lib/featureFlags";
 import ExecutionTrendCard from "@/components/ExecutionTrendCard";
 import { getTrendDirection, getTrendState, type TrendDirection, type TrendState } from "@/lib/trendUtils";
 import { localISODate, addDaysToISO } from "@/lib/dateUtils";
@@ -40,6 +37,7 @@ interface OverviewDashboardProps {
   todayKey: DayKey;
   onNavigate: (tab: number) => void;
   onMarkTaskDone: (taskId: string, subtaskIds: string[]) => void;
+  onMissedTask: (taskId: string, subtaskIds: string[]) => void;
   onOpenSubtasks?: (taskId: string) => void;
   completedRitualIds: Set<string>;
   onLogTracker: (tracker: ProgressTracker) => void;
@@ -66,56 +64,6 @@ function formatTime(t?: string): string {
   return m === 0 ? `${hour} ${ampm}` : `${hour}:${String(m).padStart(2, "0")} ${ampm}`;
 }
 
-function calcRitualStreak(
-  ritualId: string,
-  completions: RitualCompletion[],
-  ritual: Ritual,
-  todayISO: string
-): number {
-  const done = new Set(
-    completions.filter((c) => c.ritualId === ritualId).map((c) => c.date)
-  );
-  let streak = 0;
-  let cursor = addDaysToISO(todayISO, -1);
-  for (let i = 0; i < 90; i++) {
-    const dayOfWeek = new Date(cursor + "T00:00:00").getDay();
-    const scheduled =
-      !ritual.repeatDays ||
-      ritual.repeatDays.length === 0 ||
-      ritual.repeatDays.includes(["sunday","monday","tuesday","wednesday","thursday","friday","saturday"][dayOfWeek] as DayKey);
-    if (scheduled) {
-      if (done.has(cursor)) streak++;
-      else break;
-    }
-    cursor = addDaysToISO(cursor, -1);
-  }
-  return streak;
-}
-
-// ── Sparkline ─────────────────────────────────────────────────────────────────
-
-function Sparkline({ values, color }: { values: number[]; color: string }) {
-  if (values.length < 2) return <div className="h-8 w-full" />;
-  const W = 100; const H = 32;
-  const min = Math.min(...values);
-  const max = Math.max(...values);
-  const range = max - min || 1;
-  const pts = values.map((v, i) => {
-    const x = (i / (values.length - 1)) * W;
-    const y = H - ((v - min) / range) * (H - 4) - 2;
-    return `${x},${y}`;
-  });
-  const strokeMap: Record<string, string> = {
-    blue: "stroke-blue-500", emerald: "stroke-emerald-500",
-    violet: "stroke-violet-500", pink: "stroke-pink-500",
-    amber: "stroke-amber-500", cyan: "stroke-cyan-500",
-  };
-  return (
-    <svg viewBox={`0 0 ${W} ${H}`} className={`h-8 w-full ${strokeMap[color] ?? strokeMap.cyan} dark:opacity-80`} preserveAspectRatio="none">
-      <path d={`M ${pts.join(" L ")}`} fill="none" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
-    </svg>
-  );
-}
 
 // ── Trend arrow ───────────────────────────────────────────────────────────────
 // Direction = which way the metric moved; state = good/bad relative to the goal.
@@ -192,16 +140,25 @@ function SwipeableCardStack({
   plans,
   onMarkDone,
   onSkip,
+  onMissed,
   onOpenSubtasks,
 }: {
   tasks: StackTask[];
   plans: Plan[];
   onMarkDone: (task: StackTask) => void;
-  onSkip: (task: StackTask) => void;
+  onSkip: (task: StackTask) => void;      // defer — send to back of the queue
+  onMissed: (task: StackTask) => void;    // record as missed for today
   onOpenSubtasks?: (taskId: string) => void;
 }) {
   const y = useMotionValue(0);
   const [busy, setBusy] = useState(false);
+  // Synchronous lock — `busy` state updates async, so rapid taps in the same
+  // tick all see busy=false and fire multiple times (toggling a task back to
+  // incomplete). A ref flips immediately and gates every entry.
+  const lockRef = useRef(false);
+  // The card we've already committed to dismissing this gesture, so a stray
+  // re-fire can't act on whatever task slid into the front slot.
+  const committedIdRef = useRef<string | null>(null);
 
   // Drag commitment: 0 at rest → 1 once dragged a full card-height up.
   const progress = useTransform(y, [-120, 0], [1, 0]);
@@ -220,21 +177,30 @@ function SwipeableCardStack({
     : 0;
 
   async function dismiss(type: "skip" | "done") {
-    if (busy) return;
+    if (lockRef.current) return;
+    lockRef.current = true;
+    const target = front;
+    committedIdRef.current = target.id;
     setBusy(true);
     haptic(type === "done" ? "medium" : "light");
     await motionAnimate(y, -460, { duration: 0.32, ease: [0.36, 0, 0.66, -0.1] });
-    if (type === "done") onMarkDone(front);
-    else onSkip(front);
-    y.set(0);
+    if (type === "done") onMarkDone(target);
+    else onSkip(target);
+    // Skipping the only card re-queues it to itself — glide it back down rather
+    // than snapping, so the rotation reads as "it came back around".
+    if (type === "skip" && count === 1) {
+      await motionAnimate(y, 0, { type: "spring", stiffness: 320, damping: 32 });
+    } else {
+      y.set(0);
+    }
+    committedIdRef.current = null;
+    lockRef.current = false;
     setBusy(false);
   }
 
   return (
-    <div className="relative" style={{ paddingTop: padTop }}>
-      {/* Cards behind — motion-driven depth */}
-      {count >= 3 && <BackgroundCard progress={progress} depth={1} top={padTop} />}
-      {count >= 2 && <BackgroundCard progress={progress} depth={0} top={padTop} />}
+    <div className="relative pt-3">
+  
 
       {/* Front card — draggable */}
       <motion.div
@@ -263,28 +229,21 @@ function SwipeableCardStack({
             {/* Header row */}
             <div className="flex items-center justify-between mb-3">
               <div className="flex items-center gap-1.5">
-                <IconBolt size={16} strokeWidth={2.5} className="text-emerald-600 dark:text-emerald-400" />
-                <span className="text-[14px] font-bold text-emerald-600 dark:text-emerald-400">Next up</span>
+                <IconBolt size={16} strokeWidth={2} className="text-emerald-600 dark:text-emerald-400" />
+                <span className="text-[14px] font-bold text-emerald-600 dark:text-emerald-400">Current Task</span>
               </div>
-              <div className="flex items-center gap-2.5">
-                {subTotal > 0 && onOpenSubtasks && (
-                  <button
-                    type="button"
-                    onPointerDownCapture={(e) => e.stopPropagation()}
-                    onClick={(e) => { e.stopPropagation(); haptic("light"); onOpenSubtasks(front.id); }}
-                    className="inline-flex items-center gap-1.5 rounded-full border border-emerald-200/80 bg-white/70 px-2.5 py-1 text-[12px] font-bold tabular-nums text-emerald-700 dark:border-emerald-500/30 dark:bg-white/[0.06] dark:text-emerald-300"
-                  >
-                    <IconListCheck size={13} strokeWidth={2.2} />
-                    {subDone}/{subTotal}
-                    <IconArrowUpRight size={13} strokeWidth={2.4} />
-                  </button>
-                )}
-                {duration && (
-                  <span className="text-[14px] font-bold text-emerald-600 dark:text-emerald-400">
-                    {duration}
-                  </span>
-                )}
-              </div>
+              {subTotal > 0 && onOpenSubtasks && (
+                <button
+                  type="button"
+                  onPointerDownCapture={(e) => e.stopPropagation()}
+                  onClick={(e) => { e.stopPropagation(); haptic("light"); onOpenSubtasks(front.id); }}
+                  className="inline-flex items-center gap-1.5 rounded-full border border-emerald-200/80 bg-white/70 px-2.5 py-1 text-[12px] font-bold tabular-nums text-emerald-700 dark:border-emerald-500/30 dark:bg-white/[0.06] dark:text-emerald-300"
+                >
+                  <IconListCheck size={16} strokeWidth={2} />
+                  {subDone}/{subTotal}
+                  <IconArrowUpRight size={16} strokeWidth={2} />
+                </button>
+              )}
             </div>
 
             {/* Task title */}
@@ -292,31 +251,51 @@ function SwipeableCardStack({
               {front.title}
             </p>
 
-            {/* Time + category chip */}
-            <div className="mt-1.5 mb-5 flex items-center gap-2.5">
+            {/* Plan kicker */}
+            {chip && (
+              <p className="mt-1 text-[11px] font-bold uppercase tracking-[0.08em] text-neutral-400 dark:text-neutral-500">
+                {chip}
+              </p>
+            )}
+
+            {/* Time · duration */}
+            <div className="mt-1.5 mb-5 flex items-center gap-3">
               {front.startTime && (
-                <span className="text-[14px] font-medium text-emerald-600 dark:text-emerald-400">
+                <span className="text-[14px] font-semibold text-emerald-600 dark:text-emerald-400">
                   {formatTimeFull(front.startTime)}
                   {front.endTime ? ` - ${formatTimeFull(front.endTime)}` : ""}
                 </span>
               )}
-              {chip && (
-                <span className="rounded-full border border-neutral-200 bg-white px-3 py-0.5 text-[13px] font-semibold text-neutral-600 dark:border-white/[0.12] dark:bg-white/[0.06] dark:text-neutral-300">
-                  {chip}
+              {duration && (
+                <span className="text-[14px] font-medium text-neutral-400 dark:text-neutral-500">
+                  {duration}
                 </span>
               )}
             </div>
 
-            {/* Action */}
-            <motion.button
-              type="button"
-              whileTap={{ scale: 0.96 }}
-              onClick={() => void dismiss("done")}
-              className="flex items-center gap-2 rounded-full bg-emerald-600 px-6 py-3 text-[15px] font-bold text-white"
-            >
-              <IconCheck size={18} strokeWidth={3} />
-              Mark Done
-            </motion.button>
+            {/* Actions */}
+            <div className="flex items-center gap-2.5">
+              <motion.button
+                type="button"
+                whileTap={{ scale: 0.96 }}
+                disabled={busy}
+                onClick={() => void dismiss("done")}
+                className="flex items-center gap-1 rounded-full bg-emerald-600 px-4 py-2 text-[12px] font-semibold text-white disabled:opacity-70"
+              >
+                <IconCheck size={16} strokeWidth={1.5} />
+                Mark Done
+              </motion.button>
+              {/* <motion.button
+                type="button"
+                whileTap={{ scale: 0.96 }}
+                disabled={busy}
+                onClick={() => void dismiss("skip")}
+                className="flex items-center gap-2 rounded-full border-2 border-rose-500 px-6 py-3 text-[15px] font-bold text-rose-500 disabled:opacity-70 dark:border-rose-500/80 dark:text-rose-400"
+              >
+                <IconX size={18} strokeWidth={3} />
+                Missed it
+              </motion.button> */}
+            </div>
           </motion.div>
         </AnimatePresence>
       </motion.div>
@@ -328,107 +307,50 @@ function SwipeableCardStack({
 
 const CARD = "rounded-2xl border border-neutral-200/70 bg-white dark:border-white/[0.07] dark:bg-neutral-900";
 
-// ── Stat tile (desktop only) ──────────────────────────────────────────────────
-
-type TileColor = "emerald" | "amber" | "rose" | "neutral";
-
-const TILE_COLOR: Record<TileColor, { val: string; sub: string; dot: string }> = {
-  emerald: { val: "text-emerald-600 dark:text-emerald-400", sub: "text-emerald-500/70 dark:text-emerald-400/60", dot: "bg-emerald-500" },
-  amber:   { val: "text-amber-600 dark:text-amber-400",   sub: "text-amber-500/70 dark:text-amber-400/60",   dot: "bg-amber-500" },
-  rose:    { val: "text-rose-600 dark:text-rose-400",     sub: "text-rose-500/70 dark:text-rose-400/60",     dot: "bg-rose-500" },
-  neutral: { val: "text-neutral-900 dark:text-white",     sub: "text-neutral-400 dark:text-neutral-500",     dot: "bg-neutral-400 dark:bg-neutral-600" },
-};
-
-function StatTile({ value, label, sub, color, onClick }: {
-  value: string | number; label: string; sub: string; color: TileColor; onClick?: () => void;
-}) {
-  const c = TILE_COLOR[color];
-  return (
-    <button
-      type="button"
-      onClick={() => { if (onClick) { haptic("light"); onClick(); } }}
-      className={`${CARD} flex flex-col gap-1.5 px-4 py-4 text-left transition-transform active:scale-[0.98]`}
-    >
-      <div className="flex items-center gap-1.5">
-        <span className={`h-1.5 w-1.5 shrink-0 rounded-full ${c.dot}`} />
-        <span className="text-[11px] font-bold uppercase tracking-[0.07em] text-neutral-400 dark:text-neutral-500">{label}</span>
-      </div>
-      <span className={`text-[30px] font-extrabold leading-none tabular-nums ${c.val}`}>{value}</span>
-      <span className={`text-[11.5px] font-medium leading-none ${c.sub}`}>{sub}</span>
-    </button>
-  );
-}
-
-// ── Status config ─────────────────────────────────────────────────────────────
-
-type PlanStatus = "on_track" | "at_risk" | "delayed";
-const STATUS_CFG: Record<PlanStatus, { label: string; text: string; dot: string; pulse: boolean }> = {
-  on_track: { label: "On Track",    text: "text-emerald-600 dark:text-emerald-400", dot: "bg-emerald-500", pulse: true },
-  at_risk:  { label: "At Risk",     text: "text-amber-600 dark:text-amber-400",     dot: "bg-amber-500",  pulse: false },
-  delayed:  { label: "Needs Focus", text: "text-rose-600 dark:text-rose-400",       dot: "bg-rose-500",   pulse: false },
-};
-
 // ── Main component ────────────────────────────────────────────────────────────
 
 export default function OverviewDashboard({
   schedule, todayKey, onNavigate,
-  onMarkTaskDone, onOpenSubtasks, completedRitualIds, onLogTracker,
+  onMarkTaskDone, onMissedTask, onOpenSubtasks, onLogTracker,
 }: OverviewDashboardProps) {
-  // Per-task skip set — persists while on this day
-  const [skippedIds, setSkippedIds] = useState<Set<string>>(new Set());
-  useEffect(() => { setSkippedIds(new Set()); }, [todayKey]);
+  // Rotation order for the Next-up stack. "Missed it"/swipe sends a task to the
+  // back of the queue instead of removing it, so cards keep cycling until they're
+  // marked done. Resets when the day changes.
+  const [rotation, setRotation] = useState<string[]>([]);
+  useEffect(() => { setRotation([]); }, [todayKey]);
   // Inline task list toggle
   const [showAllTasks, setShowAllTasks] = useState(false);
   const todayISO = localISODate(new Date());
 
   // ── Shared computed data ──────────────────────────────────────────────────
 
-  const { tasksDone, tasksTotal, weeklyPct, longestStreak } = useMemo(() => {
-    const todayTasks = schedule.activities[todayKey] ?? [];
-    const done = todayTasks.filter((t) => isTaskCompleted(t, t.subtasks?.length ?? 0)).length;
-    let weekTotal = 0; let weekDays = 0;
-    for (let i = 0; i < 7; i++) {
-      const iso = addDaysToISO(todayISO, -i);
-      const dk = ["sunday","monday","tuesday","wednesday","thursday","friday","saturday"][new Date(iso + "T00:00:00").getDay()] as DayKey;
-      const dt = schedule.activities[dk] ?? [];
-      if (dt.length > 0) {
-        weekTotal += Math.round((dt.filter((t) => isTaskCompleted(t, t.subtasks?.length ?? 0)).length / dt.length) * 100);
-        weekDays++;
-      }
-    }
-    let longest = 0;
-    for (const r of schedule.rituals ?? []) {
-      const s = calcRitualStreak(r.id, schedule.ritualCompletions ?? [], r, todayISO);
-      if (s > longest) longest = s;
-    }
-    return { tasksDone: done, tasksTotal: todayTasks.length, weeklyPct: weekDays > 0 ? Math.round(weekTotal / weekDays) : 0, longestStreak: longest };
-  }, [schedule, todayKey, todayISO]);
+  const { tasksDone, tasksTotal, missedCount } = useMemo(() => {
+    const today = schedule.activities[todayKey] ?? [];
+    const done = today.filter((t) => isTaskCompleted(t, t.subtasks?.length ?? 0)).length;
+    const missed = today.filter((t) => !isTaskCompleted(t, t.subtasks?.length ?? 0) && !!t.missed).length;
+    return { tasksDone: done, tasksTotal: today.length, missedCount: missed };
+  }, [schedule, todayKey]);
 
   const todayTasks = useMemo(() => schedule.activities[todayKey] ?? [], [schedule, todayKey]);
 
-  // Incomplete tasks not yet skipped — used by the swipeable stack
-  const incompleteTasks = useMemo(() =>
-    todayTasks.filter((t) => !isTaskCompleted(t, t.subtasks?.length ?? 0) && !skippedIds.has(t.id)),
-    [todayTasks, skippedIds]
-  );
-
-  const todayRituals = useMemo(() => {
-    const dayIdx = new Date(todayISO + "T00:00:00").getDay();
-    const da = ["sunday","monday","tuesday","wednesday","thursday","friday","saturday"][dayIdx] as DayKey;
-    return (schedule.rituals ?? []).filter(
-      (r) => !r.repeatDays || r.repeatDays.length === 0 || r.repeatDays.includes(da)
-    );
-  }, [schedule, todayISO]);
-
-  const planStats = useMemo(() =>
-    schedule.plans.map((plan) => {
-      const { dayState, consistency } = getPlanCardStats(plan, schedule.activities, todayKey);
-      const taskCount = Object.values(schedule.activities).flat().filter((t) => t.planId === plan.id).length;
-      const status: PlanStatus = dayState === "complete" || consistency >= 70 ? "on_track" : consistency >= 35 ? "at_risk" : "delayed";
-      return { plan, consistency, status, taskCount };
-    }),
-    [schedule, todayKey]
-  );
+  // Incomplete tasks for the swipeable stack, ordered by the rotation queue so
+  // missed/swiped cards come back around after the others.
+  const incompleteTasks = useMemo(() => {
+    const incomplete = todayTasks.filter((t) => !isTaskResolved(t, t.subtasks?.length ?? 0));
+    const byId = new Map(incomplete.map((t) => [t.id, t] as const));
+    const ordered: typeof incomplete = [];
+    const seen = new Set<string>();
+    // Rotated tasks keep their queued position…
+    for (const id of rotation) {
+      const t = byId.get(id);
+      if (t && !seen.has(id)) { ordered.push(t); seen.add(id); }
+    }
+    // …new/untouched tasks follow in their natural order.
+    for (const t of incomplete) {
+      if (!seen.has(t.id)) { ordered.push(t); seen.add(t.id); }
+    }
+    return ordered;
+  }, [todayTasks, rotation]);
 
   const trackerData = useMemo(() =>
     (schedule.progressTrackers ?? []).map((tracker) => {
@@ -458,26 +380,6 @@ export default function OverviewDashboard({
     [schedule]
   );
 
-  const nudges = useMemo(() => {
-    const items: { icon: React.ElementType; title: string; desc: string; tab: number }[] = [];
-    const hasMilestones = (schedule.milestones ?? []).length > 0;
-    const hasCoach = schedule.plans.some((p) => ((p as Plan & { coachMessages?: unknown[] }).coachMessages?.length ?? 0) > 0);
-    if (schedule.plans.length === 0)
-      items.push({ icon: IconClipboardData, title: "Create your first plan", desc: "Break goals into trackable tasks with milestones and progress.", tab: 1 });
-    if (schedule.plans.length > 0 && !hasMilestones)
-      items.push({ icon: IconMap2, title: "Map your milestones", desc: "Give plans concrete checkpoints and target dates.", tab: 1 });
-    if (AI_ENABLED && schedule.plans.length > 0 && !hasCoach)
-      items.push({ icon: IconBrain, title: "Try the AI Coach", desc: "Get task suggestions and weekly coaching — runs locally.", tab: 1 });
-    if (schedule.plans.length > 0 && (schedule.progressTrackers ?? []).length === 0)
-      items.push({ icon: IconTrendingUp, title: "Track your progress", desc: "Add metrics to plans and log daily values to see trends.", tab: 1 });
-    if ((schedule.rituals ?? []).length === 0)
-      items.push({ icon: IconRepeat, title: "Build a daily routine", desc: "Add habits to stay consistent day after day.", tab: 2 });
-    if ((schedule.progressTrackers ?? []).length > 0 && (schedule.metricEntries ?? []).length < 3)
-      items.push({ icon: IconTarget, title: "Log your first metrics", desc: "Open a plan tracker and record today's value.", tab: 1 });
-    return items;
-  }, [schedule]);
-
-
   // ── Mobile — Whole-week activity across every plan ─────────────────────────
 
   const weeklyActivity = useMemo(() => {
@@ -487,12 +389,21 @@ export default function OverviewDashboard({
     const todayIdx = new Date(todayISO + "T00:00:00").getDay(); // 0=Sun..6=Sat
     const monday = addDaysToISO(todayISO, -((todayIdx + 6) % 7));
 
-    // Tasks: weekday templates, all plans combined.
+    // Tasks per day come from the dated completion history (not the live
+    // template flag, which only reflects today after the daily reset). Today
+    // also counts the live flag so checking a task updates the bar instantly.
     const days = DAYS_ORDER.map((dk, i) => {
       const tasks = schedule.activities[dk] ?? [];
       const total = tasks.length;
-      const done = tasks.filter((t) => isTaskCompleted(t, t.subtasks?.length ?? 0)).length;
-      const isToday = addDaysToISO(monday, i) === todayISO;
+      const date = addDaysToISO(monday, i);
+      const isToday = date === todayISO;
+      const done = tasks.filter((t) =>
+        isToday
+          ? isTaskCompleted(t, t.subtasks?.length ?? 0)
+          : (t.completionHistory ?? []).some(
+              (e) => e.completionType === "task" && localISODate(new Date(e.completedAt)) === date
+            )
+      ).length;
       return { label: DAY_LABELS[i], total, done, isToday, pct: total > 0 ? Math.round((done / total) * 100) : 0 };
     });
     const totalTasks = days.reduce((s, d) => s + d.total, 0);
@@ -517,34 +428,67 @@ export default function OverviewDashboard({
     return { days, tasksPct, habitsPct };
   }, [schedule, todayISO]);
 
-  // ── Derived colors ────────────────────────────────────────────────────────
-
-  const taskColor: TileColor = tasksTotal === 0 ? "neutral" : tasksDone === tasksTotal ? "emerald" : tasksDone > 0 ? "amber" : "neutral";
-  const weekColor: TileColor = weeklyPct >= 70 ? "emerald" : weeklyPct >= 40 ? "amber" : weeklyPct > 0 ? "rose" : "neutral";
-  const streakColor: TileColor = longestStreak >= 3 ? "amber" : "neutral";
-
   // Any tasks scheduled across the week (not just today) — gates execution analytics.
   const hasScheduledTasks = useMemo(
     () => Object.values(schedule.activities).some((a) => (a?.length ?? 0) > 0),
     [schedule.activities]
   );
 
-  // ── Render ────────────────────────────────────────────────────────────────
+  // ── Routine Consistency — today's rituals with streak + 7-day dot history ──
+  const ritualConsistency = useMemo(() => {
+    const completions = schedule.ritualCompletions ?? [];
+    const doneSet = new Set(completions.map((c) => `${c.ritualId}|${c.date}`));
+    const last7 = Array.from({ length: 7 }, (_, i) => addDaysToISO(todayISO, -(6 - i)));
+    const todayIdx = new Date(todayISO + "T00:00:00").getDay();
+    const da = ["sunday","monday","tuesday","wednesday","thursday","friday","saturday"][todayIdx] as DayKey;
+    return (schedule.rituals ?? [])
+      .filter((r) => !r.repeatDays || r.repeatDays.length === 0 || r.repeatDays.includes(da))
+      .map((r) => {
+        // Streak: consecutive scheduled days (ending yesterday→back) the ritual was done.
+        let streak = 0;
+        let cursor = addDaysToISO(todayISO, -1);
+        for (let i = 0; i < 90; i++) {
+          const dow = new Date(cursor + "T00:00:00").getDay();
+          const scheduled = !r.repeatDays || r.repeatDays.length === 0 ||
+            r.repeatDays.includes(["sunday","monday","tuesday","wednesday","thursday","friday","saturday"][dow] as DayKey);
+          if (scheduled) { if (doneSet.has(`${r.id}|${cursor}`)) streak++; else break; }
+          cursor = addDaysToISO(cursor, -1);
+        }
+        const dots = last7.map((d) => doneSet.has(`${r.id}|${d}`));
+        return { ritual: r, streak, dots };
+      });
+  }, [schedule.rituals, schedule.ritualCompletions, todayISO]);
+
+  // ── Plan Consistency — score + milestone progress per plan ──────────────────
+  const planConsistency = useMemo(() =>
+    schedule.plans.map((plan) => {
+      const { consistency } = getPlanCardStats(plan, schedule.activities, todayKey);
+      const ms = (schedule.milestones ?? []).filter((m) => m.planId === plan.id);
+      const msDone = ms.filter((m) => m.status === "completed").length;
+      return { plan, consistency, milestonesTotal: ms.length, milestonesDone: msDone };
+    }),
+    [schedule.plans, schedule.activities, schedule.milestones, todayKey]
+  );
+
+  // ── Render — one responsive layout for mobile + desktop ───────────────────
 
   return (
-    <div className="pb-24 lg:px-6 lg:pt-6 lg:pb-8">
+    <div className="pb-24 lg:pb-8">
+      <div className="mx-auto w-full max-w-[1120px] px-4 pt-5 lg:px-6 lg:pt-3">
 
-      {/* ═══════════════════════════════════════════════════════════════════════
-          MOBILE LAYOUT (< lg) — Reference design
-      ════════════════════════════════════════════════════════════════════════ */}
-      <div className="lg:hidden">
+        {/* Desktop header */}
+        <div className="mb-4 hidden lg:block">
+          <p className="text-[11px] font-bold uppercase tracking-[0.08em] text-neutral-400 dark:text-neutral-500">
+            {new Date().toLocaleDateString("en-US", { weekday: "long", month: "long", day: "numeric" })}
+          </p>
+          <h1 className="mt-0.5 text-[26px] font-extrabold leading-tight text-neutral-950 dark:text-white">Overview</h1>
+        </div>
 
-        {/* ── 1. Task count + swipeable card stack ─────────────────────────── */}
-        <div className="px-4 pt-5 mb-5">
-          {/* Count row */}
-          <div className="flex items-center justify-between mb-3">
+        {/* ── Task count row (mobile only — desktop shows it in the card) ──── */}
+        <div className="mb-3 lg:hidden">
+          <div className="flex items-center justify-between">
             <div className="flex items-center gap-1.5 text-[14px] text-neutral-400 dark:text-neutral-500">
-              <IconClipboardCheck size={16} strokeWidth={2} className="shrink-0" />
+              <IconChecklist size={16} strokeWidth={2} className="shrink-0" />
               <span className="font-bold text-neutral-900 dark:text-white">{tasksDone}/{tasksTotal}</span>
               <span className="font-medium">Tasks Done</span>
             </div>
@@ -554,36 +498,72 @@ export default function OverviewDashboard({
               className="flex items-center gap-0.5 text-[14px] font-bold text-neutral-900 dark:text-white"
             >
               {showAllTasks ? "Hide" : "View All"}
-              <IconChevronRight size={16} strokeWidth={2.5} className="shrink-0" />
+              <IconChevronRight
+                size={16}
+                strokeWidth={2.5}
+                className={`shrink-0 transition-transform duration-200 ${showAllTasks ? "-rotate-90" : "rotate-0"}`}
+              />
             </button>
           </div>
+        </div>
 
-          {/* ── Swipeable card stack ── */}
-          <AnimatePresence mode="wait">
-            {incompleteTasks.length > 0 ? (
-              <motion.div key="stack" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
-                <SwipeableCardStack
-                  tasks={incompleteTasks}
-                  plans={schedule.plans}
-                  onMarkDone={(t) => onMarkTaskDone(t.id, t.subtasks?.map((s) => s.id) ?? [])}
-                  onSkip={(t) => setSkippedIds((prev) => new Set([...prev, t.id]))}
-                  onOpenSubtasks={onOpenSubtasks}
-                />
-              </motion.div>
-            ) : (
-              <motion.div key="all-done" initial={{ opacity: 0 }} animate={{ opacity: 1 }}
-                className="rounded-2xl border border-neutral-200/70 bg-white px-5 py-5 dark:border-white/[0.07] dark:bg-neutral-900">
-                <p className="text-[15px] font-bold text-neutral-900 dark:text-white">
-                  {tasksTotal === 0 ? "No tasks today" : "You're all caught up! ✓"}
-                </p>
-                <p className="mt-0.5 text-[13px] text-neutral-400 dark:text-neutral-500">
-                  {tasksTotal === 0 ? "Head to Today to add tasks." : "Great work — all tasks done."}
-                </p>
-              </motion.div>
-            )}
-          </AnimatePresence>
+        {/* ── 3-column dashboard grid ──────────────────────────────────────── */}
+        <div className="space-y-4 lg:grid lg:grid-cols-3 lg:gap-4 lg:space-y-0 lg:items-start">
 
-          {/* ── Inline task list (View All) ── */}
+          {/* Column 1 —  · This Week · Routine Consistency */}
+          <div className="space-y-4 lg:min-w-0">
+
+          {/* ── Desktop: plain Today's Task list card (reference design) ── */}
+          <div className="hidden lg:block">
+            <TodayTaskListCard
+              tasks={todayTasks}
+              done={tasksDone}
+              total={tasksTotal}
+              plans={schedule.plans}
+              onMarkDone={onMarkTaskDone}
+              onOpenSubtasks={onOpenSubtasks}
+            />
+          </div>
+
+          {/* ── Mobile: swipeable Next-up card + View All list ── */}
+          <div className="lg:hidden">
+
+          {/* ── Swipeable card stack — hidden while the full list is shown ── */}
+          {!showAllTasks && (
+            <AnimatePresence mode="popLayout" initial={false}>
+              {incompleteTasks.length > 0 ? (
+                <motion.div key="stack" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
+                  <SwipeableCardStack
+                    tasks={incompleteTasks}
+                    plans={schedule.plans}
+                    onMarkDone={(t) => onMarkTaskDone(t.id, t.subtasks?.map((s) => s.id) ?? [])}
+                    onSkip={(t) =>
+                      // "Missed it" / swipe — record the task (and its subtasks) as
+                      // missed for today; it then leaves the Next-up stack.
+                      onMissedTask(t.id, t.subtasks?.map((s) => s.id) ?? [])
+                    }
+                    onOpenSubtasks={onOpenSubtasks}
+                  />
+                </motion.div>
+              ) : (
+                <motion.div key="all-done" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+                  className="rounded-2xl border border-neutral-200/70 bg-white px-5 py-5 dark:border-white/[0.07] dark:bg-neutral-900">
+                  <p className="text-[15px] font-bold text-neutral-900 dark:text-white">
+                    {tasksTotal === 0 ? "No tasks today" : missedCount > 0 ? "All tasks handled" : "You're all caught up! ✓"}
+                  </p>
+                  <p className="mt-0.5 text-[13px] text-neutral-400 dark:text-neutral-500">
+                    {tasksTotal === 0
+                      ? "Head to Today to add tasks."
+                      : missedCount > 0
+                      ? `${tasksDone} done · ${missedCount} missed`
+                      : "Great work — all tasks done."}
+                  </p>
+                </motion.div>
+              )}
+            </AnimatePresence>
+          )}
+
+          {/* ── Inline task list (View All) — clean list, no swipe ── */}
           <AnimatePresence>
             {showAllTasks && todayTasks.length > 0 && (
               <motion.div
@@ -593,27 +573,64 @@ export default function OverviewDashboard({
                 transition={{ duration: 0.22, ease: "easeOut" }}
                 className="overflow-hidden"
               >
-                <div className={`${CARD} mt-3 divide-y divide-neutral-100 dark:divide-white/[0.05]`}>
+                <div className={`${CARD} divide-y divide-neutral-100 dark:divide-white/[0.05]`}>
                   {todayTasks.map((task) => {
-                    const done = isTaskCompleted(task, task.subtasks?.length ?? 0);
+                    const subTotal = task.subtasks?.length ?? 0;
+                    const subDone = subTotal > 0
+                      ? (task.completedSubtaskIds ?? []).filter((id) => task.subtasks!.some((s) => s.id === id)).length
+                      : 0;
+                    const done = isTaskCompleted(task, subTotal);
+                    const isMissed = !done && !!task.missed;
                     const plan = schedule.plans.find((p) => p.id === task.planId);
                     return (
-                      <div key={task.id} className="flex items-center gap-3 px-4 py-3">
-                        <div className={`flex h-5 w-5 shrink-0 items-center justify-center rounded-full border-[1.5px] ${done ? "border-emerald-500 bg-emerald-500" : "border-neutral-300 dark:border-neutral-600"}`}>
-                          {done && <IconCheck size={9} strokeWidth={3} className="text-white" />}
-                        </div>
+                      <div key={task.id} className="flex items-center gap-3 px-4 py-3.5">
+                        {/* Checkbox — toggles completion */}
+                        <button
+                          type="button"
+                          aria-label={done ? "Mark not done" : "Mark done"}
+                          aria-pressed={done}
+                          onClick={() => { haptic("light"); onMarkTaskDone(task.id, task.subtasks?.map((s) => s.id) ?? []); }}
+                          className={`flex h-[26px] w-[26px] shrink-0 items-center justify-center rounded-lg border-2 transition-colors ${
+                            done ? "border-emerald-500 bg-emerald-500"
+                            : isMissed ? "border-rose-500 bg-rose-500"
+                            : "border-emerald-500/60 hover:border-emerald-500 dark:border-emerald-500/50"
+                          }`}
+                        >
+                          {done && <IconCheck size={15} strokeWidth={3} className="text-white" />}
+                          {isMissed && <IconX size={15} strokeWidth={3} className="text-white" />}
+                        </button>
+
+                        {/* Title + meta */}
                         <div className="min-w-0 flex-1">
-                          <p className={`text-[13px] font-semibold leading-snug ${done ? "text-neutral-400 line-through dark:text-neutral-600" : "text-neutral-900 dark:text-white"}`}>
+                          <p className={`text-[15px] font-bold leading-snug ${
+                            done ? "text-neutral-400 line-through dark:text-neutral-600"
+                            : isMissed ? "text-neutral-400 line-through decoration-rose-400 dark:text-neutral-600"
+                            : "text-neutral-900 dark:text-white"
+                          }`}>
                             {task.title}
                           </p>
                           {(task.startTime || plan) && (
-                            <p className="text-[11px] text-neutral-400 dark:text-neutral-500 mt-0.5">
+                            <p className="mt-0.5 text-[12px] text-neutral-400 dark:text-neutral-500">
                               {task.startTime && formatTime(task.startTime)}
                               {task.startTime && plan && " · "}
-                              {plan && `${plan.emoji} ${plan.title}`}
+                              {plan && plan.title}
                             </p>
                           )}
                         </div>
+
+                        {/* Subtask pill — only when the task has subtasks */}
+                        {subTotal > 0 && (
+                          <button
+                            type="button"
+                            onClick={() => { haptic("light"); onOpenSubtasks?.(task.id); }}
+                            aria-label={`Open subtasks (${subDone} of ${subTotal} done)`}
+                            className="flex shrink-0 items-center gap-1.5 rounded-full border border-neutral-200 px-2.5 py-1.5 text-neutral-500 transition-colors hover:bg-neutral-50 dark:border-white/[0.1] dark:text-neutral-400 dark:hover:bg-white/[0.04]"
+                          >
+                            <IconListCheck size={14} strokeWidth={2} className="shrink-0" />
+                            <span className="text-[12px] font-bold tabular-nums">{subDone}/{subTotal}</span>
+                            <IconArrowUpRight size={13} strokeWidth={2.2} className="shrink-0" />
+                          </button>
+                        )}
                       </div>
                     );
                   })}
@@ -621,11 +638,10 @@ export default function OverviewDashboard({
               </motion.div>
             )}
           </AnimatePresence>
-        </div>
+          </div>
 
-        {/* ── 3. Weekly Activity card ───────────────────────────────────────── */}
-        {weeklyActivity && (
-          <div className="mx-4 mb-4">
+            {/* ── This Week ── */}
+            {weeklyActivity && (
             <div className={`${CARD} px-5 py-4`}>
               {/* Header */}
               <div className="flex items-center gap-2 mb-4">
@@ -676,19 +692,20 @@ export default function OverviewDashboard({
                 </div>
               </div>
             </div>
-          </div>
-        )}
+            )}
 
-        {/* ── 3b. Execution trend (8-week analytics) ─────────────────────────── */}
-        {hasScheduledTasks && (
-          <div className="mx-4 mb-4">
-            <ExecutionTrendCard schedule={schedule} />
+            {/* ── Routine Consistency ── */}
+            <RoutineConsistencyCard rows={ritualConsistency} />
           </div>
-        )}
 
-        {/* ── 4. Active Tracking list ───────────────────────────────────────── */}
-        <div className="mx-4 mb-4">
-          <div className={`${CARD} px-5 py-4`}>
+          {/* Column 2 — Execution · Tracking */}
+          <div className="mt-4 space-y-4 lg:mt-0 lg:min-w-0">
+
+            {/* ── Execution trend (8-week analytics) ── */}
+            {hasScheduledTasks && <ExecutionTrendCard schedule={schedule} />}
+
+            {/* ── Active Tracking ── */}
+            <div className={`${CARD} px-5 py-4`}>
             <div className="flex items-center gap-2 mb-3">
               <IconTarget size={14} strokeWidth={2} className="text-neutral-400 dark:text-neutral-500 shrink-0" />
               <p className="text-[13px] font-bold text-neutral-700 dark:text-neutral-300">Active Tracking</p>
@@ -712,7 +729,7 @@ export default function OverviewDashboard({
                   return (
                     <div
                       key={tracker.id}
-                      className="flex items-center gap-3 rounded-xl border border-neutral-200/70 px-4 py-3 dark:border-white/[0.07]"
+                      className="flex items-center gap-3 border-b border-neutral-200/70 px-4 py-3 dark:border-white/[0.07]"
                     >
                       <span className={`h-3 w-3 shrink-0 rounded-full ${accent.dot}`} />
                       <div className="min-w-0 flex-1">
@@ -729,7 +746,7 @@ export default function OverviewDashboard({
                         whileTap={{ scale: 0.9 }}
                         aria-label={`Log ${tracker.title}`}
                         onClick={() => { haptic("light"); onLogTracker(tracker); }}
-                        className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-neutral-900 text-white dark:bg-white dark:text-neutral-900"
+                        className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-neutral-900 text-white dark:bg-white dark:text-neutral-900"
                       >
                         <IconPlus size={18} strokeWidth={2.5} />
                       </motion.button>
@@ -738,95 +755,14 @@ export default function OverviewDashboard({
                 })}
               </div>
             )}
-          </div>
-        </div>
-
-        {/* ── 5. What's Possible nudges ─────────────────────────────────────── */}
-        {nudges.length > 0 && (
-          <div className="mx-4 mb-4">
-            <div className={`${CARD} px-5 py-4`}>
-              <p className="text-[11px] font-bold uppercase tracking-[0.08em] text-neutral-400 dark:text-neutral-500 mb-3">What's Possible</p>
-              <div className="space-y-2">
-                {nudges.map((nudge) => {
-                  const NudgeIcon = nudge.icon;
-                  return (
-                    <motion.button
-                      key={nudge.title}
-                      type="button"
-                      onClick={() => { haptic("light"); onNavigate(nudge.tab); }}
-                      whileTap={{ scale: 0.987 }}
-                      className="flex w-full items-start gap-3 rounded-xl border border-neutral-100 bg-neutral-50 px-3.5 py-3 text-left dark:border-white/[0.05] dark:bg-white/[0.03]"
-                    >
-                      <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-neutral-200/60 dark:bg-white/[0.07]">
-                        <NudgeIcon size={15} strokeWidth={1.8} className="text-neutral-600 dark:text-neutral-400" />
-                      </div>
-                      <div className="min-w-0 flex-1">
-                        <p className="text-[12.5px] font-bold text-neutral-900 dark:text-white">{nudge.title}</p>
-                        <p className="mt-0.5 text-[11px] leading-snug text-neutral-400 dark:text-neutral-500">{nudge.desc}</p>
-                      </div>
-                      <IconArrowRight size={13} strokeWidth={2} className="mt-0.5 shrink-0 text-neutral-300 dark:text-neutral-600" />
-                    </motion.button>
-                  );
-                })}
-              </div>
             </div>
           </div>
-        )}
-      </div>
 
-      {/* ═══════════════════════════════════════════════════════════════════════
-          DESKTOP BENTO GRID (≥ lg) — unchanged
-      ════════════════════════════════════════════════════════════════════════ */}
-      <div className="hidden lg:block px-6 pt-6">
-        <div className="mb-5">
-          <p className="text-[11px] font-bold uppercase tracking-[0.08em] text-neutral-400 dark:text-neutral-500">
-            {new Date().toLocaleDateString("en-US", { weekday: "long", month: "long", day: "numeric" })}
-          </p>
-          <h1 className="mt-0.5 text-[26px] font-extrabold leading-tight text-neutral-950 dark:text-white">Overview</h1>
-        </div>
+          {/* Column 3 — Plan Consistency */}
+          <div className="mt-4 space-y-4 lg:mt-0 lg:min-w-0">
 
-        <div className="grid grid-cols-4 gap-4">
-          <StatTile
-            value={tasksTotal === 0 ? "—" : `${tasksDone}/${tasksTotal}`}
-            label="Tasks Today"
-            sub={tasksDone === tasksTotal && tasksTotal > 0 ? "All done ✓" : tasksTotal > 0 ? `${tasksTotal - tasksDone} remaining` : "No tasks today"}
-            color={taskColor} onClick={() => onNavigate(0)}
-          />
-          <StatTile
-            value={`${weeklyPct}%`} label="Weekly Pace"
-            sub={weeklyPct >= 70 ? "Strong week" : weeklyPct >= 40 ? "Keep going" : weeklyPct > 0 ? "Room to improve" : "No data yet"}
-            color={weekColor} onClick={() => onNavigate(3)}
-          />
-          <StatTile
-            value={longestStreak === 0 ? "—" : `${longestStreak}d`} label="Best Streak"
-            sub={longestStreak >= 7 ? "On fire 🔥" : longestStreak >= 3 ? "Keep it going" : longestStreak === 0 ? "No streaks yet" : "Building up"}
-            color={streakColor} onClick={() => onNavigate(2)}
-          />
-
-          {/* Row 1–2, col 4: Plan Health (row-span-2) */}
-          <div className="row-span-2">
-            <PlanHealthCard planStats={planStats} onNavigate={onNavigate} tall />
-          </div>
-
-          {/* Row 2, cols 1–3: Today's execution */}
-          <div className="col-span-3">
-            <TodayCard
-              todayTasks={todayTasks} todayRituals={todayRituals}
-              completedTodayIds={completedRitualIds} todayISO={todayISO}
-              schedule={schedule} onNavigate={onNavigate}
-            />
-          </div>
-
-          {/* Row 3, col-span-4: Execution trend analytics */}
-          {hasScheduledTasks && (
-            <div className="col-span-4">
-              <ExecutionTrendCard schedule={schedule} />
-            </div>
-          )}
-
-          {/* Row 4, col-span-4: Trackers + Discovery */}
-          <div className="col-span-4">
-            <BottomCard trackerData={trackerData} nudges={nudges} onNavigate={onNavigate} />
+            {/* ── Plan Consistency ── */}
+            <PlanConsistencyCard rows={planConsistency} onNavigate={onNavigate} />
           </div>
         </div>
       </div>
@@ -834,250 +770,195 @@ export default function OverviewDashboard({
   );
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// Desktop sub-components (unchanged)
-// ─────────────────────────────────────────────────────────────────────────────
+// ── Routine Consistency card (reference: streak + 7-day dots) ─────────────────
 
-function TodayCard({
-  todayTasks, todayRituals, completedTodayIds, todayISO, schedule, onNavigate,
+function RoutineConsistencyCard({
+  rows,
 }: {
-  todayTasks: Task[];
-  todayRituals: Ritual[];
-  completedTodayIds: Set<string>;
-  todayISO: string;
-  schedule: Schedule;
-  onNavigate: (tab: number) => void;
+  rows: { ritual: { id: string; title: string; time: string }; streak: number; dots: boolean[] }[];
 }) {
-  const ritualsDone = todayRituals.filter((r) => completedTodayIds.has(r.id)).length;
+  if (rows.length === 0) return null;
   return (
-    <div className={`${CARD} px-5 py-5 h-full`}>
-      <div className="flex items-center justify-between mb-4">
-        <p className="text-[11px] font-bold uppercase tracking-[0.08em] text-neutral-400 dark:text-neutral-500">Today</p>
-        <button type="button" onClick={() => { haptic("light"); onNavigate(0); }}
-          className="flex items-center gap-1 text-[11px] font-semibold text-neutral-400 hover:text-neutral-700 dark:hover:text-neutral-200 transition-colors">
-          Open <IconArrowRight size={11} strokeWidth={2.5} />
-        </button>
+    <div className={`${CARD} px-5 py-4`}>
+      <div className="mb-1 flex items-center gap-2">
+        <IconRepeat size={14} strokeWidth={2} className="shrink-0 text-neutral-400 dark:text-neutral-500" />
+        <p className="text-[13px] font-bold text-neutral-700 dark:text-neutral-300">Routine Consistency</p>
       </div>
-      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 lg:gap-6">
-        <div>
-          <div className="flex items-center justify-between mb-2.5">
-            <p className="text-[12px] font-semibold text-neutral-600 dark:text-neutral-300">
-              Tasks
-              {todayTasks.length > 0 && (
-                <span className="ml-1.5 text-neutral-400 dark:text-neutral-500 font-normal">
-                  {todayTasks.filter((t) => isTaskCompleted(t, t.subtasks?.length ?? 0)).length}/{todayTasks.length}
+      <div className="divide-y divide-neutral-100 dark:divide-white/[0.05]">
+        {rows.map(({ ritual, streak, dots }) => (
+          <div key={ritual.id} className="flex items-center justify-between gap-3 py-3">
+            <div className="min-w-0">
+              <p className="truncate text-[14px] font-semibold text-neutral-900 dark:text-white">
+                {ritual.title}
+                {ritual.time && <span className="ml-1.5 font-medium text-neutral-400 dark:text-neutral-500">{ritual.time}</span>}
+              </p>
+              {streak > 0 && (
+                <span className="mt-1 inline-flex items-center gap-1 text-[11px] font-bold text-rose-500 dark:text-rose-400">
+                  <IconFlame size={12} strokeWidth={2} />
+                  {streak}d Streak
                 </span>
               )}
-            </p>
+            </div>
+            <div className="flex shrink-0 gap-1">
+              {dots.map((on, i) => (
+                <span key={i} className={`h-2.5 w-2.5 rounded-full ${on ? "bg-emerald-500" : "bg-neutral-200 dark:bg-white/[0.1]"}`} />
+              ))}
+            </div>
           </div>
-          {todayTasks.length === 0 ? (
-            <div className="flex items-center gap-2 py-2">
-              <IconCalendarEvent size={14} strokeWidth={1.5} className="text-neutral-300 dark:text-neutral-600 shrink-0" />
-              <p className="text-[12px] text-neutral-400 dark:text-neutral-500">No tasks scheduled</p>
-            </div>
-          ) : (
-            <div className="space-y-2.5">
-              {todayTasks.slice(0, 5).map((task) => {
-                const done = isTaskCompleted(task, task.subtasks?.length ?? 0);
-                return (
-                  <div key={task.id} className="flex items-center gap-2.5">
-                    <div className={`flex h-[18px] w-[18px] shrink-0 items-center justify-center rounded-full border-[1.5px] ${done ? "border-emerald-500 bg-emerald-500" : "border-neutral-300 dark:border-neutral-600"}`}>
-                      {done && <IconCheck size={9} strokeWidth={3} className="text-white" />}
-                    </div>
-                    <p className={`truncate text-[13px] font-semibold ${done ? "text-neutral-400 line-through dark:text-neutral-600" : "text-neutral-900 dark:text-white"}`}>
-                      {task.title}
-                    </p>
-                  </div>
-                );
-              })}
-              {todayTasks.length > 5 && (
-                <button type="button" onClick={() => { haptic("light"); onNavigate(0); }}
-                  className="text-[11.5px] font-semibold text-neutral-400 hover:text-neutral-600 dark:hover:text-neutral-300">
-                  +{todayTasks.length - 5} more
-                </button>
-              )}
-            </div>
-          )}
-        </div>
-        <div>
-          <div className="flex items-center justify-between mb-2.5">
-            <p className="text-[12px] font-semibold text-neutral-600 dark:text-neutral-300">
-              Rituals
-              {todayRituals.length > 0 && (
-                <span className="ml-1.5 text-neutral-400 dark:text-neutral-500 font-normal">{ritualsDone}/{todayRituals.length}</span>
-              )}
-            </p>
-          </div>
-          {todayRituals.length === 0 ? (
-            <div className="flex items-center gap-2 py-2">
-              <IconRepeat size={14} strokeWidth={1.5} className="text-neutral-300 dark:text-neutral-600 shrink-0" />
-              <p className="text-[12px] text-neutral-400 dark:text-neutral-500">No rituals today</p>
-            </div>
-          ) : (
-            <div className="space-y-2.5">
-              {todayRituals.slice(0, 5).map((ritual) => {
-                const done = completedTodayIds.has(ritual.id);
-                const accent = accentStyles(ritual.color ?? "cyan");
-                return (
-                  <div key={ritual.id} className="flex items-center gap-2.5">
-                    <span className={`h-2 w-2 shrink-0 rounded-full ${done ? "bg-emerald-500" : accent.dot}`} />
-                    <p className={`min-w-0 flex-1 truncate text-[13px] font-medium ${done ? "line-through text-neutral-400 dark:text-neutral-600" : "text-neutral-800 dark:text-neutral-200"}`}>
-                      {ritual.title}
-                    </p>
-                  </div>
-                );
-              })}
-            </div>
-          )}
-        </div>
+        ))}
       </div>
     </div>
   );
 }
 
-function PlanHealthCard({
-  planStats, onNavigate, tall,
+// ── Plan Consistency card (reference: % conic ring per plan) ──────────────────
+
+function ringColor(pct: number): string {
+  if (pct >= 70) return "#00a63e";
+  if (pct >= 35) return "#fab623";
+  return "#fb2c36";
+}
+
+function PlanConsistencyCard({
+  rows,
+  onNavigate,
 }: {
-  planStats: { plan: Plan; consistency: number; status: PlanStatus; taskCount: number }[];
+  rows: { plan: { id: string; title: string }; consistency: number; milestonesTotal: number; milestonesDone: number }[];
   onNavigate: (tab: number) => void;
-  tall?: boolean;
+}) {
+  if (rows.length === 0) return null;
+  return (
+    <div className={`${CARD} px-5 py-4`}>
+      <div className="mb-1 flex items-center gap-2">
+        <IconClipboardList size={14} strokeWidth={2} className="shrink-0 text-neutral-400 dark:text-neutral-500" />
+        <p className="text-[13px] font-bold text-neutral-700 dark:text-neutral-300">Plan Consistency</p>
+      </div>
+      <div className="divide-y divide-neutral-100 dark:divide-white/[0.05]">
+        {rows.map(({ plan, consistency, milestonesTotal, milestonesDone }) => {
+          const color = ringColor(consistency);
+          return (
+            <button
+              key={plan.id}
+              type="button"
+              onClick={() => { haptic("light"); onNavigate(1); }}
+              className="flex w-full items-center justify-between gap-3 py-3 text-left"
+            >
+              <div className="min-w-0">
+                <p className="truncate text-[14px] font-semibold text-neutral-900 dark:text-white">{plan.title}</p>
+                {milestonesTotal > 0 && (
+                  <>
+                    <p className="mt-0.5 text-[11px] font-medium text-neutral-400 dark:text-neutral-500">
+                      {milestonesDone}/{milestonesTotal} Milestone
+                    </p>
+                    <div className="mt-1.5 flex flex-wrap gap-1">
+                      {Array.from({ length: Math.min(milestonesTotal, 10) }, (_, i) => (
+                        <span key={i} className={`h-2 w-2 rounded-full ${i < milestonesDone ? "bg-emerald-500" : "bg-neutral-200 dark:bg-white/[0.1]"}`} />
+                      ))}
+                    </div>
+                  </>
+                )}
+              </div>
+              <div className="flex shrink-0 flex-col items-center gap-1">
+                <span
+                  className="grid h-[44px] w-[44px] place-items-center rounded-full"
+                  style={{ background: `conic-gradient(${color} ${consistency}%, var(--color-neutral-200) 0)` }}
+                >
+                  <span className="grid h-[34px] w-[34px] place-items-center rounded-full bg-white text-[10px] font-extrabold tabular-nums text-neutral-900 dark:bg-neutral-900 dark:text-white">
+                    {consistency}%
+                  </span>
+                </span>
+                <span className="text-[9px] font-medium text-neutral-400 dark:text-neutral-500">Consistency</span>
+              </div>
+            </button>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+// ── Today's Task list card (desktop — plain list, no swipe) ───────────────────
+
+function TodayTaskListCard({
+  tasks,
+  done,
+  total,
+  plans,
+  onMarkDone,
+  onOpenSubtasks,
+}: {
+  tasks: Task[];
+  done: number;
+  total: number;
+  plans: Plan[];
+  onMarkDone: (taskId: string, subtaskIds: string[]) => void;
+  onOpenSubtasks?: (taskId: string) => void;
 }) {
   return (
-    <div className={`${CARD} px-5 py-5 ${tall ? "h-full flex flex-col" : ""}`}>
-      <div className="flex items-center justify-between mb-4">
-        <p className="text-[11px] font-bold uppercase tracking-[0.08em] text-neutral-400 dark:text-neutral-500">
-          Plans {planStats.length > 0 && <span className="font-normal normal-case">({planStats.length})</span>}
-        </p>
-        <button type="button" onClick={() => { haptic("light"); onNavigate(1); }}
-          className="flex items-center gap-1 text-[11px] font-semibold text-neutral-400 hover:text-neutral-700 dark:hover:text-neutral-200 transition-colors">
-          Open <IconArrowRight size={11} strokeWidth={2.5} />
-        </button>
+    <div className={`${CARD} px-5 py-4`}>
+      <div className="mb-1 flex items-center gap-2">
+        <IconChecklist size={14} strokeWidth={2} className="shrink-0 text-neutral-400 dark:text-neutral-500" />
+        <p className="text-[13px] font-bold text-neutral-700 dark:text-neutral-300">{done}/{total} Today&apos;s Task</p>
       </div>
-      {planStats.length === 0 ? (
-        <div className="flex flex-col items-center justify-center py-6 text-center gap-3 flex-1">
-          <IconClipboardData size={28} strokeWidth={1.3} className="text-neutral-200 dark:text-neutral-700" />
-          <div>
-            <p className="text-[13px] font-semibold text-neutral-500 dark:text-neutral-400">No plans yet</p>
-            <p className="text-[11.5px] text-neutral-400 dark:text-neutral-500 mt-0.5">Create a plan to start tracking</p>
-          </div>
-          <button type="button" onClick={() => { haptic("light"); onNavigate(1); }}
-            className="rounded-xl bg-neutral-900 px-4 py-1.5 text-[12px] font-semibold text-white dark:bg-white dark:text-neutral-900">
-            + New Plan
-          </button>
-        </div>
+      {tasks.length === 0 ? (
+        <p className="py-3 text-[13px] text-neutral-400 dark:text-neutral-500">No tasks scheduled today.</p>
       ) : (
-        <div className={`space-y-3 ${tall ? "flex-1 overflow-y-auto" : ""}`}>
-          {planStats.map(({ plan, consistency, status, taskCount }) => {
-            const accent = accentStyles(plan.color ?? "cyan");
-            const cfg = STATUS_CFG[status];
+        <div className="divide-y divide-neutral-100 dark:divide-white/[0.05]">
+          {tasks.map((task) => {
+            const subTotal = task.subtasks?.length ?? 0;
+            const subDone = subTotal > 0
+              ? (task.completedSubtaskIds ?? []).filter((id) => task.subtasks!.some((s) => s.id === id)).length
+              : 0;
+            const isDone = isTaskCompleted(task, subTotal);
+            const isMissed = !isDone && !!task.missed;
+            const plan = plans.find((p) => p.id === task.planId);
             return (
-              <motion.button key={plan.id} type="button" onClick={() => { haptic("light"); onNavigate(1); }} whileTap={{ scale: 0.987 }}
-                className={`w-full rounded-xl border-l-[3px] ${accent.leftBorder} bg-neutral-50 px-3.5 py-3 text-left dark:bg-white/[0.03]`}>
-                <div className="flex items-center justify-between gap-2 mb-2">
-                  <div className="flex items-center gap-2 min-w-0">
-                    <span className="text-[14px] leading-none shrink-0">{plan.emoji}</span>
-                    <p className="truncate text-[13px] font-bold text-neutral-900 dark:text-white">{plan.title}</p>
-                  </div>
-                  <div className={`flex shrink-0 items-center gap-1 text-[9.5px] font-bold uppercase tracking-[0.05em] ${cfg.text}`}>
-                    <span className={`h-1.5 w-1.5 rounded-full shrink-0 ${cfg.dot} ${cfg.pulse ? "animate-pulse" : ""}`} />
-                    {cfg.label}
-                  </div>
+              <div key={task.id} className="flex items-center gap-3 py-3">
+                <button
+                  type="button"
+                  aria-label={isDone ? "Mark not done" : "Mark done"}
+                  aria-pressed={isDone}
+                  onClick={() => { haptic("light"); onMarkDone(task.id, task.subtasks?.map((s) => s.id) ?? []); }}
+                  className={`flex h-[24px] w-[24px] shrink-0 items-center justify-center rounded-md border-2 transition-colors ${
+                    isDone ? "border-emerald-500 bg-emerald-500"
+                    : isMissed ? "border-rose-500 bg-rose-500"
+                    : "border-emerald-500/60 hover:border-emerald-500 dark:border-emerald-500/50"
+                  }`}
+                >
+                  {isDone && <IconCheck size={14} strokeWidth={3} className="text-white" />}
+                  {isMissed && <IconX size={14} strokeWidth={3} className="text-white" />}
+                </button>
+                <div className="min-w-0 flex-1">
+                  <p className={`text-[14px] font-bold leading-snug ${
+                    isDone ? "text-neutral-400 line-through dark:text-neutral-600"
+                    : isMissed ? "text-neutral-400 line-through decoration-rose-400 dark:text-neutral-600"
+                    : "text-neutral-900 dark:text-white"
+                  }`}>
+                    {task.title}
+                  </p>
+                  {(task.startTime || plan) && (
+                    <p className="mt-0.5 text-[11px] text-neutral-400 dark:text-neutral-500">
+                      {task.startTime && formatTime(task.startTime)}
+                      {task.startTime && plan && " · "}
+                      {plan && plan.title}
+                    </p>
+                  )}
                 </div>
-                <div className="h-1 w-full overflow-hidden rounded-full bg-neutral-200 dark:bg-white/[0.08]">
-                  <motion.div className={`h-full rounded-full ${accent.dot}`}
-                    initial={{ width: 0 }} animate={{ width: `${consistency}%` }}
-                    transition={{ duration: 0.6, ease: [0.25, 0.46, 0.45, 0.94], delay: 0.1 }} />
-                </div>
-                <div className="mt-1.5 flex items-center justify-between">
-                  <span className="flex items-center gap-1 text-[11px] text-neutral-400 dark:text-neutral-500">
-                    <IconClipboardList size={10} strokeWidth={2.2} />
-                    {taskCount} task{taskCount !== 1 ? "s" : ""}
-                  </span>
-                  <span className="text-[11px] font-semibold tabular-nums text-neutral-500 dark:text-neutral-400">{consistency}%</span>
-                </div>
-              </motion.button>
+                {subTotal > 0 && (
+                  <button
+                    type="button"
+                    onClick={() => { haptic("light"); onOpenSubtasks?.(task.id); }}
+                    aria-label={`Open subtasks (${subDone} of ${subTotal} done)`}
+                    className="flex shrink-0 items-center gap-1.5 rounded-full border border-neutral-200 px-2.5 py-1 text-neutral-500 transition-colors hover:bg-neutral-50 dark:border-white/[0.1] dark:text-neutral-400 dark:hover:bg-white/[0.04]"
+                  >
+                    <IconListCheck size={13} strokeWidth={2} className="shrink-0" />
+                    <span className="text-[12px] font-bold tabular-nums">{subDone}/{subTotal}</span>
+                    <IconArrowUpRight size={12} strokeWidth={2.2} className="shrink-0" />
+                  </button>
+                )}
+              </div>
             );
           })}
-        </div>
-      )}
-    </div>
-  );
-}
-
-function BottomCard({
-  trackerData, nudges, onNavigate,
-}: {
-  trackerData: { tracker: ProgressTracker; latest: Schedule["metricEntries"][0] | undefined; sparkValues: number[]; plan: Plan | undefined }[];
-  nudges: { icon: React.ElementType; title: string; desc: string; tab: number }[];
-  onNavigate: (tab: number) => void;
-}) {
-  const hasTrackers = trackerData.length > 0;
-  const hasNudges = nudges.length > 0;
-  return (
-    <div className={`${CARD} px-5 py-5`}>
-      {hasTrackers && (
-        <div className={hasNudges ? "mb-5" : ""}>
-          <div className="flex items-center justify-between mb-3">
-            <p className="text-[11px] font-bold uppercase tracking-[0.08em] text-neutral-400 dark:text-neutral-500">Tracker Pulse</p>
-            <button type="button" onClick={() => { haptic("light"); onNavigate(1); }}
-              className="flex items-center gap-1 text-[11px] font-semibold text-neutral-400 hover:text-neutral-700 dark:hover:text-neutral-200 transition-colors">
-              View all <IconArrowRight size={11} strokeWidth={2.5} />
-            </button>
-          </div>
-          <div className="flex gap-3 overflow-x-auto pb-1" style={{ scrollbarWidth: "none" }}>
-            {trackerData.map(({ tracker, latest, sparkValues, plan }) => {
-              const accent = accentStyles(plan?.color ?? "cyan");
-              return (
-                <button key={tracker.id} type="button" onClick={() => { haptic("light"); onNavigate(1); }}
-                  className="flex w-[148px] shrink-0 flex-col rounded-xl border border-neutral-100 bg-neutral-50 px-3.5 py-3 text-left active:scale-[0.98] transition-transform dark:border-white/[0.05] dark:bg-white/[0.03]">
-                  <div className="flex items-center gap-1.5 mb-1.5">
-                    <span className={`h-1.5 w-1.5 shrink-0 rounded-full ${accent.dot}`} />
-                    <p className="truncate text-[11px] font-semibold text-neutral-500 dark:text-neutral-400">{tracker.title}</p>
-                  </div>
-                  <div className="flex items-baseline gap-1 mb-1">
-                    <span className="text-[22px] font-extrabold leading-none tabular-nums text-neutral-900 dark:text-white">{latest ? latest.value : "—"}</span>
-                    {tracker.unit && <span className="text-[11px] font-medium text-neutral-400 dark:text-neutral-500">{tracker.unit}</span>}
-                  </div>
-                  {sparkValues.length >= 2 ? <Sparkline values={sparkValues} color={plan?.color ?? "cyan"} /> : <p className="text-[10px] text-neutral-300 dark:text-neutral-600 mt-1">Not enough data</p>}
-                  <p className="mt-1 truncate text-[10px] text-neutral-400 dark:text-neutral-500">{plan?.emoji} {plan?.title}</p>
-                </button>
-              );
-            })}
-          </div>
-        </div>
-      )}
-      {hasNudges && (
-        <div>
-          <p className="text-[11px] font-bold uppercase tracking-[0.08em] text-neutral-400 dark:text-neutral-500 mb-3">
-            {hasTrackers ? "What's Possible" : "Get Started"}
-          </p>
-          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
-            {nudges.map((nudge) => {
-              const NudgeIcon = nudge.icon;
-              return (
-                <motion.button key={nudge.title} type="button" onClick={() => { haptic("light"); onNavigate(nudge.tab); }} whileTap={{ scale: 0.987 }}
-                  className="flex items-start gap-3 rounded-xl border border-neutral-100 bg-neutral-50 px-4 py-3 text-left dark:border-white/[0.05] dark:bg-white/[0.03]">
-                  <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-neutral-200/60 dark:bg-white/[0.07]">
-                    <NudgeIcon size={15} strokeWidth={1.8} className="text-neutral-600 dark:text-neutral-400" />
-                  </div>
-                  <div className="min-w-0 flex-1">
-                    <p className="text-[12.5px] font-bold text-neutral-900 dark:text-white">{nudge.title}</p>
-                    <p className="mt-0.5 text-[11px] leading-snug text-neutral-400 dark:text-neutral-500">{nudge.desc}</p>
-                  </div>
-                  <IconArrowRight size={13} strokeWidth={2} className="mt-0.5 shrink-0 text-neutral-300 dark:text-neutral-600" />
-                </motion.button>
-              );
-            })}
-          </div>
-        </div>
-      )}
-      {!hasTrackers && !hasNudges && (
-        <div className="flex items-center gap-3 py-2">
-          <span className="text-[24px]">🎉</span>
-          <div>
-            <p className="text-[14px] font-bold text-neutral-900 dark:text-white">You're all set</p>
-            <p className="text-[12px] text-neutral-400 dark:text-neutral-500">Using every feature PlanR has to offer.</p>
-          </div>
         </div>
       )}
     </div>

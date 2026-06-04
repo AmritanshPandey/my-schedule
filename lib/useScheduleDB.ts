@@ -38,9 +38,9 @@ export interface Goal {
 export interface TaskCompletionEvent {
   id: string;
   taskId: string;
-  completedAt: string; // ISO 8601 timestamp
-  completionType: "task" | "subtask";
-  subtaskId?: string;
+  completedAt: string; // ISO 8601 timestamp (for "missed", the timestamp it was marked)
+  completionType: "task" | "subtask" | "missed";
+  subtaskId?: string;  // present for subtask-level events (completed or missed)
 }
 
 export interface Task {
@@ -56,6 +56,8 @@ export interface Task {
   completed?: boolean;
   completedAt?: string;               // ISO timestamp of last full completion
   completedSubtaskIds?: string[];
+  missed?: boolean;                   // today's occurrence was marked "missed"
+  missedAt?: string;                  // ISO timestamp it was marked missed
   completionHistory?: TaskCompletionEvent[]; // append-only event log
   streakEnabled?: boolean;            // opt-in to streak tracking
   sortOrder?: number;                 // drag-reorder position within a day
@@ -504,6 +506,8 @@ function normalizeTasks(value: unknown, fallbackPlanId: string, fallbackIcon = "
         ...(task.completed !== undefined && { completed: task.completed }),
         ...(task.completedAt !== undefined && { completedAt: task.completedAt }),
         ...(task.completedSubtaskIds !== undefined && { completedSubtaskIds: task.completedSubtaskIds }),
+        ...(task.missed !== undefined && { missed: task.missed }),
+        ...(task.missedAt !== undefined && { missedAt: task.missedAt }),
         ...(task.completionHistory !== undefined && { completionHistory: task.completionHistory }),
         ...(task.streakEnabled !== undefined && { streakEnabled: task.streakEnabled }),
         ...(task.sortOrder !== undefined && { sortOrder: task.sortOrder }),
@@ -703,6 +707,40 @@ function emptyEmpty(): Schedule {
   return { plans: [], activities: emptyDayActivities(), progressTrackers: [], metricEntries: [], milestones: [], rituals: [], strategies: [], ritualCompletions: [], notes: [] };
 }
 
+/**
+ * Recurring weekday tasks store their completion on the template itself
+ * (`completed` / `completedSubtaskIds`). That state belongs to a single day's
+ * occurrence — without resetting it, yesterday's (or last week's) completion
+ * bleeds into the new day. This clears the live completion flags for any task
+ * whose most recent activity isn't today, while leaving `completionHistory`
+ * (the dated, permanent record used by analytics/heatmaps) fully intact.
+ */
+export function resetStaleCompletions(schedule: Schedule, todayISO: string): Schedule {
+  let changed = false;
+  const activities = { ...schedule.activities };
+  for (const day of DAYS) {
+    const tasks = activities[day];
+    if (!tasks?.length) continue;
+    let dayChanged = false;
+    const next = tasks.map((t) => {
+      const hasLiveState = !!t.completed || !!t.missed || (t.completedSubtaskIds?.length ?? 0) > 0;
+      if (!hasLiveState) return t;
+      const activeToday =
+        (t.completedAt && localISODate(new Date(t.completedAt)) === todayISO) ||
+        (t.missedAt && localISODate(new Date(t.missedAt)) === todayISO) ||
+        (t.completionHistory ?? []).some((e) => localISODate(new Date(e.completedAt)) === todayISO);
+      if (activeToday) return t;
+      dayChanged = true;
+      return { ...t, completed: false, completedAt: undefined, completedSubtaskIds: [], missed: false, missedAt: undefined };
+    });
+    if (dayChanged) {
+      activities[day] = next;
+      changed = true;
+    }
+  }
+  return changed ? { ...schedule, activities } : schedule;
+}
+
 export function useScheduleDB() {
   const [schedule, setScheduleState] = useState<Schedule>(emptyEmpty());
   const [ready, setReady] = useState(false);
@@ -716,7 +754,7 @@ export function useScheduleDB() {
         dbRef.current = db;
         const stored = await readDB(db);
         if (stored) {
-          setScheduleState(migrate(stored));
+          setScheduleState(resetStaleCompletions(migrate(stored), localISODate(new Date())));
         } else {
           // No stored data — true first launch
           setIsFirstLaunch(true);
@@ -735,7 +773,7 @@ export function useScheduleDB() {
   useEffect(() => {
     function handleCloudMerge(e: Event) {
       const { schedule: cloudSchedule } = (e as CustomEvent<{ schedule: Schedule; lastUpdated: number }>).detail;
-      const migrated = migrate(cloudSchedule);
+      const migrated = resetStaleCompletions(migrate(cloudSchedule), localISODate(new Date()));
       setScheduleState(migrated);
       if (dbRef.current) {
         writeDB(dbRef.current, migrated).catch(() => {});
@@ -783,5 +821,38 @@ export function useScheduleDB() {
     }
   }
 
-  return { schedule, setSchedule, ready, clearData, isFirstLaunch };
+  /**
+   * Wipe all *progress* — task completions (incl. history), ritual check-ins,
+   * and logged metric values — while keeping the structure (plans, tasks,
+   * trackers, rituals, milestones, notes). Used by Settings → "Clear progress".
+   */
+  async function clearProgress(): Promise<void> {
+    const next: Schedule = (() => {
+      const activities = {} as Schedule["activities"];
+      for (const day of DAYS) {
+        activities[day] = (schedule.activities[day] ?? []).map((t) => {
+          const { completed: _c, completedAt: _a, completedSubtaskIds: _s, completionHistory: _h, missed: _m, missedAt: _ma, ...rest } = t;
+          void _c; void _a; void _s; void _h; void _m; void _ma;
+          return rest;
+        });
+      }
+      // Un-complete milestones: strip the completion dates and re-derive status
+      // from the roadmap timeline (keeps the milestones, resets their progress).
+      const milestones = normalizeMilestoneTimelines(
+        schedule.plans,
+        schedule.milestones.map((m) => {
+          const { actualCompletedDate: _ad, completedDate: _cd, ...rest } = m;
+          void _ad; void _cd;
+          return { ...rest, status: "upcoming" as const, completionStatus: "pending" as const };
+        }),
+      );
+      return { ...schedule, activities, milestones, ritualCompletions: [], metricEntries: [] };
+    })();
+    setScheduleState(next);
+    if (dbRef.current) {
+      await writeDB(dbRef.current, next).catch(() => {});
+    }
+  }
+
+  return { schedule, setSchedule, ready, clearData, clearProgress, isFirstLaunch };
 }

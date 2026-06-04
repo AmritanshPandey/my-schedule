@@ -1,7 +1,7 @@
 "use client";
 
 import { motion } from "framer-motion";
-import { IconCheck, IconClipboardList } from "@tabler/icons-react";
+import { IconCheck, IconRepeat } from "@tabler/icons-react";
 import type { Ritual, RitualColor, DayKey } from "@/lib/useScheduleDB";
 import { haptic } from "@/lib/haptics";
 
@@ -47,7 +47,7 @@ export default function TodayRitualsBar({
           Routines
         </span>
         <div className="flex items-center gap-1.5 text-neutral-400 dark:text-neutral-500">
-          <IconClipboardList size={14} strokeWidth={1.8} />
+          <IconRepeat size={14} strokeWidth={1.8} />
           <span className="text-[13px] font-bold tabular-nums">
             {doneCount}/{todayRituals.length}
           </span>

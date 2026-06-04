@@ -12,7 +12,7 @@ import {
   IconArrowUp,
   IconArrowDown,
   IconCalendar,
-  IconRepeat,
+  IconStack2,
   IconClock,
   IconChevronRight,
   IconListCheck,
@@ -26,6 +26,7 @@ import ReactMarkdown from "react-markdown";
 import { haptic } from "@/lib/haptics";
 import ProgressChart from "@/components/ProgressChart";
 import BottomSheet from "@/components/ui/BottomSheet";
+import ProgressBar from "@/components/ui/ProgressBar";
 import SheetHeader from "@/components/ui/SheetHeader";
 import Button from "@/components/ui/Button";
 import Input from "@/components/ui/Input";
@@ -771,12 +772,12 @@ export default function PlanDetailView({
               </span>
             )}
           </div>
-          {/* Line 3: Routine badge (only for routine tasks) */}
+          {/* Line 3: Session badge (only for session tasks) */}
           {isRoutine && (
             <div className="mt-1.5">
               <span className="inline-flex items-center gap-1 rounded-full bg-amber-50 px-2 py-0.5 text-[11px] font-bold text-amber-600 dark:bg-amber-900/25 dark:text-amber-400">
-                <IconRepeat size={10} strokeWidth={2.5} />
-                Routine
+                <IconStack2 size={10} strokeWidth={2.5} />
+                Session
               </span>
             </div>
           )}
@@ -1181,14 +1182,12 @@ export default function PlanDetailView({
           </div>
 
           {/* Smooth animated fill bar */}
-          <div className="relative h-[10px] rounded-full bg-neutral-200 dark:bg-white/[0.08] overflow-hidden mb-3">
-            <motion.div
-              className="absolute inset-y-0 left-0 rounded-full bg-gradient-to-r from-green-600 via-green-500 to-emerald-400"
-              initial={{ width: "0%" }}
-              animate={{ width: `${Math.max(overallPct, overallPct > 0 ? 2 : 0)}%` }}
-              transition={{ duration: 0.9, ease: [0.25, 0.46, 0.45, 0.94], delay: 0.1 }}
-            />
-          </div>
+          <ProgressBar
+            pct={overallPct}
+            height={10}
+            fillClassName="bg-gradient-to-r from-green-600 via-green-500 to-emerald-400"
+            className="mb-3"
+          />
 
           {/* Day activity strip — last 28 days */}
           <div className="flex gap-[3px] mb-3">
@@ -2132,8 +2131,8 @@ export default function PlanDetailView({
               {isRoutine && (
                 <div className="mb-3">
                   <span className="inline-flex items-center gap-1.5 rounded-full bg-amber-50 px-2.5 py-1 text-[12px] font-bold text-amber-600 dark:bg-amber-900/20 dark:text-amber-400">
-                    <IconRepeat size={12} strokeWidth={2.5} />
-                    Routine Task
+                    <IconStack2 size={12} strokeWidth={2.5} />
+                    Session
                   </span>
                 </div>
               )}

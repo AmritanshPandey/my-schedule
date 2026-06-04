@@ -21,6 +21,7 @@ import {
 } from "@/lib/consistency/calculateDailyStats";
 import { calculateWeeklyHistory } from "@/lib/consistency/calculateWeeklyStats";
 import { calculateInsights } from "@/lib/consistency/calculateInsights";
+import ProgressBar from "@/components/ui/ProgressBar";
 import type { InsightIcon } from "@/lib/consistency/calculateInsights";
 import WeeklyConsistencyChart from "./WeeklyConsistencyChart";
 
@@ -184,14 +185,7 @@ export default function ConsistencyOverview({
           </div>
 
           {/* Progress bar */}
-          <div className="h-2 rounded-full bg-neutral-200 dark:bg-white/[0.07] overflow-hidden">
-            <motion.div
-              className={`h-full rounded-full ${barColor(thisWeekPct)}`}
-              initial={{ width: "0%" }}
-              animate={{ width: `${thisWeekPct}%` }}
-              transition={{ duration: 0.8, ease: [0.25, 0.46, 0.45, 0.94], delay: 0.1 }}
-            />
-          </div>
+          <ProgressBar pct={thisWeekPct} height={8} fillClassName={barColor(thisWeekPct)} />
 
           {/* 2-col metric tiles */}
           <div className="grid grid-cols-2 gap-2.5 mt-4">
@@ -260,14 +254,12 @@ export default function ConsistencyOverview({
                     }`}>
                       {week.scheduled > 0 ? `${week.pct}%` : "—"}
                     </p>
-                    <div className="mt-2 h-1 rounded-full bg-neutral-200 dark:bg-white/[0.07] overflow-hidden">
-                      <motion.div
-                        className={`h-full rounded-full ${barColor(week.pct)}`}
-                        initial={{ width: "0%" }}
-                        animate={{ width: week.scheduled > 0 ? `${week.pct}%` : "0%" }}
-                        transition={{ duration: 0.6, ease: "easeOut", delay: 0.1 + i * 0.04 }}
-                      />
-                    </div>
+                    <ProgressBar
+                      pct={week.scheduled > 0 ? week.pct : 0}
+                      height={4}
+                      fillClassName={barColor(week.pct)}
+                      className="mt-2"
+                    />
                     {week.trendVsPrev !== null && (
                       <div className={`mt-1 flex items-center gap-0.5 text-[9px] font-bold ${
                         trendUp ? "text-emerald-500" : trendDown ? "text-rose-400" : "text-neutral-300 dark:text-neutral-700"

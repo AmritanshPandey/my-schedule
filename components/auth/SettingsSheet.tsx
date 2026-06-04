@@ -323,6 +323,63 @@ function ClearDataRow({ onClearData, onDone }: ClearDataRowProps) {
   );
 }
 
+// ── Clear progress row (keeps plans/tasks, wipes completions & logs) ──────────
+
+function ClearProgressRow({ onClearProgress }: { onClearProgress: () => Promise<void> }) {
+  const [phase, setPhase] = useState<"idle" | "confirm" | "clearing">("idle");
+
+  const handleClear = useCallback(async () => {
+    setPhase("clearing");
+    try { await onClearProgress(); } finally { setPhase("idle"); }
+  }, [onClearProgress]);
+
+  return (
+    <div className="px-4 py-3.5">
+      <AnimatePresence mode="wait" initial={false}>
+        {phase === "idle" && (
+          <motion.div key="idle" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: 0.15 }} className="flex items-center gap-3">
+            <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl border border-amber-100 bg-amber-50 text-amber-600 dark:border-amber-500/20 dark:bg-amber-500/10 dark:text-amber-400">
+              <IconRefresh size={15} strokeWidth={2} />
+            </div>
+            <div className="min-w-0 flex-1">
+              <p className="text-[13px] font-semibold text-neutral-800 dark:text-white">Clear progress</p>
+              <p className="text-[11px] text-neutral-400 dark:text-neutral-500">Resets completions & logs · keeps plans and tasks</p>
+            </div>
+            <button type="button" onClick={() => setPhase("confirm")}
+              className="shrink-0 rounded-xl border border-amber-200 bg-amber-50 px-3 py-1.5 text-[11px] font-semibold text-amber-700 transition-colors hover:bg-amber-100 dark:border-amber-500/20 dark:bg-amber-500/10 dark:text-amber-400">
+              Reset
+            </button>
+          </motion.div>
+        )}
+        {phase === "confirm" && (
+          <motion.div key="confirm" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: 0.15 }}>
+            <div className="mb-3 flex items-center gap-2 text-amber-600 dark:text-amber-400">
+              <IconAlertTriangle size={14} strokeWidth={2} />
+              <p className="text-[12px] font-semibold">Clears all completions, history, check-ins, logged metrics & milestone progress. Plans, tasks and milestones stay.</p>
+            </div>
+            <div className="flex gap-2">
+              <button type="button" onClick={() => setPhase("idle")}
+                className="flex flex-1 items-center justify-center gap-1.5 rounded-xl border border-neutral-200 bg-white py-2 text-[12px] font-semibold text-neutral-600 transition-colors hover:bg-neutral-100 dark:border-white/[0.08] dark:bg-white/[0.04] dark:text-neutral-400">
+                <IconX size={12} strokeWidth={2.5} />Cancel
+              </button>
+              <button type="button" onClick={handleClear}
+                className="flex flex-1 items-center justify-center gap-1.5 rounded-xl border border-amber-200 bg-amber-50 py-2 text-[12px] font-semibold text-amber-700 transition-colors hover:bg-amber-100 dark:border-amber-500/20 dark:bg-amber-500/10 dark:text-amber-400">
+                <IconRefresh size={12} strokeWidth={2} />Clear progress
+              </button>
+            </div>
+          </motion.div>
+        )}
+        {phase === "clearing" && (
+          <motion.div key="clearing" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: 0.15 }} className="flex items-center gap-3">
+            <span className="h-4 w-4 animate-spin rounded-full border-2 border-neutral-200 border-t-neutral-600 dark:border-neutral-700 dark:border-t-neutral-300" />
+            <span className="text-[13px] font-medium text-neutral-500 dark:text-neutral-400">Clearing progress…</span>
+          </motion.div>
+        )}
+      </AnimatePresence>
+    </div>
+  );
+}
+
 // ── Profile section ───────────────────────────────────────────────────────────
 
 function GoogleLogo() {
@@ -689,10 +746,11 @@ interface SettingsSheetProps {
   open: boolean;
   onClose: () => void;
   onClearData: () => Promise<void>;
+  onClearProgress?: () => Promise<void>;
   schedule: Schedule;
 }
 
-export function SettingsSheet({ open, onClose, onClearData, schedule }: SettingsSheetProps) {
+export function SettingsSheet({ open, onClose, onClearData, onClearProgress, schedule }: SettingsSheetProps) {
   const { user, isGuest, authLoading, login, logout } = useAuth();
   const [busy, setBusy] = useState(false);
   const [aiSettingsOpen, setAiSettingsOpen] = useState(false);
@@ -826,6 +884,12 @@ export function SettingsSheet({ open, onClose, onClearData, schedule }: Settings
           {!isGuest && (
             <>
               <SyncRow schedule={schedule} />
+              <Divider />
+            </>
+          )}
+          {onClearProgress && (
+            <>
+              <ClearProgressRow onClearProgress={onClearProgress} />
               <Divider />
             </>
           )}

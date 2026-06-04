@@ -487,15 +487,17 @@ function GoogleLogo() {
 interface SettingsViewProps {
   schedule: Schedule;
   onClearData: () => Promise<void>;
+  onClearProgress?: () => Promise<void>;
   onClose?: () => void;
 }
 
-export function SettingsView({ schedule, onClearData, onClose }: SettingsViewProps) {
+export function SettingsView({ schedule, onClearData, onClearProgress, onClose }: SettingsViewProps) {
   const { user, isGuest, authLoading, login, logout } = useAuth();
   const [busy, setBusy]   = useState(false);
   const [theme, setTheme] = useState<ThemeMode>("light");
   const [themeReady, setThemeReady] = useState(false);
   const [clearPhase, setClearPhase] = useState<"idle" | "confirm" | "clearing">("idle");
+  const [progressPhase, setProgressPhase] = useState<"idle" | "confirm" | "clearing">("idle");
 
   useEffect(() => { setTheme(readTheme()); setThemeReady(true); }, []);
 
@@ -511,6 +513,11 @@ export function SettingsView({ schedule, onClearData, onClose }: SettingsViewPro
     setClearPhase("clearing");
     try { await onClearData(); await deleteCloudData(); } finally { setClearPhase("idle"); onClose?.(); }
   }, [onClearData, onClose]);
+  const handleClearProgress = useCallback(async () => {
+    if (!onClearProgress) return;
+    setProgressPhase("clearing");
+    try { await onClearProgress(); } finally { setProgressPhase("idle"); }
+  }, [onClearProgress]);
 
   return (
     <div className="min-h-full bg-[#F5F5F5] dark:bg-[#111111]">
@@ -615,6 +622,56 @@ export function SettingsView({ schedule, onClearData, onClose }: SettingsViewPro
                   <Divider />
                 </>
               )}
+              {/* Clear progress — keeps plans/tasks/trackers, wipes completions & logs */}
+              {onClearProgress && (
+                <>
+                  <div className="px-4 py-3.5">
+                    <AnimatePresence mode="wait" initial={false}>
+                      {progressPhase === "idle" && (
+                        <motion.div key="p-idle" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+                          className="flex items-center gap-3">
+                          <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl border border-amber-100 bg-amber-50 text-amber-600 dark:border-amber-500/20 dark:bg-amber-500/10 dark:text-amber-400">
+                            <IconRefresh size={14} strokeWidth={2} />
+                          </div>
+                          <div className="min-w-0 flex-1">
+                            <p className="text-[13px] font-semibold text-neutral-800 dark:text-white">Clear progress</p>
+                            <p className="text-[11px] text-neutral-400 dark:text-neutral-500">Resets completions & logged values · keeps your plans and tasks</p>
+                          </div>
+                          <button type="button" onClick={() => setProgressPhase("confirm")}
+                            className="shrink-0 rounded-xl border border-amber-200 bg-amber-50 px-3 py-1.5 text-[11px] font-semibold text-amber-700 hover:bg-amber-100 dark:border-amber-500/20 dark:bg-amber-500/10 dark:text-amber-400">
+                            Reset
+                          </button>
+                        </motion.div>
+                      )}
+                      {progressPhase === "confirm" && (
+                        <motion.div key="p-confirm" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
+                          <p className="mb-3 text-[12px] font-semibold text-amber-600 dark:text-amber-400">
+                            Clears all task completions, completion history, routine check-ins, logged metrics, and milestone progress. Your plans, tasks, trackers, milestones, and routines stay. Cannot be undone.
+                          </p>
+                          <div className="flex gap-2">
+                            <button type="button" onClick={() => setProgressPhase("idle")}
+                              className="flex flex-1 items-center justify-center gap-1.5 rounded-xl border border-neutral-200 bg-white py-2 text-[12px] font-semibold text-neutral-600 hover:bg-neutral-50 dark:border-white/[0.08] dark:bg-white/[0.04]">
+                              <IconX size={12} strokeWidth={2.5} />Cancel
+                            </button>
+                            <button type="button" onClick={handleClearProgress}
+                              className="flex flex-1 items-center justify-center gap-1.5 rounded-xl border border-amber-200 bg-amber-50 py-2 text-[12px] font-semibold text-amber-700 hover:bg-amber-100 dark:border-amber-500/20 dark:bg-amber-500/10 dark:text-amber-400">
+                              <IconRefresh size={12} strokeWidth={2} />Clear progress
+                            </button>
+                          </div>
+                        </motion.div>
+                      )}
+                      {progressPhase === "clearing" && (
+                        <motion.div key="p-clearing" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="flex items-center gap-3">
+                          <span className="h-4 w-4 animate-spin rounded-full border-2 border-neutral-200 border-t-neutral-600" />
+                          <span className="text-[13px] font-medium text-neutral-500">Clearing progress…</span>
+                        </motion.div>
+                      )}
+                    </AnimatePresence>
+                  </div>
+                  <Divider />
+                </>
+              )}
+
               {/* Clear data */}
               <div className="px-4 py-3.5">
                 <AnimatePresence mode="wait" initial={false}>

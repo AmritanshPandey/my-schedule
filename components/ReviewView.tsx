@@ -17,6 +17,7 @@ import type { Schedule, DayKey } from "@/lib/useScheduleDB";
 import { DAYS, DAY_LABELS } from "@/lib/useScheduleDB";
 import { isTaskCompleted } from "@/lib/taskCompletion";
 import { calculateConsistency } from "@/lib/planInsights";
+import ProgressBar from "@/components/ui/ProgressBar";
 import { computeTrend } from "@/lib/trendUtils";
 import { todayISO, addDaysToISO, localISODate } from "@/lib/dateUtils";
 import { streamWeeklyInsight } from "@/lib/aiActions";
@@ -367,16 +368,11 @@ function ThisWeekSection({
               }`}>
                 {label}
               </span>
-              <div className="w-full h-[5px] rounded-full bg-neutral-100 dark:bg-white/[0.06] overflow-hidden">
-                {total > 0 && isPastOrToday && (
-                  <div
-                    className={`h-full rounded-full ${
-                      pct === 100 ? "bg-emerald-500" : pct >= 50 ? "bg-amber-400" : "bg-rose-400"
-                    }`}
-                    style={{ width: `${Math.max(pct, pct > 0 ? 10 : 0)}%` }}
-                  />
-                )}
-              </div>
+              <ProgressBar
+                pct={total > 0 && isPastOrToday ? pct : 0}
+                height={5}
+                fillClassName={pct === 100 ? "bg-emerald-500" : pct >= 50 ? "bg-amber-400" : "bg-rose-400"}
+              />
               <span className={`text-[9px] tabular-nums leading-none ${
                 isToday ? "font-bold text-neutral-700 dark:text-neutral-300" : "text-neutral-400 dark:text-neutral-500"
               }`}>
@@ -1055,14 +1051,11 @@ function MetricsLogSection({ schedule }: { schedule: Schedule }) {
                       {Math.round(goalPct * 100)}%
                     </span>
                   </div>
-                  <div className="h-1.5 w-full overflow-hidden rounded-full bg-neutral-100 dark:bg-white/[0.07]">
-                    <div
-                      className={`h-full rounded-full transition-all ${
-                        goalPct >= 0.8 ? "bg-emerald-500" : goalPct >= 0.5 ? "bg-amber-400" : "bg-rose-400"
-                      }`}
-                      style={{ width: `${Math.round(goalPct * 100)}%` }}
-                    />
-                  </div>
+                  <ProgressBar
+                    pct={Math.round(goalPct * 100)}
+                    height={6}
+                    fillClassName={goalPct >= 0.8 ? "bg-emerald-500" : goalPct >= 0.5 ? "bg-amber-400" : "bg-rose-400"}
+                  />
                 </div>
               )}
 

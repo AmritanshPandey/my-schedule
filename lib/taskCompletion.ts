@@ -23,7 +23,7 @@ function stripTodayTaskEvents(history: TaskCompletionEvent[] | undefined): TaskC
 
 export function createCompletionEvent(
   taskId: string,
-  type: "task" | "subtask",
+  type: "task" | "subtask" | "missed",
   subtaskId?: string
 ): TaskCompletionEvent {
   return {
@@ -33,6 +33,17 @@ export function createCompletionEvent(
     completionType: type,
     subtaskId,
   };
+}
+
+// Strip ALL of today's events whose type is in `types`.
+function stripTodayEvents(
+  history: TaskCompletionEvent[] | undefined,
+  types: TaskCompletionEvent["completionType"][],
+): TaskCompletionEvent[] {
+  const today = localISODate(new Date());
+  return (history ?? []).filter(
+    (ev) => !(types.includes(ev.completionType) && localISODate(new Date(ev.completedAt)) === today)
+  );
 }
 
 // ── Progress calculation ─────────────────────────────────────────────────────
@@ -65,14 +76,20 @@ export function isTaskCompleted(task: Task, totalSubtasks: number): boolean {
   return (task.completedSubtaskIds?.length ?? 0) >= totalSubtasks;
 }
 
-// ── Three-state resolver ─────────────────────────────────────────────────────
+// ── State resolver ───────────────────────────────────────────────────────────
 
-export type TaskState = "incomplete" | "partial" | "completed";
+export type TaskState = "incomplete" | "partial" | "completed" | "missed";
 
 export function resolveTaskState(task: Task, totalSubtasks: number): TaskState {
   if (isTaskCompleted(task, totalSubtasks)) return "completed";
+  if (task.missed) return "missed";
   if (totalSubtasks > 0 && (task.completedSubtaskIds?.length ?? 0) > 0) return "partial";
   return "incomplete";
+}
+
+/** A task is "resolved" for the day once it's either done or explicitly missed. */
+export function isTaskResolved(task: Task, totalSubtasks: number): boolean {
+  return isTaskCompleted(task, totalSubtasks) || !!task.missed;
 }
 
 // ── Toggle task (whole task) ─────────────────────────────────────────────────
@@ -106,7 +123,40 @@ export function toggleTaskComplete(
     completed: true,
     completedAt: now,
     completedSubtaskIds: allSubtaskIds,
-    completionHistory: [...(task.completionHistory ?? []), event],
+    // Completing clears a prior "missed" mark for today.
+    missed: false,
+    missedAt: undefined,
+    completionHistory: [...stripTodayEvents(task.completionHistory, ["missed"]), event],
+  };
+}
+
+// ── Mark task (and its subtasks) "missed" ────────────────────────────────────
+
+/**
+ * Toggle a whole-task "missed" mark for TODAY. Marking missed clears any
+ * completion for today and records a missed event for the task + each subtask;
+ * tapping again un-marks it.
+ */
+export function markTaskMissed(task: Task, allSubtaskIds: string[]): Partial<Task> {
+  if (task.missed) {
+    return {
+      missed: false,
+      missedAt: undefined,
+      completionHistory: stripTodayEvents(task.completionHistory, ["missed"]),
+    };
+  }
+  const cleared = stripTodayEvents(task.completionHistory, ["task", "subtask", "missed"]);
+  const events: TaskCompletionEvent[] = [
+    createCompletionEvent(task.id, "missed"),
+    ...allSubtaskIds.map((sid) => createCompletionEvent(task.id, "missed", sid)),
+  ];
+  return {
+    completed: false,
+    completedAt: undefined,
+    completedSubtaskIds: [],
+    missed: true,
+    missedAt: new Date().toISOString(),
+    completionHistory: [...cleared, ...events],
   };
 }
 
@@ -148,7 +198,10 @@ export function toggleSubtaskComplete(
       completedSubtaskIds: next,
       completed: allNowDone,
       completedAt: allNowDone ? now : undefined,
-      completionHistory: [...history, ...events],
+      // Any progress clears a prior "missed" mark for today.
+      missed: false,
+      missedAt: undefined,
+      completionHistory: [...stripTodayEvents(history, ["missed"]), ...events],
     };
   }
 
@@ -159,4 +212,84 @@ export function toggleSubtaskComplete(
     completedAt: undefined,
     completionHistory: stripTodayTaskEvents(history),
   };
+}
+
+// ── Date-aware completion (viewing a day other than today) ───────────────────
+// The live `completed`/`completedSubtaskIds` flags only describe TODAY's
+// occurrence. For any other day we read the permanent `completionHistory`.
+
+/** Derive a task's completion state for a specific date from its history. */
+export function completionForDate(
+  task: Task,
+  dateISO: string
+): { completed: boolean; completedSubtaskIds: string[]; missed: boolean } {
+  const onDate = (task.completionHistory ?? []).filter(
+    (e) => localISODate(new Date(e.completedAt)) === dateISO
+  );
+  const allSubIds = task.subtasks?.map((s) => s.id) ?? [];
+  if (onDate.some((e) => e.completionType === "task")) {
+    return { completed: true, completedSubtaskIds: allSubIds, missed: false };
+  }
+  const missed = onDate.some((e) => e.completionType === "missed" && !e.subtaskId);
+  const subIds = Array.from(
+    new Set(onDate.filter((e) => e.completionType === "subtask" && e.subtaskId).map((e) => e.subtaskId as string))
+  );
+  return {
+    completed: allSubIds.length > 0 && subIds.length >= allSubIds.length,
+    completedSubtaskIds: subIds,
+    missed,
+  };
+}
+
+function datedEvent(taskId: string, dateISO: string, type: "task" | "subtask", subtaskId?: string): TaskCompletionEvent {
+  return { id: uid(), taskId, completedAt: new Date(`${dateISO}T12:00:00`).toISOString(), completionType: type, subtaskId };
+}
+
+/** Toggle whole-task completion for a non-today date — history only. */
+export function toggleTaskCompleteForDate(
+  task: Task,
+  allSubtaskIds: string[],
+  dateISO: string
+): Partial<Task> {
+  const history = task.completionHistory ?? [];
+  const onDate = (e: TaskCompletionEvent) => localISODate(new Date(e.completedAt)) === dateISO;
+  const wasComplete = history.some((e) => e.completionType === "task" && onDate(e));
+  if (wasComplete) {
+    return { completionHistory: history.filter((e) => !onDate(e)) };
+  }
+  const events = [
+    datedEvent(task.id, dateISO, "task"),
+    ...allSubtaskIds.map((sid) => datedEvent(task.id, dateISO, "subtask", sid)),
+  ];
+  return { completionHistory: [...history, ...events] };
+}
+
+/** Toggle one subtask for a non-today date — history only. */
+export function toggleSubtaskCompleteForDate(
+  task: Task,
+  subtaskId: string,
+  totalSubtasks: number,
+  dateISO: string
+): Partial<Task> {
+  const history = task.completionHistory ?? [];
+  const onDate = (e: TaskCompletionEvent) => localISODate(new Date(e.completedAt)) === dateISO;
+  const dayEvents = history.filter(onDate);
+  const hasSub = dayEvents.some((e) => e.completionType === "subtask" && e.subtaskId === subtaskId);
+
+  if (hasSub) {
+    // Remove this subtask's event for the date + any auto-task event (no longer all-done).
+    return {
+      completionHistory: history.filter(
+        (e) => !(onDate(e) && ((e.completionType === "subtask" && e.subtaskId === subtaskId) || e.completionType === "task"))
+      ),
+    };
+  }
+
+  const doneSubs = new Set(dayEvents.filter((e) => e.completionType === "subtask" && e.subtaskId).map((e) => e.subtaskId as string));
+  doneSubs.add(subtaskId);
+  const add = [datedEvent(task.id, dateISO, "subtask", subtaskId)];
+  if (totalSubtasks > 0 && doneSubs.size >= totalSubtasks && !dayEvents.some((e) => e.completionType === "task")) {
+    add.push(datedEvent(task.id, dateISO, "task"));
+  }
+  return { completionHistory: [...history, ...add] };
 }

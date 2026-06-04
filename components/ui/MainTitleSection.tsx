@@ -2,8 +2,9 @@
 
 import { memo } from "react";
 import { AnimatePresence, motion } from "framer-motion";
-import { IconCheck, IconClipboardList } from "@tabler/icons-react";
+import { IconCheck, IconChecklist } from "@tabler/icons-react";
 import { Eyebrow, PageTitle } from "@/components/ui/Typography";
+import ProgressBar from "@/components/ui/ProgressBar";
 import { ICON } from "@/components/ui/Icon";
 
 type ProgressMeta =
@@ -144,7 +145,7 @@ function MainTitleSectionInner({
 
             {counter && (
               <span className="inline-flex shrink-0 items-center gap-1 tabular-nums text-[13px] font-bold leading-none tracking-[-0.1px] text-neutral-400 dark:text-neutral-500">
-                <IconClipboardList {...ICON.badge} strokeWidth={1.8} />
+                <IconChecklist {...ICON.badge} strokeWidth={1.8} />
                 {counter.done}/{counter.total}
               </span>
             )}
@@ -159,14 +160,13 @@ function MainTitleSectionInner({
       </div>
 
       {progressBar !== undefined && (
-        <div className="mt-[10px] h-[4px] w-full overflow-hidden rounded-[2px] bg-neutral-100 dark:bg-white/[0.08]">
-          <motion.div
-            className="h-full rounded-[2px] bg-green-500"
-            initial={false}
-            animate={{ width: `${progressBar.pct}%` }}
-            transition={{ duration: 0.45, ease: [0.34, 1.1, 0.64, 1] }}
-          />
-        </div>
+        <ProgressBar
+          pct={progressBar.pct}
+          height={4}
+          rounded="rounded-[2px]"
+          fillClassName="bg-green-500"
+          className="mt-[10px]"
+        />
       )}
     </div>
   );

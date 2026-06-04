@@ -4,13 +4,14 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import dynamic from "next/dynamic";
 import AddEntryModal from "@/components/AddEntryModal";
+import { TaskBlockCard } from "@/components/TaskBlockCard";
 import { TaskSheet, type TaskSaveData } from "@/components/task/TaskSheet";
 import type { MilestoneSaveData } from "@/components/plan/MilestoneSheet";
 import { PlanCard } from "@/components/plan/PlanCard";
 import AppHeader from "@/components/AppHeader";
 import BottomNav from "@/components/BottomNav";
 import DesktopSidebar from "@/components/desktop/DesktopSidebar";
-import ThemeToggle from "@/components/ThemeToggle";
+import DesktopTopBar from "@/components/desktop/DesktopTopBar";
 import { WeekGrid } from "@/components/desktop/WeekGrid";
 import { QuickAddPanel } from "@/components/desktop/QuickAddPanel";
 import AIAssistant from "@/components/ai/AIAssistant";
@@ -28,8 +29,8 @@ const NotesView = dynamic(() => import("@/components/notes/NotesView"), { ssr: f
 const TemplatesSheet = dynamic(() => import("@/components/TemplatesSheet").then(m => ({ default: m.TemplatesSheet })), { ssr: false });
 const SessionSheet = dynamic(() => import("@/components/activity/SessionSheet"), { ssr: false });
 const SubtasksSheet = dynamic(() => import("@/components/activity/SubtasksSheet"), { ssr: false });
+const BulkImportSheet = dynamic(() => import("@/components/BulkImportSheet"), { ssr: false });
 const RitualView = dynamic(() => import("@/components/activity/RitualView"), { ssr: false });
-const ReviewView = dynamic(() => import("@/components/ReviewView"), { ssr: false });
 const OverviewDashboard = dynamic(() => import("@/components/OverviewDashboard"), { ssr: false });
 const TrackerQuickBar = dynamic(() => import("@/components/TrackerQuickBar"), { ssr: false });
 import WhatNextCard from "@/components/WhatNextCard";
@@ -51,12 +52,12 @@ import {
   SummaryConfig,
   Task,
   categoryFromIcon,
+  resetStaleCompletions,
 } from "@/lib/useScheduleDB";
 import RitualOverlayLayer from "@/components/timeline/RitualOverlayLayer";
 import {
   colorFromIcon,
   resolveAccentColor,
-  timelineCardStyles,
   type AccentColor,
 } from "@/lib/colorSystem";
 import { SECTION_ICONS, getIconPickerStyle } from "@/components/SectionIcons";
@@ -64,6 +65,7 @@ import {
   IconCheck,
   IconChevronLeft,
   IconCalendar,
+  IconChecklist,
   IconChevronRight,
   IconClipboardList,
   IconEdit,
@@ -93,18 +95,23 @@ import { taskLaneStyle } from "@/lib/timeline/taskLaneStyle";
 import {
   toggleTaskComplete,
   toggleSubtaskComplete,
+  markTaskMissed,
+  completionForDate,
   isTaskCompleted,
+  isTaskResolved,
   resolveTaskState,
 } from "@/lib/taskCompletion";
 import { createTask, updateTaskDays, deleteTask, uid, sortTasksByTime } from "@/lib/taskMutations";
 import type { AIGeneratedTask } from "@/lib/aiActions";
 import { applyScheduleRules } from "@/lib/scheduleRules";
+import { resolveTimes as resolveParsedTimes } from "@/lib/scheduleParser";
 import { applyTemplate } from "@/lib/templates";
 import type { Template } from "@/lib/templates";
 import { parseTimeToMinutes, formatDuration } from "@/lib/timeUtils";
-import { todayISO, daysBetween as daysBetweenUtil, formatDate, addDaysToISO } from "@/lib/dateUtils";
+import { todayISO, daysBetween as daysBetweenUtil, formatDate, addDaysToISO, localISODate } from "@/lib/dateUtils";
 import { getPlanCardStats } from "@/lib/planInsights";
 import { MainTitleSection, IconActionButton, CtaActionButton } from "@/components/ui/MainTitleSection";
+import ProgressBar from "@/components/ui/ProgressBar";
 import { cycleAccentColor } from "@/components/ui/Badge";
 import { recalculateRoadmapTimeline } from "@/lib/roadmapDates";
 import { haptic } from "@/lib/haptics";
@@ -434,7 +441,7 @@ function WeekSummary({
 // ─── Main component ───────────────────────────────────────────────────────────
 
 export default function ScheduleApp() {
-  const { schedule, setSchedule, ready, clearData, isFirstLaunch } = useScheduleDB();
+  const { schedule, setSchedule, ready, clearData, clearProgress, isFirstLaunch } = useScheduleDB();
   const [todayKey, setTodayKey] = useState<DayKey>(() => JS_DAYS[new Date().getDay()]);
   const [activeDay, setActiveDay] = useState<DayKey>(() => JS_DAYS[new Date().getDay()]);
   const [editMode, setEditMode] = useState(false);
@@ -453,6 +460,38 @@ export default function ScheduleApp() {
   const [viewMode, setViewMode] = useState<"list" | "timeline">("timeline");
   const [calendarView, setCalendarView] = useState<"1day" | "3day" | "7day" | "custom3">("7day");
   const [customDays, setCustomDays] = useState<DayKey[]>(["monday", "wednesday", "friday"]);
+
+  // Desktop Quick-Add panel width (px) — user-resizable via the split bar, persisted.
+  const QUICK_ADD_MIN = 360;
+  const QUICK_ADD_MAX = 860;
+  const [quickAddWidth, setQuickAddWidth] = useState<number | null>(null);
+  const splitRowRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    const saved = Number(localStorage.getItem("planr_quickadd_width"));
+    if (saved >= QUICK_ADD_MIN && saved <= QUICK_ADD_MAX) setQuickAddWidth(saved);
+  }, []);
+  const startSplitDrag = useCallback((e: React.PointerEvent) => {
+    e.preventDefault();
+    const row = splitRowRef.current;
+    if (!row) return;
+    const rowRight = row.getBoundingClientRect().right;
+    const onMove = (ev: PointerEvent) => {
+      // Panel sits on the right, so its width grows as the pointer moves left.
+      const next = Math.min(QUICK_ADD_MAX, Math.max(QUICK_ADD_MIN, rowRight - ev.clientX));
+      setQuickAddWidth(next);
+    };
+    const onUp = () => {
+      window.removeEventListener("pointermove", onMove);
+      window.removeEventListener("pointerup", onUp);
+      document.body.style.userSelect = "";
+      document.body.style.cursor = "";
+      setQuickAddWidth((w) => { if (w) localStorage.setItem("planr_quickadd_width", String(Math.round(w))); return w; });
+    };
+    document.body.style.userSelect = "none";
+    document.body.style.cursor = "col-resize";
+    window.addEventListener("pointermove", onMove);
+    window.addEventListener("pointerup", onUp);
+  }, []);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
 
   const [taskSheetInitialType, setTaskSheetInitialType] = useState<"task" | "session">("task");
@@ -477,7 +516,8 @@ export default function ScheduleApp() {
   const [sessionTask, setSessionTask] = useState<Task | null>(null);
   // Task whose subtasks are shown in the bottom sheet — stored by id+day so the
   // sheet always reflects the live task (completion updates create new objects).
-  const [subtasksRef, setSubtasksRef] = useState<{ id: string; day: DayKey } | null>(null);
+  const [subtasksRef, setSubtasksRef] = useState<{ id: string; day: DayKey; dateISO: string } | null>(null);
+  const [bulkImportOpen, setBulkImportOpen] = useState(false);
   const completedRitualIds = useMemo(() => {
     const today = todayISO();
     return new Set(
@@ -620,6 +660,14 @@ export default function ScheduleApp() {
     setWhatNextDismissed(false);
   }, [activeDay]);
 
+  // When the day rolls over (midnight / tab wake), clear yesterday's live task
+  // completion so today starts fresh. History is preserved by the util, and it
+  // returns the same reference when nothing changed (no needless re-render).
+  useEffect(() => {
+    if (!ready) return;
+    setSchedule((prev) => resetStaleCompletions(prev, todayISO()));
+  }, [todayKey, ready, setSchedule]);
+
   useEffect(() => {
     // On tab wake after sleep, todayKey may be stale — correct it immediately.
     const currentKey = JS_DAYS[new Date().getDay()];
@@ -692,14 +740,38 @@ export default function ScheduleApp() {
   }
 
   const handleToggleTaskComplete = useCallback(
-    (taskId: string, allSubtaskIds: string[], day: DayKey = activeDay) => {
+    (taskId: string, allSubtaskIds: string[], day: DayKey = activeDay, dateISO?: string) => {
+      // Only today is editable — past/future days are read-only (history view).
+      if (dateISO && dateISO !== todayISO()) return;
+      haptic("medium");
+      setSchedule((prev) => ({
+        ...prev,
+        activities: {
+          ...prev.activities,
+          [day]: (prev.activities[day] ?? []).map((t) => {
+            if (t.id !== taskId) return t;
+            // Tapping the checkbox of a "missed" task clears it back to
+            // incomplete (un-miss) rather than completing it.
+            if (t.missed) return { ...t, ...markTaskMissed(t, allSubtaskIds) };
+            return { ...t, ...toggleTaskComplete(t, allSubtaskIds) };
+          }),
+        },
+      }));
+    },
+    [activeDay, setSchedule]
+  );
+
+  const handleMarkTaskMissed = useCallback(
+    (taskId: string, allSubtaskIds: string[], day: DayKey = activeDay, dateISO?: string) => {
+      // Only today is editable — past/future days are read-only (history view).
+      if (dateISO && dateISO !== todayISO()) return;
       haptic("medium");
       setSchedule((prev) => ({
         ...prev,
         activities: {
           ...prev.activities,
           [day]: (prev.activities[day] ?? []).map((t) =>
-            t.id === taskId ? { ...t, ...toggleTaskComplete(t, allSubtaskIds) } : t
+            t.id === taskId ? { ...t, ...markTaskMissed(t, allSubtaskIds) } : t
           ),
         },
       }));
@@ -708,7 +780,8 @@ export default function ScheduleApp() {
   );
 
   const handleToggleSubtask = useCallback(
-    (taskId: string, subtaskId: string, day: DayKey = activeDay) => {
+    (taskId: string, subtaskId: string, day: DayKey = activeDay, dateISO?: string) => {
+      if (dateISO && dateISO !== todayISO()) return; // read-only past/future
       haptic("light");
       setSchedule((prev) => ({
         ...prev,
@@ -724,6 +797,30 @@ export default function ScheduleApp() {
     },
     [activeDay, setSchedule]
   );
+
+  function handleBulkImport(days: import("@/lib/scheduleParser").ParsedDay[]) {
+    setSchedule((prev) => {
+      const activities = { ...prev.activities };
+      for (const d of days) {
+        const created: Task[] = d.tasks.map((t) => {
+          const { startTime, endTime } = resolveParsedTimes(t);
+          const plan = prev.plans.find((p) => p.id === t.planId) ?? prev.plans[0] ?? null;
+          return {
+            id: uid(),
+            title: t.title,
+            startTime,
+            endTime,
+            icon: t.icon,
+            color: (plan?.color ?? "cyan") as AccentColor,
+            planId: plan?.id ?? "",
+          };
+        });
+        activities[d.day] = sortTasksByTime([...(activities[d.day] ?? []), ...created]);
+      }
+      return { ...prev, activities };
+    });
+    setToastMessage("Tasks imported");
+  }
 
   function handleAddPlan() {
     const title = newPlanTitle.trim();
@@ -1280,6 +1377,20 @@ export default function ScheduleApp() {
     [schedule.activities, activeDay]
   );
 
+  // Real calendar date of the selected weekday (current week ± weekOffset).
+  const activeDateISO = useMemo(() => {
+    const found = getWeekDates(weekOffset).find((d) => d.day === activeDay);
+    return found ? localISODate(found.date) : todayISO();
+  }, [weekOffset, activeDay, todayKey]); // eslint-disable-line react-hooks/exhaustive-deps
+  const isViewingToday = activeDateISO === todayISO();
+
+  // For days other than today, completion is read from the dated history so the
+  // selected day reflects what was actually done (the live flag only holds today).
+  const dayTasksView = useMemo(
+    () => (isViewingToday ? dayTasks : dayTasks.map((t) => ({ ...t, ...completionForDate(t, activeDateISO) }))),
+    [dayTasks, isViewingToday, activeDateISO]
+  );
+
   const taskSheetActiveDays = useMemo(() => {
     if (taskSheetMode !== "edit" || !taskSheetTask) return [activeDay];
 
@@ -1312,12 +1423,12 @@ export default function ScheduleApp() {
   }, [schedule.plans, schedule.milestones, schedule.progressTrackers]);
 
   const dayProgress = useMemo(() => {
-    const total = dayTasks.length;
-    const done = dayTasks.filter((t) =>
+    const total = dayTasksView.length;
+    const done = dayTasksView.filter((t) =>
       isTaskCompleted(t, t.subtasks?.length ?? 0)
     ).length;
     return { done, total, pct: total > 0 ? Math.round((done / total) * 100) : 0 };
-  }, [dayTasks, plansById]);
+  }, [dayTasksView]);
 
   // ── Today Command Center derived data ──────────────────────────────────────
 
@@ -1332,10 +1443,11 @@ export default function ScheduleApp() {
     return map;
   }, [schedule.milestones]);
 
-  /** First uncompleted task for today, sorted by time — drives What's Next card */
+  /** First unresolved task for today, sorted by time — drives What's Next card.
+      Skips both completed and missed tasks. */
   const nextTask = useMemo(() => {
     if (activeDay !== todayKey) return null;
-    return dayTasks.find((t) => !isTaskCompleted(t, t.subtasks?.length ?? 0)) ?? null;
+    return dayTasks.find((t) => !isTaskResolved(t, t.subtasks?.length ?? 0)) ?? null;
   }, [dayTasks, activeDay, todayKey]);
 
   /** Rituals due on the active day (for summary line) */
@@ -1440,7 +1552,7 @@ export default function ScheduleApp() {
   }
 
   const timelineTaskLayouts = useMemo(() => {
-    const intervals = dayTasks
+    const intervals = dayTasksView
       .map((task) => {
         const start = parseTimeToMinutes(task.startTime) ?? TIMELINE_START_MINUTES;
         let end = parseTimeToMinutes(task.endTime) ?? start + 30;
@@ -1484,7 +1596,7 @@ export default function ScheduleApp() {
     });
     if (cluster.length > 0) finishCluster();
     return layouts;
-  }, [dayTasks]);
+  }, [dayTasksView]);
 
 
   // ─── Loading ───────────────────────────────────────────────────────────────
@@ -1512,163 +1624,30 @@ export default function ScheduleApp() {
     isOvernight = false,
     isTruncated = false
   ) {
-    const { linkedPlan, color } = getTaskPresentation(task);
-    const tone = timelineCardStyles(color);
+    // Unified visual: the shared TaskBlockCard (same component as the desktop
+    // week grid + the mobile list). Size tiers map to its grid variants.
+    const { linkedPlan } = getTaskPresentation(task);
     const duration = formatTaskDuration(task.startTime, task.endTime);
-    const totalSubtasks = task.subtasks?.length ?? 0;
     const allSubtaskIds = task.subtasks?.map((i) => i.id) ?? [];
-    const taskState = resolveTaskState(task, totalSubtasks);
-    const done = taskState === "completed";
-    const partial = taskState === "partial";
-    const isSession = task.taskType === "session";
+    const taskState = resolveTaskState(task, task.subtasks?.length ?? 0);
+    const toggle = () => { haptic("light"); handleToggleTaskComplete(task.id, allSubtaskIds, activeDay, activeDateISO); };
+    void cardClassName; void isOvernight; void isTruncated;
 
-    // Completed blocks read as "filed away", not broken: keep the tinted bg
-    // (color identity) but neutralize the loud accent rail and recede slightly.
-    const rail = done ? "border-l-[3px] border-l-neutral-300 dark:border-l-white/15" : tone.accentBar;
-    const base = `${cardClassName} ${tone.cardBg} ${tone.blockBorder} ${rail} transition-all duration-300${done ? " opacity-[0.65]" : ""}`;
-    const titleClass = `${tone.title}${done ? " line-through decoration-neutral-400/50 dark:decoration-white/30 text-neutral-500 dark:text-white/55" : ""}`;
-
-    // ── Checkbox (small / medium / large) ─────────────────────────────────
-    const checkbox = (cardSize !== "xsmall") ? (
-      <motion.button
-        type="button"
-        whileTap={{ scale: 0.80 }}
-        transition={{ type: "spring", stiffness: 500, damping: 25 }}
-        onClick={(e) => { e.stopPropagation(); handleToggleTaskComplete(task.id, allSubtaskIds); }}
-        aria-label={done ? "Mark incomplete" : "Mark complete"}
-        className={`absolute top-1.5 right-1.5 z-10 flex h-[17px] w-[17px] shrink-0 items-center justify-center rounded-[4px] border-[1.5px] transition-colors duration-200 ${
-          done || partial
-            ? "border-transparent bg-green-500"
-            : "border-neutral-400/45 bg-transparent dark:border-white/35"
-        }`}
-      >
-        <AnimatePresence mode="wait" initial={false}>
-          {done && (
-            <motion.span
-              key="check"
-              initial={{ opacity: 0, scale: 0.4, rotate: -15 }}
-              animate={{ opacity: 1, scale: 1, rotate: 0 }}
-              exit={{ opacity: 0, scale: 0.4 }}
-              transition={{ type: "spring", stiffness: 500, damping: 22 }}
-            >
-              <IconCheck size={9} strokeWidth={3} className="text-white" />
-            </motion.span>
-          )}
-          {partial && (
-            <motion.span
-              key="partial"
-              initial={{ opacity: 0, scale: 0.4 }}
-              animate={{ opacity: 1, scale: 1 }}
-              exit={{ opacity: 0, scale: 0.4 }}
-              transition={{ duration: 0.15 }}
-            >
-              <IconMinus size={9} strokeWidth={3} className="text-white" />
-            </motion.span>
-          )}
-        </AnimatePresence>
-      </motion.button>
-    ) : null;
-
-    // ── xsmall (< 32px): title chip + tap to toggle ────────────────────────
-    if (cardSize === "xsmall") {
-      return (
-        <div
-          className={`${base} cursor-pointer`}
-          onClick={() => handleToggleTaskComplete(task.id, allSubtaskIds)}
-        >
-          <div className="flex h-full items-center min-w-0">
-            <span className={`text-[10px] font-semibold leading-none truncate ${titleClass}`}>
-              {task.title}
-            </span>
-          </div>
-        </div>
-      );
-    }
-
-    // ── small (32–48px): plan label + title + checkbox ─────────────────────
-    if (cardSize === "small") {
-      return (
-        <div className={`${base} relative cursor-pointer`} onClick={() => { haptic("light"); handleToggleTaskComplete(task.id, allSubtaskIds); }}>
-          {checkbox}
-          <div className="flex h-full flex-col justify-center gap-[2px] min-w-0 pr-5">
-            {linkedPlan && (
-              <p className={`text-[8px] font-bold uppercase tracking-[0.07em] truncate shrink-0 leading-none ${tone.planLabel}`}>
-                {linkedPlan.title}
-              </p>
-            )}
-            <div className="flex min-w-0 items-center gap-1">
-              {isSession && <IconStack2 size={11} strokeWidth={2} className={`shrink-0 ${tone.planLabel}`} />}
-              <span className={`text-[11px] font-semibold leading-snug truncate ${titleClass}`}>
-                {task.title}
-              </span>
-            </div>
-          </div>
-        </div>
-      );
-    }
-
-    // ── medium (48–64px): plan + title + time row ──────────────────────────
-    if (cardSize === "medium") {
-      return (
-        <div className={`${base} relative cursor-pointer`} onClick={() => { haptic("light"); handleToggleTaskComplete(task.id, allSubtaskIds); }}>
-          {checkbox}
-          <div className="flex h-full flex-col min-w-0 pr-5">
-            {linkedPlan && (
-              <p className={`text-[8px] font-bold uppercase tracking-[0.07em] truncate shrink-0 leading-none mb-[2px] ${tone.planLabel}`}>
-                {linkedPlan.title}
-              </p>
-            )}
-            <div className="flex flex-1 min-w-0 items-start gap-1">
-              {isSession && <IconStack2 size={11} strokeWidth={2} className={`mt-[1px] shrink-0 ${tone.planLabel}`} />}
-              <h3 className={`text-[11px] font-semibold leading-snug min-w-0 line-clamp-2 ${titleClass}`}>
-                {task.title}
-              </h3>
-            </div>
-            <div className="flex items-center gap-1 shrink-0">
-              <span className={`text-[9px] font-medium leading-none shrink-0 ${tone.time}`}>
-                {task.startTime}{isOvernight ? " →" : ` – ${task.endTime}`}
-                {isTruncated && " ↓"}
-              </span>
-              {duration && (
-                <span className={`shrink-0 rounded-full px-1.5 py-[1px] text-[8px] font-bold ${tone.durationBadge}`}>
-                  {duration}
-                </span>
-              )}
-            </div>
-          </div>
-        </div>
-      );
-    }
-
-    // ── large (≥ 64px): full time block layout ─────────────────────────────
     return (
-      <div className={`${base} relative cursor-pointer`} onClick={() => { haptic("light"); handleToggleTaskComplete(task.id, allSubtaskIds); }}>
-        {checkbox}
-        <div className="flex flex-col h-full min-w-0 pr-6">
-          {linkedPlan && (
-            <p className={`text-[9px] font-bold uppercase tracking-[0.07em] truncate shrink-0 leading-none mb-1 ${tone.planLabel}`}>
-              {linkedPlan.title}
-            </p>
-          )}
-          <div className="flex flex-1 min-w-0 items-start gap-1">
-            {isSession && <IconStack2 size={12} strokeWidth={2} className={`mt-[1px] shrink-0 ${tone.planLabel}`} />}
-            <h3 className={`text-[13px] font-semibold leading-snug min-w-0 line-clamp-2 ${titleClass}`}>
-              {task.title}
-            </h3>
-          </div>
-          <div className="flex items-center gap-1.5 mt-auto shrink-0 flex-wrap">
-            <span className={`text-[10px] font-medium shrink-0 ${tone.time}`}>
-              {task.startTime}{isOvernight ? " → next" : ` – ${task.endTime}`}
-              {isTruncated && " ↓"}
-            </span>
-            {duration && (
-              <span className={`shrink-0 rounded-full px-2 py-[2px] text-[9px] font-bold ${tone.durationBadge}`}>
-                {duration}
-              </span>
-            )}
-          </div>
-        </div>
-      </div>
+      <TaskBlockCard
+        variant="grid"
+        task={task}
+        plan={linkedPlan}
+        state={taskState}
+        duration={duration}
+        readOnly={!isViewingToday}
+        minimal={cardSize === "xsmall"}
+        compact={cardSize === "small" || cardSize === "medium"}
+        narrow={cardSize === "small"}
+        onToggle={toggle}
+        onClick={toggle}
+        className="h-full w-full"
+      />
     );
   }
 
@@ -1934,6 +1913,7 @@ export default function ScheduleApp() {
                 dateRange={dateRange}
                 onSelect={() => { haptic("light"); setSelectedPlanId(plan.id); }}
                 onQuickLog={firstTracker ? () => setEntryTracker(firstTracker) : undefined}
+                onDelete={() => handleDeletePlan(plan.id)}
               />
             );
           })}
@@ -1956,7 +1936,7 @@ export default function ScheduleApp() {
   // ─── JSX ──────────────────────────────────────────────────────────────────
 
   return (
-    <main className="min-h-screen bg-[#F5F5F5] text-neutral-900 dark:bg-[#111111] dark:text-white lg:flex lg:h-screen lg:overflow-hidden">
+    <main className="min-h-screen bg-[#F5F5F5] text-neutral-900 dark:bg-[#111111] dark:text-white lg:flex lg:h-screen lg:gap-4 lg:overflow-hidden lg:p-4">
 
       {/* ── Desktop sidebar (hidden on mobile) ─────────────────────────────── */}
       <DesktopSidebar
@@ -1969,6 +1949,7 @@ export default function ScheduleApp() {
         onCreateTask={() => openCreateSheet()}
         onCreatePlan={openAddPlan}
         onCreateRitual={() => { setActiveTab(2); if (canAddRitual) setRitualAddOpen(true); }}
+        onBulkImport={() => setBulkImportOpen(true)}
         onOpenSettings={() => setSettingsOpen(true)}
         onOpenSettingsTab={() => setActiveTab(5)}
         onOpenNotes={() => { setSelectedPlanId(null); setActiveTab(6); }}
@@ -2018,16 +1999,32 @@ export default function ScheduleApp() {
           setOllamaModel(localStorage.getItem(OLLAMA_MODEL_KEY) ?? DEFAULT_OLLAMA_MODEL);
         }}
         onClearData={clearData}
+        onClearProgress={clearProgress}
         schedule={schedule}
       />
       <TemplatesSheet open={templatesOpen} onClose={() => setTemplatesOpen(false)} onApply={handleApplyTemplate} />
 
       {/* ── Content ────────────────────────────────────────────────────────── */}
-      {/* paddingTop offsets the fixed header (64px) + iOS safe-area inset on mobile */}
-      <div
-        className="max-w-full pb-40 lg:pt-0 lg:flex-1 lg:max-w-none lg:overflow-y-auto lg:pb-0"
-        style={{ paddingTop: "calc(64px + env(safe-area-inset-top, 0px))" }}
-      >
+      {/* paddingTop offsets the fixed header (64px) + iOS safe-area inset — mobile only.
+          (Tailwind arbitrary value so `lg:pt-0` can actually override it; an inline
+          style would win over the breakpoint and leave a phantom gap on desktop.) */}
+      {activeTab === 6 ? (
+        // Notes lives inside the layout: a framed panel beside the sidebar on
+        // desktop, a full-screen page on mobile.
+        <div
+          className="fixed inset-0 z-50 bg-white dark:bg-neutral-950 lg:static lg:z-auto lg:min-h-0 lg:flex-1 lg:overflow-hidden lg:rounded-2xl lg:border lg:border-neutral-200 dark:lg:border-white/[0.08]"
+          style={{ paddingTop: "env(safe-area-inset-top, 0px)" }}
+        >
+          <NotesView
+            notes={schedule.notes}
+            onCreate={handleCreateNote}
+            onUpdate={handleUpdateNote}
+            onDelete={handleDeleteNote}
+            onClose={() => setActiveTab(0)}
+          />
+        </div>
+      ) : (
+      <div className="max-w-full pb-40 pt-[calc(64px+env(safe-area-inset-top,0px))] lg:pt-0 lg:flex-1 lg:max-w-none lg:overflow-y-auto lg:pb-0">
         <AnimatePresence mode="wait" initial={false}>
 
         {/* ── Tasks Tab ────────────────────────────────────────────────────── */}
@@ -2041,8 +2038,8 @@ export default function ScheduleApp() {
             className="lg:flex lg:h-full lg:overflow-hidden"
           >
             {/* ── Desktop: WeekGrid + QuickAddPanel ─────────────────────────── */}
-            <div className="hidden lg:flex lg:flex-1 lg:overflow-hidden">
-              <div className="flex-1 overflow-hidden">
+            <div ref={splitRowRef} className="hidden lg:flex lg:flex-1 lg:overflow-hidden">
+              <div className="min-w-0 flex-1 overflow-hidden">
                 <WeekGrid
                   schedule={schedule}
                   plansById={plansById}
@@ -2068,27 +2065,44 @@ export default function ScheduleApp() {
                   onCustomDaysChange={setCustomDays}
                   onEditTask={openEditSheet}
                   onToggleTaskComplete={handleToggleTaskComplete}
+                  onDeleteTask={handleDeleteTask}
                   plans={schedule.plans}
                   onInlineAdd={(data) => setSchedule(createTask(data.taskDraft, data.repeatDays, data.planItems))}
                 />
               </div>
+              {/* Drag handle — resize the split between the week grid and Quick Add */}
               <div
-                className="shrink-0 border-l border-neutral-200/80 bg-white transition-[width] duration-200 dark:border-white/[0.08] dark:bg-neutral-950"
+                role="separator"
+                aria-orientation="vertical"
+                aria-label="Resize panels"
+                onPointerDown={startSplitDrag}
+                onDoubleClick={() => { setQuickAddWidth(null); localStorage.removeItem("planr_quickadd_width"); }}
+                title="Drag to resize · double-click to reset"
+                className="group relative w-1.5 shrink-0 cursor-col-resize"
+              >
+                <span className="absolute inset-y-0 left-1/2 w-px -translate-x-1/2 bg-neutral-200/80 transition-colors group-hover:bg-emerald-400 dark:bg-white/[0.08] dark:group-hover:bg-emerald-500" />
+                <span className="absolute left-1/2 top-1/2 flex h-10 w-1.5 -translate-x-1/2 -translate-y-1/2 items-center justify-center rounded-full bg-neutral-300/0 transition-colors group-hover:bg-emerald-400/70 dark:group-hover:bg-emerald-500/70" />
+              </div>
+
+              <div
+                className={`shrink-0 bg-white dark:bg-neutral-950 ${quickAddWidth === null ? "transition-[width] duration-200" : ""}`}
                 style={{
-                  width:
-                    calendarView === "1day"   ? "clamp(580px, 46%, 840px)" :
-                    calendarView === "3day"   ? "clamp(500px, 41%, 720px)" :
-                    calendarView === "custom3"
-                      ? customDays.length <= 2 ? "clamp(580px, 46%, 840px)"
-                        : customDays.length <= 4 ? "clamp(500px, 41%, 720px)"
-                        : "clamp(420px, 35%, 580px)"
-                    : /* 7day */                 "clamp(420px, 35%, 580px)",
+                  width: quickAddWidth !== null
+                    ? `${quickAddWidth}px`
+                    : calendarView === "1day"   ? "clamp(580px, 46%, 840px)" :
+                      calendarView === "3day"   ? "clamp(500px, 41%, 720px)" :
+                      calendarView === "custom3"
+                        ? customDays.length <= 2 ? "clamp(580px, 46%, 840px)"
+                          : customDays.length <= 4 ? "clamp(500px, 41%, 720px)"
+                          : "clamp(420px, 35%, 580px)"
+                      : /* 7day */                 "clamp(420px, 35%, 580px)",
                 }}
               >
                 <QuickAddPanel
                   plans={schedule.plans}
                   activeDay={activeDay}
                   onSave={handleTaskSheetSave}
+                  onBulkImport={handleBulkImport}
                 />
               </div>
             </div>
@@ -2164,7 +2178,7 @@ export default function ScheduleApp() {
                             isActive
                               ? "text-white/55 dark:text-neutral-900/55"
                               : isDateToday
-                              ? "text-emerald-500"
+                              ? "text-rose-500"
                               : "text-neutral-400 dark:text-neutral-500"
                           }`}>
                             {DAY_LABELS[day]}
@@ -2173,7 +2187,7 @@ export default function ScheduleApp() {
                             isActive
                               ? "text-white dark:text-neutral-950"
                               : isDateToday
-                              ? "text-emerald-500"
+                              ? "text-rose-500"
                               : "text-neutral-800 dark:text-neutral-200"
                           }`}>
                             {date.getDate()}
@@ -2204,7 +2218,7 @@ export default function ScheduleApp() {
                 </h1>
                 {dayProgress.total > 0 && (
                   <div className="flex items-center gap-1.5 text-neutral-400 dark:text-neutral-500">
-                    <IconClipboardList size={16} strokeWidth={1.8} />
+                    <IconChecklist size={16} strokeWidth={1.8} />
                     <span className="text-[14px] font-bold tabular-nums text-neutral-500 dark:text-neutral-400">
                       {dayProgress.done}/{dayProgress.total}
                     </span>
@@ -2214,14 +2228,7 @@ export default function ScheduleApp() {
 
               {/* Progress bar */}
               {dayProgress.total > 0 && (
-                <div className="mt-3 h-[6px] w-full overflow-hidden rounded-full bg-neutral-150 dark:bg-white/[0.08]" style={{ backgroundColor: "rgba(0,0,0,0.07)" }}>
-                  <motion.div
-                    className="h-full rounded-full bg-emerald-500"
-                    initial={false}
-                    animate={{ width: `${dayProgress.pct}%` }}
-                    transition={{ duration: 0.5, ease: [0.34, 1.1, 0.64, 1] }}
-                  />
-                </div>
+                <ProgressBar pct={dayProgress.pct} height={6} className="mt-3" />
               )}
             </div>
 
@@ -2287,7 +2294,7 @@ export default function ScheduleApp() {
                       </DndContext>
                     ) : (
                       <div className="flex flex-col gap-3 pb-4">
-                        {dayTasks.map((task) => {
+                        {dayTasksView.map((task) => {
                           const linkedPlan = task.planId ? plansById.get(task.planId) ?? null : null;
                           const linkedMilestone = taskToMilestoneMap.get(task.id);
                           return (
@@ -2295,11 +2302,12 @@ export default function ScheduleApp() {
                               <ListTaskCard
                                 task={task}
                                 linkedPlan={linkedPlan}
-                                onToggleComplete={handleToggleTaskComplete}
-                                onToggleSubtask={handleToggleSubtask}
+                                readOnly={!isViewingToday}
+                                onToggleComplete={(id, ids) => handleToggleTaskComplete(id, ids, activeDay, activeDateISO)}
+                                onToggleSubtask={(id, sub) => handleToggleSubtask(id, sub, activeDay, activeDateISO)}
                                 onEdit={() => openEditSheet(task)}
                                 onDelete={() => handleDeleteTask(task.id)}
-                                onOpenSubtasks={() => setSubtasksRef({ id: task.id, day: activeDay })}
+                                onOpenSubtasks={() => setSubtasksRef({ id: task.id, day: activeDay, dateISO: activeDateISO })}
                               />
                               {linkedMilestone && (
                                 <div className="mt-[-6px] px-1 pb-0.5">
@@ -2570,23 +2578,6 @@ export default function ScheduleApp() {
           </motion.div>
         )}
 
-        {/* ── Review Tab ─────────────────────────────────────────────────── */}
-        {activeTab === 3 && (
-          <motion.div
-            key="tab-review"
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            transition={{ duration: 0.12, ease: "easeOut" }}
-          >
-            <ReviewView
-              schedule={schedule}
-              todayKey={todayKey}
-              ritualWeekHistory={ritualWeekHistory}
-            />
-          </motion.div>
-        )}
-
         {/* ── Overview Tab ───────────────────────────────────────────────── */}
         {activeTab === 4 && (
           <motion.div
@@ -2601,7 +2592,8 @@ export default function ScheduleApp() {
               todayKey={todayKey}
               onNavigate={(tab) => { setActiveTab(tab); setSelectedPlanId(null); }}
               onMarkTaskDone={(id, subtaskIds) => handleToggleTaskComplete(id, subtaskIds, todayKey)}
-              onOpenSubtasks={(id) => setSubtasksRef({ id, day: todayKey })}
+              onMissedTask={(id, subtaskIds) => handleMarkTaskMissed(id, subtaskIds, todayKey)}
+              onOpenSubtasks={(id) => setSubtasksRef({ id, day: todayKey, dateISO: todayISO() })}
               completedRitualIds={completedRitualIds}
               onLogTracker={(tracker) => setEntryTracker(tracker)}
             />
@@ -2620,6 +2612,7 @@ export default function ScheduleApp() {
             <SettingsView
               schedule={schedule}
               onClearData={clearData}
+              onClearProgress={clearProgress}
               onClose={() => setActiveTab(0)}
             />
           </motion.div>
@@ -2627,6 +2620,7 @@ export default function ScheduleApp() {
 
         </AnimatePresence>
       </div>
+      )}
 
       {/* ── Edit Plan Bottom Sheet ─────────────────────────────────────────── */}
       <BottomSheet open={!!editingPlanId} onClose={() => setEditingPlanId(null)} maxHeight="80vh">
@@ -2732,31 +2726,18 @@ export default function ScheduleApp() {
           onCreateTask={() => openCreateSheet()}
           onCreatePlan={openAddPlan}
           onCreateRitual={() => { setActiveTab(2); if (canAddRitual) setRitualAddOpen(true); }}
+          onBulkImport={() => setBulkImportOpen(true)}
         />
       </div>
 
-      {/* ── Notes — full-screen overlay (own header + Back) ────────────────── */}
-      <AnimatePresence>
-        {activeTab === 6 && (
-          <motion.div
-            key="notes-overlay"
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            transition={{ duration: 0.15, ease: "easeOut" }}
-            className="fixed inset-0 z-50 bg-white dark:bg-neutral-950"
-            style={{ paddingTop: "env(safe-area-inset-top, 0px)" }}
-          >
-            <NotesView
-              notes={schedule.notes}
-              onCreate={handleCreateNote}
-              onUpdate={handleUpdateNote}
-              onDelete={handleDeleteNote}
-              onClose={() => setActiveTab(0)}
-            />
-          </motion.div>
-        )}
-      </AnimatePresence>
+      <BulkImportSheet
+        open={bulkImportOpen}
+        plans={schedule.plans}
+        fallbackDay={activeDay}
+        onClose={() => setBulkImportOpen(false)}
+        onCommit={handleBulkImport}
+      />
+
 
       {/* ── Modals ─────────────────────────────────────────────────────────── */}
       <TaskSheet
@@ -2824,16 +2805,22 @@ export default function ScheduleApp() {
       />
 
       {(() => {
-        const st = subtasksRef ? (schedule.activities[subtasksRef.day] ?? []).find((t) => t.id === subtasksRef.id) ?? null : null;
+        const raw = subtasksRef ? (schedule.activities[subtasksRef.day] ?? []).find((t) => t.id === subtasksRef.id) ?? null : null;
+        // Show the selected day's completion (history) when it isn't today.
+        const st = raw && subtasksRef && subtasksRef.dateISO !== todayISO()
+          ? { ...raw, ...completionForDate(raw, subtasksRef.dateISO) }
+          : raw;
         return (
           <SubtasksSheet
             open={!!subtasksRef}
             task={st}
             linkedPlan={st?.planId ? plansById.get(st.planId) ?? null : null}
+            readOnly={!!subtasksRef && subtasksRef.dateISO !== todayISO()}
             onClose={() => setSubtasksRef(null)}
-            onToggleSubtask={(taskId, subId) => handleToggleSubtask(taskId, subId, subtasksRef?.day)}
-            onToggleComplete={(taskId, ids) => handleToggleTaskComplete(taskId, ids, subtasksRef?.day)}
-            onEdit={st ? () => { openEditSheet(st); setSubtasksRef(null); } : undefined}
+            onToggleSubtask={(taskId, subId) => handleToggleSubtask(taskId, subId, subtasksRef?.day, subtasksRef?.dateISO)}
+            onToggleComplete={(taskId, ids) => handleToggleTaskComplete(taskId, ids, subtasksRef?.day, subtasksRef?.dateISO)}
+            onMissed={(taskId, ids) => handleMarkTaskMissed(taskId, ids, subtasksRef?.day, subtasksRef?.dateISO)}
+            onEdit={raw ? () => { openEditSheet(raw); setSubtasksRef(null); } : undefined}
           />
         );
       })()}
@@ -2900,9 +2887,9 @@ export default function ScheduleApp() {
         </AnimatePresence>
       )}
 
-      {/* ── Theme toggle — desktop top right ────────────────────────────────── */}
-      <div className="fixed top-6 right-6 z-50 hidden lg:block">
-        <ThemeToggle />
+      {/* ── Desktop top-bar pill — theme toggle + avatar ────────────────────── */}
+      <div className="fixed top-7 right-7 z-50 hidden lg:block">
+        <DesktopTopBar onOpenSettings={() => setActiveTab(5)} />
       </div>
 
       {/* ── AI onboarding — shown once when app opens ─────────────────────── */}

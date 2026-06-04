@@ -4,6 +4,7 @@ import { useMemo } from "react";
 import { motion } from "framer-motion";
 import { IconCheck, IconMinus, IconListCheck, IconX } from "@tabler/icons-react";
 import BottomSheet from "@/components/ui/BottomSheet";
+import ProgressBar from "@/components/ui/ProgressBar";
 import type { Task, Plan } from "@/lib/useScheduleDB";
 import type { ScheduleEntry, MetaField } from "@/components/ScheduleItem";
 import { calculateTaskProgress, resolveTaskState } from "@/lib/taskCompletion";
@@ -13,9 +14,11 @@ interface SubtasksSheetProps {
   open: boolean;
   task: Task | null;
   linkedPlan: Plan | null;
+  readOnly?: boolean;
   onClose: () => void;
   onToggleSubtask: (taskId: string, subtaskId: string) => void;
   onToggleComplete: (taskId: string, allSubtaskIds: string[]) => void;
+  onMissed?: (taskId: string, allSubtaskIds: string[]) => void;
   onEdit?: () => void;
 }
 
@@ -36,9 +39,11 @@ export default function SubtasksSheet({
   open,
   task,
   linkedPlan,
+  readOnly = false,
   onClose,
   onToggleSubtask,
   onToggleComplete,
+  onMissed,
   onEdit,
 }: SubtasksSheetProps) {
   const isSession = task?.taskType === "session";
@@ -65,7 +70,7 @@ export default function SubtasksSheet({
 
   return (
     <BottomSheet open={open} onClose={onClose}>
-      <div className="relative px-5 pt-5 pb-6 flex flex-col gap-4">
+      <div className="relative px-5 pt-5 pb-8 flex flex-col gap-4">
         {/* Close */}
         <button
           type="button"
@@ -77,10 +82,24 @@ export default function SubtasksSheet({
         </button>
 
         {/* Header */}
-        <div className="flex items-center gap-3 pr-10">
-          <span className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-xl ${done ? "bg-green-600" : "bg-green-600/90"}`}>
-            {done ? <IconCheck size={20} strokeWidth={2.6} className="text-white" /> : <IconMinus size={20} strokeWidth={2.6} className="text-white" />}
-          </span>
+        <div className="flex items-start gap-2.5 pr-10">
+          <button
+            type="button"
+            onClick={() => { if (!readOnly) onToggleComplete(task.id, allIds); }}
+            aria-label={done ? "Mark task not done" : "Mark task done"}
+            aria-pressed={done}
+            className={`mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-[7px] border-2 transition-colors ${readOnly ? "cursor-default" : "active:scale-95"} ${
+              state === "completed" || state === "partial"
+                ? "border-transparent bg-green-600"
+                : state === "missed"
+                ? "border-transparent bg-rose-500"
+                : "border-green-600/70 bg-transparent dark:border-green-500/70"
+            }`}
+          >
+            {state === "completed" && <IconCheck size={14} strokeWidth={3} className="text-white" />}
+            {state === "partial" && <IconMinus size={14} strokeWidth={3} className="text-white" />}
+            {state === "missed" && <IconX size={14} strokeWidth={3} className="text-white" />}
+          </button>
           <div className="min-w-0">
             <h2 className="truncate text-[20px] font-bold leading-tight text-neutral-900 dark:text-white">{task.title}</h2>
             <p className="text-[12px] font-bold uppercase tracking-[0.08em] text-neutral-400 dark:text-neutral-500">{eyebrow}</p>
@@ -90,14 +109,7 @@ export default function SubtasksSheet({
         {/* Progress */}
         {items.length > 0 && (
           <div className="flex items-center gap-3">
-            <div className="relative h-2.5 flex-1 overflow-hidden rounded-full bg-neutral-200 dark:bg-white/[0.08]">
-              <motion.div
-                className="absolute inset-y-0 left-0 rounded-full bg-green-600"
-                initial={false}
-                animate={{ width: `${barPct}%` }}
-                transition={{ duration: 0.45, ease: [0.22, 1, 0.36, 1] }}
-              />
-            </div>
+            <ProgressBar pct={barPct} height={10} fillClassName="bg-green-600" className="min-w-0 flex-1" />
             <span className="w-10 shrink-0 text-right text-[14px] font-bold tabular-nums text-neutral-500 dark:text-neutral-400">{barPct}%</span>
           </div>
         )}
@@ -137,18 +149,23 @@ export default function SubtasksSheet({
                 <button
                   key={item.id}
                   type="button"
-                  onClick={() => onToggleSubtask(task.id, item.id)}
+                  onClick={() => { if (!readOnly) onToggleSubtask(task.id, item.id); }}
                   className={`flex items-center gap-3 rounded-2xl px-3.5 py-3 text-left transition-colors ${
                     isDone ? "bg-transparent" : "bg-neutral-100/70 dark:bg-white/[0.03]"
                   }`}
                 >
                   <span className={`flex h-6 w-6 shrink-0 items-center justify-center rounded-[7px] border-2 transition-colors ${
-                    isDone ? "border-transparent bg-green-600" : "border-green-600/70 bg-transparent dark:border-green-500/70"
+                    isDone ? "border-transparent bg-green-600"
+                    : state === "missed" ? "border-transparent bg-rose-500"
+                    : "border-green-600/70 bg-transparent dark:border-green-500/70"
                   }`}>
                     {isDone && <IconCheck size={14} strokeWidth={3} className="text-white" />}
+                    {!isDone && state === "missed" && <IconX size={14} strokeWidth={3} className="text-white" />}
                   </span>
                   <span className={`flex-1 min-w-0 text-[15px] font-semibold ${
-                    isDone ? "text-neutral-400 line-through dark:text-neutral-500" : "text-neutral-800 dark:text-neutral-200"
+                    isDone ? "text-neutral-400 line-through dark:text-neutral-500"
+                    : state === "missed" ? "text-neutral-400 line-through decoration-rose-400 dark:text-neutral-500"
+                    : "text-neutral-800 dark:text-neutral-200"
                   }`}>
                     {item.task}
                   </span>
@@ -167,27 +184,25 @@ export default function SubtasksSheet({
           </p>
         )}
 
-        {/* Actions */}
-        <div className="mt-1 flex items-center gap-3">
-          <motion.button
-            type="button"
-            whileTap={{ scale: 0.97 }}
-            onClick={() => { onToggleComplete(task.id, allIds); onClose(); }}
-            className="flex flex-1 items-center justify-center gap-2 rounded-full bg-green-600 py-3.5 text-[15px] font-bold text-white"
-          >
-            <IconCheck size={18} strokeWidth={2.6} />
-            {done ? "Completed" : "Mark Done"}
-          </motion.button>
-          <motion.button
-            type="button"
-            whileTap={{ scale: 0.97 }}
-            onClick={onClose}
-            className="flex flex-1 items-center justify-center gap-2 rounded-full border-2 border-rose-500 py-3.5 text-[15px] font-bold text-rose-500"
-          >
-            <IconX size={18} strokeWidth={2.6} />
-            Missed it
-          </motion.button>
-        </div>
+        {/* Actions — only today is editable */}
+        {readOnly ? (
+          <p className="mt-1 rounded-full bg-neutral-100 py-3 text-center text-[13px] font-semibold text-neutral-400 dark:bg-white/[0.04] dark:text-neutral-500">
+            Read-only — past day
+          </p>
+        ) : (
+          <div className="mt-1 flex items-center gap-3">
+            <motion.button
+              type="button"
+              whileTap={{ scale: 0.97 }}
+              onClick={() => { onToggleComplete(task.id, allIds); onClose(); }}
+              className="flex flex-1 items-center justify-center gap-2 rounded-full bg-green-600 py-3.5 text-[15px] font-bold text-white"
+            >
+              <IconCheck size={18} strokeWidth={2.6} />
+              {done ? "Completed" : "Mark Done"}
+            </motion.button>
+       
+          </div>
+        )}
 
         {onEdit && (
           <button

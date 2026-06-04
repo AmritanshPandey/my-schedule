@@ -40,7 +40,7 @@ export default function WhatNextCard({
           className="shrink-0 text-emerald-500"
         />
         <p className="text-[10.5px] font-black uppercase tracking-[0.1em] text-emerald-600 dark:text-emerald-400">
-          Next Up
+          Current Task
         </p>
       </div>
 
