@@ -179,7 +179,9 @@ export default function DesktopSidebar({
       </div>
 
       {/* ── Nav ──────────────────────────────────────────────────────────────── */}
-      <nav className={`flex-1 space-y-0.5 py-2 ${collapsed ? "px-2" : "px-2.5"}`}>
+      {/* min-h-0 + overflow lets the nav scroll on very short screens so the
+          create button and bottom actions below stay pinned and visible. */}
+      <nav className={`min-h-0 flex-1 space-y-0.5 overflow-y-auto py-2 ${collapsed ? "px-2" : "px-2.5"}`}>
         {NAV_ITEMS.map(({ tab, label, Icon }) => {
           const active = activeTab === tab;
           return (
@@ -209,7 +211,7 @@ export default function DesktopSidebar({
 
       {/* ── Create button (hidden on Review tab) ─────────────────────────────── */}
       {activeTab !== 3 && activeTab !== 4 && (
-        <div className={`pb-2 ${collapsed ? "px-2" : "px-2.5"}`}>
+        <div className={`shrink-0 pb-2 ${collapsed ? "px-2" : "px-2.5"}`}>
           <button
             type="button"
             onClick={handleCreate}
@@ -227,7 +229,7 @@ export default function DesktopSidebar({
       )}
 
       {/* ── Bottom: AI status + settings + collapse ───────────────────────────── */}
-      <div className={`border-t border-neutral-200/50 dark:border-white/[0.05] py-2 ${collapsed ? "px-2" : "px-2.5"}`}>
+      <div className={`shrink-0 border-t border-neutral-200/50 dark:border-white/[0.05] py-2 ${collapsed ? "px-2" : "px-2.5"}`}>
 
         {/* AI status row — click to re-check (hidden while AI is disabled) */}
         {AI_ENABLED && (

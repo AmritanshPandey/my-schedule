@@ -2046,7 +2046,7 @@ export default function ScheduleApp() {
   // ─── JSX ──────────────────────────────────────────────────────────────────
 
   return (
-    <main className="min-h-screen bg-[#F5F5F5] text-neutral-900 dark:bg-[#111111] dark:text-white lg:flex lg:h-screen lg:gap-4 lg:overflow-hidden lg:p-4">
+    <main className="min-h-dvh bg-[#F5F5F5] text-neutral-900 dark:bg-[#111111] dark:text-white lg:flex lg:h-dvh lg:gap-4 lg:overflow-hidden lg:p-4">
 
       {/* ── Desktop sidebar (hidden on mobile) ─────────────────────────────── */}
       <DesktopSidebar

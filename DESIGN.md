@@ -113,7 +113,9 @@ makes you wait.
 The aesthetic is **precise and native-fast** — crisp hairline borders, near-flat cards,
 instant feedback, restraint over flourish. Surfaces are quiet so the content (your
 progress) carries the energy. It draws from instrument panels and well-built native iOS
-apps, not from marketing dashboards.
+apps, not from marketing dashboards. The bar for every screen: it reads in a glance and
+moves under your thumb. If a pixel isn't reporting state or inviting the next action, it's
+noise — cut it.
 
 This system explicitly rejects four things, carried from PRODUCT.md: the **gamified,
 childish habit app** (no mascots, confetti spam, or badge-spam); the **cluttered
@@ -145,10 +147,16 @@ set of category and status hues for data.
   Ink Soft also serves as the dark-mode card surface.
 
 ### Tertiary (data accents — scoped to timeline blocks & plan icons)
-- **Cardio Orange** (#FF6900), **Skin/Health Lime** (#5EA500), **Engineering Blue**
-  (#155DFC), **Design Amber** (#E17100), **Pink** (#EC003F), **Purple** (#AD46FF), **Cyan**
-  (#00A6F4): Per-plan category accents. Used only to color-code plans and timeline blocks,
-  never as general UI chrome.
+- **Cardio Orange** (#FF6900), **Health Lime** (#5EA500), **Focus Blue** (#155DFC),
+  **Craft Amber** (#E17100), **Signal Pink** (#EC003F), **Strategy Purple** (#AD46FF),
+  **Stream Cyan** (#00A6F4): Per-plan category accents. They exist to color-code plans and
+  timeline blocks so the eye can sort the day by plan — nothing else. Never general UI
+  chrome, never a substitute for Momentum Green on a CTA.
+
+### Status (functional only)
+- **Danger Red** (#FB2C36): Missed occurrences, destructive actions.
+- **At-Risk Amber** (#E17100) and **Behind Rose** (#FB2C36) pair with green on the status
+  ramp for the instruments. **Info Blue** (#155DFC): links and informational accents.
 
 ### Neutral
 - **Surface Light** (#FAFAFA): Light-theme body background.
@@ -254,10 +262,56 @@ fills, instant `active:scale` feedback, restraint over flourish.
 - **Style:** Floating bottom nav (mobile) with the Nav shadow; left sidebar (desktop).
   Active item uses ink/green; inactive is Muted. Tap targets ≥44px.
 
-### Signature Component — Progress Readouts
-The week-bars row, the consistency ring, and the execution-trend chart are the system's
-signature. Bars/rings use a status ramp (green ≥70%, amber 40–69%, rose <40%) so a glance
-reads as "on track / at risk / behind." These are the live instruments of Mission Control.
+### Bottom Sheet & Modal
+The same component, two registers — it knows where it is.
+- **Mobile:** A bottom sheet that springs up from the bottom edge (`rounded-t-[32px]`, a
+  10×4px drag handle, `bg-black/40` backdrop). Motion is a real spring (stiffness 380,
+  damping 30, mass 0.9), not a linear slide — it should feel grabbed and released.
+- **Desktop:** A centered modal (`rounded-2xl`, ≤520px) that scales in from 0.97 over a
+  `bg-black/50 backdrop-blur-[3px]` scrim, 180ms on an `[0.22, 1, 0.36, 1]` ease.
+- **Shared:** The Popover shadow, scroll-locked body, Esc-to-close, and safe-area padding.
+
+### Segmented Tabs
+- **Style:** A pill track (`bg-neutral-100` / `white/[0.05]`, `rounded-xl`, 4px inset). The
+  active segment is a raised white chip with a 1px ring and the Card shadow; inactive
+  segments are Muted text only. Switching modes (Single / Bulk), not navigating between
+  pages.
+
+### Timeline Block (Week Grid)
+The colored task block on the desktop week grid (and its taller mobile list twin).
+- **Identity = category color.** The block carries its plan's category hue three ways at
+  once: a 1px full border in the hue, an 8% tint wash of the hue across the whole block
+  (18% in dark), and a 3px `inset` left rail (`box-shadow: inset 3px 0 0`) reinforcing the
+  edge. The time text and duration pill are the same hue. **This is the one sanctioned
+  exception to the side-stripe ban** — the rail is legal here because the *entire* block is
+  saturated in the color (border + tint + text), so the rail reinforces an identity rather
+  than being a lone stripe on a neutral card.
+- **Shape:** `rounded-[8px]` (grid) / `rounded-[18px]` (list). Surface is white / neutral-900
+  under the tint.
+- **Content:** plan eyebrow (8px uppercase), title, then a bottom-pinned time row in the
+  category hue with a hairline duration pill.
+- **Checkbox:** 18–22px, `rounded-[5px]`; fills Streak Green when done/partial, Rose when
+  missed. Resolved blocks drop to 60% opacity with a strikethrough.
+- **Hover (grid):** lifts 1px with a soft `0 6px 16px -6px rgba(0,0,0,0.25)` shadow.
+- **The now-line:** a 1.5px Rose (#FB2C36) rule with a 7px dot, ticking every minute on
+  today's column only.
+
+### Signature Component — The Instruments
+Three live readouts are the system's signature, all reading on one status ramp (green ≥70%,
+amber 40–69%, rose <40%) so a glance answers "on track / at risk / behind":
+- **Week bars:** Seven thin pills, height = completion, today ringed in green.
+- **Consistency ring:** A 44px `conic-gradient` ring with the percentage in a punched-out
+  center (tabular-nums). The fill color is the status ramp; the track is `neutral-200`.
+- **Execution trend:** The 8-week chart on the Weekly Progress card.
+
+These are the instruments of Mission Control: never decorative, always reporting real state.
+
+### Named Rules
+**The Native-Register Rule.** Motion matches the surface. Mobile overlays use springs (they
+feel physical, grabbed-and-released); desktop overlays use short eased curves (≤200ms,
+`[0.22, 1, 0.36, 1]`). Page-level transitions are feedback, never choreography — no
+orchestrated entrances, no scroll-driven sequences. Every motion has a
+`prefers-reduced-motion` fallback (crossfade or instant).
 
 ## 6. Do's and Don'ts
 
@@ -272,6 +326,10 @@ reads as "on track / at risk / behind." These are the live instruments of Missio
   card.
 - **Do** give every button `active:scale-[0.98]` and pair it with haptics on mobile; keep
   tap targets ≥44px.
+- **Do** match motion to the surface: springs for mobile sheets, short eased curves for
+  desktop modals (The Native-Register Rule).
+- **Do** drive every progress instrument (bars, ring, trend) off the one status ramp
+  (green ≥70 / amber 40–69 / rose <40) so they read consistently at a glance.
 - **Do** ship every state in both light and dark, and give every animation a
   `prefers-reduced-motion` fallback.
 
@@ -284,6 +342,12 @@ reads as "on track / at risk / behind." These are the live instruments of Missio
   gradient text, no tracked uppercase eyebrow above every section, no hero-metric cliché.
 - **Don't** ship a sterile corporate calendar grid with zero warmth.
 - **Don't** put a `border-left`/`border-right` greater than 1px as a colored accent stripe
-  on cards or rows. Use full hairline borders or a tonal wash instead.
+  on cards or rows. Use full hairline borders or a tonal wash instead. (The one exception is
+  the Timeline Block, where the whole block is saturated in the category hue — border, tint,
+  and text — so the rail reinforces an identity rather than standing alone.)
 - **Don't** nest a bordered card inside another bordered card; use a tonal inner panel.
 - **Don't** stack drop shadows on flat resting cards, or use ALL-CAPS sentences.
+- **Don't** spend a category accent (Cardio Orange, Focus Blue, etc.) on UI chrome or a
+  CTA. They color-code plans only; the affirmative action is always Momentum Green.
+- **Don't** linear-slide a mobile sheet or skip the drag handle — it should spring, and it
+  must look grabbable.
