@@ -2,17 +2,25 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
-import { IconNotebook, IconPlus, IconSearch, IconX } from "@tabler/icons-react";
+import { IconNotebook, IconPlus, IconSearch, IconX, IconPinnedFilled, IconLayoutGrid } from "@tabler/icons-react";
 import type { Note } from "@/lib/useScheduleDB";
 import { haptic } from "@/lib/haptics";
 import { checklistStats, deriveSnippet, deriveTitle } from "@/lib/notes/markdown";
+import { AccentBadge, cycleAccentColor } from "@/components/ui/Badge";
+import { stableFieldHash } from "@/lib/hash";
+import { NOTE_TEMPLATES } from "@/lib/notes/templates";
+import BottomSheet from "@/components/ui/BottomSheet";
+import SheetHeader from "@/components/ui/SheetHeader";
 import DetailHeader from "@/components/ui/DetailHeader";
+import EmptyState from "@/components/ui/EmptyState";
 import NoteEditor from "./NoteEditor";
+
+type NotePatch = Partial<Pick<Note, "title" | "body" | "pinned" | "tags">>;
 
 interface NotesViewProps {
   notes: Note[];
-  onCreate: () => string;            // creates a note, returns its id
-  onUpdate: (id: string, patch: Partial<Pick<Note, "title" | "body">>) => void;
+  onCreate: (body?: string) => string;   // creates a note, returns its id
+  onUpdate: (id: string, patch: NotePatch) => void;
   onDelete: (id: string) => void;
   onClose: () => void;
 }
@@ -28,18 +36,44 @@ function relativeDate(iso: string): string {
   return d.toLocaleDateString("en-US", { month: "short", day: "numeric", ...(sameYear ? {} : { year: "numeric" }) });
 }
 
-function NoteCard({ note, active, onSelect }: { note: Note; active: boolean; onSelect: () => void }) {
+function tagColor(tag: string) {
+  return cycleAccentColor(stableFieldHash(tag.toLowerCase()));
+}
+
+function SectionLabel({ icon, label }: { icon?: React.ReactNode; label: string }) {
+  return (
+    <div className="flex items-center gap-1.5 px-1 pb-1 text-[11px] font-bold uppercase tracking-[0.08em] text-neutral-400 dark:text-neutral-500">
+      {icon}
+      {label}
+    </div>
+  );
+}
+
+function NoteCard({
+  note,
+  active,
+  onSelect,
+  onTogglePin,
+}: {
+  note: Note;
+  active: boolean;
+  onSelect: () => void;
+  onTogglePin: () => void;
+}) {
   const stats = checklistStats(note.body);
   const snippet = deriveSnippet(note);
+  const tags = note.tags ?? [];
   return (
-    <motion.button
+    <motion.div
       layout
       initial={{ opacity: 0, y: 6 }}
       animate={{ opacity: 1, y: 0 }}
       exit={{ opacity: 0, height: 0 }}
-      type="button"
+      role="button"
+      tabIndex={0}
       onClick={onSelect}
-      className={`flex w-full flex-col rounded-2xl border px-4 py-3 text-left transition-colors ${
+      onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); onSelect(); } }}
+      className={`group relative flex w-full cursor-pointer flex-col rounded-2xl border px-4 py-3 text-left transition-colors ${
         active
           ? "border-neutral-300 bg-neutral-50 dark:border-white/[0.12] dark:bg-white/[0.06]"
           : "border-neutral-100 bg-white hover:border-neutral-200 hover:bg-neutral-50 dark:border-white/[0.06] dark:bg-neutral-900/40 dark:hover:bg-white/[0.04]"
@@ -49,58 +83,72 @@ function NoteCard({ note, active, onSelect }: { note: Note; active: boolean; onS
         <span className="truncate text-[15px] font-semibold text-neutral-900 dark:text-white">
           {deriveTitle(note)}
         </span>
-        <span className="shrink-0 text-[11px] font-medium text-neutral-400 dark:text-neutral-500">
-          {relativeDate(note.updatedAt)}
-        </span>
+        <div className="flex shrink-0 items-center gap-1.5">
+          <span className="text-[11px] font-medium text-neutral-400 dark:text-neutral-500">
+            {relativeDate(note.updatedAt)}
+          </span>
+          <button
+            type="button"
+            aria-label={note.pinned ? "Unpin note" : "Pin note"}
+            aria-pressed={!!note.pinned}
+            onClick={(e) => { e.stopPropagation(); haptic("light"); onTogglePin(); }}
+            className={`-mr-1 flex h-6 w-6 items-center justify-center rounded-lg transition-colors ${
+              note.pinned
+                ? "text-amber-500"
+                : "text-neutral-300 hover:text-neutral-500 dark:text-neutral-600 dark:hover:text-neutral-400"
+            }`}
+          >
+            <IconPinnedFilled size={15} strokeWidth={2} />
+          </button>
+        </div>
       </div>
       {snippet && (
         <span className="mt-0.5 line-clamp-2 text-[13px] leading-snug text-neutral-500 dark:text-neutral-400">
           {snippet}
         </span>
       )}
-      {stats && (
-        <span
-          className={`mt-2 inline-flex w-fit items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-semibold ${
-            stats.done === stats.total
-              ? "bg-emerald-50 text-emerald-600 dark:bg-emerald-500/10 dark:text-emerald-400"
-              : "bg-neutral-100 text-neutral-500 dark:bg-white/[0.06] dark:text-neutral-400"
-          }`}
-        >
-          <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
-            <path d="M20 6 9 17l-5-5" />
-          </svg>
-          {stats.done}/{stats.total}
-        </span>
+      {(stats || tags.length > 0) && (
+        <div className="mt-2 flex flex-wrap items-center gap-1.5">
+          {stats && (
+            <span
+              className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-semibold ${
+                stats.done === stats.total
+                  ? "bg-emerald-50 text-emerald-600 dark:bg-emerald-500/10 dark:text-emerald-400"
+                  : "bg-neutral-100 text-neutral-500 dark:bg-white/[0.06] dark:text-neutral-400"
+              }`}
+            >
+              <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M20 6 9 17l-5-5" />
+              </svg>
+              {stats.done}/{stats.total}
+            </span>
+          )}
+          {tags.map((tag) => (
+            <AccentBadge key={tag} color={tagColor(tag)}>{tag}</AccentBadge>
+          ))}
+        </div>
       )}
-    </motion.button>
+    </motion.div>
   );
 }
 
 function EmptyDetail({ onCreate }: { onCreate: () => void }) {
   return (
-    <div className="flex h-full flex-col items-center justify-center px-6 text-center">
-      <div className="mb-4 flex h-16 w-16 items-center justify-center rounded-2xl bg-neutral-100 dark:bg-white/[0.05]">
-        <IconNotebook size={30} strokeWidth={1.6} className="text-neutral-400 dark:text-neutral-500" />
-      </div>
-      <p className="text-[16px] font-semibold text-neutral-700 dark:text-neutral-200">Select a note</p>
-      <p className="mt-1 max-w-[260px] text-[13px] text-neutral-400 dark:text-neutral-500">
-        Pick a note from the list, or start a new one.
-      </p>
-      <button
-        type="button"
-        onClick={onCreate}
-        className="mt-5 flex h-9 items-center gap-1.5 rounded-xl bg-neutral-900 px-4 text-[13px] font-bold text-white transition-colors hover:bg-neutral-800 dark:bg-white dark:text-neutral-900 dark:hover:bg-neutral-100"
-      >
-        <IconPlus size={16} strokeWidth={2.5} />
-        New note
-      </button>
-    </div>
+    <EmptyState
+      center
+      icon={IconNotebook}
+      title="Select a note"
+      description="Pick a note from the list, or start a new one."
+      action={{ label: "New note", onClick: onCreate }}
+    />
   );
 }
 
 export default function NotesView({ notes, onCreate, onUpdate, onDelete, onClose }: NotesViewProps) {
   const [editingId, setEditingId] = useState<string | null>(null);
   const [query, setQuery] = useState("");
+  const [selectedTags, setSelectedTags] = useState<string[]>([]);
+  const [templatePickerOpen, setTemplatePickerOpen] = useState(false);
   const [isDesktop, setIsDesktop] = useState(
     () => typeof window !== "undefined" && window.matchMedia("(min-width: 1024px)").matches,
   );
@@ -114,23 +162,65 @@ export default function NotesView({ notes, onCreate, onUpdate, onDelete, onClose
     return () => mq.removeEventListener("change", handler);
   }, []);
 
+  // Pinned notes float to the top; within each group, most-recently-updated first.
   const sorted = useMemo(
-    () => [...notes].sort((a, b) => b.updatedAt.localeCompare(a.updatedAt)),
+    () =>
+      [...notes].sort(
+        (a, b) =>
+          (b.pinned ? 1 : 0) - (a.pinned ? 1 : 0) || b.updatedAt.localeCompare(a.updatedAt),
+      ),
     [notes],
   );
 
+  // Every distinct tag across all notes, for the filter chip row.
+  const allTags = useMemo(() => {
+    const seen = new Set<string>();
+    const tags: string[] = [];
+    for (const n of notes) {
+      for (const t of n.tags ?? []) {
+        const key = t.toLowerCase();
+        if (!seen.has(key)) { seen.add(key); tags.push(t); }
+      }
+    }
+    return tags.sort((a, b) => a.localeCompare(b));
+  }, [notes]);
+
+  // Drop selected tags that no longer exist on any note.
+  useEffect(() => {
+    setSelectedTags((prev) => prev.filter((t) => allTags.some((a) => a.toLowerCase() === t.toLowerCase())));
+  }, [allTags]);
+
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
-    if (!q) return sorted;
-    return sorted.filter((n) => (n.title + " " + n.body).toLowerCase().includes(q));
-  }, [sorted, query]);
+    return sorted.filter((n) => {
+      if (q && !(n.title + " " + n.body).toLowerCase().includes(q)) return false;
+      if (selectedTags.length > 0) {
+        const noteTags = (n.tags ?? []).map((t) => t.toLowerCase());
+        if (!selectedTags.every((t) => noteTags.includes(t.toLowerCase()))) return false;
+      }
+      return true;
+    });
+  }, [sorted, query, selectedTags]);
 
   const editingNote = editingId ? notes.find((n) => n.id === editingId) ?? null : null;
 
-  function handleCreate() {
+  function handleCreate(body?: string) {
     haptic("light");
-    const id = onCreate();
+    const id = onCreate(body);
     setEditingId(id);
+  }
+
+  function toggleTagFilter(tag: string) {
+    haptic("light");
+    setSelectedTags((prev) =>
+      prev.some((t) => t.toLowerCase() === tag.toLowerCase())
+        ? prev.filter((t) => t.toLowerCase() !== tag.toLowerCase())
+        : [...prev, tag],
+    );
+  }
+
+  function togglePin(note: Note) {
+    onUpdate(note.id, { pinned: !note.pinned });
   }
 
   function handleDelete(id: string) {
@@ -152,7 +242,16 @@ export default function NotesView({ notes, onCreate, onUpdate, onDelete, onClose
             <div className="flex-1" />
             <button
               type="button"
-              onClick={handleCreate}
+              onClick={() => setTemplatePickerOpen(true)}
+              aria-label="New from template"
+              className="flex h-9 items-center gap-1.5 rounded-xl border border-neutral-200 px-3 text-[13px] font-semibold text-neutral-600 transition-colors hover:bg-neutral-100 dark:border-white/[0.1] dark:text-neutral-300 dark:hover:bg-white/[0.06]"
+            >
+              <IconLayoutGrid size={16} strokeWidth={2} />
+              Templates
+            </button>
+            <button
+              type="button"
+              onClick={() => handleCreate()}
               className="flex h-9 items-center gap-1.5 rounded-xl bg-neutral-900 px-3 text-[13px] font-bold text-white transition-colors hover:bg-neutral-800 dark:bg-white dark:text-neutral-900 dark:hover:bg-neutral-100"
             >
               <IconPlus size={16} strokeWidth={2.5} />
@@ -163,7 +262,10 @@ export default function NotesView({ notes, onCreate, onUpdate, onDelete, onClose
           <DetailHeader
             title="Notes"
             onBack={onClose}
-            actions={[{ icon: IconPlus, label: "New note", onClick: handleCreate }]}
+            actions={[
+              { icon: IconLayoutGrid, label: "New from template", onClick: () => setTemplatePickerOpen(true) },
+              { icon: IconPlus, label: "New note", onClick: () => handleCreate() },
+            ]}
           />
         )}
 
@@ -185,38 +287,104 @@ export default function NotesView({ notes, onCreate, onUpdate, onDelete, onClose
           </div>
         </div>
 
+        {/* Tag filter chips */}
+        {allTags.length > 0 && (
+          <div className="flex gap-1.5 overflow-x-auto px-4 pb-3 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+            {allTags.map((tag) => {
+              const on = selectedTags.some((t) => t.toLowerCase() === tag.toLowerCase());
+              return (
+                <button
+                  key={tag}
+                  type="button"
+                  onClick={() => toggleTagFilter(tag)}
+                  className={`shrink-0 rounded-full border px-2.5 py-1 text-[12px] font-semibold transition-colors ${
+                    on
+                      ? "border-neutral-900 bg-neutral-900 text-white dark:border-white dark:bg-white dark:text-neutral-900"
+                      : "border-neutral-200 text-neutral-500 hover:border-neutral-300 dark:border-white/[0.1] dark:text-neutral-400 dark:hover:border-white/20"
+                  }`}
+                >
+                  {tag}
+                </button>
+              );
+            })}
+          </div>
+        )}
+
         {/* List */}
         <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-4 pb-32 lg:pb-6">
           {filtered.length === 0 ? (
-            <div className="flex flex-col items-center justify-center px-6 pt-24 text-center">
-              <div className="mb-4 flex h-14 w-14 items-center justify-center rounded-2xl bg-neutral-100 dark:bg-white/[0.05]">
-                <IconNotebook size={26} strokeWidth={1.6} className="text-neutral-400 dark:text-neutral-500" />
-              </div>
-              <p className="text-[15px] font-semibold text-neutral-700 dark:text-neutral-200">
-                {query ? "No matching notes" : "No notes yet"}
-              </p>
-              <p className="mt-1 max-w-[240px] text-[13px] text-neutral-400 dark:text-neutral-500">
-                {query ? "Try a different search." : "Tap New to start a note — jot a paragraph or a checklist."}
-              </p>
-            </div>
-          ) : (
-            <div className="space-y-1.5">
+            notes.length === 0 ? (
+              <EmptyState
+                icon={IconNotebook}
+                title="No notes yet"
+                description="Tap New to start a note — jot a paragraph or a checklist."
+                action={{ label: "New note", onClick: () => handleCreate() }}
+                secondaryAction={{ label: "Browse templates", onClick: () => setTemplatePickerOpen(true) }}
+              />
+            ) : (
+              <EmptyState
+                icon={IconSearch}
+                title="No matching notes"
+                description={selectedTags.length > 0 ? "Try different tags or search." : "Try a different search."}
+              />
+            )
+          ) : (() => {
+            const pinnedNotes = filtered.filter((n) => n.pinned);
+            const otherNotes = filtered.filter((n) => !n.pinned);
+            const renderCard = (note: Note) => (
+              <NoteCard
+                key={note.id}
+                note={note}
+                active={activeId === note.id}
+                onSelect={() => { haptic("light"); setEditingId(note.id); }}
+                onTogglePin={() => togglePin(note)}
+              />
+            );
+            return (
               <AnimatePresence initial={false}>
-                {filtered.map((note) => (
-                  <NoteCard
-                    key={note.id}
-                    note={note}
-                    active={activeId === note.id}
-                    onSelect={() => { haptic("light"); setEditingId(note.id); }}
-                  />
-                ))}
+                {pinnedNotes.length > 0 && (
+                  <div className="space-y-1.5">
+                    <SectionLabel icon={<IconPinnedFilled size={12} strokeWidth={2.5} />} label="Pinned" />
+                    {pinnedNotes.map(renderCard)}
+                  </div>
+                )}
+                <div className={`space-y-1.5 ${pinnedNotes.length > 0 ? "mt-4" : ""}`}>
+                  {pinnedNotes.length > 0 && otherNotes.length > 0 && <SectionLabel label="Notes" />}
+                  {otherNotes.map(renderCard)}
+                </div>
               </AnimatePresence>
-            </div>
-          )}
+            );
+          })()}
         </div>
       </>
     );
   }
+
+  const templateSheet = (
+    <BottomSheet open={templatePickerOpen} onClose={() => setTemplatePickerOpen(false)}>
+      <div className="space-y-2 p-5 pb-8">
+        <SheetHeader eyebrow="New note" title="Start from a template" onClose={() => setTemplatePickerOpen(false)} />
+        <div className="space-y-1.5 pt-1">
+          {NOTE_TEMPLATES.map(({ id, label, description, icon: Icon, body }) => (
+            <button
+              key={id}
+              type="button"
+              onClick={() => { setTemplatePickerOpen(false); handleCreate(body || undefined); }}
+              className="flex w-full items-center gap-3 rounded-2xl border border-neutral-200 bg-white px-4 py-3 text-left transition-colors hover:border-neutral-300 active:bg-neutral-50 dark:border-white/[0.08] dark:bg-neutral-900 dark:hover:border-white/20 dark:active:bg-white/[0.03]"
+            >
+              <span className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-neutral-100 text-neutral-500 dark:bg-white/[0.06] dark:text-neutral-400">
+                <Icon size={20} strokeWidth={1.8} />
+              </span>
+              <div className="min-w-0 flex-1">
+                <p className="text-[15px] font-bold text-neutral-900 dark:text-white">{label}</p>
+                <p className="mt-0.5 text-[13px] text-neutral-400 dark:text-neutral-500">{description}</p>
+              </div>
+            </button>
+          ))}
+        </div>
+      </div>
+    </BottomSheet>
+  );
 
   // ── Desktop: two-pane master / detail ────────────────────────────────────────
   if (isDesktop) {
@@ -235,9 +403,10 @@ export default function NotesView({ notes, onCreate, onUpdate, onDelete, onClose
               onBack={() => setEditingId(null)}
             />
           ) : (
-            <EmptyDetail onCreate={handleCreate} />
+            <EmptyDetail onCreate={() => handleCreate()} />
           )}
         </section>
+        {templateSheet}
       </div>
     );
   }
@@ -275,6 +444,7 @@ export default function NotesView({ notes, onCreate, onUpdate, onDelete, onClose
           </motion.div>
         )}
       </AnimatePresence>
+      {templateSheet}
     </div>
   );
 }

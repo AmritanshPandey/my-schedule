@@ -1,4 +1,20 @@
 import type { Note } from "@/lib/useScheduleDB";
+import { categoryHex, type AccentColor } from "@/lib/colorSystem";
+
+// ── Inline text color ───────────────────────────────────────────────────────
+// Stored as a paired token: {c=amber}text{/c}. Names map to the shared accent
+// palette so colored note text matches the rest of the app.
+export const NOTE_COLORS: { name: AccentColor; hex: string }[] = [
+  { name: "blue", hex: categoryHex("blue") },
+  { name: "emerald", hex: categoryHex("emerald") },
+  { name: "violet", hex: categoryHex("violet") },
+  { name: "pink", hex: categoryHex("pink") },
+  { name: "amber", hex: categoryHex("amber") },
+  { name: "cyan", hex: categoryHex("cyan") },
+];
+
+const COLOR_NAMES = NOTE_COLORS.map((c) => c.name).join("|");
+const COLOR_TOKEN_RE = new RegExp(`^\\{c=(${COLOR_NAMES})\\}([^]*)\\{/c\\}$`);
 
 // ── Note markdown model ─────────────────────────────────────────────────────
 // A note `body` is a plain markdown string, one logical line per "\n".
@@ -70,11 +86,17 @@ export function serializeLine(p: {
 
 // ── Inline emphasis renderer ────────────────────────────────────────────────
 // Order matters: match **bold** before *italic* so the two don't collide.
-const INLINE_RE = /(\*\*[^*\n]+\*\*|~~[^~\n]+~~|`[^`\n]+`|\*[^*\n]+\*)/g;
+// Order matters: match the color token and **bold** before *italic*.
+const INLINE_RE = /(\{c=(?:blue|emerald|violet|pink|amber|cyan)\}[^{}\n]+\{\/c\}|\*\*[^*\n]+\*\*|~~[^~\n]+~~|`[^`\n]+`|\*[^*\n]+\*)/g;
 
 export function renderInline(text: string): React.ReactNode {
   const parts = text.split(INLINE_RE);
   return parts.map((p, i) => {
+    const color = p.match(COLOR_TOKEN_RE);
+    if (color) {
+      const hex = NOTE_COLORS.find((c) => c.name === color[1])?.hex;
+      return <span key={i} style={{ color: hex }}>{renderInline(color[2])}</span>;
+    }
     if (p.startsWith("**") && p.endsWith("**") && p.length > 4)
       return <strong key={i} className="font-semibold">{p.slice(2, -2)}</strong>;
     if (p.startsWith("~~") && p.endsWith("~~") && p.length > 4)
@@ -97,6 +119,7 @@ export function stripMarkers(text: string): string {
     .replace(/^#{1,3}\s+/, "")
     .replace(/^- \[[ xX]\]\s?/, "")
     .replace(/^- /, "")
+    .replace(/\{c=[a-z]+\}([^{}]+)\{\/c\}/g, "$1")
     .replace(/\*\*([^*]+)\*\*/g, "$1")
     .replace(/~~([^~]+)~~/g, "$1")
     .replace(/`([^`]+)`/g, "$1")
@@ -208,6 +231,7 @@ export function deriveSnippet(note: Note): string {
         .replace(/^- \[ \]\s?/, "○ ")
         .replace(/^- \[[xX]\]\s?/, "✓ ")
         .replace(/^- /, "• ")
+        .replace(/\{c=[a-z]+\}([^{}]+)\{\/c\}/g, "$1")
         .replace(/\*\*([^*]+)\*\*/g, "$1")
         .replace(/~~([^~]+)~~/g, "$1")
         .replace(/`([^`]+)`/g, "$1")

@@ -6,24 +6,52 @@
  * The same output shape could later be produced by an AI parser as a drop-in.
  */
 
-import type { DayKey, Plan } from "./useScheduleDB";
+import type { DayKey, Plan, PlanCategory } from "./useScheduleDB";
+import { categoryFromIcon } from "./useScheduleDB";
 import { uid } from "./taskMutations";
+import { colorFromIcon, type AccentColor } from "./colorSystem";
+
+export interface ParsedSubtask {
+  id: string;                 // temp id for UI keying
+  title: string;
+  info?: string;              // "[easy pace]"
+  duration?: string;          // "(10 min)"
+}
 
 export interface ParsedTask {
   id: string;                 // temp id for UI keying
   title: string;
   startTime?: string;         // "7:00 AM"
   endTime?: string;           // "8:00 AM"
-  planId?: string;
+  planId?: string;            // matched existing plan
+  planRef?: string;           // temp ref to a parsed (new) plan
   icon: string;
   suggestedTime?: string;     // smart suggestion for the missing-info Q&A
   needsTime: boolean;         // true when no explicit time was found
+  subtasks?: ParsedSubtask[];
 }
 
 export interface ParsedDay {
   day: DayKey;
   label: string;              // "Monday"
   tasks: ParsedTask[];
+}
+
+/** A brand-new plan defined inline via a `# Title` header. */
+export interface ParsedPlan {
+  ref: string;                // temp id linking tasks → this plan
+  title: string;
+  description?: string;
+  startDate?: string;
+  endDate?: string;
+  emoji: string;              // inferred icon name
+  color: AccentColor;
+  category: PlanCategory;
+}
+
+export interface ParseResult {
+  days: ParsedDay[];
+  plans: ParsedPlan[];        // new plans to create on commit
 }
 
 const DAY_ALIASES: Record<string, DayKey> = {
@@ -117,6 +145,40 @@ function matchPlan(text: string, plans: Plan[]): Plan | null {
   return null;
 }
 
+// Keyword → icon name for inferring a brand-new plan's icon (and, via
+// colorFromIcon / categoryFromIcon, its color and category).
+const ICON_KEYWORDS: [RegExp, string][] = [
+  [/\b(run|running|marathon|jog|cardio|sprint|5k|10k)\b/i, "run"],
+  [/\b(gym|lift|lifting|strength|weights?|workout|fitness|barbell)\b/i, "barbell"],
+  [/\b(read|reading|book|study|studying|learn|learning|course|gmat)\b/i, "book"],
+  [/\b(think|meditat|mindful|journal|reflect|brain)\b/i, "brain"],
+  [/\b(code|coding|program|dev|build|engineering|leetcode)\b/i, "code"],
+  [/\b(work|client|meeting|report|office|project|deep work)\b/i, "briefcase"],
+  [/\b(sleep|rest|nap|recovery|wind down)\b/i, "sleep"],
+];
+
+function iconForTitle(title: string): string {
+  for (const [re, icon] of ICON_KEYWORDS) {
+    if (re.test(title)) return icon;
+  }
+  return "star";
+}
+
+const INFO_RE = /\[([^\]]+)\]/;
+const PAREN_RE = /\(([^)]+)\)/;
+
+/** Parse a subtask body: strip `[info]` and `(duration)`, leaving the title. */
+function parseSubtask(body: string): ParsedSubtask {
+  const info = body.match(INFO_RE)?.[1]?.trim();
+  const duration = body.match(PAREN_RE)?.[1]?.trim();
+  const title = body
+    .replace(INFO_RE, " ")
+    .replace(PAREN_RE, " ")
+    .replace(/\s{2,}/g, " ")
+    .trim();
+  return { id: uid(), title: title || body.trim(), info: info || undefined, duration: duration || undefined };
+}
+
 function cleanTitle(raw: string): string {
   return raw
     .replace(RANGE_RE, " ")
@@ -140,10 +202,24 @@ function isDayHeader(line: string): DayKey | null {
   return null;
 }
 
-export function parseSchedule(text: string, plans: Plan[], fallbackDay: DayKey = "monday"): ParsedDay[] {
+/** Leading-whitespace width of a raw line (tabs count as 2). */
+function indentOf(rawLine: string): number {
+  const m = rawLine.match(/^[ \t]*/);
+  return m ? m[0].replace(/\t/g, "  ").length : 0;
+}
+
+const PLAN_HEADER_RE = /^#+\s+(.+)$/;
+const META_RE = /^(description|desc|start date|start|end date|end)\s*:\s*(.*)$/i;
+
+export function parseSchedule(text: string, plans: Plan[], fallbackDay: DayKey = "monday"): ParseResult {
   const lines = text.split("\n");
   const days: ParsedDay[] = [];
+  const parsedPlans: ParsedPlan[] = [];
   let current: ParsedDay | null = null;
+  let currentPlan: ParsedPlan | null = null;
+  // The task most recently parsed, so deeper-indented bullets attach as subtasks.
+  let lastTask: ParsedTask | null = null;
+  let lastTaskIndent = 0;
 
   const ensureDay = (day: DayKey) => {
     let d = days.find((x) => x.day === day);
@@ -154,13 +230,54 @@ export function parseSchedule(text: string, plans: Plan[], fallbackDay: DayKey =
   for (const rawLine of lines) {
     const line = rawLine.trim();
     if (!line) continue;
+    if (line.startsWith("//")) continue;   // comment / instructions line
+    const indent = indentOf(rawLine);
+
+    // Plan header — `# Title` opens a new plan section.
+    const planHeader = line.match(PLAN_HEADER_RE);
+    if (planHeader) {
+      const title = planHeader[1].trim();
+      const icon = iconForTitle(title);
+      currentPlan = {
+        ref: uid(),
+        title,
+        emoji: icon,
+        color: colorFromIcon(icon),
+        category: categoryFromIcon(icon),
+      };
+      parsedPlans.push(currentPlan);
+      current = null;
+      lastTask = null;
+      continue;
+    }
+
+    // Plan metadata — `Description:` / `Start:` / `End:` (only inside a plan).
+    if (currentPlan) {
+      const meta = line.match(META_RE);
+      if (meta) {
+        const value = meta[2].trim();
+        const key = meta[1].toLowerCase();
+        if (value) {
+          if (key.startsWith("desc")) currentPlan.description = value;
+          else if (key.startsWith("start")) currentPlan.startDate = value;
+          else if (key.startsWith("end")) currentPlan.endDate = value;
+        }
+        continue;
+      }
+    }
 
     const header = isDayHeader(line);
-    if (header) { current = ensureDay(header); continue; }
+    if (header) { current = ensureDay(header); lastTask = null; continue; }
 
-    // Task line — strip a leading bullet/number.
+    // Strip a leading bullet/number.
     const body = line.replace(/^\s*(?:[-•*·–]|\d+[.)])\s*/, "").trim();
     if (!body) continue;
+
+    // Deeper-indented bullet under a task → subtask of that task.
+    if (lastTask && indent > lastTaskIndent) {
+      (lastTask.subtasks ??= []).push(parseSubtask(body));
+      continue;
+    }
 
     const target = current ?? (current = ensureDay(fallbackDay));
 
@@ -185,22 +302,30 @@ export function parseSchedule(text: string, plans: Plan[], fallbackDay: DayKey =
       for (const [re, sug] of FUZZY_TIMES) { if (re.test(body)) { suggestedTime = sug; break; } }
     }
 
-    const plan = matchPlan(body, plans);
+    // Inside a plan section tasks attach to it; otherwise keyword-match existing plans.
+    const plan = currentPlan ? null : matchPlan(body, plans);
     const title = cleanTitle(body) || body;
 
-    target.tasks.push({
+    const task: ParsedTask = {
       id: uid(),
       title,
       startTime,
       endTime,
       planId: plan?.id,
-      icon: plan?.emoji ?? "briefcase",
+      planRef: currentPlan?.ref,
+      icon: currentPlan?.emoji ?? plan?.emoji ?? "briefcase",
       suggestedTime: suggestedTime ?? (startTime ? undefined : "9:00 AM"),
       needsTime: !startTime,
-    });
+    };
+    target.tasks.push(task);
+    lastTask = task;
+    lastTaskIndent = indent;
   }
 
-  return days.filter((d) => d.tasks.length > 0);
+  return {
+    days: days.filter((d) => d.tasks.length > 0),
+    plans: parsedPlans,
+  };
 }
 
 /** Total task count across all parsed days. */

@@ -24,7 +24,7 @@ import {
 import type { TaskSaveData } from "@/components/task/TaskSheet";
 import type { ScheduleEntry } from "@/components/ScheduleItem";
 import { BulkImportFlow } from "@/components/BulkImportSheet";
-import type { ParsedDay } from "@/lib/scheduleParser";
+import type { ParseResult } from "@/lib/scheduleParser";
 
 const SECTION_LABEL =
   "text-[11px] font-semibold uppercase tracking-[0.08em] text-neutral-400 dark:text-neutral-500";
@@ -55,7 +55,7 @@ interface QuickAddPanelProps {
   plans: Plan[];
   activeDay: DayKey;
   onSave: (data: TaskSaveData) => void;
-  onBulkImport: (days: ParsedDay[]) => void;
+  onBulkImport: (result: ParseResult) => void;
 }
 
 function isValidInputTime(v: string) {
@@ -361,7 +361,7 @@ export function QuickAddPanel({ plans, activeDay, onSave, onBulkImport }: QuickA
               type="button"
               onClick={handleSubmit}
               disabled={!canSubmit}
-              className="flex flex-1 items-center justify-center gap-2 rounded-xl bg-neutral-900 py-3 text-[14px] font-bold text-white transition-opacity disabled:opacity-40 dark:bg-white dark:text-neutral-950"
+              className="flex flex-1 items-center justify-center gap-2 rounded-full bg-neutral-900 py-3 text-[14px] font-bold text-white transition-opacity disabled:opacity-40 dark:bg-white dark:text-neutral-950"
             >
               <IconCheck size={15} strokeWidth={2.5} /> Add Task
             </button>
@@ -369,7 +369,7 @@ export function QuickAddPanel({ plans, activeDay, onSave, onBulkImport }: QuickA
               type="button"
               onClick={reset}
               aria-label="Clear"
-              className="flex h-[46px] w-[46px] shrink-0 items-center justify-center rounded-xl border border-neutral-200 text-neutral-400 transition-colors hover:bg-neutral-100 hover:text-neutral-600 dark:border-white/10 dark:text-neutral-500 dark:hover:bg-white/[0.05]"
+              className="flex h-[46px] w-[46px] shrink-0 items-center justify-center rounded-full border border-neutral-200 text-neutral-400 transition-colors hover:bg-neutral-100 hover:text-neutral-600 dark:border-white/10 dark:text-neutral-500 dark:hover:bg-white/[0.05]"
             >
               <IconX size={16} strokeWidth={2} />
             </button>

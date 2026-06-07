@@ -1,26 +1,51 @@
 "use client";
 
-import { useEffect, useMemo, useState, type ReactNode } from "react";
+import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   IconSparkles, IconCheck, IconCircleCheck, IconClock, IconTrash,
-  IconChevronDown, IconX, IconCalendarEvent,
+  IconChevronDown, IconX, IconCalendarEvent, IconDownload, IconUpload,
 } from "@tabler/icons-react";
 import BottomSheet from "@/components/ui/BottomSheet";
 import SheetHeader from "@/components/ui/SheetHeader";
 import type { Plan } from "@/lib/useScheduleDB";
-import { parseSchedule, countTasks, type ParsedDay } from "@/lib/scheduleParser";
+import { parseSchedule, countTasks, type ParsedDay, type ParseResult } from "@/lib/scheduleParser";
+import { SECTION_ICONS } from "@/components/SectionIcons";
 import { haptic } from "@/lib/haptics";
 
-const SAMPLE = `Monday
-- Gym 7 AM
-- Deep Work after breakfast
-- GMAT practice in evening
+const PLAN_ICONS: Record<string, (typeof SECTION_ICONS)[number]["icon"]> = Object.fromEntries(
+  SECTION_ICONS.map((s) => [s.name, s.icon])
+);
 
-Tuesday
-- Cardio 6 AM
-- Client work 10 AM
-- Read 30 mins before bed`;
+const SAMPLE = `# Marathon Training
+Description: 12-week sub-4 plan
+Start: 2026-06-10
+End: 2026-09-01
+
+Monday
+- Long run 6 AM
+    - Warmup [easy pace] (10 min)
+    - Main set [10k] (45 min)
+    - Cooldown [stretch] (5 min)
+Wednesday
+- Tempo run 6 AM
+    - 5x1k [race pace] (30 min)`;
+
+// Downloadable starter file — a commented legend (// lines are ignored on import)
+// followed by the marathon example so it parses back to the same plan.
+const TEMPLATE = `// PlanR schedule template — edit this, then upload it back.
+// Lines starting with // are ignored on import.
+//
+//   # Plan title           creates a new plan
+//   Description: ...        plan description (optional)
+//   Start: YYYY-MM-DD       plan start date (optional)
+//   End: YYYY-MM-DD         plan end date (optional)
+//   Monday, Tuesday ...     day headers group the tasks under them
+//   - Task name 7 AM        a task (time optional)
+//       - Subtask [info] (duration)   indent a bullet to make it a subtask
+//
+${SAMPLE}
+`;
 
 const TIME_OPTS: { label: string; sub: string; time: string }[] = [
   { label: "Morning", sub: "6 AM – 12 PM", time: "9:00 AM" },
@@ -46,7 +71,7 @@ interface BulkImportSheetProps {
   plans: Plan[];
   fallbackDay?: ParsedDay["day"];
   onClose: () => void;
-  onCommit: (days: ParsedDay[]) => void;
+  onCommit: (result: ParseResult) => void;
 }
 
 export default function BulkImportSheet({ open, plans, fallbackDay = "monday", onClose, onCommit }: BulkImportSheetProps) {
@@ -68,7 +93,7 @@ export default function BulkImportSheet({ open, plans, fallbackDay = "monday", o
 interface BulkImportFlowProps {
   plans: Plan[];
   fallbackDay?: ParsedDay["day"];
-  onCommit: (days: ParsedDay[]) => void;
+  onCommit: (result: ParseResult) => void;
   onDone: () => void;
   /** Optional header element (e.g. the sheet's title/close). */
   header?: ReactNode;
@@ -76,15 +101,17 @@ interface BulkImportFlowProps {
 
 export function BulkImportFlow({ plans, fallbackDay = "monday", onCommit, onDone, header }: BulkImportFlowProps) {
   const [text, setText] = useState(SAMPLE);
-  const [days, setDays] = useState<ParsedDay[]>([]);
+  const [result, setResult] = useState<ParseResult>({ days: [], plans: [] });
   const [collapsed, setCollapsed] = useState<Set<string>>(new Set());
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   // Re-parse on text change (cheap, synchronous).
   useEffect(() => {
-    setDays(parseSchedule(text, plans, fallbackDay));
+    setResult(parseSchedule(text, plans, fallbackDay));
     setCollapsed(new Set());
   }, [text, plans, fallbackDay]);
 
+  const { days, plans: newPlans } = result;
   const total = countTasks(days);
   const missing = useMemo(
     () => days.flatMap((d) => d.tasks.filter((t) => t.needsTime).map((t) => ({ day: d, task: t }))),
@@ -94,10 +121,13 @@ export function BulkImportFlow({ plans, fallbackDay = "monday", onCommit, onDone
 
   function setTaskTime(taskId: string, time: string) {
     haptic("light");
-    setDays((prev) => prev.map((d) => ({
-      ...d,
-      tasks: d.tasks.map((t) => t.id === taskId ? { ...t, startTime: time, endTime: endFrom(time), needsTime: false } : t),
-    })));
+    setResult((prev) => ({
+      ...prev,
+      days: prev.days.map((d) => ({
+        ...d,
+        tasks: d.tasks.map((t) => t.id === taskId ? { ...t, startTime: time, endTime: endFrom(time), needsTime: false } : t),
+      })),
+    }));
     setCollapsed((prev) => { const next = new Set(prev); current && next.delete(current.day.day); return next; });
   }
 
@@ -108,8 +138,35 @@ export function BulkImportFlow({ plans, fallbackDay = "monday", onCommit, onDone
   function commit() {
     if (total === 0) return;
     haptic("medium");
-    onCommit(days);
+    onCommit(result);
     onDone();
+  }
+
+  function downloadTemplate() {
+    haptic("light");
+    const blob = new Blob([TEMPLATE], { type: "text/plain;charset=utf-8" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = "my-schedule-template.txt";
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    URL.revokeObjectURL(url);
+  }
+
+  async function handleUpload(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (fileInputRef.current) fileInputRef.current.value = "";
+    if (!file) return;
+    if (file.size > 50_000) return; // ignore oversized files
+    try {
+      const contents = await file.text();
+      haptic("light");
+      setText(contents);
+    } catch {
+      // ignore unreadable files
+    }
   }
 
   return (
@@ -150,6 +207,29 @@ export function BulkImportFlow({ plans, fallbackDay = "monday", onCommit, onDone
             <IconTrash size={14} strokeWidth={2} />Clear
           </button>
         </Step>
+        <div className="flex items-center gap-2">
+          <button
+            type="button"
+            onClick={downloadTemplate}
+            className="inline-flex items-center gap-1.5 rounded-lg border border-neutral-200 px-2.5 py-1.5 text-[12px] font-bold text-neutral-600 hover:bg-neutral-50 dark:border-white/[0.1] dark:text-neutral-300 dark:hover:bg-white/[0.04]"
+          >
+            <IconDownload size={14} strokeWidth={2} />Download template
+          </button>
+          <button
+            type="button"
+            onClick={() => { haptic("light"); fileInputRef.current?.click(); }}
+            className="inline-flex items-center gap-1.5 rounded-lg border border-neutral-200 px-2.5 py-1.5 text-[12px] font-bold text-neutral-600 hover:bg-neutral-50 dark:border-white/[0.1] dark:text-neutral-300 dark:hover:bg-white/[0.04]"
+          >
+            <IconUpload size={14} strokeWidth={2} />Upload file
+          </button>
+          <input
+            ref={fileInputRef}
+            type="file"
+            accept=".txt,.md,text/plain,text/markdown"
+            onChange={handleUpload}
+            className="hidden"
+          />
+        </div>
         <div className="relative rounded-2xl border-[1.5px] border-emerald-500/70 bg-white p-3.5 dark:bg-neutral-900">
           <textarea
             value={text}
@@ -176,6 +256,36 @@ export function BulkImportFlow({ plans, fallbackDay = "monday", onCommit, onDone
         {days.length > 0 && (
           <>
             <Step n={2} title="Preview (auto-detected)" />
+            {newPlans.length > 0 && (
+              <div className="flex flex-col gap-2">
+                {newPlans.map((p) => {
+                  const Icon = PLAN_ICONS[p.emoji] ?? IconCalendarEvent;
+                  return (
+                    <div key={p.ref} className="flex items-start gap-2.5 rounded-2xl border border-emerald-500/30 bg-emerald-500/[0.06] p-3">
+                      <span className="grid h-8 w-8 shrink-0 place-items-center rounded-xl bg-emerald-500/15 text-emerald-600 dark:text-emerald-400">
+                        <Icon size={17} strokeWidth={2} />
+                      </span>
+                      <div className="min-w-0 flex-1">
+                        <div className="flex items-center gap-1.5">
+                          <span className="inline-flex items-center gap-1 rounded-full bg-emerald-500/15 px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wide text-emerald-600 dark:text-emerald-400">
+                            <IconSparkles size={11} strokeWidth={2.5} />New plan
+                          </span>
+                          <span className="truncate text-[14px] font-bold text-neutral-900 dark:text-white">{p.title}</span>
+                        </div>
+                        {p.description && (
+                          <p className="mt-0.5 truncate text-[12px] text-neutral-500 dark:text-neutral-400">{p.description}</p>
+                        )}
+                        {(p.startDate || p.endDate) && (
+                          <p className="mt-0.5 text-[11px] font-medium text-neutral-400 dark:text-neutral-500">
+                            {p.startDate ?? "…"} → {p.endDate ?? "…"}
+                          </p>
+                        )}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
             <div className="flex flex-col gap-2.5">
               {days.map((d) => {
                 const isCollapsed = collapsed.has(d.day);
@@ -190,14 +300,30 @@ export function BulkImportFlow({ plans, fallbackDay = "monday", onCommit, onDone
                     {!isCollapsed && (
                       <div className="mt-2.5 flex flex-col gap-2">
                         {d.tasks.map((t) => (
-                          <div key={t.id} className="flex items-center gap-2.5 rounded-xl border border-neutral-100 px-2.5 py-2 dark:border-white/[0.05]">
-                            <span className="min-w-0 flex-1 truncate text-[13px] font-semibold text-neutral-800 dark:text-neutral-200">{t.title}</span>
-                            {t.needsTime ? (
-                              <span className="inline-flex shrink-0 items-center gap-1 text-[12px] font-bold text-amber-600 dark:text-amber-400">
-                                <IconClock size={13} strokeWidth={2} />Time?
-                              </span>
-                            ) : (
-                              <span className="shrink-0 text-[12px] font-bold text-emerald-600 dark:text-emerald-400">{t.startTime}</span>
+                          <div key={t.id} className="rounded-xl border border-neutral-100 px-2.5 py-2 dark:border-white/[0.05]">
+                            <div className="flex items-center gap-2.5">
+                              <span className="min-w-0 flex-1 truncate text-[13px] font-semibold text-neutral-800 dark:text-neutral-200">{t.title}</span>
+                              {t.needsTime ? (
+                                <span className="inline-flex shrink-0 items-center gap-1 text-[12px] font-bold text-amber-600 dark:text-amber-400">
+                                  <IconClock size={13} strokeWidth={2} />Time?
+                                </span>
+                              ) : (
+                                <span className="shrink-0 text-[12px] font-bold text-emerald-600 dark:text-emerald-400">{t.startTime}</span>
+                              )}
+                            </div>
+                            {t.subtasks && t.subtasks.length > 0 && (
+                              <div className="mt-1.5 flex flex-col gap-1 border-l-2 border-emerald-500/20 pl-2.5">
+                                {t.subtasks.map((s) => (
+                                  <div key={s.id} className="flex items-center gap-1.5 text-[12px]">
+                                    <span className="h-1 w-1 shrink-0 rounded-full bg-neutral-300 dark:bg-neutral-600" />
+                                    <span className="min-w-0 truncate font-medium text-neutral-600 dark:text-neutral-300">{s.title}</span>
+                                    {s.info && <span className="shrink-0 truncate text-neutral-400 dark:text-neutral-500">· {s.info}</span>}
+                                    {s.duration && (
+                                      <span className="ml-auto shrink-0 rounded-full bg-neutral-100 px-1.5 py-0.5 text-[10px] font-bold text-neutral-500 dark:bg-white/[0.06] dark:text-neutral-400">{s.duration}</span>
+                                    )}
+                                  </div>
+                                ))}
+                              </div>
                             )}
                           </div>
                         ))}
@@ -288,9 +414,13 @@ export function BulkImportFlow({ plans, fallbackDay = "monday", onCommit, onDone
         >
           <span className="flex items-center gap-2 text-[15px] font-bold">
             <IconCircleCheck size={18} strokeWidth={2} />
-            Create {total} Task{total !== 1 ? "s" : ""}
+            {newPlans.length > 0
+              ? `Create Plan + ${total} Task${total !== 1 ? "s" : ""}`
+              : `Create ${total} Task${total !== 1 ? "s" : ""}`}
           </span>
-          <span className="text-[12px] font-medium opacity-90">Review and create your tasks</span>
+          <span className="text-[12px] font-medium opacity-90">
+            {newPlans.length > 0 ? "Review and create your plan" : "Review and create your tasks"}
+          </span>
         </motion.button>
     </div>
   );

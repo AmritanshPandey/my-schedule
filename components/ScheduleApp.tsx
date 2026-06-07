@@ -60,7 +60,7 @@ import {
   resolveAccentColor,
   type AccentColor,
 } from "@/lib/colorSystem";
-import { SECTION_ICONS, getIconPickerStyle } from "@/components/SectionIcons";
+import { SECTION_ICONS } from "@/components/SectionIcons";
 import {
   IconCheck,
   IconChevronLeft,
@@ -83,6 +83,7 @@ import {
 import { DndContext, DragEndEvent, PointerSensor, useSensor, useSensors } from "@dnd-kit/core";
 import { arrayMove, SortableContext, useSortable, verticalListSortingStrategy } from "@dnd-kit/sortable";
 import BottomSheet from "@/components/ui/BottomSheet";
+import EmptyState from "@/components/ui/EmptyState";
 import SheetHeader from "@/components/ui/SheetHeader";
 import Button from "@/components/ui/Button";
 import Input from "@/components/ui/Input";
@@ -113,6 +114,7 @@ import { getPlanCardStats } from "@/lib/planInsights";
 import { MainTitleSection, IconActionButton, CtaActionButton } from "@/components/ui/MainTitleSection";
 import ProgressBar from "@/components/ui/ProgressBar";
 import { cycleAccentColor } from "@/components/ui/Badge";
+import { stableFieldHash } from "@/lib/hash";
 import { recalculateRoadmapTimeline } from "@/lib/roadmapDates";
 import { haptic } from "@/lib/haptics";
 
@@ -125,6 +127,63 @@ const PLAN_DURATION_PRESETS: { label: string; days: number | null }[] = [
   { label: "90 days", days: 90 },
   { label: "Ongoing", days: null },
 ];
+
+// Keep plan titles short so they render cleanly in cards, analytics, and
+// progress summaries where space is tight.
+const PLAN_TITLE_MAX = 40;
+
+// Plan accent colors — chosen independently of the icon in its own section.
+const PLAN_COLOR_SWATCHES: { color: AccentColor; bg: string }[] = [
+  { color: "blue", bg: "bg-blue-500" },
+  { color: "emerald", bg: "bg-green-500" },
+  { color: "violet", bg: "bg-violet-500" },
+  { color: "pink", bg: "bg-pink-500" },
+  { color: "amber", bg: "bg-amber-500" },
+  { color: "cyan", bg: "bg-cyan-500" },
+];
+
+function PlanColorPicker({
+  value,
+  onChange,
+}: {
+  value: AccentColor;
+  onChange: (color: AccentColor) => void;
+}) {
+  return (
+    <div>
+      <p className="mb-2 text-[11px] font-semibold uppercase tracking-[0.08em] text-neutral-400 dark:text-neutral-500">Color</p>
+      <div className="flex gap-2.5">
+        {PLAN_COLOR_SWATCHES.map(({ color, bg }) => {
+          const sel = value === color;
+          return (
+            <button
+              key={color}
+              type="button"
+              aria-label={color}
+              aria-pressed={sel}
+              onClick={() => onChange(color)}
+              className={`h-9 w-9 rounded-full ${bg} transition-transform duration-150 ${sel
+                ? "scale-110 ring-2 ring-offset-2 ring-neutral-900 ring-offset-white dark:ring-white dark:ring-offset-neutral-900"
+                : "hover:scale-105"
+                }`}
+            />
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+// Neutral, monochrome styling for the plan icon picker tiles — selected tile is
+// solid, the rest are a soft neutral so the icon grid reads cleanly and stays
+// visually separate from the color section below it.
+function iconPickerClass(selected: boolean): string {
+  return `flex flex-col items-center justify-center gap-1 rounded-2xl py-3 transition-all duration-150 ${
+    selected
+      ? "bg-neutral-900 text-white dark:bg-white dark:text-neutral-900"
+      : "bg-neutral-100 text-neutral-500 hover:bg-neutral-200 dark:bg-white/[0.06] dark:text-neutral-400 dark:hover:bg-white/[0.1]"
+  }`;
+}
 
 function addDaysISO(days: number): string {
   const d = new Date();
@@ -179,11 +238,6 @@ function inferUnit(label: string): string {
   return "";
 }
 
-function stableFieldHash(s: string): number {
-  let h = 0;
-  for (let i = 0; i < s.length; i++) h = (Math.imul(31, h) + s.charCodeAt(i)) | 0;
-  return Math.abs(h);
-}
 
 function createSummaryFromMeta(metaFields: string[]): SummaryConfig[] {
   return metaFields.map((field) => ({
@@ -505,11 +559,19 @@ export default function ScheduleApp() {
   const [newPlanStartDate, setNewPlanStartDate] = useState("");
   const [newPlanEndDate, setNewPlanEndDate] = useState("");
   const [newPlanIconName, setNewPlanIconName] = useState("brain");
+  const [newPlanColor, setNewPlanColor] = useState<AccentColor>(() => colorFromIcon("brain"));
   const [newPlanMetaFields, setNewPlanMetaFields] = useState<string[]>([]);
   const [newPlanMetaInput, setNewPlanMetaInput] = useState("");
 
   const [editingPlanId, setEditingPlanId] = useState<string | null>(null);
-  const [editPlanDraft, setEditPlanDraft] = useState({ title: "", description: "", startDate: "", endDate: "" });
+  const [editPlanDraft, setEditPlanDraft] = useState<{
+    title: string;
+    description: string;
+    startDate: string;
+    endDate: string;
+    icon: string;
+    color: AccentColor;
+  }>({ title: "", description: "", startDate: "", endDate: "", icon: "brain", color: "cyan" });
 
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [templatesOpen, setTemplatesOpen] = useState(false);
@@ -798,13 +860,43 @@ export default function ScheduleApp() {
     [activeDay, setSchedule]
   );
 
-  function handleBulkImport(days: import("@/lib/scheduleParser").ParsedDay[]) {
+  function handleBulkImport(result: import("@/lib/scheduleParser").ParseResult) {
     setSchedule((prev) => {
+      // Create real plans from inline `# Plan` definitions; map temp ref → real plan.
+      const refToPlan = new Map<string, Plan>();
+      const newPlans: Plan[] = result.plans.map((p) => {
+        const plan: Plan = {
+          id: uid(),
+          title: p.title,
+          description: p.description,
+          startDate: p.startDate,
+          endDate: p.endDate,
+          category: p.category,
+          emoji: p.emoji,
+          color: p.color,
+          items: [],
+          metaFields: [],
+          summary: [],
+        };
+        refToPlan.set(p.ref, plan);
+        return plan;
+      });
+
       const activities = { ...prev.activities };
-      for (const d of days) {
+      for (const d of result.days) {
         const created: Task[] = d.tasks.map((t) => {
           const { startTime, endTime } = resolveParsedTimes(t);
-          const plan = prev.plans.find((p) => p.id === t.planId) ?? prev.plans[0] ?? null;
+          const plan =
+            (t.planRef ? refToPlan.get(t.planRef) : null) ??
+            prev.plans.find((p) => p.id === t.planId) ??
+            prev.plans[0] ??
+            null;
+          const subtasks = t.subtasks?.map((s) => ({
+            id: uid(),
+            task: s.title,
+            info: s.info,
+            duration: s.duration,
+          }));
           return {
             id: uid(),
             title: t.title,
@@ -813,13 +905,14 @@ export default function ScheduleApp() {
             icon: t.icon,
             color: (plan?.color ?? "cyan") as AccentColor,
             planId: plan?.id ?? "",
+            ...(subtasks && subtasks.length > 0 ? { subtasks } : {}),
           };
         });
         activities[d.day] = sortTasksByTime([...(activities[d.day] ?? []), ...created]);
       }
-      return { ...prev, activities };
+      return { ...prev, plans: [...prev.plans, ...newPlans], activities };
     });
-    setToastMessage("Tasks imported");
+    setToastMessage(result.plans.length > 0 ? "Plan & tasks imported" : "Tasks imported");
   }
 
   function handleAddPlan() {
@@ -833,7 +926,7 @@ export default function ScheduleApp() {
       endDate: newPlanEndDate || undefined,
       category: categoryFromIcon(newPlanIconName),
       emoji: newPlanIconName,
-      color: colorFromIcon(newPlanIconName),
+      color: newPlanColor,
       items: [],
       metaFields: newPlanMetaFields,
       summary: createSummaryFromMeta(newPlanMetaFields),
@@ -855,6 +948,7 @@ export default function ScheduleApp() {
     setNewPlanStartDate("");
     setNewPlanEndDate("");
     setNewPlanIconName("brain");
+    setNewPlanColor(colorFromIcon("brain"));
     setNewPlanMetaFields([]);
     setNewPlanMetaInput("");
     setAddingPlan(false);
@@ -906,14 +1000,14 @@ export default function ScheduleApp() {
   }
 
   // ── Notes ───────────────────────────────────────────────────────────────────
-  function handleCreateNote(): string {
+  function handleCreateNote(initialBody = ""): string {
     const now = new Date().toISOString();
-    const note: Note = { id: uid(), title: "", body: "", createdAt: now, updatedAt: now };
+    const note: Note = { id: uid(), title: "", body: initialBody, createdAt: now, updatedAt: now };
     setSchedule((prev) => ({ ...prev, notes: [note, ...(prev.notes ?? [])] }));
     return note.id;
   }
 
-  function handleUpdateNote(id: string, patch: Partial<Pick<Note, "title" | "body">>) {
+  function handleUpdateNote(id: string, patch: Partial<Pick<Note, "title" | "body" | "pinned" | "tags">>) {
     setSchedule((prev) => ({
       ...prev,
       notes: (prev.notes ?? []).map((n) =>
@@ -1205,8 +1299,23 @@ export default function ScheduleApp() {
   function handleSaveEditPlan(planId: string) {
     const title = editPlanDraft.title.trim();
     if (!title) return;
-    setSchedule((prev) => ({
+    const nextColor = editPlanDraft.color;
+    setSchedule((prev) => {
+      const prevPlan = prev.plans.find((p) => p.id === planId);
+      const colorChanged = prevPlan?.color !== nextColor;
+      // Linked tasks store their own color (copied from the plan); keep them in
+      // sync with the plan's accent so the timeline reflects the new color.
+      const activities = colorChanged
+        ? (Object.fromEntries(
+            Object.entries(prev.activities).map(([day, tasks]) => [
+              day,
+              tasks.map((t) => (t.planId === planId ? { ...t, color: nextColor } : t)),
+            ])
+          ) as typeof prev.activities)
+        : prev.activities;
+      return {
       ...prev,
+      activities,
       plans: prev.plans.map((p) =>
         p.id === planId
           ? {
@@ -1215,6 +1324,9 @@ export default function ScheduleApp() {
             description: editPlanDraft.description.trim() || undefined,
             startDate: editPlanDraft.startDate || undefined,
             endDate: editPlanDraft.endDate || undefined,
+            emoji: editPlanDraft.icon,
+            color: nextColor,
+            category: categoryFromIcon(editPlanDraft.icon),
           }
           : p
       ),
@@ -1225,7 +1337,8 @@ export default function ScheduleApp() {
           editPlanDraft.startDate || undefined
         ),
       ],
-    }));
+    };
+    });
     setEditingPlanId(null);
   }
 
@@ -1660,13 +1773,19 @@ export default function ScheduleApp() {
         <SheetHeader eyebrow="New" title="Create Plan" onClose={() => setAddingPlan(false)} />
 
         <div className="space-y-2.5">
-          <Input
-            value={newPlanTitle}
-            onChange={(e) => setNewPlanTitle(e.target.value)}
-            placeholder="Plan title"
-            autoFocus
-            onKeyDown={(e) => { if (e.key === "Enter" && newPlanTitle.trim()) handleAddPlan(); }}
-          />
+          <div>
+            <Input
+              value={newPlanTitle}
+              onChange={(e) => setNewPlanTitle(e.target.value)}
+              placeholder="Plan title"
+              autoFocus
+              maxLength={PLAN_TITLE_MAX}
+              onKeyDown={(e) => { if (e.key === "Enter" && newPlanTitle.trim()) handleAddPlan(); }}
+            />
+            <p className="mt-1 text-right text-[11px] font-medium tabular-nums text-neutral-400 dark:text-neutral-500">
+              {newPlanTitle.length}/{PLAN_TITLE_MAX}
+            </p>
+          </div>
           <Input
             value={newPlanDescription}
             onChange={(e) => setNewPlanDescription(e.target.value)}
@@ -1729,7 +1848,6 @@ export default function ScheduleApp() {
           <p className="mb-2 text-[11px] font-semibold uppercase tracking-[0.08em] text-neutral-400 dark:text-neutral-500">Icon</p>
           <div className="grid grid-cols-5 gap-1.5">
             {SECTION_ICONS.map(({ name, label, icon: Icon }) => {
-              const ic = getIconPickerStyle(name);
               const sel = newPlanIconName === name;
               return (
                 <button
@@ -1737,11 +1855,10 @@ export default function ScheduleApp() {
                   type="button"
                   title={label}
                   onClick={() => setNewPlanIconName(name)}
-                  className={`flex flex-col items-center justify-center gap-1 rounded-2xl py-3 transition-all duration-150 ${sel ? `${ic.solid} scale-[1.04]` : `${ic.tint} ${ic.text} hover:scale-[1.04]`
-                    }`}
+                  className={iconPickerClass(sel)}
                 >
                   <Icon size={18} strokeWidth={1.5} />
-                  <span className={`text-[9px] font-semibold leading-none ${sel ? "text-white/80" : ""}`}>
+                  <span className="text-[9px] font-semibold leading-none">
                     {label}
                   </span>
                 </button>
@@ -1749,6 +1866,8 @@ export default function ScheduleApp() {
             })}
           </div>
         </div>
+
+        <PlanColorPicker value={newPlanColor} onChange={setNewPlanColor} />
 
         <div>
           <p className="mb-2 text-[11px] font-semibold uppercase tracking-[0.08em] text-neutral-400 dark:text-neutral-500">
@@ -1854,22 +1973,13 @@ export default function ScheduleApp() {
 
         {/* Empty state */}
         {schedule.plans.length === 0 && (
-          <div className="rounded-[28px] border border-dashed border-neutral-200 p-8 text-center dark:border-white/10">
-            <div className="mb-3 flex h-12 w-12 items-center justify-center rounded-2xl bg-neutral-100 dark:bg-white/[0.07] mx-auto">
-              <IconClipboardList size={22} className="text-neutral-400 dark:text-neutral-500" />
-            </div>
-            <p className="text-[15px] font-bold text-neutral-700 dark:text-neutral-300">No plans yet</p>
-            <p className="mt-1 text-[13px] text-neutral-400 dark:text-neutral-500 max-w-[220px] mx-auto">
-              Start from scratch or pick a template with tasks and milestones ready to go.
-            </p>
-            <button
-              type="button"
-              onClick={() => setTemplatesOpen(true)}
-              className="mt-4 inline-flex items-center gap-1.5 rounded-xl bg-neutral-900 px-4 py-2.5 text-[13px] font-bold text-white transition-opacity active:opacity-75 dark:bg-white dark:text-neutral-900"
-            >
-              Browse Templates
-            </button>
-          </div>
+          <EmptyState
+            icon={IconClipboardList}
+            title="No plans yet"
+            description="Start from scratch or pick a template with tasks and milestones ready to go."
+            action={{ label: "New Plan", onClick: () => setAddingPlan(true) }}
+            secondaryAction={{ label: "Browse templates", onClick: () => setTemplatesOpen(true) }}
+          />
         )}
 
         {/* Plan cards */}
@@ -1974,6 +2084,8 @@ export default function ScheduleApp() {
                     description: selectedPlan.description ?? "",
                     startDate: selectedPlan.startDate ?? "",
                     endDate: selectedPlan.endDate ?? "",
+                    icon: selectedPlan.emoji,
+                    color: selectedPlan.color,
                   });
                 },
               },
@@ -2251,19 +2363,21 @@ export default function ScheduleApp() {
                     transition={{ duration: 0.2, ease: "easeOut" }}
                   >
                     {dayTasks.length === 0 ? (
-                      <div className="rounded-2xl border border-dashed border-neutral-200 py-10 text-center dark:border-white/10">
-                        <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-neutral-100 dark:bg-white/[0.06] mx-auto mb-3">
-                          <IconCalendar size={20} strokeWidth={1.8} className="text-neutral-400 dark:text-neutral-500" />
-                        </div>
-                        <p className="text-[14px] font-semibold text-neutral-600 dark:text-neutral-300">
-                          {schedule.plans.length === 0 ? "No plans yet" : "Nothing scheduled"}
-                        </p>
-                        <p className="mt-1 text-[12px] text-neutral-400 dark:text-neutral-500">
-                          {schedule.plans.length === 0
-                            ? "Create a plan first, then add tasks."
-                            : "Tap + to schedule your first task for this day."}
-                        </p>
-                      </div>
+                      schedule.plans.length === 0 ? (
+                        <EmptyState
+                          icon={IconCalendar}
+                          title="No plans yet"
+                          description="Create a plan first, then add tasks to schedule your day."
+                          action={{ label: "Create a Plan", onClick: () => setActiveTab(1) }}
+                        />
+                      ) : (
+                        <EmptyState
+                          icon={IconCalendar}
+                          title="Nothing scheduled"
+                          description="Add your first task for this day to start building your schedule."
+                          action={{ label: "Add Task", onClick: () => openCreateSheet() }}
+                        />
+                      )
                     ) : editMode ? (
                       <DndContext sensors={sensors} onDragEnd={handleTasksDragEnd}>
                         <SortableContext items={dayTasks.map((t) => t.id)} strategy={verticalListSortingStrategy}>
@@ -2627,12 +2741,18 @@ export default function ScheduleApp() {
         <div className="space-y-4 p-5 pb-8">
           <SheetHeader eyebrow="Edit" title="Plan Details" onClose={() => setEditingPlanId(null)} />
           <div className="space-y-2.5">
-            <Input
-              value={editPlanDraft.title}
-              onChange={(e) => setEditPlanDraft((d) => ({ ...d, title: e.target.value }))}
-              placeholder="Plan title"
-              autoFocus
-            />
+            <div>
+              <Input
+                value={editPlanDraft.title}
+                onChange={(e) => setEditPlanDraft((d) => ({ ...d, title: e.target.value }))}
+                placeholder="Plan title"
+                autoFocus
+                maxLength={PLAN_TITLE_MAX}
+              />
+              <p className="mt-1 text-right text-[11px] font-medium tabular-nums text-neutral-400 dark:text-neutral-500">
+                {editPlanDraft.title.length}/{PLAN_TITLE_MAX}
+              </p>
+            </div>
             <Input
               value={editPlanDraft.description}
               onChange={(e) => setEditPlanDraft((d) => ({ ...d, description: e.target.value }))}
@@ -2690,6 +2810,36 @@ export default function ScheduleApp() {
                 })}
               </div>
             </div>
+
+            {/* Icon picker */}
+            <div>
+              <p className="mb-2 text-[11px] font-semibold uppercase tracking-[0.08em] text-neutral-400 dark:text-neutral-500">Icon</p>
+              <div className="grid grid-cols-5 gap-1.5">
+                {SECTION_ICONS.map(({ name, label, icon: Icon }) => {
+                  const sel = editPlanDraft.icon === name;
+                  return (
+                    <button
+                      key={name}
+                      type="button"
+                      title={label}
+                      onClick={() => setEditPlanDraft((d) => ({ ...d, icon: name }))}
+                      className={iconPickerClass(sel)}
+                    >
+                      <Icon size={18} strokeWidth={1.5} />
+                      <span className="text-[9px] font-semibold leading-none">
+                        {label}
+                      </span>
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+
+            {/* Color picker — separate from icon selection */}
+            <PlanColorPicker
+              value={editPlanDraft.color}
+              onChange={(c) => setEditPlanDraft((d) => ({ ...d, color: c }))}
+            />
           </div>
           <Button
             fullWidth

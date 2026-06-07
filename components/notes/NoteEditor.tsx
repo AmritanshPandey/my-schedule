@@ -10,9 +10,13 @@ import {
   IconIndentIncrease,
   IconItalic,
   IconList,
+  IconPalette,
+  IconPin,
+  IconPinnedFilled,
   IconStrikethrough,
   IconTable,
   IconTrash,
+  IconX,
 } from "@tabler/icons-react";
 import type { Note } from "@/lib/useScheduleDB";
 import { haptic } from "@/lib/haptics";
@@ -20,17 +24,22 @@ import {
   groupBlocks,
   type LineKind,
   makeEmptyTable,
+  NOTE_COLORS,
   parseLine,
   renderInline,
   serializeLine,
   serializeTable,
 } from "@/lib/notes/markdown";
+import { AccentBadge, cycleAccentColor } from "@/components/ui/Badge";
+import { stableFieldHash } from "@/lib/hash";
 import DetailHeader from "@/components/ui/DetailHeader";
 import TableBlock from "./TableBlock";
 
+type NotePatch = Partial<Pick<Note, "title" | "body" | "pinned" | "tags">>;
+
 interface NoteEditorProps {
   note: Note;
-  onUpdate: (id: string, patch: Partial<Pick<Note, "title" | "body">>) => void;
+  onUpdate: (id: string, patch: NotePatch) => void;
   onDelete: (id: string) => void;
   onBack: () => void;
 }
@@ -71,6 +80,10 @@ function setCaretOffset(el: HTMLElement, offset: number) {
 export default function NoteEditor({ note, onUpdate, onDelete, onBack }: NoteEditorProps) {
   const [title, setTitle] = useState(note.title);
   const [body, setBody] = useState(note.body);
+  const [tags, setTags] = useState<string[]>(note.tags ?? []);
+  const [tagInput, setTagInput] = useState("");
+  const [colorMenuOpen, setColorMenuOpen] = useState(false);
+  const [slashOpen, setSlashOpen] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [saveState, setSaveState] = useState<SaveState>("idle");
   // Which block holds the caret: it shows raw markdown; all others render styled.
@@ -92,6 +105,10 @@ export default function NoteEditor({ note, onUpdate, onDelete, onBack }: NoteEdi
   useEffect(() => {
     setTitle(note.title);
     setBody(note.body);
+    setTags(note.tags ?? []);
+    setTagInput("");
+    setColorMenuOpen(false);
+    setSlashOpen(false);
     if (note.body.trim().length === 0) {
       pendingCaret.current = { index: 0, offset: 0 };
       setFocusedIndex(0);
@@ -123,6 +140,11 @@ export default function NoteEditor({ note, onUpdate, onDelete, onBack }: NoteEdi
     if (savedTimer.current) clearTimeout(savedTimer.current);
   }, []);
 
+  // Close the block/color menus whenever no block is focused (e.g. on blur).
+  useEffect(() => {
+    if (focusedIndex == null) { setSlashOpen(false); setColorMenuOpen(false); }
+  }, [focusedIndex]);
+
   // Place the caret into the focused block after a programmatic edit. Runs only
   // on focus/caret changes — never on every keystroke — so typing isn't disturbed.
   useLayoutEffect(() => {
@@ -141,6 +163,34 @@ export default function NoteEditor({ note, onUpdate, onDelete, onBack }: NoteEdi
     if (saveTimer.current) clearTimeout(saveTimer.current);
     if (title !== note.title || body !== note.body) onUpdate(note.id, { title, body });
     onBack();
+  }
+
+  // ── Tags + pin ─────────────────────────────────────────────────────────────
+  function commitTags(next: string[]) {
+    setTags(next);
+    onUpdate(note.id, { tags: next });
+  }
+
+  function addTag() {
+    const raw = tagInput.trim().slice(0, 24);
+    if (!raw) return;
+    if (tags.length >= 8 || tags.some((t) => t.toLowerCase() === raw.toLowerCase())) {
+      setTagInput("");
+      return;
+    }
+    haptic("light");
+    commitTags([...tags, raw]);
+    setTagInput("");
+  }
+
+  function removeTag(tag: string) {
+    haptic("light");
+    commitTags(tags.filter((t) => t !== tag));
+  }
+
+  function togglePin() {
+    haptic("light");
+    onUpdate(note.id, { pinned: !note.pinned });
   }
 
   function bumpCaret(index: number, offset: number) {
@@ -167,7 +217,22 @@ export default function NoteEditor({ note, onUpdate, onDelete, onBack }: NoteEdi
   function handleInput(i: number) {
     const el = blockRefs.current.get(i);
     if (!el) return;
-    updateLine(i, { text: el.textContent ?? "" });
+    const text = el.textContent ?? "";
+    updateLine(i, { text });
+    // Typing "/" on an otherwise-empty line opens the block insert menu.
+    setSlashOpen(text === "/");
+  }
+
+  // Run a block-insert menu choice on the focused line, dropping the "/" trigger.
+  function applySlash(kind: "heading" | "checklist" | "bullet" | "table" | "color") {
+    if (focusedIndex == null) { setSlashOpen(false); return; }
+    const i = focusedIndex;
+    haptic("light");
+    updateLine(i, { text: "" });
+    setSlashOpen(false);
+    if (kind === "table") { insertTable(); return; }
+    if (kind === "color") { setColorMenuOpen(true); bumpCaret(i, 0); return; }
+    setBlockKind(kind);
   }
 
   // Blur → render this block styled, unless focus moved to another block.
@@ -439,16 +504,24 @@ export default function NoteEditor({ note, onUpdate, onDelete, onBack }: NoteEdi
         title="Notes"
         onBack={flushAndBack}
         rightSlot={<SaveBadge state={saveState} />}
-        actions={[{
-          icon: IconTrash,
-          label: confirmDelete ? "Confirm delete" : "Delete note",
-          destructive: true,
-          active: confirmDelete,
-          onClick: () => {
-            if (confirmDelete) { haptic("medium"); onDelete(note.id); }
-            else { haptic("light"); setConfirmDelete(true); setTimeout(() => setConfirmDelete(false), 3000); }
+        actions={[
+          {
+            icon: note.pinned ? IconPinnedFilled : IconPin,
+            label: note.pinned ? "Unpin note" : "Pin note",
+            active: !!note.pinned,
+            onClick: togglePin,
           },
-        }]}
+          {
+            icon: IconTrash,
+            label: confirmDelete ? "Confirm delete" : "Delete note",
+            destructive: true,
+            active: confirmDelete,
+            onClick: () => {
+              if (confirmDelete) { haptic("medium"); onDelete(note.id); }
+              else { haptic("light"); setConfirmDelete(true); setTimeout(() => setConfirmDelete(false), 3000); }
+            },
+          },
+        ]}
       />
 
       {/* Desktop: pane header — the list pane stays visible, so no back button.
@@ -456,6 +529,19 @@ export default function NoteEditor({ note, onUpdate, onDelete, onBack }: NoteEdi
       <div className="hidden shrink-0 items-center gap-2 px-3 pt-4 pb-2 lg:flex lg:pr-44">
         <div className="flex-1" />
         <SaveBadge state={saveState} />
+        <button
+          type="button"
+          onClick={togglePin}
+          aria-label={note.pinned ? "Unpin note" : "Pin note"}
+          aria-pressed={!!note.pinned}
+          className={`flex h-9 w-9 items-center justify-center rounded-xl transition-colors ${
+            note.pinned
+              ? "bg-amber-500/15 text-amber-500"
+              : "text-neutral-400 hover:bg-neutral-100 hover:text-neutral-700 dark:hover:bg-white/[0.06] dark:hover:text-neutral-200"
+          }`}
+        >
+          {note.pinned ? <IconPinnedFilled size={16} strokeWidth={2} /> : <IconPin size={16} strokeWidth={2} />}
+        </button>
         <button
           type="button"
           onClick={() => {
@@ -481,9 +567,40 @@ export default function NoteEditor({ note, onUpdate, onDelete, onBack }: NoteEdi
           placeholder="Title"
           className="mb-1 w-full bg-transparent text-[24px] font-bold tracking-[-0.4px] text-neutral-900 placeholder-neutral-300 outline-none dark:text-white dark:placeholder-neutral-700"
         />
-        <p className="mb-4 text-[12px] text-neutral-400 dark:text-neutral-600">
+        <p className="mb-2.5 text-[12px] text-neutral-400 dark:text-neutral-600">
           {new Date(note.updatedAt).toLocaleString("en-US", { month: "short", day: "numeric", year: "numeric", hour: "numeric", minute: "2-digit" })}
         </p>
+
+        {/* Tag chips + add input */}
+        <div className="mb-4 flex flex-wrap items-center gap-1.5">
+          {tags.map((tag) => (
+            <AccentBadge key={tag} color={cycleAccentColor(stableFieldHash(tag.toLowerCase()))} className="pr-1.5">
+              {tag}
+              <button
+                type="button"
+                aria-label={`Remove ${tag}`}
+                onClick={() => removeTag(tag)}
+                className="ml-0.5 opacity-60 transition-opacity hover:opacity-100"
+              >
+                <IconX size={11} strokeWidth={2.5} />
+              </button>
+            </AccentBadge>
+          ))}
+          {tags.length < 8 && (
+            <input
+              value={tagInput}
+              onChange={(e) => setTagInput(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter" || e.key === ",") { e.preventDefault(); addTag(); }
+                else if (e.key === "Backspace" && !tagInput && tags.length > 0) removeTag(tags[tags.length - 1]);
+              }}
+              onBlur={addTag}
+              placeholder={tags.length === 0 ? "Add tag…" : "+ tag"}
+              maxLength={24}
+              className="h-6 w-24 min-w-0 rounded-full bg-transparent px-1 text-[12px] font-medium text-neutral-600 placeholder-neutral-300 outline-none dark:text-neutral-300 dark:placeholder-neutral-700"
+            />
+          )}
+        </div>
 
         <div className="space-y-0.5">
           {groupBlocks(lines).map((block) =>
@@ -504,7 +621,53 @@ export default function NoteEditor({ note, onUpdate, onDelete, onBack }: NoteEdi
 
       {/* Formatting toolbar — visible while a block is focused */}
       {focusedIndex != null && (
-        <div className="shrink-0 border-t border-neutral-100 bg-white/90 px-2 py-2 backdrop-blur dark:border-white/[0.06] dark:bg-neutral-950/90" style={{ paddingBottom: "max(8px, env(safe-area-inset-bottom))" }}>
+        <div className="relative shrink-0 border-t border-neutral-100 bg-white/90 px-2 py-2 backdrop-blur dark:border-white/[0.06] dark:bg-neutral-950/90" style={{ paddingBottom: "max(8px, env(safe-area-inset-bottom))" }}>
+          {/* Slash / block-insert menu */}
+          {slashOpen && (
+            <div
+              onMouseDown={(e) => e.preventDefault()}
+              className="absolute bottom-full left-2 mb-1 w-52 overflow-hidden rounded-2xl border border-neutral-200 bg-white py-1 shadow-lg dark:border-white/[0.1] dark:bg-neutral-900"
+            >
+              {([
+                { kind: "heading", label: "Heading", Icon: IconHeading },
+                { kind: "checklist", label: "Checklist", Icon: IconChecklist },
+                { kind: "bullet", label: "Bullet list", Icon: IconList },
+                { kind: "table", label: "Table", Icon: IconTable },
+                { kind: "color", label: "Text color", Icon: IconPalette },
+              ] as const).map(({ kind, label, Icon }) => (
+                <button
+                  key={kind}
+                  type="button"
+                  onMouseDown={(e) => e.preventDefault()}
+                  onClick={() => applySlash(kind)}
+                  className="flex w-full items-center gap-2.5 px-3 py-2 text-left text-[14px] font-medium text-neutral-700 transition-colors hover:bg-neutral-100 dark:text-neutral-200 dark:hover:bg-white/[0.06]"
+                >
+                  <Icon size={17} strokeWidth={2} className="shrink-0 text-neutral-400 dark:text-neutral-500" />
+                  {label}
+                </button>
+              ))}
+            </div>
+          )}
+
+          {/* Color swatch popover */}
+          {colorMenuOpen && (
+            <div
+              onMouseDown={(e) => e.preventDefault()}
+              className="absolute bottom-full left-2 mb-1 flex items-center gap-1.5 rounded-2xl border border-neutral-200 bg-white p-2 shadow-lg dark:border-white/[0.1] dark:bg-neutral-900"
+            >
+              {NOTE_COLORS.map((c) => (
+                <button
+                  key={c.name}
+                  type="button"
+                  aria-label={`Color ${c.name}`}
+                  onMouseDown={(e) => e.preventDefault()}
+                  onClick={() => { wrapInline(`{c=${c.name}}`, "{/c}"); setColorMenuOpen(false); }}
+                  className="h-7 w-7 rounded-full ring-offset-1 transition-transform hover:scale-110 dark:ring-offset-neutral-900"
+                  style={{ backgroundColor: c.hex }}
+                />
+              ))}
+            </div>
+          )}
           <div className="flex items-center gap-0.5 overflow-x-auto">
             <ToolbarButton label="Checklist" onClick={() => setBlockKind("checklist")}><IconChecklist size={18} strokeWidth={2} /></ToolbarButton>
             <ToolbarButton label="Bullet" onClick={() => setBlockKind("bullet")}><IconList size={18} strokeWidth={2} /></ToolbarButton>
@@ -517,6 +680,7 @@ export default function NoteEditor({ note, onUpdate, onDelete, onBack }: NoteEdi
             <ToolbarButton label="Italic" onClick={() => wrapInline("*", "*")}><IconItalic size={18} strokeWidth={2} /></ToolbarButton>
             <ToolbarButton label="Strikethrough" onClick={() => wrapInline("~~", "~~")}><IconStrikethrough size={18} strokeWidth={2} /></ToolbarButton>
             <ToolbarButton label="Code" onClick={() => wrapInline("`", "`")}><IconCode size={18} strokeWidth={2} /></ToolbarButton>
+            <ToolbarButton label="Text color" active={colorMenuOpen} onClick={() => setColorMenuOpen((v) => !v)}><IconPalette size={18} strokeWidth={2} /></ToolbarButton>
             <Divider />
             <ToolbarButton label="Insert table" onClick={insertTable}><IconTable size={18} strokeWidth={2} /></ToolbarButton>
             <div className="ml-auto flex-1" />
@@ -556,7 +720,7 @@ function Divider() {
   return <span className="mx-0.5 h-5 w-px shrink-0 bg-neutral-200 dark:bg-white/[0.08]" />;
 }
 
-function ToolbarButton({ children, label, onClick }: { children: React.ReactNode; label: string; onClick: () => void }) {
+function ToolbarButton({ children, label, onClick, active = false }: { children: React.ReactNode; label: string; onClick: () => void; active?: boolean }) {
   return (
     <button
       type="button"
@@ -564,7 +728,12 @@ function ToolbarButton({ children, label, onClick }: { children: React.ReactNode
       onClick={onClick}
       title={label}
       aria-label={label}
-      className="flex h-9 min-w-9 shrink-0 items-center justify-center rounded-xl px-2 text-neutral-600 transition-colors hover:bg-neutral-100 dark:text-neutral-300 dark:hover:bg-white/[0.06]"
+      aria-pressed={active}
+      className={`flex h-9 min-w-9 shrink-0 items-center justify-center rounded-xl px-2 transition-colors ${
+        active
+          ? "bg-neutral-900 text-white dark:bg-white dark:text-neutral-900"
+          : "text-neutral-600 hover:bg-neutral-100 dark:text-neutral-300 dark:hover:bg-white/[0.06]"
+      }`}
     >
       {children}
     </button>

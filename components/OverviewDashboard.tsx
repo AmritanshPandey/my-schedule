@@ -20,6 +20,9 @@ import {
   IconTrendingDown,
   IconMinus,
   IconActivity,
+  IconSparkles,
+  IconChartLine,
+  IconArrowRight,
 } from "@tabler/icons-react";
 import type { Schedule, DayKey, Task, Plan, ProgressTracker } from "@/lib/useScheduleDB";
 import { isTaskCompleted, isTaskResolved } from "@/lib/taskCompletion";
@@ -140,14 +143,12 @@ function SwipeableCardStack({
   plans,
   onMarkDone,
   onSkip,
-  onMissed,
   onOpenSubtasks,
 }: {
   tasks: StackTask[];
   plans: Plan[];
   onMarkDone: (task: StackTask) => void;
   onSkip: (task: StackTask) => void;      // defer — send to back of the queue
-  onMissed: (task: StackTask) => void;    // record as missed for today
   onOpenSubtasks?: (taskId: string) => void;
 }) {
   const y = useMotionValue(0);
@@ -434,6 +435,14 @@ export default function OverviewDashboard({
     [schedule.activities]
   );
 
+  // Brand-new account: nothing to summarize yet. Show a guided getting-started
+  // checklist instead of a grid of empty cards.
+  const isFreshStart =
+    schedule.plans.length === 0 &&
+    !hasScheduledTasks &&
+    (schedule.progressTrackers?.length ?? 0) === 0 &&
+    (schedule.rituals?.length ?? 0) === 0;
+
   // ── Routine Consistency — today's rituals with streak + 7-day dot history ──
   const ritualConsistency = useMemo(() => {
     const completions = schedule.ritualCompletions ?? [];
@@ -484,6 +493,11 @@ export default function OverviewDashboard({
           <h1 className="mt-0.5 text-[26px] font-extrabold leading-tight text-neutral-950 dark:text-white">Overview</h1>
         </div>
 
+        {isFreshStart ? (
+          <GettingStarted onNavigate={onNavigate} />
+        ) : (
+        <>
+
         {/* ── Task count row (mobile only — desktop shows it in the card) ──── */}
         <div className="mb-3 lg:hidden">
           <div className="flex items-center justify-between">
@@ -510,7 +524,7 @@ export default function OverviewDashboard({
         {/* ── 3-column dashboard grid ──────────────────────────────────────── */}
         <div className="space-y-4 lg:grid lg:grid-cols-3 lg:gap-4 lg:space-y-0 lg:items-start">
 
-          {/* Column 1 —  · This Week · Routine Consistency */}
+          {/* Column 1 — Today's Task · Routine Consistency */}
           <div className="space-y-4 lg:min-w-0">
 
           {/* ── Desktop: plain Today's Task list card (reference design) ── */}
@@ -640,6 +654,13 @@ export default function OverviewDashboard({
           </AnimatePresence>
           </div>
 
+            {/* ── Routine Consistency ── */}
+            <RoutineConsistencyCard rows={ritualConsistency} />
+          </div>
+
+          {/* Column 2 — This Week · Weekly Progress · Active Tracking */}
+          <div className="mt-4 space-y-4 lg:mt-0 lg:min-w-0">
+
             {/* ── This Week ── */}
             {weeklyActivity && (
             <div className={`${CARD} px-5 py-4`}>
@@ -694,13 +715,6 @@ export default function OverviewDashboard({
             </div>
             )}
 
-            {/* ── Routine Consistency ── */}
-            <RoutineConsistencyCard rows={ritualConsistency} />
-          </div>
-
-          {/* Column 2 — Execution · Tracking */}
-          <div className="mt-4 space-y-4 lg:mt-0 lg:min-w-0">
-
             {/* ── Execution trend (8-week analytics) ── */}
             {hasScheduledTasks && <ExecutionTrendCard schedule={schedule} />}
 
@@ -712,14 +726,23 @@ export default function OverviewDashboard({
             </div>
 
             {trackerData.length === 0 ? (
-              <div className="flex items-center justify-between py-1">
-                <p className="text-[13px] text-neutral-400 dark:text-neutral-500">No trackers yet</p>
+              <div className="flex flex-col items-center gap-3 px-2 py-4 text-center">
+                <span className="grid h-12 w-12 place-items-center rounded-2xl bg-emerald-500/10 text-emerald-600 dark:bg-emerald-400/10 dark:text-emerald-400">
+                  <IconChartLine size={22} strokeWidth={2} />
+                </span>
+                <div className="space-y-0.5">
+                  <p className="text-[14px] font-bold text-neutral-900 dark:text-white">No trackers yet</p>
+                  <p className="mx-auto max-w-[230px] text-[12.5px] leading-snug text-neutral-400 dark:text-neutral-500">
+                    Track metrics like weight, pages read, or revenue to watch your trends here.
+                  </p>
+                </div>
                 <button
                   type="button"
                   onClick={() => { haptic("light"); onNavigate(1); }}
-                  className="text-[12px] font-semibold text-emerald-600 dark:text-emerald-400"
+                  className="inline-flex items-center gap-1 text-[13px] font-semibold text-neutral-600 transition-colors hover:text-neutral-900 dark:text-neutral-300 dark:hover:text-white"
                 >
-                  Set up →
+                  Set up tracking
+                  <IconArrowRight size={14} strokeWidth={2.5} />
                 </button>
               </div>
             ) : (
@@ -765,8 +788,84 @@ export default function OverviewDashboard({
             <PlanConsistencyCard rows={planConsistency} onNavigate={onNavigate} />
           </div>
         </div>
+        </>
+        )}
       </div>
     </div>
+  );
+}
+
+// ── Getting started (fresh account — guided checklist instead of empty cards) ─
+
+function GettingStarted({ onNavigate }: { onNavigate: (tab: number) => void }) {
+  const steps = [
+    {
+      n: 1,
+      icon: IconClipboardList,
+      title: "Create your first plan",
+      desc: "Group related tasks, set milestones, and track progress toward a goal.",
+      tab: 1,
+    },
+    {
+      n: 2,
+      icon: IconCalendarEvent,
+      title: "Schedule today's tasks",
+      desc: "Add what you'll work on today, then check items off as you go.",
+      tab: 0,
+    },
+    {
+      n: 3,
+      icon: IconRepeat,
+      title: "Build a daily routine",
+      desc: "Track small recurring habits and keep your streak alive.",
+      tab: 2,
+    },
+  ];
+  return (
+    <motion.div
+      initial={{ opacity: 0, y: 8 }}
+      animate={{ opacity: 1, y: 0 }}
+      className="mx-auto w-full max-w-[560px]"
+    >
+      {/* Hero */}
+      <div className="flex flex-col items-center gap-4 pb-7 pt-10 text-center lg:pt-6">
+        <div className="flex h-20 w-20 items-center justify-center rounded-[28px] bg-emerald-500/10 dark:bg-emerald-500/[0.14]">
+          <IconSparkles size={36} strokeWidth={1.4} className="text-emerald-600 dark:text-emerald-400" />
+        </div>
+        <div>
+          <p className="text-[18px] font-bold text-neutral-900 dark:text-white">Let&apos;s get you set up</p>
+          <p className="mt-1.5 max-w-[300px] text-[14px] leading-relaxed text-neutral-400 dark:text-neutral-500">
+            A few quick steps to start planning your days and tracking what matters.
+          </p>
+        </div>
+      </div>
+
+      {/* Step cards */}
+      <div className="space-y-2.5">
+        {steps.map(({ n, icon: Icon, title, desc, tab }) => (
+          <button
+            key={n}
+            type="button"
+            onClick={() => { haptic("light"); onNavigate(tab); }}
+            className="flex w-full items-center gap-3.5 rounded-2xl border border-neutral-200/70 bg-white px-4 py-3.5 text-left transition-colors hover:border-neutral-300 active:bg-neutral-50 dark:border-white/[0.07] dark:bg-neutral-900 dark:hover:border-white/20 dark:active:bg-white/[0.03]"
+          >
+            <span className="grid h-11 w-11 shrink-0 place-items-center rounded-xl bg-neutral-100 text-neutral-500 dark:bg-white/[0.06] dark:text-neutral-400">
+              <Icon size={21} strokeWidth={1.8} />
+            </span>
+            <div className="min-w-0 flex-1">
+              <div className="flex items-center gap-2">
+                <span className="grid h-[18px] w-[18px] shrink-0 place-items-center rounded-full bg-emerald-500/15 text-[10px] font-extrabold tabular-nums text-emerald-600 dark:text-emerald-400">
+                  {n}
+                </span>
+                <p className="text-[15px] font-bold text-neutral-900 dark:text-white">{title}</p>
+              </div>
+              <p className="mt-1 text-[13px] leading-relaxed text-neutral-400 dark:text-neutral-500">{desc}</p>
+            </div>
+            <IconChevronRight size={18} strokeWidth={2} className="shrink-0 text-neutral-300 dark:text-neutral-600" />
+          </button>
+        ))}
+      </div>
+    </motion.div>
   );
 }
 

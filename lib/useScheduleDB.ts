@@ -6,8 +6,9 @@ import type { AccentColor } from "@/lib/colorSystem";
 import { colorFromIcon, resolveAccentColor } from "@/lib/colorSystem";
 import type { GoalDirection } from "@/lib/trendUtils";
 export type { GoalDirection };
-import { queueSync } from "@/lib/cloudSync";
-import { writeLocalLastUpdated } from "@/lib/localMeta";
+import { mergeCloudIfNewer, queueSync, noteLatestSchedule } from "@/lib/cloudSync";
+import { getLocalLastUpdated, writeLocalLastUpdated } from "@/lib/localMeta";
+import { useAuth } from "@/contexts/AuthProvider";
 import { calculateMilestoneEndDate, recalculateRoadmapTimeline } from "@/lib/roadmapDates";
 import { localISODate } from "@/lib/dateUtils";
 
@@ -188,6 +189,7 @@ export interface Note {
   createdAt: string;     // ISO
   updatedAt: string;     // ISO
   pinned?: boolean;
+  tags?: string[];       // free-text labels for grouping/filtering
 }
 
 export interface Schedule {
@@ -205,7 +207,12 @@ export interface Schedule {
 const DB_NAME = "daily-planner";
 const DB_VERSION = 10;
 const STORE = "schedule";
-const RECORD_KEY = "data";
+const LEGACY_RECORD_KEY = "data";
+const GUEST_RECORD_KEY = "guest:data";
+
+function recordKeyForUid(uid: string): string {
+  return `user:${uid}:data`;
+}
 
 function openDB(): Promise<IDBDatabase> {
   return new Promise((resolve, reject) => {
@@ -220,22 +227,46 @@ function openDB(): Promise<IDBDatabase> {
   });
 }
 
-function readDB(db: IDBDatabase): Promise<Schedule | null> {
+function readDB(db: IDBDatabase, key: string): Promise<Schedule | null> {
   return new Promise((resolve, reject) => {
     const tx = db.transaction(STORE, "readonly");
-    const req = tx.objectStore(STORE).get(RECORD_KEY);
+    const req = tx.objectStore(STORE).get(key);
     req.onsuccess = () => resolve(req.result ?? null);
     req.onerror = () => reject(req.error);
   });
 }
 
-function writeDB(db: IDBDatabase, data: Schedule): Promise<void> {
+function writeDB(db: IDBDatabase, key: string, data: Schedule): Promise<void> {
   return new Promise((resolve, reject) => {
     const tx = db.transaction(STORE, "readwrite");
-    tx.objectStore(STORE).put(data, RECORD_KEY);
+    tx.objectStore(STORE).put(data, key);
     tx.oncomplete = () => resolve();
     tx.onerror = () => reject(tx.error);
   });
+}
+
+function deleteDBKey(db: IDBDatabase, key: string): Promise<void> {
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction(STORE, "readwrite");
+    tx.objectStore(STORE).delete(key);
+    tx.oncomplete = () => resolve();
+    tx.onerror = () => reject(tx.error);
+  });
+}
+
+/**
+ * True if a schedule holds anything the user actually created — used to decide
+ * whether orphaned guest data is worth migrating into a freshly signed-in
+ * account. Empty/untouched guest records are ignored.
+ */
+function hasMeaningfulData(s: Schedule): boolean {
+  if ((s.plans?.length ?? 0) > 0) return true;
+  if ((s.notes?.length ?? 0) > 0) return true;
+  if ((s.progressTrackers?.length ?? 0) > 0) return true;
+  if ((s.rituals?.length ?? 0) > 0) return true;
+  if ((s.milestones?.length ?? 0) > 0) return true;
+  if (Object.values(s.activities ?? {}).some((arr) => (arr?.length ?? 0) > 0)) return true;
+  return false;
 }
 
 function isPerDay(val: unknown): boolean {
@@ -686,6 +717,26 @@ function migrate(raw: unknown): Schedule {
   return { plans, activities, progressTrackers, metricEntries, milestones: [], rituals: [], strategies: [], ritualCompletions: [], notes: normalizeNotes(r.notes) };
 }
 
+const MAX_NOTE_TAGS = 8;
+const MAX_NOTE_TAG_LEN = 24;
+
+function normalizeNoteTags(raw: unknown): string[] | undefined {
+  if (!Array.isArray(raw)) return undefined;
+  const seen = new Set<string>();
+  const tags: string[] = [];
+  for (const t of raw) {
+    if (typeof t !== "string") continue;
+    const tag = t.trim().slice(0, MAX_NOTE_TAG_LEN);
+    if (!tag) continue;
+    const key = tag.toLowerCase();
+    if (seen.has(key)) continue;
+    seen.add(key);
+    tags.push(tag);
+    if (tags.length >= MAX_NOTE_TAGS) break;
+  }
+  return tags.length > 0 ? tags : undefined;
+}
+
 function normalizeNotes(raw: unknown): Note[] {
   if (!Array.isArray(raw)) return [];
   return (raw as unknown[])
@@ -700,6 +751,7 @@ function normalizeNotes(raw: unknown): Note[] {
       createdAt: typeof n.createdAt === "string" ? n.createdAt : new Date().toISOString(),
       updatedAt: typeof n.updatedAt === "string" ? n.updatedAt : new Date().toISOString(),
       pinned: typeof n.pinned === "boolean" ? n.pinned : undefined,
+      tags: normalizeNoteTags(n.tags),
     }));
 }
 
@@ -742,64 +794,173 @@ export function resetStaleCompletions(schedule: Schedule, todayISO: string): Sch
 }
 
 export function useScheduleDB() {
+  const { user, authLoading } = useAuth();
+  const storageKey = authLoading ? null : user ? recordKeyForUid(user.uid) : GUEST_RECORD_KEY;
+  const storageUid = user?.uid ?? null;
   const [schedule, setScheduleState] = useState<Schedule>(emptyEmpty());
   const [ready, setReady] = useState(false);
   const [isFirstLaunch, setIsFirstLaunch] = useState(false);
   const dbRef = useRef<IDBDatabase | null>(null);
+  // The storage key the in-memory `schedule` was hydrated for. The write effect
+  // only persists when this matches the current `storageKey`, so data for one
+  // identity can never be written under another's key (or while auth is still
+  // resolving). This replaces the order-dependent isFirstRender guard.
+  const loadedKeyRef = useRef<string | null>(null);
+  // Suppresses the immediate echo-write right after hydrating from disk/cloud,
+  // so freshly-loaded data isn't re-persisted with a new timestamp.
+  const skipNextWriteRef = useRef(false);
+  const writeTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  // ── Load from IndexedDB on mount ──────────────────────────────────────────
   useEffect(() => {
-    openDB()
+    return () => {
+      if (writeTimer.current) clearTimeout(writeTimer.current);
+      dbRef.current?.close();
+      dbRef.current = null;
+    };
+  }, []);
+
+  // ── Load from IndexedDB whenever the resolved auth identity changes ───────
+  useEffect(() => {
+    if (!storageKey) {
+      setReady(false);
+      return;
+    }
+
+    let cancelled = false;
+    const activeStorageKey = storageKey;
+    const activeUid = storageUid;
+    if (writeTimer.current) clearTimeout(writeTimer.current);
+    setReady(false);
+    setIsFirstLaunch(false);
+    // Do NOT reset loadedKeyRef here: while the new identity loads it must keep
+    // pointing at the *previous* key so the write effect refuses to persist the
+    // outgoing identity's in-memory data under the incoming key.
+
+    const getDB = async () => {
+      if (dbRef.current) return dbRef.current;
+      const db = await openDB();
+      dbRef.current = db;
+      return db;
+    };
+
+    getDB()
       .then(async (db) => {
-        dbRef.current = db;
-        const stored = await readDB(db);
+        const stored = await readDB(db, activeStorageKey);
+        const legacyGuestStored =
+          !stored && activeStorageKey === GUEST_RECORD_KEY
+            ? await readDB(db, LEGACY_RECORD_KEY)
+            : null;
+        if (cancelled) return;
+
+        const hasLocalData = !!stored || !!legacyGuestStored;
+        // Mark which identity the in-memory schedule now belongs to, and skip
+        // the echo-write of this freshly-hydrated data.
+        loadedKeyRef.current = activeStorageKey;
+        skipNextWriteRef.current = true;
+
         if (stored) {
           setScheduleState(resetStaleCompletions(migrate(stored), localISODate(new Date())));
+        } else if (legacyGuestStored) {
+          const now = Date.now();
+          const migrated = resetStaleCompletions(migrate(legacyGuestStored), localISODate(new Date()));
+          setScheduleState(migrated);
+          writeDB(db, activeStorageKey, migrated).catch(() => {});
+          writeLocalLastUpdated(now, activeUid); // keep sync clock in step with the migrated record
+          deleteDBKey(db, LEGACY_RECORD_KEY).catch(() => {}); // adopted → drop the legacy copy
         } else {
-          // No stored data — true first launch
-          setIsFirstLaunch(true);
+          setScheduleState(emptyEmpty());
+          if (!activeUid) setIsFirstLaunch(true);
         }
         setReady(true);
+
+        if (activeUid) {
+          const merged = await mergeCloudIfNewer(activeUid, getLocalLastUpdated(activeUid));
+          if (cancelled) return;
+          if (!merged && !hasLocalData) {
+            // Fresh account: no newer cloud snapshot and no local user record.
+            // Adopt any meaningful guest data so trial work isn't orphaned.
+            const guestData =
+              (await readDB(db, GUEST_RECORD_KEY)) ?? (await readDB(db, LEGACY_RECORD_KEY));
+            if (cancelled) return;
+            if (guestData && hasMeaningfulData(guestData)) {
+              const now = Date.now();
+              const migrated = resetStaleCompletions(migrate(guestData), localISODate(new Date()));
+              loadedKeyRef.current = activeStorageKey;
+              skipNextWriteRef.current = true; // persisted + synced manually below
+              setScheduleState(migrated);
+              setIsFirstLaunch(false);
+              await writeDB(db, activeStorageKey, migrated).catch(() => {});
+              writeLocalLastUpdated(now, activeUid);
+              queueSync(migrated); // back the adopted data up to this user's cloud
+              await deleteDBKey(db, GUEST_RECORD_KEY).catch(() => {}); // moved into the account
+              await deleteDBKey(db, LEGACY_RECORD_KEY).catch(() => {});
+            } else {
+              setIsFirstLaunch(true);
+            }
+          }
+        }
       })
       .catch((err) => {
+        if (cancelled) return;
         console.error("IndexedDB open failed:", err);
+        setScheduleState(emptyEmpty());
         setReady(true);
       });
-  }, []);
+    return () => {
+      cancelled = true;
+    };
+  }, [storageKey, storageUid]);
 
   // ── Cloud-merge listener ─────────────────────────────────────────────────
   // When a cloud snapshot is newer than local data, cloudSync dispatches this
   // event. We absorb the new state and persist it to IndexedDB.
   useEffect(() => {
+    if (!storageKey) return;
+    const activeStorageKey = storageKey;
+
     function handleCloudMerge(e: Event) {
-      const { schedule: cloudSchedule } = (e as CustomEvent<{ schedule: Schedule; lastUpdated: number }>).detail;
+      const { uid, schedule: cloudSchedule, lastUpdated } = (e as CustomEvent<{ uid: string; schedule: Schedule; lastUpdated: number }>).detail;
+      if (uid !== storageUid) return;
+
       const migrated = resetStaleCompletions(migrate(cloudSchedule), localISODate(new Date()));
+      // Hydrating from cloud: tag the identity and skip the echo-write so the
+      // write effect doesn't overwrite the cloud `lastUpdated` with a fresh now.
+      loadedKeyRef.current = activeStorageKey;
+      skipNextWriteRef.current = true;
       setScheduleState(migrated);
+      setIsFirstLaunch(false);
       if (dbRef.current) {
-        writeDB(dbRef.current, migrated).catch(() => {});
+        writeDB(dbRef.current, activeStorageKey, migrated).catch(() => {});
       }
+      writeLocalLastUpdated(lastUpdated, storageUid);
     }
     window.addEventListener("cloud-sync-merge", handleCloudMerge);
     return () => window.removeEventListener("cloud-sync-merge", handleCloudMerge);
-  }, []);
+  }, [storageKey, storageUid]);
 
   // ── Debounced IndexedDB write + cloud sync trigger ────────────────────────
-  const isFirstRender = useRef(true);
-  const writeTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   useEffect(() => {
-    if (!ready || !dbRef.current) return;
-    if (isFirstRender.current) {
-      isFirstRender.current = false;
+    if (!ready || !dbRef.current || !storageKey) return;
+    // Isolation guard: never persist data that belongs to a different identity
+    // than the one currently selected (covers auth switches and the resolving
+    // window). loadedKeyRef is only advanced once hydration for a key completes.
+    if (loadedKeyRef.current !== storageKey) return;
+    // Skip the one echo-write that immediately follows hydration.
+    if (skipNextWriteRef.current) {
+      skipNextWriteRef.current = false;
       return;
     }
     if (writeTimer.current) clearTimeout(writeTimer.current);
     const db = dbRef.current;
     const snap = schedule; // capture for closure
+    // Keep the sync singleton's latest-snapshot fresh on every edit so a
+    // logout/app-close flush never loses the last debounce window of changes.
+    if (storageUid) noteLatestSchedule(snap);
     writeTimer.current = setTimeout(() => {
       const now = Date.now();
-      writeDB(db, snap)
+      writeDB(db, storageKey, snap)
         .then(() => {
-          writeLocalLastUpdated(now); // update local timestamp for cloud comparison
+          writeLocalLastUpdated(now, storageUid); // update local timestamp for cloud comparison
           queueSync(snap);            // queue cloud backup (no-op for guests)
         })
         .catch((err) => console.error("IndexedDB write failed:", err));
@@ -807,7 +968,7 @@ export function useScheduleDB() {
     return () => {
       if (writeTimer.current) clearTimeout(writeTimer.current);
     };
-  }, [schedule, ready]);
+  }, [schedule, ready, storageKey, storageUid]);
 
   function setSchedule(updater: (prev: Schedule) => Schedule) {
     setScheduleState(updater);
@@ -816,8 +977,8 @@ export function useScheduleDB() {
   async function clearData(): Promise<void> {
     const empty = emptyEmpty();
     setScheduleState(empty);
-    if (dbRef.current) {
-      await writeDB(dbRef.current, empty).catch(() => {});
+    if (dbRef.current && storageKey) {
+      await writeDB(dbRef.current, storageKey, empty).catch(() => {});
     }
   }
 
@@ -849,8 +1010,8 @@ export function useScheduleDB() {
       return { ...schedule, activities, milestones, ritualCompletions: [], metricEntries: [] };
     })();
     setScheduleState(next);
-    if (dbRef.current) {
-      await writeDB(dbRef.current, next).catch(() => {});
+    if (dbRef.current && storageKey) {
+      await writeDB(dbRef.current, storageKey, next).catch(() => {});
     }
   }
 

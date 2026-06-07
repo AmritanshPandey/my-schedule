@@ -19,7 +19,7 @@ import type { Ritual, RitualColor, RitualCompletion, DayKey } from "@/lib/useSch
 import { DAYS } from "@/lib/useScheduleDB";
 import { localISODate } from "@/lib/dateUtils";
 import { haptic } from "@/lib/haptics";
-import { ICON } from "@/components/ui/Icon";
+import EmptyState from "@/components/ui/EmptyState";
 import { MainTitleSection, CtaActionButton } from "@/components/ui/MainTitleSection";
 import ProgressBar from "@/components/ui/ProgressBar";
 import { RitualSheet } from "./RitualSheet";
@@ -322,23 +322,12 @@ export default function RitualView({
 
         {/* ── Empty state (no rituals at all) ──────────────────────────────── */}
         {rituals.length === 0 && (
-          <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} className="flex flex-col items-center gap-4 pt-16 text-center">
-            <div className="flex h-20 w-20 items-center justify-center rounded-[28px] bg-neutral-100 dark:bg-white/[0.06]">
-              <IconRepeat {...ICON.hero} className="text-neutral-400 dark:text-neutral-500" />
-            </div>
-            <div>
-              <p className="text-[16px] font-semibold text-neutral-700 dark:text-neutral-200">No routines yet</p>
-              <p className="mt-1.5 max-w-[240px] text-[14px] leading-relaxed text-neutral-400">
-                Add small daily practices — skincare, vitamins, stretching — and track them each day.
-              </p>
-            </div>
-            <motion.button type="button" whileTap={{ scale: 0.96 }}
-              onClick={() => { haptic("medium"); onAddOpenChange(true); }}
-              className="mt-2 inline-flex items-center gap-2 rounded-full bg-neutral-900 px-5 py-2.5 text-[14px] font-semibold text-white dark:bg-white dark:text-neutral-950"
-            >
-              <IconPlus {...ICON.action} /> Add First Routine
-            </motion.button>
-          </motion.div>
+          <EmptyState
+            icon={IconRepeat}
+            title="No routines yet"
+            description="Add small daily practices — skincare, vitamins, stretching — and track them each day."
+            action={{ label: "Add First Routine", onClick: () => onAddOpenChange(true) }}
+          />
         )}
 
         {/* ── Empty filter state ───────────────────────────────────────────── */}

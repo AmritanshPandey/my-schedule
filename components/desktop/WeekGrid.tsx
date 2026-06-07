@@ -427,7 +427,7 @@ export function WeekGrid({
             return (
               <div
                 key={day}
-                className="relative min-w-0 flex-1 border-r border-neutral-100 last:border-r-0 dark:border-white/[0.06]"
+                className="relative min-w-0 flex-1 border-r border-neutral-200 last:border-r-0 dark:border-white/[0.06]"
                 style={{
                   backgroundImage:
                     "repeating-linear-gradient(to bottom, var(--grid-line) 0, var(--grid-line) 1px, transparent 1px, transparent 60px)",

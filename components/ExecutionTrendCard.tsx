@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo } from "react";
-import { IconTrendingUp, IconTrendingDown, IconMinus } from "@tabler/icons-react";
+import { IconTrendingUp, IconTrendingDown, IconMinus, IconChartBar } from "@tabler/icons-react";
 import type { Schedule } from "@/lib/useScheduleDB";
 import { computeExecutionTrend } from "@/lib/executionAnalytics";
 
@@ -37,9 +37,12 @@ export default function ExecutionTrendCard({ schedule }: { schedule: Schedule })
 
   return (
     <div className={`${CARD} px-5 py-4`}>
-      <p className="text-[11px] font-bold uppercase tracking-[0.08em] text-neutral-400 dark:text-neutral-500 mb-3">
-        Weekly Progress
-      </p>
+      <div className="flex items-center gap-2 mb-4">
+        <IconChartBar size={14} strokeWidth={2} className="text-neutral-400 dark:text-neutral-500 shrink-0" />
+        <p className="text-[13px] font-bold text-neutral-800 dark:text-neutral-200 truncate">
+          Weekly Progress
+        </p>
+      </div>
 
       {/* Headline: big number + plain sentence */}
       <div className="flex items-end justify-between">
