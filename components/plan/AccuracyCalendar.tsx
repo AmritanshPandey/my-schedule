@@ -151,7 +151,7 @@ export default function AccuracyCalendar({
 
   if (!hasTasks) {
     return (
-      <div className="rounded-[24px] border border-dashed border-neutral-200 dark:border-white/[0.08] py-10 px-6 text-center">
+      <div className="rounded-[24px] border border-neutral-200 bg-white px-6 py-10 text-center dark:border-white/[0.08] dark:bg-neutral-900">
         <div className="w-10 h-10 rounded-xl bg-neutral-100 dark:bg-white/[0.06] flex items-center justify-center mx-auto mb-3">
           <IconLayoutGrid size={24} strokeWidth={1.8} className="text-neutral-400 dark:text-neutral-500" />
         </div>

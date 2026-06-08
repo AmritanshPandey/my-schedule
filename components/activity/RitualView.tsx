@@ -17,33 +17,22 @@ import {
 } from "@tabler/icons-react";
 import type { Ritual, RitualColor, RitualCompletion, DayKey } from "@/lib/useScheduleDB";
 import { DAYS } from "@/lib/useScheduleDB";
+import { localISODate } from "@/lib/dateUtils";
 import { haptic } from "@/lib/haptics";
-import { typography } from "@/components/ui/Typography";
-import { ICON } from "@/components/ui/Icon";
+import EmptyState from "@/components/ui/EmptyState";
 import { MainTitleSection, CtaActionButton } from "@/components/ui/MainTitleSection";
+import ProgressBar from "@/components/ui/ProgressBar";
 import { RitualSheet } from "./RitualSheet";
 
 // ── Color maps ────────────────────────────────────────────────────────────────
 
-const COLOR_DOT: Record<RitualColor, string> = {
-  rose:    "bg-rose-400",   sky:     "bg-sky-400",
-  violet:  "bg-violet-400", amber:   "bg-amber-400",
-  emerald: "bg-emerald-400",fuchsia: "bg-fuchsia-400",
-  orange:  "bg-orange-400", cyan:    "bg-cyan-400",
-  indigo:  "bg-indigo-400", teal:    "bg-teal-400",
-};
-
-const COLOR_RING_BORDER: Record<RitualColor, string> = {
-  rose:    "border-rose-300 dark:border-rose-500/50",
-  sky:     "border-sky-300 dark:border-sky-500/50",
-  violet:  "border-violet-300 dark:border-violet-500/50",
-  amber:   "border-amber-300 dark:border-amber-500/50",
-  emerald: "border-emerald-300 dark:border-emerald-500/50",
-  fuchsia: "border-fuchsia-300 dark:border-fuchsia-500/50",
-  orange:  "border-orange-300 dark:border-orange-500/50",
-  cyan:    "border-cyan-300 dark:border-cyan-500/50",
-  indigo:  "border-indigo-300 dark:border-indigo-500/50",
-  teal:    "border-teal-300 dark:border-teal-500/50",
+// Vivid ring border (left toggle + today dot) — matches the design reference.
+const COLOR_RING: Record<RitualColor, string> = {
+  rose:    "border-rose-500",   sky:     "border-sky-500",
+  violet:  "border-violet-500", amber:   "border-amber-500",
+  emerald: "border-emerald-500",fuchsia: "border-fuchsia-500",
+  orange:  "border-orange-500", cyan:    "border-cyan-500",
+  indigo:  "border-indigo-500", teal:    "border-teal-500",
 };
 
 const TIME_GROUPS = [
@@ -66,7 +55,7 @@ function getLast7Dates(): string[] {
   const dates: string[] = [];
   for (let i = 6; i >= 0; i--) {
     const d = new Date(); d.setDate(d.getDate() - i);
-    dates.push(d.toISOString().slice(0, 10));
+    dates.push(localISODate(d));
   }
   return dates;
 }
@@ -144,10 +133,6 @@ export default function RitualView({
     return sorted.filter((r) => appliesToDay(r, day)).length;
   }
 
-  function getRitualStreak(id: string): boolean[] {
-    return last7.map((date) => ritualCompletions.some((c) => c.ritualId === id && c.date === date));
-  }
-
   function toggleGroup(key: string) {
     setCollapsedGroups((prev) => {
       const next = new Set(prev);
@@ -157,78 +142,80 @@ export default function RitualView({
   }
 
   function renderCard(ritual: Ritual) {
-    const dot = ritual.color ? COLOR_DOT[ritual.color] : "bg-neutral-300 dark:bg-neutral-600";
-    const ringBorder = ritual.color ? COLOR_RING_BORDER[ritual.color] : "border-neutral-300 dark:border-neutral-600";
+    const ring = ritual.color ? COLOR_RING[ritual.color] : "border-neutral-300 dark:border-neutral-600";
     const dayLabel = ritual.repeatDays && ritual.repeatDays.length > 0
       ? ritual.repeatDays.map((d) => DAY_SHORT[d]).join(" · ")
-      : "Every day";
+      : "Everyday";
     const done = completedIds.has(ritual.id);
-    const streak = getRitualStreak(ritual.id);
+
+    // Last-7-days dots: green = completed, color ring = due today & not done,
+    // gray = due & missed, faint = not scheduled that day.
+    const todayISOstr = localISODate(new Date());
+    const week = last7.map((date) => {
+      const wd = JS_TO_DAY[new Date(`${date}T00:00:00`).getDay()];
+      return {
+        completed: ritualCompletions.some((c) => c.ritualId === ritual.id && c.date === date),
+        due: appliesToDay(ritual, wd),
+        isToday: date === todayISOstr,
+      };
+    });
 
     return (
-      <div className={`rounded-2xl border bg-white dark:bg-neutral-900 transition-all duration-200 ${
-        done
-          ? "border-neutral-100 opacity-50 dark:border-white/[0.04]"
-          : "border-neutral-200 dark:border-white/[0.08]"
-      }`}>
-        <div className="flex items-center gap-3 px-4 py-3">
-          {/* Completion button */}
-          <motion.button
-            type="button"
-            whileTap={{ scale: 0.82 }}
-            onClick={() => { haptic("light"); onToggleComplete(ritual.id); }}
-            className={`shrink-0 flex h-7 w-7 items-center justify-center rounded-full border-2 transition-colors ${
-              done ? "border-transparent bg-green-500" : `${ringBorder} bg-transparent`
-            }`}
-          >
-            {done && <IconCheck size={12} strokeWidth={2.5} className="text-white" />}
-          </motion.button>
+      <div className="group flex items-center gap-4 py-4">
+        {/* Big completion ring */}
+        <motion.button
+          type="button"
+          whileTap={{ scale: 0.88 }}
+          onClick={() => { haptic("light"); onToggleComplete(ritual.id); }}
+          aria-label={done ? "Mark incomplete" : "Mark complete"}
+          className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-full border-[2.5px] transition-colors ${
+            done ? "border-transparent bg-green-500" : `${ring} bg-transparent`
+          }`}
+        >
+          {done && <IconCheck size={22} strokeWidth={3} className="text-white" />}
+        </motion.button>
 
-          {/* Text block */}
-          <button
-            type="button"
-            onClick={() => { haptic("light"); setEditRitual(ritual); }}
-            className="min-w-0 flex-1 text-left"
-          >
-            <div className="flex items-center gap-1.5">
-              <span className={`h-2 w-2 shrink-0 rounded-full ${dot}`} />
-              <p className={`text-[15px] font-semibold leading-tight ${
-                done
-                  ? "text-neutral-400 line-through decoration-neutral-300 dark:text-neutral-500"
-                  : "text-neutral-900 dark:text-white"
-              }`}>{ritual.title}</p>
-            </div>
-            <div className="mt-0.5 flex flex-wrap items-center gap-x-1.5 pl-3.5">
-              <span className="text-[11px] font-medium tabular-nums text-neutral-500 dark:text-neutral-400">{ritual.time}</span>
-              {ritual.duration && (
-                <span className="text-[11px] text-neutral-400 dark:text-neutral-500">· {ritual.duration}m</span>
-              )}
-              <span className="text-[11px] text-neutral-400 dark:text-neutral-500">· {dayLabel}</span>
-            </div>
-            <div className="mt-1 flex items-center gap-[3px] pl-3.5">
-              {streak.map((hit, i) => (
-                <span key={i} className={`h-[4px] w-[4px] rounded-full transition-colors ${hit ? dot : "bg-black/10 dark:bg-white/15"}`} />
-              ))}
-            </div>
-          </button>
+        {/* Title + meta */}
+        <button
+          type="button"
+          onClick={() => { haptic("light"); setEditRitual(ritual); }}
+          className="min-w-0 flex-1 text-left"
+        >
+          <p className={`truncate text-[17px] font-bold leading-tight ${
+            done ? "text-neutral-400 line-through decoration-neutral-300 dark:text-neutral-500" : "text-neutral-900 dark:text-white"
+          }`}>
+            {ritual.title}
+          </p>
+          <p className="mt-1 truncate text-[13px] font-medium text-neutral-500 dark:text-neutral-400">
+            <span className="tabular-nums">{ritual.time}</span> · {dayLabel}
+          </p>
+        </button>
 
-          {/* Desktop-only delete */}
-          <motion.button
-            type="button"
-            whileTap={{ scale: 0.84 }}
-            onClick={() => onDelete(ritual.id)}
-            className="hidden lg:flex h-7 w-7 items-center justify-center rounded-lg text-neutral-300 transition-colors hover:bg-rose-50 hover:text-rose-500 dark:text-neutral-600 dark:hover:bg-rose-500/10 dark:hover:text-rose-400"
-          >
-            <IconTrash size={13} strokeWidth={2} />
-          </motion.button>
+        {/* 7-day consistency dots */}
+        <div className="flex shrink-0 items-center gap-1.5">
+          {week.map((d, i) => {
+            if (d.completed) return <span key={i} className="h-2.5 w-2.5 rounded-full bg-green-500" />;
+            if (d.isToday && d.due) return <span key={i} className={`h-2.5 w-2.5 rounded-full border-2 bg-transparent ${ring}`} />;
+            return <span key={i} className={`h-2.5 w-2.5 rounded-full ${d.due ? "bg-neutral-200 dark:bg-white/15" : "bg-neutral-100 dark:bg-white/[0.06]"}`} />;
+          })}
         </div>
+
+        {/* Desktop-only delete */}
+        <motion.button
+          type="button"
+          whileTap={{ scale: 0.84 }}
+          onClick={() => onDelete(ritual.id)}
+          className="hidden h-8 w-8 shrink-0 items-center justify-center rounded-lg text-neutral-300 opacity-0 transition-all hover:bg-rose-50 hover:text-rose-500 group-hover:opacity-100 dark:text-neutral-600 dark:hover:bg-rose-500/10 dark:hover:text-rose-400 lg:flex"
+        >
+          <IconTrash size={14} strokeWidth={2} />
+        </motion.button>
       </div>
     );
   }
 
   return (
     <>
-      <div className="px-4 pb-6 pt-6 lg:px-8 lg:pb-10 lg:pt-6 lg:max-w-4xl">
+      <div className="px-4 pb-6 pt-6 lg:mx-auto lg:max-w-4xl lg:px-8 lg:pb-10 lg:pt-6">
 
         {/* ── Header ───────────────────────────────────────────────────────── */}
         <MainTitleSection
@@ -248,54 +235,41 @@ export default function RitualView({
           className="mb-4"
         />
 
+        {/* ── Progress bar (today / all only, mobile) ──────────────────────── */}
+        {total > 0 && showProgress && (
+          <div className="mb-5 lg:hidden">
+            <div className="mb-2 flex items-center justify-between">
+              <span className="text-[14px] font-semibold text-neutral-500 dark:text-neutral-400">
+                {allDone ? "All done today 🎉" : `${completedToday} of ${total} done`}
+              </span>
+              <span className="text-[14px] font-bold tabular-nums text-neutral-500 dark:text-neutral-400">{pct}%</span>
+            </div>
+            <ProgressBar pct={pct} height={8} fillClassName="bg-green-500" />
+          </div>
+        )}
+
         {/* ── Day filter strip ─────────────────────────────────────────────── */}
         {rituals.length > 0 && (
-          <div className="mb-4 grid grid-cols-7 gap-1.5">
+          <div className="mb-6 grid grid-cols-7 gap-2">
             {DAYS.map((day) => {
               const sel = selectedDay === day;
-              const isToday = day === todayKey;
               const count = dayCount(day);
               return (
                 <button
                   key={day}
                   type="button"
                   onClick={() => setSelectedDay(day)}
-                  className={`relative flex w-full flex-col items-center rounded-xl py-1.5 transition-colors ${
+                  className={`flex w-full flex-col items-center justify-center gap-1.5 rounded-2xl py-3.5 transition-colors ${
                     sel
                       ? "bg-neutral-900 text-white dark:bg-white dark:text-neutral-900"
                       : "border border-neutral-200 text-neutral-500 hover:border-neutral-300 hover:text-neutral-700 dark:border-white/10 dark:text-neutral-400 dark:hover:border-white/20 dark:hover:text-neutral-200"
                   }`}
                 >
-                  <span className="text-[12px] font-semibold leading-none">{DAY_SHORT[day]}</span>
-                  <span className={`mt-0.5 text-[10px] tabular-nums leading-none ${sel ? "text-white/70 dark:text-neutral-900/60" : "text-neutral-400 dark:text-neutral-600"}`}>
-                    {count}
-                  </span>
-                  {isToday && (
-                    <span className={`absolute -bottom-[3px] left-1/2 -translate-x-1/2 h-[3px] w-[3px] rounded-full ${sel ? "bg-white/80 dark:bg-neutral-900/70" : "bg-neutral-400 dark:bg-neutral-500"}`} />
-                  )}
+                  <span className={`text-[13px] font-semibold leading-none ${sel ? "" : "text-neutral-400 dark:text-neutral-500"}`}>{DAY_SHORT[day]}</span>
+                  <span className="text-[20px] font-bold tabular-nums leading-none">{count}</span>
                 </button>
               );
             })}
-          </div>
-        )}
-
-        {/* ── Progress bar (today / all only, mobile) ──────────────────────── */}
-        {total > 0 && showProgress && (
-          <div className="mb-4 lg:hidden">
-            <div className="mb-1.5 flex items-center justify-between">
-              <span className={`${typography.caption} font-semibold`}>
-                {allDone ? "All done today 🎉" : `${completedToday} of ${total} done`}
-              </span>
-              <span className="text-[12px] font-bold tabular-nums text-neutral-500 dark:text-neutral-400">{pct}%</span>
-            </div>
-            <div className="h-1.5 w-full overflow-hidden rounded-full bg-neutral-200 dark:bg-white/[0.06]">
-              <motion.div
-                className={`h-full rounded-full ${allDone ? "bg-emerald-500" : "bg-neutral-500 dark:bg-neutral-400"}`}
-                initial={{ width: 0 }}
-                animate={{ width: `${pct}%` }}
-                transition={{ duration: 0.5, ease: [0.22, 1, 0.36, 1] }}
-              />
-            </div>
           </div>
         )}
 
@@ -348,23 +322,12 @@ export default function RitualView({
 
         {/* ── Empty state (no rituals at all) ──────────────────────────────── */}
         {rituals.length === 0 && (
-          <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} className="flex flex-col items-center gap-4 pt-16 text-center">
-            <div className="flex h-20 w-20 items-center justify-center rounded-[28px] bg-neutral-100 dark:bg-white/[0.06]">
-              <IconRepeat {...ICON.hero} className="text-neutral-400 dark:text-neutral-500" />
-            </div>
-            <div>
-              <p className="text-[16px] font-semibold text-neutral-700 dark:text-neutral-200">No routines yet</p>
-              <p className="mt-1.5 max-w-[240px] text-[14px] leading-relaxed text-neutral-400">
-                Add small daily practices — skincare, vitamins, stretching — and track them each day.
-              </p>
-            </div>
-            <motion.button type="button" whileTap={{ scale: 0.96 }}
-              onClick={() => { haptic("medium"); onAddOpenChange(true); }}
-              className="mt-2 inline-flex items-center gap-2 rounded-full bg-neutral-900 px-5 py-2.5 text-[14px] font-semibold text-white dark:bg-white dark:text-neutral-950"
-            >
-              <IconPlus {...ICON.action} /> Add First Routine
-            </motion.button>
-          </motion.div>
+          <EmptyState
+            icon={IconRepeat}
+            title="No routines yet"
+            description="Add small daily practices — skincare, vitamins, stretching — and track them each day."
+            action={{ label: "Add First Routine", onClick: () => onAddOpenChange(true) }}
+          />
         )}
 
         {/* ── Empty filter state ───────────────────────────────────────────── */}
@@ -381,8 +344,8 @@ export default function RitualView({
           </motion.div>
         )}
 
-        {/* ── Mobile: flat list ─────────────────────────────────────────────── */}
-        <div className="space-y-2 lg:hidden">
+        {/* ── Mobile: flat divided list ─────────────────────────────────────── */}
+        <div className="divide-y divide-neutral-100 dark:divide-white/[0.06] lg:hidden">
           <AnimatePresence initial={false}>
             {filteredRituals.map((ritual) => (
               <motion.div
@@ -430,7 +393,7 @@ export default function RitualView({
                       transition={{ duration: 0.2, ease: [0.22, 1, 0.36, 1] }}
                       className="overflow-hidden"
                     >
-                      <div className="space-y-2">
+                      <div className="divide-y divide-neutral-100 dark:divide-white/[0.06]">
                         {group.map((ritual) => (
                           <div key={ritual.id}>{renderCard(ritual)}</div>
                         ))}

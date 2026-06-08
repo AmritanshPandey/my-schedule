@@ -95,7 +95,7 @@ export default function BottomSheet({
               animate={{ opacity: 1, scale: 1, y: 0 }}
               exit={{ opacity: 0, scale: 0.97, y: 10 }}
               transition={DESKTOP_EASE}
-              className={`relative w-full ${desktopWidth} overflow-y-auto overscroll-contain rounded-2xl border border-neutral-200/80 bg-white shadow-[0_24px_64px_-12px_rgba(0,0,0,0.28)] dark:border-white/[0.08] dark:bg-neutral-900 dark:shadow-[0_24px_64px_-12px_rgba(0,0,0,0.6)] ${className}`}
+              className={`relative w-full ${desktopWidth} overflow-y-auto overscroll-contain rounded-2xl border border-neutral-200/80 bg-white dark:border-white/[0.08] dark:bg-neutral-900 ${className}`}
               style={{ maxHeight: "88vh" }}
             >
               {children}

@@ -111,7 +111,7 @@ export const LoginButton = memo(function LoginButton() {
         disabled={busy}
         whileTap={{ scale: 0.97 }}
         transition={{ type: "spring", stiffness: 400, damping: 22 }}
-        className="inline-flex w-full items-center justify-center gap-2.5 rounded-xl border border-neutral-200 bg-white px-4 py-2.5 text-[14px] font-semibold text-neutral-700 hover:bg-neutral-50 hover:border-neutral-300 dark:border-white/10 dark:bg-neutral-900 dark:text-white dark:hover:bg-white/[0.06] dark:hover:border-white/[0.16] transition-colors disabled:opacity-60"
+        className="inline-flex w-full items-center justify-center gap-2.5 rounded-xl border border-neutral-200 bg-white px-4 py-2.5 text-[14px] font-semibold text-neutral-700 hover:bg-neutral-100 hover:border-neutral-300 dark:border-white/10 dark:bg-neutral-900 dark:text-white dark:hover:bg-white/[0.07] dark:hover:border-white/[0.16] transition-colors disabled:opacity-60"
       >
         {busy ? (
           <span className="h-4 w-4 animate-spin rounded-full border-2 border-neutral-300 border-t-neutral-700 dark:border-neutral-700 dark:border-t-neutral-300" />

@@ -2,13 +2,15 @@
 
 import { memo, useMemo, useState } from "react";
 import { motion, AnimatePresence, useMotionValue, useTransform, animate } from "framer-motion";
-import { IconCheck, IconChevronDown, IconEdit, IconListCheck, IconMinus, IconTrash } from "@tabler/icons-react";
+import { IconArrowUpRight, IconCheck, IconChevronDown, IconEdit, IconListCheck, IconMinus, IconTrash } from "@tabler/icons-react";
 import type { Task, Plan } from "@/lib/useScheduleDB";
 import type { ScheduleEntry, MetaField } from "@/components/ScheduleItem";
 import { calculateTaskProgress, resolveTaskState } from "@/lib/taskCompletion";
 import type { TaskState } from "@/lib/taskCompletion";
 import { formatDuration } from "@/lib/timeUtils";
 import { haptic } from "@/lib/haptics";
+import { TaskBlockCard } from "@/components/TaskBlockCard";
+import ProgressBar from "@/components/ui/ProgressBar";
 
 // ── Plan accent dot colors ────────────────────────────────────────────────────
 
@@ -24,6 +26,12 @@ const PLAN_DOT: Record<string, string> = {
 // ── Subtask detail pill text ──────────────────────────────────────────────────
 
 function subtaskDetailPill(entry: ScheduleEntry): string | null {
+  const info = entry.info?.trim() || entry.note?.trim();
+  const details = [] as string[];
+  if (info) details.push(info);
+  if (entry.duration) details.push(entry.duration);
+  if (details.length > 0) return details.join(" · ");
+
   const meta = (entry as ScheduleEntry & { meta?: MetaField[] }).meta;
   if (meta && meta.length > 0) return meta.map((m) => m.value).join(" | ");
   if (entry.time) return entry.time;
@@ -35,10 +43,11 @@ function subtaskDetailPill(entry: ScheduleEntry): string | null {
 interface CheckboxProps {
   state: TaskState;
   size?: "lg" | "md";
+  readOnly?: boolean;
   onChange: () => void;
 }
 
-function TaskCheckbox({ state, size = "lg", onChange }: CheckboxProps) {
+function TaskCheckbox({ state, size = "lg", readOnly = false, onChange }: CheckboxProps) {
   const dim      = size === "lg" ? "w-5 h-5"      : "w-4 h-4";
   const round    = size === "lg" ? "rounded-[6px]" : "rounded-[4px]";
   const iconSize = size === "lg" ? 14              : 12;
@@ -47,10 +56,10 @@ function TaskCheckbox({ state, size = "lg", onChange }: CheckboxProps) {
   return (
     <motion.button
       type="button"
-      whileTap={{ scale: 0.84 }}
+      whileTap={readOnly ? undefined : { scale: 0.84 }}
       transition={{ type: "spring", stiffness: 500, damping: 25 }}
-      onClick={(e) => { e.stopPropagation(); onChange(); }}
-      className={`shrink-0 ${dim} ${round} border-2 flex items-center justify-center transition-colors duration-150 ${
+      onClick={(e) => { e.stopPropagation(); if (!readOnly) onChange(); }}
+      className={`shrink-0 ${dim} ${round} border-2 flex items-center justify-center transition-colors duration-150 ${readOnly ? "cursor-default" : ""} ${
         filled
           ? "border-transparent bg-green-500"
           : "border-neutral-300 bg-transparent dark:border-neutral-500"
@@ -90,11 +99,15 @@ export interface ListTaskCardProps {
   task: Task;
   linkedPlan: Plan | null;
   editMode?: boolean;
+  /** Past/future day — show completion but don't allow toggling. */
+  readOnly?: boolean;
   onToggleComplete: (taskId: string, allIds: string[]) => void;
   onToggleSubtask: (taskId: string, subtaskId: string) => void;
   onEdit: () => void;
   onDelete: () => void;
   onOpenRoutine?: () => void;
+  /** Open the subtasks/session bottom sheet (preferred over inline expand). */
+  onOpenSubtasks?: () => void;
 }
 
 const SWIPE_THRESHOLD = 72;
@@ -103,11 +116,13 @@ function ListTaskCardInner({
   task,
   linkedPlan,
   editMode = false,
+  readOnly = false,
   onToggleComplete,
   onToggleSubtask,
   onEdit,
   onDelete,
   onOpenRoutine,
+  onOpenSubtasks,
 }: ListTaskCardProps) {
   const [expanded, setExpanded] = useState(false);
 
@@ -169,266 +184,172 @@ function ListTaskCardInner({
   // subtasks, or toggle complete for plain tasks with nothing to show.
   function handleCardTap() {
     haptic("light");
-    if (isRoutine && onOpenRoutine) {
+    if ((canExpand || hasRoutine) && onOpenSubtasks) {
+      onOpenSubtasks();
+    } else if (isRoutine && onOpenRoutine) {
       onOpenRoutine();
     } else if (canExpand) {
       setExpanded((v) => !v);
-    } else {
+    } else if (!readOnly) {
       onToggleComplete(task.id, allSubtaskIds);
     }
   }
 
+  // ── Right-of-checkbox action (subtask chip / view / chevron / edit-delete) ──
+  const trailingNode = editMode ? (
+    <div className="flex items-center gap-1">
+      <button
+        type="button"
+        onClick={(e) => { e.stopPropagation(); onEdit(); }}
+        className="flex h-8 w-8 items-center justify-center rounded-xl text-neutral-400 transition-colors hover:text-neutral-700 dark:hover:text-neutral-200"
+      >
+        <IconEdit size={16} />
+      </button>
+      <button
+        type="button"
+        onClick={(e) => { e.stopPropagation(); onDelete(); }}
+        className="flex h-8 w-8 items-center justify-center rounded-xl text-neutral-400 transition-colors hover:text-rose-500 dark:hover:text-rose-400"
+      >
+        <IconTrash size={16} />
+      </button>
+    </div>
+  ) : (canExpand || hasRoutine) && onOpenSubtasks ? (
+    <button
+      type="button"
+      onClick={(e) => { e.stopPropagation(); onOpenSubtasks(); }}
+      aria-label="Open subtasks"
+      className="inline-flex items-center gap-1 rounded-full bg-neutral-100 px-2.5 py-1.5 text-[12px] font-bold tabular-nums text-neutral-600 transition-colors hover:bg-neutral-200 dark:bg-white/[0.07] dark:text-neutral-300 dark:hover:bg-white/[0.12]"
+    >
+      <IconListCheck size={14} strokeWidth={2} />
+      {completedCount}/{totalCount || itemCount}
+      <IconArrowUpRight size={13} strokeWidth={2.2} />
+    </button>
+  ) : isRoutine && hasRoutine && onOpenRoutine ? (
+    <button
+      type="button"
+      onClick={(e) => { e.stopPropagation(); onOpenRoutine(); }}
+      className="inline-flex items-center rounded-full bg-neutral-100 px-3 py-1.5 text-[12px] font-semibold text-neutral-600 transition-colors hover:bg-neutral-200 dark:bg-white/[0.07] dark:text-neutral-300 dark:hover:bg-white/[0.12]"
+    >
+      View
+    </button>
+  ) : canExpand ? (
+    <button
+      type="button"
+      onClick={(e) => { e.stopPropagation(); setExpanded((v) => !v); }}
+      className="flex h-8 w-8 items-center justify-center rounded-full bg-neutral-100 text-neutral-500 transition-colors hover:bg-neutral-200 dark:bg-white/[0.07] dark:text-neutral-400 dark:hover:bg-white/[0.12]"
+    >
+      <motion.span animate={{ rotate: expanded ? 180 : 0 }} transition={{ duration: 0.22, ease: "easeInOut" }} style={{ display: "flex" }}>
+        <IconChevronDown size={18} strokeWidth={2} />
+      </motion.span>
+    </button>
+  ) : null;
+
+  // ── Note + progress bar (below the time row) ────────────────────────────────
+  const footerNode = (task.description || canExpand || done) ? (
+    <div className="flex flex-col gap-2">
+      {task.description && (
+        <p className={`text-[13px] leading-relaxed ${done ? "text-neutral-400 dark:text-neutral-500" : "text-neutral-500 dark:text-neutral-400"}`}>
+          {task.description}
+        </p>
+      )}
+      {(canExpand || done) && (
+        <div className="flex items-center gap-3">
+          <ProgressBar pct={barPct} height={8} fillClassName="bg-green-500" className="min-w-0 flex-1" />
+          <span className="w-9 shrink-0 text-right text-[13px] font-semibold tabular-nums text-neutral-500 dark:text-neutral-400">
+            {barPct}%
+          </span>
+        </div>
+      )}
+    </div>
+  ) : null;
+
+  // ── Expandable subtasks ─────────────────────────────────────────────────────
+  const expandContent = expanded && !editMode ? (
+    <motion.div
+      initial={{ height: 0, opacity: 0 }}
+      animate={{ height: "auto", opacity: 1 }}
+      transition={{ duration: 0.24, ease: "easeInOut" }}
+      style={{ overflow: "hidden" }}
+    >
+      <div className="mt-1 flex gap-0 border-t border-neutral-100 pt-3 dark:border-white/[0.06]">
+        <div className="mr-3 w-[3px] shrink-0 rounded-full bg-neutral-200 dark:bg-white/[0.08]" />
+        <div className="flex-1 space-y-2">
+          {effectiveItems.map((item) => {
+            const isDone = (task.completedSubtaskIds ?? []).includes(item.id);
+            const detail = subtaskDetailPill(item);
+            return (
+              <div
+                key={item.id}
+                className={`flex items-center gap-3 rounded-xl px-3 py-2.5 transition-colors duration-200 ${
+                  isDone ? "bg-neutral-50 dark:bg-white/[0.02]" : "bg-neutral-100/70 dark:bg-white/[0.03]"
+                }`}
+              >
+                <TaskCheckbox
+                  state={isDone ? "completed" : "incomplete"}
+                  size="md"
+                  readOnly={readOnly}
+                  onChange={() => onToggleSubtask(task.id, item.id)}
+                />
+                <p
+                  className={`min-w-0 flex-1 text-[14px] font-medium ${
+                    isDone ? "text-neutral-400 line-through dark:text-neutral-500" : "text-neutral-700 dark:text-neutral-300"
+                  }`}
+                >
+                  {item.task}
+                </p>
+                {detail && (
+                  <span className="inline-flex shrink-0 items-center rounded-full border border-neutral-300 bg-white px-3 py-1 text-[13px] font-semibold text-neutral-500 dark:border-white/[0.10] dark:bg-transparent dark:text-neutral-400">
+                    {detail}
+                  </span>
+                )}
+              </div>
+            );
+          })}
+        </div>
+      </div>
+    </motion.div>
+  ) : null;
+
   return (
-    <div className="relative overflow-hidden rounded-[24px]">
+    <div className="relative overflow-hidden rounded-[18px]">
       {/* ── Swipe reveal layer ─────────────────────────────────────────────── */}
-      {!editMode && (
-        <div
-          className={`absolute inset-0 flex items-center pl-5 rounded-[24px] ${
-            done
-              ? "bg-neutral-100 dark:bg-white/[0.04]"
-              : "bg-green-500"
-          }`}
-        >
+      {!editMode && !readOnly && (
+        <div className={`absolute inset-0 flex items-center rounded-[18px] pl-5 ${done ? "bg-neutral-100 dark:bg-white/[0.04]" : "bg-green-500"}`}>
           <motion.div
             style={{ opacity: revealOpacity, scale: revealScale }}
-            className={`flex h-9 w-9 items-center justify-center rounded-full ${
-              done
-                ? "bg-neutral-300/60 dark:bg-white/[0.10]"
-                : "bg-white/25"
-            }`}
+            className={`flex h-9 w-9 items-center justify-center rounded-full ${done ? "bg-neutral-300/60 dark:bg-white/[0.10]" : "bg-white/25"}`}
           >
-            <IconCheck
-              size={16}
-              strokeWidth={done ? 1.5 : 2.5}
-              className={done ? "text-neutral-500 dark:text-neutral-400" : "text-white"}
-            />
+            <IconCheck size={16} strokeWidth={done ? 1.5 : 2.5} className={done ? "text-neutral-500 dark:text-neutral-400" : "text-white"} />
           </motion.div>
         </div>
       )}
 
-      {/* ── Card (draggable) ───────────────────────────────────────────────── */}
+      {/* ── Card (draggable) — shared TaskBlockCard visual ─────────────────── */}
       <motion.div
         layout
-        drag={editMode ? false : "x"}
+        drag={editMode || readOnly ? false : "x"}
         dragConstraints={{ left: 0, right: 100 }}
         dragElastic={{ left: 0, right: 0.05 }}
         dragMomentum={false}
         onDragEnd={handleDragEnd}
         style={{ x: editMode ? 0 : dragX, touchAction: "pan-y" }}
         transition={{ layout: { duration: 0.22, ease: "easeInOut" } }}
-        className={`relative z-10 rounded-[24px] bg-white dark:bg-neutral-900 border transition-colors duration-300 ${
-          done
-            ? "border-neutral-200/50 dark:border-white/[0.04]"
-            : "border-neutral-200 dark:border-white/[0.08]"
-        }`}
+        className="relative z-10"
       >
-        <div
-          className={`px-5 pt-4 pb-4 ${!editMode ? "cursor-pointer" : ""}`}
+        <TaskBlockCard
+          variant="list"
+          task={task}
+          plan={linkedPlan}
+          state={taskState}
+          duration={duration}
+          readOnly={readOnly}
+          onToggle={() => onToggleComplete(task.id, allSubtaskIds)}
           onClick={editMode ? undefined : handleCardTap}
+          trailing={trailingNode}
+          footer={footerNode}
         >
-
-          {/* ── Row 1: Checkbox · Title · Expand/Edit ─────────────────────── */}
-          <div className="flex items-start gap-3">
-
-            {/* Checkbox */}
-            <div className="shrink-0 mt-2">
-              <TaskCheckbox
-                state={taskState}
-                size="lg"
-                onChange={() => onToggleComplete(task.id, allSubtaskIds)}
-              />
-            </div>
-
-            {/* Title + plan label */}
-            <div className="flex-1 min-w-0 pt-0.5">
-              <motion.p
-                animate={{ opacity: done ? 0.5 : 1 }}
-                transition={{ duration: 0.25 }}
-                className={`text-[22px] font-bold leading-tight text-neutral-900 dark:text-white ${
-                  done ? "line-through decoration-neutral-400 dark:decoration-neutral-500" : ""
-                }`}
-              >
-                {task.title}
-              </motion.p>
-
-              {linkedPlan && (
-                <div className="mt-1 flex items-center gap-1.5">
-                  <span className={`h-1.5 w-1.5 shrink-0 rounded-full ${done ? "bg-neutral-300 dark:bg-neutral-600" : (PLAN_DOT[linkedPlan.color] ?? "bg-neutral-400")}`} />
-                  <p className={`text-[12px] font-semibold uppercase tracking-[0.08em] ${
-                    done ? "text-neutral-400 dark:text-neutral-600" : "text-neutral-400 dark:text-neutral-500"
-                  }`}>
-                    {linkedPlan.title}
-                  </p>
-                </div>
-              )}
-            </div>
-
-            {/* Action: expand / view / edit+delete */}
-            <div className="shrink-0 mt-0.5">
-              {editMode ? (
-                <div className="flex items-center gap-1">
-                  <button
-                    type="button"
-                    onClick={(e) => { e.stopPropagation(); onEdit(); }}
-                    className="flex h-9 w-9 items-center justify-center rounded-xl text-neutral-400 transition-colors hover:text-neutral-700 dark:hover:text-neutral-200"
-                  >
-                    <IconEdit size={16} />
-                  </button>
-                  <button
-                    type="button"
-                    onClick={(e) => { e.stopPropagation(); onDelete(); }}
-                    className="flex h-9 w-9 items-center justify-center rounded-xl text-neutral-400 transition-colors hover:text-rose-500 dark:hover:text-rose-400"
-                  >
-                    <IconTrash size={16} />
-                  </button>
-                </div>
-              ) : isRoutine && hasRoutine && onOpenRoutine ? (
-                <button
-                  type="button"
-                  onClick={(e) => { e.stopPropagation(); onOpenRoutine(); }}
-                  className="inline-flex items-center rounded-full bg-neutral-100 px-4 py-2 text-[13px] font-semibold text-neutral-600 transition-colors hover:bg-neutral-200 dark:bg-white/[0.07] dark:text-neutral-300 dark:hover:bg-white/[0.12]"
-                >
-                  View
-                </button>
-              ) : canExpand ? (
-                <button
-                  type="button"
-                  onClick={(e) => { e.stopPropagation(); setExpanded((v) => !v); }}
-                  className="flex h-11 w-11 items-center justify-center rounded-full bg-neutral-100 text-neutral-500 transition-colors hover:bg-neutral-200 dark:bg-white/[0.07] dark:text-neutral-400 dark:hover:bg-white/[0.12]"
-                >
-                  <motion.span
-                    animate={{ rotate: expanded ? 180 : 0 }}
-                    transition={{ duration: 0.22, ease: "easeInOut" }}
-                    style={{ display: "flex" }}
-                  >
-                    <IconChevronDown size={20} strokeWidth={2} />
-                  </motion.span>
-                </button>
-              ) : null}
-            </div>
-          </div>
-
-          {/* ── Note — always inline, never collapsed ────────────────────── */}
-          {task.description && (
-            <p className={`mt-2 text-[14px] leading-relaxed ${
-              done ? "text-neutral-400 dark:text-neutral-500" : "text-neutral-500 dark:text-neutral-400"
-            }`}>
-              {task.description}
-            </p>
-          )}
-
-          {/* ── Row 2: Progress bar — items show partial, done shows 100% ─ */}
-          {(canExpand || done) && (
-            <div className="mt-4 flex items-center gap-3">
-              <div className="relative flex-1 h-2.5 overflow-hidden rounded-full" style={{ backgroundColor: "rgb(229 231 235)" }}>
-                <motion.div
-                  className="absolute inset-y-0 left-0 rounded-full bg-green-500"
-                  initial={false}
-                  animate={{ width: `${barPct}%` }}
-                  transition={{ duration: 0.5, ease: [0.22, 1, 0.36, 1] }}
-                />
-              </div>
-              <motion.span
-                key={barPct}
-                initial={{ opacity: 0, y: 3 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ duration: 0.2 }}
-                className="shrink-0 w-10 text-right text-[14px] font-semibold tabular-nums text-neutral-500 dark:text-neutral-400"
-              >
-                {barPct}%
-              </motion.span>
-            </div>
-          )}
-
-          {/* ── Row 3: Time · Duration · Count ───────────────────────────── */}
-          <div className="mt-4 flex items-center gap-3">
-            {(task.startTime || task.endTime) && (
-              <p className={`text-[14px] font-medium ${
-                done ? "text-neutral-400 dark:text-neutral-500" : "text-neutral-600 dark:text-neutral-400"
-              }`}>
-                {task.startTime}
-                {task.endTime && ` – ${task.endTime}`}
-              </p>
-            )}
-            {duration && !(task.startTime && task.endTime) && (
-              <span className="inline-flex items-center rounded-full border border-neutral-300 bg-white px-3.5 py-1 text-[14px] font-semibold text-neutral-600 dark:border-white/[0.12] dark:bg-transparent dark:text-neutral-400">
-                {duration}
-              </span>
-            )}
-            {canExpand && (
-              <span className="ml-auto inline-flex items-center gap-1.5 text-[14px] font-semibold text-neutral-500 dark:text-neutral-400 tabular-nums">
-                {completedCount}/{totalCount}
-                <IconListCheck size={16} strokeWidth={2} />
-              </span>
-            )}
-            {hasRoutine && (
-              <span className="ml-auto inline-flex items-center gap-1.5 text-[13px] font-semibold text-neutral-400 dark:text-neutral-500">
-                <IconListCheck size={15} strokeWidth={2} />
-                {itemCount} items
-              </span>
-            )}
-          </div>
-        </div>
-
-        {/* ── Expandable section ──────────────────────────────────────────── */}
-        <AnimatePresence initial={false}>
-          {expanded && !editMode && (
-            <motion.div
-              key="expanded"
-              initial={{ height: 0, opacity: 0 }}
-              animate={{ height: "auto", opacity: 1 }}
-              exit={{ height: 0, opacity: 0 }}
-              transition={{ duration: 0.24, ease: "easeInOut" }}
-              style={{ overflow: "hidden" }}
-            >
-              <div className="mx-5 border-t border-neutral-100 dark:border-white/[0.05]" />
-
-              <div className="px-5 pt-4 pb-5">
-                <div className="flex gap-0">
-                  <div className="w-[3px] rounded-full bg-neutral-200 dark:bg-white/[0.08] shrink-0 mr-4" />
-                  <div className="flex-1 space-y-2.5">
-                    {effectiveItems.map((item) => {
-                      const isDone = (task.completedSubtaskIds ?? []).includes(item.id);
-                      const detail = subtaskDetailPill(item);
-                      return (
-                        <div
-                          key={item.id}
-                          className={`flex items-center gap-3 rounded-2xl px-4 py-3.5 transition-colors duration-200 ${
-                            isDone
-                              ? "bg-neutral-50 dark:bg-white/[0.02]"
-                              : "bg-neutral-100/70 dark:bg-white/[0.03]"
-                          }`}
-                        >
-                          <TaskCheckbox
-                            state={isDone ? "completed" : "incomplete"}
-                            size="md"
-                            onChange={() => onToggleSubtask(task.id, item.id)}
-                          />
-                          <motion.p
-                            animate={{ opacity: isDone ? 0.45 : 1 }}
-                            transition={{ duration: 0.2 }}
-                            className={`flex-1 min-w-0 text-[14px] font-medium ${
-                              isDone
-                                ? "text-neutral-400 line-through dark:text-neutral-500"
-                                : "text-neutral-700 dark:text-neutral-300"
-                            }`}
-                          >
-                            {item.task}
-                          </motion.p>
-                          {detail && (
-                            <span className="shrink-0 inline-flex items-center rounded-full border border-neutral-300 bg-white px-3 py-1 text-[13px] font-semibold text-neutral-500 dark:border-white/[0.10] dark:bg-transparent dark:text-neutral-400">
-                              {detail}
-                            </span>
-                          )}
-                        </div>
-                      );
-                    })}
-                  </div>
-                </div>
-              </div>
-            </motion.div>
-          )}
-        </AnimatePresence>
+          {expandContent}
+        </TaskBlockCard>
       </motion.div>
     </div>
   );

@@ -40,7 +40,7 @@ type MilestoneStatus = Milestone["status"];
 function dotClasses(status: MilestoneStatus, selected: boolean): string {
   const base =
     "absolute top-1/2 -translate-y-1/2 -translate-x-1/2 flex h-[22px] w-[22px] items-center justify-center rounded-full border-2 transition-transform focus:outline-none";
-  const scale = selected ? "scale-[1.3] shadow-md" : "hover:scale-110";
+  const scale = selected ? "scale-[1.3]" : "hover:scale-110";
   const color =
     status === "completed"
       ? "bg-emerald-500 border-emerald-500"
@@ -234,7 +234,7 @@ export default function MilestoneTimeline({ schedule }: MilestoneTimelineProps) 
 
   if (planRows.length === 0) {
     return (
-      <div className="rounded-2xl border border-neutral-200/70 bg-white shadow-[0_1px_3px_rgba(0,0,0,0.05),0_2px_8px_rgba(0,0,0,0.04)] dark:border-white/[0.07] dark:bg-neutral-900 dark:shadow-[0_1px_3px_rgba(0,0,0,0.3)] px-5 py-5">
+      <div className="rounded-2xl border border-neutral-200/70 bg-white dark:border-white/[0.07] dark:bg-neutral-900 px-5 py-5">
         <div className="mb-3 flex items-center gap-1.5">
           <IconMap2 size={13} strokeWidth={2.2} className="text-neutral-400 dark:text-neutral-500" />
           <p className="text-[11px] font-bold uppercase tracking-[0.08em] text-neutral-400 dark:text-neutral-500">
@@ -253,7 +253,7 @@ export default function MilestoneTimeline({ schedule }: MilestoneTimelineProps) 
   // ── Render ─────────────────────────────────────────────────────────────────
 
   return (
-    <div className="rounded-2xl border border-neutral-200/70 bg-white shadow-[0_1px_3px_rgba(0,0,0,0.05),0_2px_8px_rgba(0,0,0,0.04)] dark:border-white/[0.07] dark:bg-neutral-900 dark:shadow-[0_1px_3px_rgba(0,0,0,0.3)] py-4">
+    <div className="rounded-2xl border border-neutral-200/70 bg-white dark:border-white/[0.07] dark:bg-neutral-900 py-4">
       {/* Section header */}
       <div className="mb-3 flex items-center gap-1.5 px-4">
         <IconMap2 size={13} strokeWidth={2.2} className="text-neutral-400 dark:text-neutral-500" />

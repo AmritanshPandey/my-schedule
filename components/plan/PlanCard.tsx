@@ -5,9 +5,10 @@ import { motion } from "framer-motion";
 import {
   IconCalendar,
   IconCheck,
-  IconClipboardList,
+  IconChecklist,
   IconFlame,
   IconPlus,
+  IconTrash,
 } from "@tabler/icons-react";
 import type { Plan } from "@/lib/useScheduleDB";
 import { haptic } from "@/lib/haptics";
@@ -121,6 +122,7 @@ interface PlanCardProps {
   dateRange: string | null;
   onSelect: () => void;
   onQuickLog?: () => void;
+  onDelete?: () => void;
 }
 
 // ── Component ─────────────────────────────────────────────────────────────────
@@ -135,6 +137,7 @@ function PlanCardInner({
   dateRange,
   onSelect,
   onQuickLog,
+  onDelete,
 }: PlanCardProps) {
   const accent = accentStyles(plan.color);
   const stroke = ACCENT_STROKE[plan.color as AccentColor] ?? ACCENT_STROKE.cyan;
@@ -151,8 +154,20 @@ function PlanCardInner({
       whileHover={{ y: -2 }}
       whileTap={{ scale: 0.985 }}
       transition={{ type: "spring", stiffness: 420, damping: 30 }}
-      className="w-full cursor-pointer rounded-3xl border border-neutral-200/70 bg-white px-5 pt-5 pb-4 text-left shadow-[0_1px_3px_rgba(0,0,0,0.05),0_4px_12px_rgba(0,0,0,0.04)] transition-all hover:border-neutral-300/80 hover:shadow-[0_2px_8px_rgba(0,0,0,0.07),0_8px_24px_rgba(0,0,0,0.06)] dark:border-white/[0.07] dark:bg-neutral-900 dark:shadow-[0_1px_3px_rgba(0,0,0,0.3),0_4px_12px_rgba(0,0,0,0.2)] dark:hover:border-white/[0.12]"
+      className="group relative w-full cursor-pointer rounded-3xl border border-neutral-200/70 bg-white px-5 pt-5 pb-4 text-left transition-all hover:border-neutral-300/80 dark:border-white/[0.07] dark:bg-neutral-900 dark:hover:border-white/[0.12]"
     >
+      {/* Delete — hover affordance (desktop) */}
+      {onDelete && (
+        <button
+          type="button"
+          onClick={(e) => { e.stopPropagation(); haptic("light"); onDelete(); }}
+          aria-label="Delete plan"
+          className="absolute right-3 top-3 z-10 hidden h-8 w-8 items-center justify-center rounded-xl text-neutral-400 transition-colors hover:bg-rose-500/10 hover:text-rose-500 group-hover:flex dark:text-neutral-500"
+        >
+          <IconTrash size={15} strokeWidth={2} />
+        </button>
+      )}
+
       {/* ── Row 1: status chip ───────────────────────────────────────────── */}
       <motion.div
         className={`flex items-center gap-2 text-[10.5px] font-bold uppercase tracking-[0.07em] ${statusCfg.text}`}
@@ -203,7 +218,7 @@ function PlanCardInner({
       {/* ── Row 3: insight chip ──────────────────────────────────────────── */}
       <div className="mt-3.5 flex items-center gap-2">
         <div className="flex flex-1 items-center gap-1.5 rounded-xl bg-neutral-50 dark:bg-white/[0.04] px-3 py-2 text-[12px] font-semibold text-neutral-500 dark:text-neutral-400">
-          <IconClipboardList size={12} strokeWidth={2.2} className="shrink-0" />
+          <IconChecklist size={12} strokeWidth={2.2} className="shrink-0" />
           {taskCount} task{taskCount !== 1 ? "s" : ""}
           {trackerCount > 0 && <span className="text-neutral-400 dark:text-neutral-600"> · {trackerCount} tracked</span>}
         </div>

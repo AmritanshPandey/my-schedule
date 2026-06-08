@@ -68,9 +68,16 @@ export default function SessionSheet({
                 <span className="shrink-0 flex h-7 w-7 items-center justify-center rounded-full bg-neutral-100 dark:bg-white/[0.06] text-[12px] font-bold text-neutral-600 dark:text-neutral-400">
                   {idx + 1}
                 </span>
-                <p className="flex-1 min-w-0 text-[16px] font-medium text-neutral-900 dark:text-white">
-                  {item.task}
-                </p>
+                <div className="min-w-0 flex-1">
+                  <p className="truncate text-[16px] font-medium text-neutral-900 dark:text-white">
+                    {item.task}
+                  </p>
+                  {item.info ? (
+                    <p className="mt-1 truncate text-[13px] text-neutral-500 dark:text-neutral-400">
+                      {item.info}
+                    </p>
+                  ) : null}
+                </div>
                 {item.duration && (
                   <span className="shrink-0 rounded-full bg-neutral-100 dark:bg-white/[0.06] px-3 py-1 text-[13px] font-semibold text-neutral-600 dark:text-neutral-400">
                     {item.duration}
@@ -95,7 +102,7 @@ export default function SessionSheet({
             onClick={() => { onEdit(); onClose(); }}
             className="text-[14px] font-semibold text-neutral-400 hover:text-neutral-600 dark:text-neutral-500 dark:hover:text-neutral-300 transition-colors"
           >
-            Edit Routine
+            Edit Session
           </button>
 
           <motion.button

@@ -1,7 +1,9 @@
 "use client";
 
+import { useEffect, useRef, useState } from "react";
 import { motion } from "framer-motion";
-import { IconChevronLeft, IconSettings } from "@tabler/icons-react";
+import { IconChevronLeft, IconPencil, IconUser } from "@tabler/icons-react";
+import { useAuth } from "@/contexts/AuthProvider";
 
 interface ActionItem {
   icon: React.ComponentType<{ size?: number; strokeWidth?: number; className?: string }>;
@@ -11,104 +13,209 @@ interface ActionItem {
 }
 
 interface AppHeaderProps {
-  back?: {
-    label: string;
-    onBack: () => void;
-  };
+  back?: { label: string; onBack: () => void };
   actions?: ActionItem[];
   onOpenSettings?: () => void;
+  onNotes?: () => void;
 }
 
-export default function AppHeader({ back, actions, onOpenSettings }: AppHeaderProps) {
-  const isDetail = !!back;
+// ── Logo mark ─────────────────────────────────────────────────────────────────
 
-  if (isDetail) {
-    return (
-      <header className="sticky top-0 z-40 flex flex-col bg-neutral-950/90 backdrop-blur-md">
-        {/* Top accent line */}
-        <div className="h-[1.5px] bg-gradient-to-r from-neutral-500/40 via-neutral-500/15 to-transparent" />
+function LogoMark({ className }: { className?: string }) {
+  return (
+    <svg width="16" height="18" viewBox="0 0 16 18" fill="none" className={className}>
+      <rect x="0" y="0"    width="16"  height="3.2" rx="1.6" fill="currentColor" />
+      <rect x="0" y="6.0"  width="11"  height="3.2" rx="1.6" fill="currentColor" />
+      <rect x="0" y="12.0" width="6.5" height="3.2" rx="1.6" fill="currentColor" />
+    </svg>
+  );
+}
 
-        {/* Main row */}
-        <div className="flex items-center gap-1 px-4 pt-4 pb-4">
-          {/* Back button */}
-          <motion.button
-            type="button"
-            whileTap={{ scale: 0.86 }}
-            onClick={back.onBack}
-            aria-label={`Back to ${back.label}`}
-            className="shrink-0 flex h-9 w-9 items-center justify-center  text-white/60 active:text-white transition-colors"
-          >
-            <IconChevronLeft size={24} strokeWidth={1.5} />
-          </motion.button>
+// ── Shared scroll + dark-mode state ──────────────────────────────────────────
 
-          {/* Back label */}
-          <div className="flex-1 min-w-0">
-            <p className="text-[16px] font-bold text-white/60">
-              {back.label}
-            </p>
-          </div>
+function useHeaderState() {
+  const [scrolled, setScrolled]   = useState(false);
+  const [isDark,   setIsDark]     = useState(false);
+  const rafRef = useRef<number | null>(null);
 
-          {/* Action buttons */}
-          {actions && actions.length > 0 && (
-            <div className="shrink-0 flex items-center gap-1.5">
-              {actions.map((action, i) => {
-                const Icon = action.icon;
-                return (
-                  <motion.button
-                    key={i}
-                    type="button"
-                    whileTap={{ scale: 0.86 }}
-                    onClick={action.onClick}
-                    aria-label={action.label}
-                    className={`flex h-9 w-9 items-center justify-center rounded-full bg-white/[0.07] transition-colors ${
-                      action.destructive
-                        ? "text-white/40 active:bg-rose-500/15 active:text-rose-400"
-                        : "text-white/50 active:text-white"
-                    }`}
-                  >
-                    <Icon size={20} strokeWidth={2} />
-                  </motion.button>
-                );
-              })}
-            </div>
-          )}
-        </div>
+  useEffect(() => {
+    // Initialise dark-mode from the document class (set by ThemeToggle)
+    const check = () => setIsDark(document.documentElement.classList.contains("dark"));
+    check();
 
-        {/* Bottom border */}
-        <div className="h-px bg-white/[0.06]" />
-      </header>
-    );
+    // Watch for theme changes via a MutationObserver on <html>
+    const observer = new MutationObserver(check);
+    observer.observe(document.documentElement, { attributes: true, attributeFilter: ["class"] });
+
+    function onScroll() {
+      if (rafRef.current !== null) return;
+      rafRef.current = requestAnimationFrame(() => {
+        rafRef.current = null;
+        setScrolled(window.scrollY > 8);
+      });
+    }
+    window.addEventListener("scroll", onScroll, { passive: true });
+
+    return () => {
+      observer.disconnect();
+      window.removeEventListener("scroll", onScroll);
+      if (rafRef.current !== null) cancelAnimationFrame(rafRef.current);
+    };
+  }, []);
+
+  return { scrolled, isDark };
+}
+
+// ── Glass style helper ────────────────────────────────────────────────────────
+
+function glassStyle(scrolled: boolean, isDark: boolean): React.CSSProperties {
+  const border = isDark
+    ? "rgba(255, 255, 255, 0.08)"
+    : "rgba(0, 0, 0, 0.09)";
+
+  if (!scrolled) {
+    return { backgroundColor: "transparent", borderBottom: `0.5px solid ${border}` };
   }
 
-  // ── Root mode — glassmorphism header ─────────────────────────────────────────
+  const bg = isDark
+    ? "rgba(17, 17, 21, 0.80)"
+    : "rgba(242, 242, 247, 0.80)";
+
+  return {
+    backgroundColor: bg,
+    backdropFilter: "blur(20px) saturate(180%)",
+    WebkitBackdropFilter: "blur(20px) saturate(180%)",
+    borderBottom: `0.5px solid ${border}`,
+    boxShadow: isDark
+      ? "0 1px 16px rgba(0, 0, 0, 0.30)"
+      : "0 1px 12px rgba(0, 0, 0, 0.05)",
+  };
+}
+
+// ── Root header ───────────────────────────────────────────────────────────────
+
+function RootHeader({ onOpenSettings, onNotes }: Pick<AppHeaderProps, "onOpenSettings" | "onNotes">) {
+  const { user } = useAuth();
+  const { scrolled, isDark } = useHeaderState();
+
   return (
     <header
-      className="
-        sticky top-0 z-40 flex items-center justify-between px-4 py-3.5
-        border-b border-neutral-200/60 bg-white/80 backdrop-blur-md
-        shadow-[0_1px_3px_rgba(0,0,0,0.04),0_4px_20px_rgba(0,0,0,0.04)]
-        dark:border-white/[0.07] dark:bg-neutral-950/82
-        dark:shadow-[0_1px_0_rgba(255,255,255,0.03),0_4px_20px_rgba(0,0,0,0.28)]
-      "
+      className="fixed inset-x-0 top-0 z-40 flex items-center justify-between px-5 transition-all duration-300 lg:hidden"
+      style={{
+        height: 64,
+        paddingTop: "env(safe-area-inset-top)",
+        ...glassStyle(scrolled, isDark),
+      }}
     >
-      {/* Logo */}
-      <div className="flex items-center">
-        <img src="/logo.svg" alt="PlanR" className="h-6 w-auto dark:hidden" />
-        <img src="/logo-dark.svg" alt="PlanR" className="hidden h-6 w-auto dark:block" />
+      {/* Left: logo mark + wordmark */}
+      <div className="flex items-center gap-2.5">
+        <LogoMark className="text-neutral-900 dark:text-white" />
+        <span className="text-[20px] font-bold tracking-[-0.5px] text-neutral-900 dark:text-white leading-none">
+          planr.
+        </span>
       </div>
 
-      {/* Settings gear */}
-      {onOpenSettings && (
+      {/* Right: Notes pill + avatar */}
+      <div className="flex items-center gap-2.5">
         <motion.button
           type="button"
-          whileTap={{ scale: 0.86 }}
-          onClick={onOpenSettings}
-          aria-label="Settings"
-          className="flex h-9 w-9 items-center justify-center rounded-full text-neutral-400 transition-colors active:text-neutral-700 dark:text-neutral-500 dark:active:text-white"
+          whileTap={{ scale: 0.94 }}
+          onClick={onNotes}
+          aria-label="Notes"
+          className="flex items-center gap-2 rounded-full bg-neutral-900 px-4 py-2.5 dark:bg-white"
         >
-          <IconSettings size={20} strokeWidth={1.8} />
+          <IconPencil size={15} strokeWidth={2.2} className="text-white dark:text-neutral-900" />
+          <span className="text-[14px] font-semibold text-white dark:text-neutral-900 leading-none">
+            Notes
+          </span>
         </motion.button>
+
+        <motion.button
+          type="button"
+          whileTap={{ scale: 0.90 }}
+          onClick={onOpenSettings}
+          aria-label="Account"
+          className="h-9 w-9 shrink-0 overflow-hidden rounded-full border-[1.5px] border-neutral-200 bg-neutral-100 dark:border-white/[0.12] dark:bg-neutral-800"
+        >
+          {user?.photoURL ? (
+            <img src={user.photoURL} alt="Avatar" className="h-full w-full object-cover" />
+          ) : (
+            <div className="flex h-full w-full items-center justify-center">
+              <IconUser size={17} strokeWidth={1.8} className="text-neutral-400 dark:text-neutral-500" />
+            </div>
+          )}
+        </motion.button>
+      </div>
+    </header>
+  );
+}
+
+// ── Detail header ─────────────────────────────────────────────────────────────
+
+function DetailHeader({ back, actions }: Pick<AppHeaderProps, "back" | "actions">) {
+  const { scrolled, isDark } = useHeaderState();
+
+  return (
+    <header
+      className="fixed inset-x-0 top-0 z-40 flex items-center gap-1 px-2 transition-all duration-250 lg:hidden"
+      style={{
+        height: 56,
+        paddingTop: "env(safe-area-inset-top)",
+        ...glassStyle(scrolled, isDark),
+        // Detail header always has some bg so back label is readable
+        backgroundColor: scrolled
+          ? glassStyle(scrolled, isDark).backgroundColor
+          : isDark
+          ? "rgba(17, 17, 21, 1)"
+          : "rgba(242, 242, 247, 1)",
+      }}
+    >
+      <motion.button
+        type="button"
+        whileTap={{ scale: 0.86 }}
+        onClick={back?.onBack}
+        aria-label={`Back to ${back?.label}`}
+        className="flex h-9 w-9 items-center justify-center text-neutral-500 dark:text-white/60"
+      >
+        <IconChevronLeft size={26} strokeWidth={1.5} />
+      </motion.button>
+
+      <div className="flex-1 min-w-0">
+        <p className="text-[16px] font-bold text-neutral-950 dark:text-white/80">
+          {back?.label}
+        </p>
+      </div>
+
+      {actions && actions.length > 0 && (
+        <div className="flex shrink-0 items-center gap-1.5 pr-2">
+          {actions.map((action, i) => {
+            const Icon = action.icon;
+            return (
+              <motion.button
+                key={i}
+                type="button"
+                whileTap={{ scale: 0.86 }}
+                onClick={action.onClick}
+                aria-label={action.label}
+                className={`flex h-9 w-9 items-center justify-center rounded-full transition-colors ${
+                  action.destructive
+                    ? "bg-rose-50 text-rose-600 dark:bg-rose-500/10 dark:text-rose-300"
+                    : "bg-neutral-100 text-neutral-700 dark:bg-white/[0.07] dark:text-white/70"
+                }`}
+              >
+                <Icon size={20} strokeWidth={2} />
+              </motion.button>
+            );
+          })}
+        </div>
       )}
     </header>
   );
+}
+
+// ── Export ────────────────────────────────────────────────────────────────────
+
+export default function AppHeader({ back, actions, onOpenSettings, onNotes }: AppHeaderProps) {
+  if (back) return <DetailHeader back={back} actions={actions} />;
+  return <RootHeader onOpenSettings={onOpenSettings} onNotes={onNotes} />;
 }

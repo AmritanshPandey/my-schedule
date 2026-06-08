@@ -217,7 +217,7 @@ export default function PWAInstallPrompt() {
               </div>
               <button
                 onClick={dismiss}
-                className="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl border border-neutral-200 text-neutral-400 hover:bg-neutral-50 dark:border-white/10 dark:text-neutral-500 dark:hover:bg-white/5 transition-colors"
+                className="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl border border-neutral-200 text-neutral-400 hover:bg-neutral-100 dark:border-white/10 dark:text-neutral-500 dark:hover:bg-white/[0.07] transition-colors"
                 aria-label="Dismiss"
               >
                 <IconX size={16} />

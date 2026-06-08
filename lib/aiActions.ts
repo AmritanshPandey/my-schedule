@@ -232,37 +232,9 @@ export function streamGenerateMilestoneTasks(
   return streamOllamaAction(baseUrl, model, MILESTONE_TASK_GEN_PROMPT, userMessage, signal);
 }
 
-// ── Weekly planning ───────────────────────────────────────────────────────────
-
-const WEEKLY_PLAN_PROMPT = `You are a weekly planning assistant. Based on the user's missed tasks and lagging milestones, generate 4-7 concrete tasks for NEXT WEEK that will help them catch up and make meaningful progress on the chosen plan.
-Output ONLY a raw JSON array — no explanation, no markdown fences.
-[{"title":"...","day":"monday","startTime":"07:00","endTime":"08:00","icon":"barbell","subtasks":["Step 1","Step 2"]},...]
-Icons (pick most relevant): run, school, book, sleep, star, briefcase, car, brain, barbell, code, heart, music, palette, plane, chefhat, coin, camera, users, leaf, pencil, yoga, bike, mountain, droplet, moodsmile, flame, language, pill, bolt, dna
-Days: monday tuesday wednesday thursday friday saturday sunday
-Times: HH:MM 24-hour. Spread tasks across different days. Each task needs 2-3 subtasks.`;
-
-/**
- * Streams 4-7 tasks for next week based on what was missed/lagged this week.
- * Parse the result with the existing `parseGeneratedTasks()`.
- */
-export function streamWeeklyPlan(
-  baseUrl: string,
-  model: string,
-  plan: { title: string; description?: string },
-  weekContext: string,
-  signal?: AbortSignal,
-): AsyncGenerator<string> {
-  const userMessage = [
-    `Generate next-week tasks for plan: "${plan.title}"${plan.description ? ` (${plan.description})` : ""}.`,
-    `Last week: ${weekContext}`,
-    `Prioritise catching up on what was missed and advancing lagging milestones.`,
-  ].join(" ");
-  return streamOllamaAction(baseUrl, model, WEEKLY_PLAN_PROMPT, userMessage, signal);
-}
-
 // ── Weekly insight generation ─────────────────────────────────────────────────
 
-const WEEKLY_INSIGHT_PROMPT = `You are a personal performance coach reviewing someone's week. Write exactly 2-3 sentences of coaching insight as plain prose — no bullet points, no markdown, no lists. Cover: (1) the strongest or weakest execution area this week, (2) which plan or habit needs the most attention, (3) one concrete action to take next. Be direct, specific, and encouraging. Never start with "I" or a generic greeting.`;
+const WEEKLY_INSIGHT_PROMPT = `You are a personal performance coach reviewing someone's week. Write exactly 2-3 sentences of coaching insight as plain prose — no bullet points, no markdown, no lists. Call out the strongest or weakest execution area, name the exact plan or habit that needs the most attention, and give one concrete next action. Use the exact plan or habit names from the provided week stats when available. Be direct, specific, and encouraging. Never start with "I", "As a coach", or a generic greeting.`;
 
 /**
  * Streams a 2-3 sentence weekly coaching insight based on the week's stats.

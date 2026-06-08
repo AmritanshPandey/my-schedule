@@ -1,7 +1,7 @@
 "use client";
 
 import { motion } from "framer-motion";
-import { IconCheck } from "@tabler/icons-react";
+import { IconCheck, IconRepeat } from "@tabler/icons-react";
 import type { Ritual, RitualColor, DayKey } from "@/lib/useScheduleDB";
 import { haptic } from "@/lib/haptics";
 
@@ -42,13 +42,16 @@ export default function TodayRitualsBar({
 
   return (
     <div className="mb-3">
-      <div className="mb-1.5 flex items-center justify-between px-0.5">
-        <span className="text-[11px] font-bold uppercase tracking-[0.08em] text-neutral-400 dark:text-neutral-500">
+      <div className="mb-2 flex items-center justify-between px-0.5">
+        <span className="text-[12px] font-black uppercase tracking-[0.10em] text-neutral-800 dark:text-neutral-200">
           Routines
         </span>
-        <span className="text-[11px] font-semibold tabular-nums text-neutral-400 dark:text-neutral-500">
-          {doneCount}/{todayRituals.length}
-        </span>
+        <div className="flex items-center gap-1.5 text-neutral-400 dark:text-neutral-500">
+          <IconRepeat size={14} strokeWidth={1.8} />
+          <span className="text-[13px] font-bold tabular-nums">
+            {doneCount}/{todayRituals.length}
+          </span>
+        </div>
       </div>
       <div className="flex gap-2 overflow-x-auto pb-0.5 [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden" style={{ touchAction: "pan-x" }}>
         {todayRituals.map((ritual) => {

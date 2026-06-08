@@ -24,6 +24,7 @@ import type { Schedule } from "@/lib/useScheduleDB";
 export type SyncStatus = "idle" | "syncing" | "offline" | "error";
 
 export interface CloudSnapshot {
+  uid: string;
   schedule: Schedule;
   lastUpdated: number;
 }
@@ -91,7 +92,17 @@ function detachListeners() {
 
 /** Call once when an authenticated user is resolved. */
 export function initSync(uid: string) {
+  if (_uid !== uid) {
+    if (_timer) clearTimeout(_timer);
+    _timer = null;
+    _pending = null;
+    _lastSchedule = null;
+    _lastSyncedAt = 0;
+    _skipNextSync = false;
+    setStatus("idle");
+  }
   _uid = uid;
+  detachListeners();
   attachListeners();
 }
 
@@ -101,6 +112,8 @@ export function destroySync() {
   _timer = null;
   _uid = null;
   _pending = null;
+  _lastSchedule = null;
+  _lastSyncedAt = 0;
   _syncing = false;
   _skipNextSync = false;
   detachListeners();
@@ -124,6 +137,15 @@ export function onSyncStatusChange(fn: (s: SyncStatus) => void): () => void {
 /** Returns the most recent schedule seen by queueSync (for flush-on-logout). */
 export function getLastSchedule(): Schedule | null {
   return _lastSchedule;
+}
+
+/**
+ * Synchronously record the latest schedule without scheduling a sync.
+ * Called on every local edit so flushNow() (logout/app-close) always has the
+ * freshest data, instead of whatever the 30s debounce last happened to capture.
+ */
+export function noteLatestSchedule(schedule: Schedule): void {
+  _lastSchedule = schedule;
 }
 
 /** Delete the user's cloud snapshot. Used by "Clear data". */
@@ -201,7 +223,7 @@ export async function mergeCloudIfNewer(
     _skipNextSync = true;
 
     const event = new CustomEvent<CloudSnapshot>("cloud-sync-merge", {
-      detail: { schedule: data.schedule, lastUpdated: data.lastUpdated },
+      detail: { uid, schedule: data.schedule, lastUpdated: data.lastUpdated },
     });
     window.dispatchEvent(event);
 

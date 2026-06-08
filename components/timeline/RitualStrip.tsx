@@ -37,7 +37,6 @@ export default function RitualStrip({ ritual, completed, onToggle }: RitualStrip
         pointer-events-auto
         flex items-center justify-center
         h-4 w-4 shrink-0 rounded-full cursor-pointer
-        shadow-[0_1px_4px_0_rgba(0,0,0,0.22)]
         hover:brightness-110 active:brightness-95
         transition-all duration-150 select-none
         ${completed ? "opacity-50" : "opacity-100"}

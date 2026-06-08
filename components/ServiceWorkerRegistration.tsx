@@ -31,9 +31,28 @@ export default function ServiceWorkerRegistration() {
       return;
     }
 
+    let refreshing = false;
+
+    function handleControllerChange() {
+      if (refreshing) return;
+      refreshing = true;
+      window.location.reload();
+    }
+
+    navigator.serviceWorker.addEventListener("controllerchange", handleControllerChange);
+
     navigator.serviceWorker
       .register("/sw.js", { updateViaCache: "none" })
+      .then((registration) => {
+        if (registration.waiting) {
+          registration.waiting.postMessage({ type: "SKIP_WAITING" });
+        }
+      })
       .catch((err) => console.error("Service worker registration failed:", err));
+
+    return () => {
+      navigator.serviceWorker.removeEventListener("controllerchange", handleControllerChange);
+    };
   }, []);
 
   return null;

@@ -22,9 +22,7 @@ import {
   destroySync,
   flushNow,
   getLastSchedule,
-  mergeCloudIfNewer,
 } from "@/lib/cloudSync";
-import { getLocalLastUpdated } from "@/lib/localMeta";
 
 // ── Context types ─────────────────────────────────────────────────────────────
 
@@ -67,11 +65,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     // ONE auth observer for the entire app lifetime.
     const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
       if (firebaseUser) {
-        // Authenticated: start sync engine, then pull cloud if newer.
+        // Authenticated: start sync engine. useScheduleDB pulls cloud after
+        // its local, per-user IndexedDB record and merge listener are ready.
         initSync(firebaseUser.uid);
-        const localTs = getLocalLastUpdated();
-        // Fire-and-forget — UI never blocks on this.
-        mergeCloudIfNewer(firebaseUser.uid, localTs).catch(() => {});
       } else {
         // Signed out or guest: stop sync.
         destroySync();

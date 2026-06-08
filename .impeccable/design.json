@@ -1,0 +1,170 @@
+{
+  "schemaVersion": 2,
+  "generatedAt": "2026-06-07T00:00:00.000Z",
+  "title": "Design System: PlanR",
+  "extensions": {
+    "colorMeta": {
+      "momentum-green": {
+        "role": "primary",
+        "displayName": "Momentum Green",
+        "canonical": "#00A63E",
+        "tonalRamp": ["#052E16", "#0C4F28", "#096B30", "#008236", "#00A63E", "#00C950", "#2FD46E", "#74E5A0", "#B9F8CF", "#DCFCE7", "#F0FDF4"]
+      },
+      "ink": {
+        "role": "secondary",
+        "displayName": "Ink",
+        "canonical": "#0A0A0A",
+        "tonalRamp": ["#0A0A0A", "#171717", "#262626", "#404040", "#525252", "#737373", "#A3A3A3", "#D4D4D4", "#E5E5E5", "#F5F5F5", "#FAFAFA"]
+      },
+      "muted": {
+        "role": "neutral",
+        "displayName": "Muted",
+        "canonical": "#737373",
+        "tonalRamp": ["#171717", "#262626", "#404040", "#525252", "#737373", "#A3A3A3", "#D4D4D4", "#E5E5E5", "#FAFAFA"]
+      },
+      "status-info": { "role": "tertiary", "displayName": "Focus Blue", "canonical": "#155DFC" },
+      "cat-cardio": { "role": "tertiary", "displayName": "Cardio Orange", "canonical": "#FF6900" }
+    },
+    "typographyMeta": {
+      "display": { "displayName": "Display", "purpose": "The single headline metric per card (week %, streak count)." },
+      "title": { "displayName": "Title", "purpose": "Card headers, task titles, list-row primary text." },
+      "label": { "displayName": "Label", "purpose": "Short uppercase stat captions only (≤4 words)." }
+    },
+    "shadows": [
+      { "name": "card", "value": "0 1px 2px rgb(0 0 0 / 0.04)", "purpose": "Barely-there lift for resting cards; often omitted in favor of the border." },
+      { "name": "nav", "value": "0 0 12px rgb(0 0 0 / 0.10)", "purpose": "Floating bottom nav / app shell." },
+      { "name": "popover", "value": "0 8px 24px rgb(0 0 0 / 0.12)", "purpose": "Bottom sheets, menus, overlays." }
+    ],
+    "motion": [
+      { "name": "ease-standard", "value": "cubic-bezier(0.4, 0, 0.2, 1)", "purpose": "Default easing for transitions and loading bar." },
+      { "name": "panel-in", "value": "130ms ease-out", "purpose": "Popover/panel entrance: fade + 4px rise." },
+      { "name": "press", "value": "scale(0.98)", "purpose": "Tactile active state on every button, paired with haptics on mobile." }
+    ],
+    "breakpoints": [
+      { "name": "sm", "value": "640px" },
+      { "name": "md", "value": "768px" },
+      { "name": "lg", "value": "1024px" }
+    ]
+  },
+  "components": [
+    {
+      "name": "Primary Button (Ink)",
+      "kind": "button",
+      "refersTo": "button-primary",
+      "description": "Default UI action. Ink fill, not green — green is reserved for affirmative actions.",
+      "html": "<button class=\"ds-btn-primary\">Save changes</button>",
+      "css": ".ds-btn-primary { display: inline-flex; align-items: center; justify-content: center; gap: 6px; height: 48px; padding: 0 20px; border: none; border-radius: 16px; background: #0A0A0A; color: #fff; font-family: Nunito, ui-sans-serif, system-ui, sans-serif; font-size: 15px; font-weight: 600; cursor: pointer; transition: background .2s, transform .1s; } .ds-btn-primary:hover { background: #171717; } .ds-btn-primary:active { transform: scale(0.98); } .ds-btn-primary:focus-visible { outline: 2px solid rgba(10,10,10,0.25); outline-offset: 2px; }"
+    },
+    {
+      "name": "CTA Button (Momentum Green)",
+      "kind": "button",
+      "refersTo": "button-cta",
+      "description": "The affirmative action: Create, Complete, Log. One per screen. Pill shape.",
+      "html": "<button class=\"ds-btn-cta\"><svg viewBox=\"0 0 24 24\" width=\"16\" height=\"16\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"3\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><path d=\"M5 12l5 5L20 7\"/></svg>Complete task</button>",
+      "css": ".ds-btn-cta { display: inline-flex; align-items: center; justify-content: center; gap: 8px; padding: 12px 18px; border: none; border-radius: 9999px; background: #00A63E; color: #fff; font-family: Nunito, ui-sans-serif, system-ui, sans-serif; font-size: 15px; font-weight: 700; cursor: pointer; transition: background .2s, transform .1s; } .ds-btn-cta:hover { background: #008236; } .ds-btn-cta:active { transform: scale(0.98); } .ds-btn-cta:focus-visible { outline: 2px solid rgba(0,166,62,0.4); outline-offset: 2px; }"
+    },
+    {
+      "name": "Pill / Chip",
+      "kind": "chip",
+      "refersTo": "button-ghost",
+      "description": "Filter/toggle pill. Muted by default; active state inverts to ink fill, not a color shift.",
+      "html": "<div style=\"display:flex; gap:8px;\"><button class=\"ds-pill\">Mon</button><button class=\"ds-pill ds-pill--active\">Sun</button></div>",
+      "css": ".ds-pill { padding: 6px 10px; border: 1px solid rgba(10,10,10,0.12); border-radius: 8px; background: transparent; color: #737373; font-family: Nunito, ui-sans-serif, system-ui, sans-serif; font-size: 12px; font-weight: 700; cursor: pointer; transition: color .15s, background .15s; } .ds-pill:hover { color: #404040; } .ds-pill--active { background: #171717; color: #fff; border-color: #171717; }"
+    },
+    {
+      "name": "Card",
+      "kind": "card",
+      "refersTo": "card",
+      "description": "Resting surface. Border-defined and near-flat; no resting shadow.",
+      "html": "<div class=\"ds-card\"><div class=\"ds-card__head\"><svg viewBox=\"0 0 24 24\" width=\"14\" height=\"14\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><rect x=\"3\" y=\"5\" width=\"18\" height=\"16\" rx=\"2\"/><path d=\"M3 9h18M8 3v4M16 3v4\"/></svg><span>This Week</span></div><div class=\"ds-card__metric\">0<span>%</span></div><div class=\"ds-card__label\">Tasks done</div></div>",
+      "css": ".ds-card { padding: 16px 20px; border: 1px solid rgba(255,255,255,0.07); border-radius: 16px; background: #171717; font-family: Nunito, ui-sans-serif, system-ui, sans-serif; } .ds-card__head { display: flex; align-items: center; gap: 8px; color: #737373; font-size: 15px; font-weight: 700; margin-bottom: 14px; } .ds-card__head span { color: #e5e5e5; } .ds-card__metric { font-size: 40px; font-weight: 800; line-height: 1; letter-spacing: -0.01em; color: #fff; } .ds-card__metric span { font-size: 18px; } .ds-card__label { margin-top: 6px; font-size: 11px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: #737373; }"
+    },
+    {
+      "name": "Input / Field",
+      "kind": "input",
+      "refersTo": "input",
+      "description": "Text field with accent-border focus, no heavy glow. ≥16px font to prevent iOS zoom.",
+      "html": "<input class=\"ds-input\" placeholder=\"Add a task…\" />",
+      "css": ".ds-input { width: 100%; padding: 14px; border: 1.5px solid rgba(255,255,255,0.10); border-radius: 24px; background: #171717; color: #fff; font-family: Nunito, ui-sans-serif, system-ui, sans-serif; font-size: 16px; font-weight: 500; outline: none; transition: border-color .15s; } .ds-input::placeholder { color: #525252; } .ds-input:focus { border-color: rgba(0,201,80,0.7); }"
+    },
+    {
+      "name": "Progress Readout (Week Bars)",
+      "kind": "custom",
+      "refersTo": "card",
+      "description": "Signature instrument. Status ramp: green ≥70%, amber 40–69%, rose <40%. A glance reads on-track / at-risk / behind.",
+      "html": "<div class=\"ds-bars\"><div class=\"ds-bar\"><span>M</span><i style=\"--h:80%; --c:#00C950\"></i></div><div class=\"ds-bar\"><span>T</span><i style=\"--h:55%; --c:#FAB623\"></i></div><div class=\"ds-bar\"><span>W</span><i style=\"--h:30%; --c:#FB2C36\"></i></div><div class=\"ds-bar\"><span>T</span><i style=\"--h:90%; --c:#00C950\"></i></div><div class=\"ds-bar\"><span>F</span><i style=\"--h:0%; --c:#404040\"></i></div></div>",
+      "css": ".ds-bars { display: flex; align-items: flex-end; gap: 10px; height: 90px; font-family: Nunito, ui-sans-serif, system-ui, sans-serif; } .ds-bar { display: flex; flex-direction: column; align-items: center; gap: 6px; flex: 1; height: 100%; justify-content: flex-end; } .ds-bar span { font-size: 10px; font-weight: 700; color: #737373; } .ds-bar i { width: 100%; max-width: 14px; height: var(--h); min-height: 4px; border-radius: 9999px; background: var(--c); transition: height .3s cubic-bezier(0.4,0,0.2,1); }"
+    },
+    {
+      "name": "Consistency Ring",
+      "kind": "custom",
+      "refersTo": "card",
+      "description": "A 44px conic-gradient ring with the percentage punched out of the center. Fill color follows the status ramp; track is neutral-200.",
+      "html": "<div class=\"ds-ring\" style=\"--pct:72%; --c:#00C950\"><span class=\"ds-ring__pct\">72%</span></div>",
+      "css": ".ds-ring { display: grid; place-items: center; width: 44px; height: 44px; border-radius: 9999px; background: conic-gradient(var(--c) var(--pct), #e5e5e5 0); font-family: Nunito, ui-sans-serif, system-ui, sans-serif; } .ds-ring__pct { display: grid; place-items: center; width: 34px; height: 34px; border-radius: 9999px; background: #171717; color: #fff; font-size: 10px; font-weight: 800; font-variant-numeric: tabular-nums; }"
+    },
+    {
+      "name": "Segmented Tabs",
+      "kind": "nav",
+      "refersTo": "button-ghost",
+      "description": "Mode switch (not page nav). Pill track; active segment is a raised chip with a ring + card shadow, inactive is muted text.",
+      "html": "<div class=\"ds-seg\"><button class=\"ds-seg__item ds-seg__item--active\">Single Task</button><button class=\"ds-seg__item\">Bulk Upload</button></div>",
+      "css": ".ds-seg { display: inline-flex; gap: 4px; padding: 4px; border-radius: 12px; background: rgba(255,255,255,0.05); font-family: Nunito, ui-sans-serif, system-ui, sans-serif; } .ds-seg__item { flex: 1; padding: 8px 14px; border: none; border-radius: 8px; background: transparent; color: #a3a3a3; font-size: 13px; font-weight: 700; cursor: pointer; transition: color .15s, background .15s; } .ds-seg__item--active { background: #262626; color: #fff; box-shadow: 0 1px 2px rgb(0 0 0 / 0.06); }"
+    },
+    {
+      "name": "Timeline Block",
+      "kind": "card",
+      "refersTo": "card",
+      "description": "The colored task block on the week grid. Carries its plan's category hue as full border + 8% tint + 3px inset left rail; time text + duration pill match the hue. The one sanctioned exception to the side-stripe ban.",
+      "html": "<div class=\"ds-block\"><span class=\"ds-block__eyebrow\">Marathon Training</span><div class=\"ds-block__head\"><span class=\"ds-block__title\">Long run</span><span class=\"ds-block__check\"></span></div><div class=\"ds-block__time\">6:00 AM – 7:00 AM<span class=\"ds-block__dur\">1h</span></div></div>",
+      "css": ".ds-block { --hue: #FF6900; position: relative; display: flex; flex-direction: column; gap: 6px; padding: 8px 8px 8px 12px; border: 1px solid var(--hue); border-radius: 8px; box-shadow: inset 3px 0 0 var(--hue); background: #fff; overflow: hidden; font-family: Nunito, ui-sans-serif, system-ui, sans-serif; } .ds-block::before { content: ''; position: absolute; inset: 0; background: var(--hue); opacity: 0.08; pointer-events: none; } .ds-block__eyebrow { position: relative; font-size: 8px; font-weight: 700; letter-spacing: 0.07em; text-transform: uppercase; color: #737373; } .ds-block__head { position: relative; display: flex; align-items: flex-start; justify-content: space-between; gap: 8px; } .ds-block__title { font-size: 12.5px; font-weight: 700; color: #171717; line-height: 1.2; } .ds-block__check { width: 18px; height: 18px; border: 1.5px solid #d4d4d4; border-radius: 5px; background: rgba(255,255,255,0.8); flex-shrink: 0; } .ds-block__time { position: relative; display: flex; align-items: center; gap: 6px; font-size: 11px; font-weight: 800; font-variant-numeric: tabular-nums; color: var(--hue); } .ds-block__dur { padding: 0 6px; font-size: 9px; line-height: 15px; border: 1px solid var(--hue); border-radius: 9999px; }"
+    },
+    {
+      "name": "Bottom Sheet (Mobile)",
+      "kind": "custom",
+      "refersTo": "card",
+      "description": "Mobile overlay that springs up from the bottom edge. 32px top radius, a grabbable drag handle, dark-black backdrop. On desktop this becomes a centered rounded-2xl modal.",
+      "html": "<div class=\"ds-sheet\"><div class=\"ds-sheet__handle\"></div><div class=\"ds-sheet__body\"><div class=\"ds-sheet__title\">Add task</div><div class=\"ds-sheet__row\">Plan with AI</div><div class=\"ds-sheet__row\">Bulk upload</div></div></div>",
+      "css": ".ds-sheet { width: 100%; max-width: 420px; border-top: 1px solid rgba(255,255,255,0.08); border-radius: 32px 32px 0 0; background: #171717; overflow: hidden; font-family: Nunito, ui-sans-serif, system-ui, sans-serif; } .ds-sheet__handle { width: 40px; height: 4px; margin: 12px auto 4px; border-radius: 9999px; background: rgba(255,255,255,0.2); } .ds-sheet__body { padding: 8px 20px 24px; } .ds-sheet__title { font-size: 15px; font-weight: 700; color: #fff; padding: 8px 0 12px; } .ds-sheet__row { padding: 14px 0; border-top: 1px solid rgba(255,255,255,0.07); color: #e5e5e5; font-size: 14px; font-weight: 600; }"
+    }
+  ],
+  "narrative": {
+    "northStar": "Mission Control",
+    "overview": "PlanR is a dark-first command surface for people running their own execution OS. Every screen is an instrument panel: the day's tasks, the week's bars, the streak, the trend — all live readouts, with the next action never more than one tap away. The system is calm under its energy. Motivation is real and earned, not manufactured with confetti. Color is a signal, not decoration. The interface is native-fast: it renders instantly from local data, responds to every press, and never makes you wait.",
+    "keyCharacteristics": [
+      "Dark-mode-first; both themes are first-class, never an afterthought.",
+      "One confident accent (Momentum Green) on a disciplined neutral base.",
+      "Near-flat, border-defined surfaces — depth from hairlines and tonal layering, not shadow.",
+      "Single typeface (Nunito) carrying the whole hierarchy through weight and scale.",
+      "Motion is feedback, not choreography: fast, purposeful, reduced-motion-safe."
+    ],
+    "rules": [
+      { "name": "The One Signal Rule", "body": "Momentum Green means progress: done, success, streak, the next-step CTA. It never appears as decoration. If green isn't reporting forward motion, it shouldn't be on screen.", "section": "colors" },
+      { "name": "The Ink-First Rule", "body": "The default action button is ink (#0A0A0A), not green. Green is spent on the affirmative action (Create, Complete, Log). Two green buttons competing on one screen is a bug.", "section": "colors" },
+      { "name": "The One Big Number Rule", "body": "Display size is for a single headline metric per card. If two numbers fight for Display weight, neither is the headline; demote one to Title.", "section": "typography" },
+      { "name": "The Border-Before-Shadow Rule", "body": "A resting surface is defined by its border and tone, not a shadow. Reach for shadow only when an element genuinely floats above the page (nav, sheet, popover). Stacked shadows on flat cards are forbidden.", "section": "elevation" },
+      { "name": "The Native-Register Rule", "body": "Motion matches the surface. Mobile overlays use springs (grabbed-and-released); desktop overlays use short eased curves (≤200ms, [0.22,1,0.36,1]). Page-level transitions are feedback, never choreography. Every motion has a prefers-reduced-motion fallback.", "section": "elevation" }
+    ],
+    "dos": [
+      "Do keep Momentum Green (#00A63E) for progress only — CTAs, completion, streaks, the next action. Let its rarity make it mean something.",
+      "Do make the default action button ink (#0A0A0A), spending green only on the affirmative action on a screen.",
+      "Do define resting surfaces with 1px hairline borders and tonal layering; reach for shadow only when an element truly floats.",
+      "Do carry the whole type hierarchy with Nunito weight + scale; one Display number per card.",
+      "Do give every button active:scale-[0.98] and pair it with haptics on mobile; keep tap targets ≥44px.",
+      "Do match motion to the surface: springs for mobile sheets, short eased curves for desktop modals.",
+      "Do drive every progress instrument (bars, ring, trend) off the one status ramp (green ≥70 / amber 40–69 / rose <40) so they read consistently at a glance.",
+      "Do ship every state in both light and dark, and give every animation a prefers-reduced-motion fallback."
+    ],
+    "donts": [
+      "Don't build the gamified/childish habit-app look: no mascots, confetti spam, or badge-spam.",
+      "Don't drift toward a cluttered enterprise PM tool: no Jira-dense gray panel overload.",
+      "Don't use the generic AI-SaaS template: no purple gradients, gradient text, tracked uppercase eyebrows on every section, or hero-metric clichés.",
+      "Don't ship a sterile corporate calendar grid with zero warmth.",
+      "Don't use a border-left/border-right greater than 1px as a colored accent stripe on cards or rows.",
+      "Don't nest a bordered card inside another bordered card; use a tonal inner panel.",
+      "Don't stack drop shadows on flat resting cards, or use ALL-CAPS sentences.",
+      "Don't spend a category accent (Cardio Orange, Focus Blue, etc.) on UI chrome or a CTA; they color-code plans only, and the affirmative action is always Momentum Green.",
+      "Don't linear-slide a mobile sheet or skip the drag handle — it should spring, and it must look grabbable."
+    ]
+  }
+}

@@ -14,6 +14,7 @@ import type { StrategyAsset } from "@/lib/useScheduleDB";
 import StrategyViewer from "./StrategyViewer";
 import StrategyUpload from "./StrategyUpload";
 import { haptic } from "@/lib/haptics";
+import EmptyState from "@/components/ui/EmptyState";
 
 interface StrategySpaceProps {
   strategies: StrategyAsset[];
@@ -74,32 +75,12 @@ export default function StrategySpace({ strategies, uploadOpen, onUploadOpen, on
 
         {/* Empty state */}
         {strategies.length === 0 && (
-          <motion.div
-            initial={{ opacity: 0, y: 8 }}
-            animate={{ opacity: 1, y: 0 }}
-            className="flex flex-col items-center gap-4 pt-16 text-center"
-          >
-            <div className="flex h-20 w-20 items-center justify-center rounded-[28px] bg-neutral-100 dark:bg-white/[0.06]">
-              <IconBrain size={36} strokeWidth={1.4} className="text-neutral-400 dark:text-neutral-500" />
-            </div>
-            <div>
-              <p className="text-[16px] font-semibold text-neutral-700 dark:text-neutral-200">
-                Your strategies live here
-              </p>
-              <p className="mt-1.5 text-[14px] leading-relaxed text-neutral-400 max-w-[260px]">
-                Upload HTML frameworks, PDF playbooks, and visual systems. Experience them as immersive reading sessions.
-              </p>
-            </div>
-            <motion.button
-              type="button"
-              whileTap={{ scale: 0.96 }}
-              onClick={() => { haptic("medium"); onUploadOpen(); }}
-              className="mt-2 inline-flex items-center gap-2 rounded-full bg-neutral-900 px-5 py-2.5 text-[14px] font-semibold text-white dark:bg-white dark:text-neutral-950"
-            >
-              <IconPlus size={16} strokeWidth={2.5} />
-              Upload First Strategy
-            </motion.button>
-          </motion.div>
+          <EmptyState
+            icon={IconBrain}
+            title="Your strategies live here"
+            description="Upload HTML frameworks, PDF playbooks, and visual systems. Experience them as immersive reading sessions."
+            action={{ label: "Upload First Strategy", onClick: onUploadOpen }}
+          />
         )}
 
         {/* Strategy list */}

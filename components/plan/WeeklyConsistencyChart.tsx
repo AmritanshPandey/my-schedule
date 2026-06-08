@@ -2,6 +2,7 @@
 
 import { motion } from "framer-motion";
 import type { DayStats } from "@/lib/consistency/calculateDailyStats";
+import ProgressBar from "@/components/ui/ProgressBar";
 
 function barColor(pct: number): string {
   if (pct >= 80) return "bg-emerald-500";
@@ -42,20 +43,12 @@ export default function WeeklyConsistencyChart({ dayStats }: WeeklyConsistencyCh
           </span>
 
           {/* Bar track */}
-          <div className="relative flex-1 h-2 rounded-full bg-neutral-100 dark:bg-white/[0.07] overflow-hidden">
-            {!day.isFuture && day.scheduled > 0 && (
-              <motion.div
-                className={`absolute inset-y-0 left-0 rounded-full ${barColor(day.pct)}`}
-                initial={{ width: "0%" }}
-                animate={{ width: `${day.pct}%` }}
-                transition={{
-                  duration: 0.65,
-                  ease: [0.25, 0.46, 0.45, 0.94],
-                  delay: 0.08 + i * 0.045,
-                }}
-              />
-            )}
-          </div>
+          <ProgressBar
+            pct={!day.isFuture && day.scheduled > 0 ? day.pct : 0}
+            height={8}
+            fillClassName={barColor(day.pct)}
+            className="min-w-0 flex-1"
+          />
 
           {/* Percentage */}
           <span

@@ -18,7 +18,7 @@ export type AIActionResult =
 export const OLLAMA_URL_KEY = "planr_ollama_url";
 export const OLLAMA_MODEL_KEY = "planr_ollama_model";
 export const DEFAULT_OLLAMA_URL = "http://localhost:11434";
-export const DEFAULT_OLLAMA_MODEL = "gemma3:4b";
+export const DEFAULT_OLLAMA_MODEL = "gemma4:e2b";
 
 const VALID_COLORS = ["blue", "emerald", "violet", "pink", "amber", "cyan"] as const;
 const VALID_RITUAL_COLORS = ["rose", "sky", "violet", "amber", "emerald", "fuchsia", "orange", "cyan", "indigo", "teal"] as const;
@@ -361,11 +361,81 @@ export function parseAIAction(text: string): AIActionResult | null {
   }
 }
 
+function normalizeOllamaBaseUrl(baseUrl: string) {
+  return baseUrl.trim().replace(/\/+$/, "");
+}
+
+function parseModelArray(raw: unknown): string[] {
+  if (!Array.isArray(raw)) return [];
+  return raw
+    .map((item) => {
+      if (typeof item === "string") return item;
+      if (item && typeof item === "object" && typeof (item as Record<string, unknown>).name === "string") {
+        return (item as Record<string, unknown>).name;
+      }
+      return null;
+    })
+    .filter((name): name is string => typeof name === "string");
+}
+
+function parseOllamaModels(data: unknown): string[] {
+  if (Array.isArray(data)) {
+    return parseModelArray(data);
+  }
+
+  if (!data || typeof data !== "object") return [];
+  const payload = data as Record<string, unknown>;
+
+  if (Array.isArray(payload.models)) {
+    return parseModelArray(payload.models);
+  }
+
+  if (Array.isArray(payload.tags)) {
+    return payload.tags.filter((tag): tag is string => typeof tag === "string");
+  }
+
+  return [];
+}
+
+function makeOllamaCORSMessage(endpoint: string): string {
+  return `Ollama returned 403 Forbidden for ${endpoint}. This usually means the browser origin is blocked by Ollama CORS. Restart Ollama with: ollama serve --cors "*" or ollama serve --cors "https://your-firebase-app.web.app".`;
+}
+
 export async function checkOllamaConnection(baseUrl: string): Promise<string[]> {
-  const response = await fetch(`${baseUrl}/api/tags`, { cache: "no-store" });
-  if (!response.ok) throw new Error(`HTTP ${response.status}`);
-  const data = await response.json() as { models?: { name: string }[] };
-  return (data.models ?? []).map((m) => m.name);
+  const normalizedBaseUrl = normalizeOllamaBaseUrl(baseUrl);
+  const endpoints = ["/api/models", "/api/tags"];
+  let serverReachable = false;
+
+  for (const endpoint of endpoints) {
+    try {
+      const response = await fetch(`${normalizedBaseUrl}${endpoint}`, {
+        cache: "no-store",
+        mode: "cors",
+        headers: { Accept: "application/json" },
+      });
+      serverReachable = true;
+      if (!response.ok) {
+        if (response.status === 403) {
+          throw new Error(makeOllamaCORSMessage(endpoint));
+        }
+        continue;
+      }
+      const data = await response.json();
+      const models = parseOllamaModels(data);
+      if (models.length > 0) return models;
+    } catch (err) {
+      if (err instanceof TypeError) {
+        throw new Error("Network/CORS issue connecting to Ollama. Ensure the browser can reach the server and Ollama allows requests from this origin.");
+      }
+      throw err;
+    }
+  }
+
+  if (serverReachable) {
+    throw new Error("Ollama is reachable, but no models were found. Verify the selected model and installed Ollama models.");
+  }
+
+  throw new Error("Ollama not reachable. Make sure ollama serve is running and the URL is correct.");
 }
 
 /**
@@ -383,12 +453,17 @@ export async function checkModelStatus(
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ name: model }),
       cache: "no-store",
+      mode: "cors",
     });
     if (res.ok) return "connected";
+    if (res.status === 403) {
+      throw new Error(makeOllamaCORSMessage("/api/show"));
+    }
     if (res.status === 404) return "no-model";
     // Any other non-ok response from a live server still means server is up
     return "no-model";
-  } catch {
+  } catch (err) {
+    if (err instanceof Error && err.message.includes("CORS")) throw err;
     return "offline";
   }
 }

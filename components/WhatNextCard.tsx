@@ -30,7 +30,7 @@ export default function WhatNextCard({
       animate={{ opacity: 1, y: 0, scale: 1 }}
       exit={{ opacity: 0, y: -6, scale: 0.97 }}
       transition={{ duration: 0.22, ease: [0.22, 1, 0.36, 1] }}
-      className="mb-3 overflow-hidden rounded-2xl border border-emerald-200 bg-gradient-to-br from-emerald-50 to-white shadow-[0_0_18px_rgba(16,185,129,0.12)] dark:border-emerald-500/20 dark:from-emerald-500/[0.08] dark:to-transparent dark:shadow-[0_0_18px_rgba(16,185,129,0.08)]"
+      className="mb-3 overflow-hidden rounded-2xl border border-emerald-200 bg-gradient-to-br from-emerald-50 to-white dark:border-emerald-500/20 dark:from-emerald-500/[0.08] dark:to-transparent"
     >
       {/* Header row */}
       <div className="flex items-center gap-2 border-b border-emerald-100 px-4 py-2.5 dark:border-emerald-500/[0.12]">
@@ -40,7 +40,7 @@ export default function WhatNextCard({
           className="shrink-0 text-emerald-500"
         />
         <p className="text-[10.5px] font-black uppercase tracking-[0.1em] text-emerald-600 dark:text-emerald-400">
-          Next Up
+          Current Task
         </p>
       </div>
 

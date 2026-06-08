@@ -2,8 +2,9 @@
 
 import { memo } from "react";
 import { AnimatePresence, motion } from "framer-motion";
-import { IconCheck, IconClipboardList } from "@tabler/icons-react";
+import { IconCheck, IconChecklist } from "@tabler/icons-react";
 import { Eyebrow, PageTitle } from "@/components/ui/Typography";
+import ProgressBar from "@/components/ui/ProgressBar";
 import { ICON } from "@/components/ui/Icon";
 
 type ProgressMeta =
@@ -100,7 +101,7 @@ export function CtaActionButton({
     <button
       type="button"
       onClick={onClick}
-      className="inline-flex items-center gap-2 rounded-full border-[1.5px] border-neutral-200 bg-white px-4 min-h-[44px] py-[10px] text-[13px] font-bold tracking-[-0.15px] text-neutral-700 transition-colors hover:bg-neutral-100 active:scale-[0.97] dark:border-white/10 dark:bg-neutral-900 dark:text-neutral-400 dark:hover:bg-white/[0.07]"
+      className="inline-flex items-center gap-2 rounded-full border-[1.5px] border-neutral-200 bg-white px-4 min-h-[44px] py-[10px] text-[13px] font-bold text-neutral-700 transition-colors hover:bg-neutral-100 active:scale-[0.97] dark:border-white/15 dark:bg-neutral-900 dark:text-neutral-300 dark:hover:bg-neutral-800"
     >
       {icon}
       <span>{label}</span>
@@ -125,8 +126,8 @@ function MainTitleSectionInner({
 
   return (
     <div className={className}>
-      <div className="flex items-center justify-between gap-3">
-        <div className="min-w-0">
+      <div className="flex flex-row items-center justify-between gap-3">
+        <div className="min-w-0 flex-1">
           {label && <Eyebrow className="mb-2">{label}</Eyebrow>}
           <div className="flex items-baseline gap-[9px]">
             <PageTitle
@@ -144,7 +145,7 @@ function MainTitleSectionInner({
 
             {counter && (
               <span className="inline-flex shrink-0 items-center gap-1 tabular-nums text-[13px] font-bold leading-none tracking-[-0.1px] text-neutral-400 dark:text-neutral-500">
-                <IconClipboardList {...ICON.badge} strokeWidth={1.8} />
+                <IconChecklist {...ICON.badge} strokeWidth={1.8} />
                 {counter.done}/{counter.total}
               </span>
             )}
@@ -159,14 +160,13 @@ function MainTitleSectionInner({
       </div>
 
       {progressBar !== undefined && (
-        <div className="mt-[10px] h-[4px] w-full overflow-hidden rounded-[2px] bg-neutral-100 dark:bg-white/[0.08]">
-          <motion.div
-            className="h-full rounded-[2px] bg-green-500"
-            initial={false}
-            animate={{ width: `${progressBar.pct}%` }}
-            transition={{ duration: 0.45, ease: [0.34, 1.1, 0.64, 1] }}
-          />
-        </div>
+        <ProgressBar
+          pct={progressBar.pct}
+          height={4}
+          rounded="rounded-[2px]"
+          fillClassName="bg-green-500"
+          className="mt-[10px]"
+        />
       )}
     </div>
   );

@@ -3,6 +3,7 @@
 import { motion } from "framer-motion";
 import { IconTrendingUp, IconTrendingDown } from "@tabler/icons-react";
 import type { WeekStats } from "@/lib/consistency/calculateWeeklyStats";
+import ProgressBar from "@/components/ui/ProgressBar";
 
 // ── Color helpers ─────────────────────────────────────────────────────────────
 
@@ -59,14 +60,12 @@ export default function WeeklyHistory({ weekStats }: WeeklyHistoryProps) {
             </p>
 
             {/* Mini progress bar */}
-            <div className="mt-2.5 h-1.5 rounded-full bg-neutral-200 dark:bg-white/[0.08] overflow-hidden">
-              <motion.div
-                className={`h-full rounded-full ${barColor(week.pct)}`}
-                initial={{ width: "0%" }}
-                animate={{ width: week.scheduled > 0 ? `${week.pct}%` : "0%" }}
-                transition={{ duration: 0.6, ease: "easeOut", delay: 0.15 + i * 0.05 }}
-              />
-            </div>
+            <ProgressBar
+              pct={week.scheduled > 0 ? week.pct : 0}
+              height={6}
+              fillClassName={barColor(week.pct)}
+              className="mt-2.5"
+            />
 
             {/* Trend */}
             {week.trendVsPrev !== null && (

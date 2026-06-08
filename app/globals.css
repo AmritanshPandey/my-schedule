@@ -57,10 +57,84 @@ textarea {
   font-size: max(16px, 1em) !important;
 }
 
+select,
+option {
+  background-color: var(--color-background);
+  color: var(--color-foreground);
+}
+
+.dark select,
+.dark option {
+  background-color: #111827;
+  color: #f8fafc;
+}
+
 @theme inline {
   --color-background: var(--color-neutral-50);
   --color-foreground: var(--color-neutral-900);
   --font-sans: var(--font-nunito), ui-sans-serif, system-ui, sans-serif;
+}
+
+/* ── PlanR design tokens ─────────────────────────────────────────────────────
+   Single source of truth ported from the design handoff (colors_and_type.css).
+   The brand green ramp below overrides Tailwind's default `green` AND `emerald`
+   so every existing `green-*` / `emerald-*` utility (and its /opacity variants)
+   resolves to the one confident brand green — #00A63E. Tailwind's `neutral`
+   ramp already matches the spec neutrals (fg-3 = neutral-500 = #737373, etc.),
+   so neutrals are intentionally left untouched. */
+@theme {
+  /* Brand green — primary accent, success, progress */
+  --color-green-50:  #F0FDF4;
+  --color-green-100: #DCFCE7;
+  --color-green-200: #B9F8CF;
+  --color-green-300: #74E5A0;
+  --color-green-400: #2FD46E;  /* dark-mode accent (lighter than 500) */
+  --color-green-500: #00C950;  /* bright streak dots */
+  --color-green-600: #00A63E;  /* primary brand green — CTAs, success */
+  --color-green-700: #008236;  /* pressed / darker */
+  --color-green-800: #096B30;
+  --color-green-900: #0C4F28;
+  --color-green-950: #052E16;
+
+  /* Emerald mirrors brand green — the app mixes both names; unify to one green */
+  --color-emerald-50:  #F0FDF4;
+  --color-emerald-100: #DCFCE7;
+  --color-emerald-200: #B9F8CF;
+  --color-emerald-300: #74E5A0;
+  --color-emerald-400: #2FD46E;
+  --color-emerald-500: #00C950;
+  --color-emerald-600: #00A63E;
+  --color-emerald-700: #008236;
+  --color-emerald-800: #096B30;
+  --color-emerald-900: #0C4F28;
+  --color-emerald-950: #052E16;
+
+  /* Category accents — timeline blocks & plan icons (utilities: bg/text/border-cat-*) */
+  --color-cat-cardio: #FF6900;
+  --color-cat-skin:   #5EA500;
+  --color-cat-eng:    #155DFC;
+  --color-cat-design: #E17100;
+  --color-cat-pink:   #EC003F;
+  --color-cat-purple: #AD46FF;
+  --color-cat-cyan:   #00A6F4;
+
+  /* Semantic status (utilities: bg/text/border-status-*) */
+  --color-status-danger:  #FB2C36;  /* missed / need-focus / destructive */
+  --color-status-danger2: #EC003F;  /* hot accent — "now" line */
+  --color-status-warn:    #E17100;  /* at-risk amber */
+  --color-status-warn2:   #FAB623;  /* partial / amber dot */
+  --color-status-info:    #155DFC;  /* blue category / links */
+
+  /* Radii */
+  --radius-pr-sm: 6px;
+  --radius-pr-md: 12px;
+  --radius-pr-lg: 16px;
+  --radius-pr-xl: 24px;
+
+  /* Elevation — cards are border-defined & near-flat */
+  --shadow-pr-card: 0 1px 2px rgb(0 0 0 / 0.04);
+  --shadow-pr-nav:  0 0 12px rgb(0 0 0 / 0.10);
+  --shadow-pr-pop:  0 8px 24px rgb(0 0 0 / 0.12);
 }
 
 
@@ -101,6 +175,11 @@ textarea {
   to   { transform: rotate(360deg); }
 }
 
+@keyframes rainbow-spin {
+  from { transform: rotate(0deg); }
+  to   { transform: rotate(360deg); }
+}
+
 .ai-fab-rainbow-ring {
   background: conic-gradient(
     from 0deg,
@@ -108,6 +187,24 @@ textarea {
   );
   animation: ai-fab-spin 5s linear infinite;
   border-radius: 9999px;
+}
+
+.rainbow-spinner {
+  width: 100%;
+  height: 100%;
+  border-radius: 9999px;
+  background: conic-gradient(
+    from 0deg at 50% 50%,
+    #ff6b6b 0deg,
+    #feca57 45deg,
+    #48dbfb 90deg,
+    #1dd1a1 135deg,
+    #5f27cd 180deg,
+    #ff9ff3 225deg,
+    #54a0ff 270deg,
+    #ff6b6b 360deg
+  );
+  animation: rainbow-spin 2s linear infinite;
 }
 
 /* ── AI promo announcement bar ───────────────────────────────────────────────

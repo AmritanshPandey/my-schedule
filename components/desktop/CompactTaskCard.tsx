@@ -8,11 +8,12 @@ import { resolveTaskState } from "@/lib/taskCompletion";
 interface CompactTaskCardProps {
   task: Task;
   plan: Plan | null;
+  readOnly?: boolean;
   onToggleComplete: (taskId: string, allSubtaskIds: string[]) => void;
   onEdit: (task: Task) => void;
 }
 
-export function CompactTaskCard({ task, plan, onToggleComplete, onEdit }: CompactTaskCardProps) {
+export function CompactTaskCard({ task, plan, readOnly = false, onToggleComplete, onEdit }: CompactTaskCardProps) {
   const allSubtaskIds = task.subtasks?.map((s) => s.id) ?? [];
   const taskState = resolveTaskState(task, task.subtasks?.length ?? 0);
   const done = taskState === "completed";
@@ -59,8 +60,8 @@ export function CompactTaskCard({ task, plan, onToggleComplete, onEdit }: Compac
       {/* Checkbox */}
       <button
         type="button"
-        onClick={(e) => { e.stopPropagation(); onToggleComplete(task.id, allSubtaskIds); }}
-        className={`shrink-0 flex h-[18px] w-[18px] items-center justify-center rounded-[5px] border-2 transition-colors ${
+        onClick={(e) => { e.stopPropagation(); if (!readOnly) onToggleComplete(task.id, allSubtaskIds); }}
+        className={`shrink-0 flex h-[18px] w-[18px] items-center justify-center rounded-[5px] border-2 transition-colors ${readOnly ? "cursor-default" : ""} ${
           done || partial
             ? "border-transparent bg-green-500"
             : "border-neutral-300 bg-transparent dark:border-neutral-500"

@@ -9,6 +9,7 @@ import {
   IconClipboardData,
   IconCalendarPlus,
   IconClipboardPlus,
+  IconFileImport,
   IconLayoutDashboard,
   IconPlus,
   IconRepeat,
@@ -20,6 +21,7 @@ interface BottomNavProps {
   onCreateTask: () => void;
   onCreatePlan: () => void;
   onCreateRitual: () => void;
+  onBulkImport?: () => void;
 }
 
 export default function BottomNav({
@@ -28,6 +30,7 @@ export default function BottomNav({
   onCreateTask,
   onCreatePlan,
   onCreateRitual,
+  onBulkImport,
 }: BottomNavProps) {
   const [expanded, setExpanded] = useState(false);
   const navRef = useRef<HTMLDivElement>(null);
@@ -53,7 +56,7 @@ export default function BottomNav({
   }
 
   const tabClass = (active: boolean) => `
-    flex h-[56px] w-[52px] flex-col items-center justify-center gap-[2px]
+    flex h-[56px] w-[64px] flex-col items-center justify-center gap-[2px]
     rounded-full transition-all duration-200
     ${active
       ? "bg-black/[0.05] text-neutral-950 dark:bg-white/[0.10] dark:text-white"
@@ -131,6 +134,21 @@ export default function BottomNav({
                     </div>
                     <span className="text-[11px] font-semibold text-white/75">Habit</span>
                   </motion.button>
+
+                  {/* BULK IMPORT */}
+                  {onBulkImport && (
+                    <motion.button
+                      whileTap={{ scale: 0.95 }}
+                      onClick={() => { haptic("medium"); setExpanded(false); onBulkImport(); }}
+                      className="flex flex-col items-center gap-1.5"
+                      aria-label="Paste schedule"
+                    >
+                      <div className="flex h-[52px] w-[60px] items-center justify-center rounded-[18px] bg-white/[0.09]">
+                        <IconFileImport size={24} strokeWidth={2} className="text-white" />
+                      </div>
+                      <span className="text-[11px] font-semibold text-white/75">Import</span>
+                    </motion.button>
+                  )}
                 </div>
               </motion.div>
             )}
