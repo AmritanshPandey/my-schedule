@@ -3,7 +3,6 @@ import { Nunito } from "next/font/google";
 import "./globals.css";
 import ServiceWorkerRegistration from "@/components/ServiceWorkerRegistration";
 import PWAInstallPrompt from "@/components/PWAInstallPrompt";
-import ViewportStability from "@/components/ViewportStability";
 import LandscapeBlocker from "@/components/LandscapeBlocker";
 import { AuthProvider } from "@/contexts/AuthProvider";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
@@ -34,9 +33,6 @@ export const viewport: Viewport = {
   ],
   width: "device-width",
   initialScale: 1,
-  minimumScale: 1,
-  maximumScale: 1,
-  userScalable: false,
   viewportFit: "cover",
   interactiveWidget: "resizes-content",
 };
@@ -68,7 +64,6 @@ try{
       </head>
       <body className="min-h-full flex flex-col bg-neutral-50 text-neutral-900 dark:bg-neutral-950 dark:text-white font-sans" style={{ paddingTop: "env(safe-area-inset-top)", paddingLeft: "env(safe-area-inset-left)", paddingRight: "env(safe-area-inset-right)" }}>
         <LandscapeBlocker />
-        <ViewportStability />
         <ServiceWorkerRegistration />
         <PWAInstallPrompt />
         {/* AI teaser sits above everything — mobile only, dismissable (hidden while AI is disabled) */}

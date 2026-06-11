@@ -9,16 +9,13 @@ import {
   useSensor,
   useSensors,
 } from "@dnd-kit/core";
-import { arrayMove, SortableContext, useSortable, verticalListSortingStrategy } from "@dnd-kit/sortable";
-import { CSS } from "@dnd-kit/utilities";
+import { arrayMove, SortableContext, verticalListSortingStrategy } from "@dnd-kit/sortable";
 import {
   IconArrowLeft,
   IconCheck,
   IconCopy,
-  IconGripVertical,
   IconPlus,
   IconSparkles,
-  IconTrash,
   IconX,
 } from "@tabler/icons-react";
 import { streamGenerateSubtasks, parseGeneratedSubtasks } from "@/lib/aiActions";
@@ -30,6 +27,7 @@ import { getDeviceCapabilities } from "@/lib/performance/detectLowEndDevice";
 import BottomSheet from "@/components/ui/BottomSheet";
 import SheetHeader from "@/components/ui/SheetHeader";
 import Button from "@/components/ui/Button";
+import IconButton from "@/components/ui/IconButton";
 import Input from "@/components/ui/Input";
 import TimeSlotPicker from "@/components/TimeSlotPicker";
 import type { DayKey, Plan, Task } from "@/lib/useScheduleDB";
@@ -39,9 +37,10 @@ import {
   uid,
   displayToInputTime,
   inputToDisplayTime,
-  createSubtask,
 } from "@/lib/taskMutations";
 import { PlanSelector } from "./PlanSelector";
+import SubtaskDraftRow, { type SubtaskDraft } from "./SubtaskDraftRow";
+import { validateTaskTime } from "@/lib/scheduleRules";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -71,21 +70,14 @@ export interface TaskSheetProps {
   onDuplicate?: (data: TaskSaveData) => void;
 }
 
-// ── Local subtask draft ───────────────────────────────────────────────────────
-
-interface SubtaskDraft {
-  id: string;
-  title: string;
-  info?: string;
-  duration?: string;
-}
-
 function entryToSubtaskDraft(e: ScheduleEntry): SubtaskDraft {
   return {
     id: e.id,
     title: e.task,
     info: e.info ?? "",
     duration: e.duration ?? "",
+    deadline: e.deadline,
+    deadlineScope: e.deadlineScope,
   };
 }
 
@@ -95,6 +87,8 @@ function subtaskDraftToEntry(d: SubtaskDraft): ScheduleEntry {
     task: d.title.trim(),
     info: (d.info ?? "").trim() || undefined,
     duration: (d.duration ?? "").trim() || undefined,
+    deadline: d.deadline || undefined,
+    deadlineScope: d.deadline ? d.deadlineScope ?? "day" : undefined,
   };
 }
 
@@ -105,68 +99,6 @@ const SECTION_LABEL =
 
 function isValidInputTime(value: string): boolean {
   return /^([01]\d|2[0-3]):[0-5]\d$/.test(value);
-}
-
-// ── Subtask row ───────────────────────────────────────────────────────────────
-
-interface SubtaskRowProps {
-  draft: SubtaskDraft;
-  onChange: (updated: SubtaskDraft) => void;
-  onDelete: () => void;
-  autoFocus?: boolean;
-}
-
-function SortableSubtaskRow({ draft, onChange, onDelete, autoFocus }: SubtaskRowProps) {
-  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: draft.id });
-
-  return (
-    <div
-      ref={setNodeRef}
-      style={{
-        transform: CSS.Transform.toString(transform),
-        transition,
-        opacity: isDragging ? 0.7 : 1,
-      }}
-      className="flex items-center gap-2 group"
-    >
-      <button
-        type="button"
-        {...attributes}
-        {...listeners}
-        className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl text-neutral-300 transition-colors hover:text-neutral-500 dark:text-white/20 dark:hover:text-white"
-      >
-        <IconGripVertical size={14} />
-      </button>
-      <div className="min-w-0 flex-1 space-y-1">
-        <input
-          autoFocus={autoFocus}
-          value={draft.title ?? ""}
-          onChange={(e) => onChange({ ...draft, title: e.target.value })}
-          placeholder="Name"
-          className="h-10 w-full rounded-xl border border-neutral-200 bg-neutral-50 px-3 text-[14px] font-medium text-neutral-900 outline-none placeholder:text-neutral-400 transition-colors focus:border-neutral-300 focus:bg-white dark:border-white/10 dark:bg-white/[0.04] dark:text-white dark:placeholder:text-neutral-500 dark:focus:border-white/20 dark:focus:bg-white/[0.07]"
-        />
-        <input
-          value={draft.info ?? ""}
-          onChange={(e) => onChange({ ...draft, info: e.target.value })}
-          placeholder="Info"
-          className="h-8 w-full rounded-xl border border-neutral-200 bg-neutral-50 px-3 text-[13px] text-neutral-500 outline-none placeholder:text-neutral-400 transition-colors focus:border-neutral-300 focus:bg-white dark:border-white/10 dark:bg-white/[0.04] dark:text-neutral-400 dark:placeholder:text-neutral-500 dark:focus:border-white/20 dark:focus:bg-white/[0.07]"
-        />
-      </div>
-      <input
-        value={draft.duration ?? ""}
-        onChange={(e) => onChange({ ...draft, duration: e.target.value })}
-        placeholder="5min"
-        className="h-10 w-[72px] shrink-0 rounded-xl border border-neutral-200 bg-neutral-50 px-3 text-center text-[13px] font-semibold text-sky-700 outline-none placeholder:text-neutral-400 transition-colors focus:border-neutral-300 focus:bg-white dark:border-white/10 dark:bg-white/[0.04] dark:text-sky-300 dark:placeholder:text-neutral-500 dark:focus:border-white/20 dark:focus:bg-white/[0.07]"
-      />
-      <button
-        type="button"
-        onClick={onDelete}
-        className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl text-neutral-300 transition-colors hover:text-rose-500 dark:text-white/20 dark:hover:text-rose-400"
-      >
-        <IconTrash size={15} />
-      </button>
-    </div>
-  );
 }
 
 // ── Main sheet ────────────────────────────────────────────────────────────────
@@ -309,11 +241,21 @@ export function TaskSheet({
 
   // ── Save ───────────────────────────────────────────────────────────────────
   const selectedPlan = plans.find((p) => p.id === planId) ?? null;
+  const timeError =
+    isValidInputTime(startTime) && isValidInputTime(endTime)
+      ? validateTaskTime({
+          title: title.trim() || "Task",
+          day: activeDay,
+          startTime,
+          endTime,
+        })
+      : null;
   const canSave =
     !!selectedPlan &&
     title.trim().length > 0 &&
     isValidInputTime(startTime) &&
     isValidInputTime(endTime) &&
+    !timeError &&
     repeatDays.length > 0;
 
   function handleSave() {
@@ -400,13 +342,16 @@ export function TaskSheet({
           >
             {/* Header */}
             <div className="mb-5 flex items-center gap-3">
-              <button
-                type="button"
+              <IconButton
+                label="Back"
+                variant="soft"
+                size="md"
+                radius="full"
                 onClick={() => setDuplicateStep("idle")}
-                className="flex h-9 w-9 items-center justify-center rounded-full bg-neutral-100 text-neutral-600 dark:bg-white/[0.07] dark:text-neutral-300"
+                className="text-neutral-600 dark:text-neutral-300"
               >
                 <IconArrowLeft size={18} strokeWidth={2} />
-              </button>
+              </IconButton>
               <p className="text-[18px] font-bold text-neutral-900 dark:text-white">Duplicate Task</p>
             </div>
 
@@ -521,6 +466,11 @@ export function TaskSheet({
                 repeatDays={repeatDays}
                 onRepeatDaysChange={setRepeatDays}
               />
+              {timeError && (
+                <p className="-mt-3 text-[12px] font-semibold text-rose-500 dark:text-rose-400">
+                  {timeError.message}
+                </p>
+              )}
 
               {/* Subtasks / Session Steps */}
               {selectedPlan && (
@@ -552,9 +502,10 @@ export function TaskSheet({
                           transition={{ duration: 0.18, ease: "easeInOut" }}
                           style={{ overflow: "hidden" }}
                         >
-                          <SortableSubtaskRow
+                          <SubtaskDraftRow
                             draft={s}
                             autoFocus={focusNewSubtask && i === subtasks.length - 1}
+                            showDeadline={taskType === "task"}
                             onChange={(updated) => updateSubtask(s.id, updated)}
                             onDelete={() => removeSubtask(s.id)}
                           />

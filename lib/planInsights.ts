@@ -21,10 +21,12 @@ export type PlanDayState = "incomplete" | "partial" | "complete";
  */
 export function resolvePlanDayState(
   todayTasks: Task[],
-  totalSubtasks: number
+  fallbackSubtaskCount: number
 ): PlanDayState {
   if (todayTasks.length === 0) return "incomplete";
-  const done = todayTasks.filter((t) => isTaskCompleted(t, totalSubtasks)).length;
+  const done = todayTasks.filter((task) =>
+    isTaskCompleted(task, task.subtasks?.length ?? fallbackSubtaskCount)
+  ).length;
   if (done === 0) return "incomplete";
   if (done >= todayTasks.length) return "complete";
   return "partial";

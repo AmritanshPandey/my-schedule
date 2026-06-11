@@ -21,6 +21,7 @@ export function parseTimeToMinutes(value: string): number | null {
   if (twelveHour) {
     let h = Number(twelveHour[1]);
     const m = Number(twelveHour[2]);
+    if (h < 1 || h > 12 || m > 59) return null;
     const suf = twelveHour[3].toUpperCase();
     if (suf === "PM" && h !== 12) h += 12;
     if (suf === "AM" && h === 12) h = 0;
@@ -28,9 +29,22 @@ export function parseTimeToMinutes(value: string): number | null {
   }
 
   const twentyFour = raw.match(/^(\d{1,2}):(\d{2})$/);
-  if (twentyFour) return Number(twentyFour[1]) * 60 + Number(twentyFour[2]);
+  if (twentyFour) {
+    const h = Number(twentyFour[1]);
+    const m = Number(twentyFour[2]);
+    if (h > 23 || m > 59) return null;
+    return h * 60 + m;
+  }
 
   return null;
+}
+
+/**
+ * Convert clock minutes into the app's 4 AM-to-4 AM schedule-day space.
+ * Times after midnight but before the boundary belong at the end of the day.
+ */
+export function toScheduleDayMinutes(minutes: number, dayStartMinutes = 4 * 60): number {
+  return minutes < dayStartMinutes ? minutes + 24 * 60 : minutes;
 }
 
 // ── Conversion ────────────────────────────────────────────────────────────────

@@ -49,7 +49,7 @@ import type {
 import { DAYS } from "@/lib/useScheduleDB";
 import { timelineCardStyles } from "@/lib/colorSystem";
 import { formatDuration } from "@/lib/timeUtils";
-import { formatDate, formatDateShort } from "@/lib/dateUtils";
+import { formatDate, formatDateShort, todayISO } from "@/lib/dateUtils";
 import { DayPill } from "@/components/ui/Badge";
 import { InternalSectionTitle, SectionIconButton } from "@/components/ui/InternalSectionTitle";
 import { TrackerTabs } from "@/components/ui/TrackerTabs";
@@ -652,14 +652,14 @@ export default function PlanDetailView({
     const key = `${msgIdx}-${mIdx}`;
     if (acceptedMilestoneIds.has(key)) return;
     const milestoneId = uid();
-    const today = new Date().toISOString().slice(0, 10);
+    const today = todayISO();
     const startDate = plan.startDate ?? today;
     const targetDate = milestone.targetDate;
-    const targetMs = targetDate ? new Date(targetDate).getTime() : NaN;
+    const targetMs = targetDate ? new Date(`${targetDate}T00:00:00`).getTime() : NaN;
     const hasValidTarget = Number.isFinite(targetMs);
     const plannedEndDate = hasValidTarget ? targetDate! : today;
     const plannedDurationDays = hasValidTarget
-      ? Math.max(1, Math.ceil((targetMs - new Date(startDate).getTime()) / 86_400_000))
+      ? Math.max(1, Math.round((targetMs - new Date(`${startDate}T00:00:00`).getTime()) / 86_400_000) + 1)
       : 30;
     onAddMilestone({
       id: milestoneId,
@@ -696,14 +696,14 @@ export default function PlanDetailView({
       const realIdx = milestones.indexOf(m);
       const key = `${msgIdx}-${realIdx}`;
       if (acceptedMilestoneIds.has(key)) return;
-      const today = new Date().toISOString().slice(0, 10);
+      const today = todayISO();
       const startDate = plan.startDate ?? today;
       const targetDate = m.targetDate;
-      const targetMs = targetDate ? new Date(targetDate).getTime() : NaN;
+      const targetMs = targetDate ? new Date(`${targetDate}T00:00:00`).getTime() : NaN;
       const hasValidTarget = Number.isFinite(targetMs);
       const plannedEndDate = hasValidTarget ? targetDate! : today;
       const plannedDurationDays = hasValidTarget
-        ? Math.max(1, Math.ceil((targetMs - new Date(startDate).getTime()) / 86_400_000))
+        ? Math.max(1, Math.round((targetMs - new Date(`${startDate}T00:00:00`).getTime()) / 86_400_000) + 1)
         : 30;
       onAddMilestone({
         title: m.title,

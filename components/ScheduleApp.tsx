@@ -13,7 +13,6 @@ import BottomNav from "@/components/BottomNav";
 import DesktopSidebar from "@/components/desktop/DesktopSidebar";
 import DesktopTopBar from "@/components/desktop/DesktopTopBar";
 import { WeekGrid } from "@/components/desktop/WeekGrid";
-import { QuickAddPanel } from "@/components/desktop/QuickAddPanel";
 import AIAssistant from "@/components/ai/AIAssistant";
 import { checkOllamaConnection, OLLAMA_URL_KEY, OLLAMA_MODEL_KEY, DEFAULT_OLLAMA_URL, DEFAULT_OLLAMA_MODEL } from "@/lib/ai";
 import type { AIActionResult } from "@/lib/ai";
@@ -108,7 +107,7 @@ import { applyScheduleRules } from "@/lib/scheduleRules";
 import { resolveTimes as resolveParsedTimes } from "@/lib/scheduleParser";
 import { applyTemplate } from "@/lib/templates";
 import type { Template } from "@/lib/templates";
-import { parseTimeToMinutes, formatDuration } from "@/lib/timeUtils";
+import { parseTimeToMinutes, formatDuration, toScheduleDayMinutes } from "@/lib/timeUtils";
 import { todayISO, daysBetween as daysBetweenUtil, formatDate, addDaysToISO, localISODate } from "@/lib/dateUtils";
 import { getPlanCardStats } from "@/lib/planInsights";
 import { MainTitleSection, IconActionButton, CtaActionButton } from "@/components/ui/MainTitleSection";
@@ -387,18 +386,22 @@ function WeekSummary({
       d.setDate(monday.getDate() + i);
       return { day, date: d };
     });
-  }, []);
+  }, [todayKey]);
 
   const todayMidnight = useMemo(() => {
     const d = new Date();
     d.setHours(0, 0, 0, 0);
     return d;
-  }, []);
+  }, [todayKey]);
 
   const dayStats = useMemo(
     () =>
       thisWeekDates.map(({ day, date }) => {
-        const tasks = schedule.activities[day] ?? [];
+        const dateISO = localISODate(date);
+        const isToday = day === todayKey;
+        const tasks = (schedule.activities[day] ?? []).map((task) =>
+          isToday ? task : { ...task, ...completionForDate(task, dateISO) }
+        );
         const total = tasks.length;
         const done = tasks.filter((t) => isTaskCompleted(t, t.subtasks?.length ?? 0)).length;
         return {
@@ -407,7 +410,7 @@ function WeekSummary({
           total,
           done,
           isPastOrToday: date <= todayMidnight,
-          isToday: day === todayKey,
+          isToday,
         };
       }),
     [schedule.activities, thisWeekDates, todayMidnight, todayKey]
@@ -515,37 +518,6 @@ export default function ScheduleApp() {
   const [calendarView, setCalendarView] = useState<"1day" | "3day" | "7day" | "custom3">("7day");
   const [customDays, setCustomDays] = useState<DayKey[]>(["monday", "wednesday", "friday"]);
 
-  // Desktop Quick-Add panel width (px) — user-resizable via the split bar, persisted.
-  const QUICK_ADD_MIN = 360;
-  const QUICK_ADD_MAX = 860;
-  const [quickAddWidth, setQuickAddWidth] = useState<number | null>(null);
-  const splitRowRef = useRef<HTMLDivElement>(null);
-  useEffect(() => {
-    const saved = Number(localStorage.getItem("planr_quickadd_width"));
-    if (saved >= QUICK_ADD_MIN && saved <= QUICK_ADD_MAX) setQuickAddWidth(saved);
-  }, []);
-  const startSplitDrag = useCallback((e: React.PointerEvent) => {
-    e.preventDefault();
-    const row = splitRowRef.current;
-    if (!row) return;
-    const rowRight = row.getBoundingClientRect().right;
-    const onMove = (ev: PointerEvent) => {
-      // Panel sits on the right, so its width grows as the pointer moves left.
-      const next = Math.min(QUICK_ADD_MAX, Math.max(QUICK_ADD_MIN, rowRight - ev.clientX));
-      setQuickAddWidth(next);
-    };
-    const onUp = () => {
-      window.removeEventListener("pointermove", onMove);
-      window.removeEventListener("pointerup", onUp);
-      document.body.style.userSelect = "";
-      document.body.style.cursor = "";
-      setQuickAddWidth((w) => { if (w) localStorage.setItem("planr_quickadd_width", String(Math.round(w))); return w; });
-    };
-    document.body.style.userSelect = "none";
-    document.body.style.cursor = "col-resize";
-    window.addEventListener("pointermove", onMove);
-    window.addEventListener("pointerup", onUp);
-  }, []);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
 
   const [taskSheetInitialType, setTaskSheetInitialType] = useState<"task" | "session">("task");
@@ -1667,10 +1639,14 @@ export default function ScheduleApp() {
   const timelineTaskLayouts = useMemo(() => {
     const intervals = dayTasksView
       .map((task) => {
-        const start = parseTimeToMinutes(task.startTime) ?? TIMELINE_START_MINUTES;
-        let end = parseTimeToMinutes(task.endTime) ?? start + 30;
-        const isOvernight = end <= start;
-        if (isOvernight) end += 1440;
+        const parsedStart = parseTimeToMinutes(task.startTime);
+        const start = parsedStart === null
+          ? TIMELINE_START_MINUTES
+          : toScheduleDayMinutes(parsedStart, TIMELINE_START_MINUTES);
+        const parsedEnd = parseTimeToMinutes(task.endTime);
+        let end = parsedEnd === null ? start + 30 : parsedEnd;
+        while (end <= start) end += 1440;
+        const isOvernight = end >= 1440;
         const cs = clamp(start, TIMELINE_START_MINUTES, TIMELINE_END_MINUTES);
         const ce = clamp(Math.max(end, cs + 15), TIMELINE_START_MINUTES, TIMELINE_END_MINUTES);
         return {
@@ -2149,8 +2125,8 @@ export default function ScheduleApp() {
             transition={{ duration: 0.12, ease: "easeOut" }}
             className="lg:flex lg:h-full lg:overflow-hidden"
           >
-            {/* ── Desktop: WeekGrid + QuickAddPanel ─────────────────────────── */}
-            <div ref={splitRowRef} className="hidden lg:flex lg:flex-1 lg:overflow-hidden">
+            {/* ── Desktop: WeekGrid ─────────────────────────────────────────── */}
+            <div className="hidden lg:flex lg:flex-1 lg:overflow-hidden">
               <div className="min-w-0 flex-1 overflow-hidden">
                 <WeekGrid
                   schedule={schedule}
@@ -2180,41 +2156,6 @@ export default function ScheduleApp() {
                   onDeleteTask={handleDeleteTask}
                   plans={schedule.plans}
                   onInlineAdd={(data) => setSchedule(createTask(data.taskDraft, data.repeatDays, data.planItems))}
-                />
-              </div>
-              {/* Drag handle — resize the split between the week grid and Quick Add */}
-              <div
-                role="separator"
-                aria-orientation="vertical"
-                aria-label="Resize panels"
-                onPointerDown={startSplitDrag}
-                onDoubleClick={() => { setQuickAddWidth(null); localStorage.removeItem("planr_quickadd_width"); }}
-                title="Drag to resize · double-click to reset"
-                className="group relative w-1.5 shrink-0 cursor-col-resize"
-              >
-                <span className="absolute inset-y-0 left-1/2 w-px -translate-x-1/2 bg-neutral-200/80 transition-colors group-hover:bg-emerald-400 dark:bg-white/[0.08] dark:group-hover:bg-emerald-500" />
-                <span className="absolute left-1/2 top-1/2 flex h-10 w-1.5 -translate-x-1/2 -translate-y-1/2 items-center justify-center rounded-full bg-neutral-300/0 transition-colors group-hover:bg-emerald-400/70 dark:group-hover:bg-emerald-500/70" />
-              </div>
-
-              <div
-                className={`shrink-0 bg-white dark:bg-neutral-950 ${quickAddWidth === null ? "transition-[width] duration-200" : ""}`}
-                style={{
-                  width: quickAddWidth !== null
-                    ? `${quickAddWidth}px`
-                    : calendarView === "1day"   ? "clamp(580px, 46%, 840px)" :
-                      calendarView === "3day"   ? "clamp(500px, 41%, 720px)" :
-                      calendarView === "custom3"
-                        ? customDays.length <= 2 ? "clamp(580px, 46%, 840px)"
-                          : customDays.length <= 4 ? "clamp(500px, 41%, 720px)"
-                          : "clamp(420px, 35%, 580px)"
-                      : /* 7day */                 "clamp(420px, 35%, 580px)",
-                }}
-              >
-                <QuickAddPanel
-                  plans={schedule.plans}
-                  activeDay={activeDay}
-                  onSave={handleTaskSheetSave}
-                  onBulkImport={handleBulkImport}
                 />
               </div>
             </div>

@@ -17,4 +17,8 @@ export interface ScheduleEntry {
   date?: string;
   duration?: string;
   notes?: string;
+  /** Optional deadline (ISO "YYYY-MM-DD") for a Task's subtask. */
+  deadline?: string;
+  /** Granularity of the deadline — drives the badge label + overdue window. */
+  deadlineScope?: "day" | "week" | "month";
 }

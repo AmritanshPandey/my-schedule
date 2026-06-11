@@ -16,7 +16,7 @@
  */
 
 import type { Schedule } from "./useScheduleDB";
-import { DAYS } from "./useScheduleDB";
+import { DAYS } from "./scheduleConstants";
 import { localISODate } from "./dateUtils";
 
 export interface ExecutionWeek {
@@ -60,10 +60,10 @@ export function computeExecutionTrend(schedule: Schedule, weeksCount = 8): Execu
 
   // Bucket distinct completed task ids by their week's Monday.
   const weekDone = new Map<string, Set<string>>();
-  const markDone = (weekMon: string, taskId: string) => {
+  const markDone = (weekMon: string, occurrenceId: string) => {
     let set = weekDone.get(weekMon);
     if (!set) { set = new Set(); weekDone.set(weekMon, set); }
-    set.add(taskId);
+    set.add(occurrenceId);
   };
   const weekMondayOf = (iso: string): string => localISODate(mondayOf(new Date(iso + "T00:00:00")));
 
@@ -81,7 +81,8 @@ export function computeExecutionTrend(schedule: Schedule, weeksCount = 8): Execu
       if (dates.size === 0 && task.completed && task.completedAt) {
         dates.add(localISODate(new Date(task.completedAt)));
       }
-      for (const d of dates) markDone(weekMondayOf(d), task.id);
+      const occurrenceId = `${day}:${task.id}`;
+      for (const d of dates) markDone(weekMondayOf(d), occurrenceId);
     }
   }
 

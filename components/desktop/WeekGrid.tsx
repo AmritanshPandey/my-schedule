@@ -8,7 +8,7 @@ import { DAYS } from "@/lib/useScheduleDB";
 import { sortTasksByTime } from "@/lib/taskMutations";
 import { completionForDate, resolveTaskState } from "@/lib/taskCompletion";
 import { localISODate, todayISO } from "@/lib/dateUtils";
-import { currentMinutes, formatDuration, parseTimeToMinutes } from "@/lib/timeUtils";
+import { currentMinutes, formatDuration, parseTimeToMinutes, toScheduleDayMinutes } from "@/lib/timeUtils";
 import { categoryHex, resolveAccentColor } from "@/lib/colorSystem";
 import { haptic } from "@/lib/haptics";
 import { TaskBlockCard } from "@/components/TaskBlockCard";
@@ -29,7 +29,7 @@ const PX_MIN = 2;        // 1 minute = 2px → 30 min = 60px, 1h = 120px
 const RAIL_W = 64;
 
 function fmtRail(m: number): string {
-  let h = Math.floor(m / 60);
+  let h = Math.floor(m / 60) % 24;
   const mm = m % 60;
   const ap = h >= 12 ? "PM" : "AM";
   h = h % 12 || 12;
@@ -49,10 +49,12 @@ function buildDayLayout(tasks: Task[], startMin: number, endMin: number): { time
   const untimed: Task[] = [];
   const parsed: { task: Task; s: number; e: number }[] = [];
   for (const t of tasks) {
-    const s = parseTimeToMinutes(t.startTime);
-    if (s == null) { untimed.push(t); continue; }
+    const parsedStart = parseTimeToMinutes(t.startTime);
+    if (parsedStart == null) { untimed.push(t); continue; }
+    const s = toScheduleDayMinutes(parsedStart, startMin);
     let e = parseTimeToMinutes(t.endTime);
-    if (e == null || e <= s) e = s + 30;
+    if (e == null) e = s + 30;
+    while (e <= s) e += 1440;
     parsed.push({ task: t, s, e });
   }
   parsed.sort((a, b) => a.s - b.s || a.e - b.e);
@@ -133,13 +135,13 @@ export function WeekGrid({
   onDeleteTask,
 }: WeekGridProps) {
   const [showCustomPicker, setShowCustomPicker] = useState(false);
-  const [now, setNow] = useState(() => currentMinutes());
+  const [now, setNow] = useState(() => toScheduleDayMinutes(currentMinutes()));
   const pickerRef = useRef<HTMLDivElement>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
 
   // Tick the now-line every minute.
   useEffect(() => {
-    const id = setInterval(() => setNow(currentMinutes()), 60_000);
+    const id = setInterval(() => setNow(toScheduleDayMinutes(currentMinutes())), 60_000);
     return () => clearInterval(id);
   }, []);
 
@@ -149,7 +151,7 @@ export function WeekGrid({
     if (didAutoScroll.current || !scrollRef.current) return;
     const showsToday = weekDates.some(({ date }) => localISODate(date) === todayISO());
     if (!showsToday) return;
-    const offset = (currentMinutes() - 4 * 60) * PX_MIN - 140;
+    const offset = (toScheduleDayMinutes(currentMinutes()) - 4 * 60) * PX_MIN - 140;
     scrollRef.current.scrollTo({ top: Math.max(0, offset) });
     didAutoScroll.current = true;
   }, [weekDates]);
@@ -195,23 +197,9 @@ export function WeekGrid({
   });
 
   // ── Compute the time window from all visible timed tasks ──────────────────
-  const allMinutes = days.flatMap((d) =>
-    d.tasks.map((t) => {
-      const s = parseTimeToMinutes(t.startTime);
-      if (s == null) return null;
-      let e = parseTimeToMinutes(t.endTime);
-      if (e == null || e <= s) e = s + 30;
-      return { s, e };
-    }).filter((x): x is { s: number; e: number } => x !== null),
-  );
-
-  // Day always starts at 4 AM; the end follows the latest task (min 10h window).
+  // The schedule day runs from 4 AM through 4 AM the following calendar day.
   const startMin = 4 * 60;
-  let endMin = 24 * 60;
-  // if (allMinutes.length > 0) {
-  //   endMin = Math.min(24 * 60, Math.ceil(Math.max(...allMinutes.map((x) => x.e)) / 60) * 60);
-  // }
-  if (endMin - startMin < 10 * 60) endMin = Math.min(24 * 60, startMin + 10 * 60);
+  const endMin = 28 * 60;
   const totalPx = (endMin - startMin) * PX_MIN;
 
   const railLabels: number[] = [];

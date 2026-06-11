@@ -2,6 +2,7 @@
 
 import { memo } from "react";
 import { useNowMinutes } from "@/lib/timeline/useNowMinutes";
+import { toScheduleDayMinutes } from "@/lib/timeUtils";
 
 interface CurrentTimeLayerProps {
   activeDay: string;
@@ -24,7 +25,7 @@ function CurrentTimeLayerInner({
   timelineTopPadding,
   hourHeight,
 }: CurrentTimeLayerProps) {
-  const nowMinutes = useNowMinutes();
+  const nowMinutes = toScheduleDayMinutes(useNowMinutes(), timelineStartMinutes);
 
   const visible =
     activeDay === todayKey &&

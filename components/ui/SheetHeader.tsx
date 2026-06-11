@@ -3,6 +3,7 @@
 import { IconX } from "@tabler/icons-react";
 import { Eyebrow, SheetTitle } from "@/components/ui/Typography";
 import { ICON } from "@/components/ui/Icon";
+import IconButton from "@/components/ui/IconButton";
 
 interface SheetHeaderProps {
   eyebrow: string;
@@ -17,14 +18,9 @@ export default function SheetHeader({ eyebrow, title, onClose }: SheetHeaderProp
         <Eyebrow>{eyebrow}</Eyebrow>
         <SheetTitle className="mt-0.5">{title}</SheetTitle>
       </div>
-      <button
-        type="button"
-        onClick={onClose}
-        aria-label="Close"
-        className="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl border border-neutral-200 text-neutral-400 transition-colors hover:bg-neutral-100 dark:border-white/10 dark:text-neutral-500 dark:hover:bg-white/[0.07]"
-      >
+      <IconButton label="Close" variant="outline" size="sm" radius="xl" onClick={onClose}>
         <IconX {...ICON.ui} />
-      </button>
+      </IconButton>
     </div>
   );
 }

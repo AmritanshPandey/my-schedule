@@ -29,6 +29,8 @@ export interface CloudSnapshot {
   lastUpdated: number;
 }
 
+export type CloudMergeResult = "merged" | "local-newer" | "equal" | "missing" | "error";
+
 // ── Module state ──────────────────────────────────────────────────────────────
 
 const DEBOUNCE_MS = 30_000; // 30 s between auto-syncs
@@ -40,7 +42,6 @@ let _pending: Schedule | null = null;
 let _lastSchedule: Schedule | null = null; // latest snapshot seen by queueSync
 let _lastSyncedAt = 0;
 let _status: SyncStatus = "idle";
-let _skipNextSync = false; // prevents re-uploading data we just downloaded
 
 const _listeners = new Set<(s: SyncStatus) => void>();
 
@@ -98,7 +99,6 @@ export function initSync(uid: string) {
     _pending = null;
     _lastSchedule = null;
     _lastSyncedAt = 0;
-    _skipNextSync = false;
     setStatus("idle");
   }
   _uid = uid;
@@ -115,7 +115,6 @@ export function destroySync() {
   _lastSchedule = null;
   _lastSyncedAt = 0;
   _syncing = false;
-  _skipNextSync = false;
   detachListeners();
   setStatus("idle");
 }
@@ -167,10 +166,7 @@ export async function deleteCloudData(): Promise<void> {
  */
 export function queueSync(schedule: Schedule): void {
   _lastSchedule = schedule; // always track latest so flushNow / Sync Now always has data
-  if (!_uid || _skipNextSync) {
-    _skipNextSync = false;
-    return;
-  }
+  if (!_uid) return;
   _pending = schedule;
   scheduleSync(schedule, DEBOUNCE_MS);
 }
@@ -201,37 +197,37 @@ export async function flushNow(schedule: Schedule): Promise<void> {
  * Dispatches a "cloud-sync-merge" CustomEvent so useScheduleDB can
  * update its state without coupling to Firebase directly.
  *
- * Returns true if a merge happened.
+ * Reports which side is newer so callers can immediately recover unsynced
+ * local data without overwriting a newer cloud snapshot.
  */
 export async function mergeCloudIfNewer(
   uid: string,
   localLastUpdated: number
-): Promise<boolean> {
+): Promise<CloudMergeResult> {
   try {
     const snap = await getDoc(firestoreRef(uid));
-    if (!snap.exists()) return false;
+    if (!snap.exists()) return "missing";
 
     const data = snap.data() as { schedule?: Schedule; lastUpdated?: number };
-    if (!data.schedule || !data.lastUpdated) return false;
-    if (data.lastUpdated <= localLastUpdated) return false;
+    if (!data.schedule || !data.lastUpdated) return "missing";
+    if (data.lastUpdated < localLastUpdated) return "local-newer";
+    if (data.lastUpdated === localLastUpdated) return "equal";
 
     // Cloud is newer → notify useScheduleDB to absorb the data.
     // Cancel any pending local sync first — the local data is stale and must
     // not overwrite the cloud data we're about to absorb.
     if (_timer) { clearTimeout(_timer); _timer = null; }
     _pending = null;
-    _skipNextSync = true;
-
     const event = new CustomEvent<CloudSnapshot>("cloud-sync-merge", {
       detail: { uid, schedule: data.schedule, lastUpdated: data.lastUpdated },
     });
     window.dispatchEvent(event);
 
     _lastSyncedAt = data.lastUpdated;
-    return true;
+    return "merged";
   } catch (err) {
     console.warn("[CloudSync] mergeCloudIfNewer failed:", err);
-    return false;
+    return "error";
   }
 }
 

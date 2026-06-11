@@ -23,7 +23,7 @@ export default function BottomSheet({
   children,
   maxHeight = "calc(var(--sheet-vh, 100dvh) - env(safe-area-inset-top) - 12px)",
   className = "",
-  desktopWidth = "max-w-[520px]",
+  desktopWidth = "max-w-[640px]",
 }: BottomSheetProps) {
   const [isDesktop, setIsDesktop] = useState(false);
   const [viewportFrame, setViewportFrame] = useState({ height: 0, offsetTop: 0 });

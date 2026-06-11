@@ -15,7 +15,7 @@ import { SECTION_ICONS, getIconPickerStyle } from "@/components/SectionIcons";
 import { streamOllamaChat, buildSystemPrompt, parseAIAction, type AITask } from "@/lib/ai";
 import { useAIActions } from "@/lib/ai/useAIActions";
 import { resolveAccentColor, type AccentColor } from "@/lib/colorSystem";
-import { todayISO } from "@/lib/dateUtils";
+import { localISODate, todayISO } from "@/lib/dateUtils";
 import type { Plan } from "@/lib/useScheduleDB";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
@@ -95,7 +95,7 @@ const DURATION_PRESETS: { label: string; days: number | null }[] = [
 function addDays(days: number): string {
   const d = new Date();
   d.setDate(d.getDate() + days);
-  return d.toISOString().slice(0, 10);
+  return localISODate(d);
 }
 
 // ── Example chips ─────────────────────────────────────────────────────────────

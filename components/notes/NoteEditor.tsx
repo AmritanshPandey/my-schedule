@@ -97,6 +97,27 @@ export default function NoteEditor({ note, onUpdate, onDelete, onBack }: NoteEdi
   const newTableStart = useRef<number | null>(null); // table to auto-focus after insert
   const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const savedTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const latestDraft = useRef({ title: note.title, body: note.body });
+  const lastSavedDraft = useRef({ title: note.title, body: note.body });
+
+  useEffect(() => {
+    latestDraft.current = { title, body };
+  }, [title, body]);
+
+  useEffect(() => {
+    latestDraft.current = { title: note.title, body: note.body };
+    lastSavedDraft.current = { title: note.title, body: note.body };
+    const noteId = note.id;
+    return () => {
+      if (saveTimer.current) clearTimeout(saveTimer.current);
+      if (savedTimer.current) clearTimeout(savedTimer.current);
+      const draft = latestDraft.current;
+      const saved = lastSavedDraft.current;
+      if (draft.title !== saved.title || draft.body !== saved.body) {
+        onUpdate(noteId, draft);
+      }
+    };
+  }, [note.id]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const lines = body.split("\n");
   const isEmpty = body.trim().length === 0;
@@ -126,6 +147,7 @@ export default function NoteEditor({ note, onUpdate, onDelete, onBack }: NoteEdi
     if (saveTimer.current) clearTimeout(saveTimer.current);
     saveTimer.current = setTimeout(() => {
       onUpdate(note.id, { title, body });
+      lastSavedDraft.current = { title, body };
       setSaveState("saved");
       if (savedTimer.current) clearTimeout(savedTimer.current);
       savedTimer.current = setTimeout(() => setSaveState("idle"), 1500);
@@ -133,12 +155,6 @@ export default function NoteEditor({ note, onUpdate, onDelete, onBack }: NoteEdi
     return () => { if (saveTimer.current) clearTimeout(saveTimer.current); };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [title, body]);
-
-  // Flush pending timers on unmount.
-  useEffect(() => () => {
-    if (saveTimer.current) clearTimeout(saveTimer.current);
-    if (savedTimer.current) clearTimeout(savedTimer.current);
-  }, []);
 
   // Close the block/color menus whenever no block is focused (e.g. on blur).
   useEffect(() => {
@@ -161,7 +177,10 @@ export default function NoteEditor({ note, onUpdate, onDelete, onBack }: NoteEdi
 
   function flushAndBack() {
     if (saveTimer.current) clearTimeout(saveTimer.current);
-    if (title !== note.title || body !== note.body) onUpdate(note.id, { title, body });
+    if (title !== lastSavedDraft.current.title || body !== lastSavedDraft.current.body) {
+      onUpdate(note.id, { title, body });
+      lastSavedDraft.current = { title, body };
+    }
     onBack();
   }
 

@@ -2,7 +2,7 @@
 
 import { useEffect } from "react";
 
-const CACHE_PREFIX = "daily-planner-";
+const CACHE_PREFIX = "planr-";
 
 export default function ServiceWorkerRegistration() {
   useEffect(() => {

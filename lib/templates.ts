@@ -8,6 +8,7 @@ import type { AccentColor } from "./colorSystem";
 import { colorFromIcon } from "./colorSystem";
 import type { ScheduleEntry } from "@/components/ScheduleItem";
 import { recalculateRoadmapTimeline } from "@/lib/roadmapDates";
+import { localISODate } from "@/lib/dateUtils";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -46,7 +47,7 @@ function uid(): string {
 function addDays(base: Date, n: number): string {
   const d = new Date(base);
   d.setDate(d.getDate() + n);
-  return d.toISOString().split("T")[0];
+  return localISODate(d);
 }
 
 const ALL_DAYS: DayKey[] = ["monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday"];
@@ -286,7 +287,7 @@ export const TEMPLATES: Template[] = [
  */
 export function applyTemplate(template: Template): (prev: Schedule) => Schedule {
   const today = new Date();
-  const todayISO = today.toISOString().split("T")[0];
+  const todayISO = localISODate(today);
   const planId = uid();
 
   const planItems: ScheduleEntry[] = template.subtasks.map((s) => ({

@@ -13,7 +13,7 @@
  */
 
 import type { DayKey } from "@/lib/useScheduleDB";
-import { parseTimeToMinutes } from "@/lib/timeUtils";
+import { parseTimeToMinutes, toScheduleDayMinutes } from "@/lib/timeUtils";
 
 // Mirror ScheduleApp constants — timeline bounds
 const TIMELINE_START_HOUR = 4;
@@ -64,7 +64,8 @@ export interface RuleEngineResult<T extends SchedulableTask> {
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
 function toMinutes(time: string): number | null {
-  return parseTimeToMinutes(time);
+  const minutes = parseTimeToMinutes(time);
+  return minutes === null ? null : toScheduleDayMinutes(minutes, TIMELINE_START_MINUTES);
 }
 
 function minutesToTime(minutes: number): string {
@@ -103,6 +104,13 @@ export function validateTaskTime(task: SchedulableTask): ValidationError | null 
     return {
       code: "out-of-bounds",
       message: `Task start time must be between ${TIMELINE_START_HOUR}:00 and ${TIMELINE_END_HOUR}:00`,
+    };
+  }
+
+  if (normalizedEnd > TIMELINE_END_MINUTES) {
+    return {
+      code: "out-of-bounds",
+      message: `Task must end by ${TIMELINE_END_HOUR % 24}:00`,
     };
   }
 

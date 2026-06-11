@@ -6,6 +6,7 @@ import { accentStyles } from "@/lib/colorSystem";
 import { resolveTaskState } from "@/lib/taskCompletion";
 import { taskLaneStyle } from "@/lib/timeline/taskLaneStyle";
 import { useNowMinutes } from "@/lib/timeline/useNowMinutes";
+import { toScheduleDayMinutes } from "@/lib/timeUtils";
 
 export interface HighlightLayout {
   task: Task;
@@ -43,7 +44,7 @@ function CurrentTaskHighlightLayerInner({
   timelineStartMinutes,
   timelineEndMinutes,
 }: CurrentTaskHighlightLayerProps) {
-  const nowMinutes = useNowMinutes();
+  const nowMinutes = toScheduleDayMinutes(useNowMinutes(), timelineStartMinutes);
 
   if (activeDay !== todayKey || nowMinutes < timelineStartMinutes || nowMinutes > timelineEndMinutes) {
     return null;

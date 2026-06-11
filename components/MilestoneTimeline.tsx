@@ -3,6 +3,7 @@
 import { useMemo, useRef, useEffect, useState } from "react";
 import { IconMap2 } from "@tabler/icons-react";
 import type { Schedule, Milestone, Plan } from "@/lib/useScheduleDB";
+import { addDaysToISO, localISODate, todayISO as getTodayISO } from "@/lib/dateUtils";
 
 interface MilestoneTimelineProps {
   schedule: Schedule;
@@ -24,9 +25,7 @@ function daysBetween(from: string, to: string): number {
 }
 
 function addDaysISO(iso: string, n: number): string {
-  const d = new Date(iso + "T00:00:00");
-  d.setDate(d.getDate() + n);
-  return d.toISOString().slice(0, 10);
+  return addDaysToISO(iso, n);
 }
 
 function clamp(val: number, lo: number, hi: number): number {
@@ -154,7 +153,7 @@ export default function MilestoneTimeline({ schedule }: MilestoneTimelineProps) 
   const scrollRef = useRef<HTMLDivElement>(null);
   const [selectedId, setSelectedId] = useState<string | null>(null);
 
-  const todayISO = useMemo(() => new Date().toISOString().slice(0, 10), []);
+  const todayISO = getTodayISO();
 
   const { rangeStart, totalDays, todayOffset, planRows, monthMarks } = useMemo(() => {
     const allMs = (schedule.milestones ?? []).filter((m) => m.plannedEndDate);
@@ -201,9 +200,9 @@ export default function MilestoneTimeline({ schedule }: MilestoneTimelineProps) 
     const monthMarks: { label: string; offsetDays: number }[] = [];
     const cur = new Date(rangeStart + "T00:00:00");
     cur.setDate(1);
-    if (cur.toISOString().slice(0, 10) < rangeStart) cur.setMonth(cur.getMonth() + 1);
+    if (localISODate(cur) < rangeStart) cur.setMonth(cur.getMonth() + 1);
     while (true) {
-      const iso = cur.toISOString().slice(0, 10);
+      const iso = localISODate(cur);
       if (iso > rangeEnd) break;
       monthMarks.push({
         label: cur.toLocaleDateString("en-US", { month: "short", year: "2-digit" }),

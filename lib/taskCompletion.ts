@@ -7,16 +7,30 @@
  */
 
 import type { Task, TaskCompletionEvent } from "./useScheduleDB";
-import { uid } from "./taskMutations";
+import { uid } from "./id";
 import { localISODate } from "./dateUtils";
 
-// Drop today's whole-task completion events so unchecking actually reverses
-// progress in the append-only history (keeps prior days' history intact).
-function stripTodayTaskEvents(history: TaskCompletionEvent[] | undefined): TaskCompletionEvent[] {
+function stripTodayCompletionEvents(history: TaskCompletionEvent[] | undefined): TaskCompletionEvent[] {
   const today = localISODate(new Date());
   return (history ?? []).filter(
-    (ev) => !(ev.completionType === "task" && localISODate(new Date(ev.completedAt)) === today)
+    (ev) =>
+      !(
+        (ev.completionType === "task" || ev.completionType === "subtask") &&
+        localISODate(new Date(ev.completedAt)) === today
+      )
   );
+}
+
+function stripTodaySubtaskEvent(
+  history: TaskCompletionEvent[] | undefined,
+  subtaskId: string
+): TaskCompletionEvent[] {
+  const today = localISODate(new Date());
+  return (history ?? []).filter((ev) => {
+    if (localISODate(new Date(ev.completedAt)) !== today) return true;
+    if (ev.completionType === "task") return false;
+    return !(ev.completionType === "subtask" && ev.subtaskId === subtaskId);
+  });
 }
 
 // ── Event factory ────────────────────────────────────────────────────────────
@@ -63,8 +77,10 @@ export function calculateTaskProgress(task: Task, totalSubtasks: number): TaskPr
     const done = task.completed ? 1 : 0;
     return { completedCount: done, totalCount: 1, pct: done * 100 };
   }
-  const ids = task.completedSubtaskIds ?? [];
-  const completedCount = Math.min(ids.length, totalSubtasks);
+  const completedIds = new Set(task.completedSubtaskIds ?? []);
+  const completedCount = task.subtasks?.length
+    ? task.subtasks.filter((subtask) => completedIds.has(subtask.id)).length
+    : Math.min(completedIds.size, totalSubtasks);
   const pct = Math.round((completedCount / totalSubtasks) * 100);
   return { completedCount, totalCount: totalSubtasks, pct };
 }
@@ -73,7 +89,8 @@ export function calculateTaskProgress(task: Task, totalSubtasks: number): TaskPr
 
 export function isTaskCompleted(task: Task, totalSubtasks: number): boolean {
   if (totalSubtasks === 0) return !!task.completed;
-  return (task.completedSubtaskIds?.length ?? 0) >= totalSubtasks;
+  if (task.completed !== undefined) return task.completed;
+  return new Set(task.completedSubtaskIds ?? []).size >= totalSubtasks;
 }
 
 // ── State resolver ───────────────────────────────────────────────────────────
@@ -83,7 +100,7 @@ export type TaskState = "incomplete" | "partial" | "completed" | "missed";
 export function resolveTaskState(task: Task, totalSubtasks: number): TaskState {
   if (isTaskCompleted(task, totalSubtasks)) return "completed";
   if (task.missed) return "missed";
-  if (totalSubtasks > 0 && (task.completedSubtaskIds?.length ?? 0) > 0) return "partial";
+  if (totalSubtasks > 0 && calculateTaskProgress(task, totalSubtasks).completedCount > 0) return "partial";
   return "incomplete";
 }
 
@@ -114,7 +131,7 @@ export function toggleTaskComplete(
       completed: false,
       completedAt: undefined,
       completedSubtaskIds: [],
-      completionHistory: stripTodayTaskEvents(task.completionHistory),
+      completionHistory: stripTodayCompletionEvents(task.completionHistory),
     };
   }
 
@@ -180,9 +197,9 @@ export function toggleSubtaskComplete(
   const isDone = current.includes(subtaskId);
   const next = isDone
     ? current.filter((id) => id !== subtaskId)
-    : [...current, subtaskId];
+    : Array.from(new Set([...current, subtaskId]));
 
-  const allNowDone = totalSubtasks > 0 && next.length >= totalSubtasks;
+  const allNowDone = totalSubtasks > 0 && new Set(next).size >= totalSubtasks;
   const now = new Date().toISOString();
   const history = task.completionHistory ?? [];
 
@@ -206,11 +223,29 @@ export function toggleSubtaskComplete(
   }
 
   // Marking subtask incomplete — also drop today's auto-task completion event
+  // and materialize any remaining implied subtask completions. Whole-task
+  // completion stores one task event, so without this conversion the partial
+  // state would disappear from history after the day rolls over.
+  const strippedHistory = stripTodaySubtaskEvent(history, subtaskId);
+  const today = localISODate(new Date());
+  const recordedToday = new Set(
+    strippedHistory
+      .filter(
+        (event) =>
+          event.completionType === "subtask" &&
+          event.subtaskId &&
+          localISODate(new Date(event.completedAt)) === today
+      )
+      .map((event) => event.subtaskId as string)
+  );
+  const impliedEvents = next
+    .filter((id) => !recordedToday.has(id))
+    .map((id) => createCompletionEvent(task.id, "subtask", id));
   return {
     completedSubtaskIds: next,
     completed: false,
     completedAt: undefined,
-    completionHistory: stripTodayTaskEvents(history),
+    completionHistory: [...strippedHistory, ...impliedEvents],
   };
 }
 

@@ -6,25 +6,17 @@ import type { AccentColor } from "@/lib/colorSystem";
 import { colorFromIcon, resolveAccentColor } from "@/lib/colorSystem";
 import type { GoalDirection } from "@/lib/trendUtils";
 export type { GoalDirection };
-import { mergeCloudIfNewer, queueSync, noteLatestSchedule } from "@/lib/cloudSync";
+import { flushNow, mergeCloudIfNewer, queueSync, noteLatestSchedule } from "@/lib/cloudSync";
 import { getLocalLastUpdated, writeLocalLastUpdated } from "@/lib/localMeta";
 import { useAuth } from "@/contexts/AuthProvider";
 import { calculateMilestoneEndDate, recalculateRoadmapTimeline } from "@/lib/roadmapDates";
 import { localISODate } from "@/lib/dateUtils";
+import { DAYS, DAY_LABELS, type DayKey } from "@/lib/scheduleConstants";
 
-export type DayKey = "monday" | "tuesday" | "wednesday" | "thursday" | "friday" | "saturday" | "sunday";
+export { DAYS, DAY_LABELS } from "@/lib/scheduleConstants";
+export type { DayKey } from "@/lib/scheduleConstants";
+
 export type PlanCategory = "fitness" | "learning" | "work" | "health" | "routine";
-
-export const DAYS: DayKey[] = ["monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday"];
-export const DAY_LABELS: Record<DayKey, string> = {
-  monday: "Mo",
-  tuesday: "Tu",
-  wednesday: "We",
-  thursday: "Th",
-  friday: "Fr",
-  saturday: "Sa",
-  sunday: "Su",
-};
 
 export interface Goal {
   id: string;
@@ -641,7 +633,7 @@ function migrate(raw: unknown): Schedule {
     const cutoff = (() => {
       const d = new Date();
       d.setDate(d.getDate() - 90);
-      return d.toISOString().slice(0, 10);
+      return localISODate(d);
     })();
     const ritualCompletions: RitualCompletion[] = Array.isArray(r.ritualCompletions)
       ? (r.ritualCompletions as unknown[]).filter(
@@ -858,8 +850,10 @@ export function useScheduleDB() {
         loadedKeyRef.current = activeStorageKey;
         skipNextWriteRef.current = true;
 
+        let localSchedule: Schedule | null = null;
         if (stored) {
-          setScheduleState(resetStaleCompletions(migrate(stored), localISODate(new Date())));
+          localSchedule = resetStaleCompletions(migrate(stored), localISODate(new Date()));
+          setScheduleState(localSchedule);
         } else if (legacyGuestStored) {
           const now = Date.now();
           const migrated = resetStaleCompletions(migrate(legacyGuestStored), localISODate(new Date()));
@@ -874,8 +868,16 @@ export function useScheduleDB() {
         setReady(true);
 
         if (activeUid) {
-          const merged = await mergeCloudIfNewer(activeUid, getLocalLastUpdated(activeUid));
+          const cloudResult = await mergeCloudIfNewer(activeUid, getLocalLastUpdated(activeUid));
           if (cancelled) return;
+          const merged = cloudResult === "merged";
+          if ((cloudResult === "local-newer" || cloudResult === "missing") && localSchedule) {
+            // Recover a local write from a previous session that may have closed
+            // before the debounced cloud sync completed.
+            await flushNow(localSchedule);
+          } else if (cloudResult === "error" && localSchedule) {
+            queueSync(localSchedule);
+          }
           if (!merged && !hasLocalData) {
             // Fresh account: no newer cloud snapshot and no local user record.
             // Adopt any meaningful guest data so trial work isn't orphaned.

@@ -1,6 +1,7 @@
 "use client";
 
 import type { Ritual, DayKey, RitualCompletion } from "@/lib/useScheduleDB";
+import { addDaysToISO, todayISO } from "@/lib/dateUtils";
 
 interface StreakAlertChipsProps {
   rituals: Ritual[];
@@ -16,9 +17,7 @@ interface AtRiskRitual {
 
 /** ISO date for N days before a given ISO date */
 function subtractDay(isoDate: string, n: number): string {
-  const d = new Date(isoDate + "T00:00:00");
-  d.setDate(d.getDate() - n);
-  return d.toISOString().slice(0, 10);
+  return addDaysToISO(isoDate, -n);
 }
 
 function calcRitualStreak(
@@ -45,8 +44,8 @@ export default function StreakAlertChips({
   completedRitualIds,
   ritualCompletions,
 }: StreakAlertChipsProps) {
-  const todayISO = new Date().toISOString().slice(0, 10);
-  const yesterdayISO = subtractDay(todayISO, 1);
+  const today = todayISO();
+  const yesterdayISO = subtractDay(today, 1);
 
   // Rituals due today that are NOT yet completed
   const dueAndIncomplete = rituals.filter((r) => {

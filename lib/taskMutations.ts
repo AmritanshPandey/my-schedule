@@ -5,16 +5,15 @@
  * can pass it directly to setSchedule(). No component logic lives here.
  */
 
-import { DAYS, type Schedule, type Task, type DayKey } from "./useScheduleDB";
-import { parseTimeToMinutes } from "./timeUtils";
+import type { Schedule, Task } from "./useScheduleDB";
+import { DAYS, type DayKey } from "./scheduleConstants";
+import { uid } from "./id";
+import { localISODate } from "./dateUtils";
+import { parseTimeToMinutes, toScheduleDayMinutes } from "./timeUtils";
 import type { ScheduleEntry } from "@/components/ScheduleItem";
 import { colorFromIcon } from "./colorSystem";
 
-// ── Id generator ─────────────────────────────────────────────────────────────
-
-export function uid(): string {
-  return Date.now().toString(36) + Math.random().toString(36).slice(2);
-}
+export { uid } from "./id";
 
 // ── Time format converters — re-exported from timeUtils for convenience ───────
 
@@ -25,6 +24,43 @@ export { displayToInputTime, inputToDisplayTime } from "./timeUtils";
 interface PlanItemsUpdate {
   planId: string;
   items: ScheduleEntry[];
+}
+
+function reconcileEditedTask(existing: Task, updates: Omit<Task, "id">): Task {
+  const merged = { ...existing, ...updates };
+  if (updates.taskType === "session") return merged;
+
+  const nextSubtaskIds = new Set(updates.subtasks?.map((subtask) => subtask.id) ?? []);
+  const completedSubtaskIds = Array.from(
+    new Set(existing.completedSubtaskIds ?? [])
+  ).filter((id) => nextSubtaskIds.has(id));
+  const wasCompleted = existing.completed ?? (
+    nextSubtaskIds.size > 0 && completedSubtaskIds.length === nextSubtaskIds.size
+  );
+  const staysCompleted =
+    nextSubtaskIds.size === 0
+      ? wasCompleted && (existing.subtasks?.length ?? 0) === 0
+      : wasCompleted && completedSubtaskIds.length === nextSubtaskIds.size;
+  const today = localISODate(new Date());
+  const completionHistory = (existing.completionHistory ?? []).filter((event) => {
+    if (localISODate(new Date(event.completedAt)) !== today) return true;
+    if (event.completionType === "subtask") {
+      return !!event.subtaskId && nextSubtaskIds.has(event.subtaskId);
+    }
+    if (event.completionType === "missed" && event.subtaskId) {
+      return nextSubtaskIds.has(event.subtaskId);
+    }
+    if (event.completionType === "task") return staysCompleted;
+    return true;
+  });
+
+  return {
+    ...merged,
+    completed: staysCompleted,
+    completedAt: staysCompleted ? existing.completedAt : undefined,
+    completedSubtaskIds,
+    completionHistory,
+  };
 }
 
 /**
@@ -115,7 +151,7 @@ export function updateTaskDays(
         }
 
         const updatedTasks = hasTask
-          ? existingTasks.map((t) => (t.id === taskId ? { ...t, ...updates } : t))
+          ? existingTasks.map((t) => (t.id === taskId ? reconcileEditedTask(t, updates) : t))
           : [...existingTasks, { ...updates, id: taskId }];
 
         return [day, updatedTasks];
@@ -158,21 +194,30 @@ export { colorFromIcon };
 
 export function sortTasksByTime(tasks: Task[]): Task[] {
   return [...tasks].sort((left, right) => {
-    const lm = parseTimeToMinutes(left.startTime);
-    const rm = parseTimeToMinutes(right.startTime);
+    const lso = left.sortOrder;
+    const rso = right.sortOrder;
+    if (lso !== undefined || rso !== undefined) {
+      const orderDiff = (lso ?? Infinity) - (rso ?? Infinity);
+      if (orderDiff !== 0) return orderDiff;
+    }
+
+    const leftMinutes = parseTimeToMinutes(left.startTime);
+    const rightMinutes = parseTimeToMinutes(right.startTime);
+    const lm = leftMinutes === null ? null : toScheduleDayMinutes(leftMinutes);
+    const rm = rightMinutes === null ? null : toScheduleDayMinutes(rightMinutes);
     if (lm === null && rm === null) {
-      const lso = left.sortOrder ?? Infinity;
-      const rso = right.sortOrder ?? Infinity;
-      return lso !== rso ? lso - rso : left.title.localeCompare(right.title);
+      return left.title.localeCompare(right.title);
     }
     if (lm === null) return 1;
     if (rm === null) return -1;
     if (lm !== rm) return lm - rm;
-    const le = parseTimeToMinutes(left.endTime) ?? lm;
-    const re = parseTimeToMinutes(right.endTime) ?? rm;
+    const parsedLeftEnd = parseTimeToMinutes(left.endTime);
+    const parsedRightEnd = parseTimeToMinutes(right.endTime);
+    let le = parsedLeftEnd === null ? lm : parsedLeftEnd;
+    let re = parsedRightEnd === null ? rm : parsedRightEnd;
+    while (le <= lm) le += 1440;
+    while (re <= rm) re += 1440;
     if (le !== re) return le - re;
-    const lso = left.sortOrder ?? Infinity;
-    const rso = right.sortOrder ?? Infinity;
-    return lso !== rso ? lso - rso : left.title.localeCompare(right.title);
+    return left.title.localeCompare(right.title);
   });
 }

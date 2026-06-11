@@ -5,6 +5,7 @@ import { motion } from "framer-motion";
 import { IconCheck } from "@tabler/icons-react";
 import BottomSheet from "@/components/ui/BottomSheet";
 import SheetHeader from "@/components/ui/SheetHeader";
+import Pill from "@/components/ui/Pill";
 import type { Task, Plan } from "@/lib/useScheduleDB";
 import type { ScheduleEntry } from "@/components/ScheduleItem";
 
@@ -49,9 +50,9 @@ export default function SessionSheet({
         {/* Time chip */}
         {(task.startTime || task.endTime) && (
           <div className="flex items-center gap-2">
-            <span className="inline-flex items-center rounded-full border border-neutral-200 bg-neutral-50 px-3.5 py-1.5 text-[13px] font-semibold text-neutral-600 dark:border-white/[0.10] dark:bg-white/[0.04] dark:text-neutral-400">
+            <Pill variant="subtle" size="md" className="px-3.5 py-1.5 text-neutral-600 dark:text-neutral-400">
               {task.startTime}{task.endTime ? ` – ${task.endTime}` : ""}
-            </span>
+            </Pill>
           </div>
         )}
 
@@ -79,9 +80,9 @@ export default function SessionSheet({
                   ) : null}
                 </div>
                 {item.duration && (
-                  <span className="shrink-0 rounded-full bg-neutral-100 dark:bg-white/[0.06] px-3 py-1 text-[13px] font-semibold text-neutral-600 dark:text-neutral-400">
+                  <Pill variant="subtle" size="md" className="border-transparent text-neutral-600 dark:text-neutral-400">
                     {item.duration}
-                  </span>
+                  </Pill>
                 )}
               </div>
             ))}
