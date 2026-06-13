@@ -9,7 +9,19 @@ interface Props {
 interface State {
   hasError: boolean;
   message: string;
-  reloadAttempts: number;
+}
+
+// Persisted across reloads so a chunk that *keeps* failing can't trigger an
+// endless reload loop (which Safari surfaces as "A problem repeatedly occurred").
+const RELOAD_KEY = "planr-chunk-reloads";
+const MAX_RELOADS = 1;
+
+function getReloadCount(): number {
+  try {
+    return Number(sessionStorage.getItem(RELOAD_KEY)) || 0;
+  } catch {
+    return 0;
+  }
 }
 
 function isChunkLoadError(message: string) {
@@ -21,11 +33,47 @@ function isChunkLoadError(message: string) {
   );
 }
 
+// Drop the stale service-worker caches that usually cause a chunk to 404, so the
+// follow-up reload actually fetches the current build instead of looping.
+async function clearStaleCaches() {
+  try {
+    if ("caches" in window) {
+      const keys = await caches.keys();
+      await Promise.all(keys.filter((k) => k.startsWith("planr-")).map((k) => caches.delete(k)));
+    }
+  } catch {
+    /* best effort */
+  }
+}
+
 export class ErrorBoundary extends Component<Props, State> {
-  state: State = { hasError: false, message: "", reloadAttempts: 0 };
+  state: State = { hasError: false, message: "" };
 
   static getDerivedStateFromError(error: Error): State {
-    return { hasError: true, message: error.message, reloadAttempts: 0 };
+    return { hasError: true, message: error.message };
+  }
+
+  private resetTimer: number | undefined;
+
+  componentDidMount() {
+    // If the app stays healthy for a few seconds, the previous recovery worked —
+    // reset the counter so a *future* chunk error still gets its one reload.
+    // Done on a delay (not immediately) because chunk errors fire when a lazy
+    // import loads, which happens after mount; clearing too early would let the
+    // loop resume.
+    this.resetTimer = window.setTimeout(() => {
+      if (!this.state.hasError) {
+        try {
+          sessionStorage.removeItem(RELOAD_KEY);
+        } catch {
+          /* ignore */
+        }
+      }
+    }, 5000);
+  }
+
+  componentWillUnmount() {
+    window.clearTimeout(this.resetTimer);
   }
 
   componentDidCatch(error: Error) {
@@ -33,16 +81,18 @@ export class ErrorBoundary extends Component<Props, State> {
   }
 
   componentDidUpdate(_: Props, prevState: State) {
-    if (
+    const isNewError =
       this.state.hasError &&
-      this.state.reloadAttempts === 0 &&
-      isChunkLoadError(this.state.message) &&
-      (prevState.hasError === false || prevState.message !== this.state.message)
-    ) {
-      this.setState({ reloadAttempts: 1 }, () => {
-        window.setTimeout(() => {
-          window.location.reload();
-        }, 800);
+      (prevState.hasError === false || prevState.message !== this.state.message);
+
+    if (isNewError && isChunkLoadError(this.state.message) && getReloadCount() < MAX_RELOADS) {
+      try {
+        sessionStorage.setItem(RELOAD_KEY, String(getReloadCount() + 1));
+      } catch {
+        /* ignore */
+      }
+      clearStaleCaches().finally(() => {
+        window.setTimeout(() => window.location.reload(), 800);
       });
     }
   }
@@ -62,7 +112,14 @@ export class ErrorBoundary extends Component<Props, State> {
                 : this.state.message}
             </p>
             <button
-              onClick={() => window.location.reload()}
+              onClick={() => {
+                try {
+                  sessionStorage.removeItem(RELOAD_KEY);
+                } catch {
+                  /* ignore */
+                }
+                clearStaleCaches().finally(() => window.location.reload());
+              }}
               className="w-full rounded-xl border border-neutral-200 bg-neutral-50 px-4 py-2.5 text-[13px] font-semibold text-neutral-700 transition-colors hover:bg-neutral-100 dark:border-white/[0.08] dark:bg-white/[0.04] dark:text-white dark:hover:bg-white/[0.08]"
             >
               Reload app

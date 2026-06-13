@@ -93,6 +93,24 @@ export function inputToDisplayTime(value: string): string {
   return `${h.toString().padStart(2, "0")}:${min} ${suf}`;
 }
 
+/**
+ * Normalize any stored time ("14:00", "7:00 AM", "07:00") into a clean 12-hour
+ * display string ("2:00 PM"). Stored times are inconsistent across the app —
+ * AI-generated tasks use 24-hour, manually parsed ones use 12-hour — so always
+ * run a value through this before showing it. Returns the trimmed input
+ * unchanged if it can't be parsed.
+ */
+export function formatDisplayTime(value: string): string {
+  const minutes = parseTimeToMinutes(value);
+  if (minutes === null) return value.trim();
+  let h = Math.floor(minutes / 60) % 24;
+  const m = minutes % 60;
+  const suf = h >= 12 ? "PM" : "AM";
+  if (h === 0) h = 12;
+  else if (h > 12) h -= 12;
+  return `${h}:${m.toString().padStart(2, "0")} ${suf}`;
+}
+
 // ── Duration ──────────────────────────────────────────────────────────────────
 
 /**

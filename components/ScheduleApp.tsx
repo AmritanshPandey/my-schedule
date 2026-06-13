@@ -681,11 +681,10 @@ export default function ScheduleApp() {
 
 
 
-  // Auto-open templates on true first launch (no stored data)
+  // Land on the Overview page on true first launch (no stored data)
   useEffect(() => {
     if (ready && isFirstLaunch) {
-      setActiveTab(1); // Plans tab
-      setTemplatesOpen(true);
+      setActiveTab(4); // Overview
     }
   }, [ready, isFirstLaunch]);
 

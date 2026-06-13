@@ -3,6 +3,7 @@
 import { motion } from "framer-motion";
 import { IconBolt, IconCheck } from "@tabler/icons-react";
 import type { Task, Plan, Milestone } from "@/lib/useScheduleDB";
+import { formatDisplayTime } from "@/lib/timeUtils";
 
 interface WhatNextCardProps {
   task: Task;
@@ -21,8 +22,12 @@ export default function WhatNextCard({
 }: WhatNextCardProps) {
   const timeLabel =
     task.startTime && task.endTime
-      ? `${task.startTime} – ${task.endTime}`
-      : task.startTime || task.endTime || null;
+      ? `${formatDisplayTime(task.startTime)} – ${formatDisplayTime(task.endTime)}`
+      : task.startTime
+        ? formatDisplayTime(task.startTime)
+        : task.endTime
+          ? formatDisplayTime(task.endTime)
+          : null;
 
   return (
     <motion.div

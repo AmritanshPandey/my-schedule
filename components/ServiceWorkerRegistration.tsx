@@ -31,10 +31,15 @@ export default function ServiceWorkerRegistration() {
       return;
     }
 
+    // Only an *update* should reload the page. On the very first visit the page
+    // is uncontrolled, so the initial `clients.claim()` fires a controllerchange
+    // that is NOT an update — reloading on it causes an unnecessary (and, paired
+    // with other reloads, looping) refresh. Skip it when there was no controller.
+    const hadController = Boolean(navigator.serviceWorker.controller);
     let refreshing = false;
 
     function handleControllerChange() {
-      if (refreshing) return;
+      if (refreshing || !hadController) return;
       refreshing = true;
       window.location.reload();
     }

@@ -365,6 +365,19 @@ function normalizeOllamaBaseUrl(baseUrl: string) {
   return baseUrl.trim().replace(/\/+$/, "");
 }
 
+/**
+ * True when the page is served over HTTPS but the Ollama URL is plain HTTP
+ * (e.g. http://localhost on the deployed mobile site). Such requests are
+ * unconditionally blocked by the browser as insecure "mixed content" — and on
+ * WebKit/Safari the blocked fetch surfaces as an uncaught error that can take
+ * the whole page down. Ollama is a desktop-localhost feature and can never be
+ * reached from a deployed HTTPS origin, so we skip the request entirely.
+ */
+function isMixedContentBlocked(normalizedBaseUrl: string): boolean {
+  if (typeof window === "undefined") return false;
+  return window.location.protocol === "https:" && /^http:\/\//i.test(normalizedBaseUrl);
+}
+
 function parseModelArray(raw: unknown): string[] {
   if (!Array.isArray(raw)) return [];
   return raw
@@ -403,6 +416,9 @@ function makeOllamaCORSMessage(endpoint: string): string {
 
 export async function checkOllamaConnection(baseUrl: string): Promise<string[]> {
   const normalizedBaseUrl = normalizeOllamaBaseUrl(baseUrl);
+  if (isMixedContentBlocked(normalizedBaseUrl)) {
+    throw new Error("Ollama not reachable from this site (use the desktop app for local AI).");
+  }
   const endpoints = ["/api/models", "/api/tags"];
   let serverReachable = false;
 
@@ -446,6 +462,7 @@ export async function checkModelStatus(
   baseUrl: string,
   model: string,
 ): Promise<"connected" | "no-model" | "offline"> {
+  if (isMixedContentBlocked(normalizeOllamaBaseUrl(baseUrl))) return "offline";
   try {
     // /api/show is the definitive check — 200 means model is present, 404 means it isn't
     const res = await fetch(`${baseUrl}/api/show`, {
