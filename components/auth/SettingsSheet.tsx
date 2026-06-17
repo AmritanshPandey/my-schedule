@@ -23,10 +23,12 @@ import {
 import BottomSheet from "@/components/ui/BottomSheet";
 import { useAuth } from "@/contexts/AuthProvider";
 import { getSyncStatus, getLastSyncedAt, getLastSchedule, onSyncStatusChange, flushNow, deleteCloudData, type SyncStatus } from "@/lib/cloudSync";
-import type { Schedule } from "@/lib/useScheduleDB";
+import { formatDisplayTime, minutesToInputTime } from "@/lib/timeUtils";
+import type { Schedule, SchedulePreferences } from "@/lib/useScheduleDB";
 import { OLLAMA_URL_KEY, OLLAMA_MODEL_KEY, DEFAULT_OLLAMA_URL, DEFAULT_OLLAMA_MODEL, checkOllamaConnection, checkModelStatus } from "@/lib/ai";
 import { AISettingsSheet } from "@/components/ai/AISettingsSheet";
 import { AI_ENABLED } from "@/lib/featureFlags";
+import { normalizeDayStartTime } from "@/lib/timeline/displayWindow";
 
 // ── Theme helpers ─────────────────────────────────────────────────────────────
 
@@ -93,6 +95,11 @@ function Divider() {
   return <div className="mx-4 border-t border-neutral-100 dark:border-white/[0.06]" />;
 }
 
+const DAY_START_OPTIONS = Array.from({ length: 48 }, (_, index) => {
+  const value = minutesToInputTime(index * 30);
+  return { value, label: formatDisplayTime(value) };
+});
+
 // ── Appearance toggle ─────────────────────────────────────────────────────────
 
 function AppearanceRow() {
@@ -142,6 +149,49 @@ function AppearanceRow() {
           })}
         </div>
       )}
+    </div>
+  );
+}
+
+function StartOfDayRow({
+  value,
+  onChange,
+}: {
+  value?: string;
+  onChange?: (patch: Partial<SchedulePreferences>) => void;
+}) {
+  const dayStartTime = value ?? "";
+
+  return (
+    <div className="flex items-start gap-3 px-4 py-3.5">
+      <div className="min-w-0 flex-1">
+        <p className="text-[13px] font-semibold text-neutral-800 dark:text-white">Start of day</p>
+        <p className="mt-0.5 text-[11px] leading-snug text-neutral-400 dark:text-neutral-500">
+          Auto follows the first timed task. A fixed time starts the timeline one hour earlier.
+        </p>
+      </div>
+      <div className="flex shrink-0 items-center gap-2">
+        <select
+          value={dayStartTime}
+          onChange={(e) => onChange?.({ dayStartTime: normalizeDayStartTime(e.target.value) })}
+          className="rounded-xl border border-neutral-200 bg-neutral-50 px-3 py-2 text-[12px] font-semibold text-neutral-700 outline-none transition-colors focus:border-neutral-300 dark:border-white/[0.08] dark:bg-white/[0.04] dark:text-white"
+        >
+          <option value="">Auto from tasks</option>
+          {DAY_START_OPTIONS.map((option) => (
+            <option key={option.value} value={option.value}>
+              {option.label}
+            </option>
+          ))}
+        </select>
+        <button
+          type="button"
+          onClick={() => onChange?.({ dayStartTime: undefined })}
+          disabled={!dayStartTime}
+          className="rounded-xl border border-neutral-200 px-3 py-2 text-[11px] font-semibold text-neutral-500 transition-colors hover:border-neutral-300 disabled:cursor-default disabled:opacity-40 dark:border-white/[0.08] dark:text-neutral-400"
+        >
+          Clear
+        </button>
+      </div>
     </div>
   );
 }
@@ -748,9 +798,17 @@ interface SettingsSheetProps {
   onClearData: () => Promise<void>;
   onClearProgress?: () => Promise<void>;
   schedule: Schedule;
+  onUpdatePreferences?: (patch: Partial<SchedulePreferences>) => void;
 }
 
-export function SettingsSheet({ open, onClose, onClearData, onClearProgress, schedule }: SettingsSheetProps) {
+export function SettingsSheet({
+  open,
+  onClose,
+  onClearData,
+  onClearProgress,
+  schedule,
+  onUpdatePreferences,
+}: SettingsSheetProps) {
   const { user, isGuest, authLoading, login, logout } = useAuth();
   const [busy, setBusy] = useState(false);
   const [aiSettingsOpen, setAiSettingsOpen] = useState(false);
@@ -851,6 +909,14 @@ export function SettingsSheet({ open, onClose, onClearData, onClearProgress, sch
         <SectionLabel>Preferences</SectionLabel>
         <SettingsCard>
           <AppearanceRow />
+        </SettingsCard>
+
+        <SectionLabel>Timeline</SectionLabel>
+        <SettingsCard>
+          <StartOfDayRow
+            value={schedule.preferences?.dayStartTime}
+            onChange={onUpdatePreferences}
+          />
         </SettingsCard>
 
         {/* ── AI (hidden while AI is disabled) ─────────────────────────────── */}

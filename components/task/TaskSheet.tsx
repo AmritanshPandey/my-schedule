@@ -16,6 +16,7 @@ import {
   IconCopy,
   IconPlus,
   IconSparkles,
+  IconTrash,
   IconX,
 } from "@tabler/icons-react";
 import { streamGenerateSubtasks, parseGeneratedSubtasks } from "@/lib/aiActions";
@@ -30,6 +31,7 @@ import Button from "@/components/ui/Button";
 import IconButton from "@/components/ui/IconButton";
 import Input from "@/components/ui/Input";
 import TimeSlotPicker from "@/components/TimeSlotPicker";
+import { haptic } from "@/lib/haptics";
 import type { DayKey, Plan, Task } from "@/lib/useScheduleDB";
 import { DAYS, DAY_LABELS } from "@/lib/useScheduleDB";
 import type { ScheduleEntry } from "@/components/ScheduleItem";
@@ -63,11 +65,16 @@ export interface TaskSheetProps {
   isOpen: boolean;
   initialPlanId?: string | null;
   initialTaskType?: "task" | "session";
+  /** Pre-fill start time on create (HH:MM 24-hour format, e.g. "09:30"). */
+  initialStartTime?: string;
+  /** Pre-fill end time on create (HH:MM 24-hour format, e.g. "10:30"). */
+  initialEndTime?: string;
   ollamaUrl?: string;
   ollamaModel?: string;
   onClose: () => void;
   onSave: (data: TaskSaveData) => void;
   onDuplicate?: (data: TaskSaveData) => void;
+  onDelete?: () => void;
 }
 
 function entryToSubtaskDraft(e: ScheduleEntry): SubtaskDraft {
@@ -112,11 +119,14 @@ export function TaskSheet({
   isOpen,
   initialPlanId,
   initialTaskType,
+  initialStartTime,
+  initialEndTime,
   ollamaUrl,
   ollamaModel,
   onClose,
   onSave,
   onDuplicate,
+  onDelete,
 }: TaskSheetProps) {
   // ── AI routing ────────────────────────────────────────────────────────────
   const aiRuntime = useAIRuntime();
@@ -127,6 +137,7 @@ export function TaskSheet({
     ollamaConnected: !!(ollamaUrl && ollamaModel),
     aiEnabled: aiRuntime.enabled,
   });
+  const keepBackdropLight = mode === "create" && (!!initialStartTime || !!initialEndTime);
   // AI is globally hidden for now — gate the "Expand" affordance behind the flag.
   const canExpand = AI_ENABLED && aiRoute.backend !== "none";
 
@@ -169,8 +180,8 @@ export function TaskSheet({
       setTaskType(initialTaskType ?? "task");
       setTitle("");
       setDescription("");
-      setStartTime("");
-      setEndTime("");
+      setStartTime(initialStartTime ?? "");
+      setEndTime(initialEndTime ?? "");
       setRepeatDays([activeDay]);
       setSubtasks([]);
     }
@@ -327,7 +338,11 @@ export function TaskSheet({
   const headingTitle = mode === "create" ? "New Task" : (task?.title ?? "Task");
 
   return (
-    <BottomSheet open={isOpen} onClose={duplicateStep === "picking" ? () => setDuplicateStep("idle") : handleClose}>
+    <BottomSheet
+      open={isOpen}
+      onClose={duplicateStep === "picking" ? () => setDuplicateStep("idle") : handleClose}
+      backdropClassName={keepBackdropLight ? "bg-black/24 backdrop-blur-[1px]" : undefined}
+    >
       <AnimatePresence mode="wait" initial={false}>
 
         {/* ── Duplicate day-picker ─────────────────────────────────────────── */}
@@ -537,11 +552,25 @@ export function TaskSheet({
                   <IconX size={15} />
                 </Button>
               </div>
-              {mode === "edit" && onDuplicate && (
-                <Button variant="secondary" fullWidth onClick={openDuplicatePicker} disabled={!canSave}>
-                  <IconCopy size={15} />
-                  Duplicate
-                </Button>
+              {mode === "edit" && (onDuplicate || onDelete) && (
+                <div className={`grid gap-2 ${onDuplicate && onDelete ? "grid-cols-2" : "grid-cols-1"}`}>
+                  {onDuplicate && (
+                    <Button variant="secondary" fullWidth onClick={openDuplicatePicker} disabled={!canSave}>
+                      <IconCopy size={15} />
+                      Duplicate
+                    </Button>
+                  )}
+                  {onDelete && (
+                    <Button
+                      variant="dangerSecondary"
+                      fullWidth
+                      onClick={() => { haptic("light"); onDelete(); }}
+                    >
+                      <IconTrash size={15} />
+                      Delete
+                    </Button>
+                  )}
+                </div>
               )}
             </div>
           </motion.div>

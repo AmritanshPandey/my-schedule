@@ -3,7 +3,7 @@
 import { forwardRef, type ButtonHTMLAttributes, type ReactNode } from "react";
 
 type Variant = "outline" | "soft" | "ghost" | "dangerGhost";
-type Size = "sm" | "md" | "xs";
+type Size = "tiny" | "xxs" | "xs" | "sm" | "md";
 type Radius = "lg" | "xl" | "full";
 
 interface IconButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
@@ -22,10 +22,12 @@ const variantClasses: Record<Variant, string> = {
   ghost:
     "text-neutral-400 hover:bg-neutral-100 hover:text-neutral-600 dark:text-neutral-500 dark:hover:bg-white/[0.07] dark:hover:text-neutral-300",
   dangerGhost:
-    "text-neutral-300 hover:bg-rose-500/10 hover:text-rose-500 dark:text-white/20 dark:hover:text-rose-400",
+    "text-neutral-400 hover:bg-rose-500/10 hover:text-rose-500 focus-visible:bg-rose-500/10 focus-visible:text-rose-500 dark:text-neutral-500 dark:hover:bg-rose-500/10 dark:hover:text-rose-400 dark:focus-visible:bg-rose-500/10 dark:focus-visible:text-rose-400",
 };
 
 const sizeClasses: Record<Size, string> = {
+  tiny: "h-[18px] w-[18px]",
+  xxs: "h-6 w-6",
   xs: "h-8 w-8",
   sm: "h-8 w-8",
   md: "h-9 w-9",

@@ -2,7 +2,7 @@
 
 import { forwardRef } from "react";
 
-type Variant = "primary" | "secondary" | "ghost" | "destructive";
+type Variant = "primary" | "secondary" | "ghost" | "destructive" | "dangerSecondary";
 type Size = "sm" | "md" | "lg";
 
 interface ButtonProps extends React.ButtonHTMLAttributes<HTMLButtonElement> {
@@ -19,7 +19,9 @@ const variantClasses: Record<Variant, string> = {
   ghost:
     "text-neutral-500 hover:bg-neutral-100 dark:text-neutral-400 dark:hover:bg-white/[0.07]",
   destructive:
-    "bg-red-500 text-white hover:bg-red-600 disabled:opacity-40 dark:bg-red-600 dark:hover:bg-red-700",
+    "bg-rose-500 text-white hover:bg-rose-600 disabled:opacity-40 dark:bg-rose-500 dark:hover:bg-rose-600",
+  dangerSecondary:
+    "border border-neutral-200 text-neutral-500 hover:border-rose-200 hover:bg-rose-500/10 hover:text-rose-500 dark:border-white/10 dark:text-neutral-400 dark:hover:border-rose-500/20 dark:hover:bg-rose-500/10 dark:hover:text-rose-400",
 };
 
 const sizeClasses: Record<Size, string> = {

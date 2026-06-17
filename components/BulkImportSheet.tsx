@@ -170,11 +170,11 @@ export function BulkImportFlow({ plans, fallbackDay = "monday", onCommit, onDone
   }
 
   return (
-    <div className="flex flex-col gap-4">
+    <div className="flex flex-col gap-5">
       {header ? (
         <div className="flex items-start justify-between gap-3">
           {header}
-          <span className="mt-1 inline-flex shrink-0 items-center gap-1.5 rounded-full border border-emerald-500/40 bg-emerald-500/10 px-3 py-1 text-[12px] font-bold text-emerald-600 dark:text-emerald-400">
+          <span className="mt-1 inline-flex shrink-0 items-center gap-1.5 rounded-full border border-emerald-500/35 bg-emerald-500/10 px-3 py-1.5 text-[12px] font-semibold text-emerald-600 dark:text-emerald-400">
             <IconSparkles size={14} strokeWidth={2} />
             Parsing
           </span>
@@ -192,7 +192,7 @@ export function BulkImportFlow({ plans, fallbackDay = "monday", onCommit, onDone
       )}
 
       {header && (
-        <p className="-mt-2 text-[12px] leading-snug text-neutral-500 dark:text-neutral-400">
+        <p className="-mt-2 text-[13px] leading-relaxed text-neutral-500 dark:text-neutral-400">
           Paste a plan — we&apos;ll turn it into scheduled tasks. One line per task, with day headers like &quot;Monday&quot;.
         </p>
       )}
@@ -202,23 +202,23 @@ export function BulkImportFlow({ plans, fallbackDay = "monday", onCommit, onDone
           <button
             type="button"
             onClick={() => { haptic("light"); setText(""); }}
-            className="ml-auto inline-flex items-center gap-1.5 rounded-lg border border-neutral-200 px-2.5 py-1 text-[12px] font-bold text-neutral-500 hover:bg-neutral-50 dark:border-white/[0.1] dark:text-neutral-400 dark:hover:bg-white/[0.04]"
+            className="ml-auto inline-flex items-center gap-1.5 rounded-xl border border-neutral-200 bg-white px-3 py-1.5 text-[12px] font-semibold text-neutral-500 transition-colors hover:border-neutral-300 hover:bg-neutral-50 dark:border-white/[0.1] dark:bg-white/[0.03] dark:text-neutral-400 dark:hover:bg-white/[0.05]"
           >
             <IconTrash size={14} strokeWidth={2} />Clear
           </button>
         </Step>
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
           <button
             type="button"
             onClick={downloadTemplate}
-            className="inline-flex items-center gap-1.5 rounded-lg border border-neutral-200 px-2.5 py-1.5 text-[12px] font-bold text-neutral-600 hover:bg-neutral-50 dark:border-white/[0.1] dark:text-neutral-300 dark:hover:bg-white/[0.04]"
+            className="inline-flex items-center gap-1.5 rounded-xl border border-neutral-200 bg-white px-3 py-2 text-[12px] font-semibold text-neutral-600 transition-colors hover:border-neutral-300 hover:bg-neutral-50 dark:border-white/[0.1] dark:bg-white/[0.03] dark:text-neutral-300 dark:hover:bg-white/[0.05]"
           >
             <IconDownload size={14} strokeWidth={2} />Download template
           </button>
           <button
             type="button"
             onClick={() => { haptic("light"); fileInputRef.current?.click(); }}
-            className="inline-flex items-center gap-1.5 rounded-lg border border-neutral-200 px-2.5 py-1.5 text-[12px] font-bold text-neutral-600 hover:bg-neutral-50 dark:border-white/[0.1] dark:text-neutral-300 dark:hover:bg-white/[0.04]"
+            className="inline-flex items-center gap-1.5 rounded-xl border border-neutral-200 bg-white px-3 py-2 text-[12px] font-semibold text-neutral-600 transition-colors hover:border-neutral-300 hover:bg-neutral-50 dark:border-white/[0.1] dark:bg-white/[0.03] dark:text-neutral-300 dark:hover:bg-white/[0.05]"
           >
             <IconUpload size={14} strokeWidth={2} />Upload file
           </button>
@@ -230,13 +230,16 @@ export function BulkImportFlow({ plans, fallbackDay = "monday", onCommit, onDone
             className="hidden"
           />
         </div>
-        <div className="relative rounded-2xl border-[1.5px] border-emerald-500/70 bg-white p-3.5 dark:bg-neutral-900">
+        <div className="relative overflow-hidden rounded-[24px] border border-neutral-200 bg-white shadow-[0_1px_2px_rgba(10,10,10,0.04)] dark:border-white/[0.08] dark:bg-neutral-900">
+          <div className="border-b border-neutral-100 px-4 py-2.5 text-[11px] font-semibold uppercase tracking-[0.08em] text-neutral-400 dark:border-white/[0.06] dark:text-neutral-500">
+            Source
+          </div>
           <textarea
             value={text}
             onChange={(e) => setText(e.target.value)}
             spellCheck={false}
             placeholder={SAMPLE}
-            className="h-[150px] w-full resize-y bg-transparent font-mono text-[12.5px] leading-[1.7] text-neutral-900 outline-none placeholder:text-neutral-300 dark:text-white dark:placeholder:text-neutral-600"
+            className="h-[210px] w-full resize-y bg-transparent px-4 py-3 font-sans text-[15px] leading-7 text-neutral-900 outline-none placeholder:text-neutral-300 dark:text-white dark:placeholder:text-neutral-600"
           />
           <span className="pointer-events-none absolute bottom-2 right-3 text-[11px] text-neutral-300 dark:text-neutral-600">
             {text.length}/2000
@@ -261,22 +264,22 @@ export function BulkImportFlow({ plans, fallbackDay = "monday", onCommit, onDone
                 {newPlans.map((p) => {
                   const Icon = PLAN_ICONS[p.emoji] ?? IconCalendarEvent;
                   return (
-                    <div key={p.ref} className="flex items-start gap-2.5 rounded-2xl border border-emerald-500/30 bg-emerald-500/[0.06] p-3">
-                      <span className="grid h-8 w-8 shrink-0 place-items-center rounded-xl bg-emerald-500/15 text-emerald-600 dark:text-emerald-400">
+                    <div key={p.ref} className="flex items-start gap-3 rounded-[24px] border border-neutral-200 bg-white px-4 py-3.5 shadow-[0_1px_2px_rgba(10,10,10,0.04)] dark:border-white/[0.08] dark:bg-neutral-900">
+                      <span className="grid h-11 w-11 shrink-0 place-items-center rounded-2xl bg-emerald-500/12 text-emerald-600 dark:text-emerald-400">
                         <Icon size={17} strokeWidth={2} />
                       </span>
                       <div className="min-w-0 flex-1">
-                        <div className="flex items-center gap-1.5">
-                          <span className="inline-flex items-center gap-1 rounded-full bg-emerald-500/15 px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wide text-emerald-600 dark:text-emerald-400">
+                        <div className="flex items-center gap-2">
+                          <span className="inline-flex items-center gap-1 rounded-full bg-emerald-500/15 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.08em] text-emerald-600 dark:text-emerald-400">
                             <IconSparkles size={11} strokeWidth={2.5} />New plan
                           </span>
-                          <span className="truncate text-[14px] font-bold text-neutral-900 dark:text-white">{p.title}</span>
+                          <span className="truncate text-[15px] font-bold text-neutral-900 dark:text-white">{p.title}</span>
                         </div>
                         {p.description && (
-                          <p className="mt-0.5 truncate text-[12px] text-neutral-500 dark:text-neutral-400">{p.description}</p>
+                          <p className="mt-1 truncate text-[13px] text-neutral-500 dark:text-neutral-400">{p.description}</p>
                         )}
                         {(p.startDate || p.endDate) && (
-                          <p className="mt-0.5 text-[11px] font-medium text-neutral-400 dark:text-neutral-500">
+                          <p className="mt-1 text-[12px] font-medium text-neutral-400 dark:text-neutral-500">
                             {p.startDate ?? "…"} → {p.endDate ?? "…"}
                           </p>
                         )}
@@ -290,29 +293,32 @@ export function BulkImportFlow({ plans, fallbackDay = "monday", onCommit, onDone
               {days.map((d) => {
                 const isCollapsed = collapsed.has(d.day);
                 return (
-                  <div key={d.day} className="rounded-2xl border border-neutral-200 p-3 dark:border-white/[0.08]">
+                  <div key={d.day} className="overflow-hidden rounded-[24px] border border-neutral-200 bg-white shadow-[0_1px_2px_rgba(10,10,10,0.04)] dark:border-white/[0.08] dark:bg-neutral-900">
                     <button type="button" onClick={() => toggleDay(d.day)} className="flex w-full items-center gap-2.5 text-left">
-                      <IconCalendarEvent size={16} strokeWidth={2} className="shrink-0 text-emerald-600 dark:text-emerald-400" />
-                      <span className="text-[14px] font-bold text-neutral-900 dark:text-white">{d.label}</span>
-                      <span className="ml-auto text-[12px] font-bold text-emerald-600 dark:text-emerald-400">{d.tasks.length} task{d.tasks.length !== 1 ? "s" : ""}</span>
-                      <IconChevronDown size={16} strokeWidth={2} className={`shrink-0 text-neutral-400 transition-transform ${isCollapsed ? "-rotate-90" : ""}`} />
+                      <div className="flex w-full items-center gap-2.5 px-4 py-3.5">
+                        <IconCalendarEvent size={16} strokeWidth={2} className="shrink-0 text-emerald-600 dark:text-emerald-400" />
+                        <span className="text-[15px] font-bold text-neutral-900 dark:text-white">{d.label}</span>
+                        <span className="ml-auto text-[12px] font-semibold text-emerald-600 dark:text-emerald-400">{d.tasks.length} task{d.tasks.length !== 1 ? "s" : ""}</span>
+                        <IconChevronDown size={16} strokeWidth={2} className={`shrink-0 text-neutral-400 transition-transform ${isCollapsed ? "-rotate-90" : ""}`} />
+                      </div>
                     </button>
                     {!isCollapsed && (
-                      <div className="mt-2.5 flex flex-col gap-2">
+                      <div className="border-t border-neutral-100 px-4 py-3 dark:border-white/[0.06]">
+                        <div className="flex flex-col gap-2">
                         {d.tasks.map((t) => (
-                          <div key={t.id} className="rounded-xl border border-neutral-100 px-2.5 py-2 dark:border-white/[0.05]">
+                          <div key={t.id} className="rounded-[20px] border border-neutral-100 px-3 py-3 dark:border-white/[0.05]">
                             <div className="flex items-center gap-2.5">
-                              <span className="min-w-0 flex-1 truncate text-[13px] font-semibold text-neutral-800 dark:text-neutral-200">{t.title}</span>
+                              <span className="min-w-0 flex-1 truncate text-[14px] font-semibold text-neutral-800 dark:text-neutral-200">{t.title}</span>
                               {t.needsTime ? (
-                                <span className="inline-flex shrink-0 items-center gap-1 text-[12px] font-bold text-amber-600 dark:text-amber-400">
+                                <span className="inline-flex shrink-0 items-center gap-1 text-[12px] font-semibold text-amber-600 dark:text-amber-400">
                                   <IconClock size={13} strokeWidth={2} />Time?
                                 </span>
                               ) : (
-                                <span className="shrink-0 text-[12px] font-bold text-emerald-600 dark:text-emerald-400">{t.startTime}</span>
+                                <span className="shrink-0 text-[12px] font-semibold text-emerald-600 dark:text-emerald-400">{t.startTime}</span>
                               )}
                             </div>
                             {t.subtasks && t.subtasks.length > 0 && (
-                              <div className="mt-1.5 flex flex-col gap-1 border-l-2 border-emerald-500/20 pl-2.5">
+                              <div className="mt-2 flex flex-col gap-1.5 border-l-2 border-emerald-500/18 pl-3">
                                 {t.subtasks.map((s) => (
                                   <div key={s.id} className="flex items-center gap-1.5 text-[12px]">
                                     <span className="h-1 w-1 shrink-0 rounded-full bg-neutral-300 dark:bg-neutral-600" />
@@ -327,6 +333,7 @@ export function BulkImportFlow({ plans, fallbackDay = "monday", onCommit, onDone
                             )}
                           </div>
                         ))}
+                        </div>
                       </div>
                     )}
                   </div>
@@ -345,7 +352,7 @@ export function BulkImportFlow({ plans, fallbackDay = "monday", onCommit, onDone
                 <motion.div
                   key={current.task.id}
                   initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -6 }}
-                  className="rounded-2xl border border-amber-500/35 bg-amber-50 p-3.5 dark:border-amber-500/20 dark:bg-amber-500/10"
+                  className="rounded-[24px] border border-amber-500/28 bg-amber-50/85 p-4 dark:border-amber-500/20 dark:bg-amber-500/10"
                 >
                   <div className="flex items-start gap-2.5">
                     <span className="grid h-7 w-7 shrink-0 place-items-center rounded-full bg-amber-500/25 text-amber-700 dark:text-amber-400">
@@ -365,9 +372,9 @@ export function BulkImportFlow({ plans, fallbackDay = "monday", onCommit, onDone
                         key={o.label}
                         type="button"
                         onClick={() => setTaskTime(current.task.id, o.time)}
-                        className="rounded-xl border border-amber-500/30 bg-white px-2 py-2 text-center transition-colors hover:border-amber-500 dark:bg-neutral-900"
+                        className="rounded-2xl border border-amber-500/25 bg-white px-2 py-2.5 text-center transition-colors hover:border-amber-500 dark:bg-neutral-900"
                       >
-                        <span className="block text-[12px] font-bold text-neutral-800 dark:text-neutral-200">{o.label}</span>
+                        <span className="block text-[12px] font-semibold text-neutral-800 dark:text-neutral-200">{o.label}</span>
                         <span className="block text-[10px] font-medium text-neutral-400 dark:text-neutral-500">{o.sub}</span>
                       </button>
                     ))}
@@ -389,7 +396,7 @@ export function BulkImportFlow({ plans, fallbackDay = "monday", onCommit, onDone
               ) : (
                 <motion.div
                   key="all-set" initial={{ opacity: 0 }} animate={{ opacity: 1 }}
-                  className="flex items-center gap-2.5 rounded-2xl border border-emerald-500/30 bg-emerald-500/10 p-3.5"
+                  className="flex items-center gap-2.5 rounded-[24px] border border-neutral-200 bg-white p-4 shadow-[0_1px_2px_rgba(10,10,10,0.04)] dark:border-white/[0.08] dark:bg-neutral-900"
                 >
                   <span className="grid h-7 w-7 shrink-0 place-items-center rounded-full bg-emerald-500 text-white">
                     <IconCheck size={15} strokeWidth={3} />
@@ -410,7 +417,7 @@ export function BulkImportFlow({ plans, fallbackDay = "monday", onCommit, onDone
           whileTap={{ scale: 0.98 }}
           disabled={total === 0}
           onClick={commit}
-          className="mt-1 flex w-full flex-col items-center gap-0.5 rounded-full bg-emerald-600 py-3 text-white disabled:opacity-50"
+          className="mt-1 flex w-full flex-col items-center gap-0.5 rounded-full bg-neutral-900 py-3.5 text-white shadow-[0_10px_24px_rgba(10,10,10,0.12)] transition-colors hover:bg-neutral-800 disabled:opacity-50 dark:bg-white dark:text-neutral-900 dark:hover:bg-neutral-100"
         >
           <span className="flex items-center gap-2 text-[15px] font-bold">
             <IconCircleCheck size={18} strokeWidth={2} />

@@ -12,6 +12,7 @@ import { useAuth } from "@/contexts/AuthProvider";
 import { calculateMilestoneEndDate, recalculateRoadmapTimeline } from "@/lib/roadmapDates";
 import { localISODate } from "@/lib/dateUtils";
 import { DAYS, DAY_LABELS, type DayKey } from "@/lib/scheduleConstants";
+import { normalizeDayStartTime } from "@/lib/timeline/displayWindow";
 
 export { DAYS, DAY_LABELS } from "@/lib/scheduleConstants";
 export type { DayKey } from "@/lib/scheduleConstants";
@@ -184,6 +185,10 @@ export interface Note {
   tags?: string[];       // free-text labels for grouping/filtering
 }
 
+export interface SchedulePreferences {
+  dayStartTime?: string;
+}
+
 export interface Schedule {
   plans: Plan[];
   activities: DayActivities;
@@ -194,6 +199,7 @@ export interface Schedule {
   strategies: StrategyAsset[];
   ritualCompletions: RitualCompletion[];
   notes: Note[];
+  preferences: SchedulePreferences;
 }
 
 const DB_NAME = "daily-planner";
@@ -589,6 +595,7 @@ function migrate(raw: unknown): Schedule {
   const empty = emptyEmpty();
   if (!raw || typeof raw !== "object") return empty;
   const r = raw as Record<string, unknown>;
+  const preferences = normalizeSchedulePreferences(r.preferences);
 
   // Already current shape or existing activities that still need per-day normalization.
   if (isPerDay(r.activities) && Array.isArray(r.plans)) {
@@ -657,6 +664,7 @@ function migrate(raw: unknown): Schedule {
       strategies,
       ritualCompletions,
       notes,
+      preferences,
     };
   }
 
@@ -681,6 +689,7 @@ function migrate(raw: unknown): Schedule {
       strategies: [],
       ritualCompletions: [],
       notes: normalizeNotes(r.notes),
+      preferences,
     };
   }
 
@@ -706,7 +715,18 @@ function migrate(raw: unknown): Schedule {
   plans[0].items = Array.isArray(r.diet) ? (r.diet as ScheduleEntry[]) : [];
   plans[1].items = Array.isArray(r.workout) ? (r.workout as ScheduleEntry[]) : [];
 
-  return { plans, activities, progressTrackers, metricEntries, milestones: [], rituals: [], strategies: [], ritualCompletions: [], notes: normalizeNotes(r.notes) };
+  return {
+    plans,
+    activities,
+    progressTrackers,
+    metricEntries,
+    milestones: [],
+    rituals: [],
+    strategies: [],
+    ritualCompletions: [],
+    notes: normalizeNotes(r.notes),
+    preferences,
+  };
 }
 
 const MAX_NOTE_TAGS = 8;
@@ -747,8 +767,25 @@ function normalizeNotes(raw: unknown): Note[] {
     }));
 }
 
+function normalizeSchedulePreferences(raw: unknown): SchedulePreferences {
+  if (!raw || typeof raw !== "object") return {};
+  const dayStartTime = normalizeDayStartTime((raw as { dayStartTime?: unknown }).dayStartTime);
+  return dayStartTime ? { dayStartTime } : {};
+}
+
 function emptyEmpty(): Schedule {
-  return { plans: [], activities: emptyDayActivities(), progressTrackers: [], metricEntries: [], milestones: [], rituals: [], strategies: [], ritualCompletions: [], notes: [] };
+  return {
+    plans: [],
+    activities: emptyDayActivities(),
+    progressTrackers: [],
+    metricEntries: [],
+    milestones: [],
+    rituals: [],
+    strategies: [],
+    ritualCompletions: [],
+    notes: [],
+    preferences: {},
+  };
 }
 
 /**

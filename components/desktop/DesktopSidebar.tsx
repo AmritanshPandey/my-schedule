@@ -7,10 +7,12 @@ import {
   IconFileImport,
   IconLayoutDashboard,
   IconLayoutSidebar,
+  IconMoon,
   IconPencil,
   IconPlus,
   IconRepeat,
   IconSettings,
+  IconSun,
 } from "@tabler/icons-react";
 import { haptic } from "@/lib/haptics";
 import { checkModelStatus } from "@/lib/ai";
@@ -41,6 +43,19 @@ const NAV_ITEMS = [
 ] as const;
 
 type ConnectionStatus = "checking" | "connected" | "no-model" | "offline";
+type ThemeMode = "light" | "dark";
+
+function applyTheme(theme: ThemeMode) {
+  const root = document.documentElement;
+  root.classList.toggle("dark", theme === "dark");
+  root.style.colorScheme = theme;
+}
+
+function detectInitialTheme(): ThemeMode {
+  const stored = window.localStorage.getItem("theme");
+  if (stored === "light" || stored === "dark") return stored;
+  return window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
+}
 
 function StatusDot({ status }: { status: ConnectionStatus }) {
   if (status === "checking") {
@@ -82,7 +97,16 @@ export default function DesktopSidebar({
 }: DesktopSidebarProps) {
   const [status, setStatus] = useState<ConnectionStatus>("checking");
   const [checkTick, setCheckTick] = useState(0);
+  const [theme, setTheme] = useState<ThemeMode>("light");
+  const [themeReady, setThemeReady] = useState(false);
   const runtime = useAIRuntime();
+
+  useEffect(() => {
+    const initial = detectInitialTheme();
+    setTheme(initial);
+    applyTheme(initial);
+    setThemeReady(true);
+  }, []);
 
   // Check connection on mount, when url/model changes, on manual refresh, and every 15s
   useEffect(() => {
@@ -105,6 +129,17 @@ export default function DesktopSidebar({
     else if (activeTab === 1) onCreatePlan();
     else if (activeTab === 2) onCreateRitual();
     // tab 3 (Review) has no create action
+  }
+
+  function setMode(next: ThemeMode) {
+    haptic("light");
+    setTheme(next);
+    applyTheme(next);
+    window.localStorage.setItem("theme", next);
+  }
+
+  function toggleTheme() {
+    setMode(theme === "dark" ? "light" : "dark");
   }
 
   // Short display name for the Ollama model — strip tag if generic
@@ -209,8 +244,8 @@ export default function DesktopSidebar({
         })}
       </nav>
 
-      {/* ── Create button (hidden on Review tab) ─────────────────────────────── */}
-      {activeTab !== 3 && activeTab !== 4 && (
+      {/* ── Create button (hidden where the current view owns creation) ───────── */}
+      {activeTab !== 3 && activeTab !== 4 && activeTab !== 6 && (
         <div className={`shrink-0 pb-2 ${collapsed ? "px-2" : "px-2.5"}`}>
           <button
             type="button"
@@ -284,6 +319,44 @@ export default function DesktopSidebar({
           <IconSettings size={16} strokeWidth={1.8} className="shrink-0" />
           {!collapsed && <span className="text-[13px] font-medium">Settings</span>}
         </button>
+
+        {/* Theme */}
+        {collapsed ? (
+          <button
+            type="button"
+            onClick={toggleTheme}
+            title={themeReady ? `Switch to ${theme === "dark" ? "light" : "dark"} mode` : "Toggle theme"}
+            aria-label={themeReady ? `Switch to ${theme === "dark" ? "light" : "dark"} mode` : "Toggle theme"}
+            className="mt-1 flex w-full items-center justify-center rounded-xl py-2 text-neutral-500 transition-colors hover:bg-neutral-100 hover:text-neutral-700 dark:text-neutral-500 dark:hover:bg-white/[0.04] dark:hover:text-neutral-300"
+          >
+            {theme === "dark" ? <IconSun size={16} strokeWidth={1.8} /> : <IconMoon size={16} strokeWidth={1.8} />}
+          </button>
+        ) : (
+          <div className="mt-2 rounded-xl bg-neutral-100 p-1 dark:bg-white/[0.06]">
+            <div className="grid grid-cols-2 gap-1">
+              {(["light", "dark"] as const).map((mode) => {
+                const active = theme === mode;
+                const Icon = mode === "light" ? IconSun : IconMoon;
+                return (
+                  <button
+                    key={mode}
+                    type="button"
+                    onClick={() => setMode(mode)}
+                    aria-pressed={active}
+                    className={`flex items-center justify-center gap-1.5 rounded-lg py-1.5 text-[12px] font-semibold transition-all ${
+                      active
+                        ? "bg-white text-neutral-900 shadow-[0_1px_2px_rgba(10,10,10,0.06)] dark:bg-[#0a0a0a] dark:text-white"
+                        : "text-neutral-500 hover:text-neutral-800 dark:text-neutral-400 dark:hover:text-neutral-100"
+                    }`}
+                  >
+                    <Icon size={14} strokeWidth={2} />
+                    <span>{mode === "light" ? "Light" : "Dark"}</span>
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+        )}
       </div>
     </aside>
   );

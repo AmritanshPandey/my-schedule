@@ -16,10 +16,11 @@ import EmptyState from "@/components/ui/EmptyState";
 import NoteEditor from "./NoteEditor";
 
 type NotePatch = Partial<Pick<Note, "title" | "body" | "pinned" | "tags">>;
+type CreateNoteInput = Partial<Pick<Note, "title" | "body" | "tags">>;
 
 interface NotesViewProps {
   notes: Note[];
-  onCreate: (body?: string) => string;   // creates a note, returns its id
+  onCreate: (input?: CreateNoteInput) => string;   // creates a note, returns its id
   onUpdate: (id: string, patch: NotePatch) => void;
   onDelete: (id: string) => void;
   onClose: () => void;
@@ -204,9 +205,9 @@ export default function NotesView({ notes, onCreate, onUpdate, onDelete, onClose
 
   const editingNote = editingId ? notes.find((n) => n.id === editingId) ?? null : null;
 
-  function handleCreate(body?: string) {
+  function handleCreate(input?: CreateNoteInput) {
     haptic("light");
-    const id = onCreate(body);
+    const id = onCreate(input);
     setEditingId(id);
   }
 
@@ -270,7 +271,7 @@ export default function NotesView({ notes, onCreate, onUpdate, onDelete, onClose
         )}
 
         {/* Search */}
-        <div className="px-4 pt-2 pb-3">
+        <div className="px-4 pt-5 pb-3">
           <div className="relative">
             <IconSearch size={15} strokeWidth={2} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-neutral-400" />
             <input
@@ -343,12 +344,12 @@ export default function NotesView({ notes, onCreate, onUpdate, onDelete, onClose
             return (
               <AnimatePresence initial={false}>
                 {pinnedNotes.length > 0 && (
-                  <div className="space-y-1.5">
+                  <div key="pinned" className="space-y-1.5">
                     <SectionLabel icon={<IconPinnedFilled size={12} strokeWidth={2.5} />} label="Pinned" />
                     {pinnedNotes.map(renderCard)}
                   </div>
                 )}
-                <div className={`space-y-1.5 ${pinnedNotes.length > 0 ? "mt-4" : ""}`}>
+                <div key="others" className={`space-y-1.5 ${pinnedNotes.length > 0 ? "mt-4" : ""}`}>
                   {pinnedNotes.length > 0 && otherNotes.length > 0 && <SectionLabel label="Notes" />}
                   {otherNotes.map(renderCard)}
                 </div>
@@ -365,11 +366,11 @@ export default function NotesView({ notes, onCreate, onUpdate, onDelete, onClose
       <div className="space-y-2 p-5 pb-8">
         <SheetHeader eyebrow="New note" title="Start from a template" onClose={() => setTemplatePickerOpen(false)} />
         <div className="space-y-1.5 pt-1">
-          {NOTE_TEMPLATES.map(({ id, label, description, icon: Icon, body }) => (
+          {NOTE_TEMPLATES.map(({ id, label, description, icon: Icon, title, tags, body }) => (
             <button
               key={id}
               type="button"
-              onClick={() => { setTemplatePickerOpen(false); handleCreate(body || undefined); }}
+              onClick={() => { setTemplatePickerOpen(false); handleCreate({ title, tags, body }); }}
               className="flex w-full items-center gap-3 rounded-2xl border border-neutral-200 bg-white px-4 py-3 text-left transition-colors hover:border-neutral-300 active:bg-neutral-50 dark:border-white/[0.08] dark:bg-neutral-900 dark:hover:border-white/20 dark:active:bg-white/[0.03]"
             >
               <span className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-neutral-100 text-neutral-500 dark:bg-white/[0.06] dark:text-neutral-400">
@@ -390,7 +391,7 @@ export default function NotesView({ notes, onCreate, onUpdate, onDelete, onClose
   if (isDesktop) {
     return (
       <div className="flex h-full w-full overflow-hidden bg-white dark:bg-neutral-950 lg:rounded-2xl">
-        <aside className="flex w-[340px] shrink-0 flex-col border-r border-neutral-150 dark:border-white/[0.06]">
+        <aside className="flex w-[340px] shrink-0 flex-col border-r border-neutral-200/70 dark:border-white/[0.08]">
           {listColumn(editingId)}
         </aside>
         <section className="min-w-0 flex-1">

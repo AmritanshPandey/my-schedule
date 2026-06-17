@@ -11,7 +11,6 @@ import { PlanCard } from "@/components/plan/PlanCard";
 import AppHeader from "@/components/AppHeader";
 import BottomNav from "@/components/BottomNav";
 import DesktopSidebar from "@/components/desktop/DesktopSidebar";
-import DesktopTopBar from "@/components/desktop/DesktopTopBar";
 import { WeekGrid } from "@/components/desktop/WeekGrid";
 import AIAssistant from "@/components/ai/AIAssistant";
 import { checkOllamaConnection, OLLAMA_URL_KEY, OLLAMA_MODEL_KEY, DEFAULT_OLLAMA_URL, DEFAULT_OLLAMA_MODEL } from "@/lib/ai";
@@ -91,6 +90,7 @@ import TodayRitualsBar from "@/components/activity/TodayRitualsBar";
 import ConfirmSheet from "@/components/ui/ConfirmSheet";
 import { CurrentTimeLayer } from "@/components/timeline/CurrentTimeLayer";
 import { CurrentTaskHighlightLayer } from "@/components/timeline/CurrentTaskHighlightLayer";
+import TimelineDraftCard from "@/components/timeline/TimelineDraftCard";
 import { taskLaneStyle } from "@/lib/timeline/taskLaneStyle";
 import {
   toggleTaskComplete,
@@ -101,116 +101,57 @@ import {
   isTaskResolved,
   resolveTaskState,
 } from "@/lib/taskCompletion";
-import { createTask, updateTaskDays, deleteTask, uid, sortTasksByTime } from "@/lib/taskMutations";
+import {
+  applyTaskDelete,
+  createTask,
+  createTaskDeleteSnapshot,
+  restoreTaskDelete,
+  uid,
+  sortTasksByTime,
+  updateTaskDays,
+  type TaskDeleteScope,
+} from "@/lib/taskMutations";
 import type { AIGeneratedTask } from "@/lib/aiActions";
 import { applyScheduleRules } from "@/lib/scheduleRules";
 import { resolveTimes as resolveParsedTimes } from "@/lib/scheduleParser";
 import { applyTemplate } from "@/lib/templates";
 import type { Template } from "@/lib/templates";
-import { parseTimeToMinutes, formatDuration, toScheduleDayMinutes } from "@/lib/timeUtils";
+import { parseTimeToMinutes, formatDuration } from "@/lib/timeUtils";
+import {
+  pointerToMinutes,
+  snapMinutes,
+  clampMinutes,
+  minutesToDisplayTime,
+  minutesToInputTime,
+  getDurationLabel,
+  DRAG_THRESHOLD_PX,
+  LONG_PRESS_MS,
+  DRAG_MIN_DURATION,
+  DRAG_DEFAULT_DURATION,
+} from "@/lib/timeline/dragTimeUtils";
+import {
+  buildTimelineGridMarks,
+  getTimelineDisplayStartMinutes,
+  mapMinutesToTimeline,
+  TIMELINE_END_MINUTES,
+} from "@/lib/timeline/displayWindow";
 import { todayISO, daysBetween as daysBetweenUtil, formatDate, addDaysToISO, localISODate } from "@/lib/dateUtils";
 import { getPlanCardStats } from "@/lib/planInsights";
 import { MainTitleSection, IconActionButton, CtaActionButton } from "@/components/ui/MainTitleSection";
 import ProgressBar from "@/components/ui/ProgressBar";
-import { cycleAccentColor } from "@/components/ui/Badge";
-import { stableFieldHash } from "@/lib/hash";
 import { recalculateRoadmapTimeline } from "@/lib/roadmapDates";
+import AddPlanSheet from "@/components/plan/AddPlanSheet";
+import EditPlanSheet from "@/components/plan/EditPlanSheet";
 import { haptic } from "@/lib/haptics";
+import { buildDeleteConfirmationCopy } from "@/lib/deleteConfirm";
 
 // ─── Constants ───────────────────────────────────────────────────────────────
 
-const PLAN_DURATION_PRESETS: { label: string; days: number | null }[] = [
-  { label: "15 days", days: 15 },
-  { label: "30 days", days: 30 },
-  { label: "60 days", days: 60 },
-  { label: "90 days", days: 90 },
-  { label: "Ongoing", days: null },
-];
-
-// Keep plan titles short so they render cleanly in cards, analytics, and
-// progress summaries where space is tight.
-const PLAN_TITLE_MAX = 40;
-
-// Plan accent colors — chosen independently of the icon in its own section.
-const PLAN_COLOR_SWATCHES: { color: AccentColor; bg: string }[] = [
-  { color: "blue", bg: "bg-blue-500" },
-  { color: "emerald", bg: "bg-green-500" },
-  { color: "violet", bg: "bg-violet-500" },
-  { color: "pink", bg: "bg-pink-500" },
-  { color: "amber", bg: "bg-amber-500" },
-  { color: "cyan", bg: "bg-cyan-500" },
-];
-
-function PlanColorPicker({
-  value,
-  onChange,
-}: {
-  value: AccentColor;
-  onChange: (color: AccentColor) => void;
-}) {
-  return (
-    <div>
-      <p className="mb-2 text-[11px] font-semibold uppercase tracking-[0.08em] text-neutral-400 dark:text-neutral-500">Color</p>
-      <div className="flex gap-2.5">
-        {PLAN_COLOR_SWATCHES.map(({ color, bg }) => {
-          const sel = value === color;
-          return (
-            <button
-              key={color}
-              type="button"
-              aria-label={color}
-              aria-pressed={sel}
-              onClick={() => onChange(color)}
-              className={`h-9 w-9 rounded-full ${bg} transition-transform duration-150 ${sel
-                ? "scale-110 ring-2 ring-offset-2 ring-neutral-900 ring-offset-white dark:ring-white dark:ring-offset-neutral-900"
-                : "hover:scale-105"
-                }`}
-            />
-          );
-        })}
-      </div>
-    </div>
-  );
-}
-
-// Neutral, monochrome styling for the plan icon picker tiles — selected tile is
-// solid, the rest are a soft neutral so the icon grid reads cleanly and stays
-// visually separate from the color section below it.
-function iconPickerClass(selected: boolean): string {
-  return `flex flex-col items-center justify-center gap-1 rounded-2xl py-3 transition-all duration-150 ${
-    selected
-      ? "bg-neutral-900 text-white dark:bg-white dark:text-neutral-900"
-      : "bg-neutral-100 text-neutral-500 hover:bg-neutral-200 dark:bg-white/[0.06] dark:text-neutral-400 dark:hover:bg-white/[0.1]"
-  }`;
-}
-
-function addDaysISO(days: number): string {
-  const d = new Date();
-  d.setDate(d.getDate() + days);
-  const y = d.getFullYear();
-  const mo = String(d.getMonth() + 1).padStart(2, "0");
-  const dy = String(d.getDate()).padStart(2, "0");
-  return `${y}-${mo}-${dy}`;
-}
-
-
 const daysBetween = daysBetweenUtil;
 
-const TIMELINE_START_HOUR = 4;
-const TIMELINE_END_HOUR = 28; // extends to 4 AM next day for overnight tasks
-const HOUR_HEIGHT = 96;
-const TIMELINE_TOP_PADDING = 12;
+const HOUR_HEIGHT = 120;
+const TIMELINE_TOP_PADDING = 16;
 const TIMELINE_BOTTOM_PADDING = 48;
-const TIMELINE_START_MINUTES = TIMELINE_START_HOUR * 60;
-const TIMELINE_END_MINUTES = TIMELINE_END_HOUR * 60;
-const TIMELINE_HEIGHT =
-  TIMELINE_TOP_PADDING +
-  (TIMELINE_END_HOUR - TIMELINE_START_HOUR) * HOUR_HEIGHT +
-  TIMELINE_BOTTOM_PADDING;
-const TIMELINE_HOURS: number[] = Array.from(
-  { length: TIMELINE_END_HOUR - TIMELINE_START_HOUR + 1 },
-  (_, i) => TIMELINE_START_HOUR + i
-);
 const RITUAL_LANE_WIDTH = 28;
 
 const JS_DAYS = [
@@ -228,37 +169,20 @@ const JS_DAYS = [
 
 const formatPlanDate = formatDate;
 
-function inferUnit(label: string): string {
-  const key = label.toLowerCase();
-  if (key.includes("calorie")) return "kcal";
-  if (key.includes("protein") || key.includes("carb") || /\bfat\b/.test(key)) return "g";
-  if (key.includes("duration") || key.includes("time")) return "min";
-  if (key.includes("weight")) return "kg";
-  return "";
-}
-
-
-function createSummaryFromMeta(metaFields: string[]): SummaryConfig[] {
-  return metaFields.map((field) => ({
-    label: field,
-    metaKey: field,
-    unit: inferUnit(field),
-    colorClass: `accent-${cycleAccentColor(stableFieldHash(field))}`,
-  }));
-}
-
 const formatTaskDuration = formatDuration;
 
-function formatHourLabel(hour24: number): string {
-  const normalizedHour = hour24 % 24;
+function formatHourLabel(totalMinutes: number): string {
+  const normalizedHour = Math.floor(totalMinutes / 60) % 24;
   const suffix = normalizedHour >= 12 ? "PM" : "AM";
   const hour = normalizedHour % 12 || 12;
   return `${hour} ${suffix}`;
 }
 
-function formatHalfHourLabel(hour24: number): string {
-  const hour = hour24 % 12 || 12;
-  return `${hour}:30`;
+function formatHalfHourLabel(totalMinutes: number): string {
+  const normalizedMinutes = ((totalMinutes % 1440) + 1440) % 1440;
+  const hour = Math.floor(normalizedMinutes / 60) % 12 || 12;
+  const minute = normalizedMinutes % 60;
+  return `${hour}:${minute.toString().padStart(2, "0")}`;
 }
 
 
@@ -269,11 +193,11 @@ function clamp(value: number, min: number, max: number): number {
 type CardSize = "xsmall" | "small" | "medium" | "large";
 
 function computeCardSize(height: number, laneCount: number): CardSize {
-  // HOUR_HEIGHT = 96 → 20min=32px, 30min=48px, 40min=64px, 60min=96px
-  // xsmall: title chip only         — card < 32px  (< ~20 min)
-  // small:  plan label + title      — card < 48px  (< ~30 min)
-  // medium: plan+title+time         — card < 64px  (< ~40 min)
-  // large:  full layout with gutter — card ≥ 64px  (≥ ~40 min)
+  // HOUR_HEIGHT = 112 → 20min=37px, 30min=56px, 40min=75px, 60min=112px
+  // xsmall: title chip only         — card < 37px  (< ~20 min)
+  // small:  plan label + title      — card < 56px  (< ~30 min)
+  // medium: plan+title+time         — card < 75px  (< ~40 min)
+  // large:  full layout with gutter — card ≥ 75px  (≥ ~40 min)
   let size: CardSize;
   if (height < 32) size = "xsmall";
   else if (height < 48) size = "small";
@@ -495,6 +419,17 @@ function WeekSummary({
   );
 }
 
+type ToastState = {
+  message: string;
+  actionLabel?: string;
+  onAction?: () => void;
+};
+
+type TaskDeleteRequest = {
+  taskId: string;
+  sourceDay: DayKey;
+};
+
 // ─── Main component ───────────────────────────────────────────────────────────
 
 export default function ScheduleApp() {
@@ -505,7 +440,8 @@ export default function ScheduleApp() {
   const [activeTab, setActiveTab] = useState(0);
   const [whatNextDismissed, setWhatNextDismissed] = useState(false);
 
-  const [toastMessage, setToastMessage] = useState<string | null>(null);
+  const [toastState, setToastState] = useState<ToastState | null>(null);
+  const toastMessage = toastState?.message ?? null;
   const [taskSheetOpen, setTaskSheetOpen] = useState(false);
   const [taskSheetMode, setTaskSheetMode] = useState<"create" | "edit">("create");
   const [taskSheetTask, setTaskSheetTask] = useState<Task | null>(null);
@@ -515,35 +451,30 @@ export default function ScheduleApp() {
   const [entryTracker, setEntryTracker] = useState<ProgressTracker | null>(null);
   const [weekOffset, setWeekOffset] = useState(0);
   const [viewMode, setViewMode] = useState<"list" | "timeline">("timeline");
-  const [calendarView, setCalendarView] = useState<"1day" | "3day" | "7day" | "custom3">("7day");
+  const [calendarView, setCalendarView] = useState<import("@/components/desktop/WeekGrid").CalendarView>("7day");
   const [customDays, setCustomDays] = useState<DayKey[]>(["monday", "wednesday", "friday"]);
 
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
 
   const [taskSheetInitialType, setTaskSheetInitialType] = useState<"task" | "session">("task");
+  const [taskSheetInitialStartTime, setTaskSheetInitialStartTime] = useState("");
+  const [taskSheetInitialEndTime, setTaskSheetInitialEndTime] = useState("");
+
+  // ── Timeline drag-create state (ghost block during empty-area drag) ──────────
+  const [dragCreate, setDragCreate] = useState<{ startMin: number; endMin: number } | null>(null);
+  // ── Timeline drag-move state (preview block during task long-press drag) ─────
+  const [dragMove, setDragMove] = useState<{
+    taskId: string;
+    durationMin: number;
+    previewStartMin: number;
+  } | null>(null);
 
   const [addingPlan, setAddingPlan] = useState(false);
   const [aiPlanCreating, setAiPlanCreating] = useState(false);
   const [aiOpen, setAiOpen] = useState(false);
   const [aiInitialMessage, setAiInitialMessage] = useState("");
-  const [newPlanTitle, setNewPlanTitle] = useState("");
-  const [newPlanDescription, setNewPlanDescription] = useState("");
-  const [newPlanStartDate, setNewPlanStartDate] = useState("");
-  const [newPlanEndDate, setNewPlanEndDate] = useState("");
-  const [newPlanIconName, setNewPlanIconName] = useState("brain");
-  const [newPlanColor, setNewPlanColor] = useState<AccentColor>(() => colorFromIcon("brain"));
-  const [newPlanMetaFields, setNewPlanMetaFields] = useState<string[]>([]);
-  const [newPlanMetaInput, setNewPlanMetaInput] = useState("");
 
   const [editingPlanId, setEditingPlanId] = useState<string | null>(null);
-  const [editPlanDraft, setEditPlanDraft] = useState<{
-    title: string;
-    description: string;
-    startDate: string;
-    endDate: string;
-    icon: string;
-    color: AccentColor;
-  }>({ title: "", description: "", startDate: "", endDate: "", icon: "brain", color: "cyan" });
 
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [templatesOpen, setTemplatesOpen] = useState(false);
@@ -565,8 +496,10 @@ export default function ScheduleApp() {
   const [confirmState, setConfirmState] = useState<{
     title: string;
     description: string;
+    confirmLabel?: string;
     onConfirm: () => void;
   } | null>(null);
+  const [taskDeleteRequest, setTaskDeleteRequest] = useState<TaskDeleteRequest | null>(null);
 
   const [ollamaUrl, setOllamaUrl] = useState(() =>
     typeof window !== "undefined" ? (localStorage.getItem(OLLAMA_URL_KEY) ?? DEFAULT_OLLAMA_URL) : DEFAULT_OLLAMA_URL
@@ -594,11 +527,40 @@ export default function ScheduleApp() {
     return () => { cancelled = true; };
   }, [ollamaUrl, ollamaModel]);
 
-  function openConfirm(title: string, description: string, fn: () => void) {
-    setConfirmState({ title, description, onConfirm: fn });
+  function openConfirm(
+    copy: { title: string; description: string; confirmLabel?: string },
+    fn: () => void,
+  ) {
+    setConfirmState({ ...copy, onConfirm: fn });
+  }
+
+  function setToastMessage(next: string | ToastState | null) {
+    setToastState(typeof next === "string" ? { message: next } : next);
   }
 
   const timelineScrollRef = useRef<HTMLDivElement | null>(null);
+  const taskGridRef = useRef<HTMLDivElement | null>(null);
+  // Mutable tracking for drag-create (no renders during drag)
+  const createDragRef = useRef<{
+    dragging: boolean;
+    startClientY: number;
+    startMin: number;
+    pointerId: number;
+    lastEndMin: number; // tracks current end during drag; avoids stale-closure in pointerup
+  } | null>(null);
+  // Mutable tracking for drag-move long-press
+  const moveDragRef = useRef<{
+    taskId: string;
+    task: Task;
+    durationMin: number;
+    grabOffsetMin: number;
+    longPressTimer: ReturnType<typeof setTimeout> | null;
+    dragging: boolean;
+    startClientY: number;
+    pointerId: number;
+    currentPreviewStartMin: number; // tracks current position; avoids stale-closure in pointerup
+    isCheckbox: boolean; // tap originated on the checkbox — don't open edit sheet
+  } | null>(null);
   const hasUserScrolledTimelineRef = useRef(false);
   const isAutoScrollingRef = useRef(false);
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 12 } }));
@@ -617,69 +579,10 @@ export default function ScheduleApp() {
   }, [activeDay]);
 
   useEffect(() => {
-    if (!toastMessage) return;
+    if (!toastState) return;
     const t = setTimeout(() => setToastMessage(null), 2500);
     return () => clearTimeout(t);
-  }, [toastMessage]);
-
-  useEffect(() => {
-    if (
-      !ready ||
-      activeTab !== 0 ||
-      viewMode !== "timeline" ||
-      activeDay !== todayKey ||
-      editMode ||
-      hasUserScrolledTimelineRef.current
-    ) {
-      return;
-    }
-
-    const id = requestAnimationFrame(() => {
-      const timeline = timelineScrollRef.current;
-
-      if (!timeline) return;
-
-      const clampedNow = clamp(
-        getCurrentMinutes(),
-        TIMELINE_START_MINUTES,
-        TIMELINE_END_MINUTES
-      );
-
-      const currentTop =
-        TIMELINE_TOP_PADDING +
-        ((clampedNow - TIMELINE_START_MINUTES) / 60) * HOUR_HEIGHT;
-
-      const visibleCenterOffset = 140;
-
-      const targetTop = clamp(
-        currentTop - timeline.clientHeight / 2 + visibleCenterOffset,
-        0,
-        timeline.scrollHeight - timeline.clientHeight
-      );
-
-      isAutoScrollingRef.current = true;
-
-      timeline.scrollTo({
-        top: targetTop,
-        behavior: "smooth",
-      });
-
-      window.setTimeout(() => {
-        isAutoScrollingRef.current = false;
-      }, 450);
-    });
-
-    return () => cancelAnimationFrame(id);
-  }, [
-    ready,
-    activeTab,
-    viewMode,
-    activeDay,
-    todayKey,
-    editMode,
-  ]);
-
-
+  }, [toastState]);
 
   // Land on the Overview page on true first launch (no stored data)
   useEffect(() => {
@@ -722,12 +625,277 @@ export default function ScheduleApp() {
   // ── TaskSheet open/close helpers ──────────────────────────────────────────
 
   function openCreateSheet(initialPid?: string | null) {
+    setTaskSheetInitialStartTime("");
+    setTaskSheetInitialEndTime("");
     setTaskSheetPlanId(initialPid ?? null);
     setTaskSheetTask(null);
     setTaskSheetMode("create");
     setTaskSheetInitialType("task");
     setTaskSheetOpen(true);
   }
+
+  // ── Timeline drag helpers ──────────────────────────────────────────────────
+
+  function gridClientYToMinutes(clientY: number): number {
+    const grid = taskGridRef.current;
+    if (!grid) return timelineStartMinutes;
+    return pointerToMinutes(clientY, grid, TIMELINE_TOP_PADDING, HOUR_HEIGHT, timelineStartMinutes);
+  }
+
+  function snapAndClamp(minutes: number): number {
+    return clampMinutes(snapMinutes(minutes), timelineStartMinutes, timelineEndMinutes - DRAG_MIN_DURATION);
+  }
+
+  function minutesToTopPx(minutes: number): number {
+    return TIMELINE_TOP_PADDING + ((minutes - timelineStartMinutes) / 60) * HOUR_HEIGHT;
+  }
+
+  function minutesToHeightPx(durationMin: number): number {
+    return (durationMin / 60) * HOUR_HEIGHT;
+  }
+
+  /** Open create sheet pre-filled with a dragged time range. */
+  function openCreateSheetWithTime(startMin: number, endMin: number, day: DayKey = activeDay) {
+    setActiveDay(day);
+    setTaskSheetInitialStartTime(minutesToInputTime(startMin));
+    setTaskSheetInitialEndTime(minutesToInputTime(endMin));
+    setTaskSheetPlanId(null);
+    setTaskSheetTask(null);
+    setTaskSheetMode("create");
+    setTaskSheetInitialType("task");
+    setTaskSheetOpen(true);
+  }
+
+  // ── Drag helpers — stable ref so document listeners are deps-free ───────────
+  // Updated every render (after isViewingToday is derived) — see below.
+  const dragHelpersRef = useRef<{
+    gridClientYToMinutes: (clientY: number) => number;
+    snapAndClamp: (minutes: number) => number;
+    openCreateSheetWithTime: (startMin: number, endMin: number) => void;
+    openEditSheet: (task: Task) => void;
+    setDragCreate: React.Dispatch<React.SetStateAction<{ startMin: number; endMin: number } | null>>;
+    setDragMove: React.Dispatch<React.SetStateAction<{ taskId: string; durationMin: number; previewStartMin: number } | null>>;
+    setSchedule: ReturnType<typeof useScheduleDB>["setSchedule"];
+    activeDay: string;
+    isViewingToday: boolean;
+    timelineStartMinutes: number;
+    timelineEndMinutes: number;
+  }>(null as never);
+
+  // ── Drag-create: pointerdown on empty grid ────────────────────────────────
+
+  function handleGridPointerDown(e: React.PointerEvent<HTMLDivElement>) {
+    if (e.pointerType === "mouse" && e.button !== 0) return;
+    if ((e.target as HTMLElement).closest("[data-task-block]")) return;
+    if (!dragHelpersRef.current.isViewingToday) return;
+    const startMin = dragHelpersRef.current.snapAndClamp(
+      dragHelpersRef.current.gridClientYToMinutes(e.clientY),
+    );
+    createDragRef.current = {
+      dragging: false,
+      startClientY: e.clientY,
+      startMin,
+      pointerId: e.pointerId,
+      lastEndMin: Math.min(startMin + DRAG_DEFAULT_DURATION, timelineEndMinutes),
+    };
+    // Capture so pointermove/pointerup on this element get all events even if
+    // the pointer leaves the grid bounds.
+    (e.currentTarget as HTMLDivElement).setPointerCapture(e.pointerId);
+  }
+
+  // ── Drag-move: pointerdown on task card ───────────────────────────────────
+
+  function handleTaskPointerDown(
+    e: React.PointerEvent<HTMLDivElement>,
+    task: Task,
+    layoutStart: number,
+    layoutEnd: number,
+  ) {
+    e.stopPropagation(); // prevent grid drag-create from firing
+    if (!dragHelpersRef.current.isViewingToday) return;
+    if (e.pointerType === "mouse" && e.button !== 0) return;
+
+    const grabMin = dragHelpersRef.current.gridClientYToMinutes(e.clientY);
+    const durationMin = layoutEnd - layoutStart;
+    const grabOffsetMin = Math.max(0, Math.min(grabMin - layoutStart, durationMin));
+    const el = e.currentTarget as HTMLDivElement;
+    const pointerId = e.pointerId;
+
+    // Capture immediately (spec requires setPointerCapture inside a pointer event handler)
+    el.setPointerCapture(pointerId);
+
+    moveDragRef.current = {
+      taskId: task.id,
+      task,
+      durationMin,
+      grabOffsetMin,
+      longPressTimer: setTimeout(() => {
+        if (!moveDragRef.current || moveDragRef.current.taskId !== task.id) return;
+        moveDragRef.current.dragging = true;
+        haptic("medium");
+        dragHelpersRef.current.setDragMove({ taskId: task.id, durationMin, previewStartMin: layoutStart });
+      }, LONG_PRESS_MS),
+      dragging: false,
+      startClientY: e.clientY,
+      pointerId,
+      currentPreviewStartMin: layoutStart,
+      isCheckbox: !!(e.target as HTMLElement).closest("button[aria-label]"),
+    };
+  }
+
+  // ── Document-level handlers (installed once, read refs — no stale closures) ─
+
+  useEffect(() => {
+    // RAF-throttle state updates so React never receives more than one drag
+    // state update per animation frame (prevents "Maximum update depth exceeded").
+    let rafId: number | null = null;
+    let pendingCreate: { startMin: number; endMin: number } | null = null;
+    let pendingMoveStartMin: number | null = null;
+
+    function flushDragState() {
+      rafId = null;
+      const h = dragHelpersRef.current;
+      if (pendingCreate !== null) {
+        h.setDragCreate(pendingCreate);
+        pendingCreate = null;
+      }
+      if (pendingMoveStartMin !== null) {
+        const min = pendingMoveStartMin;
+        pendingMoveStartMin = null;
+        h.setDragMove((prev) => (prev ? { ...prev, previewStartMin: min } : prev));
+      }
+    }
+
+    function scheduleFlush() {
+      if (rafId === null) rafId = requestAnimationFrame(flushDragState);
+    }
+
+    function onPointerMove(e: PointerEvent) {
+      const h = dragHelpersRef.current;
+
+      // Drag-create
+      if (createDragRef.current && createDragRef.current.pointerId === e.pointerId) {
+        const { startClientY, startMin, dragging } = createDragRef.current;
+        if (!dragging && Math.abs(e.clientY - startClientY) < DRAG_THRESHOLD_PX) return;
+        if (!createDragRef.current.dragging) {
+          createDragRef.current.dragging = true;
+        }
+        e.preventDefault(); // prevent scroll during drag-create
+        const currentMin = h.gridClientYToMinutes(e.clientY);
+        const endMin = Math.max(h.snapAndClamp(currentMin), startMin + DRAG_MIN_DURATION);
+        createDragRef.current.lastEndMin = endMin;
+        // Only schedule a flush if endMin changed (snapping to same slot → skip)
+        if (pendingCreate?.endMin !== endMin || pendingCreate?.startMin !== startMin) {
+          pendingCreate = { startMin, endMin };
+          scheduleFlush();
+        }
+        return;
+      }
+
+      // Drag-move
+      if (moveDragRef.current && moveDragRef.current.pointerId === e.pointerId) {
+        const { dragging, startClientY, grabOffsetMin, durationMin, longPressTimer } =
+          moveDragRef.current;
+        if (!dragging) {
+          // Cancel long-press if the user scrolls before 300ms threshold
+          if (Math.abs(e.clientY - startClientY) > DRAG_THRESHOLD_PX) {
+            if (longPressTimer) clearTimeout(longPressTimer);
+            moveDragRef.current = null;
+          }
+          return;
+        }
+        e.preventDefault(); // prevent scroll during drag-move
+        const currentMin = h.gridClientYToMinutes(e.clientY);
+        const newStartMin = clampMinutes(
+          snapMinutes(currentMin - grabOffsetMin),
+          h.timelineStartMinutes,
+          h.timelineEndMinutes - durationMin,
+        );
+        moveDragRef.current.currentPreviewStartMin = newStartMin;
+        if (pendingMoveStartMin !== newStartMin) {
+          pendingMoveStartMin = newStartMin;
+          scheduleFlush();
+        }
+      }
+    }
+
+    function onPointerUp(e: PointerEvent) {
+      const h = dragHelpersRef.current;
+
+      // Drag-create commit
+      if (createDragRef.current && createDragRef.current.pointerId === e.pointerId) {
+        const { dragging, startMin, lastEndMin } = createDragRef.current;
+        createDragRef.current = null;
+        h.setDragCreate(null);
+        if (!h.isViewingToday) return;
+        if (dragging) {
+          h.openCreateSheetWithTime(startMin, lastEndMin);
+        } else {
+          // tap on empty space → quick-create with default duration
+          h.openCreateSheetWithTime(
+            startMin,
+            Math.min(startMin + DRAG_DEFAULT_DURATION, timelineEndMinutes),
+          );
+        }
+        return;
+      }
+
+      // Drag-move commit
+      if (moveDragRef.current && moveDragRef.current.pointerId === e.pointerId) {
+        const { longPressTimer, dragging, currentPreviewStartMin, durationMin, task, isCheckbox } =
+          moveDragRef.current;
+        if (longPressTimer) clearTimeout(longPressTimer);
+        moveDragRef.current = null;
+        if (!dragging) {
+          h.setDragMove(null);
+          if (!isCheckbox) h.openEditSheet(task);
+          return;
+        }
+        e.preventDefault();
+        const newStartMin = currentPreviewStartMin;
+        const newEndMin = newStartMin + durationMin;
+        const newStartTime = minutesToDisplayTime(newStartMin);
+        const newEndTime = minutesToDisplayTime(newEndMin);
+        const day = h.activeDay;
+        h.setSchedule((prev) => {
+          const acts = prev.activities as Record<string, Task[]>;
+          return {
+            ...prev,
+            activities: {
+              ...prev.activities,
+              [day]: (acts[day] ?? []).map((t: Task) =>
+                t.id !== task.id ? t : { ...t, startTime: newStartTime, endTime: newEndTime },
+              ),
+            },
+          };
+        });
+        haptic("light");
+        h.setDragMove(null);
+      }
+    }
+
+    function onPointerCancel(e: PointerEvent) {
+      if (createDragRef.current && createDragRef.current.pointerId === e.pointerId) {
+        createDragRef.current = null;
+        dragHelpersRef.current.setDragCreate(null);
+      }
+      if (moveDragRef.current && moveDragRef.current.pointerId === e.pointerId) {
+        if (moveDragRef.current.longPressTimer) clearTimeout(moveDragRef.current.longPressTimer);
+        moveDragRef.current = null;
+        dragHelpersRef.current.setDragMove(null);
+      }
+    }
+
+    document.addEventListener("pointermove", onPointerMove, { passive: false });
+    document.addEventListener("pointerup", onPointerUp);
+    document.addEventListener("pointercancel", onPointerCancel);
+    return () => {
+      document.removeEventListener("pointermove", onPointerMove);
+      document.removeEventListener("pointerup", onPointerUp);
+      document.removeEventListener("pointercancel", onPointerCancel);
+      if (rafId !== null) cancelAnimationFrame(rafId);
+    };
+  }, []); // empty deps: handlers read all live values through refs
 
   function openEditSheet(task: Task) {
     setTaskSheetTask(task);
@@ -755,21 +923,9 @@ export default function ScheduleApp() {
     closeTaskSheet();
   }
 
-  function handleDeleteTask(taskId: string) {
-    const task = Object.values(schedule.activities).flat().find((t) => t.id === taskId);
-    openConfirm(
-      `Delete "${task?.title ?? "task"}"?`,
-      "This action cannot be undone.",
-      () => setSchedule((prev) => ({
-        ...prev,
-        activities: Object.fromEntries(
-          Object.entries(prev.activities).map(([day, tasks]) => [
-            day,
-            (tasks as typeof prev.activities[typeof activeDay]).filter((t) => t.id !== taskId),
-          ])
-        ) as typeof prev.activities,
-      }))
-    );
+  function requestDeleteTask(taskId: string, sourceDay: DayKey = activeDay) {
+    haptic("light");
+    setTaskDeleteRequest({ taskId, sourceDay });
   }
 
   const handleToggleTaskComplete = useCallback(
@@ -886,45 +1042,6 @@ export default function ScheduleApp() {
     setToastMessage(result.plans.length > 0 ? "Plan & tasks imported" : "Tasks imported");
   }
 
-  function handleAddPlan() {
-    const title = newPlanTitle.trim();
-    if (!title) return;
-    const plan: Plan = {
-      id: uid(),
-      title,
-      description: newPlanDescription.trim() || undefined,
-      startDate: newPlanStartDate || undefined,
-      endDate: newPlanEndDate || undefined,
-      category: categoryFromIcon(newPlanIconName),
-      emoji: newPlanIconName,
-      color: newPlanColor,
-      items: [],
-      metaFields: newPlanMetaFields,
-      summary: createSummaryFromMeta(newPlanMetaFields),
-    };
-    const trackers: ProgressTracker[] = newPlanMetaFields.map((field) => ({
-      id: uid(),
-      planId: plan.id,
-      title: field,
-      type: "number",
-      unit: inferUnit(field),
-    }));
-    setSchedule((prev) => ({
-      ...prev,
-      plans: [...prev.plans, plan],
-      progressTrackers: [...prev.progressTrackers, ...trackers],
-    }));
-    setNewPlanTitle("");
-    setNewPlanDescription("");
-    setNewPlanStartDate("");
-    setNewPlanEndDate("");
-    setNewPlanIconName("brain");
-    setNewPlanColor(colorFromIcon("brain"));
-    setNewPlanMetaFields([]);
-    setNewPlanMetaInput("");
-    setAddingPlan(false);
-  }
-
   function handleAddRitual(data: Omit<Ritual, "id">) {
     setSchedule((prev) => ({
       ...prev,
@@ -935,8 +1052,10 @@ export default function ScheduleApp() {
   function handleDeleteRitual(id: string) {
     const ritual = (schedule.rituals ?? []).find((r) => r.id === id);
     openConfirm(
-      `Delete "${ritual?.title ?? "routine"}"?`,
-      "This routine will be removed from your daily practice.",
+      buildDeleteConfirmationCopy("routine", {
+        name: ritual?.title,
+        description: "This routine will be removed from your daily practice.",
+      }),
       () => setSchedule((prev) => ({
         ...prev,
         rituals: (prev.rituals ?? []).filter((r) => r.id !== id),
@@ -971,9 +1090,16 @@ export default function ScheduleApp() {
   }
 
   // ── Notes ───────────────────────────────────────────────────────────────────
-  function handleCreateNote(initialBody = ""): string {
+  function handleCreateNote(input: Partial<Pick<Note, "title" | "body" | "tags">> = {}): string {
     const now = new Date().toISOString();
-    const note: Note = { id: uid(), title: "", body: initialBody, createdAt: now, updatedAt: now };
+    const note: Note = {
+      id: uid(),
+      title: input.title ?? "",
+      body: input.body ?? "",
+      tags: input.tags ?? [],
+      createdAt: now,
+      updatedAt: now,
+    };
     setSchedule((prev) => ({ ...prev, notes: [note, ...(prev.notes ?? [])] }));
     return note.id;
   }
@@ -1046,8 +1172,10 @@ export default function ScheduleApp() {
   function handleDeletePlan(planId: string) {
     const plan = schedule.plans.find((p) => p.id === planId);
     openConfirm(
-      `Delete "${plan?.title ?? "plan"}"?`,
-      "All tasks, trackers, and entries linked to this plan will also be deleted.",
+      buildDeleteConfirmationCopy("plan", {
+        name: plan?.title,
+        description: "All tasks, trackers, and entries linked to this plan will also be deleted.",
+      }),
       () => {
         setSchedule((prev) => ({
           ...prev,
@@ -1078,8 +1206,9 @@ export default function ScheduleApp() {
 
   function handleDeleteEntry(entryId: string) {
     openConfirm(
-      "Delete this entry?",
-      "The logged value will be permanently removed.",
+      buildDeleteConfirmationCopy("entry", {
+        description: "The logged value will be permanently removed.",
+      }),
       () => setSchedule((prev) => ({
         ...prev,
         metricEntries: prev.metricEntries.filter((e) => e.id !== entryId),
@@ -1257,8 +1386,10 @@ export default function ScheduleApp() {
   function handleDeleteTracker(trackerId: string) {
     const tracker = schedule.progressTrackers.find((t) => t.id === trackerId);
     openConfirm(
-      `Delete "${tracker?.title ?? "tracker"}"?`,
-      "All logged entries for this tracker will also be deleted.",
+      buildDeleteConfirmationCopy("tracker", {
+        name: tracker?.title,
+        description: "All logged entries for this tracker will also be deleted.",
+      }),
       () => setSchedule((prev) => ({
         ...prev,
         progressTrackers: prev.progressTrackers.filter((t) => t.id !== trackerId),
@@ -1267,68 +1398,8 @@ export default function ScheduleApp() {
     );
   }
 
-  function handleSaveEditPlan(planId: string) {
-    const title = editPlanDraft.title.trim();
-    if (!title) return;
-    const nextColor = editPlanDraft.color;
-    setSchedule((prev) => {
-      const prevPlan = prev.plans.find((p) => p.id === planId);
-      const colorChanged = prevPlan?.color !== nextColor;
-      // Linked tasks store their own color (copied from the plan); keep them in
-      // sync with the plan's accent so the timeline reflects the new color.
-      const activities = colorChanged
-        ? (Object.fromEntries(
-            Object.entries(prev.activities).map(([day, tasks]) => [
-              day,
-              tasks.map((t) => (t.planId === planId ? { ...t, color: nextColor } : t)),
-            ])
-          ) as typeof prev.activities)
-        : prev.activities;
-      return {
-      ...prev,
-      activities,
-      plans: prev.plans.map((p) =>
-        p.id === planId
-          ? {
-            ...p,
-            title,
-            description: editPlanDraft.description.trim() || undefined,
-            startDate: editPlanDraft.startDate || undefined,
-            endDate: editPlanDraft.endDate || undefined,
-            emoji: editPlanDraft.icon,
-            color: nextColor,
-            category: categoryFromIcon(editPlanDraft.icon),
-          }
-          : p
-      ),
-      milestones: [
-        ...(prev.milestones ?? []).filter((m) => m.planId !== planId),
-        ...recalculateRoadmapTimeline(
-          (prev.milestones ?? []).filter((m) => m.planId === planId),
-          editPlanDraft.startDate || undefined
-        ),
-      ],
-    };
-    });
-    setEditingPlanId(null);
-  }
-
   function handleDeleteLinkedTask(task: Task, activeDays: DayKey[]) {
-    openConfirm(
-      `Delete "${task.title}"?`,
-      activeDays.length > 1
-        ? `This task appears on ${activeDays.length} days and will be removed from all of them.`
-        : "This task will be removed from the plan.",
-      () => setSchedule((prev) => ({
-        ...prev,
-        activities: Object.fromEntries(
-          DAYS.map((day) => [
-            day,
-            prev.activities[day].filter((t) => t.id !== task.id),
-          ])
-        ) as typeof prev.activities,
-      }))
-    );
+    requestDeleteTask(task.id, activeDays[0] ?? activeDay);
   }
 
   // ─── Milestone handlers ──────────────────────────────────────────────────
@@ -1383,8 +1454,10 @@ export default function ScheduleApp() {
   function handleDeleteMilestone(id: string) {
     const milestone = (schedule.milestones ?? []).find((m) => m.id === id);
     openConfirm(
-      `Delete "${milestone?.title ?? "milestone"}"?`,
-      "This milestone will be permanently removed from the roadmap.",
+      buildDeleteConfirmationCopy("milestone", {
+        name: milestone?.title,
+        description: "This milestone will be permanently removed from the roadmap.",
+      }),
       () => setSchedule((prev) => {
         const existing = (prev.milestones ?? []).find((m) => m.id === id);
         if (!existing) return prev;
@@ -1475,6 +1548,102 @@ export default function ScheduleApp() {
     [dayTasks, isViewingToday, activeDateISO]
   );
 
+  const timelineStartMinutes = useMemo(
+    () =>
+      getTimelineDisplayStartMinutes({
+        dayStartTime: schedule.preferences?.dayStartTime,
+        tasks: dayTasksView,
+      }),
+    [dayTasksView, schedule.preferences?.dayStartTime]
+  );
+  const timelineEndMinutes = TIMELINE_END_MINUTES;
+  const timelineHeight = useMemo(
+    () =>
+      TIMELINE_TOP_PADDING +
+      ((timelineEndMinutes - timelineStartMinutes) / 60) * HOUR_HEIGHT +
+      TIMELINE_BOTTOM_PADDING,
+    [timelineEndMinutes, timelineStartMinutes]
+  );
+  const timelineMarks = useMemo(
+    () => buildTimelineGridMarks(timelineStartMinutes, timelineEndMinutes),
+    [timelineEndMinutes, timelineStartMinutes]
+  );
+
+  // Update drag helpers ref every render so document-level listeners always
+  // have fresh values without needing to be re-registered.
+  dragHelpersRef.current = {
+    gridClientYToMinutes,
+    snapAndClamp,
+    openCreateSheetWithTime,
+    openEditSheet,
+    setDragCreate,
+    setDragMove,
+    setSchedule,
+    activeDay,
+    isViewingToday,
+    timelineStartMinutes,
+    timelineEndMinutes,
+  };
+
+  useEffect(() => {
+    if (
+      !ready ||
+      activeTab !== 0 ||
+      viewMode !== "timeline" ||
+      activeDay !== todayKey ||
+      editMode ||
+      hasUserScrolledTimelineRef.current
+    ) {
+      return;
+    }
+
+    const id = requestAnimationFrame(() => {
+      const timeline = timelineScrollRef.current;
+
+      if (!timeline) return;
+
+      const clampedNow = clamp(
+        getCurrentMinutes(),
+        timelineStartMinutes,
+        timelineEndMinutes
+      );
+
+      const currentTop =
+        TIMELINE_TOP_PADDING +
+        ((clampedNow - timelineStartMinutes) / 60) * HOUR_HEIGHT;
+
+      const visibleCenterOffset = 140;
+
+      const targetTop = clamp(
+        currentTop - timeline.clientHeight / 2 + visibleCenterOffset,
+        0,
+        timeline.scrollHeight - timeline.clientHeight
+      );
+
+      isAutoScrollingRef.current = true;
+
+      timeline.scrollTo({
+        top: targetTop,
+        behavior: "smooth",
+      });
+
+      window.setTimeout(() => {
+        isAutoScrollingRef.current = false;
+      }, 450);
+    });
+
+    return () => cancelAnimationFrame(id);
+  }, [
+    ready,
+    activeTab,
+    viewMode,
+    activeDay,
+    todayKey,
+    editMode,
+    timelineEndMinutes,
+    timelineStartMinutes,
+  ]);
+
   const taskSheetActiveDays = useMemo(() => {
     if (taskSheetMode !== "edit" || !taskSheetTask) return [activeDay];
 
@@ -1527,6 +1696,59 @@ export default function ScheduleApp() {
     return map;
   }, [schedule.milestones]);
 
+  const taskDeleteDetails = useMemo(() => {
+    if (!taskDeleteRequest) return null;
+    const activeDays = DAYS.filter((day) =>
+      schedule.activities[day].some((task) => task.id === taskDeleteRequest.taskId)
+    );
+    const sourceDay = activeDays.includes(taskDeleteRequest.sourceDay)
+      ? taskDeleteRequest.sourceDay
+      : activeDays[0] ?? taskDeleteRequest.sourceDay;
+    const task =
+      schedule.activities[sourceDay]?.find((item) => item.id === taskDeleteRequest.taskId) ??
+      Object.values(schedule.activities).flat().find((item) => item.id === taskDeleteRequest.taskId) ??
+      null;
+
+    if (!task || activeDays.length === 0) return null;
+    return { task, activeDays, sourceDay };
+  }, [schedule.activities, taskDeleteRequest]);
+
+  const taskDeleteCopy = useMemo(() => {
+    if (!taskDeleteDetails) return null;
+    return buildDeleteConfirmationCopy("task", {
+      name: taskDeleteDetails.task.title,
+      description: taskDeleteDetails.activeDays.length > 1
+        ? `This task appears on ${taskDeleteDetails.activeDays.length} days. Choose what you want to delete.`
+        : `This removes it from ${deleteDayLabel(taskDeleteDetails.sourceDay)}.`,
+    });
+  }, [taskDeleteDetails]);
+
+  function deleteDayLabel(day: DayKey): string {
+    return day.charAt(0).toUpperCase() + day.slice(1);
+  }
+
+  function performTaskDelete(scope: TaskDeleteScope) {
+    if (!taskDeleteDetails) return;
+    const snapshot = createTaskDeleteSnapshot(
+      schedule,
+      taskDeleteDetails.task.id,
+      taskDeleteDetails.sourceDay,
+      scope
+    );
+    setSchedule(applyTaskDelete(snapshot));
+    setTaskDeleteRequest(null);
+    haptic("medium");
+    setToastMessage({
+      message: `Deleted "${taskDeleteDetails.task.title}"`,
+      actionLabel: "Undo",
+      onAction: () => {
+        setSchedule(restoreTaskDelete(snapshot));
+        setToastMessage(null);
+        haptic("light");
+      },
+    });
+  }
+
   /** First unresolved task for today, sorted by time — drives What's Next card.
       Skips both completed and missed tasks. */
   const nextTask = useMemo(() => {
@@ -1562,34 +1784,35 @@ export default function ScheduleApp() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [weekOffset, todayKey]);
 
-  function navigateByDays(n: number) {
-    const idx = DAYS.indexOf(activeDay);
-    const total = idx + n;
-    if (total < 0) {
-      setWeekOffset((w) => w - 1);
-      setActiveDay(DAYS[7 + total] as DayKey);
-    } else if (total >= 7) {
-      setWeekOffset((w) => w + 1);
-      setActiveDay(DAYS[total - 7] as DayKey);
+  function navigateByDays(days: number) {
+    const activeIndex = DAYS.indexOf(activeDay);
+    const targetIndex = activeIndex + days;
+
+    if (targetIndex < 0) {
+      setWeekOffset((offset) => offset - 1);
+      setActiveDay(DAYS[7 + targetIndex] as DayKey);
+    } else if (targetIndex >= 7) {
+      setWeekOffset((offset) => offset + 1);
+      setActiveDay(DAYS[targetIndex - 7] as DayKey);
     } else {
-      setActiveDay(DAYS[total] as DayKey);
+      setActiveDay(DAYS[targetIndex] as DayKey);
     }
   }
 
   const visibleDates = useMemo(() => {
     if (calendarView === "7day") return weekDates;
     if (calendarView === "1day") {
-      const found = weekDates.find((d) => d.day === activeDay);
-      return found ? [found] : weekDates.slice(0, 1);
+      const selectedDate = weekDates.find(({ day }) => day === activeDay);
+      return selectedDate ? [selectedDate] : weekDates.slice(0, 1);
     }
     if (calendarView === "3day") {
-      const idx = weekDates.findIndex((d) => d.day === activeDay);
-      const start = Math.max(0, Math.min(4, idx - 1));
-      return weekDates.slice(start, start + 3);
+      const activeIndex = weekDates.findIndex(({ day }) => day === activeDay);
+      const startIndex = Math.max(0, Math.min(4, activeIndex - 1));
+      return weekDates.slice(startIndex, startIndex + 3);
     }
-    // custom3
-    return weekDates.filter((d) => customDays.includes(d.day));
-  }, [calendarView, weekDates, activeDay, customDays]);
+    return weekDates.filter(({ day }) => customDays.includes(day));
+  }, [activeDay, calendarView, customDays, weekDates]);
+
 
   const selectedPlan = useMemo(
     () => (selectedPlanId ? plansById.get(selectedPlanId) ?? null : null),
@@ -1640,22 +1863,24 @@ export default function ScheduleApp() {
       .map((task) => {
         const parsedStart = parseTimeToMinutes(task.startTime);
         const start = parsedStart === null
-          ? TIMELINE_START_MINUTES
-          : toScheduleDayMinutes(parsedStart, TIMELINE_START_MINUTES);
+          ? timelineStartMinutes
+          : mapMinutesToTimeline(parsedStart, timelineStartMinutes, timelineEndMinutes);
         const parsedEnd = parseTimeToMinutes(task.endTime);
-        let end = parsedEnd === null ? start + 30 : parsedEnd;
+        let end = parsedEnd === null
+          ? start + 30
+          : mapMinutesToTimeline(parsedEnd, timelineStartMinutes, timelineEndMinutes);
         while (end <= start) end += 1440;
         const isOvernight = end >= 1440;
-        const cs = clamp(start, TIMELINE_START_MINUTES, TIMELINE_END_MINUTES);
-        const ce = clamp(Math.max(end, cs + 15), TIMELINE_START_MINUTES, TIMELINE_END_MINUTES);
+        const cs = clamp(start, timelineStartMinutes, timelineEndMinutes);
+        const ce = clamp(Math.max(end, cs + 15), timelineStartMinutes, timelineEndMinutes);
         return {
           task,
           color: getTaskPresentation(task).color,
           start: cs,
           end: ce,
           isOvernight,
-          isTruncated: isOvernight && end > TIMELINE_END_MINUTES,
-          top: TIMELINE_TOP_PADDING + ((cs - TIMELINE_START_MINUTES) / 60) * HOUR_HEIGHT,
+          isTruncated: isOvernight && end > timelineEndMinutes,
+          top: TIMELINE_TOP_PADDING + ((cs - timelineStartMinutes) / 60) * HOUR_HEIGHT,
           height: ((ce - cs) / 60) * HOUR_HEIGHT,
           lane: 0,
           laneCount: 1,
@@ -1684,7 +1909,7 @@ export default function ScheduleApp() {
     });
     if (cluster.length > 0) finishCluster();
     return layouts;
-  }, [dayTasksView]);
+  }, [dayTasksView, timelineEndMinutes, timelineStartMinutes]);
 
 
   // ─── Loading ───────────────────────────────────────────────────────────────
@@ -1700,8 +1925,6 @@ export default function ScheduleApp() {
       </main>
     );
   }
-
-  const editPlanDuration = daysBetween(editPlanDraft.startDate, editPlanDraft.endDate);
 
   // ─── Render helpers ────────────────────────────────────────────────────────
 
@@ -1733,176 +1956,41 @@ export default function ScheduleApp() {
         compact={cardSize === "small" || cardSize === "medium"}
         narrow={cardSize === "small"}
         onToggle={toggle}
-        onClick={toggle}
+        onClick={() => openEditSheet(task)}
         className="h-full w-full"
       />
     );
   }
 
-  // ─── Add Plan Sheet ────────────────────────────────────────────────────────
+  // ─── Shared card renderer for WeekGrid ────────────────────────────────────
+  // Same visual as the mobile timeline — changes here apply to both surfaces.
 
-  function renderAddPlanSheet() {
-    const newPlanDuration = daysBetween(newPlanStartDate, newPlanEndDate);
+  function renderWeekCard(
+    task: Task,
+    height: number,
+    widthPct: number,
+    readOnly: boolean,
+    onToggle: () => void,
+    onDelete: () => void,
+  ) {
+    const { linkedPlan } = getTaskPresentation(task);
+    const duration = formatTaskDuration(task.startTime, task.endTime);
+    const taskState = resolveTaskState(task, task.subtasks?.length ?? 0);
     return (
-      <div className="space-y-4 p-5 pb-8">
-        <SheetHeader eyebrow="New" title="Create Plan" onClose={() => setAddingPlan(false)} />
-
-        <div className="space-y-2.5">
-          <div>
-            <Input
-              value={newPlanTitle}
-              onChange={(e) => setNewPlanTitle(e.target.value)}
-              placeholder="Plan title"
-              autoFocus
-              maxLength={PLAN_TITLE_MAX}
-              onKeyDown={(e) => { if (e.key === "Enter" && newPlanTitle.trim()) handleAddPlan(); }}
-            />
-            <p className="mt-1 text-right text-[11px] font-medium tabular-nums text-neutral-400 dark:text-neutral-500">
-              {newPlanTitle.length}/{PLAN_TITLE_MAX}
-            </p>
-          </div>
-          <Input
-            value={newPlanDescription}
-            onChange={(e) => setNewPlanDescription(e.target.value)}
-            placeholder="Short description (optional)"
-          />
-          <div className="grid grid-cols-2 gap-2">
-            <div>
-              <p className="mb-1 text-[11px] font-semibold uppercase tracking-[0.08em] text-neutral-400 dark:text-neutral-500">Start date</p>
-              <input
-                type="date"
-                value={newPlanStartDate}
-                onChange={(e) => setNewPlanStartDate(e.target.value)}
-                className="h-11 w-full min-w-0 rounded-xl border border-neutral-200 bg-neutral-50 px-3 text-[16px] text-neutral-900 outline-none transition-colors focus:border-neutral-300 focus:bg-neutral-100 dark:border-white/10 dark:bg-white/[0.04] dark:text-white dark:focus:border-white/20 dark:focus:bg-white/[0.07] dark:[color-scheme:dark]"
-              />
-            </div>
-            <div>
-              <p className="mb-1 text-[11px] font-semibold uppercase tracking-[0.08em] text-neutral-400 dark:text-neutral-500">
-                End date{newPlanDuration ? <span className="normal-case font-normal ml-1">({newPlanDuration} days)</span> : null}
-              </p>
-              <input
-                type="date"
-                value={newPlanEndDate}
-                onChange={(e) => setNewPlanEndDate(e.target.value)}
-                className="h-11 w-full min-w-0 rounded-xl border border-neutral-200 bg-neutral-50 px-3 text-[16px] text-neutral-900 outline-none transition-colors focus:border-neutral-300 focus:bg-neutral-100 dark:border-white/10 dark:bg-white/[0.04] dark:text-white dark:focus:border-white/20 dark:focus:bg-white/[0.07] dark:[color-scheme:dark]"
-              />
-            </div>
-          </div>
-
-          {/* Duration presets */}
-          <div>
-            <p className="mb-2 text-[11px] font-semibold uppercase tracking-[0.08em] text-neutral-400 dark:text-neutral-500">Quick duration</p>
-            <div className="flex gap-2 flex-wrap">
-              {PLAN_DURATION_PRESETS.map(({ label, days }) => {
-                const today = todayISO();
-                const isActive = days !== null
-                  ? newPlanStartDate === today && newPlanEndDate === addDaysISO(days)
-                  : newPlanStartDate === today && !newPlanEndDate;
-                return (
-                  <button
-                    key={label}
-                    type="button"
-                    onClick={() => {
-                      setNewPlanStartDate(today);
-                      setNewPlanEndDate(days !== null ? addDaysISO(days) : "");
-                    }}
-                    className={`rounded-full border px-3 py-1.5 text-[13px] font-semibold transition-all ${isActive
-                      ? "border-neutral-950 bg-neutral-950 text-white dark:border-white dark:bg-white dark:text-neutral-900"
-                      : "border-neutral-200 bg-white text-neutral-600 hover:border-neutral-300 dark:border-white/10 dark:bg-white/[0.04] dark:text-neutral-300 dark:hover:border-white/20"
-                      }`}
-                  >
-                    {label}
-                  </button>
-                );
-              })}
-            </div>
-          </div>
-        </div>
-
-        <div>
-          <p className="mb-2 text-[11px] font-semibold uppercase tracking-[0.08em] text-neutral-400 dark:text-neutral-500">Icon</p>
-          <div className="grid grid-cols-5 gap-1.5">
-            {SECTION_ICONS.map(({ name, label, icon: Icon }) => {
-              const sel = newPlanIconName === name;
-              return (
-                <button
-                  key={name}
-                  type="button"
-                  title={label}
-                  onClick={() => setNewPlanIconName(name)}
-                  className={iconPickerClass(sel)}
-                >
-                  <Icon size={18} strokeWidth={1.5} />
-                  <span className="text-[9px] font-semibold leading-none">
-                    {label}
-                  </span>
-                </button>
-              );
-            })}
-          </div>
-        </div>
-
-        <PlanColorPicker value={newPlanColor} onChange={setNewPlanColor} />
-
-        <div>
-          <p className="mb-2 text-[11px] font-semibold uppercase tracking-[0.08em] text-neutral-400 dark:text-neutral-500">
-            Progress trackers <span className="normal-case font-normal text-neutral-400">(optional)</span>
-          </p>
-          <div className="flex gap-2">
-            <Input
-              value={newPlanMetaInput}
-              onChange={(e) => setNewPlanMetaInput(e.target.value)}
-              onKeyDown={(e) => {
-                if (e.key === "Enter") {
-                  e.preventDefault();
-                  const val = newPlanMetaInput.trim();
-                  if (val && !newPlanMetaFields.includes(val)) {
-                    setNewPlanMetaFields((prev) => [...prev, val]);
-                    setNewPlanMetaInput("");
-                  }
-                }
-              }}
-              placeholder="e.g. Weight, Running Distance…"
-            />
-            <button
-              type="button"
-              onClick={() => {
-                const val = newPlanMetaInput.trim();
-                if (val && !newPlanMetaFields.includes(val)) {
-                  setNewPlanMetaFields((prev) => [...prev, val]);
-                  setNewPlanMetaInput("");
-                }
-              }}
-              className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl border border-neutral-200 text-neutral-500 hover:bg-neutral-100 dark:border-white/10 dark:text-neutral-400 dark:hover:bg-white/[0.07]"
-            >
-              <IconPlus size={16} />
-            </button>
-          </div>
-          {newPlanMetaFields.length > 0 && (
-            <div className="mt-2 flex flex-wrap gap-1.5">
-              {newPlanMetaFields.map((field) => (
-                <span
-                  key={field}
-                  className="inline-flex items-center gap-1.5 rounded-full border border-neutral-200 bg-neutral-50 px-2.5 py-1 text-[12px] font-medium text-neutral-600 dark:border-white/10 dark:bg-white/[0.04] dark:text-neutral-300"
-                >
-                  {field}
-                  <button
-                    type="button"
-                    onClick={() => setNewPlanMetaFields((prev) => prev.filter((f) => f !== field))}
-                    className="opacity-50 hover:opacity-100 hover:text-red-500 transition-opacity"
-                  >
-                    <IconX size={11} />
-                  </button>
-                </span>
-              ))}
-            </div>
-          )}
-        </div>
-
-        <Button fullWidth onClick={handleAddPlan} disabled={!newPlanTitle.trim()}>
-          Create New Plan
-        </Button>
-      </div>
+      <TaskBlockCard
+        variant="grid"
+        task={task}
+        plan={linkedPlan}
+        state={taskState}
+        duration={duration}
+        readOnly={readOnly}
+        compact={height < 56}
+        narrow={widthPct < 60 || height < 88}
+        onToggle={onToggle}
+        onClick={() => openEditSheet(task)}
+        onDelete={!readOnly ? onDelete : undefined}
+        className="h-full w-full"
+      />
     );
   }
 
@@ -2052,17 +2140,7 @@ export default function ScheduleApp() {
               {
                 icon: IconEdit,
                 label: "Edit plan",
-                onClick: () => {
-                  setEditingPlanId(selectedPlan.id);
-                  setEditPlanDraft({
-                    title: selectedPlan.title,
-                    description: selectedPlan.description ?? "",
-                    startDate: selectedPlan.startDate ?? "",
-                    endDate: selectedPlan.endDate ?? "",
-                    icon: selectedPlan.emoji,
-                    color: selectedPlan.color,
-                  });
-                },
+                onClick: () => setEditingPlanId(selectedPlan.id),
               },
               {
                 icon: IconTrash,
@@ -2088,6 +2166,15 @@ export default function ScheduleApp() {
         onClearData={clearData}
         onClearProgress={clearProgress}
         schedule={schedule}
+        onUpdatePreferences={(patch) =>
+          setSchedule((prev) => ({
+            ...prev,
+            preferences: {
+              ...prev.preferences,
+              ...patch,
+            },
+          }))
+        }
       />
       <TemplatesSheet open={templatesOpen} onClose={() => setTemplatesOpen(false)} onApply={handleApplyTemplate} />
 
@@ -2099,7 +2186,7 @@ export default function ScheduleApp() {
         // Notes lives inside the layout: a framed panel beside the sidebar on
         // desktop, a full-screen page on mobile.
         <div
-          className="fixed inset-0 z-50 bg-white dark:bg-neutral-950 lg:static lg:z-auto lg:min-h-0 lg:flex-1 lg:overflow-hidden lg:rounded-2xl lg:border lg:border-neutral-200 dark:lg:border-white/[0.08]"
+          className="fixed inset-0 z-50 bg-white dark:bg-neutral-950 lg:static lg:z-auto lg:relative lg:min-h-0 lg:flex-1 lg:overflow-hidden lg:rounded-2xl lg:border lg:border-neutral-200 dark:lg:border-white/[0.08]"
           style={{ paddingTop: "env(safe-area-inset-top, 0px)" }}
         >
           <NotesView
@@ -2124,134 +2211,130 @@ export default function ScheduleApp() {
             transition={{ duration: 0.12, ease: "easeOut" }}
             className="lg:flex lg:h-full lg:overflow-hidden"
           >
-            {/* ── Desktop: WeekGrid ─────────────────────────────────────────── */}
-            <div className="hidden lg:flex lg:flex-1 lg:overflow-hidden">
-              <div className="min-w-0 flex-1 overflow-hidden">
-                <WeekGrid
-                  schedule={schedule}
-                  plansById={plansById}
-                  weekDates={visibleDates}
-                  todayKey={todayKey}
-                  weekLabel={weekLabel}
-                  activeDay={activeDay}
-                  calendarView={calendarView}
-                  customDays={customDays}
-                  onDaySelect={setActiveDay}
-                  onWeekPrev={() => {
-                    if (calendarView === "1day") navigateByDays(-1);
-                    else if (calendarView === "3day") navigateByDays(-3);
-                    else setWeekOffset((w) => w - 1);
-                  }}
-                  onWeekNext={() => {
-                    if (calendarView === "1day") navigateByDays(1);
-                    else if (calendarView === "3day") navigateByDays(3);
-                    else setWeekOffset((w) => w + 1);
-                  }}
-                  onWeekToday={() => { setWeekOffset(0); setActiveDay(todayKey); }}
-                  onCalendarViewChange={setCalendarView}
-                  onCustomDaysChange={setCustomDays}
-                  onEditTask={openEditSheet}
-                  onToggleTaskComplete={handleToggleTaskComplete}
-                  onDeleteTask={handleDeleteTask}
-                  plans={schedule.plans}
-                  onInlineAdd={(data) => setSchedule(createTask(data.taskDraft, data.repeatDays, data.planItems))}
-                />
-              </div>
+            {/* ── Desktop WeekGrid (right panel, lg+ only) ──────────────────── */}
+            <div className="hidden lg:flex lg:min-w-0 lg:flex-1 lg:overflow-hidden">
+              <WeekGrid
+                schedule={schedule}
+                plansById={plansById}
+                weekDates={visibleDates}
+                todayKey={todayKey}
+                weekLabel={weekLabel}
+                activeDay={activeDay}
+                calendarView={calendarView}
+                customDays={customDays}
+                onDaySelect={setActiveDay}
+                onCreateTaskAtTime={(day, startMin, endMin) => openCreateSheetWithTime(startMin, endMin, day)}
+                onWeekPrev={() => {
+                  if (calendarView === "1day") navigateByDays(-1);
+                  else if (calendarView === "3day") navigateByDays(-3);
+                  else setWeekOffset((offset) => offset - 1);
+                }}
+                onWeekNext={() => {
+                  if (calendarView === "1day") navigateByDays(1);
+                  else if (calendarView === "3day") navigateByDays(3);
+                  else setWeekOffset((offset) => offset + 1);
+                }}
+                onWeekToday={() => { setWeekOffset(0); setActiveDay(todayKey); }}
+                onCalendarViewChange={setCalendarView}
+                onCustomDaysChange={setCustomDays}
+                onEditTask={openEditSheet}
+                onDeleteTask={requestDeleteTask}
+                onToggleTaskComplete={handleToggleTaskComplete}
+                renderCard={renderWeekCard}
+              />
             </div>
 
-            {/* ── Mobile: calendar strip + day task list ────────────────────── */}
-            <div className="lg:hidden">
+            {/* ── Unified: calendar strip + day timeline (mobile only) ────────── */}
+            <div className="flex min-h-0 flex-col bg-neutral-50 lg:hidden dark:bg-neutral-950">
 
-            {/* ── Calendar card ─────────────────────────────────────────────── */}
-            <div className="px-4 pt-4">
-              <div className="rounded-[20px] border border-neutral-200 bg-white px-4 pt-4 pb-4 dark:border-white/[0.08] dark:bg-neutral-900">
-
-                {/* Month + nav row */}
-                <div className="mb-4 flex items-center justify-between">
-                  <span className="text-[20px] font-bold tracking-[-0.3px] text-neutral-900 dark:text-white">
-                    {weekLabel}
-                  </span>
-                  <div className="flex items-center gap-1">
-                    {weekOffset !== 0 && (
-                      <button
-                        type="button"
-                        onClick={() => { setWeekOffset(0); setActiveDay(todayKey); }}
-                        className="mr-0.5 text-[12px] font-semibold text-emerald-600 dark:text-emerald-400"
-                      >
-                        Today
-                      </button>
-                    )}
+            {/* ── Mobile calendar strip ───────────────────────────────────── */}
+            <div className="shrink-0 px-4 pt-4">
+              {/* Month + nav row */}
+              <div className="mb-3 flex items-center justify-between">
+                <span className="text-[20px] font-bold tracking-[-0.3px] text-neutral-900 dark:text-white">
+                  {weekLabel}
+                </span>
+                <div className="flex items-center gap-1">
+                  {weekOffset !== 0 && (
                     <button
                       type="button"
-                      onClick={() => { haptic("light"); setWeekOffset((w) => w - 1); }}
-                      aria-label="Previous week"
-                      className="flex h-8 w-8 items-center justify-center rounded-full text-neutral-500 hover:bg-neutral-100 dark:text-neutral-400 dark:hover:bg-white/[0.07]"
+                      onClick={() => { setWeekOffset(0); setActiveDay(todayKey); }}
+                      className="mr-0.5 text-[12px] font-semibold text-emerald-600 dark:text-emerald-400"
                     >
-                      <IconChevronLeft size={16} strokeWidth={2} />
+                      Today
                     </button>
-                    <button
-                      type="button"
-                      onClick={() => { haptic("light"); setWeekOffset((w) => w + 1); }}
-                      aria-label="Next week"
-                      className="flex h-8 w-8 items-center justify-center rounded-full text-neutral-500 hover:bg-neutral-100 dark:text-neutral-400 dark:hover:bg-white/[0.07]"
-                    >
-                      <IconChevronRight size={16} strokeWidth={2} />
-                    </button>
-                  </div>
+                  )}
+                  <button
+                    type="button"
+                    onClick={() => { haptic("light"); setWeekOffset((w) => w - 1); }}
+                    aria-label="Previous week"
+                    className="flex h-8 w-8 items-center justify-center rounded-full text-neutral-500 hover:bg-neutral-100 dark:text-neutral-400 dark:hover:bg-white/[0.07]"
+                  >
+                    <IconChevronLeft size={16} strokeWidth={2} />
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => { haptic("light"); setWeekOffset((w) => w + 1); }}
+                    aria-label="Next week"
+                    className="flex h-8 w-8 items-center justify-center rounded-full text-neutral-500 hover:bg-neutral-100 dark:text-neutral-400 dark:hover:bg-white/[0.07]"
+                  >
+                    <IconChevronRight size={16} strokeWidth={2} />
+                  </button>
                 </div>
+              </div>
 
-                {/* Day strip */}
-                <div className="grid grid-cols-7 gap-0.5">
-                  {weekDates.map(({ day, date }) => {
-                    const isDateToday = date.getTime() === todayMidnightTime;
-                    const isActive = day === activeDay;
-                    return (
-                      <button
-                        key={day}
-                        type="button"
-                        onClick={() => { haptic("light"); setActiveDay(day); }}
-                        className="relative flex flex-col items-center focus-visible:outline-none"
-                      >
-                        {/* Active day: tall black pill */}
-                        {isActive && (
-                          <motion.div
-                            layoutId="weekDayPill"
-                            className="absolute inset-0 rounded-[14px] bg-neutral-950 dark:bg-white"
-                            style={{ willChange: "transform" }}
-                            transition={{ type: "spring", stiffness: 380, damping: 30, mass: 0.6 }}
-                          />
-                        )}
+              {/* Day strip */}
+              <div className="grid grid-cols-7 gap-0.5 border-b border-neutral-200/80 pb-3 dark:border-white/[0.06]">
+                {weekDates.map(({ day, date }) => {
+                  const isDateToday = date.getTime() === todayMidnightTime;
+                  const isActive = day === activeDay;
+                  return (
+                    <button
+                      key={day}
+                      type="button"
+                      onClick={() => { haptic("light"); setActiveDay(day); }}
+                      className="relative flex flex-col items-center focus-visible:outline-none"
+                    >
+                      {/* Active day: tall black pill */}
+                      {isActive && (
                         <motion.div
-                          whileTap={{ scale: 0.90 }}
-                          transition={{ type: "spring", stiffness: 500, damping: 28 }}
-                          className="relative z-10 flex flex-col items-center gap-2 w-full py-3"
-                        >
-                          <span className={`text-[11px] font-semibold leading-none ${
-                            isActive
-                              ? "text-white/55 dark:text-neutral-900/55"
-                              : isDateToday
-                              ? "text-rose-500"
-                              : "text-neutral-400 dark:text-neutral-500"
-                          }`}>
-                            {DAY_LABELS[day]}
-                          </span>
-                          <span className={`text-[18px] font-bold leading-none tabular-nums ${
-                            isActive
-                              ? "text-white dark:text-neutral-950"
-                              : isDateToday
-                              ? "text-rose-500"
-                              : "text-neutral-800 dark:text-neutral-200"
-                          }`}>
-                            {date.getDate()}
-                          </span>
-                        </motion.div>
-                      </button>
-                    );
-                  })}
-                </div>
+                          layoutId="weekDayPill"
+                          className="absolute inset-0 rounded-[14px] bg-neutral-950 dark:bg-white"
+                          style={{ willChange: "transform" }}
+                          transition={{ type: "spring", stiffness: 380, damping: 30, mass: 0.6 }}
+                        />
+                      )}
+                      <motion.div
+                        whileTap={{ scale: 0.90 }}
+                        transition={{ type: "spring", stiffness: 500, damping: 28 }}
+                        className="relative z-10 flex flex-col items-center gap-2 w-full py-3"
+                      >
+                        <span className={`text-[11px] font-semibold leading-none ${
+                          isActive
+                            ? "text-white/55 dark:text-neutral-900/55"
+                            : isDateToday
+                            ? "text-rose-500"
+                            : "text-neutral-400 dark:text-neutral-500"
+                        }`}>
+                          {DAY_LABELS[day]}
+                        </span>
+                        <span className={`text-[18px] font-bold leading-none tabular-nums ${
+                          isActive
+                            ? "text-white dark:text-neutral-950"
+                            : isDateToday
+                            ? "text-rose-500"
+                            : "text-neutral-800 dark:text-neutral-200"
+                        }`}>
+                          {date.getDate()}
+                        </span>
+                      </motion.div>
+                    </button>
+                  );
+                })}
               </div>
             </div>
 
+            <div className="flex min-h-0 flex-1 flex-col">
             <AnimatePresence mode="wait" initial={false}>
             <motion.div
               key={activeDay}
@@ -2259,10 +2342,11 @@ export default function ScheduleApp() {
               animate={{ opacity: 1, y: 0 }}
               exit={{ opacity: 0 }}
               transition={{ duration: 0.12, ease: "easeOut" }}
+              className="flex min-h-0 flex-1 flex-col"
             >
 
             {/* ── Title + progress ──────────────────────────────────────────── */}
-            <div className="px-4 pt-5 pb-2">
+            <div className="shrink-0 px-4 pt-5 pb-2">
               {/* Title row */}
               <div className="flex items-center justify-between">
                 <h1 className="text-[24px] font-bold leading-tight tracking-[-0.8px] text-neutral-900 dark:text-white">
@@ -2285,7 +2369,7 @@ export default function ScheduleApp() {
             </div>
 
             {/* Task content */}
-            <div className="px-4">
+            <div className="flex min-h-0 flex-1 flex-col px-4 lg:overflow-hidden">
               {/* Rituals strip */}
               <TodayRitualsBar
                 rituals={schedule.rituals ?? []}
@@ -2293,6 +2377,7 @@ export default function ScheduleApp() {
                 completedIds={completedRitualIds}
                 onToggle={handleToggleRitualComplete}
               />
+              <div className="flex min-h-0 flex-1 flex-col">
               <AnimatePresence mode="wait" initial={false}>
                 {viewMode === "list" ? (
                   <motion.div
@@ -2337,7 +2422,7 @@ export default function ScheduleApp() {
                                       onToggleComplete={handleToggleTaskComplete}
                                       onToggleSubtask={handleToggleSubtask}
                                       onEdit={() => openEditSheet(task)}
-                                      onDelete={() => handleDeleteTask(task.id)}
+                                      onDelete={() => requestDeleteTask(task.id, activeDay)}
                                     />
                                   </div>
                                 )}
@@ -2360,7 +2445,7 @@ export default function ScheduleApp() {
                                 onToggleComplete={(id, ids) => handleToggleTaskComplete(id, ids, activeDay, activeDateISO)}
                                 onToggleSubtask={(id, sub) => handleToggleSubtask(id, sub, activeDay, activeDateISO)}
                                 onEdit={() => openEditSheet(task)}
-                                onDelete={() => handleDeleteTask(task.id)}
+                                onDelete={() => requestDeleteTask(task.id, activeDay)}
                                 onOpenSubtasks={() => setSubtasksRef({ id: task.id, day: activeDay, dateISO: activeDateISO })}
                               />
                               {linkedMilestone && (
@@ -2383,9 +2468,10 @@ export default function ScheduleApp() {
                     animate={{ opacity: 1, y: 0 }}
                     exit={{ opacity: 0, y: -4 }}
                     transition={{ duration: 0.2, ease: "easeOut" }}
+                    className="flex min-h-0 flex-1 flex-col"
                   >
                     {dayTasks.length === 0 && (
-                      <div className="mb-3 rounded-2xl border border-dashed border-neutral-200 py-8 text-center dark:border-white/10">
+                      <div className="mb-3 shrink-0 rounded-2xl border border-dashed border-neutral-200 py-8 text-center dark:border-white/10">
                         <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-neutral-100 dark:bg-white/[0.06] mx-auto mb-2">
                           <IconCalendar size={17} strokeWidth={1.8} className="text-neutral-400 dark:text-neutral-500" />
                         </div>
@@ -2395,53 +2481,51 @@ export default function ScheduleApp() {
                       </div>
                     )}
                     {/* Premium execution timeline */}
-                    <div
-                      ref={timelineScrollRef}
-                      onScroll={() => {
-                        if (isAutoScrollingRef.current) return;
-                        hasUserScrolledTimelineRef.current = true;
-                      }}
-                      className="calendar-scrollbar-none relative flex h-[calc(100vh-280px)] overflow-y-auto overflow-x-hidden"
-                      style={{ willChange: "transform" }}
-                    >
+                    <div className="-mx-4">
+                      <div
+                        ref={timelineScrollRef}
+                        onScroll={() => {
+                          if (isAutoScrollingRef.current) return;
+                          hasUserScrolledTimelineRef.current = true;
+                        }}
+                        className="calendar-scrollbar-none relative flex h-[calc(100dvh-280px)] overflow-y-auto overflow-x-hidden bg-transparent lg:h-auto lg:min-h-0 lg:flex-1"
+                        style={{ willChange: "transform" }}
+                      >
                       {/* Time column */}
                       <div
-                        className="sticky left-0 z-20 w-[44px] shrink-0 bg-[#F5F5F5] dark:bg-[#111111]"
-                        style={{ height: TIMELINE_HEIGHT }}
+                        className="sticky left-0 z-20 w-[52px] shrink-0 bg-transparent"
+                        style={{ height: timelineHeight }}
                       >
-                        {TIMELINE_HOURS.map((hour, index) => {
-                          const isMidnight = hour === 24;
-                          const isLast = index === TIMELINE_HOURS.length - 1;
+                        {timelineMarks.map((mark) => {
+                          const isMidnight = mark % 1440 === 0;
+                          const isHourMark = mark % 60 === 0;
                           return (
-                            <div key={hour}>
-                              {/* Hour label (4 AM not shown — sits under the top padding) */}
-                              {index > 0 && (
-                                <div
-                                  className="absolute right-0 pr-2 flex flex-col items-end"
-                                  style={{ top: TIMELINE_TOP_PADDING + index * HOUR_HEIGHT - 6 }}
-                                >
-                                  {isMidnight ? (
-                                    <span className="text-[8px] font-bold text-neutral-300 dark:text-white/20 leading-none uppercase tracking-wide">
-                                      tmrw
-                                    </span>
-                                  ) : (
-                                    <span className="text-[9px] font-semibold text-neutral-400 dark:text-neutral-500 tabular-nums leading-none">
-                                      {formatHourLabel(hour)}
-                                    </span>
-                                  )}
-                                </div>
-                              )}
-                              {/* Half-hour label */}
-                              {!isLast && (
-                                <div
-                                  className="absolute right-0 pr-2"
-                                  style={{ top: TIMELINE_TOP_PADDING + index * HOUR_HEIGHT + HOUR_HEIGHT / 2 - 5 }}
-                                >
-                                  <span className="text-[8px] font-medium text-neutral-300 dark:text-neutral-600 tabular-nums leading-none">
-                                    {formatHalfHourLabel(hour)}
+                            <div key={mark}>
+                              <div
+                                className="absolute right-0 pr-2.5"
+                                style={{
+                                  top:
+                                    TIMELINE_TOP_PADDING +
+                                    ((mark - timelineStartMinutes) / 60) * HOUR_HEIGHT -
+                                    (isHourMark || isMidnight ? 6 : 5),
+                                }}
+                              >
+                                {isMidnight ? (
+                                  <span className="text-[10px] font-bold text-neutral-400 dark:text-white/25 leading-none uppercase tracking-wide">
+                                    tmrw
                                   </span>
-                                </div>
-                              )}
+                                ) : (
+                                  <span
+                                    className={`tabular-nums leading-none ${
+                                      isHourMark
+                                        ? "text-[9px] font-semibold text-neutral-500 dark:text-neutral-500"
+                                        : "text-[9px] font-medium text-neutral-500 dark:text-neutral-500"
+                                    }`}
+                                  >
+                                    {isHourMark ? formatHourLabel(mark) : formatHalfHourLabel(mark)}
+                                  </span>
+                                )}
+                              </div>
                             </div>
                           );
                         })}
@@ -2450,13 +2534,13 @@ export default function ScheduleApp() {
                       {/* Ritual lane — dedicated column, pills start here and never cover task titles */}
                       <div
                         className="relative shrink-0 overflow-visible"
-                        style={{ width: RITUAL_LANE_WIDTH, height: TIMELINE_HEIGHT }}
+                        style={{ width: RITUAL_LANE_WIDTH, height: timelineHeight }}
                       >
                         <RitualOverlayLayer
                           rituals={schedule.rituals ?? []}
                           activeDay={activeDay}
-                          timelineStartMinutes={TIMELINE_START_MINUTES}
-                          timelineEndMinutes={TIMELINE_END_MINUTES}
+                          timelineStartMinutes={timelineStartMinutes}
+                          timelineEndMinutes={timelineEndMinutes}
                           timelineTopPadding={TIMELINE_TOP_PADDING}
                           hourHeight={HOUR_HEIGHT}
                           completedIds={completedRitualIds}
@@ -2466,29 +2550,32 @@ export default function ScheduleApp() {
 
                       {/* Grid + tasks */}
                       <div
+                        ref={taskGridRef}
                         className="relative min-w-0 flex-1 border-l border-neutral-200/80 dark:border-white/[0.07]"
-                        style={{ height: TIMELINE_HEIGHT, contain: "layout style" }}
+                        style={{ height: timelineHeight, contain: "layout style" }}
+                        onPointerDown={isViewingToday ? handleGridPointerDown : undefined}
                       >
                         {/* Grid lines */}
                         <div className="absolute inset-0 pointer-events-none">
-                          {TIMELINE_HOURS.map((hour, index) => {
-                            const isMidnight = hour === 24;
+                          {timelineMarks.map((mark) => {
+                            const isMidnight = mark % 1440 === 0;
+                            const isHourMark = mark % 60 === 0;
                             return (
-                              <div key={`grid-${hour}`}>
+                              <div key={`grid-${mark}`}>
                                 <div
-                                  className={`absolute left-0 right-0 ${
+                                  className={`absolute left-0 right-0 border-t ${
                                     isMidnight
-                                      ? "border-t border-neutral-200 dark:border-white/[0.10]"
-                                      : "border-t border-neutral-100/90 dark:border-white/[0.05]"
+                                      ? "border-neutral-300/80 dark:border-white/[0.16]"
+                                      : isHourMark
+                                      ? "border-neutral-300/70 dark:border-white/[0.12]"
+                                      : "border-dashed border-neutral-200/80 dark:border-white/[0.06]"
                                   }`}
-                                  style={{ top: TIMELINE_TOP_PADDING + index * HOUR_HEIGHT }}
+                                  style={{
+                                    top:
+                                      TIMELINE_TOP_PADDING +
+                                      ((mark - timelineStartMinutes) / 60) * HOUR_HEIGHT,
+                                  }}
                                 />
-                                {index < TIMELINE_HOURS.length - 1 && (
-                                  <div
-                                    className="absolute left-0 right-0 border-t border-dashed border-neutral-200/70 dark:border-white/[0.045]"
-                                    style={{ top: TIMELINE_TOP_PADDING + index * HOUR_HEIGHT + HOUR_HEIGHT / 2 }}
-                                  />
-                                )}
                               </div>
                             );
                           })}
@@ -2496,23 +2583,74 @@ export default function ScheduleApp() {
 
                         {/* Task blocks */}
                         <div className="absolute inset-0">
-                          {timelineTaskLayouts.map((layout) => (
-                            <div
-                              key={layout.task.id}
-                              className="absolute min-w-0 px-0.5 py-[2px] animate-panel-in"
-                              style={{ ...taskLaneStyle(layout), willChange: "opacity" }}
-                            >
-                              <div className="relative h-full min-h-[20px]">
+                          {timelineTaskLayouts.map((layout) => {
+                            const isBeingMoved = dragMove?.taskId === layout.task.id;
+                            return (
+                              <div
+                                key={layout.task.id}
+                                data-task-block
+                                className={`absolute min-w-0 px-0.5 py-[2px] animate-panel-in touch-none transition-opacity ${
+                                  isBeingMoved ? "opacity-25 pointer-events-none" : ""
+                                }`}
+                                style={{ ...taskLaneStyle(layout), willChange: "opacity" }}
+                                onPointerDown={isViewingToday ? (e) => handleTaskPointerDown(e, layout.task, layout.start, layout.end) : undefined}
+                              >
+                                <div className="relative h-full min-h-[20px]">
+                                  {renderTimelineTaskCard(
+                                    layout.task,
+                                    "h-full rounded-[8px] px-2 py-1.5 w-full min-w-0 overflow-hidden",
+                                    computeCardSize(layout.height, layout.laneCount),
+                                    layout.isOvernight,
+                                    layout.isTruncated
+                                  )}
+                                </div>
+                              </div>
+                            );
+                          })}
+
+                          {/* Drag-create ghost block */}
+                          {dragCreate && (() => {
+                            const top = minutesToTopPx(dragCreate.startMin);
+                            const height = Math.max(minutesToHeightPx(dragCreate.endMin - dragCreate.startMin), 24);
+                            const showDuration = dragCreate.endMin - dragCreate.startMin >= 30;
+                            return (
+                              <div
+                                className="pointer-events-none absolute left-0.5 right-0.5 z-20"
+                                style={{ top, height }}
+                              >
+                                <TimelineDraftCard
+                                  startLabel={minutesToDisplayTime(dragCreate.startMin)}
+                                  endLabel={minutesToDisplayTime(dragCreate.endMin)}
+                                  durationLabel={showDuration ? getDurationLabel(dragCreate.startMin, dragCreate.endMin) : null}
+                                  compact={height < 56}
+                                  className="h-full"
+                                />
+                              </div>
+                            );
+                          })()}
+
+                          {/* Drag-move preview block */}
+                          {dragMove && (() => {
+                            const movingTask = dayTasksView.find((t) => t.id === dragMove.taskId);
+                            if (!movingTask) return null;
+                            const top = minutesToTopPx(dragMove.previewStartMin);
+                            const height = Math.max(minutesToHeightPx(dragMove.durationMin), 24);
+                            const cardSize = computeCardSize(height, 1);
+                            return (
+                              <div
+                                className="pointer-events-none absolute left-0.5 right-0.5 z-30"
+                                style={{ top, height, opacity: 0.93 }}
+                              >
                                 {renderTimelineTaskCard(
-                                  layout.task,
-                                  "h-full rounded-[8px] px-2 py-1.5 w-full min-w-0 overflow-hidden",
-                                  computeCardSize(layout.height, layout.laneCount),
-                                  layout.isOvernight,
-                                  layout.isTruncated
+                                  { ...movingTask, startTime: minutesToDisplayTime(dragMove.previewStartMin), endTime: minutesToDisplayTime(dragMove.previewStartMin + dragMove.durationMin) },
+                                  "h-full rounded-[8px] px-2 py-1.5 w-full min-w-0 overflow-hidden shadow-2xl ring-1 ring-black/10 dark:ring-white/10",
+                                  cardSize,
+                                  false,
+                                  false
                                 )}
                               </div>
-                            </div>
-                          ))}
+                            );
+                          })()}
                         </div>
 
                         {/* Current-task glow — isolated layer, hugs the active block */}
@@ -2520,28 +2658,32 @@ export default function ScheduleApp() {
                           layouts={timelineTaskLayouts}
                           activeDay={activeDay}
                           todayKey={todayKey}
-                          timelineStartMinutes={TIMELINE_START_MINUTES}
-                          timelineEndMinutes={TIMELINE_END_MINUTES}
+                          timelineStartMinutes={timelineStartMinutes}
+                          timelineEndMinutes={timelineEndMinutes}
                         />
 
                         {/* Current time — isolated layer, owns its own 30s interval */}
                         <CurrentTimeLayer
                           activeDay={activeDay}
                           todayKey={todayKey}
-                          timelineStartMinutes={TIMELINE_START_MINUTES}
-                          timelineEndMinutes={TIMELINE_END_MINUTES}
+                          timelineStartMinutes={timelineStartMinutes}
+                          timelineEndMinutes={timelineEndMinutes}
                           timelineTopPadding={TIMELINE_TOP_PADDING}
                           hourHeight={HOUR_HEIGHT}
                         />
+                      </div>
                       </div>
                     </div>
                   </motion.div>
                 )}
               </AnimatePresence>
-            </div>
+              </div>{/* end viewMode AnimatePresence wrapper */}
+            </div>{/* end task content */}
             </motion.div>
             </AnimatePresence>
-            </div>{/* end lg:hidden mobile section */}
+            </div>{/* end activeDay AnimatePresence wrapper */}
+            </div>{/* end unified section */}
+
           </motion.div>
         )}
 
@@ -2560,6 +2702,7 @@ export default function ScheduleApp() {
               plan={selectedPlan}
               schedule={schedule}
               milestones={schedule.milestones ?? []}
+              onDeletePlan={handleDeletePlan}
               onAddTask={(planId) => openCreateSheet(planId)}
               onEditTask={(task) => openEditSheet(task)}
               onDeleteLinkedTask={handleDeleteLinkedTask}
@@ -2667,6 +2810,15 @@ export default function ScheduleApp() {
               schedule={schedule}
               onClearData={clearData}
               onClearProgress={clearProgress}
+              onUpdatePreferences={(patch) =>
+                setSchedule((prev) => ({
+                  ...prev,
+                  preferences: {
+                    ...prev.preferences,
+                    ...patch,
+                  },
+                }))
+              }
               onClose={() => setActiveTab(0)}
             />
           </motion.div>
@@ -2677,124 +2829,18 @@ export default function ScheduleApp() {
       )}
 
       {/* ── Edit Plan Bottom Sheet ─────────────────────────────────────────── */}
-      <BottomSheet open={!!editingPlanId} onClose={() => setEditingPlanId(null)} maxHeight="80vh">
-        <div className="space-y-4 p-5 pb-8">
-          <SheetHeader eyebrow="Edit" title="Plan Details" onClose={() => setEditingPlanId(null)} />
-          <div className="space-y-2.5">
-            <div>
-              <Input
-                value={editPlanDraft.title}
-                onChange={(e) => setEditPlanDraft((d) => ({ ...d, title: e.target.value }))}
-                placeholder="Plan title"
-                autoFocus
-                maxLength={PLAN_TITLE_MAX}
-              />
-              <p className="mt-1 text-right text-[11px] font-medium tabular-nums text-neutral-400 dark:text-neutral-500">
-                {editPlanDraft.title.length}/{PLAN_TITLE_MAX}
-              </p>
-            </div>
-            <Input
-              value={editPlanDraft.description}
-              onChange={(e) => setEditPlanDraft((d) => ({ ...d, description: e.target.value }))}
-              placeholder="Short description (optional)"
-            />
-            <div className="grid grid-cols-2 gap-2">
-              <div>
-                <p className="mb-1 text-[11px] font-semibold uppercase tracking-[0.08em] text-neutral-400 dark:text-neutral-500">Start date</p>
-                <input
-                  type="date"
-                  value={editPlanDraft.startDate}
-                  onChange={(e) => setEditPlanDraft((d) => ({ ...d, startDate: e.target.value }))}
-                  className="h-11 w-full min-w-0 rounded-xl border border-neutral-200 bg-neutral-50 px-3 text-[16px] text-neutral-900 outline-none transition-colors focus:border-neutral-300 focus:bg-neutral-100 dark:border-white/10 dark:bg-white/[0.04] dark:text-white dark:focus:border-white/20 dark:focus:bg-white/[0.07] dark:[color-scheme:dark]"
-                />
-              </div>
-              <div>
-                <p className="mb-1 text-[11px] font-semibold uppercase tracking-[0.08em] text-neutral-400 dark:text-neutral-500">
-                  End date{editPlanDuration ? <span className="normal-case font-normal ml-1">({editPlanDuration} days)</span> : null}
-                </p>
-                <input
-                  type="date"
-                  value={editPlanDraft.endDate}
-                  onChange={(e) => setEditPlanDraft((d) => ({ ...d, endDate: e.target.value }))}
-                  className="h-11 w-full min-w-0 rounded-xl border border-neutral-200 bg-neutral-50 px-3 text-[16px] text-neutral-900 outline-none transition-colors focus:border-neutral-300 focus:bg-neutral-100 dark:border-white/10 dark:bg-white/[0.04] dark:text-white dark:focus:border-white/20 dark:focus:bg-white/[0.07] dark:[color-scheme:dark]"
-                />
-              </div>
-            </div>
-
-            {/* Duration presets */}
-            <div>
-              <p className="mb-2 text-[11px] font-semibold uppercase tracking-[0.08em] text-neutral-400 dark:text-neutral-500">Quick duration</p>
-              <div className="flex gap-2 flex-wrap">
-                {PLAN_DURATION_PRESETS.map(({ label, days }) => {
-                  const today = todayISO();
-                  const isActive = days !== null
-                    ? editPlanDraft.startDate === today && editPlanDraft.endDate === addDaysISO(days)
-                    : editPlanDraft.startDate === today && !editPlanDraft.endDate;
-                  return (
-                    <button
-                      key={label}
-                      type="button"
-                      onClick={() => setEditPlanDraft((d) => ({
-                        ...d,
-                        startDate: today,
-                        endDate: days !== null ? addDaysISO(days) : "",
-                      }))}
-                      className={`rounded-full border px-3 py-1.5 text-[13px] font-semibold transition-all ${isActive
-                        ? "border-neutral-950 bg-neutral-950 text-white dark:border-white dark:bg-white dark:text-neutral-900"
-                        : "border-neutral-200 bg-white text-neutral-600 hover:border-neutral-300 dark:border-white/10 dark:bg-white/[0.04] dark:text-neutral-300 dark:hover:border-white/20"
-                        }`}
-                    >
-                      {label}
-                    </button>
-                  );
-                })}
-              </div>
-            </div>
-
-            {/* Icon picker */}
-            <div>
-              <p className="mb-2 text-[11px] font-semibold uppercase tracking-[0.08em] text-neutral-400 dark:text-neutral-500">Icon</p>
-              <div className="grid grid-cols-5 gap-1.5">
-                {SECTION_ICONS.map(({ name, label, icon: Icon }) => {
-                  const sel = editPlanDraft.icon === name;
-                  return (
-                    <button
-                      key={name}
-                      type="button"
-                      title={label}
-                      onClick={() => setEditPlanDraft((d) => ({ ...d, icon: name }))}
-                      className={iconPickerClass(sel)}
-                    >
-                      <Icon size={18} strokeWidth={1.5} />
-                      <span className="text-[9px] font-semibold leading-none">
-                        {label}
-                      </span>
-                    </button>
-                  );
-                })}
-              </div>
-            </div>
-
-            {/* Color picker — separate from icon selection */}
-            <PlanColorPicker
-              value={editPlanDraft.color}
-              onChange={(c) => setEditPlanDraft((d) => ({ ...d, color: c }))}
-            />
-          </div>
-          <Button
-            fullWidth
-            onClick={() => editingPlanId && handleSaveEditPlan(editingPlanId)}
-            disabled={!editPlanDraft.title.trim()}
-          >
-            Save Changes
-          </Button>
-        </div>
-      </BottomSheet>
-
+      <EditPlanSheet
+        planId={editingPlanId}
+        plan={editingPlanId ? plansById.get(editingPlanId) ?? null : null}
+        setSchedule={setSchedule}
+        onClose={() => setEditingPlanId(null)}
+      />
       {/* ── Add Plan Bottom Sheet ───────────────────────────────────────────── */}
-      <BottomSheet open={addingPlan} onClose={() => setAddingPlan(false)}>
-        {renderAddPlanSheet()}
-      </BottomSheet>
+      <AddPlanSheet
+        open={addingPlan}
+        onClose={() => setAddingPlan(false)}
+        setSchedule={setSchedule}
+      />
 
       {/* ── AI Plan Creator Sheet (hidden while AI is disabled) ────────────── */}
       {AI_ENABLED && (
@@ -2809,16 +2855,18 @@ export default function ScheduleApp() {
       )}
 
       {/* ── Bottom Nav (mobile only) ───────────────────────────────────────── */}
-      <div className="lg:hidden">
-        <BottomNav
-          activeTab={activeTab}
-          onTabChange={(tab) => { setActiveTab(tab); setSelectedPlanId(null); }}
-          onCreateTask={() => openCreateSheet()}
-          onCreatePlan={openAddPlan}
-          onCreateRitual={() => { setActiveTab(2); if (canAddRitual) setRitualAddOpen(true); }}
-          onBulkImport={() => setBulkImportOpen(true)}
-        />
-      </div>
+      {activeTab !== 6 && (
+        <div className="lg:hidden">
+          <BottomNav
+            activeTab={activeTab}
+            onTabChange={(tab) => { setActiveTab(tab); setSelectedPlanId(null); }}
+            onCreateTask={() => openCreateSheet()}
+            onCreatePlan={openAddPlan}
+            onCreateRitual={() => { setActiveTab(2); if (canAddRitual) setRitualAddOpen(true); }}
+            onBulkImport={() => setBulkImportOpen(true)}
+          />
+        </div>
+      )}
 
       <BulkImportSheet
         open={bulkImportOpen}
@@ -2839,6 +2887,8 @@ export default function ScheduleApp() {
         isOpen={taskSheetOpen}
         initialPlanId={taskSheetPlanId}
         initialTaskType={taskSheetInitialType}
+        initialStartTime={taskSheetInitialStartTime}
+        initialEndTime={taskSheetInitialEndTime}
         ollamaUrl={ollamaUrl}
         ollamaModel={ollamaModel}
         onClose={closeTaskSheet}
@@ -2858,6 +2908,14 @@ export default function ScheduleApp() {
           setToastMessage("Task duplicated");
           setTimeout(() => openEditSheet(newTask), 350);
         }}
+        onDelete={taskSheetMode === "edit" && taskSheetTask ? () => {
+          const sourceDay = taskSheetActiveDays.includes(activeDay)
+            ? activeDay
+            : taskSheetActiveDays[0] ?? activeDay;
+          const taskId = taskSheetTask.id;
+          closeTaskSheet();
+          requestDeleteTask(taskId, sourceDay);
+        } : undefined}
       />
 
       <AddEntryModal
@@ -2921,6 +2979,66 @@ export default function ScheduleApp() {
         onConfirm={confirmState?.onConfirm ?? (() => {})}
         title={confirmState?.title ?? ""}
         description={confirmState?.description}
+        confirmLabel={confirmState?.confirmLabel}
+      />
+
+      <ConfirmSheet
+        open={!!taskDeleteDetails}
+        onClose={() => setTaskDeleteRequest(null)}
+        onConfirm={() => performTaskDelete("day")}
+        title={taskDeleteCopy?.title ?? ""}
+        description={taskDeleteCopy?.description}
+        confirmLabel={taskDeleteCopy?.confirmLabel}
+        actions={taskDeleteDetails ? (
+          taskDeleteDetails.activeDays.length > 1 ? (
+            <div className="space-y-2.5">
+              <Button
+                type="button"
+                variant="dangerSecondary"
+                fullWidth
+                onClick={() => performTaskDelete("day")}
+              >
+                Delete {deleteDayLabel(taskDeleteDetails.sourceDay)} only
+              </Button>
+              <Button
+                type="button"
+                variant="destructive"
+                fullWidth
+                onClick={() => performTaskDelete("all")}
+              >
+                Delete all occurrences
+              </Button>
+              <Button
+                type="button"
+                variant="ghost"
+                fullWidth
+                size="md"
+                onClick={() => setTaskDeleteRequest(null)}
+              >
+                Cancel
+              </Button>
+            </div>
+          ) : (
+            <div className="flex gap-3">
+              <Button
+                type="button"
+                variant="secondary"
+                fullWidth
+                onClick={() => setTaskDeleteRequest(null)}
+              >
+                Cancel
+              </Button>
+              <Button
+                type="button"
+                variant="destructive"
+                fullWidth
+                onClick={() => performTaskDelete("day")}
+              >
+                Delete task
+              </Button>
+            </div>
+          )
+        ) : undefined}
       />
 
       {/* ── Toast ───────────────────────────────────────────────────────────── */}
@@ -2931,9 +3049,18 @@ export default function ScheduleApp() {
             animate={{ opacity: 1, y: 0, scale: 1 }}
             exit={{ opacity: 0, y: 12, scale: 0.95 }}
             transition={{ duration: 0.2, ease: [0.22, 1, 0.36, 1] }}
-            className="fixed bottom-28 lg:bottom-6 left-1/2 z-50 -translate-x-1/2 rounded-full bg-neutral-900 px-5 py-2.5 text-[14px] font-semibold text-white dark:bg-white dark:text-neutral-900"
+            className="fixed bottom-28 lg:bottom-6 left-1/2 z-50 flex -translate-x-1/2 items-center gap-4 rounded-full bg-neutral-900 px-5 py-2.5 text-[14px] font-semibold text-white shadow-lg shadow-black/10 dark:bg-white dark:text-neutral-900"
           >
-            {toastMessage}
+            <span>{toastMessage}</span>
+            {toastState?.actionLabel && toastState.onAction && (
+              <button
+                type="button"
+                onClick={toastState.onAction}
+                className="-mr-1 rounded-full bg-white/10 px-2.5 py-1 text-[13px] font-bold text-white transition-colors hover:bg-white/20 dark:bg-neutral-900/10 dark:text-neutral-900 dark:hover:bg-neutral-900/20"
+              >
+                {toastState.actionLabel}
+              </button>
+            )}
           </motion.div>
         )}
       </AnimatePresence>
@@ -2976,11 +3103,6 @@ export default function ScheduleApp() {
           )}
         </AnimatePresence>
       )}
-
-      {/* ── Desktop top-bar pill — theme toggle + avatar ────────────────────── */}
-      <div className="fixed top-7 right-7 z-50 hidden lg:block">
-        <DesktopTopBar onOpenSettings={() => setActiveTab(5)} />
-      </div>
 
       {/* ── AI onboarding — shown once when app opens ─────────────────────── */}
       {AI_ENABLED && <AIOnboarding />}

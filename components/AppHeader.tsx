@@ -199,7 +199,7 @@ function DetailHeader({ back, actions }: Pick<AppHeaderProps, "back" | "actions"
                 aria-label={action.label}
                 className={`flex h-9 w-9 items-center justify-center rounded-full transition-colors ${
                   action.destructive
-                    ? "bg-rose-50 text-rose-600 dark:bg-rose-500/10 dark:text-rose-300"
+                    ? "bg-neutral-100 text-neutral-500 hover:bg-rose-500/10 hover:text-rose-500 focus-visible:bg-rose-500/10 focus-visible:text-rose-500 dark:bg-white/[0.07] dark:text-neutral-400 dark:hover:bg-rose-500/10 dark:hover:text-rose-400 dark:focus-visible:bg-rose-500/10 dark:focus-visible:text-rose-400"
                     : "bg-neutral-100 text-neutral-700 dark:bg-white/[0.07] dark:text-white/70"
                 }`}
               >

@@ -29,6 +29,7 @@ import BottomSheet from "@/components/ui/BottomSheet";
 import ProgressBar from "@/components/ui/ProgressBar";
 import SheetHeader from "@/components/ui/SheetHeader";
 import Button from "@/components/ui/Button";
+import IconButton from "@/components/ui/IconButton";
 import Input from "@/components/ui/Input";
 import MilestoneSheet, { type MilestoneSaveData } from "@/components/plan/MilestoneSheet";
 import { computeRoadmapStats } from "@/lib/roadmapEngine";
@@ -206,6 +207,7 @@ interface PlanDetailViewProps {
   plan: Plan;
   schedule: Schedule;
   milestones: Milestone[];
+  onDeletePlan?: (planId: string) => void;
   // Task handlers
   onAddTask: (planId: string) => void;
   onEditTask: (task: Task) => void;
@@ -246,6 +248,7 @@ export default function PlanDetailView({
   plan,
   schedule,
   milestones,
+  onDeletePlan,
   onAddTask,
   onEditTask,
   onDeleteLinkedTask,
@@ -739,7 +742,6 @@ export default function PlanDetailView({
   // ─────────────────────────────────────────────────────────────────────────
 
   function renderLinkedTaskRow(task: Task, activeDays: DayKey[]) {
-    const tone = timelineCardStyles(plan.color);
     const duration = formatDuration(task.startTime, task.endTime);
     const subtaskCount = task.subtasks?.length ?? 0;
     const isRoutine = task.taskType === "session";
@@ -760,7 +762,7 @@ export default function PlanDetailView({
           {/* Line 2: Time + duration + subtask count */}
           <div className="flex items-center gap-2 mt-1.5 flex-wrap">
             {hasTime && (
-              <p className={`text-[13px] font-medium shrink-0 ${tone.time}`}>
+              <p className="text-[13px] font-medium shrink-0 text-neutral-500 dark:text-neutral-400">
                 {task.startTime}{task.endTime && ` – ${task.endTime}`}
                 {duration && ` · ${duration}`}
               </p>
@@ -903,13 +905,15 @@ export default function PlanDetailView({
                   >
                     <IconEdit size={16} strokeWidth={2} />
                   </button>
-                  <button
-                    type="button"
+                  <IconButton
+                    label="Delete tracker"
+                    variant="dangerGhost"
+                    size="xs"
+                    radius="lg"
                     onClick={() => onDeleteTracker(tracker.id)}
-                    className="h-8 w-8 flex items-center justify-center rounded-lg text-neutral-400 hover:text-rose-500 dark:text-neutral-500 dark:hover:text-rose-400 transition-colors"
                   >
                     <IconTrash size={16} strokeWidth={2} />
-                  </button>
+                  </IconButton>
                 </div>
               )}
             </div>
@@ -1024,13 +1028,15 @@ export default function PlanDetailView({
                             </span>
                           )}
                         </span>
-                        <button
-                          type="button"
+                        <IconButton
+                          label="Delete entry"
+                          variant="dangerGhost"
+                          size="xxs"
+                          radius="lg"
                           onClick={() => onDeleteEntry(entry.id)}
-                          className="h-6 w-6 flex items-center justify-center rounded-lg text-neutral-300 hover:text-rose-500 dark:text-neutral-700 dark:hover:text-rose-400 transition-colors"
                         >
                           <IconTrash size={14} strokeWidth={1.5} />
-                        </button>
+                        </IconButton>
                       </div>
                     </div>
                   );
@@ -1158,23 +1164,23 @@ export default function PlanDetailView({
   // ── Roadmap overview ─────────────────────────────────────────────────────
 
   function renderRoadmapOverview() {
-    const { currentPhaseName, consistencyPct, overallPct, statusSummary, statusBarSegments } = roadmapStats;
+    const { currentPhaseName, consistencyPct, overallPct } = roadmapStats;
     const targetLabel = roadmapStats.targetDate ? formatPlanDate(roadmapStats.targetDate) : "—";
-
-    // Last 28 days only — readable on any screen width
-    const allBars = statusBarSegments.length > 0
-      ? statusBarSegments
-      : Array(28).fill({ state: "none" as const });
-    const dayStrip = allBars.slice(-28);
+    const progressSummary =
+      overallPct === 0
+        ? "Complete a task in this plan to start progress."
+        : overallPct >= 80
+        ? "You're on track."
+        : "Progress is building as you complete plan tasks.";
 
     return (
       <div className="space-y-[10px]">
-        {/* Overall Progress card */}
+        {/* Plan Progress card */}
         <div className="rounded-2xl border border-neutral-200 bg-white px-[18px] pt-[18px] pb-4 dark:border-white/[0.08] dark:bg-neutral-900">
           {/* Header row */}
           <div className="flex items-center justify-between mb-3">
             <p className="text-[16px] font-bold tracking-[-0.4px] text-neutral-950 dark:text-white">
-              Overall Progress
+              Plan Progress
             </p>
             <p className="text-[20px] font-extrabold tracking-[-0.5px] text-green-600 dark:text-green-400">
               {overallPct}%
@@ -1189,33 +1195,16 @@ export default function PlanDetailView({
             className="mb-3"
           />
 
-          {/* Day activity strip — last 28 days */}
-          <div className="flex gap-[3px] mb-3">
-            {dayStrip.map((seg, i) => (
-              <div
-                key={i}
-                className={
-                  "flex-1 min-w-0 h-[6px] rounded-full " + (
-                    seg.state === "success" ? "bg-green-500" :
-                    seg.state === "warning" ? "bg-amber-400" :
-                    seg.state === "fail"    ? "bg-rose-400" :
-                    "bg-neutral-200 dark:bg-white/[0.07]"
-                  )
-                }
-              />
-            ))}
-          </div>
-
           <p className="text-[13px] font-medium text-neutral-500 dark:text-neutral-400">
-            {statusSummary}
+            {progressSummary}
           </p>
         </div>
 
         {/* 2×2 stats grid */}
         <div className="grid grid-cols-2 gap-[10px]">
           {([
-            { label: "Current Phase",  value: currentPhaseName ?? "Starting out" },
-            { label: "Consistency",    value: `${consistencyPct}%` },
+            { label: "Current Focus",  value: currentPhaseName ?? "Starting out" },
+            { label: "Task Consistency", value: `${consistencyPct}%` },
             { label: "Days Left", value: roadmapStats.targetDate ? String(Math.max(0, Math.ceil((new Date(roadmapStats.targetDate).getTime() - Date.now()) / 86_400_000))) : "—" },
             { label: "Target Date",   value: targetLabel },
           ] as { label: string; value: string }[]).map(({ label, value }) => (
@@ -1760,7 +1749,7 @@ export default function PlanDetailView({
         exit={{ opacity: 0, y: -6 }}
         transition={{ duration: 0.2, ease: "easeOut" }}
       >
-        {/* Overview: Overall Progress + Stats grid */}
+        {/* Overview: Plan Progress + Stats grid */}
         <section className="mt-6 px-4 lg:px-8">{renderRoadmapOverview()}</section>
 
         {/* Milestones */}
@@ -1814,9 +1803,24 @@ export default function PlanDetailView({
     <div className="pb-32">
       {/* Plan info */}
       <div className="px-4 pt-6 space-y-2 lg:px-8">
-        <h1 className="text-[32px] font-bold leading-tight text-neutral-950 dark:text-white">
-          {plan.title}
-        </h1>
+        <div className="flex items-start justify-between gap-4">
+          <h1 className="min-w-0 text-[32px] font-bold leading-tight text-neutral-950 dark:text-white">
+            {plan.title}
+          </h1>
+          {onDeletePlan && (
+            <IconButton
+              label="Delete plan"
+              variant="dangerGhost"
+              size="md"
+              radius="xl"
+              onClick={() => { haptic("light"); onDeletePlan(plan.id); }}
+              title="Delete plan"
+              className="hidden h-10 w-10 border border-neutral-200 dark:border-white/10 lg:flex"
+            >
+              <IconTrash size={18} strokeWidth={1.9} />
+            </IconButton>
+          )}
+        </div>
         {plan.description && (
           <p className="text-[16px] leading-relaxed text-neutral-600 dark:text-neutral-400">
             {plan.description}
@@ -2096,13 +2100,16 @@ export default function PlanDetailView({
 
               {/* Edit + Delete */}
               <div className="flex gap-3">
-                <button
-                  type="button"
+                <IconButton
+                  label="Delete milestone"
+                  variant="dangerGhost"
+                  size="md"
+                  radius="xl"
                   onClick={() => { onDeleteMilestone(m.id); setViewingMilestone(null); }}
-                  className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl border border-neutral-200 text-neutral-400 transition-colors hover:border-rose-200 hover:text-rose-500 dark:border-white/10 dark:text-neutral-500"
+                  className="h-12 w-12 rounded-2xl border border-neutral-200 dark:border-white/10"
                 >
                   <IconTrash size={18} strokeWidth={1.8} />
-                </button>
+                </IconButton>
                 <button
                   type="button"
                   onClick={() => { setViewingMilestone(null); openEditMilestone(m); }}
@@ -2189,16 +2196,19 @@ export default function PlanDetailView({
 
               {/* Actions */}
               <div className="flex gap-3">
-                <button
-                  type="button"
+                <IconButton
+                  label="Delete task"
+                  variant="dangerGhost"
+                  size="md"
+                  radius="xl"
                   onClick={() => {
                     onDeleteLinkedTask(task, taskDays);
                     setViewingTask(null);
                   }}
-                  className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl border border-neutral-200 text-neutral-400 transition-colors hover:border-rose-200 hover:text-rose-500 dark:border-white/10 dark:text-neutral-500"
+                  className="h-12 w-12 rounded-2xl border border-neutral-200 dark:border-white/10"
                 >
                   <IconTrash size={18} strokeWidth={1.8} />
-                </button>
+                </IconButton>
                 <button
                   type="button"
                   onClick={() => {

@@ -5,21 +5,43 @@ import type { AccentColor } from "@/lib/colorSystem";
 import { formatDateShort } from "@/lib/dateUtils";
 
 const STROKE: Record<AccentColor, string> = {
-  blue:    "#3b82f6",
-  emerald: "#22c55e",
-  violet:  "#8b5cf6",
-  pink:    "#ec4899",
+  red:     "#ef4444",
+  orange:  "#f97316",
   amber:   "#f59e0b",
+  yellow:  "#eab308",
+  lime:    "#84cc16",
+  green:   "#22c55e",
+  emerald: "#10b981",
+  teal:    "#14b8a6",
   cyan:    "#06b6d4",
+  sky:     "#0ea5e9",
+  blue:    "#3b82f6",
+  indigo:  "#6366f1",
+  violet:  "#8b5cf6",
+  purple:  "#a855f7",
+  fuchsia: "#d946ef",
+  pink:    "#ec4899",
+  rose:    "#f43f5e",
 };
 
 const AREA: Record<AccentColor, string> = {
-  blue:    "rgba(59,130,246,0.12)",
-  emerald: "rgba(34,197,94,0.12)",
-  violet:  "rgba(139,92,246,0.12)",
-  pink:    "rgba(236,72,153,0.12)",
+  red:     "rgba(239,68,68,0.12)",
+  orange:  "rgba(249,115,22,0.12)",
   amber:   "rgba(245,158,11,0.12)",
+  yellow:  "rgba(234,179,8,0.12)",
+  lime:    "rgba(132,204,22,0.12)",
+  green:   "rgba(34,197,94,0.12)",
+  emerald: "rgba(16,185,129,0.12)",
+  teal:    "rgba(20,184,166,0.12)",
   cyan:    "rgba(6,182,212,0.12)",
+  sky:     "rgba(14,165,233,0.12)",
+  blue:    "rgba(59,130,246,0.12)",
+  indigo:  "rgba(99,102,241,0.12)",
+  violet:  "rgba(139,92,246,0.12)",
+  purple:  "rgba(168,85,247,0.12)",
+  fuchsia: "rgba(217,70,239,0.12)",
+  pink:    "rgba(236,72,153,0.12)",
+  rose:    "rgba(244,63,94,0.12)",
 };
 
 interface ProgressChartProps {

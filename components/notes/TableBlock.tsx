@@ -9,6 +9,8 @@ import {
   IconTrash,
 } from "@tabler/icons-react";
 import { haptic } from "@/lib/haptics";
+import ConfirmSheet from "@/components/ui/ConfirmSheet";
+import { buildDeleteConfirmationCopy } from "@/lib/deleteConfirm";
 
 interface TableBlockProps {
   rows: string[][];
@@ -23,8 +25,28 @@ interface TableBlockProps {
  */
 export default function TableBlock({ rows, autoFocus, onChange, onRemove }: TableBlockProps) {
   const [active, setActive] = useState<{ r: number; c: number } | null>(null);
+  const [deleteTarget, setDeleteTarget] = useState<null | { kind: "row" | "column" | "table"; index?: number }>(null);
   const wrapRef = useRef<HTMLDivElement>(null);
   const inputs = useRef<Map<string, HTMLInputElement>>(new Map());
+  const deleteCopy = deleteTarget
+    ? deleteTarget.kind === "table"
+      ? buildDeleteConfirmationCopy("table", {
+          title: "Delete this table?",
+          description: "This table will be removed from the note.",
+          confirmLabel: "Delete table",
+        })
+      : deleteTarget.kind === "row"
+        ? buildDeleteConfirmationCopy("row", {
+            title: "Delete this row?",
+            description: "This row will be removed from the table.",
+            confirmLabel: "Delete row",
+          })
+        : buildDeleteConfirmationCopy("column", {
+            title: "Delete this column?",
+            description: "This column will be removed from the table.",
+            confirmLabel: "Delete column",
+          })
+    : null;
 
   const cols = rows[0]?.length ?? 0;
   const key = (r: number, c: number) => `${r}:${c}`;
@@ -142,18 +164,34 @@ export default function TableBlock({ rows, autoFocus, onChange, onRemove }: Tabl
           <CtrlButton label="Add column right" onClick={() => { haptic("light"); addCol(active.c + 1); }}>
             <IconColumnInsertRight size={17} strokeWidth={2} />
           </CtrlButton>
-          <CtrlButton label="Delete row" onClick={() => { haptic("light"); delRow(active.r); }} disabled={rows.length <= 1}>
+          <CtrlButton label="Delete row" onClick={() => { haptic("light"); setDeleteTarget({ kind: "row", index: active.r }); }} disabled={rows.length <= 1} danger>
             <IconRowRemove size={17} strokeWidth={2} />
           </CtrlButton>
-          <CtrlButton label="Delete column" onClick={() => { haptic("light"); delCol(active.c); }} disabled={cols <= 1}>
+          <CtrlButton label="Delete column" onClick={() => { haptic("light"); setDeleteTarget({ kind: "column", index: active.c }); }} disabled={cols <= 1} danger>
             <IconColumnRemove size={17} strokeWidth={2} />
           </CtrlButton>
           <span className="mx-0.5 h-5 w-px bg-neutral-200 dark:bg-white/[0.08]" />
-          <CtrlButton label="Delete table" onClick={() => { haptic("medium"); onRemove(); }} danger>
+          <CtrlButton label="Delete table" onClick={() => { haptic("light"); setDeleteTarget({ kind: "table" }); }} danger>
             <IconTrash size={16} strokeWidth={2} />
           </CtrlButton>
         </div>
       )}
+
+      <ConfirmSheet
+        open={!!deleteTarget}
+        onClose={() => setDeleteTarget(null)}
+        onConfirm={() => {
+          if (!deleteTarget) return;
+          haptic("medium");
+          if (deleteTarget.kind === "row" && deleteTarget.index != null) delRow(deleteTarget.index);
+          else if (deleteTarget.kind === "column" && deleteTarget.index != null) delCol(deleteTarget.index);
+          else onRemove();
+          setDeleteTarget(null);
+        }}
+        title={deleteCopy?.title ?? ""}
+        description={deleteCopy?.description}
+        confirmLabel={deleteCopy?.confirmLabel}
+      />
     </div>
   );
 }
@@ -177,7 +215,7 @@ function CtrlButton({
       aria-label={label}
       className={`flex h-8 min-w-8 items-center justify-center rounded-lg px-2 transition-colors disabled:opacity-30 ${
         danger
-          ? "text-neutral-400 hover:bg-rose-50 hover:text-rose-500 dark:hover:bg-rose-500/10"
+          ? "text-neutral-400 hover:bg-rose-500/10 hover:text-rose-500 focus-visible:bg-rose-500/10 focus-visible:text-rose-500 dark:text-neutral-500 dark:hover:bg-rose-500/10 dark:hover:text-rose-400"
           : "text-neutral-500 hover:bg-neutral-100 dark:text-neutral-400 dark:hover:bg-white/[0.06]"
       }`}
     >

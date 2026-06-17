@@ -50,9 +50,9 @@ export default function DetailHeader({ title, onBack, actions, rightSlot, classN
           {actions.map((action, i) => {
             const Icon = action.icon;
             const tone = action.active
-              ? "bg-rose-500 text-white"
+              ? "bg-neutral-900 text-white dark:bg-white dark:text-neutral-900"
               : action.destructive
-                ? "bg-rose-50 text-rose-600 dark:bg-rose-500/10 dark:text-rose-300"
+                ? "bg-neutral-100 text-neutral-500 hover:bg-rose-500/10 hover:text-rose-500 focus-visible:bg-rose-500/10 focus-visible:text-rose-500 dark:bg-white/[0.07] dark:text-neutral-400 dark:hover:bg-rose-500/10 dark:hover:text-rose-400 dark:focus-visible:bg-rose-500/10 dark:focus-visible:text-rose-400"
                 : "bg-neutral-100 text-neutral-700 dark:bg-white/[0.07] dark:text-white/70";
             return (
               <motion.button

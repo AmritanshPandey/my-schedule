@@ -1,5 +1,10 @@
 import type { Note } from "@/lib/useScheduleDB";
 import { categoryHex, type AccentColor } from "@/lib/colorSystem";
+import {
+  checklistStatsFromBody,
+  deriveSnippetFromBody,
+  deriveTitleFromBody,
+} from "@/lib/notes/richText";
 
 // ── Inline text color ───────────────────────────────────────────────────────
 // Stored as a paired token: {c=amber}text{/c}. Names map to the shared accent
@@ -25,13 +30,14 @@ const COLOR_TOKEN_RE = new RegExp(`^\\{c=(${COLOR_NAMES})\\}([^]*)\\{/c\\}$`);
 
 export const INDENT = "  "; // 2 spaces == one indent step
 
-export type LineKind = "checklist" | "bullet" | "heading" | "para" | "blank";
+export type LineKind = "checklist" | "bullet" | "ordered" | "heading" | "para" | "blank";
 
 export interface ParsedLine {
   kind: LineKind;
   indent: number; // number of indent steps (lists only)
   checked?: boolean; // checklist
   level?: number; // heading 1-3
+  order?: number; // ordered list item number
   text: string; // content with the block marker stripped
   raw: string; // the original line
 }
@@ -50,6 +56,9 @@ export function parseLine(line: string): ParsedLine {
   if ((m = rest.match(/^- \[( |x|X)\]\s?(.*)$/))) {
     return { kind: "checklist", indent, checked: m[1].toLowerCase() === "x", text: m[2], raw: line };
   }
+  if ((m = rest.match(/^(\d+)\. (.*)$/))) {
+    return { kind: "ordered", indent, order: parseInt(m[1], 10), text: m[2], raw: line };
+  }
   if ((m = rest.match(/^- (.*)$/))) {
     return { kind: "bullet", indent, text: m[1], raw: line };
   }
@@ -67,12 +76,15 @@ export function serializeLine(p: {
   indent: number;
   checked?: boolean;
   level?: number;
+  order?: number;
   text: string;
 }): string {
   const pad = INDENT.repeat(Math.max(0, p.indent));
   switch (p.kind) {
     case "checklist":
       return `${pad}- [${p.checked ? "x" : " "}] ${p.text}`;
+    case "ordered":
+      return `${pad}${p.order ?? 1}. ${p.text}`;
     case "bullet":
       return `${pad}- ${p.text}`;
     case "heading":
@@ -118,6 +130,7 @@ export function stripMarkers(text: string): string {
   return text
     .replace(/^#{1,3}\s+/, "")
     .replace(/^- \[[ xX]\]\s?/, "")
+    .replace(/^\d+\. /, "")
     .replace(/^- /, "")
     .replace(/\{c=[a-z]+\}([^{}]+)\{\/c\}/g, "$1")
     .replace(/\*\*([^*]+)\*\*/g, "$1")
@@ -198,44 +211,16 @@ export function groupBlocks(lines: string[]): RenderBlock[] {
 
 // ── Checklist progress (list-card pill) ─────────────────────────────────────
 export function checklistStats(body: string): { done: number; total: number } | null {
-  let done = 0;
-  let total = 0;
-  for (const line of body.split("\n")) {
-    const p = parseLine(line);
-    if (p.kind === "checklist") {
-      total++;
-      if (p.checked) done++;
-    }
-  }
-  return total > 0 ? { done, total } : null;
+  return checklistStatsFromBody(body);
 }
 
 // ── Derived title / snippet (Apple Notes style) ─────────────────────────────
 export function deriveTitle(note: Note): string {
   if (note.title.trim()) return note.title.trim();
-  const first = note.body.split("\n").find((l) => l.trim().length > 0) ?? "";
-  return stripMarkers(first.trim()).trim() || "New Note";
+  const title = deriveTitleFromBody(note.body);
+  return title || "New Note";
 }
 
 export function deriveSnippet(note: Note): string {
-  const lines = note.body
-    .split("\n")
-    .map((l) => l.trim())
-    .filter((l) => l.length > 0 && !isTableSeparator(l));
-  const titleLine = note.title.trim() ? -1 : 0; // first content line is the title when none is set
-  const rest = lines.slice(titleLine + 1);
-  return rest
-    .map((l) =>
-      (isTableRow(l) ? l.replace(/\|/g, " ").trim() : l)
-        .replace(/^#{1,3}\s+/, "")
-        .replace(/^- \[ \]\s?/, "○ ")
-        .replace(/^- \[[xX]\]\s?/, "✓ ")
-        .replace(/^- /, "• ")
-        .replace(/\{c=[a-z]+\}([^{}]+)\{\/c\}/g, "$1")
-        .replace(/\*\*([^*]+)\*\*/g, "$1")
-        .replace(/~~([^~]+)~~/g, "$1")
-        .replace(/`([^`]+)`/g, "$1")
-        .replace(/\*([^*]+)\*/g, "$1"),
-    )
-    .join("  ");
+  return deriveSnippetFromBody(note.body);
 }

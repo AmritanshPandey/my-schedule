@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { IconCheck, IconPlus } from "@tabler/icons-react";
 import BottomSheet from "@/components/ui/BottomSheet";
 import { SheetTitle, typography } from "@/components/ui/Typography";
+import Button from "@/components/ui/Button";
 import type { Ritual, RitualColor, DayKey } from "@/lib/useScheduleDB";
 import { DAYS, DAY_LABELS, RITUAL_COLORS } from "@/lib/useScheduleDB";
 import { haptic } from "@/lib/haptics";
@@ -237,13 +238,13 @@ export function RitualSheet({ open, onClose, initial, onSave, onDelete }: Ritual
 
           {/* Delete — edit mode only */}
           {isEdit && onDelete && (
-            <button
-              type="button"
-              onClick={() => { haptic("medium"); onDelete(); onClose(); }}
-              className="flex w-full items-center justify-center gap-2 rounded-2xl border border-rose-200 py-3 text-[14px] font-semibold text-rose-500 transition-colors hover:bg-rose-50 dark:border-rose-500/20 dark:text-rose-400 dark:hover:bg-rose-500/[0.07]"
+            <Button
+              variant="dangerSecondary"
+              fullWidth
+              onClick={() => { haptic("light"); onDelete(); onClose(); }}
             >
               Delete Routine
-            </button>
+            </Button>
           )}
         </div>
       </div>

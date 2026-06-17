@@ -15,6 +15,7 @@ import { haptic } from "@/lib/haptics";
 import type { AccentColor } from "@/lib/colorSystem";
 import type { PlanDayState } from "@/lib/planInsights";
 import { accentStyles } from "@/lib/colorSystem";
+import IconButton from "@/components/ui/IconButton";
 
 // ── Status derivation ─────────────────────────────────────────────────────────
 
@@ -55,12 +56,23 @@ function derivePlanStatus(dayState: PlanDayState, consistency: number): PlanStat
 // ── Accent → SVG stroke color ─────────────────────────────────────────────────
 
 const ACCENT_STROKE: Record<AccentColor, string> = {
-  blue:    "stroke-blue-500 dark:stroke-blue-400",
-  emerald: "stroke-green-500 dark:stroke-green-400",
-  violet:  "stroke-violet-500 dark:stroke-violet-400",
-  pink:    "stroke-pink-500 dark:stroke-pink-400",
+  red:     "stroke-red-500 dark:stroke-red-400",
+  orange:  "stroke-orange-500 dark:stroke-orange-400",
   amber:   "stroke-amber-500 dark:stroke-amber-400",
+  yellow:  "stroke-yellow-500 dark:stroke-yellow-400",
+  lime:    "stroke-lime-500 dark:stroke-lime-400",
+  green:   "stroke-green-500 dark:stroke-green-400",
+  emerald: "stroke-emerald-500 dark:stroke-emerald-400",
+  teal:    "stroke-teal-500 dark:stroke-teal-400",
   cyan:    "stroke-cyan-500 dark:stroke-cyan-400",
+  sky:     "stroke-sky-500 dark:stroke-sky-400",
+  blue:    "stroke-blue-500 dark:stroke-blue-400",
+  indigo:  "stroke-indigo-500 dark:stroke-indigo-400",
+  violet:  "stroke-violet-500 dark:stroke-violet-400",
+  purple:  "stroke-purple-500 dark:stroke-purple-400",
+  fuchsia: "stroke-fuchsia-500 dark:stroke-fuchsia-400",
+  pink:    "stroke-pink-500 dark:stroke-pink-400",
+  rose:    "stroke-rose-500 dark:stroke-rose-400",
 };
 
 // ── Progress ring (SVG) ───────────────────────────────────────────────────────
@@ -158,14 +170,16 @@ function PlanCardInner({
     >
       {/* Delete — hover affordance (desktop) */}
       {onDelete && (
-        <button
-          type="button"
+        <IconButton
+          label="Delete plan"
+          variant="dangerGhost"
+          size="xs"
+          radius="xl"
           onClick={(e) => { e.stopPropagation(); haptic("light"); onDelete(); }}
-          aria-label="Delete plan"
-          className="absolute right-3 top-3 z-10 hidden h-8 w-8 items-center justify-center rounded-xl text-neutral-400 transition-colors hover:bg-rose-500/10 hover:text-rose-500 group-hover:flex dark:text-neutral-500"
+          className="absolute right-3 top-3 z-10 hidden group-hover:flex"
         >
           <IconTrash size={15} strokeWidth={2} />
-        </button>
+        </IconButton>
       )}
 
       {/* ── Row 1: status chip ───────────────────────────────────────────── */}

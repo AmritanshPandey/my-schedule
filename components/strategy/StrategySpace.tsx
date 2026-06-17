@@ -15,6 +15,9 @@ import StrategyViewer from "./StrategyViewer";
 import StrategyUpload from "./StrategyUpload";
 import { haptic } from "@/lib/haptics";
 import EmptyState from "@/components/ui/EmptyState";
+import ConfirmSheet from "@/components/ui/ConfirmSheet";
+import IconButton from "@/components/ui/IconButton";
+import { buildDeleteConfirmationCopy } from "@/lib/deleteConfirm";
 
 interface StrategySpaceProps {
   strategies: StrategyAsset[];
@@ -32,19 +35,13 @@ function formatDate(iso: string) {
 
 export default function StrategySpace({ strategies, uploadOpen, onUploadOpen, onUploadClose, onAdd, onDelete }: StrategySpaceProps) {
   const [viewingAsset, setViewingAsset] = useState<StrategyAsset | null>(null);
-  const [deleteConfirm, setDeleteConfirm] = useState<string | null>(null);
-
-  function handleDelete(id: string) {
-    if (deleteConfirm === id) {
-      haptic("medium");
-      onDelete(id);
-      setDeleteConfirm(null);
-    } else {
-      haptic("light");
-      setDeleteConfirm(id);
-      setTimeout(() => setDeleteConfirm(null), 3000);
-    }
-  }
+  const [deleteTarget, setDeleteTarget] = useState<StrategyAsset | null>(null);
+  const deleteCopy = deleteTarget
+    ? buildDeleteConfirmationCopy("strategy", {
+        name: deleteTarget.title,
+        description: "This strategy will be removed from your library.",
+      })
+    : null;
 
   return (
     <>
@@ -141,26 +138,18 @@ export default function StrategySpace({ strategies, uploadOpen, onUploadOpen, on
                     </div>
 
                     {/* Delete */}
-                    <motion.button
-                      type="button"
-                      whileTap={{ scale: 0.85 }}
-                      onClick={(e) => { e.stopPropagation(); handleDelete(asset.id); }}
-                      className={`shrink-0 flex h-8 w-8 items-center justify-center rounded-xl transition-colors ${
-                        deleteConfirm === asset.id
-                          ? "bg-rose-500/15 text-rose-500"
-                          : "text-neutral-300 dark:text-neutral-600 hover:text-rose-400"
-                      }`}
+                    <IconButton
+                      label="Delete strategy"
+                      variant="dangerGhost"
+                      size="xs"
+                      radius="xl"
+                      onClick={(e) => { e.stopPropagation(); haptic("light"); setDeleteTarget(asset); }}
                     >
                       <IconTrash size={15} strokeWidth={2} />
-                    </motion.button>
+                    </IconButton>
                   </div>
                 </div>
 
-                {deleteConfirm === asset.id && (
-                  <div className="px-5 pb-4 pt-0">
-                    <p className="text-[12px] text-rose-500 font-medium">Tap delete again to confirm.</p>
-                  </div>
-                )}
               </div>
             </motion.div>
           ))}
@@ -181,6 +170,20 @@ export default function StrategySpace({ strategies, uploadOpen, onUploadOpen, on
       <StrategyViewer
         asset={viewingAsset}
         onClose={() => setViewingAsset(null)}
+      />
+
+      <ConfirmSheet
+        open={!!deleteTarget}
+        onClose={() => setDeleteTarget(null)}
+        onConfirm={() => {
+          if (!deleteTarget) return;
+          haptic("medium");
+          onDelete(deleteTarget.id);
+          setDeleteTarget(null);
+        }}
+        title={deleteCopy?.title ?? ""}
+        description={deleteCopy?.description}
+        confirmLabel={deleteCopy?.confirmLabel}
       />
     </>
   );

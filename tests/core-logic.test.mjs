@@ -29,11 +29,22 @@ const {
   toggleSubtaskComplete,
   toggleTaskComplete,
 } = await import("../lib/taskCompletion.ts");
-const { updateTaskDays } = await import("../lib/taskMutations.ts");
+const {
+  applyTaskDelete,
+  createTaskDeleteSnapshot,
+  restoreTaskDelete,
+  updateTaskDays,
+} = await import("../lib/taskMutations.ts");
 const { computeExecutionTrend } = await import("../lib/executionAnalytics.ts");
 const { localISODate, addDaysToISO } = await import("../lib/dateUtils.ts");
 const { parseTimeToMinutes, toScheduleDayMinutes } = await import("../lib/timeUtils.ts");
 const { DAYS } = await import("../lib/scheduleConstants.ts");
+const { pointerToScrollableMinutes } = await import("../lib/timeline/dragTimeUtils.ts");
+const {
+  checklistStatsFromBody,
+  mergeNoteTags,
+  serializeRichNoteBody,
+} = await import("../lib/notes/richText.ts");
 
 function event(taskId, completionType, completedAt, subtaskId) {
   return { id: `${completionType}-${subtaskId ?? "task"}`, taskId, completionType, completedAt, subtaskId };
@@ -50,6 +61,21 @@ function emptySchedule() {
     strategies: [],
     ritualCompletions: [],
     notes: [],
+  };
+}
+
+function baseTask(id = "delete-me") {
+  return {
+    id,
+    title: "Delete me",
+    startTime: "9:00 AM",
+    endTime: "10:00 AM",
+    icon: "star",
+    color: "amber",
+    planId: "plan-1",
+    sortOrder: 2,
+    completionHistory: [event(id, "task", new Date().toISOString())],
+    subtasks: [{ id: "sub-1", task: "Subtask" }],
   };
 }
 
@@ -143,6 +169,126 @@ test("editing subtasks invalidates stale completion ids and task events", () => 
   assert.equal(task.completionHistory.some((item) => item.completionType === "task"), false);
 });
 
+test("single-day task delete removes only that occurrence", () => {
+  const schedule = emptySchedule();
+  const task = baseTask();
+  schedule.activities.monday = [{ ...task }];
+  schedule.activities.tuesday = [{ ...baseTask("keep-me"), title: "Keep me" }];
+  schedule.milestones = [{
+    id: "milestone-1",
+    planId: "plan-1",
+    title: "Milestone",
+    startDate: "2026-06-01",
+    plannedDurationDays: 7,
+    plannedEndDate: "2026-06-08",
+    status: "active",
+    linkedActivities: ["delete-me", "keep-me"],
+    linkedTrackers: [],
+    createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString(),
+    sortOrder: 0,
+  }];
+
+  const snapshot = createTaskDeleteSnapshot(schedule, "delete-me", "monday", "day");
+  const result = applyTaskDelete(snapshot)(schedule);
+
+  assert.equal(result.activities.monday.some((item) => item.id === "delete-me"), false);
+  assert.equal(result.activities.tuesday.some((item) => item.id === "keep-me"), true);
+  assert.deepEqual(result.milestones[0].linkedActivities, ["keep-me"]);
+});
+
+test("day-scoped repeated task delete preserves other days and milestone links", () => {
+  const schedule = emptySchedule();
+  const task = baseTask("repeat-me");
+  schedule.activities.monday = [{ ...task, title: "Monday copy" }];
+  schedule.activities.wednesday = [{ ...task, title: "Wednesday copy" }];
+  schedule.milestones = [{
+    id: "milestone-1",
+    planId: "plan-1",
+    title: "Milestone",
+    startDate: "2026-06-01",
+    plannedDurationDays: 7,
+    plannedEndDate: "2026-06-08",
+    status: "active",
+    linkedActivities: ["repeat-me"],
+    linkedTrackers: [],
+    createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString(),
+    sortOrder: 0,
+  }];
+
+  const snapshot = createTaskDeleteSnapshot(schedule, "repeat-me", "monday", "day");
+  const result = applyTaskDelete(snapshot)(schedule);
+
+  assert.equal(result.activities.monday.some((item) => item.id === "repeat-me"), false);
+  assert.equal(result.activities.wednesday.some((item) => item.id === "repeat-me"), true);
+  assert.deepEqual(result.milestones[0].linkedActivities, ["repeat-me"]);
+});
+
+test("all-occurrences repeated task delete removes every day and milestone links", () => {
+  const schedule = emptySchedule();
+  const task = baseTask("repeat-me");
+  schedule.activities.monday = [{ ...task }];
+  schedule.activities.wednesday = [{ ...task }];
+  schedule.milestones = [{
+    id: "milestone-1",
+    planId: "plan-1",
+    title: "Milestone",
+    startDate: "2026-06-01",
+    plannedDurationDays: 7,
+    plannedEndDate: "2026-06-08",
+    status: "active",
+    linkedActivities: ["repeat-me", "other-task"],
+    linkedTrackers: [],
+    createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString(),
+    sortOrder: 0,
+  }];
+
+  const snapshot = createTaskDeleteSnapshot(schedule, "repeat-me", "monday", "all");
+  const result = applyTaskDelete(snapshot)(schedule);
+
+  assert.equal(result.activities.monday.some((item) => item.id === "repeat-me"), false);
+  assert.equal(result.activities.wednesday.some((item) => item.id === "repeat-me"), false);
+  assert.deepEqual(result.milestones[0].linkedActivities, ["other-task"]);
+});
+
+test("task delete undo restores removed occurrences and milestone links", () => {
+  const schedule = emptySchedule();
+  const first = { ...baseTask("repeat-me"), title: "First" };
+  const second = { ...baseTask("repeat-me"), title: "Second" };
+  schedule.activities.monday = [{ ...baseTask("before"), title: "Before" }, first, { ...baseTask("after"), title: "After" }];
+  schedule.activities.wednesday = [second];
+  schedule.milestones = [{
+    id: "milestone-1",
+    planId: "plan-1",
+    title: "Milestone",
+    startDate: "2026-06-01",
+    plannedDurationDays: 7,
+    plannedEndDate: "2026-06-08",
+    status: "active",
+    linkedActivities: ["repeat-me", "other-task"],
+    linkedTrackers: [],
+    createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString(),
+    sortOrder: 0,
+  }];
+
+  const snapshot = createTaskDeleteSnapshot(schedule, "repeat-me", "monday", "all");
+  const deleted = applyTaskDelete(snapshot)(schedule);
+  const restored = restoreTaskDelete(snapshot)(deleted);
+
+  assert.deepEqual(restored.activities.monday.map((task) => task.title), ["Before", "First", "After"]);
+  assert.deepEqual(restored.activities.wednesday, [second]);
+  assert.deepEqual(restored.milestones[0].linkedActivities, ["repeat-me", "other-task"]);
+});
+
+test("rich note helpers keep legacy checklist stats and tag merging stable", () => {
+  assert.deepEqual(checklistStatsFromBody("- [x] Done\n- [ ] Todo"), { done: 1, total: 2 });
+  assert.deepEqual(mergeNoteTags(["Diet", "health"], ["health", "sleep"]), ["Diet", "health", "sleep"]);
+  assert.equal(serializeRichNoteBody("<p>Hello</p>").startsWith("<!--rich-note-body-->"), true);
+});
+
 test("weekly analytics count each recurring weekday occurrence", () => {
   const today = new Date();
   const dow = today.getDay();
@@ -182,4 +328,8 @@ test("time parsing and schedule-day conversion reject invalid clocks", () => {
   assert.equal(parseTimeToMinutes("9:99 AM"), null);
   assert.equal(toScheduleDayMinutes(parseTimeToMinutes("1:30 AM")), 1530);
   assert.equal(toScheduleDayMinutes(parseTimeToMinutes("4:00 AM")), 240);
+});
+
+test("pointerToScrollableMinutes accounts for vertical scroll position", () => {
+  assert.equal(pointerToScrollableMinutes(180, 100, 40, 2, 240), 300);
 });

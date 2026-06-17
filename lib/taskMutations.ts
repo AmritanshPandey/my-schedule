@@ -26,6 +26,19 @@ interface PlanItemsUpdate {
   items: ScheduleEntry[];
 }
 
+export type TaskDeleteScope = "day" | "all";
+
+export interface TaskDeleteSnapshot {
+  taskId: string;
+  scope: TaskDeleteScope;
+  sourceDay: DayKey;
+  affectedDays: Array<{
+    day: DayKey;
+    entries: Array<{ index: number; task: Task }>;
+  }>;
+  milestoneLinks: Array<{ milestoneId: string; linkedActivities: string[] }>;
+}
+
 function reconcileEditedTask(existing: Task, updates: Omit<Task, "id">): Task {
   const merged = { ...existing, ...updates };
   if (updates.taskType === "session") return merged;
@@ -174,6 +187,107 @@ export function deleteTask(
       [day]: prev.activities[day].filter((t) => t.id !== taskId),
     },
   });
+}
+
+export function getTaskActiveDays(schedule: Schedule, taskId: string): DayKey[] {
+  return DAYS.filter((day) => schedule.activities[day].some((task) => task.id === taskId));
+}
+
+export function createTaskDeleteSnapshot(
+  schedule: Schedule,
+  taskId: string,
+  sourceDay: DayKey,
+  scope: TaskDeleteScope
+): TaskDeleteSnapshot {
+  const activeDays = getTaskActiveDays(schedule, taskId);
+  const daysToDelete =
+    scope === "all"
+      ? activeDays
+      : activeDays.includes(sourceDay)
+        ? [sourceDay]
+        : [];
+  const remainingDays = activeDays.filter((day) => !daysToDelete.includes(day));
+  const removeMilestoneLinks = remainingDays.length === 0;
+
+  return {
+    taskId,
+    scope,
+    sourceDay,
+    affectedDays: daysToDelete.map((day) => ({
+      day,
+      entries: schedule.activities[day]
+        .map((task, index) => ({ task, index }))
+        .filter(({ task }) => task.id === taskId),
+    })),
+    milestoneLinks: removeMilestoneLinks
+      ? schedule.milestones
+          .filter((milestone) => milestone.linkedActivities.includes(taskId))
+          .map((milestone) => ({
+            milestoneId: milestone.id,
+            linkedActivities: [...milestone.linkedActivities],
+          }))
+      : [],
+  };
+}
+
+export function applyTaskDelete(snapshot: TaskDeleteSnapshot): (prev: Schedule) => Schedule {
+  return (prev) => {
+    const affected = new Set(snapshot.affectedDays.map(({ day }) => day));
+    const linkedMilestones = new Set(snapshot.milestoneLinks.map(({ milestoneId }) => milestoneId));
+
+    return {
+      ...prev,
+      activities: Object.fromEntries(
+        DAYS.map((day) => [
+          day,
+          affected.has(day)
+            ? prev.activities[day].filter((task) => task.id !== snapshot.taskId)
+            : prev.activities[day],
+        ])
+      ) as Schedule["activities"],
+      milestones: linkedMilestones.size > 0
+        ? prev.milestones.map((milestone) =>
+            linkedMilestones.has(milestone.id)
+              ? {
+                  ...milestone,
+                  linkedActivities: milestone.linkedActivities.filter((id) => id !== snapshot.taskId),
+                }
+              : milestone
+          )
+        : prev.milestones,
+    };
+  };
+}
+
+export function restoreTaskDelete(snapshot: TaskDeleteSnapshot): (prev: Schedule) => Schedule {
+  return (prev) => {
+    const restoredActivities = { ...prev.activities };
+
+    for (const { day, entries } of snapshot.affectedDays) {
+      const withoutDeletedTask = restoredActivities[day].filter((task) => task.id !== snapshot.taskId);
+      const restored = [...withoutDeletedTask];
+      for (const { index, task } of [...entries].sort((a, b) => a.index - b.index)) {
+        restored.splice(Math.min(index, restored.length), 0, task);
+      }
+      restoredActivities[day] = restored;
+    }
+
+    const milestoneLinks = new Map(
+      snapshot.milestoneLinks.map(({ milestoneId, linkedActivities }) => [milestoneId, linkedActivities])
+    );
+
+    return {
+      ...prev,
+      activities: restoredActivities,
+      milestones: milestoneLinks.size > 0
+        ? prev.milestones.map((milestone) =>
+            milestoneLinks.has(milestone.id)
+              ? { ...milestone, linkedActivities: [...milestoneLinks.get(milestone.id)!] }
+              : milestone
+          )
+        : prev.milestones,
+    };
+  };
 }
 
 // ── Subtask factory ───────────────────────────────────────────────────────────

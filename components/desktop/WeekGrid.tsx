@@ -1,5 +1,6 @@
 "use client";
 
+import type { PointerEvent as ReactPointerEvent, ReactNode } from "react";
 import { useEffect, useRef, useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import { IconChevronLeft, IconChevronRight } from "@tabler/icons-react";
@@ -8,11 +9,25 @@ import { DAYS } from "@/lib/useScheduleDB";
 import { sortTasksByTime } from "@/lib/taskMutations";
 import { completionForDate, resolveTaskState } from "@/lib/taskCompletion";
 import { localISODate, todayISO } from "@/lib/dateUtils";
-import { currentMinutes, formatDuration, parseTimeToMinutes, toScheduleDayMinutes } from "@/lib/timeUtils";
+import { currentMinutes, parseTimeToMinutes } from "@/lib/timeUtils";
 import { categoryHex, resolveAccentColor } from "@/lib/colorSystem";
 import { haptic } from "@/lib/haptics";
-import { TaskBlockCard } from "@/components/TaskBlockCard";
-import type { TaskSaveData } from "@/components/task/TaskSheet";
+import {
+  DRAG_DEFAULT_DURATION,
+  DRAG_MIN_DURATION,
+  DRAG_THRESHOLD_PX,
+  clampMinutes,
+  minutesToDisplayTime,
+  pointerToScrollableMinutes,
+  snapMinutes,
+} from "@/lib/timeline/dragTimeUtils";
+import {
+  buildTimelineGridMarks,
+  getTimelineDisplayStartMinutes,
+  mapMinutesToTimeline,
+  TIMELINE_END_MINUTES,
+} from "@/lib/timeline/displayWindow";
+import TimelineDraftCard from "@/components/timeline/TimelineDraftCard";
 
 export type CalendarView = "1day" | "3day" | "7day" | "custom3";
 
@@ -25,8 +40,10 @@ const VIEW_LABELS: Record<CalendarView, string> = {
   "1day": "1D", "3day": "3D", "7day": "7D", "custom3": "Custom",
 };
 
-const PX_MIN = 2;        // 1 minute = 2px → 30 min = 60px, 1h = 120px
+const PX_MIN = 2;
 const RAIL_W = 64;
+const DAY_MIN_W = 156;
+const TASK_VERTICAL_INSET = 2;
 
 function fmtRail(m: number): string {
   let h = Math.floor(m / 60) % 24;
@@ -44,22 +61,21 @@ interface BlockLayout {
   widthPct: number;
 }
 
-/** Lay timed tasks out into non-overlapping lanes; return untimed separately. */
 function buildDayLayout(tasks: Task[], startMin: number, endMin: number): { timed: BlockLayout[]; untimed: Task[] } {
   const untimed: Task[] = [];
   const parsed: { task: Task; s: number; e: number }[] = [];
   for (const t of tasks) {
     const parsedStart = parseTimeToMinutes(t.startTime);
     if (parsedStart == null) { untimed.push(t); continue; }
-    const s = toScheduleDayMinutes(parsedStart, startMin);
+    const s = mapMinutesToTimeline(parsedStart, startMin, endMin);
     let e = parseTimeToMinutes(t.endTime);
     if (e == null) e = s + 30;
+    else e = mapMinutesToTimeline(e, startMin, endMin);
     while (e <= s) e += 1440;
     parsed.push({ task: t, s, e });
   }
   parsed.sort((a, b) => a.s - b.s || a.e - b.e);
 
-  // Greedy lane assignment.
   const laneEnd: number[] = [];
   const withLane = parsed.map((p) => {
     let lane = laneEnd.findIndex((end) => end <= p.s);
@@ -67,7 +83,6 @@ function buildDayLayout(tasks: Task[], startMin: number, endMin: number): { time
     return { ...p, lane };
   });
 
-  // Cluster overlapping runs to size column widths.
   const timed: BlockLayout[] = [];
   let i = 0;
   while (i < withLane.length) {
@@ -95,7 +110,6 @@ function buildDayLayout(tasks: Task[], startMin: number, endMin: number): { time
 interface WeekGridProps {
   schedule: Schedule;
   plansById: Map<string, Plan>;
-  plans: Plan[];
   weekDates: Array<{ day: DayKey; date: Date }>;
   todayKey: DayKey;
   weekLabel: string;
@@ -109,15 +123,27 @@ interface WeekGridProps {
   onCalendarViewChange: (v: CalendarView) => void;
   onCustomDaysChange: (days: DayKey[]) => void;
   onEditTask: (task: Task) => void;
+  onDeleteTask: (taskId: string, day: DayKey) => void;
   onToggleTaskComplete: (taskId: string, allSubtaskIds: string[], day: DayKey, dateISO: string) => void;
-  onDeleteTask: (taskId: string) => void;
-  onInlineAdd: (data: TaskSaveData) => void;
+  onCreateTaskAtTime: (day: DayKey, startMin: number, endMin: number) => void;
+  /**
+   * Render prop for the task card inside each time block.
+   * WeekGrid handles positioning; the parent injects the card so
+   * visual changes on mobile automatically apply here too.
+   */
+  renderCard: (
+    task: Task,
+    height: number,
+    widthPct: number,
+    readOnly: boolean,
+    onToggle: () => void,
+    onDelete: () => void,
+  ) => ReactNode;
 }
 
 export function WeekGrid({
   schedule,
   plansById,
-  plans,
   weekDates,
   todayKey,
   weekLabel,
@@ -131,32 +157,62 @@ export function WeekGrid({
   onCalendarViewChange,
   onCustomDaysChange,
   onEditTask,
-  onToggleTaskComplete,
   onDeleteTask,
+  onToggleTaskComplete,
+  onCreateTaskAtTime,
+  renderCard,
 }: WeekGridProps) {
   const [showCustomPicker, setShowCustomPicker] = useState(false);
-  const [now, setNow] = useState(() => toScheduleDayMinutes(currentMinutes()));
+  const [dragCreate, setDragCreate] = useState<{ day: DayKey; startMin: number; endMin: number } | null>(null);
   const pickerRef = useRef<HTMLDivElement>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
+  const clearDragCreateTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const createDragRef = useRef<{
+    day: DayKey;
+    columnEl: HTMLDivElement;
+    pointerId: number;
+    startClientY: number;
+    startMin: number;
+    dragging: boolean;
+    lastEndMin: number;
+  } | null>(null);
 
-  // Tick the now-line every minute.
+  const days = weekDates.map(({ day, date }) => {
+    const dateISO = localISODate(date);
+    const dayIsToday = dateISO === todayISO();
+    const raw = sortTasksByTime(schedule.activities[day] ?? []);
+    const tasks = dayIsToday ? raw : raw.map((t) => ({ ...t, ...completionForDate(t, dateISO) }));
+    return { day, date, dateISO, dayIsToday, tasks };
+  });
+
+  const startMin = getTimelineDisplayStartMinutes({
+    dayStartTime: schedule.preferences?.dayStartTime,
+    tasks: days.flatMap((day) => day.tasks),
+  });
+  const endMin = TIMELINE_END_MINUTES;
+  const [now, setNow] = useState(() => mapMinutesToTimeline(currentMinutes(), startMin, endMin));
+  const totalPx = (endMin - startMin) * PX_MIN;
+  const railLabels = buildTimelineGridMarks(startMin, endMin);
+
   useEffect(() => {
-    const id = setInterval(() => setNow(toScheduleDayMinutes(currentMinutes())), 60_000);
+    setNow(mapMinutesToTimeline(currentMinutes(), startMin, endMin));
+    const id = setInterval(
+      () => setNow(mapMinutesToTimeline(currentMinutes(), startMin, endMin)),
+      60_000,
+    );
     return () => clearInterval(id);
-  }, []);
+  }, [endMin, startMin]);
 
-  // One-time: scroll so the current time sits near the top third of the grid.
   const didAutoScroll = useRef(false);
   useEffect(() => {
     if (didAutoScroll.current || !scrollRef.current) return;
     const showsToday = weekDates.some(({ date }) => localISODate(date) === todayISO());
     if (!showsToday) return;
-    const offset = (toScheduleDayMinutes(currentMinutes()) - 4 * 60) * PX_MIN - 140;
+    const offset = (Math.max(startMin, Math.min(currentMinutes(), endMin)) - startMin) * PX_MIN - 140;
     scrollRef.current.scrollTo({ top: Math.max(0, offset) });
     didAutoScroll.current = true;
-  }, [weekDates]);
+  }, [endMin, startMin, weekDates]);
 
-  // Close custom picker on outside click
   useEffect(() => {
     if (!showCustomPicker) return;
     function handleClick(e: MouseEvent) {
@@ -166,7 +222,83 @@ export function WeekGrid({
     return () => document.removeEventListener("mousedown", handleClick);
   }, [showCustomPicker]);
 
-  // Dynamic display label based on visible dates
+  useEffect(() => {
+    let rafId: number | null = null;
+    let pendingCreate: { day: DayKey; startMin: number; endMin: number } | null = null;
+
+    function flush() {
+      rafId = null;
+      if (pendingCreate) {
+        setDragCreate(pendingCreate);
+        pendingCreate = null;
+      }
+    }
+
+    function scheduleFlush() {
+      if (rafId === null) rafId = requestAnimationFrame(flush);
+    }
+
+    function onPointerMove(e: PointerEvent) {
+      const drag = createDragRef.current;
+      if (!drag || drag.pointerId !== e.pointerId) return;
+      if (!drag.dragging && Math.abs(e.clientY - drag.startClientY) < DRAG_THRESHOLD_PX) return;
+      if (!drag.dragging) drag.dragging = true;
+
+      e.preventDefault();
+      const scrollTop = scrollRef.current?.scrollTop ?? 0;
+      const gridTop = drag.columnEl.getBoundingClientRect().top;
+      const currentMin = pointerToScrollableMinutes(e.clientY, gridTop, scrollTop, PX_MIN, startMin);
+      const snapped = snapMinutes(currentMin);
+      const clamped = clampMinutes(snapped, startMin, endMin - DRAG_MIN_DURATION);
+      const nextEndMin = Math.max(clamped, drag.startMin + DRAG_MIN_DURATION);
+      drag.lastEndMin = nextEndMin;
+      if (
+        pendingCreate?.day !== drag.day ||
+        pendingCreate?.startMin !== drag.startMin ||
+        pendingCreate?.endMin !== nextEndMin
+      ) {
+        pendingCreate = { day: drag.day, startMin: drag.startMin, endMin: nextEndMin };
+        scheduleFlush();
+      }
+    }
+
+    function onPointerUp(e: PointerEvent) {
+      const drag = createDragRef.current;
+      if (!drag || drag.pointerId !== e.pointerId) return;
+      createDragRef.current = null;
+      if (!drag.dragging) return;
+      haptic("light");
+      onCreateTaskAtTime(drag.day, drag.startMin, drag.lastEndMin);
+      if (clearDragCreateTimerRef.current) clearTimeout(clearDragCreateTimerRef.current);
+      clearDragCreateTimerRef.current = setTimeout(() => {
+        setDragCreate(null);
+        clearDragCreateTimerRef.current = null;
+      }, 900);
+    }
+
+    function onPointerCancel(e: PointerEvent) {
+      const drag = createDragRef.current;
+      if (!drag || drag.pointerId !== e.pointerId) return;
+      createDragRef.current = null;
+      setDragCreate(null);
+      if (clearDragCreateTimerRef.current) {
+        clearTimeout(clearDragCreateTimerRef.current);
+        clearDragCreateTimerRef.current = null;
+      }
+    }
+
+    document.addEventListener("pointermove", onPointerMove, { passive: false });
+    document.addEventListener("pointerup", onPointerUp);
+    document.addEventListener("pointercancel", onPointerCancel);
+    return () => {
+      document.removeEventListener("pointermove", onPointerMove);
+      document.removeEventListener("pointerup", onPointerUp);
+      document.removeEventListener("pointercancel", onPointerCancel);
+      if (rafId !== null) cancelAnimationFrame(rafId);
+      if (clearDragCreateTimerRef.current) clearTimeout(clearDragCreateTimerRef.current);
+    };
+  }, [endMin, onCreateTaskAtTime, startMin]);
+
   const displayLabel = (() => {
     if (calendarView === "7day") return weekLabel;
     if (weekDates.length === 0) return weekLabel;
@@ -187,39 +319,46 @@ export function WeekGrid({
     }
   }
 
-  // ── Resolve per-day tasks (date-aware completion) ─────────────────────────
-  const days = weekDates.map(({ day, date }) => {
-    const dateISO = localISODate(date);
-    const dayIsToday = dateISO === todayISO();
-    const raw = sortTasksByTime(schedule.activities[day] ?? []);
-    const tasks = dayIsToday ? raw : raw.map((t) => ({ ...t, ...completionForDate(t, dateISO) }));
-    return { day, date, dateISO, dayIsToday, tasks };
-  });
-
-  // ── Compute the time window from all visible timed tasks ──────────────────
-  // The schedule day runs from 4 AM through 4 AM the following calendar day.
-  const startMin = 4 * 60;
-  const endMin = 28 * 60;
-  const totalPx = (endMin - startMin) * PX_MIN;
-
-  const railLabels: number[] = [];
-  for (let m = startMin; m <= endMin; m += 30) railLabels.push(m);
-
   const cols = Math.max(1, weekDates.length);
-  const gridTemplate = `${RAIL_W}px repeat(${cols}, minmax(0, 1fr))`;
+  const gridTemplate = `${RAIL_W}px repeat(${cols}, minmax(${DAY_MIN_W}px, 1fr))`;
+  const minGridWidth = RAIL_W + cols * DAY_MIN_W;
   const hasUntimed = days.some((d) => d.tasks.some((t) => parseTimeToMinutes(t.startTime) == null));
 
+  function handleDayPointerDown(day: DayKey, e: ReactPointerEvent<HTMLDivElement>) {
+    if (e.pointerType === "mouse" && e.button !== 0) return;
+    if ((e.target as HTMLElement).closest("[data-task-block]")) return;
+    if (clearDragCreateTimerRef.current) {
+      clearTimeout(clearDragCreateTimerRef.current);
+      clearDragCreateTimerRef.current = null;
+    }
+    const columnEl = e.currentTarget;
+    const scrollTop = scrollRef.current?.scrollTop ?? 0;
+    const gridTop = columnEl.getBoundingClientRect().top;
+    const rawMin = pointerToScrollableMinutes(e.clientY, gridTop, scrollTop, PX_MIN, startMin);
+    const startMinSnapped = clampMinutes(snapMinutes(rawMin), startMin, endMin - DRAG_MIN_DURATION);
+    createDragRef.current = {
+      day,
+      columnEl,
+      pointerId: e.pointerId,
+      startClientY: e.clientY,
+      startMin: startMinSnapped,
+      dragging: false,
+      lastEndMin: Math.min(startMinSnapped + DRAG_DEFAULT_DURATION, endMin),
+    };
+    columnEl.setPointerCapture(e.pointerId);
+  }
+
   return (
-    <div className="flex h-full flex-col overflow-hidden">
+    <div className="flex h-full w-full min-w-0 flex-col overflow-hidden bg-[#f5f5f5] p-6 dark:bg-neutral-950">
 
       {/* ── Nav bar ─────────────────────────────────────────────────────────── */}
-      <div className="relative z-10 shrink-0">
-        <div className="flex h-[60px] items-center gap-3 border-b border-neutral-100 px-4 dark:border-white/[0.06]">
-          <span className="min-w-0 shrink truncate text-[13px] font-semibold text-neutral-700 dark:text-neutral-300">
+      <div className="relative z-20 mb-8 flex shrink-0 items-start justify-between gap-6">
+        <div className="min-w-0">
+          <span className="block min-w-0 truncate text-[17px] font-semibold leading-none text-neutral-950 dark:text-white">
             {displayLabel}
           </span>
 
-          <div className="flex shrink-0 items-center gap-0.5 rounded-lg border border-neutral-200 bg-neutral-50 p-0.5 dark:border-white/[0.07] dark:bg-white/[0.04]">
+          <div className="relative mt-5 flex h-11 w-[274px] shrink-0 items-center rounded-[14px] border border-neutral-200 bg-white p-1 shadow-[0_1px_2px_rgba(10,10,10,0.04),0_6px_18px_rgba(10,10,10,0.04)] dark:border-white/[0.08] dark:bg-neutral-900">
             {(["1day", "3day", "7day", "custom3"] as const).map((v) => (
               <button
                 key={v}
@@ -229,130 +368,131 @@ export function WeekGrid({
                   onCalendarViewChange(v);
                   setShowCustomPicker(v === "custom3");
                 }}
-                className={`rounded-md px-2.5 py-1 text-[11px] font-semibold transition-all ${
+                className={`flex h-full flex-1 items-center justify-center rounded-[10px] text-[13px] font-semibold transition-colors ${
                   calendarView === v
-                    ? "bg-white text-neutral-900 dark:bg-neutral-800 dark:text-white"
-                    : "text-neutral-400 hover:text-neutral-700 dark:text-neutral-500 dark:hover:text-neutral-200"
+                    ? "bg-neutral-950 text-white shadow-sm dark:bg-white dark:text-neutral-950"
+                    : "text-neutral-400 hover:bg-neutral-100/80 hover:text-neutral-700 dark:text-neutral-500 dark:hover:bg-white/[0.06] dark:hover:text-neutral-200"
                 }`}
               >
                 {VIEW_LABELS[v]}
               </button>
             ))}
-          </div>
 
-          <div className="ml-auto flex shrink-0 items-center gap-0.5">
+            <AnimatePresence>
+              {calendarView === "custom3" && showCustomPicker && (
+                <motion.div
+                  ref={pickerRef}
+                  initial={{ opacity: 0, y: -6, scale: 0.98 }}
+                  animate={{ opacity: 1, y: 0, scale: 1 }}
+                  exit={{ opacity: 0, y: -6, scale: 0.98 }}
+                  transition={{ duration: 0.15, ease: [0.22, 1, 0.36, 1] }}
+                  className="absolute left-0 top-full z-30 mt-2 w-72 rounded-2xl border border-neutral-200 bg-white p-3 shadow-[0_14px_40px_rgba(10,10,10,0.12)] dark:border-white/[0.08] dark:bg-neutral-900 dark:shadow-[0_18px_50px_rgba(0,0,0,0.45)]"
+                >
+                  <p className="mb-2 text-[10px] font-semibold uppercase tracking-wider text-neutral-400 dark:text-neutral-500">
+                    Pick days · {customDays.length} selected
+                  </p>
+                  <div className="flex flex-wrap gap-1.5">
+                    {DAYS.map((d) => {
+                      const sel = customDays.includes(d);
+                      return (
+                        <button
+                          key={d}
+                          type="button"
+                          onClick={() => toggleCustomDay(d)}
+                          className={`rounded-lg px-2.5 py-1 text-[12px] font-semibold transition-colors ${
+                            sel
+                              ? "bg-neutral-900 text-white dark:bg-white dark:text-neutral-900"
+                              : "border border-neutral-200 text-neutral-500 hover:border-neutral-300 hover:text-neutral-700 dark:border-white/10 dark:text-neutral-400 dark:hover:border-white/20"
+                          }`}
+                        >
+                          {DAY_SHORT[d]}
+                        </button>
+                      );
+                    })}
+                  </div>
+                  {customDays.length >= 1 && (
+                    <button
+                      type="button"
+                      onClick={() => setShowCustomPicker(false)}
+                      className="mt-3 w-full rounded-xl bg-neutral-900 py-1.5 text-[12px] font-bold text-white dark:bg-white dark:text-neutral-900"
+                    >
+                      Done
+                    </button>
+                  )}
+                </motion.div>
+              )}
+            </AnimatePresence>
+          </div>
+        </div>
+
+          <div className="flex shrink-0 items-center gap-2 pt-7">
             <button
               type="button"
               onClick={() => { haptic("light"); onWeekToday(); }}
-              className="rounded-lg px-2.5 py-1 text-[11px] font-semibold text-neutral-500 transition-colors hover:bg-neutral-100 dark:text-neutral-400 dark:hover:bg-white/[0.07]"
+              className="mr-2 rounded-full px-3 py-2 text-[13px] font-bold text-neutral-500 transition-colors hover:bg-neutral-100 hover:text-neutral-950 dark:text-neutral-400 dark:hover:bg-white/[0.07] dark:hover:text-white"
             >
               Today
             </button>
             <button
               type="button"
               onClick={() => { haptic("light"); onWeekPrev(); }}
-              className="flex h-7 w-7 items-center justify-center rounded-lg text-neutral-400 transition-colors hover:bg-neutral-100 dark:text-neutral-500 dark:hover:bg-white/[0.07]"
+              className="flex h-9 w-9 items-center justify-center rounded-full text-neutral-500 transition-colors hover:bg-neutral-100 hover:text-neutral-950 dark:text-neutral-400 dark:hover:bg-white/[0.07] dark:hover:text-white"
               aria-label="Previous"
             >
-              <IconChevronLeft size={18} strokeWidth={2} />
+              <IconChevronLeft size={20} strokeWidth={2.2} />
             </button>
             <button
               type="button"
               onClick={() => { haptic("light"); onWeekNext(); }}
-              className="flex h-7 w-7 items-center justify-center rounded-lg text-neutral-400 transition-colors hover:bg-neutral-100 dark:text-neutral-500 dark:hover:bg-white/[0.07]"
+              className="flex h-9 w-9 items-center justify-center rounded-full text-neutral-500 transition-colors hover:bg-neutral-100 hover:text-neutral-950 dark:text-neutral-400 dark:hover:bg-white/[0.07] dark:hover:text-white"
               aria-label="Next"
             >
-              <IconChevronRight size={18} strokeWidth={2} />
+              <IconChevronRight size={20} strokeWidth={2.2} />
             </button>
           </div>
-        </div>
+      </div>
 
-        {/* ── Custom day picker ──────────────────────────────────────────────── */}
-        <AnimatePresence>
-          {calendarView === "custom3" && showCustomPicker && (
-            <motion.div
-              ref={pickerRef}
-              initial={{ opacity: 0, y: -6 }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: -6 }}
-              transition={{ duration: 0.15, ease: [0.22, 1, 0.36, 1] }}
-              className="absolute left-0 right-0 top-full z-20 border-b border-neutral-200 bg-white px-4 py-3 dark:border-white/[0.08] dark:bg-neutral-900"
-            >
-              <p className="mb-2 text-[10px] font-semibold uppercase tracking-wider text-neutral-400 dark:text-neutral-500">
-                Pick days · {customDays.length} selected
-              </p>
-              <div className="flex flex-wrap gap-1.5">
-                {DAYS.map((d) => {
-                  const sel = customDays.includes(d);
-                  return (
-                    <button
-                      key={d}
-                      type="button"
-                      onClick={() => toggleCustomDay(d)}
-                      className={`rounded-lg px-2.5 py-1 text-[12px] font-semibold transition-colors ${
-                        sel
-                          ? "bg-neutral-900 text-white dark:bg-white dark:text-neutral-900"
-                          : "border border-neutral-200 text-neutral-500 hover:border-neutral-300 hover:text-neutral-700 dark:border-white/10 dark:text-neutral-400 dark:hover:border-white/20"
-                      }`}
-                    >
-                      {DAY_SHORT[d]}
-                    </button>
-                  );
-                })}
-              </div>
-              {customDays.length >= 1 && (
+      <div className="min-h-0 flex-1 overflow-x-auto overscroll-x-contain rounded-[24px] border border-neutral-200 bg-white shadow-[0_1px_2px_rgba(10,10,10,0.04),0_14px_40px_rgba(10,10,10,0.04)] dark:border-white/[0.08] dark:bg-neutral-950 dark:shadow-none">
+        <div className="flex h-full min-w-full flex-col" style={{ width: `max(100%, ${minGridWidth}px)` }}>
+          {/* ── Fixed day-header row ─────────────────────────────────────────────── */}
+          <div
+            className="grid h-[76px] shrink-0 border-b border-neutral-200 dark:border-white/[0.07]"
+            style={{ gridTemplateColumns: gridTemplate }}
+          >
+            <div className="sticky left-0 z-10 border-r border-neutral-200 bg-white dark:border-white/[0.07] dark:bg-neutral-950" />
+            {days.map(({ day, date, dayIsToday }) => {
+              const isActive = day === activeDay;
+              return (
                 <button
+                  key={day}
                   type="button"
-                  onClick={() => setShowCustomPicker(false)}
-                  className="mt-2.5 w-full rounded-xl bg-neutral-900 py-1.5 text-[12px] font-bold text-white dark:bg-white dark:text-neutral-900"
+                  onClick={() => { haptic("light"); onDaySelect(day); }}
+                  className={`flex flex-col items-center justify-center gap-2 border-r border-neutral-200 transition-colors last:border-r-0 dark:border-white/[0.07] ${
+                    isActive ? "bg-neutral-950 dark:bg-white" : "hover:bg-neutral-50 dark:hover:bg-white/[0.04]"
+                  }`}
                 >
-                  Done
+                  <span className={`text-[13px] font-semibold leading-none ${
+                    isActive ? "text-white/90 dark:text-neutral-900" : dayIsToday ? "text-rose-500" : "text-neutral-600 dark:text-neutral-300"
+                  }`}>
+                    {DAY_SHORT[day]}
+                  </span>
+                  <span className={`text-[22px] font-extrabold tabular-nums leading-none ${
+                    isActive ? "text-white dark:text-neutral-900" : dayIsToday ? "text-rose-500" : "text-neutral-900 dark:text-neutral-100"
+                  }`}>
+                    {date.getDate()}
+                  </span>
                 </button>
-              )}
-            </motion.div>
-          )}
-        </AnimatePresence>
-      </div>
+              );
+            })}
+          </div>
 
-      {/* ── Fixed day-header row ─────────────────────────────────────────────── */}
-      <div
-        className="grid shrink-0 border-b border-neutral-100 px-3 dark:border-white/[0.06]"
-        style={{ gridTemplateColumns: gridTemplate }}
-      >
-        <div className="border-r border-neutral-200 dark:border-white/[0.07]" />
-        {days.map(({ day, date, dayIsToday }) => {
-          const isActive = day === activeDay;
-          return (
-            <button
-              key={day}
-              type="button"
-              onClick={() => { haptic("light"); onDaySelect(day); }}
-              className={`flex flex-col items-center gap-0.5 border-r border-neutral-100 py-2.5 transition-colors last:border-r-0 dark:border-white/[0.06] ${
-                isActive ? "bg-neutral-900 dark:bg-white" : "hover:bg-neutral-50 dark:hover:bg-white/[0.04]"
-              }`}
-            >
-              <span className={`text-[11px] font-bold uppercase tracking-wider ${
-                isActive ? "text-white dark:text-neutral-900" : dayIsToday ? "text-rose-500" : "text-neutral-400 dark:text-neutral-500"
-              }`}>
-                {DAY_SHORT[day]}
-              </span>
-              <span className={`text-[17px] font-extrabold tabular-nums leading-none ${
-                isActive ? "text-white dark:text-neutral-900" : dayIsToday ? "text-rose-500" : "text-neutral-800 dark:text-neutral-100"
-              }`}>
-                {date.getDate()}
-              </span>
-            </button>
-          );
-        })}
-      </div>
-
-      {/* ── Scrollable grid body ─────────────────────────────────────────────── */}
-      <div ref={scrollRef} className="min-h-0 flex-1 overflow-y-auto overscroll-contain pb-8">
+          {/* ── Scrollable grid body ─────────────────────────────────────────────── */}
+          <div ref={scrollRef} className="min-h-0 flex-1 overflow-y-auto overflow-x-hidden overscroll-contain">
 
         {/* All-day / untimed band */}
         {hasUntimed && (
-          <div className="grid border-b border-neutral-100 px-3 dark:border-white/[0.06]" style={{ gridTemplateColumns: gridTemplate }}>
-            <div className="flex items-start justify-end border-r border-neutral-100 px-2 pt-2 dark:border-white/[0.06]">
+          <div className="grid border-b border-neutral-200 dark:border-white/[0.07]" style={{ gridTemplateColumns: gridTemplate }}>
+            <div className="sticky left-0 z-10 flex items-start justify-end border-r border-neutral-200 bg-white px-2 pt-2 dark:border-white/[0.07] dark:bg-neutral-950">
               <span className="text-[9px] font-semibold uppercase tracking-wide text-neutral-300 dark:text-neutral-600">All day</span>
             </div>
             {days.map(({ day, tasks, dayIsToday, dateISO }) => {
@@ -383,24 +523,25 @@ export function WeekGrid({
           </div>
         )}
 
-        {/* Time grid — flex row so the rail + every column share one height/origin */}
+        {/* Time grid */}
         <div
-          className="relative mt-3 flex px-3 [--grid-line:#e5e5e5] dark:[--grid-line:rgba(255,255,255,0.07)]"
+          className="relative flex"
           style={{ height: totalPx }}
         >
           {/* Time rail */}
-          <div className="relative shrink-0 border-r border-neutral-200 dark:border-white/[0.07]" style={{ width: RAIL_W }}>
+          <div className="sticky left-0 z-10 shrink-0 border-r border-neutral-200 bg-white dark:border-white/[0.07] dark:bg-neutral-950" style={{ width: RAIL_W }}>
             {railLabels.map((m) => {
               const onHour = m % 60 === 0;
+              const isFirst = m === startMin;
               return (
                 <span
                   key={m}
-                  className={`absolute right-3 -translate-y-1/2 whitespace-nowrap tabular-nums ${
+                  className={`absolute right-3 whitespace-nowrap tabular-nums ${isFirst ? "" : "-translate-y-1/2"} ${
                     onHour
                       ? "text-[11px] font-bold text-neutral-500 dark:text-neutral-300"
                       : "text-[10px] font-semibold text-neutral-300 dark:text-neutral-600"
                   }`}
-                  style={{ top: (m - startMin) * PX_MIN }}
+                  style={{ top: isFirst ? 14 : (m - startMin) * PX_MIN }}
                 >
                   {fmtRail(m)}
                 </span>
@@ -412,28 +553,76 @@ export function WeekGrid({
           {days.map(({ day, dayIsToday, dateISO, tasks }) => {
             const { timed } = buildDayLayout(tasks, startMin, endMin);
             const showNow = dayIsToday && now >= startMin && now <= endMin;
+            const readOnly = !dayIsToday;
             return (
               <div
                 key={day}
                 className="relative min-w-0 flex-1 border-r border-neutral-200 last:border-r-0 dark:border-white/[0.06]"
-                style={{
-                  backgroundImage:
-                    "repeating-linear-gradient(to bottom, var(--grid-line) 0, var(--grid-line) 1px, transparent 1px, transparent 60px)",
-                }}
+                onPointerDown={(e) => handleDayPointerDown(day, e)}
               >
-                {timed.map((layout) => (
-                  <TimeBlock
-                    key={layout.task.id}
-                    layout={layout}
-                    plan={plansById.get(layout.task.planId) ?? null}
-                    readOnly={!dayIsToday}
-                    onEdit={onEditTask}
-                    onDelete={() => onDeleteTask(layout.task.id)}
-                    onToggle={() =>
-                      onToggleTaskComplete(layout.task.id, layout.task.subtasks?.map((s) => s.id) ?? [], day, dateISO)
-                    }
-                  />
-                ))}
+                <div className="pointer-events-none absolute inset-0">
+                  {railLabels.map((m) => {
+                    const onHour = m % 60 === 0;
+                    return (
+                      <div
+                        key={`${day}-grid-${m}`}
+                        className={`absolute left-0 right-0 border-t ${
+                          onHour
+                            ? "border-neutral-100/90 dark:border-white/[0.05]"
+                            : "border-dashed border-neutral-200/70 dark:border-white/[0.045]"
+                        }`}
+                        style={{ top: (m - startMin) * PX_MIN }}
+                      />
+                    );
+                  })}
+                </div>
+
+                {timed.map((layout) => {
+                  const visualHeight = Math.max(22, layout.height - TASK_VERTICAL_INSET * 2);
+                  return (
+                    <div
+                      key={layout.task.id}
+                      data-task-block
+                      className="absolute"
+                      style={{
+                        top: layout.top + TASK_VERTICAL_INSET,
+                        height: visualHeight,
+                        left: `calc(${layout.leftPct}% + 5px)`,
+                        width: `calc(${layout.widthPct}% - 10px)`,
+                        minHeight: 22,
+                      }}
+                    >
+                      {renderCard(
+                        layout.task,
+                        layout.height,
+                        layout.widthPct,
+                        readOnly,
+                        () => onToggleTaskComplete(layout.task.id, layout.task.subtasks?.map((s) => s.id) ?? [], day, dateISO),
+                        () => onDeleteTask(layout.task.id, day),
+                      )}
+                    </div>
+                  );
+                })}
+
+                {dragCreate?.day === day && (() => {
+                  const top = (dragCreate.startMin - startMin) * PX_MIN;
+                  const height = Math.max((dragCreate.endMin - dragCreate.startMin) * PX_MIN, 24);
+                  const showDuration = dragCreate.endMin - dragCreate.startMin >= 30;
+                  return (
+                    <div
+                      className="pointer-events-none absolute left-0.5 right-0.5 z-40"
+                      style={{ top, height }}
+                    >
+                      <TimelineDraftCard
+                        startLabel={minutesToDisplayTime(dragCreate.startMin)}
+                        endLabel={minutesToDisplayTime(dragCreate.endMin)}
+                        durationLabel={showDuration ? `${Math.max(0, Math.round(dragCreate.endMin - dragCreate.startMin))}m` : null}
+                        compact={height < 56}
+                        className="h-full"
+                      />
+                    </div>
+                  );
+                })()}
 
                 {showNow && (
                   <div
@@ -447,54 +636,9 @@ export function WeekGrid({
             );
           })}
         </div>
+          </div>
+        </div>
       </div>
-    </div>
-  );
-}
-
-// ── Single time-grid task block ───────────────────────────────────────────────
-
-interface TimeBlockProps {
-  layout: BlockLayout;
-  plan: Plan | null;
-  readOnly: boolean;
-  onEdit: (task: Task) => void;
-  onToggle: () => void;
-  onDelete: () => void;
-}
-
-function TimeBlock({ layout, plan, readOnly, onEdit, onToggle, onDelete }: TimeBlockProps) {
-  const { task, top, height, leftPct, widthPct } = layout;
-  const state = resolveTaskState(task, task.subtasks?.length ?? 0);
-  const duration = formatDuration(task.startTime, task.endTime);
-
-  // Positioning lives on this wrapper; the card fills it. (TaskBlockCard's own
-  // `relative` would otherwise beat a passed `absolute` in Tailwind's CSS order.)
-  return (
-    <div
-      className="absolute"
-      style={{
-        top,
-        height,
-        left: `calc(${leftPct}% + 5px)`,
-        width: `calc(${widthPct}% - 10px)`,
-        minHeight: 24,
-      }}
-    >
-      <TaskBlockCard
-        variant="grid"
-        task={task}
-        plan={plan}
-        state={state}
-        duration={duration}
-        readOnly={readOnly}
-        compact={height < 56}
-        narrow={widthPct < 60 || height < 88}
-        onToggle={onToggle}
-        onClick={() => onEdit(task)}
-        onDelete={readOnly ? undefined : onDelete}
-        className="h-full w-full"
-      />
     </div>
   );
 }

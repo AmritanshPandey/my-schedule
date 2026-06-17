@@ -12,6 +12,8 @@ interface BottomSheetProps {
   className?: string;
   /** Override modal width on desktop (default max-w-[520px]) */
   desktopWidth?: string;
+  /** Override the backdrop classes for the modal/sheet overlay. */
+  backdropClassName?: string;
 }
 
 const MOBILE_SPRING = { type: "spring", stiffness: 380, damping: 30, mass: 0.9 } as const;
@@ -24,6 +26,7 @@ export default function BottomSheet({
   maxHeight = "calc(var(--sheet-vh, 100dvh) - env(safe-area-inset-top) - 12px)",
   className = "",
   desktopWidth = "max-w-[640px]",
+  backdropClassName,
 }: BottomSheetProps) {
   const [isDesktop, setIsDesktop] = useState(false);
   const [viewportFrame, setViewportFrame] = useState({ height: 0, offsetTop: 0 });
@@ -85,7 +88,7 @@ export default function BottomSheet({
               animate={{ opacity: 1 }}
               exit={{ opacity: 0 }}
               transition={{ duration: 0.16 }}
-              className="absolute inset-0 bg-black/50 backdrop-blur-[3px]"
+              className={`absolute inset-0 ${backdropClassName ?? "bg-black/50 backdrop-blur-[3px]"}`}
               onClick={onClose}
             />
 
@@ -116,7 +119,7 @@ export default function BottomSheet({
               animate={{ opacity: 1 }}
               exit={{ opacity: 0 }}
               transition={{ duration: 0.22 }}
-              className="absolute inset-0 bg-black/40"
+              className={`absolute inset-0 ${backdropClassName ?? "bg-black/40"}`}
               onClick={onClose}
             />
 

@@ -2,7 +2,7 @@
 
 import { memo, useMemo, useState } from "react";
 import { motion, AnimatePresence, useMotionValue, useTransform, animate } from "framer-motion";
-import { IconArrowUpRight, IconCheck, IconChevronDown, IconEdit, IconListCheck, IconMinus, IconTrash } from "@tabler/icons-react";
+import { IconArrowUpRight, IconCheck, IconChevronDown, IconEdit, IconListCheck, IconMinus, IconTrash, IconX } from "@tabler/icons-react";
 import type { Task, Plan } from "@/lib/useScheduleDB";
 import type { ScheduleEntry, MetaField } from "@/components/ScheduleItem";
 import { calculateTaskProgress, resolveTaskState } from "@/lib/taskCompletion";
@@ -11,6 +11,7 @@ import { formatDuration } from "@/lib/timeUtils";
 import { haptic } from "@/lib/haptics";
 import { TaskBlockCard } from "@/components/TaskBlockCard";
 import ProgressBar from "@/components/ui/ProgressBar";
+import IconButton from "@/components/ui/IconButton";
 
 // ── Plan accent dot colors ────────────────────────────────────────────────────
 
@@ -52,16 +53,36 @@ function TaskCheckbox({ state, size = "lg", readOnly = false, onChange }: Checkb
   const round    = size === "lg" ? "rounded-[6px]" : "rounded-[4px]";
   const iconSize = size === "lg" ? 14              : 12;
   const filled   = state === "completed" || state === "partial";
+  const missed = state === "missed";
+  const statusLabel = readOnly
+    ? state === "completed"
+      ? "Completed"
+      : missed
+      ? "Missed"
+      : state === "partial"
+      ? "Partially completed"
+      : "Not completed"
+    : state === "completed"
+    ? "Mark incomplete"
+    : "Mark complete";
 
   return (
     <motion.button
       type="button"
+      disabled={readOnly}
       whileTap={readOnly ? undefined : { scale: 0.84 }}
       transition={{ type: "spring", stiffness: 500, damping: 25 }}
       onClick={(e) => { e.stopPropagation(); if (!readOnly) onChange(); }}
-      className={`shrink-0 ${dim} ${round} border-2 flex items-center justify-center transition-colors duration-150 ${readOnly ? "cursor-default" : ""} ${
+      aria-label={statusLabel}
+      aria-disabled={readOnly}
+      aria-pressed={filled}
+      className={`shrink-0 ${dim} ${round} border-2 flex items-center justify-center transition-colors duration-150 disabled:opacity-100 ${readOnly ? "cursor-default" : ""} ${
         filled
           ? "border-transparent bg-green-500"
+          : missed
+          ? "border-transparent bg-rose-500"
+          : readOnly
+          ? "border-neutral-200 bg-neutral-100/80 dark:border-white/[0.08] dark:bg-white/[0.04]"
           : "border-neutral-300 bg-transparent dark:border-neutral-500"
       }`}
     >
@@ -86,6 +107,17 @@ function TaskCheckbox({ state, size = "lg", readOnly = false, onChange }: Checkb
             transition={{ duration: 0.15 }}
           >
             <IconMinus size={iconSize} strokeWidth={3} className="text-white" />
+          </motion.span>
+        )}
+        {state === "missed" && (
+          <motion.span
+            key="missed"
+            initial={{ opacity: 0, scale: 0.4 }}
+            animate={{ opacity: 1, scale: 1 }}
+            exit={{ opacity: 0, scale: 0.4 }}
+            transition={{ duration: 0.15 }}
+          >
+            <IconX size={iconSize} strokeWidth={3} className="text-white" />
           </motion.span>
         )}
       </AnimatePresence>
@@ -205,13 +237,15 @@ function ListTaskCardInner({
       >
         <IconEdit size={16} />
       </button>
-      <button
-        type="button"
+      <IconButton
+        label="Delete task"
+        variant="dangerGhost"
+        size="xs"
+        radius="xl"
         onClick={(e) => { e.stopPropagation(); onDelete(); }}
-        className="flex h-8 w-8 items-center justify-center rounded-xl text-neutral-400 transition-colors hover:text-rose-500 dark:hover:text-rose-400"
       >
         <IconTrash size={16} />
-      </button>
+      </IconButton>
     </div>
   ) : (canExpand || hasRoutine) && onOpenSubtasks ? (
     <button

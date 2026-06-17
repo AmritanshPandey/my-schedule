@@ -26,6 +26,7 @@ import {
   getSyncStatus, getLastSyncedAt, getLastSchedule,
   onSyncStatusChange, flushNow, deleteCloudData, type SyncStatus,
 } from "@/lib/cloudSync";
+import { haptic } from "@/lib/haptics";
 import {
   checkOllamaConnection, checkModelStatus,
   OLLAMA_URL_KEY, OLLAMA_MODEL_KEY,
@@ -35,7 +36,11 @@ import { useAIRuntime } from "@/lib/ai/useAIRuntime";
 import { resolveTransformersModel, MODEL_SIZES, type AIPerformanceMode } from "@/lib/ai/runtime";
 import { AI_ENABLED } from "@/lib/featureFlags";
 import { getDeviceCapabilities } from "@/lib/performance/detectLowEndDevice";
-import type { Schedule } from "@/lib/useScheduleDB";
+import { formatDisplayTime, minutesToInputTime } from "@/lib/timeUtils";
+import type { Schedule, SchedulePreferences } from "@/lib/useScheduleDB";
+import ConfirmSheet from "@/components/ui/ConfirmSheet";
+import { buildDeleteConfirmationCopy } from "@/lib/deleteConfirm";
+import { normalizeDayStartTime } from "@/lib/timeline/displayWindow";
 
 // ── Primitives ────────────────────────────────────────────────────────────────
 
@@ -66,6 +71,11 @@ function Row({ children, className = "" }: { children: React.ReactNode; classNam
 function Divider() {
   return <div className="mx-4 border-t border-neutral-100 dark:border-white/[0.05]" />;
 }
+
+const DAY_START_OPTIONS = Array.from({ length: 48 }, (_, index) => {
+  const value = minutesToInputTime(index * 30);
+  return { value, label: formatDisplayTime(value) };
+});
 
 // ── Theme ─────────────────────────────────────────────────────────────────────
 
@@ -488,16 +498,29 @@ interface SettingsViewProps {
   schedule: Schedule;
   onClearData: () => Promise<void>;
   onClearProgress?: () => Promise<void>;
+  onUpdatePreferences?: (patch: Partial<SchedulePreferences>) => void;
   onClose?: () => void;
 }
 
-export function SettingsView({ schedule, onClearData, onClearProgress, onClose }: SettingsViewProps) {
+export function SettingsView({
+  schedule,
+  onClearData,
+  onClearProgress,
+  onUpdatePreferences,
+  onClose,
+}: SettingsViewProps) {
   const { user, isGuest, authLoading, login, logout } = useAuth();
   const [busy, setBusy]   = useState(false);
   const [theme, setTheme] = useState<ThemeMode>("light");
   const [themeReady, setThemeReady] = useState(false);
-  const [clearPhase, setClearPhase] = useState<"idle" | "confirm" | "clearing">("idle");
+  const [clearPhase, setClearPhase] = useState<"idle" | "clearing">("idle");
+  const [clearConfirmOpen, setClearConfirmOpen] = useState(false);
   const [progressPhase, setProgressPhase] = useState<"idle" | "confirm" | "clearing">("idle");
+  const clearCopy = buildDeleteConfirmationCopy("everything", {
+    title: "Delete everything?",
+    description: "This permanently deletes all local and cloud data. Cannot be undone.",
+    confirmLabel: "Delete everything",
+  });
 
   useEffect(() => { setTheme(readTheme()); setThemeReady(true); }, []);
 
@@ -518,6 +541,10 @@ export function SettingsView({ schedule, onClearData, onClearProgress, onClose }
     setProgressPhase("clearing");
     try { await onClearProgress(); } finally { setProgressPhase("idle"); }
   }, [onClearProgress]);
+  const dayStartTime = schedule.preferences?.dayStartTime ?? "";
+  const handleDayStartChange = useCallback((value: string) => {
+    onUpdatePreferences?.({ dayStartTime: normalizeDayStartTime(value) });
+  }, [onUpdatePreferences]);
 
   return (
     <div className="min-h-full bg-[#F5F5F5] dark:bg-[#111111]">
@@ -612,6 +639,42 @@ export function SettingsView({ schedule, onClearData, onClearProgress, onClose }
             </Card>
           </div>
 
+          <div>
+            <SectionLabel>Timeline</SectionLabel>
+            <Card>
+              <Row className="items-start">
+                <div className="min-w-0 flex-1">
+                  <p className="text-[13px] font-semibold text-neutral-800 dark:text-white">Start of day</p>
+                  <p className="mt-0.5 text-[11px] leading-snug text-neutral-400 dark:text-neutral-500">
+                    Auto follows the first timed task. A fixed time starts the timeline one hour earlier.
+                  </p>
+                </div>
+                <div className="flex shrink-0 items-center gap-2">
+                  <select
+                    value={dayStartTime}
+                    onChange={(e) => handleDayStartChange(e.target.value)}
+                    className="rounded-xl border border-neutral-200 bg-neutral-50 px-3 py-2 text-[12px] font-semibold text-neutral-700 outline-none transition-colors focus:border-neutral-300 dark:border-white/[0.08] dark:bg-white/[0.04] dark:text-white"
+                  >
+                    <option value="">Auto from tasks</option>
+                    {DAY_START_OPTIONS.map((option) => (
+                      <option key={option.value} value={option.value}>
+                        {option.label}
+                      </option>
+                    ))}
+                  </select>
+                  <button
+                    type="button"
+                    onClick={() => handleDayStartChange("")}
+                    disabled={!dayStartTime}
+                    className="rounded-xl border border-neutral-200 px-3 py-2 text-[11px] font-semibold text-neutral-500 transition-colors hover:border-neutral-300 disabled:cursor-default disabled:opacity-40 dark:border-white/[0.08] dark:text-neutral-400"
+                  >
+                    Clear
+                  </button>
+                </div>
+              </Row>
+            </Card>
+          </div>
+
           {/* ── Data ────────────────────────────────────────────────────────── */}
           <div>
             <SectionLabel>Data</SectionLabel>
@@ -682,27 +745,10 @@ export function SettingsView({ schedule, onClearData, onClearProgress, onClose }
                         <IconTrash size={14} strokeWidth={2} />
                       </div>
                       <span className="flex-1 text-[13px] font-semibold text-neutral-800 dark:text-white">Clear all data</span>
-                      <button type="button" onClick={() => setClearPhase("confirm")}
+                      <button type="button" onClick={() => { haptic("light"); setClearConfirmOpen(true); }}
                         className="rounded-xl border border-rose-200 bg-rose-50 px-3 py-1.5 text-[11px] font-semibold text-rose-600 hover:bg-rose-100 dark:border-rose-500/20 dark:bg-rose-500/10 dark:text-rose-400">
                         Clear
                       </button>
-                    </motion.div>
-                  )}
-                  {clearPhase === "confirm" && (
-                    <motion.div key="confirm" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
-                      <p className="mb-3 text-[12px] font-semibold text-amber-600 dark:text-amber-400">
-                        This permanently deletes all local and cloud data. Cannot be undone.
-                      </p>
-                      <div className="flex gap-2">
-                        <button type="button" onClick={() => setClearPhase("idle")}
-                          className="flex flex-1 items-center justify-center gap-1.5 rounded-xl border border-neutral-200 bg-white py-2 text-[12px] font-semibold text-neutral-600 hover:bg-neutral-50 dark:border-white/[0.08] dark:bg-white/[0.04]">
-                          <IconX size={12} strokeWidth={2.5} />Cancel
-                        </button>
-                        <button type="button" onClick={handleClear}
-                          className="flex flex-1 items-center justify-center gap-1.5 rounded-xl border border-rose-200 bg-rose-50 py-2 text-[12px] font-semibold text-rose-600 hover:bg-rose-100 dark:border-rose-500/20 dark:bg-rose-500/10 dark:text-rose-400">
-                          <IconTrash size={12} strokeWidth={2} />Delete everything
-                        </button>
-                      </div>
                     </motion.div>
                   )}
                   {clearPhase === "clearing" && (
@@ -719,6 +765,18 @@ export function SettingsView({ schedule, onClearData, onClearProgress, onClose }
           <p className="text-center text-[10px] text-neutral-300 dark:text-neutral-700">PlanR · Personal Execution OS</p>
         </div>
       </div>
+
+      <ConfirmSheet
+        open={clearConfirmOpen}
+        onClose={() => setClearConfirmOpen(false)}
+        onConfirm={() => {
+          setClearConfirmOpen(false);
+          void handleClear();
+        }}
+        title={clearCopy.title}
+        description={clearCopy.description}
+        confirmLabel={clearCopy.confirmLabel}
+      />
     </div>
   );
 }

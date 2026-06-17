@@ -3,8 +3,12 @@
 import { IconGripVertical, IconTrash } from "@tabler/icons-react";
 import { useSortable } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
+import { useState } from "react";
 import IconButton from "@/components/ui/IconButton";
 import type { DeadlineScope } from "@/lib/subtaskDeadline";
+import { haptic } from "@/lib/haptics";
+import ConfirmSheet from "@/components/ui/ConfirmSheet";
+import { buildDeleteConfirmationCopy } from "@/lib/deleteConfirm";
 
 export interface SubtaskDraft {
   id: string;
@@ -36,6 +40,11 @@ export default function SubtaskDraftRow({
   showDeadline,
 }: SubtaskDraftRowProps) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: draft.id });
+  const [deleteOpen, setDeleteOpen] = useState(false);
+  const deleteCopy = buildDeleteConfirmationCopy("subtask", {
+    name: draft.title.trim() || undefined,
+    description: "This subtask will be removed from the task.",
+  });
 
   return (
     <div
@@ -74,7 +83,7 @@ export default function SubtaskDraftRow({
           variant="dangerGhost"
           size="xs"
           radius="lg"
-          onClick={onDelete}
+          onClick={() => { haptic("light"); setDeleteOpen(true); }}
         >
           <IconTrash size={15} />
         </IconButton>
@@ -123,6 +132,18 @@ export default function SubtaskDraftRow({
           </div>
         )}
       </div>
+
+      <ConfirmSheet
+        open={deleteOpen}
+        onClose={() => setDeleteOpen(false)}
+        onConfirm={() => {
+          onDelete();
+          setDeleteOpen(false);
+        }}
+        title={deleteCopy.title}
+        description={deleteCopy.description}
+        confirmLabel={deleteCopy.confirmLabel}
+      />
     </div>
   );
 }

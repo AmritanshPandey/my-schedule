@@ -1,5 +1,6 @@
 "use client";
 
+import type { ReactNode } from "react";
 import { motion } from "framer-motion";
 import BottomSheet from "@/components/ui/BottomSheet";
 
@@ -10,6 +11,7 @@ interface ConfirmSheetProps {
   title: string;
   description?: string;
   confirmLabel?: string;
+  actions?: ReactNode;
 }
 
 export default function ConfirmSheet({
@@ -19,6 +21,7 @@ export default function ConfirmSheet({
   title,
   description,
   confirmLabel = "Delete",
+  actions,
 }: ConfirmSheetProps) {
   function handleConfirm() {
     onConfirm();
@@ -38,24 +41,26 @@ export default function ConfirmSheet({
         )}
         {!description && <div className="mb-6" />}
 
-        <div className="flex gap-3">
-          <motion.button
-            type="button"
-            whileTap={{ scale: 0.97 }}
-            onClick={onClose}
-            className="flex-1 rounded-2xl border border-neutral-200 bg-white py-3.5 text-[15px] font-semibold text-neutral-700 transition-colors hover:bg-neutral-100 dark:border-white/[0.08] dark:bg-neutral-900 dark:text-neutral-300 dark:hover:bg-white/[0.07]"
-          >
-            Cancel
-          </motion.button>
-          <motion.button
-            type="button"
-            whileTap={{ scale: 0.97 }}
-            onClick={handleConfirm}
-            className="flex-1 rounded-2xl bg-rose-500 py-3.5 text-[15px] font-semibold text-white transition-colors hover:bg-rose-600 dark:bg-rose-500 dark:hover:bg-rose-600"
-          >
-            {confirmLabel}
-          </motion.button>
-        </div>
+        {actions ?? (
+          <div className="flex gap-3">
+            <motion.button
+              type="button"
+              whileTap={{ scale: 0.97 }}
+              onClick={onClose}
+              className="flex-1 rounded-2xl border border-neutral-200 bg-white py-3.5 text-[15px] font-semibold text-neutral-700 transition-colors hover:bg-neutral-100 dark:border-white/[0.08] dark:bg-neutral-900 dark:text-neutral-300 dark:hover:bg-white/[0.07]"
+            >
+              Cancel
+            </motion.button>
+            <motion.button
+              type="button"
+              whileTap={{ scale: 0.97 }}
+              onClick={handleConfirm}
+              className="flex-1 rounded-2xl bg-rose-500 py-3.5 text-[15px] font-semibold text-white transition-colors hover:bg-rose-600 dark:bg-rose-500 dark:hover:bg-rose-600"
+            >
+              {confirmLabel}
+            </motion.button>
+          </div>
+        )}
       </div>
     </BottomSheet>
   );

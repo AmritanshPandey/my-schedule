@@ -20,8 +20,11 @@ import { DAYS } from "@/lib/useScheduleDB";
 import { localISODate } from "@/lib/dateUtils";
 import { haptic } from "@/lib/haptics";
 import EmptyState from "@/components/ui/EmptyState";
+import ConfirmSheet from "@/components/ui/ConfirmSheet";
+import { buildDeleteConfirmationCopy } from "@/lib/deleteConfirm";
 import { MainTitleSection, CtaActionButton } from "@/components/ui/MainTitleSection";
 import ProgressBar from "@/components/ui/ProgressBar";
+import IconButton from "@/components/ui/IconButton";
 import { RitualSheet } from "./RitualSheet";
 
 // ── Color maps ────────────────────────────────────────────────────────────────
@@ -101,8 +104,15 @@ export default function RitualView({
 }: RitualViewProps) {
   const todayKey = JS_TO_DAY[new Date().getDay()] as DayKey;
   const [editRitual, setEditRitual] = useState<Ritual | null>(null);
+  const [deleteRitual, setDeleteRitual] = useState<Ritual | null>(null);
   const [collapsedGroups, setCollapsedGroups] = useState<Set<string>>(new Set());
   const [selectedDay, setSelectedDay] = useState<DayKey>(todayKey);
+  const deleteCopy = deleteRitual
+    ? buildDeleteConfirmationCopy("routine", {
+        name: deleteRitual.title,
+        description: "This routine will be removed from your daily practice.",
+      })
+    : null;
 
   const last7 = useMemo(getLast7Dates, []);
   const MAX_RITUALS = 8;
@@ -201,14 +211,16 @@ export default function RitualView({
         </div>
 
         {/* Desktop-only delete */}
-        <motion.button
-          type="button"
-          whileTap={{ scale: 0.84 }}
-          onClick={() => onDelete(ritual.id)}
-          className="hidden h-8 w-8 shrink-0 items-center justify-center rounded-lg text-neutral-300 opacity-0 transition-all hover:bg-rose-50 hover:text-rose-500 group-hover:opacity-100 dark:text-neutral-600 dark:hover:bg-rose-500/10 dark:hover:text-rose-400 lg:flex"
+        <IconButton
+          label="Delete routine"
+          variant="dangerGhost"
+          size="xs"
+          radius="lg"
+          onClick={() => setDeleteRitual(ritual)}
+          className="hidden opacity-0 transition-opacity group-hover:opacity-100 lg:flex"
         >
           <IconTrash size={14} strokeWidth={2} />
-        </motion.button>
+        </IconButton>
       </div>
     );
   }
@@ -414,7 +426,21 @@ export default function RitualView({
         onClose={() => setEditRitual(null)}
         initial={editRitual ?? undefined}
         onSave={(data) => { if (editRitual) onUpdate(editRitual.id, data); }}
-        onDelete={() => { if (editRitual) { onDelete(editRitual.id); setEditRitual(null); } }}
+        onDelete={() => { if (editRitual) { haptic("light"); setDeleteRitual(editRitual); } setEditRitual(null); }}
+      />
+
+      <ConfirmSheet
+        open={!!deleteRitual}
+        onClose={() => setDeleteRitual(null)}
+        onConfirm={() => {
+          if (!deleteRitual) return;
+          haptic("medium");
+          onDelete(deleteRitual.id);
+          setDeleteRitual(null);
+        }}
+        title={deleteCopy?.title ?? ""}
+        description={deleteCopy?.description}
+        confirmLabel={deleteCopy?.confirmLabel}
       />
     </>
   );
