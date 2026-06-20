@@ -40,7 +40,7 @@ export default function DetailHeader({ title, onBack, actions, rightSlot, classN
       </motion.button>
 
       <div className="min-w-0 flex-1">
-        <p className="truncate text-[16px] font-bold text-neutral-950 dark:text-white/80">{title}</p>
+        <h1 className="truncate text-[16px] font-bold text-neutral-950 dark:text-white/80">{title}</h1>
       </div>
 
       {rightSlot}
