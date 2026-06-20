@@ -18,6 +18,7 @@ import {
 } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import type { Schedule } from "@/lib/useScheduleDB";
+import { logError } from "@/lib/errorLog";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -35,8 +36,12 @@ export type CloudMergeResult = "merged" | "local-newer" | "equal" | "missing" | 
 
 const DEBOUNCE_MS = 30_000; // 30 s between auto-syncs
 
+const RETRY_DELAYS = [5_000, 15_000, 45_000]; // exponential-ish backoff after a failed sync
+
 let _uid: string | null = null;
 let _timer: ReturnType<typeof setTimeout> | null = null;
+let _retryTimer: ReturnType<typeof setTimeout> | null = null;
+let _retryCount = 0;
 let _syncing = false;
 let _pending: Schedule | null = null;
 let _lastSchedule: Schedule | null = null; // latest snapshot seen by queueSync
@@ -64,9 +69,17 @@ function attachListeners() {
   _visibilityFn = () => {
     if (document.visibilityState === "hidden" && _pending) {
       // Use Web Locks API when available to extend tab lifetime during the flush.
+      // If the lock can't be acquired (rejects/throws), still flush directly so
+      // the final edit isn't silently dropped on tab close.
       const snap = _pending;
       if ("locks" in navigator) {
-        navigator.locks.request("planr-sync-flush", { steal: true }, () => performSync(snap));
+        try {
+          navigator.locks
+            .request("planr-sync-flush", { steal: true }, () => performSync(snap))
+            .catch(() => performSync(snap));
+        } catch {
+          performSync(snap);
+        }
       } else {
         performSync(snap);
       }
@@ -95,7 +108,10 @@ function detachListeners() {
 export function initSync(uid: string) {
   if (_uid !== uid) {
     if (_timer) clearTimeout(_timer);
+    if (_retryTimer) clearTimeout(_retryTimer);
     _timer = null;
+    _retryTimer = null;
+    _retryCount = 0;
     _pending = null;
     _lastSchedule = null;
     _lastSyncedAt = 0;
@@ -109,7 +125,10 @@ export function initSync(uid: string) {
 /** Call on sign-out or component teardown. */
 export function destroySync() {
   if (_timer) clearTimeout(_timer);
+  if (_retryTimer) clearTimeout(_retryTimer);
   _timer = null;
+  _retryTimer = null;
+  _retryCount = 0;
   _uid = null;
   _pending = null;
   _lastSchedule = null;
@@ -268,6 +287,56 @@ function trimForSync(schedule: Schedule): Schedule {
   };
 }
 
+// Firestore caps a document at 1 MB. Stay comfortably under it; if a payload is
+// still too big after trimForSync (e.g. a giant note or strategy HTML), drop the
+// largest offenders from the CLOUD copy only — they remain intact locally in
+// IndexedDB — so the rest of the data still backs up instead of failing wholesale.
+const MAX_DOC_BYTES = 900_000;
+
+function encodedBytes(value: unknown): number {
+  return new TextEncoder().encode(JSON.stringify(value)).length;
+}
+
+function capPayloadSize(schedule: Schedule): { payload: Schedule; oversizedFields: number } {
+  if (encodedBytes(schedule) <= MAX_DOC_BYTES) return { payload: schedule, oversizedFields: 0 };
+
+  let oversizedFields = 0;
+  let payload: Schedule = schedule;
+
+  // 1. Strategy HTML can be multi-MB on its own — drop it first.
+  if (Array.isArray(payload.strategies) && payload.strategies.some((s) => s.htmlContent)) {
+    payload = {
+      ...payload,
+      strategies: payload.strategies.map((s) => {
+        if (s.htmlContent) {
+          oversizedFields++;
+          return { ...s, htmlContent: undefined };
+        }
+        return s;
+      }),
+    };
+    if (encodedBytes(payload) <= MAX_DOC_BYTES) return { payload, oversizedFields };
+  }
+
+  // 2. Blank the largest note bodies until we fit (keep the note + title).
+  if (Array.isArray(payload.notes) && payload.notes.length > 0) {
+    const order = payload.notes
+      .map((n, i) => ({ i, size: n.body?.length ?? 0 }))
+      .sort((a, b) => b.size - a.size);
+    const notes = [...payload.notes];
+    for (const { i } of order) {
+      if (encodedBytes(payload) <= MAX_DOC_BYTES) break;
+      if (notes[i]?.body) {
+        notes[i] = { ...notes[i], body: "" };
+        oversizedFields++;
+        payload = { ...payload, notes };
+      }
+    }
+  }
+
+  return { payload, oversizedFields };
+}
+
 async function performSync(schedule: Schedule): Promise<void> {
   if (!_uid) return;
   if (!navigator.onLine) {
@@ -286,19 +355,38 @@ async function performSync(schedule: Schedule): Promise<void> {
 
   const now = Date.now();
   try {
+    const { payload, oversizedFields } = capPayloadSize(trimForSync(schedule));
     await setDoc(firestoreRef(_uid), {
-      schedule: trimForSync(schedule),
+      schedule: payload,
       lastUpdated: now,
       syncedAt: serverTimestamp(),
     });
     _lastSyncedAt = now;
+    _retryCount = 0;
+    if (_retryTimer) { clearTimeout(_retryTimer); _retryTimer = null; }
     // Only clear _pending if no new edit arrived while we were awaiting setDoc
     if (_pending === pendingSnapshot) _pending = null;
     setStatus("idle");
+    if (oversizedFields > 0) {
+      logError(
+        "cloudsync:oversize",
+        `Cloud backup skipped ${oversizedFields} oversized field(s) to fit Firestore's 1MB limit. They remain saved on this device.`
+      );
+    }
   } catch (err) {
-    console.error("[CloudSync] performSync failed:", err);
+    logError("cloudsync", err);
     setStatus("error");
-    // Keep _pending so we retry on next trigger
+    // Keep _pending and auto-retry with backoff (transient network/Firestore
+    // hiccups shouldn't strand the user on "Sync failed" until a manual retry).
+    if (_retryTimer) clearTimeout(_retryTimer);
+    if (_retryCount < RETRY_DELAYS.length) {
+      const delay = RETRY_DELAYS[_retryCount];
+      _retryCount++;
+      _retryTimer = setTimeout(() => {
+        _retryTimer = null;
+        void performSync(_pending ?? schedule);
+      }, delay);
+    }
   } finally {
     _syncing = false;
   }

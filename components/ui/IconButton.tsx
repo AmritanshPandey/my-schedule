@@ -58,7 +58,7 @@ const IconButton = forwardRef<HTMLButtonElement, IconButtonProps>(function IconB
       aria-label={label}
       {...props}
       className={[
-        "inline-flex shrink-0 items-center justify-center transition-colors disabled:cursor-not-allowed disabled:opacity-40",
+        "tap-target inline-flex shrink-0 items-center justify-center transition-colors disabled:cursor-not-allowed disabled:opacity-40",
         variantClasses[variant],
         sizeClasses[size],
         radiusClasses[radius],

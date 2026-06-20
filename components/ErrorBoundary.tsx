@@ -1,9 +1,19 @@
 "use client";
 
-import { Component, type ReactNode } from "react";
+import { Component, type ErrorInfo, type ReactNode } from "react";
+import { logError } from "@/lib/errorLog";
 
 interface Props {
   children: ReactNode;
+  /** Label used in console logs, e.g. "Timeline", "Notes". */
+  name?: string;
+  /**
+   * Section mode: render a compact, retry-in-place fallback and NEVER reload the
+   * whole page. Use to isolate a feature area so its crash can't white-screen
+   * (or reload-loop) the entire app. Leave off for the single root boundary,
+   * which keeps the chunk-error recovery reload.
+   */
+  section?: boolean;
 }
 
 interface State {
@@ -76,11 +86,17 @@ export class ErrorBoundary extends Component<Props, State> {
     window.clearTimeout(this.resetTimer);
   }
 
-  componentDidCatch(error: Error) {
-    console.error("[ErrorBoundary]", error);
+  componentDidCatch(error: Error, info: ErrorInfo) {
+    // Feed React render crashes into the on-device error log so they show up
+    // alongside window/promise errors (and survive a reload).
+    logError(`react:${this.props.name ?? (this.props.section ? "section" : "root")}`, error, info.componentStack ?? undefined);
   }
 
   componentDidUpdate(_: Props, prevState: State) {
+    // Section boundaries isolate a feature area — they must never trigger a
+    // full-page reload (that's the root boundary's job).
+    if (this.props.section) return;
+
     const isNewError =
       this.state.hasError &&
       (prevState.hasError === false || prevState.message !== this.state.message);
@@ -99,6 +115,30 @@ export class ErrorBoundary extends Component<Props, State> {
 
   render() {
     if (this.state.hasError) {
+      // Section mode: contained, retry-in-place fallback. Resetting state
+      // re-mounts the children so a transient failure can recover without a
+      // full reload (and without taking the rest of the app down).
+      if (this.props.section) {
+        return (
+          <div className="flex flex-col items-center justify-center gap-3 rounded-2xl border border-neutral-200 bg-white p-6 text-center dark:border-white/[0.08] dark:bg-neutral-900">
+            <p className="text-[13px] font-semibold text-neutral-700 dark:text-neutral-200">
+              {this.props.name ? `${this.props.name} hit a problem` : "This section hit a problem"}
+            </p>
+            {this.state.message && (
+              <p className="max-w-full break-words font-mono text-[11px] text-neutral-400 dark:text-neutral-500">
+                {this.state.message}
+              </p>
+            )}
+            <button
+              onClick={() => this.setState({ hasError: false, message: "" })}
+              className="rounded-xl border border-neutral-200 bg-neutral-50 px-4 py-2 text-[12px] font-semibold text-neutral-700 transition-colors hover:bg-neutral-100 dark:border-white/[0.08] dark:bg-white/[0.04] dark:text-white dark:hover:bg-white/[0.08]"
+            >
+              Try again
+            </button>
+          </div>
+        );
+      }
+
       const chunkError = isChunkLoadError(this.state.message);
       return (
         <div className="flex min-h-screen flex-col items-center justify-center gap-5 p-8 text-center">

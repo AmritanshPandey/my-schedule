@@ -34,7 +34,7 @@ export default function DetailHeader({ title, onBack, actions, rightSlot, classN
         whileTap={{ scale: 0.86 }}
         onClick={onBack}
         aria-label="Back"
-        className="flex h-9 w-9 shrink-0 items-center justify-center text-neutral-500 dark:text-white/60"
+        className="tap-target flex h-9 w-9 shrink-0 items-center justify-center text-neutral-500 dark:text-white/60"
       >
         <IconChevronLeft size={26} strokeWidth={1.5} />
       </motion.button>
@@ -61,7 +61,7 @@ export default function DetailHeader({ title, onBack, actions, rightSlot, classN
                 whileTap={{ scale: 0.86 }}
                 onClick={action.onClick}
                 aria-label={action.label}
-                className={`flex h-9 w-9 items-center justify-center rounded-full transition-colors ${tone}`}
+                className={`tap-target flex h-9 w-9 items-center justify-center rounded-full transition-colors ${tone}`}
               >
                 <Icon size={20} strokeWidth={2} />
               </motion.button>

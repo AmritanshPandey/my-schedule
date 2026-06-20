@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, type CSSProperties } from "react";
+import { useEffect, useRef, useState, type CSSProperties } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 
 interface BottomSheetProps {
@@ -30,6 +30,7 @@ export default function BottomSheet({
 }: BottomSheetProps) {
   const [isDesktop, setIsDesktop] = useState(false);
   const [viewportFrame, setViewportFrame] = useState({ height: 0, offsetTop: 0 });
+  const panelRef = useRef<HTMLDivElement>(null);
 
   // Track breakpoint once mounted (SSR-safe)
   useEffect(() => {
@@ -57,14 +58,45 @@ export default function BottomSheet({
     return () => { vv.removeEventListener("resize", update); vv.removeEventListener("scroll", update); };
   }, [open, isDesktop]);
 
-  // Esc key + scroll lock
+  // Esc key + scroll lock + focus trap (focus the panel on open, keep Tab within
+  // it, and restore focus to the trigger on close — WCAG 2.4.3 / dialog pattern).
   useEffect(() => {
     if (!open) return;
-    const onKey = (e: KeyboardEvent) => { if (e.key === "Escape") onClose(); };
+    const previouslyFocused = document.activeElement as HTMLElement | null;
+    const FOCUSABLE =
+      'a[href],button:not([disabled]),textarea:not([disabled]),input:not([disabled]),select:not([disabled]),[tabindex]:not([tabindex="-1"])';
+
+    // Focus the panel itself (not the first input) so opening a sheet doesn't pop
+    // the keyboard; Tab then moves into the panel's controls.
+    const id = requestAnimationFrame(() => panelRef.current?.focus());
+
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") { onClose(); return; }
+      if (e.key !== "Tab") return;
+      const panel = panelRef.current;
+      if (!panel) return;
+      const nodes = Array.from(panel.querySelectorAll<HTMLElement>(FOCUSABLE)).filter(
+        (el) => el.offsetParent !== null || el === panel
+      );
+      if (nodes.length === 0) { e.preventDefault(); panel.focus(); return; }
+      const first = nodes[0];
+      const last = nodes[nodes.length - 1];
+      const active = document.activeElement;
+      if (!panel.contains(active)) { e.preventDefault(); first.focus(); }
+      else if (e.shiftKey && active === first) { e.preventDefault(); last.focus(); }
+      else if (!e.shiftKey && active === last) { e.preventDefault(); first.focus(); }
+    };
+
     const prev = document.body.style.overflow;
     document.body.style.overflow = "hidden";
     window.addEventListener("keydown", onKey);
-    return () => { document.body.style.overflow = prev; window.removeEventListener("keydown", onKey); };
+    return () => {
+      cancelAnimationFrame(id);
+      document.body.style.overflow = prev;
+      window.removeEventListener("keydown", onKey);
+      // Restore focus to whatever opened the sheet (if it's still in the DOM).
+      if (previouslyFocused && document.contains(previouslyFocused)) previouslyFocused.focus();
+    };
   }, [open, onClose]);
 
   const mobileStyle = (viewportFrame.height > 0
@@ -90,15 +122,18 @@ export default function BottomSheet({
               transition={{ duration: 0.16 }}
               className={`absolute inset-0 ${backdropClassName ?? "bg-black/50 backdrop-blur-[3px]"}`}
               onClick={onClose}
+              aria-hidden="true"
             />
 
             {/* Modal panel */}
             <motion.div
+              ref={panelRef}
+              tabIndex={-1}
               initial={{ opacity: 0, scale: 0.97, y: 10 }}
               animate={{ opacity: 1, scale: 1, y: 0 }}
               exit={{ opacity: 0, scale: 0.97, y: 10 }}
               transition={DESKTOP_EASE}
-              className={`relative w-full ${desktopWidth} overflow-y-auto overscroll-contain rounded-2xl border border-neutral-200/80 bg-white dark:border-white/[0.08] dark:bg-neutral-900 ${className}`}
+              className={`relative w-full ${desktopWidth} overflow-y-auto overscroll-contain rounded-2xl border border-neutral-200/80 bg-white outline-none dark:border-white/[0.08] dark:bg-neutral-900 ${className}`}
               style={{ maxHeight: "88vh" }}
             >
               {children}
@@ -121,16 +156,19 @@ export default function BottomSheet({
               transition={{ duration: 0.22 }}
               className={`absolute inset-0 ${backdropClassName ?? "bg-black/40"}`}
               onClick={onClose}
+              aria-hidden="true"
             />
 
             {/* Panel */}
             <motion.div
+              ref={panelRef}
+              tabIndex={-1}
               initial={{ y: "100%" }}
               animate={{ y: 0 }}
               exit={{ y: "100%" }}
               transition={MOBILE_SPRING}
               style={{ maxHeight, willChange: "transform" }}
-              className={`relative w-full max-w-lg overflow-y-auto overscroll-contain rounded-t-[32px] border-t border-neutral-200 bg-white pb-[env(safe-area-inset-bottom)] dark:border-white/[0.08] dark:bg-neutral-900 ${className}`}
+              className={`relative w-full max-w-lg overflow-y-auto overscroll-contain rounded-t-[32px] border-t border-neutral-200 bg-white pb-[env(safe-area-inset-bottom)] outline-none dark:border-white/[0.08] dark:bg-neutral-900 ${className}`}
             >
               {/* Drag handle */}
               <div className="sticky top-0 z-10 flex justify-center rounded-t-[32px] bg-white/95 pb-1 pt-3 dark:bg-neutral-900/95">

@@ -407,7 +407,7 @@ export default function NoteEditor({ note, onUpdate, onDelete, onBack }: NoteEdi
   return (
     <div className="flex h-full min-h-0 flex-col bg-white dark:bg-neutral-950">
       <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain">
-        <div className="sticky top-0 z-30 border-b border-black/[0.07] bg-white/88 backdrop-blur-xl dark:border-white/[0.08] dark:bg-neutral-950/88">
+        <div className="glass-surface sticky top-0 z-30 border-b border-black/[0.07] bg-white/88 backdrop-blur-xl dark:border-white/[0.08] dark:bg-neutral-950/88">
           <div className="mx-auto flex w-full max-w-4xl items-start gap-3 px-5 py-4 lg:max-w-5xl xl:max-w-6xl">
             <IconButton
               label="Back"
@@ -517,7 +517,7 @@ export default function NoteEditor({ note, onUpdate, onDelete, onBack }: NoteEdi
         </div>
       </div>
 
-      <div className="shrink-0 border-t border-neutral-100 bg-white/90 px-2 py-2 backdrop-blur dark:border-white/[0.06] dark:bg-neutral-950/90" style={{ paddingBottom: "max(8px, env(safe-area-inset-bottom))" }}>
+      <div className="glass-surface shrink-0 border-t border-neutral-100 bg-white/90 px-2 py-2 backdrop-blur dark:border-white/[0.06] dark:bg-neutral-950/90" style={{ paddingBottom: "max(8px, env(safe-area-inset-bottom))" }}>
         <div className="mx-auto flex w-full max-w-4xl flex-col gap-2 px-3 lg:max-w-5xl xl:max-w-6xl">
           {isTableActive && (
             <div className="flex items-center gap-1 overflow-x-auto rounded-2xl border border-neutral-200 bg-neutral-50 px-2 py-2 dark:border-white/[0.08] dark:bg-white/[0.04]">

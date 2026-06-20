@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import dynamic from "next/dynamic";
 import AddEntryModal from "@/components/AddEntryModal";
@@ -16,6 +16,7 @@ import AIAssistant from "@/components/ai/AIAssistant";
 import { checkOllamaConnection, OLLAMA_URL_KEY, OLLAMA_MODEL_KEY, DEFAULT_OLLAMA_URL, DEFAULT_OLLAMA_MODEL } from "@/lib/ai";
 import type { AIActionResult } from "@/lib/ai";
 import { AI_ENABLED } from "@/lib/featureFlags";
+import { ErrorBoundary } from "@/components/ErrorBoundary";
 
 // ── Deferred heavy components (separate JS chunks, loaded on demand) ──────────
 const PlanDetailView = dynamic(() => import("@/components/plan/PlanDetailView"), { ssr: false });
@@ -217,6 +218,73 @@ function computeCardSize(height: number, laneCount: number): CardSize {
 
   return size;
 }
+
+// Shape of one positioned timeline task (produced by the timelineTaskLayouts memo).
+interface TimelineTaskLayout {
+  task: Task;
+  start: number;
+  end: number;
+  isOvernight: boolean;
+  isTruncated: boolean;
+  top: number;
+  height: number;
+  lane: number;
+  laneCount: number;
+}
+
+/**
+ * One positioned task block on the timeline, memoized so a drag (which updates
+ * dragCreate/dragMove on the parent every animation frame) doesn't re-render
+ * every card — only the dragged card's `isBeingMoved` flips. Relies on the
+ * parent passing a STABLE `layout` ref (the timelineTaskLayouts memo) and stable
+ * callbacks (the toggle/edit/pointer handlers are useCallback'd).
+ */
+const TimelineTaskBlock = memo(function TimelineTaskBlock({
+  layout,
+  plan,
+  isBeingMoved,
+  isViewingToday,
+  onPointerDown,
+  onToggle,
+  onEdit,
+}: {
+  layout: TimelineTaskLayout;
+  plan: Plan | null;
+  isBeingMoved: boolean;
+  isViewingToday: boolean;
+  onPointerDown: (e: React.PointerEvent<HTMLDivElement>, task: Task, start: number, end: number) => void;
+  onToggle: (task: Task) => void;
+  onEdit: (task: Task) => void;
+}) {
+  const cardSize = computeCardSize(layout.height, layout.laneCount);
+  return (
+    <div
+      data-task-block
+      className={`absolute min-w-0 px-0.5 py-[2px] animate-panel-in touch-none transition-opacity ${
+        isBeingMoved ? "opacity-25 pointer-events-none" : ""
+      }`}
+      style={{ ...taskLaneStyle(layout), willChange: isBeingMoved ? "opacity" : undefined }}
+      onPointerDown={isViewingToday ? (e) => onPointerDown(e, layout.task, layout.start, layout.end) : undefined}
+    >
+      <div className="relative h-full min-h-[20px]">
+        <TaskBlockCard
+          variant="grid"
+          task={layout.task}
+          plan={plan}
+          state={resolveTaskState(layout.task, layout.task.subtasks?.length ?? 0)}
+          duration={formatTaskDuration(layout.task.startTime, layout.task.endTime)}
+          readOnly={!isViewingToday}
+          minimal={cardSize === "xsmall"}
+          compact={cardSize === "small" || cardSize === "medium"}
+          narrow={cardSize === "small"}
+          onToggle={() => onToggle(layout.task)}
+          onClick={() => onEdit(layout.task)}
+          className="h-full w-full"
+        />
+      </div>
+    </div>
+  );
+});
 
 
 function getCurrentMinutes(): number {
@@ -509,6 +577,10 @@ export default function ScheduleApp() {
   );
 
   useEffect(() => {
+    // AI is feature-flagged off — don't fire a localhost connection probe on
+    // every app start (needless work; on iOS the mixed-content fetch is dead
+    // weight). Re-enabling AI_ENABLED restores this automatically.
+    if (!AI_ENABLED) return;
     if (typeof window === "undefined") return;
     let cancelled = false;
 
@@ -705,12 +777,14 @@ export default function ScheduleApp() {
 
   // ── Drag-move: pointerdown on task card ───────────────────────────────────
 
-  function handleTaskPointerDown(
+  // Stable identity (reads all live values through refs) so the memoized
+  // TimelineTaskBlock doesn't re-render every frame during a drag.
+  const handleTaskPointerDown = useCallback((
     e: React.PointerEvent<HTMLDivElement>,
     task: Task,
     layoutStart: number,
     layoutEnd: number,
-  ) {
+  ) => {
     e.stopPropagation(); // prevent grid drag-create from firing
     if (!dragHelpersRef.current.isViewingToday) return;
     if (e.pointerType === "mouse" && e.button !== 0) return;
@@ -741,7 +815,7 @@ export default function ScheduleApp() {
       currentPreviewStartMin: layoutStart,
       isCheckbox: !!(e.target as HTMLElement).closest("button[aria-label]"),
     };
-  }
+  }, []);
 
   // ── Document-level handlers (installed once, read refs — no stale closures) ─
 
@@ -897,12 +971,13 @@ export default function ScheduleApp() {
     };
   }, []); // empty deps: handlers read all live values through refs
 
-  function openEditSheet(task: Task) {
+  // Stable identity (setters are stable) so the memoized TimelineTaskBlock holds.
+  const openEditSheet = useCallback((task: Task) => {
     setTaskSheetTask(task);
     setTaskSheetPlanId(task.planId);
     setTaskSheetMode("edit");
     setTaskSheetOpen(true);
-  }
+  }, []);
 
   function closeTaskSheet() {
     setTaskSheetOpen(false);
@@ -1858,6 +1933,17 @@ export default function ScheduleApp() {
     };
   }
 
+  // Stable toggle for memoized timeline cards (mirrors the inline closure that
+  // renderTimelineTaskCard used, but with a stable identity so cards don't
+  // re-render during a drag). Recreated only when the active day/date changes.
+  const handleTimelineToggle = useCallback(
+    (task: Task) => {
+      haptic("light");
+      handleToggleTaskComplete(task.id, task.subtasks?.map((s) => s.id) ?? [], activeDay, activeDateISO);
+    },
+    [handleToggleTaskComplete, activeDay, activeDateISO]
+  );
+
   const timelineTaskLayouts = useMemo(() => {
     const intervals = dayTasksView
       .map((task) => {
@@ -2189,16 +2275,21 @@ export default function ScheduleApp() {
           className="fixed inset-0 z-50 bg-white dark:bg-neutral-950 lg:static lg:z-auto lg:relative lg:min-h-0 lg:flex-1 lg:overflow-hidden lg:rounded-2xl lg:border lg:border-neutral-200 dark:lg:border-white/[0.08]"
           style={{ paddingTop: "env(safe-area-inset-top, 0px)" }}
         >
-          <NotesView
-            notes={schedule.notes}
-            onCreate={handleCreateNote}
-            onUpdate={handleUpdateNote}
-            onDelete={handleDeleteNote}
-            onClose={() => setActiveTab(0)}
-          />
+          <ErrorBoundary section name="Notes">
+            <NotesView
+              notes={schedule.notes}
+              onCreate={handleCreateNote}
+              onUpdate={handleUpdateNote}
+              onDelete={handleDeleteNote}
+              onClose={() => setActiveTab(0)}
+            />
+          </ErrorBoundary>
         </div>
       ) : (
-      <div className="max-w-full pb-40 pt-[calc(64px+env(safe-area-inset-top,0px))] lg:pt-0 lg:flex-1 lg:max-w-none lg:overflow-y-auto lg:pb-0">
+      /* pt = the fixed header's base height (64px). The notch inset is already
+         applied once by the body's padding-top, so we must NOT add it again
+         here or it double-counts and leaves a gap under the header. */
+      <div className="max-w-full pb-40 pt-16 lg:pt-0 lg:flex-1 lg:max-w-none lg:overflow-y-auto lg:pb-0">
         <AnimatePresence mode="wait" initial={false}>
 
         {/* ── Tasks Tab ────────────────────────────────────────────────────── */}
@@ -2481,6 +2572,7 @@ export default function ScheduleApp() {
                       </div>
                     )}
                     {/* Premium execution timeline */}
+                    <ErrorBoundary section name="Timeline">
                     <div className="-mx-4">
                       <div
                         ref={timelineScrollRef}
@@ -2489,7 +2581,6 @@ export default function ScheduleApp() {
                           hasUserScrolledTimelineRef.current = true;
                         }}
                         className="calendar-scrollbar-none relative flex h-[calc(100dvh-280px)] overflow-y-auto overflow-x-hidden bg-transparent lg:h-auto lg:min-h-0 lg:flex-1"
-                        style={{ willChange: "transform" }}
                       >
                       {/* Time column */}
                       <div
@@ -2583,30 +2674,18 @@ export default function ScheduleApp() {
 
                         {/* Task blocks */}
                         <div className="absolute inset-0">
-                          {timelineTaskLayouts.map((layout) => {
-                            const isBeingMoved = dragMove?.taskId === layout.task.id;
-                            return (
-                              <div
-                                key={layout.task.id}
-                                data-task-block
-                                className={`absolute min-w-0 px-0.5 py-[2px] animate-panel-in touch-none transition-opacity ${
-                                  isBeingMoved ? "opacity-25 pointer-events-none" : ""
-                                }`}
-                                style={{ ...taskLaneStyle(layout), willChange: "opacity" }}
-                                onPointerDown={isViewingToday ? (e) => handleTaskPointerDown(e, layout.task, layout.start, layout.end) : undefined}
-                              >
-                                <div className="relative h-full min-h-[20px]">
-                                  {renderTimelineTaskCard(
-                                    layout.task,
-                                    "h-full rounded-[8px] px-2 py-1.5 w-full min-w-0 overflow-hidden",
-                                    computeCardSize(layout.height, layout.laneCount),
-                                    layout.isOvernight,
-                                    layout.isTruncated
-                                  )}
-                                </div>
-                              </div>
-                            );
-                          })}
+                          {timelineTaskLayouts.map((layout) => (
+                            <TimelineTaskBlock
+                              key={layout.task.id}
+                              layout={layout}
+                              plan={layout.task.planId ? plansById.get(layout.task.planId) ?? null : null}
+                              isBeingMoved={dragMove?.taskId === layout.task.id}
+                              isViewingToday={isViewingToday}
+                              onPointerDown={handleTaskPointerDown}
+                              onToggle={handleTimelineToggle}
+                              onEdit={openEditSheet}
+                            />
+                          ))}
 
                           {/* Drag-create ghost block */}
                           {dragCreate && (() => {
@@ -2674,6 +2753,7 @@ export default function ScheduleApp() {
                       </div>
                       </div>
                     </div>
+                    </ErrorBoundary>
                   </motion.div>
                 )}
               </AnimatePresence>
@@ -2698,6 +2778,7 @@ export default function ScheduleApp() {
           >
           <div className={selectedPlan ? "lg:mx-auto lg:max-w-4xl" : ""}>
           {selectedPlan ? (
+            <ErrorBoundary section name="Plan">
             <PlanDetailView
               plan={selectedPlan}
               schedule={schedule}
@@ -2746,6 +2827,7 @@ export default function ScheduleApp() {
               onLinkTrackerToMilestone={handleLinkTrackerToMilestone}
               onUpdateCoachMessages={handleUpdateCoachMessages}
             />
+            </ErrorBoundary>
           ) : renderPlanList()}
           </div>
           </motion.div>
@@ -2759,6 +2841,7 @@ export default function ScheduleApp() {
             exit={{ opacity: 0 }}
             transition={{ duration: 0.12, ease: "easeOut" }}
           >
+            <ErrorBoundary section name="Routine">
             <RitualView
               rituals={schedule.rituals ?? []}
               completedIds={completedRitualIds}
@@ -2772,6 +2855,7 @@ export default function ScheduleApp() {
               onAddOpenChange={setRitualAddOpen}
               weekHistory={ritualWeekHistory}
             />
+            </ErrorBoundary>
           </motion.div>
         )}
 
@@ -2784,6 +2868,7 @@ export default function ScheduleApp() {
             exit={{ opacity: 0 }}
             transition={{ duration: 0.12, ease: "easeOut" }}
           >
+            <ErrorBoundary section name="Overview">
             <OverviewDashboard
               schedule={schedule}
               todayKey={todayKey}
@@ -2794,6 +2879,7 @@ export default function ScheduleApp() {
               completedRitualIds={completedRitualIds}
               onLogTracker={(tracker) => setEntryTracker(tracker)}
             />
+            </ErrorBoundary>
           </motion.div>
         )}
 

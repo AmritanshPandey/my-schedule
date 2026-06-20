@@ -517,23 +517,62 @@ header {
    Devices with low GPU memory can't afford backdrop-filter on every surface.
    This class is added to <html> by detectLowEndDevice when needed.          */
 
-html.reduce-blur .backdrop-blur-md,
-html.reduce-blur .backdrop-blur-sm,
-html.reduce-blur .backdrop-blur-xl {
+/* Catch every backdrop-blur variant (-sm/-md/-xl/-lg, plain, arbitrary) in one
+   rule. The header sets backdrop-filter inline; an !important author rule still
+   beats an inline non-important declaration, so `header` reaches it too —
+   otherwise the fixed header keeps re-compositing its blur on every scroll
+   frame even when blur is meant to be off. */
+html.reduce-blur [class*="backdrop-blur"],
+html.reduce-blur header {
   backdrop-filter: none !important;
   -webkit-backdrop-filter: none !important;
 }
 
-/* When blur is disabled, restore full opacity so glass surfaces stay readable */
-html.reduce-blur header {
+/* When blur is disabled, restore full opacity so glass surfaces stay readable.
+   `header` covers the app/detail headers; `.glass-surface` is the opt-in marker
+   for non-<header> frosted panels (e.g. the Notes editor toolbar/footer) so they
+   become solid instead of letting scrolling content ghost through at ~88%. */
+html.reduce-blur header,
+html.reduce-blur .glass-surface {
   background-color: white !important;
 }
 html.reduce-blur.dark header,
-.dark html.reduce-blur header {
+.dark html.reduce-blur header,
+html.reduce-blur.dark .glass-surface,
+.dark html.reduce-blur .glass-surface {
   background-color: rgb(9 9 11) !important; /* neutral-950 */
 }
 
 /* Promote fixed nav to its own compositor layer (same as sticky headers) */
 nav[aria-label="Main navigation"] {
   will-change: transform;
+}
+
+/* ── Visible keyboard focus (WCAG 2.4.7) ─────────────────────────────────────
+   Shows only for keyboard / assistive-tech users (:focus-visible never fires on
+   touch or mouse taps). Low specificity via :where() so any component with its
+   own bespoke focus styling still wins. */
+:where(button, a, [role="button"], input, textarea, select, [tabindex]):focus-visible {
+  outline: 2px solid #00A63E; /* brand green */
+  outline-offset: 2px;
+}
+
+/* ── Accessible tap targets (≥44px) ──────────────────────────────────────────
+   Expands a small control's touch region to 44px WITHOUT changing its visual
+   size, via a centered invisible pseudo-element. Clicks on the pseudo-element
+   are attributed to its host button, so the visual stays compact while the
+   hit-area meets the WCAG 2.5.5 / design-system 44px bar. */
+.tap-target {
+  position: relative;
+}
+.tap-target::before {
+  content: "";
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 100%;
+  height: 100%;
+  min-width: 44px;
+  min-height: 44px;
+  transform: translate(-50%, -50%);
 }

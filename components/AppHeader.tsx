@@ -102,7 +102,10 @@ function RootHeader({ onOpenSettings, onNotes }: Pick<AppHeaderProps, "onOpenSet
     <header
       className="fixed inset-x-0 top-0 z-40 flex items-center justify-between px-5 transition-all duration-300 lg:hidden"
       style={{
-        height: 64,
+        // box-sizing is border-box (Tailwind preflight), so the safe-area inset
+        // must be ADDED to the height — otherwise the notch eats into the 64px
+        // bar and squashes the logo. Content area stays a clean 64px.
+        height: "calc(64px + env(safe-area-inset-top))",
         paddingTop: "env(safe-area-inset-top)",
         ...glassStyle(scrolled, isDark),
       }}
@@ -159,7 +162,10 @@ function DetailHeader({ back, actions }: Pick<AppHeaderProps, "back" | "actions"
     <header
       className="fixed inset-x-0 top-0 z-40 flex items-center gap-1 px-2 transition-all duration-250 lg:hidden"
       style={{
-        height: 56,
+        // Match the root header's 64px base so content (offset by pt-16 = 64px)
+        // sits flush with no gap, and add the safe-area inset on top (border-box)
+        // so the back/title row isn't clipped under the notch.
+        height: "calc(64px + env(safe-area-inset-top))",
         paddingTop: "env(safe-area-inset-top)",
         ...glassStyle(scrolled, isDark),
         // Detail header always has some bg so back label is readable

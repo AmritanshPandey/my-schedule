@@ -49,7 +49,7 @@ export default function TaskStatusCheckbox({
       aria-label={statusLabel}
       aria-disabled={readOnly}
       aria-pressed={done || partial}
-      className={`flex shrink-0 items-center justify-center border-2 transition-colors disabled:opacity-100 ${
+      className={`tap-target flex shrink-0 items-center justify-center border-2 transition-colors disabled:opacity-100 ${
         sizeClasses[size]
       } ${readOnly ? "cursor-default" : "active:scale-95"} ${
         done || partial

@@ -7,7 +7,7 @@
 //
 // Bump CACHE_VERSION to force a full cache refresh on deploy.
 
-const CACHE_VERSION = 'planr-v4';
+const CACHE_VERSION = 'planr-v5';
 const SHELL_CACHE = `${CACHE_VERSION}-shell`;
 const ASSET_CACHE = `${CACHE_VERSION}-assets`;
 const FONT_CACHE  = `${CACHE_VERSION}-fonts`;

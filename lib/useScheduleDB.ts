@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { ScheduleEntry } from "@/components/ScheduleItem";
 import type { AccentColor } from "@/lib/colorSystem";
 import { colorFromIcon, resolveAccentColor } from "@/lib/colorSystem";
@@ -8,6 +8,7 @@ import type { GoalDirection } from "@/lib/trendUtils";
 export type { GoalDirection };
 import { flushNow, mergeCloudIfNewer, queueSync, noteLatestSchedule } from "@/lib/cloudSync";
 import { getLocalLastUpdated, writeLocalLastUpdated } from "@/lib/localMeta";
+import { logError } from "@/lib/errorLog";
 import { useAuth } from "@/contexts/AuthProvider";
 import { calculateMilestoneEndDate, recalculateRoadmapTimeline } from "@/lib/roadmapDates";
 import { localISODate } from "@/lib/dateUtils";
@@ -822,6 +823,21 @@ export function resetStaleCompletions(schedule: Schedule, todayISO: string): Sch
   return changed ? { ...schedule, activities } : schedule;
 }
 
+/**
+ * Migrate + reset, but never throw: a single corrupt record (e.g. malformed
+ * completionHistory) must not reject the whole load and blank the app. On
+ * failure it logs to the on-device error reporter and returns null so the caller
+ * can fall back (and still let a healthy cloud snapshot load).
+ */
+function safeMigrate(raw: unknown): Schedule | null {
+  try {
+    return resetStaleCompletions(migrate(raw), localISODate(new Date()));
+  } catch (err) {
+    logError("indexeddb:migrate", err);
+    return null;
+  }
+}
+
 export function useScheduleDB() {
   const { user, authLoading } = useAuth();
   const storageKey = authLoading ? null : user ? recordKeyForUid(user.uid) : GUEST_RECORD_KEY;
@@ -889,15 +905,22 @@ export function useScheduleDB() {
 
         let localSchedule: Schedule | null = null;
         if (stored) {
-          localSchedule = resetStaleCompletions(migrate(stored), localISODate(new Date()));
-          setScheduleState(localSchedule);
+          // If the local record is corrupt, fall back to empty but keep going —
+          // the cloud-merge block below can still restore a healthy snapshot.
+          localSchedule = safeMigrate(stored);
+          setScheduleState(localSchedule ?? emptyEmpty());
         } else if (legacyGuestStored) {
-          const now = Date.now();
-          const migrated = resetStaleCompletions(migrate(legacyGuestStored), localISODate(new Date()));
-          setScheduleState(migrated);
-          writeDB(db, activeStorageKey, migrated).catch(() => {});
-          writeLocalLastUpdated(now, activeUid); // keep sync clock in step with the migrated record
-          deleteDBKey(db, LEGACY_RECORD_KEY).catch(() => {}); // adopted → drop the legacy copy
+          const migrated = safeMigrate(legacyGuestStored);
+          if (migrated) {
+            const now = Date.now();
+            setScheduleState(migrated);
+            writeDB(db, activeStorageKey, migrated).catch((e) => logError("indexeddb:write", e));
+            writeLocalLastUpdated(now, activeUid); // keep sync clock in step with the migrated record
+            deleteDBKey(db, LEGACY_RECORD_KEY).catch(() => {}); // adopted → drop the legacy copy
+          } else {
+            setScheduleState(emptyEmpty());
+            if (!activeUid) setIsFirstLaunch(true);
+          }
         } else {
           setScheduleState(emptyEmpty());
           if (!activeUid) setIsFirstLaunch(true);
@@ -941,7 +964,9 @@ export function useScheduleDB() {
       })
       .catch((err) => {
         if (cancelled) return;
-        console.error("IndexedDB open failed:", err);
+        logError("indexeddb:load", err);
+        // Don't crash — fall back to an empty in-memory schedule so the app
+        // still renders even if IndexedDB is unavailable (private mode, quota).
         setScheduleState(emptyEmpty());
         setReady(true);
       });
@@ -961,7 +986,8 @@ export function useScheduleDB() {
       const { uid, schedule: cloudSchedule, lastUpdated } = (e as CustomEvent<{ uid: string; schedule: Schedule; lastUpdated: number }>).detail;
       if (uid !== storageUid) return;
 
-      const migrated = resetStaleCompletions(migrate(cloudSchedule), localISODate(new Date()));
+      const migrated = safeMigrate(cloudSchedule);
+      if (!migrated) return; // corrupt cloud snapshot — keep current local state
       // Hydrating from cloud: tag the identity and skip the echo-write so the
       // write effect doesn't overwrite the cloud `lastUpdated` with a fresh now.
       loadedKeyRef.current = activeStorageKey;
@@ -969,7 +995,7 @@ export function useScheduleDB() {
       setScheduleState(migrated);
       setIsFirstLaunch(false);
       if (dbRef.current) {
-        writeDB(dbRef.current, activeStorageKey, migrated).catch(() => {});
+        writeDB(dbRef.current, activeStorageKey, migrated).catch((e) => logError("indexeddb:write", e));
       }
       writeLocalLastUpdated(lastUpdated, storageUid);
     }
@@ -1002,22 +1028,26 @@ export function useScheduleDB() {
           writeLocalLastUpdated(now, storageUid); // update local timestamp for cloud comparison
           queueSync(snap);            // queue cloud backup (no-op for guests)
         })
-        .catch((err) => console.error("IndexedDB write failed:", err));
+        .catch((err) => logError("indexeddb:write", err));
     }, 500);
     return () => {
       if (writeTimer.current) clearTimeout(writeTimer.current);
     };
   }, [schedule, ready, storageKey, storageUid]);
 
-  function setSchedule(updater: (prev: Schedule) => Schedule) {
+  // Stable identity (setScheduleState is stable) so downstream effects and
+  // useCallback hooks that depend on it don't re-run/recreate every render.
+  const setSchedule = useCallback((updater: (prev: Schedule) => Schedule) => {
     setScheduleState(updater);
-  }
+  }, []);
 
   async function clearData(): Promise<void> {
     const empty = emptyEmpty();
     setScheduleState(empty);
     if (dbRef.current && storageKey) {
-      await writeDB(dbRef.current, storageKey, empty).catch(() => {});
+      // Surface a failed wipe (don't pretend it succeeded). Cloud deletion is
+      // paired by the caller (SettingsView → deleteCloudData).
+      await writeDB(dbRef.current, storageKey, empty).catch((err) => logError("indexeddb:clear", err));
     }
   }
 
@@ -1050,7 +1080,7 @@ export function useScheduleDB() {
     })();
     setScheduleState(next);
     if (dbRef.current && storageKey) {
-      await writeDB(dbRef.current, storageKey, next).catch(() => {});
+      await writeDB(dbRef.current, storageKey, next).catch((err) => logError("indexeddb:clear-progress", err));
     }
   }
 

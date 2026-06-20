@@ -38,7 +38,7 @@ type MilestoneStatus = Milestone["status"];
 
 function dotClasses(status: MilestoneStatus, selected: boolean): string {
   const base =
-    "absolute top-1/2 -translate-y-1/2 -translate-x-1/2 flex h-[22px] w-[22px] items-center justify-center rounded-full border-2 transition-transform focus:outline-none";
+    "absolute top-1/2 -translate-y-1/2 -translate-x-1/2 flex h-[22px] w-[22px] items-center justify-center rounded-full border-2 transition-transform";
   const scale = selected ? "scale-[1.3]" : "hover:scale-110";
   const color =
     status === "completed"
