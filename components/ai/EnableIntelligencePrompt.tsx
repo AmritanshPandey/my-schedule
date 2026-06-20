@@ -1,7 +1,7 @@
 "use client";
 
 import { m, AnimatePresence } from "framer-motion";
-import { IconBrain, IconCheck, IconShield, IconWifi } from "@tabler/icons-react";
+import { IconBrain, IconCheck, IconShield, IconWifi, IconAlertTriangle, IconRefresh } from "@tabler/icons-react";
 import type { EmbeddedAIStatus } from "@/lib/ai/useAIRuntime";
 
 interface EnableIntelligencePromptProps {
@@ -175,6 +175,38 @@ export default function EnableIntelligencePrompt({
                   Offline · Private · Always available
                 </p>
               </div>
+            </m.div>
+          )}
+
+          {/* ── Error: couldn't load (offline / blocked) ────────────────────── */}
+          {status === "error" && (
+            <m.div
+              key="error"
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              className="flex items-center gap-3"
+            >
+              <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-amber-500/15 text-amber-600 dark:text-amber-400">
+                <IconAlertTriangle size={16} strokeWidth={2.2} />
+              </div>
+              <div className="min-w-0 flex-1">
+                <p className="text-[14px] font-bold text-neutral-900 dark:text-white">
+                  On-device AI couldn&apos;t load
+                </p>
+                <p className="mt-0.5 text-[12px] text-neutral-400 dark:text-neutral-500">
+                  You may be offline or the download was blocked. The rest of the app works normally.
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={onEnable}
+                aria-label="Retry loading on-device AI"
+                className="flex h-11 shrink-0 items-center gap-1.5 rounded-2xl border border-neutral-200 px-3 text-[12px] font-bold text-neutral-600 transition-colors hover:bg-neutral-50 dark:border-white/[0.08] dark:text-neutral-300 dark:hover:bg-white/[0.04]"
+              >
+                <IconRefresh size={14} strokeWidth={2.2} />
+                Retry
+              </button>
             </m.div>
           )}
 

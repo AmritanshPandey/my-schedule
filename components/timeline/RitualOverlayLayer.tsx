@@ -70,7 +70,7 @@ export default function RitualOverlayLayer({
             ))}
             {/* Overflow indicator on the last visible group */}
             {dropped > 0 && group.key === lastKey && (
-              <span className="rounded-full px-1.5 py-0.5 text-[8px] font-bold leading-none bg-neutral-200 text-neutral-600 dark:bg-white/10 dark:text-white/60">
+              <span className="rounded-full px-1.5 py-0.5 text-[8px] font-bold leading-none bg-neutral-200 text-neutral-600 dark:bg-white/10 dark:text-white/75">
                 +{dropped}
               </span>
             )}

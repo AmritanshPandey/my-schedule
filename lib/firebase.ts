@@ -17,12 +17,6 @@ import {
 } from "firebase/firestore";
 
 import {
-  getAnalytics,
-  isSupported,
-  type Analytics,
-} from "firebase/analytics";
-
-import {
   getStorage,
   type FirebaseStorage,
 } from "firebase/storage";
@@ -34,7 +28,6 @@ const config = {
   storageBucket:     process.env.NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET,
   messagingSenderId: process.env.NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID,
   appId:             process.env.NEXT_PUBLIC_FIREBASE_APP_ID,
-  measurementId:     process.env.NEXT_PUBLIC_FIREBASE_MEASUREMENT_ID,
 };
 
 const isClient = typeof window !== "undefined";
@@ -61,12 +54,5 @@ if (isClient && isConfigured) {
 export const auth: Auth | null = _app ? getAuth(_app) : null;
 export const db: Firestore | null = _db;
 export const storage: FirebaseStorage | null = _app ? getStorage(_app) : null;
-
-export async function initializeAnalytics(): Promise<Analytics | null> {
-  if (!isClient || !_app) return null;
-  const supported = await isSupported();
-  if (!supported) return null;
-  return getAnalytics(_app);
-}
 
 export default _app;

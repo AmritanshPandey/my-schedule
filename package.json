@@ -3,8 +3,11 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
+    "copy-pdf-worker": "node scripts/copy-pdf-worker.mjs",
+    "predev": "node scripts/copy-pdf-worker.mjs",
     "dev": "next dev",
     "test": "node --experimental-strip-types --test tests/*.test.mjs",
+    "prebuild": "node scripts/copy-pdf-worker.mjs",
     "build": "next build",
     "postbuild": "node scripts/inject-precache.mjs",
     "start": "next start"

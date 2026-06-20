@@ -15,6 +15,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { getDeviceCapabilities } from "@/lib/performance/detectLowEndDevice";
+import { safeGetItem, safeSetItem } from "@/lib/safeStorage";
 import {
   AI_ENABLED_KEY,
   AI_MODE_KEY,
@@ -115,6 +116,10 @@ function getOrCreateWorker(): Worker | null {
     };
     return sharedWorker;
   } catch {
+    // Worker module failed to instantiate (e.g. chunk blocked/offline in the
+    // iOS PWA). Surface a definite error state instead of leaving callers stuck
+    // on "enabling" forever, so the UI can show an "AI unavailable" message.
+    statusListeners.forEach((fn) => fn("error", 0));
     return null;
   }
 }
@@ -152,12 +157,12 @@ export function useAIRuntime(): AIRuntimeState {
   // disabled it. Minimal / data-saver devices never auto-load (guarded below).
   const [enabled, setEnabled] = useState<boolean>(() => {
     if (typeof window === "undefined") return false;
-    return localStorage.getItem(AI_ENABLED_KEY) !== "false";
+    return safeGetItem(AI_ENABLED_KEY) !== "false";
   });
 
   const [mode, setModeState] = useState<AIPerformanceMode>(() => {
     if (typeof window === "undefined") return defaultPerformanceMode(tier, isDesktop);
-    const saved = localStorage.getItem(AI_MODE_KEY) as AIPerformanceMode | null;
+    const saved = safeGetItem(AI_MODE_KEY) as AIPerformanceMode | null;
     return saved ?? defaultPerformanceMode(tier, isDesktop);
   });
 
@@ -174,7 +179,7 @@ export function useAIRuntime(): AIRuntimeState {
 
   const [status, setStatus] = useState<EmbeddedAIStatus>(() => {
     if (typeof window === "undefined") return "disabled";
-    if (localStorage.getItem(AI_ENABLED_KEY) === "false") return "disabled";
+    if (safeGetItem(AI_ENABLED_KEY) === "false") return "disabled";
     // Already downloaded (cached on disk) or preloaded earlier this session →
     // start "ready": loading from cache is instant, so never flash a download bar.
     if (isModelDownloaded(currentModel) || lastRequestedModel) return "ready";
@@ -232,21 +237,21 @@ export function useAIRuntime(): AIRuntimeState {
   }, [enabled, currentModel, tier, isSaveData]);
 
   const enable = useCallback(() => {
-    localStorage.setItem(AI_ENABLED_KEY, "true");
+    safeSetItem(AI_ENABLED_KEY, "true");
     setEnabled(true);
     setStatus(isModelDownloaded(currentModel) ? "ready" : "enabling");
     preloadModel(currentModel);
   }, [currentModel]);
 
   const disable = useCallback(() => {
-    localStorage.setItem(AI_ENABLED_KEY, "false");
+    safeSetItem(AI_ENABLED_KEY, "false");
     lastRequestedModel = null; // allow re-enable to re-trigger preload
     setEnabled(false);
     setStatus("disabled");
   }, []);
 
   const setMode = useCallback((m: AIPerformanceMode) => {
-    localStorage.setItem(AI_MODE_KEY, m);
+    safeSetItem(AI_MODE_KEY, m);
     setModeState(m);
   }, []);
 

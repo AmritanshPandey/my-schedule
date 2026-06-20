@@ -100,6 +100,13 @@ export function installGlobalErrorHandlers(): void {
   window.addEventListener("error", (event: ErrorEvent) => {
     // Ignore benign ResizeObserver loop notices that some browsers emit.
     if (event.message && event.message.includes("ResizeObserver loop")) return;
+    // Drop opaque cross-origin "Script error." reports. iOS Safari masks the
+    // message, filename, line, and Error object for any throw from a script on
+    // another origin (e.g. Firebase Analytics' gtag.js from googletagmanager.com,
+    // which ITP interferes with in a standalone PWA). They carry no actionable
+    // detail and would otherwise bury the real crash this reporter exists to surface.
+    const opaque = !event.error && !event.filename && /^script error\.?$/i.test(event.message ?? "");
+    if (opaque) return;
     const where = event.filename
       ? ` (${event.filename.split("/").pop()}:${event.lineno}:${event.colno})`
       : "";

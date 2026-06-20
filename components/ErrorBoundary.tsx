@@ -24,13 +24,40 @@ interface State {
 // Persisted across reloads so a chunk that *keeps* failing can't trigger an
 // endless reload loop (which Safari surfaces as "A problem repeatedly occurred").
 const RELOAD_KEY = "planr-chunk-reloads";
-const MAX_RELOADS = 1;
+const MAX_RELOADS = 2;
+
+// In-memory mirror of the reload counter. On iOS Private Browsing every
+// sessionStorage write throws, so the persisted counter would stay 0 and the
+// guard below would reload forever. This module-level fallback survives within
+// the session (it resets on a true reload, but combined with MAX_RELOADS it
+// still caps a hard loop) so the guard holds even when storage is unavailable.
+let memReloadCount = 0;
 
 function getReloadCount(): number {
+  let stored = 0;
   try {
-    return Number(sessionStorage.getItem(RELOAD_KEY)) || 0;
+    stored = Number(sessionStorage.getItem(RELOAD_KEY)) || 0;
   } catch {
-    return 0;
+    /* storage unavailable — rely on the in-memory mirror */
+  }
+  return Math.max(stored, memReloadCount);
+}
+
+function setReloadCount(n: number): void {
+  memReloadCount = n;
+  try {
+    sessionStorage.setItem(RELOAD_KEY, String(n));
+  } catch {
+    /* storage unavailable — in-memory mirror already updated */
+  }
+}
+
+function resetReloadCount(): void {
+  memReloadCount = 0;
+  try {
+    sessionStorage.removeItem(RELOAD_KEY);
+  } catch {
+    /* ignore */
   }
 }
 
@@ -72,13 +99,7 @@ export class ErrorBoundary extends Component<Props, State> {
     // import loads, which happens after mount; clearing too early would let the
     // loop resume.
     this.resetTimer = window.setTimeout(() => {
-      if (!this.state.hasError) {
-        try {
-          sessionStorage.removeItem(RELOAD_KEY);
-        } catch {
-          /* ignore */
-        }
-      }
+      if (!this.state.hasError) resetReloadCount();
     }, 5000);
   }
 
@@ -102,11 +123,7 @@ export class ErrorBoundary extends Component<Props, State> {
       (prevState.hasError === false || prevState.message !== this.state.message);
 
     if (isNewError && isChunkLoadError(this.state.message) && getReloadCount() < MAX_RELOADS) {
-      try {
-        sessionStorage.setItem(RELOAD_KEY, String(getReloadCount() + 1));
-      } catch {
-        /* ignore */
-      }
+      setReloadCount(getReloadCount() + 1);
       clearStaleCaches().finally(() => {
         window.setTimeout(() => window.location.reload(), 800);
       });
@@ -153,11 +170,7 @@ export class ErrorBoundary extends Component<Props, State> {
             </p>
             <button
               onClick={() => {
-                try {
-                  sessionStorage.removeItem(RELOAD_KEY);
-                } catch {
-                  /* ignore */
-                }
+                resetReloadCount();
                 clearStaleCaches().finally(() => window.location.reload());
               }}
               className="w-full rounded-xl border border-neutral-200 bg-neutral-50 px-4 py-2.5 text-[13px] font-semibold text-neutral-700 transition-colors hover:bg-neutral-100 dark:border-white/[0.08] dark:bg-white/[0.04] dark:text-white dark:hover:bg-white/[0.08]"

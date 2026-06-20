@@ -6,8 +6,10 @@ import { m, AnimatePresence } from "framer-motion";
 import { IconChevronUp, IconChevronDown } from "@tabler/icons-react";
 import { haptic } from "@/lib/haptics";
 
-// CDN worker — no webpack config needed
-pdfjs.GlobalWorkerOptions.workerSrc = `https://unpkg.com/pdfjs-dist@${pdfjs.version}/build/pdf.worker.min.mjs`;
+// Self-hosted worker (copied into public/ by scripts/copy-pdf-worker.mjs at
+// build time). Served same-origin so it works offline / when a CDN is blocked
+// in the installed iOS PWA, and is cached by the service worker.
+pdfjs.GlobalWorkerOptions.workerSrc = "/pdf.worker.min.mjs";
 
 interface StrategyPdfReaderProps {
   pdfData?: string;  // base64 (guest fallback)
@@ -35,11 +37,21 @@ export default function StrategyPdfReader({ pdfData, pdfUrl, onPageChange }: Str
 
   // Measure container width
   useLayoutEffect(() => {
-    if (!containerRef.current) return;
+    const el = containerRef.current;
+    if (!el) return;
+    // ResizeObserver is unavailable on very old WebKit — fall back to the
+    // initial measurement (plus a window-resize listener) so pages still render
+    // at a real width instead of 0.
+    if (typeof ResizeObserver === "undefined") {
+      const measure = () => setContainerWidth(el.getBoundingClientRect().width);
+      measure();
+      window.addEventListener("resize", measure);
+      return () => window.removeEventListener("resize", measure);
+    }
     const ro = new ResizeObserver((entries) => {
       setContainerWidth(entries[0].contentRect.width);
     });
-    ro.observe(containerRef.current);
+    ro.observe(el);
     return () => ro.disconnect();
   }, []);
 

@@ -34,7 +34,7 @@ export default function DetailHeader({ title, onBack, actions, rightSlot, classN
         whileTap={{ scale: 0.86 }}
         onClick={onBack}
         aria-label="Back"
-        className="tap-target flex h-9 w-9 shrink-0 items-center justify-center text-neutral-500 dark:text-white/60"
+        className="tap-target flex h-9 w-9 shrink-0 items-center justify-center text-neutral-500 dark:text-white/70"
       >
         <IconChevronLeft size={26} strokeWidth={1.5} />
       </m.button>

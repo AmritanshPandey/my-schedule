@@ -58,20 +58,20 @@ export default function ErrorReporter() {
             <div className="flex items-center gap-1.5">
               <button
                 onClick={copyAll}
-                className="rounded-lg border border-red-300 bg-white px-2 py-1 text-[11px] font-semibold text-red-700 dark:border-red-500/40 dark:bg-neutral-800 dark:text-red-300"
+                className="inline-flex min-h-[44px] items-center justify-center rounded-lg border border-red-300 bg-white px-3 py-1 text-[11px] font-semibold text-red-700 dark:border-red-500/40 dark:bg-neutral-800 dark:text-red-300"
               >
                 {copied ? "Copied" : "Copy"}
               </button>
               <button
                 onClick={() => clearErrorLog()}
-                className="rounded-lg border border-neutral-300 bg-white px-2 py-1 text-[11px] font-semibold text-neutral-600 dark:border-white/10 dark:bg-neutral-800 dark:text-neutral-300"
+                className="inline-flex min-h-[44px] items-center justify-center rounded-lg border border-neutral-300 bg-white px-3 py-1 text-[11px] font-semibold text-neutral-600 dark:border-white/10 dark:bg-neutral-800 dark:text-neutral-300"
               >
                 Clear
               </button>
               <button
                 onClick={() => setOpen(false)}
                 aria-label="Collapse error log"
-                className="rounded-lg border border-neutral-300 bg-white px-2 py-1 text-[11px] font-semibold text-neutral-600 dark:border-white/10 dark:bg-neutral-800 dark:text-neutral-300"
+                className="inline-flex min-h-[44px] min-w-[44px] items-center justify-center rounded-lg border border-neutral-300 bg-white px-3 py-1 text-[11px] font-semibold text-neutral-600 dark:border-white/10 dark:bg-neutral-800 dark:text-neutral-300"
               >
                 ✕
               </button>
@@ -104,7 +104,7 @@ export default function ErrorReporter() {
       ) : (
         <button
           onClick={() => setOpen(true)}
-          className="flex items-center gap-1.5 rounded-full border border-red-300 bg-red-50 px-3 py-1.5 text-[12px] font-bold text-red-700 shadow-lg dark:border-red-500/40 dark:bg-red-500/15 dark:text-red-300"
+          className="flex min-h-[44px] items-center gap-1.5 rounded-full border border-red-300 bg-red-50 px-4 py-1.5 text-[12px] font-bold text-red-700 shadow-lg dark:border-red-500/40 dark:bg-red-500/15 dark:text-red-300"
         >
           ⚠︎ {errors.length} error{errors.length === 1 ? "" : "s"}
         </button>

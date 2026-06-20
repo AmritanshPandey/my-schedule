@@ -16,7 +16,7 @@ import {
   signOut,
   type User,
 } from "firebase/auth";
-import { auth, initializeAnalytics } from "@/lib/firebase";
+import { auth } from "@/lib/firebase";
 import {
   initSync,
   destroySync,
@@ -53,9 +53,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const provider = useRef(new GoogleAuthProvider());
 
   useEffect(() => {
-    // Initialize analytics once on mount — fire-and-forget, non-blocking.
-    initializeAnalytics().catch(() => {});
-
     if (!auth) {
       // Firebase not configured (missing env vars) — run as guest.
       setAuthLoading(false);

@@ -46,17 +46,33 @@ export default function ServiceWorkerRegistration() {
 
     navigator.serviceWorker.addEventListener("controllerchange", handleControllerChange);
 
-    navigator.serviceWorker
-      .register("/sw.js", { updateViaCache: "none" })
-      .then((registration) => {
-        if (registration.waiting) {
-          registration.waiting.postMessage({ type: "SKIP_WAITING" });
-        }
-      })
-      .catch((err) => console.error("Service worker registration failed:", err));
+    // iOS Safari intermittently fails the first registration (e.g. during a
+    // cold launch). Retry once after a short delay so a transient failure
+    // doesn't leave the PWA permanently uncontrolled — which would mean stale
+    // caches are never cleaned and the user never receives updates.
+    let retryTimer: number | undefined;
+
+    function register(attempt: number) {
+      navigator.serviceWorker
+        .register("/sw.js", { updateViaCache: "none" })
+        .then((registration) => {
+          if (registration.waiting) {
+            registration.waiting.postMessage({ type: "SKIP_WAITING" });
+          }
+        })
+        .catch((err) => {
+          console.error("Service worker registration failed:", err);
+          if (attempt === 0) {
+            retryTimer = window.setTimeout(() => register(1), 3000);
+          }
+        });
+    }
+
+    register(0);
 
     return () => {
       navigator.serviceWorker.removeEventListener("controllerchange", handleControllerChange);
+      if (retryTimer) window.clearTimeout(retryTimer);
     };
   }, []);
 

@@ -125,7 +125,7 @@ function RootHeader({ onOpenSettings, onNotes }: Pick<AppHeaderProps, "onOpenSet
           whileTap={{ scale: 0.94 }}
           onClick={onNotes}
           aria-label="Notes"
-          className="flex items-center gap-2 rounded-full bg-neutral-900 px-4 py-2.5 dark:bg-white"
+          className="flex min-h-[44px] items-center gap-2 rounded-full bg-neutral-900 px-4 py-2.5 dark:bg-white"
         >
           <IconPencil size={15} strokeWidth={2.2} className="text-white dark:text-neutral-900" />
           <span className="text-[14px] font-semibold text-white dark:text-neutral-900 leading-none">
@@ -138,7 +138,7 @@ function RootHeader({ onOpenSettings, onNotes }: Pick<AppHeaderProps, "onOpenSet
           whileTap={{ scale: 0.90 }}
           onClick={onOpenSettings}
           aria-label="Account"
-          className="h-9 w-9 shrink-0 overflow-hidden rounded-full border-[1.5px] border-neutral-200 bg-neutral-100 dark:border-white/[0.12] dark:bg-neutral-800"
+          className="h-11 w-11 shrink-0 overflow-hidden rounded-full border-[1.5px] border-neutral-200 bg-neutral-100 dark:border-white/[0.12] dark:bg-neutral-800"
         >
           {user?.photoURL ? (
             <img src={user.photoURL} alt="Avatar" className="h-full w-full object-cover" />
@@ -181,7 +181,7 @@ function DetailHeader({ back, actions }: Pick<AppHeaderProps, "back" | "actions"
         whileTap={{ scale: 0.86 }}
         onClick={back?.onBack}
         aria-label={`Back to ${back?.label}`}
-        className="flex h-9 w-9 items-center justify-center text-neutral-500 dark:text-white/60"
+        className="flex h-9 w-9 items-center justify-center text-neutral-500 dark:text-white/70"
       >
         <IconChevronLeft size={26} strokeWidth={1.5} />
       </m.button>
