@@ -824,6 +824,22 @@ export function resetStaleCompletions(schedule: Schedule, todayISO: string): Sch
 }
 
 /**
+ * Log an IndexedDB write failure, calling out a full-storage quota error with an
+ * actionable message — on iOS the quota is small and a silent failure means
+ * recent edits aren't persisted and are lost on the next reload.
+ */
+function logWriteError(err: unknown): void {
+  const quota =
+    err instanceof DOMException && (err.name === "QuotaExceededError" || err.code === 22);
+  logError(
+    "indexeddb:write",
+    quota
+      ? "Device storage is full — recent changes couldn't be saved on this device. Free up space (or use Settings → Clear data) to keep saving."
+      : err
+  );
+}
+
+/**
  * Migrate + reset, but never throw: a single corrupt record (e.g. malformed
  * completionHistory) must not reject the whole load and blank the app. On
  * failure it logs to the on-device error reporter and returns null so the caller
@@ -914,7 +930,7 @@ export function useScheduleDB() {
           if (migrated) {
             const now = Date.now();
             setScheduleState(migrated);
-            writeDB(db, activeStorageKey, migrated).catch((e) => logError("indexeddb:write", e));
+            writeDB(db, activeStorageKey, migrated).catch(logWriteError);
             writeLocalLastUpdated(now, activeUid); // keep sync clock in step with the migrated record
             deleteDBKey(db, LEGACY_RECORD_KEY).catch(() => {}); // adopted → drop the legacy copy
           } else {
@@ -995,7 +1011,7 @@ export function useScheduleDB() {
       setScheduleState(migrated);
       setIsFirstLaunch(false);
       if (dbRef.current) {
-        writeDB(dbRef.current, activeStorageKey, migrated).catch((e) => logError("indexeddb:write", e));
+        writeDB(dbRef.current, activeStorageKey, migrated).catch(logWriteError);
       }
       writeLocalLastUpdated(lastUpdated, storageUid);
     }
@@ -1028,7 +1044,7 @@ export function useScheduleDB() {
           writeLocalLastUpdated(now, storageUid); // update local timestamp for cloud comparison
           queueSync(snap);            // queue cloud backup (no-op for guests)
         })
-        .catch((err) => logError("indexeddb:write", err));
+        .catch(logWriteError);
     }, 500);
     return () => {
       if (writeTimer.current) clearTimeout(writeTimer.current);
