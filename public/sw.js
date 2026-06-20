@@ -1,28 +1,43 @@
 // ── PlanR Service Worker ──────────────────────────────────────────────────────
 // Strategy:
-//   • App shell (HTML)         → network-first, cache fallback
+//   • App shell (HTML)         → stale-while-revalidate (instant launch, refresh in bg)
 //   • Hashed JS/CSS chunks     → cache-first (immutable, versioned by filename)
-//   • Fonts (Google Fonts CDN) → cache-first, long-lived
+//   • Static images / icons    → cache-first, long-lived
 //   • Firebase / analytics     → skip (always network)
+//
+// Fonts are self-hosted by next/font at build time (served from /_next/static/),
+// so there are no Google Fonts CDN requests to special-case here.
 //
 // Bump CACHE_VERSION to force a full cache refresh on deploy.
 
-const CACHE_VERSION = 'planr-v5';
+const CACHE_VERSION = 'planr-v6';
 const SHELL_CACHE = `${CACHE_VERSION}-shell`;
 const ASSET_CACHE = `${CACHE_VERSION}-assets`;
-const FONT_CACHE  = `${CACHE_VERSION}-fonts`;
 
-const ALL_CACHES = [SHELL_CACHE, ASSET_CACHE, FONT_CACHE];
+const ALL_CACHES = [SHELL_CACHE, ASSET_CACHE];
 
-// Precache only the minimal shell — hashed chunks are cached on first fetch
+// Minimal shell precache. The entry JS chunks are appended at build time by
+// scripts/inject-precache.mjs (see PRECACHE_ASSETS); hashed chunks not listed
+// there are still cached on first fetch.
 const PRECACHE_SHELL = ['/', '/manifest.json'];
+
+// Populated at build time with the entry chunk URLs from out/index.html.
+// Left empty in source so `next dev` and un-injected builds still work.
+const PRECACHE_ASSETS = [];
 
 // ── Install ───────────────────────────────────────────────────────────────────
 
 self.addEventListener('install', (e) => {
   self.skipWaiting();
   e.waitUntil(
-    caches.open(SHELL_CACHE).then((c) => c.addAll(PRECACHE_SHELL))
+    Promise.all([
+      // Shell is required — a failed shell precache should fail the install.
+      caches.open(SHELL_CACHE).then((c) => c.addAll(PRECACHE_SHELL)),
+      // Entry chunks are best-effort — one missing chunk must not abort install.
+      caches.open(ASSET_CACHE).then((c) =>
+        Promise.allSettled(PRECACHE_ASSETS.map((url) => c.add(url)))
+      ),
+    ])
   );
 });
 
@@ -41,11 +56,13 @@ self.addEventListener('activate', (e) => {
       .then(() => self.clients.claim())
   );
 });
+
 self.addEventListener('message', (event) => {
   if (event.data && event.data.type === 'SKIP_WAITING') {
     self.skipWaiting();
   }
 });
+
 // ── Fetch ─────────────────────────────────────────────────────────────────────
 
 self.addEventListener('fetch', (e) => {
@@ -65,20 +82,14 @@ self.addEventListener('fetch', (e) => {
   ];
   if (skipHosts.some((h) => url.hostname.endsWith(h))) return;
 
-  // 2. Fonts (Google Fonts CDN) — cache-first, very long-lived
-  if (url.hostname === 'fonts.googleapis.com' || url.hostname === 'fonts.gstatic.com') {
-    e.respondWith(cacheFirst(request, FONT_CACHE));
-    return;
-  }
-
-  // 3. Hashed static assets (_next/static/**) — cache-first, immutable
+  // 2. Hashed static assets (_next/static/**) — cache-first, immutable
   //    Next.js content-hashes these filenames, so stale entries never serve wrong code
   if (url.origin === self.location.origin && url.pathname.startsWith('/_next/static/')) {
     e.respondWith(cacheFirst(request, ASSET_CACHE));
     return;
   }
 
-  // 4. Static images / icons / SVGs from same origin — cache-first
+  // 3. Static images / icons / SVGs / fonts from same origin — cache-first
   if (
     url.origin === self.location.origin &&
     /\.(svg|png|jpg|jpeg|webp|avif|ico|woff2?)$/i.test(url.pathname)
@@ -87,19 +98,21 @@ self.addEventListener('fetch', (e) => {
     return;
   }
 
-  // 5. App shell navigation — network-first, fall back to cached shell
+  // 4. App shell navigation — stale-while-revalidate: serve cached shell instantly,
+  //    refresh it in the background so the next launch is current. This makes the
+  //    installed PWA open without waiting on the network every time.
   if (request.mode === 'navigate') {
-    e.respondWith(networkFirst(request, SHELL_CACHE, '/'));
+    e.respondWith(staleWhileRevalidate(request, SHELL_CACHE, '/'));
     return;
   }
 
-  // 6. Everything else same-origin (e.g. manifest.json) — network-first
+  // 5. Everything else same-origin (e.g. manifest.json) — stale-while-revalidate
   if (url.origin === self.location.origin) {
-    e.respondWith(networkFirst(request, SHELL_CACHE));
+    e.respondWith(staleWhileRevalidate(request, SHELL_CACHE));
     return;
   }
 
-  // 7. Unknown cross-origin — pass through
+  // 6. Unknown cross-origin — pass through
 });
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -120,21 +133,34 @@ async function cacheFirst(request, cacheName) {
   }
 }
 
-async function networkFirst(request, cacheName, fallbackPath) {
+// Serve the cached response immediately (if present) while fetching a fresh copy
+// in the background to update the cache. Falls back to the network on a cache
+// miss, and to `fallbackPath` (the app shell) when both miss and we're offline.
+async function staleWhileRevalidate(request, cacheName, fallbackPath) {
   const cache = await caches.open(cacheName);
-  try {
-    const response = await fetch(request);
-    if (response.ok) {
-      cache.put(request, response.clone());
-    }
-    return response;
-  } catch {
-    const cached = await cache.match(request);
-    if (cached) return cached;
-    if (fallbackPath) {
-      const fallback = await cache.match(fallbackPath);
-      if (fallback) return fallback;
-    }
-    return new Response('Offline', { status: 503 });
+  const cached = await cache.match(request);
+
+  const networkFetch = fetch(request)
+    .then((response) => {
+      if (response.ok) {
+        cache.put(request, response.clone());
+      }
+      return response;
+    })
+    .catch(() => null);
+
+  if (cached) {
+    // Don't let the background refresh block the response.
+    networkFetch;
+    return cached;
   }
+
+  const response = await networkFetch;
+  if (response) return response;
+
+  if (fallbackPath) {
+    const fallback = await cache.match(fallbackPath);
+    if (fallback) return fallback;
+  }
+  return new Response('Offline', { status: 503 });
 }

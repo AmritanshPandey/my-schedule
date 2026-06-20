@@ -1,6 +1,6 @@
 "use client";
 
-import { motion } from "framer-motion";
+import { m } from "framer-motion";
 import { IconChevronLeft } from "@tabler/icons-react";
 
 export interface DetailHeaderAction {
@@ -29,7 +29,7 @@ export default function DetailHeader({ title, onBack, actions, rightSlot, classN
     <header
       className={`flex h-14 shrink-0 items-center gap-1 border-b border-black/[0.07] bg-white/85 px-2 backdrop-blur-xl dark:border-white/[0.08] dark:bg-neutral-950/85 ${className}`}
     >
-      <motion.button
+      <m.button
         type="button"
         whileTap={{ scale: 0.86 }}
         onClick={onBack}
@@ -37,7 +37,7 @@ export default function DetailHeader({ title, onBack, actions, rightSlot, classN
         className="tap-target flex h-9 w-9 shrink-0 items-center justify-center text-neutral-500 dark:text-white/60"
       >
         <IconChevronLeft size={26} strokeWidth={1.5} />
-      </motion.button>
+      </m.button>
 
       <div className="min-w-0 flex-1">
         <h1 className="truncate text-[16px] font-bold text-neutral-950 dark:text-white/80">{title}</h1>
@@ -55,7 +55,7 @@ export default function DetailHeader({ title, onBack, actions, rightSlot, classN
                 ? "bg-neutral-100 text-neutral-500 hover:bg-rose-500/10 hover:text-rose-500 focus-visible:bg-rose-500/10 focus-visible:text-rose-500 dark:bg-white/[0.07] dark:text-neutral-400 dark:hover:bg-rose-500/10 dark:hover:text-rose-400 dark:focus-visible:bg-rose-500/10 dark:focus-visible:text-rose-400"
                 : "bg-neutral-100 text-neutral-700 dark:bg-white/[0.07] dark:text-white/70";
             return (
-              <motion.button
+              <m.button
                 key={i}
                 type="button"
                 whileTap={{ scale: 0.86 }}
@@ -64,7 +64,7 @@ export default function DetailHeader({ title, onBack, actions, rightSlot, classN
                 className={`tap-target flex h-9 w-9 items-center justify-center rounded-full transition-colors ${tone}`}
               >
                 <Icon size={20} strokeWidth={2} />
-              </motion.button>
+              </m.button>
             );
           })}
         </div>

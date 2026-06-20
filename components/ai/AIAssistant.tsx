@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import { AnimatePresence, motion } from "framer-motion";
+import { AnimatePresence, m } from "framer-motion";
 import {
   IconBolt,
   IconBrain,
@@ -78,7 +78,7 @@ interface Suggestion {
 
 function StreamingCursor() {
   return (
-    <motion.span
+    <m.span
       className="inline-block ml-0.5 h-[12px] w-[2px] rounded-full bg-neutral-500 align-middle"
       animate={{ opacity: [1, 0, 1] }}
       transition={{ duration: 0.85, repeat: Infinity, ease: "easeInOut" }}
@@ -543,7 +543,7 @@ export default function AIAssistant({
 
               <AnimatePresence>
                 {planPickerOpen && (
-                  <motion.div
+                  <m.div
                     initial={{ opacity: 0, y: -4, scale: 0.97 }}
                     animate={{ opacity: 1, y: 0, scale: 1 }}
                     exit={{ opacity: 0, y: -4, scale: 0.97 }}
@@ -580,7 +580,7 @@ export default function AIAssistant({
                         );
                       })
                     )}
-                  </motion.div>
+                  </m.div>
                 )}
               </AnimatePresence>
             </div>
@@ -607,7 +607,7 @@ export default function AIAssistant({
             >
               <IconPlus size={16} strokeWidth={2} />
             </button>
-            <motion.button
+            <m.button
               type="button"
               onClick={handleSend}
               disabled={!customGoal.trim() || !selectedPlan}
@@ -615,14 +615,14 @@ export default function AIAssistant({
               className="flex h-8 w-8 items-center justify-center rounded-full bg-emerald-500 text-white shadow-sm shadow-emerald-500/30 transition-opacity disabled:opacity-30 hover:bg-emerald-600"
             >
               <IconSend size={13} strokeWidth={2.5} />
-            </motion.button>
+            </m.button>
           </div>
         </div>
 
         {/* Inline insight block */}
         <AnimatePresence>
           {insightState && (
-            <motion.div
+            <m.div
               key="insight"
               initial={{ opacity: 0, height: 0 }}
               animate={{ opacity: 1, height: "auto" }}
@@ -646,7 +646,7 @@ export default function AIAssistant({
               {insightState === "loading" ? (
                 <div className="flex items-center gap-2">
                   {[0, 1, 2].map((i) => (
-                    <motion.span
+                    <m.span
                       key={i}
                       className="block h-1.5 w-1.5 rounded-full bg-emerald-500"
                       animate={{ opacity: [0.3, 1, 0.3], scale: [0.7, 1, 0.7] }}
@@ -660,7 +660,7 @@ export default function AIAssistant({
                   <StreamingCursor />
                 </p>
               )}
-            </motion.div>
+            </m.div>
           )}
         </AnimatePresence>
 
@@ -672,7 +672,7 @@ export default function AIAssistant({
 
           <div className="space-y-0.5">
             {gatedSuggestions.map((s) => (
-              <motion.button
+              <m.button
                 key={s.id}
                 type="button"
                 onClick={s.locked ? undefined : s.onAction}
@@ -703,11 +703,11 @@ export default function AIAssistant({
                     </span>
                   )}
                 </span>
-              </motion.button>
+              </m.button>
             ))}
 
             {/* What else */}
-            <motion.button
+            <m.button
               type="button"
               onClick={() => textareaRef.current?.focus()}
               whileTap={{ scale: 0.98 }}
@@ -719,7 +719,7 @@ export default function AIAssistant({
               <span className="text-[13px] font-medium text-neutral-400 dark:text-neutral-500">
                 What else can AI help with?
               </span>
-            </motion.button>
+            </m.button>
           </div>
         </div>
       </div>

@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo } from "react";
-import { motion } from "framer-motion";
+import { m } from "framer-motion";
 import {
   IconPlus,
   IconLayoutGrid,
@@ -171,14 +171,14 @@ export default function ConsistencyOverview({
 
           {/* Big % + label */}
           <div className="flex items-baseline gap-2 mb-3">
-            <motion.span
+            <m.span
               className="text-[40px] font-black leading-none tabular-nums text-neutral-950 dark:text-white"
               initial={{ opacity: 0, scale: 0.9 }}
               animate={{ opacity: 1, scale: 1 }}
               transition={{ duration: 0.35, ease: "easeOut" }}
             >
               {thisWeekPct}%
-            </motion.span>
+            </m.span>
             <span className="text-[13px] font-medium text-neutral-400 dark:text-neutral-500">
               consistency
             </span>
@@ -235,7 +235,7 @@ export default function ConsistencyOverview({
                 const isCurrentWeek = i === weekStats.length - 1;
 
                 return (
-                  <motion.div
+                  <m.div
                     key={week.weekStart}
                     className="flex-none w-[62px]"
                     initial={{ opacity: 0, y: 4 }}
@@ -276,7 +276,7 @@ export default function ConsistencyOverview({
                           : "—"}
                       </div>
                     )}
-                  </motion.div>
+                  </m.div>
                 );
               })}
             </div>
@@ -286,7 +286,7 @@ export default function ConsistencyOverview({
 
       {/* Insight chips — below the card, inline style */}
       {insights.length > 0 && (
-        <motion.div
+        <m.div
           className="flex flex-wrap gap-2"
           initial={{ opacity: 0, y: 4 }}
           animate={{ opacity: 1, y: 0 }}
@@ -310,7 +310,7 @@ export default function ConsistencyOverview({
               </div>
             );
           })}
-        </motion.div>
+        </m.div>
       )}
     </div>
   );

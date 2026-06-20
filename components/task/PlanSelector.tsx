@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { AnimatePresence, motion } from "framer-motion";
+import { AnimatePresence, m } from "framer-motion";
 import { IconCheck, IconChevronDown } from "@tabler/icons-react";
 import type { Plan } from "@/lib/useScheduleDB";
 import { accentStyles } from "@/lib/colorSystem";
@@ -76,7 +76,7 @@ export function PlanSelector({ plans, selectedId, onSelect }: PlanSelectorProps)
 
       <AnimatePresence>
         {open && (
-          <motion.div
+          <m.div
             initial={{ opacity: 0, y: -4 }}
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0, y: -4 }}
@@ -120,7 +120,7 @@ export function PlanSelector({ plans, selectedId, onSelect }: PlanSelectorProps)
                 );
               })}
             </div>
-          </motion.div>
+          </m.div>
         )}
       </AnimatePresence>
     </div>

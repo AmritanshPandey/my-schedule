@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import Image from "next/image";
-import { AnimatePresence, motion } from "framer-motion";
+import { AnimatePresence, m } from "framer-motion";
 import {
   IconBrain,
   IconCheck,
@@ -139,14 +139,14 @@ function AISection() {
               Disable
             </button>
           ) : (
-            <motion.button
+            <m.button
               type="button"
               onClick={runtime.enable}
               whileTap={{ scale: 0.95 }}
               className="rounded-xl bg-neutral-900 px-3 py-1.5 text-[12px] font-bold text-white dark:bg-white dark:text-neutral-900"
             >
               Enable
-            </motion.button>
+            </m.button>
           )}
         </Row>
 
@@ -154,7 +154,7 @@ function AISection() {
         {(runtime.status === "downloading" || runtime.status === "enabling") && (
           <div className="mx-4 mb-3.5">
             <div className="h-1.5 w-full overflow-hidden rounded-full bg-neutral-100 dark:bg-white/[0.06]">
-              <motion.div
+              <m.div
                 className="h-full rounded-full bg-emerald-500"
                 animate={{ width: `${Math.max(runtime.downloadProgress, 3)}%` }}
                 transition={{ duration: 0.4 }}
@@ -359,16 +359,16 @@ function OllamaCard() {
           )}
           <AnimatePresence>
             {errMsg && (
-              <motion.p key="err" initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: "auto" }} exit={{ opacity: 0, height: 0 }}
+              <m.p key="err" initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: "auto" }} exit={{ opacity: 0, height: 0 }}
                 className="mt-1.5 flex items-start gap-1.5 overflow-hidden text-[11px] text-rose-500 dark:text-rose-400">
                 <IconWifiOff size={11} strokeWidth={2} className="mt-px shrink-0" />{errMsg}
-              </motion.p>
+              </m.p>
             )}
             {!errMsg && connOk && (
-              <motion.p key="ok" initial={{ opacity: 0 }} animate={{ opacity: 1 }}
+              <m.p key="ok" initial={{ opacity: 0 }} animate={{ opacity: 1 }}
                 className="mt-1.5 flex items-center gap-1.5 text-[11px] text-emerald-600 dark:text-emerald-400">
                 <IconCheck size={11} strokeWidth={2.5} />Connected · {models.length} model{models.length !== 1 ? "s" : ""} available
-              </motion.p>
+              </m.p>
             )}
           </AnimatePresence>
         </div>
@@ -390,13 +390,13 @@ function OllamaCard() {
         className="flex w-full items-center gap-2.5 px-4 py-3 text-left">
         <IconTerminal2 size={13} strokeWidth={2} className="text-neutral-400" />
         <span className="flex-1 text-[12px] font-semibold text-neutral-500 dark:text-neutral-400">Setup instructions</span>
-        <motion.span animate={{ rotate: showSetup ? 90 : 0 }} transition={{ duration: 0.16 }}>
+        <m.span animate={{ rotate: showSetup ? 90 : 0 }} transition={{ duration: 0.16 }}>
           <IconChevronRight size={13} strokeWidth={2} className="text-neutral-400" />
-        </motion.span>
+        </m.span>
       </button>
       <AnimatePresence initial={false}>
         {showSetup && (
-          <motion.div initial={{ height: 0, opacity: 0 }} animate={{ height: "auto", opacity: 1 }}
+          <m.div initial={{ height: 0, opacity: 0 }} animate={{ height: "auto", opacity: 1 }}
             exit={{ height: 0, opacity: 0 }} transition={{ duration: 0.2 }} className="overflow-hidden">
             <div className="space-y-2 border-t border-neutral-100 px-4 pb-4 pt-3 dark:border-white/[0.06]">
               {OLLAMA_STEPS.map(({ cmd, desc }, i) => {
@@ -419,7 +419,7 @@ function OllamaCard() {
                 );
               })}
             </div>
-          </motion.div>
+          </m.div>
         )}
       </AnimatePresence>
     </Card>
@@ -468,13 +468,13 @@ function SyncRow({ schedule }: { schedule: Schedule }) {
         <p className="text-[13px] font-semibold text-neutral-800 dark:text-white">Cloud sync</p>
         <p className={`text-[11px] font-medium ${color}`}>{label}</p>
       </div>
-      <motion.button type="button" onClick={syncNow} disabled={isBusy} whileTap={{ scale: 0.93 }}
+      <m.button type="button" onClick={syncNow} disabled={isBusy} whileTap={{ scale: 0.93 }}
         className="flex items-center gap-1.5 rounded-xl border border-neutral-200 bg-neutral-50 px-3 py-1.5 text-[11px] font-semibold text-neutral-600 hover:bg-white disabled:opacity-40 dark:border-white/[0.08] dark:bg-white/[0.04] dark:text-neutral-300">
-        <motion.span animate={isBusy ? { rotate: 360 } : {}} transition={isBusy ? { repeat: Infinity, duration: 0.9, ease: "linear" } : {}}>
+        <m.span animate={isBusy ? { rotate: 360 } : {}} transition={isBusy ? { repeat: Infinity, duration: 0.9, ease: "linear" } : {}}>
           <IconCloud size={11} strokeWidth={2} />
-        </motion.span>
+        </m.span>
         {isBusy ? "Syncing…" : "Sync now"}
-      </motion.button>
+      </m.button>
     </Row>
   );
 }
@@ -574,11 +574,11 @@ export function SettingsView({
                     <p className="mb-3.5 text-[12px] text-neutral-400 dark:text-neutral-500">
                       Back up your data and access it across all your devices.
                     </p>
-                    <motion.button type="button" onClick={handleLogin} disabled={busy} whileTap={{ scale: 0.97 }}
+                    <m.button type="button" onClick={handleLogin} disabled={busy} whileTap={{ scale: 0.97 }}
                       className="inline-flex w-full items-center justify-center gap-2 rounded-xl border border-neutral-200 bg-neutral-50 px-4 py-2.5 text-[13px] font-semibold text-neutral-700 hover:bg-white disabled:opacity-50 dark:border-white/[0.08] dark:bg-white/[0.04] dark:text-white">
                       {busy ? <span className="h-3.5 w-3.5 animate-spin rounded-full border-2 border-neutral-300 border-t-neutral-600" /> : <GoogleLogo />}
                       {busy ? "Signing in…" : "Continue with Google"}
-                    </motion.button>
+                    </m.button>
                   </div>
                 </Card>
               ) : (
@@ -593,10 +593,10 @@ export function SettingsView({
                       <p className="truncate text-[14px] font-bold text-neutral-900 dark:text-white">{user?.displayName ?? "User"}</p>
                       <p className="truncate text-[11px] text-neutral-400 dark:text-neutral-500">{user?.email}</p>
                     </div>
-                    <motion.button type="button" onClick={handleLogout} disabled={busy} whileTap={{ scale: 0.94 }}
+                    <m.button type="button" onClick={handleLogout} disabled={busy} whileTap={{ scale: 0.94 }}
                       className="rounded-xl border border-neutral-200 px-3 py-1.5 text-[11px] font-semibold text-neutral-500 hover:border-neutral-300 dark:border-white/[0.08] dark:text-neutral-400 disabled:opacity-50">
                       {busy ? "…" : "Sign out"}
-                    </motion.button>
+                    </m.button>
                   </Row>
                 </Card>
               )}
@@ -691,7 +691,7 @@ export function SettingsView({
                   <div className="px-4 py-3.5">
                     <AnimatePresence mode="wait" initial={false}>
                       {progressPhase === "idle" && (
-                        <motion.div key="p-idle" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+                        <m.div key="p-idle" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
                           className="flex items-center gap-3">
                           <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl border border-amber-100 bg-amber-50 text-amber-600 dark:border-amber-500/20 dark:bg-amber-500/10 dark:text-amber-400">
                             <IconRefresh size={14} strokeWidth={2} />
@@ -704,10 +704,10 @@ export function SettingsView({
                             className="shrink-0 rounded-xl border border-amber-200 bg-amber-50 px-3 py-1.5 text-[11px] font-semibold text-amber-700 hover:bg-amber-100 dark:border-amber-500/20 dark:bg-amber-500/10 dark:text-amber-400">
                             Reset
                           </button>
-                        </motion.div>
+                        </m.div>
                       )}
                       {progressPhase === "confirm" && (
-                        <motion.div key="p-confirm" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
+                        <m.div key="p-confirm" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
                           <p className="mb-3 text-[12px] font-semibold text-amber-600 dark:text-amber-400">
                             Clears all task completions, completion history, routine check-ins, logged metrics, and milestone progress. Your plans, tasks, trackers, milestones, and routines stay. Cannot be undone.
                           </p>
@@ -721,13 +721,13 @@ export function SettingsView({
                               <IconRefresh size={12} strokeWidth={2} />Clear progress
                             </button>
                           </div>
-                        </motion.div>
+                        </m.div>
                       )}
                       {progressPhase === "clearing" && (
-                        <motion.div key="p-clearing" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="flex items-center gap-3">
+                        <m.div key="p-clearing" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="flex items-center gap-3">
                           <span className="h-4 w-4 animate-spin rounded-full border-2 border-neutral-200 border-t-neutral-600" />
                           <span className="text-[13px] font-medium text-neutral-500">Clearing progress…</span>
-                        </motion.div>
+                        </m.div>
                       )}
                     </AnimatePresence>
                   </div>
@@ -739,7 +739,7 @@ export function SettingsView({
               <div className="px-4 py-3.5">
                 <AnimatePresence mode="wait" initial={false}>
                   {clearPhase === "idle" && (
-                    <motion.div key="idle" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+                    <m.div key="idle" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
                       className="flex items-center gap-3">
                       <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl border border-rose-100 bg-rose-50 text-rose-500 dark:border-rose-500/20 dark:bg-rose-500/10">
                         <IconTrash size={14} strokeWidth={2} />
@@ -749,13 +749,13 @@ export function SettingsView({
                         className="rounded-xl border border-rose-200 bg-rose-50 px-3 py-1.5 text-[11px] font-semibold text-rose-600 hover:bg-rose-100 dark:border-rose-500/20 dark:bg-rose-500/10 dark:text-rose-400">
                         Clear
                       </button>
-                    </motion.div>
+                    </m.div>
                   )}
                   {clearPhase === "clearing" && (
-                    <motion.div key="clearing" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="flex items-center gap-3">
+                    <m.div key="clearing" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="flex items-center gap-3">
                       <span className="h-4 w-4 animate-spin rounded-full border-2 border-neutral-200 border-t-neutral-600" />
                       <span className="text-[13px] font-medium text-neutral-500">Clearing…</span>
-                    </motion.div>
+                    </m.div>
                   )}
                 </AnimatePresence>
               </div>

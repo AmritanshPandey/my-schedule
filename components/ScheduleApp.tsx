@@ -1,7 +1,7 @@
 "use client";
 
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { AnimatePresence, motion } from "framer-motion";
+import { AnimatePresence, m } from "framer-motion";
 import dynamic from "next/dynamic";
 import AddEntryModal from "@/components/AddEntryModal";
 import { TaskBlockCard } from "@/components/TaskBlockCard";
@@ -2294,7 +2294,7 @@ export default function ScheduleApp() {
 
         {/* ── Tasks Tab ────────────────────────────────────────────────────── */}
         {activeTab === 0 && (
-          <motion.div
+          <m.div
             key="tab-tasks"
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
@@ -2388,14 +2388,14 @@ export default function ScheduleApp() {
                     >
                       {/* Active day: tall black pill */}
                       {isActive && (
-                        <motion.div
+                        <m.div
                           layoutId="weekDayPill"
                           className="absolute inset-0 rounded-[14px] bg-neutral-950 dark:bg-white"
                           style={{ willChange: "transform" }}
                           transition={{ type: "spring", stiffness: 380, damping: 30, mass: 0.6 }}
                         />
                       )}
-                      <motion.div
+                      <m.div
                         whileTap={{ scale: 0.90 }}
                         transition={{ type: "spring", stiffness: 500, damping: 28 }}
                         className="relative z-10 flex flex-col items-center gap-2 w-full py-3"
@@ -2418,7 +2418,7 @@ export default function ScheduleApp() {
                         }`}>
                           {date.getDate()}
                         </span>
-                      </motion.div>
+                      </m.div>
                     </button>
                   );
                 })}
@@ -2427,7 +2427,7 @@ export default function ScheduleApp() {
 
             <div className="flex min-h-0 flex-1 flex-col">
             <AnimatePresence mode="wait" initial={false}>
-            <motion.div
+            <m.div
               key={activeDay}
               initial={{ opacity: 0, y: 3 }}
               animate={{ opacity: 1, y: 0 }}
@@ -2471,7 +2471,7 @@ export default function ScheduleApp() {
               <div className="flex min-h-0 flex-1 flex-col">
               <AnimatePresence mode="wait" initial={false}>
                 {viewMode === "list" ? (
-                  <motion.div
+                  <m.div
                     key="list"
                     initial={{ opacity: 0, y: 6 }}
                     animate={{ opacity: 1, y: 0 }}
@@ -2551,9 +2551,9 @@ export default function ScheduleApp() {
                         })}
                       </div>
                     )}
-                  </motion.div>
+                  </m.div>
                 ) : (
-                  <motion.div
+                  <m.div
                     key="timeline"
                     initial={{ opacity: 0, y: 6 }}
                     animate={{ opacity: 1, y: 0 }}
@@ -2754,22 +2754,22 @@ export default function ScheduleApp() {
                       </div>
                     </div>
                     </ErrorBoundary>
-                  </motion.div>
+                  </m.div>
                 )}
               </AnimatePresence>
               </div>{/* end viewMode AnimatePresence wrapper */}
             </div>{/* end task content */}
-            </motion.div>
+            </m.div>
             </AnimatePresence>
             </div>{/* end activeDay AnimatePresence wrapper */}
             </div>{/* end unified section */}
 
-          </motion.div>
+          </m.div>
         )}
 
         {/* ── Plan Tab ─────────────────────────────────────────────────────── */}
         {activeTab === 1 && (
-          <motion.div
+          <m.div
             key="tab-plans"
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
@@ -2830,11 +2830,11 @@ export default function ScheduleApp() {
             </ErrorBoundary>
           ) : renderPlanList()}
           </div>
-          </motion.div>
+          </m.div>
         )}
         {/* ── Routine Tab ────────────────────────────────────────────────── */}
         {activeTab === 2 && (
-          <motion.div
+          <m.div
             key="tab-routine"
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
@@ -2856,12 +2856,12 @@ export default function ScheduleApp() {
               weekHistory={ritualWeekHistory}
             />
             </ErrorBoundary>
-          </motion.div>
+          </m.div>
         )}
 
         {/* ── Overview Tab ───────────────────────────────────────────────── */}
         {activeTab === 4 && (
-          <motion.div
+          <m.div
             key="tab-overview"
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
@@ -2880,12 +2880,12 @@ export default function ScheduleApp() {
               onLogTracker={(tracker) => setEntryTracker(tracker)}
             />
             </ErrorBoundary>
-          </motion.div>
+          </m.div>
         )}
 
         {/* ── Settings Tab ─────────────────────────────────────────────────── */}
         {activeTab === 5 && (
-          <motion.div
+          <m.div
             key="tab-settings"
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
@@ -2907,7 +2907,7 @@ export default function ScheduleApp() {
               }
               onClose={() => setActiveTab(0)}
             />
-          </motion.div>
+          </m.div>
         )}
 
         </AnimatePresence>
@@ -3130,7 +3130,7 @@ export default function ScheduleApp() {
       {/* ── Toast ───────────────────────────────────────────────────────────── */}
       <AnimatePresence>
         {toastMessage && (
-          <motion.div
+          <m.div
             initial={{ opacity: 0, y: 12, scale: 0.95 }}
             animate={{ opacity: 1, y: 0, scale: 1 }}
             exit={{ opacity: 0, y: 12, scale: 0.95 }}
@@ -3147,7 +3147,7 @@ export default function ScheduleApp() {
                 {toastState.actionLabel}
               </button>
             )}
-          </motion.div>
+          </m.div>
         )}
       </AnimatePresence>
       </div>{/* end main scrollable column */}
@@ -3172,7 +3172,7 @@ export default function ScheduleApp() {
       {AI_ENABLED && (
         <AnimatePresence>
           {!aiOpen && (
-            <motion.button
+            <m.button
               key="ai-fab"
               type="button"
               initial={{ opacity: 0, scale: 0.8, y: 8 }}
@@ -3185,7 +3185,7 @@ export default function ScheduleApp() {
               className="fixed bottom-24 right-4 z-40 lg:bottom-8 lg:right-8 flex h-12 w-12 items-center justify-center rounded-full bg-gradient-to-br from-violet-500 via-fuchsia-500 to-pink-500 text-white shadow-lg shadow-fuchsia-500/30 transition-shadow hover:shadow-xl hover:shadow-fuchsia-500/40"
             >
               <IconSparkles size={20} strokeWidth={2} />
-            </motion.button>
+            </m.button>
           )}
         </AnimatePresence>
       )}

@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { Document, Page, pdfjs } from "react-pdf";
-import { motion, AnimatePresence } from "framer-motion";
+import { m, AnimatePresence } from "framer-motion";
 import { IconChevronUp, IconChevronDown } from "@tabler/icons-react";
 import { haptic } from "@/lib/haptics";
 
@@ -141,7 +141,7 @@ export default function StrategyPdfReader({ pdfData, pdfUrl, onPageChange }: Str
         onTouchMove={handleTouchMove}
         onTouchEnd={handleTouchEnd}
       >
-        <motion.div
+        <m.div
           style={{ scale: visualScale, transformOrigin: "top center" }}
           transition={{ type: "spring", stiffness: 600, damping: 40 }}
           className="flex flex-col items-center py-4"
@@ -180,19 +180,19 @@ export default function StrategyPdfReader({ pdfData, pdfUrl, onPageChange }: Str
               ))}
             </Document>
           )}
-        </motion.div>
+        </m.div>
       </div>
 
       {/* Floating page nav */}
       <AnimatePresence>
         {numPages > 1 && (
-          <motion.div
+          <m.div
             initial={{ opacity: 0, x: 16 }}
             animate={{ opacity: 1, x: 0 }}
             exit={{ opacity: 0, x: 16 }}
             className="absolute right-4 bottom-8 flex flex-col items-center gap-1.5"
           >
-            <motion.button
+            <m.button
               type="button"
               whileTap={{ scale: 0.88 }}
               disabled={currentPage <= 1}
@@ -200,13 +200,13 @@ export default function StrategyPdfReader({ pdfData, pdfUrl, onPageChange }: Str
               className="flex h-9 w-9 items-center justify-center rounded-full bg-neutral-800/90 backdrop-blur-sm border border-white/[0.10] text-white/70 disabled:opacity-30"
             >
               <IconChevronUp size={16} strokeWidth={2.5} />
-            </motion.button>
+            </m.button>
 
             <span className="text-[10px] font-bold tabular-nums text-white/40">
               {currentPage}
             </span>
 
-            <motion.button
+            <m.button
               type="button"
               whileTap={{ scale: 0.88 }}
               disabled={currentPage >= numPages}
@@ -214,8 +214,8 @@ export default function StrategyPdfReader({ pdfData, pdfUrl, onPageChange }: Str
               className="flex h-9 w-9 items-center justify-center rounded-full bg-neutral-800/90 backdrop-blur-sm border border-white/[0.10] text-white/70 disabled:opacity-30"
             >
               <IconChevronDown size={16} strokeWidth={2.5} />
-            </motion.button>
-          </motion.div>
+            </m.button>
+          </m.div>
         )}
       </AnimatePresence>
     </div>

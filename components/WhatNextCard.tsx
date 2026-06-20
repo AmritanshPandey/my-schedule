@@ -1,6 +1,6 @@
 "use client";
 
-import { motion } from "framer-motion";
+import { m } from "framer-motion";
 import { IconBolt, IconCheck } from "@tabler/icons-react";
 import type { Task, Plan, Milestone } from "@/lib/useScheduleDB";
 import { formatDisplayTime } from "@/lib/timeUtils";
@@ -30,7 +30,7 @@ export default function WhatNextCard({
           : null;
 
   return (
-    <motion.div
+    <m.div
       initial={{ opacity: 0, y: -8, scale: 0.97 }}
       animate={{ opacity: 1, y: 0, scale: 1 }}
       exit={{ opacity: 0, y: -6, scale: 0.97 }}
@@ -94,6 +94,6 @@ export default function WhatNextCard({
           </button>
         </div>
       </div>
-    </motion.div>
+    </m.div>
   );
 }

@@ -1,6 +1,6 @@
 "use client";
 
-import { motion } from "framer-motion";
+import { m } from "framer-motion";
 import { IconCheck, IconRepeat } from "@tabler/icons-react";
 import type { Ritual, RitualColor, DayKey } from "@/lib/useScheduleDB";
 import { haptic } from "@/lib/haptics";
@@ -59,7 +59,7 @@ export default function TodayRitualsBar({
           const dot = ritual.color ? COLOR_DOT[ritual.color] : "bg-neutral-300 dark:bg-neutral-600";
 
           return (
-            <motion.button
+            <m.button
               key={ritual.id}
               type="button"
               whileTap={{ scale: 0.93 }}
@@ -85,7 +85,7 @@ export default function TodayRitualsBar({
               <span className="text-[11px] font-medium text-neutral-400 dark:text-neutral-500">
                 {ritual.time}
               </span>
-            </motion.button>
+            </m.button>
           );
         })}
       </div>

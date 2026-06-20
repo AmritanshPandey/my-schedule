@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { motion, AnimatePresence } from "framer-motion";
+import { m, AnimatePresence } from "framer-motion";
 import {
   IconBrain,
   IconCode,
@@ -60,14 +60,14 @@ export default function StrategySpace({ strategies, uploadOpen, onUploadOpen, on
             </h1>
           </div>
 
-          <motion.button
+          <m.button
             type="button"
             whileTap={{ scale: 0.9 }}
             onClick={() => { haptic("medium"); onUploadOpen(); }}
             className="shrink-0 flex h-10 w-10 items-center justify-center rounded-full bg-neutral-900 text-white dark:bg-white dark:text-neutral-950"
           >
             <IconPlus size={20} strokeWidth={2.2} />
-          </motion.button>
+          </m.button>
         </div>
 
         {/* Empty state */}
@@ -83,7 +83,7 @@ export default function StrategySpace({ strategies, uploadOpen, onUploadOpen, on
         {/* Strategy list */}
         <AnimatePresence initial={false}>
           {strategies.map((asset, i) => (
-            <motion.div
+            <m.div
               key={asset.id}
               layout
               initial={{ opacity: 0, y: 10 }}
@@ -151,7 +151,7 @@ export default function StrategySpace({ strategies, uploadOpen, onUploadOpen, on
                 </div>
 
               </div>
-            </motion.div>
+            </m.div>
           ))}
         </AnimatePresence>
       </div>

@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo } from "react";
-import { motion } from "framer-motion";
+import { m } from "framer-motion";
 import { IconPlus } from "@tabler/icons-react";
 import { haptic } from "@/lib/haptics";
 import { accentStyles } from "@/lib/colorSystem";
@@ -91,7 +91,7 @@ export default function TrackerQuickBar({
               </button>
 
               {/* Log [+] button */}
-              <motion.button
+              <m.button
                 type="button"
                 whileTap={{ scale: 0.88 }}
                 onClick={() => { haptic("medium"); onLog(tracker); }}
@@ -104,7 +104,7 @@ export default function TrackerQuickBar({
                 "
               >
                 <IconPlus size={14} strokeWidth={2.5} />
-              </motion.button>
+              </m.button>
             </div>
           );
         })}

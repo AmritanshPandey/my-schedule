@@ -2,7 +2,7 @@
 
 import { useState, useCallback } from "react";
 import dynamic from "next/dynamic";
-import { motion, AnimatePresence } from "framer-motion";
+import { m, AnimatePresence } from "framer-motion";
 import type { StrategyAsset } from "@/lib/useScheduleDB";
 import StrategyHeader from "./StrategyHeader";
 import StrategyHtmlRenderer from "./StrategyHtmlRenderer";
@@ -48,7 +48,7 @@ export default function StrategyViewer({ asset, onClose }: StrategyViewerProps) 
   return (
     <AnimatePresence>
       {asset && (
-        <motion.div
+        <m.div
           key="strategy-viewer"
           initial={{ y: "100%" }}
           animate={{ y: 0 }}
@@ -104,7 +104,7 @@ export default function StrategyViewer({ asset, onClose }: StrategyViewerProps) 
           {/* Focus mode tap-to-show hint */}
           <AnimatePresence>
             {focusMode && (
-              <motion.div
+              <m.div
                 initial={{ opacity: 0 }}
                 animate={{ opacity: 1 }}
                 exit={{ opacity: 0 }}
@@ -113,10 +113,10 @@ export default function StrategyViewer({ asset, onClose }: StrategyViewerProps) 
                 <span className="rounded-full bg-neutral-900/80 backdrop-blur-sm px-4 py-2 text-[12px] font-semibold text-white/40">
                   Tap to show controls
                 </span>
-              </motion.div>
+              </m.div>
             )}
           </AnimatePresence>
-        </motion.div>
+        </m.div>
       )}
     </AnimatePresence>
   );

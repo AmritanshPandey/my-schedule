@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { haptic } from "@/lib/haptics";
-import { AnimatePresence, motion } from "framer-motion";
+import { AnimatePresence, m } from "framer-motion";
 import {
   IconCalendarEvent,
   IconChartBar,
@@ -69,7 +69,7 @@ export default function BottomNav({
       {/* BACKDROP */}
       <AnimatePresence>
         {expanded && (
-          <motion.div
+          <m.div
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
@@ -88,7 +88,7 @@ export default function BottomNav({
           {/* ── EXPANDED CREATE MENU ─────────────────────────────────────── */}
           <AnimatePresence>
             {expanded && (
-              <motion.div
+              <m.div
                 initial={{ opacity: 0, y: 8, scale: 0.97 }}
                 animate={{ opacity: 1, y: 0, scale: 1 }}
                 exit={{ opacity: 0, y: 6, scale: 0.97 }}
@@ -97,7 +97,7 @@ export default function BottomNav({
               >
                 <div className="flex items-start gap-6 rounded-[24px] border border-white/[0.10] bg-neutral-950 px-5 py-4">
                   {/* ADD TASK */}
-                  <motion.button
+                  <m.button
                     whileTap={{ scale: 0.95 }}
                     onClick={() => { haptic("medium"); setExpanded(false); onCreateTask(); }}
                     className="flex flex-col items-center gap-1.5"
@@ -107,10 +107,10 @@ export default function BottomNav({
                       <IconCalendarPlus size={24} strokeWidth={2} className="text-white" />
                     </div>
                     <span className="text-[11px] font-semibold text-white/75">Task</span>
-                  </motion.button>
+                  </m.button>
 
                   {/* ADD PLAN */}
-                  <motion.button
+                  <m.button
                     whileTap={{ scale: 0.95 }}
                     onClick={() => { haptic("medium"); setExpanded(false); onCreatePlan(); }}
                     className="flex flex-col items-center gap-1.5"
@@ -120,10 +120,10 @@ export default function BottomNav({
                       <IconClipboardPlus size={24} strokeWidth={2} className="text-white" />
                     </div>
                     <span className="text-[11px] font-semibold text-white/75">Plan</span>
-                  </motion.button>
+                  </m.button>
 
                   {/* ADD HABIT */}
-                  <motion.button
+                  <m.button
                     whileTap={{ scale: 0.95 }}
                     onClick={() => { haptic("medium"); setExpanded(false); onCreateRitual(); }}
                     className="flex flex-col items-center gap-1.5"
@@ -133,11 +133,11 @@ export default function BottomNav({
                       <IconRepeat size={24} strokeWidth={2} className="text-white" />
                     </div>
                     <span className="text-[11px] font-semibold text-white/75">Habit</span>
-                  </motion.button>
+                  </m.button>
 
                   {/* BULK IMPORT */}
                   {onBulkImport && (
-                    <motion.button
+                    <m.button
                       whileTap={{ scale: 0.95 }}
                       onClick={() => { haptic("medium"); setExpanded(false); onBulkImport(); }}
                       className="flex flex-col items-center gap-1.5"
@@ -147,15 +147,15 @@ export default function BottomNav({
                         <IconFileImport size={24} strokeWidth={2} className="text-white" />
                       </div>
                       <span className="text-[11px] font-semibold text-white/75">Import</span>
-                    </motion.button>
+                    </m.button>
                   )}
                 </div>
-              </motion.div>
+              </m.div>
             )}
           </AnimatePresence>
 
           {/* ── FLOATING PLUS BUTTON ─────────────────────────────────────── */}
-          <motion.button
+          <m.button
             type="button"
             whileTap={{ scale: 0.94 }}
             onClick={() => { haptic("medium"); setExpanded((v) => !v); }}
@@ -170,13 +170,13 @@ export default function BottomNav({
               dark:bg-white dark:text-neutral-950
             "
           >
-            <motion.div
+            <m.div
               animate={{ rotate: expanded ? 45 : 0 }}
               transition={{ duration: 0.2, ease: [0.34, 1.1, 0.64, 1] }}
             >
               <IconPlus size={24} strokeWidth={2} />
-            </motion.div>
-          </motion.button>
+            </m.div>
+          </m.button>
 
           {/* ── NAVBAR ───────────────────────────────────────────────────── */}
           <nav

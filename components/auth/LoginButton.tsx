@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, memo } from "react";
-import { motion } from "framer-motion";
+import { m } from "framer-motion";
 import Image from "next/image";
 import { useAuth } from "@/contexts/AuthProvider";
 import { SyncStatusBadge } from "@/components/auth/SyncStatusBadge";
@@ -84,7 +84,7 @@ export const LoginButton = memo(function LoginButton() {
         </div>
 
         {/* Sign out */}
-        <motion.button
+        <m.button
           type="button"
           onClick={handleLogout}
           disabled={busy}
@@ -92,7 +92,7 @@ export const LoginButton = memo(function LoginButton() {
           className="rounded-xl border border-neutral-200 bg-white px-3 py-1.5 text-[12px] font-semibold text-neutral-500 hover:text-neutral-900 dark:border-white/10 dark:bg-neutral-900 dark:text-neutral-400 dark:hover:text-white transition-colors disabled:opacity-50"
         >
           Sign out
-        </motion.button>
+        </m.button>
       </div>
     );
   }
@@ -105,7 +105,7 @@ export const LoginButton = memo(function LoginButton() {
         Sign in to back up your data and sync across devices.
       </p>
 
-      <motion.button
+      <m.button
         type="button"
         onClick={handleLogin}
         disabled={busy}
@@ -119,7 +119,7 @@ export const LoginButton = memo(function LoginButton() {
           <GoogleLogo />
         )}
         {busy ? "Signing in…" : "Continue with Google"}
-      </motion.button>
+      </m.button>
     </div>
   );
 });

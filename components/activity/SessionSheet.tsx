@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo } from "react";
-import { motion } from "framer-motion";
+import { m } from "framer-motion";
 import { IconCheck } from "@tabler/icons-react";
 import BottomSheet from "@/components/ui/BottomSheet";
 import SheetHeader from "@/components/ui/SheetHeader";
@@ -106,7 +106,7 @@ export default function SessionSheet({
             Edit Session
           </button>
 
-          <motion.button
+          <m.button
             type="button"
             whileTap={{ scale: 0.97 }}
             transition={{ type: "spring", stiffness: 500, damping: 25 }}
@@ -128,7 +128,7 @@ export default function SessionSheet({
             ) : (
               "Complete Session"
             )}
-          </motion.button>
+          </m.button>
         </div>
       </div>
     </BottomSheet>

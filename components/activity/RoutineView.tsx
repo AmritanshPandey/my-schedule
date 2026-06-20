@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo } from "react";
-import { motion, AnimatePresence } from "framer-motion";
+import { m, AnimatePresence } from "framer-motion";
 import {
   IconCheck,
   IconListCheck,
@@ -85,14 +85,14 @@ export default function RoutineView({
             Routines
           </h1>
         </div>
-        <motion.button
+        <m.button
           type="button"
           whileTap={{ scale: 0.9 }}
           onClick={() => { haptic("medium"); onCreateRoutine(); }}
           className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-neutral-900 text-white dark:bg-white dark:text-neutral-950"
         >
           <IconPlus size={20} strokeWidth={2.2} />
-        </motion.button>
+        </m.button>
       </div>
 
       {/* Empty state */}
@@ -110,7 +110,7 @@ export default function RoutineView({
         {routines.map((r, i) => {
           const task = r.todayTask ?? r.representativeTask;
           return (
-            <motion.div
+            <m.div
               key={r.key}
               layout
               initial={{ opacity: 0, y: 10 }}
@@ -119,7 +119,7 @@ export default function RoutineView({
               transition={{ delay: i * 0.04, duration: 0.22 }}
               className="mb-3"
             >
-              <motion.button
+              <m.button
                 type="button"
                 whileTap={{ scale: 0.99 }}
                 onClick={() => { haptic("light"); onOpenRoutine(task); }}
@@ -182,8 +182,8 @@ export default function RoutineView({
                     </span>
                   )}
                 </div>
-              </motion.button>
-            </motion.div>
+              </m.button>
+            </m.div>
           );
         })}
       </AnimatePresence>

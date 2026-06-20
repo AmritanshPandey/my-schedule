@@ -1,7 +1,7 @@
 "use client";
 
 import { useRef, useState } from "react";
-import { motion } from "framer-motion";
+import { m } from "framer-motion";
 import { IconUpload, IconFileText, IconCode, IconCloud, IconLock } from "@tabler/icons-react";
 import BottomSheet from "@/components/ui/BottomSheet";
 import SheetHeader from "@/components/ui/SheetHeader";
@@ -114,7 +114,7 @@ export default function StrategyUpload({ isOpen, onClose, onSave }: StrategyUplo
         <SheetHeader eyebrow="Strategy Space" title="Upload Strategy" onClose={handleClose} />
 
         {/* Drop zone */}
-        <motion.button
+        <m.button
           type="button"
           whileTap={{ scale: 0.98 }}
           onClick={() => fileInputRef.current?.click()}
@@ -168,7 +168,7 @@ export default function StrategyUpload({ isOpen, onClose, onSave }: StrategyUplo
               </span>
             </div>
           )}
-        </motion.button>
+        </m.button>
 
         {error && <p className="text-[13px] text-rose-500">{error}</p>}
 

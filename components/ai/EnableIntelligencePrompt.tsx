@@ -1,6 +1,6 @@
 "use client";
 
-import { motion, AnimatePresence } from "framer-motion";
+import { m, AnimatePresence } from "framer-motion";
 import { IconBrain, IconCheck, IconShield, IconWifi } from "@tabler/icons-react";
 import type { EmbeddedAIStatus } from "@/lib/ai/useAIRuntime";
 
@@ -21,7 +21,7 @@ function ProgressRing({ progress }: { progress: number }) {
     <svg width="52" height="52" className="rotate-[-90deg]">
       <circle cx="26" cy="26" r={r} fill="none" stroke="currentColor" strokeWidth="3"
         className="text-neutral-200 dark:text-white/10" />
-      <motion.circle
+      <m.circle
         cx="26" cy="26" r={r} fill="none" stroke="currentColor" strokeWidth="3"
         strokeLinecap="round" strokeDasharray={circumference}
         strokeDashoffset={offset}
@@ -45,7 +45,7 @@ export default function EnableIntelligencePrompt({
   const isReady = status === "ready";
 
   return (
-    <motion.div
+    <m.div
       initial={{ opacity: 0, y: 16, scale: 0.97 }}
       animate={{ opacity: 1, y: 0, scale: 1 }}
       exit={{ opacity: 0, y: 8, scale: 0.97 }}
@@ -54,7 +54,7 @@ export default function EnableIntelligencePrompt({
     >
       {isDownloading && (
         <div className="h-[3px] w-full bg-neutral-100 dark:bg-white/[0.06]">
-          <motion.div
+          <m.div
             className="h-full rounded-full bg-emerald-500"
             initial={{ width: "0%" }}
             animate={{ width: `${Math.max(downloadProgress, 3)}%` }}
@@ -68,7 +68,7 @@ export default function EnableIntelligencePrompt({
 
           {/* ── Idle: enable prompt ─────────────────────────────────────────── */}
           {status === "disabled" && (
-            <motion.div key="idle" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
+            <m.div key="idle" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
               <div className="mb-4 flex items-start gap-3.5">
                 <div className="mt-0.5 flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl bg-gradient-to-br from-violet-500 via-fuchsia-500 to-pink-500">
                   <IconBrain size={18} strokeWidth={1.8} className="text-white" />
@@ -97,7 +97,7 @@ export default function EnableIntelligencePrompt({
               </div>
 
               <div className="flex gap-2">
-                <motion.button
+                <m.button
                   type="button"
                   onClick={onEnable}
                   whileTap={{ scale: 0.97 }}
@@ -105,7 +105,7 @@ export default function EnableIntelligencePrompt({
                 >
                   <IconBrain size={15} strokeWidth={2} />
                   Enable Local Intelligence
-                </motion.button>
+                </m.button>
                 <button
                   type="button"
                   onClick={onDismiss}
@@ -114,12 +114,12 @@ export default function EnableIntelligencePrompt({
                   ×
                 </button>
               </div>
-            </motion.div>
+            </m.div>
           )}
 
           {/* ── Downloading ─────────────────────────────────────────────────── */}
           {isDownloading && (
-            <motion.div
+            <m.div
               key="downloading"
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
@@ -147,26 +147,26 @@ export default function EnableIntelligencePrompt({
                   You can keep using the app while this downloads.
                 </p>
               </div>
-            </motion.div>
+            </m.div>
           )}
 
           {/* ── Ready ───────────────────────────────────────────────────────── */}
           {isReady && (
-            <motion.div
+            <m.div
               key="ready"
               initial={{ opacity: 0, scale: 0.95 }}
               animate={{ opacity: 1, scale: 1 }}
               exit={{ opacity: 0 }}
               className="flex items-center gap-3"
             >
-              <motion.div
+              <m.div
                 initial={{ scale: 0 }}
                 animate={{ scale: 1 }}
                 transition={{ type: "spring", stiffness: 400, damping: 22 }}
                 className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-emerald-500"
               >
                 <IconCheck size={16} strokeWidth={2.5} className="text-white" />
-              </motion.div>
+              </m.div>
               <div>
                 <p className="text-[14px] font-bold text-neutral-900 dark:text-white">
                   Embedded Intelligence Ready
@@ -175,11 +175,11 @@ export default function EnableIntelligencePrompt({
                   Offline · Private · Always available
                 </p>
               </div>
-            </motion.div>
+            </m.div>
           )}
 
         </AnimatePresence>
       </div>
-    </motion.div>
+    </m.div>
   );
 }

@@ -1,6 +1,6 @@
 "use client";
 
-import { motion } from "framer-motion";
+import { m } from "framer-motion";
 import { IconTrendingUp, IconTrendingDown } from "@tabler/icons-react";
 import type { WeekStats } from "@/lib/consistency/calculateWeeklyStats";
 import ProgressBar from "@/components/ui/ProgressBar";
@@ -38,7 +38,7 @@ export default function WeeklyHistory({ weekStats }: WeeklyHistoryProps) {
         const trendDown = week.trendVsPrev !== null && week.trendVsPrev < -2;
 
         return (
-          <motion.div
+          <m.div
             key={week.weekStart}
             className={`flex-none w-[88px] rounded-2xl p-3 border transition-colors ${
               isCurrentWeek
@@ -90,7 +90,7 @@ export default function WeeklyHistory({ weekStats }: WeeklyHistoryProps) {
                   : "steady"}
               </div>
             )}
-          </motion.div>
+          </m.div>
         );
       })}
     </div>

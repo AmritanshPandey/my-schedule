@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { motion, AnimatePresence } from "framer-motion";
+import { m, AnimatePresence } from "framer-motion";
 import { IconChevronLeft, IconChevronRight, IconLayoutGrid, IconPlus } from "@tabler/icons-react";
 import type { DayKey, Task } from "@/lib/useScheduleDB";
 import { todayISO, localISODate } from "@/lib/dateUtils";
@@ -185,7 +185,7 @@ export default function AccuracyCalendar({
             Accuracy
           </h3>
         </div>
-        <motion.p
+        <m.p
           key={`acc-${year}-${month}`}
           className="text-[26px] font-extrabold tracking-tight leading-none text-emerald-600 dark:text-emerald-400"
           initial={{ opacity: 0, scale: 0.85 }}
@@ -193,7 +193,7 @@ export default function AccuracyCalendar({
           transition={{ duration: 0.28, ease: "easeOut" }}
         >
           {stats.accuracy}%
-        </motion.p>
+        </m.p>
       </div>
 
       {/* Card */}
@@ -235,7 +235,7 @@ export default function AccuracyCalendar({
 
           {/* Day grid */}
           <AnimatePresence mode="wait">
-            <motion.div
+            <m.div
               key={`grid-${year}-${month}`}
               className="grid grid-cols-7 gap-1.5"
               initial={{ opacity: 0 }}
@@ -256,7 +256,7 @@ export default function AccuracyCalendar({
                   {day}
                 </div>
               ))}
-            </motion.div>
+            </m.div>
           </AnimatePresence>
 
           {/* Stats row */}

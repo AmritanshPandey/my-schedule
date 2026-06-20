@@ -557,6 +557,20 @@ nav[aria-label="Main navigation"] {
   outline-offset: 2px;
 }
 
+/* ── Off-screen render skipping ──────────────────────────────────────────────
+   For long, scrollable lists: let the engine skip layout/paint of items that
+   are off-screen, cutting work on cold paint and long scrolls (notably on
+   iPhone). `contain-intrinsic-size: auto <size>` reserves space for skipped
+   items and remembers their last rendered size, so the scrollbar stays stable.
+
+   Note: content-visibility implies paint containment, which clips an outside
+   focus *outline*. Apply this only to elements whose focus ring is drawn INSIDE
+   the box (inset ring), so keyboard focus stays visible (WCAG 2.4.7). */
+.cv-auto {
+  content-visibility: auto;
+  contain-intrinsic-size: auto var(--cv-size, 88px);
+}
+
 /* ── Accessible tap targets (≥44px) ──────────────────────────────────────────
    Expands a small control's touch region to 44px WITHOUT changing its visual
    size, via a centered invisible pseudo-element. Clicks on the pseudo-element

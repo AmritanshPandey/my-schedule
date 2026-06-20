@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { AnimatePresence, motion } from "framer-motion";
+import { AnimatePresence, m } from "framer-motion";
 import { IconSparkles, IconX } from "@tabler/icons-react";
 import BottomSheet from "@/components/ui/BottomSheet";
 
@@ -27,7 +27,7 @@ export default function AIMobileTeaser() {
       {/* ── Announcement bar — mobile only, dismissable ───────────────────── */}
       <AnimatePresence initial={false}>
         {!dismissed && (
-          <motion.div
+          <m.div
             initial={{ opacity: 0, height: 0 }}
             animate={{ opacity: 1, height: "auto" }}
             exit={{ opacity: 0, height: 0 }}
@@ -72,7 +72,7 @@ export default function AIMobileTeaser() {
                 </button>
               </div>
             </div>
-          </motion.div>
+          </m.div>
         )}
       </AnimatePresence>
 

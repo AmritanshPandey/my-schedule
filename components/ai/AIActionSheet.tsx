@@ -7,7 +7,7 @@
  */
 
 import { useEffect, useRef, useState } from "react";
-import { AnimatePresence, motion } from "framer-motion";
+import { AnimatePresence, m } from "framer-motion";
 import { IconCheck, IconSparkles, IconX } from "@tabler/icons-react";
 import BottomSheet from "@/components/ui/BottomSheet";
 
@@ -52,7 +52,7 @@ function ThinkingDots() {
   return (
     <span className="inline-flex items-center gap-1">
       {[0, 1, 2].map((i) => (
-        <motion.span
+        <m.span
           key={i}
           className="block h-1.5 w-1.5 rounded-full bg-emerald-500"
           animate={{ opacity: [0.25, 1, 0.25], scale: [0.7, 1, 0.7] }}
@@ -211,7 +211,7 @@ export default function AIActionSheet({
 
           {/* ── Phase 1: Prompt ───────────────────────────────────────────── */}
           {(phase === "prompt" || phase === "loading") && (
-            <motion.div
+            <m.div
               key="prompt"
               initial={{ opacity: 0, y: 8 }}
               animate={{ opacity: 1, y: 0 }}
@@ -271,7 +271,7 @@ export default function AIActionSheet({
               )}
 
               {/* CTA */}
-              <motion.button
+              <m.button
                 type="button"
                 onClick={handleGenerate}
                 disabled={phase === "loading"}
@@ -291,13 +291,13 @@ export default function AIActionSheet({
                     {ctaLabel}
                   </>
                 )}
-              </motion.button>
-            </motion.div>
+              </m.button>
+            </m.div>
           )}
 
           {/* ── Phase 3: Results ──────────────────────────────────────────── */}
           {phase === "result" && results.length > 0 && (
-            <motion.div
+            <m.div
               key="result"
               initial={{ opacity: 0, y: 8 }}
               animate={{ opacity: 1, y: 0 }}
@@ -374,7 +374,7 @@ export default function AIActionSheet({
                 >
                   Retry
                 </button>
-                <motion.button
+                <m.button
                   type="button"
                   onClick={handleAdd}
                   disabled={selectedCount === 0}
@@ -383,9 +383,9 @@ export default function AIActionSheet({
                 >
                   <IconCheck size={15} strokeWidth={2.5} />
                   Add {selectedCount} {nLabel}
-                </motion.button>
+                </m.button>
               </div>
-            </motion.div>
+            </m.div>
           )}
 
         </AnimatePresence>

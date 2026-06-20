@@ -1,7 +1,7 @@
 "use client";
 
 import { memo, useMemo, useState } from "react";
-import { motion, AnimatePresence, useMotionValue, useTransform, animate } from "framer-motion";
+import { m, AnimatePresence, useMotionValue, useTransform, animate } from "framer-motion";
 import { IconArrowUpRight, IconCheck, IconChevronDown, IconEdit, IconListCheck, IconMinus, IconTrash, IconX } from "@tabler/icons-react";
 import type { Task, Plan } from "@/lib/useScheduleDB";
 import type { ScheduleEntry, MetaField } from "@/components/ScheduleItem";
@@ -67,7 +67,7 @@ function TaskCheckbox({ state, size = "lg", readOnly = false, onChange }: Checkb
     : "Mark complete";
 
   return (
-    <motion.button
+    <m.button
       type="button"
       disabled={readOnly}
       whileTap={readOnly ? undefined : { scale: 0.84 }}
@@ -88,7 +88,7 @@ function TaskCheckbox({ state, size = "lg", readOnly = false, onChange }: Checkb
     >
       <AnimatePresence mode="wait" initial={false}>
         {state === "completed" && (
-          <motion.span
+          <m.span
             key="check"
             initial={{ opacity: 0, scale: 0.4, rotate: -15 }}
             animate={{ opacity: 1, scale: 1, rotate: 0 }}
@@ -96,10 +96,10 @@ function TaskCheckbox({ state, size = "lg", readOnly = false, onChange }: Checkb
             transition={{ type: "spring", stiffness: 500, damping: 22 }}
           >
             <IconCheck size={iconSize} strokeWidth={3} className="text-white" />
-          </motion.span>
+          </m.span>
         )}
         {state === "partial" && (
-          <motion.span
+          <m.span
             key="partial"
             initial={{ opacity: 0, scale: 0.4 }}
             animate={{ opacity: 1, scale: 1 }}
@@ -107,10 +107,10 @@ function TaskCheckbox({ state, size = "lg", readOnly = false, onChange }: Checkb
             transition={{ duration: 0.15 }}
           >
             <IconMinus size={iconSize} strokeWidth={3} className="text-white" />
-          </motion.span>
+          </m.span>
         )}
         {state === "missed" && (
-          <motion.span
+          <m.span
             key="missed"
             initial={{ opacity: 0, scale: 0.4 }}
             animate={{ opacity: 1, scale: 1 }}
@@ -118,10 +118,10 @@ function TaskCheckbox({ state, size = "lg", readOnly = false, onChange }: Checkb
             transition={{ duration: 0.15 }}
           >
             <IconX size={iconSize} strokeWidth={3} className="text-white" />
-          </motion.span>
+          </m.span>
         )}
       </AnimatePresence>
-    </motion.button>
+    </m.button>
   );
 }
 
@@ -272,9 +272,9 @@ function ListTaskCardInner({
       onClick={(e) => { e.stopPropagation(); setExpanded((v) => !v); }}
       className="flex h-8 w-8 items-center justify-center rounded-full bg-neutral-100 text-neutral-500 transition-colors hover:bg-neutral-200 dark:bg-white/[0.07] dark:text-neutral-400 dark:hover:bg-white/[0.12]"
     >
-      <motion.span animate={{ rotate: expanded ? 180 : 0 }} transition={{ duration: 0.22, ease: "easeInOut" }} style={{ display: "flex" }}>
+      <m.span animate={{ rotate: expanded ? 180 : 0 }} transition={{ duration: 0.22, ease: "easeInOut" }} style={{ display: "flex" }}>
         <IconChevronDown size={18} strokeWidth={2} />
-      </motion.span>
+      </m.span>
     </button>
   ) : null;
 
@@ -299,7 +299,7 @@ function ListTaskCardInner({
 
   // ── Expandable subtasks ─────────────────────────────────────────────────────
   const expandContent = expanded && !editMode ? (
-    <motion.div
+    <m.div
       initial={{ height: 0, opacity: 0 }}
       animate={{ height: "auto", opacity: 1 }}
       transition={{ duration: 0.24, ease: "easeInOut" }}
@@ -341,7 +341,7 @@ function ListTaskCardInner({
           })}
         </div>
       </div>
-    </motion.div>
+    </m.div>
   ) : null;
 
   return (
@@ -349,17 +349,17 @@ function ListTaskCardInner({
       {/* ── Swipe reveal layer ─────────────────────────────────────────────── */}
       {!editMode && !readOnly && (
         <div className={`absolute inset-0 flex items-center rounded-[18px] pl-5 ${done ? "bg-neutral-100 dark:bg-white/[0.04]" : "bg-green-500"}`}>
-          <motion.div
+          <m.div
             style={{ opacity: revealOpacity, scale: revealScale }}
             className={`flex h-9 w-9 items-center justify-center rounded-full ${done ? "bg-neutral-300/60 dark:bg-white/[0.10]" : "bg-white/25"}`}
           >
             <IconCheck size={16} strokeWidth={done ? 1.5 : 2.5} className={done ? "text-neutral-500 dark:text-neutral-400" : "text-white"} />
-          </motion.div>
+          </m.div>
         </div>
       )}
 
       {/* ── Card (draggable) — shared TaskBlockCard visual ─────────────────── */}
-      <motion.div
+      <m.div
         layout
         drag={editMode || readOnly ? false : "x"}
         dragConstraints={{ left: 0, right: 100 }}
@@ -384,7 +384,7 @@ function ListTaskCardInner({
         >
           {expandContent}
         </TaskBlockCard>
-      </motion.div>
+      </m.div>
     </div>
   );
 }

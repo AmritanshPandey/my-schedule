@@ -1,7 +1,7 @@
 "use client";
 
 import { memo } from "react";
-import { AnimatePresence, motion } from "framer-motion";
+import { AnimatePresence, m } from "framer-motion";
 import { SectionTitle } from "@/components/ui/Typography";
 
 interface InternalSectionTitleProps {
@@ -27,7 +27,7 @@ export function SectionIconButton({
   label,
 }: SectionIconButtonProps) {
   return (
-    <motion.button
+    <m.button
       type="button"
       onClick={onClick}
       whileTap={{ scale: 0.88 }}
@@ -40,7 +40,7 @@ export function SectionIconButton({
       }`}
     >
       <AnimatePresence mode="wait" initial={false}>
-        <motion.span
+        <m.span
           key={saving ? "save" : "normal"}
           initial={{ opacity: 0, scale: 0.7 }}
           animate={{ opacity: 1, scale: 1 }}
@@ -48,9 +48,9 @@ export function SectionIconButton({
           transition={{ duration: 0.13 }}
         >
           {saving && saveIcon ? saveIcon : icon}
-        </motion.span>
+        </m.span>
       </AnimatePresence>
-    </motion.button>
+    </m.button>
   );
 }
 

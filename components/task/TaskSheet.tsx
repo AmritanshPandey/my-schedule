@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { motion, AnimatePresence } from "framer-motion";
+import { m, AnimatePresence } from "framer-motion";
 import {
   DndContext,
   DragEndEvent,
@@ -347,7 +347,7 @@ export function TaskSheet({
 
         {/* ── Duplicate day-picker ─────────────────────────────────────────── */}
         {duplicateStep === "picking" && (
-          <motion.div
+          <m.div
             key="picker"
             initial={{ opacity: 0, x: 32 }}
             animate={{ opacity: 1, x: 0 }}
@@ -408,12 +408,12 @@ export function TaskSheet({
               <IconCopy size={15} />
               Create Copy
             </Button>
-          </motion.div>
+          </m.div>
         )}
 
         {/* ── Main form ───────────────────────────────────────────────────── */}
         {duplicateStep === "idle" && (
-          <motion.div
+          <m.div
             key="form"
             initial={{ opacity: 0, x: -32 }}
             animate={{ opacity: 1, x: 0 }}
@@ -509,7 +509,7 @@ export function TaskSheet({
                   <DndContext sensors={subtaskSensors} onDragEnd={handleSubtasksDragEnd}>
                     <SortableContext items={subtasks.map((s) => s.id)} strategy={verticalListSortingStrategy}>
                       {subtasks.map((s, i) => (
-                        <motion.div
+                        <m.div
                           key={s.id}
                           layout
                           initial={{ opacity: 0, height: 0 }}
@@ -524,7 +524,7 @@ export function TaskSheet({
                             onChange={(updated) => updateSubtask(s.id, updated)}
                             onDelete={() => removeSubtask(s.id)}
                           />
-                        </motion.div>
+                        </m.div>
                       ))}
                     </SortableContext>
                   </DndContext>
@@ -573,7 +573,7 @@ export function TaskSheet({
                 </div>
               )}
             </div>
-          </motion.div>
+          </m.div>
         )}
 
       </AnimatePresence>

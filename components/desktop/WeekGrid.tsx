@@ -2,7 +2,7 @@
 
 import type { PointerEvent as ReactPointerEvent, ReactNode } from "react";
 import { useEffect, useRef, useState } from "react";
-import { AnimatePresence, motion } from "framer-motion";
+import { AnimatePresence, m } from "framer-motion";
 import { IconChevronLeft, IconChevronRight } from "@tabler/icons-react";
 import type { DayKey, Plan, Schedule, Task } from "@/lib/useScheduleDB";
 import { DAYS } from "@/lib/useScheduleDB";
@@ -380,7 +380,7 @@ export function WeekGrid({
 
             <AnimatePresence>
               {calendarView === "custom3" && showCustomPicker && (
-                <motion.div
+                <m.div
                   ref={pickerRef}
                   initial={{ opacity: 0, y: -6, scale: 0.98 }}
                   animate={{ opacity: 1, y: 0, scale: 1 }}
@@ -419,7 +419,7 @@ export function WeekGrid({
                       Done
                     </button>
                   )}
-                </motion.div>
+                </m.div>
               )}
             </AnimatePresence>
           </div>

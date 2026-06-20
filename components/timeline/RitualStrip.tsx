@@ -1,6 +1,6 @@
 "use client";
 
-import { motion } from "framer-motion";
+import { m } from "framer-motion";
 import { IconCheck } from "@tabler/icons-react";
 import type { Ritual, RitualColor } from "@/lib/useScheduleDB";
 
@@ -27,7 +27,7 @@ export default function RitualStrip({ ritual, completed, onToggle }: RitualStrip
   const dot = ritual.color ? COLOR_DOTS[ritual.color] : "bg-neutral-400";
 
   return (
-    <motion.button
+    <m.button
       type="button"
       whileTap={{ scale: 0.82 }}
       transition={{ type: "spring", stiffness: 500, damping: 28 }}
@@ -46,6 +46,6 @@ export default function RitualStrip({ ritual, completed, onToggle }: RitualStrip
       {completed && (
         <IconCheck size={8} strokeWidth={3.5} className="text-white/90" />
       )}
-    </motion.button>
+    </m.button>
   );
 }

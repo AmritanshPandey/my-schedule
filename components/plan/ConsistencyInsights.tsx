@@ -1,6 +1,6 @@
 "use client";
 
-import { motion } from "framer-motion";
+import { m } from "framer-motion";
 import {
   IconFlame,
   IconTrendingUp,
@@ -49,7 +49,7 @@ export default function ConsistencyInsights({ insights }: ConsistencyInsightsPro
         const iconColor = ICON_COLORS[insight.icon];
 
         return (
-          <motion.div
+          <m.div
             key={insight.key}
             className="rounded-2xl border border-neutral-200 bg-white px-3.5 py-3 dark:border-white/[0.08] dark:bg-white/[0.04]"
             initial={{ opacity: 0, y: 6 }}
@@ -65,7 +65,7 @@ export default function ConsistencyInsights({ insights }: ConsistencyInsightsPro
             <p className="text-[11px] font-medium text-neutral-400 dark:text-neutral-500 leading-snug">
               {insight.description}
             </p>
-          </motion.div>
+          </m.div>
         );
       })}
     </div>

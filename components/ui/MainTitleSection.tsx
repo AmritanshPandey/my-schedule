@@ -1,7 +1,7 @@
 "use client";
 
 import { memo } from "react";
-import { AnimatePresence, motion } from "framer-motion";
+import { AnimatePresence, m } from "framer-motion";
 import { IconCheck, IconChecklist } from "@tabler/icons-react";
 import { Eyebrow, PageTitle } from "@/components/ui/Typography";
 import ProgressBar from "@/components/ui/ProgressBar";
@@ -62,7 +62,7 @@ export function IconActionButton({
 }) {
   if (!show) return null;
   return (
-    <motion.button
+    <m.button
       type="button"
       onClick={onClick}
       whileTap={{ scale: 0.92 }}
@@ -74,7 +74,7 @@ export function IconActionButton({
       }`}
     >
       <AnimatePresence mode="wait" initial={false}>
-        <motion.span
+        <m.span
           key={saving ? "save" : "edit"}
           initial={{ opacity: 0, scale: 0.75 }}
           animate={{ opacity: 1, scale: 1 }}
@@ -82,9 +82,9 @@ export function IconActionButton({
           transition={{ duration: 0.14 }}
         >
           {saving && saveIcon ? saveIcon : icon}
-        </motion.span>
+        </m.span>
       </AnimatePresence>
-    </motion.button>
+    </m.button>
   );
 }
 

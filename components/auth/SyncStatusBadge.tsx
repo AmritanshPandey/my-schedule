@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState, memo } from "react";
-import { motion, AnimatePresence } from "framer-motion";
+import { m, AnimatePresence } from "framer-motion";
 import { IconCheck, IconCloudUpload, IconWifiOff } from "@tabler/icons-react";
 import {
   getSyncStatus,
@@ -76,7 +76,7 @@ export const SyncStatusBadge = memo(function SyncStatusBadge() {
 
   return (
     <AnimatePresence mode="wait">
-      <motion.span
+      <m.span
         key={status + label}
         initial={{ opacity: 0 }}
         animate={{ opacity: 1 }}
@@ -86,7 +86,7 @@ export const SyncStatusBadge = memo(function SyncStatusBadge() {
       >
         {icon}
         {label}
-      </motion.span>
+      </m.span>
     </AnimatePresence>
   );
 });

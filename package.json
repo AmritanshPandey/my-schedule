@@ -6,6 +6,7 @@
     "dev": "next dev",
     "test": "node --experimental-strip-types --test tests/*.test.mjs",
     "build": "next build",
+    "postbuild": "node scripts/inject-precache.mjs",
     "start": "next start"
   },
   "dependencies": {

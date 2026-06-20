@@ -1,6 +1,6 @@
 "use client";
 
-import { motion } from "framer-motion";
+import { m } from "framer-motion";
 import {
   IconArrowLeft,
   IconMaximize,
@@ -43,7 +43,7 @@ export default function StrategyHeader({
     : { pill: "bg-violet-500/15 text-violet-300 border border-violet-500/25", bar: "from-violet-500/50 via-violet-500/20 to-transparent", progress: "bg-violet-400" };
 
   return (
-    <motion.div
+    <m.div
       animate={{ opacity: focusMode ? 0 : 1, y: focusMode ? -6 : 0 }}
       transition={{ duration: 0.2, ease: "easeInOut" }}
       className={`shrink-0 z-10 flex flex-col bg-neutral-950/95 backdrop-blur-md ${focusMode ? "pointer-events-none" : ""}`}
@@ -55,14 +55,14 @@ export default function StrategyHeader({
       <div className="flex items-center gap-3 px-4 pt-4 pb-4">
 
         {/* Back button */}
-        <motion.button
+        <m.button
           type="button"
           whileTap={{ scale: 0.86 }}
           onClick={() => { haptic("light"); onBack(); }}
           className="shrink-0 flex h-9 w-9 items-center justify-center rounded-full bg-white/[0.07] text-white/60 active:text-white transition-colors"
         >
           <IconArrowLeft size={17} strokeWidth={2.2} />
-        </motion.button>
+        </m.button>
 
         {/* Title block */}
         <div className="flex-1 min-w-0">
@@ -87,14 +87,14 @@ export default function StrategyHeader({
         {/* Action buttons */}
         <div className="shrink-0 flex items-center gap-1.5">
           {/* Focus / fullscreen */}
-          <motion.button
+          <m.button
             type="button"
             whileTap={{ scale: 0.86 }}
             onClick={() => { haptic("light"); onToggleFocus(); }}
             className="flex h-9 w-9 items-center justify-center rounded-full bg-white/[0.07] text-white/50 active:text-white transition-colors"
           >
             {focusMode ? <IconMinimize size={15} strokeWidth={2.2} /> : <IconMaximize size={15} strokeWidth={2.2} />}
-          </motion.button>
+          </m.button>
         </div>
       </div>
 
@@ -104,7 +104,7 @@ export default function StrategyHeader({
         {/* HTML: render mode toggle pill */}
         {isHtml && onToggleMode && (
           <>
-            <motion.button
+            <m.button
               type="button"
               whileTap={{ scale: 0.94 }}
               onClick={() => { haptic("light"); onToggleMode(); }}
@@ -116,8 +116,8 @@ export default function StrategyHeader({
             >
               <IconDeviceMobile size={11} strokeWidth={2.2} />
               Adaptive
-            </motion.button>
-            <motion.button
+            </m.button>
+            <m.button
               type="button"
               whileTap={{ scale: 0.94 }}
               onClick={() => { haptic("light"); onToggleMode(); }}
@@ -129,7 +129,7 @@ export default function StrategyHeader({
             >
               <IconLayout size={11} strokeWidth={2.2} />
               Original
-            </motion.button>
+            </m.button>
             <div className="flex-1" />
             <span className="text-[10px] font-semibold text-white/20 uppercase tracking-wider">
               HTML
@@ -141,7 +141,7 @@ export default function StrategyHeader({
         {!isHtml && (
           <>
             <div className="relative flex-1 h-[2px] overflow-hidden rounded-full bg-white/[0.08]">
-              <motion.div
+              <m.div
                 className={`absolute inset-y-0 left-0 rounded-full ${accent.progress}`}
                 initial={false}
                 animate={{ width: `${progress}%` }}
@@ -157,6 +157,6 @@ export default function StrategyHeader({
 
       {/* Bottom border */}
       <div className="h-px bg-white/[0.06]" />
-    </motion.div>
+    </m.div>
   );
 }

@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import { AnimatePresence, motion } from "framer-motion";
+import { AnimatePresence, m } from "framer-motion";
 import { IconArrowRight, IconBrain, IconEraser, IconSend, IconSparkles, IconX } from "@tabler/icons-react";
 import ReactMarkdown from "react-markdown";
 import { streamOllamaChat, parseAIAction, buildSystemPrompt, buildPlanContext } from "@/lib/ai";
@@ -40,7 +40,7 @@ function ThinkingDots() {
   return (
     <span className="inline-flex items-center gap-1 px-0.5 py-1">
       {[0, 1, 2].map((i) => (
-        <motion.span
+        <m.span
           key={i}
           className="block h-1.5 w-1.5 rounded-full bg-neutral-400 dark:bg-neutral-500"
           animate={{ scale: [0.6, 1.2, 0.6], opacity: [0.4, 1, 0.4] }}
@@ -53,7 +53,7 @@ function ThinkingDots() {
 
 function StreamingCursor() {
   return (
-    <motion.span
+    <m.span
       className="inline-block ml-0.5 h-[13px] w-[2px] rounded-full bg-neutral-400 align-middle dark:bg-neutral-500"
       animate={{ opacity: [1, 0, 1] }}
       transition={{ duration: 0.9, repeat: Infinity, ease: "easeInOut" }}
@@ -86,7 +86,7 @@ function PlanDraftCard({ action, onApply }: { action: Extract<AIActionResult, { 
   const selectedStyle = getIconPickerStyle(iconName);
 
   return (
-    <motion.div
+    <m.div
       initial={{ opacity: 0, y: 8 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.25, ease: "easeOut" }}
@@ -209,7 +209,7 @@ function PlanDraftCard({ action, onApply }: { action: Extract<AIActionResult, { 
         </div>
       </div>
 
-      <motion.button
+      <m.button
         type="button"
         whileTap={{ scale: 0.97 }}
         disabled={!title.trim()}
@@ -220,8 +220,8 @@ function PlanDraftCard({ action, onApply }: { action: Extract<AIActionResult, { 
         className="w-full rounded-xl bg-emerald-600 py-2 text-[13px] font-bold text-white transition-colors hover:bg-emerald-500 disabled:opacity-40 dark:bg-emerald-500 dark:hover:bg-emerald-400"
       >
         Create Plan{tasks.length > 0 ? ` + ${tasks.length} task${tasks.length !== 1 ? "s" : ""}` : ""}
-      </motion.button>
-    </motion.div>
+      </m.button>
+    </m.div>
   );
 }
 
@@ -243,7 +243,7 @@ function ActionCard({ action, onApply }: { action: AIActionResult; onApply: (upd
       : null;
 
   return (
-    <motion.div
+    <m.div
       initial={{ opacity: 0, y: 6 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.25, ease: "easeOut" }}
@@ -261,16 +261,16 @@ function ActionCard({ action, onApply }: { action: AIActionResult; onApply: (upd
             </p>
           )}
         </div>
-        <motion.button
+        <m.button
           type="button"
           onClick={() => onApply()}
           whileTap={{ scale: 0.93 }}
           className="shrink-0 rounded-xl bg-emerald-600 px-3 py-1.5 text-[12px] font-bold text-white transition-opacity hover:bg-emerald-500 dark:bg-emerald-500 dark:hover:bg-emerald-400"
         >
           Apply
-        </motion.button>
+        </m.button>
       </div>
-    </motion.div>
+    </m.div>
   );
 }
 
@@ -415,7 +415,7 @@ export function AIPanel({ ollamaUrl, ollamaModel, context, plans, rituals, activ
         <div className="flex items-center gap-2">
           <AnimatePresence>
             {messages.length > 0 && (
-              <motion.button
+              <m.button
                 initial={{ opacity: 0, scale: 0.8 }}
                 animate={{ opacity: 1, scale: 1 }}
                 exit={{ opacity: 0, scale: 0.8 }}
@@ -426,7 +426,7 @@ export function AIPanel({ ollamaUrl, ollamaModel, context, plans, rituals, activ
                 className="flex h-9 w-9 items-center justify-center rounded-2xl border border-neutral-200 bg-white text-neutral-500 transition-colors hover:border-blue-200 hover:text-blue-700 dark:border-white/[0.08] dark:bg-neutral-950 dark:text-neutral-300 dark:hover:border-blue-500/20 dark:hover:text-blue-300"
               >
                 <IconEraser size={14} strokeWidth={2} />
-              </motion.button>
+              </m.button>
             )}
           </AnimatePresence>
 
@@ -446,7 +446,7 @@ export function AIPanel({ ollamaUrl, ollamaModel, context, plans, rituals, activ
       {/* Error banner */}
       <AnimatePresence>
         {error && (
-          <motion.div
+          <m.div
             initial={{ opacity: 0, height: 0 }}
             animate={{ opacity: 1, height: "auto" }}
             exit={{ opacity: 0, height: 0 }}
@@ -468,7 +468,7 @@ export function AIPanel({ ollamaUrl, ollamaModel, context, plans, rituals, activ
             >
               <IconX size={14} strokeWidth={2} />
             </button>
-          </motion.div>
+          </m.div>
         )}
       </AnimatePresence>
 
@@ -476,34 +476,34 @@ export function AIPanel({ ollamaUrl, ollamaModel, context, plans, rituals, activ
       <div className="flex-1 overflow-y-auto overscroll-contain px-3 py-3">
         <AnimatePresence mode="wait">
           {messages.length === 0 && (
-            <motion.div
+            <m.div
               key="empty"
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
               exit={{ opacity: 0 }}
               className="flex h-full flex-col items-center justify-center gap-4 text-center"
             >
-              <motion.div
+              <m.div
                 initial={{ scale: 0.7, opacity: 0 }}
                 animate={{ scale: 1, opacity: 1 }}
                 transition={{ delay: 0.05, type: "spring", stiffness: 260, damping: 20 }}
                 className="flex h-11 w-11 items-center justify-center rounded-3xl bg-white/10 ring-1 ring-white/10"
               >
                 <IconBrain size={20} strokeWidth={1.5} className="text-white" />
-              </motion.div>
+              </m.div>
 
-              <motion.p
+              <m.p
                 initial={{ opacity: 0, y: 6 }}
                 animate={{ opacity: 1, y: 0 }}
                 transition={{ delay: 0.1 }}
                 className="text-[13px] font-semibold text-white/90"
               >
                 What would you like to build?
-              </motion.p>
+              </m.p>
 
               <div className="flex w-full flex-col gap-1.5 px-2">
                 {STARTER_PROMPTS[context].map((prompt, i) => (
-                  <motion.button
+                  <m.button
                     key={prompt}
                     initial={{ opacity: 0, x: -8 }}
                     animate={{ opacity: 1, x: 0 }}
@@ -522,21 +522,21 @@ export function AIPanel({ ollamaUrl, ollamaModel, context, plans, rituals, activ
                       {prompt}
                     </span>
                     <IconArrowRight size={14} strokeWidth={2} className="ml-2 shrink-0 text-white/70" />
-                  </motion.button>
+                  </m.button>
                 ))}
               </div>
 
               {!ollamaUrl.includes("localhost") && (
-                <motion.p
+                <m.p
                   initial={{ opacity: 0 }}
                   animate={{ opacity: 1 }}
                   transition={{ delay: 0.4 }}
                   className="max-w-[220px] rounded-xl border border-amber-200 bg-amber-50 p-2 text-[11px] text-amber-700 dark:border-amber-500/20 dark:bg-amber-500/10 dark:text-amber-400"
                 >
                   Non-localhost URL detected. Make sure Ollama CORS allows this origin.
-                </motion.p>
+                </m.p>
               )}
-            </motion.div>
+            </m.div>
           )}
         </AnimatePresence>
 
@@ -546,7 +546,7 @@ export function AIPanel({ ollamaUrl, ollamaModel, context, plans, rituals, activ
             ? "ml-auto rounded-[26px] rounded-br-[10px] bg-blue-600 text-white shadow-blue-600/20"
             : "mr-auto rounded-[26px] rounded-bl-[10px] border border-white/10 bg-white/5 text-white shadow-black/20";
           return (
-            <motion.div
+            <m.div
               key={i}
               initial={{ opacity: 0, y: 10 }}
               animate={{ opacity: 1, y: 0 }}
@@ -575,7 +575,7 @@ export function AIPanel({ ollamaUrl, ollamaModel, context, plans, rituals, activ
                   />
                 )}
               </div>
-            </motion.div>
+            </m.div>
           );
         })}
         <div ref={bottomRef} />
@@ -583,7 +583,7 @@ export function AIPanel({ ollamaUrl, ollamaModel, context, plans, rituals, activ
 
       {/* Input */}
       <div className="shrink-0 border-t border-white/10 px-3 py-3">
-        <motion.div
+        <m.div
           animate={focused ? { boxShadow: "0 0 0 2px rgba(59,130,246,0.16)" } : { boxShadow: "0 0 0 0px rgba(59,130,246,0)" }}
           transition={{ duration: 0.15 }}
           className="flex items-center gap-2 rounded-[28px] border border-white/10 bg-white/5 px-3 py-2 shadow-sm shadow-black/20 transition-colors"
@@ -607,7 +607,7 @@ export function AIPanel({ ollamaUrl, ollamaModel, context, plans, rituals, activ
             className="flex-1 resize-none bg-transparent text-[13px] text-white outline-none placeholder:text-white/50 disabled:opacity-50"
             style={{ minHeight: "22px", maxHeight: "80px" }}
           />
-          <motion.button
+          <m.button
             type="button"
             onClick={() => void handleSend()}
             disabled={!input.trim() || streaming}
@@ -616,8 +616,8 @@ export function AIPanel({ ollamaUrl, ollamaModel, context, plans, rituals, activ
             className="mb-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-2xl bg-blue-600 text-white transition-opacity disabled:opacity-30 hover:bg-blue-500"
           >
             <IconSend size={13} strokeWidth={2.5} />
-          </motion.button>
-        </motion.div>
+          </m.button>
+        </m.div>
         <p className="mt-1.5 text-[10px] text-white/50">
           Shift+Enter for new line · Enter to send
         </p>

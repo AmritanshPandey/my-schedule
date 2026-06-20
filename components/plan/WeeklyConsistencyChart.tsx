@@ -1,6 +1,6 @@
 "use client";
 
-import { motion } from "framer-motion";
+import { m } from "framer-motion";
 import type { DayStats } from "@/lib/consistency/calculateDailyStats";
 import ProgressBar from "@/components/ui/ProgressBar";
 
@@ -24,7 +24,7 @@ export default function WeeklyConsistencyChart({ dayStats }: WeeklyConsistencyCh
   return (
     <div className="space-y-2.5">
       {dayStats.map((day, i) => (
-        <motion.div
+        <m.div
           key={day.dayKey}
           className="flex items-center gap-3"
           initial={{ opacity: 0, x: -6 }}
@@ -60,7 +60,7 @@ export default function WeeklyConsistencyChart({ dayStats }: WeeklyConsistencyCh
           >
             {day.isFuture || day.scheduled === 0 ? "—" : `${day.pct}%`}
           </span>
-        </motion.div>
+        </m.div>
       ))}
     </div>
   );

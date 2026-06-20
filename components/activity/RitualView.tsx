@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { motion, AnimatePresence } from "framer-motion";
+import { m, AnimatePresence } from "framer-motion";
 import {
   IconCheck,
   IconChevronDown,
@@ -173,7 +173,7 @@ export default function RitualView({
     return (
       <div className="group flex items-center gap-4 py-4">
         {/* Big completion ring */}
-        <motion.button
+        <m.button
           type="button"
           whileTap={{ scale: 0.88 }}
           onClick={() => { haptic("light"); onToggleComplete(ritual.id); }}
@@ -183,7 +183,7 @@ export default function RitualView({
           }`}
         >
           {done && <IconCheck size={22} strokeWidth={3} className="text-white" />}
-        </motion.button>
+        </m.button>
 
         {/* Title + meta */}
         <button
@@ -344,7 +344,7 @@ export default function RitualView({
 
         {/* ── Empty filter state ───────────────────────────────────────────── */}
         {rituals.length > 0 && filteredRituals.length === 0 && (
-          <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="flex flex-col items-center gap-2 py-12 text-center">
+          <m.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="flex flex-col items-center gap-2 py-12 text-center">
             <p className="text-[14px] font-semibold text-neutral-500 dark:text-neutral-400">
               No routines for {DAY_SHORT[selectedDay]}
             </p>
@@ -353,14 +353,14 @@ export default function RitualView({
             >
               Add one
             </button>
-          </motion.div>
+          </m.div>
         )}
 
         {/* ── Mobile: flat divided list ─────────────────────────────────────── */}
         <div className="divide-y divide-neutral-100 dark:divide-white/[0.06] lg:hidden">
           <AnimatePresence initial={false}>
             {filteredRituals.map((ritual) => (
-              <motion.div
+              <m.div
                 key={ritual.id}
                 initial={{ opacity: 0, y: 4 }}
                 animate={{ opacity: 1, y: 0 }}
@@ -368,7 +368,7 @@ export default function RitualView({
                 transition={{ duration: 0.18 }}
               >
                 {renderCard(ritual)}
-              </motion.div>
+              </m.div>
             ))}
           </AnimatePresence>
         </div>
@@ -397,7 +397,7 @@ export default function RitualView({
 
                 <AnimatePresence initial={false}>
                   {!collapsed && (
-                    <motion.div
+                    <m.div
                       key="content"
                       initial={{ opacity: 0, height: 0 }}
                       animate={{ opacity: 1, height: "auto" }}
@@ -410,7 +410,7 @@ export default function RitualView({
                           <div key={ritual.id}>{renderCard(ritual)}</div>
                         ))}
                       </div>
-                    </motion.div>
+                    </m.div>
                   )}
                 </AnimatePresence>
               </div>

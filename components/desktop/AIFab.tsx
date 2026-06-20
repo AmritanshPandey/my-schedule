@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { AnimatePresence, motion } from "framer-motion";
+import { AnimatePresence, m } from "framer-motion";
 import { IconSparkles, IconX } from "@tabler/icons-react";
 import { AIPanel } from "./AIPanel";
 import BottomSheet from "@/components/ui/BottomSheet";
@@ -100,7 +100,7 @@ export function AIFab({
           aria-hidden="true"
           className={`absolute -inset-1 ai-fab-rainbow-ring blur-[5px] transition-opacity duration-300 ${open ? "opacity-15" : "opacity-35"}`}
         />
-        <motion.button
+        <m.button
           type="button"
           onClick={() => setOpen(!open)}
           whileTap={{ scale: 0.93 }}
@@ -109,7 +109,7 @@ export function AIFab({
         >
           <AnimatePresence mode="wait" initial={false}>
             {open ? (
-              <motion.span
+              <m.span
                 key="close"
                 initial={{ rotate: -45, opacity: 0 }}
                 animate={{ rotate: 0, opacity: 1 }}
@@ -117,9 +117,9 @@ export function AIFab({
                 transition={{ duration: 0.15 }}
               >
                 <IconX size={20} strokeWidth={2} className="text-neutral-950 dark:text-white" />
-              </motion.span>
+              </m.span>
             ) : (
-              <motion.span
+              <m.span
                 key="open"
                 initial={{ rotate: 45, opacity: 0 }}
                 animate={{ rotate: 0, opacity: 1 }}
@@ -127,10 +127,10 @@ export function AIFab({
                 transition={{ duration: 0.15 }}
               >
                 <IconSparkles size={20} strokeWidth={2} className="text-neutral-950 dark:text-white" />
-              </motion.span>
+              </m.span>
             )}
           </AnimatePresence>
-        </motion.button>
+        </m.button>
       </div>
     </>
   );

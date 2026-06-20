@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import { motion, AnimatePresence, useMotionValue, useTransform, animate as motionAnimate, type MotionValue } from "framer-motion";
+import { m, AnimatePresence, useMotionValue, useTransform, animate as motionAnimate, type MotionValue } from "framer-motion";
 import {
   IconArrowUpRight,
   IconBolt,
@@ -130,7 +130,7 @@ function BackgroundCard({ progress, depth, top }: { progress: MotionValue<number
   // Anchored to the FRONT card's box (top: padTop) — not the padded container —
   // so the visible peek equals exactly |restY| with no extra height bleed.
   return (
-    <motion.div
+    <m.div
       aria-hidden
       className="absolute left-0 right-0 bottom-0 rounded-3xl border border-emerald-200/50 bg-gradient-to-br from-emerald-50/80 to-white dark:border-emerald-500/[0.12] dark:from-emerald-900/[0.14] dark:to-neutral-900"
       style={{ top, y, scale, opacity, transformOrigin: "top center", zIndex: depth === 0 ? 2 : 1, willChange: "transform" }}
@@ -204,7 +204,7 @@ function SwipeableCardStack({
   
 
       {/* Front card — draggable */}
-      <motion.div
+      <m.div
         className="relative z-10 cursor-grab touch-pan-x rounded-3xl border border-emerald-200/70 bg-gradient-to-br from-emerald-50 to-white px-5 py-5 dark:border-emerald-500/20 dark:from-emerald-900/20 dark:to-neutral-900 active:cursor-grabbing"
         style={{ y, rotate, opacity: frontOpacity, willChange: "transform" }}
         drag={busy ? false : "y"}
@@ -221,7 +221,7 @@ function SwipeableCardStack({
       >
         {/* Content keyed per task so the next card fades/scales forward on swap */}
         <AnimatePresence mode="popLayout" initial={false}>
-          <motion.div
+          <m.div
             key={front.id}
             initial={{ opacity: 0, scale: 0.97 }}
             animate={{ opacity: 1, scale: 1 }}
@@ -276,7 +276,7 @@ function SwipeableCardStack({
 
             {/* Actions */}
             <div className="flex items-center gap-2.5">
-              <motion.button
+              <m.button
                 type="button"
                 whileTap={{ scale: 0.96 }}
                 disabled={busy}
@@ -285,8 +285,8 @@ function SwipeableCardStack({
               >
                 <IconCheck size={16} strokeWidth={1.5} />
                 Mark Done
-              </motion.button>
-              {/* <motion.button
+              </m.button>
+              {/* <m.button
                 type="button"
                 whileTap={{ scale: 0.96 }}
                 disabled={busy}
@@ -295,11 +295,11 @@ function SwipeableCardStack({
               >
                 <IconX size={18} strokeWidth={3} />
                 Missed it
-              </motion.button> */}
+              </m.button> */}
             </div>
-          </motion.div>
+          </m.div>
         </AnimatePresence>
-      </motion.div>
+      </m.div>
     </div>
   );
 }
@@ -546,7 +546,7 @@ export default function OverviewDashboard({
           {!showAllTasks && (
             <AnimatePresence mode="popLayout" initial={false}>
               {incompleteTasks.length > 0 ? (
-                <motion.div key="stack" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
+                <m.div key="stack" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
                   <SwipeableCardStack
                     tasks={incompleteTasks}
                     plans={schedule.plans}
@@ -558,9 +558,9 @@ export default function OverviewDashboard({
                     }
                     onOpenSubtasks={onOpenSubtasks}
                   />
-                </motion.div>
+                </m.div>
               ) : (
-                <motion.div key="all-done" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+                <m.div key="all-done" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
                   className="rounded-2xl border border-neutral-200/70 bg-white px-5 py-5 dark:border-white/[0.07] dark:bg-neutral-900">
                   <p className="text-[15px] font-bold text-neutral-900 dark:text-white">
                     {tasksTotal === 0 ? "No tasks today" : missedCount > 0 ? "All tasks handled" : "You're all caught up! ✓"}
@@ -572,7 +572,7 @@ export default function OverviewDashboard({
                       ? `${tasksDone} done · ${missedCount} missed`
                       : "Great work — all tasks done."}
                   </p>
-                </motion.div>
+                </m.div>
               )}
             </AnimatePresence>
           )}
@@ -580,7 +580,7 @@ export default function OverviewDashboard({
           {/* ── Inline task list (View All) — clean list, no swipe ── */}
           <AnimatePresence>
             {showAllTasks && todayTasks.length > 0 && (
-              <motion.div
+              <m.div
                 initial={{ opacity: 0, height: 0 }}
                 animate={{ opacity: 1, height: "auto" }}
                 exit={{ opacity: 0, height: 0 }}
@@ -649,7 +649,7 @@ export default function OverviewDashboard({
                     );
                   })}
                 </div>
-              </motion.div>
+              </m.div>
             )}
           </AnimatePresence>
           </div>
@@ -764,7 +764,7 @@ export default function OverviewDashboard({
                           {latest ? `${latest.value}${tracker.unit ?? ""}` : "No entries yet"}
                         </p>
                       </div>
-                      <motion.button
+                      <m.button
                         type="button"
                         whileTap={{ scale: 0.9 }}
                         aria-label={`Log ${tracker.title}`}
@@ -772,7 +772,7 @@ export default function OverviewDashboard({
                         className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-neutral-900 text-white dark:bg-white dark:text-neutral-900"
                       >
                         <IconPlus size={18} strokeWidth={2.5} />
-                      </motion.button>
+                      </m.button>
                     </div>
                   );
                 })}
@@ -822,7 +822,7 @@ function GettingStarted({ onNavigate }: { onNavigate: (tab: number) => void }) {
     },
   ];
   return (
-    <motion.div
+    <m.div
       initial={{ opacity: 0, y: 8 }}
       animate={{ opacity: 1, y: 0 }}
       className="mx-auto w-full max-w-[560px]"
@@ -865,7 +865,7 @@ function GettingStarted({ onNavigate }: { onNavigate: (tab: number) => void }) {
           </button>
         ))}
       </div>
-    </motion.div>
+    </m.div>
   );
 }
 

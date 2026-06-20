@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
-import { motion, AnimatePresence } from "framer-motion";
+import { m, AnimatePresence } from "framer-motion";
 import {
   IconSparkles, IconCheck, IconCircleCheck, IconClock, IconTrash,
   IconChevronDown, IconX, IconCalendarEvent, IconDownload, IconUpload,
@@ -349,7 +349,7 @@ export function BulkImportFlow({ plans, fallbackDay = "monday", onCommit, onDone
             <Step n={3} title="Missing information" />
             <AnimatePresence mode="wait" initial={false}>
               {current ? (
-                <motion.div
+                <m.div
                   key={current.task.id}
                   initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -6 }}
                   className="rounded-[24px] border border-amber-500/28 bg-amber-50/85 p-4 dark:border-amber-500/20 dark:bg-amber-500/10"
@@ -392,9 +392,9 @@ export function BulkImportFlow({ plans, fallbackDay = "monday", onCommit, onDone
                       </button>
                     </div>
                   )}
-                </motion.div>
+                </m.div>
               ) : (
-                <motion.div
+                <m.div
                   key="all-set" initial={{ opacity: 0 }} animate={{ opacity: 1 }}
                   className="flex items-center gap-2.5 rounded-[24px] border border-neutral-200 bg-white p-4 shadow-[0_1px_2px_rgba(10,10,10,0.04)] dark:border-white/[0.08] dark:bg-neutral-900"
                 >
@@ -405,14 +405,14 @@ export function BulkImportFlow({ plans, fallbackDay = "monday", onCommit, onDone
                     <p className="text-[14px] font-bold text-neutral-900 dark:text-white">All set!</p>
                     <p className="text-[12px] font-medium text-neutral-500 dark:text-neutral-400">Every task has a time.</p>
                   </div>
-                </motion.div>
+                </m.div>
               )}
             </AnimatePresence>
           </>
         )}
 
         {/* Create */}
-        <motion.button
+        <m.button
           type="button"
           whileTap={{ scale: 0.98 }}
           disabled={total === 0}
@@ -428,7 +428,7 @@ export function BulkImportFlow({ plans, fallbackDay = "monday", onCommit, onDone
           <span className="text-[12px] font-medium opacity-90">
             {newPlans.length > 0 ? "Review and create your plan" : "Review and create your tasks"}
           </span>
-        </motion.button>
+        </m.button>
     </div>
   );
 }

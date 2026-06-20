@@ -1,7 +1,7 @@
 "use client";
 
 import { memo } from "react";
-import { motion } from "framer-motion";
+import { m } from "framer-motion";
 import {
   IconBarbell, IconBook, IconBriefcase, IconBrain, IconCode,
   IconRun, IconStar, IconBed, IconCar, IconCheck, IconFlag,
@@ -46,7 +46,7 @@ function TemplateCard({ template, onUse }: TemplateCardProps) {
   const totalTasks = template.tasks.reduce((sum, t) => sum + t.days.length, 0);
 
   return (
-    <motion.div
+    <m.div
       initial={{ opacity: 0, y: 12 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.22, ease: [0.22, 1, 0.36, 1] }}
@@ -95,16 +95,16 @@ function TemplateCard({ template, onUse }: TemplateCardProps) {
 
       {/* CTA */}
       <div className="px-4 pb-4">
-        <motion.button
+        <m.button
           type="button"
           whileTap={{ scale: 0.97 }}
           onClick={() => onUse(template)}
           className={`w-full rounded-xl py-2.5 text-[14px] font-bold transition-opacity active:opacity-80 ${accent.tint} ${accent.icon}`}
         >
           Use this template
-        </motion.button>
+        </m.button>
       </div>
-    </motion.div>
+    </m.div>
   );
 }
 

@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { AnimatePresence, motion } from "framer-motion";
+import { AnimatePresence, m } from "framer-motion";
 import { IconNotebook, IconPlus, IconSearch, IconX, IconPinnedFilled, IconLayoutGrid } from "@tabler/icons-react";
 import type { Note } from "@/lib/useScheduleDB";
 import { haptic } from "@/lib/haptics";
@@ -65,7 +65,7 @@ function NoteCard({
   const snippet = deriveSnippet(note);
   const tags = note.tags ?? [];
   return (
-    <motion.div
+    <m.div
       layout
       initial={{ opacity: 0, y: 6 }}
       animate={{ opacity: 1, y: 0 }}
@@ -74,7 +74,7 @@ function NoteCard({
       tabIndex={0}
       onClick={onSelect}
       onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); onSelect(); } }}
-      className={`group relative flex w-full cursor-pointer flex-col rounded-2xl border px-4 py-3 text-left transition-colors ${
+      className={`cv-auto group relative flex w-full cursor-pointer flex-col rounded-2xl border px-4 py-3 text-left transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[#00A63E] ${
         active
           ? "border-neutral-300 bg-neutral-50 dark:border-white/[0.12] dark:bg-white/[0.06]"
           : "border-neutral-100 bg-white hover:border-neutral-200 hover:bg-neutral-50 dark:border-white/[0.06] dark:bg-neutral-900/40 dark:hover:bg-white/[0.04]"
@@ -129,7 +129,7 @@ function NoteCard({
           ))}
         </div>
       )}
-    </motion.div>
+    </m.div>
   );
 }
 
@@ -417,7 +417,7 @@ export default function NotesView({ notes, onCreate, onUpdate, onDelete, onClose
     <div className="relative h-full overflow-hidden bg-white dark:bg-neutral-950">
       <AnimatePresence initial={false}>
         {editingNote ? (
-          <motion.div
+          <m.div
             key="editor"
             initial={{ x: "100%" }}
             animate={{ x: 0 }}
@@ -431,9 +431,9 @@ export default function NotesView({ notes, onCreate, onUpdate, onDelete, onClose
               onDelete={handleDelete}
               onBack={() => setEditingId(null)}
             />
-          </motion.div>
+          </m.div>
         ) : (
-          <motion.div
+          <m.div
             key="list"
             initial={{ x: "-12%", opacity: 0.4 }}
             animate={{ x: 0, opacity: 1 }}
@@ -442,7 +442,7 @@ export default function NotesView({ notes, onCreate, onUpdate, onDelete, onClose
             className="absolute inset-0 flex flex-col bg-white dark:bg-neutral-950"
           >
             {listColumn(null)}
-          </motion.div>
+          </m.div>
         )}
       </AnimatePresence>
       {templateSheet}

@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo } from "react";
-import { motion } from "framer-motion";
+import { m } from "framer-motion";
 import { IconCheck, IconListCheck, IconX } from "@tabler/icons-react";
 import BottomSheet from "@/components/ui/BottomSheet";
 import IconButton from "@/components/ui/IconButton";
@@ -157,7 +157,7 @@ export default function SubtasksSheet({
           </p>
         ) : (
           <div className="mt-1 flex items-center gap-3">
-            <motion.button
+            <m.button
               type="button"
               whileTap={{ scale: 0.97 }}
               onClick={() => { onToggleComplete(task.id, allIds); onClose(); }}
@@ -165,7 +165,7 @@ export default function SubtasksSheet({
             >
               <IconCheck size={18} strokeWidth={2.6} />
               {done ? "Completed" : "Mark Done"}
-            </motion.button>
+            </m.button>
        
           </div>
         )}

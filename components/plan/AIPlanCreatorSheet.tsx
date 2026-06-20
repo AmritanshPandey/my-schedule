@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { AnimatePresence, motion } from "framer-motion";
+import { AnimatePresence, m } from "framer-motion";
 import {
   IconArrowLeft,
   IconRefresh,
@@ -57,7 +57,7 @@ function GenStreamingStatus() {
   }, []);
   return (
     <AnimatePresence mode="wait">
-      <motion.span
+      <m.span
         key={GEN_PHRASES[idx]}
         initial={{ opacity: 0, y: 3 }}
         animate={{ opacity: 1, y: 0 }}
@@ -66,7 +66,7 @@ function GenStreamingStatus() {
         className="shimmer-text text-[13px] font-medium"
       >
         {GEN_PHRASES[idx]}
-      </motion.span>
+      </m.span>
     </AnimatePresence>
   );
 }
@@ -291,14 +291,14 @@ export default function AIPlanCreatorSheet({
               {/* Streaming status */}
               <AnimatePresence>
                 {streaming && (
-                  <motion.div
+                  <m.div
                     initial={{ opacity: 0, y: 4 }}
                     animate={{ opacity: 1, y: 0 }}
                     exit={{ opacity: 0, y: -4 }}
                     className="flex items-center gap-2 px-1"
                   >
                     <GenStreamingStatus />
-                  </motion.div>
+                  </m.div>
                 )}
               </AnimatePresence>
 
@@ -492,7 +492,7 @@ export default function AIPlanCreatorSheet({
     <BottomSheet open={open} onClose={onClose}>
       <AnimatePresence mode="wait">
         {step === "input" ? (
-          <motion.div
+          <m.div
             key="input"
             initial={{ opacity: 0, x: -20 }}
             animate={{ opacity: 1, x: 0 }}
@@ -500,9 +500,9 @@ export default function AIPlanCreatorSheet({
             transition={{ duration: 0.2 }}
           >
             {renderInput()}
-          </motion.div>
+          </m.div>
         ) : (
-          <motion.div
+          <m.div
             key="review"
             initial={{ opacity: 0, x: 20 }}
             animate={{ opacity: 1, x: 0 }}
@@ -510,7 +510,7 @@ export default function AIPlanCreatorSheet({
             transition={{ duration: 0.2 }}
           >
             {renderReview()}
-          </motion.div>
+          </m.div>
         )}
       </AnimatePresence>
     </BottomSheet>

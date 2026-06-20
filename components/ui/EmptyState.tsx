@@ -1,6 +1,6 @@
 "use client";
 
-import { motion } from "framer-motion";
+import { m } from "framer-motion";
 import { IconPlus } from "@tabler/icons-react";
 import type { ComponentType } from "react";
 import { haptic } from "@/lib/haptics";
@@ -46,7 +46,7 @@ export default function EmptyState({
 }: EmptyStateProps) {
   const ActionIcon = action ? (action.icon === undefined ? IconPlus : action.icon) : null;
   return (
-    <motion.div
+    <m.div
       initial={{ opacity: 0, y: 8 }}
       animate={{ opacity: 1, y: 0 }}
       className={`flex flex-col items-center gap-4 text-center ${center ? "h-full justify-center" : "pt-16"} ${className}`}
@@ -59,7 +59,7 @@ export default function EmptyState({
         <p className="mt-1.5 max-w-[260px] text-[14px] leading-relaxed text-neutral-400">{description}</p>
       </div>
       {action && (
-        <motion.button
+        <m.button
           type="button"
           whileTap={{ scale: 0.96 }}
           onClick={() => { haptic("medium"); action.onClick(); }}
@@ -67,7 +67,7 @@ export default function EmptyState({
         >
           {ActionIcon && <ActionIcon size={16} strokeWidth={2.5} />}
           {action.label}
-        </motion.button>
+        </m.button>
       )}
       {secondaryAction && (
         <button
@@ -78,6 +78,6 @@ export default function EmptyState({
           {secondaryAction.label}
         </button>
       )}
-    </motion.div>
+    </m.div>
   );
 }

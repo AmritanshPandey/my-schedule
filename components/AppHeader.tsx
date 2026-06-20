@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { motion } from "framer-motion";
+import { m } from "framer-motion";
 import { IconChevronLeft, IconPencil, IconUser } from "@tabler/icons-react";
 import { useAuth } from "@/contexts/AuthProvider";
 
@@ -120,7 +120,7 @@ function RootHeader({ onOpenSettings, onNotes }: Pick<AppHeaderProps, "onOpenSet
 
       {/* Right: Notes pill + avatar */}
       <div className="flex items-center gap-2.5">
-        <motion.button
+        <m.button
           type="button"
           whileTap={{ scale: 0.94 }}
           onClick={onNotes}
@@ -131,9 +131,9 @@ function RootHeader({ onOpenSettings, onNotes }: Pick<AppHeaderProps, "onOpenSet
           <span className="text-[14px] font-semibold text-white dark:text-neutral-900 leading-none">
             Notes
           </span>
-        </motion.button>
+        </m.button>
 
-        <motion.button
+        <m.button
           type="button"
           whileTap={{ scale: 0.90 }}
           onClick={onOpenSettings}
@@ -147,7 +147,7 @@ function RootHeader({ onOpenSettings, onNotes }: Pick<AppHeaderProps, "onOpenSet
               <IconUser size={17} strokeWidth={1.8} className="text-neutral-400 dark:text-neutral-500" />
             </div>
           )}
-        </motion.button>
+        </m.button>
       </div>
     </header>
   );
@@ -176,7 +176,7 @@ function DetailHeader({ back, actions }: Pick<AppHeaderProps, "back" | "actions"
           : "rgba(242, 242, 247, 1)",
       }}
     >
-      <motion.button
+      <m.button
         type="button"
         whileTap={{ scale: 0.86 }}
         onClick={back?.onBack}
@@ -184,7 +184,7 @@ function DetailHeader({ back, actions }: Pick<AppHeaderProps, "back" | "actions"
         className="flex h-9 w-9 items-center justify-center text-neutral-500 dark:text-white/60"
       >
         <IconChevronLeft size={26} strokeWidth={1.5} />
-      </motion.button>
+      </m.button>
 
       <div className="flex-1 min-w-0">
         <p className="text-[16px] font-bold text-neutral-950 dark:text-white/80">
@@ -197,7 +197,7 @@ function DetailHeader({ back, actions }: Pick<AppHeaderProps, "back" | "actions"
           {actions.map((action, i) => {
             const Icon = action.icon;
             return (
-              <motion.button
+              <m.button
                 key={i}
                 type="button"
                 whileTap={{ scale: 0.86 }}
@@ -210,7 +210,7 @@ function DetailHeader({ back, actions }: Pick<AppHeaderProps, "back" | "actions"
                 }`}
               >
                 <Icon size={20} strokeWidth={2} />
-              </motion.button>
+              </m.button>
             );
           })}
         </div>

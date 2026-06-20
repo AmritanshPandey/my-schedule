@@ -1,8 +1,16 @@
 "use client";
 
 import { useEffect, useState, type ReactNode } from "react";
-import { MotionConfig } from "framer-motion";
+import { LazyMotion, MotionConfig } from "framer-motion";
 import { isIOS } from "@/lib/platform";
+
+// Lazy-load the animation feature bundle so it is split out of the initial JS
+// and fetched after first paint. `domMax` (not the leaner `domAnimation`) is
+// required because the app uses layout animations (`layout`/`layoutId`) and drag
+// (swipe-to-complete, bottom sheets). Components must use the lightweight `m.*`
+// primitives (not `motion.*`) for this to actually shrink the initial bundle —
+// `strict` enforces that at runtime in development.
+const loadFeatures = () => import("framer-motion").then((mod) => mod.domMax);
 
 /**
  * Global Framer Motion configuration.
@@ -25,5 +33,9 @@ export default function MotionProvider({ children }: { children: ReactNode }) {
     if (isIOS()) setReducedMotion("always");
   }, []);
 
-  return <MotionConfig reducedMotion={reducedMotion}>{children}</MotionConfig>;
+  return (
+    <LazyMotion features={loadFeatures} strict>
+      <MotionConfig reducedMotion={reducedMotion}>{children}</MotionConfig>
+    </LazyMotion>
+  );
 }

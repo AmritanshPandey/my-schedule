@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { AnimatePresence, motion } from "framer-motion";
+import { AnimatePresence, m } from "framer-motion";
 import {
   IconCheck,
   IconChevronDown,
@@ -129,14 +129,14 @@ function EmbeddedSection() {
             Disable
           </button>
         ) : (
-          <motion.button
+          <m.button
             type="button"
             onClick={runtime.enable}
             whileTap={{ scale: 0.96 }}
             className="rounded-xl bg-neutral-900 px-3 py-1.5 text-[11px] font-bold text-white dark:bg-white dark:text-neutral-900"
           >
             Enable
-          </motion.button>
+          </m.button>
         )}
       </div>
 
@@ -144,7 +144,7 @@ function EmbeddedSection() {
       {!runtime.modelCached && (runtime.status === "downloading" || runtime.status === "enabling") && (
         <div className="mx-4 mb-3">
           <div className="h-1.5 w-full overflow-hidden rounded-full bg-neutral-100 dark:bg-white/[0.06]">
-            <motion.div
+            <m.div
               className="h-full rounded-full bg-emerald-500"
               animate={{ width: `${Math.max(runtime.downloadProgress, 3)}%` }}
               transition={{ duration: 0.4 }}
@@ -492,19 +492,19 @@ function OllamaSection() {
 
           <AnimatePresence>
             {errorMsg && (
-              <motion.p key="err" initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: "auto" }}
+              <m.p key="err" initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: "auto" }}
                 exit={{ opacity: 0, height: 0 }}
                 className="mt-1.5 flex items-start gap-1.5 overflow-hidden text-[11px] text-rose-500 dark:text-rose-400">
                 <IconWifiOff size={11} strokeWidth={2} className="mt-px shrink-0" />
                 {errorMsg}
-              </motion.p>
+              </m.p>
             )}
             {!errorMsg && connectionState === "ok" && (
-              <motion.p key="ok" initial={{ opacity: 0 }} animate={{ opacity: 1 }}
+              <m.p key="ok" initial={{ opacity: 0 }} animate={{ opacity: 1 }}
                 className="mt-1.5 flex items-center gap-1.5 text-[11px] text-emerald-600 dark:text-emerald-400">
                 <IconCheck size={11} strokeWidth={2.5} />
                 Connected · {availableModels.length} model{availableModels.length !== 1 ? "s" : ""} available
-              </motion.p>
+              </m.p>
             )}
           </AnimatePresence>
         </div>

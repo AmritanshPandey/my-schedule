@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { AnimatePresence, motion } from "framer-motion";
+import { AnimatePresence, m } from "framer-motion";
 import { IconBrain, IconCheck, IconShield, IconSparkles, IconWifi, IconX } from "@tabler/icons-react";
 import { AI_ENABLED_KEY } from "@/lib/ai/runtime";
 import { useAIRuntime } from "@/lib/ai/useAIRuntime";
@@ -52,7 +52,7 @@ export default function AIOnboarding() {
       {visible && (
         <>
           {/* Backdrop */}
-          <motion.div
+          <m.div
             key="backdrop"
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
@@ -63,7 +63,7 @@ export default function AIOnboarding() {
           />
 
           {/* Sheet */}
-          <motion.div
+          <m.div
             key="sheet"
             initial={{ opacity: 0, y: "100%" }}
             animate={{ opacity: 1, y: 0 }}
@@ -78,7 +78,7 @@ export default function AIOnboarding() {
 
                 {/* ── Idle: enable prompt ─────────────────────────────────── */}
                 {phase === "idle" && (
-                  <motion.div key="idle" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0, scale: 0.97 }}>
+                  <m.div key="idle" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0, scale: 0.97 }}>
 
                     {/* Dismiss button */}
                     <div className="flex justify-end px-5 pt-5">
@@ -94,13 +94,13 @@ export default function AIOnboarding() {
                         <div className="flex h-20 w-20 items-center justify-center rounded-[28px] bg-gradient-to-br from-violet-500 via-fuchsia-500 to-pink-500 shadow-lg shadow-fuchsia-500/30">
                           <IconBrain size={36} strokeWidth={1.5} className="text-white" />
                         </div>
-                        <motion.div
+                        <m.div
                           className="absolute -right-1 -top-1 flex h-7 w-7 items-center justify-center rounded-full bg-emerald-500 shadow-md"
                           animate={{ scale: [1, 1.1, 1] }}
                           transition={{ duration: 2, repeat: Infinity, ease: "easeInOut" }}
                         >
                           <IconSparkles size={13} strokeWidth={2} className="text-white" />
-                        </motion.div>
+                        </m.div>
                       </div>
                     </div>
 
@@ -132,7 +132,7 @@ export default function AIOnboarding() {
 
                     {/* CTA */}
                     <div className="px-5 pb-6">
-                      <motion.button
+                      <m.button
                         type="button"
                         onClick={handleEnable}
                         whileTap={{ scale: 0.97 }}
@@ -140,23 +140,23 @@ export default function AIOnboarding() {
                       >
                         <IconBrain size={18} strokeWidth={2} />
                         Enable Local Intelligence
-                      </motion.button>
+                      </m.button>
                       <button type="button" onClick={handleDismiss}
                         className="mt-3 w-full py-2 text-[13px] font-medium text-neutral-400 hover:text-neutral-600 dark:text-neutral-500 dark:hover:text-neutral-300">
                         Set up later in Settings
                       </button>
                     </div>
-                  </motion.div>
+                  </m.div>
                 )}
 
                 {/* ── Downloading ─────────────────────────────────────────── */}
                 {phase === "downloading" && (
-                  <motion.div key="downloading" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+                  <m.div key="downloading" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
                     className="px-6 py-8 text-center">
                     <div className="relative mx-auto mb-5 h-20 w-20">
                       <svg className="absolute inset-0 -rotate-90" viewBox="0 0 80 80">
                         <circle cx="40" cy="40" r="34" fill="none" stroke="currentColor" strokeWidth="5" className="text-neutral-100 dark:text-white/10" />
-                        <motion.circle
+                        <m.circle
                           cx="40" cy="40" r="34" fill="none" stroke="currentColor" strokeWidth="5"
                           strokeLinecap="round"
                           strokeDasharray={2 * Math.PI * 34}
@@ -184,31 +184,31 @@ export default function AIOnboarding() {
                     <p className="mt-4 text-[11px] text-neutral-300 dark:text-neutral-600">
                       The app stays fully usable while this downloads.
                     </p>
-                  </motion.div>
+                  </m.div>
                 )}
 
                 {/* ── Done ────────────────────────────────────────────────── */}
                 {phase === "done" && (
-                  <motion.div key="done" initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }}
+                  <m.div key="done" initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }}
                     exit={{ opacity: 0 }} className="px-6 py-10 text-center">
-                    <motion.div
+                    <m.div
                       initial={{ scale: 0 }}
                       animate={{ scale: 1 }}
                       transition={{ type: "spring", stiffness: 350, damping: 20 }}
                       className="mx-auto mb-5 flex h-20 w-20 items-center justify-center rounded-full bg-emerald-500 shadow-lg shadow-emerald-500/30"
                     >
                       <IconCheck size={36} strokeWidth={2.5} className="text-white" />
-                    </motion.div>
+                    </m.div>
                     <p className="text-[18px] font-bold text-neutral-900 dark:text-white">Intelligence Enabled</p>
                     <p className="mt-2 text-[13px] text-emerald-600 dark:text-emerald-400">
                       Offline · Private · Always available
                     </p>
-                  </motion.div>
+                  </m.div>
                 )}
 
               </AnimatePresence>
             </div>
-          </motion.div>
+          </m.div>
         </>
       )}
     </AnimatePresence>

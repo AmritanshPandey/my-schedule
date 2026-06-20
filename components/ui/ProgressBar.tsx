@@ -1,6 +1,6 @@
 "use client";
 
-import { motion } from "framer-motion";
+import { m } from "framer-motion";
 
 interface ProgressBarProps {
   /** Fill amount, 0–100. */
@@ -46,7 +46,7 @@ export default function ProgressBar({
       className={`relative w-full overflow-hidden bg-neutral-200 dark:bg-white/10 ${rounded} ${trackClassName} ${className}`}
       style={{ height }}
     >
-      <motion.div
+      <m.div
         className={`absolute inset-y-0 left-0 ${rounded} ${fillColor ? "" : fillClassName}`}
         style={fillColor ? { backgroundColor: fillColor } : undefined}
         initial={false}

@@ -1,7 +1,7 @@
 "use client";
 
 import { memo } from "react";
-import { motion } from "framer-motion";
+import { m } from "framer-motion";
 import {
   IconCalendar,
   IconCheck,
@@ -103,7 +103,7 @@ function ProgressRing({ value, Icon, iconClass, tintClass, strokeClass }: Progre
           className="stroke-neutral-100 dark:stroke-white/[0.07]"
         />
         {/* Progress arc */}
-        <motion.circle
+        <m.circle
           cx="26" cy="26" r={RING_R}
           fill="none"
           strokeWidth="3.5"
@@ -158,7 +158,7 @@ function PlanCardInner({
 
 
   return (
-    <motion.div
+    <m.div
       role="button"
       tabIndex={0}
       onClick={onSelect}
@@ -183,7 +183,7 @@ function PlanCardInner({
       )}
 
       {/* ── Row 1: status chip ───────────────────────────────────────────── */}
-      <motion.div
+      <m.div
         className={`flex items-center gap-2 text-[10.5px] font-bold uppercase tracking-[0.07em] ${statusCfg.text}`}
         initial={{ opacity: 0, y: -4 }}
         animate={{ opacity: 1, y: 0 }}
@@ -195,7 +195,7 @@ function PlanCardInner({
           }`}
         />
         {statusCfg.label} · {consistency}%
-      </motion.div>
+      </m.div>
 
       {/* ── Row 2: progress ring + title / description / date ────────────── */}
       <div className="flex items-start gap-3.5 mt-3">
@@ -275,7 +275,7 @@ function PlanCardInner({
           </span>
         )}
       </div>
-    </motion.div>
+    </m.div>
   );
 }
 

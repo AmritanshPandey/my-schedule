@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState, type CSSProperties } from "react";
-import { AnimatePresence, motion } from "framer-motion";
+import { AnimatePresence, m } from "framer-motion";
 
 interface BottomSheetProps {
   open: boolean;
@@ -108,14 +108,14 @@ export default function BottomSheet({
       {open && (
         isDesktop ? (
           /* ── Desktop: centered modal ──────────────────────────────────────── */
-          <motion.div
+          <m.div
             key="desktop-modal"
             className="fixed inset-0 z-50 flex items-center justify-center p-8"
             role="dialog"
             aria-modal="true"
           >
             {/* Backdrop */}
-            <motion.div
+            <m.div
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
               exit={{ opacity: 0 }}
@@ -126,7 +126,7 @@ export default function BottomSheet({
             />
 
             {/* Modal panel */}
-            <motion.div
+            <m.div
               ref={panelRef}
               tabIndex={-1}
               initial={{ opacity: 0, scale: 0.97, y: 10 }}
@@ -137,11 +137,11 @@ export default function BottomSheet({
               style={{ maxHeight: "88vh" }}
             >
               {children}
-            </motion.div>
-          </motion.div>
+            </m.div>
+          </m.div>
         ) : (
           /* ── Mobile: bottom sheet ─────────────────────────────────────────── */
-          <motion.div
+          <m.div
             key="mobile-sheet"
             className="fixed left-0 right-0 top-0 z-50 flex items-end justify-center overflow-hidden"
             style={mobileStyle}
@@ -149,7 +149,7 @@ export default function BottomSheet({
             aria-modal="true"
           >
             {/* Backdrop */}
-            <motion.div
+            <m.div
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
               exit={{ opacity: 0 }}
@@ -160,7 +160,7 @@ export default function BottomSheet({
             />
 
             {/* Panel */}
-            <motion.div
+            <m.div
               ref={panelRef}
               tabIndex={-1}
               initial={{ y: "100%" }}
@@ -175,8 +175,8 @@ export default function BottomSheet({
                 <div className="h-1 w-10 rounded-full bg-neutral-300 dark:bg-white/20" />
               </div>
               {children}
-            </motion.div>
-          </motion.div>
+            </m.div>
+          </m.div>
         )
       )}
     </AnimatePresence>

@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import { AnimatePresence, motion } from "framer-motion";
+import { AnimatePresence, m } from "framer-motion";
 import {
   IconCheck,
   IconEdit,
@@ -187,7 +187,7 @@ function CoachStreamingStatus() {
   }, []);
   return (
     <AnimatePresence mode="wait">
-      <motion.span
+      <m.span
         key={COACH_STATUS_PHRASES[idx]}
         initial={{ opacity: 0, y: 3 }}
         animate={{ opacity: 1, y: 0 }}
@@ -196,7 +196,7 @@ function CoachStreamingStatus() {
         className="shimmer-text text-[13px] font-medium"
       >
         {COACH_STATUS_PHRASES[idx]}
-      </motion.span>
+      </m.span>
     </AnimatePresence>
   );
 }
@@ -1230,7 +1230,7 @@ export default function PlanDetailView({
   function renderStrategyTab() {
     const noOllama = !ai.hasOllama;
     return (
-      <motion.div
+      <m.div
         key="strategy"
         initial={{ opacity: 0, y: 8 }}
         animate={{ opacity: 1, y: 0 }}
@@ -1294,7 +1294,7 @@ export default function PlanDetailView({
                       </div>
                     ) : msg.type === "confirmation" ? (
                       /* ── Confirmation bubble ── */
-                      <motion.div
+                      <m.div
                         initial={{ opacity: 0, y: 6, scale: 0.97 }}
                         animate={{ opacity: 1, y: 0, scale: 1 }}
                         transition={{ duration: 0.2, ease: [0.22, 1, 0.36, 1] }}
@@ -1313,7 +1313,7 @@ export default function PlanDetailView({
                             {msg.content}
                           </ReactMarkdown>
                         </div>
-                      </motion.div>
+                      </m.div>
                     ) : (
                       /* ── AI message ── */
                       <div className="group">
@@ -1447,7 +1447,7 @@ export default function PlanDetailView({
               })}
               {/* Post-milestone CTA card */}
               {postMilestoneContext && !(milestoneTasksAdded && (milestoneTrackerAdded || !postMilestoneTrackerSuggestion)) && (
-                <motion.div
+                <m.div
                   initial={{ opacity: 0, y: 8, scale: 0.97 }}
                   animate={{ opacity: 1, y: 0, scale: 1 }}
                   exit={{ opacity: 0, y: -6, scale: 0.97 }}
@@ -1513,7 +1513,7 @@ export default function PlanDetailView({
                       Skip
                     </button>
                   </div>
-                </motion.div>
+                </m.div>
               )}
 
               <div ref={chatEndRef} />
@@ -1540,16 +1540,16 @@ export default function PlanDetailView({
                   style={{ minHeight: "44px", maxHeight: "120px" }}
                 />
                 {coachStreaming ? (
-                  <motion.button
+                  <m.button
                     type="button"
                     whileTap={{ scale: 0.9 }}
                     onClick={() => coachAbortRef.current?.abort()}
                     className="flex h-[44px] w-[44px] shrink-0 items-center justify-center rounded-xl bg-neutral-200 text-neutral-700 transition-colors hover:bg-neutral-300 dark:bg-white/[0.1] dark:text-neutral-300 dark:hover:bg-white/[0.15]"
                   >
                     <IconPlayerStop size={16} strokeWidth={1.5} />
-                  </motion.button>
+                  </m.button>
                 ) : (
-                  <motion.button
+                  <m.button
                     type="button"
                     whileTap={{ scale: 0.9 }}
                     onClick={handleSendCoachMessage}
@@ -1557,13 +1557,13 @@ export default function PlanDetailView({
                     className="flex h-[44px] w-[44px] shrink-0 items-center justify-center rounded-xl bg-neutral-900 text-white transition-opacity disabled:opacity-40 dark:bg-white dark:text-neutral-900"
                   >
                     <IconSend size={17} strokeWidth={2} />
-                  </motion.button>
+                  </m.button>
                 )}
               </div>
             </div>
           </>
         )}
-      </motion.div>
+      </m.div>
     );
   }
 
@@ -1571,7 +1571,7 @@ export default function PlanDetailView({
 
   function renderPlanningTab() {
     return (
-      <motion.div
+      <m.div
         key="planning"
         initial={{ opacity: 0, y: 8 }}
         animate={{ opacity: 1, y: 0 }}
@@ -1733,7 +1733,7 @@ export default function PlanDetailView({
 
         </div>
 
-      </motion.div>
+      </m.div>
     );
   }
 
@@ -1742,7 +1742,7 @@ export default function PlanDetailView({
   function renderRoadmapTab() {
 
     return (
-      <motion.div
+      <m.div
         key="roadmap"
         initial={{ opacity: 0, y: 8 }}
         animate={{ opacity: 1, y: 0 }}
@@ -1791,7 +1791,7 @@ export default function PlanDetailView({
             </div>
           )}
         </section>
-      </motion.div>
+      </m.div>
     );
   }
 
@@ -1838,7 +1838,7 @@ export default function PlanDetailView({
 
         {/* ── Mobile: Planning + Roadmap only ─────────────────────────────── */}
         <div className="relative flex rounded-2xl bg-neutral-100 dark:bg-white/[0.06] p-1 lg:hidden">
-          <motion.div
+          <m.div
             className="absolute rounded-xl border border-neutral-200 bg-white dark:border-white/[0.08] dark:bg-neutral-800"
             style={{ top: "4px", bottom: "4px", left: "4px", width: "calc((100% - 8px) / 2)", willChange: "transform" }}
             animate={{ x: `${(planTab === "roadmap" ? 1 : 0) * 100}%` }}
@@ -1867,7 +1867,7 @@ export default function PlanDetailView({
             const activeIndex = desktopTabs.indexOf(planTab);
             return (
               <>
-                <motion.div
+                <m.div
                   className="absolute rounded-xl border border-neutral-200 bg-white dark:border-white/[0.08] dark:bg-neutral-800"
                   style={{ top: "4px", bottom: "4px", left: "4px", width: `calc((100% - 8px) / ${desktopTabs.length})`, willChange: "transform" }}
                   animate={{ x: `${Math.max(activeIndex, 0) * 100}%` }}

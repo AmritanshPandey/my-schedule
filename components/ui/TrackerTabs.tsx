@@ -1,7 +1,7 @@
 "use client";
 
 import { memo } from "react";
-import { motion } from "framer-motion";
+import { m } from "framer-motion";
 
 interface TrackerTab {
   id: string;
@@ -21,7 +21,7 @@ function TrackerTabsInner({ tabs, activeId, onChange }: TrackerTabsProps) {
       {tabs.map((tab) => {
         const isActive = tab.id === activeId;
         return (
-          <motion.button
+          <m.button
             key={tab.id}
             type="button"
             onClick={() => onChange(tab.id)}
@@ -35,7 +35,7 @@ function TrackerTabsInner({ tabs, activeId, onChange }: TrackerTabsProps) {
             style={isActive ? { transition: "all 180ms cubic-bezier(0.34, 1.1, 0.64, 1)" } : undefined}
           >
             {tab.label}
-          </motion.button>
+          </m.button>
         );
       })}
     </div>

@@ -2,7 +2,7 @@
 
 import { useEffect, useState, useCallback } from "react";
 import Image from "next/image";
-import { AnimatePresence, motion } from "framer-motion";
+import { AnimatePresence, m } from "framer-motion";
 import {
   IconMoon,
   IconSun,
@@ -249,22 +249,22 @@ function SyncRow({ schedule }: { schedule: Schedule }) {
         </p>
       </div>
 
-      <motion.button
+      <m.button
         type="button"
         onClick={handleSyncNow}
         disabled={isBusy}
         whileTap={!isBusy ? { scale: 0.93 } : undefined}
         className="flex items-center gap-1.5 rounded-xl border border-neutral-200 bg-neutral-50 px-3 py-1.5 text-[11px] font-semibold text-neutral-600 transition-colors hover:border-neutral-300 hover:bg-white disabled:opacity-40 dark:border-white/[0.08] dark:bg-white/[0.04] dark:text-neutral-300 dark:hover:bg-white/[0.08]"
       >
-        <motion.span
+        <m.span
           animate={isBusy ? { rotate: 360 } : { rotate: 0 }}
           transition={isBusy ? { repeat: Infinity, duration: 0.9, ease: "linear" } : { duration: 0 }}
           className="inline-flex"
         >
           <IconCloud size={11} strokeWidth={2} />
-        </motion.span>
+        </m.span>
         {isBusy ? "Syncing…" : "Sync now"}
-      </motion.button>
+      </m.button>
     </div>
   );
 }
@@ -294,7 +294,7 @@ function ClearDataRow({ onClearData, onDone }: ClearDataRowProps) {
     <div className="px-4 py-3.5">
       <AnimatePresence mode="wait" initial={false}>
         {phase === "idle" && (
-          <motion.div
+          <m.div
             key="idle"
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
@@ -315,11 +315,11 @@ function ClearDataRow({ onClearData, onDone }: ClearDataRowProps) {
             >
               Clear
             </button>
-          </motion.div>
+          </m.div>
         )}
 
         {phase === "confirm" && (
-          <motion.div
+          <m.div
             key="confirm"
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
@@ -350,11 +350,11 @@ function ClearDataRow({ onClearData, onDone }: ClearDataRowProps) {
                 Delete everything
               </button>
             </div>
-          </motion.div>
+          </m.div>
         )}
 
         {phase === "clearing" && (
-          <motion.div
+          <m.div
             key="clearing"
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
@@ -366,7 +366,7 @@ function ClearDataRow({ onClearData, onDone }: ClearDataRowProps) {
             <span className="text-[13px] font-medium text-neutral-500 dark:text-neutral-400">
               Clearing…
             </span>
-          </motion.div>
+          </m.div>
         )}
       </AnimatePresence>
     </div>
@@ -387,7 +387,7 @@ function ClearProgressRow({ onClearProgress }: { onClearProgress: () => Promise<
     <div className="px-4 py-3.5">
       <AnimatePresence mode="wait" initial={false}>
         {phase === "idle" && (
-          <motion.div key="idle" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: 0.15 }} className="flex items-center gap-3">
+          <m.div key="idle" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: 0.15 }} className="flex items-center gap-3">
             <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl border border-amber-100 bg-amber-50 text-amber-600 dark:border-amber-500/20 dark:bg-amber-500/10 dark:text-amber-400">
               <IconRefresh size={15} strokeWidth={2} />
             </div>
@@ -399,10 +399,10 @@ function ClearProgressRow({ onClearProgress }: { onClearProgress: () => Promise<
               className="shrink-0 rounded-xl border border-amber-200 bg-amber-50 px-3 py-1.5 text-[11px] font-semibold text-amber-700 transition-colors hover:bg-amber-100 dark:border-amber-500/20 dark:bg-amber-500/10 dark:text-amber-400">
               Reset
             </button>
-          </motion.div>
+          </m.div>
         )}
         {phase === "confirm" && (
-          <motion.div key="confirm" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: 0.15 }}>
+          <m.div key="confirm" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: 0.15 }}>
             <div className="mb-3 flex items-center gap-2 text-amber-600 dark:text-amber-400">
               <IconAlertTriangle size={14} strokeWidth={2} />
               <p className="text-[12px] font-semibold">Clears all completions, history, check-ins, logged metrics & milestone progress. Plans, tasks and milestones stay.</p>
@@ -417,13 +417,13 @@ function ClearProgressRow({ onClearProgress }: { onClearProgress: () => Promise<
                 <IconRefresh size={12} strokeWidth={2} />Clear progress
               </button>
             </div>
-          </motion.div>
+          </m.div>
         )}
         {phase === "clearing" && (
-          <motion.div key="clearing" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: 0.15 }} className="flex items-center gap-3">
+          <m.div key="clearing" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: 0.15 }} className="flex items-center gap-3">
             <span className="h-4 w-4 animate-spin rounded-full border-2 border-neutral-200 border-t-neutral-600 dark:border-neutral-700 dark:border-t-neutral-300" />
             <span className="text-[13px] font-medium text-neutral-500 dark:text-neutral-400">Clearing progress…</span>
-          </motion.div>
+          </m.div>
         )}
       </AnimatePresence>
     </div>
@@ -705,13 +705,13 @@ function OllamaRow() {
             <span className="flex-1 text-[11px] font-semibold text-neutral-500 dark:text-neutral-400">
               Setup instructions
             </span>
-            <motion.span animate={{ rotate: showSetup ? 180 : 0 }} transition={{ duration: 0.2 }}>
+            <m.span animate={{ rotate: showSetup ? 180 : 0 }} transition={{ duration: 0.2 }}>
               <IconChevronDown size={11} strokeWidth={2} className="text-neutral-400" />
-            </motion.span>
+            </m.span>
           </button>
           <AnimatePresence initial={false}>
             {showSetup && (
-              <motion.div
+              <m.div
                 initial={{ height: 0, opacity: 0 }}
                 animate={{ height: "auto", opacity: 1 }}
                 exit={{ height: 0, opacity: 0 }}
@@ -781,7 +781,7 @@ function OllamaRow() {
                     </div>
                   </div>
                 </div>
-              </motion.div>
+              </m.div>
             )}
           </AnimatePresence>
         </div>
@@ -842,7 +842,7 @@ export function SettingsSheet({
                   <p className="mb-3.5 text-[11px] leading-snug text-neutral-400 dark:text-neutral-500">
                     Back up your data and access it across all your devices.
                   </p>
-                  <motion.button
+                  <m.button
                     type="button"
                     onClick={handleLogin}
                     disabled={busy}
@@ -855,7 +855,7 @@ export function SettingsSheet({
                       <GoogleLogo />
                     )}
                     {busy ? "Signing in…" : "Continue with Google"}
-                  </motion.button>
+                  </m.button>
                 </div>
               </SettingsCard>
             ) : (
@@ -890,7 +890,7 @@ export function SettingsSheet({
                     <IconCheck size={12} strokeWidth={2.5} />
                     <span className="text-[11px] font-semibold">Account connected</span>
                   </div>
-                  <motion.button
+                  <m.button
                     type="button"
                     onClick={handleLogout}
                     disabled={busy}
@@ -898,7 +898,7 @@ export function SettingsSheet({
                     className="rounded-xl border border-neutral-200 px-3 py-1.5 text-[11px] font-semibold text-neutral-500 transition-colors hover:border-neutral-300 hover:text-neutral-800 dark:border-white/[0.08] dark:text-neutral-400 dark:hover:text-white disabled:opacity-50"
                   >
                     {busy ? "…" : "Sign out"}
-                  </motion.button>
+                  </m.button>
                 </div>
               </SettingsCard>
             )}
