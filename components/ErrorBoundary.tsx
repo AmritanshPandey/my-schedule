@@ -2,6 +2,12 @@
 
 import { Component, type ErrorInfo, type ReactNode } from "react";
 import { logError } from "@/lib/errorLog";
+import {
+  isChunkLoadError,
+  clearStaleCaches,
+  resetReloadCount,
+  recoverFromChunkError,
+} from "@/lib/chunkRecovery";
 
 interface Props {
   children: ReactNode;
@@ -21,67 +27,9 @@ interface State {
   message: string;
 }
 
-// Persisted across reloads so a chunk that *keeps* failing can't trigger an
-// endless reload loop (which Safari surfaces as "A problem repeatedly occurred").
-const RELOAD_KEY = "planr-chunk-reloads";
-const MAX_RELOADS = 2;
-
-// In-memory mirror of the reload counter. On iOS Private Browsing every
-// sessionStorage write throws, so the persisted counter would stay 0 and the
-// guard below would reload forever. This module-level fallback survives within
-// the session (it resets on a true reload, but combined with MAX_RELOADS it
-// still caps a hard loop) so the guard holds even when storage is unavailable.
-let memReloadCount = 0;
-
-function getReloadCount(): number {
-  let stored = 0;
-  try {
-    stored = Number(sessionStorage.getItem(RELOAD_KEY)) || 0;
-  } catch {
-    /* storage unavailable — rely on the in-memory mirror */
-  }
-  return Math.max(stored, memReloadCount);
-}
-
-function setReloadCount(n: number): void {
-  memReloadCount = n;
-  try {
-    sessionStorage.setItem(RELOAD_KEY, String(n));
-  } catch {
-    /* storage unavailable — in-memory mirror already updated */
-  }
-}
-
-function resetReloadCount(): void {
-  memReloadCount = 0;
-  try {
-    sessionStorage.removeItem(RELOAD_KEY);
-  } catch {
-    /* ignore */
-  }
-}
-
-function isChunkLoadError(message: string) {
-  return (
-    message.includes("Loading chunk") ||
-    message.includes("Failed to load chunk") ||
-    message.includes("ChunkLoadError") ||
-    message.includes("Unexpected token")
-  );
-}
-
-// Drop the stale service-worker caches that usually cause a chunk to 404, so the
-// follow-up reload actually fetches the current build instead of looping.
-async function clearStaleCaches() {
-  try {
-    if ("caches" in window) {
-      const keys = await caches.keys();
-      await Promise.all(keys.filter((k) => k.startsWith("planr-")).map((k) => caches.delete(k)));
-    }
-  } catch {
-    /* best effort */
-  }
-}
+// Loop-guarded chunk-error recovery (clear caches + reload) lives in
+// lib/chunkRecovery so the React boundary, window errors, and unhandled promise
+// rejections all share one reload counter.
 
 export class ErrorBoundary extends Component<Props, State> {
   state: State = { hasError: false, message: "" };
@@ -122,11 +70,8 @@ export class ErrorBoundary extends Component<Props, State> {
       this.state.hasError &&
       (prevState.hasError === false || prevState.message !== this.state.message);
 
-    if (isNewError && isChunkLoadError(this.state.message) && getReloadCount() < MAX_RELOADS) {
-      setReloadCount(getReloadCount() + 1);
-      clearStaleCaches().finally(() => {
-        window.setTimeout(() => window.location.reload(), 800);
-      });
+    if (isNewError && isChunkLoadError(this.state.message)) {
+      recoverFromChunkError(800);
     }
   }
 

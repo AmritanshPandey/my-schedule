@@ -11,6 +11,8 @@
  * reload/crash, letting you read the real message on the phone itself.
  */
 
+import { isChunkLoadError, recoverFromChunkError } from "@/lib/chunkRecovery";
+
 export interface LoggedError {
   time: number;       // epoch ms
   source: string;     // "window" | "promise" | "react:Timeline" | ...
@@ -111,9 +113,20 @@ export function installGlobalErrorHandlers(): void {
       ? ` (${event.filename.split("/").pop()}:${event.lineno}:${event.colno})`
       : "";
     logError("window", event.error ?? `${event.message}${where}`);
+    maybeRecoverFromChunkError(event.message, event.error);
   });
 
   window.addEventListener("unhandledrejection", (event: PromiseRejectionEvent) => {
     logError("promise", event.reason ?? "Unhandled promise rejection");
+    // A failed dynamic import()/prefetch rejects here and never reaches the React
+    // ErrorBoundary, so recover from a stale-build chunk error on this path too.
+    maybeRecoverFromChunkError(undefined, event.reason);
   });
+}
+
+function maybeRecoverFromChunkError(message: unknown, error: unknown): void {
+  const text =
+    (typeof message === "string" ? message : "") ||
+    (error instanceof Error ? `${error.name} ${error.message}` : typeof error === "string" ? error : "");
+  if (isChunkLoadError(text)) recoverFromChunkError();
 }
