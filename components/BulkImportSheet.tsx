@@ -172,12 +172,20 @@ export function BulkImportFlow({ plans, fallbackDay = "monday", onCommit, onDone
   return (
     <div className="flex flex-col gap-5">
       {header ? (
-        <div className="flex items-start justify-between gap-3">
+        <div className="flex flex-col gap-3">
+          {/* SheetHeader is a full-width title↔close row; render it on its own
+              line so the close button stays at the far right (nesting it beside
+              the Parsing pill collapsed it and stranded the ✕ in the middle). */}
           {header}
-          <span className="mt-1 inline-flex shrink-0 items-center gap-1.5 rounded-full border border-emerald-500/35 bg-emerald-500/10 px-3 py-1.5 text-[12px] font-semibold text-emerald-600 dark:text-emerald-400">
-            <IconSparkles size={14} strokeWidth={2} />
-            Parsing
-          </span>
+          <div className="flex items-start justify-between gap-3">
+            <p className="text-[13px] leading-relaxed text-neutral-500 dark:text-neutral-400">
+              Paste a plan — we&apos;ll turn it into scheduled tasks. One line per task, with day headers like &quot;Monday&quot;.
+            </p>
+            <span className="mt-0.5 inline-flex shrink-0 items-center gap-1.5 rounded-full border border-emerald-500/35 bg-emerald-500/10 px-3 py-1.5 text-[12px] font-semibold text-emerald-600 dark:text-emerald-400">
+              <IconSparkles size={14} strokeWidth={2} />
+              Parsing
+            </span>
+          </div>
         </div>
       ) : (
         <div className="flex items-center justify-between gap-3">
@@ -189,12 +197,6 @@ export function BulkImportFlow({ plans, fallbackDay = "monday", onCommit, onDone
             Parsing
           </span>
         </div>
-      )}
-
-      {header && (
-        <p className="-mt-2 text-[13px] leading-relaxed text-neutral-500 dark:text-neutral-400">
-          Paste a plan — we&apos;ll turn it into scheduled tasks. One line per task, with day headers like &quot;Monday&quot;.
-        </p>
       )}
 
         {/* Step 1 — paste */}
