@@ -24,6 +24,7 @@ import BottomSheet from "@/components/ui/BottomSheet";
 import { useAuth } from "@/contexts/AuthProvider";
 import { getSyncStatus, getLastSyncedAt, getLastSchedule, onSyncStatusChange, flushNow, deleteCloudData, type SyncStatus } from "@/lib/cloudSync";
 import { formatDisplayTime, minutesToInputTime } from "@/lib/timeUtils";
+import { buildLabel } from "@/lib/buildInfo";
 import type { Schedule, SchedulePreferences } from "@/lib/useScheduleDB";
 import { OLLAMA_URL_KEY, OLLAMA_MODEL_KEY, DEFAULT_OLLAMA_URL, DEFAULT_OLLAMA_MODEL, checkOllamaConnection, checkModelStatus } from "@/lib/ai";
 import { AISettingsSheet } from "@/components/ai/AISettingsSheet";
@@ -965,6 +966,9 @@ export function SettingsSheet({
         {/* ── Footer ───────────────────────────────────────────────────────── */}
         <p className="mt-2 text-center text-[10px] text-neutral-300 dark:text-neutral-700">
           PlanR · Goal-oriented planning
+        </p>
+        <p className="mt-0.5 text-center font-mono text-[10px] text-neutral-300 dark:text-neutral-700">
+          build {buildLabel()}
         </p>
       </div>
     </BottomSheet>
