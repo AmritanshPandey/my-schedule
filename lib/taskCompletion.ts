@@ -190,23 +190,32 @@ export function markTaskMissed(task: Task, allSubtaskIds: string[]): Partial<Tas
  * has no parseable start time. Times stay in the app's display format.
  */
 export function snoozeTaskLater(task: Task, byMinutes = 60): Partial<Task> {
-  const start = parseTimeToMinutes(task.startTime);
+  // `?? ""` guards against an untimed task — parseTimeToMinutes throws on
+  // undefined (it calls `.trim()`), and the "Later today" action is reachable
+  // for tasks with no start time.
+  const start = parseTimeToMinutes(task.startTime ?? "");
   if (start == null) return {};
-  const end = parseTimeToMinutes(task.endTime);
-  const duration = end != null && end > start ? end - start : 60;
+
+  // Real duration, accounting for tasks that run past midnight (end < start).
+  let end = parseTimeToMinutes(task.endTime ?? "");
+  let duration = 60;
+  if (end != null) {
+    if (end < start) end += 1440;
+    duration = end - start > 0 ? end - start : 60;
+  }
 
   const DAY_END = 23 * 60 + 59;
-  // At least `byMinutes` later than now, and at least `byMinutes` past the old start.
+  // Aim for `byMinutes` later than both the original start and now, but keep the
+  // whole task inside today.
   let newStart = Math.max(start + byMinutes, currentMinutes() + byMinutes);
-  let newEnd = newStart + duration;
-  if (newEnd > DAY_END) {
-    newEnd = DAY_END;
-    newStart = Math.max(0, DAY_END - duration);
-  }
+  newStart = Math.min(newStart, DAY_END - duration);
+
+  // No room left later today — never shove the task earlier than it already is.
+  if (newStart <= start) return {};
 
   return {
     startTime: minutesToDisplayTime(newStart),
-    endTime: minutesToDisplayTime(newEnd),
+    endTime: minutesToDisplayTime(newStart + duration),
     // A deferred task is not missed.
     missed: false,
     missedAt: undefined,

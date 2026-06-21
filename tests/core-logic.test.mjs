@@ -28,6 +28,7 @@ const {
   completionForDate,
   toggleSubtaskComplete,
   toggleTaskComplete,
+  snoozeTaskLater,
 } = await import("../lib/taskCompletion.ts");
 const {
   applyTaskDelete,
@@ -321,6 +322,29 @@ test("weekly analytics count each recurring weekday occurrence", () => {
   assert.equal(trend.current.scheduled, 2);
   assert.equal(trend.current.completed, 2);
   assert.equal(trend.current.pct, 100);
+});
+
+test("snooze never moves a task earlier than its scheduled time", () => {
+  const mk = (startTime, endTime) => ({
+    id: "s", title: "S", startTime, endTime, icon: "star", color: "amber",
+    planId: "p", completionHistory: [],
+  });
+  const parse = (v) => parseTimeToMinutes(v);
+
+  // Normal morning task: moves later, preserves duration.
+  const morning = snoozeTaskLater(mk("8:00 AM", "9:00 AM"), 60);
+  assert.ok(parse(morning.startTime) > parse("8:00 AM"), "morning task should move later");
+  assert.equal(parse(morning.endTime) - parse(morning.startTime), 60, "duration preserved");
+
+  // Overnight task (end < start): must not be shoved backward — either a valid
+  // forward move or a no-op (no room left today), never earlier than 11:00 PM.
+  const overnight = snoozeTaskLater(mk("11:00 PM", "1:00 AM"), 60);
+  if (overnight.startTime !== undefined) {
+    assert.ok(parse(overnight.startTime) > parse("11:00 PM"), "overnight task must not move earlier");
+  }
+
+  // Untimed task is a no-op.
+  assert.deepEqual(snoozeTaskLater({ id: "x", completionHistory: [] }, 60), {});
 });
 
 test("time parsing and schedule-day conversion reject invalid clocks", () => {
