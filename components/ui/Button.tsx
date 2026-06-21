@@ -2,7 +2,7 @@
 
 import { forwardRef } from "react";
 
-type Variant = "primary" | "secondary" | "ghost" | "destructive" | "dangerSecondary";
+type Variant = "primary" | "cta" | "secondary" | "ghost" | "destructive" | "dangerSecondary";
 type Size = "sm" | "md" | "lg";
 
 interface ButtonProps extends React.ButtonHTMLAttributes<HTMLButtonElement> {
@@ -14,6 +14,10 @@ interface ButtonProps extends React.ButtonHTMLAttributes<HTMLButtonElement> {
 const variantClasses: Record<Variant, string> = {
   primary:
     "bg-neutral-950 text-white hover:bg-neutral-800 disabled:opacity-40 dark:bg-white dark:text-neutral-900 dark:hover:bg-neutral-100",
+  // Affirmative action only (Create / Complete / Log / Start) — the One Signal
+  // + Ink-First rules: one green action per screen, ink is the default.
+  cta:
+    "bg-[#00A63E] text-white hover:bg-[#008236] disabled:opacity-40 dark:bg-[#2FD46E] dark:text-neutral-950 dark:hover:bg-[#2FD46E]/90",
   secondary:
     "border border-neutral-200 text-neutral-500 hover:bg-neutral-100 dark:border-white/10 dark:text-neutral-400 dark:hover:bg-white/[0.07]",
   ghost:

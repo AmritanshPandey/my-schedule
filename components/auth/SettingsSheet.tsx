@@ -929,7 +929,7 @@ export function SettingsSheet({
                 onClick={() => setAiSettingsOpen(true)}
                 className="flex w-full items-center gap-3 px-4 py-3.5 text-left transition-colors hover:bg-neutral-50 dark:hover:bg-white/[0.03]"
               >
-                <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-violet-500 via-fuchsia-500 to-pink-500">
+                <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl bg-[#AD46FF]">
                   <IconSparkles size={14} strokeWidth={2} className="text-white" />
                 </div>
                 <div className="min-w-0 flex-1">

@@ -35,7 +35,7 @@ export default function WhatNextCard({
       animate={{ opacity: 1, y: 0, scale: 1 }}
       exit={{ opacity: 0, y: -6, scale: 0.97 }}
       transition={{ duration: 0.22, ease: [0.22, 1, 0.36, 1] }}
-      className="mb-3 overflow-hidden rounded-2xl border border-emerald-200 bg-gradient-to-br from-emerald-50 to-white dark:border-emerald-500/20 dark:from-emerald-500/[0.08] dark:to-transparent"
+      className="mb-3 overflow-hidden rounded-2xl border border-emerald-200/70 bg-white dark:border-emerald-500/[0.18] dark:bg-neutral-900"
     >
       {/* Header row */}
       <div className="flex items-center gap-2 border-b border-emerald-100 px-4 py-2.5 dark:border-emerald-500/[0.12]">
@@ -44,8 +44,8 @@ export default function WhatNextCard({
           strokeWidth={2.5}
           className="shrink-0 text-emerald-500"
         />
-        <p className="text-[10.5px] font-black uppercase tracking-[0.1em] text-emerald-600 dark:text-emerald-400">
-          Current Task
+        <p className="text-[13px] font-bold text-emerald-600 dark:text-emerald-400">
+          Current task
         </p>
       </div>
 
@@ -80,7 +80,7 @@ export default function WhatNextCard({
           <button
             type="button"
             onClick={onMarkDone}
-            className="flex items-center gap-1.5 rounded-xl bg-emerald-600 px-3 py-2 text-[13px] font-semibold text-white transition-opacity hover:opacity-90 active:opacity-80"
+            className="flex min-h-[44px] items-center gap-1.5 rounded-xl bg-[#00A63E] px-4 py-2 text-[13px] font-semibold text-white transition-colors hover:bg-[#008236] dark:bg-[#2FD46E] dark:text-neutral-950 dark:hover:bg-[#2FD46E]/90"
           >
             <IconCheck size={14} strokeWidth={2.5} />
             Mark done
@@ -88,7 +88,7 @@ export default function WhatNextCard({
           <button
             type="button"
             onClick={onDismissDay}
-            className="rounded-xl px-3 py-2 text-[13px] font-medium text-neutral-400 transition-colors hover:text-neutral-600 dark:text-neutral-500 dark:hover:text-neutral-300"
+            className="min-h-[44px] rounded-xl px-3 py-2 text-[13px] font-medium text-neutral-400 transition-colors hover:text-neutral-600 dark:text-neutral-500 dark:hover:text-neutral-300"
           >
             Focus later
           </button>

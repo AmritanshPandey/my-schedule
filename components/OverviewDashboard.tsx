@@ -31,6 +31,7 @@ import { accentStyles } from "@/lib/colorSystem";
 import ExecutionTrendCard from "@/components/ExecutionTrendCard";
 import { getTrendDirection, getTrendState, type TrendDirection, type TrendState } from "@/lib/trendUtils";
 import { localISODate, addDaysToISO } from "@/lib/dateUtils";
+import { parseTimeToMinutes } from "@/lib/timeUtils";
 import { haptic } from "@/lib/haptics";
 
 // ── Props ─────────────────────────────────────────────────────────────────────
@@ -49,12 +50,11 @@ interface OverviewDashboardProps {
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
 function parseHM(t: string): [number, number] | null {
-  const match = t.match(/^(\d{1,2}):(\d{2})/);
-  if (!match) return null;
-  const h = parseInt(match[1], 10);
-  const m = parseInt(match[2], 10);
-  if (isNaN(h) || isNaN(m)) return null;
-  return [h, m];
+  // Use the canonical parser so 12-hour display times ("8:00 PM") keep their
+  // AM/PM — a bare `HH:MM` regex would drop the suffix and render PM as AM.
+  const mins = parseTimeToMinutes(t);
+  if (mins === null) return null;
+  return [Math.floor(mins / 60), mins % 60];
 }
 
 function formatTime(t?: string): string {
@@ -132,7 +132,7 @@ function BackgroundCard({ progress, depth, top }: { progress: MotionValue<number
   return (
     <m.div
       aria-hidden
-      className="absolute left-0 right-0 bottom-0 rounded-3xl border border-emerald-200/50 bg-gradient-to-br from-emerald-50/80 to-white dark:border-emerald-500/[0.12] dark:from-emerald-900/[0.14] dark:to-neutral-900"
+      className="absolute left-0 right-0 bottom-0 rounded-3xl border border-emerald-200/50 bg-neutral-50 dark:border-emerald-500/[0.12] dark:bg-neutral-900"
       style={{ top, y, scale, opacity, transformOrigin: "top center", zIndex: depth === 0 ? 2 : 1, willChange: "transform" }}
     />
   );
@@ -205,7 +205,7 @@ function SwipeableCardStack({
 
       {/* Front card — draggable */}
       <m.div
-        className="relative z-10 cursor-grab touch-pan-x rounded-3xl border border-emerald-200/70 bg-gradient-to-br from-emerald-50 to-white px-5 py-5 dark:border-emerald-500/20 dark:from-emerald-900/20 dark:to-neutral-900 active:cursor-grabbing"
+        className="relative z-10 cursor-grab touch-pan-x rounded-3xl border border-emerald-200/70 bg-white px-5 py-5 dark:border-emerald-500/[0.18] dark:bg-neutral-900 active:cursor-grabbing"
         style={{ y, rotate, opacity: frontOpacity, willChange: "transform" }}
         drag={busy ? false : "y"}
         dragConstraints={{ top: -460, bottom: 18 }}
@@ -254,7 +254,7 @@ function SwipeableCardStack({
 
             {/* Plan kicker */}
             {chip && (
-              <p className="mt-1 text-[11px] font-bold uppercase tracking-[0.08em] text-neutral-400 dark:text-neutral-500">
+              <p className="mt-1 text-[12px] font-semibold text-neutral-400 dark:text-neutral-500">
                 {chip}
               </p>
             )}
@@ -281,7 +281,7 @@ function SwipeableCardStack({
                 whileTap={{ scale: 0.96 }}
                 disabled={busy}
                 onClick={() => void dismiss("done")}
-                className="flex items-center gap-1 rounded-full bg-emerald-600 px-4 py-2 text-[12px] font-semibold text-white disabled:opacity-70"
+                className="flex min-h-[44px] items-center gap-1 rounded-full bg-[#00A63E] px-4 py-2 text-[12px] font-semibold text-white hover:bg-[#008236] disabled:opacity-70 dark:bg-[#2FD46E] dark:text-neutral-950"
               >
                 <IconCheck size={16} strokeWidth={1.5} />
                 Mark Done
@@ -487,7 +487,7 @@ export default function OverviewDashboard({
 
         {/* Desktop header */}
         <div className="mb-4 hidden lg:block">
-          <p className="text-[11px] font-bold uppercase tracking-[0.08em] text-neutral-400 dark:text-neutral-500">
+          <p className="text-[13px] font-semibold text-neutral-400 dark:text-neutral-500">
             {new Date().toLocaleDateString("en-US", { weekday: "long", month: "long", day: "numeric" })}
           </p>
           <h1 className="mt-0.5 text-[26px] font-extrabold leading-tight text-neutral-950 dark:text-white">Overview</h1>
@@ -835,7 +835,7 @@ function GettingStarted({ onNavigate }: { onNavigate: (tab: number) => void }) {
         <div>
           <p className="text-[18px] font-bold text-neutral-900 dark:text-white">Let&apos;s get you set up</p>
           <p className="mt-1.5 max-w-[300px] text-[14px] leading-relaxed text-neutral-400 dark:text-neutral-500">
-            A few quick steps to start planning your days and tracking what matters.
+            Three steps to turn your goals into daily follow-through.
           </p>
         </div>
       </div>

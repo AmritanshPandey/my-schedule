@@ -2,7 +2,7 @@
 
 import { useMemo } from "react";
 import { m } from "framer-motion";
-import { IconCheck, IconListCheck, IconX } from "@tabler/icons-react";
+import { IconCheck, IconListCheck, IconX, IconClockHour4 } from "@tabler/icons-react";
 import BottomSheet from "@/components/ui/BottomSheet";
 import IconButton from "@/components/ui/IconButton";
 import Pill from "@/components/ui/Pill";
@@ -25,6 +25,7 @@ interface SubtasksSheetProps {
   onToggleSubtask: (taskId: string, subtaskId: string) => void;
   onToggleComplete: (taskId: string, allSubtaskIds: string[]) => void;
   onMissed?: (taskId: string, allSubtaskIds: string[]) => void;
+  onSnooze?: (taskId: string) => void;
   onEdit?: () => void;
 }
 
@@ -37,6 +38,7 @@ export default function SubtasksSheet({
   onToggleSubtask,
   onToggleComplete,
   onMissed,
+  onSnooze,
   onEdit,
 }: SubtasksSheetProps) {
   const isSession = task?.taskType === "session";
@@ -63,7 +65,7 @@ export default function SubtasksSheet({
   const barPct = done && items.length === 0 ? 100 : pct;
 
   if (!task) return null;
-  const eyebrow = (linkedPlan?.title ?? (isSession ? "Session" : "Task")).toUpperCase();
+  const eyebrow = linkedPlan?.title ?? (isSession ? "Session" : "Task");
 
   return (
     <BottomSheet open={open} onClose={onClose}>
@@ -92,7 +94,7 @@ export default function SubtasksSheet({
           </div>
           <div className="min-w-0">
             <h2 className="truncate text-[20px] font-bold leading-tight text-neutral-900 dark:text-white">{task.title}</h2>
-            <p className="text-[12px] font-bold uppercase tracking-[0.08em] text-neutral-400 dark:text-neutral-500">{eyebrow}</p>
+            <p className="text-[13px] font-semibold text-neutral-400 dark:text-neutral-500">{eyebrow}</p>
           </div>
         </div>
 
@@ -156,17 +158,42 @@ export default function SubtasksSheet({
             Read-only — past day
           </p>
         ) : (
-          <div className="mt-1 flex items-center gap-3">
+          <div className="mt-1 flex flex-col gap-2.5">
             <m.button
               type="button"
               whileTap={{ scale: 0.97 }}
               onClick={() => { onToggleComplete(task.id, allIds); onClose(); }}
-              className="flex flex-1 items-center justify-center gap-2 rounded-full bg-green-600 py-3.5 text-[15px] font-bold text-white"
+              className="flex min-h-[52px] flex-1 items-center justify-center gap-2 rounded-full bg-[#00A63E] py-3.5 text-[15px] font-bold text-white hover:bg-[#008236] dark:bg-[#2FD46E] dark:text-neutral-950 dark:hover:bg-[#2FD46E]/90"
             >
               <IconCheck size={18} strokeWidth={2.6} />
-              {done ? "Completed" : "Mark Done"}
+              {done ? "Completed" : "Mark done"}
             </m.button>
-       
+
+            {/* Honest alternatives to completing: defer or acknowledge a miss. */}
+            {!done && (onSnooze || onMissed) && (
+              <div className="flex items-center gap-2.5">
+                {onSnooze && (
+                  <button
+                    type="button"
+                    onClick={() => { onSnooze(task.id); onClose(); }}
+                    className="flex min-h-[44px] flex-1 items-center justify-center gap-1.5 rounded-full border border-neutral-200 text-[13px] font-semibold text-neutral-600 transition-colors hover:bg-neutral-50 dark:border-white/[0.10] dark:text-neutral-300 dark:hover:bg-white/[0.04]"
+                  >
+                    <IconClockHour4 size={16} strokeWidth={2.2} />
+                    Later today
+                  </button>
+                )}
+                {onMissed && (
+                  <button
+                    type="button"
+                    onClick={() => { onMissed(task.id, allIds); onClose(); }}
+                    className="flex min-h-[44px] flex-1 items-center justify-center gap-1.5 rounded-full border border-neutral-200 text-[13px] font-semibold text-neutral-500 transition-colors hover:border-rose-200 hover:bg-rose-500/[0.06] hover:text-rose-500 dark:border-white/[0.10] dark:text-neutral-400 dark:hover:border-rose-500/20 dark:hover:bg-rose-500/[0.08] dark:hover:text-rose-400"
+                  >
+                    <IconX size={16} strokeWidth={2.2} />
+                    Mark missed
+                  </button>
+                )}
+              </div>
+            )}
           </div>
         )}
 

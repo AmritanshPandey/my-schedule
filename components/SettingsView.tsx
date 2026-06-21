@@ -110,7 +110,7 @@ function AISection() {
       {/* Status hero */}
       <Card>
         <Row>
-          <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-violet-500 via-fuchsia-500 to-pink-500">
+          <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-[#AD46FF]">
             <IconBrain size={18} strokeWidth={1.8} className="text-white" />
           </div>
           <div className="min-w-0 flex-1">

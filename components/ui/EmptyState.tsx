@@ -51,8 +51,8 @@ export default function EmptyState({
       animate={{ opacity: 1, y: 0 }}
       className={`flex flex-col items-center gap-4 text-center ${center ? "h-full justify-center" : "pt-16"} ${className}`}
     >
-      <div className="flex h-20 w-20 items-center justify-center rounded-[28px] bg-neutral-100 dark:bg-white/[0.06]">
-        <Icon size={36} strokeWidth={1.4} className="text-neutral-400 dark:text-neutral-500" />
+      <div className="flex h-20 w-20 items-center justify-center rounded-[28px] bg-[#00A63E]/[0.08] dark:bg-[#2FD46E]/[0.10]">
+        <Icon size={36} strokeWidth={1.4} className="text-[#00A63E] dark:text-[#2FD46E]" />
       </div>
       <div>
         <p className="text-[16px] font-semibold text-neutral-700 dark:text-neutral-200">{title}</p>
@@ -63,7 +63,7 @@ export default function EmptyState({
           type="button"
           whileTap={{ scale: 0.96 }}
           onClick={() => { haptic("medium"); action.onClick(); }}
-          className="mt-2 inline-flex items-center gap-2 rounded-full bg-neutral-900 px-5 py-2.5 text-[14px] font-semibold text-white dark:bg-white dark:text-neutral-950"
+          className="mt-2 inline-flex min-h-[44px] items-center gap-2 rounded-full bg-[#00A63E] px-5 py-2.5 text-[14px] font-semibold text-white hover:bg-[#008236] dark:bg-[#2FD46E] dark:text-neutral-950 dark:hover:bg-[#2FD46E]/90"
         >
           {ActionIcon && <ActionIcon size={16} strokeWidth={2.5} />}
           {action.label}

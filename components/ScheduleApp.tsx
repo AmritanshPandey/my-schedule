@@ -97,6 +97,7 @@ import {
   toggleTaskComplete,
   toggleSubtaskComplete,
   markTaskMissed,
+  snoozeTaskLater,
   completionForDate,
   isTaskCompleted,
   isTaskResolved,
@@ -1036,6 +1037,24 @@ export default function ScheduleApp() {
           ...prev.activities,
           [day]: (prev.activities[day] ?? []).map((t) =>
             t.id === taskId ? { ...t, ...markTaskMissed(t, allSubtaskIds) } : t
+          ),
+        },
+      }));
+    },
+    [activeDay, setSchedule]
+  );
+
+  const handleSnoozeTaskLater = useCallback(
+    (taskId: string, day: DayKey = activeDay, dateISO?: string) => {
+      // Only today is editable — deferring a past/future occurrence is meaningless.
+      if (dateISO && dateISO !== todayISO()) return;
+      haptic("medium");
+      setSchedule((prev) => ({
+        ...prev,
+        activities: {
+          ...prev.activities,
+          [day]: (prev.activities[day] ?? []).map((t) =>
+            t.id === taskId ? { ...t, ...snoozeTaskLater(t) } : t
           ),
         },
       }));
@@ -3054,6 +3073,7 @@ export default function ScheduleApp() {
             onToggleSubtask={(taskId, subId) => handleToggleSubtask(taskId, subId, subtasksRef?.day, subtasksRef?.dateISO)}
             onToggleComplete={(taskId, ids) => handleToggleTaskComplete(taskId, ids, subtasksRef?.day, subtasksRef?.dateISO)}
             onMissed={(taskId, ids) => handleMarkTaskMissed(taskId, ids, subtasksRef?.day, subtasksRef?.dateISO)}
+            onSnooze={(taskId) => handleSnoozeTaskLater(taskId, subtasksRef?.day, subtasksRef?.dateISO)}
             onEdit={raw ? () => { openEditSheet(raw); setSubtasksRef(null); } : undefined}
           />
         );
@@ -3182,7 +3202,7 @@ export default function ScheduleApp() {
               whileTap={{ scale: 0.92 }}
               onClick={() => setAiOpen(true)}
               aria-label="Open AI Assistant"
-              className="fixed bottom-24 right-4 z-40 lg:bottom-8 lg:right-8 flex h-12 w-12 items-center justify-center rounded-full bg-gradient-to-br from-violet-500 via-fuchsia-500 to-pink-500 text-white shadow-lg shadow-fuchsia-500/30 transition-shadow hover:shadow-xl hover:shadow-fuchsia-500/40"
+              className="fixed bottom-24 right-4 z-40 lg:bottom-8 lg:right-8 flex h-12 w-12 items-center justify-center rounded-full bg-[#AD46FF] text-white shadow-sm"
             >
               <IconSparkles size={20} strokeWidth={2} />
             </m.button>

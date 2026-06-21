@@ -448,7 +448,7 @@ export default function AIAssistant({
       {/* ── Header ─────────────────────────────────────────────────────────── */}
       <div className="flex shrink-0 items-center justify-between px-5 pt-5 pb-4">
         <div className="flex items-center gap-2.5">
-          <div className="flex h-8 w-8 items-center justify-center rounded-xl bg-gradient-to-br from-violet-500 via-fuchsia-500 to-pink-500 shadow-sm shadow-fuchsia-500/25">
+          <div className="flex h-8 w-8 items-center justify-center rounded-xl bg-[#AD46FF] shadow-sm">
             <IconSparkles size={15} strokeWidth={2} className="text-white" />
           </div>
           <span className="text-[15px] font-bold text-neutral-900 dark:text-white tracking-[-0.2px]">

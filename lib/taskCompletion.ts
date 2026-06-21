@@ -9,6 +9,8 @@
 import type { Task, TaskCompletionEvent } from "./useScheduleDB";
 import { uid } from "./id";
 import { localISODate } from "./dateUtils";
+import { parseTimeToMinutes, currentMinutes } from "./timeUtils";
+import { minutesToDisplayTime } from "./timeline/dragTimeUtils";
 
 function stripTodayCompletionEvents(history: TaskCompletionEvent[] | undefined): TaskCompletionEvent[] {
   const today = localISODate(new Date());
@@ -174,6 +176,41 @@ export function markTaskMissed(task: Task, allSubtaskIds: string[]): Partial<Tas
     missed: true,
     missedAt: new Date().toISOString(),
     completionHistory: [...cleared, ...events],
+  };
+}
+
+// ── Snooze ("Later today") ───────────────────────────────────────────────────
+
+/**
+ * Shift a task later in the day — an honest alternative to "missed" when you
+ * slip but still intend to do it. Moves start/end forward by `byMinutes`
+ * (default 60), but never earlier than the current time, and clamps inside the
+ * day (23:59), preserving the original duration. Clears any "missed" mark for
+ * today, since a deferred task isn't missed. Returns {} (no change) if the task
+ * has no parseable start time. Times stay in the app's display format.
+ */
+export function snoozeTaskLater(task: Task, byMinutes = 60): Partial<Task> {
+  const start = parseTimeToMinutes(task.startTime);
+  if (start == null) return {};
+  const end = parseTimeToMinutes(task.endTime);
+  const duration = end != null && end > start ? end - start : 60;
+
+  const DAY_END = 23 * 60 + 59;
+  // At least `byMinutes` later than now, and at least `byMinutes` past the old start.
+  let newStart = Math.max(start + byMinutes, currentMinutes() + byMinutes);
+  let newEnd = newStart + duration;
+  if (newEnd > DAY_END) {
+    newEnd = DAY_END;
+    newStart = Math.max(0, DAY_END - duration);
+  }
+
+  return {
+    startTime: minutesToDisplayTime(newStart),
+    endTime: minutesToDisplayTime(newEnd),
+    // A deferred task is not missed.
+    missed: false,
+    missedAt: undefined,
+    completionHistory: stripTodayEvents(task.completionHistory, ["missed"]),
   };
 }
 

@@ -247,7 +247,7 @@ function ActionCard({ action, onApply }: { action: AIActionResult; onApply: (upd
       initial={{ opacity: 0, y: 6 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.25, ease: "easeOut" }}
-      className="mt-2 rounded-2xl border border-emerald-200/60 bg-gradient-to-br from-emerald-50 to-white p-3 dark:border-emerald-500/20 dark:from-emerald-500/10 dark:to-neutral-900"
+      className="mt-2 rounded-2xl border border-emerald-200/60 bg-white p-3 dark:border-emerald-500/[0.18] dark:bg-neutral-900"
     >
       <div className="flex items-start justify-between gap-2">
         <div className="min-w-0 flex-1">

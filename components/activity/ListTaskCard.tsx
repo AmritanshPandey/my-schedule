@@ -212,16 +212,18 @@ function ListTaskCardInner({
   // Show 100% bar for done tasks with no expandable items (confirms completion visually)
   const barPct = done && !canExpand ? 100 : displayPct;
 
-  // Card tap: open session sheet for session tasks, expand for tasks with
-  // subtasks, or toggle complete for plain tasks with nothing to show.
+  // Card tap: a task with subtasks expands INLINE so steps can be checked in
+  // place mid-execution (no modal round-trip) — the trailing count chip still
+  // opens the detailed sheet. Session/routine tasks keep their richer sheet;
+  // a plain task with nothing to show just toggles complete.
   function handleCardTap() {
     haptic("light");
-    if ((canExpand || hasRoutine) && onOpenSubtasks) {
+    if (canExpand) {
+      setExpanded((v) => !v);
+    } else if (hasRoutine && onOpenSubtasks) {
       onOpenSubtasks();
     } else if (isRoutine && onOpenRoutine) {
       onOpenRoutine();
-    } else if (canExpand) {
-      setExpanded((v) => !v);
     } else if (!readOnly) {
       onToggleComplete(task.id, allSubtaskIds);
     }

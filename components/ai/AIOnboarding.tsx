@@ -91,7 +91,7 @@ export default function AIOnboarding() {
                     {/* Icon */}
                     <div className="flex justify-center px-5 pt-2 pb-5">
                       <div className="relative">
-                        <div className="flex h-20 w-20 items-center justify-center rounded-[28px] bg-gradient-to-br from-violet-500 via-fuchsia-500 to-pink-500 shadow-lg shadow-fuchsia-500/30">
+                        <div className="flex h-20 w-20 items-center justify-center rounded-[28px] bg-[#AD46FF] shadow-sm">
                           <IconBrain size={36} strokeWidth={1.5} className="text-white" />
                         </div>
                         <m.div

@@ -102,7 +102,7 @@ export function TaskBlockCard({
     <div className="relative flex items-start justify-between gap-2">
       <div className="flex min-w-0 flex-col gap-px">
         {showEyebrow && (
-          <span className={`truncate font-bold uppercase tracking-[0.07em] ${styles.planLabel} ${isList ? "text-[10px]" : "text-[8px] leading-none"}`}>
+          <span className={`truncate font-bold ${styles.planLabel} ${isList ? "text-[11px]" : "text-[9px] leading-none"}`}>
             {plan!.title}
           </span>
         )}

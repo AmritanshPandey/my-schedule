@@ -70,7 +70,7 @@ export default function EnableIntelligencePrompt({
           {status === "disabled" && (
             <m.div key="idle" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
               <div className="mb-4 flex items-start gap-3.5">
-                <div className="mt-0.5 flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl bg-gradient-to-br from-violet-500 via-fuchsia-500 to-pink-500">
+                <div className="mt-0.5 flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl bg-[#AD46FF]">
                   <IconBrain size={18} strokeWidth={1.8} className="text-white" />
                 </div>
                 <div>
