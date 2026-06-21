@@ -44,3 +44,21 @@ export function resolveOccurrence(task: Task, dateISO: string): Task {
   if (ex.description !== undefined) merged.description = ex.description;
   return merged;
 }
+
+/** The overridable display fields of a task occurrence. */
+export type OccurrenceFields = Pick<TaskException, "title" | "startTime" | "endTime" | "description">;
+
+/**
+ * The minimal per-date override: only the fields whose `draft` value differs
+ * from the `original` task. Writing just the changed fields keeps the exception
+ * small and lets unchanged fields keep tracking the recurring template. An empty
+ * result means nothing changed (the caller can skip writing an exception).
+ */
+export function diffException(original: Task, draft: OccurrenceFields): OccurrenceFields {
+  const out: OccurrenceFields = {};
+  if (draft.title !== undefined && draft.title !== original.title) out.title = draft.title;
+  if (draft.startTime !== undefined && draft.startTime !== original.startTime) out.startTime = draft.startTime;
+  if (draft.endTime !== undefined && draft.endTime !== original.endTime) out.endTime = draft.endTime;
+  if (draft.description !== undefined && draft.description !== original.description) out.description = draft.description;
+  return out;
+}

@@ -40,6 +40,7 @@ import {
   displayToInputTime,
   inputToDisplayTime,
 } from "@/lib/taskMutations";
+import { resolveOccurrence } from "@/lib/taskOccurrence";
 import { PlanSelector } from "./PlanSelector";
 import SubtaskDraftRow, { type SubtaskDraft } from "./SubtaskDraftRow";
 import { validateTaskTime } from "@/lib/scheduleRules";
@@ -54,6 +55,8 @@ export interface TaskSaveData {
     planId: string;
     items: ScheduleEntry[];
   } | null;
+  /** "occurrence" = apply edits to just `occurrenceDateISO` (per-date override). */
+  scope?: "all" | "occurrence";
 }
 
 export interface TaskSheetProps {
@@ -69,12 +72,18 @@ export interface TaskSheetProps {
   initialStartTime?: string;
   /** Pre-fill end time on create (HH:MM 24-hour format, e.g. "10:30"). */
   initialEndTime?: string;
+  /** The specific date being edited — enables the "This day only" scope toggle. */
+  occurrenceDateISO?: string;
+  /** Whether editing just this occurrence is allowed (today/future only). */
+  canEditOccurrence?: boolean;
   ollamaUrl?: string;
   ollamaModel?: string;
   onClose: () => void;
   onSave: (data: TaskSaveData) => void;
   onDuplicate?: (data: TaskSaveData) => void;
   onDelete?: () => void;
+  /** Clear this date's per-date override (restore the recurring template). */
+  onResetOccurrence?: () => void;
 }
 
 function entryToSubtaskDraft(e: ScheduleEntry): SubtaskDraft {
@@ -121,12 +130,15 @@ export function TaskSheet({
   initialTaskType,
   initialStartTime,
   initialEndTime,
+  occurrenceDateISO,
+  canEditOccurrence = false,
   ollamaUrl,
   ollamaModel,
   onClose,
   onSave,
   onDuplicate,
   onDelete,
+  onResetOccurrence,
 }: TaskSheetProps) {
   // ── AI routing ────────────────────────────────────────────────────────────
   const aiRuntime = useAIRuntime();
@@ -154,8 +166,23 @@ export function TaskSheet({
   const [focusNewSubtask, setFocusNewSubtask] = useState(false);
   const [duplicateStep, setDuplicateStep] = useState<"idle" | "picking">("idle");
   const [duplicateDays, setDuplicateDays] = useState<DayKey[]>([]);
+  const [editScope, setEditScope] = useState<"all" | "occurrence">("all");
 
   const titleRef = useRef<HTMLInputElement>(null);
+
+  // The "This day only" scope is offered when editing an existing task on a known
+  // current/future date. Per-date overrides cover title/time/note (not subtasks).
+  const canScopeToOccurrence = mode === "edit" && !!occurrenceDateISO && canEditOccurrence;
+  const isOccurrenceScope = canScopeToOccurrence && editScope === "occurrence";
+  const occurrenceDateLabel = occurrenceDateISO
+    ? new Date(occurrenceDateISO + "T00:00:00").toLocaleDateString(undefined, { weekday: "short", month: "short", day: "numeric" })
+    : "";
+  const hasOccurrenceOverride = !!(
+    task && occurrenceDateISO && (() => {
+      const ex = task.exceptions?.[occurrenceDateISO];
+      return ex && (ex.title !== undefined || ex.startTime !== undefined || ex.endTime !== undefined || ex.description !== undefined);
+    })()
+  );
 
   // ── Initialise on open ─────────────────────────────────────────────────────
   useEffect(() => {
@@ -187,8 +214,22 @@ export function TaskSheet({
     }
     setFocusNewSubtask(false);
     setDuplicateStep("idle");
+    setEditScope("all");
     setTimeout(() => titleRef.current?.focus(), 80);
   }, [isOpen]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Switching scope reloads the editable fields from the matching base: the
+  // recurring template for "all", or this date's resolved occurrence for "this
+  // day only" (so an existing per-date override pre-fills).
+  function applyScope(scope: "all" | "occurrence") {
+    setEditScope(scope);
+    if (mode !== "edit" || !task) return;
+    const src = scope === "occurrence" && occurrenceDateISO ? resolveOccurrence(task, occurrenceDateISO) : task;
+    setTitle(src.title);
+    setDescription(src.description ?? "");
+    setStartTime(displayToInputTime(src.startTime));
+    setEndTime(displayToInputTime(src.endTime));
+  }
 
   function handleSelectPlan(plan: Plan) {
     setPlanId(plan.id);
@@ -298,6 +339,7 @@ export function TaskSheet({
         mode === "create" && taskType === "task" && validSubtasks.length > 0
           ? { planId: selectedPlan.id, items: validSubtasks }
           : null,
+      scope: isOccurrenceScope ? "occurrence" : "all",
     });
   }
 
@@ -424,7 +466,48 @@ export function TaskSheet({
             <SheetHeader eyebrow={eyebrow} title={headingTitle} onClose={handleClose} />
 
             <div className="mt-4 space-y-5">
+              {/* Edit scope — all occurrences vs just this date */}
+              {canScopeToOccurrence && (
+                <div>
+                  <p className={`mb-1.5 ${SECTION_LABEL}`}>Apply changes to</p>
+                  <div className="grid grid-cols-2 gap-2">
+                    {([["all", "All days"], ["occurrence", "This day only"]] as const).map(([value, label]) => (
+                      <button
+                        key={value}
+                        type="button"
+                        onClick={() => applyScope(value)}
+                        className={`h-10 rounded-xl text-[14px] font-semibold transition-colors ${
+                          editScope === value
+                            ? "bg-neutral-900 text-white dark:bg-white dark:text-neutral-950"
+                            : "border border-neutral-200 bg-white text-neutral-500 dark:border-white/10 dark:bg-white/[0.04] dark:text-neutral-400"
+                        }`}
+                      >
+                        {label}
+                      </button>
+                    ))}
+                  </div>
+                  {isOccurrenceScope && (
+                    <p className="mt-2 text-[12px] leading-snug text-neutral-400 dark:text-neutral-500">
+                      Changes apply only to {occurrenceDateLabel} — title, time &amp; note.
+                      {hasOccurrenceOverride && onResetOccurrence && (
+                        <>
+                          {" "}
+                          <button
+                            type="button"
+                            onClick={() => { haptic("light"); onResetOccurrence(); }}
+                            className="font-semibold text-emerald-600 underline-offset-2 hover:underline dark:text-emerald-400"
+                          >
+                            Reset this day
+                          </button>
+                        </>
+                      )}
+                    </p>
+                  )}
+                </div>
+              )}
+
               {/* Task type toggle */}
+              {!isOccurrenceScope && (
               <div>
                 <p className={`mb-1.5 ${SECTION_LABEL}`}>Type</p>
                 <div className="grid grid-cols-2 gap-2">
@@ -444,13 +527,16 @@ export function TaskSheet({
                   ))}
                 </div>
               </div>
+              )}
 
               {/* Plan selector */}
-              <PlanSelector
-                plans={plans}
-                selectedId={planId}
-                onSelect={handleSelectPlan}
-              />
+              {!isOccurrenceScope && (
+                <PlanSelector
+                  plans={plans}
+                  selectedId={planId}
+                  onSelect={handleSelectPlan}
+                />
+              )}
 
               {/* Title */}
               <Input
@@ -478,8 +564,8 @@ export function TaskSheet({
                 onStartChange={setStartTime}
                 onEndChange={setEndTime}
                 activeDay={activeDay}
-                repeatDays={repeatDays}
-                onRepeatDaysChange={setRepeatDays}
+                repeatDays={isOccurrenceScope ? undefined : repeatDays}
+                onRepeatDaysChange={isOccurrenceScope ? undefined : setRepeatDays}
               />
               {timeError && (
                 <p className="-mt-3 text-[12px] font-semibold text-rose-500 dark:text-rose-400">
@@ -488,7 +574,7 @@ export function TaskSheet({
               )}
 
               {/* Subtasks / Session Steps */}
-              {selectedPlan && (
+              {selectedPlan && !isOccurrenceScope && (
                 <section className="space-y-3">
                   <div className="flex items-center justify-between">
                     <p className={SECTION_LABEL}>
@@ -546,13 +632,13 @@ export function TaskSheet({
               <div className="flex gap-2">
                 <Button fullWidth onClick={handleSave} disabled={!canSave}>
                   <IconCheck size={16} strokeWidth={2.5} />
-                  {mode === "create" ? "Add Task" : "Save Changes"}
+                  {mode === "create" ? "Add Task" : isOccurrenceScope ? "Save this day" : "Save Changes"}
                 </Button>
                 <Button variant="secondary" onClick={handleClose}>
                   <IconX size={15} />
                 </Button>
               </div>
-              {mode === "edit" && (onDuplicate || onDelete) && (
+              {mode === "edit" && !isOccurrenceScope && (onDuplicate || onDelete) && (
                 <div className={`grid gap-2 ${onDuplicate && onDelete ? "grid-cols-2" : "grid-cols-1"}`}>
                   {onDuplicate && (
                     <Button variant="secondary" fullWidth onClick={openDuplicatePicker} disabled={!canSave}>

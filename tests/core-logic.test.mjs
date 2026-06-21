@@ -38,7 +38,7 @@ const {
   setTaskException,
   clearTaskException,
 } = await import("../lib/taskMutations.ts");
-const { isTaskScheduledOn, resolveOccurrence } = await import("../lib/taskOccurrence.ts");
+const { isTaskScheduledOn, resolveOccurrence, diffException } = await import("../lib/taskOccurrence.ts");
 const { computeExecutionTrend } = await import("../lib/executionAnalytics.ts");
 const { calculateExecutionStreak } = await import("../lib/consistency/calculateExecutionStreak.ts");
 const { localISODate, addDaysToISO } = await import("../lib/dateUtils.ts");
@@ -370,6 +370,16 @@ test("per-date exceptions: scheduling, resolution, and mutations", () => {
   assert.equal(afterEdit.activities.monday[0].exceptions[D].title, "X");
   const afterClear = clearTaskException("rt", D)(afterEdit);
   assert.equal(afterClear.activities.monday[0].exceptions, undefined);
+
+  // diffException returns only changed fields
+  const orig = base();
+  assert.deepEqual(diffException(orig, { title: "Run", startTime: "8:00 AM", endTime: "9:00 AM" }), {}, "no change -> empty");
+  assert.deepEqual(diffException(orig, { startTime: "7:00 AM" }), { startTime: "7:00 AM" }, "only changed field");
+  assert.deepEqual(
+    diffException(orig, { title: "Long run", startTime: "7:00 AM", endTime: "9:00 AM" }),
+    { title: "Long run", startTime: "7:00 AM" },
+    "mix of changed and unchanged"
+  );
 });
 
 test("execution streak unifies tasks and rituals", () => {

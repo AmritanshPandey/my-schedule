@@ -112,9 +112,10 @@ import {
   sortTasksByTime,
   updateTaskDays,
   setTaskException,
+  clearTaskException,
   type TaskDeleteScope,
 } from "@/lib/taskMutations";
-import { isTaskScheduledOn, resolveOccurrence } from "@/lib/taskOccurrence";
+import { isTaskScheduledOn, resolveOccurrence, diffException } from "@/lib/taskOccurrence";
 import type { AIGeneratedTask } from "@/lib/aiActions";
 import { applyScheduleRules } from "@/lib/scheduleRules";
 import { resolveTimes as resolveParsedTimes } from "@/lib/scheduleParser";
@@ -517,6 +518,8 @@ export default function ScheduleApp() {
   const [taskSheetMode, setTaskSheetMode] = useState<"create" | "edit">("create");
   const [taskSheetTask, setTaskSheetTask] = useState<Task | null>(null);
   const [taskSheetPlanId, setTaskSheetPlanId] = useState<string | null>(null);
+  // The specific date the edit sheet was opened on (enables "this day only").
+  const [taskSheetDateISO, setTaskSheetDateISO] = useState<string>("");
 
   const [selectedPlanId, setSelectedPlanId] = useState<string | null>(null);
   const [entryTracker, setEntryTracker] = useState<ProgressTracker | null>(null);
@@ -615,6 +618,11 @@ export default function ScheduleApp() {
 
   const timelineScrollRef = useRef<HTMLDivElement | null>(null);
   const taskGridRef = useRef<HTMLDivElement | null>(null);
+  // Current schedule + active date, mirrored to refs so the stable openEditSheet
+  // callback can read the latest values (and resolve the underlying template).
+  const scheduleRef = useRef(schedule);
+  scheduleRef.current = schedule;
+  const activeDateISORef = useRef("");
   // Mutable tracking for drag-create (no renders during drag)
   const createDragRef = useRef<{
     dragging: boolean;
@@ -975,9 +983,14 @@ export default function ScheduleApp() {
   }, []); // empty deps: handlers read all live values through refs
 
   // Stable identity (setters are stable) so the memoized TimelineTaskBlock holds.
-  const openEditSheet = useCallback((task: Task) => {
-    setTaskSheetTask(task);
-    setTaskSheetPlanId(task.planId);
+  const openEditSheet = useCallback((task: Task, dateISO?: string) => {
+    // The caller may pass a *resolved* occurrence (timeline); always edit the
+    // underlying weekday template so "All days" starts from template values.
+    const template =
+      DAYS.flatMap((d) => scheduleRef.current.activities[d] ?? []).find((t) => t.id === task.id) ?? task;
+    setTaskSheetTask(template);
+    setTaskSheetPlanId(template.planId);
+    setTaskSheetDateISO(dateISO ?? activeDateISORef.current);
     setTaskSheetMode("edit");
     setTaskSheetOpen(true);
   }, []);
@@ -991,6 +1004,23 @@ export default function ScheduleApp() {
   // ── Unified create + edit save handler ────────────────────────────────────
 
   function handleTaskSheetSave(data: TaskSaveData) {
+    // "This day only" — write a minimal per-date override instead of editing the
+    // recurring template across every weekday copy.
+    if (data.taskId && data.scope === "occurrence" && taskSheetDateISO && taskSheetTask) {
+      const diff = diffException(taskSheetTask, {
+        title: data.taskDraft.title,
+        startTime: data.taskDraft.startTime,
+        endTime: data.taskDraft.endTime,
+        description: data.taskDraft.description,
+      });
+      if (Object.keys(diff).length > 0) {
+        setSchedule(setTaskException(data.taskId, taskSheetDateISO, diff));
+        const label = new Date(taskSheetDateISO + "T00:00:00").toLocaleDateString(undefined, { weekday: "short", month: "short", day: "numeric" });
+        setToastMessage(`Updated ${label} only`);
+      }
+      closeTaskSheet();
+      return;
+    }
     if (data.taskId) {
       // Edit mode
       setSchedule(updateTaskDays(data.taskId, data.taskDraft, data.repeatDays, data.planItems));
@@ -1659,6 +1689,7 @@ export default function ScheduleApp() {
     const found = getWeekDates(weekOffset).find((d) => d.day === activeDay);
     return found ? localISODate(found.date) : todayISO();
   }, [weekOffset, activeDay, todayKey]); // eslint-disable-line react-hooks/exhaustive-deps
+  activeDateISORef.current = activeDateISO;
   const isViewingToday = activeDateISO === todayISO();
 
   // Resolve each weekday-template task to its occurrence on the selected date:
@@ -3028,6 +3059,19 @@ export default function ScheduleApp() {
         initialTaskType={taskSheetInitialType}
         initialStartTime={taskSheetInitialStartTime}
         initialEndTime={taskSheetInitialEndTime}
+        occurrenceDateISO={taskSheetDateISO}
+        canEditOccurrence={taskSheetMode === "edit" && !!taskSheetDateISO && taskSheetDateISO >= todayISO()}
+        onResetOccurrence={
+          taskSheetTask && taskSheetDateISO
+            ? () => {
+                const id = taskSheetTask.id;
+                const label = new Date(taskSheetDateISO + "T00:00:00").toLocaleDateString(undefined, { weekday: "short", month: "short", day: "numeric" });
+                setSchedule(clearTaskException(id, taskSheetDateISO));
+                closeTaskSheet();
+                setToastMessage(`Reset ${label} to default`);
+              }
+            : undefined
+        }
         ollamaUrl={ollamaUrl}
         ollamaModel={ollamaModel}
         onClose={closeTaskSheet}
@@ -3093,10 +3137,12 @@ export default function ScheduleApp() {
 
       {(() => {
         const raw = subtasksRef ? (schedule.activities[subtasksRef.day] ?? []).find((t) => t.id === subtasksRef.id) ?? null : null;
-        // Show the selected day's completion (history) when it isn't today.
-        const st = raw && subtasksRef && subtasksRef.dateISO !== todayISO()
-          ? { ...raw, ...completionForDate(raw, subtasksRef.dateISO) }
-          : raw;
+        // Apply this date's per-date overrides (title/time), then overlay the
+        // selected day's completion from history when it isn't today.
+        const resolved = raw && subtasksRef ? resolveOccurrence(raw, subtasksRef.dateISO) : raw;
+        const st = resolved && subtasksRef && subtasksRef.dateISO !== todayISO()
+          ? { ...resolved, ...completionForDate(raw!, subtasksRef.dateISO) }
+          : resolved;
         return (
           <SubtasksSheet
             open={!!subtasksRef}
@@ -3111,7 +3157,7 @@ export default function ScheduleApp() {
             onSkip={(taskId) => handleSkipOccurrence(taskId, subtasksRef?.dateISO)}
             skipped={!!(subtasksRef && raw?.exceptions?.[subtasksRef.dateISO]?.skipped)}
             canSkip={!!subtasksRef && subtasksRef.dateISO >= todayISO()}
-            onEdit={raw ? () => { openEditSheet(raw); setSubtasksRef(null); } : undefined}
+            onEdit={raw ? () => { openEditSheet(raw, subtasksRef?.dateISO); setSubtasksRef(null); } : undefined}
           />
         );
       })()}
