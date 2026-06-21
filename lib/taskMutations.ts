@@ -5,7 +5,7 @@
  * can pass it directly to setSchedule(). No component logic lives here.
  */
 
-import type { Schedule, Task } from "./useScheduleDB";
+import type { Schedule, Task, TaskException } from "./useScheduleDB";
 import { DAYS, type DayKey } from "./scheduleConstants";
 import { uid } from "./id";
 import { localISODate } from "./dateUtils";
@@ -173,6 +173,69 @@ export function updateTaskDays(
 
     return { ...prev, plans, activities };
   };
+}
+
+// ── Per-date exceptions (single-occurrence skip / edit) ──────────────────────
+
+/**
+ * Merge a per-date exception onto a recurring task. Written to every weekday
+ * bucket that holds the task id so the date-keyed override is consistent
+ * regardless of which weekday the date falls on. Keys that resolve to
+ * empty/false are pruned, and an empty exceptions map is removed entirely so
+ * untouched tasks stay clean.
+ */
+export function setTaskException(
+  taskId: string,
+  dateISO: string,
+  patch: TaskException
+): (prev: Schedule) => Schedule {
+  return (prev) => ({
+    ...prev,
+    activities: Object.fromEntries(
+      DAYS.map((day) => [
+        day,
+        prev.activities[day].map((t) => {
+          if (t.id !== taskId) return t;
+          const nextExceptions = { ...(t.exceptions ?? {}) };
+          const merged = { ...(nextExceptions[dateISO] ?? {}), ...patch };
+          const cleaned = Object.fromEntries(
+            Object.entries(merged).filter(([, v]) => v !== undefined && v !== false && v !== "")
+          ) as TaskException;
+          if (Object.keys(cleaned).length === 0) delete nextExceptions[dateISO];
+          else nextExceptions[dateISO] = cleaned;
+
+          const out = { ...t };
+          if (Object.keys(nextExceptions).length > 0) out.exceptions = nextExceptions;
+          else delete out.exceptions;
+          return out;
+        }),
+      ])
+    ) as Schedule["activities"],
+  });
+}
+
+/** Remove a task's entire exception for one date (restores the template). */
+export function clearTaskException(
+  taskId: string,
+  dateISO: string
+): (prev: Schedule) => Schedule {
+  return (prev) => ({
+    ...prev,
+    activities: Object.fromEntries(
+      DAYS.map((day) => [
+        day,
+        prev.activities[day].map((t) => {
+          if (t.id !== taskId || !t.exceptions?.[dateISO]) return t;
+          const nextExceptions = { ...t.exceptions };
+          delete nextExceptions[dateISO];
+          const out = { ...t };
+          if (Object.keys(nextExceptions).length > 0) out.exceptions = nextExceptions;
+          else delete out.exceptions;
+          return out;
+        }),
+      ])
+    ) as Schedule["activities"],
+  });
 }
 
 /** Removes a task from a single day. */

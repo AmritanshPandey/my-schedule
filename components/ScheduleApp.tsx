@@ -111,8 +111,10 @@ import {
   uid,
   sortTasksByTime,
   updateTaskDays,
+  setTaskException,
   type TaskDeleteScope,
 } from "@/lib/taskMutations";
+import { isTaskScheduledOn, resolveOccurrence } from "@/lib/taskOccurrence";
 import type { AIGeneratedTask } from "@/lib/aiActions";
 import { applyScheduleRules } from "@/lib/scheduleRules";
 import { resolveTimes as resolveParsedTimes } from "@/lib/scheduleParser";
@@ -1072,6 +1074,20 @@ export default function ScheduleApp() {
     [activeDay, schedule, setSchedule]
   );
 
+  const handleSkipOccurrence = useCallback(
+    (taskId: string, dateISO?: string) => {
+      const date = dateISO ?? todayISO();
+      const isSkipped = DAYS.some((day) =>
+        (schedule.activities[day] ?? []).some((t) => t.id === taskId && t.exceptions?.[date]?.skipped)
+      );
+      haptic("medium");
+      // `{ skipped: false }` un-skips while preserving any other per-date edits.
+      setSchedule(setTaskException(taskId, date, { skipped: !isSkipped }));
+      setToastMessage(isSkipped ? "Restored this day" : "Skipped this day");
+    },
+    [schedule, setSchedule]
+  );
+
   const handleToggleSubtask = useCallback(
     (taskId: string, subtaskId: string, day: DayKey = activeDay, dateISO?: string) => {
       if (dateISO && dateISO !== todayISO()) return; // read-only past/future
@@ -1645,10 +1661,18 @@ export default function ScheduleApp() {
   }, [weekOffset, activeDay, todayKey]); // eslint-disable-line react-hooks/exhaustive-deps
   const isViewingToday = activeDateISO === todayISO();
 
-  // For days other than today, completion is read from the dated history so the
-  // selected day reflects what was actually done (the live flag only holds today).
+  // Resolve each weekday-template task to its occurrence on the selected date:
+  // drop ones skipped for this date, apply per-date field overrides, and (for
+  // days other than today) overlay completion from the dated history — the live
+  // flag only holds today.
   const dayTasksView = useMemo(
-    () => (isViewingToday ? dayTasks : dayTasks.map((t) => ({ ...t, ...completionForDate(t, activeDateISO) }))),
+    () =>
+      dayTasks
+        .filter((t) => isTaskScheduledOn(t, activeDateISO, true))
+        .map((t) => {
+          const resolved = resolveOccurrence(t, activeDateISO);
+          return isViewingToday ? resolved : { ...resolved, ...completionForDate(t, activeDateISO) };
+        }),
     [dayTasks, isViewingToday, activeDateISO]
   );
 
@@ -3084,6 +3108,9 @@ export default function ScheduleApp() {
             onToggleComplete={(taskId, ids) => handleToggleTaskComplete(taskId, ids, subtasksRef?.day, subtasksRef?.dateISO)}
             onMissed={(taskId, ids) => handleMarkTaskMissed(taskId, ids, subtasksRef?.day, subtasksRef?.dateISO)}
             onSnooze={(taskId) => handleSnoozeTaskLater(taskId, subtasksRef?.day, subtasksRef?.dateISO)}
+            onSkip={(taskId) => handleSkipOccurrence(taskId, subtasksRef?.dateISO)}
+            skipped={!!(subtasksRef && raw?.exceptions?.[subtasksRef.dateISO]?.skipped)}
+            canSkip={!!subtasksRef && subtasksRef.dateISO >= todayISO()}
             onEdit={raw ? () => { openEditSheet(raw); setSubtasksRef(null); } : undefined}
           />
         );

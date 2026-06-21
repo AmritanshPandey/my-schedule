@@ -33,6 +33,7 @@ import { getTrendDirection, getTrendState, type TrendDirection, type TrendState 
 import { localISODate, addDaysToISO } from "@/lib/dateUtils";
 import { parseTimeToMinutes, toScheduleDayMinutes } from "@/lib/timeUtils";
 import { calculateExecutionStreak } from "@/lib/consistency/calculateExecutionStreak";
+import { isTaskScheduledOn } from "@/lib/taskOccurrence";
 import ExecutionStreakBanner from "@/components/ExecutionStreakBanner";
 import { haptic } from "@/lib/haptics";
 
@@ -328,7 +329,8 @@ export default function OverviewDashboard({
   // ── Shared computed data ──────────────────────────────────────────────────
 
   const { tasksDone, tasksTotal, missedCount } = useMemo(() => {
-    const today = schedule.activities[todayKey] ?? [];
+    const todayDateISO = localISODate(new Date());
+    const today = (schedule.activities[todayKey] ?? []).filter((t) => isTaskScheduledOn(t, todayDateISO, true));
     const done = today.filter((t) => isTaskCompleted(t, t.subtasks?.length ?? 0)).length;
     const missed = today.filter((t) => !isTaskCompleted(t, t.subtasks?.length ?? 0) && !!t.missed).length;
     return { tasksDone: done, tasksTotal: today.length, missedCount: missed };
@@ -338,11 +340,14 @@ export default function OverviewDashboard({
   // full list reads top-to-bottom by time and the "what's next" card surfaces the
   // earliest unresolved task. Raw storage order is insertion order, not by time.
   const todayTasks = useMemo(() => {
+    const todayDateISO = localISODate(new Date());
     const startKey = (t: { startTime?: string }) => {
       const mins = parseTimeToMinutes(t.startTime ?? "");
       return mins === null ? Infinity : toScheduleDayMinutes(mins);
     };
-    return [...(schedule.activities[todayKey] ?? [])].sort((a, b) => startKey(a) - startKey(b));
+    return [...(schedule.activities[todayKey] ?? [])]
+      .filter((t) => isTaskScheduledOn(t, todayDateISO, true))
+      .sort((a, b) => startKey(a) - startKey(b));
   }, [schedule, todayKey]);
 
   // Incomplete tasks for the swipeable stack, ordered by the rotation queue so

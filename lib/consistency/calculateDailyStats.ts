@@ -5,6 +5,7 @@
 
 import type { DayKey, Task } from "@/lib/useScheduleDB";
 import { localISODate } from "@/lib/dateUtils";
+import { isTaskScheduledOn } from "@/lib/taskOccurrence";
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 
@@ -88,7 +89,9 @@ export function calculateCurrentWeekStats(
     const isToday = dateISO === todayISO;
     const isFuture = date > today;
 
-    const tasks = (activities[dayKey] ?? []).filter((t) => t.planId === planId);
+    const tasks = (activities[dayKey] ?? []).filter(
+      (t) => t.planId === planId && isTaskScheduledOn(t, dateISO, true)
+    );
     const scheduled = tasks.length;
     const completed = scheduled > 0 && !isFuture ? completedOnDate(tasks, dateISO, isToday) : 0;
     const pct = scheduled > 0 && !isFuture ? Math.round((completed / scheduled) * 100) : 0;

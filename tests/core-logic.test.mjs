@@ -35,7 +35,10 @@ const {
   createTaskDeleteSnapshot,
   restoreTaskDelete,
   updateTaskDays,
+  setTaskException,
+  clearTaskException,
 } = await import("../lib/taskMutations.ts");
+const { isTaskScheduledOn, resolveOccurrence } = await import("../lib/taskOccurrence.ts");
 const { computeExecutionTrend } = await import("../lib/executionAnalytics.ts");
 const { calculateExecutionStreak } = await import("../lib/consistency/calculateExecutionStreak.ts");
 const { localISODate, addDaysToISO } = await import("../lib/dateUtils.ts");
@@ -323,6 +326,50 @@ test("weekly analytics count each recurring weekday occurrence", () => {
   assert.equal(trend.current.scheduled, 2);
   assert.equal(trend.current.completed, 2);
   assert.equal(trend.current.pct, 100);
+});
+
+test("per-date exceptions: scheduling, resolution, and mutations", () => {
+  const D = "2026-06-22"; // a Monday
+  const base = () => ({
+    id: "rt", title: "Run", startTime: "8:00 AM", endTime: "9:00 AM",
+    icon: "star", color: "amber", planId: "p", completionHistory: [],
+  });
+
+  // isTaskScheduledOn
+  assert.equal(isTaskScheduledOn(base(), D, true), true, "template hit is scheduled");
+  assert.equal(isTaskScheduledOn(base(), D, false), false, "not in weekday bucket -> not scheduled");
+  const skipped = { ...base(), exceptions: { [D]: { skipped: true } } };
+  assert.equal(isTaskScheduledOn(skipped, D, true), false, "skipped date is not scheduled");
+  assert.equal(isTaskScheduledOn(skipped, "2026-06-29", true), true, "other dates unaffected");
+
+  // resolveOccurrence applies overrides but preserves identity/history
+  const edited = { ...base(), exceptions: { [D]: { title: "Long run", startTime: "7:00 AM" } } };
+  const occ = resolveOccurrence(edited, D);
+  assert.equal(occ.title, "Long run");
+  assert.equal(occ.startTime, "7:00 AM");
+  assert.equal(occ.id, "rt");
+  assert.equal(occ.endTime, "9:00 AM", "unset fields fall through to template");
+  const noEx = base();
+  assert.equal(resolveOccurrence(noEx, D), noEx, "no exception returns the same reference");
+
+  // setTaskException / clearTaskException across weekday buckets
+  const sched = emptySchedule();
+  sched.activities.monday = [base()];
+  sched.activities.wednesday = [base()];
+
+  const afterSkip = setTaskException("rt", D, { skipped: true })(sched);
+  assert.equal(afterSkip.activities.monday[0].exceptions[D].skipped, true);
+  assert.equal(afterSkip.activities.wednesday[0].exceptions[D].skipped, true, "written to all buckets");
+
+  // Un-skip via { skipped: false } prunes the key (false/empty dropped)
+  const afterUnskip = setTaskException("rt", D, { skipped: false })(afterSkip);
+  assert.equal(afterUnskip.activities.monday[0].exceptions, undefined, "empty exceptions removed");
+
+  // Field override then clear
+  const afterEdit = setTaskException("rt", D, { title: "X" })(sched);
+  assert.equal(afterEdit.activities.monday[0].exceptions[D].title, "X");
+  const afterClear = clearTaskException("rt", D)(afterEdit);
+  assert.equal(afterClear.activities.monday[0].exceptions, undefined);
 });
 
 test("execution streak unifies tasks and rituals", () => {

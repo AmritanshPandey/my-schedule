@@ -38,6 +38,20 @@ export interface TaskCompletionEvent {
   subtaskId?: string;  // present for subtask-level events (completed or missed)
 }
 
+/**
+ * Per-date override for a single occurrence of a recurring (weekday-template)
+ * task — keyed by ISO date in `Task.exceptions`. Lets a user skip or edit just
+ * one date without touching every weekday copy. Never overrides identity or
+ * history (id / planId / completionHistory).
+ */
+export interface TaskException {
+  skipped?: boolean;      // this date's occurrence is removed from the schedule
+  startTime?: string;     // per-date time override (reschedule within the day)
+  endTime?: string;
+  title?: string;         // edit just this occurrence
+  description?: string;
+}
+
 export interface Task {
   id: string;
   title: string;
@@ -58,6 +72,7 @@ export interface Task {
   sortOrder?: number;                 // drag-reorder position within a day
   subtasks?: ScheduleEntry[];         // per-task subtask list (overrides plan.items)
   taskType?: "task" | "session";       // undefined treated as "task"
+  exceptions?: Record<string, TaskException>; // per-date overrides, keyed by ISO date
 }
 
 export interface SummaryConfig {
@@ -542,6 +557,7 @@ function normalizeTasks(value: unknown, fallbackPlanId: string, fallbackIcon = "
         ...(task.streakEnabled !== undefined && { streakEnabled: task.streakEnabled }),
         ...(task.sortOrder !== undefined && { sortOrder: task.sortOrder }),
         ...(Array.isArray(task.subtasks) && task.subtasks.length > 0 && { subtasks: task.subtasks }),
+        ...(task.exceptions && typeof task.exceptions === "object" && !Array.isArray(task.exceptions) && { exceptions: task.exceptions }),
       }];
     }
 

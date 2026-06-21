@@ -2,7 +2,7 @@
 
 import { useMemo } from "react";
 import { m } from "framer-motion";
-import { IconCheck, IconListCheck, IconX, IconClockHour4 } from "@tabler/icons-react";
+import { IconCheck, IconListCheck, IconX, IconClockHour4, IconBan, IconArrowBackUp } from "@tabler/icons-react";
 import BottomSheet from "@/components/ui/BottomSheet";
 import IconButton from "@/components/ui/IconButton";
 import Pill from "@/components/ui/Pill";
@@ -26,6 +26,12 @@ interface SubtasksSheetProps {
   onToggleComplete: (taskId: string, allSubtaskIds: string[]) => void;
   onMissed?: (taskId: string, allSubtaskIds: string[]) => void;
   onSnooze?: (taskId: string) => void;
+  /** Skip/restore just this dated occurrence of a recurring task. */
+  onSkip?: (taskId: string) => void;
+  /** This date's occurrence is currently skipped. */
+  skipped?: boolean;
+  /** The viewed date is today or future (skipping a past occurrence is meaningless). */
+  canSkip?: boolean;
   onEdit?: () => void;
 }
 
@@ -39,6 +45,9 @@ export default function SubtasksSheet({
   onToggleComplete,
   onMissed,
   onSnooze,
+  onSkip,
+  skipped = false,
+  canSkip = false,
   onEdit,
 }: SubtasksSheetProps) {
   const isSession = task?.taskType === "session";
@@ -66,6 +75,19 @@ export default function SubtasksSheet({
 
   if (!task) return null;
   const eyebrow = linkedPlan?.title ?? (isSession ? "Session" : "Task");
+
+  // Skip/restore this single dated occurrence — valid for today and future
+  // (skipping a past occurrence is meaningless).
+  const skipToggle = onSkip && canSkip ? (
+    <button
+      type="button"
+      onClick={() => { onSkip(task.id); onClose(); }}
+      className="flex min-h-[44px] w-full items-center justify-center gap-1.5 rounded-full border border-neutral-200 text-[13px] font-semibold text-neutral-500 transition-colors hover:bg-neutral-50 dark:border-white/[0.10] dark:text-neutral-400 dark:hover:bg-white/[0.04]"
+    >
+      {skipped ? <IconArrowBackUp size={16} strokeWidth={2.2} /> : <IconBan size={16} strokeWidth={2.2} />}
+      {skipped ? "Restore this day" : "Skip this day"}
+    </button>
+  ) : null;
 
   return (
     <BottomSheet open={open} onClose={onClose}>
@@ -157,9 +179,14 @@ export default function SubtasksSheet({
 
         {/* Actions — only today is editable */}
         {readOnly ? (
-          <p className="mt-1 rounded-full bg-neutral-100 py-3 text-center text-[13px] font-semibold text-neutral-400 dark:bg-white/[0.04] dark:text-neutral-500">
-            Read-only — past day
-          </p>
+          skipToggle ? (
+            // Future date: completion is locked, but scheduling a skip is valid.
+            <div className="mt-1">{skipToggle}</div>
+          ) : (
+            <p className="mt-1 rounded-full bg-neutral-100 py-3 text-center text-[13px] font-semibold text-neutral-400 dark:bg-white/[0.04] dark:text-neutral-500">
+              Read-only — past day
+            </p>
+          )
         ) : (
           <div className="mt-1 flex flex-col gap-2.5">
             <m.button
@@ -197,6 +224,7 @@ export default function SubtasksSheet({
                 )}
               </div>
             )}
+            {skipToggle}
           </div>
         )}
 
