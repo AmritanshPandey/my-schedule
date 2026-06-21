@@ -87,15 +87,11 @@ export function minutesToDisplayTime(minutes: number): string {
 }
 
 /**
- * Convert timeline minutes to an HTML input[type=time] value "HH:MM".
- * Wraps overnight (> 1440) back to the next-day clock time.
+ * Re-exported from the canonical timeUtils implementation (same wrapping
+ * behavior) so there's a single source of truth. Kept here for the existing
+ * `dragTimeUtils` import sites.
  */
-export function minutesToInputTime(minutes: number): string {
-  const n = ((minutes % 1440) + 1440) % 1440;
-  const h = Math.floor(n / 60);
-  const m = n % 60;
-  return `${h.toString().padStart(2, "0")}:${m.toString().padStart(2, "0")}`;
-}
+export { minutesToInputTime } from "@/lib/timeUtils";
 
 /**
  * Human-readable duration label: "1h 30m", "45m", "2h".

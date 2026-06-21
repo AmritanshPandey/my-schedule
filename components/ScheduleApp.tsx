@@ -1048,18 +1048,28 @@ export default function ScheduleApp() {
     (taskId: string, day: DayKey = activeDay, dateISO?: string) => {
       // Only today is editable — deferring a past/future occurrence is meaningless.
       if (dateISO && dateISO !== todayISO()) return;
+      const task = (schedule.activities[day] ?? []).find((t) => t.id === taskId);
+      if (!task) return;
+      const patch = snoozeTaskLater(task);
+      // No room left later today — tell the user instead of silently doing nothing.
+      if (!patch.startTime) {
+        haptic("light");
+        setToastMessage("No room left today — try tomorrow");
+        return;
+      }
       haptic("medium");
       setSchedule((prev) => ({
         ...prev,
         activities: {
           ...prev.activities,
           [day]: (prev.activities[day] ?? []).map((t) =>
-            t.id === taskId ? { ...t, ...snoozeTaskLater(t) } : t
+            t.id === taskId ? { ...t, ...patch } : t
           ),
         },
       }));
+      setToastMessage(`Moved to ${patch.startTime}`);
     },
-    [activeDay, setSchedule]
+    [activeDay, schedule, setSchedule]
   );
 
   const handleToggleSubtask = useCallback(

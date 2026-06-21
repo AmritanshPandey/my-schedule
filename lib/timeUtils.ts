@@ -54,12 +54,14 @@ export function toScheduleDayMinutes(minutes: number, dayStartMinutes = 4 * 60):
 
 /**
  * Convert minutes-from-midnight to an HTML input[type=time] value ("09:30").
- * Clamps to the valid 00:00–23:59 range.
+ * Wraps overnight/negative values into a valid 00:00–23:59 clock time (e.g.
+ * 1500 → "01:00") — the single canonical implementation; `dragTimeUtils`
+ * re-exports this. In-range callers are unaffected.
  */
 export function minutesToInputTime(minutes: number): string {
-  const clamped = Math.min(Math.max(Math.round(minutes), 0), 23 * 60 + 59);
-  const h = Math.floor(clamped / 60).toString().padStart(2, "0");
-  const m = (clamped % 60).toString().padStart(2, "0");
+  const n = ((Math.round(minutes) % 1440) + 1440) % 1440;
+  const h = Math.floor(n / 60).toString().padStart(2, "0");
+  const m = (n % 60).toString().padStart(2, "0");
   return `${h}:${m}`;
 }
 
