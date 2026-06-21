@@ -70,17 +70,20 @@ export default function SubtasksSheet({
   return (
     <BottomSheet open={open} onClose={onClose}>
       <div className="relative px-5 pt-5 pb-8 flex flex-col gap-4">
-        {/* Close */}
-        <IconButton
-          label="Close"
-          variant="soft"
-          size="md"
-          radius="full"
-          onClick={onClose}
-          className="absolute right-4 top-4"
-        >
-          <IconX size={18} strokeWidth={2.2} />
-        </IconButton>
+        {/* Close — positioned via wrapper because IconButton's `tap-target`
+            class sets `position: relative`, which would override an `absolute`
+            placed directly on the button. */}
+        <div className="absolute right-4 top-4 z-10">
+          <IconButton
+            label="Close"
+            variant="soft"
+            size="md"
+            radius="full"
+            onClick={onClose}
+          >
+            <IconX size={18} strokeWidth={2.2} />
+          </IconButton>
+        </div>
 
         {/* Header */}
         <div className="flex items-start gap-2.5 pr-10">

@@ -168,18 +168,23 @@ function PlanCardInner({
       transition={{ type: "spring", stiffness: 420, damping: 30 }}
       className="group relative w-full cursor-pointer rounded-3xl border border-neutral-200/70 bg-white px-5 pt-5 pb-4 text-left transition-all hover:border-neutral-300/80 dark:border-white/[0.07] dark:bg-neutral-900 dark:hover:border-white/[0.12]"
     >
-      {/* Delete — hover affordance (desktop) */}
+      {/* Delete — corner affordance. The absolute position lives on this wrapper
+          because IconButton's `tap-target` class sets `position: relative`, which
+          would otherwise override an `absolute` on the button itself and drop it
+          inline at the top-left. Subtle by default (so it's reachable on touch,
+          which has no hover) and emphasized on hover. */}
       {onDelete && (
-        <IconButton
-          label="Delete plan"
-          variant="dangerGhost"
-          size="xs"
-          radius="xl"
-          onClick={(e) => { e.stopPropagation(); haptic("light"); onDelete(); }}
-          className="absolute right-3 top-3 z-10 hidden group-hover:flex"
-        >
-          <IconTrash size={15} strokeWidth={2} />
-        </IconButton>
+        <div className="absolute right-2.5 top-2.5 z-10 opacity-60 transition-opacity group-hover:opacity-100">
+          <IconButton
+            label="Delete plan"
+            variant="dangerGhost"
+            size="xs"
+            radius="xl"
+            onClick={(e) => { e.stopPropagation(); haptic("light"); onDelete(); }}
+          >
+            <IconTrash size={15} strokeWidth={2} />
+          </IconButton>
+        </div>
       )}
 
       {/* ── Row 1: status chip ───────────────────────────────────────────── */}
