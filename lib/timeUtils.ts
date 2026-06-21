@@ -14,6 +14,9 @@
  * Returns null if the string cannot be parsed.
  */
 export function parseTimeToMinutes(value: string): number | null {
+  // Defensive: callers occasionally pass an untimed task's `undefined` start/end.
+  // Without this guard `.trim()` throws and crashes the caller (e.g. snooze).
+  if (typeof value !== "string") return null;
   const raw = value.trim();
   if (!raw) return null;
 

@@ -575,18 +575,28 @@ nav[aria-label="Main navigation"] {
    Expands a small control's touch region to 44px WITHOUT changing its visual
    size, via a centered invisible pseudo-element. Clicks on the pseudo-element
    are attributed to its host button, so the visual stays compact while the
-   hit-area meets the WCAG 2.5.5 / design-system 44px bar. */
-.tap-target {
-  position: relative;
-}
-.tap-target::before {
-  content: "";
-  position: absolute;
-  left: 50%;
-  top: 50%;
-  width: 100%;
-  height: 100%;
-  min-width: 44px;
-  min-height: 44px;
-  transform: translate(-50%, -50%);
+   hit-area meets the WCAG 2.5.5 / design-system 44px bar.
+
+   Scoped to @layer components so Tailwind's `utilities` layer (which comes
+   after) can still override `position` — otherwise this unlayered rule's
+   `position: relative` would beat an `absolute`/`fixed` utility placed on the
+   same element and silently drop it inline (this previously stranded the
+   PlanCard delete and several sheet close buttons). The ::before hit-area still
+   works whether the host ends up relative or absolute, since both are
+   positioned ancestors for it. */
+@layer components {
+  .tap-target {
+    position: relative;
+  }
+  .tap-target::before {
+    content: "";
+    position: absolute;
+    left: 50%;
+    top: 50%;
+    width: 100%;
+    height: 100%;
+    min-width: 44px;
+    min-height: 44px;
+    transform: translate(-50%, -50%);
+  }
 }
