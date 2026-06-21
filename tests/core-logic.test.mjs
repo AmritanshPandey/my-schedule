@@ -37,6 +37,7 @@ const {
   updateTaskDays,
 } = await import("../lib/taskMutations.ts");
 const { computeExecutionTrend } = await import("../lib/executionAnalytics.ts");
+const { calculateExecutionStreak } = await import("../lib/consistency/calculateExecutionStreak.ts");
 const { localISODate, addDaysToISO } = await import("../lib/dateUtils.ts");
 const { parseTimeToMinutes, toScheduleDayMinutes } = await import("../lib/timeUtils.ts");
 const { DAYS } = await import("../lib/scheduleConstants.ts");
@@ -322,6 +323,45 @@ test("weekly analytics count each recurring weekday occurrence", () => {
   assert.equal(trend.current.scheduled, 2);
   assert.equal(trend.current.completed, 2);
   assert.equal(trend.current.pct, 100);
+});
+
+test("execution streak unifies tasks and rituals", () => {
+  const today = localISODate(new Date());
+  const d = (n) => addDaysToISO(today, n);
+  const sched = emptySchedule();
+
+  // Three consecutive days of ritual activity ending today.
+  sched.ritualCompletions = [
+    { ritualId: "r", date: d(0) },
+    { ritualId: "r", date: d(-1) },
+    { ritualId: "r", date: d(-2) },
+  ];
+  const s1 = calculateExecutionStreak(sched, today);
+  assert.equal(s1.streak, 3);
+  assert.equal(s1.doneToday, true);
+  assert.equal(s1.atRisk, false);
+
+  // A task completion 3 days ago extends the run to 4.
+  sched.activities.monday = [{
+    id: "t", title: "T", startTime: "9:00 AM", endTime: "10:00 AM", icon: "star", color: "amber", planId: "p",
+    completionHistory: [event("t", "task", new Date(`${d(-3)}T12:00:00`).toISOString())],
+  }];
+  assert.equal(calculateExecutionStreak(sched, today).streak, 4);
+
+  // Removing today's activity → at risk, streak anchored at yesterday.
+  sched.ritualCompletions = sched.ritualCompletions.filter((c) => c.date !== d(0));
+  const s3 = calculateExecutionStreak(sched, today);
+  assert.equal(s3.doneToday, false);
+  assert.equal(s3.atRisk, true);
+  assert.equal(s3.streak, 3);
+
+  // Missed marks do not count as showing up.
+  const missedOnly = emptySchedule();
+  missedOnly.activities.monday = [{
+    id: "m", title: "M", startTime: "9:00 AM", endTime: "10:00 AM", icon: "star", color: "amber", planId: "p",
+    completionHistory: [event("m", "missed", new Date(`${today}T12:00:00`).toISOString())],
+  }];
+  assert.equal(calculateExecutionStreak(missedOnly, today).streak, 0);
 });
 
 test("snooze never moves a task earlier than its scheduled time", () => {

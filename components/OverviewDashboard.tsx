@@ -32,6 +32,8 @@ import ExecutionTrendCard from "@/components/ExecutionTrendCard";
 import { getTrendDirection, getTrendState, type TrendDirection, type TrendState } from "@/lib/trendUtils";
 import { localISODate, addDaysToISO } from "@/lib/dateUtils";
 import { parseTimeToMinutes, toScheduleDayMinutes } from "@/lib/timeUtils";
+import { calculateExecutionStreak } from "@/lib/consistency/calculateExecutionStreak";
+import ExecutionStreakBanner from "@/components/ExecutionStreakBanner";
 import { haptic } from "@/lib/haptics";
 
 // ── Props ─────────────────────────────────────────────────────────────────────
@@ -488,6 +490,12 @@ export default function OverviewDashboard({
     [schedule.plans, schedule.activities, schedule.milestones, todayKey]
   );
 
+  // Unified execution streak (tasks + rituals) — the single momentum signal.
+  const executionStreak = useMemo(
+    () => calculateExecutionStreak(schedule, localISODate(new Date())),
+    [schedule]
+  );
+
   // ── Render — one responsive layout for mobile + desktop ───────────────────
 
   return (
@@ -506,6 +514,9 @@ export default function OverviewDashboard({
           <GettingStarted onNavigate={onNavigate} />
         ) : (
         <>
+
+        {/* ── Execution streak — the one momentum signal, both surfaces ────── */}
+        <ExecutionStreakBanner data={executionStreak} />
 
         {/* ── Task count row (mobile only — desktop shows it in the card) ──── */}
         <div className="mb-3 lg:hidden">
