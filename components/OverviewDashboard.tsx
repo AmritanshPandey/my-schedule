@@ -31,7 +31,7 @@ import { accentStyles } from "@/lib/colorSystem";
 import ExecutionTrendCard from "@/components/ExecutionTrendCard";
 import { getTrendDirection, getTrendState, type TrendDirection, type TrendState } from "@/lib/trendUtils";
 import { localISODate, addDaysToISO } from "@/lib/dateUtils";
-import { parseTimeToMinutes } from "@/lib/timeUtils";
+import { parseTimeToMinutes, toScheduleDayMinutes } from "@/lib/timeUtils";
 import { haptic } from "@/lib/haptics";
 
 // ── Props ─────────────────────────────────────────────────────────────────────
@@ -332,7 +332,16 @@ export default function OverviewDashboard({
     return { tasksDone: done, tasksTotal: today.length, missedCount: missed };
   }, [schedule, todayKey]);
 
-  const todayTasks = useMemo(() => schedule.activities[todayKey] ?? [], [schedule, todayKey]);
+  // Chronological order (matching the timeline's 4 AM schedule-day model) so the
+  // full list reads top-to-bottom by time and the "what's next" card surfaces the
+  // earliest unresolved task. Raw storage order is insertion order, not by time.
+  const todayTasks = useMemo(() => {
+    const startKey = (t: { startTime?: string }) => {
+      const mins = parseTimeToMinutes(t.startTime ?? "");
+      return mins === null ? Infinity : toScheduleDayMinutes(mins);
+    };
+    return [...(schedule.activities[todayKey] ?? [])].sort((a, b) => startKey(a) - startKey(b));
+  }, [schedule, todayKey]);
 
   // Incomplete tasks for the swipeable stack, ordered by the rotation queue so
   // missed/swiped cards come back around after the others.
