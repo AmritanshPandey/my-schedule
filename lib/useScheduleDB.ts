@@ -199,6 +199,7 @@ export interface Note {
   updatedAt: string;     // ISO
   pinned?: boolean;
   tags?: string[];       // free-text labels for grouping/filtering
+  linkedTaskIds?: string[]; // ids of tasks this note references
 }
 
 export interface SchedulePreferences {
@@ -784,6 +785,9 @@ function normalizeNotes(raw: unknown): Note[] {
       updatedAt: typeof n.updatedAt === "string" ? n.updatedAt : new Date().toISOString(),
       pinned: typeof n.pinned === "boolean" ? n.pinned : undefined,
       tags: normalizeNoteTags(n.tags),
+      linkedTaskIds: Array.isArray(n.linkedTaskIds)
+        ? (n.linkedTaskIds as unknown[]).filter((x): x is string => typeof x === "string")
+        : undefined,
     }));
 }
 

@@ -2,10 +2,11 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { AnimatePresence, m } from "framer-motion";
-import { IconNotebook, IconPlus, IconSearch, IconX, IconPinnedFilled, IconLayoutGrid } from "@tabler/icons-react";
-import type { Note } from "@/lib/useScheduleDB";
+import { IconNotebook, IconPlus, IconSearch, IconX, IconPinnedFilled, IconLayoutGrid, IconLink } from "@tabler/icons-react";
+import type { Note, Task, Plan } from "@/lib/useScheduleDB";
 import { haptic } from "@/lib/haptics";
 import { checklistStats, deriveSnippet, deriveTitle } from "@/lib/notes/markdown";
+import { bodyToPlainText } from "@/lib/notes/richText";
 import { AccentBadge, cycleAccentColor } from "@/components/ui/Badge";
 import { stableFieldHash } from "@/lib/hash";
 import { NOTE_TEMPLATES } from "@/lib/notes/templates";
@@ -15,7 +16,7 @@ import DetailHeader from "@/components/ui/DetailHeader";
 import EmptyState from "@/components/ui/EmptyState";
 import NoteEditor from "./NoteEditor";
 
-type NotePatch = Partial<Pick<Note, "title" | "body" | "pinned" | "tags">>;
+type NotePatch = Partial<Pick<Note, "title" | "body" | "pinned" | "tags" | "linkedTaskIds">>;
 type CreateNoteInput = Partial<Pick<Note, "title" | "body" | "tags">>;
 
 interface NotesViewProps {
@@ -24,6 +25,10 @@ interface NotesViewProps {
   onUpdate: (id: string, patch: NotePatch) => void;
   onDelete: (id: string) => void;
   onClose: () => void;
+  /** De-duplicated tasks + plans for note→task linking, and the open handler. */
+  tasks: Task[];
+  plans: Plan[];
+  onOpenTask: (taskId: string) => void;
 }
 
 function relativeDate(iso: string): string {
@@ -64,6 +69,7 @@ function NoteCard({
   const stats = checklistStats(note.body);
   const snippet = deriveSnippet(note);
   const tags = note.tags ?? [];
+  const linkCount = note.linkedTaskIds?.length ?? 0;
   return (
     <m.div
       layout
@@ -108,8 +114,14 @@ function NoteCard({
           {snippet}
         </span>
       )}
-      {(stats || tags.length > 0) && (
+      {(stats || tags.length > 0 || linkCount > 0) && (
         <div className="mt-2 flex flex-wrap items-center gap-1.5">
+          {linkCount > 0 && (
+            <span className="inline-flex items-center gap-1 rounded-full bg-neutral-100 px-2 py-0.5 text-[11px] font-semibold text-neutral-500 dark:bg-white/[0.06] dark:text-neutral-400">
+              <IconLink size={11} strokeWidth={2.2} />
+              {linkCount}
+            </span>
+          )}
           {stats && (
             <span
               className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-semibold ${
@@ -145,7 +157,7 @@ function EmptyDetail({ onCreate }: { onCreate: () => void }) {
   );
 }
 
-export default function NotesView({ notes, onCreate, onUpdate, onDelete, onClose }: NotesViewProps) {
+export default function NotesView({ notes, onCreate, onUpdate, onDelete, onClose, tasks, plans, onOpenTask }: NotesViewProps) {
   const [editingId, setEditingId] = useState<string | null>(null);
   const [query, setQuery] = useState("");
   const [selectedTags, setSelectedTags] = useState<string[]>([]);
@@ -191,17 +203,25 @@ export default function NotesView({ notes, onCreate, onUpdate, onDelete, onClose
     setSelectedTags((prev) => prev.filter((t) => allTags.some((a) => a.toLowerCase() === t.toLowerCase())));
   }, [allTags]);
 
+  // Precomputed lowercase search text (title + the body's *plain text*, not raw
+  // rich-HTML) so search matches words the user can see, not markup.
+  const searchIndex = useMemo(() => {
+    const map = new Map<string, string>();
+    for (const n of notes) map.set(n.id, (n.title + " " + bodyToPlainText(n.body)).toLowerCase());
+    return map;
+  }, [notes]);
+
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
     return sorted.filter((n) => {
-      if (q && !(n.title + " " + n.body).toLowerCase().includes(q)) return false;
+      if (q && !(searchIndex.get(n.id) ?? "").includes(q)) return false;
       if (selectedTags.length > 0) {
         const noteTags = (n.tags ?? []).map((t) => t.toLowerCase());
         if (!selectedTags.every((t) => noteTags.includes(t.toLowerCase()))) return false;
       }
       return true;
     });
-  }, [sorted, query, selectedTags]);
+  }, [sorted, query, selectedTags, searchIndex]);
 
   const editingNote = editingId ? notes.find((n) => n.id === editingId) ?? null : null;
 
@@ -402,6 +422,9 @@ export default function NotesView({ notes, onCreate, onUpdate, onDelete, onClose
               onUpdate={onUpdate}
               onDelete={handleDelete}
               onBack={() => setEditingId(null)}
+              tasks={tasks}
+              plans={plans}
+              onOpenTask={onOpenTask}
             />
           ) : (
             <EmptyDetail onCreate={() => handleCreate()} />
@@ -430,6 +453,9 @@ export default function NotesView({ notes, onCreate, onUpdate, onDelete, onClose
               onUpdate={onUpdate}
               onDelete={handleDelete}
               onBack={() => setEditingId(null)}
+              tasks={tasks}
+              plans={plans}
+              onOpenTask={onOpenTask}
             />
           </m.div>
         ) : (

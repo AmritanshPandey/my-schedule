@@ -41,6 +41,7 @@ const {
 } = await import("../lib/taskMutations.ts");
 const { isTaskScheduledOn, resolveOccurrence, diffException } = await import("../lib/taskOccurrence.ts");
 const { normalizeMilestoneTimeline, cascadeMilestoneDates } = await import("../lib/roadmapDates.ts");
+const { resolveLinkedTasks } = await import("../lib/notes/linkedTasks.ts");
 const { computeExecutionTrend, trendNarrative } = await import("../lib/executionAnalytics.ts");
 const { calculateExecutionStreak } = await import("../lib/consistency/calculateExecutionStreak.ts");
 const { localISODate, addDaysToISO } = await import("../lib/dateUtils.ts");
@@ -421,6 +422,18 @@ test("execution streak unifies tasks and rituals", () => {
     completionHistory: [event("m", "missed", new Date(`${today}T12:00:00`).toISOString())],
   }];
   assert.equal(calculateExecutionStreak(missedOnly, today).streak, 0);
+});
+
+test("resolveLinkedTasks drops missing ids and dedupes", () => {
+  const tasksById = new Map([
+    ["a", { id: "a", title: "A" }],
+    ["b", { id: "b", title: "B" }],
+  ]);
+  assert.deepEqual(resolveLinkedTasks(["a", "b"], tasksById).map((t) => t.id), ["a", "b"]);
+  assert.deepEqual(resolveLinkedTasks(["a", "gone", "b"], tasksById).map((t) => t.id), ["a", "b"]);
+  assert.deepEqual(resolveLinkedTasks(["a", "a"], tasksById).map((t) => t.id), ["a"]);
+  assert.deepEqual(resolveLinkedTasks(undefined, tasksById), []);
+  assert.deepEqual(resolveLinkedTasks([], tasksById), []);
 });
 
 test("getTaskSubtaskSummary resolves items + count", () => {

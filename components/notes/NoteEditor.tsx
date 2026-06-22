@@ -26,8 +26,12 @@ import {
   IconTable,
   IconTrash,
   IconX,
+  IconLink,
+  IconPlus,
 } from "@tabler/icons-react";
-import type { Note } from "@/lib/useScheduleDB";
+import type { Note, Task, Plan } from "@/lib/useScheduleDB";
+import { resolveLinkedTasks } from "@/lib/notes/linkedTasks";
+import TaskLinkPicker from "@/components/notes/TaskLinkPicker";
 import type { Editor } from "@tiptap/core";
 import { haptic } from "@/lib/haptics";
 import { AccentBadge, cycleAccentColor } from "@/components/ui/Badge";
@@ -46,13 +50,18 @@ import {
 } from "@/lib/notes/richText";
 import { buildNoteEditorExtensions } from "./richTextExtensions";
 
-type NotePatch = Partial<Pick<Note, "title" | "body" | "pinned" | "tags">>;
+type NotePatch = Partial<Pick<Note, "title" | "body" | "pinned" | "tags" | "linkedTaskIds">>;
 
 interface NoteEditorProps {
   note: Note;
   onUpdate: (id: string, patch: NotePatch) => void;
   onDelete: (id: string) => void;
   onBack: () => void;
+  /** De-duplicated tasks (for the link picker + chip titles). */
+  tasks: Task[];
+  plans: Plan[];
+  /** Open a task referenced by the note. */
+  onOpenTask: (taskId: string) => void;
 }
 
 type SaveState = "idle" | "saving" | "saved";
@@ -125,8 +134,23 @@ function readSelectionColor(editor: Editor): string | null {
   return normalizeEditorColor(editor.getAttributes("textStyle").color as string | undefined);
 }
 
-export default function NoteEditor({ note, onUpdate, onDelete, onBack }: NoteEditorProps) {
+export default function NoteEditor({ note, onUpdate, onDelete, onBack, tasks, plans, onOpenTask }: NoteEditorProps) {
   const [title, setTitle] = useState(note.title);
+  const [linkPickerOpen, setLinkPickerOpen] = useState(false);
+  const tasksById = useMemo(() => new Map(tasks.map((t) => [t.id, t])), [tasks]);
+  const planEmoji = useMemo(() => new Map(plans.map((p) => [p.id, p.emoji])), [plans]);
+  const linkedTasks = useMemo(
+    () => resolveLinkedTasks(note.linkedTaskIds, tasksById),
+    [note.linkedTaskIds, tasksById]
+  );
+
+  function addLinkedTask(taskId: string) {
+    const next = Array.from(new Set([...(note.linkedTaskIds ?? []), taskId]));
+    onUpdate(note.id, { linkedTaskIds: next });
+  }
+  function removeLinkedTask(taskId: string) {
+    onUpdate(note.id, { linkedTaskIds: (note.linkedTaskIds ?? []).filter((id) => id !== taskId) });
+  }
   const [headerTags, setHeaderTags] = useState<string[]>(note.tags ?? []);
   const [bodyTags, setBodyTags] = useState<string[]>(extractTagsFromBody(note.body));
   const [tagInput, setTagInput] = useState("");
@@ -510,12 +534,62 @@ export default function NoteEditor({ note, onUpdate, onDelete, onBack }: NoteEdi
           </div>
         </div>
 
+        {/* Linked tasks */}
+        <div className="mx-auto w-full max-w-4xl px-5 pt-4 lg:max-w-5xl xl:max-w-6xl">
+          <div className="flex flex-wrap items-center gap-1.5">
+            <span className="mr-0.5 inline-flex items-center gap-1 text-[11px] font-bold uppercase tracking-[0.08em] text-neutral-400 dark:text-neutral-500">
+              <IconLink size={12} strokeWidth={2.2} />
+              Linked tasks
+            </span>
+            {linkedTasks.map((task) => (
+              <span
+                key={task.id}
+                className="inline-flex items-center gap-1 rounded-full border border-neutral-200 bg-white py-1 pl-2 pr-1 text-[12px] font-semibold text-neutral-700 dark:border-white/[0.12] dark:bg-white/[0.04] dark:text-neutral-200"
+              >
+                <button
+                  type="button"
+                  onClick={() => onOpenTask(task.id)}
+                  className="inline-flex max-w-[160px] items-center gap-1 truncate"
+                >
+                  <span className="leading-none">{planEmoji.get(task.planId) ?? "📋"}</span>
+                  <span className="truncate">{task.title}</span>
+                </button>
+                <button
+                  type="button"
+                  aria-label={`Unlink ${task.title}`}
+                  onClick={() => removeLinkedTask(task.id)}
+                  className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full text-neutral-400 hover:bg-neutral-100 hover:text-neutral-600 dark:hover:bg-white/[0.08]"
+                >
+                  <IconX size={12} strokeWidth={2.4} />
+                </button>
+              </span>
+            ))}
+            <button
+              type="button"
+              onClick={() => setLinkPickerOpen(true)}
+              className="inline-flex min-h-[28px] items-center gap-1 rounded-full border border-dashed border-neutral-300 px-2.5 text-[12px] font-semibold text-neutral-500 transition-colors hover:border-neutral-400 hover:text-neutral-700 dark:border-white/[0.14] dark:text-neutral-400 dark:hover:text-neutral-200"
+            >
+              <IconPlus size={13} strokeWidth={2.4} />
+              Link task
+            </button>
+          </div>
+        </div>
+
         <div className="mx-auto w-full max-w-4xl px-5 pt-5 pb-8 lg:max-w-5xl xl:max-w-6xl">
           <div className="note-editor-shell">
             <EditorContent editor={editor} />
           </div>
         </div>
       </div>
+
+      <TaskLinkPicker
+        open={linkPickerOpen}
+        tasks={tasks}
+        plans={plans}
+        linkedIds={note.linkedTaskIds ?? []}
+        onAdd={addLinkedTask}
+        onClose={() => setLinkPickerOpen(false)}
+      />
 
       <div className="glass-surface shrink-0 border-t border-neutral-100 bg-white/90 px-2 py-2 backdrop-blur dark:border-white/[0.06] dark:bg-neutral-950/90" style={{ paddingBottom: "max(8px, env(safe-area-inset-bottom))" }}>
         <div className="mx-auto flex w-full max-w-4xl flex-col gap-2 px-3 lg:max-w-5xl xl:max-w-6xl">

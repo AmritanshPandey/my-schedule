@@ -1259,7 +1259,7 @@ export default function ScheduleApp() {
     return note.id;
   }
 
-  function handleUpdateNote(id: string, patch: Partial<Pick<Note, "title" | "body" | "pinned" | "tags">>) {
+  function handleUpdateNote(id: string, patch: Partial<Pick<Note, "title" | "body" | "pinned" | "tags" | "linkedTaskIds">>) {
     setSchedule((prev) => ({
       ...prev,
       notes: (prev.notes ?? []).map((n) =>
@@ -1271,6 +1271,24 @@ export default function ScheduleApp() {
   function handleDeleteNote(id: string) {
     setSchedule((prev) => ({ ...prev, notes: (prev.notes ?? []).filter((n) => n.id !== id) }));
   }
+
+  // De-duplicated tasks (recurring tasks share an id across weekdays) for the
+  // note→task link picker + chip titles.
+  const notesLinkableTasks = useMemo(() => {
+    const byId = new Map<string, Task>();
+    for (const day of DAYS) {
+      for (const task of schedule.activities[day] ?? []) {
+        if (!byId.has(task.id)) byId.set(task.id, task);
+      }
+    }
+    return Array.from(byId.values());
+  }, [schedule.activities]);
+
+  const handleOpenLinkedTask = useCallback((taskId: string) => {
+    const task = DAYS.flatMap((d) => scheduleRef.current.activities[d] ?? []).find((t) => t.id === taskId);
+    if (task) openEditSheet(task);
+    else setToastMessage("That task no longer exists");
+  }, [openEditSheet]);
 
   function handleAddGeneratedTasks(tasks: AIGeneratedTask[], planId: string, milestoneId?: string) {
     const plan = schedule.plans.find((p) => p.id === planId);
@@ -2372,6 +2390,9 @@ export default function ScheduleApp() {
               onUpdate={handleUpdateNote}
               onDelete={handleDeleteNote}
               onClose={() => setActiveTab(0)}
+              tasks={notesLinkableTasks}
+              plans={schedule.plans}
+              onOpenTask={handleOpenLinkedTask}
             />
           </ErrorBoundary>
         </div>
