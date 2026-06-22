@@ -3,7 +3,7 @@
 import { useMemo } from "react";
 import { IconTrendingUp, IconTrendingDown, IconMinus, IconChartBar } from "@tabler/icons-react";
 import type { Schedule } from "@/lib/useScheduleDB";
-import { computeExecutionTrend } from "@/lib/executionAnalytics";
+import { computeExecutionTrend, trendNarrative } from "@/lib/executionAnalytics";
 
 const CARD =
   "rounded-2xl border border-neutral-200/70 bg-white dark:border-white/[0.07] dark:bg-neutral-900";
@@ -25,6 +25,7 @@ function valueColor(pct: number): string {
 export default function ExecutionTrendCard({ schedule }: { schedule: Schedule }) {
   const trend = useMemo(() => computeExecutionTrend(schedule), [schedule]);
   const { weeks, current, deltaPct, averagePct, bestPct } = trend;
+  const narrative = useMemo(() => trendNarrative(trend), [trend]);
   const maxPct = Math.max(...weeks.map((w) => w.pct), 10);
 
   // Plain-English comparison to last week.
@@ -65,6 +66,13 @@ export default function ExecutionTrendCard({ schedule }: { schedule: Schedule })
           {comparison.text}
         </span>
       </div>
+
+      {/* One-line momentum read */}
+      {narrative && (
+        <p className="mt-3 text-[12px] font-medium text-neutral-500 dark:text-neutral-400">
+          {narrative}
+        </p>
+      )}
 
       {/* Supporting chart — last 8 weeks */}
       <div className="mt-5 flex items-end gap-1.5" style={{ height: 44 }}>

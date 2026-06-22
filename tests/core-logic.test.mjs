@@ -39,7 +39,7 @@ const {
   clearTaskException,
 } = await import("../lib/taskMutations.ts");
 const { isTaskScheduledOn, resolveOccurrence, diffException } = await import("../lib/taskOccurrence.ts");
-const { computeExecutionTrend } = await import("../lib/executionAnalytics.ts");
+const { computeExecutionTrend, trendNarrative } = await import("../lib/executionAnalytics.ts");
 const { calculateExecutionStreak } = await import("../lib/consistency/calculateExecutionStreak.ts");
 const { localISODate, addDaysToISO } = await import("../lib/dateUtils.ts");
 const { parseTimeToMinutes, toScheduleDayMinutes } = await import("../lib/timeUtils.ts");
@@ -442,6 +442,27 @@ test("snooze never moves a task earlier than its scheduled time", () => {
 
   // Untimed task is a no-op.
   assert.deepEqual(snoozeTaskLater({ id: "x", completionHistory: [] }, 60), {});
+});
+
+test("trendNarrative picks an honest momentum line (or null)", () => {
+  const mkWeek = (pct) => ({ monStr: "", sunStr: "", label: "", completed: 0, scheduled: 5, pct, isCurrentWeek: false });
+  const mkTrend = (pcts, extra = {}) => {
+    const weeks = pcts.map(mkWeek);
+    const current = weeks[weeks.length - 1];
+    const previous = weeks[weeks.length - 2] ?? current;
+    const averagePct = Math.round(weeks.reduce((s, w) => s + w.pct, 0) / weeks.length);
+    const bestPct = weeks.reduce((m, w) => Math.max(m, w.pct), 0);
+    return { weeks, current, previous, deltaPct: current.pct - previous.pct, averagePct, bestPct, totalCompleted: 10, scheduled: 5, ...extra };
+  };
+
+  assert.equal(trendNarrative(mkTrend([20, 30, 40, 50, 90])), "Best week in 5 weeks.");
+  assert.equal(trendNarrative(mkTrend([70, 40, 50, 60, 65])), "Up 3 of the last 4 weeks.");
+  assert.equal(trendNarrative(mkTrend([90, 85, 82, 88, 84])), "On a strong run.");
+  assert.equal(trendNarrative(mkTrend([60, 70, 80, 50, 30])), "In a dip — you've bounced back before.");
+  assert.equal(trendNarrative(mkTrend([50, 52, 48, 51, 50])), "Steady rhythm.");
+  // No signal → null (hidden)
+  assert.equal(trendNarrative(mkTrend([10, 20, 30, 40, 50], { totalCompleted: 0 })), null);
+  assert.equal(trendNarrative(mkTrend([10, 20, 30, 40, 50], { scheduled: 0 })), null);
 });
 
 test("time parsing and schedule-day conversion reject invalid clocks", () => {

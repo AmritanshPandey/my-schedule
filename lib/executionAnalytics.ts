@@ -123,3 +123,38 @@ export function computeExecutionTrend(schedule: Schedule, weeksCount = 8): Execu
     scheduled,
   };
 }
+
+/**
+ * One honest, motivating sentence summarizing the trend — or null when there's
+ * no real signal (nothing scheduled / no completions yet), so the caller hides
+ * the line. Earned, not gamified: it never invents momentum that isn't there.
+ */
+export function trendNarrative(trend: ExecutionTrend): string | null {
+  const { weeks, current, previous, averagePct, bestPct, scheduled, totalCompleted } = trend;
+  if (scheduled <= 0 || totalCompleted <= 0) return null;
+
+  // Rises among the most recent four week-over-week transitions.
+  const recent = weeks.slice(-5); // up to 5 weeks → 4 transitions
+  let recentRises = 0;
+  for (let i = 1; i < recent.length; i++) {
+    if (recent[i].pct > recent[i - 1].pct) recentRises++;
+  }
+  const minPct = weeks.reduce((m, w) => Math.min(m, w.pct), 100);
+
+  if (current.pct === bestPct && current.pct > averagePct) {
+    return `Best week in ${weeks.length} weeks.`;
+  }
+  if (recentRises >= 3) {
+    return `Up ${recentRises} of the last 4 weeks.`;
+  }
+  if (current.pct >= 80 && previous.pct >= 80) {
+    return "On a strong run.";
+  }
+  if (current.pct < averagePct && current.pct < previous.pct) {
+    return "In a dip — you've bounced back before.";
+  }
+  if (bestPct - minPct <= 12 && current.pct > 0) {
+    return "Steady rhythm.";
+  }
+  return null;
+}

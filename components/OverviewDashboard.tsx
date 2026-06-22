@@ -369,6 +369,21 @@ export default function OverviewDashboard({
     return ordered;
   }, [todayTasks, rotation]);
 
+  // "All clear for today" moment — fire once when the user clears the LAST task
+  // (a clean sweep), never on a cold open that's already empty or a day with misses.
+  const [celebrating, setCelebrating] = useState(false);
+  const prevIncompleteRef = useRef(incompleteTasks.length);
+  useEffect(() => {
+    const prev = prevIncompleteRef.current;
+    prevIncompleteRef.current = incompleteTasks.length;
+    if (prev > 0 && incompleteTasks.length === 0 && tasksTotal > 0 && missedCount === 0) {
+      setCelebrating(true);
+      haptic("heavy");
+      const t = setTimeout(() => setCelebrating(false), 3500);
+      return () => clearTimeout(t);
+    }
+  }, [incompleteTasks.length, tasksTotal, missedCount]);
+
   const trackerData = useMemo(() =>
     (schedule.progressTrackers ?? []).map((tracker) => {
       const entries = (schedule.metricEntries ?? [])
@@ -586,17 +601,42 @@ export default function OverviewDashboard({
                 </m.div>
               ) : (
                 <m.div key="all-done" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
-                  className="rounded-2xl border border-neutral-200/70 bg-white px-5 py-5 dark:border-white/[0.07] dark:bg-neutral-900">
-                  <p className="text-[15px] font-bold text-neutral-900 dark:text-white">
-                    {tasksTotal === 0 ? "No tasks today" : missedCount > 0 ? "All tasks handled" : "You're all caught up! ✓"}
-                  </p>
-                  <p className="mt-0.5 text-[13px] text-neutral-400 dark:text-neutral-500">
-                    {tasksTotal === 0
-                      ? "Head to Today to add tasks."
-                      : missedCount > 0
-                      ? `${tasksDone} done · ${missedCount} missed`
-                      : "Great work — all tasks done."}
-                  </p>
+                  className={`rounded-2xl border px-5 py-5 ${
+                    celebrating
+                      ? "border-emerald-300/60 bg-emerald-50 dark:border-emerald-500/25 dark:bg-emerald-500/[0.08]"
+                      : "border-neutral-200/70 bg-white dark:border-white/[0.07] dark:bg-neutral-900"
+                  }`}>
+                  {celebrating ? (
+                    <div className="flex items-center gap-3">
+                      <m.div
+                        initial={{ scale: 0 }}
+                        animate={{ scale: 1 }}
+                        transition={{ type: "spring", stiffness: 420, damping: 18 }}
+                        className="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl bg-[#00A63E] dark:bg-[#2FD46E]"
+                      >
+                        <IconCheck size={20} strokeWidth={2.6} className="text-white dark:text-neutral-950" />
+                      </m.div>
+                      <div>
+                        <p className="text-[15px] font-bold text-neutral-900 dark:text-white">All clear for today</p>
+                        <p className="mt-0.5 text-[13px] font-semibold text-emerald-600 dark:text-emerald-400">
+                          {executionStreak.streak >= 2 ? `You showed up — ${executionStreak.streak}-day streak` : "You showed up. Nice work."}
+                        </p>
+                      </div>
+                    </div>
+                  ) : (
+                    <>
+                      <p className="text-[15px] font-bold text-neutral-900 dark:text-white">
+                        {tasksTotal === 0 ? "No tasks today" : missedCount > 0 ? "All tasks handled" : "You're all caught up! ✓"}
+                      </p>
+                      <p className="mt-0.5 text-[13px] text-neutral-400 dark:text-neutral-500">
+                        {tasksTotal === 0
+                          ? "Head to Today to add tasks."
+                          : missedCount > 0
+                          ? `${tasksDone} done · ${missedCount} missed`
+                          : "Great work — all tasks done."}
+                      </p>
+                    </>
+                  )}
                 </m.div>
               )}
             </AnimatePresence>
