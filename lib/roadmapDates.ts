@@ -95,3 +95,111 @@ export function shiftFutureMilestones(
   );
   return recalculateRoadmapTimeline(updated, roadmapStartDate);
 }
+
+function isValidISODate(value: unknown): value is string {
+  return typeof value === "string" && /^\d{4}-\d{2}-\d{2}$/.test(value);
+}
+
+/**
+ * Per-milestone normalization that PRESERVES each milestone's stored start date
+ * (so user-edited dates survive load + structural ops), deriving a start only
+ * when one is missing/invalid — sequentially after the previous milestone, or
+ * the roadmap start for the first. Always recomputes the derived end date,
+ * status, sortOrder, and legacy mirror fields. Unlike `recalculateRoadmapTimeline`
+ * it never re-lays the timeline from a single anchor, so gaps the user created
+ * are kept.
+ */
+export function normalizeMilestoneTimeline(
+  milestones: Milestone[],
+  roadmapStartDate?: string
+): Milestone[] {
+  const sorted = [...milestones].sort((a, b) => a.sortOrder - b.sortOrder);
+  let prevEnd: string | null = null;
+
+  return sorted.map((milestone, index) => {
+    const plannedDurationDays = normalizeDurationDays(milestone.plannedDurationDays ?? milestone.estimatedDays);
+    const startDate = isValidISODate(milestone.startDate)
+      ? milestone.startDate
+      : prevEnd
+        ? calculateNextMilestoneStart(prevEnd)
+        : roadmapStartDate || todayISO();
+    const plannedEndDate = calculateMilestoneEndDate(startDate, plannedDurationDays);
+    prevEnd = plannedEndDate;
+    const actualCompletedDate = milestone.actualCompletedDate ?? milestone.completedDate;
+    const status = resolveMilestoneStatus({
+      status: actualCompletedDate ? "completed" : milestone.status,
+      startDate,
+      plannedEndDate,
+      actualCompletedDate,
+    });
+
+    return {
+      ...milestone,
+      startDate,
+      plannedDurationDays,
+      plannedEndDate,
+      actualCompletedDate,
+      status,
+      sortOrder: index,
+      updatedAt: milestone.updatedAt ?? new Date().toISOString(),
+      targetDate: plannedEndDate,
+      estimatedDays: plannedDurationDays,
+      completionStatus: status === "completed" ? "completed" : "pending",
+      completedDate: actualCompletedDate,
+    };
+  });
+}
+
+/**
+ * Apply `updates` to one milestone and push every later milestone so the
+ * remaining ones follow automatically. Milestones BEFORE the edited one keep
+ * their dates; the edited one anchors at its (possibly new) start date, and all
+ * subsequent milestones are laid back-to-back after it. This is what makes
+ * changing one milestone's date cascade to the rest.
+ */
+export function cascadeMilestoneDates(
+  milestones: Milestone[],
+  editedId: string,
+  updates: Partial<Milestone>
+): Milestone[] {
+  const sorted = [...milestones].sort((a, b) => a.sortOrder - b.sortOrder);
+  const editedIndex = sorted.findIndex((m) => m.id === editedId);
+  if (editedIndex === -1) return normalizeMilestoneTimeline(sorted);
+
+  const result: Milestone[] = [];
+  // Earlier milestones are untouched (just re-index sortOrder).
+  for (let i = 0; i < editedIndex; i++) result.push({ ...sorted[i], sortOrder: i });
+
+  // From the edited milestone onward: anchor at its start, lay back-to-back.
+  let cursor = isValidISODate(updates.startDate) ? updates.startDate : sorted[editedIndex].startDate;
+  for (let i = editedIndex; i < sorted.length; i++) {
+    const merged = i === editedIndex ? { ...sorted[i], ...updates } : sorted[i];
+    const plannedDurationDays = normalizeDurationDays(merged.plannedDurationDays ?? merged.estimatedDays);
+    const startDate = cursor;
+    const plannedEndDate = calculateMilestoneEndDate(startDate, plannedDurationDays);
+    const actualCompletedDate = merged.actualCompletedDate ?? merged.completedDate;
+    const status = resolveMilestoneStatus({
+      status: actualCompletedDate ? "completed" : merged.status,
+      startDate,
+      plannedEndDate,
+      actualCompletedDate,
+    });
+    cursor = calculateNextMilestoneStart(plannedEndDate);
+
+    result.push({
+      ...merged,
+      startDate,
+      plannedDurationDays,
+      plannedEndDate,
+      actualCompletedDate,
+      status,
+      sortOrder: i,
+      updatedAt: new Date().toISOString(),
+      targetDate: plannedEndDate,
+      estimatedDays: plannedDurationDays,
+      completionStatus: status === "completed" ? "completed" : "pending",
+      completedDate: actualCompletedDate,
+    });
+  }
+  return result;
+}

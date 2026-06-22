@@ -10,7 +10,7 @@ import { flushNow, mergeCloudIfNewer, queueSync, noteLatestSchedule } from "@/li
 import { getLocalLastUpdated, writeLocalLastUpdated } from "@/lib/localMeta";
 import { logError } from "@/lib/errorLog";
 import { useAuth } from "@/contexts/AuthProvider";
-import { calculateMilestoneEndDate, recalculateRoadmapTimeline } from "@/lib/roadmapDates";
+import { calculateMilestoneEndDate, normalizeMilestoneTimeline } from "@/lib/roadmapDates";
 import { localISODate } from "@/lib/dateUtils";
 import { DAYS, DAY_LABELS, type DayKey } from "@/lib/scheduleConstants";
 import { normalizeDayStartTime } from "@/lib/timeline/displayWindow";
@@ -520,7 +520,10 @@ function normalizeMetricEntry(value: unknown, trackers: ProgressTracker[]): Metr
 function normalizeMilestoneTimelines(plans: Plan[], milestones: Milestone[]): Milestone[] {
   return plans.flatMap((plan) => {
     const planMilestones = milestones.filter((milestone) => milestone.planId === plan.id);
-    return recalculateRoadmapTimeline(planMilestones, plan.startDate);
+    // Preserve stored (possibly user-edited) start dates across loads; only
+    // derived fields are recomputed. Re-laying from plan.startDate would wipe
+    // every manual date change on the next reload.
+    return normalizeMilestoneTimeline(planMilestones, plan.startDate);
   });
 }
 

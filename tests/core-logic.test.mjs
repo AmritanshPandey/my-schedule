@@ -39,6 +39,7 @@ const {
   clearTaskException,
 } = await import("../lib/taskMutations.ts");
 const { isTaskScheduledOn, resolveOccurrence, diffException } = await import("../lib/taskOccurrence.ts");
+const { normalizeMilestoneTimeline, cascadeMilestoneDates } = await import("../lib/roadmapDates.ts");
 const { computeExecutionTrend, trendNarrative } = await import("../lib/executionAnalytics.ts");
 const { calculateExecutionStreak } = await import("../lib/consistency/calculateExecutionStreak.ts");
 const { localISODate, addDaysToISO } = await import("../lib/dateUtils.ts");
@@ -442,6 +443,36 @@ test("snooze never moves a task earlier than its scheduled time", () => {
 
   // Untimed task is a no-op.
   assert.deepEqual(snoozeTaskLater({ id: "x", completionHistory: [] }, 60), {});
+});
+
+test("milestone date edits cascade to the remaining and persist", () => {
+  const mk = (id, start, dur, sortOrder) => ({
+    id, planId: "p", title: id, startDate: start, plannedDurationDays: dur,
+    plannedEndDate: "", status: "upcoming", linkedActivities: [], linkedTrackers: [],
+    createdAt: "", updatedAt: "2020-01-01T00:00:00Z", sortOrder,
+  });
+  const ms = [mk("m0", "2026-06-01", 7, 0), mk("m1", "2026-06-08", 7, 1), mk("m2", "2026-06-15", 7, 2)];
+
+  // Normalize preserves stored starts (so edits survive load) and recomputes ends.
+  const norm = normalizeMilestoneTimeline(ms, "2026-06-01");
+  assert.equal(norm[0].startDate, "2026-06-01");
+  assert.equal(norm[0].plannedEndDate, "2026-06-07");
+  assert.equal(norm[1].startDate, "2026-06-08");
+  assert.equal(norm[2].startDate, "2026-06-15");
+
+  // Move m1 later → m0 untouched, m1 at new start, m2 pushed after it.
+  const later = cascadeMilestoneDates(ms, "m1", { startDate: "2026-06-20" });
+  assert.equal(later[0].startDate, "2026-06-01");
+  assert.equal(later[1].startDate, "2026-06-20");
+  assert.equal(later[1].plannedEndDate, "2026-06-26");
+  assert.equal(later[2].startDate, "2026-06-27");
+  assert.equal(later[2].plannedEndDate, "2026-07-03");
+
+  // Pull m1 earlier → the remaining follow earlier too.
+  const earlier = cascadeMilestoneDates(ms, "m1", { startDate: "2026-06-05" });
+  assert.equal(earlier[0].startDate, "2026-06-01");
+  assert.equal(earlier[1].startDate, "2026-06-05");
+  assert.equal(earlier[2].startDate, "2026-06-12");
 });
 
 test("trendNarrative picks an honest momentum line (or null)", () => {

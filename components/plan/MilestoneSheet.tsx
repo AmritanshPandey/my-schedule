@@ -10,7 +10,7 @@ import {
   calculateMilestoneEndDate,
   calculateNextMilestoneStart,
   normalizeDurationToDays,
-  shiftFutureMilestones,
+  cascadeMilestoneDates,
   type DurationType,
 } from "@/lib/roadmapDates";
 import { formatDate, todayISO } from "@/lib/dateUtils";
@@ -128,9 +128,10 @@ export default function MilestoneSheet({
   const milestoneIndex = milestone
     ? orderedMilestones.findIndex((item) => item.id === milestone.id)
     : -1;
-  const canEditStartDate = mode === "create"
-    ? orderedMilestones.length === 0
-    : milestoneIndex <= 0;
+  // Any milestone's start date is editable in edit mode — changing it cascades
+  // the remaining milestones. On create, the new milestone appends after the
+  // last, so only the very first one's start is freely editable.
+  const canEditStartDate = mode === "edit" || orderedMilestones.length === 0;
 
   useEffect(() => {
     if (!isOpen) return;
@@ -146,16 +147,11 @@ export default function MilestoneSheet({
 
   const preview = useMemo(() => {
     if (mode !== "edit" || !milestone || !draft.startDate || !plannedEndDate) return null;
-    const recalculated = shiftFutureMilestones(
-      orderedMilestones,
-      milestone.id,
-      {
-        startDate: draft.startDate,
-        plannedDurationDays,
-        plannedEndDate,
-      },
-      canEditStartDate ? draft.startDate : planStartDate
-    );
+    const recalculated = cascadeMilestoneDates(orderedMilestones, milestone.id, {
+      startDate: draft.startDate,
+      plannedDurationDays,
+      plannedEndDate,
+    });
     const originalFuture = orderedMilestones.filter((item) => item.sortOrder > milestone.sortOrder);
     const recalculatedFuture = recalculated.filter((item) => item.sortOrder > milestone.sortOrder);
     const firstOriginal = originalFuture[0];
@@ -169,12 +165,10 @@ export default function MilestoneSheet({
       shiftDays,
     };
   }, [
-    canEditStartDate,
     draft.startDate,
     milestone,
     mode,
     orderedMilestones,
-    planStartDate,
     plannedDurationDays,
     plannedEndDate,
   ]);

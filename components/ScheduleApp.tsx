@@ -144,7 +144,7 @@ import { todayISO, daysBetween as daysBetweenUtil, formatDate, addDaysToISO, loc
 import { getPlanCardStats } from "@/lib/planInsights";
 import { MainTitleSection, IconActionButton, CtaActionButton } from "@/components/ui/MainTitleSection";
 import ProgressBar from "@/components/ui/ProgressBar";
-import { recalculateRoadmapTimeline } from "@/lib/roadmapDates";
+import { normalizeMilestoneTimeline, cascadeMilestoneDates } from "@/lib/roadmapDates";
 import AddPlanSheet from "@/components/plan/AddPlanSheet";
 import EditPlanSheet from "@/components/plan/EditPlanSheet";
 import { haptic } from "@/lib/haptics";
@@ -1523,7 +1523,7 @@ export default function ScheduleApp() {
           ...prev,
           milestones: [
             ...otherMilestones,
-            ...recalculateRoadmapTimeline([...existing, ...newMilestones], plan?.startDate),
+            ...normalizeMilestoneTimeline([...existing, ...newMilestones], plan?.startDate),
           ],
         };
       });
@@ -1574,7 +1574,7 @@ export default function ScheduleApp() {
         ...prev,
         milestones: [
           ...otherMilestones,
-          ...recalculateRoadmapTimeline(planMilestones, roadmapStartDate),
+          ...normalizeMilestoneTimeline(planMilestones, roadmapStartDate),
         ],
       };
     });
@@ -1586,16 +1586,13 @@ export default function ScheduleApp() {
       milestones: (() => {
         const existing = (prev.milestones ?? []).find((m) => m.id === id);
         if (!existing) return prev.milestones ?? [];
-        const plan = prev.plans.find((p) => p.id === existing.planId);
         const otherMilestones = (prev.milestones ?? []).filter((m) => m.planId !== existing.planId);
-        const planMilestones = (prev.milestones ?? [])
-          .filter((m) => m.planId === existing.planId)
-          .map((m) => (m.id === id ? { ...m, ...data, updatedAt: new Date().toISOString() } : m));
-        const updatedMilestone = planMilestones.find((m) => m.id === id);
-        const roadmapStartDate = existing.sortOrder === 0 ? updatedMilestone?.startDate : plan?.startDate;
+        const planMilestones = (prev.milestones ?? []).filter((m) => m.planId === existing.planId);
+        // Apply the edit to this milestone and push the remaining ones so they
+        // follow its (possibly new) date. Earlier milestones keep their dates.
         return [
           ...otherMilestones,
-          ...recalculateRoadmapTimeline(planMilestones, roadmapStartDate),
+          ...cascadeMilestoneDates(planMilestones, id, { ...data, updatedAt: new Date().toISOString() }),
         ];
       })(),
     }));
@@ -1620,7 +1617,7 @@ export default function ScheduleApp() {
           ...prev,
           milestones: [
             ...otherMilestones,
-            ...recalculateRoadmapTimeline(planMilestones, plan?.startDate),
+            ...normalizeMilestoneTimeline(planMilestones, plan?.startDate),
           ],
         };
       })
@@ -1652,7 +1649,7 @@ export default function ScheduleApp() {
         ...prev,
         milestones: [
           ...otherMilestones,
-          ...recalculateRoadmapTimeline(planMilestones, plan?.startDate),
+          ...normalizeMilestoneTimeline(planMilestones, plan?.startDate),
         ],
       };
     });
