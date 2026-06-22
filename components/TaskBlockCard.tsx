@@ -1,11 +1,10 @@
 "use client";
 
 import type { CSSProperties, ReactNode } from "react";
-import { IconCheck, IconMinus, IconTrash, IconX } from "@tabler/icons-react";
+import { IconCheck, IconMinus, IconX } from "@tabler/icons-react";
 import type { Plan, Task } from "@/lib/useScheduleDB";
 import type { TaskState } from "@/lib/taskCompletion";
 import { resolveAccentColor, timelineCardStyles } from "@/lib/colorSystem";
-import IconButton from "@/components/ui/IconButton";
 
 /**
  * Shared colored category block used in BOTH surfaces:
@@ -31,7 +30,11 @@ export interface TaskBlockCardProps {
   minimal?: boolean;
   onToggle: () => void;
   onClick?: () => void;
-  /** When set, a hover trash button appears next to the checkbox (grid). */
+  /**
+   * Accepted for compatibility but intentionally not rendered on the card —
+   * an on-card trash sat next to the checkbox and was easy to mis-tap (on iOS
+   * the hover state sticks after a tap). Delete lives in the task edit sheet.
+   */
   onDelete?: () => void;
   /** Right-of-checkbox content (list: subtask chip / chevron / edit-delete). */
   trailing?: ReactNode;
@@ -54,7 +57,6 @@ export function TaskBlockCard({
   narrow = false,
   onToggle,
   onClick,
-  onDelete,
   trailing,
   footer,
   children,
@@ -117,18 +119,6 @@ export function TaskBlockCard({
 
       <div className="flex shrink-0 items-center gap-1">
         {trailing}
-        {onDelete && (
-          <IconButton
-            label="Delete task"
-            variant="dangerGhost"
-            size="tiny"
-            radius="lg"
-            onClick={(e) => { e.stopPropagation(); onDelete(); }}
-            className="hidden rounded-[5px] group-hover:flex"
-          >
-            <IconTrash size={12} strokeWidth={2} />
-          </IconButton>
-        )}
         <button
           type="button"
           disabled={readOnly}
