@@ -5,6 +5,7 @@
 
 import type { DayKey, Task } from "@/lib/useScheduleDB";
 import { localISODate } from "@/lib/dateUtils";
+import { isTaskScheduledOn } from "@/lib/taskOccurrence";
 import { ORDERED_DAYS, getMondayOfWeek, completedOnDate } from "./calculateDailyStats";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
@@ -44,7 +45,9 @@ function computeWeekStats(
     const dayKey = ORDERED_DAYS[i];
     const isToday = dayISO === realTodayISO;
 
-    const tasks = (activities[dayKey] ?? []).filter((t) => t.planId === planId);
+    const tasks = (activities[dayKey] ?? []).filter(
+      (t) => t.planId === planId && isTaskScheduledOn(t, dayISO, true)
+    );
     if (tasks.length === 0) continue;
 
     totalScheduled += tasks.length;

@@ -31,7 +31,7 @@ import { accentStyles } from "@/lib/colorSystem";
 import ExecutionTrendCard from "@/components/ExecutionTrendCard";
 import { getTrendDirection, getTrendState, type TrendDirection, type TrendState } from "@/lib/trendUtils";
 import { localISODate, addDaysToISO } from "@/lib/dateUtils";
-import { parseTimeToMinutes, toScheduleDayMinutes } from "@/lib/timeUtils";
+import { parseTimeToMinutes, toScheduleDayMinutes, currentMinutes } from "@/lib/timeUtils";
 import { calculateExecutionStreak } from "@/lib/consistency/calculateExecutionStreak";
 import { isTaskScheduledOn } from "@/lib/taskOccurrence";
 import ExecutionStreakBanner from "@/components/ExecutionStreakBanner";
@@ -320,8 +320,6 @@ export default function OverviewDashboard({
   // Rotation order for the Next-up stack. "Missed it"/swipe sends a task to the
   // back of the queue instead of removing it, so cards keep cycling until they're
   // marked done. Resets when the day changes.
-  const [rotation, setRotation] = useState<string[]>([]);
-  useEffect(() => { setRotation([]); }, [todayKey]);
   // Inline task list toggle
   const [showAllTasks, setShowAllTasks] = useState(false);
   const todayISO = localISODate(new Date());
@@ -350,24 +348,29 @@ export default function OverviewDashboard({
       .sort((a, b) => startKey(a) - startKey(b));
   }, [schedule, todayKey]);
 
-  // Incomplete tasks for the swipeable stack, ordered by the rotation queue so
-  // missed/swiped cards come back around after the others.
+  // Incomplete tasks for the swipeable stack, ordered by the CLOCK so the front
+  // card is what's happening now (active task), then what's next, then anything
+  // overdue, then untimed. (At 3 PM you should see the 3 PM task, not the 8 AM one.)
   const incompleteTasks = useMemo(() => {
     const incomplete = todayTasks.filter((t) => !isTaskResolved(t, t.subtasks?.length ?? 0));
-    const byId = new Map(incomplete.map((t) => [t.id, t] as const));
-    const ordered: typeof incomplete = [];
-    const seen = new Set<string>();
-    // Rotated tasks keep their queued position…
-    for (const id of rotation) {
-      const t = byId.get(id);
-      if (t && !seen.has(id)) { ordered.push(t); seen.add(id); }
-    }
-    // …new/untouched tasks follow in their natural order.
-    for (const t of incomplete) {
-      if (!seen.has(t.id)) { ordered.push(t); seen.add(t.id); }
-    }
-    return ordered;
-  }, [todayTasks, rotation]);
+    const now = toScheduleDayMinutes(currentMinutes());
+    const rank = (t: Task): [number, number] => {
+      const s = parseTimeToMinutes(t.startTime ?? "");
+      if (s === null) return [3, Infinity]; // untimed → last
+      const start = toScheduleDayMinutes(s);
+      const eRaw = parseTimeToMinutes(t.endTime ?? "");
+      let end = eRaw === null ? start : toScheduleDayMinutes(eRaw);
+      if (end <= start) end += 1440; // overnight guard
+      if (start <= now && now < end) return [0, start]; // active now
+      if (start >= now) return [1, start];              // upcoming
+      return [2, start];                                // overdue, unfinished
+    };
+    return [...incomplete].sort((a, b) => {
+      const [ab, ak] = rank(a);
+      const [bb, bk] = rank(b);
+      return ab - bb || ak - bk;
+    });
+  }, [todayTasks]);
 
   // "All clear for today" moment — fire once when the user clears the LAST task
   // (a clean sweep), never on a cold open that's already empty or a day with misses.

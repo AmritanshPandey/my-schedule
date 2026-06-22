@@ -16,16 +16,43 @@ export function exceptionFor(task: Task, dateISO: string): TaskException | undef
   return task.exceptions?.[dateISO];
 }
 
+/** Monday (local) of the week containing an ISO date, at 00:00. */
+function mondayOf(dateISO: string): Date {
+  const d = new Date(dateISO + "T00:00:00");
+  const dow = d.getDay(); // 0=Sun
+  d.setDate(d.getDate() - (dow === 0 ? 6 : dow - 1));
+  d.setHours(0, 0, 0, 0);
+  return d;
+}
+
+/** Whole calendar weeks between two ISO dates (by their Monday), signed. */
+export function weeksBetween(anchorISO: string, dateISO: string): number {
+  const ms = mondayOf(dateISO).getTime() - mondayOf(anchorISO).getTime();
+  return Math.round(ms / (7 * 24 * 60 * 60 * 1000));
+}
+
 /**
  * Whether the task should appear on a given date.
  *
  * `weekdayHasTask` is whether the task is present in that date's weekday bucket
- * (the caller already knows this — it read the bucket). A skipped exception
- * removes the occurrence. (Phase 2 will add interval/anchor recurrence here.)
+ * (the caller already knows this — it read the bucket). Honors per-date skips
+ * and the recurrence rule: a `once` task is due only on its date; a `weekly`
+ * task with interval > 1 is due only on weeks that are a multiple of the
+ * interval from its anchor. Absent recurrence = every matching weekday.
  */
 export function isTaskScheduledOn(task: Task, dateISO: string, weekdayHasTask: boolean): boolean {
   if (!weekdayHasTask) return false;
-  return !task.exceptions?.[dateISO]?.skipped;
+  if (task.exceptions?.[dateISO]?.skipped) return false;
+
+  const r = task.recurrence;
+  if (r) {
+    if (r.type === "once") return dateISO === r.dateISO;
+    if (r.type === "weekly" && r.interval > 1) {
+      const weeks = weeksBetween(r.anchorISO, dateISO);
+      if (weeks < 0 || weeks % r.interval !== 0) return false;
+    }
+  }
+  return true;
 }
 
 /**

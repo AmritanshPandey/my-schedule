@@ -18,6 +18,7 @@
 import type { Schedule } from "./useScheduleDB";
 import { DAYS } from "./scheduleConstants";
 import { localISODate } from "./dateUtils";
+import { isTaskScheduledOn } from "./taskOccurrence";
 
 export interface ExecutionWeek {
   monStr: string;        // ISO date of that week's Monday
@@ -54,9 +55,21 @@ export function computeExecutionTrend(schedule: Schedule, weeksCount = 8): Execu
   today.setHours(0, 0, 0, 0);
   const currentMonday = mondayOf(today);
 
-  // Scheduled tasks per week = current count across weekday buckets.
-  let scheduled = 0;
-  for (const day of DAYS) scheduled += (schedule.activities[day] ?? []).length;
+  // Scheduled occurrences in a week = sum over that week's 7 dates of the tasks
+  // due on each (honors skips + recurrence intervals/one-off, so a biweekly task
+  // only counts on its weeks). mon is a Monday → DAYS[di] is that date's weekday.
+  const scheduledInWeek = (mon: Date): number => {
+    let count = 0;
+    for (let di = 0; di < 7; di++) {
+      const d = new Date(mon);
+      d.setDate(mon.getDate() + di);
+      const dateISO = localISODate(d);
+      for (const task of schedule.activities[DAYS[di]] ?? []) {
+        if (isTaskScheduledOn(task, dateISO, true)) count++;
+      }
+    }
+    return count;
+  };
 
   // Bucket distinct completed task ids by their week's Monday.
   const weekDone = new Map<string, Set<string>>();
@@ -93,6 +106,7 @@ export function computeExecutionTrend(schedule: Schedule, weeksCount = 8): Execu
     const sun = new Date(mon);
     sun.setDate(mon.getDate() + 6);
     const monStr = localISODate(mon);
+    const scheduled = scheduledInWeek(mon);
     const completed = Math.min(weekDone.get(monStr)?.size ?? 0, scheduled || Infinity);
     const pct = scheduled > 0 ? Math.min(100, Math.round((completed / scheduled) * 100)) : 0;
     weeks.push({
@@ -120,7 +134,7 @@ export function computeExecutionTrend(schedule: Schedule, weeksCount = 8): Execu
     averagePct,
     bestPct,
     totalCompleted,
-    scheduled,
+    scheduled: current.scheduled,
   };
 }
 

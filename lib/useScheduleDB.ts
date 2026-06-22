@@ -52,6 +52,15 @@ export interface TaskException {
   description?: string;
 }
 
+/**
+ * Recurrence rule layered on the weekday template. Absent = a plain weekly task
+ * (every matching weekday). `weekly` with interval > 1 repeats every N weeks;
+ * `once` is a single dated occurrence (lives in that date's weekday bucket).
+ */
+export type TaskRecurrence =
+  | { type: "weekly"; interval: number; anchorISO: string }
+  | { type: "once"; dateISO: string };
+
 export interface Task {
   id: string;
   title: string;
@@ -73,6 +82,7 @@ export interface Task {
   subtasks?: ScheduleEntry[];         // per-task subtask list (overrides plan.items)
   taskType?: "task" | "session";       // undefined treated as "task"
   exceptions?: Record<string, TaskException>; // per-date overrides, keyed by ISO date
+  recurrence?: TaskRecurrence;         // absent = weekly (every matching weekday)
 }
 
 export interface SummaryConfig {
@@ -562,6 +572,7 @@ function normalizeTasks(value: unknown, fallbackPlanId: string, fallbackIcon = "
         ...(task.sortOrder !== undefined && { sortOrder: task.sortOrder }),
         ...(Array.isArray(task.subtasks) && task.subtasks.length > 0 && { subtasks: task.subtasks }),
         ...(task.exceptions && typeof task.exceptions === "object" && !Array.isArray(task.exceptions) && { exceptions: task.exceptions }),
+        ...(task.recurrence && typeof task.recurrence === "object" && !Array.isArray(task.recurrence) && { recurrence: task.recurrence }),
       }];
     }
 

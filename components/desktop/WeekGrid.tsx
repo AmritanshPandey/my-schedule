@@ -8,6 +8,7 @@ import type { DayKey, Plan, Schedule, Task } from "@/lib/useScheduleDB";
 import { DAYS } from "@/lib/useScheduleDB";
 import { sortTasksByTime } from "@/lib/taskMutations";
 import { completionForDate, resolveTaskState } from "@/lib/taskCompletion";
+import { isTaskScheduledOn, resolveOccurrence } from "@/lib/taskOccurrence";
 import { localISODate, todayISO } from "@/lib/dateUtils";
 import { currentMinutes, parseTimeToMinutes } from "@/lib/timeUtils";
 import { categoryHex, resolveAccentColor } from "@/lib/colorSystem";
@@ -180,8 +181,11 @@ export function WeekGrid({
   const days = weekDates.map(({ day, date }) => {
     const dateISO = localISODate(date);
     const dayIsToday = dateISO === todayISO();
-    const raw = sortTasksByTime(schedule.activities[day] ?? []);
-    const tasks = dayIsToday ? raw : raw.map((t) => ({ ...t, ...completionForDate(t, dateISO) }));
+    const raw = sortTasksByTime(schedule.activities[day] ?? []).filter((t) => isTaskScheduledOn(t, dateISO, true));
+    const tasks = raw.map((t) => {
+      const r = resolveOccurrence(t, dateISO);
+      return dayIsToday ? r : { ...r, ...completionForDate(t, dateISO) };
+    });
     return { day, date, dateISO, dayIsToday, tasks };
   });
 

@@ -32,8 +32,9 @@ import IconButton from "@/components/ui/IconButton";
 import Input from "@/components/ui/Input";
 import TimeSlotPicker from "@/components/TimeSlotPicker";
 import { haptic } from "@/lib/haptics";
-import type { DayKey, Plan, Task } from "@/lib/useScheduleDB";
+import type { DayKey, Plan, Task, TaskRecurrence } from "@/lib/useScheduleDB";
 import { DAYS, DAY_LABELS } from "@/lib/useScheduleDB";
+import { localISODate } from "@/lib/dateUtils";
 import type { ScheduleEntry } from "@/components/ScheduleItem";
 import {
   uid,
@@ -57,6 +58,13 @@ export interface TaskSaveData {
   } | null;
   /** "occurrence" = apply edits to just `occurrenceDateISO` (per-date override). */
   scope?: "all" | "occurrence";
+  /** Recurrence rule (absent = plain weekly on the repeatDays). */
+  recurrence?: TaskRecurrence;
+}
+
+const JS_DAYS: DayKey[] = ["sunday", "monday", "tuesday", "wednesday", "thursday", "friday", "saturday"];
+function weekdayOfISO(iso: string): DayKey {
+  return JS_DAYS[new Date(iso + "T00:00:00").getDay()];
 }
 
 export interface TaskSheetProps {
@@ -167,8 +175,15 @@ export function TaskSheet({
   const [duplicateStep, setDuplicateStep] = useState<"idle" | "picking">("idle");
   const [duplicateDays, setDuplicateDays] = useState<DayKey[]>([]);
   const [editScope, setEditScope] = useState<"all" | "occurrence">("all");
+  // Recurrence: weekly (every matching weekday), interval (every N weeks), or once (single date).
+  const [repeatMode, setRepeatMode] = useState<"weekly" | "interval" | "once">("weekly");
+  const [intervalWeeks, setIntervalWeeks] = useState(2);
+  const [onceDate, setOnceDate] = useState("");
 
   const titleRef = useRef<HTMLInputElement>(null);
+
+  // Anchor for "every N weeks" + default date for a one-off: the viewed date, else today.
+  const baseDateISO = occurrenceDateISO || localISODate(new Date());
 
   // The "This day only" scope is offered when editing an existing task on a known
   // current/future date. Per-date overrides cover title/time/note (not subtasks).
@@ -201,6 +216,10 @@ export function TaskSheet({
       // Load per-task subtasks; fall back to plan template for tasks created before this fix
       const taskSubtasks = task.subtasks ?? linkedPlan?.items ?? [];
       setSubtasks(taskSubtasks.map(entryToSubtaskDraft));
+      const r = task.recurrence;
+      if (r?.type === "once") { setRepeatMode("once"); setOnceDate(r.dateISO); }
+      else if (r?.type === "weekly" && r.interval > 1) { setRepeatMode("interval"); setIntervalWeeks(r.interval); setOnceDate(baseDateISO); }
+      else { setRepeatMode("weekly"); setOnceDate(baseDateISO); }
     } else {
       const pid = initialPlanId ?? plans[0]?.id ?? "";
       setPlanId(pid);
@@ -211,6 +230,9 @@ export function TaskSheet({
       setEndTime(initialEndTime ?? "");
       setRepeatDays([activeDay]);
       setSubtasks([]);
+      setRepeatMode("weekly");
+      setIntervalWeeks(2);
+      setOnceDate(baseDateISO);
     }
     setFocusNewSubtask(false);
     setDuplicateStep("idle");
@@ -302,13 +324,18 @@ export function TaskSheet({
           endTime,
         })
       : null;
+  const repeatOk = isOccurrenceScope
+    ? true
+    : repeatMode === "once"
+      ? !!onceDate
+      : repeatDays.length > 0;
   const canSave =
     !!selectedPlan &&
     title.trim().length > 0 &&
     isValidInputTime(startTime) &&
     isValidInputTime(endTime) &&
     !timeError &&
-    repeatDays.length > 0;
+    repeatOk;
 
   function handleSave() {
     if (!canSave || !selectedPlan) return;
@@ -316,6 +343,16 @@ export function TaskSheet({
     const validSubtasks = subtasks
       .filter((s) => s.title.trim().length > 0)
       .map(subtaskDraftToEntry);
+
+    // Resolve the recurrence rule + which weekday bucket(s) host the task.
+    let recurrence: TaskRecurrence | undefined;
+    let effectiveRepeatDays = repeatDays;
+    if (repeatMode === "once") {
+      recurrence = { type: "once", dateISO: onceDate };
+      effectiveRepeatDays = [weekdayOfISO(onceDate)];
+    } else if (repeatMode === "interval") {
+      recurrence = { type: "weekly", interval: intervalWeeks, anchorISO: baseDateISO };
+    } // weekly → undefined (every matching weekday)
 
     const taskDraft: Omit<Task, "id"> = {
       title: title.trim(),
@@ -328,18 +365,20 @@ export function TaskSheet({
       taskType,
       // Store subtasks on the task itself so each task has an independent list
       subtasks: validSubtasks.length > 0 ? validSubtasks : undefined,
+      recurrence,
     };
 
     onSave({
       taskDraft,
       taskId: mode === "edit" ? task?.id : undefined,
-      repeatDays,
+      repeatDays: effectiveRepeatDays,
       // Only update the plan template if the user explicitly added subtasks
       planItems:
         mode === "create" && taskType === "task" && validSubtasks.length > 0
           ? { planId: selectedPlan.id, items: validSubtasks }
           : null,
       scope: isOccurrenceScope ? "occurrence" : "all",
+      recurrence,
     });
   }
 
@@ -557,20 +596,62 @@ export function TaskSheet({
                 onKeyDown={(e) => { if (e.key === "Enter") handleSave(); }}
               />
 
-              {/* Time slot + repeat days */}
+              {/* Time slot + repeat days (weekday chips hidden for one-off) */}
               <TimeSlotPicker
                 startTime={startTime}
                 endTime={endTime}
                 onStartChange={setStartTime}
                 onEndChange={setEndTime}
                 activeDay={activeDay}
-                repeatDays={isOccurrenceScope ? undefined : repeatDays}
-                onRepeatDaysChange={isOccurrenceScope ? undefined : setRepeatDays}
+                repeatDays={isOccurrenceScope || repeatMode === "once" ? undefined : repeatDays}
+                onRepeatDaysChange={isOccurrenceScope || repeatMode === "once" ? undefined : setRepeatDays}
               />
               {timeError && (
                 <p className="-mt-3 text-[12px] font-semibold text-rose-500 dark:text-rose-400">
                   {timeError.message}
                 </p>
+              )}
+
+              {/* Recurrence mode */}
+              {!isOccurrenceScope && (
+                <div className="space-y-2">
+                  <p className={`mb-1.5 ${SECTION_LABEL}`}>Repeat</p>
+                  <div className="grid grid-cols-3 gap-2">
+                    {([["weekly", "Weekly"], ["interval", "Every N wks"], ["once", "One-off"]] as const).map(([val, label]) => (
+                      <button
+                        key={val}
+                        type="button"
+                        onClick={() => setRepeatMode(val)}
+                        className={`h-10 rounded-xl text-[12px] font-semibold transition-colors ${
+                          repeatMode === val
+                            ? "bg-neutral-900 text-white dark:bg-white dark:text-neutral-950"
+                            : "border border-neutral-200 bg-white text-neutral-500 dark:border-white/10 dark:bg-white/[0.04] dark:text-neutral-400"
+                        }`}
+                      >
+                        {label}
+                      </button>
+                    ))}
+                  </div>
+                  {repeatMode === "interval" && (
+                    <div className="flex items-center gap-2 pt-1">
+                      <span className="text-[13px] text-neutral-500 dark:text-neutral-400">Every</span>
+                      <button type="button" onClick={() => setIntervalWeeks((n) => Math.max(2, n - 1))}
+                        className="flex h-8 w-8 items-center justify-center rounded-lg border border-neutral-200 text-[16px] font-bold text-neutral-600 dark:border-white/10 dark:text-neutral-300">−</button>
+                      <span className="w-6 text-center text-[15px] font-bold tabular-nums text-neutral-900 dark:text-white">{intervalWeeks}</span>
+                      <button type="button" onClick={() => setIntervalWeeks((n) => Math.min(8, n + 1))}
+                        className="flex h-8 w-8 items-center justify-center rounded-lg border border-neutral-200 text-[16px] font-bold text-neutral-600 dark:border-white/10 dark:text-neutral-300">+</button>
+                      <span className="text-[13px] text-neutral-500 dark:text-neutral-400">weeks</span>
+                    </div>
+                  )}
+                  {repeatMode === "once" && (
+                    <input
+                      type="date"
+                      value={onceDate}
+                      onChange={(e) => setOnceDate(e.target.value)}
+                      className="h-11 w-full min-w-0 rounded-xl border border-neutral-200 bg-neutral-50 px-3 text-[16px] text-neutral-900 outline-none transition-colors focus:border-neutral-300 focus:bg-neutral-100 dark:border-white/10 dark:bg-white/[0.04] dark:text-white dark:focus:border-white/20 dark:focus:bg-white/[0.07] dark:[color-scheme:dark]"
+                    />
+                  )}
+                </div>
               )}
 
               {/* Subtasks / Session Steps */}

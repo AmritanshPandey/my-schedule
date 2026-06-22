@@ -39,7 +39,7 @@ const {
   setTaskException,
   clearTaskException,
 } = await import("../lib/taskMutations.ts");
-const { isTaskScheduledOn, resolveOccurrence, diffException } = await import("../lib/taskOccurrence.ts");
+const { isTaskScheduledOn, resolveOccurrence, diffException, weeksBetween } = await import("../lib/taskOccurrence.ts");
 const { normalizeMilestoneTimeline, cascadeMilestoneDates } = await import("../lib/roadmapDates.ts");
 const { resolveLinkedTasks } = await import("../lib/notes/linkedTasks.ts");
 const { computeExecutionTrend, trendNarrative } = await import("../lib/executionAnalytics.ts");
@@ -329,6 +329,34 @@ test("weekly analytics count each recurring weekday occurrence", () => {
   assert.equal(trend.current.scheduled, 2);
   assert.equal(trend.current.completed, 2);
   assert.equal(trend.current.pct, 100);
+});
+
+test("recurrence: weekly intervals and one-off scheduling", () => {
+  const base = (recurrence) => ({
+    id: "r", title: "R", startTime: "8:00 AM", endTime: "9:00 AM",
+    icon: "star", color: "amber", planId: "p", completionHistory: [], recurrence,
+  });
+
+  // weeksBetween (normalizes to Monday-of-week)
+  assert.equal(weeksBetween("2026-06-10", "2026-06-10"), 0);
+  assert.equal(weeksBetween("2026-06-10", "2026-06-17"), 1);
+  assert.equal(weeksBetween("2026-06-10", "2026-06-24"), 2);
+
+  // every 2 weeks from 2026-06-10: due weeks 0,2,4… not odd weeks
+  const biweekly = base({ type: "weekly", interval: 2, anchorISO: "2026-06-10" });
+  assert.equal(isTaskScheduledOn(biweekly, "2026-06-10", true), true);
+  assert.equal(isTaskScheduledOn(biweekly, "2026-06-17", true), false);
+  assert.equal(isTaskScheduledOn(biweekly, "2026-06-24", true), true);
+  assert.equal(isTaskScheduledOn(biweekly, "2026-06-10", false), false, "not in weekday bucket");
+
+  // one-off: only its exact date
+  const once = base({ type: "once", dateISO: "2026-06-25" });
+  assert.equal(isTaskScheduledOn(once, "2026-06-25", true), true);
+  assert.equal(isTaskScheduledOn(once, "2026-06-26", true), false);
+
+  // no recurrence (or interval 1) = every matching weekday
+  assert.equal(isTaskScheduledOn(base(undefined), "2026-06-17", true), true);
+  assert.equal(isTaskScheduledOn(base({ type: "weekly", interval: 1, anchorISO: "2026-06-10" }), "2026-06-17", true), true);
 });
 
 test("per-date exceptions: scheduling, resolution, and mutations", () => {

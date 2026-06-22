@@ -20,6 +20,7 @@ import { calculateConsistency } from "@/lib/planInsights";
 import ProgressBar from "@/components/ui/ProgressBar";
 import { computeTrend } from "@/lib/trendUtils";
 import { todayISO, addDaysToISO, localISODate } from "@/lib/dateUtils";
+import { isTaskScheduledOn } from "@/lib/taskOccurrence";
 import { streamWeeklyInsight } from "@/lib/aiActions";
 import {
   OLLAMA_URL_KEY,
@@ -96,7 +97,8 @@ function buildWeeklyContext(
   const dayStats = DAYS.map((day, i) => {
     const d = new Date(monday);
     d.setDate(monday.getDate() + i);
-    const tasks = schedule.activities[day] ?? [];
+    const dateISO = localISODate(d);
+    const tasks = (schedule.activities[day] ?? []).filter((t) => isTaskScheduledOn(t, dateISO, true));
     const total = tasks.length;
     const done = tasks.filter((t) => isTaskCompleted(t, t.subtasks?.length ?? 0)).length;
     return { day, label: DAY_LABELS[day], total, done, isPastOrToday: d <= today };
