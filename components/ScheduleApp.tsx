@@ -250,7 +250,7 @@ const TimelineTaskBlock = memo(function TimelineTaskBlock({
   isViewingToday,
   onPointerDown,
   onToggle,
-  onEdit,
+  onOpenSubtasks,
 }: {
   layout: TimelineTaskLayout;
   plan: Plan | null;
@@ -258,13 +258,13 @@ const TimelineTaskBlock = memo(function TimelineTaskBlock({
   isViewingToday: boolean;
   onPointerDown: (e: React.PointerEvent<HTMLDivElement>, task: Task, start: number, end: number) => void;
   onToggle: (task: Task) => void;
-  onEdit: (task: Task) => void;
+  onOpenSubtasks: (task: Task) => void;
 }) {
   const cardSize = computeCardSize(layout.height, layout.laneCount);
   return (
     <div
       data-task-block
-      className={`absolute min-w-0 px-0.5 py-[2px] animate-panel-in touch-none transition-opacity ${
+      className={`absolute min-w-0 px-0.5 py-[2px] animate-panel-in touch-pan-y transition-opacity ${
         isBeingMoved ? "opacity-25 pointer-events-none" : ""
       }`}
       style={{ ...taskLaneStyle(layout), willChange: isBeingMoved ? "opacity" : undefined }}
@@ -282,7 +282,7 @@ const TimelineTaskBlock = memo(function TimelineTaskBlock({
           compact={cardSize === "small" || cardSize === "medium"}
           narrow={cardSize === "small"}
           onToggle={() => onToggle(layout.task)}
-          onClick={() => onEdit(layout.task)}
+          onOpenSubtasks={() => onOpenSubtasks(layout.task)}
           className="h-full w-full"
         />
       </div>
@@ -756,6 +756,7 @@ export default function ScheduleApp() {
     snapAndClamp: (minutes: number) => number;
     openCreateSheetWithTime: (startMin: number, endMin: number) => void;
     openEditSheet: (task: Task) => void;
+    toggleTask: (task: Task) => void;
     setDragCreate: React.Dispatch<React.SetStateAction<{ startMin: number; endMin: number } | null>>;
     setDragMove: React.Dispatch<React.SetStateAction<{ taskId: string; durationMin: number; previewStartMin: number } | null>>;
     setSchedule: ReturnType<typeof useScheduleDB>["setSchedule"];
@@ -803,11 +804,12 @@ export default function ScheduleApp() {
     const grabMin = dragHelpersRef.current.gridClientYToMinutes(e.clientY);
     const durationMin = layoutEnd - layoutStart;
     const grabOffsetMin = Math.max(0, Math.min(grabMin - layoutStart, durationMin));
-    const el = e.currentTarget as HTMLDivElement;
     const pointerId = e.pointerId;
 
-    // Capture immediately (spec requires setPointerCapture inside a pointer event handler)
-    el.setPointerCapture(pointerId);
+    // Do NOT capture the pointer here: capture (plus touch-action: none) blocks
+    // native vertical scrolling over a card. Drag-move runs off document-level
+    // pointer listeners gated by pointerId, so capture isn't needed; a vertical
+    // scroll gesture cancels the long-press below and the day scrolls smoothly.
 
     moveDragRef.current = {
       taskId: task.id,
@@ -933,7 +935,10 @@ export default function ScheduleApp() {
         moveDragRef.current = null;
         if (!dragging) {
           h.setDragMove(null);
-          if (!isCheckbox) h.openEditSheet(task);
+          // Tap on the card body marks the task done (mobile timeline). Taps on
+          // the checkbox / subtasks pill run their own handlers (isCheckbox =
+          // any aria-labeled control), so they're skipped here to avoid double-firing.
+          if (!isCheckbox) h.toggleTask(task);
           return;
         }
         e.preventDefault();
@@ -1732,6 +1737,10 @@ export default function ScheduleApp() {
     snapAndClamp,
     openCreateSheetWithTime,
     openEditSheet,
+    toggleTask: (task: Task) => {
+      haptic("light");
+      handleToggleTaskComplete(task.id, task.subtasks?.map((s) => s.id) ?? [], activeDay, activeDateISO);
+    },
     setDragCreate,
     setDragMove,
     setSchedule,
@@ -2764,7 +2773,7 @@ export default function ScheduleApp() {
                               isViewingToday={isViewingToday}
                               onPointerDown={handleTaskPointerDown}
                               onToggle={handleTimelineToggle}
-                              onEdit={openEditSheet}
+                              onOpenSubtasks={(task) => setSubtasksRef({ id: task.id, day: activeDay, dateISO: activeDateISO })}
                             />
                           ))}
 

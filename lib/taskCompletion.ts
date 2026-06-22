@@ -6,7 +6,7 @@
  * these calculations in components.
  */
 
-import type { Task, TaskCompletionEvent } from "./useScheduleDB";
+import type { Task, TaskCompletionEvent, Plan } from "./useScheduleDB";
 import { uid } from "./id";
 import { localISODate } from "./dateUtils";
 import { parseTimeToMinutes, currentMinutes } from "./timeUtils";
@@ -85,6 +85,37 @@ export function calculateTaskProgress(task: Task, totalSubtasks: number): TaskPr
     : Math.min(completedIds.size, totalSubtasks);
   const pct = Math.round((completedCount / totalSubtasks) * 100);
   return { completedCount, totalCount: totalSubtasks, pct };
+}
+
+// ── Subtask / session summary (for the timeline + list pill) ─────────────────
+
+export interface TaskSubtaskSummary {
+  isSession: boolean;     // taskType === "session"
+  hasItems: boolean;      // has any checkable subtasks/steps
+  completedCount: number;
+  totalCount: number;
+}
+
+/**
+ * Resolves a task's effective checkable items and their done/total count, with
+ * the same precedence the list view uses: a task's own subtasks, else the linked
+ * plan's template items (sessions always use their own steps, never the template).
+ * Used to render the "N/M" subtask pill on a card.
+ */
+export function getTaskSubtaskSummary(task: Task, plan: Plan | null): TaskSubtaskSummary {
+  const isSession = task.taskType === "session";
+  const subtasks = task.subtasks ?? [];
+  const templateItems = !isSession && subtasks.length === 0 ? plan?.items ?? [] : [];
+  const effectiveItems = isSession ? subtasks : subtasks.length > 0 ? subtasks : templateItems;
+  const totalCount = effectiveItems.length;
+
+  const completedIds = new Set(task.completedSubtaskIds ?? []);
+  let completedCount = effectiveItems.reduce((n, item) => n + (completedIds.has(item.id) ? 1 : 0), 0);
+  // A whole-task completion implies every item is done (the per-item ids may not
+  // all be recorded individually).
+  if (task.completed && totalCount > 0) completedCount = totalCount;
+
+  return { isSession, hasItems: totalCount > 0, completedCount, totalCount };
 }
 
 // ── Completion predicate ─────────────────────────────────────────────────────

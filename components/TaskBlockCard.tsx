@@ -1,9 +1,10 @@
 "use client";
 
 import type { CSSProperties, ReactNode } from "react";
-import { IconCheck, IconMinus, IconX } from "@tabler/icons-react";
+import { IconCheck, IconMinus, IconX, IconListCheck, IconArrowUpRight } from "@tabler/icons-react";
 import type { Plan, Task } from "@/lib/useScheduleDB";
 import type { TaskState } from "@/lib/taskCompletion";
+import { getTaskSubtaskSummary } from "@/lib/taskCompletion";
 import { resolveAccentColor, timelineCardStyles } from "@/lib/colorSystem";
 
 /**
@@ -31,6 +32,11 @@ export interface TaskBlockCardProps {
   onToggle: () => void;
   onClick?: () => void;
   /**
+   * Timeline (grid) only: when set and the task has subtasks/steps, a tappable
+   * "N/M" pill appears under the title to open the subtasks sheet.
+   */
+  onOpenSubtasks?: () => void;
+  /**
    * Accepted for compatibility but intentionally not rendered on the card —
    * an on-card trash sat next to the checkbox and was easy to mis-tap (on iOS
    * the hover state sticks after a tap). Delete lives in the task edit sheet.
@@ -57,6 +63,7 @@ export function TaskBlockCard({
   narrow = false,
   onToggle,
   onClick,
+  onOpenSubtasks,
   trailing,
   footer,
   children,
@@ -72,6 +79,8 @@ export function TaskBlockCard({
   const resolved = done || missed;
   const isList = variant === "list";
   const showEyebrow = !!plan && !narrow && !minimal;
+  // Timeline (grid) subtask/session pill — only when wired and the task has items.
+  const subtaskPill = onOpenSubtasks && !isList && !minimal ? getTaskSubtaskSummary(task, plan) : null;
   const statusLabel = readOnly
     ? done
       ? "Completed"
@@ -115,6 +124,18 @@ export function TaskBlockCard({
         >
           {task.title}
         </span>
+        {subtaskPill?.hasItems && (
+          <button
+            type="button"
+            aria-label="Open subtasks"
+            onClick={(e) => { e.stopPropagation(); onOpenSubtasks?.(); }}
+            className="mt-1 inline-flex w-fit items-center gap-1 rounded-full border border-black/15 px-2 py-0.5 text-[11px] font-bold tabular-nums text-neutral-700 dark:border-white/20 dark:text-neutral-200"
+          >
+            <IconListCheck size={12} strokeWidth={2} />
+            {subtaskPill.completedCount}/{subtaskPill.totalCount}
+            {!narrow && <IconArrowUpRight size={11} strokeWidth={2.2} />}
+          </button>
+        )}
       </div>
 
       <div className="flex shrink-0 items-center gap-1">

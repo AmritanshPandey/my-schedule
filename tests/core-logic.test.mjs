@@ -29,6 +29,7 @@ const {
   toggleSubtaskComplete,
   toggleTaskComplete,
   snoozeTaskLater,
+  getTaskSubtaskSummary,
 } = await import("../lib/taskCompletion.ts");
 const {
   applyTaskDelete,
@@ -420,6 +421,28 @@ test("execution streak unifies tasks and rituals", () => {
     completionHistory: [event("m", "missed", new Date(`${today}T12:00:00`).toISOString())],
   }];
   assert.equal(calculateExecutionStreak(missedOnly, today).streak, 0);
+});
+
+test("getTaskSubtaskSummary resolves items + count", () => {
+  const base = { id: "t", title: "T", startTime: "8:00 AM", endTime: "9:00 AM", icon: "star", color: "amber", planId: "p" };
+  const plan = { id: "p", items: [{ id: "a", task: "A" }, { id: "b", task: "B" }] };
+
+  // Task with its own subtasks, one done
+  const withSubs = { ...base, subtasks: [{ id: "x", task: "X" }, { id: "y", task: "Y" }, { id: "z", task: "Z" }], completedSubtaskIds: ["x"] };
+  assert.deepEqual(getTaskSubtaskSummary(withSubs, null), { isSession: false, hasItems: true, completedCount: 1, totalCount: 3 });
+
+  // No own subtasks → falls back to plan template
+  assert.deepEqual(getTaskSubtaskSummary({ ...base }, plan), { isSession: false, hasItems: true, completedCount: 0, totalCount: 2 });
+
+  // Session uses its own steps, never the template
+  const session = { ...base, taskType: "session", subtasks: [{ id: "s1", task: "S1" }, { id: "s2", task: "S2" }], completedSubtaskIds: ["s1", "s2"] };
+  assert.deepEqual(getTaskSubtaskSummary(session, plan), { isSession: true, hasItems: true, completedCount: 2, totalCount: 2 });
+
+  // Whole-task completion implies all items done
+  assert.deepEqual(getTaskSubtaskSummary({ ...withSubs, completed: true }, null).completedCount, 3);
+
+  // Plain task with no items and no template
+  assert.deepEqual(getTaskSubtaskSummary({ ...base }, null), { isSession: false, hasItems: false, completedCount: 0, totalCount: 0 });
 });
 
 test("snooze never moves a task earlier than its scheduled time", () => {
