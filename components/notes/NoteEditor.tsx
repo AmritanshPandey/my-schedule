@@ -32,6 +32,7 @@ import {
 import type { Note, Task, Plan } from "@/lib/useScheduleDB";
 import { resolveLinkedTasks } from "@/lib/notes/linkedTasks";
 import TaskLinkPicker from "@/components/notes/TaskLinkPicker";
+import { SECTION_ICONS } from "@/components/SectionIcons";
 import type { Editor } from "@tiptap/core";
 import { haptic } from "@/lib/haptics";
 import { AccentBadge, cycleAccentColor } from "@/components/ui/Badge";
@@ -138,7 +139,11 @@ export default function NoteEditor({ note, onUpdate, onDelete, onBack, tasks, pl
   const [title, setTitle] = useState(note.title);
   const [linkPickerOpen, setLinkPickerOpen] = useState(false);
   const tasksById = useMemo(() => new Map(tasks.map((t) => [t.id, t])), [tasks]);
-  const planEmoji = useMemo(() => new Map(plans.map((p) => [p.id, p.emoji])), [plans]);
+  // plan.emoji is a Tabler icon NAME — resolve it to a component.
+  const planIcon = useMemo(() => {
+    const byName = new Map(SECTION_ICONS.map((s) => [s.name, s.icon]));
+    return new Map(plans.map((p) => [p.id, byName.get(p.emoji) ?? SECTION_ICONS[0].icon]));
+  }, [plans]);
   const linkedTasks = useMemo(
     () => resolveLinkedTasks(note.linkedTaskIds, tasksById),
     [note.linkedTaskIds, tasksById]
@@ -541,7 +546,9 @@ export default function NoteEditor({ note, onUpdate, onDelete, onBack, tasks, pl
               <IconLink size={12} strokeWidth={2.2} />
               Linked tasks
             </span>
-            {linkedTasks.map((task) => (
+            {linkedTasks.map((task) => {
+              const Icon = planIcon.get(task.planId) ?? SECTION_ICONS[0].icon;
+              return (
               <span
                 key={task.id}
                 className="inline-flex items-center gap-1 rounded-full border border-neutral-200 bg-white py-1 pl-2 pr-1 text-[12px] font-semibold text-neutral-700 dark:border-white/[0.12] dark:bg-white/[0.04] dark:text-neutral-200"
@@ -551,7 +558,7 @@ export default function NoteEditor({ note, onUpdate, onDelete, onBack, tasks, pl
                   onClick={() => onOpenTask(task.id)}
                   className="inline-flex max-w-[160px] items-center gap-1 truncate"
                 >
-                  <span className="leading-none">{planEmoji.get(task.planId) ?? "📋"}</span>
+                  <Icon size={13} strokeWidth={2} className="shrink-0 text-neutral-500 dark:text-neutral-400" />
                   <span className="truncate">{task.title}</span>
                 </button>
                 <button
@@ -563,7 +570,8 @@ export default function NoteEditor({ note, onUpdate, onDelete, onBack, tasks, pl
                   <IconX size={12} strokeWidth={2.4} />
                 </button>
               </span>
-            ))}
+              );
+            })}
             <button
               type="button"
               onClick={() => setLinkPickerOpen(true)}

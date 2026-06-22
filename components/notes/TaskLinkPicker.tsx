@@ -4,6 +4,7 @@ import { useMemo, useState } from "react";
 import { IconSearch, IconX, IconPlus, IconCheck } from "@tabler/icons-react";
 import BottomSheet from "@/components/ui/BottomSheet";
 import IconButton from "@/components/ui/IconButton";
+import { SECTION_ICONS } from "@/components/SectionIcons";
 import type { Task, Plan } from "@/lib/useScheduleDB";
 
 /**
@@ -27,7 +28,11 @@ export default function TaskLinkPicker({
   onClose: () => void;
 }) {
   const [query, setQuery] = useState("");
-  const planEmoji = useMemo(() => new Map(plans.map((p) => [p.id, p.emoji])), [plans]);
+  // plan.emoji holds a Tabler icon NAME — resolve it to a component.
+  const planIcon = useMemo(() => {
+    const byName = new Map(SECTION_ICONS.map((s) => [s.name, s.icon]));
+    return new Map(plans.map((p) => [p.id, byName.get(p.emoji) ?? SECTION_ICONS[0].icon]));
+  }, [plans]);
   const linked = new Set(linkedIds);
 
   const filtered = useMemo(() => {
@@ -64,6 +69,7 @@ export default function TaskLinkPicker({
           ) : (
             filtered.map((task) => {
               const isLinked = linked.has(task.id);
+              const Icon = planIcon.get(task.planId) ?? SECTION_ICONS[0].icon;
               return (
                 <button
                   key={task.id}
@@ -76,7 +82,7 @@ export default function TaskLinkPicker({
                       : "hover:bg-neutral-100 dark:hover:bg-white/[0.05]"
                   }`}
                 >
-                  <span className="text-[16px] leading-none">{planEmoji.get(task.planId) ?? "📋"}</span>
+                  <Icon size={17} strokeWidth={2} className="shrink-0 text-neutral-400 dark:text-neutral-500" />
                   <span className="min-w-0 flex-1 truncate text-[14px] font-semibold text-neutral-800 dark:text-neutral-200">
                     {task.title}
                   </span>
