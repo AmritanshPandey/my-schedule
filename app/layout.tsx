@@ -36,7 +36,8 @@ export const viewport: Viewport = {
   width: "device-width",
   initialScale: 1,
   viewportFit: "cover",
-  interactiveWidget: "resizes-content",
+  // `interactive-widget` is an Android-Chrome-only viewport key; iOS Safari logs
+  // "not recognized and ignored". Omitted since this is an iOS-first PWA.
 };
 
 export default function RootLayout({

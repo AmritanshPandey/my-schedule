@@ -190,8 +190,8 @@ function SwipeableCardStack({
     await motionAnimate(y, -460, { duration: 0.32, ease: [0.36, 0, 0.66, -0.1] });
     if (type === "done") onMarkDone(target);
     else onSkip(target);
-    // Skipping the only card re-queues it to itself — glide it back down rather
-    // than snapping, so the rotation reads as "it came back around".
+    // Skipping the only card leaves nothing behind it — glide it back down
+    // rather than snapping, so it reads as settling back into place.
     if (type === "skip" && count === 1) {
       await motionAnimate(y, 0, { type: "spring", stiffness: 320, damping: 32 });
     } else {
@@ -317,9 +317,6 @@ export default function OverviewDashboard({
   schedule, todayKey, onNavigate,
   onMarkTaskDone, onMissedTask, onOpenSubtasks, onLogTracker,
 }: OverviewDashboardProps) {
-  // Rotation order for the Next-up stack. "Missed it"/swipe sends a task to the
-  // back of the queue instead of removing it, so cards keep cycling until they're
-  // marked done. Resets when the day changes.
   // Inline task list toggle
   const [showAllTasks, setShowAllTasks] = useState(false);
   const todayISO = localISODate(new Date());
