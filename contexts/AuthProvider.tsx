@@ -4,6 +4,7 @@ import {
   createContext,
   useContext,
   useEffect,
+  useMemo,
   useRef,
   useState,
   useCallback,
@@ -70,7 +71,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         destroySync();
       }
 
-      setUser(firebaseUser);
+      // Keep the existing User reference when only the token refreshed (same
+      // uid). onAuthStateChanged re-fires on token refresh and app resume with
+      // a brand-new User object; swapping it would change the context value and
+      // cascade a full-tree re-render (a visible "flash" during background
+      // processing) even though nothing the UI reads has changed.
+      setUser((prev) =>
+        prev && firebaseUser && prev.uid === firebaseUser.uid ? prev : firebaseUser,
+      );
       setAuthLoading(false);
     });
 
@@ -96,11 +104,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     // onAuthStateChanged fires automatically → destroySync() called there.
   }, []);
 
-  return (
-    <AuthContext.Provider value={{ user, authLoading, isGuest: !user, login, logout }}>
-      {children}
-    </AuthContext.Provider>
+  // Memoized so consumers only re-render when user/authLoading actually change,
+  // not on every AuthProvider render (login/logout are stable useCallbacks).
+  const value = useMemo<AuthContextValue>(
+    () => ({ user, authLoading, isGuest: !user, login, logout }),
+    [user, authLoading, login, logout],
   );
+
+  return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 }
 
 export function useAuth() {

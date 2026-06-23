@@ -19,6 +19,7 @@ import {
 import { db } from "@/lib/firebase";
 import type { Schedule } from "@/lib/useScheduleDB";
 import { logError } from "@/lib/errorLog";
+import { getLocalLastUpdated } from "@/lib/localMeta";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -46,7 +47,10 @@ let _syncing = false;
 let _pending: Schedule | null = null;
 let _lastSchedule: Schedule | null = null; // latest snapshot seen by queueSync
 let _lastSyncedAt = 0;
+let _lastPullAt = 0; // throttle resume/reconnect pulls (rapid visibility toggles)
 let _status: SyncStatus = "idle";
+
+const PULL_THROTTLE_MS = 10_000; // at most one resume-pull per 10 s
 
 const _listeners = new Set<(s: SyncStatus) => void>();
 
@@ -83,12 +87,20 @@ function attachListeners() {
       } else {
         performSync(snap);
       }
-    } else if (document.visibilityState === "visible" && _pending) {
-      scheduleSync(_pending, 3_000); // re-queue shortly after coming back
+    } else if (document.visibilityState === "visible") {
+      if (_pending) {
+        scheduleSync(_pending, 3_000); // re-queue local edits shortly after coming back
+      } else {
+        // Caught up locally → pull any newer snapshot another device wrote while
+        // this one was backgrounded, so the two surfaces stay in step without a
+        // full reload.
+        void maybePull();
+      }
     }
   };
   _onlineFn = () => {
     if (_pending) scheduleSync(_pending, 5_000); // retry soon after reconnect
+    else void maybePull(); // reconnected with nothing pending → check for remote changes
   };
 
   document.addEventListener("visibilitychange", _visibilityFn);
@@ -115,6 +127,7 @@ export function initSync(uid: string) {
     _pending = null;
     _lastSchedule = null;
     _lastSyncedAt = 0;
+    _lastPullAt = 0;
     setStatus("idle");
   }
   _uid = uid;
@@ -133,6 +146,7 @@ export function destroySync() {
   _pending = null;
   _lastSchedule = null;
   _lastSyncedAt = 0;
+  _lastPullAt = 0;
   _syncing = false;
   detachListeners();
   setStatus("idle");
@@ -251,6 +265,27 @@ export async function mergeCloudIfNewer(
 }
 
 // ── Internal ──────────────────────────────────────────────────────────────────
+
+/**
+ * Pull a newer cloud snapshot on resume/reconnect. Only runs when this device is
+ * "caught up" (no _pending local edits) so a passive resume never clobbers
+ * unsynced local work — those edits are pushed instead and the pull happens on a
+ * later resume. Throttled and skipped while a push is in flight. mergeCloudIfNewer
+ * is a no-op unless the cloud is strictly newer, and the merge listener's
+ * equality guard suppresses any redundant re-render.
+ */
+async function maybePull(): Promise<void> {
+  if (!_uid || _pending || _syncing) return;
+  if (typeof navigator !== "undefined" && !navigator.onLine) return;
+  const now = Date.now();
+  if (now - _lastPullAt < PULL_THROTTLE_MS) return;
+  _lastPullAt = now;
+  try {
+    await mergeCloudIfNewer(_uid, getLocalLastUpdated(_uid));
+  } catch {
+    // non-fatal — mergeCloudIfNewer already swallows + logs its own errors
+  }
+}
 
 function scheduleSync(schedule: Schedule, delayMs: number) {
   if (_timer) clearTimeout(_timer);

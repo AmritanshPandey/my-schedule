@@ -888,6 +888,22 @@ function safeMigrate(raw: unknown): Schedule | null {
   }
 }
 
+/**
+ * Cheap content-equality check for two schedules. Both sides are produced by the
+ * same normalize/migrate pipeline, so key order is deterministic and a string
+ * compare is a reliable "did anything change". Used to skip no-op cloud merges
+ * that would otherwise rebuild the whole render tree. Falls back to "not equal"
+ * if serialization throws (e.g., unexpected cyclic data) so we never wrongly
+ * suppress a real update.
+ */
+function schedulesEqual(a: Schedule, b: Schedule): boolean {
+  try {
+    return JSON.stringify(a) === JSON.stringify(b);
+  } catch {
+    return false;
+  }
+}
+
 export function useScheduleDB() {
   const { user, authLoading } = useAuth();
   const storageKey = authLoading ? null : user ? recordKeyForUid(user.uid) : GUEST_RECORD_KEY;
@@ -1038,16 +1054,29 @@ export function useScheduleDB() {
 
       const migrated = safeMigrate(cloudSchedule);
       if (!migrated) return; // corrupt cloud snapshot — keep current local state
-      // Hydrating from cloud: tag the identity and skip the echo-write so the
-      // write effect doesn't overwrite the cloud `lastUpdated` with a fresh now.
+
+      // If the cloud snapshot is content-identical to what we already render
+      // (common right after login when this device wrote the snapshot last),
+      // skip the state swap entirely. Replacing the schedule with a structurally
+      // new-but-equal tree forces every memo/component to re-render for nothing —
+      // a visible "flash" while the app syncs. Still reconcile the local
+      // timestamp so we don't keep re-merging the same snapshot.
       loadedKeyRef.current = activeStorageKey;
-      skipNextWriteRef.current = true;
-      setScheduleState(migrated);
+      let changed = false;
+      setScheduleState((prev) => {
+        if (schedulesEqual(prev, migrated)) return prev;
+        changed = true;
+        return migrated;
+      });
       setIsFirstLaunch(false);
+      writeLocalLastUpdated(lastUpdated, storageUid);
+      if (!changed) return;
+      // Real change absorbed from cloud: skip the echo-write so the write effect
+      // doesn't overwrite the cloud `lastUpdated` with a fresh now, and persist.
+      skipNextWriteRef.current = true;
       if (dbRef.current) {
         writeDB(dbRef.current, activeStorageKey, migrated).catch(logWriteError);
       }
-      writeLocalLastUpdated(lastUpdated, storageUid);
     }
     window.addEventListener("cloud-sync-merge", handleCloudMerge);
     return () => window.removeEventListener("cloud-sync-merge", handleCloudMerge);
