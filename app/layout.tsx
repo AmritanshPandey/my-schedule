@@ -6,7 +6,6 @@ import PWAInstallPrompt from "@/components/PWAInstallPrompt";
 import LandscapeBlocker from "@/components/LandscapeBlocker";
 import { AuthProvider } from "@/contexts/AuthProvider";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
-import MotionProvider from "@/components/MotionProvider";
 import ErrorReporter from "@/components/ErrorReporter";
 import AIMobileTeaser from "@/components/ai/AIMobileTeaser";
 import { AI_ENABLED } from "@/lib/featureFlags";
@@ -84,9 +83,7 @@ try{
         {AI_ENABLED && <AIMobileTeaser />}
         <AuthProvider>
           <ErrorBoundary>
-            <MotionProvider>
-              {children}
-            </MotionProvider>
+            {children}
           </ErrorBoundary>
         </AuthProvider>
       </body>

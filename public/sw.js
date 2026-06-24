@@ -28,7 +28,6 @@ const PRECACHE_ASSETS = [];
 // ── Install ───────────────────────────────────────────────────────────────────
 
 self.addEventListener('install', (e) => {
-  self.skipWaiting();
   e.waitUntil(
     Promise.all([
       // Shell is required — a failed shell precache should fail the install.
@@ -55,12 +54,6 @@ self.addEventListener('activate', (e) => {
       )
       .then(() => self.clients.claim())
   );
-});
-
-self.addEventListener('message', (event) => {
-  if (event.data && event.data.type === 'SKIP_WAITING') {
-    self.skipWaiting();
-  }
 });
 
 // ── Fetch ─────────────────────────────────────────────────────────────────────
