@@ -1,5 +1,5 @@
-import ScheduleApp from "@/components/ScheduleApp";
+import ScheduleAppClient from "@/components/ScheduleAppClient";
 
 export default function Home() {
-  return <ScheduleApp />;
+  return <ScheduleAppClient />;
 }

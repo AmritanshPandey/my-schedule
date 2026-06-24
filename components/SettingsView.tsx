@@ -22,11 +22,11 @@ import {
   IconChevronDown,
 } from "@tabler/icons-react";
 import { useAuth } from "@/contexts/AuthProvider";
-import {
-  getSyncStatus, getLastSyncedAt, getLastSchedule,
-  onSyncStatusChange, flushNow, deleteCloudData, type SyncStatus,
-} from "@/lib/cloudSync";
+import { deleteCloudData } from "@/lib/cloudSync";
+import { useSyncStatus } from "@/lib/useSyncStatus";
 import { haptic } from "@/lib/haptics";
+import { hardRefreshApp } from "@/lib/chunkRecovery";
+import { versionLabel } from "@/lib/buildInfo";
 import {
   checkOllamaConnection, checkModelStatus,
   OLLAMA_URL_KEY, OLLAMA_MODEL_KEY,
@@ -428,36 +428,11 @@ function OllamaCard() {
 
 // ── Sync row ──────────────────────────────────────────────────────────────────
 
-function relativeTime(ts: number): string {
-  if (ts === 0) return "Never";
-  const secs = Math.floor((Date.now() - ts) / 1000);
-  if (secs < 10) return "Just now";
-  if (secs < 60) return `${secs}s ago`;
-  const mins = Math.floor(secs / 60);
-  if (mins < 60) return `${mins}m ago`;
-  return `${Math.floor(mins / 60)}h ago`;
-}
-
-function SyncRow({ schedule }: { schedule: Schedule }) {
-  const [status, setStatus] = useState<SyncStatus>(getSyncStatus());
-  const [lastAt, setLastAt] = useState(getLastSyncedAt());
-  const [busy, setBusy]     = useState(false);
-  const [, tick] = useState(0);
-
-  useEffect(() => onSyncStatusChange((s) => { setStatus(s); if (s === "idle") setLastAt(getLastSyncedAt()); }), []);
-  useEffect(() => { if (status !== "idle") return; const id = setInterval(() => tick((n) => n + 1), 30_000); return () => clearInterval(id); }, [status]);
-
-  async function syncNow() {
-    if (busy || status === "syncing") return;
-    const snap = schedule ?? getLastSchedule();
-    if (!snap) return;
-    setBusy(true);
-    try { await flushNow(snap); setLastAt(getLastSyncedAt()); } finally { setBusy(false); }
-  }
-
-  const isBusy = busy || status === "syncing";
-  const label = status === "syncing" ? "Syncing…" : status === "offline" ? "Offline" : status === "error" ? "Sync failed" : lastAt === 0 ? "Not synced yet" : `Synced ${relativeTime(lastAt)}`;
-  const color = status === "offline" ? "text-amber-500" : status === "error" ? "text-rose-500" : "text-emerald-500 dark:text-emerald-400";
+function SyncRow({ schedule: _schedule }: { schedule: Schedule }) {
+  // useSyncStatus flushes the engine's latest tracked snapshot via getLastSchedule,
+  // which is kept fresh on every edit — so we no longer need the schedule prop here.
+  const { tone, label, isBusy, syncNow } = useSyncStatus();
+  const color = tone === "warn" ? "text-amber-500" : tone === "error" ? "text-rose-500" : "text-emerald-500 dark:text-emerald-400";
 
   return (
     <Row>
@@ -516,6 +491,7 @@ export function SettingsView({
   const [clearPhase, setClearPhase] = useState<"idle" | "clearing">("idle");
   const [clearConfirmOpen, setClearConfirmOpen] = useState(false);
   const [progressPhase, setProgressPhase] = useState<"idle" | "confirm" | "clearing">("idle");
+  const [refreshing, setRefreshing] = useState(false);
   const clearCopy = buildDeleteConfirmationCopy("everything", {
     title: "Delete everything?",
     description: "This permanently deletes all local and cloud data. Cannot be undone.",
@@ -541,6 +517,16 @@ export function SettingsView({
     setProgressPhase("clearing");
     try { await onClearProgress(); } finally { setProgressPhase("idle"); }
   }, [onClearProgress]);
+  const handleHardRefresh = useCallback(async () => {
+    haptic("light");
+    setRefreshing(true);
+    try {
+      await hardRefreshApp();
+      setRefreshing(false);
+    } catch {
+      setRefreshing(false);
+    }
+  }, []);
   const dayStartTime = schedule.preferences?.dayStartTime ?? "";
   const handleDayStartChange = useCallback((value: string) => {
     onUpdatePreferences?.({ dayStartTime: normalizeDayStartTime(value) });
@@ -672,6 +658,32 @@ export function SettingsView({
                   </button>
                 </div>
               </Row>
+            </Card>
+          </div>
+
+          {/* ── App ─────────────────────────────────────────────────────────── */}
+          <div>
+            <SectionLabel>App</SectionLabel>
+            <Card>
+              <div className="flex items-center gap-3 px-4 py-3.5">
+                <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl border border-neutral-200 bg-neutral-50 text-neutral-500 dark:border-white/[0.08] dark:bg-white/[0.04] dark:text-neutral-300">
+                  <IconRefresh size={14} strokeWidth={2} className={refreshing ? "animate-spin" : ""} />
+                </div>
+                <div className="min-w-0 flex-1">
+                  <p className="text-[13px] font-semibold text-neutral-800 dark:text-white">Check for updates</p>
+                  <p className="mt-0.5 text-[11px] leading-snug text-neutral-400 dark:text-neutral-500">
+                    Clears the app cache; reopen to fetch the latest version · keeps your data
+                  </p>
+                </div>
+                <button type="button" onClick={handleHardRefresh} disabled={refreshing}
+                  className="shrink-0 rounded-xl border border-neutral-200 bg-neutral-50 px-3 py-1.5 text-[11px] font-semibold text-neutral-700 hover:bg-neutral-100 disabled:opacity-50 dark:border-white/[0.08] dark:bg-white/[0.04] dark:text-neutral-200">
+                  {refreshing ? "Updating…" : "Update"}
+                </button>
+              </div>
+              <Divider />
+              <div className="px-4 py-2.5">
+                <p className="text-[10px] text-neutral-300 dark:text-neutral-600">{versionLabel()}</p>
+              </div>
             </Card>
           </div>
 

@@ -5,13 +5,14 @@
  * that no longer exist on the server (and, because the SPA rewrite serves
  * index.html for any missing path, a stale chunk request comes back as HTML —
  * surfacing as "Failed to load chunk" / "Unexpected token '<'"). The fix is to
- * drop the stale caches and reload once to pick up the fresh build.
+ * drop the stale caches and let the user manually reopen/refresh to pick up
+ * the fresh build.
  *
  * These chunk failures arrive on THREE paths: a React render crash (caught by
  * ErrorBoundary), an uncaught `window` error, and — critically — an unhandled
  * promise rejection from a failed dynamic `import()`/prefetch, which never
- * reaches the React boundary. This module centralizes the loop-guarded reload
- * so every path can call it and share one counter.
+ * reaches the React boundary. During the iOS crash investigation, automatic
+ * reloads are disabled so Safari cannot fall into a repeated-problem loop.
  */
 
 const RELOAD_KEY = "planr-chunk-reloads";
@@ -77,19 +78,45 @@ export async function clearStaleCaches(): Promise<void> {
 }
 
 /**
- * Clear stale caches and reload once to recover from a chunk failure. Guarded so
- * a chunk that *keeps* failing can't loop (which Safari surfaces as "A problem
- * repeatedly occurred"). Returns true if a recovery is in flight / was started,
- * false if the reload budget is exhausted (caller should show a manual fallback).
+ * User-initiated "update the app" used by the Settings refresh button. Unlike
+ * unregisters the service worker and drops every cache so the next user-initiated
+ * page load pulls the latest deploy. It does NOT touch IndexedDB or localStorage,
+ * so the schedule, preferences, and sign-in are all preserved.
  */
-export function recoverFromChunkError(delayMs = 600): boolean {
+export async function hardRefreshApp(): Promise<void> {
+  resetReloadCount(); // a manual refresh clears any prior chunk-recovery budget
+  // Unregister service workers so a fresh one installs on the next load.
+  try {
+    if (typeof navigator !== "undefined" && "serviceWorker" in navigator) {
+      const regs = await navigator.serviceWorker.getRegistrations();
+      await Promise.all(regs.map((r) => r.unregister()));
+    }
+  } catch {
+    /* best effort — still clear caches + reload below */
+  }
+  // Drop every cache (not just planr-*) so no stale chunk survives the update.
+  try {
+    if (typeof caches !== "undefined") {
+      const keys = await caches.keys();
+      await Promise.all(keys.map((k) => caches.delete(k)));
+    }
+  } catch {
+    /* best effort */
+  }
+}
+
+/**
+ * Clear stale caches after a chunk failure. Automatic reload is disabled for the
+ * iOS safe-mode build because reload loops are one suspected crash source.
+ */
+export function recoverFromChunkError(_delayMs = 600): boolean {
   if (typeof window === "undefined") return false;
   if (recovering) return true;
   if (getReloadCount() >= MAX_RELOADS) return false;
   recovering = true;
   setReloadCount(getReloadCount() + 1);
   clearStaleCaches().finally(() => {
-    window.setTimeout(() => window.location.reload(), delayMs);
+    recovering = false;
   });
   return true;
 }

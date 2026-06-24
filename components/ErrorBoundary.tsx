@@ -116,11 +116,11 @@ export class ErrorBoundary extends Component<Props, State> {
             <button
               onClick={() => {
                 resetReloadCount();
-                clearStaleCaches().finally(() => window.location.reload());
+                clearStaleCaches().finally(() => this.setState({ hasError: false, message: "" }));
               }}
               className="w-full rounded-xl border border-neutral-200 bg-neutral-50 px-4 py-2.5 text-[13px] font-semibold text-neutral-700 transition-colors hover:bg-neutral-100 dark:border-white/[0.08] dark:bg-white/[0.04] dark:text-white dark:hover:bg-white/[0.08]"
             >
-              Reload app
+              Try again
             </button>
           </div>
         </div>

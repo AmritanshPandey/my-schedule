@@ -548,13 +548,9 @@ nav[aria-label="Main navigation"] {
   will-change: transform;
 }
 
-/* ── Visible keyboard focus (WCAG 2.4.7) ─────────────────────────────────────
-   Shows only for keyboard / assistive-tech users (:focus-visible never fires on
-   touch or mouse taps). Low specificity via :where() so any component with its
-   own bespoke focus styling still wins. */
+/* Keyboard focus ring disabled for the app's current interaction preference. */
 :where(button, a, [role="button"], input, textarea, select, [tabindex]):focus-visible {
-  outline: 2px solid #00A63E; /* brand green */
-  outline-offset: 2px;
+  outline: none;
 }
 
 /* ── Off-screen render skipping ──────────────────────────────────────────────
@@ -563,9 +559,8 @@ nav[aria-label="Main navigation"] {
    iPhone). `contain-intrinsic-size: auto <size>` reserves space for skipped
    items and remembers their last rendered size, so the scrollbar stays stable.
 
-   Note: content-visibility implies paint containment, which clips an outside
-   focus *outline*. Apply this only to elements whose focus ring is drawn INSIDE
-   the box (inset ring), so keyboard focus stays visible (WCAG 2.4.7). */
+   Note: content-visibility implies paint containment, which can clip outside
+   outlines. */
 .cv-auto {
   content-visibility: auto;
   contain-intrinsic-size: auto var(--cv-size, 88px);

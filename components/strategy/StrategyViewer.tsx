@@ -7,6 +7,7 @@ import type { StrategyAsset } from "@/lib/useScheduleDB";
 import StrategyHeader from "./StrategyHeader";
 import StrategyHtmlRenderer from "./StrategyHtmlRenderer";
 import { haptic } from "@/lib/haptics";
+import { isIOSSafeMode } from "@/lib/iosSafeMode";
 
 const StrategyPdfReader = dynamic(() => import("./StrategyPdfReader"), {
   ssr: false,
@@ -19,6 +20,7 @@ interface StrategyViewerProps {
 }
 
 export default function StrategyViewer({ asset, onClose }: StrategyViewerProps) {
+  const iosSafeMode = isIOSSafeMode();
   const [focusMode, setFocusMode] = useState(false);
   const [renderMode, setRenderMode] = useState<"original" | "adaptive">("original");
   const [currentPage, setCurrentPage] = useState(1);
@@ -84,7 +86,18 @@ export default function StrategyViewer({ asset, onClose }: StrategyViewerProps) 
               />
             )}
 
-            {asset.type === "pdf" && (asset.pdfUrl || asset.pdfData) && (
+            {asset.type === "pdf" && iosSafeMode && (
+              <div className="flex h-full items-center justify-center px-6 text-center">
+                <div>
+                  <p className="text-[15px] font-bold text-white">PDF viewer paused on iOS</p>
+                  <p className="mt-1 text-[13px] leading-snug text-white/45">
+                    Safe mode is active while the iPhone crash is being isolated.
+                  </p>
+                </div>
+              </div>
+            )}
+
+            {asset.type === "pdf" && !iosSafeMode && (asset.pdfUrl || asset.pdfData) && (
               <StrategyPdfReader
                 pdfUrl={asset.pdfUrl}
                 pdfData={asset.pdfData}

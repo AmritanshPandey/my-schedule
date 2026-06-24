@@ -4,6 +4,8 @@ import { useEffect, useRef, useState } from "react";
 import { m } from "framer-motion";
 import { IconChevronLeft, IconPencil, IconUser } from "@tabler/icons-react";
 import { useAuth } from "@/contexts/AuthProvider";
+import { useSyncStatus } from "@/lib/useSyncStatus";
+import SyncDot from "@/components/sync/SyncDot";
 
 interface ActionItem {
   icon: React.ComponentType<{ size?: number; strokeWidth?: number; className?: string }>;
@@ -97,6 +99,7 @@ function glassStyle(scrolled: boolean, isDark: boolean): React.CSSProperties {
 function RootHeader({ onOpenSettings, onNotes }: Pick<AppHeaderProps, "onOpenSettings" | "onNotes">) {
   const { user } = useAuth();
   const { scrolled, isDark } = useHeaderState();
+  const { tone, label } = useSyncStatus();
 
   return (
     <header
@@ -133,21 +136,35 @@ function RootHeader({ onOpenSettings, onNotes }: Pick<AppHeaderProps, "onOpenSet
           </span>
         </m.button>
 
-        <m.button
-          type="button"
-          whileTap={{ scale: 0.90 }}
-          onClick={onOpenSettings}
-          aria-label="Account"
-          className="h-11 w-11 shrink-0 overflow-hidden rounded-full border-[1.5px] border-neutral-200 bg-neutral-100 dark:border-white/[0.12] dark:bg-neutral-800"
-        >
-          {user?.photoURL ? (
-            <img src={user.photoURL} alt="Avatar" className="h-full w-full object-cover" />
-          ) : (
-            <div className="flex h-full w-full items-center justify-center">
-              <IconUser size={17} strokeWidth={1.8} className="text-neutral-400 dark:text-neutral-500" />
-            </div>
+        {/* Avatar opens Settings (full sync detail lives there); the corner dot
+            gives at-a-glance sync state. Dot sits outside the overflow-hidden
+            button so it isn't clipped. Signed-in only — guests don't sync. */}
+        <div className="relative shrink-0">
+          <m.button
+            type="button"
+            whileTap={{ scale: 0.90 }}
+            onClick={onOpenSettings}
+            aria-label="Account"
+            className="h-11 w-11 overflow-hidden rounded-full border-[1.5px] border-neutral-200 bg-neutral-100 dark:border-white/[0.12] dark:bg-neutral-800"
+          >
+            {user?.photoURL ? (
+              <img src={user.photoURL} alt="Avatar" className="h-full w-full object-cover" />
+            ) : (
+              <div className="flex h-full w-full items-center justify-center">
+                <IconUser size={17} strokeWidth={1.8} className="text-neutral-400 dark:text-neutral-500" />
+              </div>
+            )}
+          </m.button>
+          {user && (
+            <span
+              role="status"
+              aria-label={`Cloud sync: ${label}`}
+              className="pointer-events-none absolute -top-0.5 -right-0.5 rounded-full bg-neutral-50 p-[2px] dark:bg-neutral-950"
+            >
+              <SyncDot tone={tone} size="sm" />
+            </span>
           )}
-        </m.button>
+        </div>
       </div>
     </header>
   );

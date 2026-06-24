@@ -18,6 +18,7 @@ import EmptyState from "@/components/ui/EmptyState";
 import ConfirmSheet from "@/components/ui/ConfirmSheet";
 import IconButton from "@/components/ui/IconButton";
 import { buildDeleteConfirmationCopy } from "@/lib/deleteConfirm";
+import { ErrorBoundary } from "@/components/ErrorBoundary";
 
 interface StrategySpaceProps {
   strategies: StrategyAsset[];
@@ -157,20 +158,24 @@ export default function StrategySpace({ strategies, uploadOpen, onUploadOpen, on
       </div>
 
       {/* Upload sheet */}
-      <StrategyUpload
-        isOpen={uploadOpen}
-        onClose={onUploadClose}
-        onSave={(data, pdfBytes) => {
-          onAdd(data, pdfBytes);
-          onUploadClose();
-        }}
-      />
+      <ErrorBoundary section name="Strategy">
+        <StrategyUpload
+          isOpen={uploadOpen}
+          onClose={onUploadClose}
+          onSave={(data, pdfBytes) => {
+            onAdd(data, pdfBytes);
+            onUploadClose();
+          }}
+        />
+      </ErrorBoundary>
 
       {/* Viewer */}
-      <StrategyViewer
-        asset={viewingAsset}
-        onClose={() => setViewingAsset(null)}
-      />
+      <ErrorBoundary section name="Strategy">
+        <StrategyViewer
+          asset={viewingAsset}
+          onClose={() => setViewingAsset(null)}
+        />
+      </ErrorBoundary>
 
       <ConfirmSheet
         open={!!deleteTarget}

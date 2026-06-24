@@ -1,24 +1,27 @@
 "use client";
 
-import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { memo, useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { AnimatePresence, m } from "framer-motion";
 import dynamic from "next/dynamic";
 import AddEntryModal from "@/components/AddEntryModal";
 import { TaskBlockCard } from "@/components/TaskBlockCard";
-import { TaskSheet, type TaskSaveData } from "@/components/task/TaskSheet";
+import type { TaskSaveData } from "@/components/task/TaskSheet";
 import type { MilestoneSaveData } from "@/components/plan/MilestoneSheet";
 import { PlanCard } from "@/components/plan/PlanCard";
 import AppHeader from "@/components/AppHeader";
 import BottomNav from "@/components/BottomNav";
 import DesktopSidebar from "@/components/desktop/DesktopSidebar";
 import { WeekGrid } from "@/components/desktop/WeekGrid";
-import AIAssistant from "@/components/ai/AIAssistant";
 import { checkOllamaConnection, OLLAMA_URL_KEY, OLLAMA_MODEL_KEY, DEFAULT_OLLAMA_URL, DEFAULT_OLLAMA_MODEL } from "@/lib/ai";
 import type { AIActionResult } from "@/lib/ai";
 import { AI_ENABLED } from "@/lib/featureFlags";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
+import { useAuth } from "@/contexts/AuthProvider";
+import { bootLog, isIOSSafeMode, isStandalonePWA } from "@/lib/iosSafeMode";
 
 // ── Deferred heavy components (separate JS chunks, loaded on demand) ──────────
+const AIAssistant = dynamic(() => import("@/components/ai/AIAssistant"), { ssr: false });
+const TaskSheet = dynamic(() => import("@/components/task/TaskSheet").then(m => ({ default: m.TaskSheet })), { ssr: false });
 const PlanDetailView = dynamic(() => import("@/components/plan/PlanDetailView"), { ssr: false });
 const AIPlanCreatorSheet = dynamic(() => import("@/components/plan/AIPlanCreatorSheet"), { ssr: false });
 const SettingsSheet = dynamic(() => import("@/components/auth/SettingsSheet").then(m => ({ default: m.SettingsSheet })), { ssr: false });
@@ -169,6 +172,9 @@ const JS_DAYS = [
   "saturday",
 ] as const;
 
+function NoopPresence({ children }: { children: ReactNode; mode?: string; initial?: boolean }) {
+  return <>{children}</>;
+}
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
@@ -181,6 +187,91 @@ function formatHourLabel(totalMinutes: number): string {
   const suffix = normalizedHour >= 12 ? "PM" : "AM";
   const hour = normalizedHour % 12 || 12;
   return `${hour} ${suffix}`;
+}
+
+function IOSSafeDashboard({
+  schedule,
+  todayTasks,
+  plansById,
+  authLabel,
+  onNavigate,
+  onToggleTask,
+  onToggleSubtask,
+  onOpenSubtasks,
+}: {
+  schedule: Schedule;
+  todayTasks: Task[];
+  plansById: Map<string, Plan>;
+  authLabel: string;
+  onNavigate: (tab: number) => void;
+  onToggleTask: (task: Task) => void;
+  onToggleSubtask: (taskId: string, subtaskId: string) => void;
+  onOpenSubtasks: (task: Task) => void;
+}) {
+  const done = todayTasks.filter((task) => isTaskCompleted(task, task.subtasks?.length ?? 0)).length;
+  const total = todayTasks.length;
+  const plans = schedule.plans.length;
+  const rituals = schedule.rituals?.length ?? 0;
+
+  return (
+    <div className="px-4 pb-8 pt-5">
+      <MainTitleSection
+        label={authLabel}
+        title="Dashboard"
+        actions={
+          <CtaActionButton
+            label="Today"
+            icon={<IconCalendar size={14} strokeWidth={2.5} />}
+            onClick={() => onNavigate(0)}
+          />
+        }
+        className="mb-5"
+      />
+
+      <div className="grid grid-cols-3 gap-2.5">
+        <StatTile icon={IconChecklist} value={total} label={`${done} done`} />
+        <StatTile icon={IconClipboardData} value={plans} label="Plans" />
+        <StatTile icon={IconStack2} value={rituals} label="Habits" />
+      </div>
+
+      <section className="mt-5">
+        <div className="mb-3 flex items-center justify-between">
+          <h2 className="text-[16px] font-extrabold text-neutral-950 dark:text-white">Today's tasks</h2>
+          <button
+            type="button"
+            onClick={() => onNavigate(0)}
+            className="text-[13px] font-bold text-neutral-500 dark:text-neutral-400"
+          >
+            Open
+          </button>
+        </div>
+
+        {todayTasks.length === 0 ? (
+          <EmptyState
+            icon={IconCalendar}
+            title="No tasks today"
+            description="Add tasks from the Today tab when you're ready."
+            action={{ label: "Add Task", onClick: () => onNavigate(0) }}
+          />
+        ) : (
+          <div className="flex flex-col gap-3">
+            {todayTasks.map((task) => (
+              <ListTaskCard
+                key={task.id}
+                task={task}
+                linkedPlan={task.planId ? plansById.get(task.planId) ?? null : null}
+                onToggleComplete={() => onToggleTask(task)}
+                onToggleSubtask={onToggleSubtask}
+                onEdit={() => onNavigate(0)}
+                onDelete={() => onNavigate(0)}
+                onOpenSubtasks={() => onOpenSubtasks(task)}
+              />
+            ))}
+          </div>
+        )}
+      </section>
+    </div>
+  );
 }
 
 function formatHalfHourLabel(totalMinutes: number): string {
@@ -505,11 +596,18 @@ type TaskDeleteRequest = {
 // ─── Main component ───────────────────────────────────────────────────────────
 
 export default function ScheduleApp() {
+  const iosSafeMode = isIOSSafeMode();
+  bootLog("APP_BOOT_START");
+  if (iosSafeMode) {
+    bootLog("IOS_SAFE_MODE_ENABLED");
+    void isStandalonePWA();
+  }
+  const { user, isGuest, authLoading } = useAuth();
   const { schedule, setSchedule, ready, clearData, clearProgress, isFirstLaunch } = useScheduleDB();
   const [todayKey, setTodayKey] = useState<DayKey>(() => JS_DAYS[new Date().getDay()]);
   const [activeDay, setActiveDay] = useState<DayKey>(() => JS_DAYS[new Date().getDay()]);
   const [editMode, setEditMode] = useState(false);
-  const [activeTab, setActiveTab] = useState(0);
+  const [activeTab, setActiveTab] = useState(() => (iosSafeMode ? 4 : 0));
   const [whatNextDismissed, setWhatNextDismissed] = useState(false);
 
   const [toastState, setToastState] = useState<ToastState | null>(null);
@@ -524,7 +622,7 @@ export default function ScheduleApp() {
   const [selectedPlanId, setSelectedPlanId] = useState<string | null>(null);
   const [entryTracker, setEntryTracker] = useState<ProgressTracker | null>(null);
   const [weekOffset, setWeekOffset] = useState(0);
-  const [viewMode, setViewMode] = useState<"list" | "timeline">("timeline");
+  const [viewMode, setViewMode] = useState<"list" | "timeline">(() => (iosSafeMode ? "list" : "timeline"));
   const [calendarView, setCalendarView] = useState<import("@/components/desktop/WeekGrid").CalendarView>("7day");
   const [customDays, setCustomDays] = useState<DayKey[]>(["monday", "wednesday", "friday"]);
 
@@ -586,7 +684,7 @@ export default function ScheduleApp() {
     // AI is feature-flagged off — don't fire a localhost connection probe on
     // every app start (needless work; on iOS the mixed-content fetch is dead
     // weight). Re-enabling AI_ENABLED restores this automatically.
-    if (!AI_ENABLED) return;
+    if (!AI_ENABLED || iosSafeMode) return;
     if (typeof window === "undefined") return;
     let cancelled = false;
 
@@ -603,7 +701,7 @@ export default function ScheduleApp() {
 
     void syncInstalledModel();
     return () => { cancelled = true; };
-  }, [ollamaUrl, ollamaModel]);
+  }, [ollamaUrl, ollamaModel, iosSafeMode]);
 
   function openConfirm(
     copy: { title: string; description: string; confirmLabel?: string },
@@ -669,10 +767,24 @@ export default function ScheduleApp() {
 
   // Land on the Overview page on true first launch (no stored data)
   useEffect(() => {
+    if (iosSafeMode) return;
     if (ready && isFirstLaunch) {
       setActiveTab(4); // Overview
     }
-  }, [ready, isFirstLaunch]);
+  }, [ready, isFirstLaunch, iosSafeMode]);
+
+  useEffect(() => {
+    if (!iosSafeMode) return;
+    setViewMode("list");
+    setEditMode(false);
+    bootLog("TIMELINE_SKIPPED_ON_IOS");
+  }, [iosSafeMode]);
+
+  useEffect(() => {
+    if (!ready) return;
+    bootLog("DASHBOARD_READY");
+    bootLog("APP_BOOT_COMPLETE");
+  }, [ready]);
 
   // Reset "What's Next" dismissal whenever the user navigates to a new day
   useEffect(() => {
@@ -833,6 +945,7 @@ export default function ScheduleApp() {
   // ── Document-level handlers (installed once, read refs — no stale closures) ─
 
   useEffect(() => {
+    if (iosSafeMode) return;
     // RAF-throttle state updates so React never receives more than one drag
     // state update per animation frame (prevents "Maximum update depth exceeded").
     let rafId: number | null = null;
@@ -985,7 +1098,7 @@ export default function ScheduleApp() {
       document.removeEventListener("pointercancel", onPointerCancel);
       if (rafId !== null) cancelAnimationFrame(rafId);
     };
-  }, []); // empty deps: handlers read all live values through refs
+  }, [iosSafeMode]); // handlers read all live values through refs
 
   // Stable identity (setters are stable) so the memoized TimelineTaskBlock holds.
   const openEditSheet = useCallback((task: Task, dateISO?: string) => {
@@ -2301,26 +2414,36 @@ export default function ScheduleApp() {
   }
 
   // ─── JSX ──────────────────────────────────────────────────────────────────
+  const TabPresence = iosSafeMode ? NoopPresence : AnimatePresence;
+  const DayPresence = iosSafeMode ? NoopPresence : AnimatePresence;
+  const ViewPresence = iosSafeMode ? NoopPresence : AnimatePresence;
+  const authLabel = authLoading
+    ? "Auth checking"
+    : isGuest
+    ? "Guest mode"
+    : user?.displayName || user?.email || "Signed in";
 
   return (
     <main className="min-h-dvh bg-[#F5F5F5] text-neutral-900 dark:bg-[#111111] dark:text-white lg:flex lg:h-dvh lg:gap-4 lg:overflow-hidden lg:p-4">
 
       {/* ── Desktop sidebar (hidden on mobile) ─────────────────────────────── */}
-      <DesktopSidebar
-        activeTab={activeTab}
-        collapsed={sidebarCollapsed}
-        ollamaUrl={ollamaUrl}
-        ollamaModel={ollamaModel}
-        onTabChange={(tab) => { setActiveTab(tab); setSelectedPlanId(null); }}
-        onToggleCollapse={() => setSidebarCollapsed((v) => !v)}
-        onCreateTask={() => openCreateSheet()}
-        onCreatePlan={openAddPlan}
-        onCreateRitual={() => { setActiveTab(2); if (canAddRitual) setRitualAddOpen(true); }}
-        onBulkImport={() => setBulkImportOpen(true)}
-        onOpenSettings={() => setSettingsOpen(true)}
-        onOpenSettingsTab={() => setActiveTab(5)}
-        onOpenNotes={() => { setSelectedPlanId(null); setActiveTab(6); }}
-      />
+      {!iosSafeMode && (
+        <DesktopSidebar
+          activeTab={activeTab}
+          collapsed={sidebarCollapsed}
+          ollamaUrl={ollamaUrl}
+          ollamaModel={ollamaModel}
+          onTabChange={(tab) => { setActiveTab(tab); setSelectedPlanId(null); }}
+          onToggleCollapse={() => setSidebarCollapsed((v) => !v)}
+          onCreateTask={() => openCreateSheet()}
+          onCreatePlan={openAddPlan}
+          onCreateRitual={() => { setActiveTab(2); if (canAddRitual) setRitualAddOpen(true); }}
+          onBulkImport={() => setBulkImportOpen(true)}
+          onOpenSettings={() => setSettingsOpen(true)}
+          onOpenSettingsTab={() => setActiveTab(5)}
+          onOpenNotes={() => { setSelectedPlanId(null); setActiveTab(6); }}
+        />
+      )}
 
       {/* ── Main scrollable column ──────────────────────────────────────────── */}
       <div className="flex min-h-0 flex-1 flex-col lg:overflow-hidden">
@@ -2350,26 +2473,28 @@ export default function ScheduleApp() {
       </div>
 
 
-      <SettingsSheet
-        open={settingsOpen}
-        onClose={() => {
-          setSettingsOpen(false);
-          setOllamaUrl(localStorage.getItem(OLLAMA_URL_KEY) ?? DEFAULT_OLLAMA_URL);
-          setOllamaModel(localStorage.getItem(OLLAMA_MODEL_KEY) ?? DEFAULT_OLLAMA_MODEL);
-        }}
-        onClearData={clearData}
-        onClearProgress={clearProgress}
-        schedule={schedule}
-        onUpdatePreferences={(patch) =>
-          setSchedule((prev) => ({
-            ...prev,
-            preferences: {
-              ...prev.preferences,
-              ...patch,
-            },
-          }))
-        }
-      />
+      {!iosSafeMode && (
+        <SettingsSheet
+          open={settingsOpen}
+          onClose={() => {
+            setSettingsOpen(false);
+            setOllamaUrl(localStorage.getItem(OLLAMA_URL_KEY) ?? DEFAULT_OLLAMA_URL);
+            setOllamaModel(localStorage.getItem(OLLAMA_MODEL_KEY) ?? DEFAULT_OLLAMA_MODEL);
+          }}
+          onClearData={clearData}
+          onClearProgress={clearProgress}
+          schedule={schedule}
+          onUpdatePreferences={(patch) =>
+            setSchedule((prev) => ({
+              ...prev,
+              preferences: {
+                ...prev.preferences,
+                ...patch,
+              },
+            }))
+          }
+        />
+      )}
       <TemplatesSheet open={templatesOpen} onClose={() => setTemplatesOpen(false)} onApply={handleApplyTemplate} />
 
       {/* ── Content ────────────────────────────────────────────────────────── */}
@@ -2401,7 +2526,7 @@ export default function ScheduleApp() {
          applied once by the body's padding-top, so we must NOT add it again
          here or it double-counts and leaves a gap under the header. */
       <div className="max-w-full pb-40 pt-16 lg:pt-0 lg:flex-1 lg:max-w-none lg:overflow-y-auto lg:pb-0">
-        <AnimatePresence mode="wait" initial={false}>
+        <TabPresence mode="wait" initial={false}>
 
         {/* ── Tasks Tab ────────────────────────────────────────────────────── */}
         {activeTab === 0 && (
@@ -2498,14 +2623,18 @@ export default function ScheduleApp() {
                       className="relative flex flex-col items-center focus-visible:outline-none"
                     >
                       {/* Active day: tall black pill */}
-                      {isActive && (
+                      {isActive && (iosSafeMode ? (
+                        <div
+                          className="absolute inset-0 rounded-[14px] bg-neutral-950 dark:bg-white"
+                        />
+                      ) : (
                         <m.div
                           layoutId="weekDayPill"
                           className="absolute inset-0 rounded-[14px] bg-neutral-950 dark:bg-white"
                           style={{ willChange: "transform" }}
                           transition={{ type: "spring", stiffness: 380, damping: 30, mass: 0.6 }}
                         />
-                      )}
+                      ))}
                       <m.div
                         whileTap={{ scale: 0.90 }}
                         transition={{ type: "spring", stiffness: 500, damping: 28 }}
@@ -2537,7 +2666,7 @@ export default function ScheduleApp() {
             </div>
 
             <div className="flex min-h-0 flex-1 flex-col">
-            <AnimatePresence mode="wait" initial={false}>
+            <DayPresence mode="wait" initial={false}>
             <m.div
               key={activeDay}
               initial={{ opacity: 0, y: 3 }}
@@ -2580,8 +2709,8 @@ export default function ScheduleApp() {
                 onToggle={handleToggleRitualComplete}
               />
               <div className="flex min-h-0 flex-1 flex-col">
-              <AnimatePresence mode="wait" initial={false}>
-                {viewMode === "list" ? (
+              <ViewPresence mode="wait" initial={false}>
+                {iosSafeMode || viewMode === "list" ? (
                   <m.div
                     key="list"
                     initial={{ opacity: 0, y: 6 }}
@@ -2605,7 +2734,7 @@ export default function ScheduleApp() {
                           action={{ label: "Add Task", onClick: () => openCreateSheet() }}
                         />
                       )
-                    ) : editMode ? (
+                    ) : editMode && !iosSafeMode ? (
                       <DndContext sensors={sensors} onDragEnd={handleTasksDragEnd}>
                         <SortableContext items={dayTasks.map((t) => t.id)} strategy={verticalListSortingStrategy}>
                           <div className="flex flex-col gap-3 pb-4">
@@ -2755,7 +2884,7 @@ export default function ScheduleApp() {
                         ref={taskGridRef}
                         className="relative min-w-0 flex-1 border-l border-neutral-200/80 dark:border-white/[0.07]"
                         style={{ height: timelineHeight, contain: "layout style" }}
-                        onPointerDown={isViewingToday ? handleGridPointerDown : undefined}
+                        onPointerDown={!iosSafeMode && isViewingToday ? handleGridPointerDown : undefined}
                       >
                         {/* Grid lines */}
                         <div className="absolute inset-0 pointer-events-none">
@@ -2867,11 +2996,11 @@ export default function ScheduleApp() {
                     </ErrorBoundary>
                   </m.div>
                 )}
-              </AnimatePresence>
+              </ViewPresence>
               </div>{/* end viewMode AnimatePresence wrapper */}
             </div>{/* end task content */}
             </m.div>
-            </AnimatePresence>
+            </DayPresence>
             </div>{/* end activeDay AnimatePresence wrapper */}
             </div>{/* end unified section */}
 
@@ -2889,7 +3018,7 @@ export default function ScheduleApp() {
           >
           <div className={selectedPlan ? "lg:mx-auto lg:max-w-4xl" : ""}>
           {selectedPlan ? (
-            <ErrorBoundary section name="Plan">
+            <ErrorBoundary section name="Plans">
             <PlanDetailView
               plan={selectedPlan}
               schedule={schedule}
@@ -2979,17 +3108,30 @@ export default function ScheduleApp() {
             exit={{ opacity: 0 }}
             transition={{ duration: 0.12, ease: "easeOut" }}
           >
-            <ErrorBoundary section name="Overview">
-            <OverviewDashboard
-              schedule={schedule}
-              todayKey={todayKey}
-              onNavigate={(tab) => { setActiveTab(tab); setSelectedPlanId(null); }}
-              onMarkTaskDone={(id, subtaskIds) => handleToggleTaskComplete(id, subtaskIds, todayKey)}
-              onMissedTask={(id, subtaskIds) => handleMarkTaskMissed(id, subtaskIds, todayKey)}
-              onOpenSubtasks={(id) => setSubtasksRef({ id, day: todayKey, dateISO: todayISO() })}
-              completedRitualIds={completedRitualIds}
-              onLogTracker={(tracker) => setEntryTracker(tracker)}
-            />
+            <ErrorBoundary section name="Dashboard">
+            {iosSafeMode ? (
+              <IOSSafeDashboard
+                schedule={schedule}
+                todayTasks={schedule.activities[todayKey] ?? []}
+                plansById={plansById}
+                authLabel={authLabel}
+                onNavigate={(tab) => { setActiveTab(tab); setSelectedPlanId(null); }}
+                onToggleTask={(task) => handleToggleTaskComplete(task.id, task.subtasks?.map((s) => s.id) ?? [], todayKey, todayISO())}
+                onToggleSubtask={(id, subtaskId) => handleToggleSubtask(id, subtaskId, todayKey, todayISO())}
+                onOpenSubtasks={(task) => setSubtasksRef({ id: task.id, day: todayKey, dateISO: todayISO() })}
+              />
+            ) : (
+              <OverviewDashboard
+                schedule={schedule}
+                todayKey={todayKey}
+                onNavigate={(tab) => { setActiveTab(tab); setSelectedPlanId(null); }}
+                onMarkTaskDone={(id, subtaskIds) => handleToggleTaskComplete(id, subtaskIds, todayKey)}
+                onMissedTask={(id, subtaskIds) => handleMarkTaskMissed(id, subtaskIds, todayKey)}
+                onOpenSubtasks={(id) => setSubtasksRef({ id, day: todayKey, dateISO: todayISO() })}
+                completedRitualIds={completedRitualIds}
+                onLogTracker={(tracker) => setEntryTracker(tracker)}
+              />
+            )}
             </ErrorBoundary>
           </m.div>
         )}
@@ -3003,44 +3145,50 @@ export default function ScheduleApp() {
             exit={{ opacity: 0 }}
             transition={{ duration: 0.12, ease: "easeOut" }}
           >
-            <SettingsView
-              schedule={schedule}
-              onClearData={clearData}
-              onClearProgress={clearProgress}
-              onUpdatePreferences={(patch) =>
-                setSchedule((prev) => ({
-                  ...prev,
-                  preferences: {
-                    ...prev.preferences,
-                    ...patch,
-                  },
-                }))
-              }
-              onClose={() => setActiveTab(0)}
-            />
+            <ErrorBoundary section name="AI">
+              <SettingsView
+                schedule={schedule}
+                onClearData={clearData}
+                onClearProgress={clearProgress}
+                onUpdatePreferences={(patch) =>
+                  setSchedule((prev) => ({
+                    ...prev,
+                    preferences: {
+                      ...prev.preferences,
+                      ...patch,
+                    },
+                  }))
+                }
+                onClose={() => setActiveTab(0)}
+              />
+            </ErrorBoundary>
           </m.div>
         )}
 
-        </AnimatePresence>
+        </TabPresence>
       </div>
       )}
 
       {/* ── Edit Plan Bottom Sheet ─────────────────────────────────────────── */}
-      <EditPlanSheet
-        planId={editingPlanId}
-        plan={editingPlanId ? plansById.get(editingPlanId) ?? null : null}
-        setSchedule={setSchedule}
-        onClose={() => setEditingPlanId(null)}
-      />
+      {editingPlanId && (
+        <EditPlanSheet
+          planId={editingPlanId}
+          plan={plansById.get(editingPlanId) ?? null}
+          setSchedule={setSchedule}
+          onClose={() => setEditingPlanId(null)}
+        />
+      )}
       {/* ── Add Plan Bottom Sheet ───────────────────────────────────────────── */}
-      <AddPlanSheet
-        open={addingPlan}
-        onClose={() => setAddingPlan(false)}
-        setSchedule={setSchedule}
-      />
+      {addingPlan && (
+        <AddPlanSheet
+          open={addingPlan}
+          onClose={() => setAddingPlan(false)}
+          setSchedule={setSchedule}
+        />
+      )}
 
       {/* ── AI Plan Creator Sheet (hidden while AI is disabled) ────────────── */}
-      {AI_ENABLED && (
+      {AI_ENABLED && !iosSafeMode && (
         <AIPlanCreatorSheet
           open={aiPlanCreating}
           onClose={() => setAiPlanCreating(false)}
@@ -3065,104 +3213,108 @@ export default function ScheduleApp() {
         </div>
       )}
 
-      <BulkImportSheet
-        open={bulkImportOpen}
-        plans={schedule.plans}
-        fallbackDay={activeDay}
-        onClose={() => setBulkImportOpen(false)}
-        onCommit={handleBulkImport}
-      />
+      {bulkImportOpen && (
+        <BulkImportSheet
+          open={bulkImportOpen}
+          plans={schedule.plans}
+          fallbackDay={activeDay}
+          onClose={() => setBulkImportOpen(false)}
+          onCommit={handleBulkImport}
+        />
+      )}
 
 
       {/* ── Modals ─────────────────────────────────────────────────────────── */}
-      <TaskSheet
-        mode={taskSheetMode}
-        task={taskSheetTask}
-        plans={schedule.plans}
-        activeDay={activeDay}
-        activeDays={taskSheetActiveDays}
-        isOpen={taskSheetOpen}
-        initialPlanId={taskSheetPlanId}
-        initialTaskType={taskSheetInitialType}
-        initialStartTime={taskSheetInitialStartTime}
-        initialEndTime={taskSheetInitialEndTime}
-        occurrenceDateISO={taskSheetDateISO}
-        canEditOccurrence={taskSheetMode === "edit" && !!taskSheetDateISO && taskSheetDateISO >= todayISO()}
-        onResetOccurrence={
-          taskSheetTask && taskSheetDateISO
-            ? () => {
-                const id = taskSheetTask.id;
-                const label = new Date(taskSheetDateISO + "T00:00:00").toLocaleDateString(undefined, { weekday: "short", month: "short", day: "numeric" });
-                setSchedule(clearTaskException(id, taskSheetDateISO));
-                closeTaskSheet();
-                setToastMessage(`Reset ${label} to default`);
-              }
-            : undefined
-        }
-        ollamaUrl={ollamaUrl}
-        ollamaModel={ollamaModel}
-        onClose={closeTaskSheet}
-        onSave={handleTaskSheetSave}
-        onDuplicate={(data) => {
-          const newId = uid();
-          const newTask: Task = { ...data.taskDraft, id: newId };
-          const days = data.repeatDays.length > 0 ? data.repeatDays : [activeDay];
-          setSchedule((prev) => ({
-            ...prev,
-            activities: days.reduce(
-              (acc, day) => ({ ...acc, [day]: [...acc[day], newTask] }),
-              { ...prev.activities }
-            ),
-          }));
-          closeTaskSheet();
-          setToastMessage("Task duplicated");
-          setTimeout(() => openEditSheet(newTask), 350);
-        }}
-        onDelete={taskSheetMode === "edit" && taskSheetTask ? () => {
-          const sourceDay = taskSheetActiveDays.includes(activeDay)
-            ? activeDay
-            : taskSheetActiveDays[0] ?? activeDay;
-          const taskId = taskSheetTask.id;
-          closeTaskSheet();
-          requestDeleteTask(taskId, sourceDay);
-        } : undefined}
-      />
+      {taskSheetOpen && (
+        <TaskSheet
+          mode={taskSheetMode}
+          task={taskSheetTask}
+          plans={schedule.plans}
+          activeDay={activeDay}
+          activeDays={taskSheetActiveDays}
+          isOpen={taskSheetOpen}
+          initialPlanId={taskSheetPlanId}
+          initialTaskType={taskSheetInitialType}
+          initialStartTime={taskSheetInitialStartTime}
+          initialEndTime={taskSheetInitialEndTime}
+          occurrenceDateISO={taskSheetDateISO}
+          canEditOccurrence={taskSheetMode === "edit" && !!taskSheetDateISO && taskSheetDateISO >= todayISO()}
+          onResetOccurrence={
+            taskSheetTask && taskSheetDateISO
+              ? () => {
+                  const id = taskSheetTask.id;
+                  const label = new Date(taskSheetDateISO + "T00:00:00").toLocaleDateString(undefined, { weekday: "short", month: "short", day: "numeric" });
+                  setSchedule(clearTaskException(id, taskSheetDateISO));
+                  closeTaskSheet();
+                  setToastMessage(`Reset ${label} to default`);
+                }
+              : undefined
+          }
+          ollamaUrl={ollamaUrl}
+          ollamaModel={ollamaModel}
+          onClose={closeTaskSheet}
+          onSave={handleTaskSheetSave}
+          onDuplicate={(data) => {
+            const newId = uid();
+            const newTask: Task = { ...data.taskDraft, id: newId };
+            const days = data.repeatDays.length > 0 ? data.repeatDays : [activeDay];
+            setSchedule((prev) => ({
+              ...prev,
+              activities: days.reduce(
+                (acc, day) => ({ ...acc, [day]: [...acc[day], newTask] }),
+                { ...prev.activities }
+              ),
+            }));
+            closeTaskSheet();
+            setToastMessage("Task duplicated");
+            setTimeout(() => openEditSheet(newTask), 350);
+          }}
+          onDelete={taskSheetMode === "edit" && taskSheetTask ? () => {
+            const sourceDay = taskSheetActiveDays.includes(activeDay)
+              ? activeDay
+              : taskSheetActiveDays[0] ?? activeDay;
+            const taskId = taskSheetTask.id;
+            closeTaskSheet();
+            requestDeleteTask(taskId, sourceDay);
+          } : undefined}
+        />
+      )}
 
-      <AddEntryModal
-        isOpen={!!entryTracker}
-        onClose={() => setEntryTracker(null)}
-        onSave={(value, date) => {
-          if (!entryTracker) return;
-          handleAddEntry({
-            planId: entryTracker.planId,
-            trackerId: entryTracker.id,
-            value,
-            date,
-          });
-        }}
-        metric={
-          entryTracker
-            ? { name: entryTracker.title, unit: entryTracker.unit ?? "" }
-            : undefined
-        }
-      />
+      {entryTracker && (
+        <AddEntryModal
+          isOpen={!!entryTracker}
+          onClose={() => setEntryTracker(null)}
+          onSave={(value, date) => {
+            if (!entryTracker) return;
+            handleAddEntry({
+              planId: entryTracker.planId,
+              trackerId: entryTracker.id,
+              value,
+              date,
+            });
+          }}
+          metric={{ name: entryTracker.title, unit: entryTracker.unit ?? "" }}
+        />
+      )}
 
-      <SessionSheet
-        isOpen={!!sessionTask}
-        task={sessionTask}
-        linkedPlan={sessionLinkedPlan}
-        onClose={() => setSessionTask(null)}
-        onComplete={(taskId, allIds) => {
-          handleToggleTaskComplete(taskId, allIds);
-          setSessionTask(null);
-        }}
-        onEdit={() => {
-          if (sessionTask) openEditSheet(sessionTask);
-          setSessionTask(null);
-        }}
-      />
+      {sessionTask && (
+        <SessionSheet
+          isOpen={!!sessionTask}
+          task={sessionTask}
+          linkedPlan={sessionLinkedPlan}
+          onClose={() => setSessionTask(null)}
+          onComplete={(taskId, allIds) => {
+            handleToggleTaskComplete(taskId, allIds);
+            setSessionTask(null);
+          }}
+          onEdit={() => {
+            if (sessionTask) openEditSheet(sessionTask);
+            setSessionTask(null);
+          }}
+        />
+      )}
 
-      {(() => {
+      {subtasksRef && (() => {
         const raw = subtasksRef ? (schedule.activities[subtasksRef.day] ?? []).find((t) => t.id === subtasksRef.id) ?? null : null;
         // Apply this date's per-date overrides (title/time), then overlay the
         // selected day's completion from history when it isn't today.
@@ -3283,23 +3435,25 @@ export default function ScheduleApp() {
       </div>{/* end main scrollable column */}
 
       {/* ── AI Assistant — available on all tabs (hidden while AI is disabled) ── */}
-      {AI_ENABLED && (
-        <AIAssistant
-          open={aiOpen}
-          onClose={() => { setAiOpen(false); setAiInitialMessage(""); }}
-          plans={schedule.plans}
-          schedule={schedule}
-          initialPlanId={selectedPlanId}
-          ollamaUrl={ollamaUrl}
-          ollamaModel={ollamaModel}
-          onAddGeneratedTasks={handleAddGeneratedTasks}
-          onApplyAction={handleApplyAction}
-          onNavigateToPlan={(planId) => { setActiveTab(1); setSelectedPlanId(planId); setAiOpen(false); }}
-        />
+      {AI_ENABLED && !iosSafeMode && (
+        <ErrorBoundary section name="AI">
+          <AIAssistant
+            open={aiOpen}
+            onClose={() => { setAiOpen(false); setAiInitialMessage(""); }}
+            plans={schedule.plans}
+            schedule={schedule}
+            initialPlanId={selectedPlanId}
+            ollamaUrl={ollamaUrl}
+            ollamaModel={ollamaModel}
+            onAddGeneratedTasks={handleAddGeneratedTasks}
+            onApplyAction={handleApplyAction}
+            onNavigateToPlan={(planId) => { setActiveTab(1); setSelectedPlanId(planId); setAiOpen(false); }}
+          />
+        </ErrorBoundary>
       )}
 
       {/* ── AI trigger button (floating, mobile + desktop) ────────────────── */}
-      {AI_ENABLED && (
+      {AI_ENABLED && !iosSafeMode && (
         <AnimatePresence>
           {!aiOpen && (
             <m.button
@@ -3321,7 +3475,7 @@ export default function ScheduleApp() {
       )}
 
       {/* ── AI onboarding — shown once when app opens ─────────────────────── */}
-      {AI_ENABLED && <AIOnboarding />}
+      {AI_ENABLED && !iosSafeMode && <AIOnboarding />}
 
     </main>
   );

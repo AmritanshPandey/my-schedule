@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect } from "react";
+import { DISABLE_SW_ON_IOS, isIOSSafeMode } from "@/lib/iosSafeMode";
 
 const CACHE_PREFIX = "planr-";
 
@@ -9,8 +10,9 @@ export default function ServiceWorkerRegistration() {
     if (!("serviceWorker" in navigator)) return;
 
     const isDev = process.env.NODE_ENV !== "production";
+    const disableForIOS = DISABLE_SW_ON_IOS && isIOSSafeMode();
 
-    if (isDev) {
+    if (isDev || disableForIOS) {
       // Prevent stale cached JS in local development from causing hydration mismatches.
       navigator.serviceWorker.getRegistrations().then((regs) => {
         regs.forEach((reg) => {
@@ -31,21 +33,6 @@ export default function ServiceWorkerRegistration() {
       return;
     }
 
-    // Only an *update* should reload the page. On the very first visit the page
-    // is uncontrolled, so the initial `clients.claim()` fires a controllerchange
-    // that is NOT an update — reloading on it causes an unnecessary (and, paired
-    // with other reloads, looping) refresh. Skip it when there was no controller.
-    const hadController = Boolean(navigator.serviceWorker.controller);
-    let refreshing = false;
-
-    function handleControllerChange() {
-      if (refreshing || !hadController) return;
-      refreshing = true;
-      window.location.reload();
-    }
-
-    navigator.serviceWorker.addEventListener("controllerchange", handleControllerChange);
-
     // iOS Safari intermittently fails the first registration (e.g. during a
     // cold launch). Retry once after a short delay so a transient failure
     // doesn't leave the PWA permanently uncontrolled — which would mean stale
@@ -56,9 +43,7 @@ export default function ServiceWorkerRegistration() {
       navigator.serviceWorker
         .register("/sw.js", { updateViaCache: "none" })
         .then((registration) => {
-          if (registration.waiting) {
-            registration.waiting.postMessage({ type: "SKIP_WAITING" });
-          }
+          void registration.update();
         })
         .catch((err) => {
           console.error("Service worker registration failed:", err);
@@ -71,7 +56,6 @@ export default function ServiceWorkerRegistration() {
     register(0);
 
     return () => {
-      navigator.serviceWorker.removeEventListener("controllerchange", handleControllerChange);
       if (retryTimer) window.clearTimeout(retryTimer);
     };
   }, []);

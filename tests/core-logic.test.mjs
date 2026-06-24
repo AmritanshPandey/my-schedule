@@ -53,6 +53,7 @@ const {
   mergeNoteTags,
   serializeRichNoteBody,
 } = await import("../lib/notes/richText.ts");
+const { describeSyncStatus, relativeTime } = await import("../lib/syncStatus.ts");
 
 function event(taskId, completionType, completedAt, subtaskId) {
   return { id: `${completionType}-${subtaskId ?? "task"}`, taskId, completionType, completedAt, subtaskId };
@@ -569,4 +570,24 @@ test("time parsing and schedule-day conversion reject invalid clocks", () => {
 
 test("pointerToScrollableMinutes accounts for vertical scroll position", () => {
   assert.equal(pointerToScrollableMinutes(180, 100, 40, 2, 240), 300);
+});
+
+test("sync status: label + tone mapping and relative time buckets", () => {
+  const now = Date.now();
+  // Transient states ignore lastAt.
+  assert.deepEqual(describeSyncStatus("syncing", now), { label: "Syncing…", tone: "syncing" });
+  assert.deepEqual(describeSyncStatus("offline", now), { label: "Offline", tone: "warn" });
+  assert.deepEqual(describeSyncStatus("error", now), { label: "Sync failed", tone: "error" });
+  // Idle = caught up; lastAt drives the label.
+  assert.deepEqual(describeSyncStatus("idle", 0), { label: "Not synced yet", tone: "neutral" });
+  const ok = describeSyncStatus("idle", now);
+  assert.equal(ok.tone, "ok");
+  assert.match(ok.label, /^Synced /);
+
+  // relativeTime buckets.
+  assert.equal(relativeTime(0), "Never");
+  assert.equal(relativeTime(now), "Just now");
+  assert.equal(relativeTime(now - 30_000), "30s ago");
+  assert.equal(relativeTime(now - 5 * 60_000), "5m ago");
+  assert.equal(relativeTime(now - 3 * 60 * 60_000), "3h ago");
 });

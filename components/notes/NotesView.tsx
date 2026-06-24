@@ -80,7 +80,7 @@ function NoteCard({
       tabIndex={0}
       onClick={onSelect}
       onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); onSelect(); } }}
-      className={`cv-auto group relative flex w-full cursor-pointer flex-col rounded-2xl border px-4 py-3 text-left transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[#00A63E] ${
+      className={`cv-auto group relative flex w-full cursor-pointer flex-col rounded-2xl border px-4 py-3 text-left transition-colors focus-visible:outline-none ${
         active
           ? "border-neutral-300 bg-neutral-50 dark:border-white/[0.12] dark:bg-white/[0.06]"
           : "border-neutral-100 bg-white hover:border-neutral-200 hover:bg-neutral-50 dark:border-white/[0.06] dark:bg-neutral-900/40 dark:hover:bg-white/[0.04]"

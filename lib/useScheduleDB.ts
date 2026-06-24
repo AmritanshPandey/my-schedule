@@ -14,6 +14,7 @@ import { calculateMilestoneEndDate, normalizeMilestoneTimeline } from "@/lib/roa
 import { localISODate } from "@/lib/dateUtils";
 import { DAYS, DAY_LABELS, type DayKey } from "@/lib/scheduleConstants";
 import { normalizeDayStartTime } from "@/lib/timeline/displayWindow";
+import { bootLog } from "@/lib/iosSafeMode";
 
 export { DAYS, DAY_LABELS } from "@/lib/scheduleConstants";
 export type { DayKey } from "@/lib/scheduleConstants";
@@ -992,6 +993,7 @@ export function useScheduleDB() {
           if (!activeUid) setIsFirstLaunch(true);
         }
         setReady(true);
+        bootLog("LOCAL_DB_READY");
 
         if (activeUid) {
           const cloudResult = await mergeCloudIfNewer(activeUid, getLocalLastUpdated(activeUid));
@@ -1035,6 +1037,7 @@ export function useScheduleDB() {
         // still renders even if IndexedDB is unavailable (private mode, quota).
         setScheduleState(emptyEmpty());
         setReady(true);
+        bootLog("LOCAL_DB_READY");
       });
     return () => {
       cancelled = true;

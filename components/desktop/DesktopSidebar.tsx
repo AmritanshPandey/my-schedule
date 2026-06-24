@@ -18,6 +18,9 @@ import { haptic } from "@/lib/haptics";
 import { checkModelStatus } from "@/lib/ai";
 import { useAIRuntime } from "@/lib/ai/useAIRuntime";
 import { AI_ENABLED } from "@/lib/featureFlags";
+import { useAuth } from "@/contexts/AuthProvider";
+import { useSyncStatus } from "@/lib/useSyncStatus";
+import SyncDot from "@/components/sync/SyncDot";
 
 interface DesktopSidebarProps {
   activeTab: number;
@@ -100,6 +103,10 @@ export default function DesktopSidebar({
   const [theme, setTheme] = useState<ThemeMode>("light");
   const [themeReady, setThemeReady] = useState(false);
   const runtime = useAIRuntime();
+  const { isGuest } = useAuth();
+  const sync = useSyncStatus();
+  const syncColor =
+    sync.tone === "warn" ? "text-amber-500" : sync.tone === "error" ? "text-rose-500" : "text-neutral-500 dark:text-neutral-400";
 
   useEffect(() => {
     const initial = detectInitialTheme();
@@ -306,6 +313,24 @@ export default function DesktopSidebar({
           >
             <IconPencil size={16} strokeWidth={1.8} className="shrink-0" />
             {!collapsed && <span className="text-[13px] font-medium">Notes</span>}
+          </button>
+        )}
+
+        {/* Cloud sync status — click to sync now (signed-in only; guests don't sync) */}
+        {!isGuest && (
+          <button
+            type="button"
+            onClick={() => { haptic("light"); void sync.syncNow(); }}
+            disabled={sync.isBusy}
+            title={collapsed ? sync.label : `${sync.label} — click to sync now`}
+            className={`flex w-full items-center rounded-xl py-2 transition-colors hover:bg-neutral-100 disabled:cursor-default dark:hover:bg-white/[0.04] ${collapsed ? "justify-center px-0" : "gap-2.5 px-3.5"}`}
+          >
+            <SyncDot tone={sync.tone} />
+            {!collapsed && (
+              <span className={`truncate text-[12px] font-semibold transition-colors ${syncColor}`}>
+                {sync.label}
+              </span>
+            )}
           </button>
         )}
 

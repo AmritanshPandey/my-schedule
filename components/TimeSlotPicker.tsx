@@ -3,6 +3,7 @@
 import { useState } from "react";
 import type { DayKey } from "@/lib/useScheduleDB";
 import { parseTimeToMinutes, minutesToInputTime, currentMinutes } from "@/lib/timeUtils";
+import { stopTextEditKeyPropagation } from "@/lib/keyboardEvents";
 
 const REPEAT_DAYS: DayKey[] = ["sunday", "monday", "tuesday", "wednesday", "thursday", "friday", "saturday"];
 
@@ -56,26 +57,29 @@ function durationMinutes(startTime: string, endTime: string): number | null {
   return end - start;
 }
 
-function formatTimeDraft(value: string): string {
-  const digits = value.replace(/\D/g, "").slice(0, 4);
-  if (digits.length <= 2) return digits;
-  return `${digits.slice(0, 2)}:${digits.slice(2)}`;
-}
-
-function normalizeTimeDraft(value: string): string {
-  const digits = value.replace(/\D/g, "").slice(0, 4);
-  if (!digits) return "";
-
-  const hourDigits = digits.length <= 2 ? digits : digits.slice(0, digits.length - 2);
-  const minuteDigits = digits.length <= 2 ? "00" : digits.slice(-2);
-  const hours = Number(hourDigits);
-  const minutes = Number(minuteDigits);
-
-  if (!Number.isFinite(hours) || !Number.isFinite(minutes) || hours > 23 || minutes > 59) {
-    return "";
-  }
-
-  return `${String(hours).padStart(2, "0")}:${String(minutes).padStart(2, "0")}`;
+function TimeInput({
+  label,
+  value,
+  onChange,
+}: {
+  label: string;
+  value: string;
+  onChange: (value: string) => void;
+}) {
+  return (
+    <div>
+      <p className={`mb-1.5 ${LABEL}`}>{label}</p>
+      <input
+        type="time"
+        step={60}
+        value={value}
+        onChange={(e) => onChange(e.currentTarget.value)}
+        onKeyDown={stopTextEditKeyPropagation}
+        className="h-11 w-full min-w-0 appearance-none rounded-xl border border-neutral-200 bg-neutral-50 px-3 text-[16px] font-semibold tabular-nums text-neutral-900 outline-none ring-0 transition-colors placeholder:text-neutral-400 focus:border-neutral-300 focus:bg-white focus:outline-none focus:ring-0 focus-visible:outline-none focus-visible:ring-0 dark:border-white/10 dark:bg-white/[0.04] dark:text-white dark:placeholder:text-neutral-600 dark:focus:border-white/20 dark:focus:bg-white/[0.07] dark:[color-scheme:dark]"
+        style={{ outline: "none", boxShadow: "none" }}
+      />
+    </div>
+  );
 }
 
 function durationLabel(minutes: number | null): string {
@@ -159,53 +163,25 @@ export default function TimeSlotPicker({
 
       {/* Time inputs */}
       <div className="grid grid-cols-2 gap-3">
-        <div>
-          <p className={`mb-1.5 ${LABEL}`}>Start</p>
-          <input
-            type="text"
-            inputMode="numeric"
-            autoComplete="off"
-            enterKeyHint="next"
-            placeholder="09:00"
-            value={startTime}
-            onChange={(e) => {
-              const value = formatTimeDraft(e.target.value);
-              onStartChange(value);
-              if (selectedDuration !== null) {
-                const start = inputToMinutes(value);
-                if (start !== null) onEndChange(minutesToInput(start + selectedDuration));
-              }
-            }}
-            onBlur={(e) => {
-              const value = normalizeTimeDraft(e.target.value);
-              onStartChange(value);
-              if (selectedDuration !== null && value) {
-                const start = inputToMinutes(value);
-                if (start !== null) onEndChange(minutesToInput(start + selectedDuration));
-              }
-            }}
-            className="h-11 w-full min-w-0 appearance-none rounded-xl border border-neutral-200 bg-neutral-50 px-3 text-[16px] font-semibold tabular-nums text-neutral-700 outline-none transition-colors placeholder:text-neutral-400 focus:border-neutral-300 focus:bg-white dark:border-white/10 dark:bg-white/[0.04] dark:text-white dark:placeholder:text-neutral-600 dark:focus:border-white/20 dark:focus:bg-white/[0.08]"
-          />
-        </div>
-        <div>
-          <p className={`mb-1.5 ${LABEL}`}>End</p>
-          <input
-            type="text"
-            inputMode="numeric"
-            autoComplete="off"
-            enterKeyHint="done"
-            placeholder="10:00"
-            value={endTime}
-            onChange={(e) => {
-              setSelectedDuration(null);
-              onEndChange(formatTimeDraft(e.target.value));
-            }}
-            onBlur={(e) => {
-              onEndChange(normalizeTimeDraft(e.target.value));
-            }}
-            className="h-11 w-full min-w-0 appearance-none rounded-xl border border-neutral-200 bg-neutral-50 px-3 text-[16px] font-semibold tabular-nums text-neutral-900 outline-none transition-colors placeholder:text-neutral-400 focus:border-neutral-300 focus:bg-white dark:border-white/10 dark:bg-white/[0.04] dark:text-white dark:placeholder:text-neutral-600 dark:focus:border-white/15 dark:focus:bg-white/[0.06]"
-          />
-        </div>
+        <TimeInput
+          label="Start"
+          value={startTime}
+          onChange={(value) => {
+            onStartChange(value);
+            if (selectedDuration !== null) {
+              const start = inputToMinutes(value);
+              if (start !== null) onEndChange(minutesToInput(start + selectedDuration));
+            }
+          }}
+        />
+        <TimeInput
+          label="End"
+          value={endTime}
+          onChange={(value) => {
+            setSelectedDuration(null);
+            onEndChange(value);
+          }}
+        />
       </div>
 
       {/* Start presets */}

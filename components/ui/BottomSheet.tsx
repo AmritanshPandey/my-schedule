@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState, type CSSProperties } from "react";
 import { AnimatePresence, m } from "framer-motion";
+import { stopTextEditKeyPropagation } from "@/lib/keyboardEvents";
 
 interface BottomSheetProps {
   open: boolean;
@@ -58,17 +59,14 @@ export default function BottomSheet({
     return () => { vv.removeEventListener("resize", update); vv.removeEventListener("scroll", update); };
   }, [open, isDesktop]);
 
-  // Esc key + scroll lock + focus trap (focus the panel on open, keep Tab within
-  // it, and restore focus to the trigger on close — WCAG 2.4.3 / dialog pattern).
+  // Esc key + scroll lock + focus trap. Do not focus the panel itself on open:
+  // some platforms draw a large system focus highlight around the whole dialog,
+  // and that also steals number-key input from fields inside the sheet.
   useEffect(() => {
     if (!open) return;
     const previouslyFocused = document.activeElement as HTMLElement | null;
     const FOCUSABLE =
       'a[href],button:not([disabled]),textarea:not([disabled]),input:not([disabled]),select:not([disabled]),[tabindex]:not([tabindex="-1"])';
-
-    // Focus the panel itself (not the first input) so opening a sheet doesn't pop
-    // the keyboard; Tab then moves into the panel's controls.
-    const id = requestAnimationFrame(() => panelRef.current?.focus());
 
     const onKey = (e: KeyboardEvent) => {
       if (e.key === "Escape") { onClose(); return; }
@@ -78,7 +76,7 @@ export default function BottomSheet({
       const nodes = Array.from(panel.querySelectorAll<HTMLElement>(FOCUSABLE)).filter(
         (el) => el.offsetParent !== null || el === panel
       );
-      if (nodes.length === 0) { e.preventDefault(); panel.focus(); return; }
+      if (nodes.length === 0) { e.preventDefault(); return; }
       const first = nodes[0];
       const last = nodes[nodes.length - 1];
       const active = document.activeElement;
@@ -91,7 +89,6 @@ export default function BottomSheet({
     document.body.style.overflow = "hidden";
     window.addEventListener("keydown", onKey);
     return () => {
-      cancelAnimationFrame(id);
       document.body.style.overflow = prev;
       window.removeEventListener("keydown", onKey);
       // Restore focus to whatever opened the sheet (if it's still in the DOM).
@@ -128,7 +125,7 @@ export default function BottomSheet({
             {/* Modal panel */}
             <m.div
               ref={panelRef}
-              tabIndex={-1}
+              onKeyDown={stopTextEditKeyPropagation}
               initial={{ opacity: 0, scale: 0.97, y: 10 }}
               animate={{ opacity: 1, scale: 1, y: 0 }}
               exit={{ opacity: 0, scale: 0.97, y: 10 }}
@@ -162,7 +159,7 @@ export default function BottomSheet({
             {/* Panel */}
             <m.div
               ref={panelRef}
-              tabIndex={-1}
+              onKeyDown={stopTextEditKeyPropagation}
               initial={{ y: "100%" }}
               animate={{ y: 0 }}
               exit={{ y: "100%" }}

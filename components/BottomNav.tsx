@@ -1,8 +1,9 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import { haptic } from "@/lib/haptics";
 import { AnimatePresence, m } from "framer-motion";
+import { isIOSSafeMode } from "@/lib/iosSafeMode";
 import {
   IconCalendarEvent,
   IconChartBar,
@@ -24,6 +25,10 @@ interface BottomNavProps {
   onBulkImport?: () => void;
 }
 
+function NoopPresence({ children }: { children: ReactNode; initial?: boolean }) {
+  return <>{children}</>;
+}
+
 export default function BottomNav({
   activeTab,
   onTabChange,
@@ -32,6 +37,8 @@ export default function BottomNav({
   onCreateRitual,
   onBulkImport,
 }: BottomNavProps) {
+  const iosSafeMode = isIOSSafeMode();
+  const SafePresence = iosSafeMode ? NoopPresence : AnimatePresence;
   const [expanded, setExpanded] = useState(false);
   const navRef = useRef<HTMLDivElement>(null);
 
@@ -67,7 +74,7 @@ export default function BottomNav({
   return (
     <>
       {/* BACKDROP */}
-      <AnimatePresence>
+      <SafePresence>
         {expanded && (
           <m.div
             initial={{ opacity: 0 }}
@@ -77,7 +84,7 @@ export default function BottomNav({
             className="fixed inset-0 z-[38] bg-black/[0.03] dark:bg-black/[0.12]"
           />
         )}
-      </AnimatePresence>
+      </SafePresence>
 
       <div
         className="fixed inset-x-0 z-40 flex justify-center px-4"
@@ -86,7 +93,7 @@ export default function BottomNav({
         <div ref={navRef} className="relative w-full max-w-md">
 
           {/* ── EXPANDED CREATE MENU ─────────────────────────────────────── */}
-          <AnimatePresence>
+          <SafePresence>
             {expanded && (
               <m.div
                 initial={{ opacity: 0, y: 8, scale: 0.97 }}
@@ -152,7 +159,7 @@ export default function BottomNav({
                 </div>
               </m.div>
             )}
-          </AnimatePresence>
+          </SafePresence>
 
           {/* ── FLOATING PLUS BUTTON ─────────────────────────────────────── */}
           <m.button

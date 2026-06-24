@@ -230,7 +230,7 @@ export default function AIActionSheet({
                   placeholder={inputPlaceholder}
                   rows={2}
                   disabled={phase === "loading"}
-                  className="w-full resize-none rounded-xl border border-neutral-200 bg-neutral-50 px-3.5 py-2.5 text-[14px] font-medium text-neutral-900 placeholder-neutral-400 outline-none transition-all focus:border-emerald-400 focus:ring-2 focus:ring-emerald-500/10 disabled:opacity-50 dark:border-white/[0.08] dark:bg-white/[0.04] dark:text-white dark:placeholder-neutral-500 dark:focus:border-emerald-500/60"
+                  className="w-full resize-none rounded-xl border border-neutral-200 bg-neutral-50 px-3.5 py-2.5 text-[14px] font-medium text-neutral-900 placeholder-neutral-400 outline-none transition-all focus:border-neutral-300 focus:bg-neutral-100 disabled:opacity-50 dark:border-white/[0.08] dark:bg-white/[0.04] dark:text-white dark:placeholder-neutral-500 dark:focus:border-white/20 dark:focus:bg-white/[0.07]"
                 />
               </div>
 

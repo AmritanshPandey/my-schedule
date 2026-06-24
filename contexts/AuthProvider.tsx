@@ -24,6 +24,7 @@ import {
   flushNow,
   getLastSchedule,
 } from "@/lib/cloudSync";
+import { bootLog } from "@/lib/iosSafeMode";
 
 // ── Context types ─────────────────────────────────────────────────────────────
 
@@ -80,6 +81,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         prev && firebaseUser && prev.uid === firebaseUser.uid ? prev : firebaseUser,
       );
       setAuthLoading(false);
+      bootLog("AUTH_READY");
     });
 
     return unsubscribe; // cleans up on unmount (app tear-down)
