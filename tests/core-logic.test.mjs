@@ -48,6 +48,7 @@ const { localISODate, addDaysToISO } = await import("../lib/dateUtils.ts");
 const { parseTimeToMinutes, toScheduleDayMinutes } = await import("../lib/timeUtils.ts");
 const { DAYS } = await import("../lib/scheduleConstants.ts");
 const { pointerToScrollableMinutes } = await import("../lib/timeline/dragTimeUtils.ts");
+const { toggleRitualCompletion } = await import("../lib/ritualCompletions.ts");
 const {
   checklistStatsFromBody,
   mergeNoteTags,
@@ -451,6 +452,21 @@ test("execution streak unifies tasks and rituals", () => {
     completionHistory: [event("m", "missed", new Date(`${today}T12:00:00`).toISOString())],
   }];
   assert.equal(calculateExecutionStreak(missedOnly, today).streak, 0);
+});
+
+test("routine completion toggles only the selected date", () => {
+  const monday = "2026-06-22";
+  const tuesday = "2026-06-23";
+  let completions = toggleRitualCompletion([], "r1", monday);
+  completions = toggleRitualCompletion(completions, "r1", tuesday);
+
+  assert.deepEqual(completions, [
+    { ritualId: "r1", date: monday },
+    { ritualId: "r1", date: tuesday },
+  ]);
+
+  completions = toggleRitualCompletion(completions, "r1", monday);
+  assert.deepEqual(completions, [{ ritualId: "r1", date: tuesday }]);
 });
 
 test("resolveLinkedTasks drops missing ids and dedupes", () => {

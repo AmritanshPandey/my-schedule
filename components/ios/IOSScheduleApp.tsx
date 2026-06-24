@@ -56,7 +56,7 @@ import {
 import { completionForDate, isTaskCompleted, markTaskMissed, toggleSubtaskComplete, toggleTaskComplete } from "@/lib/taskCompletion";
 import { diffException, isTaskScheduledOn, resolveOccurrence } from "@/lib/taskOccurrence";
 import { cascadeMilestoneDates, normalizeMilestoneTimeline } from "@/lib/roadmapDates";
-import { formatDuration } from "@/lib/timeUtils";
+import { toggleRitualCompletion } from "@/lib/ritualCompletions";
 import { haptic } from "@/lib/haptics";
 
 const IOSMotionBoundary = dynamic(() => import("@/components/ios/IOSMotionBoundary"), { ssr: false });
@@ -506,16 +506,12 @@ export default function IOSScheduleApp() {
     });
   }
 
-  function handleToggleRitualComplete(id: string) {
-    const today = todayISO();
+  function handleToggleRitualComplete(id: string, dateISO: string = todayISO()) {
     setSchedule((prev) => {
       const completions = prev.ritualCompletions ?? [];
-      const exists = completions.some((item) => item.ritualId === id && item.date === today);
       return {
         ...prev,
-        ritualCompletions: exists
-          ? completions.filter((item) => !(item.ritualId === id && item.date === today))
-          : [...completions, { ritualId: id, date: today }],
+        ritualCompletions: toggleRitualCompletion(completions, id, dateISO),
       };
     });
   }
@@ -835,7 +831,6 @@ export default function IOSScheduleApp() {
           <ErrorBoundary section name="Routine">
             <RitualView
               rituals={schedule.rituals ?? []}
-              completedIds={completedRitualIds}
               ritualCompletions={schedule.ritualCompletions ?? []}
               onToggleComplete={handleToggleRitualComplete}
               onAdd={handleAddRitual}

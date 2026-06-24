@@ -67,6 +67,15 @@ function appliesToDay(ritual: Ritual, day: DayKey): boolean {
   return !ritual.repeatDays || ritual.repeatDays.length === 0 || ritual.repeatDays.includes(day);
 }
 
+function dateForCurrentWeekDay(day: DayKey): string {
+  const today = new Date();
+  const todayIndex = JS_TO_DAY[today.getDay()];
+  const delta = DAYS.indexOf(day) - DAYS.indexOf(todayIndex);
+  const date = new Date(today);
+  date.setDate(today.getDate() + delta);
+  return localISODate(date);
+}
+
 // ── Types ─────────────────────────────────────────────────────────────────────
 
 interface WeekDay {
@@ -76,9 +85,8 @@ interface WeekDay {
 
 interface RitualViewProps {
   rituals: Ritual[];
-  completedIds: Set<string>;
   ritualCompletions: RitualCompletion[];
-  onToggleComplete: (id: string) => void;
+  onToggleComplete: (id: string, dateISO?: string) => void;
   onAdd: (data: Omit<Ritual, "id">) => void;
   onUpdate: (id: string, data: Omit<Ritual, "id">) => void;
   onDelete: (id: string) => void;
@@ -92,7 +100,6 @@ interface RitualViewProps {
 
 export default function RitualView({
   rituals,
-  completedIds,
   ritualCompletions,
   onToggleComplete,
   onAdd,
@@ -126,11 +133,21 @@ export default function RitualView({
     return sorted.filter((r) => appliesToDay(r, selectedDay));
   }, [sorted, selectedDay]);
 
-  const completedToday = filteredRituals.filter((r) => completedIds.has(r.id)).length;
+  const selectedDateISO = useMemo(() => dateForCurrentWeekDay(selectedDay), [selectedDay]);
+  const selectedCompletedIds = useMemo(
+    () =>
+      new Set(
+        ritualCompletions
+          .filter((completion) => completion.date === selectedDateISO)
+          .map((completion) => completion.ritualId)
+      ),
+    [ritualCompletions, selectedDateISO]
+  );
+
+  const completedToday = filteredRituals.filter((r) => selectedCompletedIds.has(r.id)).length;
   const total = filteredRituals.length;
   const pct = total > 0 ? Math.round((completedToday / total) * 100) : 0;
   const allDone = total > 0 && completedToday === total;
-  const showProgress = selectedDay === todayKey;
 
   const weekAvg = useMemo(() => {
     if (!weekHistory || weekHistory.length === 0) return null;
@@ -156,7 +173,7 @@ export default function RitualView({
     const dayLabel = ritual.repeatDays && ritual.repeatDays.length > 0
       ? ritual.repeatDays.map((d) => DAY_SHORT[d]).join(" · ")
       : "Everyday";
-    const done = completedIds.has(ritual.id);
+    const done = selectedCompletedIds.has(ritual.id);
 
     // Last-7-days dots: green = completed, color ring = due today & not done,
     // gray = due & missed, faint = not scheduled that day.
@@ -176,7 +193,7 @@ export default function RitualView({
         <m.button
           type="button"
           whileTap={{ scale: 0.88 }}
-          onClick={() => { haptic("light"); onToggleComplete(ritual.id); }}
+          onClick={() => { haptic("light"); onToggleComplete(ritual.id, selectedDateISO); }}
           aria-label={done ? "Mark incomplete" : "Mark complete"}
           className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-full border-[2.5px] transition-colors ${
             done ? "border-transparent bg-green-500" : `${ring} bg-transparent`
@@ -248,11 +265,11 @@ export default function RitualView({
         />
 
         {/* ── Progress bar (today / all only, mobile) ──────────────────────── */}
-        {total > 0 && showProgress && (
+        {total > 0 && (
           <div className="mb-5 lg:hidden">
             <div className="mb-2 flex items-center justify-between">
               <span className="text-[14px] font-semibold text-neutral-500 dark:text-neutral-400">
-                {allDone ? "All done today 🎉" : `${completedToday} of ${total} done`}
+                {allDone ? `All done for ${DAY_SHORT[selectedDay]}` : `${completedToday} of ${total} done`}
               </span>
               <span className="text-[14px] font-bold tabular-nums text-neutral-500 dark:text-neutral-400">{pct}%</span>
             </div>
@@ -296,15 +313,15 @@ export default function RitualView({
               <p className="text-[28px] font-black tabular-nums leading-none text-neutral-900 dark:text-white">{total}</p>
               <p className="mt-0.5 text-[12px] text-neutral-400 dark:text-neutral-500">for {DAY_SHORT[selectedDay]}</p>
             </div>
-            <div className={`rounded-2xl border px-4 py-3.5 ${allDone && showProgress ? "border-emerald-200 bg-emerald-50 dark:border-emerald-500/20 dark:bg-emerald-500/[0.07]" : "border-neutral-200 bg-white dark:border-white/[0.08] dark:bg-neutral-900"}`}>
+            <div className={`rounded-2xl border px-4 py-3.5 ${allDone ? "border-emerald-200 bg-emerald-50 dark:border-emerald-500/20 dark:bg-emerald-500/[0.07]" : "border-neutral-200 bg-white dark:border-white/[0.08] dark:bg-neutral-900"}`}>
               <div className="flex items-center gap-1.5 mb-1">
-                <IconCheck size={12} strokeWidth={2.5} className={allDone && showProgress ? "text-emerald-500" : "text-neutral-400 dark:text-neutral-500"} />
-                <p className="text-[11px] font-semibold uppercase tracking-wider text-neutral-400 dark:text-neutral-500">Today</p>
+                <IconCheck size={12} strokeWidth={2.5} className={allDone ? "text-emerald-500" : "text-neutral-400 dark:text-neutral-500"} />
+                <p className="text-[11px] font-semibold uppercase tracking-wider text-neutral-400 dark:text-neutral-500">Progress</p>
               </div>
-              <p className={`text-[28px] font-black tabular-nums leading-none ${allDone && showProgress ? "text-emerald-600 dark:text-emerald-400" : "text-neutral-900 dark:text-white"}`}>
+              <p className={`text-[28px] font-black tabular-nums leading-none ${allDone ? "text-emerald-600 dark:text-emerald-400" : "text-neutral-900 dark:text-white"}`}>
                 {pct}<span className="text-[16px] font-bold">%</span>
               </p>
-              <p className={`mt-0.5 text-[12px] ${allDone && showProgress ? "text-emerald-600/70 dark:text-emerald-500/70" : "text-neutral-400 dark:text-neutral-500"}`}>
+              <p className={`mt-0.5 text-[12px] ${allDone ? "text-emerald-600/70 dark:text-emerald-500/70" : "text-neutral-400 dark:text-neutral-500"}`}>
                 {completedToday} of {total} done
               </p>
             </div>

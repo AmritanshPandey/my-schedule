@@ -124,6 +124,7 @@ import { applyScheduleRules } from "@/lib/scheduleRules";
 import { resolveTimes as resolveParsedTimes } from "@/lib/scheduleParser";
 import { applyTemplate } from "@/lib/templates";
 import type { Template } from "@/lib/templates";
+import { toggleRitualCompletion } from "@/lib/ritualCompletions";
 import { parseTimeToMinutes, formatDuration } from "@/lib/timeUtils";
 import {
   pointerToMinutes,
@@ -1362,16 +1363,12 @@ export default function ScheduleApp() {
     setSchedule((prev) => ({ ...prev, rituals: reordered }));
   }
 
-  function handleToggleRitualComplete(id: string) {
-    const today = todayISO();
+  function handleToggleRitualComplete(id: string, dateISO: string = todayISO()) {
     setSchedule((prev) => {
       const completions = prev.ritualCompletions ?? [];
-      const exists = completions.some((c) => c.ritualId === id && c.date === today);
       return {
         ...prev,
-        ritualCompletions: exists
-          ? completions.filter((c) => !(c.ritualId === id && c.date === today))
-          : [...completions, { ritualId: id, date: today }],
+        ritualCompletions: toggleRitualCompletion(completions, id, dateISO),
       };
     });
   }
@@ -3103,7 +3100,6 @@ export default function ScheduleApp() {
             <ErrorBoundary section name="Routine">
             <RitualView
               rituals={schedule.rituals ?? []}
-              completedIds={completedRitualIds}
               ritualCompletions={schedule.ritualCompletions ?? []}
               onToggleComplete={handleToggleRitualComplete}
               onAdd={handleAddRitual}
