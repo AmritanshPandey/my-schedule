@@ -970,6 +970,15 @@ export default function ScheduleApp() {
       if (rafId === null) rafId = requestAnimationFrame(flushDragState);
     }
 
+    function clearPendingDragFrame() {
+      pendingCreate = null;
+      pendingMoveStartMin = null;
+      if (rafId !== null) {
+        cancelAnimationFrame(rafId);
+        rafId = null;
+      }
+    }
+
     function onPointerMove(e: PointerEvent) {
       const h = dragHelpersRef.current;
 
@@ -1026,6 +1035,7 @@ export default function ScheduleApp() {
       if (createDragRef.current && createDragRef.current.pointerId === e.pointerId) {
         const { dragging, startMin, lastEndMin } = createDragRef.current;
         createDragRef.current = null;
+        clearPendingDragFrame();
         h.setDragCreate(null);
         if (!h.isViewingToday) return;
         if (dragging) {
@@ -1046,6 +1056,7 @@ export default function ScheduleApp() {
           moveDragRef.current;
         if (longPressTimer) clearTimeout(longPressTimer);
         moveDragRef.current = null;
+        clearPendingDragFrame();
         if (!dragging) {
           h.setDragMove(null);
           // Tap on the card body marks the task done (mobile timeline). Taps on
@@ -1080,11 +1091,13 @@ export default function ScheduleApp() {
     function onPointerCancel(e: PointerEvent) {
       if (createDragRef.current && createDragRef.current.pointerId === e.pointerId) {
         createDragRef.current = null;
+        clearPendingDragFrame();
         dragHelpersRef.current.setDragCreate(null);
       }
       if (moveDragRef.current && moveDragRef.current.pointerId === e.pointerId) {
         if (moveDragRef.current.longPressTimer) clearTimeout(moveDragRef.current.longPressTimer);
         moveDragRef.current = null;
+        clearPendingDragFrame();
         dragHelpersRef.current.setDragMove(null);
       }
     }
@@ -1114,9 +1127,15 @@ export default function ScheduleApp() {
   }, []);
 
   function closeTaskSheet() {
+    createDragRef.current = null;
+    moveDragRef.current = null;
+    setDragCreate(null);
+    setDragMove(null);
     setTaskSheetOpen(false);
     setTaskSheetTask(null);
     setTaskSheetPlanId(null);
+    setTaskSheetInitialStartTime("");
+    setTaskSheetInitialEndTime("");
   }
 
   // ── Unified create + edit save handler ────────────────────────────────────
