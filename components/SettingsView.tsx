@@ -27,6 +27,9 @@ import { useSyncStatus } from "@/lib/useSyncStatus";
 import { haptic } from "@/lib/haptics";
 import { hardRefreshApp } from "@/lib/chunkRecovery";
 import { versionLabel } from "@/lib/buildInfo";
+import { collectDiagnostics, formatDiagnostics, type DiagnosticsSnapshot } from "@/lib/diagnostics";
+import { clearErrorLog } from "@/lib/errorLog";
+import { clearBootLog } from "@/lib/iosSafeMode";
 import {
   checkOllamaConnection, checkModelStatus,
   OLLAMA_URL_KEY, OLLAMA_MODEL_KEY,
@@ -431,7 +434,7 @@ function OllamaCard() {
 function SyncRow({ schedule: _schedule }: { schedule: Schedule }) {
   // useSyncStatus flushes the engine's latest tracked snapshot via getLastSchedule,
   // which is kept fresh on every edit — so we no longer need the schedule prop here.
-  const { tone, label, isBusy, syncNow } = useSyncStatus();
+  const { tone, label, isBusy, lastResult, syncNow } = useSyncStatus();
   const color = tone === "warn" ? "text-amber-500" : tone === "error" ? "text-rose-500" : "text-emerald-500 dark:text-emerald-400";
 
   return (
@@ -441,7 +444,7 @@ function SyncRow({ schedule: _schedule }: { schedule: Schedule }) {
       </div>
       <div className="min-w-0 flex-1">
         <p className="text-[13px] font-semibold text-neutral-800 dark:text-white">Cloud sync</p>
-        <p className={`text-[11px] font-medium ${color}`}>{label}</p>
+        <p className={`text-[11px] font-medium ${color}`}>{lastResult || label}</p>
       </div>
       <m.button type="button" onClick={syncNow} disabled={isBusy} whileTap={{ scale: 0.93 }}
         className="flex items-center gap-1.5 rounded-xl border border-neutral-200 bg-neutral-50 px-3 py-1.5 text-[11px] font-semibold text-neutral-600 hover:bg-white disabled:opacity-40 dark:border-white/[0.08] dark:bg-white/[0.04] dark:text-neutral-300">
@@ -451,6 +454,92 @@ function SyncRow({ schedule: _schedule }: { schedule: Schedule }) {
         {isBusy ? "Syncing…" : "Sync now"}
       </m.button>
     </Row>
+  );
+}
+
+function DiagnosticsCard() {
+  const [snapshot, setSnapshot] = useState<DiagnosticsSnapshot | null>(null);
+  const [copyState, setCopyState] = useState<"idle" | "copied" | "failed">("idle");
+
+  const refresh = useCallback(() => {
+    void collectDiagnostics().then(setSnapshot);
+  }, []);
+
+  useEffect(() => {
+    refresh();
+  }, [refresh]);
+
+  async function copyDiagnostics() {
+    if (!snapshot) return;
+    const text = formatDiagnostics(snapshot);
+    try {
+      await navigator.clipboard.writeText(text);
+      setCopyState("copied");
+    } catch {
+      setCopyState("failed");
+    } finally {
+      window.setTimeout(() => setCopyState("idle"), 1800);
+    }
+  }
+
+  const latestError = snapshot?.errors.at(-1);
+  const latestBoot = snapshot?.bootLog.at(-1);
+
+  return (
+    <Card>
+      <Row className="items-start">
+        <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl border border-neutral-100 bg-neutral-50 text-neutral-500 dark:border-white/[0.06] dark:bg-white/[0.04]">
+          <IconTerminal2 size={14} strokeWidth={2} />
+        </div>
+        <div className="min-w-0 flex-1">
+          <p className="text-[13px] font-semibold text-neutral-800 dark:text-white">Diagnostics</p>
+          <p className="mt-0.5 text-[11px] leading-snug text-neutral-400 dark:text-neutral-500">
+            {snapshot
+              ? `${snapshot.platform.iosSafeMode ? "iOS safe mode" : "Standard mode"} · Sync ${snapshot.sync.status} · ${snapshot.errors.length} errors`
+              : "Collecting app diagnostics…"}
+          </p>
+          {latestBoot && (
+            <p className="mt-2 truncate font-mono text-[10px] text-neutral-400 dark:text-neutral-500">
+              Last boot: {latestBoot.event}
+            </p>
+          )}
+          {latestError && (
+            <p className="mt-1 truncate font-mono text-[10px] text-rose-500 dark:text-rose-400">
+              Last error: {latestError.source}: {latestError.message}
+            </p>
+          )}
+        </div>
+      </Row>
+      <Divider />
+      <div className="grid grid-cols-3 gap-2 px-4 py-3">
+        <button
+          type="button"
+          onClick={copyDiagnostics}
+          disabled={!snapshot}
+          className="rounded-xl border border-neutral-200 bg-neutral-50 px-3 py-2 text-[11px] font-semibold text-neutral-700 disabled:opacity-40 dark:border-white/[0.08] dark:bg-white/[0.04] dark:text-neutral-200"
+        >
+          {copyState === "copied" ? "Copied" : copyState === "failed" ? "Copy failed" : "Copy"}
+        </button>
+        <button
+          type="button"
+          onClick={refresh}
+          className="rounded-xl border border-neutral-200 bg-neutral-50 px-3 py-2 text-[11px] font-semibold text-neutral-700 dark:border-white/[0.08] dark:bg-white/[0.04] dark:text-neutral-200"
+        >
+          Refresh
+        </button>
+        <button
+          type="button"
+          onClick={() => {
+            clearBootLog();
+            clearErrorLog();
+            refresh();
+          }}
+          className="rounded-xl border border-neutral-200 bg-neutral-50 px-3 py-2 text-[11px] font-semibold text-neutral-500 dark:border-white/[0.08] dark:bg-white/[0.04] dark:text-neutral-300"
+        >
+          Clear logs
+        </button>
+      </div>
+    </Card>
   );
 }
 
@@ -685,6 +774,11 @@ export function SettingsView({
                 <p className="text-[10px] text-neutral-300 dark:text-neutral-600">{versionLabel()}</p>
               </div>
             </Card>
+          </div>
+
+          <div>
+            <SectionLabel>Debug</SectionLabel>
+            <DiagnosticsCard />
           </div>
 
           {/* ── Data ────────────────────────────────────────────────────────── */}

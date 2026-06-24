@@ -1,6 +1,8 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { registerHooks } from "node:module";
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
 
 registerHooks({
   resolve(specifier, context, nextResolve) {
@@ -467,6 +469,35 @@ test("routine completion toggles only the selected date", () => {
 
   completions = toggleRitualCompletion(completions, "r1", monday);
   assert.deepEqual(completions, [{ ritualId: "r1", date: tuesday }]);
+});
+
+test("iOS startup shell keeps heavy desktop modules out of first-load files", () => {
+  const root = new URL("..", import.meta.url).pathname;
+  const files = [
+    "components/ios/IOSScheduleApp.tsx",
+    "components/ios/IOSLightTaskCard.tsx",
+    "components/ios/IOSBottomNav.tsx",
+    "components/ScheduleAppClient.tsx",
+  ];
+  const forbidden = [
+    "@/components/desktop",
+    "@dnd-kit",
+    "@/components/OverviewDashboard",
+    "@/components/ai/AIAssistant",
+    "@/components/strategy/StrategyViewer",
+    "@/components/strategy/StrategyPdfReader",
+    "@/components/activity/ListTaskCard",
+    "@/components/timeline/Current",
+    "@/components/timeline/TimelineDraftCard",
+    "@/components/timeline/RitualOverlayLayer",
+  ];
+
+  for (const file of files) {
+    const source = readFileSync(join(root, file), "utf8");
+    for (const needle of forbidden) {
+      assert.equal(source.includes(needle), false, `${file} imports ${needle}`);
+    }
+  }
 });
 
 test("resolveLinkedTasks drops missing ids and dedupes", () => {

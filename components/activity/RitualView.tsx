@@ -17,7 +17,7 @@ import {
 } from "@tabler/icons-react";
 import type { Ritual, RitualColor, RitualCompletion, DayKey } from "@/lib/useScheduleDB";
 import { DAYS } from "@/lib/useScheduleDB";
-import { localISODate } from "@/lib/dateUtils";
+import { localISODate, todayISO } from "@/lib/dateUtils";
 import { haptic } from "@/lib/haptics";
 import EmptyState from "@/components/ui/EmptyState";
 import ConfirmSheet from "@/components/ui/ConfirmSheet";
@@ -113,7 +113,8 @@ export default function RitualView({
   const [editRitual, setEditRitual] = useState<Ritual | null>(null);
   const [deleteRitual, setDeleteRitual] = useState<Ritual | null>(null);
   const [collapsedGroups, setCollapsedGroups] = useState<Set<string>>(new Set());
-  const [selectedDay, setSelectedDay] = useState<DayKey>(todayKey);
+  const [selectedDateISO, setSelectedDateISO] = useState(() => todayISO());
+  const selectedDay = JS_TO_DAY[new Date(`${selectedDateISO}T00:00:00`).getDay()] as DayKey;
   const deleteCopy = deleteRitual
     ? buildDeleteConfirmationCopy("routine", {
         name: deleteRitual.title,
@@ -133,7 +134,6 @@ export default function RitualView({
     return sorted.filter((r) => appliesToDay(r, selectedDay));
   }, [sorted, selectedDay]);
 
-  const selectedDateISO = useMemo(() => dateForCurrentWeekDay(selectedDay), [selectedDay]);
   const selectedCompletedIds = useMemo(
     () =>
       new Set(
@@ -174,6 +174,7 @@ export default function RitualView({
       ? ritual.repeatDays.map((d) => DAY_SHORT[d]).join(" · ")
       : "Everyday";
     const done = selectedCompletedIds.has(ritual.id);
+    const missed = selectedDateISO < todayISO() && appliesToDay(ritual, selectedDay) && !done;
 
     // Last-7-days dots: green = completed, color ring = due today & not done,
     // gray = due & missed, faint = not scheduled that day.
@@ -194,9 +195,9 @@ export default function RitualView({
           type="button"
           whileTap={{ scale: 0.88 }}
           onClick={() => { haptic("light"); onToggleComplete(ritual.id, selectedDateISO); }}
-          aria-label={done ? "Mark incomplete" : "Mark complete"}
+          aria-label={done ? "Mark incomplete" : missed ? "Mark complete for missed day" : "Mark complete"}
           className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-full border-[2.5px] transition-colors ${
-            done ? "border-transparent bg-green-500" : `${ring} bg-transparent`
+            done ? "border-transparent bg-green-500" : missed ? "border-neutral-300 bg-neutral-200 dark:border-white/15 dark:bg-white/10" : `${ring} bg-transparent`
           }`}
         >
           {done && <IconCheck size={22} strokeWidth={3} className="text-white" />}
@@ -209,12 +210,12 @@ export default function RitualView({
           className="min-w-0 flex-1 text-left"
         >
           <p className={`truncate text-[17px] font-bold leading-tight ${
-            done ? "text-neutral-400 line-through decoration-neutral-300 dark:text-neutral-500" : "text-neutral-900 dark:text-white"
+            done ? "text-neutral-400 line-through decoration-neutral-300 dark:text-neutral-500" : missed ? "text-neutral-500 dark:text-neutral-400" : "text-neutral-900 dark:text-white"
           }`}>
             {ritual.title}
           </p>
           <p className="mt-1 truncate text-[13px] font-medium text-neutral-500 dark:text-neutral-400">
-            <span className="tabular-nums">{ritual.time}</span> · {dayLabel}
+            <span className="tabular-nums">{ritual.time}</span> · {missed ? "Missed · " : ""}{dayLabel}
           </p>
         </button>
 
@@ -279,26 +280,46 @@ export default function RitualView({
 
         {/* ── Day filter strip ─────────────────────────────────────────────── */}
         {rituals.length > 0 && (
-          <div className="mb-6 grid grid-cols-7 gap-2">
-            {DAYS.map((day) => {
-              const sel = selectedDay === day;
-              const count = dayCount(day);
-              return (
+          <div className="mb-6 space-y-3">
+            <div className="flex items-center gap-2 rounded-2xl border border-neutral-200 bg-white px-3 py-2 dark:border-white/10 dark:bg-neutral-900">
+              <IconCalendarEvent size={16} strokeWidth={2} className="text-neutral-400 dark:text-neutral-500" />
+              <input
+                type="date"
+                value={selectedDateISO}
+                onChange={(e) => setSelectedDateISO(e.target.value || todayISO())}
+                className="min-w-0 flex-1 bg-transparent text-[14px] font-bold text-neutral-800 outline-none dark:text-white"
+              />
+              {selectedDateISO !== todayISO() && (
                 <button
-                  key={day}
                   type="button"
-                  onClick={() => setSelectedDay(day)}
-                  className={`flex w-full flex-col items-center justify-center gap-1.5 rounded-2xl py-3.5 transition-colors ${
-                    sel
-                      ? "bg-neutral-900 text-white dark:bg-white dark:text-neutral-900"
-                      : "border border-neutral-200 text-neutral-500 hover:border-neutral-300 hover:text-neutral-700 dark:border-white/10 dark:text-neutral-400 dark:hover:border-white/20 dark:hover:text-neutral-200"
-                  }`}
+                  onClick={() => setSelectedDateISO(todayISO())}
+                  className="rounded-full bg-neutral-100 px-3 py-1 text-[11px] font-bold text-neutral-500 dark:bg-white/[0.07] dark:text-neutral-300"
                 >
-                  <span className={`text-[13px] font-semibold leading-none ${sel ? "" : "text-neutral-400 dark:text-neutral-500"}`}>{DAY_SHORT[day]}</span>
-                  <span className="text-[20px] font-bold tabular-nums leading-none">{count}</span>
+                  Today
                 </button>
-              );
-            })}
+              )}
+            </div>
+            <div className="grid grid-cols-7 gap-2">
+              {DAYS.map((day) => {
+                const sel = selectedDay === day;
+                const count = dayCount(day);
+                return (
+                  <button
+                    key={day}
+                    type="button"
+                    onClick={() => setSelectedDateISO(dateForCurrentWeekDay(day))}
+                    className={`flex w-full flex-col items-center justify-center gap-1.5 rounded-2xl py-3.5 transition-colors ${
+                      sel
+                        ? "bg-neutral-900 text-white dark:bg-white dark:text-neutral-900"
+                        : "border border-neutral-200 text-neutral-500 hover:border-neutral-300 hover:text-neutral-700 dark:border-white/10 dark:text-neutral-400 dark:hover:border-white/20 dark:hover:text-neutral-200"
+                    }`}
+                  >
+                    <span className={`text-[13px] font-semibold leading-none ${sel ? "" : "text-neutral-400 dark:text-neutral-500"}`}>{DAY_SHORT[day]}</span>
+                    <span className="text-[20px] font-bold tabular-nums leading-none">{count}</span>
+                  </button>
+                );
+              })}
+            </div>
           </div>
         )}
 

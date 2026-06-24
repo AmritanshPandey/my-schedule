@@ -22,6 +22,7 @@ export function useSyncStatus() {
   const [status, setStatus] = useState<SyncStatus>(getSyncStatus());
   const [lastAt, setLastAt] = useState(getLastSyncedAt());
   const [busy, setBusy] = useState(false);
+  const [lastResult, setLastResult] = useState<string>("");
   const [, tick] = useState(0);
 
   useEffect(
@@ -44,16 +45,37 @@ export function useSyncStatus() {
   async function syncNow() {
     if (busy || status === "syncing") return;
     const snap = getLastSchedule(); // engine keeps this fresh on every edit
-    if (!snap) return;
+    if (!snap) {
+      setLastResult("Nothing to sync yet");
+      return;
+    }
+    if (typeof navigator !== "undefined" && !navigator.onLine) {
+      setLastResult("Offline; will retry when connected");
+      return;
+    }
     setBusy(true);
     try {
       await flushNow(snap);
-      setLastAt(getLastSyncedAt());
+      const nextStatus = getSyncStatus();
+      const nextLastAt = getLastSyncedAt();
+      setStatus(nextStatus);
+      setLastAt(nextLastAt);
+      setLastResult(
+        nextStatus === "error"
+          ? "Sync failed; retry is queued"
+          : nextStatus === "offline"
+          ? "Offline; sync is queued"
+          : nextLastAt > 0
+          ? "Synced just now"
+          : "Sync checked"
+      );
+    } catch {
+      setLastResult("Sync failed; retry is queued");
     } finally {
       setBusy(false);
     }
   }
 
   const { label, tone } = describeSyncStatus(status, lastAt);
-  return { status, lastAt, label, tone, isBusy, syncNow };
+  return { status, lastAt, label, tone, isBusy, lastResult, syncNow };
 }
