@@ -164,18 +164,19 @@ function StartOfDayRow({
   const dayStartTime = value ?? "";
 
   return (
-    <div className="flex items-start gap-3 px-4 py-3.5">
+    <div className="flex items-start gap-3 px-4 py-3.5 max-sm:flex-col sm:items-center">
       <div className="min-w-0 flex-1">
         <p className="text-[13px] font-semibold text-neutral-800 dark:text-white">Start of day</p>
         <p className="mt-0.5 text-[11px] leading-snug text-neutral-400 dark:text-neutral-500">
           Auto follows the first timed task. A fixed time starts the timeline one hour earlier.
         </p>
       </div>
-      <div className="flex shrink-0 items-center gap-2">
+      <div className="flex w-full min-w-0 items-center gap-2 sm:w-auto sm:shrink-0">
         <select
+          aria-label="Start of day"
           value={dayStartTime}
           onChange={(e) => onChange?.({ dayStartTime: normalizeDayStartTime(e.target.value) })}
-          className="rounded-xl border border-neutral-200 bg-neutral-50 px-3 py-2 text-[12px] font-semibold text-neutral-700 outline-none transition-colors focus:border-neutral-300 dark:border-white/[0.08] dark:bg-white/[0.04] dark:text-white"
+          className="h-10 min-w-0 flex-1 rounded-xl border border-neutral-200 bg-neutral-50 px-3 pr-9 text-[12px] font-semibold text-neutral-700 outline-none transition-colors focus:border-neutral-300 dark:border-white/[0.08] dark:bg-white/[0.04] dark:text-white sm:w-44 sm:flex-none"
         >
           <option value="">Auto from tasks</option>
           {DAY_START_OPTIONS.map((option) => (
@@ -186,11 +187,13 @@ function StartOfDayRow({
         </select>
         <button
           type="button"
+          aria-label="Clear start of day"
+          title="Clear start of day"
           onClick={() => onChange?.({ dayStartTime: undefined })}
           disabled={!dayStartTime}
-          className="rounded-xl border border-neutral-200 px-3 py-2 text-[11px] font-semibold text-neutral-500 transition-colors hover:border-neutral-300 disabled:cursor-default disabled:opacity-40 dark:border-white/[0.08] dark:text-neutral-400"
+          className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-neutral-200 text-neutral-500 transition-colors hover:border-neutral-300 disabled:cursor-default disabled:opacity-35 dark:border-white/[0.08] dark:text-neutral-400"
         >
-          Clear
+          <IconX size={15} strokeWidth={2.2} />
         </button>
       </div>
     </div>

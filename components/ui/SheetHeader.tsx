@@ -9,11 +9,12 @@ interface SheetHeaderProps {
   eyebrow: string;
   title: string;
   onClose: () => void;
+  className?: string;
 }
 
-export default function SheetHeader({ eyebrow, title, onClose }: SheetHeaderProps) {
+export default function SheetHeader({ eyebrow, title, onClose, className = "" }: SheetHeaderProps) {
   return (
-    <div className="flex items-start justify-between gap-3">
+    <div className={`flex items-start justify-between gap-3 ${className}`}>
       <div>
         <Eyebrow>{eyebrow}</Eyebrow>
         <SheetTitle className="mt-0.5">{title}</SheetTitle>

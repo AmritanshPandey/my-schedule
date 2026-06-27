@@ -56,7 +56,7 @@ export default function AIMobileTeaser() {
                 <button
                   type="button"
                   onClick={() => setSheetOpen(true)}
-                  className="shrink-0 rounded-full border border-white/30 bg-white/15 px-3 py-1 text-[11px] font-bold text-white backdrop-blur-sm active:bg-white/25 transition-colors"
+                  className="shrink-0 rounded-full border border-white/30 bg-white/15 px-3 py-1 text-[11px] font-bold text-white transition-colors active:bg-white/25"
                 >
                   Learn more
                 </button>

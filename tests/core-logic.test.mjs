@@ -31,6 +31,7 @@ const {
   toggleSubtaskComplete,
   toggleTaskComplete,
   snoozeTaskLater,
+  getTaskCheckableItems,
   getTaskSubtaskSummary,
 } = await import("../lib/taskCompletion.ts");
 const {
@@ -56,7 +57,15 @@ const {
   mergeNoteTags,
   serializeRichNoteBody,
 } = await import("../lib/notes/richText.ts");
+const {
+  appendQuickCaptureToBody,
+  createDailyNoteInput,
+  createInboxNoteInput,
+  deriveTaskTitleFromNoteText,
+  findDailyNote,
+} = await import("../lib/notes/dailyCapture.ts");
 const { describeSyncStatus, relativeTime } = await import("../lib/syncStatus.ts");
+const { isPhoneViewportDimensions } = await import("../lib/iosSafeMode.ts");
 
 function event(taskId, completionType, completedAt, subtaskId) {
   return { id: `${completionType}-${subtaskId ?? "task"}`, taskId, completionType, completedAt, subtaskId };
@@ -143,6 +152,37 @@ test("undoing one implied subtask preserves the remaining partial history", () =
   assert.deepEqual(updated.completedSubtaskIds, ["b"]);
   assert.deepEqual(completionForDate(updated, today).completedSubtaskIds, ["b"]);
   assert.equal(updated.completionHistory.some((item) => item.completionType === "task"), false);
+});
+
+test("plan-template fallback subtasks can complete a task item by item", () => {
+  const task = {
+    id: "task-template",
+    title: "Template task",
+    startTime: "9:00 AM",
+    endTime: "10:00 AM",
+    icon: "star",
+    color: "amber",
+    planId: "plan-template",
+    taskType: "task",
+    completedSubtaskIds: ["a"],
+  };
+  const plan = {
+    id: "plan-template",
+    title: "Plan",
+    category: "Study",
+    emoji: "star",
+    color: "amber",
+    description: "",
+    items: [{ id: "a", task: "A" }, { id: "b", task: "B" }],
+  };
+
+  const total = getTaskSubtaskSummary(task, plan).totalCount;
+  const patch = toggleSubtaskComplete(task, "b", total);
+
+  assert.equal(total, 2);
+  assert.deepEqual(getTaskCheckableItems(task, plan).map((item) => item.id), ["a", "b"]);
+  assert.equal(patch.completed, true);
+  assert.deepEqual(patch.completedSubtaskIds, ["a", "b"]);
 });
 
 test("editing subtasks invalidates stale completion ids and task events", () => {
@@ -299,6 +339,35 @@ test("rich note helpers keep legacy checklist stats and tag merging stable", () 
   assert.deepEqual(checklistStatsFromBody("- [x] Done\n- [ ] Todo"), { done: 1, total: 2 });
   assert.deepEqual(mergeNoteTags(["Diet", "health"], ["health", "sleep"]), ["Diet", "health", "sleep"]);
   assert.equal(serializeRichNoteBody("<p>Hello</p>").startsWith("<!--rich-note-body-->"), true);
+});
+
+test("daily note helper matches one note per ISO date", () => {
+  const input = createDailyNoteInput("2026-06-24");
+  const note = {
+    id: "daily-note",
+    title: input.title,
+    body: input.body,
+    tags: input.tags,
+    createdAt: "2026-06-24T08:00:00.000Z",
+    updatedAt: "2026-06-24T08:00:00.000Z",
+  };
+
+  assert.equal(findDailyNote([note], "2026-06-24")?.id, "daily-note");
+  assert.equal(findDailyNote([note], "2026-06-25"), null);
+  assert.deepEqual(input.tags, ["daily"]);
+});
+
+test("quick capture appends under captures and inbox notes preserve the inbox tag", () => {
+  const body = "### Priorities\n- [ ] Ship\n\n### Captures\n- Existing\n\n### Decisions\n- Later";
+  const updated = appendQuickCaptureToBody(body, "Call Alex", new Date("2026-06-24T09:05:00"));
+
+  assert.match(updated, /### Captures\n- Existing\n- 9:05 AM Call Alex\n\n### Decisions/);
+  assert.deepEqual(createInboxNoteInput("Call Alex").tags, ["inbox"]);
+});
+
+test("note text can be cleaned into a task title", () => {
+  assert.equal(deriveTaskTitleFromNoteText("- [ ] **Call Alex** about budget"), "Call Alex about budget");
+  assert.equal(deriveTaskTitleFromNoteText("### Follow-ups"), "Follow-ups");
 });
 
 test("weekly analytics count each recurring weekday occurrence", () => {
@@ -469,6 +538,15 @@ test("routine completion toggles only the selected date", () => {
 
   completions = toggleRitualCompletion(completions, "r1", monday);
   assert.deepEqual(completions, [{ ritualId: "r1", date: tuesday }]);
+});
+
+test("phone-sized viewports use the lightweight shell dimensions", () => {
+  assert.equal(isPhoneViewportDimensions(390, 844), true);
+  assert.equal(isPhoneViewportDimensions(844, 390), true);
+  assert.equal(isPhoneViewportDimensions(430, 932), true);
+  assert.equal(isPhoneViewportDimensions(932, 430), true);
+  assert.equal(isPhoneViewportDimensions(768, 1024), false);
+  assert.equal(isPhoneViewportDimensions(1280, 800), false);
 });
 
 test("iOS startup shell keeps heavy desktop modules out of first-load files", () => {

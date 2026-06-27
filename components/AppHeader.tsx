@@ -68,29 +68,16 @@ function useHeaderState() {
   return { scrolled, isDark };
 }
 
-// ── Glass style helper ────────────────────────────────────────────────────────
+// ── Flat style helper ─────────────────────────────────────────────────────────
 
-function glassStyle(scrolled: boolean, isDark: boolean): React.CSSProperties {
+function headerStyle(_scrolled: boolean, isDark: boolean): React.CSSProperties {
   const border = isDark
     ? "rgba(255, 255, 255, 0.08)"
     : "rgba(0, 0, 0, 0.09)";
 
-  if (!scrolled) {
-    return { backgroundColor: "transparent", borderBottom: `0.5px solid ${border}` };
-  }
-
-  const bg = isDark
-    ? "rgba(17, 17, 21, 0.80)"
-    : "rgba(242, 242, 247, 0.80)";
-
   return {
-    backgroundColor: bg,
-    backdropFilter: "blur(20px) saturate(180%)",
-    WebkitBackdropFilter: "blur(20px) saturate(180%)",
+    backgroundColor: isDark ? "rgb(10 10 10)" : "rgb(245 245 245)",
     borderBottom: `0.5px solid ${border}`,
-    boxShadow: isDark
-      ? "0 1px 16px rgba(0, 0, 0, 0.30)"
-      : "0 1px 12px rgba(0, 0, 0, 0.05)",
   };
 }
 
@@ -110,7 +97,7 @@ function RootHeader({ onOpenSettings, onNotes }: Pick<AppHeaderProps, "onOpenSet
         // bar and squashes the logo. Content area stays a clean 64px.
         height: "calc(64px + env(safe-area-inset-top))",
         paddingTop: "env(safe-area-inset-top)",
-        ...glassStyle(scrolled, isDark),
+        ...headerStyle(scrolled, isDark),
       }}
     >
       {/* Left: logo mark + wordmark */}
@@ -184,13 +171,9 @@ function DetailHeader({ back, actions }: Pick<AppHeaderProps, "back" | "actions"
         // so the back/title row isn't clipped under the notch.
         height: "calc(64px + env(safe-area-inset-top))",
         paddingTop: "env(safe-area-inset-top)",
-        ...glassStyle(scrolled, isDark),
+        ...headerStyle(scrolled, isDark),
         // Detail header always has some bg so back label is readable
-        backgroundColor: scrolled
-          ? glassStyle(scrolled, isDark).backgroundColor
-          : isDark
-          ? "rgba(17, 17, 21, 1)"
-          : "rgba(242, 242, 247, 1)",
+        backgroundColor: isDark ? "rgb(10 10 10)" : "rgb(245 245 245)",
       }}
     >
       <m.button

@@ -35,6 +35,7 @@ import MilestoneSheet, { type MilestoneSaveData } from "@/components/plan/Milest
 import { computeRoadmapStats } from "@/lib/roadmapEngine";
 import { resolveMilestoneStatus } from "@/lib/roadmapDates";
 import { computeTrend } from "@/lib/trendUtils";
+import { getTaskCheckableItems } from "@/lib/taskCompletion";
 import type { TrendResult } from "@/lib/trendUtils";
 import type {
   Plan,
@@ -208,6 +209,7 @@ interface PlanDetailViewProps {
   schedule: Schedule;
   milestones: Milestone[];
   onDeletePlan?: (planId: string) => void;
+  onEditPlan?: (planId: string) => void;
   // Task handlers
   onAddTask: (planId: string) => void;
   onEditTask: (task: Task) => void;
@@ -249,6 +251,7 @@ export default function PlanDetailView({
   schedule,
   milestones,
   onDeletePlan,
+  onEditPlan,
   onAddTask,
   onEditTask,
   onDeleteLinkedTask,
@@ -743,7 +746,7 @@ export default function PlanDetailView({
 
   function renderLinkedTaskRow(task: Task, activeDays: DayKey[]) {
     const duration = formatDuration(task.startTime, task.endTime);
-    const subtaskCount = task.subtasks?.length ?? 0;
+    const subtaskCount = getTaskCheckableItems(task, plan).length;
     const isRoutine = task.taskType === "session";
     const hasTime = task.startTime || task.endTime;
 
@@ -814,7 +817,7 @@ export default function PlanDetailView({
     return (
       <div
         key={tracker.id}
-        className="rounded-[24px] border border-neutral-200 bg-white overflow-hidden dark:border-white/[0.08] dark:bg-neutral-900"
+        className="overflow-hidden rounded-2xl border border-neutral-200 bg-white dark:border-white/[0.08] dark:bg-neutral-900"
       >
         {/* Tracker header */}
         <div className="px-5 pt-5 pb-4">
@@ -1191,7 +1194,7 @@ export default function PlanDetailView({
           <ProgressBar
             pct={overallPct}
             height={10}
-            fillClassName="bg-gradient-to-r from-green-600 via-green-500 to-emerald-400"
+            fillClassName="bg-green-600"
             className="mb-3"
           />
 
@@ -1257,10 +1260,10 @@ export default function PlanDetailView({
                 type="button"
                 onClick={handleAutoGenerateMilestones}
                 disabled={milestonesGenerating || coachStreaming}
-                className="group relative inline-flex rounded-full p-[1px] bg-gradient-to-r from-fuchsia-500 via-pink-500 to-orange-400 transition-all hover:opacity-95 active:scale-95 disabled:opacity-60"
+                className="group relative inline-flex rounded-full border border-neutral-200 bg-white transition-colors hover:bg-neutral-50 active:scale-95 disabled:opacity-60 dark:border-white/[0.10] dark:bg-neutral-950 dark:hover:bg-white/[0.06]"
               >
-                <span className="relative inline-flex items-center gap-2 overflow-hidden rounded-full bg-white/95 px-3 py-2 text-[12px] font-semibold text-neutral-950 shadow-sm shadow-black/10 transition-colors duration-200 hover:bg-white dark:bg-neutral-950/95 dark:text-white dark:shadow-black/30">
-                  <span className="inline-flex h-8 w-8 items-center justify-center rounded-full bg-gradient-to-r from-fuchsia-500 via-pink-500 to-orange-400 text-white shadow-sm shadow-pink-500/30">
+                <span className="relative inline-flex items-center gap-2 overflow-hidden rounded-full px-3 py-2 text-[12px] font-semibold text-neutral-950 transition-colors duration-200 dark:text-white">
+                  <span className="inline-flex h-8 w-8 items-center justify-center rounded-full bg-neutral-900 text-white dark:bg-white dark:text-neutral-950">
                     <IconSparkles size={14} strokeWidth={2} className={milestonesGenerating ? "animate-pulse" : ""} />
                   </span>
                   {milestonesGenerating ? "Generating…" : "Auto-generate milestones"}
@@ -1646,7 +1649,7 @@ export default function PlanDetailView({
                 }
               />
 
-              <div className="rounded-[24px] border border-neutral-200 bg-white px-4 dark:border-white/[0.08] dark:bg-neutral-900">
+              <div className="rounded-2xl border border-neutral-200 bg-white px-4 dark:border-white/[0.08] dark:bg-neutral-900">
                 {uniqueTasks.length === 0 ? (
                   <div className="py-10 text-center">
                     <p className="text-[14px] font-medium text-neutral-400 dark:text-neutral-500 max-w-[220px] mx-auto">
@@ -1687,7 +1690,7 @@ export default function PlanDetailView({
               />
 
               {trackers.length === 0 ? (
-                <div className="rounded-[24px] border border-neutral-200 bg-white py-10 text-center dark:border-white/[0.08] dark:bg-neutral-900">
+                <div className="rounded-2xl border border-neutral-200 bg-white py-10 text-center dark:border-white/[0.08] dark:bg-neutral-900">
                   <p className="text-[14px] font-medium text-neutral-400 dark:text-neutral-500">
                     No progress trackers yet.
                   </p>
@@ -1768,7 +1771,7 @@ export default function PlanDetailView({
           </div>
 
           {planMilestones.length === 0 ? (
-            <div className="rounded-[24px] border border-dashed border-neutral-200 py-12 text-center dark:border-white/[0.08]">
+            <div className="rounded-2xl border border-dashed border-neutral-200 py-12 text-center dark:border-white/[0.08]">
               <p className="mx-auto max-w-[220px] text-[14px] font-medium text-neutral-400 dark:text-neutral-500">
                 Add milestones to track your progress journey.
               </p>
@@ -1802,24 +1805,39 @@ export default function PlanDetailView({
   return (
     <div className="pb-32">
       {/* Plan info */}
-      <div className="px-4 pt-6 space-y-2 lg:px-8">
-        <div className="flex items-start justify-between gap-4">
+      <div className="space-y-2 px-4 pt-3 lg:px-8 lg:pt-6">
+        <div className="hidden items-start justify-between gap-4 lg:flex">
           <h1 className="min-w-0 text-[32px] font-bold leading-tight text-neutral-950 dark:text-white">
             {plan.title}
           </h1>
-          {onDeletePlan && (
-            <IconButton
-              label="Delete plan"
-              variant="dangerGhost"
-              size="md"
-              radius="xl"
-              onClick={() => { haptic("light"); onDeletePlan(plan.id); }}
-              title="Delete plan"
-              className="hidden h-10 w-10 border border-neutral-200 dark:border-white/10 lg:flex"
-            >
-              <IconTrash size={18} strokeWidth={1.9} />
-            </IconButton>
-          )}
+          <div className="hidden shrink-0 items-center gap-2 lg:flex">
+            {onEditPlan && (
+              <IconButton
+                label="Edit plan"
+                variant="ghost"
+                size="md"
+                radius="xl"
+                onClick={() => { haptic("light"); onEditPlan(plan.id); }}
+                title="Edit plan"
+                className="h-10 w-10 border border-neutral-200 dark:border-white/10"
+              >
+                <IconEdit size={18} strokeWidth={1.9} />
+              </IconButton>
+            )}
+            {onDeletePlan && (
+              <IconButton
+                label="Delete plan"
+                variant="dangerGhost"
+                size="md"
+                radius="xl"
+                onClick={() => { haptic("light"); onDeletePlan(plan.id); }}
+                title="Delete plan"
+                className="h-10 w-10 border border-neutral-200 dark:border-white/10"
+              >
+                <IconTrash size={18} strokeWidth={1.9} />
+              </IconButton>
+            )}
+          </div>
         </div>
         {plan.description && (
           <p className="text-[16px] leading-relaxed text-neutral-600 dark:text-neutral-400">
@@ -2129,7 +2147,8 @@ export default function PlanDetailView({
         {viewingTask && (() => {
           const { task, activeDays: taskDays } = viewingTask;
           const duration = formatDuration(task.startTime, task.endTime);
-          const subtaskCount = task.subtasks?.length ?? 0;
+          const taskItems = getTaskCheckableItems(task, plan);
+          const subtaskCount = taskItems.length;
           const isRoutine = task.taskType === "session";
 
           return (
@@ -2179,7 +2198,7 @@ export default function PlanDetailView({
                     Subtasks · {subtaskCount}
                   </p>
                   <div className="space-y-1.5">
-                    {task.subtasks?.map((st) => (
+                    {taskItems.map((st) => (
                       <div
                         key={st.id}
                         className="flex items-center gap-2.5 rounded-xl bg-neutral-50 px-3.5 py-2.5 dark:bg-white/[0.04]"

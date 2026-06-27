@@ -3,7 +3,7 @@
 import { IconArrowUpRight, IconEdit, IconListCheck } from "@tabler/icons-react";
 import { TaskBlockCard } from "@/components/TaskBlockCard";
 import type { Plan, Task } from "@/lib/useScheduleDB";
-import { calculateTaskProgress, resolveTaskState } from "@/lib/taskCompletion";
+import { calculateTaskProgress, getTaskCheckableItems, getTaskSubtaskSummary, resolveTaskState } from "@/lib/taskCompletion";
 import { formatDuration } from "@/lib/timeUtils";
 import { haptic } from "@/lib/haptics";
 
@@ -24,17 +24,18 @@ export default function IOSLightTaskCard({
   onEdit,
   onOpenSubtasks,
 }: IOSLightTaskCardProps) {
-  const itemCount = task.taskType === "session"
-    ? task.subtasks?.length ?? 0
-    : task.subtasks?.length || linkedPlan?.items.length || 0;
-  const allSubtaskIds = task.subtasks?.map((subtask) => subtask.id) ?? linkedPlan?.items.map((item) => item.id) ?? [];
+  const summary = getTaskSubtaskSummary(task, linkedPlan);
+  const itemCount = summary.totalCount;
+  const allSubtaskIds = getTaskCheckableItems(task, linkedPlan).map((item) => item.id);
   const state = resolveTaskState(task, task.taskType === "session" ? 0 : itemCount);
-  const { completedCount, totalCount } = calculateTaskProgress(task, task.taskType === "session" ? 0 : itemCount);
+  const { completedCount, totalCount } = task.taskType === "session"
+    ? summary
+    : calculateTaskProgress(task, itemCount);
   const duration = formatDuration(task.startTime, task.endTime);
   const hasItems = itemCount > 0;
 
   const trailing = (
-    <div className="flex items-center gap-1">
+    <div className="flex items-center gap-2">
       {hasItems && onOpenSubtasks && (
         <button
           type="button"
@@ -44,7 +45,7 @@ export default function IOSLightTaskCard({
             onOpenSubtasks();
           }}
           aria-label="Open subtasks"
-          className="inline-flex h-8 items-center gap-1 rounded-full bg-neutral-100 px-2.5 text-[12px] font-bold tabular-nums text-neutral-600 dark:bg-white/[0.07] dark:text-neutral-300"
+          className="inline-flex h-9 items-center gap-1.5 rounded-full border border-black/10 bg-white/60 px-3 text-[12px] font-extrabold tabular-nums text-neutral-600 transition-colors active:bg-white/80 dark:border-white/[0.10] dark:bg-white/[0.08] dark:text-neutral-200 dark:active:bg-white/[0.12]"
         >
           <IconListCheck size={14} strokeWidth={2} />
           {completedCount}/{totalCount || itemCount}
@@ -59,7 +60,7 @@ export default function IOSLightTaskCard({
           onEdit();
         }}
         aria-label="Edit task"
-        className="flex h-8 w-8 items-center justify-center rounded-full bg-neutral-100 text-neutral-500 dark:bg-white/[0.07] dark:text-neutral-300"
+        className="flex h-9 w-9 items-center justify-center rounded-full border border-black/10 bg-white/60 text-neutral-600 transition-colors active:bg-white/80 dark:border-white/[0.10] dark:bg-white/[0.08] dark:text-neutral-200 dark:active:bg-white/[0.12]"
       >
         <IconEdit size={16} strokeWidth={2} />
       </button>

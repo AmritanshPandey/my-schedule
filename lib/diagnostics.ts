@@ -3,7 +3,16 @@
 import { APP_VERSION, BUILD_ID, BUILD_TIME } from "@/lib/buildInfo";
 import { getLastSyncedAt, getSyncStatus, type SyncStatus } from "@/lib/cloudSync";
 import { getErrorLog, type LoggedError } from "@/lib/errorLog";
-import { DISABLE_SW_ON_IOS, getBootLog, isIOSDevice, isIOSSafeMode, isStandalonePWA, type BootLogEntry } from "@/lib/iosSafeMode";
+import {
+  DISABLE_SW_ON_IOS,
+  getBootLog,
+  isIOSDevice,
+  isIOSSafeMode,
+  isPhoneViewportSize,
+  isStandalonePWA,
+  shouldUseIOSAppShell,
+  type BootLogEntry,
+} from "@/lib/iosSafeMode";
 
 export interface DiagnosticsSnapshot {
   app: {
@@ -16,6 +25,8 @@ export interface DiagnosticsSnapshot {
     isIOS: boolean;
     isStandalonePWA: boolean;
     iosSafeMode: boolean;
+    phoneViewport: boolean;
+    iosAppShell: boolean;
   };
   serviceWorker: {
     supported: boolean;
@@ -49,6 +60,8 @@ export async function collectDiagnostics(): Promise<DiagnosticsSnapshot> {
       isIOS: isIOSDevice(),
       isStandalonePWA: isStandalonePWA(),
       iosSafeMode: isIOSSafeMode(),
+      phoneViewport: isPhoneViewportSize(),
+      iosAppShell: shouldUseIOSAppShell(),
     },
     serviceWorker: {
       supported,

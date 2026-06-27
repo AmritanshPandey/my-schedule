@@ -187,14 +187,14 @@ export default function PWAInstallPrompt() {
   return (
     <>
       <div
-        className={`fixed inset-0 z-40 bg-black/50 backdrop-blur-sm transition-opacity duration-300 ${animateIn ? "opacity-100" : "opacity-0"}`}
+        className={`fixed inset-0 z-40 bg-black/40 transition-opacity duration-300 ${animateIn ? "opacity-100" : "opacity-0"}`}
         onClick={dismiss}
       />
 
       <div
         className={`fixed bottom-0 left-0 right-0 z-50 transition-transform duration-300 ease-out ${animateIn ? "translate-y-0" : "translate-y-full"}`}
       >
-        <div className="mx-auto max-w-lg rounded-t-[32px] border-t border-neutral-200 bg-white dark:border-white/[0.08] dark:bg-neutral-900">
+        <div className="mx-auto max-w-lg rounded-t-2xl border-t border-neutral-200 bg-white dark:border-white/[0.08] dark:bg-neutral-900">
           {/* Drag handle */}
           <div className="flex justify-center pb-1 pt-3">
             <div className="h-1 w-10 rounded-full bg-neutral-300 dark:bg-white/20" />

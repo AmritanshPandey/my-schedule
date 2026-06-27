@@ -50,7 +50,7 @@ export default function ErrorReporter() {
       style={{ bottom: "calc(env(safe-area-inset-bottom, 0px) + 0.5rem)" }}
     >
       {open ? (
-        <div className="w-[min(92vw,420px)] overflow-hidden rounded-2xl border border-red-300 bg-white shadow-2xl dark:border-red-500/40 dark:bg-neutral-900">
+        <div className="w-[min(92vw,420px)] overflow-hidden rounded-2xl border border-red-300 bg-white dark:border-red-500/40 dark:bg-neutral-900">
           <div className="flex items-center justify-between gap-2 border-b border-red-200 bg-red-50 px-3 py-2 dark:border-red-500/30 dark:bg-red-500/10">
             <span className="text-[12px] font-bold text-red-700 dark:text-red-300">
               {errors.length} error{errors.length === 1 ? "" : "s"} captured
@@ -104,7 +104,7 @@ export default function ErrorReporter() {
       ) : (
         <button
           onClick={() => setOpen(true)}
-          className="flex min-h-[44px] items-center gap-1.5 rounded-full border border-red-300 bg-red-50 px-4 py-1.5 text-[12px] font-bold text-red-700 shadow-lg dark:border-red-500/40 dark:bg-red-500/15 dark:text-red-300"
+          className="flex min-h-[44px] items-center gap-1.5 rounded-full border border-red-300 bg-red-50 px-4 py-1.5 text-[12px] font-bold text-red-700 dark:border-red-500/40 dark:bg-red-500/15 dark:text-red-300"
         >
           ⚠︎ {errors.length} error{errors.length === 1 ? "" : "s"}
         </button>

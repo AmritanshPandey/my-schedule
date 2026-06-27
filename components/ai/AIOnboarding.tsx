@@ -58,7 +58,7 @@ export default function AIOnboarding() {
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
             transition={{ duration: 0.25 }}
-            className="fixed inset-0 z-[60] bg-black/30 backdrop-blur-sm dark:bg-black/50"
+            className="fixed inset-0 z-[60] bg-black/30 dark:bg-black/50"
             onClick={phase === "idle" ? handleDismiss : undefined}
           />
 
@@ -72,7 +72,7 @@ export default function AIOnboarding() {
             className="fixed inset-x-0 bottom-0 z-[61] mx-auto max-w-lg"
             style={{ paddingBottom: "env(safe-area-inset-bottom)" }}
           >
-            <div className="m-3 overflow-hidden rounded-3xl bg-white shadow-2xl dark:bg-neutral-900">
+            <div className="m-3 overflow-hidden rounded-2xl border border-neutral-200 bg-white dark:border-white/[0.08] dark:bg-neutral-900">
 
               <AnimatePresence mode="wait" initial={false}>
 
@@ -91,11 +91,11 @@ export default function AIOnboarding() {
                     {/* Icon */}
                     <div className="flex justify-center px-5 pt-2 pb-5">
                       <div className="relative">
-                        <div className="flex h-20 w-20 items-center justify-center rounded-[28px] bg-[#AD46FF] shadow-sm">
+                        <div className="flex h-20 w-20 items-center justify-center rounded-2xl border border-violet-500 bg-[#AD46FF]">
                           <IconBrain size={36} strokeWidth={1.5} className="text-white" />
                         </div>
                         <m.div
-                          className="absolute -right-1 -top-1 flex h-7 w-7 items-center justify-center rounded-full bg-emerald-500 shadow-md"
+                          className="absolute -right-1 -top-1 flex h-7 w-7 items-center justify-center rounded-full border border-emerald-600 bg-emerald-500"
                           animate={{ scale: [1, 1.1, 1] }}
                           transition={{ duration: 2, repeat: Infinity, ease: "easeInOut" }}
                         >
@@ -122,7 +122,7 @@ export default function AIOnboarding() {
                         { icon: IconBrain,  text: "Automatically optimized for this device" },
                       ].map(({ icon: Icon, text }) => (
                         <div key={text} className="flex items-center gap-3">
-                          <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-white shadow-sm dark:bg-white/[0.06]">
+                          <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg border border-neutral-200 bg-white dark:border-white/[0.08] dark:bg-white/[0.06]">
                             <Icon size={13} strokeWidth={2} className="text-neutral-500 dark:text-neutral-400" />
                           </div>
                           <p className="text-[13px] text-neutral-600 dark:text-neutral-300">{text}</p>
@@ -136,7 +136,7 @@ export default function AIOnboarding() {
                         type="button"
                         onClick={handleEnable}
                         whileTap={{ scale: 0.97 }}
-                        className="flex w-full items-center justify-center gap-2.5 rounded-2xl bg-neutral-900 py-4 text-[15px] font-bold text-white shadow-lg shadow-black/10 dark:bg-white dark:text-neutral-900"
+                        className="flex w-full items-center justify-center gap-2.5 rounded-full bg-neutral-900 py-4 text-[15px] font-bold text-white dark:bg-white dark:text-neutral-900"
                       >
                         <IconBrain size={18} strokeWidth={2} />
                         Enable Local Intelligence
@@ -195,7 +195,7 @@ export default function AIOnboarding() {
                       initial={{ scale: 0 }}
                       animate={{ scale: 1 }}
                       transition={{ type: "spring", stiffness: 350, damping: 20 }}
-                      className="mx-auto mb-5 flex h-20 w-20 items-center justify-center rounded-full bg-emerald-500 shadow-lg shadow-emerald-500/30"
+                      className="mx-auto mb-5 flex h-20 w-20 items-center justify-center rounded-full border border-emerald-600 bg-emerald-500"
                     >
                       <IconCheck size={36} strokeWidth={2.5} className="text-white" />
                     </m.div>

@@ -232,7 +232,7 @@ export function BulkImportFlow({ plans, fallbackDay = "monday", onCommit, onDone
             className="hidden"
           />
         </div>
-        <div className="relative overflow-hidden rounded-[24px] border border-neutral-200 bg-white shadow-[0_1px_2px_rgba(10,10,10,0.04)] dark:border-white/[0.08] dark:bg-neutral-900">
+        <div className="relative overflow-hidden rounded-2xl border border-neutral-200 bg-white dark:border-white/[0.08] dark:bg-neutral-900">
           <div className="border-b border-neutral-100 px-4 py-2.5 text-[11px] font-semibold uppercase tracking-[0.08em] text-neutral-400 dark:border-white/[0.06] dark:text-neutral-500">
             Source
           </div>
@@ -266,7 +266,7 @@ export function BulkImportFlow({ plans, fallbackDay = "monday", onCommit, onDone
                 {newPlans.map((p) => {
                   const Icon = PLAN_ICONS[p.emoji] ?? IconCalendarEvent;
                   return (
-                    <div key={p.ref} className="flex items-start gap-3 rounded-[24px] border border-neutral-200 bg-white px-4 py-3.5 shadow-[0_1px_2px_rgba(10,10,10,0.04)] dark:border-white/[0.08] dark:bg-neutral-900">
+                    <div key={p.ref} className="flex items-start gap-3 rounded-2xl border border-neutral-200 bg-white px-4 py-3.5 dark:border-white/[0.08] dark:bg-neutral-900">
                       <span className="grid h-11 w-11 shrink-0 place-items-center rounded-2xl bg-emerald-500/12 text-emerald-600 dark:text-emerald-400">
                         <Icon size={17} strokeWidth={2} />
                       </span>
@@ -295,7 +295,7 @@ export function BulkImportFlow({ plans, fallbackDay = "monday", onCommit, onDone
               {days.map((d) => {
                 const isCollapsed = collapsed.has(d.day);
                 return (
-                  <div key={d.day} className="overflow-hidden rounded-[24px] border border-neutral-200 bg-white shadow-[0_1px_2px_rgba(10,10,10,0.04)] dark:border-white/[0.08] dark:bg-neutral-900">
+                  <div key={d.day} className="overflow-hidden rounded-2xl border border-neutral-200 bg-white dark:border-white/[0.08] dark:bg-neutral-900">
                     <button type="button" onClick={() => toggleDay(d.day)} className="flex w-full items-center gap-2.5 text-left">
                       <div className="flex w-full items-center gap-2.5 px-4 py-3.5">
                         <IconCalendarEvent size={16} strokeWidth={2} className="shrink-0 text-emerald-600 dark:text-emerald-400" />
@@ -398,7 +398,7 @@ export function BulkImportFlow({ plans, fallbackDay = "monday", onCommit, onDone
               ) : (
                 <m.div
                   key="all-set" initial={{ opacity: 0 }} animate={{ opacity: 1 }}
-                  className="flex items-center gap-2.5 rounded-[24px] border border-neutral-200 bg-white p-4 shadow-[0_1px_2px_rgba(10,10,10,0.04)] dark:border-white/[0.08] dark:bg-neutral-900"
+                  className="flex items-center gap-2.5 rounded-2xl border border-neutral-200 bg-white p-4 dark:border-white/[0.08] dark:bg-neutral-900"
                 >
                   <span className="grid h-7 w-7 shrink-0 place-items-center rounded-full bg-emerald-500 text-white">
                     <IconCheck size={15} strokeWidth={3} />
@@ -419,7 +419,7 @@ export function BulkImportFlow({ plans, fallbackDay = "monday", onCommit, onDone
           whileTap={{ scale: 0.98 }}
           disabled={total === 0}
           onClick={commit}
-          className="mt-1 flex w-full flex-col items-center gap-0.5 rounded-full bg-neutral-900 py-3.5 text-white shadow-[0_10px_24px_rgba(10,10,10,0.12)] transition-colors hover:bg-neutral-800 disabled:opacity-50 dark:bg-white dark:text-neutral-900 dark:hover:bg-neutral-100"
+          className="mt-1 flex w-full flex-col items-center gap-0.5 rounded-full bg-neutral-900 py-3.5 text-white transition-colors hover:bg-neutral-800 disabled:opacity-50 dark:bg-white dark:text-neutral-900 dark:hover:bg-neutral-100"
         >
           <span className="flex items-center gap-2 text-[15px] font-bold">
             <IconCircleCheck size={18} strokeWidth={2} />

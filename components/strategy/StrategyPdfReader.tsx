@@ -209,7 +209,7 @@ export default function StrategyPdfReader({ pdfData, pdfUrl, onPageChange }: Str
               whileTap={{ scale: 0.88 }}
               disabled={currentPage <= 1}
               onClick={() => scrollToPage(currentPage - 1)}
-              className="flex h-9 w-9 items-center justify-center rounded-full bg-neutral-800/90 backdrop-blur-sm border border-white/[0.10] text-white/70 disabled:opacity-30"
+              className="flex h-9 w-9 items-center justify-center rounded-full border border-white/[0.10] bg-neutral-800 text-white/70 disabled:opacity-30"
             >
               <IconChevronUp size={16} strokeWidth={2.5} />
             </m.button>
@@ -223,7 +223,7 @@ export default function StrategyPdfReader({ pdfData, pdfUrl, onPageChange }: Str
               whileTap={{ scale: 0.88 }}
               disabled={currentPage >= numPages}
               onClick={() => scrollToPage(currentPage + 1)}
-              className="flex h-9 w-9 items-center justify-center rounded-full bg-neutral-800/90 backdrop-blur-sm border border-white/[0.10] text-white/70 disabled:opacity-30"
+              className="flex h-9 w-9 items-center justify-center rounded-full border border-white/[0.10] bg-neutral-800 text-white/70 disabled:opacity-30"
             >
               <IconChevronDown size={16} strokeWidth={2.5} />
             </m.button>

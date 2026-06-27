@@ -156,17 +156,16 @@ function PlanCardInner({
   const status = derivePlanStatus(dayState, consistency);
   const statusCfg = STATUS_CONFIG[status];
 
-
   return (
     <m.div
       role="button"
       tabIndex={0}
       onClick={onSelect}
       onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); onSelect(); } }}
-      whileHover={{ y: -2 }}
+      whileHover={{ y: 0 }}
       whileTap={{ scale: 0.985 }}
       transition={{ type: "spring", stiffness: 420, damping: 30 }}
-      className="group relative w-full cursor-pointer rounded-3xl border border-neutral-200/70 bg-white px-5 pt-5 pb-4 text-left transition-all hover:border-neutral-300/80 dark:border-white/[0.07] dark:bg-neutral-900 dark:hover:border-white/[0.12]"
+      className="group relative flex w-full cursor-pointer flex-col rounded-2xl border border-neutral-200/70 bg-white px-5 pb-4 pt-5 text-left transition-colors hover:border-neutral-300/80 dark:border-white/[0.07] dark:bg-neutral-900 dark:hover:border-white/[0.12] lg:min-h-[220px]"
     >
       {/* Delete — corner affordance. The absolute position lives on this wrapper
           because IconButton's `tap-target` class sets `position: relative`, which
@@ -235,7 +234,7 @@ function PlanCardInner({
       </div>
 
       {/* ── Row 3: insight chip ──────────────────────────────────────────── */}
-      <div className="mt-3.5 flex items-center gap-2">
+      <div className="mt-3.5 flex items-center gap-2 lg:mt-auto lg:pt-4">
         <div className="flex flex-1 items-center gap-1.5 rounded-xl bg-neutral-50 dark:bg-white/[0.04] px-3 py-2 text-[12px] font-semibold text-neutral-500 dark:text-neutral-400">
           <IconChecklist size={12} strokeWidth={2.2} className="shrink-0" />
           {taskCount} task{taskCount !== 1 ? "s" : ""}

@@ -7,7 +7,7 @@ import { IconChevronLeft, IconChevronRight } from "@tabler/icons-react";
 import type { DayKey, Plan, Schedule, Task } from "@/lib/useScheduleDB";
 import { DAYS } from "@/lib/useScheduleDB";
 import { sortTasksByTime } from "@/lib/taskMutations";
-import { completionForDate, resolveTaskState } from "@/lib/taskCompletion";
+import { completionForDate, getTaskCheckableItems, getTaskSubtaskSummary, resolveTaskState } from "@/lib/taskCompletion";
 import { isTaskScheduledOn, resolveOccurrence } from "@/lib/taskOccurrence";
 import { localISODate, todayISO } from "@/lib/dateUtils";
 import { currentMinutes, parseTimeToMinutes } from "@/lib/timeUtils";
@@ -362,7 +362,7 @@ export function WeekGrid({
             {displayLabel}
           </span>
 
-          <div className="relative mt-5 flex h-11 w-[274px] shrink-0 items-center rounded-[14px] border border-neutral-200 bg-white p-1 shadow-[0_1px_2px_rgba(10,10,10,0.04),0_6px_18px_rgba(10,10,10,0.04)] dark:border-white/[0.08] dark:bg-neutral-900">
+          <div className="relative mt-5 flex h-11 w-[274px] shrink-0 items-center rounded-[14px] border border-neutral-200 bg-white p-1 dark:border-white/[0.08] dark:bg-neutral-900">
             {(["1day", "3day", "7day", "custom3"] as const).map((v) => (
               <button
                 key={v}
@@ -374,7 +374,7 @@ export function WeekGrid({
                 }}
                 className={`flex h-full flex-1 items-center justify-center rounded-[10px] text-[13px] font-semibold transition-colors ${
                   calendarView === v
-                    ? "bg-neutral-950 text-white shadow-sm dark:bg-white dark:text-neutral-950"
+                    ? "bg-neutral-950 text-white dark:bg-white dark:text-neutral-950"
                     : "text-neutral-400 hover:bg-neutral-100/80 hover:text-neutral-700 dark:text-neutral-500 dark:hover:bg-white/[0.06] dark:hover:text-neutral-200"
                 }`}
               >
@@ -390,7 +390,7 @@ export function WeekGrid({
                   animate={{ opacity: 1, y: 0, scale: 1 }}
                   exit={{ opacity: 0, y: -6, scale: 0.98 }}
                   transition={{ duration: 0.15, ease: [0.22, 1, 0.36, 1] }}
-                  className="absolute left-0 top-full z-30 mt-2 w-72 rounded-2xl border border-neutral-200 bg-white p-3 shadow-[0_14px_40px_rgba(10,10,10,0.12)] dark:border-white/[0.08] dark:bg-neutral-900 dark:shadow-[0_18px_50px_rgba(0,0,0,0.45)]"
+                  className="absolute left-0 top-full z-30 mt-2 w-72 rounded-2xl border border-neutral-200 bg-white p-3 dark:border-white/[0.08] dark:bg-neutral-900"
                 >
                   <p className="mb-2 text-[10px] font-semibold uppercase tracking-wider text-neutral-400 dark:text-neutral-500">
                     Pick days · {customDays.length} selected
@@ -456,7 +456,7 @@ export function WeekGrid({
           </div>
       </div>
 
-      <div className="min-h-0 flex-1 overflow-x-auto overscroll-x-contain rounded-[24px] border border-neutral-200 bg-white shadow-[0_1px_2px_rgba(10,10,10,0.04),0_14px_40px_rgba(10,10,10,0.04)] dark:border-white/[0.08] dark:bg-neutral-950 dark:shadow-none">
+      <div className="min-h-0 flex-1 overflow-x-auto overscroll-x-contain rounded-2xl border border-neutral-200 bg-white dark:border-white/[0.08] dark:bg-neutral-950">
         <div className="flex h-full min-w-full flex-col" style={{ width: `max(100%, ${minGridWidth}px)` }}>
           {/* ── Fixed day-header row ─────────────────────────────────────────────── */}
           <div
@@ -505,7 +505,8 @@ export function WeekGrid({
                 <div key={day} className="flex flex-col gap-1 border-r border-neutral-100 p-1.5 last:border-r-0 dark:border-white/[0.06]">
                   {untimed.map((task) => {
                     const hex = categoryHex(resolveAccentColor(task.color, task.icon));
-                    const state = resolveTaskState(task, task.subtasks?.length ?? 0);
+                    const linkedPlan = task.planId ? plansById.get(task.planId) ?? null : null;
+                    const state = resolveTaskState(task, getTaskSubtaskSummary(task, linkedPlan).totalCount);
                     const done = state === "completed";
                     return (
                       <button
@@ -583,6 +584,8 @@ export function WeekGrid({
 
                 {timed.map((layout) => {
                   const visualHeight = Math.max(22, layout.height - TASK_VERTICAL_INSET * 2);
+                  const linkedPlan = layout.task.planId ? plansById.get(layout.task.planId) ?? null : null;
+                  const allSubtaskIds = getTaskCheckableItems(layout.task, linkedPlan).map((item) => item.id);
                   return (
                     <div
                       key={layout.task.id}
@@ -601,7 +604,7 @@ export function WeekGrid({
                         layout.height,
                         layout.widthPct,
                         readOnly,
-                        () => onToggleTaskComplete(layout.task.id, layout.task.subtasks?.map((s) => s.id) ?? [], day, dateISO),
+                        () => onToggleTaskComplete(layout.task.id, allSubtaskIds, day, dateISO),
                         () => onDeleteTask(layout.task.id, day),
                       )}
                     </div>

@@ -73,10 +73,10 @@ function TimeInput({
         type="time"
         step={60}
         value={value}
+        aria-label={`${label} time`}
         onChange={(e) => onChange(e.currentTarget.value)}
         onKeyDown={stopTextEditKeyPropagation}
         className="h-11 w-full min-w-0 appearance-none rounded-xl border border-neutral-200 bg-neutral-50 px-3 text-[16px] font-semibold tabular-nums text-neutral-900 outline-none ring-0 transition-colors placeholder:text-neutral-400 focus:border-neutral-300 focus:bg-white focus:outline-none focus:ring-0 focus-visible:outline-none focus-visible:ring-0 dark:border-white/10 dark:bg-white/[0.04] dark:text-white dark:placeholder:text-neutral-600 dark:focus:border-white/20 dark:focus:bg-white/[0.07] dark:[color-scheme:dark]"
-        style={{ outline: "none", boxShadow: "none" }}
       />
     </div>
   );

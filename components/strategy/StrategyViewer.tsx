@@ -123,7 +123,7 @@ export default function StrategyViewer({ asset, onClose }: StrategyViewerProps) 
                 exit={{ opacity: 0 }}
                 className="absolute bottom-8 left-0 right-0 flex justify-center pointer-events-none"
               >
-                <span className="rounded-full bg-neutral-900/80 backdrop-blur-sm px-4 py-2 text-[12px] font-semibold text-white/40">
+                <span className="rounded-full border border-white/[0.10] bg-neutral-900 px-4 py-2 text-[12px] font-semibold text-white/40">
                   Tap to show controls
                 </span>
               </m.div>

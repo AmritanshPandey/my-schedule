@@ -20,14 +20,14 @@ interface DetailHeaderProps {
 }
 
 /**
- * Standard glassy header bar for internal/sub pages (Notes, Plan detail, …).
- * A compact 56px bar: chevron back · title · round icon actions. Rendered as a
- * shrink-0 flex row so callers place it at the top of a full-height column.
+ * Standard compact header bar for internal/sub pages (Notes, Plan detail, ...).
+ * Rendered as a shrink-0 flex row so callers place it at the top of a full-height
+ * column.
  */
 export default function DetailHeader({ title, onBack, actions, rightSlot, className = "" }: DetailHeaderProps) {
   return (
     <header
-      className={`flex h-14 shrink-0 items-center gap-1 border-b border-black/[0.07] bg-white/85 px-2 backdrop-blur-xl dark:border-white/[0.08] dark:bg-neutral-950/85 ${className}`}
+      className={`flex h-12 shrink-0 items-center gap-1 border-b border-neutral-200 bg-white px-2 dark:border-white/[0.08] dark:bg-neutral-950 ${className}`}
     >
       <m.button
         type="button"
@@ -50,10 +50,10 @@ export default function DetailHeader({ title, onBack, actions, rightSlot, classN
           {actions.map((action, i) => {
             const Icon = action.icon;
             const tone = action.active
-              ? "bg-neutral-900 text-white dark:bg-white dark:text-neutral-900"
+              ? "border-neutral-900 bg-neutral-900 text-white dark:border-white dark:bg-white dark:text-neutral-900"
               : action.destructive
-                ? "bg-neutral-100 text-neutral-500 hover:bg-rose-500/10 hover:text-rose-500 focus-visible:bg-rose-500/10 focus-visible:text-rose-500 dark:bg-white/[0.07] dark:text-neutral-400 dark:hover:bg-rose-500/10 dark:hover:text-rose-400 dark:focus-visible:bg-rose-500/10 dark:focus-visible:text-rose-400"
-                : "bg-neutral-100 text-neutral-700 dark:bg-white/[0.07] dark:text-white/70";
+                ? "border-neutral-200 text-neutral-500 hover:bg-rose-500/10 hover:text-rose-500 focus-visible:bg-rose-500/10 focus-visible:text-rose-500 dark:border-white/[0.10] dark:text-neutral-400 dark:hover:bg-rose-500/10 dark:hover:text-rose-400 dark:focus-visible:bg-rose-500/10 dark:focus-visible:text-rose-400"
+                : "border-neutral-200 text-neutral-700 hover:bg-neutral-100 dark:border-white/[0.10] dark:text-white/70 dark:hover:bg-white/[0.06]";
             return (
               <m.button
                 key={i}
@@ -61,7 +61,7 @@ export default function DetailHeader({ title, onBack, actions, rightSlot, classN
                 whileTap={{ scale: 0.86 }}
                 onClick={action.onClick}
                 aria-label={action.label}
-                className={`tap-target flex h-9 w-9 items-center justify-center rounded-full transition-colors ${tone}`}
+                className={`tap-target flex h-9 w-9 items-center justify-center rounded-xl border transition-colors ${tone}`}
               >
                 <Icon size={20} strokeWidth={2} />
               </m.button>

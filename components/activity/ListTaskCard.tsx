@@ -347,10 +347,10 @@ function ListTaskCardInner({
   ) : null;
 
   return (
-    <div className="relative overflow-hidden rounded-[18px]">
+    <div className="relative overflow-hidden rounded-2xl">
       {/* ── Swipe reveal layer ─────────────────────────────────────────────── */}
       {!editMode && !readOnly && (
-        <div className={`absolute inset-0 flex items-center rounded-[18px] pl-5 ${done ? "bg-neutral-100 dark:bg-white/[0.04]" : "bg-green-500"}`}>
+        <div className={`absolute inset-0 flex items-center rounded-2xl pl-5 ${done ? "bg-neutral-100 dark:bg-white/[0.04]" : "bg-green-500"}`}>
           <m.div
             style={{ opacity: revealOpacity, scale: revealScale }}
             className={`flex h-9 w-9 items-center justify-center rounded-full ${done ? "bg-neutral-300/60 dark:bg-white/[0.10]" : "bg-white/25"}`}

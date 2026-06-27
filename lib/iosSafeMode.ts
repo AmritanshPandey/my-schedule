@@ -1,6 +1,8 @@
 "use client";
 
 export const DISABLE_SW_ON_IOS = true;
+export const PHONE_SHELL_MAX_SHORT_EDGE = 500;
+export const PHONE_SHELL_MAX_LONG_EDGE = 1024;
 
 const logged = new Set<string>();
 const BOOT_LOG_KEY = "planr-boot-log";
@@ -66,4 +68,31 @@ export function isStandalonePWA(): boolean {
 
 export function isIOSSafeMode(): boolean {
   return isIOSDevice();
+}
+
+export function isPhoneViewportDimensions(width: number, height: number): boolean {
+  if (!Number.isFinite(width) || !Number.isFinite(height) || width <= 0 || height <= 0) return false;
+  const shortEdge = Math.min(width, height);
+  const longEdge = Math.max(width, height);
+  return shortEdge <= PHONE_SHELL_MAX_SHORT_EDGE && longEdge <= PHONE_SHELL_MAX_LONG_EDGE;
+}
+
+export function isPhoneViewportSize(): boolean {
+  if (typeof window === "undefined") return false;
+  return isPhoneViewportDimensions(window.innerWidth, window.innerHeight);
+}
+
+export function shouldUseIOSAppShell(): boolean {
+  if (isIOSSafeMode()) return true;
+  if (typeof window === "undefined") return false;
+
+  try {
+    const params = new URLSearchParams(window.location.search);
+    if (params.get("iosShell") === "1" || params.get("mobileShell") === "1") return true;
+    if (localStorage.getItem("planr-force-ios-shell") === "true") return true;
+  } catch {
+    /* best effort */
+  }
+
+  return isPhoneViewportSize();
 }

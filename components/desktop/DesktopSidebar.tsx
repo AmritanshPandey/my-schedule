@@ -195,7 +195,7 @@ export default function DesktopSidebar({
     "text-neutral-400 dark:text-neutral-500";
 
   return (
-    <aside className={`hidden lg:flex h-full shrink-0 flex-col overflow-hidden rounded-2xl border border-neutral-200 bg-white shadow-[0_1px_2px_rgba(10,10,10,0.04),0_8px_24px_rgba(10,10,10,0.05)] transition-[width] duration-200 dark:border-white/[0.08] dark:bg-[#161618] dark:shadow-[0_1px_2px_rgba(0,0,0,0.4),0_10px_30px_rgba(0,0,0,0.45)] ${collapsed ? "w-[76px]" : "w-[236px]"}`}>
+    <aside className={`hidden lg:flex h-full shrink-0 flex-col overflow-hidden rounded-2xl border border-neutral-200 bg-white transition-[width] duration-200 dark:border-white/[0.08] dark:bg-neutral-950 ${collapsed ? "w-[76px]" : "w-[236px]"}`}>
 
       {/* ── Header: brand + collapse toggle ──────────────────────────────────── */}
       <div className={`flex h-[68px] shrink-0 items-center border-b border-neutral-200/70 dark:border-white/[0.06] ${collapsed ? "justify-center px-0" : "justify-between px-[18px]"}`}>
@@ -236,13 +236,14 @@ export default function DesktopSidebar({
                 collapsed ? "justify-center px-0 py-3" : "gap-3 px-3.5 py-2.5 text-left"
               } ${
                 active
-                  ? "bg-neutral-100 text-neutral-900 dark:bg-white/[0.09] dark:text-white dark:ring-1 dark:ring-white/[0.07]"
+                  ? "bg-emerald-50 text-emerald-800 dark:bg-emerald-500/[0.12] dark:text-emerald-300"
                   : "text-neutral-500 hover:bg-neutral-100 hover:text-neutral-700 dark:text-neutral-500 dark:hover:bg-white/[0.05] dark:hover:text-neutral-300"
               }`}
             >
+              {active && !collapsed && <span className="absolute left-0 h-5 w-1 rounded-r-full bg-emerald-600 dark:bg-emerald-400" />}
               <Icon size={17} strokeWidth={active ? 2.2 : 1.75} className="shrink-0" />
               {!collapsed && (
-                <span className={`text-[13px] ${active ? "font-bold text-neutral-900 dark:text-white" : "font-medium"}`}>
+                <span className={`text-[13px] ${active ? "font-bold text-emerald-900 dark:text-emerald-200" : "font-medium"}`}>
                   {label}
                 </span>
               )}
@@ -258,7 +259,7 @@ export default function DesktopSidebar({
             type="button"
             onClick={handleCreate}
             title={collapsed ? (activeTab === 1 ? "New Plan" : activeTab === 2 ? "New Habit" : "New Task") : undefined}
-            className={`flex w-full items-center rounded-xl bg-neutral-900 py-2.5 text-white transition-all hover:bg-neutral-800 active:scale-[0.98] dark:bg-white dark:text-neutral-950 dark:hover:bg-neutral-100 ${collapsed ? "justify-center px-0" : "gap-2 px-3.5"}`}
+            className={`flex w-full items-center rounded-full bg-[#00A63E] py-2.5 text-white transition-colors hover:bg-[#008236] active:scale-[0.98] dark:bg-[#2FD46E] dark:text-neutral-950 dark:hover:bg-[#2FD46E]/90 ${collapsed ? "justify-center px-0" : "gap-2 px-3.5"}`}
           >
             <IconPlus size={15} strokeWidth={2.5} />
             {!collapsed && (
@@ -357,7 +358,7 @@ export default function DesktopSidebar({
             {theme === "dark" ? <IconSun size={16} strokeWidth={1.8} /> : <IconMoon size={16} strokeWidth={1.8} />}
           </button>
         ) : (
-          <div className="mt-2 rounded-xl bg-neutral-100 p-1 dark:bg-white/[0.06]">
+          <div className="mt-2 rounded-full border border-neutral-200 bg-neutral-50 p-1 dark:border-white/[0.08] dark:bg-white/[0.04]">
             <div className="grid grid-cols-2 gap-1">
               {(["light", "dark"] as const).map((mode) => {
                 const active = theme === mode;
@@ -368,9 +369,9 @@ export default function DesktopSidebar({
                     type="button"
                     onClick={() => setMode(mode)}
                     aria-pressed={active}
-                    className={`flex items-center justify-center gap-1.5 rounded-lg py-1.5 text-[12px] font-semibold transition-all ${
+                    className={`flex items-center justify-center gap-1.5 rounded-full py-1.5 text-[12px] font-semibold transition-colors ${
                       active
-                        ? "bg-white text-neutral-900 shadow-[0_1px_2px_rgba(10,10,10,0.06)] dark:bg-[#0a0a0a] dark:text-white"
+                        ? "bg-white text-neutral-900 dark:bg-neutral-900 dark:text-white"
                         : "text-neutral-500 hover:text-neutral-800 dark:text-neutral-400 dark:hover:text-neutral-100"
                     }`}
                   >

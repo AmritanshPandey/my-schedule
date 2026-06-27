@@ -51,8 +51,8 @@ export default function EmptyState({
       animate={{ opacity: 1, y: 0 }}
       className={`flex flex-col items-center gap-4 text-center ${center ? "h-full justify-center" : "pt-16"} ${className}`}
     >
-      <div className="flex h-20 w-20 items-center justify-center rounded-[28px] bg-[#00A63E]/[0.08] dark:bg-[#2FD46E]/[0.10]">
-        <Icon size={36} strokeWidth={1.4} className="text-[#00A63E] dark:text-[#2FD46E]" />
+      <div className="flex h-16 w-16 items-center justify-center rounded-2xl border border-emerald-200 bg-emerald-50 dark:border-emerald-500/20 dark:bg-emerald-500/10">
+        <Icon size={30} strokeWidth={1.5} className="text-[#00A63E] dark:text-[#2FD46E]" />
       </div>
       <div>
         <p className="text-[16px] font-semibold text-neutral-700 dark:text-neutral-200">{title}</p>

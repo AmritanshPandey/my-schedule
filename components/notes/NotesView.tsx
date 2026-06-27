@@ -1,23 +1,36 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import dynamic from "next/dynamic";
 import { AnimatePresence, m } from "framer-motion";
 import { IconNotebook, IconPlus, IconSearch, IconX, IconPinnedFilled, IconLayoutGrid, IconLink } from "@tabler/icons-react";
-import type { Note, Task, Plan } from "@/lib/useScheduleDB";
+import type { DayKey, Note, Task, Plan } from "@/lib/useScheduleDB";
 import { haptic } from "@/lib/haptics";
 import { checklistStats, deriveSnippet, deriveTitle } from "@/lib/notes/markdown";
 import { bodyToPlainText } from "@/lib/notes/richText";
 import { AccentBadge, cycleAccentColor } from "@/components/ui/Badge";
 import { stableFieldHash } from "@/lib/hash";
 import { NOTE_TEMPLATES } from "@/lib/notes/templates";
+import { todayISO } from "@/lib/dateUtils";
 import BottomSheet from "@/components/ui/BottomSheet";
 import SheetHeader from "@/components/ui/SheetHeader";
 import DetailHeader from "@/components/ui/DetailHeader";
 import EmptyState from "@/components/ui/EmptyState";
-import NoteEditor from "./NoteEditor";
+
+const NoteEditor = dynamic(() => import("./NoteEditor"), {
+  ssr: false,
+  loading: () => (
+    <div className="flex h-full items-center justify-center bg-white text-[13px] font-semibold text-neutral-400 dark:bg-neutral-950 dark:text-neutral-500">
+      Opening note...
+    </div>
+  ),
+});
+
+const JS_DAYS: DayKey[] = ["sunday", "monday", "tuesday", "wednesday", "thursday", "friday", "saturday"];
 
 type NotePatch = Partial<Pick<Note, "title" | "body" | "pinned" | "tags" | "linkedTaskIds">>;
 type CreateNoteInput = Partial<Pick<Note, "title" | "body" | "tags">>;
+export type CreateTaskFromNoteInput = { title: string; noteId: string; day: DayKey; planId?: string };
 
 interface NotesViewProps {
   notes: Note[];
@@ -29,6 +42,11 @@ interface NotesViewProps {
   tasks: Task[];
   plans: Plan[];
   onOpenTask: (taskId: string) => void;
+  onCreateTaskFromNote?: (input: CreateTaskFromNoteInput) => string | undefined;
+  initialEditingId?: string | null;
+  onInitialEditingHandled?: () => void;
+  todayDateISO?: string;
+  disableMotion?: boolean;
 }
 
 function relativeDate(iso: string): string {
@@ -60,32 +78,25 @@ function NoteCard({
   active,
   onSelect,
   onTogglePin,
+  motionEnabled,
 }: {
   note: Note;
   active: boolean;
   onSelect: () => void;
   onTogglePin: () => void;
+  motionEnabled: boolean;
 }) {
   const stats = checklistStats(note.body);
   const snippet = deriveSnippet(note);
   const tags = note.tags ?? [];
   const linkCount = note.linkedTaskIds?.length ?? 0;
-  return (
-    <m.div
-      layout
-      initial={{ opacity: 0, y: 6 }}
-      animate={{ opacity: 1, y: 0 }}
-      exit={{ opacity: 0, height: 0 }}
-      role="button"
-      tabIndex={0}
-      onClick={onSelect}
-      onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); onSelect(); } }}
-      className={`cv-auto group relative flex w-full cursor-pointer flex-col rounded-2xl border px-4 py-3 text-left transition-colors focus-visible:outline-none ${
-        active
-          ? "border-neutral-300 bg-neutral-50 dark:border-white/[0.12] dark:bg-white/[0.06]"
-          : "border-neutral-100 bg-white hover:border-neutral-200 hover:bg-neutral-50 dark:border-white/[0.06] dark:bg-neutral-900/40 dark:hover:bg-white/[0.04]"
-      }`}
-    >
+  const className = `cv-auto group relative flex w-full cursor-pointer flex-col rounded-2xl border px-4 py-3 text-left transition-colors focus-visible:outline-none ${
+    active
+      ? "border-neutral-300 bg-neutral-50 dark:border-white/[0.12] dark:bg-white/[0.06]"
+      : "border-neutral-100 bg-white hover:border-neutral-200 hover:bg-neutral-50 dark:border-white/[0.06] dark:bg-neutral-900/40 dark:hover:bg-white/[0.04]"
+  }`;
+  const content = (
+    <>
       <div className="flex items-baseline justify-between gap-3">
         <span className="truncate text-[15px] font-semibold text-neutral-900 dark:text-white">
           {deriveTitle(note)}
@@ -141,6 +152,36 @@ function NoteCard({
           ))}
         </div>
       )}
+    </>
+  );
+
+  if (!motionEnabled) {
+    return (
+      <div
+        role="button"
+        tabIndex={0}
+        onClick={onSelect}
+        onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); onSelect(); } }}
+        className={className}
+      >
+        {content}
+      </div>
+    );
+  }
+
+  return (
+    <m.div
+      layout
+      initial={{ opacity: 0, y: 6 }}
+      animate={{ opacity: 1, y: 0 }}
+      exit={{ opacity: 0, height: 0 }}
+      role="button"
+      tabIndex={0}
+      onClick={onSelect}
+      onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); onSelect(); } }}
+      className={className}
+    >
+      {content}
     </m.div>
   );
 }
@@ -157,7 +198,21 @@ function EmptyDetail({ onCreate }: { onCreate: () => void }) {
   );
 }
 
-export default function NotesView({ notes, onCreate, onUpdate, onDelete, onClose, tasks, plans, onOpenTask }: NotesViewProps) {
+export default function NotesView({
+  notes,
+  onCreate,
+  onUpdate,
+  onDelete,
+  onClose,
+  tasks,
+  plans,
+  onOpenTask,
+  onCreateTaskFromNote,
+  initialEditingId,
+  onInitialEditingHandled,
+  todayDateISO = todayISO(),
+  disableMotion = false,
+}: NotesViewProps) {
   const [editingId, setEditingId] = useState<string | null>(null);
   const [query, setQuery] = useState("");
   const [selectedTags, setSelectedTags] = useState<string[]>([]);
@@ -165,6 +220,8 @@ export default function NotesView({ notes, onCreate, onUpdate, onDelete, onClose
   const [isDesktop, setIsDesktop] = useState(
     () => typeof window !== "undefined" && window.matchMedia("(min-width: 1024px)").matches,
   );
+  const motionEnabled = !disableMotion;
+  const todayDay = useMemo(() => JS_DAYS[new Date(`${todayDateISO}T00:00:00`).getDay()] ?? "monday", [todayDateISO]);
 
   // Track the desktop breakpoint (SSR-safe).
   useEffect(() => {
@@ -224,6 +281,13 @@ export default function NotesView({ notes, onCreate, onUpdate, onDelete, onClose
   }, [sorted, query, selectedTags, searchIndex]);
 
   const editingNote = editingId ? notes.find((n) => n.id === editingId) ?? null : null;
+
+  useEffect(() => {
+    if (!initialEditingId) return;
+    if (!notes.some((note) => note.id === initialEditingId)) return;
+    setEditingId(initialEditingId);
+    onInitialEditingHandled?.();
+  }, [initialEditingId, notes, onInitialEditingHandled]);
 
   function handleCreate(input?: CreateNoteInput) {
     haptic("light");
@@ -291,7 +355,7 @@ export default function NotesView({ notes, onCreate, onUpdate, onDelete, onClose
         )}
 
         {/* Search */}
-        <div className="px-4 pt-5 pb-3">
+        <div className="px-4 pt-3 pb-3">
           <div className="relative">
             <IconSearch size={15} strokeWidth={2} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-neutral-400" />
             <input
@@ -359,10 +423,11 @@ export default function NotesView({ notes, onCreate, onUpdate, onDelete, onClose
                 active={activeId === note.id}
                 onSelect={() => { haptic("light"); setEditingId(note.id); }}
                 onTogglePin={() => togglePin(note)}
+                motionEnabled={motionEnabled}
               />
             );
-            return (
-              <AnimatePresence initial={false}>
+            const listContent = (
+              <>
                 {pinnedNotes.length > 0 && (
                   <div key="pinned" className="space-y-1.5">
                     <SectionLabel icon={<IconPinnedFilled size={12} strokeWidth={2.5} />} label="Pinned" />
@@ -373,8 +438,9 @@ export default function NotesView({ notes, onCreate, onUpdate, onDelete, onClose
                   {pinnedNotes.length > 0 && otherNotes.length > 0 && <SectionLabel label="Notes" />}
                   {otherNotes.map(renderCard)}
                 </div>
-              </AnimatePresence>
+              </>
             );
+            return motionEnabled ? <AnimatePresence initial={false}>{listContent}</AnimatePresence> : listContent;
           })()}
         </div>
       </>
@@ -391,7 +457,7 @@ export default function NotesView({ notes, onCreate, onUpdate, onDelete, onClose
               key={id}
               type="button"
               onClick={() => { setTemplatePickerOpen(false); handleCreate({ title, tags, body }); }}
-              className="flex w-full items-center gap-3 rounded-2xl border border-neutral-200 bg-white px-4 py-3 text-left transition-colors hover:border-neutral-300 active:bg-neutral-50 dark:border-white/[0.08] dark:bg-neutral-900 dark:hover:border-white/20 dark:active:bg-white/[0.03]"
+              className="flex w-full items-center gap-3 rounded-xl border border-neutral-200 bg-white px-4 py-3 text-left transition-colors hover:border-neutral-300 active:bg-neutral-50 dark:border-white/[0.08] dark:bg-neutral-900 dark:hover:border-white/20 dark:active:bg-white/[0.03]"
             >
               <span className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-neutral-100 text-neutral-500 dark:bg-white/[0.06] dark:text-neutral-400">
                 <Icon size={20} strokeWidth={1.8} />
@@ -425,6 +491,8 @@ export default function NotesView({ notes, onCreate, onUpdate, onDelete, onClose
               tasks={tasks}
               plans={plans}
               onOpenTask={onOpenTask}
+              onCreateTaskFromNote={onCreateTaskFromNote}
+              todayDay={todayDay}
             />
           ) : (
             <EmptyDetail onCreate={() => handleCreate()} />
@@ -436,6 +504,33 @@ export default function NotesView({ notes, onCreate, onUpdate, onDelete, onClose
   }
 
   // ── Mobile: single column, slide between list and editor ─────────────────────
+  if (!motionEnabled) {
+    return (
+      <div className="relative h-full overflow-hidden bg-white dark:bg-neutral-950">
+        {editingNote ? (
+          <div className="absolute inset-0 bg-white dark:bg-neutral-950">
+            <NoteEditor
+              note={editingNote}
+              onUpdate={onUpdate}
+              onDelete={handleDelete}
+              onBack={() => setEditingId(null)}
+              tasks={tasks}
+              plans={plans}
+              onOpenTask={onOpenTask}
+              onCreateTaskFromNote={onCreateTaskFromNote}
+              todayDay={todayDay}
+            />
+          </div>
+        ) : (
+          <div className="absolute inset-0 flex flex-col bg-white dark:bg-neutral-950">
+            {listColumn(null)}
+          </div>
+        )}
+        {templateSheet}
+      </div>
+    );
+  }
+
   return (
     <div className="relative h-full overflow-hidden bg-white dark:bg-neutral-950">
       <AnimatePresence initial={false}>
@@ -456,6 +551,8 @@ export default function NotesView({ notes, onCreate, onUpdate, onDelete, onClose
               tasks={tasks}
               plans={plans}
               onOpenTask={onOpenTask}
+              onCreateTaskFromNote={onCreateTaskFromNote}
+              todayDay={todayDay}
             />
           </m.div>
         ) : (

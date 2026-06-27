@@ -131,10 +131,6 @@ option {
   --radius-pr-lg: 16px;
   --radius-pr-xl: 24px;
 
-  /* Elevation — cards are border-defined & near-flat */
-  --shadow-pr-card: 0 1px 2px rgb(0 0 0 / 0.04);
-  --shadow-pr-nav:  0 0 12px rgb(0 0 0 / 0.10);
-  --shadow-pr-pop:  0 8px 24px rgb(0 0 0 / 0.12);
 }
 
 
@@ -154,8 +150,10 @@ option {
   animation: panel-in 130ms ease-out;
 }
 
-/* Landscape orientation blocker for phones */
-@media (orientation: landscape) and (max-width: 1024px) {
+/* Landscape orientation blocker for phones.
+   `pointer: coarse` restricts this to touch devices so narrow landscape
+   desktop windows (which can't be rotated) are never blocked. */
+@media (orientation: landscape) and (max-width: 1024px) and (pointer: coarse) {
   .landscape-blocker {
     display: flex !important;
   }
@@ -180,30 +178,12 @@ option {
   to   { transform: rotate(360deg); }
 }
 
-.ai-fab-rainbow-ring {
-  background: conic-gradient(
-    from 0deg,
-    #f59e0b, #f97316, #ec4899, #8b5cf6, #3b82f6, #06b6d4, #10b981, #f59e0b
-  );
-  animation: ai-fab-spin 5s linear infinite;
-  border-radius: 9999px;
-}
-
+.ai-fab-rainbow-ring,
 .rainbow-spinner {
   width: 100%;
   height: 100%;
   border-radius: 9999px;
-  background: conic-gradient(
-    from 0deg at 50% 50%,
-    #ff6b6b 0deg,
-    #feca57 45deg,
-    #48dbfb 90deg,
-    #1dd1a1 135deg,
-    #5f27cd 180deg,
-    #ff9ff3 225deg,
-    #54a0ff 270deg,
-    #ff6b6b 360deg
-  );
+  background: #00A63E;
   animation: rainbow-spin 2s linear infinite;
 }
 
@@ -254,8 +234,30 @@ option {
   margin: 0.6rem 0;
 }
 
+.note-editor-shell .note-prose ul {
+  list-style: disc;
+}
+
+.note-editor-shell .note-prose ol {
+  list-style: decimal;
+}
+
 .note-editor-shell .note-prose li {
   margin: 0.2rem 0;
+}
+
+.note-editor-shell .note-prose td ul,
+.note-editor-shell .note-prose th ul,
+.note-editor-shell .note-prose td ol,
+.note-editor-shell .note-prose th ol {
+  margin: 0.25rem 0;
+  padding-left: 1.25rem;
+  list-style-position: outside;
+}
+
+.note-editor-shell .note-prose td li,
+.note-editor-shell .note-prose th li {
+  padding-left: 0.15rem;
 }
 
 .note-editor-shell .note-prose ul[data-type="taskList"] {
@@ -405,65 +407,17 @@ option {
   color: rgb(216 180 254);
 }
 
-/* ── AI promo announcement bar ───────────────────────────────────────────────
-   Three-layer effect: shifting gradient base + fine noise texture + sweep.  */
-
-@keyframes ai-promo-shift {
-  0%   { background-position: 0% 50%; }
-  50%  { background-position: 100% 50%; }
-  100% { background-position: 0% 50%; }
-}
-
-@keyframes ai-promo-sweep {
-  0%   { transform: translateX(-140%) skewX(-12deg); opacity: 0; }
-  10%  { opacity: 1; }
-  90%  { opacity: 1; }
-  100% { transform: translateX(240%) skewX(-12deg); opacity: 0; }
-}
-
-/* Base gradient — slow-shifting purple/violet */
+/* ── AI promo announcement bar ─────────────────────────────────────────────── */
 .ai-promo-bar {
-  background: linear-gradient(
-    110deg,
-    #2e1065,
-    #4c1d95,
-    #5b21b6,
-    #6d28d9,
-    #7c3aed,
-    #8b5cf6,
-    #a78bfa,
-    #8b5cf6,
-    #6d28d9,
-    #4c1d95,
-    #2e1065
-  );
-  background-size: 300% 100%;
-  animation: ai-promo-shift 8s ease infinite;
+  background: #0C4F28;
 }
 
-/* Subtle grain/noise for shader depth — SVG turbulence via data-URI */
 .ai-promo-noise {
-  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='200' height='200'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.75' numOctaves='4' stitchTiles='stitch'/%3E%3CfeColorMatrix type='saturate' values='0'/%3E%3C/filter%3E%3Crect width='200' height='200' filter='url(%23n)' opacity='0.06'/%3E%3C/svg%3E");
-  background-repeat: repeat;
-  background-size: 160px 160px;
-  mix-blend-mode: overlay;
+  background: transparent;
 }
 
-/* Angled shine sweep */
 .ai-promo-sweep::after {
-  content: "";
-  position: absolute;
-  inset: 0;
-  background: linear-gradient(
-    90deg,
-    transparent 0%,
-    rgba(255, 255, 255, 0.08) 30%,
-    rgba(255, 255, 255, 0.22) 50%,
-    rgba(255, 255, 255, 0.08) 70%,
-    transparent 100%
-  );
-  animation: ai-promo-sweep 4s ease-in-out infinite;
-  animation-delay: 1s;
+  content: none;
 }
 
 .calendar-scrollbar-none {
@@ -513,25 +467,7 @@ header {
   }
 }
 
-/* ── Low-end device blur override ───────────────────────────────────────────
-   Devices with low GPU memory can't afford backdrop-filter on every surface.
-   This class is added to <html> by detectLowEndDevice when needed.          */
-
-/* Catch every backdrop-blur variant (-sm/-md/-xl/-lg, plain, arbitrary) in one
-   rule. The header sets backdrop-filter inline; an !important author rule still
-   beats an inline non-important declaration, so `header` reaches it too —
-   otherwise the fixed header keeps re-compositing its blur on every scroll
-   frame even when blur is meant to be off. */
-html.reduce-blur [class*="backdrop-blur"],
-html.reduce-blur header {
-  backdrop-filter: none !important;
-  -webkit-backdrop-filter: none !important;
-}
-
-/* When blur is disabled, restore full opacity so glass surfaces stay readable.
-   `header` covers the app/detail headers; `.glass-surface` is the opt-in marker
-   for non-<header> frosted panels (e.g. the Notes editor toolbar/footer) so they
-   become solid instead of letting scrolling content ghost through at ~88%. */
+/* ── Low-end device solid-surface override ────────────────────────────────── */
 html.reduce-blur header,
 html.reduce-blur .glass-surface {
   background-color: white !important;

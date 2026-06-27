@@ -13,9 +13,9 @@ import {
   IconSparkles,
   IconRefresh,
 } from "@tabler/icons-react";
-import type { Schedule, DayKey } from "@/lib/useScheduleDB";
+import type { Schedule, DayKey, Task } from "@/lib/useScheduleDB";
 import { DAYS, DAY_LABELS } from "@/lib/useScheduleDB";
-import { isTaskCompleted } from "@/lib/taskCompletion";
+import { getTaskSubtaskSummary, isTaskCompleted } from "@/lib/taskCompletion";
 import { calculateConsistency } from "@/lib/planInsights";
 import ProgressBar from "@/components/ui/ProgressBar";
 import { computeTrend } from "@/lib/trendUtils";
@@ -93,6 +93,9 @@ function buildWeeklyContext(
   const today = new Date();
   today.setHours(0, 0, 0, 0);
   const monday = getMondayOf(today);
+  const plansById = new Map(schedule.plans.map((plan) => [plan.id, plan]));
+  const taskItemCount = (task: Task) =>
+    getTaskSubtaskSummary(task, task.planId ? plansById.get(task.planId) ?? null : null).totalCount;
 
   const dayStats = DAYS.map((day, i) => {
     const d = new Date(monday);
@@ -100,7 +103,7 @@ function buildWeeklyContext(
     const dateISO = localISODate(d);
     const tasks = (schedule.activities[day] ?? []).filter((t) => isTaskScheduledOn(t, dateISO, true));
     const total = tasks.length;
-    const done = tasks.filter((t) => isTaskCompleted(t, t.subtasks?.length ?? 0)).length;
+    const done = tasks.filter((t) => isTaskCompleted(t, taskItemCount(t))).length;
     return { day, label: DAY_LABELS[day], total, done, isPastOrToday: d <= today };
   });
 
@@ -329,11 +332,14 @@ function ThisWeekSection({
   }, []);
 
   const dayStats = useMemo(
-    () =>
-      thisWeekDates.map(({ day, date }) => {
+    () => {
+      const plansById = new Map(schedule.plans.map((plan) => [plan.id, plan]));
+      const taskItemCount = (task: Task) =>
+        getTaskSubtaskSummary(task, task.planId ? plansById.get(task.planId) ?? null : null).totalCount;
+      return thisWeekDates.map(({ day, date }) => {
         const tasks = schedule.activities[day] ?? [];
         const total = tasks.length;
-        const done = tasks.filter((t) => isTaskCompleted(t, t.subtasks?.length ?? 0)).length;
+        const done = tasks.filter((t) => isTaskCompleted(t, taskItemCount(t))).length;
         return {
           day,
           label: DAY_LABELS[day],
@@ -342,8 +348,9 @@ function ThisWeekSection({
           isPastOrToday: date <= todayMidnight,
           isToday: day === todayKey,
         };
-      }),
-    [schedule.activities, thisWeekDates, todayMidnight, todayKey]
+      });
+    },
+    [schedule.activities, schedule.plans, thisWeekDates, todayMidnight, todayKey]
   );
 
   const trackedDays = dayStats.filter((d) => d.isPastOrToday);

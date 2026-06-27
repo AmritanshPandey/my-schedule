@@ -50,7 +50,7 @@ export default function EnableIntelligencePrompt({
       animate={{ opacity: 1, y: 0, scale: 1 }}
       exit={{ opacity: 0, y: 8, scale: 0.97 }}
       transition={{ type: "spring", stiffness: 380, damping: 30 }}
-      className="mx-4 mb-4 overflow-hidden rounded-3xl border border-neutral-200 bg-white shadow-sm dark:border-white/[0.08] dark:bg-neutral-900"
+      className="mx-4 mb-4 overflow-hidden rounded-2xl border border-neutral-200 bg-white dark:border-white/[0.08] dark:bg-neutral-900"
     >
       {isDownloading && (
         <div className="h-[3px] w-full bg-neutral-100 dark:bg-white/[0.06]">

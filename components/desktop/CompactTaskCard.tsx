@@ -3,7 +3,7 @@
 import { IconCheck, IconEdit, IconMinus } from "@tabler/icons-react";
 import type { Plan, Task } from "@/lib/useScheduleDB";
 import { accentStyles } from "@/lib/colorSystem";
-import { resolveTaskState } from "@/lib/taskCompletion";
+import { getTaskCheckableItems, getTaskSubtaskSummary, resolveTaskState } from "@/lib/taskCompletion";
 
 interface CompactTaskCardProps {
   task: Task;
@@ -14,8 +14,8 @@ interface CompactTaskCardProps {
 }
 
 export function CompactTaskCard({ task, plan, readOnly = false, onToggleComplete, onEdit }: CompactTaskCardProps) {
-  const allSubtaskIds = task.subtasks?.map((s) => s.id) ?? [];
-  const taskState = resolveTaskState(task, task.subtasks?.length ?? 0);
+  const allSubtaskIds = getTaskCheckableItems(task, plan).map((s) => s.id);
+  const taskState = resolveTaskState(task, getTaskSubtaskSummary(task, plan).totalCount);
   const done = taskState === "completed";
   const partial = taskState === "partial";
   const accent = accentStyles(plan?.color ?? "cyan");

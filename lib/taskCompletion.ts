@@ -7,6 +7,7 @@
  */
 
 import type { Task, TaskCompletionEvent, Plan } from "./useScheduleDB";
+import type { ScheduleEntry } from "@/components/ScheduleItem";
 import { uid } from "./id";
 import { localISODate } from "./dateUtils";
 import { parseTimeToMinutes, currentMinutes } from "./timeUtils";
@@ -96,6 +97,13 @@ export interface TaskSubtaskSummary {
   totalCount: number;
 }
 
+export function getTaskCheckableItems(task: Task, plan: Plan | null): ScheduleEntry[] {
+  const isSession = task.taskType === "session";
+  const subtasks = task.subtasks ?? [];
+  const templateItems = !isSession && subtasks.length === 0 ? plan?.items ?? [] : [];
+  return isSession ? subtasks : subtasks.length > 0 ? subtasks : templateItems;
+}
+
 /**
  * Resolves a task's effective checkable items and their done/total count, with
  * the same precedence the list view uses: a task's own subtasks, else the linked
@@ -104,9 +112,7 @@ export interface TaskSubtaskSummary {
  */
 export function getTaskSubtaskSummary(task: Task, plan: Plan | null): TaskSubtaskSummary {
   const isSession = task.taskType === "session";
-  const subtasks = task.subtasks ?? [];
-  const templateItems = !isSession && subtasks.length === 0 ? plan?.items ?? [] : [];
-  const effectiveItems = isSession ? subtasks : subtasks.length > 0 ? subtasks : templateItems;
+  const effectiveItems = getTaskCheckableItems(task, plan);
   const totalCount = effectiveItems.length;
 
   const completedIds = new Set(task.completedSubtaskIds ?? []);

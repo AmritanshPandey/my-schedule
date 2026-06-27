@@ -398,10 +398,10 @@ export function AIPanel({ ollamaUrl, ollamaModel, context, plans, rituals, activ
   const contextLabel = context === "plans" ? "Plans" : context === "strategy" ? "Strategy" : "Routine";
 
   return (
-    <div className="flex h-full w-full flex-col overflow-hidden rounded-[30px] bg-neutral-950 text-white shadow-[0_40px_120px_rgba(15,23,42,0.35)] ring-1 ring-white/5">
-      <div className="flex h-[76px] shrink-0 items-center justify-between gap-3 border-b border-white/10 bg-neutral-950/95 px-4 shadow-sm shadow-black/10 backdrop-blur">
+    <div className="flex h-full w-full flex-col overflow-hidden rounded-2xl border border-white/10 bg-neutral-950 text-white">
+      <div className="flex h-[76px] shrink-0 items-center justify-between gap-3 border-b border-white/10 bg-neutral-950 px-4">
         <div className="flex items-center gap-3">
-          <div className="flex h-10 w-10 items-center justify-center rounded-3xl bg-blue-500/10 ring-1 ring-blue-500/15 dark:bg-blue-500/10">
+          <div className="flex h-10 w-10 items-center justify-center rounded-2xl border border-blue-500/15 bg-blue-500/10 dark:bg-blue-500/10">
             <IconSparkles size={18} strokeWidth={2} className="text-blue-600 dark:text-blue-300" />
           </div>
           <div className="min-w-0">
@@ -487,7 +487,7 @@ export function AIPanel({ ollamaUrl, ollamaModel, context, plans, rituals, activ
                 initial={{ scale: 0.7, opacity: 0 }}
                 animate={{ scale: 1, opacity: 1 }}
                 transition={{ delay: 0.05, type: "spring", stiffness: 260, damping: 20 }}
-                className="flex h-11 w-11 items-center justify-center rounded-3xl bg-white/10 ring-1 ring-white/10"
+                className="flex h-11 w-11 items-center justify-center rounded-2xl border border-white/10 bg-white/10"
               >
                 <IconBrain size={20} strokeWidth={1.5} className="text-white" />
               </m.div>
@@ -513,7 +513,7 @@ export function AIPanel({ ollamaUrl, ollamaModel, context, plans, rituals, activ
                     disabled={streaming}
                     whileHover={streaming ? {} : { x: 2 }}
                     whileTap={{ scale: 0.98 }}
-                    className="flex items-center justify-between rounded-full border border-white/10 bg-white/5 px-4 py-3 text-left text-[13px] font-medium text-white shadow-sm shadow-black/20 transition hover:border-white/20 hover:bg-white/10"
+                    className="flex items-center justify-between rounded-full border border-white/10 bg-white/5 px-4 py-3 text-left text-[13px] font-medium text-white transition hover:border-white/20 hover:bg-white/10"
                   >
                     <span className="flex items-center gap-3">
                       <span className="inline-flex h-9 w-9 items-center justify-center rounded-full bg-white/10 text-white">
@@ -543,8 +543,8 @@ export function AIPanel({ ollamaUrl, ollamaModel, context, plans, rituals, activ
         {messages.map((msg, i) => {
           const isStreamingThis = streaming && i === messages.length - 1 && msg.role === "assistant";
           const bubbleClass = msg.role === "user"
-            ? "ml-auto rounded-[26px] rounded-br-[10px] bg-blue-600 text-white shadow-blue-600/20"
-            : "mr-auto rounded-[26px] rounded-bl-[10px] border border-white/10 bg-white/5 text-white shadow-black/20";
+            ? "ml-auto rounded-2xl rounded-br-[10px] bg-blue-600 text-white"
+            : "mr-auto rounded-2xl rounded-bl-[10px] border border-white/10 bg-white/5 text-white";
           return (
             <m.div
               key={i}
@@ -554,7 +554,7 @@ export function AIPanel({ ollamaUrl, ollamaModel, context, plans, rituals, activ
               className={`mb-3 flex ${msg.role === "user" ? "justify-end" : "justify-start"}`}
             >
               <div className={`max-w-[85%] ${msg.role === "user" ? "items-end" : "items-start"} flex flex-col`}>
-                <div className={`rounded-[26px] px-4 py-3 text-[13px] leading-relaxed ${bubbleClass}`}>
+                <div className={`rounded-2xl px-4 py-3 text-[13px] leading-relaxed ${bubbleClass}`}>
                   {msg.role === "user" ? (
                     msg.text
                   ) : msg.text ? (
@@ -584,9 +584,8 @@ export function AIPanel({ ollamaUrl, ollamaModel, context, plans, rituals, activ
       {/* Input */}
       <div className="shrink-0 border-t border-white/10 px-3 py-3">
         <m.div
-          animate={focused ? { boxShadow: "0 0 0 2px rgba(59,130,246,0.16)" } : { boxShadow: "0 0 0 0px rgba(59,130,246,0)" }}
           transition={{ duration: 0.15 }}
-          className="flex items-center gap-2 rounded-[28px] border border-white/10 bg-white/5 px-3 py-2 shadow-sm shadow-black/20 transition-colors"
+          className={`flex items-center gap-2 rounded-full border bg-white/5 px-3 py-2 transition-colors ${focused ? "border-blue-500/30" : "border-white/10"}`}
           style={{ borderColor: focused ? "rgba(59,130,246,0.25)" : undefined }}
         >
           <textarea

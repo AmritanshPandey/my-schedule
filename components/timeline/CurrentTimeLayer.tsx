@@ -49,7 +49,7 @@ function CurrentTimeLayerInner({
         <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-red-400 opacity-60" />
         <span className="relative h-2 w-2 rounded-full bg-red-500" />
       </div>
-      <div className="h-[1.5px] flex-1 bg-gradient-to-r from-red-500 via-red-500/60 to-transparent" />
+      <div className="h-[1.5px] flex-1 bg-red-500" />
     </div>
   );
 }

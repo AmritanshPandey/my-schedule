@@ -448,7 +448,7 @@ export default function AIAssistant({
       {/* ── Header ─────────────────────────────────────────────────────────── */}
       <div className="flex shrink-0 items-center justify-between px-5 pt-5 pb-4">
         <div className="flex items-center gap-2.5">
-          <div className="flex h-8 w-8 items-center justify-center rounded-xl bg-[#AD46FF] shadow-sm">
+          <div className="flex h-8 w-8 items-center justify-center rounded-xl border border-violet-500 bg-[#AD46FF]">
             <IconSparkles size={15} strokeWidth={2} className="text-white" />
           </div>
           <span className="text-[15px] font-bold text-neutral-900 dark:text-white tracking-[-0.2px]">
@@ -514,7 +514,7 @@ export default function AIAssistant({
         </AnimatePresence>
 
         {/* Input card */}
-        <div className="mb-5 rounded-2xl border border-neutral-200 bg-white shadow-sm dark:border-white/[0.08] dark:bg-neutral-900/60">
+        <div className="mb-5 rounded-2xl border border-neutral-200 bg-white dark:border-white/[0.08] dark:bg-neutral-900/60">
 
           {/* Plan context chip */}
           <div className="border-b border-neutral-100 px-3.5 pt-3 pb-2.5 dark:border-white/[0.05]">
@@ -548,7 +548,7 @@ export default function AIAssistant({
                     animate={{ opacity: 1, y: 0, scale: 1 }}
                     exit={{ opacity: 0, y: -4, scale: 0.97 }}
                     transition={{ duration: 0.12 }}
-                    className="absolute left-0 top-full z-20 mt-1.5 w-[220px] overflow-hidden rounded-xl border border-neutral-200 bg-white shadow-lg dark:border-white/[0.08] dark:bg-neutral-900"
+                    className="absolute left-0 top-full z-20 mt-1.5 w-[220px] overflow-hidden rounded-xl border border-neutral-200 bg-white dark:border-white/[0.08] dark:bg-neutral-900"
                   >
                     {plans.length === 0 ? (
                       <p className="px-3 py-3 text-[12px] text-neutral-400">No plans yet</p>
@@ -612,7 +612,7 @@ export default function AIAssistant({
               onClick={handleSend}
               disabled={!customGoal.trim() || !selectedPlan}
               whileTap={{ scale: 0.9 }}
-              className="flex h-8 w-8 items-center justify-center rounded-full bg-emerald-500 text-white shadow-sm shadow-emerald-500/30 transition-opacity disabled:opacity-30 hover:bg-emerald-600"
+              className="flex h-8 w-8 items-center justify-center rounded-full bg-emerald-500 text-white transition-opacity hover:bg-emerald-600 disabled:opacity-30"
             >
               <IconSend size={13} strokeWidth={2.5} />
             </m.button>

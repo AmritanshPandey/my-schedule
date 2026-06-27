@@ -7,6 +7,7 @@ import AddEntryModal from "@/components/AddEntryModal";
 import { TaskBlockCard } from "@/components/TaskBlockCard";
 import type { TaskSaveData } from "@/components/task/TaskSheet";
 import type { MilestoneSaveData } from "@/components/plan/MilestoneSheet";
+import type { CreateTaskFromNoteInput } from "@/components/notes/NotesView";
 import { PlanCard } from "@/components/plan/PlanCard";
 import AppHeader from "@/components/AppHeader";
 import BottomNav from "@/components/BottomNav";
@@ -31,6 +32,7 @@ const NotesView = dynamic(() => import("@/components/notes/NotesView"), { ssr: f
 const TemplatesSheet = dynamic(() => import("@/components/TemplatesSheet").then(m => ({ default: m.TemplatesSheet })), { ssr: false });
 const SessionSheet = dynamic(() => import("@/components/activity/SessionSheet"), { ssr: false });
 const SubtasksSheet = dynamic(() => import("@/components/activity/SubtasksSheet"), { ssr: false });
+const TaskDetailView = dynamic(() => import("@/components/activity/TaskDetailView"), { ssr: false });
 const BulkImportSheet = dynamic(() => import("@/components/BulkImportSheet"), { ssr: false });
 const RitualView = dynamic(() => import("@/components/activity/RitualView"), { ssr: false });
 const OverviewDashboard = dynamic(() => import("@/components/OverviewDashboard"), { ssr: false });
@@ -105,6 +107,8 @@ import {
   isTaskCompleted,
   isTaskResolved,
   resolveTaskState,
+  getTaskCheckableItems,
+  getTaskSubtaskSummary,
 } from "@/lib/taskCompletion";
 import {
   applyTaskDelete,
@@ -173,6 +177,15 @@ const JS_DAYS = [
   "saturday",
 ] as const;
 
+function quickTaskTimeRange(now = new Date()): { startTime: string; endTime: string } {
+  const current = now.getHours() * 60 + now.getMinutes();
+  const start = Math.min(23 * 60 + 30, Math.ceil(current / 15) * 15);
+  return {
+    startTime: minutesToDisplayTime(start),
+    endTime: minutesToDisplayTime(start + 15),
+  };
+}
+
 function NoopPresence({ children }: { children: ReactNode; mode?: string; initial?: boolean }) {
   return <>{children}</>;
 }
@@ -209,7 +222,10 @@ function IOSSafeDashboard({
   onToggleSubtask: (taskId: string, subtaskId: string) => void;
   onOpenSubtasks: (task: Task) => void;
 }) {
-  const done = todayTasks.filter((task) => isTaskCompleted(task, task.subtasks?.length ?? 0)).length;
+  const done = todayTasks.filter((task) => {
+    const linkedPlan = task.planId ? plansById.get(task.planId) ?? null : null;
+    return isTaskCompleted(task, getTaskSubtaskSummary(task, linkedPlan).totalCount);
+  }).length;
   const total = todayTasks.length;
   const plans = schedule.plans.length;
   const rituals = schedule.rituals?.length ?? 0;
@@ -367,7 +383,7 @@ const TimelineTaskBlock = memo(function TimelineTaskBlock({
           variant="grid"
           task={layout.task}
           plan={plan}
-          state={resolveTaskState(layout.task, layout.task.subtasks?.length ?? 0)}
+          state={resolveTaskState(layout.task, getTaskSubtaskSummary(layout.task, plan).totalCount)}
           duration={formatTaskDuration(layout.task.startTime, layout.task.endTime)}
           readOnly={!isViewingToday}
           minimal={cardSize === "xsmall"}
@@ -491,7 +507,10 @@ function WeekSummary({
           isToday ? task : { ...task, ...completionForDate(task, dateISO) }
         );
         const total = tasks.length;
-        const done = tasks.filter((t) => isTaskCompleted(t, t.subtasks?.length ?? 0)).length;
+        const done = tasks.filter((t) => {
+          const linkedPlan = t.planId ? schedule.plans.find((plan) => plan.id === t.planId) ?? null : null;
+          return isTaskCompleted(t, getTaskSubtaskSummary(t, linkedPlan).totalCount);
+        }).length;
         return {
           day,
           label: DAY_LABELS[day],
@@ -628,6 +647,9 @@ export default function ScheduleApp() {
   const [customDays, setCustomDays] = useState<DayKey[]>(["monday", "wednesday", "friday"]);
 
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+  const [isDesktopViewport, setIsDesktopViewport] = useState(
+    () => typeof window !== "undefined" && window.matchMedia("(min-width: 1024px)").matches,
+  );
 
   const [taskSheetInitialType, setTaskSheetInitialType] = useState<"task" | "session">("task");
   const [taskSheetInitialStartTime, setTaskSheetInitialStartTime] = useState("");
@@ -759,6 +781,14 @@ export default function ScheduleApp() {
   useEffect(() => {
     hasUserScrolledTimelineRef.current = false;
   }, [activeDay]);
+
+  useEffect(() => {
+    const mq = window.matchMedia("(min-width: 1024px)");
+    setIsDesktopViewport(mq.matches);
+    const handler = (event: MediaQueryListEvent) => setIsDesktopViewport(event.matches);
+    mq.addEventListener("change", handler);
+    return () => mq.removeEventListener("change", handler);
+  }, []);
 
   useEffect(() => {
     if (!toastState) return;
@@ -1266,7 +1296,8 @@ export default function ScheduleApp() {
           ...prev.activities,
           [day]: (prev.activities[day] ?? []).map((t) => {
             if (t.id !== taskId) return t;
-            const totalSubtasks = t.subtasks?.length ?? 0;
+            const linkedPlan = t.planId ? prev.plans.find((plan) => plan.id === t.planId) ?? null : null;
+            const totalSubtasks = getTaskSubtaskSummary(t, linkedPlan).totalCount;
             return { ...t, ...toggleSubtaskComplete(t, subtaskId, totalSubtasks) };
           }),
         },
@@ -1399,6 +1430,39 @@ export default function ScheduleApp() {
 
   function handleDeleteNote(id: string) {
     setSchedule((prev) => ({ ...prev, notes: (prev.notes ?? []).filter((n) => n.id !== id) }));
+  }
+
+  function handleCreateTaskFromNote(input: CreateTaskFromNoteInput): string | undefined {
+    const current = scheduleRef.current;
+    const note = current.notes.find((item) => item.id === input.noteId);
+    const linkedPlanId = note?.linkedTaskIds
+      ?.map((taskId) => DAYS.flatMap((day) => current.activities[day] ?? []).find((task) => task.id === taskId)?.planId)
+      .find(Boolean);
+    const plan = current.plans.find((item) => item.id === (input.planId ?? linkedPlanId)) ?? current.plans[0];
+    if (!plan) {
+      setToastMessage("Create a plan first");
+      return undefined;
+    }
+    const id = uid();
+    const task: Task = {
+      id,
+      title: input.title,
+      description: "Created from note",
+      ...quickTaskTimeRange(),
+      icon: plan.emoji,
+      color: plan.color,
+      planId: plan.id,
+      taskType: "task",
+    };
+    setSchedule((prev) => ({
+      ...prev,
+      activities: {
+        ...prev.activities,
+        [input.day]: [...(prev.activities[input.day] ?? []), task],
+      },
+    }));
+    setToastMessage("Added to Today");
+    return id;
   }
 
   // De-duplicated tasks (recurring tasks share an id across weekdays) for the
@@ -1886,7 +1950,7 @@ export default function ScheduleApp() {
     openEditSheet,
     toggleTask: (task: Task) => {
       haptic("light");
-      handleToggleTaskComplete(task.id, task.subtasks?.map((s) => s.id) ?? [], activeDay, activeDateISO);
+      handleToggleTaskComplete(task.id, taskEffectiveItemIds(task), activeDay, activeDateISO);
     },
     setDragCreate,
     setDragMove,
@@ -1973,6 +2037,21 @@ export default function ScheduleApp() {
     return m;
   }, [schedule.plans]);
 
+  const taskEffectiveItemCount = useCallback(
+    (task: Task) => {
+      const linkedPlan = task.planId ? plansById.get(task.planId) ?? null : null;
+      return getTaskSubtaskSummary(task, linkedPlan).totalCount;
+    },
+    [plansById]
+  );
+  const taskEffectiveItemIds = useCallback(
+    (task: Task) => {
+      const linkedPlan = task.planId ? plansById.get(task.planId) ?? null : null;
+      return getTaskCheckableItems(task, linkedPlan).map((item) => item.id);
+    },
+    [plansById]
+  );
+
   // Trackers to surface on Today tab — only plans with an active milestone, or plans with no milestones at all
   const activePlanTrackers = useMemo(() => {
     const activePlanIds = new Set(
@@ -1990,10 +2069,10 @@ export default function ScheduleApp() {
   const dayProgress = useMemo(() => {
     const total = dayTasksView.length;
     const done = dayTasksView.filter((t) =>
-      isTaskCompleted(t, t.subtasks?.length ?? 0)
+      isTaskCompleted(t, taskEffectiveItemCount(t))
     ).length;
     return { done, total, pct: total > 0 ? Math.round((done / total) * 100) : 0 };
-  }, [dayTasksView]);
+  }, [dayTasksView, taskEffectiveItemCount]);
 
   // ── Today Command Center derived data ──────────────────────────────────────
 
@@ -2065,8 +2144,8 @@ export default function ScheduleApp() {
       Skips both completed and missed tasks. */
   const nextTask = useMemo(() => {
     if (activeDay !== todayKey) return null;
-    return dayTasks.find((t) => !isTaskResolved(t, t.subtasks?.length ?? 0)) ?? null;
-  }, [dayTasks, activeDay, todayKey]);
+    return dayTasks.find((t) => !isTaskResolved(t, taskEffectiveItemCount(t))) ?? null;
+  }, [dayTasks, activeDay, todayKey, taskEffectiveItemCount]);
 
   /** Rituals due on the active day (for summary line) */
   const todayDueRituals = useMemo(
@@ -2176,9 +2255,9 @@ export default function ScheduleApp() {
   const handleTimelineToggle = useCallback(
     (task: Task) => {
       haptic("light");
-      handleToggleTaskComplete(task.id, task.subtasks?.map((s) => s.id) ?? [], activeDay, activeDateISO);
+      handleToggleTaskComplete(task.id, taskEffectiveItemIds(task), activeDay, activeDateISO);
     },
-    [handleToggleTaskComplete, activeDay, activeDateISO]
+    [handleToggleTaskComplete, taskEffectiveItemIds, activeDay, activeDateISO]
   );
 
   const timelineTaskLayouts = useMemo(() => {
@@ -2262,8 +2341,9 @@ export default function ScheduleApp() {
     // week grid + the mobile list). Size tiers map to its grid variants.
     const { linkedPlan } = getTaskPresentation(task);
     const duration = formatTaskDuration(task.startTime, task.endTime);
-    const allSubtaskIds = task.subtasks?.map((i) => i.id) ?? [];
-    const taskState = resolveTaskState(task, task.subtasks?.length ?? 0);
+    const subtaskSummary = getTaskSubtaskSummary(task, linkedPlan);
+    const allSubtaskIds = subtaskSummary.hasItems ? getTaskCheckableItems(task, linkedPlan).map((i) => i.id) : [];
+    const taskState = resolveTaskState(task, subtaskSummary.totalCount);
     const toggle = () => { haptic("light"); handleToggleTaskComplete(task.id, allSubtaskIds, activeDay, activeDateISO); };
     void cardClassName; void isOvernight; void isTruncated;
 
@@ -2298,7 +2378,7 @@ export default function ScheduleApp() {
   ) {
     const { linkedPlan } = getTaskPresentation(task);
     const duration = formatTaskDuration(task.startTime, task.endTime);
-    const taskState = resolveTaskState(task, task.subtasks?.length ?? 0);
+    const taskState = resolveTaskState(task, getTaskSubtaskSummary(task, linkedPlan).totalCount);
     return (
       <TaskBlockCard
         variant="grid"
@@ -2320,111 +2400,157 @@ export default function ScheduleApp() {
   // ─── Plan list ─────────────────────────────────────────────────────────────
 
   function renderPlanList() {
-    const planStatsList = schedule.plans.map((p) =>
-      getPlanCardStats(p, schedule.activities, todayKey)
-    );
-    const onTrackCount = planStatsList.filter(
-      (s) => s.consistency >= 70 || s.dayState === "complete"
+    const planRows = schedule.plans.map((plan) => {
+      const uniqueTasks = getUniquePlanTasks(plan.id);
+      const trackerCount = schedule.progressTrackers.filter((t) => t.planId === plan.id).length;
+      const planIconEntry = SECTION_ICONS.find((e) => e.name === plan.emoji) ?? SECTION_ICONS[0];
+      const stats = getPlanCardStats(plan, schedule.activities, todayKey);
+      const dateRange = plan.startDate || plan.endDate ? formatPlanRange(plan) : null;
+      const firstTracker = schedule.progressTrackers.find((t) => t.planId === plan.id);
+      return { plan, uniqueTasks, trackerCount, planIconEntry, stats, dateRange, firstTracker };
+    });
+    const onTrackCount = planRows.filter(
+      ({ stats }) => stats.consistency >= 70 || stats.dayState === "complete"
     ).length;
-    const atRiskCount = planStatsList.filter(
-      (s) => s.consistency >= 35 && s.consistency < 70
+    const atRiskCount = planRows.filter(
+      ({ stats }) => stats.consistency >= 35 && stats.consistency < 70
     ).length;
-    const needsWorkCount = planStatsList.filter((s) => s.consistency < 35).length;
+    const needsWorkCount = planRows.filter(({ stats }) => stats.consistency < 35).length;
     const needsFocusCount = atRiskCount + needsWorkCount;
+    const totalPlanTasks = planRows.reduce((sum, row) => sum + row.uniqueTasks.length, 0);
+    const totalTrackers = planRows.reduce((sum, row) => sum + row.trackerCount, 0);
+    const topPlan = planRows.length > 0
+      ? [...planRows].sort((a, b) => b.stats.consistency - a.stats.consistency)[0]
+      : null;
 
     return (
-      <div className="px-4 pt-5 pb-8 lg:mx-auto lg:max-w-4xl lg:px-8 lg:pt-6 lg:pb-10">
-        {/* Header */}
-        <MainTitleSection
-          label="Stay on track"
-          title="My Plans"
-          actions={
-            <CtaActionButton
-              label="Add New Plan"
-              icon={<IconPlus size={14} strokeWidth={2.5} />}
-              onClick={() => setAddingPlan(true)}
-            />
-          }
-          className="mb-6"
-        />
-
-        {/* Desktop stat strip */}
-        {schedule.plans.length > 0 && (
-          <div className="mb-5 hidden grid-cols-3 gap-3 lg:grid">
-            <StatTile icon={IconClipboardData} value={schedule.plans.length} label="Total Plans" />
-            <StatTile icon={IconCheck} value={onTrackCount} label="On Track" />
-            <StatTile icon={IconAlertCircle} value={needsFocusCount} label="Needs Focus" />
-          </div>
-        )}
-
-        {/* Empty state */}
-        {schedule.plans.length === 0 && (
-          <EmptyState
-            icon={IconClipboardList}
-            title="No plans yet"
-            description="Start from scratch or pick a template with tasks and milestones ready to go."
-            action={{ label: "New Plan", onClick: () => setAddingPlan(true) }}
-            secondaryAction={{ label: "Browse templates", onClick: () => setTemplatesOpen(true) }}
-          />
-        )}
-
-        {/* Plan cards */}
-        <div className="space-y-3">
-          {schedule.plans.length > 0 && (
-            <button
-              type="button"
-              onClick={() => setTemplatesOpen(true)}
-              className="w-full rounded-2xl border border-dashed border-neutral-200 py-3 text-[13px] font-semibold text-neutral-400 transition-colors hover:border-neutral-300 hover:text-neutral-600 dark:border-white/10 dark:text-neutral-500 dark:hover:border-white/20 dark:hover:text-neutral-300 lg:hidden"
-            >
-              + Browse example templates
-            </button>
-          )}
-          {schedule.plans.map((plan) => {
-            const uniqueTasks = getUniquePlanTasks(plan.id);
-            const trackerCount = schedule.progressTrackers.filter(
-              (t) => t.planId === plan.id
-            ).length;
-            const planIconEntry =
-              SECTION_ICONS.find((e) => e.name === plan.emoji) ?? SECTION_ICONS[0];
-            const { dayState, consistency } = getPlanCardStats(
-              plan,
-              schedule.activities,
-              todayKey
-            );
-            const dateRange =
-              plan.startDate || plan.endDate ? formatPlanRange(plan) : null;
-
-            const firstTracker = schedule.progressTrackers.find(
-              (t) => t.planId === plan.id
-            );
-            return (
-              <PlanCard
-                key={plan.id}
-                plan={plan}
-                PlanIcon={planIconEntry.icon}
-                taskCount={uniqueTasks.length}
-                trackerCount={trackerCount}
-                dayState={dayState}
-                consistency={consistency}
-                dateRange={dateRange}
-                onSelect={() => { haptic("light"); setSelectedPlanId(plan.id); }}
-                onQuickLog={firstTracker ? () => setEntryTracker(firstTracker) : undefined}
-                onDelete={() => handleDeletePlan(plan.id)}
+      <div className="px-4 pb-8 pt-5 lg:px-8 lg:pb-10 lg:pt-6 xl:px-10">
+        <div className="mx-auto w-full max-w-[1500px]">
+          {/* Header */}
+          <MainTitleSection
+            label="Stay on track"
+            title="My Plans"
+            actions={
+              <CtaActionButton
+                label="Add New Plan"
+                icon={<IconPlus size={14} strokeWidth={2.5} />}
+                onClick={() => setAddingPlan(true)}
               />
-            );
-          })}
-        </div>
+            }
+            className="mb-6"
+          />
 
-        {/* Desktop-only template link */}
-        {schedule.plans.length > 0 && (
-          <button
-            type="button"
-            onClick={() => setTemplatesOpen(true)}
-            className="hidden lg:flex mt-5 w-full items-center justify-center rounded-2xl border border-dashed border-neutral-200 py-3 text-[13px] font-semibold text-neutral-400 transition-colors hover:border-neutral-300 hover:text-neutral-600 dark:border-white/10 dark:text-neutral-500 dark:hover:border-white/20 dark:hover:text-neutral-300"
-          >
-            + Browse example templates
-          </button>
-        )}
+          {/* Stat strip */}
+          {schedule.plans.length > 0 && (
+            <div className="mb-5 grid grid-cols-2 gap-3 lg:grid-cols-4">
+              <StatTile icon={IconClipboardData} value={schedule.plans.length} label="Total Plans" />
+              <StatTile icon={IconCheck} value={onTrackCount} label="On Track" />
+              <StatTile icon={IconAlertCircle} value={needsFocusCount} label="Needs Focus" />
+              <StatTile icon={IconChecklist} value={totalPlanTasks} label="Planned Tasks" />
+            </div>
+          )}
+
+          {/* Empty state */}
+          {schedule.plans.length === 0 && (
+            <EmptyState
+              icon={IconClipboardList}
+              title="No plans yet"
+              description="Start from scratch or pick a template with tasks and milestones ready to go."
+              action={{ label: "New Plan", onClick: () => setAddingPlan(true) }}
+              secondaryAction={{ label: "Browse templates", onClick: () => setTemplatesOpen(true) }}
+            />
+          )}
+
+          {schedule.plans.length > 0 && (
+            <div className="grid gap-5 xl:grid-cols-[minmax(0,1fr)_320px]">
+              <section className="min-w-0">
+                <div className="mb-3 flex items-center justify-between gap-3">
+                  <div>
+                    <h2 className="text-[17px] font-extrabold text-neutral-950 dark:text-white">Plan health</h2>
+                    <p className="mt-0.5 text-[13px] font-medium text-neutral-400 dark:text-neutral-500">
+                      {onTrackCount} on track · {needsFocusCount} need focus
+                    </p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setTemplatesOpen(true)}
+                    className="hidden shrink-0 rounded-xl border border-neutral-200 px-3 py-2 text-[12px] font-semibold text-neutral-500 transition-colors hover:bg-neutral-50 hover:text-neutral-800 dark:border-white/[0.10] dark:text-neutral-400 dark:hover:bg-white/[0.06] dark:hover:text-neutral-200 lg:inline-flex"
+                  >
+                    Templates
+                  </button>
+                </div>
+
+                <button
+                  type="button"
+                  onClick={() => setTemplatesOpen(true)}
+                  className="mb-3 w-full rounded-2xl border border-dashed border-neutral-200 py-3 text-[13px] font-semibold text-neutral-400 transition-colors hover:border-neutral-300 hover:text-neutral-600 dark:border-white/10 dark:text-neutral-500 dark:hover:border-white/20 dark:hover:text-neutral-300 lg:hidden"
+                >
+                  + Browse example templates
+                </button>
+
+                <div className="grid gap-3 lg:grid-cols-2">
+                  {planRows.map(({ plan, uniqueTasks, trackerCount, planIconEntry, stats, dateRange, firstTracker }) => (
+                    <PlanCard
+                      key={plan.id}
+                      plan={plan}
+                      PlanIcon={planIconEntry.icon}
+                      taskCount={uniqueTasks.length}
+                      trackerCount={trackerCount}
+                      dayState={stats.dayState}
+                      consistency={stats.consistency}
+                      dateRange={dateRange}
+                      onSelect={() => { haptic("light"); setSelectedPlanId(plan.id); }}
+                      onQuickLog={firstTracker ? () => setEntryTracker(firstTracker) : undefined}
+                      onDelete={() => handleDeletePlan(plan.id)}
+                    />
+                  ))}
+                </div>
+              </section>
+
+              <aside className="hidden min-w-0 space-y-3 xl:block">
+                <div className="rounded-2xl border border-neutral-200 bg-white p-4 dark:border-white/[0.08] dark:bg-neutral-900">
+                  <p className="text-[11px] font-semibold uppercase tracking-[0.08em] text-neutral-400 dark:text-neutral-500">
+                    Today&apos;s signal
+                  </p>
+                  <p className="mt-2 text-[24px] font-black leading-none text-neutral-950 dark:text-white">
+                    {needsFocusCount > 0 ? `${needsFocusCount} need focus` : "All steady"}
+                  </p>
+                  <p className="mt-2 text-[13px] leading-relaxed text-neutral-500 dark:text-neutral-400">
+                    {topPlan
+                      ? `${topPlan.plan.title} is your strongest plan at ${topPlan.stats.consistency}% consistency.`
+                      : "Create a plan to start tracking execution."}
+                  </p>
+                </div>
+
+                <div className="rounded-2xl border border-neutral-200 bg-white p-4 dark:border-white/[0.08] dark:bg-neutral-900">
+                  <p className="text-[11px] font-semibold uppercase tracking-[0.08em] text-neutral-400 dark:text-neutral-500">
+                    System totals
+                  </p>
+                  <div className="mt-3 space-y-2">
+                    <div className="flex items-center justify-between border-b border-neutral-100 pb-2 dark:border-white/[0.06]">
+                      <span className="text-[13px] font-semibold text-neutral-500 dark:text-neutral-400">Planned tasks</span>
+                      <span className="text-[13px] font-black tabular-nums text-neutral-950 dark:text-white">{totalPlanTasks}</span>
+                    </div>
+                    <div className="flex items-center justify-between border-b border-neutral-100 pb-2 dark:border-white/[0.06]">
+                      <span className="text-[13px] font-semibold text-neutral-500 dark:text-neutral-400">Trackers</span>
+                      <span className="text-[13px] font-black tabular-nums text-neutral-950 dark:text-white">{totalTrackers}</span>
+                    </div>
+                    <div className="flex items-center justify-between">
+                      <span className="text-[13px] font-semibold text-neutral-500 dark:text-neutral-400">Templates</span>
+                      <button
+                        type="button"
+                        onClick={() => setTemplatesOpen(true)}
+                        className="text-[13px] font-bold text-neutral-950 transition-colors hover:text-neutral-600 dark:text-white dark:hover:text-neutral-300"
+                      >
+                        Browse
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              </aside>
+            </div>
+          )}
+        </div>
       </div>
     );
   }
@@ -2438,9 +2564,20 @@ export default function ScheduleApp() {
     : isGuest
     ? "Guest mode"
     : user?.displayName || user?.email || "Signed in";
+  const subtasksRawTask = subtasksRef
+    ? (schedule.activities[subtasksRef.day] ?? []).find((task) => task.id === subtasksRef.id) ?? null
+    : null;
+  const subtasksResolvedTask = subtasksRawTask && subtasksRef
+    ? resolveOccurrence(subtasksRawTask, subtasksRef.dateISO)
+    : subtasksRawTask;
+  const subtasksDetailTask = subtasksResolvedTask && subtasksRef && subtasksRef.dateISO !== todayISO()
+    ? { ...subtasksResolvedTask, ...completionForDate(subtasksRawTask!, subtasksRef.dateISO) }
+    : subtasksResolvedTask;
+  const subtasksLinkedPlan = subtasksDetailTask?.planId ? plansById.get(subtasksDetailTask.planId) ?? null : null;
+  const showMobileTaskDetailPage = !!subtasksRef && !isDesktopViewport;
 
   return (
-    <main className="min-h-dvh bg-[#F5F5F5] text-neutral-900 dark:bg-[#111111] dark:text-white lg:flex lg:h-dvh lg:gap-4 lg:overflow-hidden lg:p-4">
+    <main className="min-h-dvh bg-[#F3F4F1] text-neutral-900 dark:bg-[#0E0E0E] dark:text-white lg:flex lg:h-dvh lg:gap-4 lg:overflow-hidden lg:p-4">
 
       {/* ── Desktop sidebar (hidden on mobile) ─────────────────────────────── */}
       {!iosSafeMode && (
@@ -2466,7 +2603,7 @@ export default function ScheduleApp() {
 
       {/* ── Header (mobile only) ────────────────────────────────────────────── */}
       <div className="lg:hidden">
-        {selectedPlan ? (
+        {showMobileTaskDetailPage ? null : selectedPlan ? (
           <AppHeader
             back={{ label: "Plans", onBack: () => setSelectedPlanId(null) }}
             actions={[
@@ -2517,7 +2654,28 @@ export default function ScheduleApp() {
       {/* paddingTop offsets the fixed header (64px) + iOS safe-area inset — mobile only.
           (Tailwind arbitrary value so `lg:pt-0` can actually override it; an inline
           style would win over the breakpoint and leave a phantom gap on desktop.) */}
-      {activeTab === 6 ? (
+      {showMobileTaskDetailPage ? (
+        <div
+          className="h-dvh bg-white dark:bg-neutral-950 lg:hidden"
+          style={{ paddingTop: "env(safe-area-inset-top, 0px)" }}
+        >
+          <TaskDetailView
+            task={subtasksDetailTask}
+            linkedPlan={subtasksLinkedPlan}
+            readOnly={!!subtasksRef && subtasksRef.dateISO !== todayISO()}
+            onClose={() => setSubtasksRef(null)}
+            onToggleSubtask={(taskId, subId) => handleToggleSubtask(taskId, subId, subtasksRef?.day, subtasksRef?.dateISO)}
+            onToggleComplete={(taskId, ids) => handleToggleTaskComplete(taskId, ids, subtasksRef?.day, subtasksRef?.dateISO)}
+            onMissed={(taskId, ids) => handleMarkTaskMissed(taskId, ids, subtasksRef?.day, subtasksRef?.dateISO)}
+            onSnooze={(taskId) => handleSnoozeTaskLater(taskId, subtasksRef?.day, subtasksRef?.dateISO)}
+            onSkip={(taskId) => handleSkipOccurrence(taskId, subtasksRef?.dateISO)}
+            skipped={!!(subtasksRef && subtasksRawTask?.exceptions?.[subtasksRef.dateISO]?.skipped)}
+            canSkip={!!subtasksRef && subtasksRef.dateISO >= todayISO()}
+            onEdit={subtasksRawTask ? () => { openEditSheet(subtasksRawTask, subtasksRef?.dateISO); setSubtasksRef(null); } : undefined}
+            presentation="page"
+          />
+        </div>
+      ) : activeTab === 6 ? (
         // Notes lives inside the layout: a framed panel beside the sidebar on
         // desktop, a full-screen page on mobile.
         <div
@@ -2534,6 +2692,9 @@ export default function ScheduleApp() {
               tasks={notesLinkableTasks}
               plans={schedule.plans}
               onOpenTask={handleOpenLinkedTask}
+              onCreateTaskFromNote={handleCreateTaskFromNote}
+              todayDateISO={todayISO()}
+              disableMotion={iosSafeMode}
             />
           </ErrorBoundary>
         </div>
@@ -2978,7 +3139,7 @@ export default function ScheduleApp() {
                               >
                                 {renderTimelineTaskCard(
                                   { ...movingTask, startTime: minutesToDisplayTime(dragMove.previewStartMin), endTime: minutesToDisplayTime(dragMove.previewStartMin + dragMove.durationMin) },
-                                  "h-full rounded-[8px] px-2 py-1.5 w-full min-w-0 overflow-hidden shadow-2xl ring-1 ring-black/10 dark:ring-white/10",
+                                  "h-full rounded-[8px] px-2 py-1.5 w-full min-w-0 overflow-hidden border border-neutral-300 dark:border-white/20",
                                   cardSize,
                                   false,
                                   false
@@ -3040,6 +3201,7 @@ export default function ScheduleApp() {
               schedule={schedule}
               milestones={schedule.milestones ?? []}
               onDeletePlan={handleDeletePlan}
+              onEditPlan={(planId) => setEditingPlanId(planId)}
               onAddTask={(planId) => openCreateSheet(planId)}
               onEditTask={(task) => openEditSheet(task)}
               onDeleteLinkedTask={handleDeleteLinkedTask}
@@ -3131,7 +3293,7 @@ export default function ScheduleApp() {
                 plansById={plansById}
                 authLabel={authLabel}
                 onNavigate={(tab) => { setActiveTab(tab); setSelectedPlanId(null); }}
-                onToggleTask={(task) => handleToggleTaskComplete(task.id, task.subtasks?.map((s) => s.id) ?? [], todayKey, todayISO())}
+                onToggleTask={(task) => handleToggleTaskComplete(task.id, taskEffectiveItemIds(task), todayKey, todayISO())}
                 onToggleSubtask={(id, subtaskId) => handleToggleSubtask(id, subtaskId, todayKey, todayISO())}
                 onOpenSubtasks={(task) => setSubtasksRef({ id: task.id, day: todayKey, dateISO: todayISO() })}
               />
@@ -3215,7 +3377,7 @@ export default function ScheduleApp() {
       )}
 
       {/* ── Bottom Nav (mobile only) ───────────────────────────────────────── */}
-      {activeTab !== 6 && (
+      {activeTab !== 6 && !showMobileTaskDetailPage && (
         <div className="lg:hidden">
           <BottomNav
             activeTab={activeTab}
@@ -3329,32 +3491,23 @@ export default function ScheduleApp() {
         />
       )}
 
-      {subtasksRef && (() => {
-        const raw = subtasksRef ? (schedule.activities[subtasksRef.day] ?? []).find((t) => t.id === subtasksRef.id) ?? null : null;
-        // Apply this date's per-date overrides (title/time), then overlay the
-        // selected day's completion from history when it isn't today.
-        const resolved = raw && subtasksRef ? resolveOccurrence(raw, subtasksRef.dateISO) : raw;
-        const st = resolved && subtasksRef && subtasksRef.dateISO !== todayISO()
-          ? { ...resolved, ...completionForDate(raw!, subtasksRef.dateISO) }
-          : resolved;
-        return (
-          <SubtasksSheet
-            open={!!subtasksRef}
-            task={st}
-            linkedPlan={st?.planId ? plansById.get(st.planId) ?? null : null}
-            readOnly={!!subtasksRef && subtasksRef.dateISO !== todayISO()}
-            onClose={() => setSubtasksRef(null)}
-            onToggleSubtask={(taskId, subId) => handleToggleSubtask(taskId, subId, subtasksRef?.day, subtasksRef?.dateISO)}
-            onToggleComplete={(taskId, ids) => handleToggleTaskComplete(taskId, ids, subtasksRef?.day, subtasksRef?.dateISO)}
-            onMissed={(taskId, ids) => handleMarkTaskMissed(taskId, ids, subtasksRef?.day, subtasksRef?.dateISO)}
-            onSnooze={(taskId) => handleSnoozeTaskLater(taskId, subtasksRef?.day, subtasksRef?.dateISO)}
-            onSkip={(taskId) => handleSkipOccurrence(taskId, subtasksRef?.dateISO)}
-            skipped={!!(subtasksRef && raw?.exceptions?.[subtasksRef.dateISO]?.skipped)}
-            canSkip={!!subtasksRef && subtasksRef.dateISO >= todayISO()}
-            onEdit={raw ? () => { openEditSheet(raw, subtasksRef?.dateISO); setSubtasksRef(null); } : undefined}
-          />
-        );
-      })()}
+      {subtasksRef && isDesktopViewport && (
+        <SubtasksSheet
+          open={!!subtasksRef}
+          task={subtasksDetailTask}
+          linkedPlan={subtasksLinkedPlan}
+          readOnly={!!subtasksRef && subtasksRef.dateISO !== todayISO()}
+          onClose={() => setSubtasksRef(null)}
+          onToggleSubtask={(taskId, subId) => handleToggleSubtask(taskId, subId, subtasksRef?.day, subtasksRef?.dateISO)}
+          onToggleComplete={(taskId, ids) => handleToggleTaskComplete(taskId, ids, subtasksRef?.day, subtasksRef?.dateISO)}
+          onMissed={(taskId, ids) => handleMarkTaskMissed(taskId, ids, subtasksRef?.day, subtasksRef?.dateISO)}
+          onSnooze={(taskId) => handleSnoozeTaskLater(taskId, subtasksRef?.day, subtasksRef?.dateISO)}
+          onSkip={(taskId) => handleSkipOccurrence(taskId, subtasksRef?.dateISO)}
+          skipped={!!(subtasksRef && subtasksRawTask?.exceptions?.[subtasksRef.dateISO]?.skipped)}
+          canSkip={!!subtasksRef && subtasksRef.dateISO >= todayISO()}
+          onEdit={subtasksRawTask ? () => { openEditSheet(subtasksRawTask, subtasksRef?.dateISO); setSubtasksRef(null); } : undefined}
+        />
+      )}
 
       <ConfirmSheet
         open={!!confirmState}
@@ -3432,7 +3585,7 @@ export default function ScheduleApp() {
             animate={{ opacity: 1, y: 0, scale: 1 }}
             exit={{ opacity: 0, y: 12, scale: 0.95 }}
             transition={{ duration: 0.2, ease: [0.22, 1, 0.36, 1] }}
-            className="fixed bottom-28 lg:bottom-6 left-1/2 z-50 flex -translate-x-1/2 items-center gap-4 rounded-full bg-neutral-900 px-5 py-2.5 text-[14px] font-semibold text-white shadow-lg shadow-black/10 dark:bg-white dark:text-neutral-900"
+            className="fixed bottom-28 left-1/2 z-50 flex -translate-x-1/2 items-center gap-4 rounded-full border border-neutral-800 bg-neutral-900 px-5 py-2.5 text-[14px] font-semibold text-white dark:border-white/[0.12] dark:bg-white dark:text-neutral-900 lg:bottom-6"
           >
             <span>{toastMessage}</span>
             {toastState?.actionLabel && toastState.onAction && (
@@ -3481,7 +3634,7 @@ export default function ScheduleApp() {
               whileTap={{ scale: 0.92 }}
               onClick={() => setAiOpen(true)}
               aria-label="Open AI Assistant"
-              className="fixed bottom-24 right-4 z-40 lg:bottom-8 lg:right-8 flex h-12 w-12 items-center justify-center rounded-full bg-[#AD46FF] text-white shadow-sm"
+              className="fixed bottom-24 right-4 z-40 flex h-12 w-12 items-center justify-center rounded-full border border-violet-500 bg-[#AD46FF] text-white lg:bottom-8 lg:right-8"
             >
               <IconSparkles size={20} strokeWidth={2} />
             </m.button>

@@ -39,17 +39,16 @@ export default function StrategyHeader({
 
   // Per-type accent colors
   const accent = isHtml
-    ? { pill: "bg-sky-500/15 text-sky-300 border border-sky-500/25", bar: "from-sky-500/50 via-sky-500/20 to-transparent", progress: "bg-sky-400" }
-    : { pill: "bg-violet-500/15 text-violet-300 border border-violet-500/25", bar: "from-violet-500/50 via-violet-500/20 to-transparent", progress: "bg-violet-400" };
+    ? { pill: "bg-sky-500/15 text-sky-300 border border-sky-500/25", bar: "bg-sky-500/70", progress: "bg-sky-400" }
+    : { pill: "bg-violet-500/15 text-violet-300 border border-violet-500/25", bar: "bg-violet-500/70", progress: "bg-violet-400" };
 
   return (
     <m.div
       animate={{ opacity: focusMode ? 0 : 1, y: focusMode ? -6 : 0 }}
       transition={{ duration: 0.2, ease: "easeInOut" }}
-      className={`shrink-0 z-10 flex flex-col bg-neutral-950/95 backdrop-blur-md ${focusMode ? "pointer-events-none" : ""}`}
+      className={`z-10 flex shrink-0 flex-col bg-neutral-950 ${focusMode ? "pointer-events-none" : ""}`}
     >
-      {/* Top accent gradient line */}
-      <div className={`h-[1.5px] bg-gradient-to-r ${accent.bar}`} />
+      <div className={`h-[1.5px] ${accent.bar}`} />
 
       {/* ── Main row ─────────────────────────────────────────────────────── */}
       <div className="flex items-center gap-3 px-4 pt-4 pb-4">

@@ -2,9 +2,11 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { EditorContent, useEditor } from "@tiptap/react";
+import { TextSelection } from "@tiptap/pm/state";
 import {
   IconArrowLeft,
   IconBold,
+  IconCalendarPlus,
   IconCheck,
   IconChecklist,
   IconColumnInsertRight,
@@ -29,7 +31,7 @@ import {
   IconLink,
   IconPlus,
 } from "@tabler/icons-react";
-import type { Note, Task, Plan } from "@/lib/useScheduleDB";
+import type { DayKey, Note, Task, Plan } from "@/lib/useScheduleDB";
 import { resolveLinkedTasks } from "@/lib/notes/linkedTasks";
 import TaskLinkPicker from "@/components/notes/TaskLinkPicker";
 import { SECTION_ICONS } from "@/components/SectionIcons";
@@ -50,8 +52,10 @@ import {
   serializeRichNoteBody,
 } from "@/lib/notes/richText";
 import { buildNoteEditorExtensions } from "./richTextExtensions";
+import { deriveTaskTitleFromNoteText } from "@/lib/notes/dailyCapture";
 
 type NotePatch = Partial<Pick<Note, "title" | "body" | "pinned" | "tags" | "linkedTaskIds">>;
+type CreateTaskFromNoteInput = { title: string; noteId: string; day: DayKey; planId?: string };
 
 interface NoteEditorProps {
   note: Note;
@@ -63,6 +67,8 @@ interface NoteEditorProps {
   plans: Plan[];
   /** Open a task referenced by the note. */
   onOpenTask: (taskId: string) => void;
+  onCreateTaskFromNote?: (input: CreateTaskFromNoteInput) => string | undefined;
+  todayDay: DayKey;
 }
 
 type SaveState = "idle" | "saving" | "saved";
@@ -135,7 +141,7 @@ function readSelectionColor(editor: Editor): string | null {
   return normalizeEditorColor(editor.getAttributes("textStyle").color as string | undefined);
 }
 
-export default function NoteEditor({ note, onUpdate, onDelete, onBack, tasks, plans, onOpenTask }: NoteEditorProps) {
+export default function NoteEditor({ note, onUpdate, onDelete, onBack, tasks, plans, onOpenTask, onCreateTaskFromNote, todayDay }: NoteEditorProps) {
   const [title, setTitle] = useState(note.title);
   const [linkPickerOpen, setLinkPickerOpen] = useState(false);
   const tasksById = useMemo(() => new Map(tasks.map((t) => [t.id, t])), [tasks]);
@@ -167,9 +173,11 @@ export default function NoteEditor({ note, onUpdate, onDelete, onBack, tasks, pl
   const [activeColor, setActiveColor] = useState<string | null>(null);
   const [pillInputOpen, setPillInputOpen] = useState(false);
   const [pillDraft, setPillDraft] = useState("");
+  const [taskCreateState, setTaskCreateState] = useState<"idle" | "added" | "missing">("idle");
 
   const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const savedTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const taskCreateTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const lastTextSelectionRef = useRef<{ from: number; to: number } | null>(null);
   const pillInputRef = useRef<HTMLInputElement | null>(null);
   const latestDraft = useRef({ title: note.title, body: note.body, tagsKey: tagKey(note.tags ?? []) });
@@ -233,6 +241,7 @@ export default function NoteEditor({ note, onUpdate, onDelete, onBack, tasks, pl
     setColorMenuOpen(false);
     setPillInputOpen(false);
     setPillDraft("");
+    setTaskCreateState("idle");
     lastTextSelectionRef.current = null;
     setDraftBody(note.body);
     latestDraft.current = { title: note.title, body: note.body, tagsKey: tagKey(note.tags ?? []) };
@@ -279,6 +288,7 @@ export default function NoteEditor({ note, onUpdate, onDelete, onBack, tasks, pl
     return () => {
       if (saveTimer.current) clearTimeout(saveTimer.current);
       if (savedTimer.current) clearTimeout(savedTimer.current);
+      if (taskCreateTimer.current) clearTimeout(taskCreateTimer.current);
       const draft = latestDraft.current;
       const saved = lastSavedDraft.current;
       if (draft.title !== saved.title || draft.body !== saved.body || draft.tagsKey !== saved.tagsKey) {
@@ -412,6 +422,42 @@ export default function NoteEditor({ note, onUpdate, onDelete, onBack, tasks, pl
     haptic("light");
   }
 
+  function selectedOrCurrentLineText(): string {
+    if (!editor) return "";
+    const { from, to, empty, $from } = editor.state.selection;
+    if (!empty) return editor.state.doc.textBetween(from, to, " ");
+    return $from.parent.textContent;
+  }
+
+  function showTaskCreateState(state: "added" | "missing") {
+    setTaskCreateState(state);
+    if (taskCreateTimer.current) clearTimeout(taskCreateTimer.current);
+    taskCreateTimer.current = setTimeout(() => setTaskCreateState("idle"), 1800);
+  }
+
+  function createTaskFromSelection() {
+    if (!onCreateTaskFromNote) return;
+    const taskTitle = deriveTaskTitleFromNoteText(selectedOrCurrentLineText());
+    if (!taskTitle) {
+      showTaskCreateState("missing");
+      return;
+    }
+    const taskId = onCreateTaskFromNote({
+      title: taskTitle,
+      noteId: note.id,
+      day: todayDay,
+      planId: linkedTasks[0]?.planId,
+    });
+    if (!taskId) {
+      showTaskCreateState("missing");
+      return;
+    }
+    const linkedIds = note.linkedTaskIds ?? [];
+    if (!linkedIds.includes(taskId)) onUpdate(note.id, { linkedTaskIds: [...linkedIds, taskId] });
+    haptic("light");
+    showTaskCreateState("added");
+  }
+
   function cycleHeading() {
     if (!editor) return;
     if (!editor.isActive("heading")) {
@@ -430,14 +476,33 @@ export default function NoteEditor({ note, onUpdate, onDelete, onBack, tasks, pl
     editor.chain().focus().toggleHeading({ level: level as 1 | 2 | 3 }).run();
   }
 
+  function focusEditorForListCommand() {
+    if (!editor) return null;
+    const selection = editor.state.selection as typeof editor.state.selection & { $anchorCell?: { pos: number } };
+    if (selection.$anchorCell) {
+      const pos = Math.min(selection.$anchorCell.pos + 1, editor.state.doc.content.size);
+      const tr = editor.state.tr.setSelection(TextSelection.near(editor.state.doc.resolve(pos), 1));
+      editor.view.dispatch(tr);
+    }
+    return editor.chain().focus();
+  }
+
+  function toggleBulletList() {
+    focusEditorForListCommand()?.toggleBulletList().run();
+  }
+
+  function toggleOrderedList() {
+    focusEditorForListCommand()?.toggleOrderedList().run();
+  }
+
   const checklistState = checklistStats ?? null;
   const isTableActive = editor?.isActive("table") ?? false;
 
   return (
     <div className="flex h-full min-h-0 flex-col bg-white dark:bg-neutral-950">
       <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain">
-        <div className="glass-surface sticky top-0 z-30 border-b border-black/[0.07] bg-white/88 backdrop-blur-xl dark:border-white/[0.08] dark:bg-neutral-950/88">
-          <div className="mx-auto flex w-full max-w-4xl items-start gap-3 px-5 py-4 lg:max-w-5xl xl:max-w-6xl">
+        <div className="sticky top-0 z-30 border-b border-neutral-200 bg-white dark:border-white/[0.08] dark:bg-neutral-950">
+          <div className="mx-auto flex h-12 w-full max-w-4xl items-center gap-2.5 px-3 sm:px-5 lg:max-w-5xl xl:max-w-6xl">
             <IconButton
               label="Back"
               variant="ghost"
@@ -454,53 +519,11 @@ export default function NoteEditor({ note, onUpdate, onDelete, onBack, tasks, pl
                 value={title}
                 onChange={(e) => setTitle(e.target.value)}
                 placeholder="Title"
-                className="mb-1 w-full bg-transparent text-[24px] font-bold tracking-[-0.4px] text-neutral-900 placeholder-neutral-300 outline-none dark:text-white dark:placeholder-neutral-700"
+                className="w-full bg-transparent text-[19px] font-bold leading-tight text-neutral-900 placeholder-neutral-300 outline-none sm:text-[21px] dark:text-white dark:placeholder-neutral-700"
               />
-              <p className="mb-2.5 flex flex-wrap items-center gap-1.5 text-[12px] text-neutral-400 dark:text-neutral-600">
-                <span>{formatUpdatedAt(note.updatedAt)}</span>
-                <span>·</span>
-                <span>{wordCount} {wordCount === 1 ? "word" : "words"}</span>
-                {checklistState && (
-                  <>
-                    <span>·</span>
-                    <span>{checklistState.done}/{checklistState.total} checked</span>
-                  </>
-                )}
-              </p>
-              <div className="mb-1.5 flex flex-wrap items-center gap-1.5">
-                {displayTags.map((tag) => (
-                  <AccentBadge key={tag} color={cycleAccentColor(stableFieldHash(tag.toLowerCase()))} className="pr-1.5">
-                    {tag}
-                    <button
-                      type="button"
-                      aria-label={`Remove ${tag}`}
-                      onClick={() => removeTag(tag)}
-                      className="ml-0.5 opacity-60 transition-opacity hover:opacity-100"
-                    >
-                      <IconX size={11} strokeWidth={2.5} />
-                    </button>
-                  </AccentBadge>
-                ))}
-                <input
-                  value={tagInput}
-                  onChange={(e) => setTagInput(e.target.value)}
-                  onKeyDown={(e) => {
-                    if (e.key === "Enter" || e.key === ",") {
-                      e.preventDefault();
-                      addTag();
-                    } else if (e.key === "Backspace" && !tagInput && displayTags.length > 0) {
-                      removeTag(displayTags[displayTags.length - 1]);
-                    }
-                  }}
-                  onBlur={addTag}
-                  placeholder={displayTags.length === 0 ? "Add tag…" : "+ tag"}
-                  maxLength={24}
-                  className="h-6 w-24 min-w-0 rounded-full bg-transparent px-1 text-[12px] font-medium text-neutral-600 placeholder-neutral-300 outline-none dark:text-neutral-300 dark:placeholder-neutral-700"
-                />
-              </div>
             </div>
 
-            <div className="flex shrink-0 items-center gap-1.5 pt-0.5">
+            <div className="flex shrink-0 items-center gap-0.5 sm:gap-1.5">
               <span className="hidden lg:inline-flex">
                 <SaveBadge state={saveState} />
               </span>
@@ -539,51 +562,117 @@ export default function NoteEditor({ note, onUpdate, onDelete, onBack, tasks, pl
           </div>
         </div>
 
+        <div className="border-b border-neutral-100 bg-white px-4 py-3 dark:border-white/[0.06] dark:bg-neutral-950">
+          <div className="mx-auto w-full max-w-4xl sm:px-1 lg:max-w-5xl xl:max-w-6xl">
+            <p className="flex flex-wrap items-center gap-1.5 text-[12px] leading-none text-neutral-400 dark:text-neutral-600">
+              <span>{formatUpdatedAt(note.updatedAt)}</span>
+              <span>·</span>
+              <span>{wordCount} {wordCount === 1 ? "word" : "words"}</span>
+              {checklistState && (
+                <>
+                  <span>·</span>
+                  <span>{checklistState.done}/{checklistState.total} checked</span>
+                </>
+              )}
+            </p>
+            <div className="mt-3 flex flex-wrap items-center gap-1.5">
+              {displayTags.map((tag) => (
+                <AccentBadge key={tag} color={cycleAccentColor(stableFieldHash(tag.toLowerCase()))} className="min-h-7 pr-1.5 text-[12px]">
+                  {tag}
+                  <button
+                    type="button"
+                    aria-label={`Remove ${tag}`}
+                    onClick={() => removeTag(tag)}
+                    className="ml-0.5 opacity-60 transition-opacity hover:opacity-100"
+                  >
+                    <IconX size={11} strokeWidth={2.5} />
+                  </button>
+                </AccentBadge>
+              ))}
+              <input
+                value={tagInput}
+                onChange={(e) => setTagInput(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" || e.key === ",") {
+                    e.preventDefault();
+                    addTag();
+                  } else if (e.key === "Backspace" && !tagInput && displayTags.length > 0) {
+                    removeTag(displayTags[displayTags.length - 1]);
+                  }
+                }}
+                onBlur={addTag}
+                placeholder={displayTags.length === 0 ? "Add tag..." : "+ tag"}
+                maxLength={24}
+                className={`h-7 min-w-0 rounded-full border border-dashed bg-transparent px-2.5 text-[12px] font-semibold text-neutral-600 outline-none transition-colors placeholder:text-neutral-300 focus:border-neutral-400 dark:text-neutral-300 dark:placeholder:text-neutral-700 ${
+                  displayTags.length === 0
+                    ? "w-24 border-neutral-200 dark:border-white/[0.10]"
+                    : "w-16 border-transparent hover:border-neutral-200 dark:hover:border-white/[0.10]"
+                }`}
+              />
+            </div>
+          </div>
+        </div>
+
         {/* Linked tasks */}
-        <div className="mx-auto w-full max-w-4xl px-5 pt-4 lg:max-w-5xl xl:max-w-6xl">
-          <div className="flex flex-wrap items-center gap-1.5">
-            <span className="mr-0.5 inline-flex items-center gap-1 text-[11px] font-bold uppercase tracking-[0.08em] text-neutral-400 dark:text-neutral-500">
+        <div className="border-b border-neutral-100 bg-neutral-50/60 dark:border-white/[0.06] dark:bg-white/[0.02]">
+          <div className="mx-auto flex w-full max-w-4xl items-center gap-2 overflow-x-auto px-4 py-3 sm:px-5 lg:max-w-5xl xl:max-w-6xl">
+            <span className="inline-flex shrink-0 items-center gap-1 text-[11px] font-bold uppercase tracking-[0.08em] text-neutral-400 dark:text-neutral-500">
               <IconLink size={12} strokeWidth={2.2} />
               Linked tasks
             </span>
             {linkedTasks.map((task) => {
               const Icon = planIcon.get(task.planId) ?? SECTION_ICONS[0].icon;
               return (
-              <span
-                key={task.id}
-                className="inline-flex items-center gap-1 rounded-full border border-neutral-200 bg-white py-1 pl-2 pr-1 text-[12px] font-semibold text-neutral-700 dark:border-white/[0.12] dark:bg-white/[0.04] dark:text-neutral-200"
-              >
-                <button
-                  type="button"
-                  onClick={() => onOpenTask(task.id)}
-                  className="inline-flex max-w-[160px] items-center gap-1 truncate"
+                <span
+                  key={task.id}
+                className="inline-flex min-h-9 shrink-0 items-center gap-1 rounded-full border border-neutral-200 bg-white py-1 pl-2.5 pr-1 text-[13px] font-semibold text-neutral-700 dark:border-white/[0.12] dark:bg-white/[0.04] dark:text-neutral-200"
                 >
-                  <Icon size={13} strokeWidth={2} className="shrink-0 text-neutral-500 dark:text-neutral-400" />
-                  <span className="truncate">{task.title}</span>
-                </button>
-                <button
-                  type="button"
-                  aria-label={`Unlink ${task.title}`}
-                  onClick={() => removeLinkedTask(task.id)}
-                  className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full text-neutral-400 hover:bg-neutral-100 hover:text-neutral-600 dark:hover:bg-white/[0.08]"
-                >
-                  <IconX size={12} strokeWidth={2.4} />
-                </button>
-              </span>
+                  <button
+                    type="button"
+                    onClick={() => onOpenTask(task.id)}
+                    className="inline-flex max-w-[180px] items-center gap-1.5 truncate"
+                  >
+                    <Icon size={13} strokeWidth={2} className="shrink-0 text-neutral-500 dark:text-neutral-400" />
+                    <span className="truncate">{task.title}</span>
+                  </button>
+                  <button
+                    type="button"
+                    aria-label={`Unlink ${task.title}`}
+                    onClick={() => removeLinkedTask(task.id)}
+                    className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-neutral-400 transition-colors hover:bg-neutral-100 hover:text-neutral-600 dark:hover:bg-white/[0.08]"
+                  >
+                    <IconX size={12} strokeWidth={2.4} />
+                  </button>
+                </span>
               );
             })}
             <button
               type="button"
               onClick={() => setLinkPickerOpen(true)}
-              className="inline-flex min-h-[28px] items-center gap-1 rounded-full border border-dashed border-neutral-300 px-2.5 text-[12px] font-semibold text-neutral-500 transition-colors hover:border-neutral-400 hover:text-neutral-700 dark:border-white/[0.14] dark:text-neutral-400 dark:hover:text-neutral-200"
+              className="inline-flex min-h-9 shrink-0 items-center gap-1.5 rounded-full border border-dashed border-neutral-300 bg-white/70 px-3 text-[13px] font-semibold text-neutral-500 transition-colors hover:border-neutral-400 hover:text-neutral-700 dark:border-white/[0.14] dark:bg-white/[0.03] dark:text-neutral-400 dark:hover:text-neutral-200"
             >
               <IconPlus size={13} strokeWidth={2.4} />
               Link task
             </button>
+            {onCreateTaskFromNote && (
+              <button
+                type="button"
+                onClick={createTaskFromSelection}
+                className="inline-flex min-h-9 shrink-0 items-center gap-1.5 rounded-full border border-neutral-900 bg-neutral-900 px-3.5 text-[13px] font-semibold text-white transition-colors hover:bg-neutral-800 dark:border-white dark:bg-white dark:text-neutral-900 dark:hover:bg-neutral-100"
+              >
+                <IconCalendarPlus size={13} strokeWidth={2.4} />
+                Create task
+              </button>
+            )}
+            {taskCreateState !== "idle" && (
+              <span className={`shrink-0 text-[12px] font-semibold ${taskCreateState === "added" ? "text-emerald-500" : "text-neutral-400 dark:text-neutral-500"}`}>
+                {taskCreateState === "added" ? "Added to Today" : "Select text first"}
+              </span>
+            )}
           </div>
         </div>
 
-        <div className="mx-auto w-full max-w-4xl px-5 pt-5 pb-8 lg:max-w-5xl xl:max-w-6xl">
+        <div className="mx-auto w-full max-w-4xl px-4 pt-4 pb-8 sm:px-5 lg:max-w-5xl xl:max-w-6xl">
           <div className="note-editor-shell">
             <EditorContent editor={editor} />
           </div>
@@ -599,7 +688,7 @@ export default function NoteEditor({ note, onUpdate, onDelete, onBack, tasks, pl
         onClose={() => setLinkPickerOpen(false)}
       />
 
-      <div className="glass-surface shrink-0 border-t border-neutral-100 bg-white/90 px-2 py-2 backdrop-blur dark:border-white/[0.06] dark:bg-neutral-950/90" style={{ paddingBottom: "max(8px, env(safe-area-inset-bottom))" }}>
+      <div className="shrink-0 border-t border-neutral-100 bg-white px-2 py-2 dark:border-white/[0.06] dark:bg-neutral-950" style={{ paddingBottom: "max(8px, env(safe-area-inset-bottom))" }}>
         <div className="mx-auto flex w-full max-w-4xl flex-col gap-2 px-3 lg:max-w-5xl xl:max-w-6xl">
           {isTableActive && (
             <div className="flex items-center gap-1 overflow-x-auto rounded-2xl border border-neutral-200 bg-neutral-50 px-2 py-2 dark:border-white/[0.08] dark:bg-white/[0.04]">
@@ -647,10 +736,10 @@ export default function NoteEditor({ note, onUpdate, onDelete, onBack, tasks, pl
           <ToolbarButton label="Checklist" active={editor?.isActive("taskList") ?? false} onClick={() => editor?.chain().focus().toggleTaskList().run()}>
             <IconChecklist size={18} strokeWidth={2} />
           </ToolbarButton>
-          <ToolbarButton label="Numbered list" active={editor?.isActive("orderedList") ?? false} onClick={() => editor?.chain().focus().toggleOrderedList().run()}>
+          <ToolbarButton label="Numbered list" active={editor?.isActive("orderedList") ?? false} onClick={toggleOrderedList}>
             <IconListNumbers size={18} strokeWidth={2} />
           </ToolbarButton>
-          <ToolbarButton label="Bullet list" active={editor?.isActive("bulletList") ?? false} onClick={() => editor?.chain().focus().toggleBulletList().run()}>
+          <ToolbarButton label="Bullet list" active={editor?.isActive("bulletList") ?? false} onClick={toggleBulletList}>
             <IconList size={18} strokeWidth={2} />
           </ToolbarButton>
           <ToolbarButton label={editor?.isActive("heading", { level: 1 }) ? "Heading 1" : editor?.isActive("heading", { level: 2 }) ? "Heading 2" : editor?.isActive("heading", { level: 3 }) ? "Heading 3" : "Heading"} active={editor?.isActive("heading") ?? false} onClick={cycleHeading}>
@@ -730,7 +819,7 @@ export default function NoteEditor({ note, onUpdate, onDelete, onBack, tasks, pl
           )}
           <div className="relative shrink-0">
             {colorMenuOpen && (
-              <div className="absolute bottom-full right-0 mb-2 flex items-center gap-2 rounded-2xl border border-neutral-200 bg-white p-2.5 shadow-xl dark:border-white/[0.1] dark:bg-neutral-900" onMouseDown={(e) => e.preventDefault()}>
+              <div className="absolute bottom-full right-0 mb-2 flex items-center gap-2 rounded-2xl border border-neutral-200 bg-white p-2.5 dark:border-white/[0.1] dark:bg-neutral-900" onMouseDown={(e) => e.preventDefault()}>
                 <button
                   type="button"
                   aria-label="Remove color"

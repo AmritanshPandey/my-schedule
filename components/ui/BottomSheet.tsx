@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState, type CSSProperties } from "react";
+import { createPortal } from "react-dom";
 import { AnimatePresence, m } from "framer-motion";
 import { stopTextEditKeyPropagation } from "@/lib/keyboardEvents";
 
@@ -29,9 +30,19 @@ export default function BottomSheet({
   desktopWidth = "max-w-[640px]",
   backdropClassName,
 }: BottomSheetProps) {
+  const [mounted, setMounted] = useState(false);
   const [isDesktop, setIsDesktop] = useState(false);
   const [viewportFrame, setViewportFrame] = useState({ height: 0, offsetTop: 0 });
   const panelRef = useRef<HTMLDivElement>(null);
+  const onCloseRef = useRef(onClose);
+
+  useEffect(() => {
+    setMounted(true);
+  }, []);
+
+  useEffect(() => {
+    onCloseRef.current = onClose;
+  }, [onClose]);
 
   // Track breakpoint once mounted (SSR-safe)
   useEffect(() => {
@@ -69,7 +80,7 @@ export default function BottomSheet({
       'a[href],button:not([disabled]),textarea:not([disabled]),input:not([disabled]),select:not([disabled]),[tabindex]:not([tabindex="-1"])';
 
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") { onClose(); return; }
+      if (e.key === "Escape") { onCloseRef.current(); return; }
       if (e.key !== "Tab") return;
       const panel = panelRef.current;
       if (!panel) return;
@@ -94,13 +105,13 @@ export default function BottomSheet({
       // Restore focus to whatever opened the sheet (if it's still in the DOM).
       if (previouslyFocused && document.contains(previouslyFocused)) previouslyFocused.focus();
     };
-  }, [open, onClose]);
+  }, [open]);
 
   const mobileStyle = (viewportFrame.height > 0
     ? { "--sheet-vh": `${viewportFrame.height}px`, height: `${viewportFrame.height}px`, top: `${viewportFrame.offsetTop}px` }
     : { "--sheet-vh": "100dvh", height: "100dvh" }) as unknown as CSSProperties;
 
-  return (
+  const sheet = (
     <AnimatePresence>
       {open && (
         isDesktop ? (
@@ -117,7 +128,7 @@ export default function BottomSheet({
               animate={{ opacity: 1 }}
               exit={{ opacity: 0 }}
               transition={{ duration: 0.16 }}
-              className={`absolute inset-0 ${backdropClassName ?? "bg-black/50 backdrop-blur-[3px]"}`}
+              className={`absolute inset-0 ${backdropClassName ?? "bg-black/30"}`}
               onClick={onClose}
               aria-hidden="true"
             />
@@ -130,7 +141,7 @@ export default function BottomSheet({
               animate={{ opacity: 1, scale: 1, y: 0 }}
               exit={{ opacity: 0, scale: 0.97, y: 10 }}
               transition={DESKTOP_EASE}
-              className={`relative w-full ${desktopWidth} overflow-y-auto overscroll-contain rounded-2xl border border-neutral-200/80 bg-white outline-none dark:border-white/[0.08] dark:bg-neutral-900 ${className}`}
+              className={`relative w-full ${desktopWidth} overflow-y-auto overscroll-contain rounded-2xl border border-neutral-200 bg-white outline-none dark:border-white/[0.08] dark:bg-neutral-900 ${className}`}
               style={{ maxHeight: "88vh" }}
             >
               {children}
@@ -151,7 +162,7 @@ export default function BottomSheet({
               animate={{ opacity: 1 }}
               exit={{ opacity: 0 }}
               transition={{ duration: 0.22 }}
-              className={`absolute inset-0 ${backdropClassName ?? "bg-black/40"}`}
+              className={`absolute inset-0 ${backdropClassName ?? "bg-black/30"}`}
               onClick={onClose}
               aria-hidden="true"
             />
@@ -165,10 +176,10 @@ export default function BottomSheet({
               exit={{ y: "100%" }}
               transition={MOBILE_SPRING}
               style={{ maxHeight, willChange: "transform" }}
-              className={`relative w-full max-w-lg overflow-y-auto overscroll-contain rounded-t-[32px] border-t border-neutral-200 bg-white pb-[env(safe-area-inset-bottom)] outline-none dark:border-white/[0.08] dark:bg-neutral-900 ${className}`}
+              className={`relative w-full max-w-lg overflow-y-auto overscroll-contain rounded-t-2xl border-t border-neutral-200 bg-white pb-[env(safe-area-inset-bottom)] outline-none dark:border-white/[0.08] dark:bg-neutral-900 ${className}`}
             >
               {/* Drag handle */}
-              <div className="sticky top-0 z-10 flex justify-center rounded-t-[32px] bg-white/95 pb-1 pt-3 dark:bg-neutral-900/95">
+              <div className="sticky top-0 z-10 flex justify-center rounded-t-2xl bg-white pb-1 pt-3 dark:bg-neutral-900">
                 <div className="h-1 w-10 rounded-full bg-neutral-300 dark:bg-white/20" />
               </div>
               {children}
@@ -178,4 +189,7 @@ export default function BottomSheet({
       )}
     </AnimatePresence>
   );
+
+  if (!mounted) return null;
+  return createPortal(sheet, document.body);
 }

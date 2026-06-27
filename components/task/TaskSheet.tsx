@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { m, AnimatePresence } from "framer-motion";
 import {
   DndContext,
@@ -29,7 +29,7 @@ import BottomSheet from "@/components/ui/BottomSheet";
 import SheetHeader from "@/components/ui/SheetHeader";
 import Button from "@/components/ui/Button";
 import IconButton from "@/components/ui/IconButton";
-import Input from "@/components/ui/Input";
+import Input, { FORM_INPUT_CLASS, FORM_LABEL, Textarea } from "@/components/ui/Input";
 import TimeSlotPicker from "@/components/TimeSlotPicker";
 import { haptic } from "@/lib/haptics";
 import type { DayKey, Plan, Task, TaskRecurrence } from "@/lib/useScheduleDB";
@@ -92,6 +92,7 @@ export interface TaskSheetProps {
   onDelete?: () => void;
   /** Clear this date's per-date override (restore the recurring template). */
   onResetOccurrence?: () => void;
+  presentation?: "sheet" | "page";
 }
 
 function entryToSubtaskDraft(e: ScheduleEntry): SubtaskDraft {
@@ -147,6 +148,7 @@ export function TaskSheet({
   onDuplicate,
   onDelete,
   onResetOccurrence,
+  presentation = "sheet",
 }: TaskSheetProps) {
   // ── AI routing ────────────────────────────────────────────────────────────
   const aiRuntime = useAIRuntime();
@@ -264,15 +266,16 @@ export function TaskSheet({
     setFocusNewSubtask(true);
   }
 
-  function updateSubtask(id: string, updated: SubtaskDraft) {
+  const updateSubtask = useCallback((id: string, updated: SubtaskDraft) => {
     setSubtasks((prev) => prev.map((s) => (s.id === id ? updated : s)));
-  }
+  }, []);
 
-  function removeSubtask(id: string) {
+  const removeSubtask = useCallback((id: string) => {
     setSubtasks((prev) => prev.filter((s) => s.id !== id));
-  }
+  }, []);
 
   const subtaskSensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 8 } }));
+  const subtaskIds = useMemo(() => subtasks.map((s) => s.id), [subtasks]);
 
   function handleSubtasksDragEnd(event: DragEndEvent) {
     const { active, over } = event;
@@ -415,15 +418,24 @@ export function TaskSheet({
     onClose();
   }
 
+  function handleTitleKeyDown(e: React.KeyboardEvent<HTMLInputElement>) {
+    if (e.key !== "Enter") return;
+    e.preventDefault();
+    handleSave();
+  }
+
+  function handleDescriptionKeyDown(e: React.KeyboardEvent<HTMLTextAreaElement>) {
+    if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) {
+      e.preventDefault();
+      handleSave();
+    }
+  }
+
   const eyebrow = mode === "create" ? "Add" : "Edit";
   const headingTitle = mode === "create" ? "New Task" : (task?.title ?? "Task");
 
-  return (
-    <BottomSheet
-      open={isOpen}
-      onClose={duplicateStep === "picking" ? () => setDuplicateStep("idle") : handleClose}
-      backdropClassName={keepBackdropLight ? "bg-black/24 backdrop-blur-[1px]" : undefined}
-    >
+  const sheetContent = (
+    <>
       <AnimatePresence mode="wait" initial={false}>
 
         {/* ── Duplicate day-picker ─────────────────────────────────────────── */}
@@ -500,11 +512,20 @@ export function TaskSheet({
             animate={{ opacity: 1, x: 0 }}
             exit={{ opacity: 0, x: -32 }}
             transition={{ duration: 0.2, ease: [0.22, 1, 0.36, 1] }}
-            className="flex flex-col px-5 pb-6 pt-4"
+            className={`flex flex-col px-5 pt-4 ${presentation === "page" ? "pb-28" : "pb-6"}`}
           >
-            <SheetHeader eyebrow={eyebrow} title={headingTitle} onClose={handleClose} />
+            <SheetHeader
+              eyebrow={eyebrow}
+              title={headingTitle}
+              onClose={handleClose}
+              className={
+                presentation === "page"
+                  ? "sticky top-0 z-20 -mx-5 border-b border-neutral-200 bg-white px-5 py-3 dark:border-white/[0.08] dark:bg-neutral-950"
+                  : ""
+              }
+            />
 
-            <div className="mt-4 space-y-5">
+            <div className={`mt-4 space-y-5 ${presentation === "page" ? "pb-4" : ""}`}>
               {/* Edit scope — all occurrences vs just this date */}
               {canScopeToOccurrence && (
                 <div>
@@ -515,7 +536,7 @@ export function TaskSheet({
                         key={value}
                         type="button"
                         onClick={() => applyScope(value)}
-                        className={`h-10 rounded-xl text-[14px] font-semibold transition-colors ${
+                        className={`h-10 rounded-full text-[14px] font-semibold transition-colors ${
                           editScope === value
                             ? "bg-neutral-900 text-white dark:bg-white dark:text-neutral-950"
                             : "border border-neutral-200 bg-white text-neutral-500 dark:border-white/10 dark:bg-white/[0.04] dark:text-neutral-400"
@@ -555,7 +576,7 @@ export function TaskSheet({
                       key={type}
                       type="button"
                       onClick={() => setTaskType(type)}
-                      className={`h-10 rounded-xl text-[14px] font-semibold transition-colors ${
+                      className={`h-10 rounded-full text-[14px] font-semibold transition-colors ${
                         taskType === type
                           ? "bg-neutral-900 text-white dark:bg-white dark:text-neutral-950"
                           : "border border-neutral-200 bg-white text-neutral-500 dark:border-white/10 dark:bg-white/[0.04] dark:text-neutral-400"
@@ -584,16 +605,24 @@ export function TaskSheet({
                 value={title}
                 onChange={(e) => setTitle(e.target.value)}
                 placeholder="What are you working on?"
-                onKeyDown={(e) => { if (e.key === "Enter") handleSave(); }}
+                onKeyDown={handleTitleKeyDown}
+                autoComplete="off"
+                enterKeyHint="done"
+                spellCheck
+                aria-label="Task title"
+                aria-invalid={title.length > 0 && title.trim().length === 0}
               />
 
               {/* Description */}
-              <Input
+              <Textarea
                 label="Note (optional)"
                 value={description}
                 onChange={(e) => setDescription(e.target.value)}
                 placeholder="Short note or context…"
-                onKeyDown={(e) => { if (e.key === "Enter") handleSave(); }}
+                onKeyDown={handleDescriptionKeyDown}
+                autoComplete="off"
+                spellCheck
+                aria-label="Task note"
               />
 
               {/* Time slot + repeat days (weekday chips hidden for one-off) */}
@@ -622,7 +651,7 @@ export function TaskSheet({
                         key={val}
                         type="button"
                         onClick={() => setRepeatMode(val)}
-                        className={`h-10 rounded-xl text-[12px] font-semibold transition-colors ${
+                        className={`h-10 rounded-full text-[12px] font-semibold transition-colors ${
                           repeatMode === val
                             ? "bg-neutral-900 text-white dark:bg-white dark:text-neutral-950"
                             : "border border-neutral-200 bg-white text-neutral-500 dark:border-white/10 dark:bg-white/[0.04] dark:text-neutral-400"
@@ -636,20 +665,26 @@ export function TaskSheet({
                     <div className="flex items-center gap-2 pt-1">
                       <span className="text-[13px] text-neutral-500 dark:text-neutral-400">Every</span>
                       <button type="button" onClick={() => setIntervalWeeks((n) => Math.max(2, n - 1))}
-                        className="flex h-8 w-8 items-center justify-center rounded-lg border border-neutral-200 text-[16px] font-bold text-neutral-600 dark:border-white/10 dark:text-neutral-300">−</button>
+                        className="flex h-8 w-8 items-center justify-center rounded-full border border-neutral-200 text-[16px] font-bold text-neutral-600 dark:border-white/10 dark:text-neutral-300">−</button>
                       <span className="w-6 text-center text-[15px] font-bold tabular-nums text-neutral-900 dark:text-white">{intervalWeeks}</span>
                       <button type="button" onClick={() => setIntervalWeeks((n) => Math.min(8, n + 1))}
-                        className="flex h-8 w-8 items-center justify-center rounded-lg border border-neutral-200 text-[16px] font-bold text-neutral-600 dark:border-white/10 dark:text-neutral-300">+</button>
+                        className="flex h-8 w-8 items-center justify-center rounded-full border border-neutral-200 text-[16px] font-bold text-neutral-600 dark:border-white/10 dark:text-neutral-300">+</button>
                       <span className="text-[13px] text-neutral-500 dark:text-neutral-400">weeks</span>
                     </div>
                   )}
                   {repeatMode === "once" && (
-                    <input
-                      type="date"
-                      value={onceDate}
-                      onChange={(e) => setOnceDate(e.target.value)}
-                      className="h-11 w-full min-w-0 rounded-xl border border-neutral-200 bg-neutral-50 px-3 text-[16px] text-neutral-900 outline-none transition-colors focus:border-neutral-300 focus:bg-neutral-100 dark:border-white/10 dark:bg-white/[0.04] dark:text-white dark:focus:border-white/20 dark:focus:bg-white/[0.07] dark:[color-scheme:dark]"
-                    />
+                    <div>
+                      <label className={FORM_LABEL} htmlFor="task-once-date">Date</label>
+                      <input
+                        id="task-once-date"
+                        type="date"
+                        value={onceDate}
+                        onChange={(e) => setOnceDate(e.target.value)}
+                        aria-label="One-off task date"
+                        aria-invalid={!onceDate}
+                        className={`${FORM_INPUT_CLASS} px-3`}
+                      />
+                    </div>
                   )}
                 </div>
               )}
@@ -674,7 +709,7 @@ export function TaskSheet({
                   </div>
 
                   <DndContext sensors={subtaskSensors} onDragEnd={handleSubtasksDragEnd}>
-                    <SortableContext items={subtasks.map((s) => s.id)} strategy={verticalListSortingStrategy}>
+                    <SortableContext items={subtaskIds} strategy={verticalListSortingStrategy}>
                       {subtasks.map((s, i) => (
                         <m.div
                           key={s.id}
@@ -688,8 +723,8 @@ export function TaskSheet({
                             draft={s}
                             autoFocus={focusNewSubtask && i === subtasks.length - 1}
                             showDeadline={taskType === "task"}
-                            onChange={(updated) => updateSubtask(s.id, updated)}
-                            onDelete={() => removeSubtask(s.id)}
+                            onChange={updateSubtask}
+                            onDelete={removeSubtask}
                           />
                         </m.div>
                       ))}
@@ -699,7 +734,7 @@ export function TaskSheet({
                   <button
                     type="button"
                     onClick={addSubtask}
-                    className="flex h-10 w-full items-center gap-2 rounded-xl border border-dashed border-neutral-200 px-3 text-[13px] font-semibold text-neutral-400 transition-colors hover:border-neutral-300 hover:text-neutral-600 dark:border-white/10 dark:text-neutral-500 dark:hover:border-white/20 dark:hover:text-neutral-300"
+                    className="flex h-10 w-full items-center gap-2 rounded-full border border-dashed border-neutral-200 px-3 text-[13px] font-semibold text-neutral-400 transition-colors hover:border-neutral-300 hover:text-neutral-600 dark:border-white/10 dark:text-neutral-500 dark:hover:border-white/20 dark:hover:text-neutral-300"
                   >
                     <IconPlus size={14} strokeWidth={2.5} />
                     {taskType === "session" ? "Add Step" : "Add Subtask"}
@@ -709,35 +744,40 @@ export function TaskSheet({
             </div>
 
             {/* Footer */}
-            <div className="mt-6 space-y-2">
-              <div className="flex gap-2">
-                <Button fullWidth onClick={handleSave} disabled={!canSave}>
-                  <IconCheck size={16} strokeWidth={2.5} />
+            <div
+              className={
+                presentation === "page"
+                  ? "fixed inset-x-0 bottom-0 z-30 flex items-center gap-2 border-t border-neutral-200 bg-white px-5 pt-3 dark:border-white/[0.08] dark:bg-neutral-950"
+                  : "mt-6 flex items-center gap-2"
+              }
+              style={presentation === "page" ? { paddingBottom: "max(12px, env(safe-area-inset-bottom))" } : undefined}
+            >
+              <Button className="min-w-0 flex-1" onClick={handleSave} disabled={!canSave}>
+                <IconCheck size={18} strokeWidth={2.5} />
+                <span className="truncate">
                   {mode === "create" ? "Add Task" : isOccurrenceScope ? "Save this day" : "Save Changes"}
+                </span>
+              </Button>
+              {mode === "edit" && !isOccurrenceScope && onDuplicate && (
+                <Button
+                  variant="secondary"
+                  onClick={openDuplicatePicker}
+                  disabled={!canSave}
+                  aria-label="Duplicate task"
+                  className="w-13 px-0"
+                >
+                  <IconCopy size={18} />
                 </Button>
-                <Button variant="secondary" onClick={handleClose}>
-                  <IconX size={15} />
+              )}
+              {mode === "edit" && !isOccurrenceScope && onDelete && (
+                <Button
+                  variant="dangerSecondary"
+                  onClick={() => { haptic("light"); onDelete(); }}
+                  aria-label="Delete task"
+                  className="w-16 px-0"
+                >
+                  <IconTrash size={18} />
                 </Button>
-              </div>
-              {mode === "edit" && !isOccurrenceScope && (onDuplicate || onDelete) && (
-                <div className={`grid gap-2 ${onDuplicate && onDelete ? "grid-cols-2" : "grid-cols-1"}`}>
-                  {onDuplicate && (
-                    <Button variant="secondary" fullWidth onClick={openDuplicatePicker} disabled={!canSave}>
-                      <IconCopy size={15} />
-                      Duplicate
-                    </Button>
-                  )}
-                  {onDelete && (
-                    <Button
-                      variant="dangerSecondary"
-                      fullWidth
-                      onClick={() => { haptic("light"); onDelete(); }}
-                    >
-                      <IconTrash size={15} />
-                      Delete
-                    </Button>
-                  )}
-                </div>
               )}
             </div>
           </m.div>
@@ -768,6 +808,36 @@ export function TaskSheet({
           onAdd={commitSubtasks}
         />
       )}
+    </>
+  );
+
+  if (presentation === "page") {
+    return (
+      <AnimatePresence>
+        {isOpen && (
+          <m.div
+            key="task-page"
+            initial={{ opacity: 0, x: 28 }}
+            animate={{ opacity: 1, x: 0 }}
+            exit={{ opacity: 0, x: 28 }}
+            transition={{ duration: 0.2, ease: [0.22, 1, 0.36, 1] }}
+            className="fixed inset-0 z-40 h-dvh overflow-y-auto overscroll-contain bg-[#F3F4F1] pt-[env(safe-area-inset-top)] text-neutral-900 dark:bg-[#0E0E0E] dark:text-white"
+            style={{ paddingBottom: "env(safe-area-inset-bottom)" }}
+          >
+            {sheetContent}
+          </m.div>
+        )}
+      </AnimatePresence>
+    );
+  }
+
+  return (
+    <BottomSheet
+      open={isOpen}
+      onClose={duplicateStep === "picking" ? () => setDuplicateStep("idle") : handleClose}
+      backdropClassName={keepBackdropLight ? "bg-black/24" : undefined}
+    >
+      {sheetContent}
     </BottomSheet>
   );
 }

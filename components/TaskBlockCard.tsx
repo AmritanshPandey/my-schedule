@@ -110,16 +110,16 @@ export function TaskBlockCard({
   }
 
   const header = (
-    <div className="relative flex items-start justify-between gap-2">
-      <div className="flex min-w-0 flex-col gap-px">
+    <div className={`relative flex items-start justify-between ${isList ? "gap-3" : "gap-2"}`}>
+      <div className={`flex min-w-0 flex-col ${isList ? "gap-1" : "gap-px"}`}>
         {showEyebrow && (
-          <span className={`truncate font-bold ${styles.planLabel} ${isList ? "text-[11px]" : "text-[9px] leading-none"}`}>
+          <span className={`truncate font-extrabold ${styles.planLabel} ${isList ? "text-[12px] leading-none" : "text-[9px] leading-none"}`}>
             {plan!.title}
           </span>
         )}
         <span
-          className={`truncate font-bold leading-tight ${styles.title} ${
-            isList ? "text-[16px]" : compact ? "text-[11px]" : "text-[12.5px]"
+          className={`truncate font-extrabold leading-tight tracking-normal ${styles.title} ${
+            isList ? "text-[17px]" : compact ? "text-[11px]" : "text-[12.5px]"
           } ${resolved && isList ? `line-through ${missed ? "decoration-rose-400" : "decoration-neutral-400"}` : ""}`}
         >
           {task.title}
@@ -138,14 +138,14 @@ export function TaskBlockCard({
         )}
       </div>
 
-      <div className="flex shrink-0 items-center gap-1">
+      <div className={`flex shrink-0 items-center ${isList ? "gap-2" : "gap-1"}`}>
         {trailing}
         <button
           type="button"
           disabled={readOnly}
           onClick={(e) => { e.stopPropagation(); if (!readOnly) onToggle(); }}
-          className={`flex shrink-0 items-center justify-center rounded-[5px] border-[1.5px] transition-colors disabled:opacity-100 ${readOnly ? "cursor-default" : ""} ${
-            isList ? "h-[22px] w-[22px]" : "h-[18px] w-[18px]"
+          className={`flex shrink-0 items-center justify-center border-[1.5px] transition-colors disabled:opacity-100 ${readOnly ? "cursor-default" : ""} ${
+            isList ? "h-7 w-7 rounded-[8px]" : "h-[18px] w-[18px] rounded-[5px]"
           } ${
             done || partial ? "border-transparent bg-green-500"
             : missed ? "border-transparent bg-rose-500"
@@ -156,23 +156,23 @@ export function TaskBlockCard({
           aria-disabled={readOnly}
           aria-pressed={done || partial}
         >
-          {done && <IconCheck size={isList ? 14 : 12} strokeWidth={3} className="text-white" />}
-          {partial && <IconMinus size={isList ? 14 : 12} strokeWidth={3} className="text-white" />}
-          {missed && <IconX size={isList ? 14 : 12} strokeWidth={3} className="text-white" />}
+          {done && <IconCheck size={isList ? 16 : 12} strokeWidth={3} className="text-white" />}
+          {partial && <IconMinus size={isList ? 16 : 12} strokeWidth={3} className="text-white" />}
+          {missed && <IconX size={isList ? 16 : 12} strokeWidth={3} className="text-white" />}
         </button>
       </div>
     </div>
   );
 
   const timeRow = (task.startTime || task.endTime) ? (
-    <div className="relative flex flex-wrap items-center gap-1.5">
+    <div className={`relative flex flex-wrap items-center ${isList ? "gap-2" : "gap-1.5"}`}>
       <span
-        className={`whitespace-nowrap font-extrabold tabular-nums text-neutral-500 dark:text-neutral-400 ${isList ? "text-[13px]" : compact ? "text-[10px]" : "text-[11px]"}`}
+        className={`whitespace-nowrap font-extrabold tabular-nums ${isList ? styles.time : "text-neutral-500 dark:text-neutral-400"} ${isList ? "text-[14px]" : compact ? "text-[10px]" : "text-[11px]"}`}
       >
         {task.startTime}{task.endTime ? ` – ${task.endTime}` : ""}
       </span>
       {duration && !narrow && (
-        <span className={`rounded-full px-1.5 text-[9px] font-bold leading-[15px] border ${styles.durationBadge}`}>
+        <span className={`rounded-full border border-current px-2 font-extrabold ${styles.durationBadge} ${isList ? "text-[11px] leading-5" : "text-[9px] leading-[15px]"}`}>
           {duration}
         </span>
       )}
@@ -188,11 +188,16 @@ export function TaskBlockCard({
         resolved ? "opacity-60" : ""
       } ${
         isList
-          ? "rounded-[18px] gap-2 px-4 py-3.5"
-          : "rounded-[8px] justify-between hover:-translate-y-px hover:shadow-[0_6px_16px_-6px_rgba(0,0,0,0.25)] " + (compact ? "gap-1 px-2.5 py-1.5" : "gap-1.5 pl-3 pr-2 py-2")
+          ? "rounded-2xl gap-3 px-5 py-4 active:scale-[0.995]"
+          : "rounded-[8px] justify-between " + (compact ? "gap-1 px-2.5 py-1.5" : "gap-1.5 pl-3 pr-2 py-2")
       } ${onClick ? "cursor-pointer" : ""} ${className}`}
       style={style}
     >
+      {isList && (
+        <>
+          <div className={`pointer-events-none absolute inset-y-4 left-0 w-1 rounded-r-full ${styles.dot}`} />
+        </>
+      )}
       {header}
       {timeRow}
       {footer && <div className="relative">{footer}</div>}

@@ -81,7 +81,7 @@ export function AIFab({
       )}
 
       {isDesktop && open && (
-        <div className="fixed bottom-24 right-6 z-50 flex w-[26rem] max-w-[95vw] flex-col overflow-hidden rounded-[30px] border border-white/10 bg-neutral-950/95 shadow-[0_30px_80px_rgba(15,23,42,0.28)] backdrop-blur">
+        <div className="fixed bottom-24 right-6 z-50 flex w-[26rem] max-w-[95vw] flex-col overflow-hidden rounded-2xl border border-white/10 bg-neutral-950">
           <div className="h-[74vh] min-h-[520px] overflow-hidden">
             {panel}
           </div>
@@ -90,21 +90,11 @@ export function AIFab({
 
       {/* ── FAB button — hidden; AI is desktop-only ────────────────────── */}
       <div className="fixed bottom-20 right-4 z-50 hidden lg:block">
-        {/* Spinning rainbow ring */}
-        <div
-          aria-hidden="true"
-          className={`absolute -inset-[2.5px] ai-fab-rainbow-ring transition-opacity duration-300 ${open ? "opacity-50" : "opacity-90"}`}
-        />
-        {/* Soft ambient glow */}
-        <div
-          aria-hidden="true"
-          className={`absolute -inset-1 ai-fab-rainbow-ring blur-[5px] transition-opacity duration-300 ${open ? "opacity-15" : "opacity-35"}`}
-        />
         <m.button
           type="button"
           onClick={() => setOpen(!open)}
           whileTap={{ scale: 0.93 }}
-          className="relative z-10 flex h-13 w-13 items-center justify-center rounded-full bg-white/85 text-neutral-950 shadow-[0_20px_60px_rgba(15,23,42,0.16)] ring-1 ring-white/40 transition-colors duration-200 hover:bg-white dark:bg-neutral-950/95 dark:text-white dark:ring-white/10"
+          className="relative z-10 flex h-13 w-13 items-center justify-center rounded-full border border-emerald-600 bg-white text-neutral-950 transition-colors duration-200 hover:bg-neutral-100 dark:border-emerald-400 dark:bg-neutral-950 dark:text-white"
           aria-label={open ? "Close AI assistant" : "Open AI assistant"}
         >
           <AnimatePresence mode="wait" initial={false}>
