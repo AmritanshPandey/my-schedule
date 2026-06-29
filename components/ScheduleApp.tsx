@@ -59,6 +59,7 @@ import {
   resetStaleCompletions,
 } from "@/lib/useScheduleDB";
 import RitualOverlayLayer from "@/components/timeline/RitualOverlayLayer";
+import RitualLegend from "@/components/timeline/RitualLegend";
 import {
   colorFromIcon,
   resolveAccentColor,
@@ -66,7 +67,6 @@ import {
 } from "@/lib/colorSystem";
 import { SECTION_ICONS } from "@/components/SectionIcons";
 import {
-  IconCheck,
   IconChevronLeft,
   IconCalendar,
   IconChecklist,
@@ -80,7 +80,6 @@ import {
   IconTable,
   IconTrash,
   IconX,
-  IconAlertCircle,
   IconClipboardData,
   IconStack2,
 } from "@tabler/icons-react";
@@ -2409,9 +2408,6 @@ export default function ScheduleApp() {
       const firstTracker = schedule.progressTrackers.find((t) => t.planId === plan.id);
       return { plan, uniqueTasks, trackerCount, planIconEntry, stats, dateRange, firstTracker };
     });
-    const onTrackCount = planRows.filter(
-      ({ stats }) => stats.consistency >= 70 || stats.dayState === "complete"
-    ).length;
     const atRiskCount = planRows.filter(
       ({ stats }) => stats.consistency >= 35 && stats.consistency < 70
     ).length;
@@ -2424,7 +2420,7 @@ export default function ScheduleApp() {
       : null;
 
     return (
-      <div className="px-4 pb-8 pt-5 lg:px-8 lg:pb-10 lg:pt-6 xl:px-10">
+      <div className="pb-8 pt-5 lg:pb-10 lg:pt-6">
         <div className="mx-auto w-full max-w-[1500px]">
           {/* Header */}
           <MainTitleSection
@@ -2440,16 +2436,6 @@ export default function ScheduleApp() {
             className="mb-6"
           />
 
-          {/* Stat strip */}
-          {schedule.plans.length > 0 && (
-            <div className="mb-5 grid grid-cols-2 gap-3 lg:grid-cols-4">
-              <StatTile icon={IconClipboardData} value={schedule.plans.length} label="Total Plans" />
-              <StatTile icon={IconCheck} value={onTrackCount} label="On Track" />
-              <StatTile icon={IconAlertCircle} value={needsFocusCount} label="Needs Focus" />
-              <StatTile icon={IconChecklist} value={totalPlanTasks} label="Planned Tasks" />
-            </div>
-          )}
-
           {/* Empty state */}
           {schedule.plans.length === 0 && (
             <EmptyState
@@ -2464,22 +2450,6 @@ export default function ScheduleApp() {
           {schedule.plans.length > 0 && (
             <div className="grid gap-5 xl:grid-cols-[minmax(0,1fr)_320px]">
               <section className="min-w-0">
-                <div className="mb-3 flex items-center justify-between gap-3">
-                  <div>
-                    <h2 className="text-[17px] font-extrabold text-neutral-950 dark:text-white">Plan health</h2>
-                    <p className="mt-0.5 text-[13px] font-medium text-neutral-400 dark:text-neutral-500">
-                      {onTrackCount} on track · {needsFocusCount} need focus
-                    </p>
-                  </div>
-                  <button
-                    type="button"
-                    onClick={() => setTemplatesOpen(true)}
-                    className="hidden shrink-0 rounded-xl border border-neutral-200 px-3 py-2 text-[12px] font-semibold text-neutral-500 transition-colors hover:bg-neutral-50 hover:text-neutral-800 dark:border-white/[0.10] dark:text-neutral-400 dark:hover:bg-white/[0.06] dark:hover:text-neutral-200 lg:inline-flex"
-                  >
-                    Templates
-                  </button>
-                </div>
-
                 <button
                   type="button"
                   onClick={() => setTemplatesOpen(true)}
@@ -2577,7 +2547,7 @@ export default function ScheduleApp() {
   const showMobileTaskDetailPage = !!subtasksRef && !isDesktopViewport;
 
   return (
-    <main className="min-h-dvh bg-[#F3F4F1] text-neutral-900 dark:bg-[#0E0E0E] dark:text-white lg:flex lg:h-dvh lg:gap-4 lg:overflow-hidden lg:p-4">
+    <main className="min-h-dvh bg-[#F3F4F1] text-neutral-900 dark:bg-[#0E0E0E] dark:text-white lg:flex lg:h-dvh lg:gap-10 lg:overflow-hidden lg:p-4">
 
       {/* ── Desktop sidebar (hidden on mobile) ─────────────────────────────── */}
       {!iosSafeMode && (
@@ -2720,6 +2690,9 @@ export default function ScheduleApp() {
               <WeekGrid
                 schedule={schedule}
                 plansById={plansById}
+                rituals={schedule.rituals ?? []}
+                ritualCompletions={schedule.ritualCompletions ?? []}
+                onToggleRitual={handleToggleRitualComplete}
                 weekDates={visibleDates}
                 todayKey={todayKey}
                 weekLabel={weekLabel}
@@ -2988,6 +2961,16 @@ export default function ScheduleApp() {
                         </p>
                       </div>
                     )}
+                    {/* Routine dot legend — maps timeline dot colors to routines */}
+                    <RitualLegend
+                      rituals={schedule.rituals ?? []}
+                      activeDay={activeDay}
+                      timelineStartMinutes={timelineStartMinutes}
+                      timelineEndMinutes={timelineEndMinutes}
+                      timelineTopPadding={TIMELINE_TOP_PADDING}
+                      hourHeight={HOUR_HEIGHT}
+                      completedIds={completedRitualIds}
+                    />
                     {/* Premium execution timeline */}
                     <ErrorBoundary section name="Timeline">
                     <div className="-mx-4">

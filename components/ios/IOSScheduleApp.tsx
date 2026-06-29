@@ -14,6 +14,7 @@ import {
   IconClipboardList,
   IconClockHour3,
   IconEdit,
+  IconFlame,
   IconListCheck,
   IconNotes,
   IconPlus,
@@ -28,7 +29,6 @@ import type { MilestoneSaveData } from "@/components/plan/MilestoneSheet";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
 import IOSBottomNav from "@/components/ios/IOSBottomNav";
 import IOSLightTaskCard from "@/components/ios/IOSLightTaskCard";
-import { useAuth } from "@/contexts/AuthProvider";
 import {
   DAYS,
   DAY_LABELS,
@@ -67,6 +67,7 @@ import { toggleRitualCompletion } from "@/lib/ritualCompletions";
 import { inputToDisplayTime, minutesToInputTime, parseTimeToMinutes, toScheduleDayMinutes } from "@/lib/timeUtils";
 import { computeTrend } from "@/lib/trendUtils";
 import { getPlanCardStats } from "@/lib/planInsights";
+import { calculateExecutionStreak } from "@/lib/consistency/calculateExecutionStreak";
 import { haptic } from "@/lib/haptics";
 import type { CreateTaskFromNoteInput } from "@/components/notes/NotesView";
 
@@ -159,16 +160,12 @@ function formatTrackerValue(entry: MetricEntry | null, tracker: ProgressTracker)
 
 function IOSHeader({
   title,
-  subtitle,
-  backLabel,
   onBack,
   actions,
   onSettings,
   onNotes,
 }: {
   title: string;
-  subtitle: string;
-  backLabel?: string;
   onBack?: () => void;
   actions?: Array<{
     icon: React.ComponentType<{ size?: number; strokeWidth?: number; className?: string }>;
@@ -180,22 +177,21 @@ function IOSHeader({
   onNotes?: () => void;
 }) {
   return (
-    <header className="fixed inset-x-0 top-0 z-30 border-b border-neutral-200 bg-neutral-50 px-4 pb-2 pt-[calc(env(safe-area-inset-top)+10px)] dark:border-white/[0.08] dark:bg-neutral-950">
+    <header className="fixed inset-x-0 top-0 z-30 border-b border-neutral-200 bg-white px-4 pb-2 pt-[calc(env(safe-area-inset-top)+10px)] dark:border-white/[0.08] dark:bg-neutral-950">
       <div className="flex h-12 items-center justify-between gap-3">
         <div className="min-w-0">
           {onBack ? (
             <button
               type="button"
               onClick={onBack}
-              className="mb-0.5 flex items-center gap-1 text-[13px] font-bold text-neutral-500 dark:text-neutral-400"
+              className="-ml-1.5 flex items-center gap-1 text-left"
             >
-              <IconChevronLeft size={16} strokeWidth={2.2} />
-              {backLabel}
+              <IconChevronLeft size={26} strokeWidth={2.4} className="shrink-0 text-neutral-400 dark:text-neutral-500" />
+              <h1 className="truncate text-[22px] font-black leading-none text-neutral-950 dark:text-white">{title}</h1>
             </button>
           ) : (
-            <p className="text-[11px] font-bold uppercase tracking-[0.1em] text-neutral-400 dark:text-neutral-500">{subtitle}</p>
+            <h1 className="truncate text-[22px] font-black leading-none text-neutral-950 dark:text-white">{title}</h1>
           )}
-          <h1 className="truncate text-[22px] font-black leading-none text-neutral-950 dark:text-white">{title}</h1>
         </div>
         <div className="flex shrink-0 items-center gap-1">
           {actions?.length ? (
@@ -343,7 +339,6 @@ export default function IOSScheduleApp() {
   bootLog(isIOSSafeMode() ? "IOS_SAFE_MODE_ENABLED" : "PHONE_SHELL_ENABLED");
   void isStandalonePWA();
 
-  const { user, isGuest, authLoading } = useAuth();
   const { schedule, setSchedule, ready, clearData, clearProgress } = useScheduleDB();
   const [todayKey, setTodayKey] = useState<DayKey>(() => JS_DAYS[new Date().getDay()]);
   const [activeDay, setActiveDay] = useState<DayKey>(() => JS_DAYS[new Date().getDay()]);
@@ -367,8 +362,6 @@ export default function IOSScheduleApp() {
   const [initialNoteId, setInitialNoteId] = useState<string | null>(null);
   const scheduleRef = useRef(schedule);
   scheduleRef.current = schedule;
-
-  const authLabel = authLoading ? "Auth checking" : isGuest ? "Guest mode" : user?.displayName || user?.email || "Signed in";
 
   useEffect(() => {
     bootLog("TIMELINE_SKIPPED_ON_IOS");
@@ -496,6 +489,7 @@ export default function IOSScheduleApp() {
     [completedRitualIds, todayRitualsDue]
   );
   const dashboardProgressPct = todayTasks.length > 0 ? Math.round((todayDone / todayTasks.length) * 100) : 0;
+  const executionStreak = useMemo(() => calculateExecutionStreak(schedule, todayISO()), [schedule]);
 	  const overviewTrackers = useMemo(() => {
 	    const storedTrackers = schedule.progressTrackers ?? [];
     const fallbackTrackers: ProgressTracker[] = storedTrackers.length > 0
@@ -911,6 +905,41 @@ export default function IOSScheduleApp() {
       return (
         <ErrorBoundary section name="Dashboard">
           <div data-testid="overview-dashboard" className="space-y-4 px-4 pt-5">
+            <section data-testid="overview-streak-card" className="rounded-2xl border border-neutral-200 bg-white p-4 dark:border-white/[0.08] dark:bg-neutral-900">
+              <div className="flex items-center gap-3">
+                <span
+                  className={`grid h-11 w-11 shrink-0 place-items-center rounded-2xl ${
+                    executionStreak.atRisk
+                      ? "bg-amber-500/12 text-amber-500 dark:bg-amber-400/12 dark:text-amber-400"
+                      : "bg-emerald-500/12 text-emerald-600 dark:bg-emerald-400/12 dark:text-emerald-400"
+                  }`}
+                >
+                  <IconFlame size={22} strokeWidth={2} />
+                </span>
+                <div className="min-w-0 flex-1">
+                  <p className="truncate text-[19px] font-black leading-none text-neutral-950 dark:text-white">
+                    {executionStreak.streak === 0 ? "No streak yet" : `${executionStreak.streak}-day streak`}
+                  </p>
+                  <p className="mt-1.5 truncate text-[12px] font-semibold text-neutral-500 dark:text-neutral-400">
+                    {executionStreak.atRisk
+                      ? "Complete one thing to keep it alive."
+                      : executionStreak.milestone
+                        ? "New milestone — keep the run going."
+                        : executionStreak.streak === 0
+                          ? "Finish a task or ritual to start."
+                          : "You showed up. Keep the run going."}
+                  </p>
+                </div>
+                {executionStreak.streak > 0 && (
+                  <span className={`shrink-0 text-[26px] font-black tabular-nums leading-none ${
+                    executionStreak.atRisk ? "text-amber-500 dark:text-amber-400" : "text-emerald-600 dark:text-emerald-400"
+                  }`}>
+                    {executionStreak.streak}
+                  </span>
+                )}
+              </div>
+            </section>
+
             <section data-testid="overview-today-card" className="rounded-2xl border border-neutral-200 bg-white p-4 dark:border-white/[0.08] dark:bg-neutral-900">
               <div className="mb-3 flex items-center justify-between gap-3">
                 <div className="flex min-w-0 items-center gap-1.5">
@@ -1305,7 +1334,7 @@ export default function IOSScheduleApp() {
       return (
         <IOSMotionBoundary>
           <ErrorBoundary section name="Notes">
-            <div className="h-[calc(100dvh_-_env(safe-area-inset-top)_-_76px)] min-h-[520px]">
+            <div className="h-full">
               <NotesView
                 notes={schedule.notes}
                 onCreate={handleCreateNote}
@@ -1335,11 +1364,9 @@ export default function IOSScheduleApp() {
 
   return (
     <main className="min-h-dvh bg-[#F3F4F1] text-neutral-900 dark:bg-[#0E0E0E] dark:text-white">
-      {!subtasksRef && (
+      {!subtasksRef && activeTab !== 6 && (
         <IOSHeader
           title={selectedPlan ? selectedPlan.title : activeTab === 0 ? "Today" : activeTab === 1 ? "Plans" : activeTab === 2 ? "Routine" : activeTab === 5 ? "Settings" : activeTab === 6 ? "Notes" : "Dashboard"}
-          subtitle={authLabel}
-          backLabel={selectedPlan ? "Plans" : undefined}
           onBack={selectedPlan ? () => setSelectedPlanId(null) : undefined}
           actions={
             selectedPlan
@@ -1368,7 +1395,7 @@ export default function IOSScheduleApp() {
           onNotes={() => { setSelectedPlanId(null); setActiveTab(6); }}
         />
       )}
-      <div className={subtasksRef ? "h-dvh" : "pb-36 pt-[calc(env(safe-area-inset-top)+76px)]"}>{content}</div>
+      <div className={subtasksRef || activeTab === 6 ? "h-dvh bg-white pt-[env(safe-area-inset-top)] dark:bg-neutral-950" : "pb-36 pt-[calc(env(safe-area-inset-top)+76px)]"}>{content}</div>
 
       {activeTab !== 6 && !subtasksRef && !taskSheetOpen && (
         <IOSBottomNav

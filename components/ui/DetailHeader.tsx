@@ -20,55 +20,50 @@ interface DetailHeaderProps {
 }
 
 /**
- * Standard compact header bar for internal/sub pages (Notes, Plan detail, ...).
- * Rendered as a shrink-0 flex row so callers place it at the top of a full-height
- * column.
+ * Standard header bar for internal/sub pages (Notes, subtasks, ...). Matches the
+ * global IOSHeader's design (height, color, title weight, round ghost actions) so
+ * every header in the app reads consistently. Rendered as a shrink-0 flex row so
+ * callers place it at the top of a full-height column.
  */
 export default function DetailHeader({ title, onBack, actions, rightSlot, className = "" }: DetailHeaderProps) {
   return (
     <header
-      className={`flex h-12 shrink-0 items-center gap-1 border-b border-neutral-200 bg-white px-2 dark:border-white/[0.08] dark:bg-neutral-950 ${className}`}
+      className={`flex h-12 shrink-0 items-center justify-between gap-3 border-b border-neutral-200 bg-white px-4 dark:border-white/[0.08] dark:bg-neutral-950 ${className}`}
     >
       <m.button
         type="button"
-        whileTap={{ scale: 0.86 }}
+        whileTap={{ scale: 0.94 }}
         onClick={onBack}
         aria-label="Back"
-        className="tap-target flex h-9 w-9 shrink-0 items-center justify-center text-neutral-500 dark:text-white/70"
+        className="-ml-1.5 flex min-w-0 items-center gap-1 text-left"
       >
-        <IconChevronLeft size={26} strokeWidth={1.5} />
+        <IconChevronLeft size={26} strokeWidth={2.4} className="shrink-0 text-neutral-400 dark:text-neutral-500" />
+        <h1 className="truncate text-[22px] font-black leading-none text-neutral-950 dark:text-white">{title}</h1>
       </m.button>
 
-      <div className="min-w-0 flex-1">
-        <h1 className="truncate text-[16px] font-bold text-neutral-950 dark:text-white/80">{title}</h1>
+      <div className="flex shrink-0 items-center gap-1">
+        {rightSlot}
+        {actions?.map((action, i) => {
+          const Icon = action.icon;
+          const tone = action.active
+            ? "bg-neutral-950 text-white dark:bg-white dark:text-neutral-950"
+            : action.destructive
+              ? "text-neutral-500 hover:bg-rose-500/10 hover:text-rose-500 dark:text-neutral-400 dark:hover:text-rose-400"
+              : "text-neutral-500 hover:bg-neutral-200/70 hover:text-neutral-800 dark:text-neutral-400 dark:hover:bg-white/[0.07] dark:hover:text-white";
+          return (
+            <m.button
+              key={i}
+              type="button"
+              whileTap={{ scale: 0.86 }}
+              onClick={action.onClick}
+              aria-label={action.label}
+              className={`flex h-10 w-10 items-center justify-center rounded-full transition-colors ${tone}`}
+            >
+              <Icon size={21} strokeWidth={2} />
+            </m.button>
+          );
+        })}
       </div>
-
-      {rightSlot}
-
-      {actions && actions.length > 0 && (
-        <div className="flex shrink-0 items-center gap-1.5 pr-1">
-          {actions.map((action, i) => {
-            const Icon = action.icon;
-            const tone = action.active
-              ? "border-neutral-900 bg-neutral-900 text-white dark:border-white dark:bg-white dark:text-neutral-900"
-              : action.destructive
-                ? "border-neutral-200 text-neutral-500 hover:bg-rose-500/10 hover:text-rose-500 focus-visible:bg-rose-500/10 focus-visible:text-rose-500 dark:border-white/[0.10] dark:text-neutral-400 dark:hover:bg-rose-500/10 dark:hover:text-rose-400 dark:focus-visible:bg-rose-500/10 dark:focus-visible:text-rose-400"
-                : "border-neutral-200 text-neutral-700 hover:bg-neutral-100 dark:border-white/[0.10] dark:text-white/70 dark:hover:bg-white/[0.06]";
-            return (
-              <m.button
-                key={i}
-                type="button"
-                whileTap={{ scale: 0.86 }}
-                onClick={action.onClick}
-                aria-label={action.label}
-                className={`tap-target flex h-9 w-9 items-center justify-center rounded-xl border transition-colors ${tone}`}
-              >
-                <Icon size={20} strokeWidth={2} />
-              </m.button>
-            );
-          })}
-        </div>
-      )}
     </header>
   );
 }

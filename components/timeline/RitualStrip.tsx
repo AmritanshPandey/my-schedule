@@ -4,7 +4,7 @@ import { m } from "framer-motion";
 import { IconCheck } from "@tabler/icons-react";
 import type { Ritual, RitualColor } from "@/lib/useScheduleDB";
 
-const COLOR_DOTS: Record<RitualColor, string> = {
+export const COLOR_DOTS: Record<RitualColor, string> = {
   rose:    "bg-rose-400",
   sky:     "bg-sky-400",
   violet:  "bg-violet-400",

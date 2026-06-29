@@ -4,16 +4,10 @@ import { useMemo, useState } from "react";
 import { m, AnimatePresence } from "framer-motion";
 import {
   IconCheck,
-  IconChevronDown,
   IconPlus,
   IconRepeat,
-  IconSunHigh,
-  IconSunrise,
-  IconSunset,
   IconTrash,
   IconCalendarEvent,
-  IconChartLine,
-  IconFlame,
 } from "@tabler/icons-react";
 import type { Ritual, RitualColor, RitualCompletion, DayKey } from "@/lib/useScheduleDB";
 import { DAYS } from "@/lib/useScheduleDB";
@@ -38,12 +32,6 @@ const COLOR_RING: Record<RitualColor, string> = {
   indigo:  "border-indigo-500", teal:    "border-teal-500",
 };
 
-const TIME_GROUPS = [
-  { key: "morning"   as const, label: "Morning",   Icon: IconSunrise, test: (h: number) => h < 12             },
-  { key: "afternoon" as const, label: "Afternoon",  Icon: IconSunHigh, test: (h: number) => h >= 12 && h < 17 },
-  { key: "evening"   as const, label: "Evening",    Icon: IconSunset,  test: (h: number) => h >= 17            },
-];
-
 // JS getDay() 0=Sunday → DayKey
 const JS_TO_DAY: DayKey[] = ["sunday","monday","tuesday","wednesday","thursday","friday","saturday"];
 
@@ -51,8 +39,6 @@ const DAY_SHORT: Record<DayKey, string> = {
   monday: "Mon", tuesday: "Tue", wednesday: "Wed",
   thursday: "Thu", friday: "Fri", saturday: "Sat", sunday: "Sun",
 };
-
-function getHour(time: string) { return parseInt(time.split(":")[0] ?? "0", 10); }
 
 function getLast7Dates(): string[] {
   const dates: string[] = [];
@@ -107,12 +93,10 @@ export default function RitualView({
   onDelete,
   addOpen,
   onAddOpenChange,
-  weekHistory,
 }: RitualViewProps) {
   const todayKey = JS_TO_DAY[new Date().getDay()] as DayKey;
   const [editRitual, setEditRitual] = useState<Ritual | null>(null);
   const [deleteRitual, setDeleteRitual] = useState<Ritual | null>(null);
-  const [collapsedGroups, setCollapsedGroups] = useState<Set<string>>(new Set());
   const [selectedDateISO, setSelectedDateISO] = useState(() => todayISO());
   const selectedDay = JS_TO_DAY[new Date(`${selectedDateISO}T00:00:00`).getDay()] as DayKey;
   const deleteCopy = deleteRitual
@@ -149,22 +133,21 @@ export default function RitualView({
   const pct = total > 0 ? Math.round((completedToday / total) * 100) : 0;
   const allDone = total > 0 && completedToday === total;
 
-  const weekAvg = useMemo(() => {
-    if (!weekHistory || weekHistory.length === 0) return null;
-    const active = weekHistory.filter((d) => d.dueCount > 0);
-    if (active.length === 0) return null;
-    return Math.round(active.reduce((sum, d) => sum + (d.completedCount / d.dueCount) * 100, 0) / active.length);
-  }, [weekHistory]);
-
   function dayCount(day: DayKey) {
     return sorted.filter((r) => appliesToDay(r, day)).length;
   }
 
-  function toggleGroup(key: string) {
-    setCollapsedGroups((prev) => {
-      const next = new Set(prev);
-      if (next.has(key)) next.delete(key); else next.add(key);
-      return next;
+  // Last-7-days status per ritual: green = completed, color ring = due today &
+  // not done, gray = due & missed, faint = not scheduled that day.
+  function weekDots(ritual: Ritual) {
+    const todayISOstr = localISODate(new Date());
+    return last7.map((date) => {
+      const wd = JS_TO_DAY[new Date(`${date}T00:00:00`).getDay()];
+      return {
+        completed: ritualCompletions.some((c) => c.ritualId === ritual.id && c.date === date),
+        due: appliesToDay(ritual, wd),
+        isToday: date === todayISOstr,
+      };
     });
   }
 
@@ -175,18 +158,7 @@ export default function RitualView({
       : "Everyday";
     const done = selectedCompletedIds.has(ritual.id);
     const missed = selectedDateISO < todayISO() && appliesToDay(ritual, selectedDay) && !done;
-
-    // Last-7-days dots: green = completed, color ring = due today & not done,
-    // gray = due & missed, faint = not scheduled that day.
-    const todayISOstr = localISODate(new Date());
-    const week = last7.map((date) => {
-      const wd = JS_TO_DAY[new Date(`${date}T00:00:00`).getDay()];
-      return {
-        completed: ritualCompletions.some((c) => c.ritualId === ritual.id && c.date === date),
-        due: appliesToDay(ritual, wd),
-        isToday: date === todayISOstr,
-      };
-    });
+    const week = weekDots(ritual);
 
     return (
       <div className="group flex items-center gap-4 py-4">
@@ -243,9 +215,82 @@ export default function RitualView({
     );
   }
 
+  // Desktop card — one self-contained card per routine, laid out in a grid.
+  function renderDesktopCard(ritual: Ritual) {
+    const ring = ritual.color ? COLOR_RING[ritual.color] : "border-neutral-300 dark:border-neutral-600";
+    const dayLabel = ritual.repeatDays && ritual.repeatDays.length > 0
+      ? ritual.repeatDays.map((d) => DAY_SHORT[d]).join(" · ")
+      : "Everyday";
+    const done = selectedCompletedIds.has(ritual.id);
+    const missed = selectedDateISO < todayISO() && appliesToDay(ritual, selectedDay) && !done;
+    const week = weekDots(ritual);
+
+    return (
+      <div className="group relative flex h-full flex-col justify-between gap-4 rounded-2xl border border-neutral-200 bg-white p-4 transition-colors hover:border-neutral-300 dark:border-white/[0.08] dark:bg-neutral-900 dark:hover:border-white/[0.16]">
+        <div className="flex items-start gap-3">
+          {/* Completion ring */}
+          <m.button
+            type="button"
+            whileTap={{ scale: 0.88 }}
+            onClick={() => { haptic("light"); onToggleComplete(ritual.id, selectedDateISO); }}
+            aria-label={done ? "Mark incomplete" : missed ? "Mark complete for missed day" : "Mark complete"}
+            className={`mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-full border-[2.5px] transition-colors ${
+              done ? "border-transparent bg-green-500" : missed ? "border-neutral-300 bg-neutral-200 dark:border-white/15 dark:bg-white/10" : `${ring} bg-transparent`
+            }`}
+          >
+            {done && <IconCheck size={20} strokeWidth={3} className="text-white" />}
+          </m.button>
+
+          {/* Title + meta */}
+          <button
+            type="button"
+            onClick={() => { haptic("light"); setEditRitual(ritual); }}
+            className="min-w-0 flex-1 text-left"
+          >
+            <p className={`truncate text-[16px] font-bold leading-tight ${
+              done ? "text-neutral-400 line-through decoration-neutral-300 dark:text-neutral-500" : missed ? "text-neutral-500 dark:text-neutral-400" : "text-neutral-900 dark:text-white"
+            }`}>
+              {ritual.title}
+            </p>
+            <p className="mt-1 truncate text-[13px] font-medium text-neutral-500 dark:text-neutral-400">
+              <span className="tabular-nums">{ritual.time}</span> · {missed ? "Missed · " : ""}{dayLabel}
+            </p>
+          </button>
+
+          {/* Delete on hover */}
+          <IconButton
+            label="Delete routine"
+            variant="dangerGhost"
+            size="xs"
+            radius="lg"
+            onClick={() => setDeleteRitual(ritual)}
+            className="opacity-0 transition-opacity group-hover:opacity-100"
+          >
+            <IconTrash size={14} strokeWidth={2} />
+          </IconButton>
+        </div>
+
+        {/* 7-day consistency */}
+        <div className="flex items-center justify-between">
+          <span className="text-[10px] font-semibold uppercase tracking-wider text-neutral-400 dark:text-neutral-500">
+            Last 7 days
+          </span>
+          <div className="flex items-center gap-1.5">
+            {week.map((d, i) => {
+              if (d.completed) return <span key={i} className="h-2.5 w-2.5 rounded-full bg-green-500" />;
+              if (d.isToday && d.due) return <span key={i} className={`h-2.5 w-2.5 rounded-full border-2 bg-transparent ${ring}`} />;
+              return <span key={i} className={`h-2.5 w-2.5 rounded-full ${d.due ? "bg-neutral-200 dark:bg-white/15" : "bg-neutral-100 dark:bg-white/[0.06]"}`} />;
+            })}
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <>
-      <div className="px-4 pb-6 pt-6 lg:mx-auto lg:max-w-4xl lg:px-8 lg:pb-10 lg:pt-6">
+      <div className="py-6 lg:pb-10 lg:pt-6">
+       <div className="mx-auto w-full max-w-[1500px]">
 
         {/* ── Header ───────────────────────────────────────────────────────── */}
         <MainTitleSection
@@ -323,53 +368,6 @@ export default function RitualView({
           </div>
         )}
 
-        {/* ── Desktop stat tiles ───────────────────────────────────────────── */}
-        {rituals.length > 0 && (
-          <div className="hidden lg:grid lg:grid-cols-3 gap-3 mb-5">
-            <div className="rounded-2xl border border-neutral-200 bg-white px-4 py-3.5 dark:border-white/[0.08] dark:bg-neutral-900">
-              <div className="flex items-center gap-1.5 mb-1">
-                <IconCalendarEvent size={12} strokeWidth={2} className="text-neutral-400 dark:text-neutral-500" />
-                <p className="text-[11px] font-semibold uppercase tracking-wider text-neutral-400 dark:text-neutral-500">Showing</p>
-              </div>
-              <p className="text-[28px] font-black tabular-nums leading-none text-neutral-900 dark:text-white">{total}</p>
-              <p className="mt-0.5 text-[12px] text-neutral-400 dark:text-neutral-500">for {DAY_SHORT[selectedDay]}</p>
-            </div>
-            <div className={`rounded-2xl border px-4 py-3.5 ${allDone ? "border-emerald-200 bg-emerald-50 dark:border-emerald-500/20 dark:bg-emerald-500/[0.07]" : "border-neutral-200 bg-white dark:border-white/[0.08] dark:bg-neutral-900"}`}>
-              <div className="flex items-center gap-1.5 mb-1">
-                <IconCheck size={12} strokeWidth={2.5} className={allDone ? "text-emerald-500" : "text-neutral-400 dark:text-neutral-500"} />
-                <p className="text-[11px] font-semibold uppercase tracking-wider text-neutral-400 dark:text-neutral-500">Progress</p>
-              </div>
-              <p className={`text-[28px] font-black tabular-nums leading-none ${allDone ? "text-emerald-600 dark:text-emerald-400" : "text-neutral-900 dark:text-white"}`}>
-                {pct}<span className="text-[16px] font-bold">%</span>
-              </p>
-              <p className={`mt-0.5 text-[12px] ${allDone ? "text-emerald-600/70 dark:text-emerald-500/70" : "text-neutral-400 dark:text-neutral-500"}`}>
-                {completedToday} of {total} done
-              </p>
-            </div>
-            {weekAvg !== null ? (
-              <div className="rounded-2xl border border-neutral-200 bg-white px-4 py-3.5 dark:border-white/[0.08] dark:bg-neutral-900">
-                <div className="flex items-center gap-1.5 mb-1">
-                  <IconChartLine size={12} strokeWidth={2} className="text-neutral-400 dark:text-neutral-500" />
-                  <p className="text-[11px] font-semibold uppercase tracking-wider text-neutral-400 dark:text-neutral-500">7-day avg</p>
-                </div>
-                <p className="text-[28px] font-black tabular-nums leading-none text-neutral-900 dark:text-white">
-                  {weekAvg}<span className="text-[16px] font-bold">%</span>
-                </p>
-                <p className="mt-0.5 text-[12px] text-neutral-400 dark:text-neutral-500">completion rate</p>
-              </div>
-            ) : (
-              <div className="rounded-2xl border border-neutral-200 bg-white px-4 py-3.5 dark:border-white/[0.08] dark:bg-neutral-900">
-                <div className="flex items-center gap-1.5 mb-1">
-                  <IconFlame size={12} strokeWidth={2} className="text-neutral-400 dark:text-neutral-500" />
-                  <p className="text-[11px] font-semibold uppercase tracking-wider text-neutral-400 dark:text-neutral-500">Streak</p>
-                </div>
-                <p className="text-[28px] font-black tabular-nums leading-none text-neutral-900 dark:text-white">—</p>
-                <p className="mt-0.5 text-[12px] text-neutral-400 dark:text-neutral-500">complete more days</p>
-              </div>
-            )}
-          </div>
-        )}
-
         {/* ── Empty state (no rituals at all) ──────────────────────────────── */}
         {rituals.length === 0 && (
           <EmptyState
@@ -411,50 +409,56 @@ export default function RitualView({
           </AnimatePresence>
         </div>
 
-        {/* ── Desktop: time-grouped list ────────────────────────────────────── */}
-        <div className="hidden lg:block">
-          {TIME_GROUPS.map(({ key, label, Icon }) => {
-            const group = filteredRituals.filter((r) => {
-              const h = getHour(r.time);
-              if (key === "morning")   return h < 12;
-              if (key === "afternoon") return h >= 12 && h < 17;
-              return h >= 17;
-            });
-            if (group.length === 0) return null;
-            const collapsed = collapsedGroups.has(key);
-
-            return (
-              <div key={key} className="mb-5 last:mb-0">
-                <button type="button" onClick={() => toggleGroup(key)} className="mb-3 flex w-full items-center gap-2 text-left">
-                  <Icon size={13} strokeWidth={2} className="text-neutral-400 dark:text-neutral-500" />
-                  <span className="text-[11px] font-bold uppercase tracking-widest text-neutral-400 dark:text-neutral-500">{label}</span>
-                  <span className="text-[11px] font-medium text-neutral-300 dark:text-neutral-700">· {group.length}</span>
-                  <IconChevronDown size={13} strokeWidth={2}
-                    className={`ml-auto text-neutral-300 transition-transform dark:text-neutral-700 ${collapsed ? "-rotate-90" : ""}`} />
-                </button>
-
-                <AnimatePresence initial={false}>
-                  {!collapsed && (
-                    <m.div
-                      key="content"
-                      initial={{ opacity: 0, height: 0 }}
-                      animate={{ opacity: 1, height: "auto" }}
-                      exit={{ opacity: 0, height: 0 }}
-                      transition={{ duration: 0.2, ease: [0.22, 1, 0.36, 1] }}
-                      className="overflow-hidden"
-                    >
-                      <div className="divide-y divide-neutral-100 dark:divide-white/[0.06]">
-                        {group.map((ritual) => (
-                          <div key={ritual.id}>{renderCard(ritual)}</div>
-                        ))}
-                      </div>
-                    </m.div>
-                  )}
-                </AnimatePresence>
+        {/* ── Desktop: routine card grid + signal rail ──────────────────────── */}
+        {filteredRituals.length > 0 && (
+          <div className="hidden gap-5 lg:grid xl:grid-cols-[minmax(0,1fr)_320px]">
+            <section className="min-w-0">
+              <div className="grid gap-3 lg:grid-cols-2">
+                {filteredRituals.map((ritual) => (
+                  <div key={ritual.id}>{renderDesktopCard(ritual)}</div>
+                ))}
               </div>
-            );
-          })}
-        </div>
+            </section>
+
+            <aside className="hidden min-w-0 space-y-3 xl:block">
+              <div className={`rounded-2xl border p-4 ${allDone ? "border-emerald-200 bg-emerald-50 dark:border-emerald-500/20 dark:bg-emerald-500/[0.07]" : "border-neutral-200 bg-white dark:border-white/[0.08] dark:bg-neutral-900"}`}>
+                <p className="text-[11px] font-semibold uppercase tracking-[0.08em] text-neutral-400 dark:text-neutral-500">
+                  Today&apos;s signal
+                </p>
+                <p className={`mt-2 text-[24px] font-black leading-none ${allDone ? "text-emerald-600 dark:text-emerald-400" : "text-neutral-950 dark:text-white"}`}>
+                  {allDone ? "All done" : `${pct}%`}
+                </p>
+                <p className="mt-2 text-[13px] leading-relaxed text-neutral-500 dark:text-neutral-400">
+                  {completedToday} of {total} done for {DAY_SHORT[selectedDay]}.
+                </p>
+                <div className="mt-3">
+                  <ProgressBar pct={pct} height={6} fillClassName="bg-green-500" />
+                </div>
+              </div>
+
+              <div className="rounded-2xl border border-neutral-200 bg-white p-4 dark:border-white/[0.08] dark:bg-neutral-900">
+                <p className="text-[11px] font-semibold uppercase tracking-[0.08em] text-neutral-400 dark:text-neutral-500">
+                  Routine totals
+                </p>
+                <div className="mt-3 space-y-2">
+                  <div className="flex items-center justify-between border-b border-neutral-100 pb-2 dark:border-white/[0.06]">
+                    <span className="text-[13px] font-semibold text-neutral-500 dark:text-neutral-400">Active routines</span>
+                    <span className="text-[13px] font-black tabular-nums text-neutral-950 dark:text-white">{rituals.length}</span>
+                  </div>
+                  <div className="flex items-center justify-between border-b border-neutral-100 pb-2 dark:border-white/[0.06]">
+                    <span className="text-[13px] font-semibold text-neutral-500 dark:text-neutral-400">Scheduled {DAY_SHORT[selectedDay]}</span>
+                    <span className="text-[13px] font-black tabular-nums text-neutral-950 dark:text-white">{total}</span>
+                  </div>
+                  <div className="flex items-center justify-between">
+                    <span className="text-[13px] font-semibold text-neutral-500 dark:text-neutral-400">Done today</span>
+                    <span className="text-[13px] font-black tabular-nums text-neutral-950 dark:text-white">{completedToday}</span>
+                  </div>
+                </div>
+              </div>
+            </aside>
+          </div>
+        )}
+       </div>
       </div>
 
       <RitualSheet open={addOpen} onClose={() => onAddOpenChange(false)} onSave={onAdd} />

@@ -28,9 +28,8 @@ import ExecutionTrendCard from "@/components/ExecutionTrendCard";
 import { getTrendDirection, getTrendState, type TrendDirection, type TrendState } from "@/lib/trendUtils";
 import { addDaysToISO, localISODate } from "@/lib/dateUtils";
 import { parseTimeToMinutes, toScheduleDayMinutes } from "@/lib/timeUtils";
-import { calculateExecutionStreak } from "@/lib/consistency/calculateExecutionStreak";
+import { calculateExecutionStreak, type ExecutionStreak } from "@/lib/consistency/calculateExecutionStreak";
 import { isTaskScheduledOn } from "@/lib/taskOccurrence";
-import ExecutionStreakBanner from "@/components/ExecutionStreakBanner";
 import { haptic } from "@/lib/haptics";
 
 interface OverviewDashboardProps {
@@ -143,12 +142,16 @@ function DashboardMetricCard({
   detail,
   pct,
   primary = false,
+  icon: Icon,
+  iconClass,
 }: {
   label: string;
   value: string;
   detail: string;
   pct?: number;
   primary?: boolean;
+  icon: ComponentType<{ size?: number; strokeWidth?: number; className?: string }>;
+  iconClass?: string;
 }) {
   return (
     <div
@@ -159,12 +162,21 @@ function DashboardMetricCard({
       }`}
     >
       <div className="flex items-start justify-between gap-3">
-        <p className={`text-[12px] font-bold uppercase tracking-[0.08em] ${primary ? "text-white/70" : "text-neutral-400 dark:text-neutral-500"}`}>
-          {label}
-        </p>
-        <IconArrowUpRight size={16} strokeWidth={2.2} className={primary ? "text-white/80" : "text-neutral-400 dark:text-neutral-500"} />
+        <span
+          className={`grid h-9 w-9 shrink-0 place-items-center rounded-xl ${
+            primary
+              ? "bg-white/15 text-white"
+              : iconClass ?? "bg-neutral-100 text-neutral-500 dark:bg-white/[0.06] dark:text-neutral-400"
+          }`}
+        >
+          <Icon size={18} strokeWidth={2} />
+        </span>
+        <IconArrowUpRight size={16} strokeWidth={2.2} className={primary ? "text-white/80" : "text-neutral-300 dark:text-neutral-600"} />
       </div>
-      <p className="mt-3 text-[34px] font-extrabold leading-none tracking-[-0.03em] tabular-nums">{value}</p>
+      <p className={`mt-3 text-[12px] font-bold uppercase tracking-[0.08em] ${primary ? "text-white/70" : "text-neutral-400 dark:text-neutral-500"}`}>
+        {label}
+      </p>
+      <p className="mt-1 text-[34px] font-extrabold leading-none tracking-[-0.03em] tabular-nums">{value}</p>
       <p className={`mt-2 text-[12px] font-medium ${primary ? "text-white/75" : "text-neutral-500 dark:text-neutral-400"}`}>{detail}</p>
       {pct !== undefined && (
         <ProgressTrack
@@ -177,41 +189,66 @@ function DashboardMetricCard({
   );
 }
 
+function streakDetail(streak: ExecutionStreak): string {
+  if (streak.atRisk) return "At risk — act today";
+  if (streak.milestone) return "New milestone reached";
+  if (streak.streak === 0) return "Start your run today";
+  if (streak.streak === 1) return "1 day — keep going";
+  return `${streak.streak} days strong`;
+}
+
 function StatGrid({
   tasksDone,
   tasksTotal,
   weekPct,
   plans,
   trackers,
+  streak,
 }: {
   tasksDone: number;
   tasksTotal: number;
   weekPct: number;
   plans: number;
   trackers: number;
+  streak: ExecutionStreak;
 }) {
   const taskPct = ratioPct(tasksDone, tasksTotal);
   return (
-    <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+    <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5">
       <DashboardMetricCard
         primary
+        icon={IconChecklist}
         label="Tasks Today"
         value={`${tasksDone}/${tasksTotal}`}
         detail={`${taskPct}% complete`}
         pct={taskPct}
       />
       <DashboardMetricCard
+        icon={IconCalendarEvent}
         label="This Week"
         value={`${weekPct}%`}
         detail="tasks completed"
         pct={weekPct}
       />
       <DashboardMetricCard
+        icon={IconFlame}
+        iconClass={
+          streak.atRisk
+            ? "bg-amber-500/12 text-amber-500 dark:bg-amber-400/12 dark:text-amber-400"
+            : "bg-emerald-500/12 text-emerald-600 dark:bg-emerald-400/12 dark:text-emerald-400"
+        }
+        label="Streak"
+        value={String(streak.streak)}
+        detail={streakDetail(streak)}
+      />
+      <DashboardMetricCard
+        icon={IconClipboardList}
         label="Plans"
         value={String(plans)}
         detail={plans === 1 ? "active plan" : "active plans"}
       />
       <DashboardMetricCard
+        icon={IconTarget}
         label="Trackers"
         value={String(trackers)}
         detail={trackers === 1 ? "metric tracked" : "metrics tracked"}
@@ -644,7 +681,7 @@ export default function OverviewDashboard({
       .sort((a, b) => startKey(a) - startKey(b));
   }, [schedule.activities, todayISO, todayKey]);
 
-  const { tasksDone, tasksTotal, missedCount, unresolvedCount } = useMemo(() => {
+  const { tasksDone, tasksTotal } = useMemo(() => {
     const done = todayTasks.filter((task) => isTaskCompleted(task, taskSummary(task).totalCount)).length;
     const missed = todayTasks.filter((task) => !isTaskCompleted(task, taskSummary(task).totalCount) && !!task.missed).length;
     const unresolved = todayTasks.filter((task) => !isTaskResolved(task, taskSummary(task).totalCount)).length;
@@ -767,7 +804,7 @@ export default function OverviewDashboard({
 
   return (
     <div data-testid="overview-dashboard" className="pb-24 lg:pb-8">
-      <div className="mx-auto w-full max-w-[1480px] px-4 pt-5 sm:px-5 lg:px-6 lg:pt-4">
+      <div className="mx-auto w-full max-w-[1480px] pt-5 lg:pt-4">
         <div className="mb-4 hidden items-end justify-between gap-4 lg:flex">
           <div>
             <p className="text-[13px] font-semibold text-neutral-400 dark:text-neutral-500">
@@ -777,25 +814,19 @@ export default function OverviewDashboard({
               Overview
             </h1>
           </div>
-          <div className="flex items-center gap-2 rounded-full border border-neutral-200 bg-white px-3 py-2 text-[12px] font-bold text-neutral-600 dark:border-white/[0.08] dark:bg-[#171717] dark:text-neutral-300">
-            <span className="h-2 w-2 rounded-full bg-emerald-500" />
-            {unresolvedCount === 0 ? "All clear" : `${unresolvedCount} left today`}
-            {missedCount > 0 ? ` - ${missedCount} missed` : ""}
-          </div>
         </div>
 
         {isFreshStart ? (
           <GettingStarted onNavigate={onNavigate} />
         ) : (
           <div className="space-y-4">
-            <ExecutionStreakBanner data={executionStreak} />
-
             <StatGrid
               tasksDone={tasksDone}
               tasksTotal={tasksTotal}
               weekPct={weeklyActivity?.tasksPct ?? 0}
               plans={schedule.plans.length}
               trackers={trackerData.length}
+              streak={executionStreak}
             />
 
             <div className="grid gap-4 lg:grid-cols-[minmax(330px,0.92fr)_minmax(360px,1fr)] xl:grid-cols-[minmax(360px,0.9fr)_minmax(410px,1fr)_minmax(360px,0.92fr)]">

@@ -4,7 +4,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { EditorContent, useEditor } from "@tiptap/react";
 import { TextSelection } from "@tiptap/pm/state";
 import {
-  IconArrowLeft,
+  IconChevronLeft,
   IconBold,
   IconCalendarPlus,
   IconCheck,
@@ -511,7 +511,7 @@ export default function NoteEditor({ note, onUpdate, onDelete, onBack, tasks, pl
               onClick={flushAndBack}
               className="lg:hidden"
             >
-              <IconArrowLeft size={18} strokeWidth={2} />
+              <IconChevronLeft size={24} strokeWidth={2.2} />
             </IconButton>
 
             <div className="min-w-0 flex-1">

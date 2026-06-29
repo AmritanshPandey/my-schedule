@@ -4,7 +4,7 @@ import type { PointerEvent as ReactPointerEvent, ReactNode } from "react";
 import { useEffect, useRef, useState } from "react";
 import { AnimatePresence, m } from "framer-motion";
 import { IconChevronLeft, IconChevronRight } from "@tabler/icons-react";
-import type { DayKey, Plan, Schedule, Task } from "@/lib/useScheduleDB";
+import type { DayKey, Plan, Ritual, RitualCompletion, Schedule, Task } from "@/lib/useScheduleDB";
 import { DAYS } from "@/lib/useScheduleDB";
 import { sortTasksByTime } from "@/lib/taskMutations";
 import { completionForDate, getTaskCheckableItems, getTaskSubtaskSummary, resolveTaskState } from "@/lib/taskCompletion";
@@ -29,6 +29,7 @@ import {
   TIMELINE_END_MINUTES,
 } from "@/lib/timeline/displayWindow";
 import TimelineDraftCard from "@/components/timeline/TimelineDraftCard";
+import RitualStrip from "@/components/timeline/RitualStrip";
 
 export type CalendarView = "1day" | "3day" | "7day" | "custom3";
 
@@ -42,7 +43,7 @@ const VIEW_LABELS: Record<CalendarView, string> = {
 };
 
 const PX_MIN = 2;
-const RAIL_W = 64;
+const RAIL_W = 78;
 const DAY_MIN_W = 156;
 const TASK_VERTICAL_INSET = 2;
 
@@ -108,9 +109,31 @@ function buildDayLayout(tasks: Task[], startMin: number, endMin: number): { time
   return { timed, untimed };
 }
 
+interface RitualMark { top: number; rituals: Ritual[] }
+
+/** Rituals due on `day`, grouped by mapped time, positioned to the timeline. */
+function buildRitualMarks(rituals: Ritual[], day: DayKey, startMin: number, endMin: number): RitualMark[] {
+  const byTime = new Map<number, Ritual[]>();
+  for (const r of rituals) {
+    if (r.repeatDays && r.repeatDays.length > 0 && !r.repeatDays.includes(day)) continue;
+    const mins = parseTimeToMinutes(r.time);
+    if (mins == null) continue;
+    const mapped = mapMinutesToTimeline(mins, startMin, endMin);
+    if (mapped < startMin || mapped > endMin) continue;
+    if (!byTime.has(mapped)) byTime.set(mapped, []);
+    byTime.get(mapped)!.push(r);
+  }
+  return Array.from(byTime.entries())
+    .sort(([a], [b]) => a - b)
+    .map(([mapped, rs]) => ({ top: (mapped - startMin) * PX_MIN, rituals: rs }));
+}
+
 interface WeekGridProps {
   schedule: Schedule;
   plansById: Map<string, Plan>;
+  rituals: Ritual[];
+  ritualCompletions: RitualCompletion[];
+  onToggleRitual: (id: string, dateISO: string) => void;
   weekDates: Array<{ day: DayKey; date: Date }>;
   todayKey: DayKey;
   weekLabel: string;
@@ -145,6 +168,9 @@ interface WeekGridProps {
 export function WeekGrid({
   schedule,
   plansById,
+  rituals,
+  ritualCompletions,
+  onToggleRitual,
   weekDates,
   todayKey,
   weekLabel,
@@ -330,7 +356,7 @@ export function WeekGrid({
 
   function handleDayPointerDown(day: DayKey, e: ReactPointerEvent<HTMLDivElement>) {
     if (e.pointerType === "mouse" && e.button !== 0) return;
-    if ((e.target as HTMLElement).closest("[data-task-block]")) return;
+    if ((e.target as HTMLElement).closest("[data-task-block],[data-ritual-mark]")) return;
     if (clearDragCreateTimerRef.current) {
       clearTimeout(clearDragCreateTimerRef.current);
       clearDragCreateTimerRef.current = null;
@@ -353,7 +379,7 @@ export function WeekGrid({
   }
 
   return (
-    <div className="flex h-full w-full min-w-0 flex-col overflow-hidden bg-[#f5f5f5] p-6 dark:bg-neutral-950">
+    <div className="flex h-full w-full min-w-0 flex-col overflow-hidden">
 
       {/* ── Nav bar ─────────────────────────────────────────────────────────── */}
       <div className="relative z-20 mb-8 flex shrink-0 items-start justify-between gap-6">
@@ -557,6 +583,10 @@ export function WeekGrid({
           {/* Day columns */}
           {days.map(({ day, dayIsToday, dateISO, tasks }) => {
             const { timed } = buildDayLayout(tasks, startMin, endMin);
+            const ritualMarks = buildRitualMarks(rituals, day, startMin, endMin);
+            const completedRituals = new Set(
+              ritualCompletions.filter((c) => c.date === dateISO).map((c) => c.ritualId),
+            );
             const showNow = dayIsToday && now >= startMin && now <= endMin;
             const readOnly = !dayIsToday;
             return (
@@ -610,6 +640,25 @@ export function WeekGrid({
                     </div>
                   );
                 })}
+
+                {ritualMarks.map((mark) => (
+                  <div
+                    key={`ritual-${mark.top}`}
+                    data-ritual-mark
+                    className="absolute right-1.5 z-[5] flex max-w-[70%] -translate-y-1/2 flex-row-reverse flex-wrap items-center justify-start gap-1"
+                    style={{ top: mark.top }}
+                  >
+                    {mark.rituals.map((ritual) => (
+                      <span key={ritual.id} className="rounded-full ring-2 ring-white dark:ring-neutral-950">
+                        <RitualStrip
+                          ritual={ritual}
+                          completed={completedRituals.has(ritual.id)}
+                          onToggle={() => onToggleRitual(ritual.id, dateISO)}
+                        />
+                      </span>
+                    ))}
+                  </div>
+                ))}
 
                 {dragCreate?.day === day && (() => {
                   const top = (dragCreate.startMin - startMin) * PX_MIN;
