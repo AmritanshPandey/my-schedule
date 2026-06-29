@@ -8,9 +8,12 @@
 // Fonts are self-hosted by next/font at build time (served from /_next/static/),
 // so there are no Google Fonts CDN requests to special-case here.
 //
-// Bump CACHE_VERSION to force a full cache refresh on deploy.
+// CACHE_VERSION is stamped with the build id at build time by
+// scripts/inject-precache.mjs, so every deploy gets fresh cache names and the
+// activate handler purges the previous build's shell + assets. The literal below
+// is the dev/un-injected fallback — keep it matching the regex in that script.
 
-const CACHE_VERSION = 'planr-v8';
+const CACHE_VERSION = 'planr-dev';
 const SHELL_CACHE = `${CACHE_VERSION}-shell`;
 const ASSET_CACHE = `${CACHE_VERSION}-assets`;
 
@@ -28,6 +31,9 @@ const PRECACHE_ASSETS = [];
 // ── Install ───────────────────────────────────────────────────────────────────
 
 self.addEventListener('install', (e) => {
+  // Take over as soon as installed so a new deploy's cache purge + fresh shell
+  // apply on the next load instead of waiting for every tab to close.
+  self.skipWaiting();
   e.waitUntil(
     Promise.all([
       // Shell is required — a failed shell precache should fail the install.
@@ -117,13 +123,27 @@ async function cacheFirst(request, cacheName) {
 
   try {
     const response = await fetch(request);
-    if (response.ok) {
+    // A missing hashed asset (e.g. an old chunk removed by a new deploy) is
+    // rewritten by Firebase Hosting to `200 + index.html`. Never cache or return
+    // that HTML for a JS/CSS/asset request — it would be parsed as script and
+    // throw "Unexpected token '<'". Treat it as a hard miss instead.
+    if (response.ok && !isHtml(response)) {
       cache.put(request, response.clone());
+      return response;
+    }
+    if (response.ok && isHtml(response)) {
+      return new Response('Stale asset', { status: 504 });
     }
     return response;
   } catch {
     return new Response('Network error', { status: 408 });
   }
+}
+
+// True when a response is an HTML document (the Firebase SPA-rewrite fallback),
+// which must not be served in place of a hashed script/style/asset.
+function isHtml(response) {
+  return (response.headers.get('content-type') || '').includes('text/html');
 }
 
 // Serve the cached response immediately (if present) while fetching a fresh copy

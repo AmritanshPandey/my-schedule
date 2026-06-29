@@ -37,15 +37,28 @@ async function main() {
 
   let sw = await readFile(SW, "utf8");
   const replacement = `const PRECACHE_ASSETS = ${JSON.stringify(list, null, 2)};`;
-  const next = sw.replace(/const PRECACHE_ASSETS = \[[^\]]*\];/, replacement);
+  let next = sw.replace(/const PRECACHE_ASSETS = \[[^\]]*\];/, replacement);
 
   if (next === sw) {
     console.warn("[inject-precache] PRECACHE_ASSETS placeholder not found in sw.js — skipping.");
     return;
   }
 
+  // Stamp CACHE_VERSION with this build's id so every deploy gets fresh cache
+  // names; the SW's activate handler then purges the previous build's caches,
+  // preventing a stale app shell from requesting chunks this build removed.
+  const buildId = process.env.NEXT_PUBLIC_BUILD_ID || `t${Date.now()}`;
+  const versioned = next.replace(
+    /const CACHE_VERSION = '[^']*';/,
+    `const CACHE_VERSION = 'planr-${buildId}';`
+  );
+  if (versioned === next) {
+    console.warn("[inject-precache] CACHE_VERSION placeholder not found in sw.js — version not stamped.");
+  }
+  next = versioned;
+
   await writeFile(SW, next);
-  console.log(`[inject-precache] Injected ${list.length} entry chunk(s) into ${SW}.`);
+  console.log(`[inject-precache] Injected ${list.length} entry chunk(s) and stamped CACHE_VERSION=planr-${buildId} into ${SW}.`);
 }
 
 main().catch((err) => {
