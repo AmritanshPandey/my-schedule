@@ -177,3 +177,22 @@ async function staleWhileRevalidate(request, cacheName, fallbackPath) {
   }
   return new Response('Offline', { status: 503 });
 }
+
+// ── Notifications ─────────────────────────────────────────────────────────────
+// Reminders are shown via registration.showNotification from the page (see
+// lib/reminders.ts). Clicking one focuses an existing PlanR window or opens
+// a fresh one.
+
+self.addEventListener('notificationclick', (e) => {
+  e.notification.close();
+  e.waitUntil(
+    self.clients
+      .matchAll({ type: 'window', includeUncontrolled: true })
+      .then((clientList) => {
+        for (const client of clientList) {
+          if ('focus' in client) return client.focus();
+        }
+        return self.clients.openWindow('/');
+      })
+  );
+});

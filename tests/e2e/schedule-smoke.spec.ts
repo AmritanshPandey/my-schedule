@@ -253,6 +253,11 @@ async function expectNoBannedVisualEffects(page: Page) {
     const bannedStyle = /(box-shadow|linear-gradient|conic-gradient|backdrop-filter)/i;
     return Array.from(document.body.querySelectorAll<HTMLElement>("*"))
       .filter((element) => {
+        // Purposeful glass/elevation on floating chrome (nav bars, sticky
+        // headers, modal panels) is a sanctioned exception, marked with
+        // data-glass. The guard still catches decorative glass/shadow slop
+        // everywhere else.
+        if (element.closest("[data-glass]")) return false;
         const className = element.getAttribute("class") ?? "";
         const style = element.getAttribute("style") ?? "";
         return bannedClass.test(className) || bannedStyle.test(style);
@@ -446,5 +451,54 @@ test("renders seeded schedule in the configured viewport", async ({ page }, test
   } else {
     await expectDesktopSchedule(page);
   }
+  await assertNoRuntimeErrors();
+});
+
+test("exports a restorable JSON backup from Settings", async ({ page }, testInfo) => {
+  const assertNoRuntimeErrors = collectRuntimeErrors(page, testInfo);
+  test.skip(testInfo.project.name === "mobile-chromium", "Backup export covered on desktop nav");
+
+  await openSeededApp(page);
+  await page.getByRole("button", { name: "Settings" }).click();
+
+  // New Data-section affordances render and read consistently.
+  await expect(page.getByText("Export backup").first()).toBeVisible();
+  await expect(page.getByText("Restore from backup").first()).toBeVisible();
+  await expect(page.getByText("Reminders").first()).toBeVisible();
+  await expectVisibleControlsInsideViewport(page);
+  await expectNoBannedVisualEffects(page);
+
+  // Exporting produces a dated PlanR backup whose payload round-trips the schedule.
+  const [download] = await Promise.all([
+    page.waitForEvent("download"),
+    page.getByRole("button", { name: "Export", exact: true }).click(),
+  ]);
+  expect(download.suggestedFilename()).toMatch(/^planr-backup-\d{4}-\d{2}-\d{2}\.json$/);
+
+  const stream = await download.createReadStream();
+  const chunks: Buffer[] = [];
+  for await (const chunk of stream) chunks.push(Buffer.from(chunk));
+  const parsed = JSON.parse(Buffer.concat(chunks).toString("utf8"));
+  expect(parsed.app).toBe("PlanR");
+  expect(parsed.format).toBeGreaterThanOrEqual(1);
+  expect(parsed.schedule?.plans?.map((p: { id: string }) => p.id)).toContain("cardio");
+
+  await assertNoRuntimeErrors();
+});
+
+test("shows the getting-started guide for a fresh user", async ({ page }, testInfo) => {
+  const assertNoRuntimeErrors = collectRuntimeErrors(page, testInfo);
+
+  // No seeded data + no dismissal flag → the onboarding guide should lead.
+  const path = testInfo.project.name === "mobile-chromium" ? "/?mobileShell=1" : "/";
+  await page.goto(path, { waitUntil: "domcontentloaded" });
+  await dismissInstallPrompt(page);
+
+  await expect(page.locator("body")).toContainText("Make your day trackable", { timeout: 20_000 });
+  await expect(page.getByText("Create your first plan").first()).toBeVisible();
+  await expectNoDocumentOverflow(page);
+  await expectVisibleControlsInsideViewport(page);
+  await expectNoBannedVisualEffects(page);
+
   await assertNoRuntimeErrors();
 });

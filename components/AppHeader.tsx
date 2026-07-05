@@ -70,14 +70,19 @@ function useHeaderState() {
 
 // ── Flat style helper ─────────────────────────────────────────────────────────
 
-function headerStyle(_scrolled: boolean, isDark: boolean): React.CSSProperties {
+function headerStyle(scrolled: boolean, isDark: boolean): React.CSSProperties {
   const border = isDark
     ? "rgba(255, 255, 255, 0.08)"
     : "rgba(0, 0, 0, 0.09)";
 
+  // Frosted, translucent bar: content scrolls under it with a soft blur (the
+  // iOS navigation-bar feel). The hairline border only appears once scrolled,
+  // so the resting state stays clean and flat against the body.
   return {
-    backgroundColor: isDark ? "rgb(10 10 10)" : "rgb(245 245 245)",
-    borderBottom: `0.5px solid ${border}`,
+    backgroundColor: isDark ? "rgba(10, 10, 10, 0.72)" : "rgba(245, 245, 245, 0.72)",
+    backdropFilter: "blur(20px) saturate(180%)",
+    WebkitBackdropFilter: "blur(20px) saturate(180%)",
+    borderBottom: `0.5px solid ${scrolled ? border : "transparent"}`,
   };
 }
 
@@ -90,6 +95,7 @@ function RootHeader({ onOpenSettings, onNotes }: Pick<AppHeaderProps, "onOpenSet
 
   return (
     <header
+      data-glass
       className="fixed inset-x-0 top-0 z-40 flex items-center justify-between px-5 transition-all duration-300 lg:hidden"
       style={{
         // box-sizing is border-box (Tailwind preflight), so the safe-area inset
@@ -164,6 +170,7 @@ function DetailHeader({ back, actions }: Pick<AppHeaderProps, "back" | "actions"
 
   return (
     <header
+      data-glass
       className="fixed inset-x-0 top-0 z-40 flex items-center gap-1 px-2 transition-all duration-250 lg:hidden"
       style={{
         // Match the root header's 64px base so content (offset by pt-16 = 64px)
@@ -171,9 +178,9 @@ function DetailHeader({ back, actions }: Pick<AppHeaderProps, "back" | "actions"
         // so the back/title row isn't clipped under the notch.
         height: "calc(64px + env(safe-area-inset-top))",
         paddingTop: "env(safe-area-inset-top)",
-        ...headerStyle(scrolled, isDark),
-        // Detail header always has some bg so back label is readable
-        backgroundColor: isDark ? "rgb(10 10 10)" : "rgb(245 245 245)",
+        // Detail header keeps the hairline border at all times (not just when
+        // scrolled) so the back label always sits on a defined bar.
+        ...headerStyle(true, isDark),
       }}
     >
       <m.button

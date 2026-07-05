@@ -14,12 +14,15 @@ import {
   getDoc,
   setDoc,
   deleteDoc,
+  collection,
+  getDocs,
   serverTimestamp,
 } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import type { Schedule } from "@/lib/useScheduleDB";
 import { logError } from "@/lib/errorLog";
 import { getLocalLastUpdated } from "@/lib/localMeta";
+import { localISODate } from "@/lib/dateUtils";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -57,6 +60,63 @@ const _listeners = new Set<(s: SyncStatus) => void>();
 function firestoreRef(uid: string) {
   if (!db) throw new Error("[CloudSync] Firestore not initialized");
   return doc(db, "users", uid, "data", "snapshot");
+}
+
+// ── Snapshot history ──────────────────────────────────────────────────────────
+// One versioned backup doc per day (users/{uid}/backups/{YYYY-MM-DD}), written
+// alongside the first successful push of the day and pruned to the most recent
+// BACKUP_KEEP. Exists so a bad sync/merge/restore is never unrecoverable — the
+// live snapshot doc is last-write-wins, these are its safety net.
+
+const BACKUP_KEEP = 10;
+let _lastBackupDate: string | null = null;
+
+function backupDocRef(uid: string, id: string) {
+  if (!db) throw new Error("[CloudSync] Firestore not initialized");
+  return doc(db, "users", uid, "backups", id);
+}
+
+function backupsCollection(uid: string) {
+  if (!db) throw new Error("[CloudSync] Firestore not initialized");
+  return collection(db, "users", uid, "backups");
+}
+
+async function writeDailyBackup(uid: string, payload: Schedule, lastUpdated: number): Promise<void> {
+  const today = localISODate(new Date());
+  if (_lastBackupDate === today) return;
+  await setDoc(backupDocRef(uid, today), {
+    schedule: payload,
+    lastUpdated,
+    savedAt: serverTimestamp(),
+  });
+  _lastBackupDate = today;
+  // Prune: doc ids are ISO dates, so lexicographic order is chronological.
+  const snaps = await getDocs(backupsCollection(uid));
+  const ids = snaps.docs.map((d) => d.id).sort();
+  const excess = ids.slice(0, Math.max(0, ids.length - BACKUP_KEEP));
+  await Promise.all(excess.map((id) => deleteDoc(backupDocRef(uid, id))));
+}
+
+export interface CloudBackupMeta {
+  id: string; // ISO date, doubles as the display label source
+  lastUpdated: number;
+}
+
+/** List available daily snapshots, newest first. Empty for guests/offline. */
+export async function listCloudBackups(): Promise<CloudBackupMeta[]> {
+  if (!_uid || !db) return [];
+  const snaps = await getDocs(backupsCollection(_uid));
+  return snaps.docs
+    .map((d) => ({ id: d.id, lastUpdated: (d.data().lastUpdated as number) ?? 0 }))
+    .sort((a, b) => b.id.localeCompare(a.id));
+}
+
+/** Fetch one daily snapshot's raw schedule (un-migrated), or null if gone. */
+export async function fetchCloudBackup(id: string): Promise<unknown | null> {
+  if (!_uid || !db) return null;
+  const snap = await getDoc(backupDocRef(_uid, id));
+  if (!snap.exists()) return null;
+  return (snap.data() as { schedule?: unknown }).schedule ?? null;
 }
 
 function setStatus(s: SyncStatus) {
@@ -128,6 +188,7 @@ export function initSync(uid: string) {
     _lastSchedule = null;
     _lastSyncedAt = 0;
     _lastPullAt = 0;
+    _lastBackupDate = null;
     setStatus("idle");
   }
   _uid = uid;
@@ -147,6 +208,7 @@ export function destroySync() {
   _lastSchedule = null;
   _lastSyncedAt = 0;
   _lastPullAt = 0;
+  _lastBackupDate = null;
   _syncing = false;
   detachListeners();
   setStatus("idle");
@@ -180,12 +242,15 @@ export function noteLatestSchedule(schedule: Schedule): void {
   _lastSchedule = schedule;
 }
 
-/** Delete the user's cloud snapshot. Used by "Clear data". */
+/** Delete the user's cloud snapshot and its daily backups. Used by "Clear data". */
 export async function deleteCloudData(): Promise<void> {
   if (!_uid) return;
   try {
     await deleteDoc(firestoreRef(_uid));
+    const backups = await getDocs(backupsCollection(_uid));
+    await Promise.all(backups.docs.map((d) => deleteDoc(d.ref)));
     _lastSyncedAt = 0;
+    _lastBackupDate = null;
     _pending = null;
     setStatus("idle");
   } catch (err) {
@@ -402,6 +467,11 @@ async function performSync(schedule: Schedule): Promise<void> {
     // Only clear _pending if no new edit arrived while we were awaiting setDoc
     if (_pending === pendingSnapshot) _pending = null;
     setStatus("idle");
+    // Fire-and-forget: the daily safety-net snapshot must never block or fail
+    // the main sync. First successful push of the day wins; pruning rides along.
+    void writeDailyBackup(_uid, payload, now).catch((err) => {
+      console.warn("[CloudSync] daily backup failed:", err);
+    });
     if (oversizedFields > 0) {
       logError(
         "cloudsync:oversize",

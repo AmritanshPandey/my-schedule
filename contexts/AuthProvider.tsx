@@ -25,6 +25,7 @@ import {
   getLastSchedule,
 } from "@/lib/cloudSync";
 import { bootLog } from "@/lib/iosSafeMode";
+import { initErrorTelemetry } from "@/lib/errorTelemetry";
 
 // ── Context types ─────────────────────────────────────────────────────────────
 
@@ -67,9 +68,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         // Authenticated: start sync engine. useScheduleDB pulls cloud after
         // its local, per-user IndexedDB record and merge listener are ready.
         initSync(firebaseUser.uid);
+        initErrorTelemetry(firebaseUser.uid); // no-op unless the user opted in
       } else {
         // Signed out or guest: stop sync.
         destroySync();
+        initErrorTelemetry(null);
       }
 
       // Keep the existing User reference when only the token refreshed (same

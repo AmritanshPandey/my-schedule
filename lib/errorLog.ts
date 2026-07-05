@@ -26,6 +26,17 @@ const MAX = 25;
 type Listener = (errors: LoggedError[]) => void;
 const listeners = new Set<Listener>();
 
+// Out-of-band sinks (e.g. opt-in cloud telemetry). Kept as a registry so this
+// module stays free of Firebase imports; the telemetry module registers itself.
+type ErrorSink = (error: LoggedError) => void;
+const sinks = new Set<ErrorSink>();
+
+/** Register a sink that receives every newly logged error. Returns an unsubscribe. */
+export function registerErrorSink(sink: ErrorSink): () => void {
+  sinks.add(sink);
+  return () => sinks.delete(sink);
+}
+
 function safeRead(): LoggedError[] {
   try {
     const raw = localStorage.getItem(KEY);
@@ -90,6 +101,14 @@ export function logError(source: string, error: unknown, extraStack?: string): v
   const next = [...current, entry].slice(-MAX);
   safeWrite(next);
   listeners.forEach((fn) => fn(next));
+  // Fan out to any registered sinks; a throwing sink must never break logging.
+  sinks.forEach((sink) => {
+    try {
+      sink(entry);
+    } catch {
+      /* sink failure is non-fatal */
+    }
+  });
 }
 
 let installed = false;

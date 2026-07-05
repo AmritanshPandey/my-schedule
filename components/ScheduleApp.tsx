@@ -58,6 +58,7 @@ import {
   categoryFromIcon,
   resetStaleCompletions,
 } from "@/lib/useScheduleDB";
+import { useReminders } from "@/lib/useReminders";
 import RitualOverlayLayer from "@/components/timeline/RitualOverlayLayer";
 import RitualLegend from "@/components/timeline/RitualLegend";
 import {
@@ -622,7 +623,8 @@ export default function ScheduleApp() {
     void isStandalonePWA();
   }
   const { user, isGuest, authLoading } = useAuth();
-  const { schedule, setSchedule, ready, clearData, clearProgress, isFirstLaunch } = useScheduleDB();
+  const { schedule, setSchedule, ready, clearData, clearProgress, restoreData, isFirstLaunch } = useScheduleDB();
+  useReminders(schedule, ready);
   const [todayKey, setTodayKey] = useState<DayKey>(() => JS_DAYS[new Date().getDay()]);
   const [activeDay, setActiveDay] = useState<DayKey>(() => JS_DAYS[new Date().getDay()]);
   const [editMode, setEditMode] = useState(false);
@@ -858,6 +860,25 @@ export default function ScheduleApp() {
     setTaskSheetInitialType("task");
     setTaskSheetOpen(true);
   }
+
+  // ── PWA app-shortcut actions (manifest "shortcuts" → /?action=…) ───────────
+  useEffect(() => {
+    if (!ready) return;
+    const params = new URLSearchParams(window.location.search);
+    const action = params.get("action");
+    if (!action) return;
+    if (action === "add-task") {
+      setActiveTab(0);
+      openCreateSheet();
+    } else if (action === "log-tracker") {
+      setActiveTab(4); // Overview — trackers with inline log buttons
+    }
+    // Clear the param so a refresh doesn't re-trigger the action.
+    params.delete("action");
+    const qs = params.toString();
+    window.history.replaceState({}, "", window.location.pathname + (qs ? `?${qs}` : ""));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [ready]);
 
   // ── Timeline drag helpers ──────────────────────────────────────────────────
 
@@ -2606,6 +2627,7 @@ export default function ScheduleApp() {
           }}
           onClearData={clearData}
           onClearProgress={clearProgress}
+          onRestoreData={restoreData}
           schedule={schedule}
           onUpdatePreferences={(patch) =>
             setSchedule((prev) => ({
@@ -3310,6 +3332,7 @@ export default function ScheduleApp() {
                 schedule={schedule}
                 onClearData={clearData}
                 onClearProgress={clearProgress}
+                onRestoreData={restoreData}
                 onUpdatePreferences={(patch) =>
                   setSchedule((prev) => ({
                     ...prev,

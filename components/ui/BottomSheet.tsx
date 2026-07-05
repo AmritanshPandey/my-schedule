@@ -122,15 +122,16 @@ export default function BottomSheet({
             role="dialog"
             aria-modal="true"
           >
-            {/* Backdrop */}
+            {/* Backdrop — frosted so the modal reads as a floating layer */}
             <m.div
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
               exit={{ opacity: 0 }}
               transition={{ duration: 0.16 }}
-              className={`absolute inset-0 ${backdropClassName ?? "bg-black/30"}`}
+              className={`absolute inset-0 ${backdropClassName ?? "bg-black/35 backdrop-blur-md"}`}
               onClick={onClose}
               aria-hidden="true"
+              data-glass
             />
 
             {/* Modal panel */}
@@ -141,7 +142,8 @@ export default function BottomSheet({
               animate={{ opacity: 1, scale: 1, y: 0 }}
               exit={{ opacity: 0, scale: 0.97, y: 10 }}
               transition={DESKTOP_EASE}
-              className={`relative w-full ${desktopWidth} overflow-y-auto overscroll-contain rounded-2xl border border-neutral-200 bg-white outline-none dark:border-white/[0.08] dark:bg-neutral-900 ${className}`}
+              data-glass
+              className={`relative w-full ${desktopWidth} overflow-y-auto overscroll-contain rounded-2xl border border-neutral-200/80 bg-white shadow-2xl shadow-black/10 outline-none dark:border-white/[0.08] dark:bg-neutral-900 dark:shadow-black/40 ${className}`}
               style={{ maxHeight: "88vh" }}
             >
               {children}
@@ -156,15 +158,16 @@ export default function BottomSheet({
             role="dialog"
             aria-modal="true"
           >
-            {/* Backdrop */}
+            {/* Backdrop — frosted so the sheet reads as a floating layer */}
             <m.div
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
               exit={{ opacity: 0 }}
               transition={{ duration: 0.22 }}
-              className={`absolute inset-0 ${backdropClassName ?? "bg-black/30"}`}
+              className={`absolute inset-0 ${backdropClassName ?? "bg-black/35 backdrop-blur-sm"}`}
               onClick={onClose}
               aria-hidden="true"
+              data-glass
             />
 
             {/* Panel */}
