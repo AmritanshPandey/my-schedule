@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useMemo, type ComponentType } from "react";
+import { useCallback, useMemo, useState, type ComponentType } from "react";
 import {
   IconArrowRight,
   IconArrowUpRight,
@@ -564,7 +564,21 @@ function TodayTaskListCard({
   );
 }
 
-function GettingStarted({ onNavigate }: { onNavigate: (tab: number) => void }) {
+interface SetupDone {
+  plan: boolean;
+  task: boolean;
+  ritual: boolean;
+}
+
+function GettingStarted({
+  onNavigate,
+  done,
+  onDismiss,
+}: {
+  onNavigate: (tab: number) => void;
+  done: SetupDone;
+  onDismiss: () => void;
+}) {
   const steps = [
     {
       n: 1,
@@ -572,6 +586,7 @@ function GettingStarted({ onNavigate }: { onNavigate: (tab: number) => void }) {
       title: "Create your first plan",
       desc: "Group related tasks, milestones, and trackers.",
       tab: 1,
+      done: done.plan,
     },
     {
       n: 2,
@@ -579,6 +594,7 @@ function GettingStarted({ onNavigate }: { onNavigate: (tab: number) => void }) {
       title: "Schedule today's tasks",
       desc: "Put the next blocks on your timeline.",
       tab: 0,
+      done: done.task,
     },
     {
       n: 3,
@@ -586,20 +602,26 @@ function GettingStarted({ onNavigate }: { onNavigate: (tab: number) => void }) {
       title: "Build a daily routine",
       desc: "Track small repeated actions.",
       tab: 2,
+      done: done.ritual,
     },
   ];
+  const doneCount = steps.filter((s) => s.done).length;
+  const nextStep = steps.find((s) => !s.done) ?? steps[0];
+  const ctaLabel = nextStep.n === 1 ? "Create plan" : nextStep.n === 2 ? "Schedule tasks" : "Add a routine";
 
   return (
     <section className="mx-auto grid w-full max-w-[980px] gap-4 lg:grid-cols-[1.05fr_0.95fr]">
       <div className="rounded-2xl border border-emerald-700 bg-[#00A63E] px-6 py-6 text-neutral-950 dark:border-emerald-400/30 dark:bg-[#2FD46E]">
         <div className="flex items-start justify-between gap-4">
           <div>
-            <p className="text-[12px] font-extrabold uppercase tracking-[0.10em] text-neutral-950/70">Onboarding</p>
+            <p className="text-[12px] font-extrabold uppercase tracking-[0.10em] text-neutral-950/70">Getting started</p>
             <h2 className="mt-3 max-w-[360px] text-[32px] font-extrabold leading-[0.98] tracking-[-0.04em]">
               Make your day trackable
             </h2>
             <p className="mt-3 max-w-[360px] text-[14px] font-semibold text-neutral-950/70">
-              Finish a few steps to turn goals into a working dashboard.
+              {doneCount === 0
+                ? "Finish a few steps to turn goals into a working dashboard."
+                : `${doneCount} of ${steps.length} done — keep going.`}
             </p>
           </div>
           <span className="grid h-12 w-12 shrink-0 place-items-center rounded-2xl bg-neutral-950 text-white">
@@ -607,35 +629,65 @@ function GettingStarted({ onNavigate }: { onNavigate: (tab: number) => void }) {
           </span>
         </div>
         <div className="mt-8 h-2 overflow-hidden rounded-full bg-neutral-950/15">
-          <div className="h-full w-1/3 rounded-full bg-neutral-950" />
+          <div
+            className="h-full rounded-full bg-neutral-950 transition-[width] duration-500"
+            style={{ width: `${Math.max(6, (doneCount / steps.length) * 100)}%` }}
+          />
         </div>
         <button
           type="button"
-          onClick={() => { haptic("light"); onNavigate(1); }}
+          onClick={() => { haptic("light"); onNavigate(nextStep.tab); }}
           className="mt-8 inline-flex min-h-[48px] w-full items-center justify-center rounded-xl bg-neutral-950 px-5 text-[15px] font-extrabold text-white transition-colors hover:bg-neutral-800"
         >
-          Create plan
+          {ctaLabel}
+        </button>
+        <button
+          type="button"
+          onClick={() => { haptic("light"); onDismiss(); }}
+          className="mt-3 inline-flex min-h-[36px] w-full items-center justify-center rounded-xl px-5 text-[12px] font-bold text-neutral-950/60 transition-colors hover:text-neutral-950"
+        >
+          Skip setup — take me to the dashboard
         </button>
       </div>
       <div className={`${CARD} px-4 py-4`}>
         <SectionHeader icon={IconSparkles} title="Setup checklist" />
         <div className="divide-y divide-neutral-100 dark:divide-white/[0.06]">
-          {steps.map(({ n, icon: Icon, title, desc, tab }) => (
+          {steps.map(({ n, icon: Icon, title, desc, tab, done: stepDone }) => (
             <button
               key={n}
               type="button"
               onClick={() => { haptic("light"); onNavigate(tab); }}
               className="flex w-full items-center gap-3 py-4 text-left"
             >
-              <span className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-neutral-100 text-neutral-500 dark:bg-white/[0.06] dark:text-neutral-400">
+              <span
+                className={`grid h-10 w-10 shrink-0 place-items-center rounded-xl ${
+                  stepDone
+                    ? "bg-emerald-500/15 text-emerald-600 dark:text-emerald-400"
+                    : "bg-neutral-100 text-neutral-500 dark:bg-white/[0.06] dark:text-neutral-400"
+                }`}
+              >
                 <Icon size={20} strokeWidth={1.8} />
               </span>
               <div className="min-w-0 flex-1">
                 <div className="flex items-center gap-2">
-                  <span className="grid h-[18px] w-[18px] shrink-0 place-items-center rounded-full bg-emerald-500/15 text-[10px] font-extrabold tabular-nums text-emerald-600 dark:text-emerald-400">
-                    {n}
+                  <span
+                    className={`grid h-[18px] w-[18px] shrink-0 place-items-center rounded-full text-[10px] font-extrabold tabular-nums ${
+                      stepDone
+                        ? "bg-emerald-500 text-white"
+                        : "bg-emerald-500/15 text-emerald-600 dark:text-emerald-400"
+                    }`}
+                  >
+                    {stepDone ? <IconCheck size={11} strokeWidth={3.2} /> : n}
                   </span>
-                  <p className="truncate text-[15px] font-bold text-neutral-950 dark:text-white">{title}</p>
+                  <p
+                    className={`truncate text-[15px] font-bold ${
+                      stepDone
+                        ? "text-neutral-400 line-through decoration-neutral-300 dark:text-neutral-500 dark:decoration-neutral-600"
+                        : "text-neutral-950 dark:text-white"
+                    }`}
+                  >
+                    {title}
+                  </p>
                 </div>
                 <p className="mt-1 text-[12px] leading-snug text-neutral-500 dark:text-neutral-400">{desc}</p>
               </div>
@@ -732,11 +784,31 @@ export default function OverviewDashboard({
     [schedule.activities]
   );
 
-  const isFreshStart =
-    schedule.plans.length === 0 &&
-    !hasScheduledTasks &&
-    (schedule.progressTrackers?.length ?? 0) === 0 &&
-    (schedule.rituals?.length ?? 0) === 0;
+  // Getting-started stays up until the user has real momentum (2 of 3 setup
+  // steps) or explicitly skips it; the flag is per-device.
+  const [setupDismissed, setSetupDismissed] = useState(() => {
+    try {
+      return localStorage.getItem("planr-getting-started-dismissed") === "1";
+    } catch {
+      return false;
+    }
+  });
+  const dismissGettingStarted = useCallback(() => {
+    setSetupDismissed(true);
+    try {
+      localStorage.setItem("planr-getting-started-dismissed", "1");
+    } catch {
+      // storage unavailable — dismissal just won't persist
+    }
+  }, []);
+
+  const setupDone: SetupDone = {
+    plan: schedule.plans.length > 0,
+    task: hasScheduledTasks,
+    ritual: (schedule.rituals?.length ?? 0) > 0,
+  };
+  const setupDoneCount = Number(setupDone.plan) + Number(setupDone.task) + Number(setupDone.ritual);
+  const showGettingStarted = !setupDismissed && setupDoneCount < 2;
 
   const ritualConsistency = useMemo(() => {
     const completions = schedule.ritualCompletions ?? [];
@@ -816,8 +888,8 @@ export default function OverviewDashboard({
           </div>
         </div>
 
-        {isFreshStart ? (
-          <GettingStarted onNavigate={onNavigate} />
+        {showGettingStarted ? (
+          <GettingStarted onNavigate={onNavigate} done={setupDone} onDismiss={dismissGettingStarted} />
         ) : (
           <div className="space-y-4">
             <StatGrid

@@ -189,10 +189,13 @@ export default function BottomNav({
           <nav
             role="navigation"
             aria-label="Main navigation"
+            data-glass
             className="
               relative flex h-[68px] w-full items-center justify-evenly rounded-full px-2
-              border border-neutral-200/70 bg-white
-              dark:border-white/[0.09] dark:bg-neutral-900
+              border border-neutral-200/70 bg-white/80 backdrop-blur-xl backdrop-saturate-150
+              shadow-[0_8px_30px_-8px_rgba(0,0,0,0.18)]
+              dark:border-white/[0.09] dark:bg-neutral-900/75 dark:shadow-[0_8px_30px_-8px_rgba(0,0,0,0.6)]
+              supports-[backdrop-filter]:bg-white/70 dark:supports-[backdrop-filter]:bg-neutral-900/65
             "
           >
             <button

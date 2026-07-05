@@ -16,6 +16,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { getDeviceCapabilities } from "@/lib/performance/detectLowEndDevice";
 import { safeGetItem, safeSetItem } from "@/lib/safeStorage";
+import { AI_ENABLED } from "@/lib/featureFlags";
 import {
   AI_ENABLED_KEY,
   AI_MODE_KEY,
@@ -80,6 +81,10 @@ function nextId() { return `ai-${++msgCounter}`; }
 
 function getOrCreateWorker(): Worker | null {
   if (typeof window === "undefined") return null;
+  // Hard stop while the AI feature is gated off: never spawn the worker, which
+  // is what pulls in Transformers.js and triggers a multi-hundred-MB model
+  // download. This keeps the dormant dependency out of runtime entirely.
+  if (!AI_ENABLED) return null;
   if (sharedWorker) return sharedWorker;
   try {
     sharedWorker = new Worker(
@@ -221,7 +226,7 @@ export function useAIRuntime(): AIRuntimeState {
   // idle so it never blocks app startup, and skips minimal / data-saver devices.
   useEffect(() => {
     mountedRef.current = true;
-    const canAutoLoad = tier !== "minimal" && !isSaveData;
+    const canAutoLoad = AI_ENABLED && tier !== "minimal" && !isSaveData;
     if (enabled && canAutoLoad && currentModel !== lastRequestedModel) {
       lastRequestedModel = currentModel;
       // Cached models load instantly — don't show the "starting" state for them.

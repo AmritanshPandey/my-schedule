@@ -1123,6 +1123,21 @@ export function useScheduleDB() {
     setScheduleState(updater);
   }, []);
 
+  /**
+   * Replace the whole schedule with data restored from a backup file. The raw
+   * object goes through the same migrate pipeline as any stored snapshot, so
+   * old exports load cleanly. Returns false (state untouched) when the payload
+   * is corrupt. Persistence + cloud sync then follow the normal debounced
+   * write path, exactly like any other edit.
+   */
+  const restoreData = useCallback((raw: unknown): boolean => {
+    const migrated = safeMigrate(raw);
+    if (!migrated) return false;
+    setScheduleState(migrated);
+    setIsFirstLaunch(false);
+    return true;
+  }, []);
+
   async function clearData(): Promise<void> {
     const empty = emptyEmpty();
     setScheduleState(empty);
@@ -1166,5 +1181,5 @@ export function useScheduleDB() {
     }
   }
 
-  return { schedule, setSchedule, ready, clearData, clearProgress, isFirstLaunch };
+  return { schedule, setSchedule, ready, clearData, clearProgress, restoreData, isFirstLaunch };
 }

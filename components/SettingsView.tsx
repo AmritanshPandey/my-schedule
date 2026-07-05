@@ -29,6 +29,7 @@ import { hardRefreshApp } from "@/lib/chunkRecovery";
 import { versionLabel } from "@/lib/buildInfo";
 import { collectDiagnostics, formatDiagnostics, type DiagnosticsSnapshot } from "@/lib/diagnostics";
 import { clearErrorLog } from "@/lib/errorLog";
+import { isErrorTelemetryEnabled, setErrorTelemetryEnabled } from "@/lib/errorTelemetry";
 import { clearBootLog } from "@/lib/iosSafeMode";
 import {
   checkOllamaConnection, checkModelStatus,
@@ -42,6 +43,8 @@ import { getDeviceCapabilities } from "@/lib/performance/detectLowEndDevice";
 import { formatDisplayTime, minutesToInputTime } from "@/lib/timeUtils";
 import type { Schedule, SchedulePreferences } from "@/lib/useScheduleDB";
 import ConfirmSheet from "@/components/ui/ConfirmSheet";
+import BackupRows from "@/components/settings/BackupRows";
+import RemindersRows from "@/components/settings/RemindersRows";
 import { buildDeleteConfirmationCopy } from "@/lib/deleteConfirm";
 import { normalizeDayStartTime } from "@/lib/timeline/displayWindow";
 
@@ -457,6 +460,47 @@ function SyncRow({ schedule: _schedule }: { schedule: Schedule }) {
   );
 }
 
+function ErrorTelemetryRow() {
+  const { isGuest } = useAuth();
+  const [on, setOn] = useState(false);
+  useEffect(() => { setOn(isErrorTelemetryEnabled()); }, []);
+  if (isGuest) return null;
+  const toggle = () => {
+    const next = !on;
+    setOn(next);
+    setErrorTelemetryEnabled(next);
+    haptic("light");
+  };
+  return (
+    <>
+      <Divider />
+      <div className="flex items-center gap-3 px-4 py-3.5">
+        <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl border border-neutral-100 bg-neutral-50 text-neutral-500 dark:border-white/[0.06] dark:bg-white/[0.04] dark:text-neutral-300">
+          <IconShield size={14} strokeWidth={2} />
+        </div>
+        <div className="min-w-0 flex-1">
+          <p className="text-[13px] font-semibold text-neutral-800 dark:text-white">Share error reports</p>
+          <p className="mt-0.5 text-[11px] leading-snug text-neutral-400 dark:text-neutral-500">
+            Sends crash details to your own cloud space to help fix bugs · no schedule content
+          </p>
+        </div>
+        <button
+          type="button"
+          role="switch"
+          aria-checked={on}
+          aria-label="Share error reports"
+          onClick={toggle}
+          className={`relative h-[26px] w-[44px] shrink-0 rounded-full transition-colors duration-200 ${
+            on ? "bg-[#00A63E]" : "bg-neutral-200 dark:bg-white/[0.12]"
+          }`}
+        >
+          <span className={`absolute top-[3px] h-5 w-5 rounded-full bg-white transition-[left] duration-200 ${on ? "left-[21px]" : "left-[3px]"}`} />
+        </button>
+      </div>
+    </>
+  );
+}
+
 function DiagnosticsCard() {
   const [snapshot, setSnapshot] = useState<DiagnosticsSnapshot | null>(null);
   const [copyState, setCopyState] = useState<"idle" | "copied" | "failed">("idle");
@@ -544,6 +588,7 @@ function DiagnosticsCard() {
           Clear logs
         </button>
       </div>
+      <ErrorTelemetryRow />
     </Card>
   );
 }
@@ -567,6 +612,7 @@ interface SettingsViewProps {
   schedule: Schedule;
   onClearData: () => Promise<void>;
   onClearProgress?: () => Promise<void>;
+  onRestoreData?: (raw: unknown) => boolean;
   onUpdatePreferences?: (patch: Partial<SchedulePreferences>) => void;
   onClose?: () => void;
 }
@@ -575,6 +621,7 @@ export function SettingsView({
   schedule,
   onClearData,
   onClearProgress,
+  onRestoreData,
   onUpdatePreferences,
   onClose,
 }: SettingsViewProps) {
@@ -720,6 +767,13 @@ export function SettingsView({
           </div>
 
           <div>
+            <SectionLabel>Reminders</SectionLabel>
+            <Card>
+              <RemindersRows />
+            </Card>
+          </div>
+
+          <div>
             <SectionLabel>Timeline</SectionLabel>
             <Card>
               <Row className="items-start max-sm:flex-col sm:items-center">
@@ -799,6 +853,8 @@ export function SettingsView({
                   <Divider />
                 </>
               )}
+              <BackupRows schedule={schedule} onRestoreData={onRestoreData} />
+              <Divider />
               {/* Clear progress — keeps plans/tasks/trackers, wipes completions & logs */}
               {onClearProgress && (
                 <>

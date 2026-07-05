@@ -20,5 +20,21 @@
       "type": "image/svg+xml",
       "purpose": "any"
     }
+  ],
+  "shortcuts": [
+    {
+      "name": "Add task",
+      "short_name": "Add task",
+      "description": "Jump to Today and add a task",
+      "url": "/?action=add-task",
+      "icons": [{ "src": "/icons/icon.svg", "sizes": "any", "type": "image/svg+xml" }]
+    },
+    {
+      "name": "Log tracker",
+      "short_name": "Log",
+      "description": "Log a value on one of your trackers",
+      "url": "/?action=log-tracker",
+      "icons": [{ "src": "/icons/icon.svg", "sizes": "any", "type": "image/svg+xml" }]
+    }
   ]
 }

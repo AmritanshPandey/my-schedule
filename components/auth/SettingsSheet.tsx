@@ -21,6 +21,8 @@ import {
   IconInfoCircle,
 } from "@tabler/icons-react";
 import BottomSheet from "@/components/ui/BottomSheet";
+import BackupRows from "@/components/settings/BackupRows";
+import RemindersRows from "@/components/settings/RemindersRows";
 import { useAuth } from "@/contexts/AuthProvider";
 import { getSyncStatus, getLastSyncedAt, getLastSchedule, onSyncStatusChange, flushNow, deleteCloudData, type SyncStatus } from "@/lib/cloudSync";
 import { formatDisplayTime, minutesToInputTime } from "@/lib/timeUtils";
@@ -801,6 +803,7 @@ interface SettingsSheetProps {
   onClose: () => void;
   onClearData: () => Promise<void>;
   onClearProgress?: () => Promise<void>;
+  onRestoreData?: (raw: unknown) => boolean;
   schedule: Schedule;
   onUpdatePreferences?: (patch: Partial<SchedulePreferences>) => void;
 }
@@ -810,6 +813,7 @@ export function SettingsSheet({
   onClose,
   onClearData,
   onClearProgress,
+  onRestoreData,
   schedule,
   onUpdatePreferences,
 }: SettingsSheetProps) {
@@ -915,6 +919,11 @@ export function SettingsSheet({
           <AppearanceRow />
         </SettingsCard>
 
+        <SectionLabel>Reminders</SectionLabel>
+        <SettingsCard>
+          <RemindersRows />
+        </SettingsCard>
+
         <SectionLabel>Timeline</SectionLabel>
         <SettingsCard>
           <StartOfDayRow
@@ -957,6 +966,8 @@ export function SettingsSheet({
               <Divider />
             </>
           )}
+          <BackupRows schedule={schedule} onRestoreData={onRestoreData} />
+          <Divider />
           {onClearProgress && (
             <>
               <ClearProgressRow onClearProgress={onClearProgress} />
