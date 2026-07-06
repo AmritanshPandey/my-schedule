@@ -99,7 +99,7 @@ export default function BottomNav({
                 initial={{ opacity: 0, y: 8, scale: 0.97 }}
                 animate={{ opacity: 1, y: 0, scale: 1 }}
                 exit={{ opacity: 0, y: 6, scale: 0.97 }}
-                transition={{ duration: 0.2, ease: [0.34, 1.1, 0.64, 1] }}
+                transition={{ duration: 0.2, ease: [0.22, 1, 0.36, 1] }}
                 className="absolute left-1/2 top-1/2 z-30 flex -translate-x-1/2 -translate-y-[156px] flex-col items-center"
               >
                 <div className="flex items-start gap-6 rounded-[24px] border border-white/[0.10] bg-neutral-950 px-5 py-4">
@@ -179,7 +179,7 @@ export default function BottomNav({
           >
             <m.div
               animate={{ rotate: expanded ? 45 : 0 }}
-              transition={{ duration: 0.2, ease: [0.34, 1.1, 0.64, 1] }}
+              transition={{ duration: 0.2, ease: [0.22, 1, 0.36, 1] }}
             >
               <IconPlus size={24} strokeWidth={2} />
             </m.div>

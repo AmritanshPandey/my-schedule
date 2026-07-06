@@ -16,6 +16,9 @@ import type { AccentColor } from "@/lib/colorSystem";
 import type { PlanDayState } from "@/lib/planInsights";
 import { accentStyles } from "@/lib/colorSystem";
 import IconButton from "@/components/ui/IconButton";
+import { CARD_INTERACTIVE } from "@/components/ui/surfaces";
+import { TRANSITION_DATA } from "@/lib/motion";
+import AnimatedNumber from "@/components/ui/AnimatedNumber";
 
 // ── Status derivation ─────────────────────────────────────────────────────────
 
@@ -111,7 +114,7 @@ function ProgressRing({ value, Icon, iconClass, tintClass, strokeClass }: Progre
           className={strokeClass}
           initial={{ strokeDasharray: `0 ${RING_C}` }}
           animate={{ strokeDasharray: `${filled} ${RING_C - filled}` }}
-          transition={{ duration: 0.85, ease: [0.25, 0.46, 0.45, 0.94], delay: 0.15 }}
+          transition={{ ...TRANSITION_DATA, delay: 0.15 }}
         />
       </svg>
       {/* Icon in center */}
@@ -165,7 +168,7 @@ function PlanCardInner({
       whileHover={{ y: 0 }}
       whileTap={{ scale: 0.985 }}
       transition={{ type: "spring", stiffness: 420, damping: 30 }}
-      className="group relative flex w-full cursor-pointer flex-col rounded-2xl border border-neutral-200/70 bg-white px-5 pb-4 pt-5 text-left transition-colors hover:border-neutral-300/80 dark:border-white/[0.07] dark:bg-neutral-900 dark:hover:border-white/[0.12] lg:min-h-[220px]"
+      className={`group relative flex w-full cursor-pointer flex-col px-5 pb-4 pt-5 text-left lg:min-h-[220px] ${CARD_INTERACTIVE}`}
     >
       {/* Delete — corner affordance. The absolute position lives on this wrapper
           because IconButton's `tap-target` class sets `position: relative`, which
@@ -198,7 +201,7 @@ function PlanCardInner({
             statusCfg.pulse ? "animate-pulse" : ""
           }`}
         />
-        {statusCfg.label} · {consistency}%
+        {statusCfg.label} · <AnimatedNumber value={consistency} />%
       </m.div>
 
       {/* ── Row 2: progress ring + title / description / date ────────────── */}

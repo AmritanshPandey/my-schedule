@@ -24,6 +24,7 @@ import type { DayKey, Plan, ProgressTracker, Schedule, Task } from "@/lib/useSch
 import { getTaskCheckableItems, getTaskSubtaskSummary, isTaskCompleted, isTaskResolved } from "@/lib/taskCompletion";
 import { getPlanCardStats } from "@/lib/planInsights";
 import { accentStyles } from "@/lib/colorSystem";
+import ExecutionStreakBanner from "@/components/ExecutionStreakBanner";
 import ExecutionTrendCard from "@/components/ExecutionTrendCard";
 import { getTrendDirection, getTrendState, type TrendDirection, type TrendState } from "@/lib/trendUtils";
 import { addDaysToISO, localISODate } from "@/lib/dateUtils";
@@ -31,6 +32,10 @@ import { parseTimeToMinutes, toScheduleDayMinutes } from "@/lib/timeUtils";
 import { calculateExecutionStreak, type ExecutionStreak } from "@/lib/consistency/calculateExecutionStreak";
 import { isTaskScheduledOn } from "@/lib/taskOccurrence";
 import { haptic } from "@/lib/haptics";
+import { CARD, CARD_INTERACTIVE, SOFT_PANEL } from "@/components/ui/surfaces";
+import CheckDraw from "@/components/ui/CheckDraw";
+import ProgressBar from "@/components/ui/ProgressBar";
+import AnimatedNumber from "@/components/ui/AnimatedNumber";
 
 interface OverviewDashboardProps {
   schedule: Schedule;
@@ -46,8 +51,6 @@ interface OverviewDashboardProps {
 const DAYS_ORDER: DayKey[] = ["monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday"];
 const DAY_LABELS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
 const JS_DAY_KEYS: DayKey[] = ["sunday", "monday", "tuesday", "wednesday", "thursday", "friday", "saturday"];
-const CARD = "rounded-2xl border border-neutral-200/70 bg-white dark:border-white/[0.08] dark:bg-[#171717]";
-const SOFT_PANEL = "rounded-xl border border-neutral-200/70 bg-neutral-50 dark:border-white/[0.07] dark:bg-white/[0.04]";
 
 type TaskSummary = ReturnType<typeof getTaskSubtaskSummary>;
 type TrackerRow = {
@@ -116,23 +119,19 @@ function SectionHeader({
   );
 }
 
-function ProgressTrack({
-  pct,
-  height = 6,
-  fillClassName,
-}: {
-  pct: number;
-  height?: number;
-  fillClassName?: string;
-}) {
-  const width = pct <= 0 ? 0 : Math.max(6, clampPct(pct));
+/**
+ * Renders a metric string ("3/8", "34%", "12") with its leading number
+ * counting up on mount; the suffix stays static.
+ */
+function MetricValue({ text }: { text: string }) {
+  const match = /^(\d+)(.*)$/.exec(text);
+  if (!match) return <>{text}</>;
+  const target = Number(match[1]);
   return (
-    <span className="block w-full overflow-hidden rounded-full bg-neutral-200 dark:bg-white/[0.10]" style={{ height }}>
-      <span
-        className={`block h-full rounded-full ${fillClassName ?? progressFillClass(pct)}`}
-        style={{ width: `${width}%` }}
-      />
-    </span>
+    <>
+      <AnimatedNumber value={target} />
+      {match[2]}
+    </>
   );
 }
 
@@ -144,6 +143,7 @@ function DashboardMetricCard({
   primary = false,
   icon: Icon,
   iconClass,
+  onClick,
 }: {
   label: string;
   value: string;
@@ -152,13 +152,20 @@ function DashboardMetricCard({
   primary?: boolean;
   icon: ComponentType<{ size?: number; strokeWidth?: number; className?: string }>;
   iconClass?: string;
+  onClick?: () => void;
 }) {
+  const Tag = onClick ? "button" : "div";
   return (
-    <div
-      className={`rounded-2xl border px-4 py-4 ${
+    <Tag
+      // The one elevated moment on the dashboard — hero shadow is sanctioned
+      // chrome-led depth, tagged data-glass for the e2e banned-effects guard.
+      data-glass={primary ? "" : undefined}
+      type={onClick ? "button" : undefined}
+      onClick={onClick ? () => { haptic("light"); onClick(); } : undefined}
+      className={`px-4 py-4 ${onClick ? "text-left" : ""} ${
         primary
-          ? "border-[#0B6B3A] bg-[#0B6B3A] text-white dark:border-emerald-400/25 dark:bg-[#143A27]"
-          : "border-neutral-200/70 bg-white text-neutral-950 dark:border-white/[0.08] dark:bg-[#171717] dark:text-white"
+          ? `rounded-2xl border border-green-700 bg-green-700 text-white shadow-[0_4px_24px_-8px_rgba(0,0,0,0.16)] dark:border-emerald-400/25 dark:bg-green-950 dark:shadow-[0_8px_30px_-12px_rgba(0,0,0,0.55)] ${onClick ? "transition-colors lg:hover:bg-green-800 dark:lg:hover:bg-[#07401F]" : ""}`
+          : `${onClick ? CARD_INTERACTIVE : CARD} text-neutral-950 dark:text-white`
       }`}
     >
       <div className="flex items-start justify-between gap-3">
@@ -171,21 +178,27 @@ function DashboardMetricCard({
         >
           <Icon size={18} strokeWidth={2} />
         </span>
-        <IconArrowUpRight size={16} strokeWidth={2.2} className={primary ? "text-white/80" : "text-neutral-300 dark:text-neutral-600"} />
+        {/* The arrow only appears when the card actually navigates. */}
+        {onClick && (
+          <IconArrowUpRight size={16} strokeWidth={2.2} className={primary ? "text-white/80" : "text-neutral-300 dark:text-neutral-600"} />
+        )}
       </div>
-      <p className={`mt-3 text-[12px] font-bold uppercase tracking-[0.08em] ${primary ? "text-white/70" : "text-neutral-400 dark:text-neutral-500"}`}>
+      <p className={`mt-3 text-[12px] font-bold uppercase tracking-[0.08em] ${primary ? "text-white/80" : "text-neutral-400 dark:text-neutral-500"}`}>
         {label}
       </p>
-      <p className="mt-1 text-[34px] font-extrabold leading-none tracking-[-0.03em] tabular-nums">{value}</p>
-      <p className={`mt-2 text-[12px] font-medium ${primary ? "text-white/75" : "text-neutral-500 dark:text-neutral-400"}`}>{detail}</p>
+      <p className="mt-1 text-[34px] font-extrabold leading-none tracking-[-0.03em] tabular-nums"><MetricValue text={value} /></p>
+      <p className={`mt-2 text-[12px] font-medium ${primary ? "text-white/80" : "text-neutral-500 dark:text-neutral-400"}`}>{detail}</p>
       {pct !== undefined && (
-        <ProgressTrack
+        <ProgressBar
           pct={pct}
           height={5}
-          fillClassName={primary ? "bg-white" : undefined}
+          animateOnMount
+          className="mt-3"
+          fillClassName={primary ? "bg-white" : progressFillClass(pct)}
+          trackClassName={primary ? "bg-white/20 dark:bg-white/20" : ""}
         />
       )}
-    </div>
+    </Tag>
   );
 }
 
@@ -204,6 +217,7 @@ function StatGrid({
   plans,
   trackers,
   streak,
+  onNavigate,
 }: {
   tasksDone: number;
   tasksTotal: number;
@@ -211,10 +225,11 @@ function StatGrid({
   plans: number;
   trackers: number;
   streak: ExecutionStreak;
+  onNavigate: (tab: number) => void;
 }) {
   const taskPct = ratioPct(tasksDone, tasksTotal);
   return (
-    <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5">
+    <div className="stagger-rise grid gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5">
       <DashboardMetricCard
         primary
         icon={IconChecklist}
@@ -222,6 +237,7 @@ function StatGrid({
         value={`${tasksDone}/${tasksTotal}`}
         detail={`${taskPct}% complete`}
         pct={taskPct}
+        onClick={() => onNavigate(0)}
       />
       <DashboardMetricCard
         icon={IconCalendarEvent}
@@ -246,6 +262,7 @@ function StatGrid({
         label="Plans"
         value={String(plans)}
         detail={plans === 1 ? "active plan" : "active plans"}
+        onClick={() => onNavigate(1)}
       />
       <DashboardMetricCard
         icon={IconTarget}
@@ -275,7 +292,7 @@ function ThisWeekCard({
           <div key={label} className={`rounded-xl border px-2 py-2 ${isToday ? "border-emerald-300 bg-emerald-50 dark:border-emerald-500/30 dark:bg-emerald-500/[0.08]" : "border-neutral-200/70 bg-neutral-50 dark:border-white/[0.07] dark:bg-white/[0.04]"}`}>
             <p className={`text-center text-[10px] font-bold ${isToday ? "text-emerald-700 dark:text-emerald-300" : "text-neutral-400 dark:text-neutral-500"}`}>{label}</p>
             <div className="mt-2">
-              <ProgressTrack pct={pct} height={4} />
+              <ProgressBar pct={pct} height={4} animateOnMount fillClassName={progressFillClass(pct)} />
             </div>
             <p className="mt-1.5 text-center text-[10px] font-bold tabular-nums text-neutral-500 dark:text-neutral-400">
               {done}/{total}
@@ -287,13 +304,13 @@ function ThisWeekCard({
         <div className={SOFT_PANEL + " px-3 py-3"}>
           <p className="text-[10px] font-bold uppercase tracking-[0.08em] text-neutral-400 dark:text-neutral-500">Tasks Done</p>
           <p className="mt-1 text-[24px] font-extrabold leading-none tabular-nums text-neutral-950 dark:text-white">
-            {activity.tasksPct}<span className="text-[14px]">%</span>
+            <AnimatedNumber value={activity.tasksPct} /><span className="text-[14px]">%</span>
           </p>
         </div>
         <div className={SOFT_PANEL + " px-3 py-3"}>
           <p className="text-[10px] font-bold uppercase tracking-[0.08em] text-neutral-400 dark:text-neutral-500">Habits Done</p>
           <p className="mt-1 text-[24px] font-extrabold leading-none tabular-nums text-neutral-950 dark:text-white">
-            {activity.habitsPct}<span className="text-[14px]">%</span>
+            <AnimatedNumber value={activity.habitsPct} /><span className="text-[14px]">%</span>
           </p>
         </div>
       </div>
@@ -420,7 +437,7 @@ function PlanConsistencyCard({
               key={plan.id}
               type="button"
               onClick={() => { haptic("light"); onNavigate(1); }}
-              className="grid w-full grid-cols-[minmax(0,1fr)_90px] items-center gap-4 py-3.5 text-left"
+              className="grid w-full grid-cols-[minmax(0,1fr)_90px] items-center gap-4 rounded-lg py-3.5 text-left transition-colors lg:hover:bg-neutral-50/80 dark:lg:hover:bg-white/[0.03]"
             >
               <div className="min-w-0">
                 <div className="flex items-center gap-2">
@@ -444,10 +461,10 @@ function PlanConsistencyCard({
               <div className="min-w-0">
                 <div className="mb-2 flex justify-end">
                   <span className="rounded-full border border-neutral-200 bg-neutral-50 px-2.5 py-1 text-[12px] font-extrabold tabular-nums text-neutral-900 dark:border-white/[0.10] dark:bg-white/[0.05] dark:text-white">
-                    {consistency}%
+                    <AnimatedNumber value={consistency} />%
                   </span>
                 </div>
-                <ProgressTrack pct={consistency} height={6} />
+                <ProgressBar pct={consistency} height={6} animateOnMount fillClassName={progressFillClass(consistency)} />
               </div>
             </button>
           );
@@ -478,7 +495,7 @@ function TaskStatusButton({
         : "border-emerald-600/70 bg-transparent hover:border-emerald-600 dark:border-emerald-500/55"
       }`}
     >
-      {done && <IconCheck size={17} strokeWidth={3} className="text-white" />}
+      <CheckDraw visible={done} size={17} strokeWidth={3} className="text-white" />
       {missed && <IconX size={17} strokeWidth={3} className="text-white" />}
     </button>
   );
@@ -892,6 +909,8 @@ export default function OverviewDashboard({
           <GettingStarted onNavigate={onNavigate} done={setupDone} onDismiss={dismissGettingStarted} />
         ) : (
           <div className="space-y-4">
+            <ExecutionStreakBanner data={executionStreak} />
+
             <StatGrid
               tasksDone={tasksDone}
               tasksTotal={tasksTotal}
@@ -899,9 +918,10 @@ export default function OverviewDashboard({
               plans={schedule.plans.length}
               trackers={trackerData.length}
               streak={executionStreak}
+              onNavigate={onNavigate}
             />
 
-            <div className="grid gap-4 lg:grid-cols-[minmax(330px,0.92fr)_minmax(360px,1fr)] xl:grid-cols-[minmax(360px,0.9fr)_minmax(410px,1fr)_minmax(360px,0.92fr)]">
+            <div className="stagger-rise grid gap-4 lg:grid-cols-[minmax(330px,0.92fr)_minmax(360px,1fr)] xl:grid-cols-[minmax(360px,0.9fr)_minmax(410px,1fr)_minmax(360px,0.92fr)]">
               <div className="space-y-4">
                 <TodayTaskListCard
                   tasks={todayTasks}

@@ -5,6 +5,7 @@ import { AnimatePresence, m } from "framer-motion";
 import dynamic from "next/dynamic";
 import AddEntryModal from "@/components/AddEntryModal";
 import { TaskBlockCard } from "@/components/TaskBlockCard";
+import Skeleton from "@/components/ui/Skeleton";
 import type { TaskSaveData } from "@/components/task/TaskSheet";
 import type { MilestoneSaveData } from "@/components/plan/MilestoneSheet";
 import type { CreateTaskFromNoteInput } from "@/components/notes/NotesView";
@@ -1371,7 +1372,7 @@ export default function ScheduleApp() {
             icon: t.icon,
             color: (plan?.color ?? "cyan") as AccentColor,
             planId: plan?.id ?? "",
-            ...(subtasks && subtasks.length > 0 ? { subtasks } : {}),
+            ...(subtasks !== undefined ? { subtasks } : {}),
           };
         });
         activities[d.day] = sortTasksByTime([...(activities[d.day] ?? []), ...created]);
@@ -2338,11 +2339,26 @@ export default function ScheduleApp() {
 
   if (!ready) {
     return (
-      <main className="min-h-screen bg-neutral-50 flex flex-col items-center justify-center gap-3 dark:bg-neutral-950">
-        <img src="/logo.svg" alt="PlanR" className="h-7 w-auto opacity-80 dark:hidden" />
-        <img src="/logo-dark.svg" alt="PlanR" className="hidden h-7 w-auto opacity-80 dark:block" />
-        <div className="h-1 w-24 overflow-hidden rounded-full bg-neutral-200 dark:bg-white/10">
-          <div className="h-full w-1/3 rounded-full bg-neutral-700 dark:bg-white/60 animate-loading-bar" />
+      <main className="min-h-screen bg-neutral-50 dark:bg-neutral-950">
+        <div className="flex flex-col items-center justify-center gap-3 pt-[30vh]">
+          <img src="/logo.svg" alt="PlanR" className="h-7 w-auto opacity-80 dark:hidden" />
+          <img src="/logo-dark.svg" alt="PlanR" className="hidden h-7 w-auto opacity-80 dark:block" />
+          <div className="h-1 w-24 overflow-hidden rounded-full bg-neutral-200 dark:bg-white/10">
+            <div className="h-full w-1/3 rounded-full bg-neutral-700 dark:bg-white/60 animate-loading-bar" />
+          </div>
+        </div>
+        {/* Ghost dashboard so first paint reads as the app taking shape. */}
+        <div className="mx-auto mt-14 w-full max-w-[980px] px-4" aria-hidden="true">
+          <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+            <Skeleton className="h-32 rounded-2xl" />
+            <Skeleton className="h-32 rounded-2xl" />
+            <Skeleton className="hidden h-32 rounded-2xl lg:block" />
+            <Skeleton className="hidden h-32 rounded-2xl lg:block" />
+          </div>
+          <div className="mt-3 grid gap-3 lg:grid-cols-2">
+            <Skeleton className="h-48 rounded-2xl" />
+            <Skeleton className="hidden h-48 rounded-2xl lg:block" />
+          </div>
         </div>
       </main>
     );
@@ -2792,7 +2808,7 @@ export default function ScheduleApp() {
                       key={day}
                       type="button"
                       onClick={() => { haptic("light"); setActiveDay(day); }}
-                      className="relative flex flex-col items-center focus-visible:outline-none"
+                      className="relative flex flex-col items-center"
                     >
                       {/* Active day: tall black pill */}
                       {isActive && (iosSafeMode ? (

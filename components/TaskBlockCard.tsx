@@ -1,7 +1,8 @@
 "use client";
 
 import type { CSSProperties, ReactNode } from "react";
-import { IconCheck, IconMinus, IconX, IconListCheck, IconArrowUpRight } from "@tabler/icons-react";
+import { IconMinus, IconX, IconListCheck, IconArrowUpRight } from "@tabler/icons-react";
+import CheckDraw from "@/components/ui/CheckDraw";
 import type { Plan, Task } from "@/lib/useScheduleDB";
 import type { TaskState } from "@/lib/taskCompletion";
 import { getTaskSubtaskSummary } from "@/lib/taskCompletion";
@@ -145,7 +146,7 @@ export function TaskBlockCard({
           disabled={readOnly}
           onClick={(e) => { e.stopPropagation(); if (!readOnly) onToggle(); }}
           className={`flex shrink-0 items-center justify-center border-[1.5px] transition-colors disabled:opacity-100 ${readOnly ? "cursor-default" : ""} ${
-            isList ? "h-7 w-7 rounded-[8px]" : "h-[18px] w-[18px] rounded-[5px]"
+            isList ? "h-7 w-7 rounded-[8px]" : "h-[18px] w-[18px] rounded-pr-sm"
           } ${
             done || partial ? "border-transparent bg-green-500"
             : missed ? "border-transparent bg-rose-500"
@@ -156,7 +157,7 @@ export function TaskBlockCard({
           aria-disabled={readOnly}
           aria-pressed={done || partial}
         >
-          {done && <IconCheck size={isList ? 16 : 12} strokeWidth={3} className="text-white" />}
+          <CheckDraw visible={done} size={isList ? 16 : 12} strokeWidth={3} className="text-white" />
           {partial && <IconMinus size={isList ? 16 : 12} strokeWidth={3} className="text-white" />}
           {missed && <IconX size={isList ? 16 : 12} strokeWidth={3} className="text-white" />}
         </button>

@@ -52,9 +52,14 @@ export default function ErrorReporter() {
       {open ? (
         <div className="w-[min(92vw,420px)] overflow-hidden rounded-2xl border border-red-300 bg-white dark:border-red-500/40 dark:bg-neutral-900">
           <div className="flex items-center justify-between gap-2 border-b border-red-200 bg-red-50 px-3 py-2 dark:border-red-500/30 dark:bg-red-500/10">
-            <span className="text-[12px] font-bold text-red-700 dark:text-red-300">
-              {errors.length} error{errors.length === 1 ? "" : "s"} captured
-            </span>
+            <div className="min-w-0">
+              <p className="text-[12px] font-bold text-red-700 dark:text-red-300">
+                Stored error log
+              </p>
+              <p className="text-[10px] font-semibold text-red-600/70 dark:text-red-300/70">
+                {errors.length} previous error{errors.length === 1 ? "" : "s"}
+              </p>
+            </div>
             <div className="flex items-center gap-1.5">
               <button
                 onClick={copyAll}
@@ -102,12 +107,23 @@ export default function ErrorReporter() {
           </div>
         </div>
       ) : (
-        <button
-          onClick={() => setOpen(true)}
-          className="flex min-h-[44px] items-center gap-1.5 rounded-full border border-red-300 bg-red-50 px-4 py-1.5 text-[12px] font-bold text-red-700 dark:border-red-500/40 dark:bg-red-500/15 dark:text-red-300"
-        >
-          ⚠︎ {errors.length} error{errors.length === 1 ? "" : "s"}
-        </button>
+        <div className="flex min-h-[44px] overflow-hidden rounded-full border border-red-300 bg-red-50 text-[12px] font-bold text-red-700 dark:border-red-500/40 dark:bg-red-500/15 dark:text-red-300">
+          <button
+            type="button"
+            onClick={() => setOpen(true)}
+            className="px-4 py-1.5"
+          >
+            Error log · {errors.length}
+          </button>
+          <button
+            type="button"
+            onClick={() => clearErrorLog()}
+            aria-label="Clear stored error log"
+            className="border-l border-red-300 px-3 py-1.5 dark:border-red-500/40"
+          >
+            Clear
+          </button>
+        </div>
       )}
     </div>
   );

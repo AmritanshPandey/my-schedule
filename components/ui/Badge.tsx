@@ -80,7 +80,7 @@ export function DayPill({ label, active }: DayPillProps) {
   return (
     <span
       className={[
-        "flex h-[22px] w-[22px] shrink-0 items-center justify-center rounded-[5px] text-[11px] font-bold transition-colors",
+        "flex h-[22px] w-[22px] shrink-0 items-center justify-center rounded-pr-sm text-[11px] font-bold transition-colors",
         active
           ? "bg-neutral-950 text-white dark:bg-white dark:text-neutral-950"
           : "text-neutral-400 dark:text-neutral-600",

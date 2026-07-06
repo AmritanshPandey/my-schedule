@@ -30,7 +30,7 @@ export default function SessionSheet({
     if (!task) return [];
     // Routine tasks: items are always task-level only (no plan fallback)
     if (task.taskType === "session") return task.subtasks ?? [];
-    return task.subtasks?.length ? task.subtasks : linkedPlan?.items ?? [];
+    return task.subtasks !== undefined ? task.subtasks : linkedPlan?.items ?? [];
   }, [task, linkedPlan]);
 
   const allItemIds = useMemo(() => items.map((i) => i.id), [items]);

@@ -4,9 +4,8 @@ import { useMemo } from "react";
 import { IconTrendingUp, IconTrendingDown, IconMinus, IconChartBar } from "@tabler/icons-react";
 import type { Schedule } from "@/lib/useScheduleDB";
 import { computeExecutionTrend, trendNarrative } from "@/lib/executionAnalytics";
-
-const CARD =
-  "rounded-2xl border border-neutral-200/70 bg-white dark:border-white/[0.07] dark:bg-neutral-900";
+import { CARD } from "@/components/ui/surfaces";
+import AnimatedNumber from "@/components/ui/AnimatedNumber";
 
 function barColor(pct: number): string {
   if (pct >= 80) return "bg-emerald-500";
@@ -50,7 +49,7 @@ export default function ExecutionTrendCard({ schedule }: { schedule: Schedule })
         <div>
           <div className="flex items-baseline gap-1">
             <span className={`text-[40px] font-extrabold leading-none tabular-nums ${valueColor(current.pct)}`}>
-              {current.pct}
+              <AnimatedNumber value={current.pct} />
             </span>
             <span className={`text-[20px] font-extrabold ${valueColor(current.pct)}`}>%</span>
           </div>
@@ -76,15 +75,15 @@ export default function ExecutionTrendCard({ schedule }: { schedule: Schedule })
 
       {/* Supporting chart — last 8 weeks */}
       <div className="mt-5 flex items-end gap-1.5" style={{ height: 44 }}>
-        {weeks.map((week) => {
+        {weeks.map((week, i) => {
           const h = Math.max(3, Math.round((week.pct / maxPct) * 44));
           return (
             <div
               key={week.monStr}
-              className={`flex-1 rounded-t-[3px] transition-all ${barColor(week.pct)} ${
+              className={`animate-bar-rise flex-1 rounded-t transition-[height,opacity] duration-300 ${barColor(week.pct)} ${
                 week.isCurrentWeek ? "opacity-100" : "opacity-50"
               }`}
-              style={{ height: h }}
+              style={{ height: h, animationDelay: `${i * 30}ms` }}
               title={`Week of ${week.label}: ${week.pct}%`}
             />
           );

@@ -1,9 +1,11 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { m, AnimatePresence } from "framer-motion";
 import {
   IconCheck,
+  IconChevronLeft,
+  IconChevronRight,
   IconPlus,
   IconRepeat,
   IconTrash,
@@ -60,6 +62,187 @@ function dateForCurrentWeekDay(day: DayKey): string {
   const date = new Date(today);
   date.setDate(today.getDate() + delta);
   return localISODate(date);
+}
+
+function formatDateButtonLabel(dateISO: string): string {
+  const [year, month, day] = dateISO.split("-");
+  return year && month && day ? `${day}/${month}/${year}` : dateISO;
+}
+
+function parseISODate(dateISO: string): Date {
+  return new Date(`${dateISO}T00:00:00`);
+}
+
+function monthStart(date: Date): Date {
+  return new Date(date.getFullYear(), date.getMonth(), 1);
+}
+
+function addMonths(date: Date, amount: number): Date {
+  return new Date(date.getFullYear(), date.getMonth() + amount, 1);
+}
+
+function buildCalendarDays(viewMonth: Date, selectedISO: string) {
+  const firstOfMonth = monthStart(viewMonth);
+  const mondayOffset = (firstOfMonth.getDay() + 6) % 7;
+  const start = new Date(firstOfMonth);
+  start.setDate(firstOfMonth.getDate() - mondayOffset);
+  const today = todayISO();
+
+  return Array.from({ length: 42 }, (_, index) => {
+    const date = new Date(start);
+    date.setDate(start.getDate() + index);
+    const iso = localISODate(date);
+    return {
+      iso,
+      dayNumber: date.getDate(),
+      inMonth: date.getMonth() === viewMonth.getMonth(),
+      isSelected: iso === selectedISO,
+      isToday: iso === today,
+    };
+  });
+}
+
+function DateActionButton({
+  value,
+  onChange,
+}: {
+  value: string;
+  onChange: (value: string) => void;
+}) {
+  const rootRef = useRef<HTMLDivElement | null>(null);
+  const [open, setOpen] = useState(false);
+  const [viewMonth, setViewMonth] = useState(() => monthStart(parseISODate(value)));
+  const calendarDays = useMemo(() => buildCalendarDays(viewMonth, value), [viewMonth, value]);
+  const monthLabel = viewMonth.toLocaleDateString("en-US", { month: "long", year: "numeric" });
+
+  useEffect(() => {
+    setViewMonth(monthStart(parseISODate(value)));
+  }, [value]);
+
+  useEffect(() => {
+    if (!open) return;
+
+    const handlePointerDown = (event: PointerEvent) => {
+      if (!rootRef.current?.contains(event.target as Node)) setOpen(false);
+    };
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") setOpen(false);
+    };
+
+    document.addEventListener("pointerdown", handlePointerDown);
+    document.addEventListener("keydown", handleKeyDown);
+    return () => {
+      document.removeEventListener("pointerdown", handlePointerDown);
+      document.removeEventListener("keydown", handleKeyDown);
+    };
+  }, [open]);
+
+  function selectDate(dateISO: string) {
+    haptic("light");
+    onChange(dateISO);
+    setOpen(false);
+  }
+
+  return (
+    <div ref={rootRef} className="relative inline-flex">
+      <button
+        type="button"
+        aria-label={`Select routine date, ${formatDateButtonLabel(value)}`}
+        aria-haspopup="dialog"
+        aria-expanded={open}
+        onClick={() => {
+          setViewMonth(monthStart(parseISODate(value)));
+          setOpen((current) => !current);
+        }}
+        className={`inline-flex min-h-[44px] items-center gap-2 rounded-full border-[1.5px] px-3 py-[10px] text-[13px] font-bold transition-colors active:scale-[0.97] sm:px-4 ${
+          open
+            ? "border-neutral-300 bg-neutral-100 text-neutral-900 dark:border-white/20 dark:bg-neutral-800 dark:text-white"
+            : "border-neutral-200 bg-white text-neutral-700 hover:bg-neutral-100 dark:border-white/15 dark:bg-neutral-900 dark:text-neutral-300 dark:hover:bg-neutral-800"
+        }`}
+      >
+        <IconCalendarEvent size={14} strokeWidth={2.3} className="shrink-0 text-neutral-500 dark:text-neutral-400" />
+        <span className="hidden tabular-nums sm:inline">{formatDateButtonLabel(value)}</span>
+      </button>
+
+      <AnimatePresence>
+        {open && (
+          <m.div
+            role="dialog"
+            aria-label="Select routine date"
+            initial={{ y: -4, scale: 0.98 }}
+            animate={{ y: 0, scale: 1 }}
+            exit={{ y: -4, scale: 0.98 }}
+            transition={{ duration: 0.14 }}
+            className="absolute right-0 top-[calc(100%+8px)] z-50 w-[292px] max-w-[calc(100vw-32px)] rounded-2xl border border-neutral-200 bg-white p-3 dark:border-white/10 dark:bg-neutral-900"
+          >
+            <div className="mb-3 flex items-center justify-between gap-2">
+              <button
+                type="button"
+                aria-label="Previous month"
+                onClick={() => setViewMonth((current) => addMonths(current, -1))}
+                className="flex h-9 w-9 items-center justify-center rounded-full text-neutral-500 transition-colors hover:bg-neutral-100 hover:text-neutral-900 dark:text-neutral-400 dark:hover:bg-white/[0.07] dark:hover:text-white"
+              >
+                <IconChevronLeft size={16} strokeWidth={2.2} />
+              </button>
+              <p className="text-[14px] font-extrabold text-neutral-950 dark:text-white">
+                {monthLabel}
+              </p>
+              <button
+                type="button"
+                aria-label="Next month"
+                onClick={() => setViewMonth((current) => addMonths(current, 1))}
+                className="flex h-9 w-9 items-center justify-center rounded-full text-neutral-500 transition-colors hover:bg-neutral-100 hover:text-neutral-900 dark:text-neutral-400 dark:hover:bg-white/[0.07] dark:hover:text-white"
+              >
+                <IconChevronRight size={16} strokeWidth={2.2} />
+              </button>
+            </div>
+
+            <div className="mb-1 grid grid-cols-7 gap-1">
+              {["M", "T", "W", "T", "F", "S", "S"].map((day, index) => (
+                <span
+                  key={`${day}-${index}`}
+                  className="flex h-7 items-center justify-center text-[11px] font-bold text-neutral-400 dark:text-neutral-500"
+                >
+                  {day}
+                </span>
+              ))}
+            </div>
+
+            <div className="grid grid-cols-7 gap-1">
+              {calendarDays.map((day) => (
+                <button
+                  key={day.iso}
+                  type="button"
+                  onClick={() => selectDate(day.iso)}
+                  aria-label={day.isToday ? `Today, ${day.iso}` : day.iso}
+                  aria-current={day.isToday ? "date" : undefined}
+                  className={`flex h-8 items-center justify-center rounded-full text-[12px] font-extrabold tabular-nums transition-colors ${
+                    day.isSelected
+                      ? "bg-neutral-950 text-white dark:bg-white dark:text-neutral-950"
+                      : day.isToday
+                        ? "border border-neutral-950 text-neutral-950 hover:bg-neutral-100 dark:border-white dark:text-white dark:hover:bg-white/[0.08]"
+                        : day.inMonth
+                          ? "text-neutral-700 hover:bg-neutral-100 dark:text-neutral-200 dark:hover:bg-white/[0.07]"
+                          : "text-neutral-300 hover:bg-neutral-50 dark:text-neutral-700 dark:hover:bg-white/[0.04]"
+                  }`}
+                >
+                  {day.dayNumber}
+                </button>
+              ))}
+            </div>
+
+            <button
+              type="button"
+              onClick={() => selectDate(todayISO())}
+              className="mt-3 flex h-10 w-full items-center justify-center rounded-full border border-neutral-200 text-[13px] font-extrabold text-neutral-700 transition-colors hover:bg-neutral-100 dark:border-white/10 dark:text-neutral-300 dark:hover:bg-white/[0.07]"
+            >
+              Today
+            </button>
+          </m.div>
+        )}
+      </AnimatePresence>
+    </div>
+  );
 }
 
 // ── Types ─────────────────────────────────────────────────────────────────────
@@ -297,15 +480,20 @@ export default function RitualView({
           label="Daily Practice"
           title="Routines"
           actions={
-            rituals.length < MAX_RITUALS ? (
-              <CtaActionButton
-                label="Add Routine"
-                icon={<IconPlus size={14} strokeWidth={2.5} />}
-                onClick={() => { haptic("medium"); onAddOpenChange(true); }}
-              />
-            ) : (
-              <span className="text-[11px] font-semibold text-neutral-400 dark:text-neutral-500">Max {MAX_RITUALS}</span>
-            )
+            <>
+              {rituals.length > 0 && (
+                <DateActionButton value={selectedDateISO} onChange={setSelectedDateISO} />
+              )}
+              {rituals.length < MAX_RITUALS ? (
+                <CtaActionButton
+                  label="Add Routine"
+                  icon={<IconPlus size={14} strokeWidth={2.5} />}
+                  onClick={() => { haptic("medium"); onAddOpenChange(true); }}
+                />
+              ) : (
+                <span className="text-[11px] font-semibold text-neutral-400 dark:text-neutral-500">Max {MAX_RITUALS}</span>
+              )}
+            </>
           }
           className="mb-4"
         />
@@ -325,25 +513,7 @@ export default function RitualView({
 
         {/* ── Day filter strip ─────────────────────────────────────────────── */}
         {rituals.length > 0 && (
-          <div className="mb-6 space-y-3">
-            <div className="flex items-center gap-2 rounded-2xl border border-neutral-200 bg-white px-3 py-2 dark:border-white/10 dark:bg-neutral-900">
-              <IconCalendarEvent size={16} strokeWidth={2} className="text-neutral-400 dark:text-neutral-500" />
-              <input
-                type="date"
-                value={selectedDateISO}
-                onChange={(e) => setSelectedDateISO(e.target.value || todayISO())}
-                className="min-w-0 flex-1 bg-transparent text-[14px] font-bold text-neutral-800 outline-none dark:text-white"
-              />
-              {selectedDateISO !== todayISO() && (
-                <button
-                  type="button"
-                  onClick={() => setSelectedDateISO(todayISO())}
-                  className="rounded-full bg-neutral-100 px-3 py-1 text-[11px] font-bold text-neutral-500 dark:bg-white/[0.07] dark:text-neutral-300"
-                >
-                  Today
-                </button>
-              )}
-            </div>
+          <div className="mb-6">
             <div className="grid grid-cols-7 gap-2">
               {DAYS.map((day) => {
                 const sel = selectedDay === day;

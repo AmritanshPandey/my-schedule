@@ -221,6 +221,55 @@ test("editing subtasks invalidates stale completion ids and task events", () => 
   assert.equal(task.completionHistory.some((item) => item.completionType === "task"), false);
 });
 
+test("explicit empty subtasks override plan template fallback", () => {
+  const schedule = emptySchedule();
+  schedule.plans = [
+    {
+      id: "plan-1",
+      title: "Plan",
+      emoji: "star",
+      color: "amber",
+      items: [{ id: "plan-a", task: "Plan step" }],
+    },
+  ];
+  schedule.activities.monday = [
+    {
+      id: "task-4",
+      title: "Task",
+      startTime: "9:00 AM",
+      endTime: "10:00 AM",
+      icon: "star",
+      color: "amber",
+      planId: "plan-1",
+      taskType: "task",
+      subtasks: [{ id: "a", task: "A" }],
+      completedSubtaskIds: ["a"],
+    },
+  ];
+
+  const update = {
+    title: "Task",
+    startTime: "9:00 AM",
+    endTime: "10:00 AM",
+    icon: "star",
+    color: "amber",
+    planId: "plan-1",
+    taskType: "task",
+    subtasks: [],
+  };
+
+  const result = updateTaskDays("task-4", update, ["monday"], null)(schedule);
+  const task = result.activities.monday[0];
+  assert.deepEqual(task.subtasks, []);
+  assert.deepEqual(getTaskCheckableItems(task, schedule.plans[0]), []);
+  assert.deepEqual(getTaskSubtaskSummary(task, schedule.plans[0]), {
+    isSession: false,
+    hasItems: false,
+    completedCount: 0,
+    totalCount: 0,
+  });
+});
+
 test("single-day task delete removes only that occurrence", () => {
   const schedule = emptySchedule();
   const task = baseTask();

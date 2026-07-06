@@ -45,6 +45,7 @@ import type { Schedule, SchedulePreferences } from "@/lib/useScheduleDB";
 import ConfirmSheet from "@/components/ui/ConfirmSheet";
 import BackupRows from "@/components/settings/BackupRows";
 import RemindersRows from "@/components/settings/RemindersRows";
+import { CARD as CARD_SURFACE } from "@/components/ui/surfaces";
 import { buildDeleteConfirmationCopy } from "@/lib/deleteConfirm";
 import { normalizeDayStartTime } from "@/lib/timeline/displayWindow";
 
@@ -60,7 +61,7 @@ function SectionLabel({ children }: { children: React.ReactNode }) {
 
 function Card({ children, className = "" }: { children: React.ReactNode; className?: string }) {
   return (
-    <div className={`overflow-hidden rounded-2xl border border-neutral-200 bg-white dark:border-white/[0.08] dark:bg-neutral-900 ${className}`}>
+    <div className={`overflow-hidden ${CARD_SURFACE} ${className}`}>
       {children}
     </div>
   );

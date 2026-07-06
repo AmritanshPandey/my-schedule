@@ -1,7 +1,8 @@
 "use client";
 
-import { IconCheck, IconMinus, IconX } from "@tabler/icons-react";
+import { IconMinus, IconX } from "@tabler/icons-react";
 import type { TaskState } from "@/lib/taskCompletion";
+import CheckDraw from "@/components/ui/CheckDraw";
 
 interface TaskStatusCheckboxProps {
   state: TaskState;
@@ -13,7 +14,7 @@ interface TaskStatusCheckboxProps {
 }
 
 const sizeClasses = {
-  sm: "h-6 w-6 rounded-[7px]",
+  sm: "h-6 w-6 rounded-pr-sm",
   md: "h-7 w-7 rounded-lg",
 } as const;
 
@@ -61,7 +62,7 @@ export default function TaskStatusCheckbox({
           : "border-green-600/70 bg-transparent dark:border-green-500/70"
       }`}
     >
-      {done && <IconCheck size={14} strokeWidth={3} className="text-white" />}
+      <CheckDraw visible={done} size={14} strokeWidth={3} className="text-white" />
       {partial && <IconMinus size={14} strokeWidth={3} className="text-white" />}
       {missed && <IconX size={14} strokeWidth={3} className="text-white" />}
     </button>

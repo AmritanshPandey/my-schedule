@@ -178,13 +178,13 @@ function ListTaskCardInner({
   // For session tasks, steps are always task-level. For task type, fall back to
   // the plan template when no task-level subtasks have been saved yet.
   const templateItems: ScheduleEntry[] = useMemo(
-    () => (!isRoutine && !task.subtasks?.length && linkedPlan ? linkedPlan.items : []),
+    () => (!isRoutine && task.subtasks === undefined && linkedPlan ? linkedPlan.items : []),
     [isRoutine, task.subtasks, linkedPlan]
   );
   // Unified list of checkable items for this task
   const effectiveItems: ScheduleEntry[] = useMemo(
-    () => (isRoutine ? subtasks : (subtasks.length > 0 ? subtasks : templateItems)),
-    [isRoutine, subtasks, templateItems]
+    () => (isRoutine ? subtasks : (task.subtasks !== undefined ? subtasks : templateItems)),
+    [isRoutine, subtasks, task.subtasks, templateItems]
   );
   const allSubtaskIds = useMemo(() => effectiveItems.map((s) => s.id), [effectiveItems]);
 

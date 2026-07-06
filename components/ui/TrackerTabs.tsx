@@ -32,7 +32,7 @@ function TrackerTabsInner({ tabs, activeId, onChange }: TrackerTabsProps) {
                 ? "bg-neutral-950 text-white dark:bg-white dark:text-neutral-950"
                 : "border-[1.5px] border-neutral-200 bg-transparent text-neutral-500 hover:bg-neutral-100 dark:border-white/10 dark:text-neutral-400 dark:hover:bg-white/[0.06]"
             }`}
-            style={isActive ? { transition: "all 180ms cubic-bezier(0.34, 1.1, 0.64, 1)" } : undefined}
+            style={isActive ? { transition: "all 180ms var(--ease-out-quint)" } : undefined}
           >
             {tab.label}
           </m.button>
