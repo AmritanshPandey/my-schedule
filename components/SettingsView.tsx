@@ -690,7 +690,7 @@ export function SettingsView({
           </p>
         </div>
 
-        <div className="space-y-6">
+        <div className="stagger-rise space-y-6">
           {/* ── Account ─────────────────────────────────────────────────────── */}
           {!authLoading && (
             <div>

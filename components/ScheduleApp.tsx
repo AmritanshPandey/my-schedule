@@ -2951,12 +2951,12 @@ export default function ScheduleApp() {
                         </SortableContext>
                       </DndContext>
                     ) : (
-                      <div className="flex flex-col gap-3 pb-4">
+                      <div className="stagger-rise flex flex-col gap-3 pb-4">
                         {dayTasksView.map((task) => {
                           const linkedPlan = task.planId ? plansById.get(task.planId) ?? null : null;
                           const linkedMilestone = taskToMilestoneMap.get(task.id);
                           return (
-                            <div key={task.id} className="animate-panel-in">
+                            <div key={task.id}>
                               <ListTaskCard
                                 task={task}
                                 linkedPlan={linkedPlan}

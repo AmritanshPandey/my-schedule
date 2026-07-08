@@ -616,11 +616,21 @@ export function WeekGrid({
                   const visualHeight = Math.max(22, layout.height - TASK_VERTICAL_INSET * 2);
                   const linkedPlan = layout.task.planId ? plansById.get(layout.task.planId) ?? null : null;
                   const allSubtaskIds = getTaskCheckableItems(layout.task, linkedPlan).map((item) => item.id);
+                  // The block you should be executing right now — green ring
+                  // (progress signal). Sanctioned chrome-led depth → data-glass.
+                  const nowPx = (now - startMin) * PX_MIN;
+                  const isCurrent =
+                    dayIsToday &&
+                    !layout.task.completed &&
+                    !layout.task.missed &&
+                    nowPx >= layout.top &&
+                    nowPx < layout.top + layout.height;
                   return (
                     <div
                       key={layout.task.id}
                       data-task-block
-                      className="absolute"
+                      data-glass={isCurrent ? "" : undefined}
+                      className={`absolute ${isCurrent ? "rounded-[10px] shadow-[0_0_0_1.5px_rgba(0,166,62,0.55),0_8px_24px_-12px_rgba(0,166,62,0.35)] dark:shadow-[0_0_0_1.5px_rgba(47,212,110,0.5),0_8px_24px_-12px_rgba(47,212,110,0.4)]" : ""}`}
                       style={{
                         top: layout.top + TASK_VERTICAL_INSET,
                         height: visualHeight,
