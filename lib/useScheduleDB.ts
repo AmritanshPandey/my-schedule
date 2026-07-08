@@ -539,7 +539,7 @@ function normalizeMilestoneTimelines(plans: Plan[], milestones: Milestone[]): Mi
   });
 }
 
-function normalizeTasks(value: unknown, fallbackPlanId: string, fallbackIcon = "briefcase", fallbackDescription?: string): Task[] {
+export function normalizeTasks(value: unknown, fallbackPlanId: string, fallbackIcon = "briefcase", fallbackDescription?: string): Task[] {
   if (!Array.isArray(value)) return [];
 
   return value.flatMap((item) => {
@@ -571,7 +571,7 @@ function normalizeTasks(value: unknown, fallbackPlanId: string, fallbackIcon = "
         ...(task.completionHistory !== undefined && { completionHistory: task.completionHistory }),
         ...(task.streakEnabled !== undefined && { streakEnabled: task.streakEnabled }),
         ...(task.sortOrder !== undefined && { sortOrder: task.sortOrder }),
-        ...(Array.isArray(task.subtasks) && task.subtasks.length > 0 && { subtasks: task.subtasks }),
+        ...(Array.isArray(task.subtasks) ? { subtasks: task.subtasks } : {}),
         ...(task.exceptions && typeof task.exceptions === "object" && !Array.isArray(task.exceptions) && { exceptions: task.exceptions }),
         ...(task.recurrence && typeof task.recurrence === "object" && !Array.isArray(task.recurrence) && { recurrence: task.recurrence }),
       }];

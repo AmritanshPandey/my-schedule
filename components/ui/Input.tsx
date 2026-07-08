@@ -12,8 +12,10 @@ interface TextareaProps extends React.TextareaHTMLAttributes<HTMLTextAreaElement
   autoGrow?: boolean;
 }
 
+// Text fields signal focus with the accent border shift (no ring — the global
+// focus-visible ring exempts inputs; see globals.css).
 export const FORM_CONTROL_BASE =
-  "w-full min-w-0 rounded-xl border border-neutral-200 bg-neutral-50 text-[16px] font-medium text-neutral-900 outline-none placeholder:text-neutral-400 transition-colors focus:border-neutral-300 focus:bg-neutral-100 dark:border-white/10 dark:bg-white/[0.04] dark:text-white dark:placeholder:text-neutral-500 dark:focus:border-white/20 dark:focus:bg-white/[0.07] dark:[color-scheme:dark]";
+  "w-full min-w-0 rounded-xl border border-neutral-200 bg-neutral-50 text-[16px] font-medium text-neutral-900 outline-none placeholder:text-neutral-400 transition-colors focus:border-emerald-600/60 focus:bg-neutral-100 dark:border-white/10 dark:bg-white/[0.04] dark:text-white dark:placeholder:text-neutral-500 dark:focus:border-emerald-400/50 dark:focus:bg-white/[0.07] dark:[color-scheme:dark]";
 
 export const FORM_INPUT_CLASS = `${FORM_CONTROL_BASE} h-11 px-4`;
 export const FORM_TEXTAREA_CLASS = `${FORM_CONTROL_BASE} min-h-[76px] max-h-36 resize-none px-4 py-3 leading-snug`;

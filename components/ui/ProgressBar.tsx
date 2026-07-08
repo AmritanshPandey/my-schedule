@@ -1,6 +1,7 @@
 "use client";
 
 import { m } from "framer-motion";
+import { TRANSITION_DATA } from "@/lib/motion";
 
 interface ProgressBarProps {
   /** Fill amount, 0–100. */
@@ -17,6 +18,8 @@ interface ProgressBarProps {
   minVisible?: boolean;
   /** Animate width changes (default true). */
   animate?: boolean;
+  /** Also animate the initial fill from 0 on mount (metric-card entrances). */
+  animateOnMount?: boolean;
   /** Extra wrapper classes (e.g. width, margins). */
   className?: string;
   /** Extend/override the track background. */
@@ -35,6 +38,7 @@ export default function ProgressBar({
   rounded = "rounded-full",
   minVisible = true,
   animate = true,
+  animateOnMount = false,
   className = "",
   trackClassName = "",
 }: ProgressBarProps) {
@@ -49,9 +53,9 @@ export default function ProgressBar({
       <m.div
         className={`absolute inset-y-0 left-0 ${rounded} ${fillColor ? "" : fillClassName}`}
         style={fillColor ? { backgroundColor: fillColor } : undefined}
-        initial={false}
+        initial={animateOnMount ? { width: 0 } : false}
         animate={{ width: `${width}%` }}
-        transition={animate ? { duration: 0.45, ease: [0.34, 1.1, 0.64, 1] } : { duration: 0 }}
+        transition={animate ? TRANSITION_DATA : { duration: 0 }}
       />
     </div>
   );

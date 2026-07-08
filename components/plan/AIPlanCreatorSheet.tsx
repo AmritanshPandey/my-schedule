@@ -63,7 +63,7 @@ function GenStreamingStatus() {
         animate={{ opacity: 1, y: 0 }}
         exit={{ opacity: 0, y: -3 }}
         transition={{ duration: 0.22 }}
-        className="shimmer-text text-[13px] font-medium"
+        className="animate-status-pulse text-[13px] font-medium text-neutral-500 dark:text-neutral-400"
       >
         {GEN_PHRASES[idx]}
       </m.span>

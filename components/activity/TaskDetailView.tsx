@@ -52,7 +52,7 @@ export default function TaskDetailView({
   const items: ScheduleEntry[] = useMemo(() => {
     if (!task) return [];
     if (isSession) return task.subtasks ?? [];
-    const base = task.subtasks?.length ? task.subtasks : linkedPlan?.items ?? [];
+    const base = task.subtasks !== undefined ? task.subtasks : linkedPlan?.items ?? [];
     return [...base].sort(compareDeadline);
   }, [task, isSession, linkedPlan]);
 

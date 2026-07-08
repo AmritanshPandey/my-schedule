@@ -366,8 +366,15 @@ export function TaskSheet({
       color: selectedPlan.color,
       planId: selectedPlan.id,
       taskType,
-      // Store subtasks on the task itself so each task has an independent list
-      subtasks: validSubtasks.length > 0 ? validSubtasks : undefined,
+      // Store subtasks on the task itself so each task has an independent list.
+      // For edits, an empty array must be persisted explicitly to override any
+      // plan template fallback and delete subtasks from this task only.
+      subtasks:
+        mode === "edit"
+          ? validSubtasks
+          : validSubtasks.length > 0
+          ? validSubtasks
+          : undefined,
       recurrence,
     };
 

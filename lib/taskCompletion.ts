@@ -99,9 +99,10 @@ export interface TaskSubtaskSummary {
 
 export function getTaskCheckableItems(task: Task, plan: Plan | null): ScheduleEntry[] {
   const isSession = task.taskType === "session";
+  const hasOwnSubtasks = task.subtasks !== undefined;
   const subtasks = task.subtasks ?? [];
-  const templateItems = !isSession && subtasks.length === 0 ? plan?.items ?? [] : [];
-  return isSession ? subtasks : subtasks.length > 0 ? subtasks : templateItems;
+  const templateItems = !isSession && !hasOwnSubtasks ? plan?.items ?? [] : [];
+  return isSession ? subtasks : hasOwnSubtasks ? subtasks : templateItems;
 }
 
 /**

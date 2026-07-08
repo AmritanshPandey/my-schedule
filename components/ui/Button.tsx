@@ -51,7 +51,7 @@ const Button = forwardRef<HTMLButtonElement, ButtonProps>(function Button(
       type="button"
       {...props}
       className={[
-        "inline-flex items-center justify-center gap-1.5 font-semibold transition-colors active:scale-[0.98] disabled:cursor-not-allowed focus-visible:outline-none",
+        "inline-flex items-center justify-center gap-1.5 font-semibold transition-colors active:scale-[0.98] disabled:cursor-not-allowed",
         variantClasses[variant],
         sizeClasses[size],
         fullWidth ? "w-full" : "",

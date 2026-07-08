@@ -1,6 +1,7 @@
 "use client";
 
-import { IconCheck, IconEdit, IconMinus } from "@tabler/icons-react";
+import { IconEdit, IconMinus } from "@tabler/icons-react";
+import CheckDraw from "@/components/ui/CheckDraw";
 import type { Plan, Task } from "@/lib/useScheduleDB";
 import { accentStyles } from "@/lib/colorSystem";
 import { getTaskCheckableItems, getTaskSubtaskSummary, resolveTaskState } from "@/lib/taskCompletion";
@@ -61,14 +62,14 @@ export function CompactTaskCard({ task, plan, readOnly = false, onToggleComplete
       <button
         type="button"
         onClick={(e) => { e.stopPropagation(); if (!readOnly) onToggleComplete(task.id, allSubtaskIds); }}
-        className={`shrink-0 flex h-[18px] w-[18px] items-center justify-center rounded-[5px] border-2 transition-colors ${readOnly ? "cursor-default" : ""} ${
+        className={`shrink-0 flex h-[18px] w-[18px] items-center justify-center rounded-pr-sm border-2 transition-colors ${readOnly ? "cursor-default" : ""} ${
           done || partial
             ? "border-transparent bg-green-500"
             : "border-neutral-300 bg-transparent dark:border-neutral-500"
         }`}
         aria-label={done ? "Mark incomplete" : "Mark complete"}
       >
-        {done && <IconCheck size={10} strokeWidth={3} className="text-white" />}
+        <CheckDraw visible={done} size={10} strokeWidth={3} className="text-white" />
         {partial && <IconMinus size={10} strokeWidth={3} className="text-white" />}
       </button>
     </div>
