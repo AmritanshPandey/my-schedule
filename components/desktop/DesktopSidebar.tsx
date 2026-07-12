@@ -9,6 +9,7 @@ import {
   IconLayoutSidebar,
   IconMoon,
   IconPencil,
+  IconPhoto,
   IconPlus,
   IconRepeat,
   IconSettings,
@@ -36,6 +37,7 @@ interface DesktopSidebarProps {
   onOpenSettings: () => void;
   onOpenSettingsTab?: () => void;
   onOpenNotes?: () => void;
+  onOpenWallpaper?: () => void;
 }
 
 const NAV_ITEMS = [
@@ -97,6 +99,7 @@ export default function DesktopSidebar({
   onOpenSettings,
   onOpenSettingsTab,
   onOpenNotes,
+  onOpenWallpaper,
 }: DesktopSidebarProps) {
   const [status, setStatus] = useState<ConnectionStatus>("checking");
   const [checkTick, setCheckTick] = useState(0);
@@ -314,6 +317,19 @@ export default function DesktopSidebar({
           >
             <IconPencil size={16} strokeWidth={1.8} className="shrink-0" />
             {!collapsed && <span className="text-[13px] font-medium">Notes</span>}
+          </button>
+        )}
+
+        {/* Day Wallpaper — lock-screen schedule image generator */}
+        {onOpenWallpaper && (
+          <button
+            type="button"
+            onClick={() => { haptic("light"); onOpenWallpaper(); }}
+            title={collapsed ? "Wallpaper" : undefined}
+            className={`flex w-full items-center rounded-xl py-2 text-neutral-500 transition-colors hover:bg-neutral-100 hover:text-neutral-700 dark:text-neutral-500 dark:hover:bg-white/[0.04] dark:hover:text-neutral-300 ${collapsed ? "justify-center px-0" : "gap-3 px-3.5"}`}
+          >
+            <IconPhoto size={16} strokeWidth={1.8} className="shrink-0" />
+            {!collapsed && <span className="text-[13px] font-medium">Wallpaper</span>}
           </button>
         )}
 

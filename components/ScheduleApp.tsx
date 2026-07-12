@@ -2606,6 +2606,7 @@ export default function ScheduleApp() {
           onOpenSettings={() => setSettingsOpen(true)}
           onOpenSettingsTab={() => setActiveTab(5)}
           onOpenNotes={() => { setSelectedPlanId(null); setActiveTab(6); }}
+          onOpenWallpaper={() => { haptic("light"); setWallpaperOpen(true); }}
         />
       )}
 
