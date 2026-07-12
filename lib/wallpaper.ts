@@ -135,20 +135,25 @@ export function renderDayWallpaper(canvas: HTMLCanvasElement, opts: RenderOption
   ctx.fillRect(0, 0, W, H);
 
   // ── Card geometry — top ~30% stays clear for the lock-screen clock ────────
+  // Every item the caller passes in renders — no "+N more" truncation. The
+  // user controls the list (task-selection UI), so if it's long the rows
+  // shrink to fit rather than getting cut off; a floor keeps text legible.
   const pad = 26 * u;
-  const rowH = 44 * u;
+  const rowHNatural = 44 * u;
   const cardX = 22 * u;
   const cardW = W - cardX * 2;
   const cardTop = H * 0.3;
   const cardBottomMax = H - 52 * u;
   const headerH = dateLabel ? 30 * u : 0;
-
-  const maxRows = Math.max(1, Math.floor((cardBottomMax - cardTop - pad * 2 - headerH) / rowH));
-  const overflow = items.length > maxRows;
-  const shown = overflow ? items.slice(0, maxRows - 1) : items;
-  const rowCount = Math.max(1, shown.length + (overflow ? 1 : 0));
-  const cardH = pad * 2 + headerH + rowCount * rowH;
   const radius = 26 * u;
+
+  const shown = items;
+  const rowCount = Math.max(1, shown.length);
+  const availableH = Math.max(rowHNatural, cardBottomMax - cardTop - pad * 2 - headerH);
+  const naturalRowsH = rowCount * rowHNatural;
+  const rowScale = naturalRowsH > availableH ? Math.max(0.68, availableH / naturalRowsH) : 1;
+  const rowH = rowHNatural * rowScale;
+  const cardH = pad * 2 + headerH + rowCount * rowH;
 
   // ── Frosted glass ──────────────────────────────────────────────────────────
   ctx.save();
@@ -195,7 +200,7 @@ export function renderDayWallpaper(canvas: HTMLCanvasElement, opts: RenderOption
   ctx.shadowBlur = 4 * u;
   ctx.shadowOffsetY = 1 * u;
 
-  const fontPx = Math.round(17 * u);
+  const fontPx = Math.round(17 * u * rowScale);
   ctx.textBaseline = "middle";
 
   if (dateLabel) {
@@ -207,7 +212,7 @@ export function renderDayWallpaper(canvas: HTMLCanvasElement, opts: RenderOption
   ctx.font = `800 ${fontPx}px Nunito, ui-sans-serif, system-ui, sans-serif`;
   const timeColW = ctx.measureText("12:30 PM").width;
   const iconX = cardX + pad;
-  const iconSize = 22 * u;
+  const iconSize = 22 * u * rowScale;
   const timeRight = iconX + iconSize + 16 * u + timeColW; // right-aligned column
   const titleX = timeRight + 16 * u;
   const titleMax = cardX + cardW - pad - titleX;
@@ -253,13 +258,6 @@ export function renderDayWallpaper(canvas: HTMLCanvasElement, opts: RenderOption
     }
     ctx.globalAlpha = 1;
   });
-
-  if (overflow) {
-    const cy = rowsTop + shown.length * rowH + rowH / 2;
-    ctx.fillStyle = "rgba(255,255,255,0.65)";
-    ctx.font = `700 ${fontPx}px Nunito, ui-sans-serif, system-ui, sans-serif`;
-    ctx.fillText(`+${items.length - shown.length} more`, titleX, cy);
-  }
   ctx.restore();
 
   // Quiet wordmark under the card — brands the shared artifact without shouting.

@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import { IconPhoto, IconRepeat, IconStar } from "@tabler/icons-react";
+import { IconCheck, IconPhoto, IconRepeat, IconStar } from "@tabler/icons-react";
 import BottomSheet from "@/components/ui/BottomSheet";
 import SheetHeader from "@/components/ui/SheetHeader";
 import Button from "@/components/ui/Button";
@@ -46,12 +46,14 @@ export default function DayWallpaperSheet({ open, onClose, schedule, todayKey }:
   const [photo, setPhoto] = useState<HTMLImageElement | null>(null);
   const [saving, setSaving] = useState(false);
   const [feedback, setFeedback] = useState<string | null>(null);
+  const [selectedIds, setSelectedIds] = useState<Set<string> | null>(null);
 
   const todayISO = localISODate(new Date());
 
-  // Today's agenda: scheduled tasks + due rituals, sorted by clock time.
-  const items = useMemo(() => {
-    const rows: Array<WallpaperItem & { iconName: string; minutes: number }> = [];
+  // Today's full agenda: scheduled tasks + due rituals, sorted by clock time.
+  // The user then picks which of these actually render on the wallpaper.
+  const allItems = useMemo(() => {
+    const rows: Array<WallpaperItem & { id: string; iconName: string; minutes: number }> = [];
 
     for (const task of schedule.activities[todayKey] ?? []) {
       if (!isTaskScheduledOn(task, todayISO, true)) continue;
@@ -59,6 +61,7 @@ export default function DayWallpaperSheet({ open, onClose, schedule, todayKey }:
       const minutes = parseTimeToMinutes(occ.startTime);
       if (minutes == null) continue;
       rows.push({
+        id: `task:${task.id}`,
         time: occ.startTime,
         title: occ.title,
         iconName: task.icon || "star",
@@ -73,6 +76,7 @@ export default function DayWallpaperSheet({ open, onClose, schedule, todayKey }:
       const minutes = parseTimeToMinutes(ritual.time);
       if (minutes == null) continue;
       rows.push({
+        id: `ritual:${ritual.id}`,
         time: formatDisplayTime(ritual.time),
         title: ritual.title,
         iconName: "__ritual__",
@@ -83,6 +87,27 @@ export default function DayWallpaperSheet({ open, onClose, schedule, todayKey }:
 
     return rows.sort((a, b) => a.minutes - b.minutes);
   }, [schedule.activities, schedule.rituals, todayKey, todayISO]);
+
+  // Default to "everything included" each time the sheet opens.
+  useEffect(() => {
+    if (open) setSelectedIds(new Set(allItems.map((i) => i.id)));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open]);
+
+  const items = useMemo(
+    () => (selectedIds ? allItems.filter((i) => selectedIds.has(i.id)) : allItems),
+    [allItems, selectedIds],
+  );
+
+  function toggleItem(id: string) {
+    haptic("light");
+    setSelectedIds((prev) => {
+      const next = new Set(prev ?? allItems.map((i) => i.id));
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  }
 
   const background: WallpaperBackground = useMemo(() => {
     if (bgId === "photo" && photo) return { kind: "photo", image: photo };
@@ -190,6 +215,68 @@ export default function DayWallpaperSheet({ open, onClose, schedule, todayKey }:
             className="max-h-[44vh] w-auto rounded-2xl border border-neutral-200/70 shadow-[0_12px_40px_-12px_rgba(0,0,0,0.35)] dark:border-white/[0.10] dark:shadow-[0_12px_40px_-12px_rgba(0,0,0,0.7)]"
           />
         </div>
+
+        {/* Task picker — choose what actually shows on the wallpaper. */}
+        {allItems.length > 0 && (
+          <div className="mt-4">
+            <div className="mb-2 flex items-center justify-between px-0.5">
+              <p className="text-[11px] font-bold uppercase tracking-[0.10em] text-neutral-400 dark:text-neutral-500">
+                Include ({items.length}/{allItems.length})
+              </p>
+              <div className="flex items-center gap-3">
+                <button
+                  type="button"
+                  onClick={() => { haptic("light"); setSelectedIds(new Set(allItems.map((i) => i.id))); }}
+                  className="text-[11px] font-semibold text-neutral-500 hover:text-neutral-800 dark:text-neutral-400 dark:hover:text-neutral-200"
+                >
+                  All
+                </button>
+                <button
+                  type="button"
+                  onClick={() => { haptic("light"); setSelectedIds(new Set()); }}
+                  className="text-[11px] font-semibold text-neutral-500 hover:text-neutral-800 dark:text-neutral-400 dark:hover:text-neutral-200"
+                >
+                  None
+                </button>
+              </div>
+            </div>
+            <div className="max-h-[192px] overflow-y-auto rounded-xl border border-neutral-200/70 dark:border-white/[0.07]">
+              {allItems.map((item, i) => {
+                const Icon =
+                  item.iconName === "__ritual__" ? IconRepeat : ICON_BY_NAME.get(item.iconName) ?? IconStar;
+                const checked = selectedIds?.has(item.id) ?? true;
+                return (
+                  <button
+                    key={item.id}
+                    type="button"
+                    aria-pressed={checked}
+                    onClick={() => toggleItem(item.id)}
+                    className={`flex w-full items-center gap-2.5 px-3 py-2 text-left transition-colors ${
+                      i > 0 ? "border-t border-neutral-100 dark:border-white/[0.05]" : ""
+                    } ${checked ? "" : "opacity-45"} hover:bg-neutral-50 dark:hover:bg-white/[0.03]`}
+                  >
+                    <Icon size={15} strokeWidth={1.8} className="shrink-0 text-neutral-400 dark:text-neutral-500" />
+                    <span className="w-[70px] shrink-0 text-[11px] font-bold tabular-nums text-neutral-500 dark:text-neutral-400">
+                      {item.time}
+                    </span>
+                    <span className="min-w-0 flex-1 truncate text-[13px] font-semibold text-neutral-800 dark:text-neutral-200">
+                      {item.title}
+                    </span>
+                    <span
+                      className={`flex h-5 w-5 shrink-0 items-center justify-center rounded-pr-sm border-2 transition-colors ${
+                        checked
+                          ? "border-transparent bg-[#00A63E] dark:bg-[#2FD46E]"
+                          : "border-neutral-300 dark:border-white/20"
+                      }`}
+                    >
+                      {checked && <IconCheck size={12} strokeWidth={3} className="text-white dark:text-neutral-950" />}
+                    </span>
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+        )}
 
         {/* Backgrounds */}
         <div className="mt-4 flex items-center justify-center gap-2.5">
