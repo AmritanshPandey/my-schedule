@@ -118,7 +118,12 @@ export default function DayWallpaperSheet({ open, onClose, schedule, todayKey }:
 
       if (cancelled) return;
       const { width, height } = wallpaperSize();
-      renderDayWallpaper(canvasEl, { width, height, items, icons, background });
+      const dateLabel = new Date().toLocaleDateString("en-US", {
+        weekday: "long",
+        month: "short",
+        day: "numeric",
+      }).replace(",", " ·");
+      renderDayWallpaper(canvasEl, { width, height, items, icons, background, dateLabel });
     })();
 
     return () => {
@@ -175,12 +180,14 @@ export default function DayWallpaperSheet({ open, onClose, schedule, todayKey }:
           })}
         </div>
 
-        {/* Preview */}
+        {/* Preview — the hero of this sheet, so it gets the sanctioned
+            chrome-led elevation (data-glass exempts it from the e2e guard). */}
         <div className="mt-4 flex justify-center">
           <canvas
             ref={setCanvasEl}
+            data-glass
             aria-label="Wallpaper preview of today's schedule"
-            className="max-h-[44vh] w-auto rounded-2xl border border-neutral-200/70 dark:border-white/[0.10]"
+            className="max-h-[44vh] w-auto rounded-2xl border border-neutral-200/70 shadow-[0_12px_40px_-12px_rgba(0,0,0,0.35)] dark:border-white/[0.10] dark:shadow-[0_12px_40px_-12px_rgba(0,0,0,0.7)]"
           />
         </div>
 
@@ -194,7 +201,9 @@ export default function DayWallpaperSheet({ open, onClose, schedule, todayKey }:
               aria-pressed={bgId === g.id}
               onClick={() => { haptic("light"); setBgId(g.id); }}
               className={`h-10 w-10 rounded-full border-2 transition-colors ${
-                bgId === g.id ? "border-neutral-900 dark:border-white" : "border-transparent"
+                bgId === g.id
+                  ? "border-neutral-900 dark:border-white"
+                  : "border-neutral-200/80 dark:border-white/[0.12]"
               }`}
               style={{ backgroundColor: g.from }}
             />
@@ -205,7 +214,9 @@ export default function DayWallpaperSheet({ open, onClose, schedule, todayKey }:
             aria-pressed={bgId === "photo"}
             onClick={() => { haptic("light"); fileRef.current?.click(); }}
             className={`flex h-10 w-10 items-center justify-center rounded-full border-2 bg-neutral-100 text-neutral-500 dark:bg-white/[0.08] dark:text-neutral-300 ${
-              bgId === "photo" ? "border-neutral-900 dark:border-white" : "border-transparent"
+              bgId === "photo"
+                ? "border-neutral-900 dark:border-white"
+                : "border-neutral-200/80 dark:border-white/[0.12]"
             }`}
           >
             <IconPhoto size={17} strokeWidth={2} />

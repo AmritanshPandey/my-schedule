@@ -111,11 +111,13 @@ export interface RenderOptions {
   /** Pre-loaded icon images aligned by index with `items` (null = no icon). */
   icons: (HTMLImageElement | null)[];
   background: WallpaperBackground;
+  /** Small eyebrow at the top of the card, e.g. "SATURDAY · JUL 11". */
+  dateLabel?: string;
 }
 
 /** Draw the full wallpaper onto `canvas`. Fonts must already be loaded. */
 export function renderDayWallpaper(canvas: HTMLCanvasElement, opts: RenderOptions): void {
-  const { width: W, height: H, items, icons, background } = opts;
+  const { width: W, height: H, items, icons, background, dateLabel } = opts;
   canvas.width = W;
   canvas.height = H;
   const ctx = canvas.getContext("2d");
@@ -139,12 +141,13 @@ export function renderDayWallpaper(canvas: HTMLCanvasElement, opts: RenderOption
   const cardW = W - cardX * 2;
   const cardTop = H * 0.3;
   const cardBottomMax = H - 52 * u;
+  const headerH = dateLabel ? 30 * u : 0;
 
-  const maxRows = Math.max(1, Math.floor((cardBottomMax - cardTop - pad * 2) / rowH));
+  const maxRows = Math.max(1, Math.floor((cardBottomMax - cardTop - pad * 2 - headerH) / rowH));
   const overflow = items.length > maxRows;
   const shown = overflow ? items.slice(0, maxRows - 1) : items;
   const rowCount = Math.max(1, shown.length + (overflow ? 1 : 0));
-  const cardH = pad * 2 + rowCount * rowH;
+  const cardH = pad * 2 + headerH + rowCount * rowH;
   const radius = 26 * u;
 
   // ── Frosted glass ──────────────────────────────────────────────────────────
@@ -173,36 +176,68 @@ export function renderDayWallpaper(canvas: HTMLCanvasElement, opts: RenderOption
   roundRectPath(ctx, cardX, cardTop, cardW, cardH, radius);
   ctx.stroke();
 
-  // ── Rows ───────────────────────────────────────────────────────────────────
+  // Inner top highlight — the light edge real frosted glass catches.
+  ctx.save();
+  roundRectPath(ctx, cardX, cardTop, cardW, cardH, radius);
+  ctx.clip();
+  const edge = ctx.createLinearGradient(0, cardTop, 0, cardTop + 3 * u);
+  edge.addColorStop(0, "rgba(255,255,255,0.35)");
+  edge.addColorStop(1, "rgba(255,255,255,0)");
+  ctx.fillStyle = edge;
+  ctx.fillRect(cardX, cardTop, cardW, 3 * u);
+  ctx.restore();
+
+  // ── Card content ───────────────────────────────────────────────────────────
+  // Soft text shadow lifts type off busy photo backgrounds; harmless on
+  // gradients. Applied to all card content, reset at the end.
+  ctx.save();
+  ctx.shadowColor = "rgba(0,0,0,0.35)";
+  ctx.shadowBlur = 4 * u;
+  ctx.shadowOffsetY = 1 * u;
+
   const fontPx = Math.round(17 * u);
   ctx.textBaseline = "middle";
-  ctx.font = `700 ${fontPx}px Nunito, ui-sans-serif, system-ui, sans-serif`;
+
+  if (dateLabel) {
+    ctx.fillStyle = "rgba(255,255,255,0.6)";
+    ctx.font = `800 ${Math.round(11 * u)}px Nunito, ui-sans-serif, system-ui, sans-serif`;
+    ctx.fillText(dateLabel.toUpperCase(), cardX + pad, cardTop + pad + 6 * u);
+  }
+
+  ctx.font = `800 ${fontPx}px Nunito, ui-sans-serif, system-ui, sans-serif`;
   const timeColW = ctx.measureText("12:30 PM").width;
   const iconX = cardX + pad;
   const iconSize = 22 * u;
-  const timeX = iconX + iconSize + 16 * u;
-  const titleX = timeX + timeColW + 16 * u;
+  const timeRight = iconX + iconSize + 16 * u + timeColW; // right-aligned column
+  const titleX = timeRight + 16 * u;
   const titleMax = cardX + cardW - pad - titleX;
+  const rowsTop = cardTop + pad + headerH;
 
   if (shown.length === 0) {
     ctx.fillStyle = "rgba(255,255,255,0.85)";
+    ctx.font = `700 ${fontPx}px Nunito, ui-sans-serif, system-ui, sans-serif`;
     ctx.textAlign = "center";
-    ctx.fillText("Nothing scheduled — enjoy the day", cardX + cardW / 2, cardTop + cardH / 2);
+    ctx.fillText("Nothing scheduled — enjoy the day", cardX + cardW / 2, rowsTop + rowH / 2);
     ctx.textAlign = "left";
+    ctx.restore();
     return;
   }
 
   shown.forEach((item, i) => {
-    const cy = cardTop + pad + i * rowH + rowH / 2;
+    const cy = rowsTop + i * rowH + rowH / 2;
     const alpha = item.done ? 0.5 : 1;
     ctx.globalAlpha = alpha;
 
     const icon = icons[i];
     if (icon) ctx.drawImage(icon, iconX, cy - iconSize / 2, iconSize, iconSize);
 
+    // Times right-align in their column so meridiems line up like an
+    // instrument readout; titles share one left edge.
     ctx.fillStyle = "#FFFFFF";
     ctx.font = `800 ${fontPx}px Nunito, ui-sans-serif, system-ui, sans-serif`;
-    ctx.fillText(item.time, timeX, cy);
+    ctx.textAlign = "right";
+    ctx.fillText(item.time, timeRight, cy);
+    ctx.textAlign = "left";
 
     ctx.font = `700 ${fontPx}px Nunito, ui-sans-serif, system-ui, sans-serif`;
     const title = truncate(ctx, item.title, titleMax);
@@ -220,11 +255,20 @@ export function renderDayWallpaper(canvas: HTMLCanvasElement, opts: RenderOption
   });
 
   if (overflow) {
-    const cy = cardTop + pad + shown.length * rowH + rowH / 2;
+    const cy = rowsTop + shown.length * rowH + rowH / 2;
     ctx.fillStyle = "rgba(255,255,255,0.65)";
     ctx.font = `700 ${fontPx}px Nunito, ui-sans-serif, system-ui, sans-serif`;
-    ctx.fillText(`+${items.length - shown.length} more`, timeX, cy);
+    ctx.fillText(`+${items.length - shown.length} more`, titleX, cy);
   }
+  ctx.restore();
+
+  // Quiet wordmark under the card — brands the shared artifact without shouting.
+  ctx.fillStyle = "rgba(255,255,255,0.35)";
+  ctx.font = `800 ${Math.round(12 * u)}px Nunito, ui-sans-serif, system-ui, sans-serif`;
+  ctx.textAlign = "center";
+  ctx.textBaseline = "middle";
+  ctx.fillText("planr.", W / 2, Math.min(cardTop + cardH + 26 * u, H - 22 * u));
+  ctx.textAlign = "left";
 }
 
 /** Export the canvas and hand it to the OS share sheet (or download). */
