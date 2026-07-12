@@ -35,6 +35,7 @@ const SessionSheet = dynamic(() => import("@/components/activity/SessionSheet"),
 const SubtasksSheet = dynamic(() => import("@/components/activity/SubtasksSheet"), { ssr: false });
 const TaskDetailView = dynamic(() => import("@/components/activity/TaskDetailView"), { ssr: false });
 const BulkImportSheet = dynamic(() => import("@/components/BulkImportSheet"), { ssr: false });
+const DayWallpaperSheet = dynamic(() => import("@/components/DayWallpaperSheet"), { ssr: false });
 const RitualView = dynamic(() => import("@/components/activity/RitualView"), { ssr: false });
 const OverviewDashboard = dynamic(() => import("@/components/OverviewDashboard"), { ssr: false });
 const TrackerQuickBar = dynamic(() => import("@/components/TrackerQuickBar"), { ssr: false });
@@ -77,6 +78,7 @@ import {
   IconEdit,
   IconLayoutList,
   IconMinus,
+  IconPhoto,
   IconPlus,
   IconSparkles,
   IconTable,
@@ -91,6 +93,7 @@ import BottomSheet from "@/components/ui/BottomSheet";
 import EmptyState from "@/components/ui/EmptyState";
 import SheetHeader from "@/components/ui/SheetHeader";
 import Button from "@/components/ui/Button";
+import IconButton from "@/components/ui/IconButton";
 import Input from "@/components/ui/Input";
 import { ListTaskCard } from "@/components/activity/ListTaskCard";
 import TodayRitualsBar from "@/components/activity/TodayRitualsBar";
@@ -675,6 +678,7 @@ export default function ScheduleApp() {
 
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [templatesOpen, setTemplatesOpen] = useState(false);
+  const [wallpaperOpen, setWallpaperOpen] = useState(false);
   const [sessionTask, setSessionTask] = useState<Task | null>(null);
   // Task whose subtasks are shown in the bottom sheet — stored by id+day so the
   // sheet always reflects the live task (completion updates create new objects).
@@ -2658,6 +2662,13 @@ export default function ScheduleApp() {
       )}
       <TemplatesSheet open={templatesOpen} onClose={() => setTemplatesOpen(false)} onApply={handleApplyTemplate} />
 
+      <DayWallpaperSheet
+        open={wallpaperOpen}
+        onClose={() => setWallpaperOpen(false)}
+        schedule={schedule}
+        todayKey={todayKey}
+      />
+
       {/* ── Content ────────────────────────────────────────────────────────── */}
       {/* paddingTop offsets the fixed header (64px) + iOS safe-area inset — mobile only.
           (Tailwind arbitrary value so `lg:pt-0` can actually override it; an inline
@@ -2871,14 +2882,25 @@ export default function ScheduleApp() {
                 <h1 className="text-[24px] font-bold leading-tight tracking-[-0.8px] text-neutral-900 dark:text-white">
                   Today's Task
                 </h1>
-                {dayProgress.total > 0 && (
-                  <div className="flex items-center gap-1.5 text-neutral-400 dark:text-neutral-500">
-                    <IconChecklist size={16} strokeWidth={1.8} />
-                    <span className="text-[14px] font-bold tabular-nums text-neutral-500 dark:text-neutral-400">
-                      {dayProgress.done}/{dayProgress.total}
-                    </span>
-                  </div>
-                )}
+                <div className="flex items-center gap-2.5">
+                  <IconButton
+                    label="Lock screen wallpaper"
+                    variant="soft"
+                    size="sm"
+                    radius="full"
+                    onClick={() => { haptic("light"); setWallpaperOpen(true); }}
+                  >
+                    <IconPhoto size={15} strokeWidth={2} />
+                  </IconButton>
+                  {dayProgress.total > 0 && (
+                    <div className="flex items-center gap-1.5 text-neutral-400 dark:text-neutral-500">
+                      <IconChecklist size={16} strokeWidth={1.8} />
+                      <span className="text-[14px] font-bold tabular-nums text-neutral-500 dark:text-neutral-400">
+                        {dayProgress.done}/{dayProgress.total}
+                      </span>
+                    </div>
+                  )}
+                </div>
               </div>
 
               {/* Progress bar */}
