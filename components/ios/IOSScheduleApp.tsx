@@ -17,6 +17,7 @@ import {
   IconFlame,
   IconListCheck,
   IconNotes,
+  IconPhoto,
   IconPlus,
   IconRepeat,
   IconSettings,
@@ -79,6 +80,7 @@ const EditPlanSheet = dynamic(() => import("@/components/plan/EditPlanSheet"), {
 const PlanDetailView = dynamic(() => import("@/components/plan/PlanDetailView"), { ssr: false });
 const RitualView = dynamic(() => import("@/components/activity/RitualView"), { ssr: false });
 const SettingsView = dynamic(() => import("@/components/SettingsView").then((m) => ({ default: m.SettingsView })), { ssr: false });
+const DayWallpaperSheet = dynamic(() => import("@/components/DayWallpaperSheet"), { ssr: false });
 const NotesView = dynamic(() => import("@/components/notes/NotesView"), { ssr: false });
 const TaskDetailView = dynamic(() => import("@/components/activity/TaskDetailView"), { ssr: false });
 const AddEntryModal = dynamic(() => import("@/components/AddEntryModal"), { ssr: false });
@@ -363,6 +365,7 @@ export default function IOSScheduleApp() {
   const [weekOffset, setWeekOffset] = useState(0);
   const [selectedPlanId, setSelectedPlanId] = useState<string | null>(null);
   const [taskSheetOpen, setTaskSheetOpen] = useState(false);
+  const [wallpaperOpen, setWallpaperOpen] = useState(false);
   const [taskSheetMode, setTaskSheetMode] = useState<"create" | "edit">("create");
   const [taskSheetTask, setTaskSheetTask] = useState<Task | null>(null);
   const [taskSheetPlanId, setTaskSheetPlanId] = useState<string | null>(null);
@@ -1282,10 +1285,20 @@ export default function IOSScheduleApp() {
                 <h2 className="text-[22px] font-black text-neutral-950 dark:text-white">{activeDay === todayKey ? "Today's Task" : DAY_LABELS[activeDay]}</h2>
                 <p className="text-[13px] font-semibold text-neutral-500 dark:text-neutral-400">{dayDone}/{dayTasksView.length} done</p>
               </div>
-              <button type="button" onClick={() => openCreateSheet()} className="inline-flex h-10 items-center gap-1 rounded-full bg-neutral-950 px-4 text-[13px] font-bold text-white dark:bg-white dark:text-neutral-950">
-                <IconPlus size={16} strokeWidth={2.4} />
-                Task
-              </button>
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  aria-label="Lock screen wallpaper"
+                  onClick={() => { haptic("light"); setWallpaperOpen(true); }}
+                  className="flex h-10 w-10 items-center justify-center rounded-full bg-neutral-100 text-neutral-500 dark:bg-white/[0.08] dark:text-neutral-300"
+                >
+                  <IconPhoto size={17} strokeWidth={2} />
+                </button>
+                <button type="button" onClick={() => openCreateSheet()} className="inline-flex h-10 items-center gap-1 rounded-full bg-neutral-950 px-4 text-[13px] font-bold text-white dark:bg-white dark:text-neutral-950">
+                  <IconPlus size={16} strokeWidth={2.4} />
+                  Task
+                </button>
+              </div>
             </div>
             {renderTaskList(dayTasksView, activeDay, activeDateISO, () => openCreateSheet())}
           </div>
@@ -1497,6 +1510,17 @@ export default function IOSScheduleApp() {
           onCreateRitual={() => { setActiveTab(2); setRitualAddOpen(true); }}
           onCreateNote={openQuickNote}
         />
+      )}
+
+      {wallpaperOpen && (
+        <IOSMotionBoundary>
+          <DayWallpaperSheet
+            open={wallpaperOpen}
+            onClose={() => setWallpaperOpen(false)}
+            schedule={schedule}
+            todayKey={todayKey}
+          />
+        </IOSMotionBoundary>
       )}
 
       {(taskSheetOpen || addingPlan || editingPlanId || entryTracker) && (
