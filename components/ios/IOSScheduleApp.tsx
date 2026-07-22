@@ -46,6 +46,7 @@ import {
   resetStaleCompletions,
 } from "@/lib/useScheduleDB";
 import { useScheduleDB } from "@/lib/useScheduleDB";
+import { colorFromIcon } from "@/lib/colorSystem";
 import { useReminders } from "@/lib/useReminders";
 import { bootLog, isIOSSafeMode, isStandalonePWA } from "@/lib/iosSafeMode";
 import { todayISO, localISODate, addDaysToISO, formatDate } from "@/lib/dateUtils";
@@ -864,7 +865,7 @@ export default function IOSScheduleApp() {
       description: "Created from note",
       ...quickTaskTimeRange(),
       icon: plan.emoji,
-      color: plan.color,
+      color: colorFromIcon(plan.emoji),
       planId: plan.id,
       taskType: "task",
     };

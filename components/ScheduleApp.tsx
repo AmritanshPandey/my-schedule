@@ -1374,7 +1374,7 @@ export default function ScheduleApp() {
             startTime,
             endTime,
             icon: t.icon,
-            color: (plan?.color ?? "cyan") as AccentColor,
+            color: colorFromIcon(t.icon),
             planId: plan?.id ?? "",
             ...(subtasks !== undefined ? { subtasks } : {}),
           };
@@ -1475,7 +1475,7 @@ export default function ScheduleApp() {
       description: "Created from note",
       ...quickTaskTimeRange(),
       icon: plan.emoji,
-      color: plan.color,
+      color: colorFromIcon(plan.emoji),
       planId: plan.id,
       taskType: "task",
     };
@@ -1532,7 +1532,7 @@ export default function ScheduleApp() {
           startTime: t.startTime,
           endTime: t.endTime,
           icon: t.icon || plan.emoji,
-          color: colorFromIcon(t.icon) ?? plan.color ?? "cyan",
+          color: colorFromIcon(t.icon),
           planId,
           subtasks: t.subtasks.map((s) => ({ id: uid(), task: s })),
         };
@@ -1661,7 +1661,7 @@ export default function ScheduleApp() {
           startTime: t.startTime,
           endTime: t.endTime,
           icon: t.icon || plan.emoji,
-          color: colorFromIcon(t.icon) ?? plan.color ?? "cyan",
+          color: colorFromIcon(t.icon),
           planId,
           subtasks: (t.subtasks ?? []).map((s) => ({ id: uid(), task: s })),
         };
@@ -2267,10 +2267,13 @@ export default function ScheduleApp() {
 
   function getTaskPresentation(task: Task) {
     const linkedPlan = task.planId ? plansById.get(task.planId) ?? null : null;
+    // Identity belongs to the task: its own icon and colour win, with the
+    // plan only as a fallback for legacy rows that never stored one.
+    const iconName = task.icon || linkedPlan?.emoji || "star";
     return {
       linkedPlan,
-      iconName: linkedPlan?.emoji ?? task.icon,
-      color: linkedPlan?.color ?? task.color,
+      iconName,
+      color: resolveAccentColor(task.color, iconName),
     };
   }
 

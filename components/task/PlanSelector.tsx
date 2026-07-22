@@ -4,7 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import { AnimatePresence, m } from "framer-motion";
 import { IconCheck, IconChevronDown } from "@tabler/icons-react";
 import type { Plan } from "@/lib/useScheduleDB";
-import { accentStyles } from "@/lib/colorSystem";
+import { PLAN_NEUTRAL } from "@/lib/colorSystem";
 import { SECTION_ICONS } from "@/components/SectionIcons";
 
 const SECTION_LABEL =
@@ -20,7 +20,7 @@ export function PlanSelector({ plans, selectedId, onSelect }: PlanSelectorProps)
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
   const selected = plans.find((p) => p.id === selectedId) ?? null;
-  const accent = selected ? accentStyles(selected.color) : null;
+  const accent = selected ? PLAN_NEUTRAL : null;
   const icon = selected
     ? (SECTION_ICONS.find((i) => i.name === selected.emoji) ?? SECTION_ICONS[0]).icon
     : null;
@@ -87,7 +87,8 @@ export function PlanSelector({ plans, selectedId, onSelect }: PlanSelectorProps)
               {plans.map((plan, i) => {
                 const ic = SECTION_ICONS.find((s) => s.name === plan.emoji) ?? SECTION_ICONS[0];
                 const PlanIcon = ic.icon;
-                const pa = accentStyles(plan.color);
+                // Plans are neutral — identity is the icon, not a hue.
+                const pa = PLAN_NEUTRAL;
                 const sel = selectedId === plan.id;
                 return (
                   <button
