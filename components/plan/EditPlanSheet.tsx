@@ -12,7 +12,6 @@ import { daysBetween as daysBetweenUtil } from "@/lib/dateUtils";
 import { recalculateRoadmapTimeline } from "@/lib/roadmapDates";
 import {
   PLAN_TITLE_MAX,
-  PlanColorPicker,
   DurationPresets,
   iconPickerClass,
 } from "./planFormShared";
@@ -53,20 +52,12 @@ export default function EditPlanSheet({ planId, plan, setSchedule, onClose }: Ed
   function handleSave() {
     if (!planId || !draft.title.trim()) return;
     const nextColor = draft.color;
+    // Editing a plan never touches its tasks' colours: colour belongs to the
+    // task (derived from its icon, overridable), so a plan-level edit must not
+    // stomp choices the user made per task.
     setSchedule((prev) => {
-      const prevPlan = prev.plans.find((p) => p.id === planId);
-      const colorChanged = prevPlan?.color !== nextColor;
-      const activities = colorChanged
-        ? (Object.fromEntries(
-            Object.entries(prev.activities).map(([day, tasks]) => [
-              day,
-              tasks.map((t) => (t.planId === planId ? { ...t, color: nextColor } : t)),
-            ])
-          ) as typeof prev.activities)
-        : prev.activities;
       return {
         ...prev,
-        activities,
         plans: prev.plans.map((p) =>
           p.id === planId
             ? {
@@ -169,10 +160,7 @@ export default function EditPlanSheet({ planId, plan, setSchedule, onClose }: Ed
             </div>
           </div>
 
-          <PlanColorPicker
-            value={draft.color}
-            onChange={(c) => setDraft((d) => ({ ...d, color: c }))}
-          />
+          {/* Plans are neutral — identity comes from the icon, colour from tasks. */}
         </div>
         <Button
           fullWidth

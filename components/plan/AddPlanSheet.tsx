@@ -20,7 +20,6 @@ import { cycleAccentColor } from "@/components/ui/Badge";
 import { stableFieldHash } from "@/lib/hash";
 import {
   PLAN_TITLE_MAX,
-  PlanColorPicker,
   DurationPresets,
   iconPickerClass,
 } from "./planFormShared";
@@ -194,7 +193,9 @@ export default function AddPlanSheet({ open, onClose, setSchedule }: AddPlanShee
           </div>
         </div>
 
-        <PlanColorPicker value={color} onChange={setColor} />
+        {/* No colour picker: plans are neutral and identified by their icon.
+            `color` is still derived from the icon so the stored field stays
+            meaningful for any task that inherits it. */}
 
         <div>
           <p className="mb-2 text-[11px] font-semibold uppercase tracking-[0.08em] text-neutral-400 dark:text-neutral-500">

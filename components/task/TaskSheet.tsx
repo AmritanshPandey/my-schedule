@@ -31,6 +31,9 @@ import Button from "@/components/ui/Button";
 import IconButton from "@/components/ui/IconButton";
 import Input, { FORM_INPUT_CLASS, FORM_LABEL, Textarea } from "@/components/ui/Input";
 import TimeSlotPicker from "@/components/TimeSlotPicker";
+import { SECTION_ICONS } from "@/components/SectionIcons";
+import { PlanColorPicker, iconPickerClass } from "@/components/plan/planFormShared";
+import { colorFromIcon, resolveAccentColor, type AccentColor } from "@/lib/colorSystem";
 import { haptic } from "@/lib/haptics";
 import type { DayKey, Plan, Task, TaskRecurrence } from "@/lib/useScheduleDB";
 import { DAYS, DAY_LABELS } from "@/lib/useScheduleDB";
@@ -178,6 +181,11 @@ export function TaskSheet({
   const [duplicateDays, setDuplicateDays] = useState<DayKey[]>([]);
   const [editScope, setEditScope] = useState<"all" | "occurrence">("all");
   // Recurrence: weekly (every matching weekday), interval (every N weeks), or once (single date).
+  // Identity: each task owns its icon and colour. Colour follows the icon
+  // (colorFromIcon) until the user picks one explicitly — then it sticks.
+  const [icon, setIcon] = useState<string>("star");
+  const [color, setColor] = useState<AccentColor>(() => colorFromIcon("star"));
+  const [colorTouched, setColorTouched] = useState(false);
   const [repeatMode, setRepeatMode] = useState<"weekly" | "interval" | "once">("weekly");
   const [intervalWeeks, setIntervalWeeks] = useState(2);
   const [onceDate, setOnceDate] = useState("");
@@ -215,6 +223,14 @@ export function TaskSheet({
       setStartTime(displayToInputTime(task.startTime));
       setEndTime(displayToInputTime(task.endTime));
       setRepeatDays(selectedDays);
+      // Existing tasks keep whatever identity they were saved with. Treat a
+      // stored colour that already matches its icon as "not overridden", so
+      // changing the icon still re-derives the colour.
+      const savedIcon = task.icon || "star";
+      const savedColor = resolveAccentColor(task.color, savedIcon);
+      setIcon(savedIcon);
+      setColor(savedColor);
+      setColorTouched(savedColor !== colorFromIcon(savedIcon));
       // Load per-task subtasks; fall back to plan template for tasks created before this fix
       const taskSubtasks = task.subtasks ?? linkedPlan?.items ?? [];
       setSubtasks(taskSubtasks.map(entryToSubtaskDraft));
@@ -232,6 +248,12 @@ export function TaskSheet({
       setEndTime(initialEndTime ?? "");
       setRepeatDays([activeDay]);
       setSubtasks([]);
+      // New tasks start from the parent plan's icon, with the colour derived
+      // from it — so a fresh task is never colourless, and never a rainbow.
+      const seedIcon = plans.find((p) => p.id === pid)?.emoji || "star";
+      setIcon(seedIcon);
+      setColor(colorFromIcon(seedIcon));
+      setColorTouched(false);
       setRepeatMode("weekly");
       setIntervalWeeks(2);
       setOnceDate(baseDateISO);
@@ -258,6 +280,17 @@ export function TaskSheet({
   function handleSelectPlan(plan: Plan) {
     setPlanId(plan.id);
     if (mode === "create") setSubtasks([]);
+  }
+
+  /** Picking an icon re-derives the colour unless the user has set one. */
+  function handleSelectIcon(name: string) {
+    setIcon(name);
+    if (!colorTouched) setColor(colorFromIcon(name));
+  }
+
+  function handleSelectColor(next: AccentColor) {
+    setColor(next);
+    setColorTouched(true);
   }
 
   // ── Subtask management ─────────────────────────────────────────────────────
@@ -362,8 +395,8 @@ export function TaskSheet({
       description: description.trim() || undefined,
       startTime: inputToDisplayTime(startTime),
       endTime: inputToDisplayTime(endTime),
-      icon: selectedPlan.emoji,
-      color: selectedPlan.color,
+      icon,
+      color,
       planId: selectedPlan.id,
       taskType,
       // Store subtasks on the task itself so each task has an independent list.
@@ -408,8 +441,8 @@ export function TaskSheet({
         description: description.trim() || undefined,
         startTime: inputToDisplayTime(startTime),
         endTime: inputToDisplayTime(endTime),
-        icon: selectedPlan.emoji,
-        color: selectedPlan.color,
+        icon,
+        color,
         planId: selectedPlan.id,
         taskType,
         subtasks: validSubtasks.length > 0 ? validSubtasks : undefined,
@@ -619,6 +652,33 @@ export function TaskSheet({
                 aria-label="Task title"
                 aria-invalid={title.length > 0 && title.trim().length === 0}
               />
+
+              {/* Identity — icon drives the colour, colour can be overridden.
+                  Hidden in occurrence scope: identity belongs to the template,
+                  not to a single date's override. */}
+              {!isOccurrenceScope && (
+                <div>
+                  <p className={FORM_LABEL}>Icon</p>
+                  <div className="grid grid-cols-6 gap-2 sm:grid-cols-8">
+                    {SECTION_ICONS.map(({ name, label, icon: Icon }) => (
+                      <button
+                        key={name}
+                        type="button"
+                        aria-label={label}
+                        aria-pressed={icon === name}
+                        title={label}
+                        onClick={() => handleSelectIcon(name)}
+                        className={iconPickerClass(icon === name)}
+                      >
+                        <Icon size={18} strokeWidth={1.9} />
+                      </button>
+                    ))}
+                  </div>
+                  <div className="mt-4">
+                    <PlanColorPicker value={color} onChange={handleSelectColor} />
+                  </div>
+                </div>
+              )}
 
               {/* Description */}
               <Textarea
