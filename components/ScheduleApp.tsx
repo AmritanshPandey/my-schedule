@@ -2447,7 +2447,7 @@ export default function ScheduleApp() {
       const uniqueTasks = getUniquePlanTasks(plan.id);
       const trackerCount = schedule.progressTrackers.filter((t) => t.planId === plan.id).length;
       const planIconEntry = SECTION_ICONS.find((e) => e.name === plan.emoji) ?? SECTION_ICONS[0];
-      const stats = getPlanCardStats(plan, schedule.activities, todayKey);
+      const stats = getPlanCardStats(plan, schedule.activities, todayKey, schedule.preferences?.startDate);
       const dateRange = plan.startDate || plan.endDate ? formatPlanRange(plan) : null;
       const firstTracker = schedule.progressTrackers.find((t) => t.planId === plan.id);
       return { plan, uniqueTasks, trackerCount, planIconEntry, stats, dateRange, firstTracker };

@@ -76,7 +76,9 @@ function buildCompletionDateSet(
 export function calculateConsistency(
   planId: string,
   activities: Record<string, Task[]>,
-  plan: Plan
+  plan: Plan,
+  /** Schedule-wide tracking start — the window never reaches before it. */
+  trackingStartISO?: string,
 ): number {
   const completedDates = buildCompletionDateSet(planId, activities);
   if (completedDates.size === 0) return 0;
@@ -97,6 +99,12 @@ export function calculateConsistency(
   if (plan.endDate) {
     const planEnd = new Date(plan.endDate + "T00:00:00");
     if (planEnd < today) windowEnd = planEnd;
+  }
+
+  // Never measure across days the user asked us to ignore.
+  if (trackingStartISO) {
+    const trackingStart = new Date(trackingStartISO + "T00:00:00");
+    if (trackingStart > windowStart) windowStart = trackingStart;
   }
 
   if (windowStart > windowEnd) return 0;
@@ -124,13 +132,15 @@ export interface PlanCardStats {
 export function getPlanCardStats(
   plan: Plan,
   activities: Record<string, Task[]>,
-  todayKey: DayKey
+  todayKey: DayKey,
+  /** Schedule-wide tracking start — analytics ignore anything before it. */
+  trackingStartISO?: string,
 ): PlanCardStats {
   const todayISO = localISODate(new Date());
   const todayTasks = (activities[todayKey] ?? []).filter(
     (t) => t.planId === plan.id && isTaskScheduledOn(t, todayISO, true)
   );
   const dayState = resolvePlanDayState(todayTasks, plan.items.length);
-  const consistency = calculateConsistency(plan.id, activities, plan);
+  const consistency = calculateConsistency(plan.id, activities, plan, trackingStartISO);
   return { dayState, consistency };
 }

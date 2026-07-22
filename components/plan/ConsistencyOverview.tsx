@@ -63,6 +63,8 @@ interface ConsistencyOverviewProps {
   planId: string;
   activities: Record<DayKey, Task[]>;
   planStartDate?: string;
+  /** Schedule-wide tracking start; the history floor is the later of the two. */
+  trackingStartDate?: string;
   onAddTask: () => void;
 }
 
@@ -72,6 +74,7 @@ export default function ConsistencyOverview({
   planId,
   activities,
   planStartDate,
+  trackingStartDate,
   onAddTask,
 }: ConsistencyOverviewProps) {
   const today = useMemo(() => todayISO(), []);
@@ -88,11 +91,13 @@ export default function ConsistencyOverview({
 
   const weekStats = useMemo(() => {
     const all = calculateWeeklyHistory(planId, activities, today, 8);
-    if (!planStartDate) return all;
-    // Only keep weeks whose Monday falls on or after the plan-start week
-    const planMondayISO = localISODate(getMondayOfWeek(new Date(planStartDate + "T00:00:00")));
-    return all.filter((w) => w.weekStart >= planMondayISO);
-  }, [planId, activities, today, planStartDate]);
+    // Floor the history at whichever start is later: the plan's own start or
+    // the schedule-wide tracking start.
+    const floor = [planStartDate, trackingStartDate].filter(Boolean).sort().pop();
+    if (!floor) return all;
+    const floorMondayISO = localISODate(getMondayOfWeek(new Date(floor + "T00:00:00")));
+    return all.filter((w) => w.weekStart >= floorMondayISO);
+  }, [planId, activities, today, planStartDate, trackingStartDate]);
 
   const completionDates = useMemo(
     () => buildPlanCompletionDates(planId, activities),

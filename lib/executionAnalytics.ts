@@ -99,6 +99,10 @@ export function computeExecutionTrend(schedule: Schedule, weeksCount = 8): Execu
     }
   }
 
+  // Weeks that finish before the schedule's tracking start are dropped: they
+  // predate the user's adoption and would drag the average down with zeroes.
+  const trackingStart = schedule.preferences?.startDate;
+
   const weeks: ExecutionWeek[] = [];
   for (let i = weeksCount - 1; i >= 0; i--) {
     const mon = new Date(currentMonday);
@@ -106,6 +110,9 @@ export function computeExecutionTrend(schedule: Schedule, weeksCount = 8): Execu
     const sun = new Date(mon);
     sun.setDate(mon.getDate() + 6);
     const monStr = localISODate(mon);
+    // The current week always survives, so the trend is never empty even if
+    // the tracking start is set to a future date.
+    if (i !== 0 && trackingStart && localISODate(sun) < trackingStart) continue;
     const scheduled = scheduledInWeek(mon);
     const completed = Math.min(weekDone.get(monStr)?.size ?? 0, scheduled || Infinity);
     const pct = scheduled > 0 ? Math.min(100, Math.round((completed / scheduled) * 100)) : 0;
@@ -122,7 +129,9 @@ export function computeExecutionTrend(schedule: Schedule, weeksCount = 8): Execu
 
   const current = weeks[weeks.length - 1];
   const previous = weeks[weeks.length - 2] ?? current;
-  const averagePct = Math.round(weeks.reduce((s, w) => s + w.pct, 0) / weeks.length);
+  const averagePct = weeks.length > 0
+    ? Math.round(weeks.reduce((s, w) => s + w.pct, 0) / weeks.length)
+    : 0;
   const bestPct = weeks.reduce((m, w) => Math.max(m, w.pct), 0);
   const totalCompleted = weeks.reduce((s, w) => s + w.completed, 0);
 

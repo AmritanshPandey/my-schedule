@@ -567,7 +567,7 @@ export default function IOSScheduleApp() {
 
   const overviewPlanConsistency = useMemo(() =>
     schedule.plans.map((plan) => {
-      const { consistency } = getPlanCardStats(plan, schedule.activities, todayKey);
+      const { consistency } = getPlanCardStats(plan, schedule.activities, todayKey, schedule.preferences?.startDate);
       const milestones = (schedule.milestones ?? []).filter((milestone) => milestone.planId === plan.id);
       const milestonesDone = milestones.filter((milestone) => milestone.status === "completed").length;
       return { plan, consistency, milestonesTotal: milestones.length, milestonesDone };

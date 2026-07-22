@@ -124,7 +124,7 @@ function buildWeeklyContext(
   const planSummaries = schedule.plans
     .filter((plan) => DAYS.some((d) => (schedule.activities[d] ?? []).some((t) => t.planId === plan.id)))
     .map((plan) => {
-      const consistency = calculateConsistency(plan.id, schedule.activities, plan);
+      const consistency = calculateConsistency(plan.id, schedule.activities, plan, schedule.preferences?.startDate);
       const milestones = (schedule.milestones ?? []).filter((m) => m.planId === plan.id);
       const completedMs = milestones.filter((m) => m.status === "completed").length;
       const delayedMs = milestones.filter((m) => m.status === "delayed").length;
@@ -539,7 +539,7 @@ function PlanHealthSection({
         const planMilestones = (schedule.milestones ?? []).filter((m) => m.planId === plan.id);
         const completedMs = planMilestones.filter((m) => m.status === "completed").length;
         const totalMs = planMilestones.length;
-        const consistency = calculateConsistency(plan.id, schedule.activities, plan);
+        const consistency = calculateConsistency(plan.id, schedule.activities, plan, schedule.preferences?.startDate);
         const delayedMs = planMilestones.filter((m) => m.status === "delayed").length;
 
         return { plan, completedMs, totalMs, consistency, delayedMs };
