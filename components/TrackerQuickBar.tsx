@@ -4,7 +4,7 @@ import { useMemo } from "react";
 import { m } from "framer-motion";
 import { IconPlus } from "@tabler/icons-react";
 import { haptic } from "@/lib/haptics";
-import { accentStyles } from "@/lib/colorSystem";
+import { PLAN_NEUTRAL } from "@/lib/colorSystem";
 import type { Plan, ProgressTracker, MetricEntry } from "@/lib/useScheduleDB";
 
 interface TrackerQuickBarProps {
@@ -50,10 +50,7 @@ export default function TrackerQuickBar({
       {/* Horizontal scroll row */}
       <div className="flex gap-2 overflow-x-auto pb-0.5 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
         {trackers.map((tracker) => {
-          const plan = plansById.get(tracker.planId);
-          const dotClass = plan
-            ? accentStyles(plan.color).dot
-            : "bg-neutral-400 dark:bg-neutral-500";
+          const dotClass = PLAN_NEUTRAL.dot;
           const lastEntry = lastEntryByTracker.get(tracker.id);
           const lastValueDisplay = lastEntry
             ? `${lastEntry.value}${tracker.unit ? ` ${tracker.unit}` : ""}`

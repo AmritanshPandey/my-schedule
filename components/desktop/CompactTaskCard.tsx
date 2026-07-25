@@ -3,7 +3,7 @@
 import { IconEdit, IconMinus } from "@tabler/icons-react";
 import CheckDraw from "@/components/ui/CheckDraw";
 import type { Plan, Task } from "@/lib/useScheduleDB";
-import { accentStyles } from "@/lib/colorSystem";
+import { accentStyles, resolveAccentColor } from "@/lib/colorSystem";
 import { getTaskCheckableItems, getTaskSubtaskSummary, resolveTaskState } from "@/lib/taskCompletion";
 
 interface CompactTaskCardProps {
@@ -19,7 +19,9 @@ export function CompactTaskCard({ task, plan, readOnly = false, onToggleComplete
   const taskState = resolveTaskState(task, getTaskSubtaskSummary(task, plan).totalCount);
   const done = taskState === "completed";
   const partial = taskState === "partial";
-  const accent = accentStyles(plan?.color ?? "cyan");
+  // Colour comes from the task itself (icon-derived, user-overridable) — the
+  // plan no longer carries a hue.
+  const accent = accentStyles(resolveAccentColor(task.color, task.icon));
 
   return (
     <div

@@ -23,7 +23,7 @@ import {
 import type { DayKey, Plan, ProgressTracker, Schedule, Task } from "@/lib/useScheduleDB";
 import { getTaskCheckableItems, getTaskSubtaskSummary, isTaskCompleted, isTaskResolved } from "@/lib/taskCompletion";
 import { getPlanCardStats } from "@/lib/planInsights";
-import { accentStyles } from "@/lib/colorSystem";
+import { PLAN_NEUTRAL } from "@/lib/colorSystem";
 import ExecutionStreakBanner from "@/components/ExecutionStreakBanner";
 import ExecutionTrendCard from "@/components/ExecutionTrendCard";
 import { getTrendDirection, getTrendState, type TrendDirection, type TrendState } from "@/lib/trendUtils";
@@ -351,7 +351,7 @@ function ActiveTrackingCard({
       ) : (
         <div className="divide-y divide-neutral-100 dark:divide-white/[0.06]">
           {rows.map(({ tracker, latest, trend, plan }) => {
-            const accent = accentStyles(plan?.color ?? "cyan");
+            const accent = PLAN_NEUTRAL;
             return (
               <div key={tracker.id} className="flex items-center gap-3 py-3">
                 <span className={`h-3 w-3 shrink-0 rounded-full ${accent.dot}`} />
@@ -431,7 +431,7 @@ function PlanConsistencyCard({
       <SectionHeader icon={IconClipboardList} title="Plan Consistency" meta={`${rows.length} plans`} />
       <div className="divide-y divide-neutral-100 dark:divide-white/[0.06]">
         {rows.map(({ plan, consistency, milestonesTotal, milestonesDone }) => {
-          const accent = accentStyles(plan.color);
+          const accent = PLAN_NEUTRAL;
           return (
             <button
               key={plan.id}
@@ -852,7 +852,7 @@ export default function OverviewDashboard({
 
   const planConsistency = useMemo(() =>
     schedule.plans.map((plan) => {
-      const { consistency } = getPlanCardStats(plan, schedule.activities, todayKey);
+      const { consistency } = getPlanCardStats(plan, schedule.activities, todayKey, schedule.preferences?.startDate);
       const milestones = (schedule.milestones ?? []).filter((milestone) => milestone.planId === plan.id);
       const milestonesDone = milestones.filter((milestone) => milestone.status === "completed").length;
       return { plan, consistency, milestonesTotal: milestones.length, milestonesDone };

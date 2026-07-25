@@ -765,3 +765,36 @@ test("sync status: label + tone mapping and relative time buckets", () => {
   assert.equal(relativeTime(now - 5 * 60_000), "5m ago");
   assert.equal(relativeTime(now - 3 * 60 * 60_000), "3h ago");
 });
+
+test("tracking start date floors streak and trend analytics", () => {
+  const today = localISODate(new Date());
+  const d = (n) => addDaysToISO(today, n);
+
+  // Five consecutive ritual days ending today.
+  const sched = emptySchedule();
+  sched.ritualCompletions = [0, -1, -2, -3, -4].map((n) => ({ ritualId: "r", date: d(n) }));
+
+  // Unset → the full run counts.
+  assert.equal(calculateExecutionStreak(sched, today).streak, 5, "no floor -> full streak");
+
+  // Floor two days back → the walk stops there instead of reaching further.
+  sched.preferences = { startDate: d(-2) };
+  assert.equal(calculateExecutionStreak(sched, today).streak, 3, "floor clamps the walk-back");
+
+  // A floor in the future must not produce a negative/NaN streak.
+  sched.preferences = { startDate: d(3) };
+  assert.equal(calculateExecutionStreak(sched, today).streak, 0, "future floor -> no streak");
+
+  // The trend always keeps the current week, even with a future floor, so the
+  // card never renders from an empty array.
+  const trend = computeExecutionTrend(sched, 8);
+  assert.ok(trend.weeks.length >= 1, "current week always survives");
+  assert.ok(Number.isFinite(trend.averagePct), "average stays a real number");
+  assert.equal(trend.current, trend.weeks[trend.weeks.length - 1]);
+
+  // A floor a few weeks back drops the older weeks from the window.
+  const sched2 = emptySchedule();
+  sched2.preferences = { startDate: d(-10) };
+  const trend2 = computeExecutionTrend(sched2, 8);
+  assert.ok(trend2.weeks.length < 8, "weeks fully before the floor are dropped");
+});

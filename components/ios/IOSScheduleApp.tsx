@@ -46,6 +46,7 @@ import {
   resetStaleCompletions,
 } from "@/lib/useScheduleDB";
 import { useScheduleDB } from "@/lib/useScheduleDB";
+import { colorFromIcon } from "@/lib/colorSystem";
 import { useReminders } from "@/lib/useReminders";
 import { bootLog, isIOSSafeMode, isStandalonePWA } from "@/lib/iosSafeMode";
 import { todayISO, localISODate, addDaysToISO, formatDate } from "@/lib/dateUtils";
@@ -566,7 +567,7 @@ export default function IOSScheduleApp() {
 
   const overviewPlanConsistency = useMemo(() =>
     schedule.plans.map((plan) => {
-      const { consistency } = getPlanCardStats(plan, schedule.activities, todayKey);
+      const { consistency } = getPlanCardStats(plan, schedule.activities, todayKey, schedule.preferences?.startDate);
       const milestones = (schedule.milestones ?? []).filter((milestone) => milestone.planId === plan.id);
       const milestonesDone = milestones.filter((milestone) => milestone.status === "completed").length;
       return { plan, consistency, milestonesTotal: milestones.length, milestonesDone };
@@ -864,7 +865,7 @@ export default function IOSScheduleApp() {
       description: "Created from note",
       ...quickTaskTimeRange(),
       icon: plan.emoji,
-      color: plan.color,
+      color: colorFromIcon(plan.emoji),
       planId: plan.id,
       taskType: "task",
     };

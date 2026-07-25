@@ -215,6 +215,13 @@ export interface Note {
 
 export interface SchedulePreferences {
   dayStartTime?: string;
+  /**
+   * ISO date ("YYYY-MM-DD") from which analytics are measured. Streaks,
+   * trends, and consistency ignore everything before it, so the empty weeks
+   * that predate a user adopting the app don't drag their numbers down.
+   * Unset = measure over all history (the original behaviour).
+   */
+  startDate?: string;
 }
 
 export interface Schedule {
@@ -805,8 +812,16 @@ function normalizeNotes(raw: unknown): Note[] {
 
 function normalizeSchedulePreferences(raw: unknown): SchedulePreferences {
   if (!raw || typeof raw !== "object") return {};
-  const dayStartTime = normalizeDayStartTime((raw as { dayStartTime?: unknown }).dayStartTime);
-  return dayStartTime ? { dayStartTime } : {};
+  const source = raw as { dayStartTime?: unknown; startDate?: unknown };
+  const dayStartTime = normalizeDayStartTime(source.dayStartTime);
+  const startDate =
+    typeof source.startDate === "string" && /^\d{4}-\d{2}-\d{2}$/.test(source.startDate)
+      ? source.startDate
+      : undefined;
+  return {
+    ...(dayStartTime ? { dayStartTime } : {}),
+    ...(startDate ? { startDate } : {}),
+  };
 }
 
 function emptyEmpty(): Schedule {

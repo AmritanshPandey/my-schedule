@@ -128,13 +128,23 @@ export function buildPlanCompletionDates(
  * Count consecutive days (up to and including today) with at least one
  * completion. If today has no completions, counts backwards from yesterday.
  */
-export function calculateStreak(completionDates: Set<string>, todayISO: string): number {
+/**
+ * Walks back from today counting consecutive active days.
+ * `floorISO` (the schedule's tracking start) stops the walk, so a streak never
+ * extends into history the user asked us to ignore.
+ */
+export function calculateStreak(
+  completionDates: Set<string>,
+  todayISO: string,
+  floorISO?: string,
+): number {
   if (completionDates.size === 0) return 0;
   const cursor = new Date(todayISO + "T00:00:00");
   if (!completionDates.has(todayISO)) cursor.setDate(cursor.getDate() - 1);
   let streak = 0;
   for (let i = 0; i < 365; i++) {
     const ds = localISODate(cursor);
+    if (floorISO && ds < floorISO) break;
     if (completionDates.has(ds)) {
       streak++;
       cursor.setDate(cursor.getDate() - 1);

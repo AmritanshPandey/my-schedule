@@ -55,6 +55,23 @@ const CATEGORY_HEX: Record<AccentColor, string> = {
   rose:    "#F43F5E",
 };
 
+/**
+ * Plans are colour-neutral by design.
+ *
+ * Colour belongs to *tasks* (derived from their icon, overridable), so a hue on
+ * the timeline encodes what kind of activity a block is — not which plan it
+ * belongs to. A plan is recognised by its icon and title instead. This keeps
+ * colour meaningful rather than decorative; see DESIGN.md.
+ */
+export const PLAN_NEUTRAL = {
+  text:       "text-neutral-600 dark:text-neutral-300",
+  tint:       "bg-neutral-100 dark:bg-white/[0.06]",
+  border:     "border-neutral-200/70 dark:border-white/[0.12]",
+  dot:        "bg-neutral-400 dark:bg-neutral-500",
+  icon:       "text-neutral-600 dark:text-neutral-300",
+  iconBorder: "border-neutral-200/70 dark:border-white/[0.12]",
+} as const;
+
 export function categoryHex(color: string): string {
   return CATEGORY_HEX[color as AccentColor] ?? CATEGORY_HEX.cyan;
 }

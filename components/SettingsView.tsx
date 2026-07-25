@@ -48,6 +48,7 @@ import RemindersRows from "@/components/settings/RemindersRows";
 import { CARD as CARD_SURFACE } from "@/components/ui/surfaces";
 import { buildDeleteConfirmationCopy } from "@/lib/deleteConfirm";
 import { normalizeDayStartTime } from "@/lib/timeline/displayWindow";
+import { localISODate } from "@/lib/dateUtils";
 
 // ── Primitives ────────────────────────────────────────────────────────────────
 
@@ -673,6 +674,10 @@ export function SettingsView({
   const handleDayStartChange = useCallback((value: string) => {
     onUpdatePreferences?.({ dayStartTime: normalizeDayStartTime(value) });
   }, [onUpdatePreferences]);
+  const trackingStart = schedule.preferences?.startDate ?? "";
+  const handleTrackingStartChange = useCallback((value: string) => {
+    onUpdatePreferences?.({ startDate: value || undefined });
+  }, [onUpdatePreferences]);
 
   return (
     <div className="min-h-full bg-[#F5F5F5] dark:bg-[#111111]">
@@ -804,6 +809,35 @@ export function SettingsView({
                     title="Clear start of day"
                     onClick={() => handleDayStartChange("")}
                     disabled={!dayStartTime}
+                    className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-neutral-200 text-neutral-500 transition-colors hover:border-neutral-300 disabled:cursor-default disabled:opacity-35 dark:border-white/[0.08] dark:text-neutral-400"
+                  >
+                    <IconX size={15} strokeWidth={2.2} />
+                  </button>
+                </div>
+              </Row>
+              <Divider />
+              <Row className="items-start max-sm:flex-col sm:items-center">
+                <div className="min-w-0 flex-1">
+                  <p className="text-[13px] font-semibold text-neutral-800 dark:text-white">Tracking starts</p>
+                  <p className="mt-0.5 text-[11px] leading-snug text-neutral-400 dark:text-neutral-500">
+                    Streaks, trends, and consistency ignore anything before this date · leave empty to use all history
+                  </p>
+                </div>
+                <div className="flex w-full min-w-0 items-center gap-2 sm:w-auto sm:shrink-0">
+                  <input
+                    type="date"
+                    aria-label="Tracking start date"
+                    value={trackingStart}
+                    max={localISODate(new Date())}
+                    onChange={(e) => handleTrackingStartChange(e.target.value)}
+                    className="h-10 min-w-0 flex-1 rounded-xl border border-neutral-200 bg-neutral-50 px-3 text-[12px] font-semibold text-neutral-700 outline-none transition-colors focus:border-emerald-600/60 dark:border-white/[0.08] dark:bg-white/[0.04] dark:text-white dark:[color-scheme:dark] sm:w-44 sm:flex-none"
+                  />
+                  <button
+                    type="button"
+                    aria-label="Clear tracking start date"
+                    title="Clear tracking start date"
+                    onClick={() => handleTrackingStartChange("")}
+                    disabled={!trackingStart}
                     className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-neutral-200 text-neutral-500 transition-colors hover:border-neutral-300 disabled:cursor-default disabled:opacity-35 dark:border-white/[0.08] dark:text-neutral-400"
                   >
                     <IconX size={15} strokeWidth={2.2} />

@@ -12,9 +12,8 @@ import {
 } from "@tabler/icons-react";
 import type { Plan } from "@/lib/useScheduleDB";
 import { haptic } from "@/lib/haptics";
-import type { AccentColor } from "@/lib/colorSystem";
 import type { PlanDayState } from "@/lib/planInsights";
-import { accentStyles } from "@/lib/colorSystem";
+import { PLAN_NEUTRAL } from "@/lib/colorSystem";
 import IconButton from "@/components/ui/IconButton";
 import { CARD_INTERACTIVE } from "@/components/ui/surfaces";
 import { TRANSITION_DATA } from "@/lib/motion";
@@ -28,24 +27,30 @@ const STATUS_CONFIG: Record<PlanStatus, {
   label: string;
   text: string;
   dot: string;
+  /** Progress-ring stroke — the ring reports execution, so it follows the
+      status ramp rather than any plan identity colour. */
+  stroke: string;
   pulse: boolean;
 }> = {
   on_track: {
     label: "ON TRACK",
     text: "text-emerald-600 dark:text-emerald-400",
     dot: "bg-emerald-500",
+    stroke: "stroke-emerald-500 dark:stroke-emerald-400",
     pulse: true,
   },
   at_risk: {
     label: "AT RISK",
     text: "text-amber-600 dark:text-amber-400",
     dot: "bg-amber-500",
+    stroke: "stroke-amber-500 dark:stroke-amber-400",
     pulse: false,
   },
   delayed: {
     label: "NEEDS FOCUS",
     text: "text-rose-600 dark:text-rose-400",
     dot: "bg-rose-500",
+    stroke: "stroke-rose-500 dark:stroke-rose-400",
     pulse: false,
   },
 };
@@ -55,28 +60,6 @@ function derivePlanStatus(dayState: PlanDayState, consistency: number): PlanStat
   if (consistency >= 35) return "at_risk";
   return "delayed";
 }
-
-// ── Accent → SVG stroke color ─────────────────────────────────────────────────
-
-const ACCENT_STROKE: Record<AccentColor, string> = {
-  red:     "stroke-red-500 dark:stroke-red-400",
-  orange:  "stroke-orange-500 dark:stroke-orange-400",
-  amber:   "stroke-amber-500 dark:stroke-amber-400",
-  yellow:  "stroke-yellow-500 dark:stroke-yellow-400",
-  lime:    "stroke-lime-500 dark:stroke-lime-400",
-  green:   "stroke-green-500 dark:stroke-green-400",
-  emerald: "stroke-emerald-500 dark:stroke-emerald-400",
-  teal:    "stroke-teal-500 dark:stroke-teal-400",
-  cyan:    "stroke-cyan-500 dark:stroke-cyan-400",
-  sky:     "stroke-sky-500 dark:stroke-sky-400",
-  blue:    "stroke-blue-500 dark:stroke-blue-400",
-  indigo:  "stroke-indigo-500 dark:stroke-indigo-400",
-  violet:  "stroke-violet-500 dark:stroke-violet-400",
-  purple:  "stroke-purple-500 dark:stroke-purple-400",
-  fuchsia: "stroke-fuchsia-500 dark:stroke-fuchsia-400",
-  pink:    "stroke-pink-500 dark:stroke-pink-400",
-  rose:    "stroke-rose-500 dark:stroke-rose-400",
-};
 
 // ── Progress ring (SVG) ───────────────────────────────────────────────────────
 
@@ -154,10 +137,11 @@ function PlanCardInner({
   onQuickLog,
   onDelete,
 }: PlanCardProps) {
-  const accent = accentStyles(plan.color);
-  const stroke = ACCENT_STROKE[plan.color as AccentColor] ?? ACCENT_STROKE.cyan;
   const status = derivePlanStatus(dayState, consistency);
   const statusCfg = STATUS_CONFIG[status];
+  // Plan identity is neutral — the icon names the plan, colour belongs to tasks.
+  const accent = PLAN_NEUTRAL;
+  const stroke = statusCfg.stroke;
 
   return (
     <m.div

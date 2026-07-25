@@ -49,7 +49,7 @@ export function buildActiveDates(schedule: Schedule): Set<string> {
 
 export function calculateExecutionStreak(schedule: Schedule, todayISO: string): ExecutionStreak {
   const active = buildActiveDates(schedule);
-  const streak = calculateStreak(active, todayISO);
+  const streak = calculateStreak(active, todayISO, schedule.preferences?.startDate);
   const doneToday = active.has(todayISO);
   const atRisk = streak > 0 && !doneToday;
   const milestone = doneToday && STREAK_MILESTONES.includes(streak) ? streak : null;
