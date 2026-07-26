@@ -46,6 +46,11 @@ const {
   getSlots,
   withSlots,
 } = await import("../lib/taskMutations.ts");
+const {
+  normalizeTasks,
+  resetStaleCompletions,
+  NORMALIZED_OPTIONAL_TASK_FIELDS,
+} = await import("../lib/scheduleNormalize.ts");
 const { isTaskScheduledOn, resolveOccurrence, diffException, weeksBetween } = await import("../lib/taskOccurrence.ts");
 const { normalizeMilestoneTimeline, cascadeMilestoneDates } = await import("../lib/roadmapDates.ts");
 const { resolveLinkedTasks } = await import("../lib/notes/linkedTasks.ts");

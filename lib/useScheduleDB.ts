@@ -19,6 +19,11 @@ import { bootLog } from "@/lib/iosSafeMode";
 export { DAYS, DAY_LABELS } from "@/lib/scheduleConstants";
 export type { DayKey } from "@/lib/scheduleConstants";
 
+// Pure normalization lives in scheduleNormalize.ts (no React/auth deps, so it's
+// unit-testable). Re-exported here so existing import sites are unchanged.
+import { normalizeTasks, entryToTask, resetStaleCompletions } from "@/lib/scheduleNormalize";
+export { normalizeTasks, resetStaleCompletions } from "@/lib/scheduleNormalize";
+
 export type PlanCategory = "fitness" | "learning" | "work" | "health" | "routine";
 
 export interface Goal {
@@ -542,58 +547,6 @@ function normalizeMilestoneTimelines(plans: Plan[], milestones: Milestone[]): Mi
   });
 }
 
-export function normalizeTasks(value: unknown, fallbackPlanId: string, fallbackIcon = "briefcase", fallbackDescription?: string): Task[] {
-  if (!Array.isArray(value)) return [];
-
-  return value.flatMap((item) => {
-    if (!item || typeof item !== "object") return [];
-
-    if ("startTime" in item && "endTime" in item && "title" in item && "icon" in item) {
-      const task = item as Task;
-      const rawType: string | undefined = task.taskType;
-      const taskType: Task["taskType"] =
-        rawType === "session" || rawType === "routine" ? "session" :
-        rawType === "task" || rawType === "normal" ? "task" :
-        undefined;
-      return [{
-        id: task.id,
-        title: task.title,
-        ...(task.description !== undefined && { description: task.description }),
-        startTime: task.startTime,
-        endTime: task.endTime,
-        ...(Array.isArray(task.slots) && task.slots.length > 0 && { slots: task.slots }),
-        icon: task.icon || fallbackIcon,
-        color: resolveAccentColor((task as Task & { color?: string }).color, task.icon || fallbackIcon),
-        planId: task.planId || fallbackPlanId,
-        ...(taskType !== undefined && { taskType }),
-        // Completion state — must be preserved across page reloads
-        ...(task.completed !== undefined && { completed: task.completed }),
-        ...(task.completedAt !== undefined && { completedAt: task.completedAt }),
-        ...(task.completedSubtaskIds !== undefined && { completedSubtaskIds: task.completedSubtaskIds }),
-        ...(Array.isArray(task.completedSlotIndices) && { completedSlotIndices: task.completedSlotIndices }),
-        ...(task.missed !== undefined && { missed: task.missed }),
-        ...(task.missedAt !== undefined && { missedAt: task.missedAt }),
-        ...(task.completionHistory !== undefined && { completionHistory: task.completionHistory }),
-        ...(task.streakEnabled !== undefined && { streakEnabled: task.streakEnabled }),
-        ...(task.sortOrder !== undefined && { sortOrder: task.sortOrder }),
-        ...(Array.isArray(task.subtasks) ? { subtasks: task.subtasks } : {}),
-        ...(task.exceptions && typeof task.exceptions === "object" && !Array.isArray(task.exceptions) && { exceptions: task.exceptions }),
-        ...(task.recurrence && typeof task.recurrence === "object" && !Array.isArray(task.recurrence) && { recurrence: task.recurrence }),
-      }];
-    }
-
-    if ("items" in item && Array.isArray((item as { items: unknown[] }).items)) {
-      const section = item as { title?: string; iconName?: string; items: ScheduleEntry[] };
-      return section.items.map((entry) => entryToTask(entry, section.iconName ?? fallbackIcon, fallbackPlanId, section.title));
-    }
-
-    if ("time" in item && "task" in item) {
-      return [entryToTask(item as ScheduleEntry, fallbackIcon, fallbackPlanId, fallbackDescription)];
-    }
-
-    return [];
-  });
-}
 
 function defaultPlans(): Plan[] {
   return [
@@ -837,39 +790,6 @@ function emptyEmpty(): Schedule {
   };
 }
 
-/**
- * Recurring weekday tasks store their completion on the template itself
- * (`completed` / `completedSubtaskIds`). That state belongs to a single day's
- * occurrence — without resetting it, yesterday's (or last week's) completion
- * bleeds into the new day. This clears the live completion flags for any task
- * whose most recent activity isn't today, while leaving `completionHistory`
- * (the dated, permanent record used by analytics/heatmaps) fully intact.
- */
-export function resetStaleCompletions(schedule: Schedule, todayISO: string): Schedule {
-  let changed = false;
-  const activities = { ...schedule.activities };
-  for (const day of DAYS) {
-    const tasks = activities[day];
-    if (!tasks?.length) continue;
-    let dayChanged = false;
-    const next = tasks.map((t) => {
-      const hasLiveState = !!t.completed || !!t.missed || (t.completedSubtaskIds?.length ?? 0) > 0 || (t.completedSlotIndices?.length ?? 0) > 0;
-      if (!hasLiveState) return t;
-      const activeToday =
-        (t.completedAt && localISODate(new Date(t.completedAt)) === todayISO) ||
-        (t.missedAt && localISODate(new Date(t.missedAt)) === todayISO) ||
-        (t.completionHistory ?? []).some((e) => localISODate(new Date(e.completedAt)) === todayISO);
-      if (activeToday) return t;
-      dayChanged = true;
-      return { ...t, completed: false, completedAt: undefined, completedSubtaskIds: [], completedSlotIndices: [], missed: false, missedAt: undefined };
-    });
-    if (dayChanged) {
-      activities[day] = next;
-      changed = true;
-    }
-  }
-  return changed ? { ...schedule, activities } : schedule;
-}
 
 /**
  * Log an IndexedDB write failure, calling out a full-storage quota error with an

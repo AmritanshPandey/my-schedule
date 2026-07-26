@@ -122,7 +122,7 @@ export function normalizeTasks(value: unknown, fallbackPlanId: string, fallbackI
         // uses the derived value rather than the raw one.
         const raw = key === "taskType" ? taskType : task[key];
         if (keepField(key, raw)) {
-          (normalized as Record<string, unknown>)[key] = raw;
+          (normalized as unknown as Record<string, unknown>)[key] = raw;
         }
       }
 
