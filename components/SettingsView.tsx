@@ -46,6 +46,7 @@ import ConfirmSheet from "@/components/ui/ConfirmSheet";
 import BackupRows from "@/components/settings/BackupRows";
 import RemindersRows from "@/components/settings/RemindersRows";
 import { CARD as CARD_SURFACE } from "@/components/ui/surfaces";
+import { SETTINGS_CONTROL_CLASS, SETTINGS_ICON_BUTTON_CLASS } from "@/components/ui/Input";
 import { buildDeleteConfirmationCopy } from "@/lib/deleteConfirm";
 import { normalizeDayStartTime } from "@/lib/timeline/displayWindow";
 import { localISODate } from "@/lib/dateUtils";
@@ -794,7 +795,7 @@ export function SettingsView({
                     aria-label="Start of day"
                     value={dayStartTime}
                     onChange={(e) => handleDayStartChange(e.target.value)}
-                    className="h-10 min-w-0 flex-1 rounded-xl border border-neutral-200 bg-neutral-50 px-3 pr-9 text-[12px] font-semibold text-neutral-700 outline-none transition-colors focus:border-neutral-300 dark:border-white/[0.08] dark:bg-white/[0.04] dark:text-white sm:w-44 sm:flex-none"
+                    className={`${SETTINGS_CONTROL_CLASS} flex-1 pr-9 sm:w-44 sm:flex-none`}
                   >
                     <option value="">Auto from tasks</option>
                     {DAY_START_OPTIONS.map((option) => (
@@ -809,7 +810,7 @@ export function SettingsView({
                     title="Clear start of day"
                     onClick={() => handleDayStartChange("")}
                     disabled={!dayStartTime}
-                    className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-neutral-200 text-neutral-500 transition-colors hover:border-neutral-300 disabled:cursor-default disabled:opacity-35 dark:border-white/[0.08] dark:text-neutral-400"
+                    className={SETTINGS_ICON_BUTTON_CLASS}
                   >
                     <IconX size={15} strokeWidth={2.2} />
                   </button>
@@ -830,7 +831,7 @@ export function SettingsView({
                     value={trackingStart}
                     max={localISODate(new Date())}
                     onChange={(e) => handleTrackingStartChange(e.target.value)}
-                    className="h-10 min-w-0 flex-1 rounded-xl border border-neutral-200 bg-neutral-50 px-3 text-[12px] font-semibold text-neutral-700 outline-none transition-colors focus:border-emerald-600/60 dark:border-white/[0.08] dark:bg-white/[0.04] dark:text-white dark:[color-scheme:dark] sm:w-44 sm:flex-none"
+                    className={`${SETTINGS_CONTROL_CLASS} flex-1 sm:w-44 sm:flex-none`}
                   />
                   <button
                     type="button"
@@ -838,7 +839,7 @@ export function SettingsView({
                     title="Clear tracking start date"
                     onClick={() => handleTrackingStartChange("")}
                     disabled={!trackingStart}
-                    className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-neutral-200 text-neutral-500 transition-colors hover:border-neutral-300 disabled:cursor-default disabled:opacity-35 dark:border-white/[0.08] dark:text-neutral-400"
+                    className={SETTINGS_ICON_BUTTON_CLASS}
                   >
                     <IconX size={15} strokeWidth={2.2} />
                   </button>

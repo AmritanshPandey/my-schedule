@@ -30,10 +30,16 @@ function stripTodayCompletionEvents(history: TaskCompletionEvent[] | undefined):
   return (history ?? []).filter(
     (ev) =>
       !(
-        (ev.completionType === "task" || ev.completionType === "subtask") &&
+        (ev.completionType === "task" || ev.completionType === "subtask" || ev.completionType === "slot") &&
         localISODate(new Date(ev.completedAt)) === today
       )
   );
+}
+
+/** All slot indices of a task — what "the whole task is done" means for slots. */
+function allSlotIndices(task: Task): number[] {
+  const total = getSlots(task).length;
+  return total > 1 ? Array.from({ length: total }, (_, i) => i) : [];
 }
 
 function stripTodaySubtaskEvent(
@@ -199,19 +205,28 @@ export function toggleTaskComplete(
       completed: false,
       completedAt: undefined,
       completedSubtaskIds: [],
+      // Un-completing the whole task un-completes each of its phases too.
+      completedSlotIndices: [],
       completionHistory: stripTodayCompletionEvents(task.completionHistory),
     };
   }
 
-  const event = createCompletionEvent(task.id, "task");
+  const slotIndices = allSlotIndices(task);
+  const events: TaskCompletionEvent[] = [
+    ...slotIndices.map((i) => createSlotEvent(task.id, i)),
+    createCompletionEvent(task.id, "task"),
+  ];
   return {
     completed: true,
     completedAt: now,
     completedSubtaskIds: allSubtaskIds,
+    // "Mark the whole task done" implies every phase is done — otherwise the
+    // timeline/list would show unchecked phases on a task that reads complete.
+    completedSlotIndices: slotIndices,
     // Completing clears a prior "missed" mark for today.
     missed: false,
     missedAt: undefined,
-    completionHistory: [...stripTodayEvents(task.completionHistory, ["missed"]), event],
+    completionHistory: [...stripTodayEvents(task.completionHistory, ["missed"]), ...events],
   };
 }
 
@@ -230,7 +245,7 @@ export function markTaskMissed(task: Task, allSubtaskIds: string[]): Partial<Tas
       completionHistory: stripTodayEvents(task.completionHistory, ["missed"]),
     };
   }
-  const cleared = stripTodayEvents(task.completionHistory, ["task", "subtask", "missed"]);
+  const cleared = stripTodayEvents(task.completionHistory, ["task", "subtask", "slot", "missed"]);
   const events: TaskCompletionEvent[] = [
     createCompletionEvent(task.id, "missed"),
     ...allSubtaskIds.map((sid) => createCompletionEvent(task.id, "missed", sid)),
@@ -239,6 +254,8 @@ export function markTaskMissed(task: Task, allSubtaskIds: string[]): Partial<Tas
     completed: false,
     completedAt: undefined,
     completedSubtaskIds: [],
+    // A missed day is whole-task: no phase survives as done.
+    completedSlotIndices: [],
     missed: true,
     missedAt: new Date().toISOString(),
     completionHistory: [...cleared, ...events],
@@ -492,6 +509,9 @@ export function toggleTaskCompleteForDate(
   const events = [
     datedEvent(task.id, dateISO, "task"),
     ...allSubtaskIds.map((sid) => datedEvent(task.id, dateISO, "subtask", sid)),
+    // Whole-task completion implies every phase, so completionForDate reports
+    // the same thing whether it's read via the task or the slot events.
+    ...allSlotIndices(task).map((i) => datedSlotEvent(task.id, dateISO, i)),
   ];
   return { completionHistory: [...history, ...events] };
 }

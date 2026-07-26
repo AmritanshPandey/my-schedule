@@ -15,6 +15,9 @@ export interface HighlightLayout {
   height: number;
   lane: number;
   laneCount: number;
+  /** Set for one phase of a multi-slot task, so the ring can respect per-slot completion. */
+  slotIndex?: number;
+  isMultiSlot?: boolean;
 }
 
 interface CurrentTaskHighlightLayerProps {
@@ -50,11 +53,19 @@ function CurrentTaskHighlightLayerInner({
 
   if (activeDay !== todayKey) return null;
 
+  // A multi-slot task's `completed` flag only flips once EVERY phase is done, so
+  // the ring has to read this phase's own state — otherwise a finished 9am block
+  // keeps glowing as "do this now" while you're inside it.
+  const isBlockDone = (l: HighlightLayout) =>
+    l.isMultiSlot && l.slotIndex !== undefined
+      ? (l.task.completedSlotIndices ?? []).includes(l.slotIndex)
+      : !!l.task.completed;
+
   const current = layouts.find(
     (l) =>
       nowMinutes >= l.start &&
       nowMinutes < l.end &&
-      !l.task.completed &&
+      !isBlockDone(l) &&
       !l.task.missed,
   );
   if (!current) return null;

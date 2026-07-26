@@ -13,6 +13,7 @@ import {
   type ReminderSettings,
 } from "@/lib/reminders";
 import { formatDisplayTime, minutesToInputTime } from "@/lib/timeUtils";
+import { SETTINGS_CONTROL_CLASS } from "@/components/ui/Input";
 
 const NUDGE_OPTIONS = Array.from({ length: 12 }, (_, i) => {
   const value = minutesToInputTime((16 * 60) + i * 30); // 16:00 → 21:30
@@ -167,7 +168,7 @@ export default function RemindersRows() {
                     aria-label="Nudge time"
                     value={settings.nudgeTime}
                     onChange={(e) => patch({ nudgeTime: e.target.value })}
-                    className="h-9 rounded-xl border border-neutral-200 bg-neutral-50 px-3 pr-8 text-[12px] font-semibold text-neutral-700 outline-none transition-colors focus:border-neutral-300 dark:border-white/[0.08] dark:bg-white/[0.04] dark:text-white"
+                    className={`${SETTINGS_CONTROL_CLASS} pr-9`}
                   >
                     {NUDGE_OPTIONS.map((o) => (
                       <option key={o.value} value={o.value}>{o.label}</option>

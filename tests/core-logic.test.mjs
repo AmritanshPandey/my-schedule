@@ -45,6 +45,7 @@ const {
   clearTaskException,
   getSlots,
   withSlots,
+  retimeSlot,
 } = await import("../lib/taskMutations.ts");
 const {
   normalizeTasks,
@@ -902,5 +903,190 @@ test("completionForDate derives per-slot completion from history for a past date
   const derived = completionForDate(task, today);
   assert.deepEqual(derived.completedSlotIndices, [0]);
   assert.equal(derived.completed, false);
+});
+
+// ── normalizeTasks field-loss guard ──────────────────────────────────────────
+// normalizeTasks() rebuilds each Task from an explicit allowlist, so any field
+// missing from that list is silently dropped on every reload / cloud merge.
+// That already happened once: `slots` was added to Task but not to the
+// allowlist, so multi-slot tasks lost every phase but the first. These two
+// tests make that failure mode loud instead of silent.
+
+test("every optional Task field is covered by the normalize allowlist", () => {
+  const root = new URL("..", import.meta.url).pathname;
+  const source = readFileSync(join(root, "lib/useScheduleDB.ts"), "utf8");
+
+  const start = source.indexOf("export interface Task {");
+  assert.notEqual(start, -1, "could not locate the Task interface");
+  const end = source.indexOf("\n}", start);
+  const body = source.slice(start, end);
+
+  // Optional members look like `  foo?: Type;` at the start of a line.
+  const optionalKeys = Array.from(body.matchAll(/^\s{2}(\w+)\?:/gm), (m) => m[1]);
+  assert.ok(optionalKeys.length > 5, "Task interface parse looks wrong");
+
+  const covered = new Set(NORMALIZED_OPTIONAL_TASK_FIELDS);
+  const missing = optionalKeys.filter((key) => !covered.has(key));
+  assert.deepEqual(
+    missing,
+    [],
+    `Task field(s) ${missing.join(", ")} are not in OPTIONAL_TASK_FIELDS in lib/scheduleNormalize.ts — ` +
+      `they will be silently dropped on every reload. Add them there.`
+  );
+
+  // And nothing stale in the other direction.
+  const known = new Set(optionalKeys);
+  const orphaned = NORMALIZED_OPTIONAL_TASK_FIELDS.filter((key) => !known.has(key));
+  assert.deepEqual(orphaned, [], `allowlist references field(s) no longer on Task: ${orphaned.join(", ")}`);
+});
+
+test("normalizeTasks round-trips a fully-populated task without losing a field", () => {
+  const populated = {
+    id: "full-1",
+    title: "Everything",
+    startTime: "9:00 AM",
+    endTime: "10:00 AM",
+    icon: "book",
+    color: "amber",
+    planId: "plan-1",
+    // every optional field, all set to something that must survive
+    description: "a note",
+    slots: [
+      { startTime: "9:00 AM", endTime: "10:00 AM" },
+      { startTime: "3:00 PM", endTime: "4:00 PM" },
+    ],
+    taskType: "session",
+    completed: true,
+    completedAt: "2026-07-26T09:30:00.000Z",
+    completedSubtaskIds: ["sub-a"],
+    completedSlotIndices: [0, 1],
+    missed: false,
+    missedAt: "2026-07-25T20:00:00.000Z",
+    completionHistory: [
+      { id: "e1", taskId: "full-1", completionType: "task", completedAt: "2026-07-26T09:30:00.000Z" },
+    ],
+    streakEnabled: true,
+    sortOrder: 3,
+    subtasks: [{ id: "sub-a", task: "Sub A" }],
+    exceptions: { "2026-08-01": { skipped: true } },
+    recurrence: { type: "weekly", interval: 2, anchorISO: "2026-07-26" },
+  };
+
+  const [out] = normalizeTasks([populated], "fallback-plan");
+
+  for (const key of NORMALIZED_OPTIONAL_TASK_FIELDS) {
+    assert.deepEqual(out[key], populated[key], `normalizeTasks dropped or altered "${key}"`);
+  }
+  // Required fields survive too.
+  assert.equal(out.id, "full-1");
+  assert.equal(out.planId, "plan-1");
+  assert.equal(out.startTime, "9:00 AM");
+});
+
+test("marking a whole multi-slot task done also marks every phase", () => {
+  const task = {
+    id: "multi-6",
+    title: "Study",
+    startTime: "9:00 AM",
+    endTime: "10:00 AM",
+    slots: [
+      { startTime: "9:00 AM", endTime: "10:00 AM" },
+      { startTime: "3:00 PM", endTime: "4:00 PM" },
+    ],
+    icon: "book",
+    color: "amber",
+    planId: "plan-1",
+  };
+
+  // "Done" from a summary surface must not leave phases looking unchecked
+  // on the timeline/list.
+  const done = { ...task, ...toggleTaskComplete(task, []) };
+  assert.equal(done.completed, true);
+  assert.deepEqual([...done.completedSlotIndices].sort(), [0, 1]);
+
+  // And un-completing clears them again, along with today's slot events.
+  const undone = { ...done, ...toggleTaskComplete(done, []) };
+  assert.equal(undone.completed, false);
+  assert.deepEqual(undone.completedSlotIndices, []);
+  const today = localISODate(new Date());
+  const leftoverToday = undone.completionHistory.filter(
+    (e) => localISODate(new Date(e.completedAt)) === today
+  );
+  assert.deepEqual(leftoverToday, [], "no stale slot/task events survive an uncheck");
+});
+
+test("retimeSlot moves one phase without disturbing its siblings", () => {
+  const task = {
+    id: "multi-5",
+    title: "Study",
+    startTime: "9:00 AM",
+    endTime: "10:00 AM",
+    slots: [
+      { startTime: "9:00 AM", endTime: "10:00 AM" },
+      { startTime: "3:00 PM", endTime: "4:00 PM" },
+    ],
+    icon: "book",
+    color: "amber",
+    planId: "plan-1",
+  };
+
+  // Drag the afternoon phase to the evening — the morning one stays put.
+  const moved = retimeSlot(task, 1, "6:00 PM", "7:00 PM");
+  assert.deepEqual(moved.slots, [
+    { startTime: "9:00 AM", endTime: "10:00 AM" },
+    { startTime: "6:00 PM", endTime: "7:00 PM" },
+  ]);
+  assert.equal(moved.startTime, "9:00 AM", "mirror still points at the earliest slot");
+
+  // Dragging the later phase before the earlier one re-sorts and re-mirrors.
+  const reordered = retimeSlot(task, 1, "7:00 AM", "8:00 AM");
+  assert.deepEqual(reordered.slots.map((s) => s.startTime), ["7:00 AM", "9:00 AM"]);
+  assert.equal(reordered.startTime, "7:00 AM");
+
+  // A single-slot task just moves, and stays free of a `slots` field.
+  const single = retimeSlot(
+    { id: "s1", title: "Gym", startTime: "9:00 AM", endTime: "10:00 AM", icon: "run", color: "cyan", planId: "p" },
+    0,
+    "11:00 AM",
+    "12:00 PM"
+  );
+  assert.equal(single.startTime, "11:00 AM");
+  assert.equal(single.endTime, "12:00 PM");
+  assert.equal("slots" in single, false);
+});
+
+test("resetStaleCompletions clears yesterday's slot completions but keeps history", () => {
+  const today = localISODate(new Date());
+  const yesterday = addDaysToISO(today, -1);
+  const sched = emptySchedule();
+  sched.activities.monday = [
+    {
+      id: "multi-4",
+      title: "Study",
+      startTime: "9:00 AM",
+      endTime: "10:00 AM",
+      slots: [
+        { startTime: "9:00 AM", endTime: "10:00 AM" },
+        { startTime: "3:00 PM", endTime: "4:00 PM" },
+      ],
+      icon: "book",
+      color: "amber",
+      planId: "plan-1",
+      completedSlotIndices: [0],
+      completionHistory: [
+        {
+          id: "e1",
+          taskId: "multi-4",
+          completionType: "slot",
+          slotIndex: 0,
+          completedAt: new Date(`${yesterday}T12:00:00`).toISOString(),
+        },
+      ],
+    },
+  ];
+
+  const task = resetStaleCompletions(sched, today).activities.monday[0];
+  assert.deepEqual(task.completedSlotIndices, [], "stale slot completions are cleared for the new day");
+  assert.equal(task.completionHistory.length, 1, "history is preserved for analytics");
 });
 

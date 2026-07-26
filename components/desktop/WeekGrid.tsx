@@ -539,9 +539,9 @@ export function WeekGrid({
                       type="button"
                       aria-label={`${DAY_SHORT[day]} actions — swap or duplicate day`}
                       onClick={(e) => { e.stopPropagation(); haptic("light"); onDayActions(day); }}
-                      className={`absolute right-1 top-1 flex h-6 w-6 items-center justify-center rounded-full opacity-0 transition-opacity focus-visible:opacity-100 group-hover:opacity-100 ${
+                      className={`absolute right-1 top-1 flex h-6 w-6 items-center justify-center rounded-full opacity-70 transition-opacity hover:opacity-100 focus-visible:opacity-100 ${
                         isActive
-                          ? "text-white/70 hover:bg-white/15 dark:text-neutral-900/60 dark:hover:bg-black/10"
+                          ? "text-white/80 hover:bg-white/15 dark:text-neutral-900/70 dark:hover:bg-black/10"
                           : "text-neutral-400 hover:bg-neutral-100 dark:text-neutral-500 dark:hover:bg-white/[0.08]"
                       }`}
                     >
@@ -706,14 +706,15 @@ export function WeekGrid({
                     className="absolute right-1.5 z-[5] flex max-w-[70%] -translate-y-1/2 flex-row-reverse flex-wrap items-center justify-start gap-1"
                     style={{ top: mark.top }}
                   >
+                    {/* The name is revealed by the dot itself expanding into a
+                        capsule (see RitualStrip) — no floating tooltip layer. */}
                     {mark.rituals.map((ritual) => (
-                      <span key={ritual.id} className="rounded-full ring-2 ring-white dark:ring-neutral-950">
-                        <RitualStrip
-                          ritual={ritual}
-                          completed={completedRituals.has(ritual.id)}
-                          onToggle={() => onToggleRitual(ritual.id, dateISO)}
-                        />
-                      </span>
+                      <RitualStrip
+                        key={ritual.id}
+                        ritual={ritual}
+                        completed={completedRituals.has(ritual.id)}
+                        onToggle={() => onToggleRitual(ritual.id, dateISO)}
+                      />
                     ))}
                   </div>
                 ))}

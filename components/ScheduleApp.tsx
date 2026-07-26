@@ -132,6 +132,7 @@ import {
   setTaskException,
   clearTaskException,
   getSlots,
+  retimeSlot,
   type TaskDeleteScope,
 } from "@/lib/taskMutations";
 import { isTaskScheduledOn, resolveOccurrence, diffException } from "@/lib/taskOccurrence";
@@ -223,6 +224,7 @@ function IOSSafeDashboard({
   onNavigate,
   onToggleTask,
   onToggleSubtask,
+  onToggleSlot,
   onOpenSubtasks,
 }: {
   schedule: Schedule;
@@ -232,6 +234,7 @@ function IOSSafeDashboard({
   onNavigate: (tab: number) => void;
   onToggleTask: (task: Task) => void;
   onToggleSubtask: (taskId: string, subtaskId: string) => void;
+  onToggleSlot: (taskId: string, slotIndex: number) => void;
   onOpenSubtasks: (task: Task) => void;
 }) {
   const done = todayTasks.filter((task) => {
@@ -291,6 +294,7 @@ function IOSSafeDashboard({
                 linkedPlan={task.planId ? plansById.get(task.planId) ?? null : null}
                 onToggleComplete={() => onToggleTask(task)}
                 onToggleSubtask={onToggleSubtask}
+                onToggleSlot={onToggleSlot}
                 onEdit={() => onNavigate(0)}
                 onDelete={() => onNavigate(0)}
                 onOpenSubtasks={() => onOpenSubtasks(task)}
@@ -344,8 +348,15 @@ function computeCardSize(height: number, laneCount: number): CardSize {
 }
 
 // Shape of one positioned timeline task (produced by the timelineTaskLayouts memo).
+// A multi-slot task contributes one layout per slot, so each phase is its own
+// positioned, independently-completable block.
 interface TimelineTaskLayout {
   task: Task;
+  /** The specific time block this layout renders. */
+  slot: TaskSlot;
+  slotIndex: number;
+  /** True when the parent task has >1 slot (drives per-slot completion + retiming). */
+  isMultiSlot: boolean;
   start: number;
   end: number;
   isOvernight: boolean;
@@ -376,11 +387,20 @@ const TimelineTaskBlock = memo(function TimelineTaskBlock({
   plan: Plan | null;
   isBeingMoved: boolean;
   isViewingToday: boolean;
-  onPointerDown: (e: React.PointerEvent<HTMLDivElement>, task: Task, start: number, end: number) => void;
-  onToggle: (task: Task) => void;
+  onPointerDown: (e: React.PointerEvent<HTMLDivElement>, task: Task, start: number, end: number, slotIndex: number) => void;
+  onToggle: (task: Task, slotIndex: number, isMultiSlot: boolean) => void;
   onOpenSubtasks: (task: Task) => void;
 }) {
   const cardSize = computeCardSize(layout.height, layout.laneCount);
+  // A phase of a multi-slot task completes on its own; a single-slot task keeps
+  // the whole-task state (which folds in subtask progress).
+  const state = layout.isMultiSlot
+    ? layout.task.missed
+      ? "missed"
+      : (layout.task.completedSlotIndices ?? []).includes(layout.slotIndex)
+      ? "completed"
+      : "incomplete"
+    : resolveTaskState(layout.task, getTaskSubtaskSummary(layout.task, plan).totalCount);
   return (
     <div
       data-task-block
@@ -388,20 +408,21 @@ const TimelineTaskBlock = memo(function TimelineTaskBlock({
         isBeingMoved ? "opacity-25 pointer-events-none" : ""
       }`}
       style={{ ...taskLaneStyle(layout), willChange: isBeingMoved ? "opacity" : undefined }}
-      onPointerDown={isViewingToday ? (e) => onPointerDown(e, layout.task, layout.start, layout.end) : undefined}
+      onPointerDown={isViewingToday ? (e) => onPointerDown(e, layout.task, layout.start, layout.end, layout.slotIndex) : undefined}
     >
       <div className="relative h-full min-h-[20px]">
         <TaskBlockCard
           variant="grid"
           task={layout.task}
           plan={plan}
-          state={resolveTaskState(layout.task, getTaskSubtaskSummary(layout.task, plan).totalCount)}
-          duration={formatTaskDuration(layout.task.startTime, layout.task.endTime)}
+          state={state}
+          duration={formatTaskDuration(layout.slot.startTime, layout.slot.endTime)}
+          slotOverride={layout.isMultiSlot ? layout.slot : undefined}
           readOnly={!isViewingToday}
           minimal={cardSize === "xsmall"}
           compact={cardSize === "small" || cardSize === "medium"}
           narrow={cardSize === "small"}
-          onToggle={() => onToggle(layout.task)}
+          onToggle={() => onToggle(layout.task, layout.slotIndex, layout.isMultiSlot)}
           onOpenSubtasks={() => onOpenSubtasks(layout.task)}
           className="h-full w-full"
         />
@@ -673,6 +694,8 @@ export default function ScheduleApp() {
   // ── Timeline drag-move state (preview block during task long-press drag) ─────
   const [dragMove, setDragMove] = useState<{
     taskId: string;
+    /** Which phase of a multi-slot task is being dragged. */
+    slotIndex: number;
     durationMin: number;
     previewStartMin: number;
   } | null>(null);
@@ -770,6 +793,7 @@ export default function ScheduleApp() {
   // Mutable tracking for drag-move long-press
   const moveDragRef = useRef<{
     taskId: string;
+    slotIndex: number;
     task: Task;
     durationMin: number;
     grabOffsetMin: number;
@@ -933,9 +957,9 @@ export default function ScheduleApp() {
     snapAndClamp: (minutes: number) => number;
     openCreateSheetWithTime: (startMin: number, endMin: number) => void;
     openEditSheet: (task: Task) => void;
-    toggleTask: (task: Task) => void;
+    toggleTask: (task: Task, slotIndex?: number, isMultiSlot?: boolean) => void;
     setDragCreate: React.Dispatch<React.SetStateAction<{ startMin: number; endMin: number } | null>>;
-    setDragMove: React.Dispatch<React.SetStateAction<{ taskId: string; durationMin: number; previewStartMin: number } | null>>;
+    setDragMove: React.Dispatch<React.SetStateAction<{ taskId: string; slotIndex: number; durationMin: number; previewStartMin: number } | null>>;
     setSchedule: ReturnType<typeof useScheduleDB>["setSchedule"];
     activeDay: string;
     isViewingToday: boolean;
@@ -973,6 +997,7 @@ export default function ScheduleApp() {
     task: Task,
     layoutStart: number,
     layoutEnd: number,
+    slotIndex = 0,
   ) => {
     e.stopPropagation(); // prevent grid drag-create from firing
     if (!dragHelpersRef.current.isViewingToday) return;
@@ -990,6 +1015,7 @@ export default function ScheduleApp() {
 
     moveDragRef.current = {
       taskId: task.id,
+      slotIndex,
       task,
       durationMin,
       grabOffsetMin,
@@ -997,7 +1023,7 @@ export default function ScheduleApp() {
         if (!moveDragRef.current || moveDragRef.current.taskId !== task.id) return;
         moveDragRef.current.dragging = true;
         haptic("medium");
-        dragHelpersRef.current.setDragMove({ taskId: task.id, durationMin, previewStartMin: layoutStart });
+        dragHelpersRef.current.setDragMove({ taskId: task.id, slotIndex, durationMin, previewStartMin: layoutStart });
       }, LONG_PRESS_MS),
       dragging: false,
       startClientY: e.clientY,
@@ -1117,7 +1143,7 @@ export default function ScheduleApp() {
 
       // Drag-move commit
       if (moveDragRef.current && moveDragRef.current.pointerId === e.pointerId) {
-        const { longPressTimer, dragging, currentPreviewStartMin, durationMin, task, isCheckbox } =
+        const { longPressTimer, dragging, currentPreviewStartMin, durationMin, task, isCheckbox, slotIndex } =
           moveDragRef.current;
         if (longPressTimer) clearTimeout(longPressTimer);
         moveDragRef.current = null;
@@ -1127,7 +1153,7 @@ export default function ScheduleApp() {
           // Tap on the card body marks the task done (mobile timeline). Taps on
           // the checkbox / subtasks pill run their own handlers (isCheckbox =
           // any aria-labeled control), so they're skipped here to avoid double-firing.
-          if (!isCheckbox) h.toggleTask(task);
+          if (!isCheckbox) h.toggleTask(task, slotIndex, getSlots(task).length > 1);
           return;
         }
         e.preventDefault();
@@ -1142,8 +1168,11 @@ export default function ScheduleApp() {
             ...prev,
             activities: {
               ...prev.activities,
+              // retimeSlot moves only the dragged phase and re-applies the slot
+              // invariant, so dragging one block of a multi-slot task can't
+              // clobber its siblings.
               [day]: (acts[day] ?? []).map((t: Task) =>
-                t.id !== task.id ? t : { ...t, startTime: newStartTime, endTime: newEndTime },
+                t.id !== task.id ? t : retimeSlot(t, slotIndex, newStartTime, newEndTime),
               ),
             },
           };
@@ -2008,8 +2037,12 @@ export default function ScheduleApp() {
     snapAndClamp,
     openCreateSheetWithTime,
     openEditSheet,
-    toggleTask: (task: Task) => {
+    toggleTask: (task: Task, slotIndex = 0, isMultiSlot = false) => {
       haptic("light");
+      if (isMultiSlot) {
+        handleToggleSlot(task.id, slotIndex, activeDay, activeDateISO);
+        return;
+      }
       handleToggleTaskComplete(task.id, taskEffectiveItemIds(task), activeDay, activeDateISO);
     },
     setDragCreate,
@@ -2316,40 +2349,53 @@ export default function ScheduleApp() {
   // renderTimelineTaskCard used, but with a stable identity so cards don't
   // re-render during a drag). Recreated only when the active day/date changes.
   const handleTimelineToggle = useCallback(
-    (task: Task) => {
+    (task: Task, slotIndex = 0, isMultiSlot = false) => {
       haptic("light");
+      if (isMultiSlot) {
+        handleToggleSlot(task.id, slotIndex, activeDay, activeDateISO);
+        return;
+      }
       handleToggleTaskComplete(task.id, taskEffectiveItemIds(task), activeDay, activeDateISO);
     },
-    [handleToggleTaskComplete, taskEffectiveItemIds, activeDay, activeDateISO]
+    [handleToggleTaskComplete, handleToggleSlot, taskEffectiveItemIds, activeDay, activeDateISO]
   );
 
   const timelineTaskLayouts = useMemo(() => {
+    // One interval per SLOT, not per task — a multi-slot task occupies several
+    // separate blocks on the day (mirrors WeekGrid.buildDayLayout on desktop).
     const intervals = dayTasksView
-      .map((task) => {
-        const parsedStart = parseTimeToMinutes(task.startTime);
-        const start = parsedStart === null
-          ? timelineStartMinutes
-          : mapMinutesToTimeline(parsedStart, timelineStartMinutes, timelineEndMinutes);
-        const parsedEnd = parseTimeToMinutes(task.endTime);
-        let end = parsedEnd === null
-          ? start + 30
-          : mapMinutesToTimeline(parsedEnd, timelineStartMinutes, timelineEndMinutes);
-        while (end <= start) end += 1440;
-        const isOvernight = end >= 1440;
-        const cs = clamp(start, timelineStartMinutes, timelineEndMinutes);
-        const ce = clamp(Math.max(end, cs + 15), timelineStartMinutes, timelineEndMinutes);
-        return {
-          task,
-          color: getTaskPresentation(task).color,
-          start: cs,
-          end: ce,
-          isOvernight,
-          isTruncated: isOvernight && end > timelineEndMinutes,
-          top: TIMELINE_TOP_PADDING + ((cs - timelineStartMinutes) / 60) * HOUR_HEIGHT,
-          height: ((ce - cs) / 60) * HOUR_HEIGHT,
-          lane: 0,
-          laneCount: 1,
-        };
+      .flatMap((task) => {
+        const slots = getSlots(task);
+        const isMultiSlot = slots.length > 1;
+        return slots.map((slot, slotIndex) => {
+          const parsedStart = parseTimeToMinutes(slot.startTime);
+          const start = parsedStart === null
+            ? timelineStartMinutes
+            : mapMinutesToTimeline(parsedStart, timelineStartMinutes, timelineEndMinutes);
+          const parsedEnd = parseTimeToMinutes(slot.endTime);
+          let end = parsedEnd === null
+            ? start + 30
+            : mapMinutesToTimeline(parsedEnd, timelineStartMinutes, timelineEndMinutes);
+          while (end <= start) end += 1440;
+          const isOvernight = end >= 1440;
+          const cs = clamp(start, timelineStartMinutes, timelineEndMinutes);
+          const ce = clamp(Math.max(end, cs + 15), timelineStartMinutes, timelineEndMinutes);
+          return {
+            task,
+            slot,
+            slotIndex,
+            isMultiSlot,
+            color: getTaskPresentation(task).color,
+            start: cs,
+            end: ce,
+            isOvernight,
+            isTruncated: isOvernight && end > timelineEndMinutes,
+            top: TIMELINE_TOP_PADDING + ((cs - timelineStartMinutes) / 60) * HOUR_HEIGHT,
+            height: ((ce - cs) / 60) * HOUR_HEIGHT,
+            lane: 0,
+            laneCount: 1,
+          };
+        });
       })
       .sort((a, b) => a.start - b.start || a.end - b.end || a.task.title.localeCompare(b.task.title));
 
@@ -2413,21 +2459,38 @@ export default function ScheduleApp() {
     cardClassName: string,
     cardSize: CardSize = "large",
     isOvernight = false,
-    isTruncated = false
+    isTruncated = false,
+    slotIndex?: number
   ) {
     // Unified visual: the shared TaskBlockCard (same component as the desktop
     // week grid + the mobile list). Size tiers map to its grid variants.
     const { linkedPlan } = getTaskPresentation(task);
-    const duration = formatTaskDuration(task.startTime, task.endTime);
+    const slots = getSlots(task);
+    const isMultiSlot = slots.length > 1 && slotIndex !== undefined;
+    const slot = isMultiSlot ? slots[slotIndex] : undefined;
+    const duration = slot
+      ? formatTaskDuration(slot.startTime, slot.endTime)
+      : formatTaskDuration(task.startTime, task.endTime);
     const subtaskSummary = getTaskSubtaskSummary(task, linkedPlan);
     const allSubtaskIds = subtaskSummary.hasItems ? getTaskCheckableItems(task, linkedPlan).map((i) => i.id) : [];
-    const taskState = resolveTaskState(task, subtaskSummary.totalCount);
-    const toggle = () => { haptic("light"); handleToggleTaskComplete(task.id, allSubtaskIds, activeDay, activeDateISO); };
+    const taskState = isMultiSlot
+      ? task.missed
+        ? "missed"
+        : (task.completedSlotIndices ?? []).includes(slotIndex)
+        ? "completed"
+        : "incomplete"
+      : resolveTaskState(task, subtaskSummary.totalCount);
+    const toggle = () => {
+      haptic("light");
+      if (isMultiSlot) handleToggleSlot(task.id, slotIndex, activeDay, activeDateISO);
+      else handleToggleTaskComplete(task.id, allSubtaskIds, activeDay, activeDateISO);
+    };
     void cardClassName; void isOvernight; void isTruncated;
 
     return (
       <TaskBlockCard
         variant="grid"
+        slotOverride={slot}
         task={task}
         plan={linkedPlan}
         state={taskState}
@@ -3212,10 +3275,10 @@ export default function ScheduleApp() {
                         <div className="absolute inset-0">
                           {timelineTaskLayouts.map((layout) => (
                             <TimelineTaskBlock
-                              key={layout.task.id}
+                              key={`${layout.task.id}-${layout.slotIndex}`}
                               layout={layout}
                               plan={layout.task.planId ? plansById.get(layout.task.planId) ?? null : null}
-                              isBeingMoved={dragMove?.taskId === layout.task.id}
+                              isBeingMoved={dragMove?.taskId === layout.task.id && dragMove?.slotIndex === layout.slotIndex}
                               isViewingToday={isViewingToday}
                               onPointerDown={handleTaskPointerDown}
                               onToggle={handleTimelineToggle}
@@ -3257,11 +3320,19 @@ export default function ScheduleApp() {
                                 style={{ top, height, opacity: 0.93 }}
                               >
                                 {renderTimelineTaskCard(
-                                  { ...movingTask, startTime: minutesToDisplayTime(dragMove.previewStartMin), endTime: minutesToDisplayTime(dragMove.previewStartMin + dragMove.durationMin) },
+                                  // Preview only the dragged phase at its new time — retimeSlot
+                                  // keeps the other slots where they are.
+                                  retimeSlot(
+                                    movingTask,
+                                    dragMove.slotIndex,
+                                    minutesToDisplayTime(dragMove.previewStartMin),
+                                    minutesToDisplayTime(dragMove.previewStartMin + dragMove.durationMin),
+                                  ),
                                   "h-full rounded-[8px] px-2 py-1.5 w-full min-w-0 overflow-hidden border border-neutral-300 dark:border-white/20",
                                   cardSize,
                                   false,
-                                  false
+                                  false,
+                                  dragMove.slotIndex,
                                 )}
                               </div>
                             );
@@ -3414,6 +3485,7 @@ export default function ScheduleApp() {
                 onNavigate={(tab) => { setActiveTab(tab); setSelectedPlanId(null); }}
                 onToggleTask={(task) => handleToggleTaskComplete(task.id, taskEffectiveItemIds(task), todayKey, todayISO())}
                 onToggleSubtask={(id, subtaskId) => handleToggleSubtask(id, subtaskId, todayKey, todayISO())}
+                onToggleSlot={(id, slotIndex) => handleToggleSlot(id, slotIndex, todayKey, todayISO())}
                 onOpenSubtasks={(task) => setSubtasksRef({ id: task.id, day: todayKey, dateISO: todayISO() })}
               />
             ) : (

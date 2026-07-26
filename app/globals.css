@@ -57,13 +57,20 @@ textarea {
   font-size: max(16px, 1em) !important;
 }
 
-select,
+/* The native dropdown LIST needs an explicit surface — an unstyled <option>
+   can render white-on-white in dark mode.
+   Scope this to <option> only. Applying it to <select> as well silently
+   overrode every styled select's own surface: the dark variant compiles to
+   `:where(.dark, .dark *)` (zero specificity, see @custom-variant above), so a
+   plain `.dark select` rule out-specifies `dark:bg-*` utilities. That made
+   selects render a different fill than the text/date inputs beside them.
+   The closed control gets its surface from its own classes; `color-scheme: dark`
+   (set on the control and on <html>) keeps the native chrome dark. */
 option {
   background-color: var(--color-background);
   color: var(--color-foreground);
 }
 
-.dark select,
 .dark option {
   background-color: #111827;
   color: #f8fafc;

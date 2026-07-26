@@ -48,7 +48,8 @@ import {
   resetStaleCompletions,
 } from "@/lib/useScheduleDB";
 import { useScheduleDB } from "@/lib/useScheduleDB";
-import { colorFromIcon } from "@/lib/colorSystem";
+import { colorFromIcon, categoryHex, resolveAccentColor } from "@/lib/colorSystem";
+import { SECTION_ICONS } from "@/components/SectionIcons";
 import { useReminders } from "@/lib/useReminders";
 import { bootLog, isIOSSafeMode, isStandalonePWA } from "@/lib/iosSafeMode";
 import { todayISO, localISODate, addDaysToISO, formatDate } from "@/lib/dateUtils";
@@ -1413,6 +1414,8 @@ export default function IOSScheduleApp() {
                 const range = plan.startDate || plan.endDate
                   ? `${plan.startDate ? formatDate(plan.startDate) : "Anytime"}${plan.endDate ? ` - ${formatDate(plan.endDate)}` : ""}`
                   : "No date range";
+                const PlanIcon = (SECTION_ICONS.find((entry) => entry.name === plan.emoji) ?? SECTION_ICONS[0]).icon;
+                const planHex = categoryHex(resolveAccentColor(plan.color, plan.emoji));
                 return (
                   <button
                     key={plan.id}
@@ -1420,12 +1423,18 @@ export default function IOSScheduleApp() {
                     onClick={() => setSelectedPlanId(plan.id)}
                     className="w-full rounded-2xl border border-neutral-200 bg-white p-4 text-left dark:border-white/[0.08] dark:bg-neutral-900"
                   >
-                    <div className="mb-3 flex items-start justify-between gap-3">
-                      <div className="min-w-0">
+                    <div className="mb-3 flex items-start gap-3">
+                      <span
+                        className="grid h-11 w-11 shrink-0 place-items-center rounded-xl"
+                        style={{ backgroundColor: `${planHex}1F`, color: planHex }}
+                      >
+                        <PlanIcon size={22} strokeWidth={2} />
+                      </span>
+                      <div className="min-w-0 flex-1">
                         <p className="truncate text-[17px] font-black text-neutral-950 dark:text-white">{plan.title}</p>
                         <p className="mt-1 truncate text-[13px] font-semibold text-neutral-500 dark:text-neutral-400">{range}</p>
                       </div>
-                      <span className="rounded-full bg-neutral-100 px-2.5 py-1 text-[12px] font-bold text-neutral-500 dark:bg-white/[0.07] dark:text-neutral-300">{taskCount} tasks</span>
+                      <span className="shrink-0 rounded-full bg-neutral-100 px-2.5 py-1 text-[12px] font-bold text-neutral-500 dark:bg-white/[0.07] dark:text-neutral-300">{taskCount} tasks</span>
                     </div>
                     {plan.description && <p className="line-clamp-2 text-[13px] font-medium leading-snug text-neutral-500 dark:text-neutral-400">{plan.description}</p>}
                   </button>

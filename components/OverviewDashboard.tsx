@@ -8,6 +8,7 @@ import {
   IconChartLine,
   IconCheck,
   IconChecklist,
+  IconClock,
   IconClipboardList,
   IconListCheck,
   IconFlame,
@@ -22,6 +23,7 @@ import {
 } from "@tabler/icons-react";
 import type { DayKey, Plan, ProgressTracker, Schedule, Task } from "@/lib/useScheduleDB";
 import { getTaskCheckableItems, getTaskSubtaskSummary, isTaskCompleted, isTaskResolved } from "@/lib/taskCompletion";
+import { getSlots } from "@/lib/taskMutations";
 import { getPlanCardStats } from "@/lib/planInsights";
 import { PLAN_NEUTRAL } from "@/lib/colorSystem";
 import ExecutionStreakBanner from "@/components/ExecutionStreakBanner";
@@ -535,6 +537,17 @@ function TodayTaskListCard({
             const isDone = isTaskCompleted(task, subTotal);
             const isMissed = !isDone && !!task.missed;
             const plan = plans.find((p) => p.id === task.planId);
+            // Multi-slot tasks run in several phases today; the summary shows
+            // every start time and how many phases are left, so the dashboard
+            // never under-reports the day. Checking off individual phases
+            // happens on Today (the execution surface), not here.
+            const slots = getSlots(task);
+            const isMultiSlot = slots.length > 1;
+            const slotsDone = isMultiSlot
+              ? isDone
+                ? slots.length
+                : new Set(task.completedSlotIndices ?? []).size
+              : 0;
             return (
               <div key={task.id} className="flex items-center gap-3 py-3.5">
                 <TaskStatusButton
@@ -554,12 +567,23 @@ function TodayTaskListCard({
                   </p>
                   {(task.startTime || plan) && (
                     <p className="mt-1 truncate text-[12px] font-medium text-neutral-500 dark:text-neutral-400">
-                      {task.startTime && formatTime(task.startTime)}
+                      {isMultiSlot
+                        ? slots.map((s) => formatTime(s.startTime)).join(" · ")
+                        : task.startTime && formatTime(task.startTime)}
                       {task.startTime && plan && " - "}
                       {plan && plan.title}
                     </p>
                   )}
                 </div>
+                {isMultiSlot && (
+                  <span
+                    aria-label={`${slotsDone} of ${slots.length} phases done`}
+                    className="inline-flex min-h-[36px] shrink-0 items-center gap-1.5 rounded-full border border-neutral-200 px-2.5 text-neutral-500 dark:border-white/[0.10] dark:text-neutral-400"
+                  >
+                    <IconClock size={14} strokeWidth={2} className="shrink-0" />
+                    <span className="text-[12px] font-bold tabular-nums">{slotsDone}/{slots.length}</span>
+                  </span>
+                )}
                 {subTotal > 0 && (
                   <button
                     type="button"

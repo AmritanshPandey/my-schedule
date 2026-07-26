@@ -57,6 +57,29 @@ export function withSlots<T extends Task | Omit<Task, "id">>(task: T): T {
   return { ...task, slots: sorted, startTime: first.startTime, endTime: first.endTime };
 }
 
+/**
+ * Retime one slot of a task, preserving every other slot. Use this instead of
+ * writing `startTime`/`endTime` directly whenever a task may be multi-slot —
+ * a bare `{...task, startTime, endTime}` would move the mirrored first block
+ * while leaving `slots` stale, silently breaking the mirror invariant.
+ *
+ * `withSlots` re-sorts afterwards, so dragging a later phase earlier than an
+ * earlier one reorders cleanly and startTime/endTime still mirror slots[0].
+ */
+export function retimeSlot<T extends Task | Omit<Task, "id">>(
+  task: T,
+  slotIndex: number,
+  startTime: string,
+  endTime: string
+): T {
+  const slots = getSlots(task);
+  if (slots.length <= 1) {
+    return withSlots({ ...task, slots: undefined, startTime, endTime });
+  }
+  const next = slots.map((slot, i) => (i === slotIndex ? { startTime, endTime } : slot));
+  return withSlots({ ...task, slots: next });
+}
+
 // ── Time format converters — re-exported from timeUtils for convenience ───────
 
 export { displayToInputTime, inputToDisplayTime } from "./timeUtils";
