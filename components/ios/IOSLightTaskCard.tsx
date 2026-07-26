@@ -4,7 +4,8 @@ import { IconArrowUpRight, IconEdit, IconListCheck } from "@tabler/icons-react";
 import { TaskBlockCard } from "@/components/TaskBlockCard";
 import type { Plan, Task } from "@/lib/useScheduleDB";
 import { calculateTaskProgress, getTaskCheckableItems, getTaskSubtaskSummary, resolveTaskState } from "@/lib/taskCompletion";
-import { formatDuration } from "@/lib/timeUtils";
+import { formatSlotsDuration } from "@/lib/timeUtils";
+import { getSlots } from "@/lib/taskMutations";
 import { haptic } from "@/lib/haptics";
 
 interface IOSLightTaskCardProps {
@@ -12,6 +13,8 @@ interface IOSLightTaskCardProps {
   linkedPlan: Plan | null;
   readOnly?: boolean;
   onToggleComplete: (taskId: string, allSubtaskIds: string[]) => void;
+  /** Independent per-phase toggle for a multi-slot task (same-day multiple time blocks). */
+  onToggleSlot?: (taskId: string, slotIndex: number) => void;
   onEdit: () => void;
   onOpenSubtasks?: () => void;
 }
@@ -21,6 +24,7 @@ export default function IOSLightTaskCard({
   linkedPlan,
   readOnly = false,
   onToggleComplete,
+  onToggleSlot,
   onEdit,
   onOpenSubtasks,
 }: IOSLightTaskCardProps) {
@@ -31,7 +35,15 @@ export default function IOSLightTaskCard({
   const { completedCount, totalCount } = task.taskType === "session"
     ? summary
     : calculateTaskProgress(task, itemCount);
-  const duration = formatDuration(task.startTime, task.endTime);
+  const slots = getSlots(task);
+  const isMultiSlot = slots.length > 1;
+  const slotCompletions = isMultiSlot && onToggleSlot
+    ? slots.map((_, i) => ({
+        done: (task.completedSlotIndices ?? []).includes(i),
+        onToggle: () => onToggleSlot(task.id, i),
+      }))
+    : undefined;
+  const duration = formatSlotsDuration(slots);
   const hasItems = itemCount > 0;
 
   const trailing = (
@@ -75,12 +87,13 @@ export default function IOSLightTaskCard({
       state={state}
       duration={duration}
       readOnly={readOnly}
+      slotCompletions={slotCompletions}
       onToggle={() => {
         haptic("medium");
         onToggleComplete(task.id, allSubtaskIds);
       }}
       onClick={() => {
-        if (!readOnly) {
+        if (!readOnly && !slotCompletions) {
           haptic("light");
           onToggleComplete(task.id, allSubtaskIds);
         }

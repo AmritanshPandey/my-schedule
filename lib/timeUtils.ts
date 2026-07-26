@@ -138,6 +138,42 @@ export function formatDuration(startTime: string, endTime: string): string | nul
 }
 
 /**
+ * Total duration across a list of time blocks (slots), summed. Each block's
+ * duration is computed like formatDuration (handling overnight). Blocks that
+ * can't be parsed are skipped. Returns null if nothing parses.
+ */
+export function formatSlotsDuration(
+  slots: ReadonlyArray<{ startTime: string; endTime: string }>
+): string | null {
+  let total = 0;
+  let any = false;
+  for (const slot of slots) {
+    const start = parseTimeToMinutes(slot.startTime);
+    let end = parseTimeToMinutes(slot.endTime);
+    if (start === null || end === null) continue;
+    if (end < start) end += 1440; // overnight
+    const d = end - start;
+    if (d <= 0) continue;
+    total += d;
+    any = true;
+  }
+  if (!any) return null;
+  return formatMinutes(total);
+}
+
+/**
+ * Render a list of time blocks as a compact combined range string, e.g.
+ * "9:00 AM – 10:00 AM · 3:00 PM – 4:00 PM". Uses formatDisplayTime per bound.
+ */
+export function formatSlotsRange(
+  slots: ReadonlyArray<{ startTime: string; endTime: string }>
+): string {
+  return slots
+    .map((s) => `${formatDisplayTime(s.startTime)} – ${formatDisplayTime(s.endTime)}`)
+    .join(" · ");
+}
+
+/**
  * Return a human-readable duration from raw minutes.
  */
 export function formatMinutes(total: number): string {

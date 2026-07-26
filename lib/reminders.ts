@@ -15,6 +15,7 @@
 import type { Schedule, Task } from "@/lib/useScheduleDB";
 import type { DayKey } from "@/lib/scheduleConstants";
 import { isTaskScheduledOn, resolveOccurrence } from "@/lib/taskOccurrence";
+import { getSlots } from "@/lib/taskMutations";
 import { parseTimeToMinutes, formatDisplayTime } from "@/lib/timeUtils";
 import { localISODate } from "@/lib/dateUtils";
 
@@ -123,15 +124,18 @@ export function collectReminders(schedule: Schedule, now = new Date()): PendingR
       if (taskIsDone(task)) continue;
       if (!isTaskScheduledOn(task, todayISO, true)) continue;
       const occ = resolveOccurrence(task, todayISO);
-      const startMin = parseTimeToMinutes(occ.startTime);
-      if (startMin == null) continue;
-      const atMs = msAt(todayISO, startMin);
-      if (atMs <= nowMs) continue;
-      out.push({
-        atMs,
-        tag: `planr-task-${task.id}-${todayISO}`,
-        title: occ.title,
-        body: `Starts now · ${formatDisplayTime(occ.startTime)}`,
+      // One reminder per phase — a multi-slot task fires at each start time.
+      getSlots(occ).forEach((slot, index) => {
+        const startMin = parseTimeToMinutes(slot.startTime);
+        if (startMin == null) return;
+        const atMs = msAt(todayISO, startMin);
+        if (atMs <= nowMs) return;
+        out.push({
+          atMs,
+          tag: `planr-task-${task.id}-${todayISO}-${index}`,
+          title: occ.title,
+          body: `Starts now · ${formatDisplayTime(slot.startTime)}`,
+        });
       });
     }
   }

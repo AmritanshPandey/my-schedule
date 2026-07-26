@@ -36,6 +36,7 @@ const SubtasksSheet = dynamic(() => import("@/components/activity/SubtasksSheet"
 const TaskDetailView = dynamic(() => import("@/components/activity/TaskDetailView"), { ssr: false });
 const BulkImportSheet = dynamic(() => import("@/components/BulkImportSheet"), { ssr: false });
 const DayWallpaperSheet = dynamic(() => import("@/components/DayWallpaperSheet"), { ssr: false });
+const DayActionsSheet = dynamic(() => import("@/components/DayActionsSheet"), { ssr: false });
 const RitualView = dynamic(() => import("@/components/activity/RitualView"), { ssr: false });
 const OverviewDashboard = dynamic(() => import("@/components/OverviewDashboard"), { ssr: false });
 const TrackerQuickBar = dynamic(() => import("@/components/TrackerQuickBar"), { ssr: false });
@@ -57,6 +58,7 @@ import {
   StrategyAsset,
   SummaryConfig,
   Task,
+  TaskSlot,
   categoryFromIcon,
   resetStaleCompletions,
 } from "@/lib/useScheduleDB";
@@ -75,6 +77,7 @@ import {
   IconChecklist,
   IconChevronRight,
   IconClipboardList,
+  IconDotsVertical,
   IconEdit,
   IconLayoutList,
   IconMinus,
@@ -105,6 +108,7 @@ import { taskLaneStyle } from "@/lib/timeline/taskLaneStyle";
 import {
   toggleTaskComplete,
   toggleSubtaskComplete,
+  toggleSlotComplete,
   markTaskMissed,
   snoozeTaskLater,
   completionForDate,
@@ -122,8 +126,12 @@ import {
   uid,
   sortTasksByTime,
   updateTaskDays,
+  updateTaskPerDay,
+  swapDays,
+  duplicateDay,
   setTaskException,
   clearTaskException,
+  getSlots,
   type TaskDeleteScope,
 } from "@/lib/taskMutations";
 import { isTaskScheduledOn, resolveOccurrence, diffException } from "@/lib/taskOccurrence";
@@ -679,6 +687,7 @@ export default function ScheduleApp() {
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [templatesOpen, setTemplatesOpen] = useState(false);
   const [wallpaperOpen, setWallpaperOpen] = useState(false);
+  const [dayActionsOpen, setDayActionsOpen] = useState(false);
   const [sessionTask, setSessionTask] = useState<Task | null>(null);
   // Task whose subtasks are shown in the bottom sheet — stored by id+day so the
   // sheet always reflects the live task (completion updates create new objects).
@@ -1215,8 +1224,12 @@ export default function ScheduleApp() {
       return;
     }
     if (data.taskId) {
-      // Edit mode
-      setSchedule(updateTaskDays(data.taskId, data.taskDraft, data.repeatDays, data.planItems));
+      // Edit mode — custom-per-day writes each weekday its own slots.
+      if (data.perDaySlots) {
+        setSchedule(updateTaskPerDay(data.taskId, data.taskDraft, data.perDaySlots, data.repeatDays, data.planItems));
+      } else {
+        setSchedule(updateTaskDays(data.taskId, data.taskDraft, data.repeatDays, data.planItems));
+      }
     } else {
       // Create mode
       setSchedule(createTask(data.taskDraft, data.repeatDays, data.planItems));
@@ -1324,6 +1337,28 @@ export default function ScheduleApp() {
             const linkedPlan = t.planId ? prev.plans.find((plan) => plan.id === t.planId) ?? null : null;
             const totalSubtasks = getTaskSubtaskSummary(t, linkedPlan).totalCount;
             return { ...t, ...toggleSubtaskComplete(t, subtaskId, totalSubtasks) };
+          }),
+        },
+      }));
+    },
+    [activeDay, setSchedule]
+  );
+
+  // Independent completion for one phase of a multi-slot task (same-day
+  // multiple time blocks) — mirrors handleToggleSubtask, keyed by slot index.
+  const handleToggleSlot = useCallback(
+    (taskId: string, slotIndex: number, day: DayKey = activeDay, dateISO?: string) => {
+      if (dateISO && dateISO !== todayISO()) return; // read-only past/future
+      haptic("light");
+      setSchedule((prev) => ({
+        ...prev,
+        activities: {
+          ...prev.activities,
+          [day]: (prev.activities[day] ?? []).map((t) => {
+            if (t.id !== taskId) return t;
+            const linkedPlan = t.planId ? prev.plans.find((plan) => plan.id === t.planId) ?? null : null;
+            const totalSubtasks = getTaskSubtaskSummary(t, linkedPlan).totalCount;
+            return { ...t, ...toggleSlotComplete(t, slotIndex, totalSubtasks) };
           }),
         },
       }));
@@ -2418,10 +2453,25 @@ export default function ScheduleApp() {
     readOnly: boolean,
     onToggle: () => void,
     onDelete: () => void,
+    slot?: TaskSlot,
+    slotIndex?: number,
   ) {
     const { linkedPlan } = getTaskPresentation(task);
-    const duration = formatTaskDuration(task.startTime, task.endTime);
-    const taskState = resolveTaskState(task, getTaskSubtaskSummary(task, linkedPlan).totalCount);
+    // Grid blocks are per-slot: show this slot's own duration.
+    const duration = slot
+      ? formatTaskDuration(slot.startTime, slot.endTime)
+      : formatTaskDuration(task.startTime, task.endTime);
+    // A multi-slot task completes per phase — this block's state reflects just
+    // its own slot, not the whole task (which only flips once every slot is done).
+    const totalSlots = getSlots(task).length;
+    const taskState =
+      totalSlots > 1 && slotIndex !== undefined
+        ? task.missed
+          ? "missed"
+          : (task.completedSlotIndices ?? []).includes(slotIndex)
+          ? "completed"
+          : "incomplete"
+        : resolveTaskState(task, getTaskSubtaskSummary(task, linkedPlan).totalCount);
     return (
       <TaskBlockCard
         variant="grid"
@@ -2429,6 +2479,7 @@ export default function ScheduleApp() {
         plan={linkedPlan}
         state={taskState}
         duration={duration}
+        slotOverride={slot}
         readOnly={readOnly}
         compact={height < 56}
         narrow={widthPct < 60 || height < 88}
@@ -2673,6 +2724,14 @@ export default function ScheduleApp() {
         todayKey={todayKey}
       />
 
+      <DayActionsSheet
+        open={dayActionsOpen}
+        sourceDay={activeDay}
+        onClose={() => setDayActionsOpen(false)}
+        onSwap={(target) => setSchedule(swapDays(activeDay, target))}
+        onDuplicate={(targets) => setSchedule(duplicateDay(activeDay, targets))}
+      />
+
       {/* ── Content ────────────────────────────────────────────────────────── */}
       {/* paddingTop offsets the fixed header (64px) + iOS safe-area inset — mobile only.
           (Tailwind arbitrary value so `lg:pt-0` can actually override it; an inline
@@ -2753,6 +2812,7 @@ export default function ScheduleApp() {
                 calendarView={calendarView}
                 customDays={customDays}
                 onDaySelect={setActiveDay}
+                onDayActions={(day) => { setActiveDay(day); setDayActionsOpen(true); }}
                 onCreateTaskAtTime={(day, startMin, endMin) => openCreateSheetWithTime(startMin, endMin, day)}
                 onWeekPrev={() => {
                   if (calendarView === "1day") navigateByDays(-1);
@@ -2770,6 +2830,7 @@ export default function ScheduleApp() {
                 onEditTask={openEditSheet}
                 onDeleteTask={requestDeleteTask}
                 onToggleTaskComplete={handleToggleTaskComplete}
+                onToggleSlot={handleToggleSlot}
                 renderCard={renderWeekCard}
               />
             </div>
@@ -2888,6 +2949,15 @@ export default function ScheduleApp() {
                 </h1>
                 <div className="flex items-center gap-2.5">
                   <IconButton
+                    label="Day actions"
+                    variant="soft"
+                    size="sm"
+                    radius="full"
+                    onClick={() => { haptic("light"); setDayActionsOpen(true); }}
+                  >
+                    <IconDotsVertical size={15} strokeWidth={2} />
+                  </IconButton>
+                  <IconButton
                     label="Lock screen wallpaper"
                     variant="soft"
                     size="sm"
@@ -2966,6 +3036,7 @@ export default function ScheduleApp() {
                                       editMode
                                       onToggleComplete={handleToggleTaskComplete}
                                       onToggleSubtask={handleToggleSubtask}
+                                      onToggleSlot={handleToggleSlot}
                                       onEdit={() => openEditSheet(task)}
                                       onDelete={() => requestDeleteTask(task.id, activeDay)}
                                     />
@@ -2989,6 +3060,7 @@ export default function ScheduleApp() {
                                 readOnly={!isViewingToday}
                                 onToggleComplete={(id, ids) => handleToggleTaskComplete(id, ids, activeDay, activeDateISO)}
                                 onToggleSubtask={(id, sub) => handleToggleSubtask(id, sub, activeDay, activeDateISO)}
+                                onToggleSlot={(id, slotIndex) => handleToggleSlot(id, slotIndex, activeDay, activeDateISO)}
                                 onEdit={() => openEditSheet(task)}
                                 onDelete={() => requestDeleteTask(task.id, activeDay)}
                                 onOpenSubtasks={() => setSubtasksRef({ id: task.id, day: activeDay, dateISO: activeDateISO })}
@@ -3457,6 +3529,7 @@ export default function ScheduleApp() {
           plans={schedule.plans}
           activeDay={activeDay}
           activeDays={taskSheetActiveDays}
+          activities={schedule.activities}
           isOpen={taskSheetOpen}
           initialPlanId={taskSheetPlanId}
           initialTaskType={taskSheetInitialType}

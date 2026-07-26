@@ -5,7 +5,7 @@
  * can pass it directly to setSchedule(). No component logic lives here.
  */
 
-import type { Schedule, Task, TaskException } from "./useScheduleDB";
+import type { Schedule, Task, TaskException, TaskSlot } from "./useScheduleDB";
 import { DAYS, type DayKey } from "./scheduleConstants";
 import { uid } from "./id";
 import { localISODate } from "./dateUtils";
@@ -14,6 +14,48 @@ import type { ScheduleEntry } from "@/components/ScheduleItem";
 import { colorFromIcon } from "./colorSystem";
 
 export { uid } from "./id";
+export type { TaskSlot } from "./useScheduleDB";
+
+// ── Slots ─────────────────────────────────────────────────────────────────────
+
+/**
+ * The task's time blocks as a non-empty array. Tasks without an explicit `slots`
+ * list expose their single startTime/endTime block. Use this everywhere that
+ * renders or reasons about a task's time so single- and multi-slot tasks share
+ * one code path.
+ */
+export function getSlots(task: Pick<Task, "startTime" | "endTime" | "slots">): TaskSlot[] {
+  return task.slots && task.slots.length > 0
+    ? task.slots
+    : [{ startTime: task.startTime, endTime: task.endTime }];
+}
+
+/**
+ * Enforce the slot invariant on a task: slots are sorted by start time and
+ * startTime/endTime always mirror the earliest slot. A single-block task is
+ * stored without a `slots` field (kept clean / back-compatible).
+ */
+export function withSlots<T extends Task | Omit<Task, "id">>(task: T): T {
+  const slots = task.slots;
+  if (!slots || slots.length === 0) {
+    const { slots: _drop, ...rest } = task as T & { slots?: TaskSlot[] };
+    return rest as T;
+  }
+  const sorted = [...slots].sort((a, b) => {
+    const am = parseTimeToMinutes(a.startTime);
+    const bm = parseTimeToMinutes(b.startTime);
+    if (am === null && bm === null) return 0;
+    if (am === null) return 1;
+    if (bm === null) return -1;
+    return toScheduleDayMinutes(am) - toScheduleDayMinutes(bm);
+  });
+  const first = sorted[0];
+  if (sorted.length === 1) {
+    const { slots: _drop, ...rest } = task as T & { slots?: TaskSlot[] };
+    return { ...rest, startTime: first.startTime, endTime: first.endTime } as T;
+  }
+  return { ...task, slots: sorted, startTime: first.startTime, endTime: first.endTime };
+}
 
 // ── Time format converters — re-exported from timeUtils for convenience ───────
 
@@ -40,8 +82,17 @@ export interface TaskDeleteSnapshot {
 }
 
 function reconcileEditedTask(existing: Task, updates: Omit<Task, "id">): Task {
-  const merged = { ...existing, ...updates };
+  const merged = withSlots({ ...existing, ...updates });
   if (updates.taskType === "session") return merged;
+
+  // Drop any completed-slot index that no longer exists after the edit (e.g. a
+  // slot was removed), and fold slot-completeness into whether the task as a
+  // whole stays "completed".
+  const totalSlots = getSlots(merged).length;
+  const completedSlotIndices = Array.from(new Set(existing.completedSlotIndices ?? [])).filter(
+    (i) => i < totalSlots
+  );
+  const slotsStayDone = totalSlots <= 1 || completedSlotIndices.length >= totalSlots;
 
   const nextSubtaskIds = new Set(updates.subtasks?.map((subtask) => subtask.id) ?? []);
   const completedSubtaskIds = Array.from(
@@ -51,14 +102,17 @@ function reconcileEditedTask(existing: Task, updates: Omit<Task, "id">): Task {
     nextSubtaskIds.size > 0 && completedSubtaskIds.length === nextSubtaskIds.size
   );
   const staysCompleted =
-    nextSubtaskIds.size === 0
+    (nextSubtaskIds.size === 0
       ? wasCompleted && (existing.subtasks?.length ?? 0) === 0
-      : wasCompleted && completedSubtaskIds.length === nextSubtaskIds.size;
+      : wasCompleted && completedSubtaskIds.length === nextSubtaskIds.size) && slotsStayDone;
   const today = localISODate(new Date());
   const completionHistory = (existing.completionHistory ?? []).filter((event) => {
     if (localISODate(new Date(event.completedAt)) !== today) return true;
     if (event.completionType === "subtask") {
       return !!event.subtaskId && nextSubtaskIds.has(event.subtaskId);
+    }
+    if (event.completionType === "slot") {
+      return event.slotIndex !== undefined && event.slotIndex < totalSlots;
     }
     if (event.completionType === "missed" && event.subtaskId) {
       return nextSubtaskIds.has(event.subtaskId);
@@ -72,6 +126,7 @@ function reconcileEditedTask(existing: Task, updates: Omit<Task, "id">): Task {
     completed: staysCompleted,
     completedAt: staysCompleted ? existing.completedAt : undefined,
     completedSubtaskIds,
+    completedSlotIndices,
     completionHistory,
   };
 }
@@ -87,6 +142,7 @@ export function createTask(
   planItems: PlanItemsUpdate | null
 ): (prev: Schedule) => Schedule {
   const id = uid();
+  const normalizedDraft = withSlots(draft);
   const days = Array.from(new Set(targetDays.length > 0 ? targetDays : ["monday" as DayKey]));
   return (prev) => {
     const plans = planItems
@@ -98,7 +154,7 @@ export function createTask(
     const activities = days.reduce(
       (acc, day) => ({
         ...acc,
-        [day]: [...acc[day], { ...draft, id }],
+        [day]: [...acc[day], { ...normalizedDraft, id }],
       }),
       { ...prev.activities }
     );
@@ -127,7 +183,7 @@ export function updateTask(
     const activities = {
       ...prev.activities,
       [day]: prev.activities[day].map((t) =>
-        t.id === taskId ? { ...t, ...updates } : t
+        t.id === taskId ? withSlots({ ...t, ...updates }) : t
       ),
     };
     return { ...prev, plans, activities };
@@ -165,13 +221,117 @@ export function updateTaskDays(
 
         const updatedTasks = hasTask
           ? existingTasks.map((t) => (t.id === taskId ? reconcileEditedTask(t, updates) : t))
-          : [...existingTasks, { ...updates, id: taskId }];
+          : [...existingTasks, withSlots({ ...updates, id: taskId })];
 
         return [day, updatedTasks];
       })
     ) as Schedule["activities"];
 
     return { ...prev, plans, activities };
+  };
+}
+
+/**
+ * Like updateTaskDays, but applies a different set of slots to each weekday.
+ * Shared (non-time) fields from `updates` are written to every target day; each
+ * day's copy then gets its own slots from `perDaySlots` (falling back to
+ * `updates`' slots/times when a day isn't listed). All copies keep the same id,
+ * so the task stays one recurring task while holding different times per day.
+ */
+export function updateTaskPerDay(
+  taskId: string,
+  updates: Omit<Task, "id">,
+  perDaySlots: Partial<Record<DayKey, TaskSlot[]>>,
+  targetDays: DayKey[],
+  planItems: PlanItemsUpdate | null
+): (prev: Schedule) => Schedule {
+  const days = new Set(targetDays.length > 0 ? targetDays : ["monday" as DayKey]);
+
+  return (prev) => {
+    const plans = planItems
+      ? prev.plans.map((p) =>
+          p.id === planItems.planId ? { ...p, items: planItems.items } : p
+        )
+      : prev.plans;
+
+    const activities = Object.fromEntries(
+      DAYS.map((day) => {
+        const existingTasks = prev.activities[day];
+        const hasTask = existingTasks.some((t) => t.id === taskId);
+
+        if (!days.has(day)) {
+          return [day, existingTasks.filter((t) => t.id !== taskId)];
+        }
+
+        const dayUpdates: Omit<Task, "id"> = { ...updates, slots: perDaySlots[day] ?? updates.slots };
+
+        const updatedTasks = hasTask
+          ? existingTasks.map((t) => (t.id === taskId ? reconcileEditedTask(t, dayUpdates) : t))
+          : [...existingTasks, withSlots({ ...dayUpdates, id: taskId })];
+
+        return [day, updatedTasks];
+      })
+    ) as Schedule["activities"];
+
+    return { ...prev, plans, activities };
+  };
+}
+
+// ── Whole-day operations ────────────────────────────────────────────────────
+
+/** Exchange two weekdays' entire task lists. Forward-looking template op. */
+export function swapDays(a: DayKey, b: DayKey): (prev: Schedule) => Schedule {
+  return (prev) => {
+    if (a === b) return prev;
+    return {
+      ...prev,
+      activities: {
+        ...prev.activities,
+        [a]: prev.activities[b],
+        [b]: prev.activities[a],
+      },
+    };
+  };
+}
+
+/** Strip per-occurrence completion/history so a copied task starts fresh. */
+function freshCopy(task: Task): Task {
+  const {
+    completed: _c,
+    completedAt: _ca,
+    completedSubtaskIds: _cs,
+    completedSlotIndices: _csl,
+    missed: _m,
+    missedAt: _ma,
+    completionHistory: _ch,
+    exceptions: _ex,
+    ...rest
+  } = task;
+  return { ...rest, id: uid() };
+}
+
+/**
+ * Copy a weekday's tasks onto one or more target weekdays as independent copies
+ * (new ids, completion cleared). Recurrence is dropped so copies are plain
+ * weekly on their new day. Copies are appended after any existing tasks.
+ */
+export function duplicateDay(
+  source: DayKey,
+  targets: DayKey[]
+): (prev: Schedule) => Schedule {
+  const targetSet = new Set(targets.filter((d) => d !== source));
+  return (prev) => {
+    if (targetSet.size === 0) return prev;
+    const sourceTasks = prev.activities[source] ?? [];
+    const activities = { ...prev.activities };
+    for (const day of targetSet) {
+      const copies = sourceTasks.map((t) => {
+        const { recurrence: _r, ...copy } = freshCopy(t);
+        return copy;
+      });
+      activities[day] = [...(prev.activities[day] ?? []), ...copies];
+    }
+    return { ...prev, activities };
   };
 }
 

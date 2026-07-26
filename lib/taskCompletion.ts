@@ -12,6 +12,18 @@ import { uid } from "./id";
 import { localISODate } from "./dateUtils";
 import { parseTimeToMinutes, currentMinutes } from "./timeUtils";
 import { minutesToDisplayTime } from "./timeline/dragTimeUtils";
+import { getSlots } from "./taskMutations";
+
+/** True when a task has more than one time slot — the multi-phase-same-day case. */
+export function isMultiSlot(task: Task): boolean {
+  return getSlots(task).length > 1;
+}
+
+function slotsAllDone(task: Task): boolean {
+  const total = getSlots(task).length;
+  if (total <= 1) return true;
+  return new Set(task.completedSlotIndices ?? []).size >= total;
+}
 
 function stripTodayCompletionEvents(history: TaskCompletionEvent[] | undefined): TaskCompletionEvent[] {
   const today = localISODate(new Date());
@@ -34,6 +46,22 @@ function stripTodaySubtaskEvent(
     if (ev.completionType === "task") return false;
     return !(ev.completionType === "subtask" && ev.subtaskId === subtaskId);
   });
+}
+
+function stripTodaySlotEvent(
+  history: TaskCompletionEvent[] | undefined,
+  slotIndex: number
+): TaskCompletionEvent[] {
+  const today = localISODate(new Date());
+  return (history ?? []).filter((ev) => {
+    if (localISODate(new Date(ev.completedAt)) !== today) return true;
+    if (ev.completionType === "task") return false;
+    return !(ev.completionType === "slot" && ev.slotIndex === slotIndex);
+  });
+}
+
+function createSlotEvent(taskId: string, slotIndex: number): TaskCompletionEvent {
+  return { id: uid(), taskId, completedAt: new Date().toISOString(), completionType: "slot", slotIndex };
 }
 
 // ── Event factory ────────────────────────────────────────────────────────────
@@ -283,7 +311,7 @@ export function toggleSubtaskComplete(
     ? current.filter((id) => id !== subtaskId)
     : Array.from(new Set([...current, subtaskId]));
 
-  const allNowDone = totalSubtasks > 0 && new Set(next).size >= totalSubtasks;
+  const allNowDone = totalSubtasks > 0 && new Set(next).size >= totalSubtasks && slotsAllDone(task);
   const now = new Date().toISOString();
   const history = task.completionHistory ?? [];
 
@@ -333,6 +361,73 @@ export function toggleSubtaskComplete(
   };
 }
 
+// ── Toggle individual slot (multi-phase-same-day tasks) ──────────────────────
+
+/**
+ * Returns the Task fields to merge after toggling one time slot's completion —
+ * the multi-slot analogue of toggleSubtaskComplete, keyed by index into
+ * getSlots(task) instead of a subtask id. Each slot gets its own independent
+ * checkbox; the whole task auto-completes once every slot (and every subtask,
+ * if any) is done, and auto-uncompletes as soon as one is undone.
+ */
+export function toggleSlotComplete(
+  task: Task,
+  slotIndex: number,
+  totalSubtasks: number
+): Partial<Task> {
+  const totalSlots = getSlots(task).length;
+  const current = task.completedSlotIndices ?? [];
+  const isDone = current.includes(slotIndex);
+  const next = isDone
+    ? current.filter((i) => i !== slotIndex)
+    : Array.from(new Set([...current, slotIndex]));
+
+  const subtasksDone =
+    totalSubtasks === 0 || new Set(task.completedSubtaskIds ?? []).size >= totalSubtasks;
+  const allNowDone = next.length >= totalSlots && subtasksDone;
+  const now = new Date().toISOString();
+  const history = task.completionHistory ?? [];
+
+  if (!isDone) {
+    const events: TaskCompletionEvent[] = [createSlotEvent(task.id, slotIndex)];
+    if (allNowDone) events.push(createCompletionEvent(task.id, "task"));
+    return {
+      completedSlotIndices: next,
+      completed: allNowDone,
+      completedAt: allNowDone ? now : undefined,
+      // Any progress clears a prior "missed" mark for today.
+      missed: false,
+      missedAt: undefined,
+      completionHistory: [...stripTodayEvents(history, ["missed"]), ...events],
+    };
+  }
+
+  // Marking a slot incomplete — also drop today's auto-task completion event
+  // and materialize any remaining implied slot completions (mirrors the
+  // subtask "un-toggle" branch above).
+  const strippedHistory = stripTodaySlotEvent(history, slotIndex);
+  const today = localISODate(new Date());
+  const recordedToday = new Set(
+    strippedHistory
+      .filter(
+        (event) =>
+          event.completionType === "slot" &&
+          event.slotIndex !== undefined &&
+          localISODate(new Date(event.completedAt)) === today
+      )
+      .map((event) => event.slotIndex as number)
+  );
+  const impliedEvents = next
+    .filter((i) => !recordedToday.has(i))
+    .map((i) => createSlotEvent(task.id, i));
+  return {
+    completedSlotIndices: next,
+    completed: false,
+    completedAt: undefined,
+    completionHistory: [...strippedHistory, ...impliedEvents],
+  };
+}
+
 // ── Date-aware completion (viewing a day other than today) ───────────────────
 // The live `completed`/`completedSubtaskIds` flags only describe TODAY's
 // occurrence. For any other day we read the permanent `completionHistory`.
@@ -341,13 +436,26 @@ export function toggleSubtaskComplete(
 export function completionForDate(
   task: Task,
   dateISO: string
-): { completed: boolean; completedSubtaskIds: string[]; missed: boolean } {
+): { completed: boolean; completedSubtaskIds: string[]; completedSlotIndices: number[]; missed: boolean } {
   const onDate = (task.completionHistory ?? []).filter(
     (e) => localISODate(new Date(e.completedAt)) === dateISO
   );
   const allSubIds = task.subtasks?.map((s) => s.id) ?? [];
+  const totalSlots = getSlots(task).length;
+  const slotIndices = Array.from(
+    new Set(
+      onDate
+        .filter((e) => e.completionType === "slot" && e.slotIndex !== undefined)
+        .map((e) => e.slotIndex as number)
+    )
+  );
   if (onDate.some((e) => e.completionType === "task")) {
-    return { completed: true, completedSubtaskIds: allSubIds, missed: false };
+    return {
+      completed: true,
+      completedSubtaskIds: allSubIds,
+      completedSlotIndices: totalSlots > 1 ? Array.from({ length: totalSlots }, (_, i) => i) : slotIndices,
+      missed: false,
+    };
   }
   const missed = onDate.some((e) => e.completionType === "missed" && !e.subtaskId);
   const subIds = Array.from(
@@ -356,12 +464,17 @@ export function completionForDate(
   return {
     completed: allSubIds.length > 0 && subIds.length >= allSubIds.length,
     completedSubtaskIds: subIds,
+    completedSlotIndices: slotIndices,
     missed,
   };
 }
 
 function datedEvent(taskId: string, dateISO: string, type: "task" | "subtask", subtaskId?: string): TaskCompletionEvent {
   return { id: uid(), taskId, completedAt: new Date(`${dateISO}T12:00:00`).toISOString(), completionType: type, subtaskId };
+}
+
+function datedSlotEvent(taskId: string, dateISO: string, slotIndex: number): TaskCompletionEvent {
+  return { id: uid(), taskId, completedAt: new Date(`${dateISO}T12:00:00`).toISOString(), completionType: "slot", slotIndex };
 }
 
 /** Toggle whole-task completion for a non-today date — history only. */
@@ -408,6 +521,38 @@ export function toggleSubtaskCompleteForDate(
   doneSubs.add(subtaskId);
   const add = [datedEvent(task.id, dateISO, "subtask", subtaskId)];
   if (totalSubtasks > 0 && doneSubs.size >= totalSubtasks && !dayEvents.some((e) => e.completionType === "task")) {
+    add.push(datedEvent(task.id, dateISO, "task"));
+  }
+  return { completionHistory: [...history, ...add] };
+}
+
+/** Toggle one time slot for a non-today date — history only (multi-slot tasks). */
+export function toggleSlotCompleteForDate(
+  task: Task,
+  slotIndex: number,
+  totalSlots: number,
+  dateISO: string
+): Partial<Task> {
+  const history = task.completionHistory ?? [];
+  const onDate = (e: TaskCompletionEvent) => localISODate(new Date(e.completedAt)) === dateISO;
+  const dayEvents = history.filter(onDate);
+  const hasSlot = dayEvents.some((e) => e.completionType === "slot" && e.slotIndex === slotIndex);
+
+  if (hasSlot) {
+    // Remove this slot's event for the date + any auto-task event (no longer all-done).
+    return {
+      completionHistory: history.filter(
+        (e) => !(onDate(e) && ((e.completionType === "slot" && e.slotIndex === slotIndex) || e.completionType === "task"))
+      ),
+    };
+  }
+
+  const doneSlots = new Set(
+    dayEvents.filter((e) => e.completionType === "slot" && e.slotIndex !== undefined).map((e) => e.slotIndex as number)
+  );
+  doneSlots.add(slotIndex);
+  const add = [datedSlotEvent(task.id, dateISO, slotIndex)];
+  if (totalSlots > 0 && doneSlots.size >= totalSlots && !dayEvents.some((e) => e.completionType === "task")) {
     add.push(datedEvent(task.id, dateISO, "task"));
   }
   return { completionHistory: [...history, ...add] };

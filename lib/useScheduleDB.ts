@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { ScheduleEntry } from "@/components/ScheduleItem";
+import type { ScheduleEntry } from "@/components/ScheduleItem";
 import type { AccentColor } from "@/lib/colorSystem";
 import { colorFromIcon, resolveAccentColor } from "@/lib/colorSystem";
 import type { GoalDirection } from "@/lib/trendUtils";
@@ -35,8 +35,9 @@ export interface TaskCompletionEvent {
   id: string;
   taskId: string;
   completedAt: string; // ISO 8601 timestamp (for "missed", the timestamp it was marked)
-  completionType: "task" | "subtask" | "missed";
+  completionType: "task" | "subtask" | "missed" | "slot";
   subtaskId?: string;  // present for subtask-level events (completed or missed)
+  slotIndex?: number;  // present for slot-level events — index into getSlots(task)
 }
 
 /**
@@ -62,12 +63,29 @@ export type TaskRecurrence =
   | { type: "weekly"; interval: number; anchorISO: string }
   | { type: "once"; dateISO: string };
 
+/**
+ * A single time block ("phase") of a task within one day. A task with multiple
+ * slots occupies several blocks on the same day but is still one task with one
+ * shared completion. Times are in display format (e.g. "09:00 AM").
+ */
+export interface TaskSlot {
+  startTime: string;
+  endTime: string;
+}
+
 export interface Task {
   id: string;
   title: string;
   description?: string;
   startTime: string;
   endTime: string;
+  /**
+   * Ordered extra time blocks within the day. Absent = a single block described
+   * by startTime/endTime. When present it is the full ordered set of phases and
+   * startTime/endTime always mirror slots[0] (earliest) for back-compat with
+   * readers that only understand a single block.
+   */
+  slots?: TaskSlot[];
   icon: string;
   color: AccentColor;
   planId: string;
@@ -75,6 +93,7 @@ export interface Task {
   completed?: boolean;
   completedAt?: string;               // ISO timestamp of last full completion
   completedSubtaskIds?: string[];
+  completedSlotIndices?: number[];    // indices into getSlots(task) completed today (multi-slot tasks)
   missed?: boolean;                   // today's occurrence was marked "missed"
   missedAt?: string;                  // ISO timestamp it was marked missed
   completionHistory?: TaskCompletionEvent[]; // append-only event log
@@ -306,15 +325,6 @@ function isPerDay(val: unknown): boolean {
   return !!val && typeof val === "object" && !Array.isArray(val) && "monday" in (val as object);
 }
 
-function splitLegacyTimeRange(value: string): { startTime: string; endTime: string } {
-  const raw = value.trim();
-  const parts = raw.split(/\s*(?:-|–|—|to)\s*/i).map((part) => part.trim()).filter(Boolean);
-  if (parts.length >= 2) {
-    return { startTime: parts[0], endTime: parts[1] };
-  }
-  return { startTime: raw, endTime: raw };
-}
-
 export function categoryFromIcon(icon: string): PlanCategory {
   if (icon === "run" || icon === "barbell") return "fitness";
   if (icon === "school" || icon === "book" || icon === "brain" || icon === "code") return "learning";
@@ -349,20 +359,6 @@ function legacyActivityPlan(): Plan {
 function ensureActivityPlans(plans: Plan[], activities: unknown): Plan[] {
   if (plans.length > 0 || !hasAnyTasks(activities)) return plans;
   return [legacyActivityPlan()];
-}
-
-function entryToTask(entry: ScheduleEntry, icon: string, planId: string, description?: string): Task {
-  const { startTime, endTime } = splitLegacyTimeRange(entry.time ?? "");
-  return {
-    id: entry.id,
-    title: entry.task,
-    description,
-    startTime,
-    endTime,
-    icon,
-    color: colorFromIcon(icon),
-    planId,
-  };
 }
 
 function normalizePlan(value: unknown): Plan | null {
@@ -565,6 +561,7 @@ export function normalizeTasks(value: unknown, fallbackPlanId: string, fallbackI
         ...(task.description !== undefined && { description: task.description }),
         startTime: task.startTime,
         endTime: task.endTime,
+        ...(Array.isArray(task.slots) && task.slots.length > 0 && { slots: task.slots }),
         icon: task.icon || fallbackIcon,
         color: resolveAccentColor((task as Task & { color?: string }).color, task.icon || fallbackIcon),
         planId: task.planId || fallbackPlanId,
@@ -573,6 +570,7 @@ export function normalizeTasks(value: unknown, fallbackPlanId: string, fallbackI
         ...(task.completed !== undefined && { completed: task.completed }),
         ...(task.completedAt !== undefined && { completedAt: task.completedAt }),
         ...(task.completedSubtaskIds !== undefined && { completedSubtaskIds: task.completedSubtaskIds }),
+        ...(Array.isArray(task.completedSlotIndices) && { completedSlotIndices: task.completedSlotIndices }),
         ...(task.missed !== undefined && { missed: task.missed }),
         ...(task.missedAt !== undefined && { missedAt: task.missedAt }),
         ...(task.completionHistory !== undefined && { completionHistory: task.completionHistory }),
@@ -855,7 +853,7 @@ export function resetStaleCompletions(schedule: Schedule, todayISO: string): Sch
     if (!tasks?.length) continue;
     let dayChanged = false;
     const next = tasks.map((t) => {
-      const hasLiveState = !!t.completed || !!t.missed || (t.completedSubtaskIds?.length ?? 0) > 0;
+      const hasLiveState = !!t.completed || !!t.missed || (t.completedSubtaskIds?.length ?? 0) > 0 || (t.completedSlotIndices?.length ?? 0) > 0;
       if (!hasLiveState) return t;
       const activeToday =
         (t.completedAt && localISODate(new Date(t.completedAt)) === todayISO) ||
@@ -863,7 +861,7 @@ export function resetStaleCompletions(schedule: Schedule, todayISO: string): Sch
         (t.completionHistory ?? []).some((e) => localISODate(new Date(e.completedAt)) === todayISO);
       if (activeToday) return t;
       dayChanged = true;
-      return { ...t, completed: false, completedAt: undefined, completedSubtaskIds: [], missed: false, missedAt: undefined };
+      return { ...t, completed: false, completedAt: undefined, completedSubtaskIds: [], completedSlotIndices: [], missed: false, missedAt: undefined };
     });
     if (dayChanged) {
       activities[day] = next;
@@ -1173,8 +1171,8 @@ export function useScheduleDB() {
       const activities = {} as Schedule["activities"];
       for (const day of DAYS) {
         activities[day] = (schedule.activities[day] ?? []).map((t) => {
-          const { completed: _c, completedAt: _a, completedSubtaskIds: _s, completionHistory: _h, missed: _m, missedAt: _ma, ...rest } = t;
-          void _c; void _a; void _s; void _h; void _m; void _ma;
+          const { completed: _c, completedAt: _a, completedSubtaskIds: _s, completedSlotIndices: _sl, completionHistory: _h, missed: _m, missedAt: _ma, ...rest } = t;
+          void _c; void _a; void _s; void _sl; void _h; void _m; void _ma;
           return rest;
         });
       }

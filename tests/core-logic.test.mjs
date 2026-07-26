@@ -30,6 +30,7 @@ const {
   completionForDate,
   toggleSubtaskComplete,
   toggleTaskComplete,
+  toggleSlotComplete,
   snoozeTaskLater,
   getTaskCheckableItems,
   getTaskSubtaskSummary,
@@ -39,8 +40,11 @@ const {
   createTaskDeleteSnapshot,
   restoreTaskDelete,
   updateTaskDays,
+  updateTaskPerDay,
   setTaskException,
   clearTaskException,
+  getSlots,
+  withSlots,
 } = await import("../lib/taskMutations.ts");
 const { isTaskScheduledOn, resolveOccurrence, diffException, weeksBetween } = await import("../lib/taskOccurrence.ts");
 const { normalizeMilestoneTimeline, cascadeMilestoneDates } = await import("../lib/roadmapDates.ts");
@@ -798,3 +802,100 @@ test("tracking start date floors streak and trend analytics", () => {
   const trend2 = computeExecutionTrend(sched2, 8);
   assert.ok(trend2.weeks.length < 8, "weeks fully before the floor are dropped");
 });
+
+test("getSlots/withSlots keep the slot invariant (sorted, mirrored, minimal)", () => {
+  // No slots field — falls back to the single startTime/endTime block.
+  const single = { startTime: "9:00 AM", endTime: "10:00 AM" };
+  assert.deepEqual(getSlots(single), [{ startTime: "9:00 AM", endTime: "10:00 AM" }]);
+
+  // withSlots sorts out-of-order slots and mirrors the earliest onto startTime/endTime.
+  const draft = {
+    startTime: "3:00 PM",
+    endTime: "4:00 PM",
+    slots: [
+      { startTime: "3:00 PM", endTime: "4:00 PM" },
+      { startTime: "9:00 AM", endTime: "10:00 AM" },
+    ],
+  };
+  const normalized = withSlots(draft);
+  assert.equal(normalized.startTime, "9:00 AM");
+  assert.equal(normalized.endTime, "10:00 AM");
+  assert.deepEqual(normalized.slots.map((s) => s.startTime), ["9:00 AM", "3:00 PM"]);
+
+  // A single-slot list collapses back to no `slots` field at all (back-compat minimal storage).
+  const collapsed = withSlots({ startTime: "1:00 PM", endTime: "2:00 PM", slots: [{ startTime: "1:00 PM", endTime: "2:00 PM" }] });
+  assert.equal("slots" in collapsed, false);
+});
+
+test("updateTaskPerDay gives each weekday its own slots under one shared id", () => {
+  const schedule = emptySchedule();
+  const updater = updateTaskPerDay(
+    "shared-id",
+    { title: "Study", startTime: "9:00 AM", endTime: "10:00 AM", icon: "book", color: "amber", planId: "plan-1" },
+    { monday: [{ startTime: "9:00 AM", endTime: "10:00 AM" }], wednesday: [{ startTime: "2:00 PM", endTime: "3:00 PM" }] },
+    ["monday", "wednesday"],
+    null
+  );
+  const next = updater(schedule);
+  const monday = next.activities.monday.find((t) => t.id === "shared-id");
+  const wednesday = next.activities.wednesday.find((t) => t.id === "shared-id");
+  assert.equal(monday.startTime, "9:00 AM");
+  assert.equal(wednesday.startTime, "2:00 PM");
+  // Same id everywhere — still one recurring task, not a duplicated series.
+  assert.equal(monday.id, wednesday.id);
+});
+
+test("toggleSlotComplete gives each phase of a multi-slot task an independent checkbox", () => {
+  const task = {
+    id: "multi-2",
+    title: "Study",
+    startTime: "9:00 AM",
+    endTime: "10:00 AM",
+    slots: [
+      { startTime: "9:00 AM", endTime: "10:00 AM" },
+      { startTime: "3:00 PM", endTime: "4:00 PM" },
+    ],
+    icon: "book",
+    color: "amber",
+    planId: "plan-1",
+  };
+
+  // Completing the first slot does not complete the second, nor the whole task.
+  const afterFirst = { ...task, ...toggleSlotComplete(task, 0, 0) };
+  assert.deepEqual(afterFirst.completedSlotIndices, [0]);
+  assert.equal(afterFirst.completed, false);
+
+  // Completing the second slot too now completes the whole task.
+  const afterSecond = { ...afterFirst, ...toggleSlotComplete(afterFirst, 1, 0) };
+  assert.deepEqual(afterSecond.completedSlotIndices.sort(), [0, 1]);
+  assert.equal(afterSecond.completed, true);
+
+  // Un-completing one phase drops the whole-task completion but keeps the other phase done.
+  const afterUndo = { ...afterSecond, ...toggleSlotComplete(afterSecond, 0, 0) };
+  assert.deepEqual(afterUndo.completedSlotIndices, [1]);
+  assert.equal(afterUndo.completed, false);
+});
+
+test("completionForDate derives per-slot completion from history for a past date", () => {
+  const today = localISODate(new Date());
+  const task = {
+    id: "multi-3",
+    title: "Study",
+    startTime: "9:00 AM",
+    endTime: "10:00 AM",
+    slots: [
+      { startTime: "9:00 AM", endTime: "10:00 AM" },
+      { startTime: "3:00 PM", endTime: "4:00 PM" },
+    ],
+    icon: "book",
+    color: "amber",
+    planId: "plan-1",
+    completionHistory: [
+      { id: "e1", taskId: "multi-3", completionType: "slot", slotIndex: 0, completedAt: new Date(`${today}T12:00:00`).toISOString() },
+    ],
+  };
+  const derived = completionForDate(task, today);
+  assert.deepEqual(derived.completedSlotIndices, [0]);
+  assert.equal(derived.completed, false);
+});
+

@@ -3,9 +3,10 @@
 import type { CSSProperties, ReactNode } from "react";
 import { IconMinus, IconX, IconListCheck, IconArrowUpRight } from "@tabler/icons-react";
 import CheckDraw from "@/components/ui/CheckDraw";
-import type { Plan, Task } from "@/lib/useScheduleDB";
+import type { Plan, Task, TaskSlot } from "@/lib/useScheduleDB";
 import type { TaskState } from "@/lib/taskCompletion";
 import { getTaskSubtaskSummary } from "@/lib/taskCompletion";
+import { getSlots } from "@/lib/taskMutations";
 import { resolveAccentColor, timelineCardStyles } from "@/lib/colorSystem";
 
 /**
@@ -30,6 +31,21 @@ export interface TaskBlockCardProps {
   narrow?: boolean;
   /** grid: tiny slot — render just the title chip. */
   minimal?: boolean;
+  /**
+   * grid only: the single slot this positioned block represents. When set, the
+   * time row shows just this slot; when absent (list), all of the task's slots
+   * are shown.
+   */
+  slotOverride?: TaskSlot;
+  /**
+   * list only: independent completion state + toggle per slot, aligned 1:1
+   * with getSlots(task). When the task has more than one slot and this is
+   * provided, each phase renders its own row and checkbox — "N things to
+   * check off today" — instead of one shared header checkbox for every phase.
+   * Ignored for grid (slotOverride already isolates one slot per block) and
+   * for a "missed" task (a missed day is whole-task, not per-phase).
+   */
+  slotCompletions?: Array<{ done: boolean; onToggle: () => void }>;
   onToggle: () => void;
   onClick?: () => void;
   /**
@@ -71,6 +87,8 @@ export function TaskBlockCard({
   className = "",
   style,
   minimal = false,
+  slotOverride,
+  slotCompletions,
 }: TaskBlockCardProps) {
   const accent = resolveAccentColor(task.color, task.icon);
   const styles = timelineCardStyles(accent);
@@ -79,6 +97,10 @@ export function TaskBlockCard({
   const missed = state === "missed";
   const resolved = done || missed;
   const isList = variant === "list";
+  // Grid blocks show only the slot being positioned; list cards show every slot.
+  const displaySlots = slotOverride ? [slotOverride] : getSlots(task);
+  const isMultiSlotList =
+    isList && !slotOverride && !missed && !!slotCompletions && slotCompletions.length === displaySlots.length && displaySlots.length > 1;
   const showEyebrow = !!plan && !narrow && !minimal;
   // Timeline (grid) subtask/session pill — only when wired and the task has items.
   const subtaskPill = onOpenSubtasks && !isList && !minimal ? getTaskSubtaskSummary(task, plan) : null;
@@ -141,36 +163,79 @@ export function TaskBlockCard({
 
       <div className={`flex shrink-0 items-center ${isList ? "gap-2" : "gap-1"}`}>
         {trailing}
-        <button
-          type="button"
-          disabled={readOnly}
-          onClick={(e) => { e.stopPropagation(); if (!readOnly) onToggle(); }}
-          className={`flex shrink-0 items-center justify-center border-[1.5px] transition-colors disabled:opacity-100 ${readOnly ? "cursor-default" : ""} ${
-            isList ? "h-7 w-7 rounded-[8px]" : "h-[18px] w-[18px] rounded-pr-sm"
-          } ${
-            done || partial ? "border-transparent bg-green-500"
-            : missed ? "border-transparent bg-rose-500"
-            : readOnly ? "border-neutral-200 bg-neutral-100/80 dark:border-white/[0.08] dark:bg-white/[0.04]"
-            : "border-neutral-300 bg-white/80 dark:border-neutral-500 dark:bg-neutral-800"
-          }`}
-          aria-label={statusLabel}
-          aria-disabled={readOnly}
-          aria-pressed={done || partial}
-        >
-          <CheckDraw visible={done} size={isList ? 16 : 12} strokeWidth={3} className="text-white" />
-          {partial && <IconMinus size={isList ? 16 : 12} strokeWidth={3} className="text-white" />}
-          {missed && <IconX size={isList ? 16 : 12} strokeWidth={3} className="text-white" />}
-        </button>
+        {!isMultiSlotList && (
+          <button
+            type="button"
+            disabled={readOnly}
+            onClick={(e) => { e.stopPropagation(); if (!readOnly) onToggle(); }}
+            className={`flex shrink-0 items-center justify-center border-[1.5px] transition-colors disabled:opacity-100 ${readOnly ? "cursor-default" : ""} ${
+              isList ? "h-7 w-7 rounded-[8px]" : "h-[18px] w-[18px] rounded-pr-sm"
+            } ${
+              done || partial ? "border-transparent bg-green-500"
+              : missed ? "border-transparent bg-rose-500"
+              : readOnly ? "border-neutral-200 bg-neutral-100/80 dark:border-white/[0.08] dark:bg-white/[0.04]"
+              : "border-neutral-300 bg-white/80 dark:border-neutral-500 dark:bg-neutral-800"
+            }`}
+            aria-label={statusLabel}
+            aria-disabled={readOnly}
+            aria-pressed={done || partial}
+          >
+            <CheckDraw visible={done} size={isList ? 16 : 12} strokeWidth={3} className="text-white" />
+            {partial && <IconMinus size={isList ? 16 : 12} strokeWidth={3} className="text-white" />}
+            {missed && <IconX size={isList ? 16 : 12} strokeWidth={3} className="text-white" />}
+          </button>
+        )}
       </div>
     </div>
   );
 
-  const timeRow = (task.startTime || task.endTime) ? (
+  const hasTime = displaySlots.some((s) => s.startTime || s.endTime);
+
+  // Multi-slot list card: each phase is its own row with its own checkbox —
+  // "N things to check off today" — instead of one combined time line.
+  const slotRows = isMultiSlotList ? (
+    <div className="relative flex flex-col gap-2">
+      {displaySlots.map((slot, i) => {
+        const slotDone = slotCompletions![i].done;
+        return (
+          <div key={i} className="flex items-center gap-3">
+            <button
+              type="button"
+              disabled={readOnly}
+              onClick={(e) => { e.stopPropagation(); if (!readOnly) slotCompletions![i].onToggle(); }}
+              className={`flex h-6 w-6 shrink-0 items-center justify-center rounded-[7px] border-[1.5px] transition-colors disabled:opacity-100 ${readOnly ? "cursor-default" : ""} ${
+                slotDone
+                  ? "border-transparent bg-green-500"
+                  : readOnly
+                  ? "border-neutral-200 bg-neutral-100/80 dark:border-white/[0.08] dark:bg-white/[0.04]"
+                  : "border-neutral-300 bg-white/80 dark:border-neutral-500 dark:bg-neutral-800"
+              }`}
+              aria-label={slotDone ? "Mark phase incomplete" : "Mark phase complete"}
+              aria-pressed={slotDone}
+            >
+              <CheckDraw visible={slotDone} size={14} strokeWidth={3} className="text-white" />
+            </button>
+            <span
+              className={`whitespace-nowrap text-[14px] font-extrabold tabular-nums ${styles.time} ${
+                slotDone ? "line-through decoration-neutral-400 opacity-70" : ""
+              }`}
+            >
+              {slot.startTime}{slot.endTime ? ` – ${slot.endTime}` : ""}
+            </span>
+          </div>
+        );
+      })}
+    </div>
+  ) : null;
+
+  const timeRow = !isMultiSlotList && hasTime ? (
     <div className={`relative flex flex-wrap items-center ${isList ? "gap-2" : "gap-1.5"}`}>
       <span
         className={`whitespace-nowrap font-extrabold tabular-nums ${isList ? styles.time : "text-neutral-500 dark:text-neutral-400"} ${isList ? "text-[14px]" : compact ? "text-[10px]" : "text-[11px]"}`}
       >
-        {task.startTime}{task.endTime ? ` – ${task.endTime}` : ""}
+        {displaySlots
+          .map((s) => `${s.startTime}${s.endTime ? ` – ${s.endTime}` : ""}`)
+          .join("  ·  ")}
       </span>
       {duration && !narrow && (
         <span className={`rounded-full border border-current px-2 font-extrabold ${styles.durationBadge} ${isList ? "text-[11px] leading-5" : "text-[9px] leading-[15px]"}`}>
@@ -201,6 +266,7 @@ export function TaskBlockCard({
       )}
       {header}
       {timeRow}
+      {slotRows}
       {footer && <div className="relative">{footer}</div>}
       {children && <div className="relative">{children}</div>}
     </div>

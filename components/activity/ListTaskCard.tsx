@@ -7,7 +7,8 @@ import type { Task, Plan } from "@/lib/useScheduleDB";
 import type { ScheduleEntry, MetaField } from "@/components/ScheduleItem";
 import { calculateTaskProgress, resolveTaskState } from "@/lib/taskCompletion";
 import type { TaskState } from "@/lib/taskCompletion";
-import { formatDuration } from "@/lib/timeUtils";
+import { formatSlotsDuration } from "@/lib/timeUtils";
+import { getSlots } from "@/lib/taskMutations";
 import { haptic } from "@/lib/haptics";
 import { TaskBlockCard } from "@/components/TaskBlockCard";
 import ProgressBar from "@/components/ui/ProgressBar";
@@ -135,6 +136,8 @@ export interface ListTaskCardProps {
   readOnly?: boolean;
   onToggleComplete: (taskId: string, allIds: string[]) => void;
   onToggleSubtask: (taskId: string, subtaskId: string) => void;
+  /** Independent per-phase toggle for a multi-slot task (same-day multiple time blocks). */
+  onToggleSlot?: (taskId: string, slotIndex: number) => void;
   onEdit: () => void;
   onDelete: () => void;
   onOpenRoutine?: () => void;
@@ -151,6 +154,7 @@ function ListTaskCardInner({
   readOnly = false,
   onToggleComplete,
   onToggleSubtask,
+  onToggleSlot,
   onEdit,
   onDelete,
   onOpenRoutine,
@@ -158,7 +162,26 @@ function ListTaskCardInner({
 }: ListTaskCardProps) {
   const [expanded, setExpanded] = useState(false);
 
+  // ── Derived state ───────────────────────────────────────────────────────────
+  const isRoutine = task.taskType === "session";
+  const slots = useMemo(() => getSlots(task), [task.startTime, task.endTime, task.slots]);
+  const isMultiSlot = slots.length > 1;
+  // Independent per-phase checkboxes — each slot toggles on its own instead of
+  // one shared "done" state for the whole task.
+  const slotCompletions = useMemo(
+    () =>
+      isMultiSlot && onToggleSlot
+        ? slots.map((_, i) => ({
+            done: (task.completedSlotIndices ?? []).includes(i),
+            onToggle: () => onToggleSlot(task.id, i),
+          }))
+        : undefined,
+    [isMultiSlot, onToggleSlot, slots, task.completedSlotIndices, task.id]
+  );
+
   // ── Swipe-to-complete ───────────────────────────────────────────────────────
+  // Not offered for multi-slot tasks — there's no single "done" state a swipe
+  // could sensibly set; each phase has its own checkbox instead.
   const dragX = useMotionValue(0);
   const revealOpacity = useTransform(dragX, [0, 24, SWIPE_THRESHOLD], [0, 0, 1]);
   const revealScale   = useTransform(dragX, [0, SWIPE_THRESHOLD], [0.5, 1]);
@@ -170,9 +193,6 @@ function ListTaskCardInner({
     }
     animate(dragX, 0, { type: "spring", stiffness: 400, damping: 30 });
   }
-
-  // ── Derived state ───────────────────────────────────────────────────────────
-  const isRoutine = task.taskType === "session";
 
   const subtasks: ScheduleEntry[] = useMemo(() => task.subtasks ?? [], [task.subtasks]);
   // For session tasks, steps are always task-level. For task type, fall back to
@@ -200,8 +220,8 @@ function ListTaskCardInner({
   const done = taskState === "completed";
 
   const duration = useMemo(
-    () => formatDuration(task.startTime, task.endTime),
-    [task.startTime, task.endTime]
+    () => formatSlotsDuration(getSlots(task)),
+    [task.startTime, task.endTime, task.slots]
   );
 
   const hasEffectiveItems = effectiveItems.length > 0;
@@ -224,7 +244,7 @@ function ListTaskCardInner({
       onOpenSubtasks();
     } else if (isRoutine && onOpenRoutine) {
       onOpenRoutine();
-    } else if (!readOnly) {
+    } else if (!readOnly && !slotCompletions) {
       onToggleComplete(task.id, allSubtaskIds);
     }
   }
@@ -349,7 +369,7 @@ function ListTaskCardInner({
   return (
     <div className="relative overflow-hidden rounded-2xl">
       {/* ── Swipe reveal layer ─────────────────────────────────────────────── */}
-      {!editMode && !readOnly && (
+      {!editMode && !readOnly && !slotCompletions && (
         <div className={`absolute inset-0 flex items-center rounded-2xl pl-5 ${done ? "bg-neutral-100 dark:bg-white/[0.04]" : "bg-green-500"}`}>
           <m.div
             style={{ opacity: revealOpacity, scale: revealScale }}
@@ -363,7 +383,7 @@ function ListTaskCardInner({
       {/* ── Card (draggable) — shared TaskBlockCard visual ─────────────────── */}
       <m.div
         layout
-        drag={editMode || readOnly ? false : "x"}
+        drag={editMode || readOnly || !!slotCompletions ? false : "x"}
         dragConstraints={{ left: 0, right: 100 }}
         dragElastic={{ left: 0, right: 0.05 }}
         dragMomentum={false}
@@ -379,6 +399,7 @@ function ListTaskCardInner({
           state={taskState}
           duration={duration}
           readOnly={readOnly}
+          slotCompletions={slotCompletions}
           onToggle={() => onToggleComplete(task.id, allSubtaskIds)}
           onClick={editMode ? undefined : handleCardTap}
           trailing={trailingNode}

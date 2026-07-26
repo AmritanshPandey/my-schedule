@@ -30,7 +30,7 @@ import SheetHeader from "@/components/ui/SheetHeader";
 import Button from "@/components/ui/Button";
 import IconButton from "@/components/ui/IconButton";
 import Input, { FORM_INPUT_CLASS, FORM_LABEL, Textarea } from "@/components/ui/Input";
-import TimeSlotPicker from "@/components/TimeSlotPicker";
+import TimeSlotPicker, { type EditableSlot } from "@/components/TimeSlotPicker";
 import { SECTION_ICONS } from "@/components/SectionIcons";
 import { PlanColorPicker, iconPickerClass } from "@/components/plan/planFormShared";
 import { colorFromIcon, resolveAccentColor, type AccentColor } from "@/lib/colorSystem";
@@ -43,11 +43,13 @@ import {
   uid,
   displayToInputTime,
   inputToDisplayTime,
+  getSlots,
 } from "@/lib/taskMutations";
+import type { TaskSlot } from "@/lib/useScheduleDB";
 import { resolveOccurrence } from "@/lib/taskOccurrence";
 import { PlanSelector } from "./PlanSelector";
 import SubtaskDraftRow, { type SubtaskDraft } from "./SubtaskDraftRow";
-import { validateTaskTime } from "@/lib/scheduleRules";
+import { validateTaskSlots } from "@/lib/scheduleRules";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -63,6 +65,11 @@ export interface TaskSaveData {
   scope?: "all" | "occurrence";
   /** Recurrence rule (absent = plain weekly on the repeatDays). */
   recurrence?: TaskRecurrence;
+  /**
+   * When set, each listed weekday gets its own slots (custom-per-day). Routes to
+   * updateTaskPerDay. Absent = the uniform slots on `taskDraft` apply to all days.
+   */
+  perDaySlots?: Partial<Record<DayKey, TaskSlot[]>>;
 }
 
 const JS_DAYS: DayKey[] = ["sunday", "monday", "tuesday", "wednesday", "thursday", "friday", "saturday"];
@@ -76,6 +83,8 @@ export interface TaskSheetProps {
   plans: Plan[];
   activeDay: DayKey;
   activeDays?: DayKey[];
+  /** All weekday task lists — lets edit mode load each day's own slots (per-day times). */
+  activities?: Partial<Record<DayKey, Task[]>>;
   isOpen: boolean;
   initialPlanId?: string | null;
   initialTaskType?: "task" | "session";
@@ -129,6 +138,26 @@ function isValidInputTime(value: string): boolean {
   return /^([01]\d|2[0-3]):[0-5]\d$/.test(value);
 }
 
+/** Convert a task's display-format time blocks into editable (input-format) slots. */
+function toInputSlots(source: { startTime: string; endTime: string; slots?: TaskSlot[] }): EditableSlot[] {
+  return getSlots(source).map((s) => ({
+    startTime: displayToInputTime(s.startTime),
+    endTime: displayToInputTime(s.endTime),
+  }));
+}
+
+/** Convert editable (input-format) slots back into display-format time blocks. */
+function toDisplaySlots(slots: EditableSlot[]): TaskSlot[] {
+  return slots.map((s) => ({
+    startTime: inputToDisplayTime(s.startTime),
+    endTime: inputToDisplayTime(s.endTime),
+  }));
+}
+
+function slotsAllValid(slots: EditableSlot[]): boolean {
+  return slots.length > 0 && slots.every((s) => isValidInputTime(s.startTime) && isValidInputTime(s.endTime));
+}
+
 // ── Main sheet ────────────────────────────────────────────────────────────────
 
 export function TaskSheet({
@@ -137,6 +166,7 @@ export function TaskSheet({
   plans,
   activeDay,
   activeDays,
+  activities,
   isOpen,
   initialPlanId,
   initialTaskType,
@@ -172,8 +202,13 @@ export function TaskSheet({
   const [taskType, setTaskType] = useState<"task" | "session">("task");
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
-  const [startTime, setStartTime] = useState("");
-  const [endTime, setEndTime] = useState("");
+  // Time blocks in HTML input format ("HH:MM"). One = single block; many = phases.
+  const [slots, setSlots] = useState<EditableSlot[]>([{ startTime: "", endTime: "" }]);
+  // Custom-per-day: when false, `slots` applies to every repeat day. When true,
+  // each repeat day has its own slots (editDay picks which one the editor edits).
+  const [sameEveryDay, setSameEveryDay] = useState(true);
+  const [perDaySlots, setPerDaySlots] = useState<Partial<Record<DayKey, EditableSlot[]>>>({});
+  const [editDay, setEditDay] = useState<DayKey>(activeDay);
   const [repeatDays, setRepeatDays] = useState<DayKey[]>([activeDay]);
   const [subtasks, setSubtasks] = useState<SubtaskDraft[]>([]);
   const [focusNewSubtask, setFocusNewSubtask] = useState(false);
@@ -220,8 +255,21 @@ export function TaskSheet({
       setTaskType(task.taskType ?? "task");
       setTitle(task.title);
       setDescription(task.description ?? "");
-      setStartTime(displayToInputTime(task.startTime));
-      setEndTime(displayToInputTime(task.endTime));
+      // Load each weekday's own slots so per-day differences round-trip; detect
+      // whether they're all identical to preselect Same-vs-Custom.
+      const perDay: Partial<Record<DayKey, EditableSlot[]>> = {};
+      for (const d of selectedDays) {
+        const dayTask = activities?.[d]?.find((t) => t.id === task.id);
+        perDay[d] = toInputSlots(dayTask ?? task);
+      }
+      const baseSlots = toInputSlots(task);
+      const uniform = selectedDays.every(
+        (d) => JSON.stringify(perDay[d]) === JSON.stringify(baseSlots)
+      );
+      setSlots(baseSlots);
+      setPerDaySlots(perDay);
+      setSameEveryDay(uniform);
+      setEditDay(selectedDays.includes(activeDay) ? activeDay : selectedDays[0]);
       setRepeatDays(selectedDays);
       // Existing tasks keep whatever identity they were saved with. Treat a
       // stored colour that already matches its icon as "not overridden", so
@@ -244,8 +292,10 @@ export function TaskSheet({
       setTaskType(initialTaskType ?? "task");
       setTitle("");
       setDescription("");
-      setStartTime(initialStartTime ?? "");
-      setEndTime(initialEndTime ?? "");
+      setSlots([{ startTime: initialStartTime ?? "", endTime: initialEndTime ?? "" }]);
+      setPerDaySlots({});
+      setSameEveryDay(true);
+      setEditDay(activeDay);
       setRepeatDays([activeDay]);
       setSubtasks([]);
       // New tasks start from the parent plan's icon, with the colour derived
@@ -273,8 +323,12 @@ export function TaskSheet({
     const src = scope === "occurrence" && occurrenceDateISO ? resolveOccurrence(task, occurrenceDateISO) : task;
     setTitle(src.title);
     setDescription(src.description ?? "");
-    setStartTime(displayToInputTime(src.startTime));
-    setEndTime(displayToInputTime(src.endTime));
+    // Per-date overrides cover a single block only; slots stay a template concept.
+    if (scope === "occurrence") {
+      setSlots([{ startTime: displayToInputTime(src.startTime), endTime: displayToInputTime(src.endTime) }]);
+    } else {
+      setSlots(toInputSlots(task));
+    }
   }
 
   function handleSelectPlan(plan: Plan) {
@@ -351,15 +405,30 @@ export function TaskSheet({
 
   // ── Save ───────────────────────────────────────────────────────────────────
   const selectedPlan = plans.find((p) => p.id === planId) ?? null;
-  const timeError =
-    isValidInputTime(startTime) && isValidInputTime(endTime)
-      ? validateTaskTime({
-          title: title.trim() || "Task",
-          day: activeDay,
-          startTime,
-          endTime,
-        })
-      : null;
+
+  // Custom-per-day is only meaningful when the task spans >1 weekday.
+  const canCustomizePerDay = !isOccurrenceScope && repeatMode !== "once" && repeatDays.length > 1;
+  const perDayActive = canCustomizePerDay && !sameEveryDay;
+  const resolvedEditDay = repeatDays.includes(editDay) ? editDay : repeatDays[0] ?? activeDay;
+
+  // Which slots the picker edits, and where edits are written.
+  const editorSlots = perDayActive ? perDaySlots[resolvedEditDay] ?? slots : slots;
+  function setEditorSlots(next: EditableSlot[]) {
+    if (perDayActive) setPerDaySlots((prev) => ({ ...prev, [resolvedEditDay]: next }));
+    else setSlots(next);
+  }
+
+  // Validate every day that will be written (each day's own slots in custom mode).
+  const daysToValidate: EditableSlot[][] = isOccurrenceScope || !perDayActive
+    ? [slots]
+    : repeatDays.map((d) => perDaySlots[d] ?? slots);
+  const allSlotsValidNow = daysToValidate.every(slotsAllValid);
+  const timeError = allSlotsValidNow
+    ? daysToValidate
+        .map((ds) => validateTaskSlots(ds, { title: title.trim() || "Task", day: activeDay }))
+        .find(Boolean) ?? null
+    : null;
+
   const repeatOk = isOccurrenceScope
     ? true
     : repeatMode === "once"
@@ -368,8 +437,7 @@ export function TaskSheet({
   const canSave =
     !!selectedPlan &&
     title.trim().length > 0 &&
-    isValidInputTime(startTime) &&
-    isValidInputTime(endTime) &&
+    allSlotsValidNow &&
     !timeError &&
     repeatOk;
 
@@ -390,11 +458,25 @@ export function TaskSheet({
       recurrence = { type: "weekly", interval: intervalWeeks, anchorISO: baseDateISO };
     } // weekly → undefined (every matching weekday)
 
+    // Uniform slots (base). In custom-per-day mode the base is the first repeat
+    // day's slots; per-day overrides ride in `perDaySlots`.
+    const baseDisplaySlots = toDisplaySlots(slots);
+    const primary = baseDisplaySlots[0] ?? { startTime: inputToDisplayTime(slots[0]?.startTime ?? ""), endTime: inputToDisplayTime(slots[0]?.endTime ?? "") };
+
+    let perDaySlotsOut: Partial<Record<DayKey, TaskSlot[]>> | undefined;
+    if (perDayActive) {
+      perDaySlotsOut = {};
+      for (const d of effectiveRepeatDays) {
+        perDaySlotsOut[d] = toDisplaySlots(perDaySlots[d] ?? slots);
+      }
+    }
+
     const taskDraft: Omit<Task, "id"> = {
       title: title.trim(),
       description: description.trim() || undefined,
-      startTime: inputToDisplayTime(startTime),
-      endTime: inputToDisplayTime(endTime),
+      startTime: primary.startTime,
+      endTime: primary.endTime,
+      slots: baseDisplaySlots.length > 1 ? baseDisplaySlots : undefined,
       icon,
       color,
       planId: selectedPlan.id,
@@ -422,6 +504,7 @@ export function TaskSheet({
           : null,
       scope: isOccurrenceScope ? "occurrence" : "all",
       recurrence,
+      perDaySlots: perDaySlotsOut,
     });
   }
 
@@ -435,12 +518,14 @@ export function TaskSheet({
     const validSubtasks = subtasks
       .filter((s) => s.title.trim().length > 0)
       .map(subtaskDraftToEntry);
+    const dupSlots = toDisplaySlots(slots);
     onDuplicate({
       taskDraft: {
         title: `Copy of ${title.trim()}`,
         description: description.trim() || undefined,
-        startTime: inputToDisplayTime(startTime),
-        endTime: inputToDisplayTime(endTime),
+        startTime: dupSlots[0]?.startTime ?? "",
+        endTime: dupSlots[0]?.endTime ?? "",
+        slots: dupSlots.length > 1 ? dupSlots : undefined,
         icon,
         color,
         planId: selectedPlan.id,
@@ -692,15 +777,54 @@ export function TaskSheet({
                 aria-label="Task note"
               />
 
+              {/* Same-vs-custom schedule per day (only when spanning >1 weekday) */}
+              {canCustomizePerDay && (
+                <div>
+                  <p className={`mb-1.5 ${SECTION_LABEL}`}>Schedule</p>
+                  <div className="grid grid-cols-2 gap-2">
+                    {([[true, "Same every day"], [false, "Custom per day"]] as const).map(([value, label]) => (
+                      <button
+                        key={label}
+                        type="button"
+                        onClick={() => setSameEveryDay(value)}
+                        className={`h-10 rounded-full text-[14px] font-semibold transition-colors ${
+                          sameEveryDay === value
+                            ? "bg-neutral-900 text-white dark:bg-white dark:text-neutral-950"
+                            : "border border-neutral-200 bg-white text-neutral-500 dark:border-white/10 dark:bg-white/[0.04] dark:text-neutral-400"
+                        }`}
+                      >
+                        {label}
+                      </button>
+                    ))}
+                  </div>
+                  {perDayActive && (
+                    <div className="mt-2.5 flex flex-wrap gap-2">
+                      {DAYS.filter((d) => repeatDays.includes(d)).map((day) => (
+                        <button
+                          key={day}
+                          type="button"
+                          onClick={() => setEditDay(day)}
+                          className={`h-8 rounded-full border px-3 text-[12px] font-semibold transition-colors ${
+                            resolvedEditDay === day
+                              ? "border-neutral-900 bg-neutral-900 text-white dark:border-white dark:bg-white dark:text-neutral-900"
+                              : "border-neutral-200 bg-white text-neutral-500 dark:border-white/10 dark:bg-white/[0.04] dark:text-neutral-400"
+                          }`}
+                        >
+                          {DAY_LABELS[day]}
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )}
+
               {/* Time slot + repeat days (weekday chips hidden for one-off) */}
               <TimeSlotPicker
-                startTime={startTime}
-                endTime={endTime}
-                onStartChange={setStartTime}
-                onEndChange={setEndTime}
+                slots={editorSlots}
+                onSlotsChange={setEditorSlots}
                 activeDay={activeDay}
-                repeatDays={isOccurrenceScope || repeatMode === "once" ? undefined : repeatDays}
-                onRepeatDaysChange={isOccurrenceScope || repeatMode === "once" ? undefined : setRepeatDays}
+                repeatDays={isOccurrenceScope || repeatMode === "once" || perDayActive ? undefined : repeatDays}
+                onRepeatDaysChange={isOccurrenceScope || repeatMode === "once" || perDayActive ? undefined : setRepeatDays}
               />
               {timeError && (
                 <p className="-mt-3 text-[12px] font-semibold text-rose-500 dark:text-rose-400">

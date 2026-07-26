@@ -3,10 +3,10 @@
 import type { PointerEvent as ReactPointerEvent, ReactNode } from "react";
 import { useEffect, useRef, useState } from "react";
 import { AnimatePresence, m } from "framer-motion";
-import { IconChevronLeft, IconChevronRight } from "@tabler/icons-react";
-import type { DayKey, Plan, Ritual, RitualCompletion, Schedule, Task } from "@/lib/useScheduleDB";
+import { IconChevronLeft, IconChevronRight, IconDotsVertical } from "@tabler/icons-react";
+import type { DayKey, Plan, Ritual, RitualCompletion, Schedule, Task, TaskSlot } from "@/lib/useScheduleDB";
 import { DAYS } from "@/lib/useScheduleDB";
-import { sortTasksByTime } from "@/lib/taskMutations";
+import { getSlots, sortTasksByTime } from "@/lib/taskMutations";
 import { completionForDate, getTaskCheckableItems, getTaskSubtaskSummary, resolveTaskState } from "@/lib/taskCompletion";
 import { isTaskScheduledOn, resolveOccurrence } from "@/lib/taskOccurrence";
 import { localISODate, todayISO } from "@/lib/dateUtils";
@@ -57,6 +57,9 @@ function fmtRail(m: number): string {
 
 interface BlockLayout {
   task: Task;
+  /** The specific slot this block renders (a multi-slot task yields one block per slot). */
+  slot: TaskSlot;
+  slotIndex: number;
   top: number;
   height: number;
   leftPct: number;
@@ -65,16 +68,22 @@ interface BlockLayout {
 
 function buildDayLayout(tasks: Task[], startMin: number, endMin: number): { timed: BlockLayout[]; untimed: Task[] } {
   const untimed: Task[] = [];
-  const parsed: { task: Task; s: number; e: number }[] = [];
+  const parsed: { task: Task; slot: TaskSlot; slotIndex: number; s: number; e: number }[] = [];
   for (const t of tasks) {
-    const parsedStart = parseTimeToMinutes(t.startTime);
-    if (parsedStart == null) { untimed.push(t); continue; }
-    const s = mapMinutesToTimeline(parsedStart, startMin, endMin);
-    let e = parseTimeToMinutes(t.endTime);
-    if (e == null) e = s + 30;
-    else e = mapMinutesToTimeline(e, startMin, endMin);
-    while (e <= s) e += 1440;
-    parsed.push({ task: t, s, e });
+    const slots = getSlots(t);
+    let anyTimed = false;
+    slots.forEach((slot, slotIndex) => {
+      const parsedStart = parseTimeToMinutes(slot.startTime);
+      if (parsedStart == null) return;
+      anyTimed = true;
+      const s = mapMinutesToTimeline(parsedStart, startMin, endMin);
+      let e = parseTimeToMinutes(slot.endTime);
+      if (e == null) e = s + 30;
+      else e = mapMinutesToTimeline(e, startMin, endMin);
+      while (e <= s) e += 1440;
+      parsed.push({ task: t, slot, slotIndex, s, e });
+    });
+    if (!anyTimed) untimed.push(t);
   }
   parsed.sort((a, b) => a.s - b.s || a.e - b.e);
 
@@ -98,6 +107,8 @@ function buildDayLayout(tasks: Task[], startMin: number, endMin: number): { time
       const bottom = (Math.min(c.e, endMin) - startMin) * PX_MIN;
       timed.push({
         task: c.task,
+        slot: c.slot,
+        slotIndex: c.slotIndex,
         top,
         height: Math.max(22, bottom - top),
         widthPct: 100 / lanes,
@@ -141,6 +152,8 @@ interface WeekGridProps {
   calendarView: CalendarView;
   customDays: DayKey[];
   onDaySelect: (day: DayKey) => void;
+  /** Open the swap/duplicate day-actions menu for a given weekday. */
+  onDayActions?: (day: DayKey) => void;
   onWeekPrev: () => void;
   onWeekNext: () => void;
   onWeekToday: () => void;
@@ -149,6 +162,8 @@ interface WeekGridProps {
   onEditTask: (task: Task) => void;
   onDeleteTask: (taskId: string, day: DayKey) => void;
   onToggleTaskComplete: (taskId: string, allSubtaskIds: string[], day: DayKey, dateISO: string) => void;
+  /** Independent completion for one phase of a multi-slot task. */
+  onToggleSlot: (taskId: string, slotIndex: number, day: DayKey, dateISO: string) => void;
   onCreateTaskAtTime: (day: DayKey, startMin: number, endMin: number) => void;
   /**
    * Render prop for the task card inside each time block.
@@ -162,6 +177,8 @@ interface WeekGridProps {
     readOnly: boolean,
     onToggle: () => void,
     onDelete: () => void,
+    slot?: TaskSlot,
+    slotIndex?: number,
   ) => ReactNode;
 }
 
@@ -178,6 +195,7 @@ export function WeekGrid({
   calendarView,
   customDays,
   onDaySelect,
+  onDayActions,
   onWeekPrev,
   onWeekNext,
   onWeekToday,
@@ -186,6 +204,7 @@ export function WeekGrid({
   onEditTask,
   onDeleteTask,
   onToggleTaskComplete,
+  onToggleSlot,
   onCreateTaskAtTime,
   renderCard,
 }: WeekGridProps) {
@@ -493,25 +512,43 @@ export function WeekGrid({
             {days.map(({ day, date, dayIsToday }) => {
               const isActive = day === activeDay;
               return (
-                <button
+                <div
                   key={day}
-                  type="button"
-                  onClick={() => { haptic("light"); onDaySelect(day); }}
-                  className={`flex flex-col items-center justify-center gap-2 border-r border-neutral-200 transition-colors last:border-r-0 dark:border-white/[0.07] ${
+                  className={`group relative flex border-r border-neutral-200 transition-colors last:border-r-0 dark:border-white/[0.07] ${
                     isActive ? "bg-neutral-950 dark:bg-white" : "hover:bg-neutral-50 dark:hover:bg-white/[0.04]"
                   }`}
                 >
-                  <span className={`text-[13px] font-semibold leading-none ${
-                    isActive ? "text-white/90 dark:text-neutral-900" : dayIsToday ? "text-rose-500" : "text-neutral-600 dark:text-neutral-300"
-                  }`}>
-                    {DAY_SHORT[day]}
-                  </span>
-                  <span className={`text-[22px] font-extrabold tabular-nums leading-none ${
-                    isActive ? "text-white dark:text-neutral-900" : dayIsToday ? "text-rose-500" : "text-neutral-900 dark:text-neutral-100"
-                  }`}>
-                    {date.getDate()}
-                  </span>
-                </button>
+                  <button
+                    type="button"
+                    onClick={() => { haptic("light"); onDaySelect(day); }}
+                    className="flex flex-1 flex-col items-center justify-center gap-2"
+                  >
+                    <span className={`text-[13px] font-semibold leading-none ${
+                      isActive ? "text-white/90 dark:text-neutral-900" : dayIsToday ? "text-rose-500" : "text-neutral-600 dark:text-neutral-300"
+                    }`}>
+                      {DAY_SHORT[day]}
+                    </span>
+                    <span className={`text-[22px] font-extrabold tabular-nums leading-none ${
+                      isActive ? "text-white dark:text-neutral-900" : dayIsToday ? "text-rose-500" : "text-neutral-900 dark:text-neutral-100"
+                    }`}>
+                      {date.getDate()}
+                    </span>
+                  </button>
+                  {onDayActions && (
+                    <button
+                      type="button"
+                      aria-label={`${DAY_SHORT[day]} actions — swap or duplicate day`}
+                      onClick={(e) => { e.stopPropagation(); haptic("light"); onDayActions(day); }}
+                      className={`absolute right-1 top-1 flex h-6 w-6 items-center justify-center rounded-full opacity-0 transition-opacity focus-visible:opacity-100 group-hover:opacity-100 ${
+                        isActive
+                          ? "text-white/70 hover:bg-white/15 dark:text-neutral-900/60 dark:hover:bg-black/10"
+                          : "text-neutral-400 hover:bg-neutral-100 dark:text-neutral-500 dark:hover:bg-white/[0.08]"
+                      }`}
+                    >
+                      <IconDotsVertical size={14} strokeWidth={2} />
+                    </button>
+                  )}
+                </div>
               );
             })}
           </div>
@@ -616,18 +653,24 @@ export function WeekGrid({
                   const visualHeight = Math.max(22, layout.height - TASK_VERTICAL_INSET * 2);
                   const linkedPlan = layout.task.planId ? plansById.get(layout.task.planId) ?? null : null;
                   const allSubtaskIds = getTaskCheckableItems(layout.task, linkedPlan).map((item) => item.id);
+                  // Multi-slot tasks complete per phase; a single-slot task keeps
+                  // the whole-task flag.
+                  const totalSlots = getSlots(layout.task).length;
+                  const slotDone = totalSlots > 1
+                    ? (layout.task.completedSlotIndices ?? []).includes(layout.slotIndex)
+                    : !!layout.task.completed;
                   // The block you should be executing right now — green ring
                   // (progress signal). Sanctioned chrome-led depth → data-glass.
                   const nowPx = (now - startMin) * PX_MIN;
                   const isCurrent =
                     dayIsToday &&
-                    !layout.task.completed &&
+                    !slotDone &&
                     !layout.task.missed &&
                     nowPx >= layout.top &&
                     nowPx < layout.top + layout.height;
                   return (
                     <div
-                      key={layout.task.id}
+                      key={`${layout.task.id}-${layout.slotIndex}`}
                       data-task-block
                       data-glass={isCurrent ? "" : undefined}
                       className={`absolute ${isCurrent ? "rounded-[10px] shadow-[0_0_0_1.5px_rgba(0,166,62,0.55),0_8px_24px_-12px_rgba(0,166,62,0.35)] dark:shadow-[0_0_0_1.5px_rgba(47,212,110,0.5),0_8px_24px_-12px_rgba(47,212,110,0.4)]" : ""}`}
@@ -644,8 +687,13 @@ export function WeekGrid({
                         layout.height,
                         layout.widthPct,
                         readOnly,
-                        () => onToggleTaskComplete(layout.task.id, allSubtaskIds, day, dateISO),
+                        () =>
+                          totalSlots > 1
+                            ? onToggleSlot(layout.task.id, layout.slotIndex, day, dateISO)
+                            : onToggleTaskComplete(layout.task.id, allSubtaskIds, day, dateISO),
                         () => onDeleteTask(layout.task.id, day),
+                        layout.slot,
+                        layout.slotIndex,
                       )}
                     </div>
                   );

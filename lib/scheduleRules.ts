@@ -117,6 +117,33 @@ export function validateTaskTime(task: SchedulableTask): ValidationError | null 
   return null;
 }
 
+/**
+ * Validate all slots of a single task: each slot must pass validateTaskTime, and
+ * no two slots of the same task may overlap. Returns the first error, or null.
+ */
+export function validateTaskSlots(
+  slots: ReadonlyArray<{ startTime: string; endTime: string }>,
+  ctx: { title: string; day: DayKey }
+): ValidationError | null {
+  if (slots.length === 0) {
+    return { code: "invalid-time", message: "Add at least one time slot" };
+  }
+
+  const intervals: TimeInterval[] = [];
+  for (const slot of slots) {
+    const error = validateTaskTime({ title: ctx.title, day: ctx.day, startTime: slot.startTime, endTime: slot.endTime });
+    if (error) return error;
+    const start = toMinutes(slot.startTime)!;
+    const end = toMinutes(slot.endTime)!;
+    const interval: TimeInterval = { start, end: end <= start ? end + 1440 : end };
+    if (intervals.some((iv) => intervalsOverlap(iv, interval))) {
+      return { code: "invalid-time", message: "Time slots can't overlap each other" };
+    }
+    intervals.push(interval);
+  }
+  return null;
+}
+
 // ── Overlap detection ─────────────────────────────────────────────────────────
 
 /**

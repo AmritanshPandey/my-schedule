@@ -16,6 +16,7 @@ import {
   IconEdit,
   IconFlame,
   IconListCheck,
+  IconDotsVertical,
   IconNotes,
   IconPhoto,
   IconPlus,
@@ -30,6 +31,7 @@ import type { MilestoneSaveData } from "@/components/plan/MilestoneSheet";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
 import IOSBottomNav from "@/components/ios/IOSBottomNav";
 import IOSLightTaskCard from "@/components/ios/IOSLightTaskCard";
+import DayActionsSheet from "@/components/DayActionsSheet";
 import {
   DAYS,
   DAY_LABELS,
@@ -59,11 +61,14 @@ import {
   sortTasksByTime,
   uid,
   updateTaskDays,
+  updateTaskPerDay,
+  swapDays,
+  duplicateDay,
   setTaskException,
   clearTaskException,
   type TaskDeleteScope,
 } from "@/lib/taskMutations";
-import { completionForDate, getTaskCheckableItems, getTaskSubtaskSummary, isTaskCompleted, isTaskResolved, markTaskMissed, toggleSubtaskComplete, toggleTaskComplete } from "@/lib/taskCompletion";
+import { completionForDate, getTaskCheckableItems, getTaskSubtaskSummary, isTaskCompleted, isTaskResolved, markTaskMissed, toggleSlotComplete, toggleSubtaskComplete, toggleTaskComplete } from "@/lib/taskCompletion";
 import { diffException, isTaskScheduledOn, resolveOccurrence } from "@/lib/taskOccurrence";
 import { cascadeMilestoneDates, normalizeMilestoneTimeline } from "@/lib/roadmapDates";
 import { toggleRitualCompletion } from "@/lib/ritualCompletions";
@@ -347,6 +352,7 @@ export default function IOSScheduleApp() {
   useReminders(schedule, ready);
   const [todayKey, setTodayKey] = useState<DayKey>(() => JS_DAYS[new Date().getDay()]);
   const [activeDay, setActiveDay] = useState<DayKey>(() => JS_DAYS[new Date().getDay()]);
+  const [dayActionsOpen, setDayActionsOpen] = useState(false);
   const [activeTab, setActiveTab] = useState(4);
   const [iosSetupDismissed, setIosSetupDismissed] = useState(() => {
     try {
@@ -633,8 +639,15 @@ export default function IOSScheduleApp() {
       closeTaskSheet();
       return;
     }
-    if (data.taskId) setSchedule(updateTaskDays(data.taskId, data.taskDraft, data.repeatDays, data.planItems));
-    else setSchedule(createTask(data.taskDraft, data.repeatDays, data.planItems));
+    if (data.taskId) {
+      if (data.perDaySlots) {
+        setSchedule(updateTaskPerDay(data.taskId, data.taskDraft, data.perDaySlots, data.repeatDays, data.planItems));
+      } else {
+        setSchedule(updateTaskDays(data.taskId, data.taskDraft, data.repeatDays, data.planItems));
+      }
+    } else {
+      setSchedule(createTask(data.taskDraft, data.repeatDays, data.planItems));
+    }
     closeTaskSheet();
   }
 
@@ -662,6 +675,24 @@ export default function IOSScheduleApp() {
           const linkedPlan = task.planId ? prev.plans.find((plan) => plan.id === task.planId) ?? null : null;
           const totalSubtasks = getTaskSubtaskSummary(task, linkedPlan).totalCount;
           return { ...task, ...toggleSubtaskComplete(task, subtaskId, totalSubtasks) };
+        }),
+      },
+    }));
+  }
+
+  // Independent completion for one phase of a multi-slot task (same-day
+  // multiple time blocks) — mirrors handleToggleSubtask, keyed by slot index.
+  function handleToggleSlot(taskId: string, slotIndex: number, day: DayKey = activeDay, dateISO?: string) {
+    if (dateISO && dateISO !== todayISO()) return;
+    setSchedule((prev) => ({
+      ...prev,
+      activities: {
+        ...prev.activities,
+        [day]: (prev.activities[day] ?? []).map((task) => {
+          if (task.id !== taskId) return task;
+          const linkedPlan = task.planId ? prev.plans.find((plan) => plan.id === task.planId) ?? null : null;
+          const totalSubtasks = getTaskSubtaskSummary(task, linkedPlan).totalCount;
+          return { ...task, ...toggleSlotComplete(task, slotIndex, totalSubtasks) };
         }),
       },
     }));
@@ -903,6 +934,7 @@ export default function IOSScheduleApp() {
             linkedPlan={task.planId ? plansById.get(task.planId) ?? null : null}
             readOnly={dateISO !== todayISO()}
             onToggleComplete={(id, ids) => handleToggleTaskComplete(id, ids, day, dateISO)}
+            onToggleSlot={(id, slotIndex) => handleToggleSlot(id, slotIndex, day, dateISO)}
             onEdit={() => openEditSheet(task, dateISO)}
             onOpenSubtasks={() => setSubtasksRef({ id: task.id, day, dateISO })}
           />
@@ -1289,6 +1321,14 @@ export default function IOSScheduleApp() {
               <div className="flex items-center gap-2">
                 <button
                   type="button"
+                  aria-label="Day actions"
+                  onClick={() => { haptic("light"); setDayActionsOpen(true); }}
+                  className="flex h-10 w-10 items-center justify-center rounded-full bg-neutral-100 text-neutral-500 dark:bg-white/[0.08] dark:text-neutral-300"
+                >
+                  <IconDotsVertical size={17} strokeWidth={2} />
+                </button>
+                <button
+                  type="button"
                   aria-label="Lock screen wallpaper"
                   onClick={() => { haptic("light"); setWallpaperOpen(true); }}
                   className="flex h-10 w-10 items-center justify-center rounded-full bg-neutral-100 text-neutral-500 dark:bg-white/[0.08] dark:text-neutral-300"
@@ -1502,6 +1542,14 @@ export default function IOSScheduleApp() {
       )}
       <div className={subtasksRef || activeTab === 6 ? "h-dvh bg-white pt-[env(safe-area-inset-top)] dark:bg-neutral-950" : "pb-36 pt-[calc(env(safe-area-inset-top)+76px)]"}>{content}</div>
 
+      <DayActionsSheet
+        open={dayActionsOpen}
+        sourceDay={activeDay}
+        onClose={() => setDayActionsOpen(false)}
+        onSwap={(target) => setSchedule(swapDays(activeDay, target))}
+        onDuplicate={(targets) => setSchedule(duplicateDay(activeDay, targets))}
+      />
+
       {activeTab !== 6 && !subtasksRef && !taskSheetOpen && (
         <IOSBottomNav
           activeTab={activeTab}
@@ -1532,6 +1580,7 @@ export default function IOSScheduleApp() {
             plans={schedule.plans}
             activeDay={activeDay}
             activeDays={taskSheetActiveDays}
+            activities={schedule.activities}
             isOpen={taskSheetOpen}
             initialPlanId={taskSheetPlanId}
             initialTaskType={taskSheetInitialType}
