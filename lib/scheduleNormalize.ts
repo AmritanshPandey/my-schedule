@@ -98,10 +98,15 @@ export function normalizeTasks(value: unknown, fallbackPlanId: string, fallbackI
 
     if ("startTime" in item && "endTime" in item && "title" in item && "icon" in item) {
       const task = item as Task & Record<string, unknown>;
+      // taskType is a whitelist, not a passthrough: anything unrecognised falls
+      // through to undefined ("task"). A new type MUST be added here or it is
+      // silently downgraded on the next reload — the same silent-loss class
+      // that once ate `slots`. ("routine"/"normal" are legacy spellings.)
       const rawType: string | undefined = task.taskType;
       const taskType: Task["taskType"] =
         rawType === "session" || rawType === "routine" ? "session" :
         rawType === "task" || rawType === "normal" ? "task" :
+        rawType === "commitment" ? "commitment" :
         undefined;
 
       // Required identity/time fields first, then every optional field that

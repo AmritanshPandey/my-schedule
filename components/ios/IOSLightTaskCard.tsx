@@ -3,7 +3,7 @@
 import { IconArrowUpRight, IconEdit, IconListCheck } from "@tabler/icons-react";
 import { TaskBlockCard } from "@/components/TaskBlockCard";
 import type { Plan, Task } from "@/lib/useScheduleDB";
-import { calculateTaskProgress, getTaskCheckableItems, getTaskSubtaskSummary, resolveTaskState } from "@/lib/taskCompletion";
+import { calculateTaskProgress, getTaskCheckableItems, getTaskSubtaskSummary, isTrackedTask, resolveTaskState } from "@/lib/taskCompletion";
 import { formatSlotsDuration } from "@/lib/timeUtils";
 import { getSlots } from "@/lib/taskMutations";
 import { haptic } from "@/lib/haptics";
@@ -35,9 +35,10 @@ export default function IOSLightTaskCard({
   const { completedCount, totalCount } = task.taskType === "session"
     ? summary
     : calculateTaskProgress(task, itemCount);
+  const tracked = isTrackedTask(task);
   const slots = getSlots(task);
   const isMultiSlot = slots.length > 1;
-  const slotCompletions = isMultiSlot && onToggleSlot
+  const slotCompletions = tracked && isMultiSlot && onToggleSlot
     ? slots.map((_, i) => ({
         done: (task.completedSlotIndices ?? []).includes(i),
         onToggle: () => onToggleSlot(task.id, i),
@@ -93,7 +94,8 @@ export default function IOSLightTaskCard({
         onToggleComplete(task.id, allSubtaskIds);
       }}
       onClick={() => {
-        if (!readOnly && !slotCompletions) {
+        // Held time can't be completed, so tapping the card must do nothing.
+        if (!readOnly && !slotCompletions && tracked) {
           haptic("light");
           onToggleComplete(task.id, allSubtaskIds);
         }

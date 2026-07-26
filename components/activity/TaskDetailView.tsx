@@ -12,7 +12,7 @@ import Pill from "@/components/ui/Pill";
 import ProgressBar from "@/components/ui/ProgressBar";
 import { todayISO } from "@/lib/dateUtils";
 import { compareDeadline } from "@/lib/subtaskDeadline";
-import { calculateTaskProgress, resolveTaskState } from "@/lib/taskCompletion";
+import { calculateTaskProgress, isTrackedTask, resolveTaskState } from "@/lib/taskCompletion";
 import { formatDuration } from "@/lib/timeUtils";
 import type { Plan, Task } from "@/lib/useScheduleDB";
 
@@ -51,6 +51,9 @@ export default function TaskDetailView({
 
   const items: ScheduleEntry[] = useMemo(() => {
     if (!task) return [];
+    // Held time has nothing to check off, and must not inherit the plan's
+    // template items (which would give it a phantom progress bar).
+    if (!isTrackedTask(task)) return [];
     if (isSession) return task.subtasks ?? [];
     const base = task.subtasks !== undefined ? task.subtasks : linkedPlan?.items ?? [];
     return [...base].sort(compareDeadline);
@@ -69,7 +72,9 @@ export default function TaskDetailView({
 
   if (!task) return null;
 
-  const eyebrow = linkedPlan?.title ?? (isSession ? "Session" : "Task");
+  // Held time offers no completion actions — only rescheduling and editing.
+  const tracked = isTrackedTask(task);
+  const eyebrow = linkedPlan?.title ?? (isSession ? "Session" : tracked ? "Task" : "Commitment");
   const skipToggle = onSkip && canSkip ? (
     <button
       type="button"
@@ -85,12 +90,14 @@ export default function TaskDetailView({
     <>
       {presentation === "page" && (
         <div className="flex items-start gap-3">
-          <TaskStatusCheckbox
-            state={state}
-            readOnly={readOnly}
-            label={done ? "Mark task not done" : "Mark task done"}
-            onClick={() => onToggleComplete(task.id, allIds)}
-          />
+          {tracked && (
+            <TaskStatusCheckbox
+              state={state}
+              readOnly={readOnly}
+              label={done ? "Mark task not done" : "Mark task done"}
+              onClick={() => onToggleComplete(task.id, allIds)}
+            />
+          )}
           <div className="min-w-0 pt-0.5">
             <p className="truncate text-[15px] font-semibold text-neutral-400 dark:text-neutral-500">{eyebrow}</p>
           </div>
@@ -164,6 +171,7 @@ export default function TaskDetailView({
   ) : (
     <div className="mt-1 space-y-2">
       <div className="flex items-center gap-2.5">
+      {tracked && (
       <m.button
         type="button"
         whileTap={{ scale: 0.97 }}
@@ -173,8 +181,9 @@ export default function TaskDetailView({
         <IconCheck size={18} strokeWidth={2.6} />
         Done
       </m.button>
+      )}
 
-      {!done && onMissed && (
+      {tracked && !done && onMissed && (
         <m.button
           type="button"
           whileTap={{ scale: 0.97 }}
@@ -199,7 +208,7 @@ export default function TaskDetailView({
       )}
       </div>
 
-      {!done && onSnooze && (
+      {tracked && !done && onSnooze && (
         <button
           type="button"
           onClick={() => { onSnooze(task.id); onClose(); }}
@@ -219,6 +228,7 @@ export default function TaskDetailView({
     actions
   ) : (
     <div className="mt-1 flex items-center gap-2.5">
+      {tracked && (
       <m.button
         type="button"
         whileTap={{ scale: 0.97 }}
@@ -228,7 +238,8 @@ export default function TaskDetailView({
         <IconCheck size={18} strokeWidth={2.6} />
         Done
       </m.button>
-      {onMissed && (
+      )}
+      {tracked && onMissed && (
         <m.button
           type="button"
           whileTap={{ scale: 0.97 }}
@@ -271,14 +282,16 @@ export default function TaskDetailView({
 
       {presentation === "sheet" && (
         <div className="flex items-start gap-2.5 pr-10">
-          <div className="mt-0.5">
-            <TaskStatusCheckbox
-              state={state}
-              readOnly={readOnly}
-              label={done ? "Mark task not done" : "Mark task done"}
-              onClick={() => onToggleComplete(task.id, allIds)}
-            />
-          </div>
+          {tracked && (
+            <div className="mt-0.5">
+              <TaskStatusCheckbox
+                state={state}
+                readOnly={readOnly}
+                label={done ? "Mark task not done" : "Mark task done"}
+                onClick={() => onToggleComplete(task.id, allIds)}
+              />
+            </div>
+          )}
           <div className="min-w-0">
             <h2 className="truncate text-[20px] font-bold leading-tight text-neutral-900 dark:text-white">{task.title}</h2>
             <p className="text-[13px] font-semibold text-neutral-400 dark:text-neutral-500">{eyebrow}</p>

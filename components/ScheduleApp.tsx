@@ -59,6 +59,7 @@ import {
   SummaryConfig,
   Task,
   TaskSlot,
+  TaskTypeValue,
   categoryFromIcon,
   resetStaleCompletions,
 } from "@/lib/useScheduleDB";
@@ -109,6 +110,7 @@ import {
   toggleTaskComplete,
   toggleSubtaskComplete,
   toggleSlotComplete,
+  isTrackedTask,
   markTaskMissed,
   snoozeTaskLater,
   completionForDate,
@@ -237,11 +239,12 @@ function IOSSafeDashboard({
   onToggleSlot: (taskId: string, slotIndex: number) => void;
   onOpenSubtasks: (task: Task) => void;
 }) {
-  const done = todayTasks.filter((task) => {
+  const trackedToday = todayTasks.filter(isTrackedTask);
+  const done = trackedToday.filter((task) => {
     const linkedPlan = task.planId ? plansById.get(task.planId) ?? null : null;
     return isTaskCompleted(task, getTaskSubtaskSummary(task, linkedPlan).totalCount);
   }).length;
-  const total = todayTasks.length;
+  const total = trackedToday.length;
   const plans = schedule.plans.length;
   const rituals = schedule.rituals?.length ?? 0;
 
@@ -536,7 +539,9 @@ function WeekSummary({
       thisWeekDates.map(({ day, date }) => {
         const dateISO = localISODate(date);
         const isToday = day === todayKey;
-        const tasks = (schedule.activities[day] ?? []).map((task) =>
+        // Commitments never count. Existing occurrence behaviour is otherwise
+        // untouched, so no pre-existing number shifts.
+        const tasks = (schedule.activities[day] ?? []).filter(isTrackedTask).map((task) =>
           isToday ? task : { ...task, ...completionForDate(task, dateISO) }
         );
         const total = tasks.length;
@@ -685,7 +690,7 @@ export default function ScheduleApp() {
     () => typeof window !== "undefined" && window.matchMedia("(min-width: 1024px)").matches,
   );
 
-  const [taskSheetInitialType, setTaskSheetInitialType] = useState<"task" | "session">("task");
+  const [taskSheetInitialType, setTaskSheetInitialType] = useState<TaskTypeValue>("task");
   const [taskSheetInitialStartTime, setTaskSheetInitialStartTime] = useState("");
   const [taskSheetInitialEndTime, setTaskSheetInitialEndTime] = useState("");
 
@@ -2160,8 +2165,11 @@ export default function ScheduleApp() {
   }, [schedule.plans, schedule.milestones, schedule.progressTrackers]);
 
   const dayProgress = useMemo(() => {
-    const total = dayTasksView.length;
-    const done = dayTasksView.filter((t) =>
+    // Count only tracked work. dayTasksView itself must keep commitments —
+    // it also drives the rendered list and timeline, which do show them.
+    const tracked = dayTasksView.filter(isTrackedTask);
+    const total = tracked.length;
+    const done = tracked.filter((t) =>
       isTaskCompleted(t, taskEffectiveItemCount(t))
     ).length;
     return { done, total, pct: total > 0 ? Math.round((done / total) * 100) : 0 };
@@ -2237,7 +2245,9 @@ export default function ScheduleApp() {
       Skips both completed and missed tasks. */
   const nextTask = useMemo(() => {
     if (activeDay !== todayKey) return null;
-    return dayTasks.find((t) => !isTaskResolved(t, taskEffectiveItemCount(t))) ?? null;
+    // A commitment is never "next to do" — it can't be resolved, so it would
+    // otherwise pin itself here permanently.
+    return dayTasks.find((t) => isTrackedTask(t) && !isTaskResolved(t, taskEffectiveItemCount(t))) ?? null;
   }, [dayTasks, activeDay, todayKey, taskEffectiveItemCount]);
 
   /** Rituals due on the active day (for summary line) */
@@ -2571,7 +2581,12 @@ export default function ScheduleApp() {
     ).length;
     const needsWorkCount = planRows.filter(({ stats }) => stats.consistency < 35).length;
     const needsFocusCount = atRiskCount + needsWorkCount;
-    const totalPlanTasks = planRows.reduce((sum, row) => sum + row.uniqueTasks.length, 0);
+    // Headline count of tracked work across plans — commitments aren't work.
+    // row.uniqueTasks itself keeps them so they still list under their plan.
+    const totalPlanTasks = planRows.reduce(
+      (sum, row) => sum + row.uniqueTasks.filter(({ task }) => isTrackedTask(task)).length,
+      0,
+    );
     const totalTrackers = planRows.reduce((sum, row) => sum + row.trackerCount, 0);
     const topPlan = planRows.length > 0
       ? [...planRows].sort((a, b) => b.stats.consistency - a.stats.consistency)[0]

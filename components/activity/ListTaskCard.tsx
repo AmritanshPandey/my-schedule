@@ -5,7 +5,7 @@ import { m, AnimatePresence, useMotionValue, useTransform, animate } from "frame
 import { IconArrowUpRight, IconCheck, IconChevronDown, IconEdit, IconListCheck, IconMinus, IconTrash, IconX } from "@tabler/icons-react";
 import type { Task, Plan } from "@/lib/useScheduleDB";
 import type { ScheduleEntry, MetaField } from "@/components/ScheduleItem";
-import { calculateTaskProgress, resolveTaskState } from "@/lib/taskCompletion";
+import { calculateTaskProgress, isTrackedTask, resolveTaskState } from "@/lib/taskCompletion";
 import type { TaskState } from "@/lib/taskCompletion";
 import { formatSlotsDuration } from "@/lib/timeUtils";
 import { getSlots } from "@/lib/taskMutations";
@@ -164,19 +164,22 @@ function ListTaskCardInner({
 
   // ── Derived state ───────────────────────────────────────────────────────────
   const isRoutine = task.taskType === "session";
+  // Held time: renders as a normal block but offers no way to complete it —
+  // no checkbox, no swipe, no tap-to-done, no progress bar.
+  const tracked = isTrackedTask(task);
   const slots = useMemo(() => getSlots(task), [task.startTime, task.endTime, task.slots]);
   const isMultiSlot = slots.length > 1;
   // Independent per-phase checkboxes — each slot toggles on its own instead of
   // one shared "done" state for the whole task.
   const slotCompletions = useMemo(
     () =>
-      isMultiSlot && onToggleSlot
+      tracked && isMultiSlot && onToggleSlot
         ? slots.map((_, i) => ({
             done: (task.completedSlotIndices ?? []).includes(i),
             onToggle: () => onToggleSlot(task.id, i),
           }))
         : undefined,
-    [isMultiSlot, onToggleSlot, slots, task.completedSlotIndices, task.id]
+    [tracked, isMultiSlot, onToggleSlot, slots, task.completedSlotIndices, task.id]
   );
 
   // ── Swipe-to-complete ───────────────────────────────────────────────────────
@@ -244,7 +247,7 @@ function ListTaskCardInner({
       onOpenSubtasks();
     } else if (isRoutine && onOpenRoutine) {
       onOpenRoutine();
-    } else if (!readOnly && !slotCompletions) {
+    } else if (!readOnly && !slotCompletions && tracked) {
       onToggleComplete(task.id, allSubtaskIds);
     }
   }
@@ -301,14 +304,15 @@ function ListTaskCardInner({
   ) : null;
 
   // ── Note + progress bar (below the time row) ────────────────────────────────
-  const footerNode = (task.description || canExpand || done) ? (
+  const footerNode = (task.description || ((canExpand || done) && tracked)) ? (
     <div className="flex flex-col gap-2">
       {task.description && (
         <p className={`text-[13px] leading-relaxed ${done ? "text-neutral-400 dark:text-neutral-500" : "text-neutral-500 dark:text-neutral-400"}`}>
           {task.description}
         </p>
       )}
-      {(canExpand || done) && (
+      {/* No progress bar on held time — green only ever reports real progress. */}
+      {(canExpand || done) && tracked && (
         <div className="flex items-center gap-3">
           <ProgressBar pct={barPct} height={8} fillClassName="bg-green-500" className="min-w-0 flex-1" />
           <span className="w-9 shrink-0 text-right text-[13px] font-semibold tabular-nums text-neutral-500 dark:text-neutral-400">
@@ -369,7 +373,7 @@ function ListTaskCardInner({
   return (
     <div className="relative overflow-hidden rounded-2xl">
       {/* ── Swipe reveal layer ─────────────────────────────────────────────── */}
-      {!editMode && !readOnly && !slotCompletions && (
+      {!editMode && !readOnly && !slotCompletions && tracked && (
         <div className={`absolute inset-0 flex items-center rounded-2xl pl-5 ${done ? "bg-neutral-100 dark:bg-white/[0.04]" : "bg-green-500"}`}>
           <m.div
             style={{ opacity: revealOpacity, scale: revealScale }}
@@ -383,7 +387,7 @@ function ListTaskCardInner({
       {/* ── Card (draggable) — shared TaskBlockCard visual ─────────────────── */}
       <m.div
         layout
-        drag={editMode || readOnly || !!slotCompletions ? false : "x"}
+        drag={editMode || readOnly || !!slotCompletions || !tracked ? false : "x"}
         dragConstraints={{ left: 0, right: 100 }}
         dragElastic={{ left: 0, right: 0.05 }}
         dragMomentum={false}

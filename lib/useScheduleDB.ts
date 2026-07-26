@@ -78,6 +78,13 @@ export interface TaskSlot {
   endTime: string;
 }
 
+/**
+ * A task's kind. "task" (default) and "session" are executed and tracked;
+ * "commitment" is held time that blocks the calendar but is never tracked.
+ * Exported so UI state that mirrors it can't drift from this union.
+ */
+export type TaskTypeValue = "task" | "session" | "commitment";
+
 export interface Task {
   id: string;
   title: string;
@@ -105,7 +112,13 @@ export interface Task {
   streakEnabled?: boolean;            // opt-in to streak tracking
   sortOrder?: number;                 // drag-reorder position within a day
   subtasks?: ScheduleEntry[];         // per-task subtask list (overrides plan.items)
-  taskType?: "task" | "session";       // undefined treated as "task"
+  /**
+   * "task" (default) and "session" are executed and tracked. "commitment" is
+   * held time — commute, fixed office hours — that blocks the calendar but is
+   * never checked off and never counts toward any statistic. See
+   * `isTrackedTask` in lib/taskCompletion.ts.
+   */
+  taskType?: TaskTypeValue;            // undefined treated as "task"
   exceptions?: Record<string, TaskException>; // per-date overrides, keyed by ISO date
   recurrence?: TaskRecurrence;         // absent = weekly (every matching weekday)
 }

@@ -16,6 +16,7 @@ import type { Schedule, Task } from "@/lib/useScheduleDB";
 import type { DayKey } from "@/lib/scheduleConstants";
 import { isTaskScheduledOn, resolveOccurrence } from "@/lib/taskOccurrence";
 import { getSlots } from "@/lib/taskMutations";
+import { isTrackedTask } from "@/lib/taskCompletion";
 import { parseTimeToMinutes, formatDisplayTime } from "@/lib/timeUtils";
 import { localISODate } from "@/lib/dateUtils";
 
@@ -166,8 +167,11 @@ export function collectReminders(schedule: Schedule, now = new Date()): PendingR
     const nudgeMin = parseTimeToMinutes(settings.nudgeTime);
     if (nudgeMin != null) {
       const atMs = msAt(todayISO, nudgeMin);
+      // Commitments are excluded: nagging "1 task still open" about a commute
+      // you can't close is exactly the kind of noise this nudge must avoid.
+      // Their start-time reminders above still fire — that part is useful.
       const openCount = (schedule.activities[dayKey] ?? []).filter(
-        (t) => !taskIsDone(t) && isTaskScheduledOn(t, todayISO, true),
+        (t) => !taskIsDone(t) && isTaskScheduledOn(t, todayISO, true) && isTrackedTask(t),
       ).length;
       if (atMs > nowMs && openCount > 0) {
         out.push({

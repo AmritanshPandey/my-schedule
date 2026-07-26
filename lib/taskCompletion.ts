@@ -19,6 +19,25 @@ export function isMultiSlot(task: Task): boolean {
   return getSlots(task).length > 1;
 }
 
+/**
+ * Whether this task participates in execution tracking.
+ *
+ * A "commitment" is held time (commute, fixed office hours): it blocks the
+ * calendar and renders on the timeline like anything else, but it has no
+ * checkbox and must not appear in any statistic — completion %, streaks,
+ * consistency, or remaining workload.
+ *
+ * Use this at every site that counts task ROWS toward a denominator. The
+ * numerators need no guard: a commitment has no checkbox, so it never emits a
+ * completion event, so every history-driven "done" figure already ignores it.
+ *
+ * Do NOT fold this into `isTaskScheduledOn` — that predicate also decides what
+ * gets DRAWN, and a commitment must still be drawn.
+ */
+export function isTrackedTask(task: Task): boolean {
+  return task.taskType !== "commitment";
+}
+
 function slotsAllDone(task: Task): boolean {
   const total = getSlots(task).length;
   if (total <= 1) return true;
@@ -132,6 +151,10 @@ export interface TaskSubtaskSummary {
 }
 
 export function getTaskCheckableItems(task: Task, plan: Plan | null): ScheduleEntry[] {
+  // A commitment has nothing to check off. Returning early also stops it
+  // inheriting the parent plan's template items, which would otherwise give a
+  // commute a phantom progress bar just for living in a plan that has subtasks.
+  if (!isTrackedTask(task)) return [];
   const isSession = task.taskType === "session";
   const hasOwnSubtasks = task.subtasks !== undefined;
   const subtasks = task.subtasks ?? [];
@@ -162,6 +185,10 @@ export function getTaskSubtaskSummary(task: Task, plan: Plan | null): TaskSubtas
 // ── Completion predicate ─────────────────────────────────────────────────────
 
 export function isTaskCompleted(task: Task, totalSubtasks: number): boolean {
+  // A commitment is never "done" — there's nothing to complete. This also
+  // covers converting an already-completed task into a commitment, which would
+  // otherwise keep a stale `completed: true` and render green forever.
+  if (!isTrackedTask(task)) return false;
   if (totalSubtasks === 0) return !!task.completed;
   if (task.completed !== undefined) return task.completed;
   return new Set(task.completedSubtaskIds ?? []).size >= totalSubtasks;
@@ -172,6 +199,9 @@ export function isTaskCompleted(task: Task, totalSubtasks: number): boolean {
 export type TaskState = "incomplete" | "partial" | "completed" | "missed";
 
 export function resolveTaskState(task: Task, totalSubtasks: number): TaskState {
+  // Held time reports no progress state at all — not done, not missed, not
+  // partial. Per the One Signal Rule, nothing green or rose may appear on it.
+  if (!isTrackedTask(task)) return "incomplete";
   if (isTaskCompleted(task, totalSubtasks)) return "completed";
   if (task.missed) return "missed";
   if (totalSubtasks > 0 && calculateTaskProgress(task, totalSubtasks).completedCount > 0) return "partial";

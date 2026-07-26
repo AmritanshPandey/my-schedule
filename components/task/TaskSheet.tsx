@@ -35,7 +35,7 @@ import { SECTION_ICONS } from "@/components/SectionIcons";
 import { PlanColorPicker, iconPickerClass } from "@/components/plan/planFormShared";
 import { colorFromIcon, resolveAccentColor, type AccentColor } from "@/lib/colorSystem";
 import { haptic } from "@/lib/haptics";
-import type { DayKey, Plan, Task, TaskRecurrence } from "@/lib/useScheduleDB";
+import type { DayKey, Plan, Task, TaskRecurrence, TaskTypeValue } from "@/lib/useScheduleDB";
 import { DAYS, DAY_LABELS } from "@/lib/useScheduleDB";
 import { localISODate } from "@/lib/dateUtils";
 import type { ScheduleEntry } from "@/components/ScheduleItem";
@@ -87,7 +87,7 @@ export interface TaskSheetProps {
   activities?: Partial<Record<DayKey, Task[]>>;
   isOpen: boolean;
   initialPlanId?: string | null;
-  initialTaskType?: "task" | "session";
+  initialTaskType?: TaskTypeValue;
   /** Pre-fill start time on create (HH:MM 24-hour format, e.g. "09:30"). */
   initialStartTime?: string;
   /** Pre-fill end time on create (HH:MM 24-hour format, e.g. "10:30"). */
@@ -199,7 +199,7 @@ export function TaskSheet({
   // ── Form state ─────────────────────────────────────────────────────────────
   const [planId, setPlanId] = useState("");
   const [expandSheetOpen, setExpandSheetOpen] = useState(false);
-  const [taskType, setTaskType] = useState<"task" | "session">("task");
+  const [taskType, setTaskType] = useState<TaskTypeValue>("task");
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
   // Time blocks in HTML input format ("HH:MM"). One = single block; many = phases.
@@ -695,22 +695,32 @@ export function TaskSheet({
               {!isOccurrenceScope && (
               <div>
                 <p className={`mb-1.5 ${SECTION_LABEL}`}>Type</p>
-                <div className="grid grid-cols-2 gap-2">
-                  {(["task", "session"] as const).map((type) => (
+                <div className="grid grid-cols-3 gap-2">
+                  {([
+                    ["task", "Task"],
+                    ["session", "Session"],
+                    ["commitment", "Commitment"],
+                  ] as const).map(([type, label]) => (
                     <button
                       key={type}
                       type="button"
                       onClick={() => setTaskType(type)}
-                      className={`h-10 rounded-full text-[14px] font-semibold transition-colors ${
+                      className={`h-10 rounded-full px-1 text-[12px] font-semibold transition-colors ${
                         taskType === type
                           ? "bg-neutral-900 text-white dark:bg-white dark:text-neutral-950"
                           : "border border-neutral-200 bg-white text-neutral-500 dark:border-white/10 dark:bg-white/[0.04] dark:text-neutral-400"
                       }`}
                     >
-                      {type === "task" ? "Task" : "Session"}
+                      {label}
                     </button>
                   ))}
                 </div>
+                {taskType === "commitment" && (
+                  <p className="mt-2 text-[12px] leading-snug text-neutral-400 dark:text-neutral-500">
+                    Blocks your calendar but is never tracked — no checkbox, and
+                    it stays out of your streak, consistency and completion stats.
+                  </p>
+                )}
               </div>
               )}
 
@@ -881,7 +891,8 @@ export function TaskSheet({
               )}
 
               {/* Subtasks / Session Steps */}
-              {selectedPlan && !isOccurrenceScope && (
+              {/* Commitments have nothing to check off, so no subtask list. */}
+              {selectedPlan && !isOccurrenceScope && taskType !== "commitment" && (
                 <section className="space-y-3">
                   <div className="flex items-center justify-between">
                     <p className={SECTION_LABEL}>

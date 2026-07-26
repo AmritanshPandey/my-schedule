@@ -1,11 +1,11 @@
 "use client";
 
 import type { CSSProperties, ReactNode } from "react";
-import { IconMinus, IconX, IconListCheck, IconArrowUpRight } from "@tabler/icons-react";
+import { IconMinus, IconX, IconListCheck, IconArrowUpRight, IconLock } from "@tabler/icons-react";
 import CheckDraw from "@/components/ui/CheckDraw";
 import type { Plan, Task, TaskSlot } from "@/lib/useScheduleDB";
 import type { TaskState } from "@/lib/taskCompletion";
-import { getTaskSubtaskSummary } from "@/lib/taskCompletion";
+import { getTaskSubtaskSummary, isTrackedTask } from "@/lib/taskCompletion";
 import { getSlots } from "@/lib/taskMutations";
 import { resolveAccentColor, timelineCardStyles } from "@/lib/colorSystem";
 
@@ -97,10 +97,15 @@ export function TaskBlockCard({
   const missed = state === "missed";
   const resolved = done || missed;
   const isList = variant === "list";
+  // A commitment is held time, not work: it reports no completion state, so it
+  // carries no checkbox at all (neither the header one nor per-slot boxes).
+  // Derived from the task itself so every surface that renders through this
+  // card inherits the behaviour without threading a prop.
+  const tracked = isTrackedTask(task);
   // Grid blocks show only the slot being positioned; list cards show every slot.
   const displaySlots = slotOverride ? [slotOverride] : getSlots(task);
   const isMultiSlotList =
-    isList && !slotOverride && !missed && !!slotCompletions && slotCompletions.length === displaySlots.length && displaySlots.length > 1;
+    tracked && isList && !slotOverride && !missed && !!slotCompletions && slotCompletions.length === displaySlots.length && displaySlots.length > 1;
   const showEyebrow = !!plan && !narrow && !minimal;
   // Timeline (grid) subtask/session pill — only when wired and the task has items.
   const subtaskPill = onOpenSubtasks && !isList && !minimal ? getTaskSubtaskSummary(task, plan) : null;
@@ -163,7 +168,7 @@ export function TaskBlockCard({
 
       <div className={`flex shrink-0 items-center ${isList ? "gap-2" : "gap-1"}`}>
         {trailing}
-        {!isMultiSlotList && (
+        {!isMultiSlotList && tracked && (
           <button
             type="button"
             disabled={readOnly}
@@ -184,6 +189,19 @@ export function TaskBlockCard({
             {partial && <IconMinus size={isList ? 16 : 12} strokeWidth={3} className="text-white" />}
             {missed && <IconX size={isList ? 16 : 12} strokeWidth={3} className="text-white" />}
           </button>
+        )}
+        {/* Held time — a quiet marker in the checkbox's place, so the row still
+            reads as deliberate rather than as a task missing its control. */}
+        {!tracked && (
+          <span
+            aria-hidden="true"
+            title="Held time — not tracked"
+            className={`flex shrink-0 items-center justify-center text-neutral-500 dark:text-neutral-400 ${
+              isList ? "h-7 w-7" : "h-[18px] w-[18px]"
+            }`}
+          >
+            <IconLock size={isList ? 15 : 11} strokeWidth={2} />
+          </span>
         )}
       </div>
     </div>

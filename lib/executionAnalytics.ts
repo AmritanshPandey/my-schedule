@@ -19,6 +19,7 @@ import type { Schedule } from "./useScheduleDB";
 import { DAYS } from "./scheduleConstants";
 import { localISODate } from "./dateUtils";
 import { isTaskScheduledOn } from "./taskOccurrence";
+import { isTrackedTask } from "./taskCompletion";
 
 export interface ExecutionWeek {
   monStr: string;        // ISO date of that week's Monday
@@ -65,7 +66,7 @@ export function computeExecutionTrend(schedule: Schedule, weeksCount = 8): Execu
       d.setDate(mon.getDate() + di);
       const dateISO = localISODate(d);
       for (const task of schedule.activities[DAYS[di]] ?? []) {
-        if (isTaskScheduledOn(task, dateISO, true)) count++;
+        if (isTaskScheduledOn(task, dateISO, true) && isTrackedTask(task)) count++;
       }
     }
     return count;

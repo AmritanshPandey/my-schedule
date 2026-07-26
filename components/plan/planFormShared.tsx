@@ -60,7 +60,7 @@ export function PlanColorPicker({
   return (
     <div>
       <p className="mb-2 text-[11px] font-semibold uppercase tracking-[0.08em] text-neutral-400 dark:text-neutral-500">Color</p>
-      <div className="grid grid-cols-9 gap-2">
+      <div className="grid grid-cols-9 gap-4">
         {PLAN_COLOR_SWATCHES.map(({ color, bg }) => {
           const sel = value === color;
           return (

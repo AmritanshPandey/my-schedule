@@ -574,7 +574,7 @@ export default function RitualView({
 
   return (
     <>
-      <div className="py-6 lg:pb-10 lg:pt-6">
+      <div className="py-6 px-4 lg:pb-10 lg:pt-6">
        <div className="mx-auto w-full max-w-[1500px]">
 
         {/* ── Header ───────────────────────────────────────────────────────── */}

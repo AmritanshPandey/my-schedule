@@ -45,6 +45,7 @@ import {
   type Ritual,
   type Schedule,
   type Task,
+  type TaskTypeValue,
   resetStaleCompletions,
 } from "@/lib/useScheduleDB";
 import { useScheduleDB } from "@/lib/useScheduleDB";
@@ -69,7 +70,7 @@ import {
   clearTaskException,
   type TaskDeleteScope,
 } from "@/lib/taskMutations";
-import { completionForDate, getTaskCheckableItems, getTaskSubtaskSummary, isTaskCompleted, isTaskResolved, markTaskMissed, toggleSlotComplete, toggleSubtaskComplete, toggleTaskComplete } from "@/lib/taskCompletion";
+import { completionForDate, getTaskCheckableItems, getTaskSubtaskSummary, isTaskCompleted, isTaskResolved, isTrackedTask, markTaskMissed, toggleSlotComplete, toggleSubtaskComplete, toggleTaskComplete } from "@/lib/taskCompletion";
 import { diffException, isTaskScheduledOn, resolveOccurrence } from "@/lib/taskOccurrence";
 import { cascadeMilestoneDates, normalizeMilestoneTimeline } from "@/lib/roadmapDates";
 import { toggleRitualCompletion } from "@/lib/ritualCompletions";
@@ -378,7 +379,7 @@ export default function IOSScheduleApp() {
   const [taskSheetTask, setTaskSheetTask] = useState<Task | null>(null);
   const [taskSheetPlanId, setTaskSheetPlanId] = useState<string | null>(null);
   const [taskSheetDateISO, setTaskSheetDateISO] = useState("");
-  const [taskSheetInitialType, setTaskSheetInitialType] = useState<"task" | "session">("task");
+  const [taskSheetInitialType, setTaskSheetInitialType] = useState<TaskTypeValue>("task");
   const [addingPlan, setAddingPlan] = useState(false);
   const [editingPlanId, setEditingPlanId] = useState<string | null>(null);
   const [ritualAddOpen, setRitualAddOpen] = useState(false);
@@ -498,11 +499,15 @@ export default function IOSScheduleApp() {
     });
   }, [schedule.rituals, schedule.ritualCompletions, todayKey]);
 
-  const dayDone = dayTasksView.filter((task) => isTaskCompleted(task, taskEffectiveItemCount(task))).length;
-  const todayDone = todayTasks.filter((task) => isTaskCompleted(task, taskEffectiveItemCount(task))).length;
+  // Counts cover tracked work only. dayTasksView / todayTasks themselves keep
+  // commitments — they also drive the rendered day list, which does show them.
+  const dayTracked = useMemo(() => dayTasksView.filter(isTrackedTask), [dayTasksView]);
+  const todayTracked = useMemo(() => todayTasks.filter(isTrackedTask), [todayTasks]);
+  const dayDone = dayTracked.filter((task) => isTaskCompleted(task, taskEffectiveItemCount(task))).length;
+  const todayDone = todayTracked.filter((task) => isTaskCompleted(task, taskEffectiveItemCount(task))).length;
   const todayOpenTasks = useMemo(
-    () => todayTasks.filter((task) => !isTaskResolved(task, taskEffectiveItemCount(task))),
-    [todayTasks, taskEffectiveItemCount]
+    () => todayTracked.filter((task) => !isTaskResolved(task, taskEffectiveItemCount(task))),
+    [todayTracked, taskEffectiveItemCount]
   );
   const remainingPlannedMinutes = useMemo(
     () => todayOpenTasks.reduce((sum, task) => sum + taskDurationMinutes(task), 0),
@@ -516,7 +521,7 @@ export default function IOSScheduleApp() {
     () => todayRitualsDue.filter((ritual) => completedRitualIds.has(ritual.id)).length,
     [completedRitualIds, todayRitualsDue]
   );
-  const dashboardProgressPct = todayTasks.length > 0 ? Math.round((todayDone / todayTasks.length) * 100) : 0;
+  const dashboardProgressPct = todayTracked.length > 0 ? Math.round((todayDone / todayTracked.length) * 100) : 0;
   const executionStreak = useMemo(() => calculateExecutionStreak(schedule, todayISO()), [schedule]);
 	  const overviewTrackers = useMemo(() => {
 	    const storedTrackers = schedule.progressTrackers ?? [];
@@ -584,7 +589,7 @@ export default function IOSScheduleApp() {
 
 	  const openConfirm = useCallback((state: ConfirmState) => setConfirmState(state), []);
 
-  function openCreateSheet(initialPlanId?: string | null, initialType: "task" | "session" = "task") {
+  function openCreateSheet(initialPlanId?: string | null, initialType: TaskTypeValue = "task") {
     setTaskSheetPlanId(initialPlanId ?? null);
     setTaskSheetTask(null);
     setTaskSheetMode("create");
@@ -1074,7 +1079,7 @@ export default function IOSScheduleApp() {
                   <h2 className="truncate text-[13px] font-extrabold text-neutral-800 dark:text-neutral-200">Today&apos;s Task</h2>
                 </div>
                 <span className="rounded-full border border-neutral-200 bg-neutral-50 px-2 py-1 text-[11px] font-black tabular-nums text-neutral-500 dark:border-white/[0.10] dark:bg-white/[0.05] dark:text-neutral-400">
-                  {todayDone}/{todayTasks.length}
+                  {todayDone}/{todayTracked.length}
                 </span>
               </div>
 
@@ -1203,7 +1208,7 @@ export default function IOSScheduleApp() {
                   icon={IconClockHour3}
                   value={`${dashboardProgressPct}%`}
                   label="This Week"
-                  detail={`${todayDone}/${todayTasks.length} tasks done`}
+                  detail={`${todayDone}/${todayTracked.length} tasks done`}
                 />
               </div>
               <div data-testid="overview-progress-card">
@@ -1317,7 +1322,7 @@ export default function IOSScheduleApp() {
             <div className="flex items-center justify-between">
               <div>
                 <h2 className="text-[22px] font-black text-neutral-950 dark:text-white">{activeDay === todayKey ? "Today's Task" : DAY_LABELS[activeDay]}</h2>
-                <p className="text-[13px] font-semibold text-neutral-500 dark:text-neutral-400">{dayDone}/{dayTasksView.length} done</p>
+                <p className="text-[13px] font-semibold text-neutral-500 dark:text-neutral-400">{dayDone}/{dayTracked.length} done</p>
               </div>
               <div className="flex items-center gap-2">
                 <button

@@ -33,6 +33,9 @@ const {
   toggleSlotComplete,
   snoozeTaskLater,
   getTaskCheckableItems,
+  isTrackedTask,
+  isTaskCompleted,
+  resolveTaskState,
   getTaskSubtaskSummary,
 } = await import("../lib/taskCompletion.ts");
 const {
@@ -1088,5 +1091,104 @@ test("resetStaleCompletions clears yesterday's slot completions but keeps histor
   const task = resetStaleCompletions(sched, today).activities.monday[0];
   assert.deepEqual(task.completedSlotIndices, [], "stale slot completions are cleared for the new day");
   assert.equal(task.completionHistory.length, 1, "history is preserved for analytics");
+});
+
+// ── Commitments: held time that blocks the calendar but isn't tracked ────────
+
+function commitment(overrides = {}) {
+  return {
+    id: "commute",
+    title: "Commute",
+    startTime: "8:00 AM",
+    endTime: "9:00 AM",
+    icon: "car",
+    color: "cyan",
+    planId: "plan-1",
+    taskType: "commitment",
+    ...overrides,
+  };
+}
+
+test("normalizeTasks round-trips the commitment task type", () => {
+  // taskType is a whitelist that falls through to undefined, so a new value
+  // that isn't added there is silently downgraded to a plain task on reload.
+  const [out] = normalizeTasks([commitment()], "fallback-plan");
+  assert.equal(out.taskType, "commitment");
+
+  // The legacy coercions must still work, and junk must still be dropped.
+  const [legacy] = normalizeTasks([commitment({ taskType: "routine" })], "p");
+  assert.equal(legacy.taskType, "session");
+  const [junk] = normalizeTasks([commitment({ taskType: "nonsense" })], "p");
+  assert.equal(junk.taskType, undefined);
+});
+
+test("isTrackedTask is false only for commitments", () => {
+  assert.equal(isTrackedTask(commitment()), false);
+  assert.equal(isTrackedTask(commitment({ taskType: "task" })), true);
+  assert.equal(isTrackedTask(commitment({ taskType: "session" })), true);
+  assert.equal(isTrackedTask(commitment({ taskType: undefined })), true, "undefined means plain task");
+});
+
+test("a commitment never reports completion state", () => {
+  // Covers converting an already-completed task into a commitment: the stale
+  // `completed: true` must not survive as a green, ticked card.
+  const stale = commitment({ completed: true, completedAt: new Date().toISOString() });
+  assert.equal(isTaskCompleted(stale, 0), false);
+  assert.equal(resolveTaskState(stale, 0), "incomplete");
+  assert.equal(resolveTaskState(commitment({ missed: true }), 0), "incomplete");
+});
+
+test("a commitment never inherits its plan's template subtasks", () => {
+  const plan = {
+    id: "plan-1", title: "Work", category: "work", emoji: "briefcase", color: "cyan",
+    description: "", items: [{ id: "a", task: "A" }, { id: "b", task: "B" }],
+  };
+  assert.deepEqual(getTaskCheckableItems(commitment(), plan), [], "no phantom progress bar");
+  // A normal task in the same plan still inherits them.
+  assert.equal(getTaskCheckableItems(commitment({ taskType: "task" }), plan).length, 2);
+});
+
+test("commitments are excluded from the execution trend denominator", () => {
+  const today = localISODate(new Date());
+  const sched = emptySchedule();
+  const dayKey = DAYS[(new Date().getDay() + 6) % 7];
+  sched.activities[dayKey] = [
+    {
+      id: "real", title: "Deep work", startTime: "9:00 AM", endTime: "10:00 AM",
+      icon: "book", color: "amber", planId: "plan-1",
+      completionHistory: [
+        { id: "e1", taskId: "real", completionType: "task", completedAt: new Date(`${today}T12:00:00`).toISOString() },
+      ],
+    },
+    commitment(),
+  ];
+
+  const trend = computeExecutionTrend(sched, 1);
+  const current = trend.weeks[trend.weeks.length - 1];
+  assert.equal(current.scheduled, 1, "the commitment is not part of the denominator");
+  assert.equal(current.completed, 1);
+  assert.equal(current.pct, 100, "one real task done = 100%, not 50%");
+});
+
+test("adding a commitment does not disturb the execution streak", () => {
+  const today = localISODate(new Date());
+  const dayKey = DAYS[(new Date().getDay() + 6) % 7];
+  const withReal = emptySchedule();
+  withReal.activities[dayKey] = [
+    {
+      id: "real", title: "Deep work", startTime: "9:00 AM", endTime: "10:00 AM",
+      icon: "book", color: "amber", planId: "plan-1",
+      completionHistory: [
+        { id: "e1", taskId: "real", completionType: "task", completedAt: new Date(`${today}T12:00:00`).toISOString() },
+      ],
+    },
+  ];
+  const before = calculateExecutionStreak(withReal, today);
+
+  const withCommitment = emptySchedule();
+  withCommitment.activities[dayKey] = [...withReal.activities[dayKey], commitment()];
+  const after = calculateExecutionStreak(withCommitment, today);
+
+  assert.deepEqual(after, before, "a commitment emits no events, so the streak is untouched");
 });
 

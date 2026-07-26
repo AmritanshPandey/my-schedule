@@ -22,7 +22,7 @@ import {
   IconX,
 } from "@tabler/icons-react";
 import type { DayKey, Plan, ProgressTracker, Schedule, Task } from "@/lib/useScheduleDB";
-import { getTaskCheckableItems, getTaskSubtaskSummary, isTaskCompleted, isTaskResolved } from "@/lib/taskCompletion";
+import { getTaskCheckableItems, getTaskSubtaskSummary, isTaskCompleted, isTaskResolved, isTrackedTask } from "@/lib/taskCompletion";
 import { getSlots } from "@/lib/taskMutations";
 import { getPlanCardStats } from "@/lib/planInsights";
 import { PLAN_NEUTRAL } from "@/lib/colorSystem";
@@ -770,7 +770,7 @@ export default function OverviewDashboard({
       return mins === null ? Infinity : toScheduleDayMinutes(mins);
     };
     return [...(schedule.activities[todayKey] ?? [])]
-      .filter((task) => isTaskScheduledOn(task, todayISO, true))
+      .filter((task) => isTaskScheduledOn(task, todayISO, true) && isTrackedTask(task))
       .sort((a, b) => startKey(a) - startKey(b));
   }, [schedule.activities, todayISO, todayKey]);
 
@@ -785,7 +785,10 @@ export default function OverviewDashboard({
     const todayIdx = new Date(todayISO + "T00:00:00").getDay();
     const monday = addDaysToISO(todayISO, -((todayIdx + 6) % 7));
     const days = DAYS_ORDER.map((day, i) => {
-      const tasks = schedule.activities[day] ?? [];
+      // Commitments never count. (This bar deliberately keeps its existing
+      // occurrence behaviour — it doesn't call isTaskScheduledOn — so that
+      // adding commitments doesn't shift any pre-existing number.)
+      const tasks = (schedule.activities[day] ?? []).filter(isTrackedTask);
       const total = tasks.length;
       const date = addDaysToISO(monday, i);
       const isToday = date === todayISO;

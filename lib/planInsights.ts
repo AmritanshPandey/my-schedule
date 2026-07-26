@@ -6,7 +6,7 @@
 import { DAYS } from "./useScheduleDB";
 import type { Task, Plan } from "./useScheduleDB";
 import type { DayKey } from "./useScheduleDB";
-import { isTaskCompleted } from "./taskCompletion";
+import { isTaskCompleted, isTrackedTask } from "./taskCompletion";
 import { isTaskScheduledOn } from "./taskOccurrence";
 import { localISODate } from "./dateUtils";
 
@@ -138,7 +138,7 @@ export function getPlanCardStats(
 ): PlanCardStats {
   const todayISO = localISODate(new Date());
   const todayTasks = (activities[todayKey] ?? []).filter(
-    (t) => t.planId === plan.id && isTaskScheduledOn(t, todayISO, true)
+    (t) => t.planId === plan.id && isTaskScheduledOn(t, todayISO, true) && isTrackedTask(t)
   );
   const dayState = resolvePlanDayState(todayTasks, plan.items.length);
   const consistency = calculateConsistency(plan.id, activities, plan, trackingStartISO);

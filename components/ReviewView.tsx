@@ -15,7 +15,7 @@ import {
 } from "@tabler/icons-react";
 import type { Schedule, DayKey, Task } from "@/lib/useScheduleDB";
 import { DAYS, DAY_LABELS } from "@/lib/useScheduleDB";
-import { getTaskSubtaskSummary, isTaskCompleted } from "@/lib/taskCompletion";
+import { getTaskSubtaskSummary, isTaskCompleted, isTrackedTask } from "@/lib/taskCompletion";
 import { calculateConsistency } from "@/lib/planInsights";
 import ProgressBar from "@/components/ui/ProgressBar";
 import { computeTrend } from "@/lib/trendUtils";
@@ -101,7 +101,7 @@ function buildWeeklyContext(
     const d = new Date(monday);
     d.setDate(monday.getDate() + i);
     const dateISO = localISODate(d);
-    const tasks = (schedule.activities[day] ?? []).filter((t) => isTaskScheduledOn(t, dateISO, true));
+    const tasks = (schedule.activities[day] ?? []).filter((t) => isTaskScheduledOn(t, dateISO, true) && isTrackedTask(t));
     const total = tasks.length;
     const done = tasks.filter((t) => isTaskCompleted(t, taskItemCount(t))).length;
     return { day, label: DAY_LABELS[day], total, done, isPastOrToday: d <= today };
@@ -337,7 +337,9 @@ function ThisWeekSection({
       const taskItemCount = (task: Task) =>
         getTaskSubtaskSummary(task, task.planId ? plansById.get(task.planId) ?? null : null).totalCount;
       return thisWeekDates.map(({ day, date }) => {
-        const tasks = schedule.activities[day] ?? [];
+        // Commitments never count; this strip's existing occurrence behaviour
+        // is left as-is so no pre-existing number moves.
+        const tasks = (schedule.activities[day] ?? []).filter(isTrackedTask);
         const total = tasks.length;
         const done = tasks.filter((t) => isTaskCompleted(t, taskItemCount(t))).length;
         return {

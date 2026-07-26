@@ -6,6 +6,7 @@ import { IconChevronLeft, IconChevronRight, IconLayoutGrid, IconPlus } from "@ta
 import type { DayKey, Task } from "@/lib/useScheduleDB";
 import { todayISO, localISODate } from "@/lib/dateUtils";
 import { completedOnDate } from "@/lib/consistency/calculateDailyStats";
+import { isTrackedTask } from "@/lib/taskCompletion";
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 
@@ -52,7 +53,7 @@ function buildCalendarDays(
       continue;
     }
 
-    const tasks = (activities[dayKey] ?? []).filter((t) => t.planId === planId);
+    const tasks = (activities[dayKey] ?? []).filter((t) => t.planId === planId && isTrackedTask(t));
 
     if (!tasks.length) {
       result.push({ day: d, dateISO: iso, status: "none" });
