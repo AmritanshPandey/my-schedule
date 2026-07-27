@@ -310,6 +310,28 @@ export function timelineCardStyles(color: string) {
   return styles[token];
 }
 
+/**
+ * Timeline styling for held time (commitments): the same shape as an accent
+ * card, but entirely neutral in both themes.
+ *
+ * Commitments carry no plan and no identity — a commute isn't a category of
+ * work — so giving them an accent would spend a colour on something that
+ * reports nothing. Neutral keeps them legible as blocked time while letting the
+ * coloured blocks around them stay the signal.
+ */
+export const TIMELINE_NEUTRAL_CARD = {
+  cardBg:        "bg-neutral-100 dark:bg-white/[0.05]",
+  blockBorder:   "border border-neutral-200/80 dark:border-white/[0.10]",
+  accentBar:     "border-l-[3px] border-l-neutral-400 dark:border-l-neutral-500",
+  title:         "text-neutral-700 dark:text-neutral-200",
+  planLabel:     "text-neutral-500/80 dark:text-neutral-400/80",
+  time:          "text-neutral-500 dark:text-neutral-400",
+  dot:           "bg-neutral-400 dark:bg-neutral-500",
+  iconBg:        "bg-neutral-400",
+  iconText:      "text-white",
+  durationBadge: "bg-neutral-200/70 text-neutral-600 dark:bg-white/[0.08] dark:text-neutral-300",
+} as const;
+
 // ── General accent styles (badges, dots, borders, plan cards) ─────────────────
 
 export function accentStyles(color: string) {

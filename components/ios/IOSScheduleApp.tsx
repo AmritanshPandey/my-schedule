@@ -87,6 +87,9 @@ const AddPlanSheet = dynamic(() => import("@/components/plan/AddPlanSheet"), { s
 const EditPlanSheet = dynamic(() => import("@/components/plan/EditPlanSheet"), { ssr: false });
 const PlanDetailView = dynamic(() => import("@/components/plan/PlanDetailView"), { ssr: false });
 const RitualView = dynamic(() => import("@/components/activity/RitualView"), { ssr: false });
+// Small hand-rolled SVG donut with no chart dependency — safe to load eagerly
+// in the iOS shell (see the first-load guard in tests/core-logic.test.mjs).
+const DayBreakdownCard = dynamic(() => import("@/components/DayBreakdownCard"), { ssr: false });
 const SettingsView = dynamic(() => import("@/components/SettingsView").then((m) => ({ default: m.SettingsView })), { ssr: false });
 const DayWallpaperSheet = dynamic(() => import("@/components/DayWallpaperSheet"), { ssr: false });
 const NotesView = dynamic(() => import("@/components/notes/NotesView"), { ssr: false });
@@ -577,12 +580,15 @@ export default function IOSScheduleApp() {
 	      .sort((a, b) => Number(b.hasEntries) - Number(a.hasEntries) || (b.latest?.date ?? "").localeCompare(a.latest?.date ?? "") || a.tracker.title.localeCompare(b.tracker.title));
 	  }, [schedule.metricEntries, schedule.plans, schedule.progressTrackers]);
 
+  // Only plans that actually have milestones — a "No milestones" row carries no
+  // information. The card hides itself when nothing qualifies.
   const overviewPlanConsistency = useMemo(() =>
-    schedule.plans.map((plan) => {
-      const { consistency } = getPlanCardStats(plan, schedule.activities, todayKey, schedule.preferences?.startDate);
+    schedule.plans.flatMap((plan) => {
       const milestones = (schedule.milestones ?? []).filter((milestone) => milestone.planId === plan.id);
+      if (milestones.length === 0) return [];
+      const { consistency } = getPlanCardStats(plan, schedule.activities, todayKey, schedule.preferences?.startDate);
       const milestonesDone = milestones.filter((milestone) => milestone.status === "completed").length;
-      return { plan, consistency, milestonesTotal: milestones.length, milestonesDone };
+      return [{ plan, consistency, milestonesTotal: milestones.length, milestonesDone }];
     }),
     [schedule.activities, schedule.milestones, schedule.plans, todayKey]
   );
@@ -1221,6 +1227,12 @@ export default function IOSScheduleApp() {
               </div>
             </div>
 
+            <DayBreakdownCard
+              tasks={schedule.activities[todayKey] ?? []}
+              plans={schedule.plans}
+              dateISO={todayISO()}
+            />
+
             {overviewPlanConsistency.length > 0 && (
               <section data-testid="overview-plan-card" className="rounded-2xl border border-neutral-200 bg-white p-4 dark:border-white/[0.08] dark:bg-neutral-900">
                 <div className="mb-2 flex items-center gap-1.5 text-neutral-500 dark:text-neutral-400">
@@ -1242,7 +1254,7 @@ export default function IOSScheduleApp() {
                       <div className="min-w-0">
                         <p className="truncate text-[15px] font-black text-neutral-950 dark:text-white">{plan.title}</p>
                         <p className="mt-0.5 text-[11px] font-semibold text-neutral-500 dark:text-neutral-400">
-                          {milestonesTotal > 0 ? `${milestonesDone}/${milestonesTotal} milestones` : "No milestones"}
+                          {milestonesDone}/{milestonesTotal} milestones
                         </p>
                       </div>
                       <div className="min-w-0">

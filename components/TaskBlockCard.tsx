@@ -7,7 +7,7 @@ import type { Plan, Task, TaskSlot } from "@/lib/useScheduleDB";
 import type { TaskState } from "@/lib/taskCompletion";
 import { getTaskSubtaskSummary, isTrackedTask } from "@/lib/taskCompletion";
 import { getSlots } from "@/lib/taskMutations";
-import { resolveAccentColor, timelineCardStyles } from "@/lib/colorSystem";
+import { resolveAccentColor, timelineCardStyles, TIMELINE_NEUTRAL_CARD } from "@/lib/colorSystem";
 
 /**
  * Shared colored category block used in BOTH surfaces:
@@ -91,7 +91,9 @@ export function TaskBlockCard({
   slotCompletions,
 }: TaskBlockCardProps) {
   const accent = resolveAccentColor(task.color, task.icon);
-  const styles = timelineCardStyles(accent);
+  // Held time is neutral in both themes: it belongs to no plan and reports no
+  // progress, so it never spends a category accent.
+  const styles = isTrackedTask(task) ? timelineCardStyles(accent) : TIMELINE_NEUTRAL_CARD;
   const done = state === "completed";
   const partial = state === "partial";
   const missed = state === "missed";

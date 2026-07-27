@@ -119,7 +119,11 @@ export function normalizeTasks(value: unknown, fallbackPlanId: string, fallbackI
         endTime: task.endTime,
         icon: task.icon || fallbackIcon,
         color: resolveAccentColor((task as Task & { color?: string }).color, task.icon || fallbackIcon),
-        planId: task.planId || fallbackPlanId,
+        // A commitment deliberately has no plan, so an empty planId is its real
+        // value — the fallback only rescues genuinely orphaned tasks. Without
+        // this guard `"" || fallbackPlanId` silently adopted every commitment
+        // into the first plan on the next reload.
+        planId: taskType === "commitment" ? task.planId ?? "" : task.planId || fallbackPlanId,
       };
 
       for (const key of OPTIONAL_TASK_FIELDS) {

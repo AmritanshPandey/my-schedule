@@ -2,7 +2,7 @@
 
 import { memo } from "react";
 import { useNowMinutes } from "@/lib/timeline/useNowMinutes";
-import { mapMinutesToTimeline } from "@/lib/timeline/displayWindow";
+import { getNowOnTimeline } from "@/lib/timeline/displayWindow";
 
 interface CurrentTimeLayerProps {
   activeDay: string;
@@ -25,18 +25,15 @@ function CurrentTimeLayerInner({
   timelineTopPadding,
   hourHeight,
 }: CurrentTimeLayerProps) {
-  const nowMinutes = mapMinutesToTimeline(
+  const nowMinutes = getNowOnTimeline(
     useNowMinutes(),
     timelineStartMinutes,
     timelineEndMinutes,
   );
 
-  const visible =
-    activeDay === todayKey &&
-    nowMinutes >= timelineStartMinutes &&
-    nowMinutes <= timelineEndMinutes;
-
-  if (!visible) return null;
+  // null = the clock is outside the visible window (e.g. 1 AM on a day that
+  // starts at 3 AM), so there is no honest place to draw the line.
+  if (activeDay !== todayKey || nowMinutes === null) return null;
 
   const top = timelineTopPadding + ((nowMinutes - timelineStartMinutes) / 60) * hourHeight;
 
