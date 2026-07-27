@@ -59,6 +59,9 @@ const { isTaskScheduledOn, resolveOccurrence, diffException, weeksBetween } = aw
 const { normalizeMilestoneTimeline, cascadeMilestoneDates } = await import("../lib/roadmapDates.ts");
 const { resolveLinkedTasks } = await import("../lib/notes/linkedTasks.ts");
 const { computeExecutionTrend, trendNarrative } = await import("../lib/executionAnalytics.ts");
+const { getNowOnTimeline, mapMinutesToTimeline } = await import("../lib/timeline/displayWindow.ts");
+const { buildDayBreakdown, taskScheduledMinutes, donutSegments, HELD_TIME_ID } =
+  await import("../lib/dayBreakdown.ts");
 const { calculateExecutionStreak } = await import("../lib/consistency/calculateExecutionStreak.ts");
 const { localISODate, addDaysToISO } = await import("../lib/dateUtils.ts");
 const { parseTimeToMinutes, toScheduleDayMinutes } = await import("../lib/timeUtils.ts");
@@ -1192,3 +1195,119 @@ test("adding a commitment does not disturb the execution streak", () => {
   assert.deepEqual(after, before, "a commitment emits no events, so the streak is untouched");
 });
 
+
+// ── Now-line window ─────────────────────────────────────────────────────────
+
+test("the now marker hides when the clock is outside the day's window", () => {
+  const start = 3 * 60;      // 3 AM day start
+  const end = 28 * 60;       // window runs to 4 AM next day
+
+  // The bug: mapMinutesToTimeline wraps 1 AM forward into the overnight tail,
+  // and 1500 then passes a naive `<= end` bounds check — so the red line was
+  // drawn near the bottom of the day.
+  assert.equal(mapMinutesToTimeline(60, start, end), 1500, "wrap still applies to tasks");
+  assert.equal(getNowOnTimeline(60, start, end), null, "but never to the clock");
+
+  assert.equal(getNowOnTimeline(2 * 60 + 59, start, end), null, "just before the window opens");
+  assert.equal(getNowOnTimeline(start, start, end), start, "exactly at the day start");
+  assert.equal(getNowOnTimeline(13 * 60, start, end), 13 * 60, "midday shows");
+  assert.equal(getNowOnTimeline(23 * 60 + 59, start, end), 23 * 60 + 59, "last minute of the day");
+
+  // A midnight start means every clock time is inside the window.
+  assert.equal(getNowOnTimeline(60, 0, end), 60);
+});
+
+// ── Day breakdown (the "where the day goes" donut) ──────────────────────────
+
+test("taskScheduledMinutes sums every slot, including past midnight", () => {
+  const base = { id: "t", title: "T", icon: "book", color: "amber", planId: "p" };
+  assert.equal(taskScheduledMinutes({ ...base, startTime: "9:00 AM", endTime: "10:30 AM" }), 90);
+  assert.equal(
+    taskScheduledMinutes({
+      ...base, startTime: "9:00 AM", endTime: "10:00 AM",
+      slots: [
+        { startTime: "9:00 AM", endTime: "10:00 AM" },
+        { startTime: "3:00 PM", endTime: "4:30 PM" },
+      ],
+    }),
+    150,
+    "both phases counted",
+  );
+  assert.equal(
+    taskScheduledMinutes({ ...base, startTime: "11:00 PM", endTime: "12:30 AM" }),
+    90,
+    "runs past midnight",
+  );
+});
+
+test("buildDayBreakdown groups by plan and pools commitments into held time", () => {
+  const today = localISODate(new Date());
+  const plans = [
+    { id: "p-work", title: "Work", category: "work", emoji: "briefcase", color: "amber", items: [] },
+    { id: "p-gym", title: "Gym", category: "fitness", emoji: "run", color: "rose", items: [] },
+  ];
+  const t = (over) => ({ id: over.id, title: over.id, icon: "book", color: "amber", planId: over.planId ?? "", startTime: over.startTime, endTime: over.endTime, ...over });
+
+  const tasks = [
+    t({ id: "a", planId: "p-work", startTime: "9:00 AM", endTime: "11:00 AM" }),   // 120
+    t({ id: "b", planId: "p-work", startTime: "1:00 PM", endTime: "2:00 PM" }),    // 60  -> Work 180
+    t({ id: "c", planId: "p-gym", startTime: "7:00 AM", endTime: "8:00 AM" }),     // 60
+    t({ id: "d", planId: "", taskType: "commitment", startTime: "8:00 AM", endTime: "9:00 AM" }), // 60 held
+    t({ id: "e", planId: "ghost", startTime: "5:00 PM", endTime: "6:00 PM" }),     // dangling plan -> skipped
+  ];
+
+  const { slices, totalMinutes } = buildDayBreakdown(tasks, plans, today);
+  assert.equal(totalMinutes, 300, "dangling-plan task is excluded");
+  assert.deepEqual(
+    slices.map((s) => [s.id, s.minutes, s.pct]),
+    [["p-work", 180, 60], ["p-gym", 60, 20], [HELD_TIME_ID, 60, 20]],
+    "largest first, held time pooled",
+  );
+  assert.equal(slices[0].label, "Work");
+  assert.equal(slices.find((s) => s.id === HELD_TIME_ID).label, "Held time");
+  assert.equal(slices.find((s) => s.id === HELD_TIME_ID).color, null, "held time has no accent");
+});
+
+test("buildDayBreakdown is empty when nothing is scheduled", () => {
+  const { slices, totalMinutes } = buildDayBreakdown([], [], localISODate(new Date()));
+  assert.deepEqual(slices, []);
+  assert.equal(totalMinutes, 0);
+});
+
+test("donutSegments tile the full circle without gaps or overflow", () => {
+  const slices = [
+    { id: "a", label: "A", color: "amber", minutes: 100, pct: 33 },
+    { id: "b", label: "B", color: "rose", minutes: 100, pct: 33 },
+    { id: "c", label: "C", color: "cyan", minutes: 100, pct: 33 },
+  ];
+  const C = 360;
+  const segs = donutSegments(slices, 300, C);
+  assert.equal(segs.length, 3);
+  assert.equal(segs[0].offset, 0);
+  // Each arc starts exactly where the previous ended, and together they close
+  // the circle even though the rounded percentages only sum to 99.
+  assert.equal(segs[1].offset, segs[0].dash);
+  assert.equal(segs[2].offset, segs[0].dash + segs[1].dash);
+  const total = segs.reduce((sum, s) => sum + s.dash, 0);
+  assert.ok(Math.abs(total - C) < 1e-9, "arcs sum to the full circumference");
+
+  assert.deepEqual(donutSegments(slices, 0, C), [], "no division by zero");
+});
+
+test("a commitment keeps its empty planId through normalization", () => {
+  // `planId: task.planId || fallbackPlanId` used to adopt every plan-less
+  // commitment into the first plan on reload, so a commute reappeared wearing
+  // a "Work" eyebrow.
+  const held = {
+    id: "commute", title: "Commute", startTime: "8:00 AM", endTime: "9:00 AM",
+    icon: "car", color: "cyan", planId: "", taskType: "commitment",
+  };
+  const [out] = normalizeTasks([held], "plan-work");
+  assert.equal(out.planId, "", "no plan is adopted");
+  assert.equal(out.taskType, "commitment");
+
+  // A genuinely orphaned normal task still gets rescued by the fallback.
+  const orphan = { ...held, taskType: "task" };
+  const [rescued] = normalizeTasks([orphan], "plan-work");
+  assert.equal(rescued.planId, "plan-work");
+});

@@ -87,6 +87,9 @@ const AddPlanSheet = dynamic(() => import("@/components/plan/AddPlanSheet"), { s
 const EditPlanSheet = dynamic(() => import("@/components/plan/EditPlanSheet"), { ssr: false });
 const PlanDetailView = dynamic(() => import("@/components/plan/PlanDetailView"), { ssr: false });
 const RitualView = dynamic(() => import("@/components/activity/RitualView"), { ssr: false });
+// Small hand-rolled SVG donut with no chart dependency — safe to load eagerly
+// in the iOS shell (see the first-load guard in tests/core-logic.test.mjs).
+const DayBreakdownCard = dynamic(() => import("@/components/DayBreakdownCard"), { ssr: false });
 const SettingsView = dynamic(() => import("@/components/SettingsView").then((m) => ({ default: m.SettingsView })), { ssr: false });
 const DayWallpaperSheet = dynamic(() => import("@/components/DayWallpaperSheet"), { ssr: false });
 const NotesView = dynamic(() => import("@/components/notes/NotesView"), { ssr: false });
@@ -1223,6 +1226,12 @@ export default function IOSScheduleApp() {
                 />
               </div>
             </div>
+
+            <DayBreakdownCard
+              tasks={schedule.activities[todayKey] ?? []}
+              plans={schedule.plans}
+              dateISO={todayISO()}
+            />
 
             {overviewPlanConsistency.length > 0 && (
               <section data-testid="overview-plan-card" className="rounded-2xl border border-neutral-200 bg-white p-4 dark:border-white/[0.08] dark:bg-neutral-900">

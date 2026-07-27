@@ -77,3 +77,24 @@ export function mapMinutesToTimeline(
   }
   return minutes;
 }
+
+/**
+ * Where "now" sits on the timeline, or null when the current time falls outside
+ * the visible window.
+ *
+ * Deliberately does NOT go through `mapMinutesToTimeline`. That wrap exists so a
+ * task running past midnight is drawn at the tail of the day, but it must never
+ * apply to the clock: at 1 AM with a 3 AM day start, wrapping turns 60 into 1500,
+ * which then passes a naive `<= endMinutes` bounds check and paints the red line
+ * near the bottom of the day. 1 AM is *before* today's window opens (the day
+ * key has already rolled over), so the honest answer is "not on screen".
+ */
+export function getNowOnTimeline(
+  nowMinutes: number,
+  timelineStartMinutes: number,
+  timelineEndMinutes: number = TIMELINE_END_MINUTES,
+): number | null {
+  if (nowMinutes < timelineStartMinutes) return null;
+  if (nowMinutes > timelineEndMinutes) return null;
+  return nowMinutes;
+}

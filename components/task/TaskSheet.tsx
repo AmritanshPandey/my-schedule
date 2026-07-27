@@ -434,15 +434,18 @@ export function TaskSheet({
     : repeatMode === "once"
       ? !!onceDate
       : repeatDays.length > 0;
+  // A commitment is held time, not project work: it belongs to no plan, so the
+  // plan requirement is lifted for it.
+  const isCommitment = taskType === "commitment";
   const canSave =
-    !!selectedPlan &&
+    (isCommitment || !!selectedPlan) &&
     title.trim().length > 0 &&
     allSlotsValidNow &&
     !timeError &&
     repeatOk;
 
   function handleSave() {
-    if (!canSave || !selectedPlan) return;
+    if (!canSave || (!isCommitment && !selectedPlan)) return;
 
     const validSubtasks = subtasks
       .filter((s) => s.title.trim().length > 0)
@@ -479,7 +482,10 @@ export function TaskSheet({
       slots: baseDisplaySlots.length > 1 ? baseDisplaySlots : undefined,
       icon,
       color,
-      planId: selectedPlan.id,
+      // A commitment belongs to no plan. Its stored icon/colour are left at
+      // their defaults and simply ignored — TaskBlockCard paints held time
+      // neutral in both themes rather than with an accent.
+      planId: isCommitment ? "" : selectedPlan!.id,
       taskType,
       // Store subtasks on the task itself so each task has an independent list.
       // For edits, an empty array must be persisted explicitly to override any
@@ -499,7 +505,7 @@ export function TaskSheet({
       repeatDays: effectiveRepeatDays,
       // Only update the plan template if the user explicitly added subtasks
       planItems:
-        mode === "create" && taskType === "task" && validSubtasks.length > 0
+        mode === "create" && taskType === "task" && selectedPlan && validSubtasks.length > 0
           ? { planId: selectedPlan.id, items: validSubtasks }
           : null,
       scope: isOccurrenceScope ? "occurrence" : "all",
@@ -724,8 +730,8 @@ export function TaskSheet({
               </div>
               )}
 
-              {/* Plan selector */}
-              {!isOccurrenceScope && (
+              {/* Plan selector — held time belongs to no plan. */}
+              {!isOccurrenceScope && !isCommitment && (
                 <PlanSelector
                   plans={plans}
                   selectedId={planId}
@@ -750,8 +756,9 @@ export function TaskSheet({
 
               {/* Identity — icon drives the colour, colour can be overridden.
                   Hidden in occurrence scope: identity belongs to the template,
-                  not to a single date's override. */}
-              {!isOccurrenceScope && (
+                  not to a single date's override. Also hidden for commitments,
+                  which render neutral and carry no identity of their own. */}
+              {!isOccurrenceScope && !isCommitment && (
                 <div>
                   <p className={FORM_LABEL}>Icon</p>
                   <div className="grid grid-cols-6 gap-2 sm:grid-cols-8">

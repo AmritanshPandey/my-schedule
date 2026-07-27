@@ -24,6 +24,7 @@ import {
 } from "@/lib/timeline/dragTimeUtils";
 import {
   buildTimelineGridMarks,
+  getNowOnTimeline,
   getTimelineDisplayStartMinutes,
   mapMinutesToTimeline,
   TIMELINE_END_MINUTES,
@@ -239,14 +240,15 @@ export function WeekGrid({
     tasks: days.flatMap((day) => day.tasks),
   });
   const endMin = TIMELINE_END_MINUTES;
-  const [now, setNow] = useState(() => mapMinutesToTimeline(currentMinutes(), startMin, endMin));
+  // null when the clock is outside the visible window — see getNowOnTimeline.
+  const [now, setNow] = useState<number | null>(() => getNowOnTimeline(currentMinutes(), startMin, endMin));
   const totalPx = (endMin - startMin) * PX_MIN;
   const railLabels = buildTimelineGridMarks(startMin, endMin);
 
   useEffect(() => {
-    setNow(mapMinutesToTimeline(currentMinutes(), startMin, endMin));
+    setNow(getNowOnTimeline(currentMinutes(), startMin, endMin));
     const id = setInterval(
-      () => setNow(mapMinutesToTimeline(currentMinutes(), startMin, endMin)),
+      () => setNow(getNowOnTimeline(currentMinutes(), startMin, endMin)),
       60_000,
     );
     return () => clearInterval(id);
@@ -624,7 +626,7 @@ export function WeekGrid({
             const completedRituals = new Set(
               ritualCompletions.filter((c) => c.date === dateISO).map((c) => c.ritualId),
             );
-            const showNow = dayIsToday && now >= startMin && now <= endMin;
+            const showNow = dayIsToday && now !== null;
             const readOnly = !dayIsToday;
             return (
               <div
@@ -661,11 +663,12 @@ export function WeekGrid({
                     : !!layout.task.completed;
                   // The block you should be executing right now — green ring
                   // (progress signal). Sanctioned chrome-led depth → data-glass.
-                  const nowPx = (now - startMin) * PX_MIN;
+                  const nowPx = now === null ? null : (now - startMin) * PX_MIN;
                   const isCurrent =
                     dayIsToday &&
                     !slotDone &&
                     !layout.task.missed &&
+                    nowPx !== null &&
                     nowPx >= layout.top &&
                     nowPx < layout.top + layout.height;
                   return (

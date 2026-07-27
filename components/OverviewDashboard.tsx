@@ -26,6 +26,7 @@ import { getTaskCheckableItems, getTaskSubtaskSummary, isTaskCompleted, isTaskRe
 import { getSlots } from "@/lib/taskMutations";
 import { getPlanCardStats } from "@/lib/planInsights";
 import { PLAN_NEUTRAL } from "@/lib/colorSystem";
+import DayBreakdownCard from "@/components/DayBreakdownCard";
 import ExecutionStreakBanner from "@/components/ExecutionStreakBanner";
 import ExecutionTrendCard from "@/components/ExecutionTrendCard";
 import { getTrendDirection, getTrendState, type TrendDirection, type TrendState } from "@/lib/trendUtils";
@@ -966,6 +967,11 @@ export default function OverviewDashboard({
                   taskCheckableIds={taskCheckableIds}
                   onMarkDone={onMarkTaskDone}
                   onOpenSubtasks={onOpenSubtasks}
+                />
+                <DayBreakdownCard
+                  tasks={schedule.activities[todayKey] ?? []}
+                  plans={schedule.plans}
+                  dateISO={todayISO}
                 />
                 <RoutineConsistencyCard rows={ritualConsistency} />
               </div>
