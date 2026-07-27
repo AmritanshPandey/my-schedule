@@ -439,7 +439,7 @@ function PlanConsistencyCard({
               key={plan.id}
               type="button"
               onClick={() => { haptic("light"); onNavigate(1); }}
-              className="grid w-full grid-cols-[minmax(0,1fr)_90px] items-center gap-4 rounded-lg py-3.5 text-left transition-colors lg:hover:bg-neutral-50/80 dark:lg:hover:bg-white/[0.03]"
+              className="grid w-full grid-cols-[minmax(0,1fr)_90px] items-center gap-4 py-3.5 text-left transition-colors lg:hover:bg-neutral-50/80 dark:lg:hover:bg-white/[0.03]"
             >
               <div className="min-w-0">
                 <div className="flex items-center gap-2">
@@ -447,14 +447,16 @@ function PlanConsistencyCard({
                   <p className="truncate text-[15px] font-bold text-neutral-950 dark:text-white">{plan.title}</p>
                 </div>
                 <p className="mt-1 text-[11px] font-semibold text-neutral-400 dark:text-neutral-500">
-                  {milestonesTotal > 0 ? `${milestonesDone}/${milestonesTotal} milestones` : "No milestones"}
+                  {milestonesDone}/{milestonesTotal} milestones
                 </p>
+                {/* One dot per real milestone (capped at 10) — rows without any
+                    never reach here, so there are no placeholder dots. */}
                 <div className="mt-2 flex flex-wrap gap-1">
-                  {Array.from({ length: Math.max(1, Math.min(milestonesTotal || 6, 10)) }, (_, i) => (
+                  {Array.from({ length: Math.min(milestonesTotal, 10) }, (_, i) => (
                     <span
                       key={i}
                       className={`h-2 w-2 rounded-full ${
-                        milestonesTotal > 0 && i < milestonesDone ? "bg-emerald-500" : "bg-neutral-200 dark:bg-white/[0.10]"
+                        i < milestonesDone ? "bg-emerald-500" : "bg-neutral-200 dark:bg-white/[0.10]"
                       }`}
                     />
                   ))}
@@ -877,12 +879,17 @@ export default function OverviewDashboard({
       });
   }, [schedule.ritualCompletions, schedule.rituals, todayISO]);
 
+  // Only plans that actually have milestones. A plan without any rendered as a
+  // "No milestones" label plus a row of six grey placeholder dots, which read
+  // as six unfinished milestones that don't exist — noise, and misleading.
+  // The card hides itself entirely when nothing qualifies.
   const planConsistency = useMemo(() =>
-    schedule.plans.map((plan) => {
-      const { consistency } = getPlanCardStats(plan, schedule.activities, todayKey, schedule.preferences?.startDate);
+    schedule.plans.flatMap((plan) => {
       const milestones = (schedule.milestones ?? []).filter((milestone) => milestone.planId === plan.id);
+      if (milestones.length === 0) return [];
+      const { consistency } = getPlanCardStats(plan, schedule.activities, todayKey, schedule.preferences?.startDate);
       const milestonesDone = milestones.filter((milestone) => milestone.status === "completed").length;
-      return { plan, consistency, milestonesTotal: milestones.length, milestonesDone };
+      return [{ plan, consistency, milestonesTotal: milestones.length, milestonesDone }];
     }),
     [schedule.activities, schedule.milestones, schedule.plans, todayKey]
   );

@@ -968,7 +968,7 @@ export function TaskSheet({
                   aria-label="Duplicate task"
                   className="w-13 px-0"
                 >
-                  <IconCopy size={18} />
+                  <IconCopy size={24} />
                 </Button>
               )}
               {mode === "edit" && !isOccurrenceScope && onDelete && (
