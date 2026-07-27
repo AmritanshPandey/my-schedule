@@ -60,10 +60,16 @@ const { normalizeMilestoneTimeline, cascadeMilestoneDates } = await import("../l
 const { resolveLinkedTasks } = await import("../lib/notes/linkedTasks.ts");
 const { computeExecutionTrend, trendNarrative } = await import("../lib/executionAnalytics.ts");
 const { getNowOnTimeline, mapMinutesToTimeline } = await import("../lib/timeline/displayWindow.ts");
-const { buildDayBreakdown, taskScheduledMinutes, donutSegments, HELD_TIME_ID } =
+const { slotInterval, crossesMidnight, headMinutes, tailMinutes, intervalMinutes } =
+  await import("../lib/timeline/overnight.ts");
+const { carriedOccurrences, viewKey, isCarriedOver } = await import("../lib/timeline/carryOver.ts");
+const { buildDayBreakdown, taskScheduledMinutes, donutSegments } =
   await import("../lib/dayBreakdown.ts");
 const { calculateExecutionStreak } = await import("../lib/consistency/calculateExecutionStreak.ts");
-const { localISODate, addDaysToISO } = await import("../lib/dateUtils.ts");
+const { localISODate, addDaysToISO, weekdayOfISO } = await import("../lib/dateUtils.ts");
+const { seedCategoryIdFromIcon } = await import("../lib/scheduleNormalize.ts");
+const { resolveCategory, normalizeCategories, seedCategories, countTasksInCategory } =
+  await import("../lib/categories.ts");
 const { parseTimeToMinutes, toScheduleDayMinutes } = await import("../lib/timeUtils.ts");
 const { DAYS } = await import("../lib/scheduleConstants.ts");
 const { pointerToScrollableMinutes } = await import("../lib/timeline/dragTimeUtils.ts");
@@ -700,6 +706,27 @@ test("snooze never moves a task earlier than its scheduled time", () => {
   assert.deepEqual(snoozeTaskLater({ id: "x", completionHistory: [] }, 60), {});
 });
 
+test("snooze moves a long overnight task instead of silently doing nothing", () => {
+  const parse = (v) => parseTimeToMinutes(v);
+  const sleep = {
+    id: "sleep", title: "Sleep", startTime: "11:00 PM", endTime: "7:00 AM",
+    icon: "sleep", color: "blue", planId: "", taskType: "commitment", completionHistory: [],
+  };
+
+  // The bug: the end was clamped to 23:59, giving an 8-hour block a ceiling of
+  // 15:59 — below its own 23:00 start — so the guard returned {} every time and
+  // "Later today" appeared to do nothing at all.
+  const moved = snoozeTaskLater(sleep, 30);
+  assert.notDeepEqual(moved, {}, "an overnight task must actually move");
+  assert.ok(parse(moved.startTime) > parse("11:00 PM"), "and move later, not earlier");
+
+  // Duration survives the midnight wrap: 23:30 → 07:30 is still 8 hours.
+  const start = parse(moved.startTime);
+  let end = parse(moved.endTime);
+  if (end < start) end += 1440;
+  assert.equal(end - start, 480, "the 8-hour duration is preserved across midnight");
+});
+
 test("milestone date edits cascade to the remaining and persist", () => {
   const mk = (id, start, dur, sortOrder) => ({
     id, planId: "p", title: id, startDate: start, plannedDurationDays: dur,
@@ -962,6 +989,7 @@ test("normalizeTasks round-trips a fully-populated task without losing a field",
       { startTime: "3:00 PM", endTime: "4:00 PM" },
     ],
     taskType: "session",
+    categoryId: "cat-custom",
     completed: true,
     completedAt: "2026-07-26T09:30:00.000Z",
     completedSubtaskIds: ["sub-a"],
@@ -1217,6 +1245,256 @@ test("the now marker hides when the clock is outside the day's window", () => {
   assert.equal(getNowOnTimeline(60, 0, end), 60);
 });
 
+// ── Categories ──────────────────────────────────────────────────────────────
+
+test("tasks without a category are auto-sorted by icon", () => {
+  const mk = (icon) => ({
+    id: `t-${icon}`, title: icon, startTime: "9:00 AM", endTime: "10:00 AM", icon, planId: "p",
+  });
+
+  const expected = {
+    sleep: "cat-sleep",
+    briefcase: "cat-work", car: "cat-work", code: "cat-work",
+    brain: "cat-work", school: "cat-work", book: "cat-work",
+    run: "cat-routine", barbell: "cat-routine", heart: "cat-routine", star: "cat-routine",
+  };
+
+  for (const [icon, categoryId] of Object.entries(expected)) {
+    assert.equal(seedCategoryIdFromIcon(icon), categoryId, `${icon} seeds ${categoryId}`);
+    const [out] = normalizeTasks([mk(icon)], "p");
+    assert.equal(out.categoryId, categoryId, `normalizeTasks assigns ${categoryId} to ${icon}`);
+  }
+});
+
+test("the icon auto-sort never overwrites a category the user picked", () => {
+  const chosen = {
+    id: "t1", title: "Gym paperwork", startTime: "9:00 AM", endTime: "10:00 AM",
+    icon: "briefcase", planId: "p", categoryId: "cat-routine",
+  };
+
+  // Two passes: normalization runs on every load, so it has to be idempotent.
+  const once = normalizeTasks([chosen], "p")[0];
+  const twice = normalizeTasks([once], "p")[0];
+  assert.equal(once.categoryId, "cat-routine", "a stored category wins over the icon guess");
+  assert.deepEqual(twice, once, "a second pass changes nothing");
+
+  // An empty string is not a real choice — it must fall through to the guess.
+  const [blank] = normalizeTasks([{ ...chosen, categoryId: "" }], "p");
+  assert.equal(blank.categoryId, "cat-work", "an empty categoryId falls back to the icon");
+});
+
+test("a task whose category was deleted still resolves to a real one", () => {
+  const categories = seedCategories().filter((c) => c.id !== "cat-sleep");
+
+  // The donut totals the day, so a dangling id must never drop the task — that
+  // would quietly subtract minutes from a chart claiming to account for them.
+  const orphan = resolveCategory(categories, "cat-sleep", "sleep");
+  assert.ok(orphan, "always resolves to something");
+  assert.ok(categories.some((c) => c.id === orphan.id), "and to a category that exists");
+
+  assert.equal(resolveCategory(categories, "cat-work", "briefcase").id, "cat-work", "exact match wins");
+  assert.equal(resolveCategory(categories, undefined, "briefcase").id, "cat-work", "falls back to the icon seed");
+  assert.equal(resolveCategory([], "cat-work", "briefcase").id, "cat-routine", "survives an empty list");
+});
+
+test("normalizeCategories seeds the three defaults when none are stored", () => {
+  assert.deepEqual(normalizeCategories(undefined), seedCategories(), "missing → seeded");
+  assert.deepEqual(normalizeCategories([]), seedCategories(), "empty → seeded");
+  assert.deepEqual(normalizeCategories("nonsense"), seedCategories(), "junk → seeded");
+
+  const stored = [{ id: "cat-x", name: "Deep work", icon: "brain", color: "violet" }];
+  assert.deepEqual(normalizeCategories(stored), stored, "a real list is preserved verbatim");
+
+  // Shape filter: entries missing required fields are dropped, not crashed on.
+  assert.deepEqual(
+    normalizeCategories([...stored, { id: "bad" }, null]),
+    stored,
+    "malformed entries are dropped",
+  );
+});
+
+test("a commitment's icon comes from its category, a task's from itself", () => {
+  // The wallpaper is the only surface that draws a task's own icon, and the
+  // task sheet hides the icon picker for commitments — so every commitment used
+  // to fall through to a generic star. Its category supplies the real one.
+  const categories = seedCategories();
+  const wallpaperIcon = (task) =>
+    isTrackedTask(task)
+      ? task.icon || "star"
+      : resolveCategory(categories, task.categoryId, task.icon).icon;
+
+  assert.equal(
+    wallpaperIcon({ icon: "brain", categoryId: "cat-work" }),
+    "brain",
+    "a tracked task keeps its own icon",
+  );
+  assert.equal(
+    wallpaperIcon({ icon: "car", categoryId: "cat-work", taskType: "commitment" }),
+    "briefcase",
+    "a commitment wears its category's icon, not its ignored stored one",
+  );
+  assert.equal(
+    wallpaperIcon({ icon: "star", categoryId: undefined, taskType: "commitment" }),
+    "star",
+    "an uncategorised commitment still resolves (Routine) rather than breaking",
+  );
+});
+
+test("countTasksInCategory counts a task once, not once per weekday", () => {
+  const categories = seedCategories();
+  // One task with a shared id across three weekday buckets — the storage model.
+  const task = { id: "shared", categoryId: "cat-work", icon: "briefcase" };
+  const activities = { monday: [task], wednesday: [task], friday: [task], tuesday: [] };
+
+  assert.equal(countTasksInCategory(activities, categories, "cat-work"), 1, "one task, three copies");
+  assert.equal(countTasksInCategory(activities, categories, "cat-sleep"), 0);
+});
+
+// ── Overnight intervals ─────────────────────────────────────────────────────
+
+test("slotInterval splits a block at midnight between the two days it touches", () => {
+  // head = minutes on the day the block is authored on, tail = minutes that
+  // spill into the next calendar day. Sleep is the case that motivated this.
+  const cases = [
+    { startTime: "11:00 PM", endTime: "7:00 AM",  start: 1380, end: 1860, head: 60,  tail: 420 },
+    { startTime: "1:00 AM",  endTime: "2:00 AM",  start: 1500, end: 1560, head: 0,   tail: 60  },
+    { startTime: "10:00 PM", endTime: "12:00 AM", start: 1320, end: 1440, head: 120, tail: 0   },
+    { startTime: "12:00 AM", endTime: "1:00 AM",  start: 1440, end: 1500, head: 0,   tail: 60  },
+    { startTime: "3:00 AM",  endTime: "5:00 AM",  start: 1620, end: 1740, head: 0,   tail: 120 },
+    { startTime: "9:00 AM",  endTime: "10:30 AM", start: 540,  end: 630,  head: 90,  tail: 0   },
+  ];
+
+  for (const c of cases) {
+    const iv = slotInterval(c);
+    const label = `${c.startTime}–${c.endTime}`;
+    assert.deepEqual(iv, { start: c.start, end: c.end }, label);
+    assert.equal(headMinutes(iv), c.head, `${label} head`);
+    assert.equal(tailMinutes(iv), c.tail, `${label} tail`);
+    // The split must be lossless: nothing is double-counted or dropped.
+    assert.equal(headMinutes(iv) + tailMinutes(iv), intervalMinutes(iv), `${label} is conserved`);
+    assert.equal(crossesMidnight(iv), c.tail > 0, `${label} crossing`);
+  }
+});
+
+test("slotInterval rejects zero-length and unparseable slots", () => {
+  // The old `while (end <= start) end += 1440` read this as a 24-hour block
+  // while formatDuration called the same slot "0m". Zero-length wins.
+  assert.equal(slotInterval({ startTime: "9:00 AM", endTime: "9:00 AM" }), null, "zero-length");
+  assert.equal(slotInterval({ startTime: "nonsense", endTime: "9:00 AM" }), null, "no start");
+
+  // A missing end falls back to a default length rather than vanishing.
+  assert.deepEqual(
+    slotInterval({ startTime: "9:00 AM", endTime: "" }),
+    { start: 540, end: 570 },
+    "missing end gets a default span",
+  );
+});
+
+// ── Overnight carry-over (yesterday's tail on today's timeline) ─────────────
+
+test("carriedOccurrences emits one read-only block per midnight-crossing slot", () => {
+  const monday = "2026-07-27";
+  const sleep = {
+    id: "sleep", title: "Sleep", icon: "sleep", color: "blue", planId: "",
+    categoryId: "cat-sleep", startTime: "11:00 PM", endTime: "7:00 AM",
+  };
+  const morning = {
+    id: "gym", title: "Gym", icon: "run", color: "rose", planId: "p",
+    startTime: "7:00 AM", endTime: "8:00 AM",
+  };
+
+  const carried = carriedOccurrences([sleep, morning], monday, "monday");
+
+  assert.equal(carried.length, 1, "only the overnight task carries over");
+  assert.equal(carried[0].id, "sleep");
+  assert.equal(carried[0].startTime, "12:00 AM", "the tail starts at midnight");
+  assert.equal(carried[0].endTime, "7:00 AM", "and ends when the block really ends");
+  assert.equal(carried[0].slots, undefined, "a carried entry is a single block");
+  assert.deepEqual(carried[0].carriedFrom, { dateISO: monday, day: "monday", slotIndex: 0 });
+  assert.ok(isCarriedOver(carried[0]));
+  assert.ok(!isCarriedOver(sleep), "a real occurrence is not carried");
+});
+
+test("a multi-slot task carries over only the phases that cross midnight", () => {
+  const shift = {
+    id: "shift", title: "Shift", icon: "briefcase", color: "red", planId: "",
+    startTime: "9:00 AM", endTime: "11:00 AM",
+    slots: [
+      { startTime: "9:00 AM", endTime: "11:00 AM" },   // daytime — no carry
+      { startTime: "10:00 PM", endTime: "2:00 AM" },   // crosses — carries
+    ],
+  };
+
+  const carried = carriedOccurrences([shift], "2026-07-27", "monday");
+  assert.equal(carried.length, 1);
+  assert.equal(carried[0].endTime, "2:00 AM");
+  assert.equal(carried[0].carriedFrom.slotIndex, 1, "the crossing phase, not the first");
+});
+
+test("carriedOccurrences respects recurrence — no tail on an off week", () => {
+  // Every other week, anchored so 2026-07-27 is an ON week.
+  const biweekly = {
+    id: "bw", title: "Night shift", icon: "briefcase", color: "red", planId: "",
+    startTime: "11:00 PM", endTime: "3:00 AM",
+    recurrence: { type: "weekly", interval: 2, anchorISO: "2026-07-27" },
+  };
+
+  assert.equal(carriedOccurrences([biweekly], "2026-07-27", "monday").length, 1, "on week carries");
+  assert.equal(carriedOccurrences([biweekly], "2026-08-03", "monday").length, 0, "off week does not");
+});
+
+test("viewKey separates a carried tail from the same task's own occurrence", () => {
+  // The landmine: a daily Sleep block puts one task.id in a single day twice.
+  // Keying by task.id would make React drop one of them.
+  const sleep = {
+    id: "sleep", title: "Sleep", icon: "sleep", color: "blue", planId: "",
+    startTime: "11:00 PM", endTime: "7:00 AM",
+  };
+  const [tail] = carriedOccurrences([sleep], "2026-07-27", "monday");
+
+  assert.notEqual(viewKey(tail), viewKey(sleep), "the two rows must key differently");
+  assert.equal(viewKey(sleep), "sleep", "a real occurrence keys by its id");
+  assert.equal(viewKey(sleep, 1), "sleep-1", "slot index is appended when given");
+});
+
+test("carry-over changes no statistic — the view-boundary rule holds", () => {
+  // The acceptance gate for Phase 4. A schedule with one daily overnight
+  // commitment must produce identical analytics whether or not carry-over
+  // exists, because carried rows never enter the weekday buckets.
+  const today = localISODate(new Date());
+  const sleep = {
+    id: "sleep", title: "Sleep", icon: "sleep", color: "blue", planId: "",
+    categoryId: "cat-sleep", taskType: "commitment",
+    startTime: "11:00 PM", endTime: "7:00 AM", completionHistory: [],
+  };
+  const real = {
+    id: "work", title: "Deep work", icon: "brain", color: "violet", planId: "p",
+    categoryId: "cat-work", startTime: "9:00 AM", endTime: "11:00 AM",
+    completionHistory: [{ id: "e", taskId: "work", completionType: "task", completedAt: `${today}T10:00:00.000Z` }],
+    completed: true,
+  };
+
+  const schedule = emptySchedule();
+  const todayKey = DAYS[(new Date().getDay() + 6) % 7];
+  schedule.activities[todayKey] = [sleep, real];
+
+  const trendBefore = computeExecutionTrend(schedule, 1);
+  const streakBefore = calculateExecutionStreak(schedule, today);
+  assert.equal(trendBefore.weeks[trendBefore.weeks.length - 1].scheduled, 1,
+    "the commitment was already outside the denominator");
+
+  // Building the carried view must not mutate the schedule it reads from.
+  const carried = carriedOccurrences(schedule.activities[todayKey], today, todayKey);
+  assert.equal(carried.length, 1, "there is in fact a tail to carry");
+
+  assert.deepEqual(computeExecutionTrend(schedule, 1), trendBefore, "trend untouched");
+  assert.deepEqual(calculateExecutionStreak(schedule, today), streakBefore, "streak untouched");
+  // And the source rows are unchanged — carriedOccurrences copies, never mutates.
+  assert.equal(schedule.activities[todayKey].length, 2);
+  assert.equal(schedule.activities[todayKey][0].startTime, "11:00 PM", "the origin keeps its time");
+  assert.equal(schedule.activities[todayKey][0].carriedFrom, undefined, "and gains no display field");
+});
+
 // ── Day breakdown (the "where the day goes" donut) ──────────────────────────
 
 test("taskScheduledMinutes sums every slot, including past midnight", () => {
@@ -1240,36 +1518,130 @@ test("taskScheduledMinutes sums every slot, including past midnight", () => {
   );
 });
 
-test("buildDayBreakdown groups by plan and pools commitments into held time", () => {
+// A task fixture. Defaults are irrelevant to the grouping — categoryId is.
+const bdTask = (over) => ({
+  id: over.id, title: over.id, icon: "book", color: "amber", planId: "",
+  startTime: over.startTime, endTime: over.endTime, ...over,
+});
+const bdCats = () => seedCategories();
+
+test("buildDayBreakdown groups by category, not by plan", () => {
   const today = localISODate(new Date());
-  const plans = [
-    { id: "p-work", title: "Work", category: "work", emoji: "briefcase", color: "amber", items: [] },
-    { id: "p-gym", title: "Gym", category: "fitness", emoji: "run", color: "rose", items: [] },
-  ];
-  const t = (over) => ({ id: over.id, title: over.id, icon: "book", color: "amber", planId: over.planId ?? "", startTime: over.startTime, endTime: over.endTime, ...over });
-
   const tasks = [
-    t({ id: "a", planId: "p-work", startTime: "9:00 AM", endTime: "11:00 AM" }),   // 120
-    t({ id: "b", planId: "p-work", startTime: "1:00 PM", endTime: "2:00 PM" }),    // 60  -> Work 180
-    t({ id: "c", planId: "p-gym", startTime: "7:00 AM", endTime: "8:00 AM" }),     // 60
-    t({ id: "d", planId: "", taskType: "commitment", startTime: "8:00 AM", endTime: "9:00 AM" }), // 60 held
-    t({ id: "e", planId: "ghost", startTime: "5:00 PM", endTime: "6:00 PM" }),     // dangling plan -> skipped
+    // Two different plans, one category: they must pool into a single slice.
+    // Grouping by plan was the duplicate-wedge problem this design removes.
+    bdTask({ id: "a", planId: "p-work", categoryId: "cat-work", startTime: "9:00 AM", endTime: "11:00 AM" }),  // 120
+    bdTask({ id: "b", planId: "p-side", categoryId: "cat-work", startTime: "1:00 PM", endTime: "2:00 PM" }),   // 60
+    bdTask({ id: "c", planId: "p-gym", categoryId: "cat-routine", startTime: "7:00 AM", endTime: "8:00 AM" }), // 60
+    // A commitment now carries a real category instead of vanishing into grey.
+    bdTask({ id: "d", taskType: "commitment", categoryId: "cat-routine", startTime: "8:00 AM", endTime: "9:00 AM" }), // 60
   ];
 
-  const { slices, totalMinutes } = buildDayBreakdown(tasks, plans, today);
-  assert.equal(totalMinutes, 300, "dangling-plan task is excluded");
+  const { slices, totalMinutes } = buildDayBreakdown({
+    dateISO: today, tasks, previousTasks: [], categories: bdCats(),
+  });
+
+  assert.equal(totalMinutes, 300);
   assert.deepEqual(
     slices.map((s) => [s.id, s.minutes, s.pct]),
-    [["p-work", 180, 60], ["p-gym", 60, 20], [HELD_TIME_ID, 60, 20]],
-    "largest first, held time pooled",
+    [["cat-work", 180, 60], ["cat-routine", 120, 40]],
+    "two plans in one category make one slice; largest first",
   );
   assert.equal(slices[0].label, "Work");
-  assert.equal(slices.find((s) => s.id === HELD_TIME_ID).label, "Held time");
-  assert.equal(slices.find((s) => s.id === HELD_TIME_ID).color, null, "held time has no accent");
+  assert.equal(slices[0].color, "red", "the slice wears the category's colour");
+  assert.ok(!slices.some((s) => s.label === "Held time"), "held time no longer exists");
+});
+
+test("an overnight task splits its minutes across the two days it touches", () => {
+  const monday = "2026-07-27";   // a Monday
+  const tuesday = "2026-07-28";
+  assert.equal(weekdayOfISO(monday), "monday", "fixture sanity");
+
+  // Sleep authored on Monday, 11 PM → 7 AM.
+  const sleep = bdTask({
+    id: "sleep", categoryId: "cat-sleep", startTime: "11:00 PM", endTime: "7:00 AM",
+  });
+
+  const mon = buildDayBreakdown({
+    dateISO: monday, tasks: [sleep], previousTasks: [], categories: bdCats(),
+  });
+  assert.equal(mon.totalMinutes, 60, "only the hour before midnight lands on Monday");
+
+  const tue = buildDayBreakdown({
+    dateISO: tuesday, tasks: [], previousTasks: [sleep], categories: bdCats(),
+  });
+  assert.equal(tue.totalMinutes, 420, "the other seven hours land on Tuesday");
+  assert.equal(tue.slices[0].label, "Sleep");
+});
+
+test("a daily overnight task totals its full length on any middle day", () => {
+  // Sleep repeats every day, so Tuesday gets Monday's 7-hour tail plus its own
+  // 1-hour head — 8 hours, in ONE slice rather than two.
+  const sleep = bdTask({
+    id: "sleep", categoryId: "cat-sleep", startTime: "11:00 PM", endTime: "7:00 AM",
+  });
+
+  const { slices, totalMinutes } = buildDayBreakdown({
+    dateISO: "2026-07-28", tasks: [sleep], previousTasks: [sleep], categories: bdCats(),
+  });
+
+  assert.equal(totalMinutes, 480, "the full 8 hours");
+  assert.equal(slices.length, 1, "one slice, not two");
+  assert.equal(slices[0].minutes, 480);
+});
+
+test("a small-hours task counts on the day it is actually lived", () => {
+  // 1–2 AM authored on Monday is really Tuesday 1 AM: the 4 AM day boundary
+  // means it belongs to Monday's *bucket* but to Tuesday's calendar day.
+  const lateNight = bdTask({
+    id: "late", categoryId: "cat-work", startTime: "1:00 AM", endTime: "2:00 AM",
+  });
+
+  const mon = buildDayBreakdown({
+    dateISO: "2026-07-27", tasks: [lateNight], previousTasks: [], categories: bdCats(),
+  });
+  assert.equal(mon.totalMinutes, 0, "nothing on the authoring day");
+
+  const tue = buildDayBreakdown({
+    dateISO: "2026-07-28", tasks: [], previousTasks: [lateNight], categories: bdCats(),
+  });
+  assert.equal(tue.totalMinutes, 60, "the whole hour on the next day");
+});
+
+test("a task whose category was deleted still contributes its minutes", () => {
+  // The donut claims to total the day. Skipping the task — the way a dangling
+  // planId used to be skipped — would quietly under-report it.
+  const categories = seedCategories().filter((c) => c.id !== "cat-sleep");
+  const orphan = bdTask({
+    id: "o", categoryId: "cat-sleep", icon: "sleep", startTime: "9:00 AM", endTime: "10:00 AM",
+  });
+
+  const { slices, totalMinutes } = buildDayBreakdown({
+    dateISO: localISODate(new Date()), tasks: [orphan], previousTasks: [], categories,
+  });
+
+  assert.equal(totalMinutes, 60, "the minutes are still counted");
+  assert.equal(slices.length, 1);
+  assert.ok(categories.some((c) => c.id === slices[0].id), "under a category that exists");
+});
+
+test("buildDayBreakdown respects per-date overrides", () => {
+  // Rescheduling one occurrence to 11 PM moves its minutes to the next day.
+  const moved = bdTask({
+    id: "m", categoryId: "cat-work", startTime: "9:00 AM", endTime: "10:00 AM",
+    exceptions: { "2026-07-27": { startTime: "11:00 PM", endTime: "11:30 PM" } },
+  });
+
+  const { totalMinutes } = buildDayBreakdown({
+    dateISO: "2026-07-27", tasks: [moved], previousTasks: [], categories: bdCats(),
+  });
+  assert.equal(totalMinutes, 30, "the override's 30 minutes, not the template's 60");
 });
 
 test("buildDayBreakdown is empty when nothing is scheduled", () => {
-  const { slices, totalMinutes } = buildDayBreakdown([], [], localISODate(new Date()));
+  const { slices, totalMinutes } = buildDayBreakdown({
+    dateISO: localISODate(new Date()), tasks: [], previousTasks: [], categories: bdCats(),
+  });
   assert.deepEqual(slices, []);
   assert.equal(totalMinutes, 0);
 });

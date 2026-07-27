@@ -24,6 +24,12 @@ export type { DayKey } from "@/lib/scheduleConstants";
 import { normalizeTasks, entryToTask, resetStaleCompletions } from "@/lib/scheduleNormalize";
 export { normalizeTasks, resetStaleCompletions } from "@/lib/scheduleNormalize";
 
+// Categories live in their own module for the same reason (no React deps).
+import type { Category } from "@/lib/categories";
+import { normalizeCategories, seedCategories } from "@/lib/categories";
+export { seedCategories, SEED_CATEGORY_IDS, resolveCategory } from "@/lib/categories";
+export type { Category } from "@/lib/categories";
+
 export type PlanCategory = "fitness" | "learning" | "work" | "health" | "routine";
 
 export interface Goal {
@@ -119,6 +125,14 @@ export interface Task {
    * `isTrackedTask` in lib/taskCompletion.ts.
    */
   taskType?: TaskTypeValue;            // undefined treated as "task"
+  /**
+   * Which `Category` this block's time counts toward. Optional at the type level
+   * only — `normalizeTasks` seeds one from the icon for any task without it, so
+   * it is populated in practice. (It must stay optional: the allowlist guard
+   * test only inspects optional members, so a required field would slip past it
+   * and then be silently dropped by the normalizer.)
+   */
+  categoryId?: string;
   exceptions?: Record<string, TaskException>; // per-date overrides, keyed by ISO date
   recurrence?: TaskRecurrence;         // absent = weekly (every matching weekday)
 }
@@ -268,6 +282,7 @@ export interface Schedule {
   metricEntries: MetricEntry[];
   milestones: Milestone[];
   rituals: Ritual[];
+  categories: Category[];
   strategies: StrategyAsset[];
   ritualCompletions: RitualCompletion[];
   notes: Note[];
@@ -635,6 +650,10 @@ function migrate(raw: unknown): Schedule {
       ? (r.rituals as Ritual[]).filter((ri) => ri && typeof ri.id === "string" && typeof ri.title === "string" && typeof ri.time === "string")
       : [];
 
+    // Seeds Work/Sleep/Routine when absent, so every existing record gains the
+    // three defaults on its next load.
+    const categories = normalizeCategories(r.categories);
+
     const strategies: StrategyAsset[] = Array.isArray(r.strategies)
       ? (r.strategies as StrategyAsset[]).filter((s) => s && typeof s.id === "string" && typeof s.type === "string" && typeof s.title === "string")
       : [];
@@ -665,6 +684,7 @@ function migrate(raw: unknown): Schedule {
       metricEntries,
       milestones: normalizedMilestones,
       rituals,
+      categories,
       strategies,
       ritualCompletions,
       notes,
@@ -690,6 +710,7 @@ function migrate(raw: unknown): Schedule {
       metricEntries,
       milestones: [],
       rituals: [],
+      categories: seedCategories(),
       strategies: [],
       ritualCompletions: [],
       notes: normalizeNotes(r.notes),
@@ -726,6 +747,7 @@ function migrate(raw: unknown): Schedule {
     metricEntries,
     milestones: [],
     rituals: [],
+    categories: seedCategories(),
     strategies: [],
     ritualCompletions: [],
     notes: normalizeNotes(r.notes),
@@ -796,6 +818,7 @@ function emptyEmpty(): Schedule {
     metricEntries: [],
     milestones: [],
     rituals: [],
+    categories: seedCategories(),
     strategies: [],
     ritualCompletions: [],
     notes: [],

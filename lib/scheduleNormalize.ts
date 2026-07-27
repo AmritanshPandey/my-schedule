@@ -30,6 +30,7 @@ const OPTIONAL_TASK_FIELDS = [
   "description",
   "slots",
   "taskType",
+  "categoryId",
   "completed",
   "completedAt",
   "completedSubtaskIds",
@@ -56,6 +57,10 @@ function keepField(key: (typeof OPTIONAL_TASK_FIELDS)[number], value: unknown): 
   switch (key) {
     case "slots":
       return Array.isArray(value) && value.length > 0;
+    case "categoryId":
+      // An empty string must not survive, or it would beat the icon-derived
+      // default seeded in the required literal below.
+      return typeof value === "string" && value.length > 0;
     case "completedSlotIndices":
     case "subtasks":
       return Array.isArray(value);
@@ -65,6 +70,29 @@ function keepField(key: (typeof OPTIONAL_TASK_FIELDS)[number], value: unknown): 
     default:
       return value !== undefined;
   }
+}
+
+/**
+ * Icons that read as work rather than routine. `car` is here deliberately — a
+ * commute is time the job costs you, which is exactly what the Work slice of the
+ * donut is for.
+ */
+const WORK_ICONS = new Set(["briefcase", "car", "code", "brain", "school", "book"]);
+
+/**
+ * Which seed category a task belongs to, guessed from its icon.
+ *
+ * Used to backfill `categoryId` on tasks that predate categories, so the donut
+ * is useful the first time it's opened instead of one undifferentiated wedge.
+ * A guess, not a promise — the task sheet lets the user re-file anything.
+ *
+ * Note this is NOT `categoryFromIcon` in useScheduleDB: that one returns a
+ * `PlanCategory` ("fitness" | "learning" | …) for plans, a different taxonomy
+ * with different members.
+ */
+export function seedCategoryIdFromIcon(icon: string): string {
+  if (icon === "sleep") return "cat-sleep";
+  return WORK_ICONS.has(icon) ? "cat-work" : "cat-routine";
 }
 
 export function splitLegacyTimeRange(value: string): { startTime: string; endTime: string } {
@@ -87,6 +115,7 @@ export function entryToTask(entry: ScheduleEntry, icon: string, planId: string, 
     icon,
     color: colorFromIcon(icon),
     planId,
+    categoryId: seedCategoryIdFromIcon(icon),
   };
 }
 
@@ -124,6 +153,11 @@ export function normalizeTasks(value: unknown, fallbackPlanId: string, fallbackI
         // this guard `"" || fallbackPlanId` silently adopted every commitment
         // into the first plan on the next reload.
         planId: taskType === "commitment" ? task.planId ?? "" : task.planId || fallbackPlanId,
+        // Backfill for tasks that predate categories. This sits in the required
+        // literal so the optional loop below can override it whenever a real
+        // value exists, which makes the migration idempotent and non-destructive
+        // — it never overwrites a category the user picked.
+        categoryId: seedCategoryIdFromIcon(task.icon || fallbackIcon),
       };
 
       for (const key of OPTIONAL_TASK_FIELDS) {

@@ -31,6 +31,7 @@ import ExecutionStreakBanner from "@/components/ExecutionStreakBanner";
 import ExecutionTrendCard from "@/components/ExecutionTrendCard";
 import { getTrendDirection, getTrendState, type TrendDirection, type TrendState } from "@/lib/trendUtils";
 import { addDaysToISO, localISODate } from "@/lib/dateUtils";
+import { previousDayKey } from "@/lib/scheduleConstants";
 import { parseTimeToMinutes, toScheduleDayMinutes } from "@/lib/timeUtils";
 import { calculateExecutionStreak, type ExecutionStreak } from "@/lib/consistency/calculateExecutionStreak";
 import { isTaskScheduledOn } from "@/lib/taskOccurrence";
@@ -970,7 +971,8 @@ export default function OverviewDashboard({
                 />
                 <DayBreakdownCard
                   tasks={schedule.activities[todayKey] ?? []}
-                  plans={schedule.plans}
+                  previousTasks={schedule.activities[previousDayKey(todayKey)] ?? []}
+                  categories={schedule.categories}
                   dateISO={todayISO}
                 />
                 <RoutineConsistencyCard rows={ritualConsistency} />

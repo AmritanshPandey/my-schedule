@@ -7,9 +7,11 @@ import { IconChevronLeft, IconChevronRight, IconDotsVertical } from "@tabler/ico
 import type { DayKey, Plan, Ritual, RitualCompletion, Schedule, Task, TaskSlot } from "@/lib/useScheduleDB";
 import { DAYS } from "@/lib/useScheduleDB";
 import { getSlots, sortTasksByTime } from "@/lib/taskMutations";
-import { completionForDate, getTaskCheckableItems, getTaskSubtaskSummary, resolveTaskState } from "@/lib/taskCompletion";
+import { completionForDate, getTaskCheckableItems, getTaskSubtaskSummary, isTrackedTask, resolveTaskState } from "@/lib/taskCompletion";
 import { isTaskScheduledOn, resolveOccurrence } from "@/lib/taskOccurrence";
-import { localISODate, todayISO } from "@/lib/dateUtils";
+import { addDaysToISO, localISODate, todayISO } from "@/lib/dateUtils";
+import { previousDayKey } from "@/lib/scheduleConstants";
+import { carriedOccurrences, isCarriedOver, viewKey, type DayViewTask } from "@/lib/timeline/carryOver";
 import { currentMinutes, parseTimeToMinutes } from "@/lib/timeUtils";
 import { categoryHex, resolveAccentColor } from "@/lib/colorSystem";
 import { haptic } from "@/lib/haptics";
@@ -65,22 +67,29 @@ interface BlockLayout {
   height: number;
   leftPct: number;
   widthPct: number;
+  /** The block runs past the bottom of the window — show where it really ends. */
+  continuesUntil?: string;
 }
 
-function buildDayLayout(tasks: Task[], startMin: number, endMin: number): { timed: BlockLayout[]; untimed: Task[] } {
-  const untimed: Task[] = [];
-  const parsed: { task: Task; slot: TaskSlot; slotIndex: number; s: number; e: number }[] = [];
+function buildDayLayout(tasks: DayViewTask[], startMin: number, endMin: number): { timed: BlockLayout[]; untimed: DayViewTask[] } {
+  const untimed: DayViewTask[] = [];
+  const parsed: { task: DayViewTask; slot: TaskSlot; slotIndex: number; s: number; e: number }[] = [];
   for (const t of tasks) {
     const slots = getSlots(t);
     let anyTimed = false;
+    // A carried-over tail is already *this* morning: 12 AM–7 AM means minutes
+    // 0–420, plainly. Running it through mapMinutesToTimeline would wrap it
+    // forward into the overnight region (1440–1860) — the far bottom of the
+    // day — which is precisely the opposite end from where it belongs.
+    const carried = isCarriedOver(t);
     slots.forEach((slot, slotIndex) => {
       const parsedStart = parseTimeToMinutes(slot.startTime);
       if (parsedStart == null) return;
       anyTimed = true;
-      const s = mapMinutesToTimeline(parsedStart, startMin, endMin);
+      const s = carried ? parsedStart : mapMinutesToTimeline(parsedStart, startMin, endMin);
       let e = parseTimeToMinutes(slot.endTime);
       if (e == null) e = s + 30;
-      else e = mapMinutesToTimeline(e, startMin, endMin);
+      else if (!carried) e = mapMinutesToTimeline(e, startMin, endMin);
       while (e <= s) e += 1440;
       parsed.push({ task: t, slot, slotIndex, s, e });
     });
@@ -88,19 +97,24 @@ function buildDayLayout(tasks: Task[], startMin: number, endMin: number): { time
   }
   parsed.sort((a, b) => a.s - b.s || a.e - b.e);
 
+  // Lane packing works on the *visible* span. Using the raw end made an 8-hour
+  // sleep block reserve a lane across a night that isn't drawn, pushing any
+  // early-morning task beside it into a needless second column.
+  const clampEnd = (e: number) => Math.min(e, endMin);
+
   const laneEnd: number[] = [];
   const withLane = parsed.map((p) => {
     let lane = laneEnd.findIndex((end) => end <= p.s);
-    if (lane === -1) { lane = laneEnd.length; laneEnd.push(p.e); } else laneEnd[lane] = p.e;
+    if (lane === -1) { lane = laneEnd.length; laneEnd.push(clampEnd(p.e)); } else laneEnd[lane] = clampEnd(p.e);
     return { ...p, lane };
   });
 
   const timed: BlockLayout[] = [];
   let i = 0;
   while (i < withLane.length) {
-    let clusterEnd = withLane[i].e;
+    let clusterEnd = clampEnd(withLane[i].e);
     let j = i + 1;
-    while (j < withLane.length && withLane[j].s < clusterEnd) { clusterEnd = Math.max(clusterEnd, withLane[j].e); j++; }
+    while (j < withLane.length && withLane[j].s < clusterEnd) { clusterEnd = Math.max(clusterEnd, clampEnd(withLane[j].e)); j++; }
     const cluster = withLane.slice(i, j);
     const lanes = Math.max(...cluster.map((c) => c.lane)) + 1;
     for (const c of cluster) {
@@ -114,6 +128,9 @@ function buildDayLayout(tasks: Task[], startMin: number, endMin: number): { time
         height: Math.max(22, bottom - top),
         widthPct: 100 / lanes,
         leftPct: (100 / lanes) * c.lane,
+        // The block is clipped at the window edge; say so rather than silently
+        // dropping the hours (an 8-hour sleep block lost three of them).
+        continuesUntil: c.e > endMin ? c.slot.endTime : undefined,
       });
     }
     i = j;
@@ -160,7 +177,11 @@ interface WeekGridProps {
   onWeekToday: () => void;
   onCalendarViewChange: (v: CalendarView) => void;
   onCustomDaysChange: (days: DayKey[]) => void;
-  onEditTask: (task: Task) => void;
+  /**
+   * The grid shows several days at once, so the column's own day/date must
+   * travel with the task — the app-wide `activeDay` is not the clicked day.
+   */
+  onEditTask: (task: Task, dateISO: string, day: DayKey) => void;
   onDeleteTask: (taskId: string, day: DayKey) => void;
   onToggleTaskComplete: (taskId: string, allSubtaskIds: string[], day: DayKey, dateISO: string) => void;
   /** Independent completion for one phase of a multi-slot task. */
@@ -170,17 +191,28 @@ interface WeekGridProps {
    * Render prop for the task card inside each time block.
    * WeekGrid handles positioning; the parent injects the card so
    * visual changes on mobile automatically apply here too.
+   *
+   * A single options object rather than positional args: the parent needs the
+   * column's `day`/`dateISO` to open the edit sheet on the right day, and this
+   * had already grown to eight positional parameters.
    */
-  renderCard: (
-    task: Task,
-    height: number,
-    widthPct: number,
-    readOnly: boolean,
-    onToggle: () => void,
-    onDelete: () => void,
-    slot?: TaskSlot,
-    slotIndex?: number,
-  ) => ReactNode;
+  renderCard: (opts: {
+    task: Task;
+    height: number;
+    widthPct: number;
+    readOnly: boolean;
+    /** The column this card sits in — NOT the app-wide `activeDay`. */
+    day: DayKey;
+    dateISO: string;
+    /** The clock is inside this block right now (today's column only). */
+    isNowInside?: boolean;
+    /** Set when the block is clipped by the window; the real end time. */
+    continuesUntil?: string;
+    onToggle: () => void;
+    onDelete: () => void;
+    slot?: TaskSlot;
+    slotIndex?: number;
+  }) => ReactNode;
 }
 
 export function WeekGrid({
@@ -228,16 +260,27 @@ export function WeekGrid({
     const dateISO = localISODate(date);
     const dayIsToday = dateISO === todayISO();
     const raw = sortTasksByTime(schedule.activities[day] ?? []).filter((t) => isTaskScheduledOn(t, dateISO, true));
-    const tasks = raw.map((t) => {
+    const tasks: DayViewTask[] = raw.map((t) => {
       const r = resolveOccurrence(t, dateISO);
       return dayIsToday ? r : { ...r, ...completionForDate(t, dateISO) };
     });
-    return { day, date, dateISO, dayIsToday, tasks };
+    // Yesterday's overnight tail, rendered read-only at the top of this column.
+    // Synthesised here at the view boundary only — never in schedule.activities.
+    const prevDay = previousDayKey(day);
+    const carried = carriedOccurrences(
+      schedule.activities[prevDay] ?? [],
+      addDaysToISO(dateISO, -1),
+      prevDay,
+    );
+    return { day, date, dateISO, dayIsToday, tasks: [...carried, ...tasks], ownTasks: tasks };
   });
 
   const startMin = getTimelineDisplayStartMinutes({
     dayStartTime: schedule.preferences?.dayStartTime,
-    tasks: days.flatMap((day) => day.tasks),
+    // Carried tails start at 12:00 AM. Feeding them here would drag the window
+    // anchor to midnight every day the user sleeps overnight, compressing the
+    // whole grid — they clip to the window instead.
+    tasks: days.flatMap((day) => day.ownTasks),
   });
   const endMin = TIMELINE_END_MINUTES;
   // null when the clock is outside the visible window — see getNowOnTimeline.
@@ -575,9 +618,9 @@ export function WeekGrid({
                     const done = state === "completed";
                     return (
                       <button
-                        key={task.id}
+                        key={viewKey(task)}
                         type="button"
-                        onClick={() => onEditTask(task)}
+                        onClick={() => onEditTask(task, dateISO, day)}
                         className={`flex items-center gap-1.5 rounded-lg border border-neutral-200/70 bg-white px-2 py-1 text-left dark:border-white/[0.08] dark:bg-neutral-900 ${done ? "opacity-60" : ""}`}
                       >
                         <span className="h-1.5 w-1.5 shrink-0 rounded-full" style={{ background: hex }} />
@@ -661,19 +704,24 @@ export function WeekGrid({
                   const slotDone = totalSlots > 1
                     ? (layout.task.completedSlotIndices ?? []).includes(layout.slotIndex)
                     : !!layout.task.completed;
-                  // The block you should be executing right now — green ring
-                  // (progress signal). Sanctioned chrome-led depth → data-glass.
+                  // Yesterday's tail is a view of an occurrence that belongs to
+                  // another day: toggling it would complete *today's*.
+                  const carried = isCarriedOver(layout.task);
+                  // The clock is inside this block — used both for the green
+                  // "do it now" ring and for the faded/active card treatment.
                   const nowPx = now === null ? null : (now - startMin) * PX_MIN;
-                  const isCurrent =
+                  const isNowInside =
                     dayIsToday &&
-                    !slotDone &&
-                    !layout.task.missed &&
                     nowPx !== null &&
                     nowPx >= layout.top &&
                     nowPx < layout.top + layout.height;
+                  // The ring is a progress signal, so it only belongs on tracked
+                  // work you can still finish.
+                  const isCurrent =
+                    isNowInside && !carried && !slotDone && !layout.task.missed && isTrackedTask(layout.task);
                   return (
                     <div
-                      key={`${layout.task.id}-${layout.slotIndex}`}
+                      key={viewKey(layout.task, layout.slotIndex)}
                       data-task-block
                       data-glass={isCurrent ? "" : undefined}
                       className={`absolute ${isCurrent ? "rounded-[10px] shadow-[0_0_0_1.5px_rgba(0,166,62,0.55),0_8px_24px_-12px_rgba(0,166,62,0.35)] dark:shadow-[0_0_0_1.5px_rgba(47,212,110,0.5),0_8px_24px_-12px_rgba(47,212,110,0.4)]" : ""}`}
@@ -685,19 +733,23 @@ export function WeekGrid({
                         minHeight: 22,
                       }}
                     >
-                      {renderCard(
-                        layout.task,
-                        layout.height,
-                        layout.widthPct,
-                        readOnly,
-                        () =>
+                      {renderCard({
+                        task: layout.task,
+                        height: layout.height,
+                        widthPct: layout.widthPct,
+                        readOnly: readOnly || carried,
+                        day,
+                        dateISO,
+                        isNowInside,
+                        continuesUntil: layout.continuesUntil,
+                        onToggle: () =>
                           totalSlots > 1
                             ? onToggleSlot(layout.task.id, layout.slotIndex, day, dateISO)
                             : onToggleTaskComplete(layout.task.id, allSubtaskIds, day, dateISO),
-                        () => onDeleteTask(layout.task.id, day),
-                        layout.slot,
-                        layout.slotIndex,
-                      )}
+                        onDelete: () => onDeleteTask(layout.task.id, day),
+                        slot: layout.slot,
+                        slotIndex: layout.slotIndex,
+                      })}
                     </div>
                   );
                 })}

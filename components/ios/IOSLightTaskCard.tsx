@@ -2,7 +2,8 @@
 
 import { IconArrowUpRight, IconEdit, IconListCheck } from "@tabler/icons-react";
 import { TaskBlockCard } from "@/components/TaskBlockCard";
-import type { Plan, Task } from "@/lib/useScheduleDB";
+import type { Category, Plan, Task } from "@/lib/useScheduleDB";
+import { useActiveBlock } from "@/components/timeline/NowActiveProvider";
 import { calculateTaskProgress, getTaskCheckableItems, getTaskSubtaskSummary, isTrackedTask, resolveTaskState } from "@/lib/taskCompletion";
 import { formatSlotsDuration } from "@/lib/timeUtils";
 import { getSlots } from "@/lib/taskMutations";
@@ -11,6 +12,8 @@ import { haptic } from "@/lib/haptics";
 interface IOSLightTaskCardProps {
   task: Task;
   linkedPlan: Plan | null;
+  /** So a commitment wears its category's colour instead of a fallback guess. */
+  categories?: readonly Category[];
   readOnly?: boolean;
   onToggleComplete: (taskId: string, allSubtaskIds: string[]) => void;
   /** Independent per-phase toggle for a multi-slot task (same-day multiple time blocks). */
@@ -22,12 +25,14 @@ interface IOSLightTaskCardProps {
 export default function IOSLightTaskCard({
   task,
   linkedPlan,
+  categories,
   readOnly = false,
   onToggleComplete,
   onToggleSlot,
   onEdit,
   onOpenSubtasks,
 }: IOSLightTaskCardProps) {
+  const isActive = useActiveBlock().taskId === task.id;
   const summary = getTaskSubtaskSummary(task, linkedPlan);
   const itemCount = summary.totalCount;
   const allSubtaskIds = getTaskCheckableItems(task, linkedPlan).map((item) => item.id);
@@ -85,6 +90,8 @@ export default function IOSLightTaskCard({
       variant="list"
       task={task}
       plan={linkedPlan}
+      categories={categories}
+      isActive={isActive}
       state={state}
       duration={duration}
       readOnly={readOnly}

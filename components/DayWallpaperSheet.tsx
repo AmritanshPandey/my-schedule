@@ -8,7 +8,10 @@ import Button from "@/components/ui/Button";
 import { SECTION_ICONS } from "@/components/SectionIcons";
 import type { DayKey, Schedule } from "@/lib/useScheduleDB";
 import { isTaskScheduledOn, resolveOccurrence } from "@/lib/taskOccurrence";
-import { parseTimeToMinutes, formatDisplayTime } from "@/lib/timeUtils";
+import { isTrackedTask } from "@/lib/taskCompletion";
+import { resolveCategory } from "@/lib/categories";
+import { crossesMidnight, slotInterval } from "@/lib/timeline/overnight";
+import { parseTimeToMinutes, formatDisplayTime, toScheduleDayMinutes } from "@/lib/timeUtils";
 import { localISODate } from "@/lib/dateUtils";
 import { haptic } from "@/lib/haptics";
 import {
@@ -60,14 +63,27 @@ export default function DayWallpaperSheet({ open, onClose, schedule, todayKey }:
       const occ = resolveOccurrence(task, todayISO);
       const minutes = parseTimeToMinutes(occ.startTime);
       if (minutes == null) continue;
+      // A block that crosses midnight is meaningless as a bare start time —
+      // "11:00 PM Sleep" reads like a bedtime reminder. Show the whole span.
+      const interval = slotInterval(occ);
+      const time = interval && crossesMidnight(interval)
+        ? `${occ.startTime} – ${occ.endTime}`
+        : occ.startTime;
       rows.push({
         id: `task:${task.id}`,
-        time: occ.startTime,
+        time,
         title: occ.title,
-        iconName: task.icon || "star",
+        // A commitment has no icon of its own (the task sheet hides that
+        // control), so it used to fall through to a generic star. Its category
+        // is its identity — use that icon.
+        iconName: isTrackedTask(task)
+          ? task.icon || "star"
+          : resolveCategory(schedule.categories ?? [], task.categoryId, task.icon).icon,
         iconSvg: null,
         done: !!task.completed,
-        minutes,
+        // Sort in schedule-day space, so a 12:30 AM block sorts to the end of
+        // the night rather than above the 6 AM wake-up.
+        minutes: toScheduleDayMinutes(minutes),
       });
     }
 
@@ -81,12 +97,12 @@ export default function DayWallpaperSheet({ open, onClose, schedule, todayKey }:
         title: ritual.title,
         iconName: "__ritual__",
         iconSvg: null,
-        minutes,
+        minutes: toScheduleDayMinutes(minutes),
       });
     }
 
     return rows.sort((a, b) => a.minutes - b.minutes);
-  }, [schedule.activities, schedule.rituals, todayKey, todayISO]);
+  }, [schedule.activities, schedule.rituals, schedule.categories, todayKey, todayISO]);
 
   // Default to "everything included" each time the sheet opens.
   useEffect(() => {

@@ -2,14 +2,13 @@
 
 import { useMemo } from "react";
 import { IconChartPie } from "@tabler/icons-react";
-import type { DayKey, Plan, Task } from "@/lib/useScheduleDB";
+import type { Category, DayKey, Task } from "@/lib/useScheduleDB";
 import { categoryHex } from "@/lib/colorSystem";
 import { CARD } from "@/components/ui/surfaces";
 import {
   buildDayBreakdown,
   donutSegments,
   formatMinutesCompact,
-  HELD_TIME_ID,
 } from "@/lib/dayBreakdown";
 
 const SIZE = 132;
@@ -19,24 +18,27 @@ const CIRCUMFERENCE = 2 * Math.PI * RADIUS;
 
 interface DayBreakdownCardProps {
   tasks: readonly Task[];
-  plans: readonly Plan[];
+  /** The previous weekday's tasks — supplies overnight carry-in (e.g. sleep). */
+  previousTasks: readonly Task[];
+  categories: readonly Category[];
   dateISO: string;
   /** Only used for the empty-state copy. */
   dayKey?: DayKey;
 }
 
 /**
- * "Where the day goes" — today's scheduled time as a donut, one arc per plan,
- * with commitments collected into a neutral "Held time" arc.
+ * "Where the day goes" — a day's scheduled time as a donut, one arc per
+ * category, with overnight blocks split at midnight across the two days they
+ * touch.
  *
  * Deliberately a donut rather than a filled pie: the hole carries the total, so
  * the chart answers "how much of my day is committed" and "to what" at once.
  * Hand-rolled SVG — the project has no charting dependency and this needs none.
  */
-export default function DayBreakdownCard({ tasks, plans, dateISO }: DayBreakdownCardProps) {
+export default function DayBreakdownCard({ tasks, previousTasks, categories, dateISO }: DayBreakdownCardProps) {
   const { slices, totalMinutes } = useMemo(
-    () => buildDayBreakdown(tasks, plans, dateISO),
-    [tasks, plans, dateISO],
+    () => buildDayBreakdown({ dateISO, tasks, previousTasks, categories }),
+    [tasks, previousTasks, categories, dateISO],
   );
   const segments = useMemo(
     () => donutSegments(slices, totalMinutes, CIRCUMFERENCE),
@@ -89,7 +91,6 @@ export default function DayBreakdownCard({ tasks, plans, dateISO }: DayBreakdown
               />
               {segments.map((seg) => {
                 const slice = slices.find((s) => s.id === seg.id)!;
-                const isHeld = slice.id === HELD_TIME_ID;
                 return (
                   <circle
                     key={seg.id}
@@ -102,8 +103,7 @@ export default function DayBreakdownCard({ tasks, plans, dateISO }: DayBreakdown
                     // without a stroke that would misreport the proportions.
                     strokeDasharray={`${Math.max(0, seg.dash - 1.5)} ${CIRCUMFERENCE}`}
                     strokeDashoffset={-seg.offset}
-                    stroke={isHeld ? undefined : categoryHex(slice.color ?? "cyan")}
-                    className={isHeld ? "stroke-neutral-400 dark:stroke-neutral-500" : undefined}
+                    stroke={categoryHex(slice.color)}
                   />
                 );
               })}
@@ -124,14 +124,8 @@ export default function DayBreakdownCard({ tasks, plans, dateISO }: DayBreakdown
               <li key={slice.id} className="flex items-center gap-2.5">
                 <span
                   aria-hidden="true"
-                  className={`h-2.5 w-2.5 shrink-0 rounded-full ${
-                    slice.id === HELD_TIME_ID ? "bg-neutral-400 dark:bg-neutral-500" : ""
-                  }`}
-                  style={
-                    slice.id === HELD_TIME_ID
-                      ? undefined
-                      : { backgroundColor: categoryHex(slice.color ?? "cyan") }
-                  }
+                  className="h-2.5 w-2.5 shrink-0 rounded-full"
+                  style={{ backgroundColor: categoryHex(slice.color) }}
                 />
                 <span className="min-w-0 flex-1 truncate text-[13px] font-semibold text-neutral-700 dark:text-neutral-300">
                   {slice.label}

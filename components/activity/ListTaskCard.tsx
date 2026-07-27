@@ -3,7 +3,8 @@
 import { memo, useMemo, useState } from "react";
 import { m, AnimatePresence, useMotionValue, useTransform, animate } from "framer-motion";
 import { IconArrowUpRight, IconCheck, IconChevronDown, IconEdit, IconListCheck, IconMinus, IconTrash, IconX } from "@tabler/icons-react";
-import type { Task, Plan } from "@/lib/useScheduleDB";
+import type { Task, Plan, Category } from "@/lib/useScheduleDB";
+import { useActiveBlock } from "@/components/timeline/NowActiveProvider";
 import type { ScheduleEntry, MetaField } from "@/components/ScheduleItem";
 import { calculateTaskProgress, isTrackedTask, resolveTaskState } from "@/lib/taskCompletion";
 import type { TaskState } from "@/lib/taskCompletion";
@@ -131,6 +132,8 @@ function TaskCheckbox({ state, size = "lg", readOnly = false, onChange }: Checkb
 export interface ListTaskCardProps {
   task: Task;
   linkedPlan: Plan | null;
+  /** Needed so a commitment can wear its category's colour rather than a guess. */
+  categories?: readonly Category[];
   editMode?: boolean;
   /** Past/future day — show completion but don't allow toggling. */
   readOnly?: boolean;
@@ -150,6 +153,7 @@ const SWIPE_THRESHOLD = 72;
 function ListTaskCardInner({
   task,
   linkedPlan,
+  categories,
   editMode = false,
   readOnly = false,
   onToggleComplete,
@@ -216,6 +220,10 @@ function ListTaskCardInner({
     [task, isRoutine, effectiveItems.length]
   );
   // Session tasks are never "partial" — pass 0 subtasks to skip that branch
+  // Read from context rather than a prop: the 30s tick then re-renders only the
+  // cards whose active state actually flipped, not the whole list.
+  const isActive = useActiveBlock().taskId === task.id;
+
   const taskState = useMemo(
     () => resolveTaskState(task, isRoutine ? 0 : effectiveItems.length),
     [task, isRoutine, effectiveItems.length]
@@ -400,9 +408,11 @@ function ListTaskCardInner({
           variant="list"
           task={task}
           plan={linkedPlan}
+          categories={categories}
           state={taskState}
           duration={duration}
           readOnly={readOnly}
+          isActive={isActive}
           slotCompletions={slotCompletions}
           onToggle={() => onToggleComplete(task.id, allSubtaskIds)}
           onClick={editMode ? undefined : handleCardTap}

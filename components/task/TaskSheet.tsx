@@ -32,12 +32,15 @@ import IconButton from "@/components/ui/IconButton";
 import Input, { FORM_INPUT_CLASS, FORM_LABEL, Textarea } from "@/components/ui/Input";
 import TimeSlotPicker, { type EditableSlot } from "@/components/TimeSlotPicker";
 import { SECTION_ICONS } from "@/components/SectionIcons";
-import { PlanColorPicker, iconPickerClass } from "@/components/plan/planFormShared";
-import { colorFromIcon, resolveAccentColor, type AccentColor } from "@/lib/colorSystem";
+import { IconPicker } from "@/components/ui/IconPicker";
+import { PlanColorPicker } from "@/components/plan/planFormShared";
+import { accentStyles, colorFromIcon, resolveAccentColor, type AccentColor } from "@/lib/colorSystem";
+import { resolveCategory } from "@/lib/categories";
+import { seedCategoryIdFromIcon } from "@/lib/scheduleNormalize";
 import { haptic } from "@/lib/haptics";
-import type { DayKey, Plan, Task, TaskRecurrence, TaskTypeValue } from "@/lib/useScheduleDB";
+import type { Category, DayKey, Plan, Task, TaskRecurrence, TaskTypeValue } from "@/lib/useScheduleDB";
 import { DAYS, DAY_LABELS } from "@/lib/useScheduleDB";
-import { localISODate } from "@/lib/dateUtils";
+import { localISODate, weekdayOfISO } from "@/lib/dateUtils";
 import type { ScheduleEntry } from "@/components/ScheduleItem";
 import {
   uid,
@@ -72,15 +75,16 @@ export interface TaskSaveData {
   perDaySlots?: Partial<Record<DayKey, TaskSlot[]>>;
 }
 
-const JS_DAYS: DayKey[] = ["sunday", "monday", "tuesday", "wednesday", "thursday", "friday", "saturday"];
-function weekdayOfISO(iso: string): DayKey {
-  return JS_DAYS[new Date(iso + "T00:00:00").getDay()];
-}
+/** Icon lookup for the category chips — the chip shows the category's own icon. */
+const CATEGORY_ICON_BY_NAME = new Map(SECTION_ICONS.map((s) => [s.name, s.icon]));
 
 export interface TaskSheetProps {
   mode: "create" | "edit";
   task?: Task | null;
   plans: Plan[];
+  categories: Category[];
+  /** Opens the category editor in create mode. Omit to hide the "+" chip. */
+  onCreateCategory?: () => void;
   activeDay: DayKey;
   activeDays?: DayKey[];
   /** All weekday task lists — lets edit mode load each day's own slots (per-day times). */
@@ -94,6 +98,14 @@ export interface TaskSheetProps {
   initialEndTime?: string;
   /** The specific date being edited — enables the "This day only" scope toggle. */
   occurrenceDateISO?: string;
+  /**
+   * The weekday whose block the user actually clicked. Surfaces that show more
+   * than one day at once (the desktop week grid) must pass this — `activeDay`
+   * is the app-wide selection and is simply the wrong day there, which used to
+   * open the sheet on Monday's times no matter which column was clicked.
+   * Falls back to `occurrenceDateISO`, then `activeDay`.
+   */
+  occurrenceDay?: DayKey;
   /** Whether editing just this occurrence is allowed (today/future only). */
   canEditOccurrence?: boolean;
   ollamaUrl?: string;
@@ -164,6 +176,8 @@ export function TaskSheet({
   mode,
   task,
   plans,
+  categories,
+  onCreateCategory,
   activeDay,
   activeDays,
   activities,
@@ -173,6 +187,7 @@ export function TaskSheet({
   initialStartTime,
   initialEndTime,
   occurrenceDateISO,
+  occurrenceDay,
   canEditOccurrence = false,
   ollamaUrl,
   ollamaModel,
@@ -198,6 +213,10 @@ export function TaskSheet({
 
   // ── Form state ─────────────────────────────────────────────────────────────
   const [planId, setPlanId] = useState("");
+  const [categoryId, setCategoryId] = useState("");
+  // Mirrors `colorTouched`: once the user picks a category, changing the icon
+  // must not silently re-file the task.
+  const [categoryTouched, setCategoryTouched] = useState(false);
   const [expandSheetOpen, setExpandSheetOpen] = useState(false);
   const [taskType, setTaskType] = useState<TaskTypeValue>("task");
   const [title, setTitle] = useState("");
@@ -230,6 +249,10 @@ export function TaskSheet({
   // Anchor for "every N weeks" + default date for a one-off: the viewed date, else today.
   const baseDateISO = occurrenceDateISO || localISODate(new Date());
 
+  // The weekday this sheet is "about". Callers that show one day at a time can
+  // leave both props off and get `activeDay`; the week grid passes the column.
+  const clickedDay = occurrenceDay ?? (occurrenceDateISO ? weekdayOfISO(occurrenceDateISO) : activeDay);
+
   // The "This day only" scope is offered when editing an existing task on a known
   // current/future date. Per-date overrides cover title/time/note (not subtasks).
   const canScopeToOccurrence = mode === "edit" && !!occurrenceDateISO && canEditOccurrence;
@@ -252,6 +275,10 @@ export function TaskSheet({
       const linkedPlan = plans.find((p) => p.id === task.planId);
       const selectedDays = activeDays && activeDays.length > 0 ? activeDays : [activeDay];
       setPlanId(task.planId);
+      // resolveCategory, not a raw read: a task whose category was deleted still
+      // opens on a real chip rather than none selected.
+      setCategoryId(resolveCategory(categories, task.categoryId, task.icon).id);
+      setCategoryTouched(true);
       setTaskType(task.taskType ?? "task");
       setTitle(task.title);
       setDescription(task.description ?? "");
@@ -262,14 +289,21 @@ export function TaskSheet({
         const dayTask = activities?.[d]?.find((t) => t.id === task.id);
         perDay[d] = toInputSlots(dayTask ?? task);
       }
-      const baseSlots = toInputSlots(task);
+      // Open on the day the user actually clicked, not the app-wide selection
+      // and not the task's earliest weekday. `startDay` seeds three things at
+      // once — the visible time fields, the Same-vs-Custom detection, and the
+      // base slots written on save — and the clicked day is right in all three:
+      // when times are uniform it is identical to any other day, and when they
+      // differ `perDaySlots` wins on save anyway.
+      const startDay = selectedDays.includes(clickedDay) ? clickedDay : selectedDays[0];
+      const baseSlots = perDay[startDay] ?? toInputSlots(task);
       const uniform = selectedDays.every(
         (d) => JSON.stringify(perDay[d]) === JSON.stringify(baseSlots)
       );
       setSlots(baseSlots);
       setPerDaySlots(perDay);
       setSameEveryDay(uniform);
-      setEditDay(selectedDays.includes(activeDay) ? activeDay : selectedDays[0]);
+      setEditDay(startDay);
       setRepeatDays(selectedDays);
       // Existing tasks keep whatever identity they were saved with. Treat a
       // stored colour that already matches its icon as "not overridden", so
@@ -295,8 +329,8 @@ export function TaskSheet({
       setSlots([{ startTime: initialStartTime ?? "", endTime: initialEndTime ?? "" }]);
       setPerDaySlots({});
       setSameEveryDay(true);
-      setEditDay(activeDay);
-      setRepeatDays([activeDay]);
+      setEditDay(clickedDay);
+      setRepeatDays([clickedDay]);
       setSubtasks([]);
       // New tasks start from the parent plan's icon, with the colour derived
       // from it — so a fresh task is never colourless, and never a rainbow.
@@ -304,6 +338,8 @@ export function TaskSheet({
       setIcon(seedIcon);
       setColor(colorFromIcon(seedIcon));
       setColorTouched(false);
+      setCategoryId(resolveCategory(categories, seedCategoryIdFromIcon(seedIcon), seedIcon).id);
+      setCategoryTouched(false);
       setRepeatMode("weekly");
       setIntervalWeeks(2);
       setOnceDate(baseDateISO);
@@ -340,6 +376,9 @@ export function TaskSheet({
   function handleSelectIcon(name: string) {
     setIcon(name);
     if (!colorTouched) setColor(colorFromIcon(name));
+    // Same rule as colour: the icon seeds the category until the user overrides
+    // it, then it stops moving.
+    if (!categoryTouched) setCategoryId(resolveCategory(categories, seedCategoryIdFromIcon(name), name).id);
   }
 
   function handleSelectColor(next: AccentColor) {
@@ -409,7 +448,7 @@ export function TaskSheet({
   // Custom-per-day is only meaningful when the task spans >1 weekday.
   const canCustomizePerDay = !isOccurrenceScope && repeatMode !== "once" && repeatDays.length > 1;
   const perDayActive = canCustomizePerDay && !sameEveryDay;
-  const resolvedEditDay = repeatDays.includes(editDay) ? editDay : repeatDays[0] ?? activeDay;
+  const resolvedEditDay = repeatDays.includes(editDay) ? editDay : repeatDays[0] ?? clickedDay;
 
   // Which slots the picker edits, and where edits are written.
   const editorSlots = perDayActive ? perDaySlots[resolvedEditDay] ?? slots : slots;
@@ -418,14 +457,17 @@ export function TaskSheet({
     else setSlots(next);
   }
 
-  // Validate every day that will be written (each day's own slots in custom mode).
-  const daysToValidate: EditableSlot[][] = isOccurrenceScope || !perDayActive
-    ? [slots]
-    : repeatDays.map((d) => perDaySlots[d] ?? slots);
-  const allSlotsValidNow = daysToValidate.every(slotsAllValid);
+  // Validate every day that will be written (each day's own slots in custom
+  // mode). Each entry carries its own weekday so the error copy names the day
+  // that actually clashes — it used to name `activeDay` for all of them.
+  const daysToValidate: Array<{ day: DayKey; slots: EditableSlot[] }> =
+    isOccurrenceScope || !perDayActive
+      ? [{ day: resolvedEditDay, slots }]
+      : repeatDays.map((d) => ({ day: d, slots: perDaySlots[d] ?? slots }));
+  const allSlotsValidNow = daysToValidate.every((e) => slotsAllValid(e.slots));
   const timeError = allSlotsValidNow
     ? daysToValidate
-        .map((ds) => validateTaskSlots(ds, { title: title.trim() || "Task", day: activeDay }))
+        .map((e) => validateTaskSlots(e.slots, { title: title.trim() || "Task", day: e.day }))
         .find(Boolean) ?? null
     : null;
 
@@ -439,6 +481,7 @@ export function TaskSheet({
   const isCommitment = taskType === "commitment";
   const canSave =
     (isCommitment || !!selectedPlan) &&
+    !!categoryId &&
     title.trim().length > 0 &&
     allSlotsValidNow &&
     !timeError &&
@@ -483,9 +526,10 @@ export function TaskSheet({
       icon,
       color,
       // A commitment belongs to no plan. Its stored icon/colour are left at
-      // their defaults and simply ignored — TaskBlockCard paints held time
-      // neutral in both themes rather than with an accent.
+      // their defaults and ignored — TaskBlockCard paints a commitment in its
+      // *category's* colour instead.
       planId: isCommitment ? "" : selectedPlan!.id,
+      categoryId,
       taskType,
       // Store subtasks on the task itself so each task has an independent list.
       // For edits, an empty array must be persisted explicitly to override any
@@ -730,6 +774,49 @@ export function TaskSheet({
               </div>
               )}
 
+              {/* Category — where this block's time counts in "Where the day
+                  goes". Every type has one, including commitments, which have
+                  no plan and no icon of their own. Hidden in occurrence scope:
+                  identity belongs to the template, not to one date. */}
+              {!isOccurrenceScope && (
+                <div>
+                  <p className={`mb-1.5 ${SECTION_LABEL}`}>Category</p>
+                  <div className="-mx-1 flex gap-2 overflow-x-auto px-1 pb-1">
+                    {categories.map((category) => {
+                      const selected = categoryId === category.id;
+                      const CategoryIcon = CATEGORY_ICON_BY_NAME.get(category.icon) ?? CATEGORY_ICON_BY_NAME.get("star")!;
+                      const chip = accentStyles(category.color);
+                      return (
+                        <button
+                          key={category.id}
+                          type="button"
+                          aria-pressed={selected}
+                          onClick={() => { setCategoryId(category.id); setCategoryTouched(true); }}
+                          className={`flex h-10 shrink-0 items-center gap-1.5 rounded-full border px-3 text-[13px] font-semibold transition-colors ${
+                            selected
+                              ? `${chip.tint} ${chip.text} ${chip.border}`
+                              : "border-neutral-200 bg-white text-neutral-500 dark:border-white/10 dark:bg-white/[0.04] dark:text-neutral-400"
+                          }`}
+                        >
+                          <CategoryIcon size={15} strokeWidth={2} />
+                          {category.name}
+                        </button>
+                      );
+                    })}
+                    {onCreateCategory && (
+                      <button
+                        type="button"
+                        aria-label="New category"
+                        onClick={() => onCreateCategory()}
+                        className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full border border-dashed border-neutral-300 text-neutral-400 transition-colors hover:border-neutral-400 hover:text-neutral-600 dark:border-white/15 dark:text-neutral-500 dark:hover:border-white/30 dark:hover:text-neutral-300"
+                      >
+                        <IconPlus size={16} strokeWidth={2.5} />
+                      </button>
+                    )}
+                  </div>
+                </div>
+              )}
+
               {/* Plan selector — held time belongs to no plan. */}
               {!isOccurrenceScope && !isCommitment && (
                 <PlanSelector
@@ -760,22 +847,11 @@ export function TaskSheet({
                   which render neutral and carry no identity of their own. */}
               {!isOccurrenceScope && !isCommitment && (
                 <div>
-                  <p className={FORM_LABEL}>Icon</p>
-                  <div className="grid grid-cols-6 gap-2 sm:grid-cols-8">
-                    {SECTION_ICONS.map(({ name, label, icon: Icon }) => (
-                      <button
-                        key={name}
-                        type="button"
-                        aria-label={label}
-                        aria-pressed={icon === name}
-                        title={label}
-                        onClick={() => handleSelectIcon(name)}
-                        className={iconPickerClass(icon === name)}
-                      >
-                        <Icon size={18} strokeWidth={1.9} />
-                      </button>
-                    ))}
-                  </div>
+                  <IconPicker
+                    value={icon}
+                    onChange={handleSelectIcon}
+                    labelClassName={FORM_LABEL}
+                  />
                   <div className="mt-4">
                     <PlanColorPicker value={color} onChange={handleSelectColor} />
                   </div>
@@ -839,7 +915,7 @@ export function TaskSheet({
               <TimeSlotPicker
                 slots={editorSlots}
                 onSlotsChange={setEditorSlots}
-                activeDay={activeDay}
+                activeDay={resolvedEditDay}
                 repeatDays={isOccurrenceScope || repeatMode === "once" || perDayActive ? undefined : repeatDays}
                 onRepeatDaysChange={isOccurrenceScope || repeatMode === "once" || perDayActive ? undefined : setRepeatDays}
               />

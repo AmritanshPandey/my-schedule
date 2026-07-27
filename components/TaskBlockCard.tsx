@@ -1,13 +1,14 @@
 "use client";
 
 import type { CSSProperties, ReactNode } from "react";
-import { IconMinus, IconX, IconListCheck, IconArrowUpRight, IconLock } from "@tabler/icons-react";
+import { IconMinus, IconX, IconListCheck, IconArrowUpRight } from "@tabler/icons-react";
 import CheckDraw from "@/components/ui/CheckDraw";
-import type { Plan, Task, TaskSlot } from "@/lib/useScheduleDB";
+import type { Category, Plan, Task, TaskSlot } from "@/lib/useScheduleDB";
 import type { TaskState } from "@/lib/taskCompletion";
 import { getTaskSubtaskSummary, isTrackedTask } from "@/lib/taskCompletion";
 import { getSlots } from "@/lib/taskMutations";
-import { resolveAccentColor, timelineCardStyles, TIMELINE_NEUTRAL_CARD } from "@/lib/colorSystem";
+import { resolveCategory } from "@/lib/categories";
+import { resolveAccentColor, timelineCardStyles } from "@/lib/colorSystem";
 
 /**
  * Shared colored category block used in BOTH surfaces:
@@ -21,10 +22,21 @@ import { resolveAccentColor, timelineCardStyles, TIMELINE_NEUTRAL_CARD } from "@
 export interface TaskBlockCardProps {
   task: Task;
   plan: Plan | null;
+  /** Every category, so a commitment can wear its category's accent. */
+  categories?: readonly Category[];
   variant: "grid" | "list";
   state: TaskState;
   duration: string | null;
   readOnly?: boolean;
+  /**
+   * The clock is inside this block right now. Commitments render faded when it
+   * isn't — see the styles block below.
+   */
+  isActive?: boolean;
+  /** The block is clipped by the timeline window; the time it really ends. */
+  continuesUntil?: string;
+  /** This row is yesterday's overnight tail, shown read-only on today. */
+  carriedOver?: boolean;
   /** grid: short slot (shrink text + padding). */
   compact?: boolean;
   /** grid: overlapping lane / short — drop eyebrow + duration. */
@@ -72,10 +84,14 @@ export interface TaskBlockCardProps {
 export function TaskBlockCard({
   task,
   plan,
+  categories,
   variant,
   state,
   duration,
   readOnly = false,
+  isActive = false,
+  continuesUntil,
+  carriedOver = false,
   compact = false,
   narrow = false,
   onToggle,
@@ -90,10 +106,14 @@ export function TaskBlockCard({
   slotOverride,
   slotCompletions,
 }: TaskBlockCardProps) {
-  const accent = resolveAccentColor(task.color, task.icon);
-  // Held time is neutral in both themes: it belongs to no plan and reports no
-  // progress, so it never spends a category accent.
-  const styles = isTrackedTask(task) ? timelineCardStyles(accent) : TIMELINE_NEUTRAL_CARD;
+  // Tracked work keeps the identity its own icon/colour give it. A commitment
+  // has neither — the task sheet hides both controls for it — so its category
+  // *is* its identity, and that is what it wears. Grey read as "disabled";
+  // a real hue at low opacity reads as "later".
+  const accent = isTrackedTask(task)
+    ? resolveAccentColor(task.color, task.icon)
+    : resolveCategory(categories ?? [], task.categoryId, task.icon).color;
+  const styles = timelineCardStyles(accent);
   const done = state === "completed";
   const partial = state === "partial";
   const missed = state === "missed";
@@ -104,6 +124,10 @@ export function TaskBlockCard({
   // Derived from the task itself so every surface that renders through this
   // card inherits the behaviour without threading a prop.
   const tracked = isTrackedTask(task);
+  // Held time in colour, but quiet until you're actually in it: exactly one
+  // block on the Today page reads at full strength — the one happening now.
+  // Carried-over rows are always dim; they belong to yesterday.
+  const dimmed = !resolved && (carriedOver || (!tracked && !isActive));
   // Grid blocks show only the slot being positioned; list cards show every slot.
   const displaySlots = slotOverride ? [slotOverride] : getSlots(task);
   const isMultiSlotList =
@@ -129,7 +153,7 @@ export function TaskBlockCard({
       <div
         role={onClick ? "button" : undefined}
         onClick={onClick}
-        className={`group relative flex items-center overflow-hidden rounded-[8px] px-2 ${styles.cardBg} ${styles.blockBorder} ${resolved ? "opacity-60" : ""} ${onClick ? "cursor-pointer" : ""} ${className}`}
+        className={`group relative flex items-center overflow-hidden rounded-[8px] px-2 ${styles.cardBg} ${styles.blockBorder} ${resolved ? "opacity-60" : dimmed ? "opacity-45" : ""} ${onClick ? "cursor-pointer" : ""} ${className}`}
         style={style}
       >
         <span className={`relative truncate text-[10px] font-bold leading-none text-neutral-900 dark:text-white ${resolved ? "line-through decoration-neutral-400" : ""}`}>
@@ -176,7 +200,7 @@ export function TaskBlockCard({
             disabled={readOnly}
             onClick={(e) => { e.stopPropagation(); if (!readOnly) onToggle(); }}
             className={`flex shrink-0 items-center justify-center border-[1.5px] transition-colors disabled:opacity-100 ${readOnly ? "cursor-default" : ""} ${
-              isList ? "h-7 w-7 rounded-[8px]" : "h-[18px] w-[18px] rounded-pr-sm"
+              isList ? "h-7 w-7 rounded-[10px]" : "h-[18px] w-[18px] rounded-pr-sm"
             } ${
               done || partial ? "border-transparent bg-green-500"
               : missed ? "border-transparent bg-rose-500"
@@ -192,19 +216,9 @@ export function TaskBlockCard({
             {missed && <IconX size={isList ? 16 : 12} strokeWidth={3} className="text-white" />}
           </button>
         )}
-        {/* Held time — a quiet marker in the checkbox's place, so the row still
-            reads as deliberate rather than as a task missing its control. */}
-        {!tracked && (
-          <span
-            aria-hidden="true"
-            title="Held time — not tracked"
-            className={`flex shrink-0 items-center justify-center text-neutral-500 dark:text-neutral-400 ${
-              isList ? "h-7 w-7" : "h-[18px] w-[18px]"
-            }`}
-          >
-            <IconLock size={isList ? 15 : 11} strokeWidth={2} />
-          </span>
-        )}
+        {/* A commitment simply has no control here. The padlock that used to sit
+            in the checkbox's place read as "locked / forbidden" rather than
+            "held", so the colour treatment carries the signal instead. */}
       </div>
     </div>
   );
@@ -262,6 +276,18 @@ export function TaskBlockCard({
           {duration}
         </span>
       )}
+      {/* An overnight block is clipped at the bottom of the window. Say where it
+          really ends — the hours used to just disappear. */}
+      {continuesUntil && !narrow && (
+        <span className={`whitespace-nowrap font-bold text-neutral-400 dark:text-neutral-500 ${isList ? "text-[11px]" : "text-[9px]"}`}>
+          → {continuesUntil}
+        </span>
+      )}
+      {carriedOver && !narrow && (
+        <span className={`whitespace-nowrap font-bold text-neutral-400 dark:text-neutral-500 ${isList ? "text-[11px]" : "text-[9px]"}`}>
+          from yesterday
+        </span>
+      )}
     </div>
   ) : null;
 
@@ -271,11 +297,11 @@ export function TaskBlockCard({
       tabIndex={onClick ? 0 : undefined}
       onClick={onClick}
       className={`group relative flex flex-col overflow-hidden transition-all ${styles.cardBg} ${styles.blockBorder} ${
-        resolved ? "opacity-60" : ""
+        resolved ? "opacity-60" : dimmed ? "opacity-45" : ""
       } ${
         isList
           ? "rounded-2xl gap-3 px-5 py-4 active:scale-[0.995]"
-          : "rounded-[8px] justify-between " + (compact ? "gap-1 px-2.5 py-1.5" : "gap-1.5 pl-3 pr-2 py-2")
+          : "rounded-[10px] justify-between " + (compact ? "gap-1 px-2.5 py-1.5" : "gap-1.5 pl-3 pr-2 py-2")
       } ${onClick ? "cursor-pointer" : ""} ${className}`}
       style={style}
     >

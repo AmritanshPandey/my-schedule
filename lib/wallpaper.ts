@@ -210,7 +210,13 @@ export function renderDayWallpaper(canvas: HTMLCanvasElement, opts: RenderOption
   }
 
   ctx.font = `800 ${fontPx}px Nunito, ui-sans-serif, system-ui, sans-serif`;
-  const timeColW = ctx.measureText("12:30 PM").width;
+  // Wide enough for the widest label actually being drawn, not just a single
+  // time — an overnight row shows a full range ("11:00 PM – 7:00 AM") and would
+  // otherwise overflow into the title column.
+  const timeColW = shown.reduce(
+    (w, item) => Math.max(w, ctx.measureText(item.time).width),
+    ctx.measureText("12:30 PM").width,
+  );
   const iconX = cardX + pad;
   const iconSize = 22 * u * rowScale;
   const timeRight = iconX + iconSize + 16 * u + timeColW; // right-aligned column

@@ -6,6 +6,7 @@ import { AnimatePresence, m } from "framer-motion";
 import {
   IconBrain,
   IconCheck,
+  IconChartPie,
   IconChevronRight,
   IconCloud,
   IconCopy,
@@ -617,6 +618,8 @@ interface SettingsViewProps {
   onClearProgress?: () => Promise<void>;
   onRestoreData?: (raw: unknown) => boolean;
   onUpdatePreferences?: (patch: Partial<SchedulePreferences>) => void;
+  /** Opens the category manager, which the parent owns alongside its other sheets. */
+  onManageCategories?: () => void;
   onClose?: () => void;
 }
 
@@ -626,6 +629,7 @@ export function SettingsView({
   onClearProgress,
   onRestoreData,
   onUpdatePreferences,
+  onManageCategories,
   onClose,
 }: SettingsViewProps) {
   const { user, isGuest, authLoading, login, logout } = useAuth();
@@ -779,6 +783,30 @@ export function SettingsView({
               <RemindersRows />
             </Card>
           </div>
+
+          {onManageCategories && (
+            <div>
+              <SectionLabel>Categories</SectionLabel>
+              <Card>
+                <button
+                  type="button"
+                  onClick={onManageCategories}
+                  className="flex w-full items-center gap-3 px-4 py-3.5 text-left"
+                >
+                  <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl border border-neutral-200 bg-neutral-50 text-neutral-500 dark:border-white/[0.08] dark:bg-white/[0.04] dark:text-neutral-300">
+                    <IconChartPie size={14} strokeWidth={2} />
+                  </div>
+                  <div className="min-w-0 flex-1">
+                    <p className="text-[13px] font-semibold text-neutral-800 dark:text-white">Manage categories</p>
+                    <p className="mt-0.5 text-[11px] leading-snug text-neutral-400 dark:text-neutral-500">
+                      {(schedule.categories ?? []).map((c) => c.name).join(" · ") || "How your day splits in the overview"}
+                    </p>
+                  </div>
+                  <IconChevronRight size={16} strokeWidth={2} className="shrink-0 text-neutral-300 dark:text-neutral-600" />
+                </button>
+              </Card>
+            </div>
+          )}
 
           <div>
             <SectionLabel>Timeline</SectionLabel>

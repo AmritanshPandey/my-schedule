@@ -1,24 +1,30 @@
 /**
- * "Where the day goes" — today's scheduled minutes grouped by plan.
+ * "Where the day goes" — a day's scheduled minutes grouped by category.
  *
- * Pure and dependency-light so it can be unit-tested directly. The dashboard
- * renders the result as a donut; this module owns all the arithmetic.
+ * Grouped by category rather than by plan: a plan answers "what am I working
+ * toward", which is the wrong question for a chart about where time went. It
+ * also removes a duplicate-slice trap — a "Work" plan and a "Work" category
+ * would otherwise both appear, splitting the same hours across two wedges.
+ *
+ * Overnight blocks are split at midnight. Sleep 11 PM → 7 AM contributes 60
+ * minutes to the day it starts and 420 to the next, so a day's donut reflects
+ * the hours actually lived in that day and can never total more than 24.
+ *
+ * Pure and dependency-light so it can be unit-tested directly.
  */
 
-import type { DayKey, Plan, Task } from "./useScheduleDB";
+import type { Category, Task } from "./useScheduleDB";
+import type { AccentColor } from "./colorSystem";
 import { getSlots } from "./taskMutations";
-import { isTrackedTask } from "./taskCompletion";
-import { isTaskScheduledOn } from "./taskOccurrence";
-import { parseTimeToMinutes, toScheduleDayMinutes } from "./timeUtils";
-
-/** Bucket id used for commitments, which belong to no plan. */
-export const HELD_TIME_ID = "__held__";
+import { resolveCategory } from "./categories";
+import { isTaskScheduledOn, resolveOccurrence } from "./taskOccurrence";
+import { addDaysToISO } from "./dateUtils";
+import { headMinutes, slotInterval, tailMinutes } from "./timeline/overnight";
 
 export interface DaySlice {
   id: string;
   label: string;
-  /** Accent colour token, or null for held time (rendered neutral). */
-  color: string | null;
+  color: AccentColor;
   minutes: number;
   /** Share of the day's scheduled minutes, 0-100, rounded for display. */
   pct: number;
@@ -29,61 +35,87 @@ export interface DayBreakdown {
   totalMinutes: number;
 }
 
-/** Minutes a task occupies on the day, summed across every slot. */
+/**
+ * Total minutes a task occupies, summed across every slot, midnight crossings
+ * included. This is the task's own length — for per-day accounting the
+ * breakdown below splits it instead.
+ */
 export function taskScheduledMinutes(task: Task): number {
   let total = 0;
   for (const slot of getSlots(task)) {
-    const rawStart = parseTimeToMinutes(slot.startTime);
-    const rawEnd = parseTimeToMinutes(slot.endTime);
-    if (rawStart === null || rawEnd === null) continue;
-    const start = toScheduleDayMinutes(rawStart);
-    let end = toScheduleDayMinutes(rawEnd);
-    if (end <= start) end += 24 * 60; // runs past midnight
-    total += end - start;
+    const interval = slotInterval(slot);
+    if (interval) total += interval.end - interval.start;
   }
   return total;
 }
 
+export interface DayBreakdownInput {
+  dateISO: string;
+  /** The weekday bucket for `dateISO`. */
+  tasks: readonly Task[];
+  /** The weekday bucket for the day before — supplies overnight carry-in. */
+  previousTasks: readonly Task[];
+  categories: readonly Category[];
+}
+
 /**
- * Group a day's scheduled time by plan, largest first, with commitments
- * collected into a single neutral "Held time" slice.
+ * Group a day's scheduled time by category, largest slice first.
  *
- * Tasks whose plan no longer exists are skipped rather than shown as an
- * "Unknown" wedge — a dangling planId is a data artefact, not a category the
- * user would recognise.
+ * Takes an options object: two of the four arguments are `Task[]`, and getting
+ * them the wrong way round would silently report yesterday's day.
  */
-export function buildDayBreakdown(
-  tasks: readonly Task[],
-  plans: readonly Plan[],
-  dateISO: string,
-): DayBreakdown {
-  const plansById = new Map(plans.map((p) => [p.id, p]));
+export function buildDayBreakdown({
+  dateISO,
+  tasks,
+  previousTasks,
+  categories,
+}: DayBreakdownInput): DayBreakdown {
   const minutesById = new Map<string, number>();
 
+  const add = (task: Task, minutes: number) => {
+    if (minutes <= 0) return;
+    // Always through resolveCategory: a task pointing at a deleted category must
+    // still be counted, or the chart quietly stops adding up.
+    const id = resolveCategory(categories, task.categoryId, task.icon).id;
+    minutesById.set(id, (minutesById.get(id) ?? 0) + minutes);
+  };
+
+  // Today's blocks contribute the part that falls before midnight.
   for (const task of tasks) {
     if (!isTaskScheduledOn(task, dateISO, true)) continue;
-    const minutes = taskScheduledMinutes(task);
-    if (minutes <= 0) continue;
+    for (const slot of getSlots(resolveOccurrence(task, dateISO))) {
+      const interval = slotInterval(slot);
+      if (interval) add(task, headMinutes(interval));
+    }
+  }
 
-    const key = isTrackedTask(task) ? task.planId : HELD_TIME_ID;
-    if (key !== HELD_TIME_ID && !plansById.has(key)) continue;
-    minutesById.set(key, (minutesById.get(key) ?? 0) + minutes);
+  // Yesterday's blocks contribute whatever spilled past midnight into today.
+  // Re-checking `isTaskScheduledOn` against the previous date matters: an
+  // every-other-week overnight task must not leak a tail on its off week.
+  const previousISO = addDaysToISO(dateISO, -1);
+  for (const task of previousTasks) {
+    if (!isTaskScheduledOn(task, previousISO, true)) continue;
+    for (const slot of getSlots(resolveOccurrence(task, previousISO))) {
+      const interval = slotInterval(slot);
+      if (interval) add(task, tailMinutes(interval));
+    }
   }
 
   const totalMinutes = Array.from(minutesById.values()).reduce((sum, m) => sum + m, 0);
   if (totalMinutes === 0) return { slices: [], totalMinutes: 0 };
 
   const slices: DaySlice[] = Array.from(minutesById.entries())
-    .map(([id, minutes]) => ({
-      id,
-      label: id === HELD_TIME_ID ? "Held time" : plansById.get(id)?.title ?? "",
-      color: id === HELD_TIME_ID ? null : plansById.get(id)?.color ?? null,
-      minutes,
-      pct: Math.round((minutes / totalMinutes) * 100),
-    }))
-    // Biggest first, so the eye lands on where the day actually goes. Held time
-    // sorts with everything else — if commute is the largest block, that is
-    // exactly the thing worth seeing.
+    .map(([id, minutes]) => {
+      const category = resolveCategory(categories, id);
+      return {
+        id,
+        label: category.name,
+        color: category.color,
+        minutes,
+        pct: Math.round((minutes / totalMinutes) * 100),
+      };
+    })
+    // Biggest first, so the eye lands on where the day actually goes.
     .sort((a, b) => b.minutes - a.minutes || a.label.localeCompare(b.label));
 
   return { slices, totalMinutes };

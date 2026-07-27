@@ -297,10 +297,11 @@ export function markTaskMissed(task: Task, allSubtaskIds: string[]): Partial<Tas
 /**
  * Shift a task later in the day — an honest alternative to "missed" when you
  * slip but still intend to do it. Moves start/end forward by `byMinutes`
- * (default 60), but never earlier than the current time, and clamps inside the
- * day (23:59), preserving the original duration. Clears any "missed" mark for
- * today, since a deferred task isn't missed. Returns {} (no change) if the task
- * has no parseable start time. Times stay in the app's display format.
+ * (default 60), but never earlier than the current time, keeping the start
+ * inside today (23:59) and preserving the original duration — an overnight task
+ * keeps running past midnight. Clears any "missed" mark for today, since a
+ * deferred task isn't missed. Returns {} (no change) if the task has no
+ * parseable start time. Times stay in the app's display format.
  */
 export function snoozeTaskLater(task: Task, byMinutes = 60): Partial<Task> {
   // `?? ""` guards against an untimed task — parseTimeToMinutes throws on
@@ -318,10 +319,14 @@ export function snoozeTaskLater(task: Task, byMinutes = 60): Partial<Task> {
   }
 
   const DAY_END = 23 * 60 + 59;
-  // Aim for `byMinutes` later than both the original start and now, but keep the
-  // whole task inside today.
+  // Normally the whole task is kept inside today. But a block that already runs
+  // past midnight cannot be — `DAY_END - duration` puts the ceiling below its
+  // own start (an 8-hour sleep at 23:00 gave 15:59), so the guard below fired
+  // every time and "Later today" silently did nothing. For those, clamp only the
+  // start; minutesToDisplayTime wraps mod-1440, so the end is represented fine.
+  const runsPastMidnight = duration > DAY_END - start;
   let newStart = Math.max(start + byMinutes, currentMinutes() + byMinutes);
-  newStart = Math.min(newStart, DAY_END - duration);
+  newStart = Math.min(newStart, runsPastMidnight ? DAY_END : DAY_END - duration);
 
   // No room left later today — never shove the task earlier than it already is.
   if (newStart <= start) return {};

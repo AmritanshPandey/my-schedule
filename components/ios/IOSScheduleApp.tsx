@@ -32,9 +32,11 @@ import { ErrorBoundary } from "@/components/ErrorBoundary";
 import IOSBottomNav from "@/components/ios/IOSBottomNav";
 import IOSLightTaskCard from "@/components/ios/IOSLightTaskCard";
 import DayActionsSheet from "@/components/DayActionsSheet";
+import CategoryManagerSheet from "@/components/category/CategoryManagerSheet";
 import {
   DAYS,
   DAY_LABELS,
+  type Category,
   type DayKey,
   type MetricEntry,
   type Milestone,
@@ -50,15 +52,20 @@ import {
 } from "@/lib/useScheduleDB";
 import { useScheduleDB } from "@/lib/useScheduleDB";
 import { colorFromIcon, categoryHex, resolveAccentColor } from "@/lib/colorSystem";
+import { countTasksInCategory, deleteCategory } from "@/lib/categories";
+import { previousDayKey } from "@/lib/scheduleConstants";
+import { NowActiveProvider } from "@/components/timeline/NowActiveProvider";
+import { slotInterval } from "@/lib/timeline/overnight";
 import { SECTION_ICONS } from "@/components/SectionIcons";
 import { useReminders } from "@/lib/useReminders";
 import { bootLog, isIOSSafeMode, isStandalonePWA } from "@/lib/iosSafeMode";
-import { todayISO, localISODate, addDaysToISO, formatDate } from "@/lib/dateUtils";
+import { todayISO, localISODate, addDaysToISO, formatDate, weekdayOfISO } from "@/lib/dateUtils";
 import { createInboxNoteInput } from "@/lib/notes/dailyCapture";
 import {
   applyTaskDelete,
   createTask,
   createTaskDeleteSnapshot,
+  getSlots,
   restoreTaskDelete,
   sortTasksByTime,
   uid,
@@ -382,6 +389,8 @@ export default function IOSScheduleApp() {
   const [taskSheetTask, setTaskSheetTask] = useState<Task | null>(null);
   const [taskSheetPlanId, setTaskSheetPlanId] = useState<string | null>(null);
   const [taskSheetDateISO, setTaskSheetDateISO] = useState("");
+  const [taskSheetDay, setTaskSheetDay] = useState<DayKey | undefined>(undefined);
+  const [categoryManagerOpen, setCategoryManagerOpen] = useState(false);
   const [taskSheetInitialType, setTaskSheetInitialType] = useState<TaskTypeValue>("task");
   const [addingPlan, setAddingPlan] = useState(false);
   const [editingPlanId, setEditingPlanId] = useState<string | null>(null);
@@ -622,11 +631,15 @@ export default function IOSScheduleApp() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [ready]);
 
-  const openEditSheet = useCallback((task: Task, dateISO?: string) => {
+  /** `dateISO`/`dayKey` identify the occurrence the user clicked — see the
+   *  matching comment in ScheduleApp. */
+  const openEditSheet = useCallback((task: Task, dateISO?: string, dayKey?: DayKey) => {
     const template = DAYS.flatMap((day) => scheduleRef.current.activities[day] ?? []).find((item) => item.id === task.id) ?? task;
+    const resolvedISO = dateISO ?? activeDateISO;
     setTaskSheetTask(template);
     setTaskSheetPlanId(template.planId);
-    setTaskSheetDateISO(dateISO ?? activeDateISO);
+    setTaskSheetDateISO(resolvedISO);
+    setTaskSheetDay(dayKey ?? (resolvedISO ? weekdayOfISO(resolvedISO) : undefined));
     setTaskSheetInitialType(template.taskType ?? "task");
     setTaskSheetMode("edit");
     setTaskSheetOpen(true);
@@ -637,6 +650,7 @@ export default function IOSScheduleApp() {
     setTaskSheetTask(null);
     setTaskSheetPlanId(null);
     setTaskSheetDateISO("");
+    setTaskSheetDay(undefined);
   }
 
   function handleTaskSheetSave(data: TaskSaveData) {
@@ -772,6 +786,38 @@ export default function IOSScheduleApp() {
         ...prev,
         ritualCompletions: toggleRitualCompletion(completions, id, dateISO),
       };
+    });
+  }
+
+  // ── Categories ────────────────────────────────────────────────────────────
+
+  function handleAddCategory(data: Omit<Category, "id">) {
+    const id = uid();
+    setSchedule((prev) => ({ ...prev, categories: [...(prev.categories ?? []), { ...data, id }] }));
+    return id;
+  }
+
+  function handleUpdateCategory(id: string, data: Omit<Category, "id">) {
+    setSchedule((prev) => ({
+      ...prev,
+      categories: (prev.categories ?? []).map((c) => (c.id === id ? { ...c, ...data, id } : c)),
+    }));
+  }
+
+  function handleDeleteCategory(id: string) {
+    const categories = schedule.categories ?? [];
+    const category = categories.find((c) => c.id === id);
+    const fallback = categories.find((c) => c.id !== id);
+    if (!fallback) return; // never delete the last category
+    const count = countTasksInCategory(schedule.activities, categories, id);
+    openConfirm({
+      title: "Delete category?",
+      description: count > 0
+        ? `${count} task${count === 1 ? "" : "s"} in "${category?.name ?? "this category"}" will move to ${fallback.name}.`
+        : `"${category?.name ?? "This category"}" isn't used by any task.`,
+      confirmLabel: "Delete",
+      destructive: true,
+      onConfirm: () => setSchedule(deleteCategory(id, fallback.id)),
     });
   }
 
@@ -930,6 +976,17 @@ export default function IOSScheduleApp() {
   }, [schedule.activities]);
 
   const renderTaskList = (tasks: Task[], day: DayKey, dateISO: string, emptyAction?: () => void) => (
+    <NowActiveProvider
+      candidates={tasks.flatMap((task) =>
+        getSlots(task).flatMap((slot, slotIndex) => {
+          const interval = slotInterval(slot);
+          return interval
+            ? [{ key: `${task.id}-${slotIndex}`, taskId: task.id, start: interval.start, end: interval.end }]
+            : [];
+        }),
+      )}
+      enabled={dateISO === todayISO()}
+    >
     <div className="flex flex-col gap-3">
       {tasks.length === 0 ? (
         <EmptyPanel
@@ -944,6 +1001,7 @@ export default function IOSScheduleApp() {
             key={task.id}
             task={task}
             linkedPlan={task.planId ? plansById.get(task.planId) ?? null : null}
+            categories={schedule.categories}
             readOnly={dateISO !== todayISO()}
             onToggleComplete={(id, ids) => handleToggleTaskComplete(id, ids, day, dateISO)}
             onToggleSlot={(id, slotIndex) => handleToggleSlot(id, slotIndex, day, dateISO)}
@@ -953,6 +1011,7 @@ export default function IOSScheduleApp() {
         ))
       )}
     </div>
+    </NowActiveProvider>
   );
 
   const content = (() => {
@@ -1229,7 +1288,8 @@ export default function IOSScheduleApp() {
 
             <DayBreakdownCard
               tasks={schedule.activities[todayKey] ?? []}
-              plans={schedule.plans}
+              previousTasks={schedule.activities[previousDayKey(todayKey)] ?? []}
+              categories={schedule.categories}
               dateISO={todayISO()}
             />
 
@@ -1494,6 +1554,7 @@ export default function IOSScheduleApp() {
               onClearProgress={clearProgress}
               onRestoreData={restoreData}
               onUpdatePreferences={(patch) => setSchedule((prev) => ({ ...prev, preferences: { ...prev.preferences, ...patch } }))}
+              onManageCategories={() => setCategoryManagerOpen(true)}
               onClose={() => setActiveTab(4)}
             />
           </ErrorBoundary>
@@ -1598,12 +1659,24 @@ export default function IOSScheduleApp() {
         </IOSMotionBoundary>
       )}
 
+      <CategoryManagerSheet
+        open={categoryManagerOpen}
+        onClose={() => setCategoryManagerOpen(false)}
+        categories={schedule.categories}
+        activities={schedule.activities}
+        onAdd={handleAddCategory}
+        onUpdate={handleUpdateCategory}
+        onDelete={handleDeleteCategory}
+      />
+
       {(taskSheetOpen || addingPlan || editingPlanId || entryTracker) && (
         <IOSMotionBoundary>
           <TaskSheet
             mode={taskSheetMode}
             task={taskSheetTask}
             plans={schedule.plans}
+            categories={schedule.categories}
+            onCreateCategory={() => setCategoryManagerOpen(true)}
             activeDay={activeDay}
             activeDays={taskSheetActiveDays}
             activities={schedule.activities}
@@ -1611,6 +1684,7 @@ export default function IOSScheduleApp() {
             initialPlanId={taskSheetPlanId}
             initialTaskType={taskSheetInitialType}
             occurrenceDateISO={taskSheetDateISO}
+            occurrenceDay={taskSheetDay}
             canEditOccurrence={!!taskSheetDateISO && taskSheetDateISO >= todayISO()}
             presentation="page"
             onClose={closeTaskSheet}

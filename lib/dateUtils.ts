@@ -6,6 +6,8 @@
  * and ScheduleApp — all four files identically.
  */
 
+import type { DayKey } from "./scheduleConstants";
+
 // ── Today ─────────────────────────────────────────────────────────────────────
 
 /** Format a Date as "YYYY-MM-DD" using the local timezone, never UTC. */
@@ -69,6 +71,21 @@ export function daysBetween(start: string, end: string): number | null {
       86_400_000
   );
   return diff > 0 ? diff : null;
+}
+
+/** JS `getDay()` (0 = Sunday) → DayKey. */
+const JS_DAY_KEYS: DayKey[] = ["sunday", "monday", "tuesday", "wednesday", "thursday", "friday", "saturday"];
+
+/**
+ * Which weekday bucket an ISO date belongs to.
+ *
+ * Tasks are stored per weekday, so any surface that knows *which date* the user
+ * clicked (a week-grid column, a timeline day) needs this to find the matching
+ * `activities[day]` entry. Parsed at local midnight, never UTC — `new Date(iso)`
+ * alone would shift the weekday for anyone west of Greenwich.
+ */
+export function weekdayOfISO(iso: string): DayKey {
+  return JS_DAY_KEYS[new Date(iso + "T00:00:00").getDay()];
 }
 
 /**

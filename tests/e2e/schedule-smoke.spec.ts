@@ -135,6 +135,11 @@ function seedSchedule() {
         color: "sky",
       },
     ],
+    categories: [
+      { id: "cat-work", name: "Work", icon: "briefcase", color: "red", sortOrder: 0 },
+      { id: "cat-sleep", name: "Sleep", icon: "sleep", color: "blue", sortOrder: 1 },
+      { id: "cat-routine", name: "Routine", icon: "star", color: "orange", sortOrder: 2 },
+    ],
     strategies: [],
     ritualCompletions: [],
     notes: [

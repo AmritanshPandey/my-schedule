@@ -45,6 +45,7 @@ import StreakAlertChips from "@/components/StreakAlertChips";
 import {
   useScheduleDB,
   DAYS,
+  Category,
   DAY_LABELS,
   DayKey,
   MetricEntry,
@@ -163,7 +164,7 @@ import {
   mapMinutesToTimeline,
   TIMELINE_END_MINUTES,
 } from "@/lib/timeline/displayWindow";
-import { todayISO, daysBetween as daysBetweenUtil, formatDate, addDaysToISO, localISODate } from "@/lib/dateUtils";
+import { todayISO, daysBetween as daysBetweenUtil, formatDate, addDaysToISO, localISODate, weekdayOfISO } from "@/lib/dateUtils";
 import { getPlanCardStats } from "@/lib/planInsights";
 import { MainTitleSection, IconActionButton, CtaActionButton } from "@/components/ui/MainTitleSection";
 import ProgressBar from "@/components/ui/ProgressBar";
@@ -172,6 +173,11 @@ import AddPlanSheet from "@/components/plan/AddPlanSheet";
 import EditPlanSheet from "@/components/plan/EditPlanSheet";
 import { haptic } from "@/lib/haptics";
 import { buildDeleteConfirmationCopy } from "@/lib/deleteConfirm";
+import { countTasksInCategory, deleteCategory } from "@/lib/categories";
+import { carriedOccurrences, isCarriedOver, viewKey, type DayViewTask } from "@/lib/timeline/carryOver";
+import { previousDayKey } from "@/lib/scheduleConstants";
+import { NowActiveProvider, useActiveBlock } from "@/components/timeline/NowActiveProvider";
+import CategoryManagerSheet from "@/components/category/CategoryManagerSheet";
 
 // ─── Constants ───────────────────────────────────────────────────────────────
 
@@ -354,15 +360,19 @@ function computeCardSize(height: number, laneCount: number): CardSize {
 // A multi-slot task contributes one layout per slot, so each phase is its own
 // positioned, independently-completable block.
 interface TimelineTaskLayout {
-  task: Task;
+  task: DayViewTask;
   /** The specific time block this layout renders. */
   slot: TaskSlot;
   slotIndex: number;
   /** True when the parent task has >1 slot (drives per-slot completion + retiming). */
   isMultiSlot: boolean;
+  /** Yesterday's overnight tail, shown read-only at the top of today. */
+  carried: boolean;
   start: number;
   end: number;
   isOvernight: boolean;
+  /** When clipped by the window, the time the block really ends. */
+  continuesUntil?: string;
   isTruncated: boolean;
   top: number;
   height: number;
@@ -380,6 +390,7 @@ interface TimelineTaskLayout {
 const TimelineTaskBlock = memo(function TimelineTaskBlock({
   layout,
   plan,
+  categories,
   isBeingMoved,
   isViewingToday,
   onPointerDown,
@@ -388,12 +399,17 @@ const TimelineTaskBlock = memo(function TimelineTaskBlock({
 }: {
   layout: TimelineTaskLayout;
   plan: Plan | null;
+  categories: readonly Category[];
   isBeingMoved: boolean;
   isViewingToday: boolean;
   onPointerDown: (e: React.PointerEvent<HTMLDivElement>, task: Task, start: number, end: number, slotIndex: number) => void;
   onToggle: (task: Task, slotIndex: number, isMultiSlot: boolean) => void;
   onOpenSubtasks: (task: Task) => void;
 }) {
+  // Read from context rather than a prop: context bypasses `memo`, so this card
+  // wakes when the *active block* changes without the 30s tick re-rendering
+  // every other card on the timeline.
+  const isActive = useActiveBlock().key === viewKey(layout.task, layout.slotIndex);
   const cardSize = computeCardSize(layout.height, layout.laneCount);
   // A phase of a multi-slot task completes on its own; a single-slot task keeps
   // the whole-task state (which folds in subtask progress).
@@ -411,17 +427,23 @@ const TimelineTaskBlock = memo(function TimelineTaskBlock({
         isBeingMoved ? "opacity-25 pointer-events-none" : ""
       }`}
       style={{ ...taskLaneStyle(layout), willChange: isBeingMoved ? "opacity" : undefined }}
-      onPointerDown={isViewingToday ? (e) => onPointerDown(e, layout.task, layout.start, layout.end, layout.slotIndex) : undefined}
+      // A carried row belongs to yesterday — dragging it would rewrite the
+      // wrong day's times.
+      onPointerDown={isViewingToday && !layout.carried ? (e) => onPointerDown(e, layout.task, layout.start, layout.end, layout.slotIndex) : undefined}
     >
       <div className="relative h-full min-h-[20px]">
         <TaskBlockCard
           variant="grid"
           task={layout.task}
           plan={plan}
+          categories={categories}
           state={state}
           duration={formatTaskDuration(layout.slot.startTime, layout.slot.endTime)}
           slotOverride={layout.isMultiSlot ? layout.slot : undefined}
-          readOnly={!isViewingToday}
+          readOnly={!isViewingToday || layout.carried}
+          isActive={isActive}
+          continuesUntil={layout.continuesUntil}
+          carriedOver={layout.carried}
           minimal={cardSize === "xsmall"}
           compact={cardSize === "small" || cardSize === "medium"}
           narrow={cardSize === "small"}
@@ -677,6 +699,10 @@ export default function ScheduleApp() {
   const [taskSheetPlanId, setTaskSheetPlanId] = useState<string | null>(null);
   // The specific date the edit sheet was opened on (enables "this day only").
   const [taskSheetDateISO, setTaskSheetDateISO] = useState<string>("");
+  // The weekday whose block was clicked. The week grid shows 7 days at once, so
+  // `activeDay` is not it — see openEditSheet.
+  const [taskSheetDay, setTaskSheetDay] = useState<DayKey | undefined>(undefined);
+  const [categoryManagerOpen, setCategoryManagerOpen] = useState(false);
 
   const [selectedPlanId, setSelectedPlanId] = useState<string | null>(null);
   const [entryTracker, setEntryTracker] = useState<ProgressTracker | null>(null);
@@ -1213,14 +1239,23 @@ export default function ScheduleApp() {
   }, [iosSafeMode]); // handlers read all live values through refs
 
   // Stable identity (setters are stable) so the memoized TimelineTaskBlock holds.
-  const openEditSheet = useCallback((task: Task, dateISO?: string) => {
+  /**
+   * `dateISO`/`dayKey` identify the occurrence the user clicked. Surfaces that
+   * show several days at once (the week grid) MUST pass them: without a date
+   * the sheet falls back to the app-wide selection, which not only showed the
+   * wrong day's times but made "This day only" write the per-date override onto
+   * the wrong date.
+   */
+  const openEditSheet = useCallback((task: Task, dateISO?: string, dayKey?: DayKey) => {
     // The caller may pass a *resolved* occurrence (timeline); always edit the
     // underlying weekday template so "All days" starts from template values.
     const template =
       DAYS.flatMap((d) => scheduleRef.current.activities[d] ?? []).find((t) => t.id === task.id) ?? task;
+    const resolvedISO = dateISO ?? activeDateISORef.current;
     setTaskSheetTask(template);
     setTaskSheetPlanId(template.planId);
-    setTaskSheetDateISO(dateISO ?? activeDateISORef.current);
+    setTaskSheetDateISO(resolvedISO);
+    setTaskSheetDay(dayKey ?? (resolvedISO ? weekdayOfISO(resolvedISO) : undefined));
     setTaskSheetMode("edit");
     setTaskSheetOpen(true);
   }, []);
@@ -1233,6 +1268,8 @@ export default function ScheduleApp() {
     setTaskSheetOpen(false);
     setTaskSheetTask(null);
     setTaskSheetPlanId(null);
+    setTaskSheetDateISO("");
+    setTaskSheetDay(undefined);
     setTaskSheetInitialStartTime("");
     setTaskSheetInitialEndTime("");
   }
@@ -1486,6 +1523,38 @@ export default function ScheduleApp() {
 
   function handleReorderRituals(reordered: Ritual[]) {
     setSchedule((prev) => ({ ...prev, rituals: reordered }));
+  }
+
+  // ── Categories ────────────────────────────────────────────────────────────
+
+  function handleAddCategory(data: Omit<Category, "id">) {
+    const id = uid();
+    setSchedule((prev) => ({ ...prev, categories: [...(prev.categories ?? []), { ...data, id }] }));
+    return id;
+  }
+
+  function handleUpdateCategory(id: string, data: Omit<Category, "id">) {
+    setSchedule((prev) => ({
+      ...prev,
+      categories: (prev.categories ?? []).map((c) => (c.id === id ? { ...c, ...data, id } : c)),
+    }));
+  }
+
+  function handleDeleteCategory(id: string) {
+    const categories = schedule.categories ?? [];
+    const category = categories.find((c) => c.id === id);
+    const fallback = categories.find((c) => c.id !== id);
+    if (!fallback) return; // never delete the last category
+    const count = countTasksInCategory(schedule.activities, categories, id);
+    openConfirm(
+      buildDeleteConfirmationCopy("category", {
+        name: category?.name,
+        description: count > 0
+          ? `${count} task${count === 1 ? "" : "s"} will move to ${fallback.name}.`
+          : "No tasks are using this category.",
+      }),
+      () => setSchedule(deleteCategory(id, fallback.id))
+    );
   }
 
   function handleToggleRitualComplete(id: string, dateISO: string = todayISO()) {
@@ -2014,6 +2083,23 @@ export default function ScheduleApp() {
     [dayTasks, isViewingToday, activeDateISO]
   );
 
+  /**
+   * Render-only: `dayTasksView` plus yesterday's overnight tails.
+   *
+   * Kept strictly separate from `dayTasksView`, which feeds the "N/M done"
+   * header and what's-next. A carried row is not a second occurrence of the
+   * task — letting one into a counted list would double-count it.
+   */
+  const dayTasksRendered = useMemo(() => {
+    const prevDay = previousDayKey(activeDay);
+    const carried = carriedOccurrences(
+      schedule.activities[prevDay] ?? [],
+      addDaysToISO(activeDateISO, -1),
+      prevDay,
+    );
+    return carried.length > 0 ? [...carried, ...dayTasksView] : dayTasksView;
+  }, [schedule.activities, activeDay, activeDateISO, dayTasksView]);
+
   const timelineStartMinutes = useMemo(
     () =>
       getTimelineDisplayStartMinutes({
@@ -2373,18 +2459,26 @@ export default function ScheduleApp() {
   const timelineTaskLayouts = useMemo(() => {
     // One interval per SLOT, not per task — a multi-slot task occupies several
     // separate blocks on the day (mirrors WeekGrid.buildDayLayout on desktop).
-    const intervals = dayTasksView
+    const intervals = dayTasksRendered
       .flatMap((task) => {
         const slots = getSlots(task);
         const isMultiSlot = slots.length > 1;
+        // A carried tail is already this morning (12 AM–7 AM = minutes 0–420).
+        // Wrapping it would fling it to the overnight region at the far bottom
+        // of the day — the opposite end from where it belongs.
+        const carried = isCarriedOver(task);
         return slots.map((slot, slotIndex) => {
           const parsedStart = parseTimeToMinutes(slot.startTime);
           const start = parsedStart === null
             ? timelineStartMinutes
+            : carried
+            ? parsedStart
             : mapMinutesToTimeline(parsedStart, timelineStartMinutes, timelineEndMinutes);
           const parsedEnd = parseTimeToMinutes(slot.endTime);
           let end = parsedEnd === null
             ? start + 30
+            : carried
+            ? parsedEnd
             : mapMinutesToTimeline(parsedEnd, timelineStartMinutes, timelineEndMinutes);
           while (end <= start) end += 1440;
           const isOvernight = end >= 1440;
@@ -2395,10 +2489,14 @@ export default function ScheduleApp() {
             slot,
             slotIndex,
             isMultiSlot,
+            carried,
             color: getTaskPresentation(task).color,
             start: cs,
             end: ce,
             isOvernight,
+            // The block runs past the bottom of the window; the card shows
+            // where it really ends instead of silently losing the hours.
+            continuesUntil: end > timelineEndMinutes ? slot.endTime : undefined,
             isTruncated: isOvernight && end > timelineEndMinutes,
             top: TIMELINE_TOP_PADDING + ((cs - timelineStartMinutes) / 60) * HOUR_HEIGHT,
             height: ((ce - cs) / 60) * HOUR_HEIGHT,
@@ -2430,7 +2528,18 @@ export default function ScheduleApp() {
     });
     if (cluster.length > 0) finishCluster();
     return layouts;
-  }, [dayTasksView, timelineEndMinutes, timelineStartMinutes]);
+  }, [dayTasksRendered, timelineEndMinutes, timelineStartMinutes]);
+
+  /** Spans the now-ticker matches against; keyed the same way the cards are. */
+  const activeBlockCandidates = useMemo(
+    () => timelineTaskLayouts.map((l) => ({
+      key: viewKey(l.task, l.slotIndex),
+      taskId: l.task.id,
+      start: l.start,
+      end: l.end,
+    })),
+    [timelineTaskLayouts],
+  );
 
 
   // ─── Loading ───────────────────────────────────────────────────────────────
@@ -2510,7 +2619,7 @@ export default function ScheduleApp() {
         compact={cardSize === "small" || cardSize === "medium"}
         narrow={cardSize === "small"}
         onToggle={toggle}
-        onClick={() => openEditSheet(task)}
+        onClick={() => openEditSheet(task, activeDateISO, activeDay)}
         className="h-full w-full"
       />
     );
@@ -2519,17 +2628,35 @@ export default function ScheduleApp() {
   // ─── Shared card renderer for WeekGrid ────────────────────────────────────
   // Same visual as the mobile timeline — changes here apply to both surfaces.
 
-  function renderWeekCard(
-    task: Task,
-    height: number,
-    widthPct: number,
-    readOnly: boolean,
-    onToggle: () => void,
-    onDelete: () => void,
-    slot?: TaskSlot,
-    slotIndex?: number,
-  ) {
+  function renderWeekCard({
+    task,
+    height,
+    widthPct,
+    readOnly,
+    day,
+    dateISO,
+    isNowInside,
+    continuesUntil,
+    onToggle,
+    onDelete,
+    slot,
+    slotIndex,
+  }: {
+    task: DayViewTask;
+    height: number;
+    widthPct: number;
+    readOnly: boolean;
+    day: DayKey;
+    dateISO: string;
+    isNowInside?: boolean;
+    continuesUntil?: string;
+    onToggle: () => void;
+    onDelete: () => void;
+    slot?: TaskSlot;
+    slotIndex?: number;
+  }) {
     const { linkedPlan } = getTaskPresentation(task);
+    const carried = isCarriedOver(task);
     // Grid blocks are per-slot: show this slot's own duration.
     const duration = slot
       ? formatTaskDuration(slot.startTime, slot.endTime)
@@ -2550,14 +2677,23 @@ export default function ScheduleApp() {
         variant="grid"
         task={task}
         plan={linkedPlan}
+        categories={schedule.categories}
         state={taskState}
         duration={duration}
         slotOverride={slot}
         readOnly={readOnly}
+        isActive={isNowInside}
+        continuesUntil={continuesUntil}
+        carriedOver={carried}
         compact={height < 56}
         narrow={widthPct < 60 || height < 88}
         onToggle={onToggle}
-        onClick={() => openEditSheet(task)}
+        // A carried row is a view of yesterday's occurrence — edit it there.
+        onClick={() =>
+          carried
+            ? openEditSheet(task, task.carriedFrom!.dateISO, task.carriedFrom!.day)
+            : openEditSheet(task, dateISO, day)
+        }
         onDelete={!readOnly ? onDelete : undefined}
         className="h-full w-full"
       />
@@ -3111,11 +3247,12 @@ export default function ScheduleApp() {
                                     <ListTaskCard
                                       task={task}
                                       linkedPlan={task.planId ? plansById.get(task.planId) ?? null : null}
+                                      categories={schedule.categories}
                                       editMode
                                       onToggleComplete={handleToggleTaskComplete}
                                       onToggleSubtask={handleToggleSubtask}
                                       onToggleSlot={handleToggleSlot}
-                                      onEdit={() => openEditSheet(task)}
+                                      onEdit={() => openEditSheet(task, activeDateISO, activeDay)}
                                       onDelete={() => requestDeleteTask(task.id, activeDay)}
                                     />
                                   </div>
@@ -3126,6 +3263,7 @@ export default function ScheduleApp() {
                         </SortableContext>
                       </DndContext>
                     ) : (
+                      <NowActiveProvider candidates={activeBlockCandidates} enabled={isViewingToday}>
                       <div className="stagger-rise flex flex-col gap-3 pb-4">
                         {dayTasksView.map((task) => {
                           const linkedPlan = task.planId ? plansById.get(task.planId) ?? null : null;
@@ -3135,11 +3273,12 @@ export default function ScheduleApp() {
                               <ListTaskCard
                                 task={task}
                                 linkedPlan={linkedPlan}
+                                categories={schedule.categories}
                                 readOnly={!isViewingToday}
                                 onToggleComplete={(id, ids) => handleToggleTaskComplete(id, ids, activeDay, activeDateISO)}
                                 onToggleSubtask={(id, sub) => handleToggleSubtask(id, sub, activeDay, activeDateISO)}
                                 onToggleSlot={(id, slotIndex) => handleToggleSlot(id, slotIndex, activeDay, activeDateISO)}
-                                onEdit={() => openEditSheet(task)}
+                                onEdit={() => openEditSheet(task, activeDateISO, activeDay)}
                                 onDelete={() => requestDeleteTask(task.id, activeDay)}
                                 onOpenSubtasks={() => setSubtasksRef({ id: task.id, day: activeDay, dateISO: activeDateISO })}
                               />
@@ -3154,6 +3293,7 @@ export default function ScheduleApp() {
                           );
                         })}
                       </div>
+                      </NowActiveProvider>
                     )}
                   </m.div>
                 ) : (
@@ -3287,13 +3427,15 @@ export default function ScheduleApp() {
                         </div>
 
                         {/* Task blocks */}
+                        <NowActiveProvider candidates={activeBlockCandidates} enabled={isViewingToday}>
                         <div className="absolute inset-0">
                           {timelineTaskLayouts.map((layout) => (
                             <TimelineTaskBlock
-                              key={`${layout.task.id}-${layout.slotIndex}`}
+                              key={viewKey(layout.task, layout.slotIndex)}
                               layout={layout}
                               plan={layout.task.planId ? plansById.get(layout.task.planId) ?? null : null}
-                              isBeingMoved={dragMove?.taskId === layout.task.id && dragMove?.slotIndex === layout.slotIndex}
+                              categories={schedule.categories}
+                              isBeingMoved={!layout.carried && dragMove?.taskId === layout.task.id && dragMove?.slotIndex === layout.slotIndex}
                               isViewingToday={isViewingToday}
                               onPointerDown={handleTaskPointerDown}
                               onToggle={handleTimelineToggle}
@@ -3353,6 +3495,7 @@ export default function ScheduleApp() {
                             );
                           })()}
                         </div>
+                        </NowActiveProvider>
 
                         {/* Current-task glow — isolated layer, hugs the active block */}
                         <CurrentTaskHighlightLayer
@@ -3534,6 +3677,7 @@ export default function ScheduleApp() {
                 onClearData={clearData}
                 onClearProgress={clearProgress}
                 onRestoreData={restoreData}
+                onManageCategories={() => setCategoryManagerOpen(true)}
                 onUpdatePreferences={(patch) =>
                   setSchedule((prev) => ({
                     ...prev,
@@ -3609,11 +3753,23 @@ export default function ScheduleApp() {
 
 
       {/* ── Modals ─────────────────────────────────────────────────────────── */}
+      <CategoryManagerSheet
+        open={categoryManagerOpen}
+        onClose={() => setCategoryManagerOpen(false)}
+        categories={schedule.categories}
+        activities={schedule.activities}
+        onAdd={handleAddCategory}
+        onUpdate={handleUpdateCategory}
+        onDelete={handleDeleteCategory}
+      />
+
       {taskSheetOpen && (
         <TaskSheet
           mode={taskSheetMode}
           task={taskSheetTask}
           plans={schedule.plans}
+          categories={schedule.categories}
+          onCreateCategory={() => setCategoryManagerOpen(true)}
           activeDay={activeDay}
           activeDays={taskSheetActiveDays}
           activities={schedule.activities}
@@ -3623,6 +3779,7 @@ export default function ScheduleApp() {
           initialStartTime={taskSheetInitialStartTime}
           initialEndTime={taskSheetInitialEndTime}
           occurrenceDateISO={taskSheetDateISO}
+          occurrenceDay={taskSheetDay}
           canEditOccurrence={taskSheetMode === "edit" && !!taskSheetDateISO && taskSheetDateISO >= todayISO()}
           onResetOccurrence={
             taskSheetTask && taskSheetDateISO
