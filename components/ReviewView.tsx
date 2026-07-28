@@ -18,6 +18,7 @@ import { DAYS, DAY_LABELS } from "@/lib/useScheduleDB";
 import { getTaskSubtaskSummary, isTaskCompleted, isTrackedTask } from "@/lib/taskCompletion";
 import { calculateConsistency } from "@/lib/planInsights";
 import ProgressBar from "@/components/ui/ProgressBar";
+import ProgressRing, { ringArcClass } from "@/components/ui/ProgressRing";
 import { computeTrend } from "@/lib/trendUtils";
 import { todayISO, addDaysToISO, localISODate } from "@/lib/dateUtils";
 import { isTaskScheduledOn } from "@/lib/taskOccurrence";
@@ -592,22 +593,17 @@ function PlanHealthSection({
                 <p className="text-[9px] font-medium text-neutral-400 dark:text-neutral-500 mt-0.5">consistency</p>
               </div>
               {msPct !== null && (
-                <div className="shrink-0 w-[36px]">
-                  <div className="h-[36px] w-[36px] relative">
-                    <svg viewBox="0 0 36 36" className="rotate-[-90deg]">
-                      <circle cx="18" cy="18" r="14" fill="none" stroke="currentColor" strokeWidth="4" className="text-neutral-200 dark:text-white/[0.07]" />
-                      <circle
-                        cx="18" cy="18" r="14" fill="none" stroke="currentColor" strokeWidth="4"
-                        strokeDasharray={`${(msPct / 100) * 87.96} 87.96`}
-                        strokeLinecap="round"
-                        className={msPct >= 70 ? "text-emerald-500" : msPct >= 40 ? "text-amber-400" : "text-rose-400"}
-                      />
-                    </svg>
-                    <span className="absolute inset-0 flex items-center justify-center text-[8.5px] font-bold text-neutral-700 dark:text-neutral-300">
-                      {msPct}%
-                    </span>
-                  </div>
-                </div>
+                <ProgressRing
+                  value={msPct}
+                  size={40}
+                  stroke={4}
+                  arcClassName={ringArcClass(msPct)}
+                  label={`Milestones ${msPct}% complete`}
+                >
+                  <span className="text-[11px] font-bold tabular-nums text-neutral-700 dark:text-neutral-300">
+                    {msPct}
+                  </span>
+                </ProgressRing>
               )}
             </div>
           );

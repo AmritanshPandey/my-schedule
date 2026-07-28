@@ -6,8 +6,8 @@
  *
  * Rules enforced:
  *  1. start < end (or overnight flag)
- *  2. Duration: minimum 5 min, maximum 16 hours
- *  3. Bounds: tasks must be within TIMELINE_START_HOUR–TIMELINE_END_HOUR
+ *  2. Duration: minimum 5 min, maximum 16 hours — this, not the clock, is what
+ *     bounds a block. An overnight task may end at any hour of the next day.
  *  4. Overlap prevention: push colliding AI tasks forward in time
  *  5. Deduplication: reject tasks with identical (title + day + startTime)
  */
@@ -107,12 +107,13 @@ export function validateTaskTime(task: SchedulableTask): ValidationError | null 
     };
   }
 
-  if (normalizedEnd > TIMELINE_END_MINUTES) {
-    return {
-      code: "out-of-bounds",
-      message: `Task must end by ${TIMELINE_END_HOUR % 24}:00`,
-    };
-  }
+  // No end-time ceiling. TIMELINE_END_HOUR (4 AM) is how far the timeline can
+  // *draw*, not how late a block may run, and the app now handles blocks that
+  // overrun it: the grid marks them truncated and `carriedOccurrences` renders
+  // the remainder on the next day. Enforcing the display window here rejected
+  // Sleep 10 PM–5:45 AM — 7h45m, well inside the 16-hour cap — while quietly
+  // allowing the same block if it ended at 3:59 AM. `duration` above is the
+  // real constraint.
 
   return null;
 }

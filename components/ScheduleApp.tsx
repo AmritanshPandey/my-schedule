@@ -165,6 +165,7 @@ import {
   TIMELINE_END_MINUTES,
 } from "@/lib/timeline/displayWindow";
 import { todayISO, daysBetween as daysBetweenUtil, formatDate, addDaysToISO, localISODate, weekdayOfISO } from "@/lib/dateUtils";
+import { resolveCategory } from "@/lib/categories";
 import { getPlanCardStats } from "@/lib/planInsights";
 import { MainTitleSection, IconActionButton, CtaActionButton } from "@/components/ui/MainTitleSection";
 import ProgressBar from "@/components/ui/ProgressBar";
@@ -2431,13 +2432,13 @@ export default function ScheduleApp() {
 
   function getTaskPresentation(task: Task) {
     const linkedPlan = task.planId ? plansById.get(task.planId) ?? null : null;
-    // Identity belongs to the task: its own icon and colour win, with the
-    // plan only as a fallback for legacy rows that never stored one.
-    const iconName = task.icon || linkedPlan?.emoji || "star";
+    // Identity belongs to the category, so a block's colour on the timeline is
+    // the same colour its slice wears in "Where the day goes".
+    const category = resolveCategory(schedule.categories, task.categoryId, task.icon);
     return {
       linkedPlan,
-      iconName,
-      color: resolveAccentColor(task.color, iconName),
+      iconName: category.icon,
+      color: category.color,
     };
   }
 

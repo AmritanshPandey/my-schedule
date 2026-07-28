@@ -106,13 +106,13 @@ export function TaskBlockCard({
   slotOverride,
   slotCompletions,
 }: TaskBlockCardProps) {
-  // Tracked work keeps the identity its own icon/colour give it. A commitment
-  // has neither — the task sheet hides both controls for it — so its category
-  // *is* its identity, and that is what it wears. Grey read as "disabled";
-  // a real hue at low opacity reads as "later".
-  const accent = isTrackedTask(task)
-    ? resolveAccentColor(task.color, task.icon)
-    : resolveCategory(categories ?? [], task.categoryId, task.icon).color;
+  // Colour comes from the category — for every task, not just commitments.
+  // Tasks used to carry their own colour while also sitting in a coloured
+  // category, so a purple "Deep work" block sat under a red Work wedge in the
+  // donut and the two views disagreed about the same hour. One source now, so
+  // the timeline and the chart always read the same. `task.color` survives only
+  // as the fallback for records that predate categories.
+  const accent = resolveCategory(categories ?? [], task.categoryId, task.icon).color;
   const styles = timelineCardStyles(accent);
   const done = state === "completed";
   const partial = state === "partial";

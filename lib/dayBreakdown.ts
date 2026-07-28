@@ -49,6 +49,47 @@ export function taskScheduledMinutes(task: Task): number {
   return total;
 }
 
+const DAY_MINUTES = 24 * 60;
+
+/** One block's claim on the day, in minutes-from-midnight of `dateISO`. */
+interface Span {
+  categoryId: string;
+  start: number;
+  end: number;
+}
+
+/**
+ * Minutes each category actually *occupies*, counting every minute of the day
+ * at most once.
+ *
+ * Summing block durations is the obvious implementation and it is wrong: an
+ * "Office hours" commitment from 9–6 with real work tasks scheduled inside it
+ * counts those hours twice, and a day can report 21h of 24h — or more — while
+ * the user is only busy from nine to six. A chart headed "where the day goes"
+ * has to answer in wall-clock time or it means nothing.
+ *
+ * Overlaps resolve to the *shortest* block covering a minute: a one-hour
+ * meeting nested inside a nine-hour work block should read as the meeting,
+ * which is the more specific claim on that hour.
+ */
+function occupiedMinutesByCategory(spans: readonly Span[]): Map<string, number> {
+  // Longest first, so shorter (more specific) spans paint over them.
+  const ordered = [...spans].sort((a, b) => b.end - b.start - (a.end - a.start));
+  const owner = new Array<string | null>(DAY_MINUTES).fill(null);
+  for (const span of ordered) {
+    const from = Math.max(0, span.start);
+    const to = Math.min(DAY_MINUTES, span.end);
+    for (let m = from; m < to; m++) owner[m] = span.categoryId;
+  }
+
+  const minutesById = new Map<string, number>();
+  for (const id of owner) {
+    if (id === null) continue;
+    minutesById.set(id, (minutesById.get(id) ?? 0) + 1);
+  }
+  return minutesById;
+}
+
 export interface DayBreakdownInput {
   dateISO: string;
   /** The weekday bucket for `dateISO`. */
@@ -70,14 +111,14 @@ export function buildDayBreakdown({
   previousTasks,
   categories,
 }: DayBreakdownInput): DayBreakdown {
-  const minutesById = new Map<string, number>();
+  const spans: Span[] = [];
 
-  const add = (task: Task, minutes: number) => {
-    if (minutes <= 0) return;
+  const push = (task: Task, start: number, end: number) => {
+    if (end <= start) return;
     // Always through resolveCategory: a task pointing at a deleted category must
     // still be counted, or the chart quietly stops adding up.
-    const id = resolveCategory(categories, task.categoryId, task.icon).id;
-    minutesById.set(id, (minutesById.get(id) ?? 0) + minutes);
+    const categoryId = resolveCategory(categories, task.categoryId, task.icon).id;
+    spans.push({ categoryId, start, end });
   };
 
   // Today's blocks contribute the part that falls before midnight.
@@ -85,22 +126,26 @@ export function buildDayBreakdown({
     if (!isTaskScheduledOn(task, dateISO, true)) continue;
     for (const slot of getSlots(resolveOccurrence(task, dateISO))) {
       const interval = slotInterval(slot);
-      if (interval) add(task, headMinutes(interval));
+      if (!interval || headMinutes(interval) <= 0) continue;
+      push(task, interval.start, Math.min(interval.end, DAY_MINUTES));
     }
   }
 
-  // Yesterday's blocks contribute whatever spilled past midnight into today.
-  // Re-checking `isTaskScheduledOn` against the previous date matters: an
-  // every-other-week overnight task must not leak a tail on its off week.
+  // Yesterday's blocks contribute whatever spilled past midnight into today,
+  // rebased so midnight is 0. Re-checking `isTaskScheduledOn` against the
+  // previous date matters: an every-other-week overnight task must not leak a
+  // tail on its off week.
   const previousISO = addDaysToISO(dateISO, -1);
   for (const task of previousTasks) {
     if (!isTaskScheduledOn(task, previousISO, true)) continue;
     for (const slot of getSlots(resolveOccurrence(task, previousISO))) {
       const interval = slotInterval(slot);
-      if (interval) add(task, tailMinutes(interval));
+      if (!interval || tailMinutes(interval) <= 0) continue;
+      push(task, Math.max(interval.start, DAY_MINUTES) - DAY_MINUTES, interval.end - DAY_MINUTES);
     }
   }
 
+  const minutesById = occupiedMinutesByCategory(spans);
   const totalMinutes = Array.from(minutesById.values()).reduce((sum, m) => sum + m, 0);
   if (totalMinutes === 0) return { slices: [], totalMinutes: 0 };
 

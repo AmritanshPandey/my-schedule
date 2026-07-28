@@ -31,7 +31,6 @@ import ExecutionStreakBanner from "@/components/ExecutionStreakBanner";
 import ExecutionTrendCard from "@/components/ExecutionTrendCard";
 import { getTrendDirection, getTrendState, type TrendDirection, type TrendState } from "@/lib/trendUtils";
 import { addDaysToISO, localISODate } from "@/lib/dateUtils";
-import { previousDayKey } from "@/lib/scheduleConstants";
 import { parseTimeToMinutes, toScheduleDayMinutes } from "@/lib/timeUtils";
 import { calculateExecutionStreak, type ExecutionStreak } from "@/lib/consistency/calculateExecutionStreak";
 import { isTaskScheduledOn } from "@/lib/taskOccurrence";
@@ -448,21 +447,27 @@ function PlanConsistencyCard({
                   <span className={`h-2.5 w-2.5 shrink-0 rounded-full ${accent.dot}`} />
                   <p className="truncate text-[15px] font-bold text-neutral-950 dark:text-white">{plan.title}</p>
                 </div>
-                <p className="mt-1 text-[11px] font-semibold text-neutral-400 dark:text-neutral-500">
-                  {milestonesDone}/{milestonesTotal} milestones
-                </p>
-                {/* One dot per real milestone (capped at 10) — rows without any
-                    never reach here, so there are no placeholder dots. */}
-                <div className="mt-2 flex flex-wrap gap-1">
-                  {Array.from({ length: Math.min(milestonesTotal, 10) }, (_, i) => (
-                    <span
-                      key={i}
-                      className={`h-2 w-2 rounded-full ${
-                        i < milestonesDone ? "bg-emerald-500" : "bg-neutral-200 dark:bg-white/[0.10]"
-                      }`}
-                    />
-                  ))}
-                </div>
+                {/* Milestones are optional. A plan without any shows the title
+                    and its consistency alone — no "0/0" line, no row of grey
+                    dots that would read as milestones it hasn't finished. */}
+                {milestonesTotal > 0 && (
+                  <>
+                    <p className="mt-1 text-[11px] font-semibold text-neutral-400 dark:text-neutral-500">
+                      {milestonesDone}/{milestonesTotal} milestones
+                    </p>
+                    {/* One dot per real milestone, capped at 10. */}
+                    <div className="mt-2 flex flex-wrap gap-1">
+                      {Array.from({ length: Math.min(milestonesTotal, 10) }, (_, i) => (
+                        <span
+                          key={i}
+                          className={`h-2 w-2 rounded-full ${
+                            i < milestonesDone ? "bg-emerald-500" : "bg-neutral-200 dark:bg-white/[0.10]"
+                          }`}
+                        />
+                      ))}
+                    </div>
+                  </>
+                )}
               </div>
               <div className="min-w-0">
                 <div className="mb-2 flex justify-end">
@@ -881,19 +886,18 @@ export default function OverviewDashboard({
       });
   }, [schedule.ritualCompletions, schedule.rituals, todayISO]);
 
-  // Only plans that actually have milestones. A plan without any rendered as a
-  // "No milestones" label plus a row of six grey placeholder dots, which read
-  // as six unfinished milestones that don't exist — noise, and misleading.
-  // The card hides itself entirely when nothing qualifies.
+  // Every plan, milestones or not — consistency is the point of this card, and
+  // a plan you're executing daily still deserves a row. Plans without milestones
+  // simply omit that sub-line rather than rendering "0/0" and a row of grey
+  // placeholder dots, which read as unfinished milestones that don't exist.
   const planConsistency = useMemo(() =>
-    schedule.plans.flatMap((plan) => {
+    schedule.plans.map((plan) => {
       const milestones = (schedule.milestones ?? []).filter((milestone) => milestone.planId === plan.id);
-      if (milestones.length === 0) return [];
       const { consistency } = getPlanCardStats(plan, schedule.activities, todayKey, schedule.preferences?.startDate);
       const milestonesDone = milestones.filter((milestone) => milestone.status === "completed").length;
-      return [{ plan, consistency, milestonesTotal: milestones.length, milestonesDone }];
+      return { plan, consistency, milestonesTotal: milestones.length, milestonesDone };
     }),
-    [schedule.activities, schedule.milestones, schedule.plans, todayKey]
+    [schedule.activities, schedule.milestones, schedule.plans, schedule.preferences?.startDate, todayKey]
   );
 
   const trackerData = useMemo<TrackerRow[]>(() =>
@@ -970,10 +974,9 @@ export default function OverviewDashboard({
                   onOpenSubtasks={onOpenSubtasks}
                 />
                 <DayBreakdownCard
-                  tasks={schedule.activities[todayKey] ?? []}
-                  previousTasks={schedule.activities[previousDayKey(todayKey)] ?? []}
+                  activities={schedule.activities}
                   categories={schedule.categories}
-                  dateISO={todayISO}
+                  todayISO={todayISO}
                 />
                 <RoutineConsistencyCard rows={ritualConsistency} />
               </div>

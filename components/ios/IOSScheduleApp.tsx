@@ -16,7 +16,6 @@ import {
   IconEdit,
   IconFlame,
   IconListCheck,
-  IconDotsVertical,
   IconNotes,
   IconPhoto,
   IconPlus,
@@ -31,7 +30,6 @@ import type { MilestoneSaveData } from "@/components/plan/MilestoneSheet";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
 import IOSBottomNav from "@/components/ios/IOSBottomNav";
 import IOSLightTaskCard from "@/components/ios/IOSLightTaskCard";
-import DayActionsSheet from "@/components/DayActionsSheet";
 import CategoryManagerSheet from "@/components/category/CategoryManagerSheet";
 import {
   DAYS,
@@ -53,7 +51,6 @@ import {
 import { useScheduleDB } from "@/lib/useScheduleDB";
 import { colorFromIcon, categoryHex, resolveAccentColor } from "@/lib/colorSystem";
 import { countTasksInCategory, deleteCategory } from "@/lib/categories";
-import { previousDayKey } from "@/lib/scheduleConstants";
 import { NowActiveProvider } from "@/components/timeline/NowActiveProvider";
 import { slotInterval } from "@/lib/timeline/overnight";
 import { SECTION_ICONS } from "@/components/SectionIcons";
@@ -71,8 +68,6 @@ import {
   uid,
   updateTaskDays,
   updateTaskPerDay,
-  swapDays,
-  duplicateDay,
   setTaskException,
   clearTaskException,
   type TaskDeleteScope,
@@ -364,7 +359,6 @@ export default function IOSScheduleApp() {
   useReminders(schedule, ready);
   const [todayKey, setTodayKey] = useState<DayKey>(() => JS_DAYS[new Date().getDay()]);
   const [activeDay, setActiveDay] = useState<DayKey>(() => JS_DAYS[new Date().getDay()]);
-  const [dayActionsOpen, setDayActionsOpen] = useState(false);
   const [activeTab, setActiveTab] = useState(4);
   const [iosSetupDismissed, setIosSetupDismissed] = useState(() => {
     try {
@@ -589,17 +583,17 @@ export default function IOSScheduleApp() {
 	      .sort((a, b) => Number(b.hasEntries) - Number(a.hasEntries) || (b.latest?.date ?? "").localeCompare(a.latest?.date ?? "") || a.tracker.title.localeCompare(b.tracker.title));
 	  }, [schedule.metricEntries, schedule.plans, schedule.progressTrackers]);
 
-  // Only plans that actually have milestones — a "No milestones" row carries no
-  // information. The card hides itself when nothing qualifies.
+  // Every plan, milestones or not — consistency is what this card reports, and a
+  // plan you execute daily earns a row whether or not it has milestones. Rows
+  // without any omit that sub-line instead of showing an empty milestone strip.
   const overviewPlanConsistency = useMemo(() =>
-    schedule.plans.flatMap((plan) => {
+    schedule.plans.map((plan) => {
       const milestones = (schedule.milestones ?? []).filter((milestone) => milestone.planId === plan.id);
-      if (milestones.length === 0) return [];
       const { consistency } = getPlanCardStats(plan, schedule.activities, todayKey, schedule.preferences?.startDate);
       const milestonesDone = milestones.filter((milestone) => milestone.status === "completed").length;
-      return [{ plan, consistency, milestonesTotal: milestones.length, milestonesDone }];
+      return { plan, consistency, milestonesTotal: milestones.length, milestonesDone };
     }),
-    [schedule.activities, schedule.milestones, schedule.plans, todayKey]
+    [schedule.activities, schedule.milestones, schedule.plans, schedule.preferences?.startDate, todayKey]
   );
 
 	  const openConfirm = useCallback((state: ConfirmState) => setConfirmState(state), []);
@@ -1287,10 +1281,9 @@ export default function IOSScheduleApp() {
             </div>
 
             <DayBreakdownCard
-              tasks={schedule.activities[todayKey] ?? []}
-              previousTasks={schedule.activities[previousDayKey(todayKey)] ?? []}
+              activities={schedule.activities}
               categories={schedule.categories}
-              dateISO={todayISO()}
+              todayISO={todayISO()}
             />
 
             {overviewPlanConsistency.length > 0 && (
@@ -1313,9 +1306,13 @@ export default function IOSScheduleApp() {
                     >
                       <div className="min-w-0">
                         <p className="truncate text-[15px] font-black text-neutral-950 dark:text-white">{plan.title}</p>
-                        <p className="mt-0.5 text-[11px] font-semibold text-neutral-500 dark:text-neutral-400">
-                          {milestonesDone}/{milestonesTotal} milestones
-                        </p>
+                        {/* Only when the plan actually has milestones — "0/0" is
+                            noise, not information. */}
+                        {milestonesTotal > 0 && (
+                          <p className="mt-0.5 text-[11px] font-semibold text-neutral-500 dark:text-neutral-400">
+                            {milestonesDone}/{milestonesTotal} milestones
+                          </p>
+                        )}
                       </div>
                       <div className="min-w-0">
                         <p className="mb-1 text-right text-[12px] font-black tabular-nums text-neutral-700 dark:text-neutral-300">{consistency}%</p>
@@ -1397,14 +1394,6 @@ export default function IOSScheduleApp() {
                 <p className="text-[13px] font-semibold text-neutral-500 dark:text-neutral-400">{dayDone}/{dayTracked.length} done</p>
               </div>
               <div className="flex items-center gap-2">
-                <button
-                  type="button"
-                  aria-label="Day actions"
-                  onClick={() => { haptic("light"); setDayActionsOpen(true); }}
-                  className="flex h-10 w-10 items-center justify-center rounded-full bg-neutral-100 text-neutral-500 dark:bg-white/[0.08] dark:text-neutral-300"
-                >
-                  <IconDotsVertical size={17} strokeWidth={2} />
-                </button>
                 <button
                   type="button"
                   aria-label="Lock screen wallpaper"
@@ -1628,14 +1617,6 @@ export default function IOSScheduleApp() {
         />
       )}
       <div className={subtasksRef || activeTab === 6 ? "h-dvh bg-white pt-[env(safe-area-inset-top)] dark:bg-neutral-950" : "pb-36 pt-[calc(env(safe-area-inset-top)+76px)]"}>{content}</div>
-
-      <DayActionsSheet
-        open={dayActionsOpen}
-        sourceDay={activeDay}
-        onClose={() => setDayActionsOpen(false)}
-        onSwap={(target) => setSchedule(swapDays(activeDay, target))}
-        onDuplicate={(targets) => setSchedule(duplicateDay(activeDay, targets))}
-      />
 
       {activeTab !== 6 && !subtasksRef && !taskSheetOpen && (
         <IOSBottomNav

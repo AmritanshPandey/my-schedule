@@ -32,9 +32,7 @@ import IconButton from "@/components/ui/IconButton";
 import Input, { FORM_INPUT_CLASS, FORM_LABEL, Textarea } from "@/components/ui/Input";
 import TimeSlotPicker, { type EditableSlot } from "@/components/TimeSlotPicker";
 import { SECTION_ICONS } from "@/components/SectionIcons";
-import { IconPicker } from "@/components/ui/IconPicker";
-import { PlanColorPicker } from "@/components/plan/planFormShared";
-import { accentStyles, colorFromIcon, resolveAccentColor, type AccentColor } from "@/lib/colorSystem";
+import { accentStyles } from "@/lib/colorSystem";
 import { resolveCategory } from "@/lib/categories";
 import { seedCategoryIdFromIcon } from "@/lib/scheduleNormalize";
 import { haptic } from "@/lib/haptics";
@@ -214,9 +212,6 @@ export function TaskSheet({
   // ── Form state ─────────────────────────────────────────────────────────────
   const [planId, setPlanId] = useState("");
   const [categoryId, setCategoryId] = useState("");
-  // Mirrors `colorTouched`: once the user picks a category, changing the icon
-  // must not silently re-file the task.
-  const [categoryTouched, setCategoryTouched] = useState(false);
   const [expandSheetOpen, setExpandSheetOpen] = useState(false);
   const [taskType, setTaskType] = useState<TaskTypeValue>("task");
   const [title, setTitle] = useState("");
@@ -235,16 +230,19 @@ export function TaskSheet({
   const [duplicateDays, setDuplicateDays] = useState<DayKey[]>([]);
   const [editScope, setEditScope] = useState<"all" | "occurrence">("all");
   // Recurrence: weekly (every matching weekday), interval (every N weeks), or once (single date).
-  // Identity: each task owns its icon and colour. Colour follows the icon
-  // (colorFromIcon) until the user picks one explicitly — then it sticks.
-  const [icon, setIcon] = useState<string>("star");
-  const [color, setColor] = useState<AccentColor>(() => colorFromIcon("star"));
-  const [colorTouched, setColorTouched] = useState(false);
   const [repeatMode, setRepeatMode] = useState<"weekly" | "interval" | "once">("weekly");
   const [intervalWeeks, setIntervalWeeks] = useState(2);
   const [onceDate, setOnceDate] = useState("");
 
   const titleRef = useRef<HTMLInputElement>(null);
+
+  // Identity is the category's, not the task's. `Task.icon`/`Task.color` are
+  // still written so every existing reader (the wallpaper, colour fallbacks,
+  // legacy records) keeps working — they just mirror the category now instead
+  // of being separately editable.
+  const selectedCategory = resolveCategory(categories, categoryId);
+  const icon = selectedCategory.icon;
+  const color = selectedCategory.color;
 
   // Anchor for "every N weeks" + default date for a one-off: the viewed date, else today.
   const baseDateISO = occurrenceDateISO || localISODate(new Date());
@@ -278,7 +276,6 @@ export function TaskSheet({
       // resolveCategory, not a raw read: a task whose category was deleted still
       // opens on a real chip rather than none selected.
       setCategoryId(resolveCategory(categories, task.categoryId, task.icon).id);
-      setCategoryTouched(true);
       setTaskType(task.taskType ?? "task");
       setTitle(task.title);
       setDescription(task.description ?? "");
@@ -305,14 +302,6 @@ export function TaskSheet({
       setSameEveryDay(uniform);
       setEditDay(startDay);
       setRepeatDays(selectedDays);
-      // Existing tasks keep whatever identity they were saved with. Treat a
-      // stored colour that already matches its icon as "not overridden", so
-      // changing the icon still re-derives the colour.
-      const savedIcon = task.icon || "star";
-      const savedColor = resolveAccentColor(task.color, savedIcon);
-      setIcon(savedIcon);
-      setColor(savedColor);
-      setColorTouched(savedColor !== colorFromIcon(savedIcon));
       // Load per-task subtasks; fall back to plan template for tasks created before this fix
       const taskSubtasks = task.subtasks ?? linkedPlan?.items ?? [];
       setSubtasks(taskSubtasks.map(entryToSubtaskDraft));
@@ -332,14 +321,10 @@ export function TaskSheet({
       setEditDay(clickedDay);
       setRepeatDays([clickedDay]);
       setSubtasks([]);
-      // New tasks start from the parent plan's icon, with the colour derived
-      // from it — so a fresh task is never colourless, and never a rainbow.
+      // Seed the category from the parent plan's icon, so a fresh task lands in
+      // a sensible bucket rather than always the first one.
       const seedIcon = plans.find((p) => p.id === pid)?.emoji || "star";
-      setIcon(seedIcon);
-      setColor(colorFromIcon(seedIcon));
-      setColorTouched(false);
       setCategoryId(resolveCategory(categories, seedCategoryIdFromIcon(seedIcon), seedIcon).id);
-      setCategoryTouched(false);
       setRepeatMode("weekly");
       setIntervalWeeks(2);
       setOnceDate(baseDateISO);
@@ -370,20 +355,6 @@ export function TaskSheet({
   function handleSelectPlan(plan: Plan) {
     setPlanId(plan.id);
     if (mode === "create") setSubtasks([]);
-  }
-
-  /** Picking an icon re-derives the colour unless the user has set one. */
-  function handleSelectIcon(name: string) {
-    setIcon(name);
-    if (!colorTouched) setColor(colorFromIcon(name));
-    // Same rule as colour: the icon seeds the category until the user overrides
-    // it, then it stops moving.
-    if (!categoryTouched) setCategoryId(resolveCategory(categories, seedCategoryIdFromIcon(name), name).id);
-  }
-
-  function handleSelectColor(next: AccentColor) {
-    setColor(next);
-    setColorTouched(true);
   }
 
   // ── Subtask management ─────────────────────────────────────────────────────
@@ -791,7 +762,7 @@ export function TaskSheet({
                           key={category.id}
                           type="button"
                           aria-pressed={selected}
-                          onClick={() => { setCategoryId(category.id); setCategoryTouched(true); }}
+                          onClick={() => setCategoryId(category.id)}
                           className={`flex h-10 shrink-0 items-center gap-1.5 rounded-full border px-3 text-[13px] font-semibold transition-colors ${
                             selected
                               ? `${chip.tint} ${chip.text} ${chip.border}`
@@ -841,22 +812,11 @@ export function TaskSheet({
                 aria-invalid={title.length > 0 && title.trim().length === 0}
               />
 
-              {/* Identity — icon drives the colour, colour can be overridden.
-                  Hidden in occurrence scope: identity belongs to the template,
-                  not to a single date's override. Also hidden for commitments,
-                  which render neutral and carry no identity of their own. */}
-              {!isOccurrenceScope && !isCommitment && (
-                <div>
-                  <IconPicker
-                    value={icon}
-                    onChange={handleSelectIcon}
-                    labelClassName={FORM_LABEL}
-                  />
-                  <div className="mt-4">
-                    <PlanColorPicker value={color} onChange={handleSelectColor} />
-                  </div>
-                </div>
-              )}
+              {/* Identity lives on the category now. A task used to carry its
+                  own icon and colour *and* sit in a category that carried both
+                  as well — two answers to one question, and the timeline and the
+                  donut disagreed as a result. The category is the single source;
+                  edit it from the ＋ chip above or Settings → Categories. */}
 
               {/* Description */}
               <Textarea

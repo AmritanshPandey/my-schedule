@@ -31,6 +31,8 @@ import { isTaskScheduledOn, resolveOccurrence } from "../taskOccurrence";
 import { minutesToDisplayTime } from "./dragTimeUtils";
 import { crossesMidnight, slotInterval } from "./overnight";
 
+const DAY_MINUTES = 24 * 60;
+
 /** Where a carried occurrence came from — always the previous day. */
 export interface CarriedFrom {
   dateISO: string;
@@ -81,7 +83,11 @@ export function carriedOccurrences(
       if (!interval || !crossesMidnight(interval)) return;
       carried.push({
         ...occurrence,
-        startTime: "12:00 AM",
+        // Where the tail actually begins, which is midnight only for a block
+        // that started before it. A 1 AM block authored yesterday resolves to
+        // [1500, 1560) — its tail starts at 1 AM, and hardcoding midnight here
+        // drew it an hour too long.
+        startTime: minutesToDisplayTime(Math.max(interval.start, DAY_MINUTES)),
         endTime: minutesToDisplayTime(interval.end),
         // A carried entry is always one block: the tail of a single phase.
         slots: undefined,

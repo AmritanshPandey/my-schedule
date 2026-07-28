@@ -13,7 +13,8 @@ import { addDaysToISO, localISODate, todayISO } from "@/lib/dateUtils";
 import { previousDayKey } from "@/lib/scheduleConstants";
 import { carriedOccurrences, isCarriedOver, viewKey, type DayViewTask } from "@/lib/timeline/carryOver";
 import { currentMinutes, parseTimeToMinutes } from "@/lib/timeUtils";
-import { categoryHex, resolveAccentColor } from "@/lib/colorSystem";
+import { categoryHex } from "@/lib/colorSystem";
+import { resolveCategory } from "@/lib/categories";
 import { haptic } from "@/lib/haptics";
 import {
   DRAG_DEFAULT_DURATION,
@@ -612,7 +613,7 @@ export function WeekGrid({
               return (
                 <div key={day} className="flex flex-col gap-1 border-r border-neutral-100 p-1.5 last:border-r-0 dark:border-white/[0.06]">
                   {untimed.map((task) => {
-                    const hex = categoryHex(resolveAccentColor(task.color, task.icon));
+                    const hex = categoryHex(resolveCategory(schedule.categories, task.categoryId, task.icon).color);
                     const linkedPlan = task.planId ? plansById.get(task.planId) ?? null : null;
                     const state = resolveTaskState(task, getTaskSubtaskSummary(task, linkedPlan).totalCount);
                     const done = state === "completed";

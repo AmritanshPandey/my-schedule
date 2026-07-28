@@ -1,10 +1,12 @@
 "use client";
 
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 import { IconChartPie } from "@tabler/icons-react";
 import type { Category, DayKey, Task } from "@/lib/useScheduleDB";
 import { categoryHex } from "@/lib/colorSystem";
 import { CARD } from "@/components/ui/surfaces";
+import { DAYS, DAY_LABELS, previousDayKey } from "@/lib/scheduleConstants";
+import { addDaysToISO, weekdayOfISO } from "@/lib/dateUtils";
 import {
   buildDayBreakdown,
   donutSegments,
@@ -17,13 +19,14 @@ const RADIUS = (SIZE - STROKE) / 2;
 const CIRCUMFERENCE = 2 * Math.PI * RADIUS;
 
 interface DayBreakdownCardProps {
-  tasks: readonly Task[];
-  /** The previous weekday's tasks — supplies overnight carry-in (e.g. sleep). */
-  previousTasks: readonly Task[];
+  /**
+   * Every weekday's tasks. The card picks the day itself, and needs the
+   * neighbouring bucket anyway to pull in overnight carry-in (e.g. sleep).
+   */
+  activities: Partial<Record<DayKey, readonly Task[]>>;
   categories: readonly Category[];
-  dateISO: string;
-  /** Only used for the empty-state copy. */
-  dayKey?: DayKey;
+  /** Today's date — the default selection and the anchor for the weekday strip. */
+  todayISO: string;
 }
 
 /**
@@ -35,10 +38,34 @@ interface DayBreakdownCardProps {
  * the chart answers "how much of my day is committed" and "to what" at once.
  * Hand-rolled SVG — the project has no charting dependency and this needs none.
  */
-export default function DayBreakdownCard({ tasks, previousTasks, categories, dateISO }: DayBreakdownCardProps) {
+export default function DayBreakdownCard({ activities, categories, todayISO }: DayBreakdownCardProps) {
+  const todayKey = weekdayOfISO(todayISO);
+  const [day, setDay] = useState<DayKey>(todayKey);
+  const isToday = day === todayKey;
+
+  // The date of the selected weekday in the week containing today. Recurrence
+  // and per-date exceptions are date-driven, so the breakdown needs a real date
+  // rather than just a weekday bucket.
+  const dateISO = useMemo(
+    () => addDaysToISO(todayISO, DAYS.indexOf(day) - DAYS.indexOf(todayKey)),
+    [todayISO, day, todayKey],
+  );
+
+  // "Saturday", not the two-letter chip label — this reads in a sentence.
+  const dayName = useMemo(
+    () => new Date(dateISO + "T00:00:00").toLocaleDateString(undefined, { weekday: "long" }),
+    [dateISO],
+  );
+
   const { slices, totalMinutes } = useMemo(
-    () => buildDayBreakdown({ dateISO, tasks, previousTasks, categories }),
-    [tasks, previousTasks, categories, dateISO],
+    () =>
+      buildDayBreakdown({
+        dateISO,
+        tasks: activities[day] ?? [],
+        previousTasks: activities[previousDayKey(day)] ?? [],
+        categories,
+      }),
+    [activities, day, categories, dateISO],
   );
   const segments = useMemo(
     () => donutSegments(slices, totalMinutes, CIRCUMFERENCE),
@@ -59,9 +86,38 @@ export default function DayBreakdownCard({ tasks, previousTasks, categories, dat
         )}
       </div>
 
+      {/* Day filter. Horizontally scrollable so seven chips never wrap on a
+          narrow phone; the selected day carries the label, so the readout below
+          is never ambiguous about which day it describes. */}
+      <div className="-mx-1 mb-3 flex gap-1 overflow-x-auto px-1 pb-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+        {DAYS.map((d) => {
+          const selected = d === day;
+          return (
+            <button
+              key={d}
+              type="button"
+              onClick={() => setDay(d)}
+              aria-pressed={selected}
+              className={`h-7 shrink-0 rounded-full px-2.5 text-[11px] font-bold transition-colors ${
+                selected
+                  ? "bg-neutral-900 text-white dark:bg-white dark:text-neutral-950"
+                  : "bg-neutral-100 text-neutral-500 hover:bg-neutral-200 dark:bg-white/[0.06] dark:text-neutral-400 dark:hover:bg-white/[0.1]"
+              }`}
+            >
+              {DAY_LABELS[d]}
+              {d === todayKey && !selected && (
+                <span className="ml-1 inline-block h-1 w-1 rounded-full bg-green-500 align-middle" />
+              )}
+            </button>
+          );
+        })}
+      </div>
+
       {totalMinutes === 0 ? (
         <div className="rounded-xl border border-dashed border-neutral-200 px-4 py-8 text-center dark:border-white/[0.09]">
-          <p className="text-[15px] font-bold text-neutral-950 dark:text-white">Nothing scheduled today</p>
+          <p className="text-[15px] font-bold text-neutral-950 dark:text-white">
+            Nothing scheduled {isToday ? "today" : `on ${dayName}`}
+          </p>
           <p className="mt-1 text-[12px] text-neutral-500 dark:text-neutral-400">
             Block some time and this shows how it splits.
           </p>
@@ -75,7 +131,7 @@ export default function DayBreakdownCard({ tasks, previousTasks, categories, dat
               height={SIZE}
               viewBox={`0 0 ${SIZE} ${SIZE}`}
               role="img"
-              aria-label={`Scheduled time today: ${slices
+              aria-label={`Scheduled time on ${dayName}: ${slices
                 .map((s) => `${s.label} ${formatMinutesCompact(s.minutes)}`)
                 .join(", ")}`}
               /* -90deg so the first arc starts at 12 o'clock. */

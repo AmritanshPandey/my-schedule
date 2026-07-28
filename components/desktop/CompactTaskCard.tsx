@@ -2,26 +2,28 @@
 
 import { IconEdit, IconMinus } from "@tabler/icons-react";
 import CheckDraw from "@/components/ui/CheckDraw";
-import type { Plan, Task } from "@/lib/useScheduleDB";
-import { accentStyles, resolveAccentColor } from "@/lib/colorSystem";
+import type { Category, Plan, Task } from "@/lib/useScheduleDB";
+import { accentStyles } from "@/lib/colorSystem";
+import { resolveCategory } from "@/lib/categories";
 import { getTaskCheckableItems, getTaskSubtaskSummary, resolveTaskState } from "@/lib/taskCompletion";
 
 interface CompactTaskCardProps {
   task: Task;
   plan: Plan | null;
+  /** Colour comes from the task's category, matching the timeline and donut. */
+  categories?: readonly Category[];
   readOnly?: boolean;
   onToggleComplete: (taskId: string, allSubtaskIds: string[]) => void;
   onEdit: (task: Task) => void;
 }
 
-export function CompactTaskCard({ task, plan, readOnly = false, onToggleComplete, onEdit }: CompactTaskCardProps) {
+export function CompactTaskCard({ task, plan, categories, readOnly = false, onToggleComplete, onEdit }: CompactTaskCardProps) {
   const allSubtaskIds = getTaskCheckableItems(task, plan).map((s) => s.id);
   const taskState = resolveTaskState(task, getTaskSubtaskSummary(task, plan).totalCount);
   const done = taskState === "completed";
   const partial = taskState === "partial";
-  // Colour comes from the task itself (icon-derived, user-overridable) — the
-  // plan no longer carries a hue.
-  const accent = accentStyles(resolveAccentColor(task.color, task.icon));
+  // Category-derived, so this dot matches the block on the timeline.
+  const accent = accentStyles(resolveCategory(categories ?? [], task.categoryId, task.icon).color);
 
   return (
     <div

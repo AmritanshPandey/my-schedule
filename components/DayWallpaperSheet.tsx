@@ -73,12 +73,9 @@ export default function DayWallpaperSheet({ open, onClose, schedule, todayKey }:
         id: `task:${task.id}`,
         time,
         title: occ.title,
-        // A commitment has no icon of its own (the task sheet hides that
-        // control), so it used to fall through to a generic star. Its category
-        // is its identity — use that icon.
-        iconName: isTrackedTask(task)
-          ? task.icon || "star"
-          : resolveCategory(schedule.categories ?? [], task.categoryId, task.icon).icon,
+        // Tasks no longer carry an icon of their own — the category owns it, so
+        // the lock screen, the timeline and the donut all agree.
+        iconName: resolveCategory(schedule.categories ?? [], task.categoryId, task.icon).icon,
         iconSvg: null,
         done: !!task.completed,
         // Sort in schedule-day space, so a 12:30 AM block sorts to the end of
@@ -159,11 +156,9 @@ export default function DayWallpaperSheet({ open, onClose, schedule, todayKey }:
 
       if (cancelled) return;
       const { width, height } = wallpaperSize();
-      const dateLabel = new Date().toLocaleDateString("en-US", {
-        weekday: "long",
-        month: "short",
-        day: "numeric",
-      }).replace(",", " ·");
+      // Weekday only — the calendar date is already on the lock screen, and
+      // repeating it just competes with the clock for attention.
+      const dateLabel = new Date().toLocaleDateString("en-US", { weekday: "long" });
       renderDayWallpaper(canvasEl, { width, height, items, icons, background, dateLabel });
     })();
 

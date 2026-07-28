@@ -66,6 +66,8 @@ const { carriedOccurrences, viewKey, isCarriedOver } = await import("../lib/time
 const { buildDayBreakdown, taskScheduledMinutes, donutSegments } =
   await import("../lib/dayBreakdown.ts");
 const { calculateExecutionStreak } = await import("../lib/consistency/calculateExecutionStreak.ts");
+const { buildWeekHeatmap, planWeekRate } = await import("../lib/consistency/weekHeatmap.ts");
+const { validateTaskTime } = await import("../lib/scheduleRules.ts");
 const { localISODate, addDaysToISO, weekdayOfISO } = await import("../lib/dateUtils.ts");
 const { seedCategoryIdFromIcon } = await import("../lib/scheduleNormalize.ts");
 const { resolveCategory, normalizeCategories, seedCategories, countTasksInCategory } =
@@ -1552,6 +1554,60 @@ test("buildDayBreakdown groups by category, not by plan", () => {
   assert.ok(!slices.some((s) => s.label === "Held time"), "held time no longer exists");
 });
 
+test("overlapping blocks count each minute once, not once per block", () => {
+  const today = localISODate(new Date());
+  // The realistic shape that broke this: a wide "office hours" commitment with
+  // real work scheduled *inside* it. Summing durations reported 9h + 3h + 1h =
+  // 13h of a day the user was only busy for 9.
+  const tasks = [
+    bdTask({ id: "office", taskType: "commitment", categoryId: "cat-work", startTime: "9:00 AM", endTime: "6:00 PM" }),
+    bdTask({ id: "deep", categoryId: "cat-work", startTime: "9:00 AM", endTime: "12:00 PM" }),
+    bdTask({ id: "mtg", categoryId: "cat-work", startTime: "2:00 PM", endTime: "3:00 PM" }),
+  ];
+
+  const { slices, totalMinutes } = buildDayBreakdown({
+    dateISO: today, tasks, previousTasks: [], categories: bdCats(),
+  });
+
+  assert.equal(totalMinutes, 540, "9:00 AM–6:00 PM is nine hours of wall clock");
+  assert.deepEqual(slices.map((s) => [s.id, s.minutes]), [["cat-work", 540]]);
+});
+
+test("a nested block is attributed to the more specific category", () => {
+  const today = localISODate(new Date());
+  // A gym hour sitting inside a broad work block belongs to Routine — the
+  // shorter span is the more specific claim on those minutes.
+  const tasks = [
+    bdTask({ id: "office", taskType: "commitment", categoryId: "cat-work", startTime: "9:00 AM", endTime: "5:00 PM" }),
+    bdTask({ id: "gym", categoryId: "cat-routine", startTime: "12:00 PM", endTime: "1:00 PM" }),
+  ];
+
+  const { slices, totalMinutes } = buildDayBreakdown({
+    dateISO: today, tasks, previousTasks: [], categories: bdCats(),
+  });
+
+  assert.equal(totalMinutes, 480, "still eight hours total, not nine");
+  assert.deepEqual(
+    slices.map((s) => [s.id, s.minutes]),
+    [["cat-work", 420], ["cat-routine", 60]],
+    "the gym hour is carved out of work, not added on top",
+  );
+});
+
+test("a day's breakdown can never exceed 24 hours", () => {
+  const today = localISODate(new Date());
+  // Eight overlapping all-day blocks: the old sum would report 192 hours.
+  const tasks = Array.from({ length: 8 }, (_, i) =>
+    bdTask({ id: `t${i}`, categoryId: "cat-work", startTime: "12:00 AM", endTime: "11:59 PM" }),
+  );
+
+  const { totalMinutes } = buildDayBreakdown({
+    dateISO: today, tasks, previousTasks: [], categories: bdCats(),
+  });
+
+  assert.ok(totalMinutes <= 24 * 60, `expected <= 1440, got ${totalMinutes}`);
+});
+
 test("an overnight task splits its minutes across the two days it touches", () => {
   const monday = "2026-07-27";   // a Monday
   const tuesday = "2026-07-28";
@@ -1682,4 +1738,202 @@ test("a commitment keeps its empty planId through normalization", () => {
   const orphan = { ...held, taskType: "task" };
   const [rescued] = normalizeTasks([orphan], "plan-work");
   assert.equal(rescued.planId, "plan-work");
+});
+
+// ── Week heatmap ─────────────────────────────────────────────────────────────
+// The grid answers "of the time you blocked in this hour, how much got done".
+// Completion is credited to the *scheduled* hour, never to the event timestamp:
+// back-dated ticks are stamped at noon and a live tick records when the box was
+// checked, not when the work happened.
+
+const MON = "2026-07-27";   // a Monday
+const TUE = "2026-07-28";
+const WED = "2026-07-29";
+const THU = "2026-07-30";
+
+const emptyWeek = () => Object.fromEntries(DAYS.map((d) => [d, []]));
+const whTask = (over) => ({
+  id: "t1", title: "Task", icon: "book", color: "amber", planId: "p1",
+  startTime: "9:00 AM", endTime: "10:00 AM", ...over,
+});
+const doneOn = (dateISO) => [{
+  id: "e1", taskId: "t1", completedAt: new Date(`${dateISO}T12:00:00`).toISOString(),
+  completionType: "task",
+}];
+const cellAt = (week, dayKey, hour) => week.cells.find((c) => c.dayKey === dayKey && c.hour === hour);
+
+test("a completed past hour reads as done, and drives avgRate", () => {
+  const activities = emptyWeek();
+  activities.tuesday = [whTask({ completionHistory: doneOn(TUE) })];
+
+  const week = buildWeekHeatmap({ activities, todayISO: WED, nowMinutes: 12 * 60 });
+
+  assert.deepEqual(week.hours, [9], "only hours with something scheduled become rows");
+  assert.equal(week.cells.length, 1);
+  assert.deepEqual(
+    (({ dayKey, hour, scheduledMinutes, completedMinutes, state }) =>
+      ({ dayKey, hour, scheduledMinutes, completedMinutes, state }))(week.cells[0]),
+    { dayKey: "tuesday", hour: 9, scheduledMinutes: 60, completedMinutes: 60, state: "done" },
+  );
+  assert.equal(week.avgRate, 100);
+  assert.equal(week.totalScheduledMinutes, 60);
+});
+
+test("the same hour left undone reads as missed", () => {
+  const activities = emptyWeek();
+  activities.tuesday = [whTask({})];
+
+  const week = buildWeekHeatmap({ activities, todayISO: WED, nowMinutes: 12 * 60 });
+
+  assert.equal(cellAt(week, "tuesday", 9).state, "missed");
+  assert.equal(week.avgRate, 0);
+});
+
+test("an hour that hasn't happened yet is upcoming, not missed", () => {
+  const activities = emptyWeek();
+  activities.thursday = [whTask({})];
+
+  const week = buildWeekHeatmap({ activities, todayISO: WED, nowMinutes: 12 * 60 });
+  const cell = cellAt(week, "thursday", 9);
+
+  assert.equal(cell.state, "upcoming");
+  assert.equal(cell.completedMinutes, 0);
+  assert.equal(week.totalScheduledMinutes, 60, "still counts toward the week's commitment");
+  assert.equal(week.scheduledMinutes, 0, "but not toward the score");
+  assert.equal(week.avgRate, 0);
+});
+
+test("today splits at the current hour: elapsed is scored, ahead is upcoming", () => {
+  const activities = emptyWeek();
+  activities.tuesday = [
+    whTask({ id: "early", startTime: "8:00 AM", endTime: "9:00 AM" }),
+    whTask({ id: "later", startTime: "11:00 AM", endTime: "12:00 PM" }),
+  ];
+
+  // 10:30 — the 8am hour is over, the 11am hour hasn't started.
+  const week = buildWeekHeatmap({ activities, todayISO: TUE, nowMinutes: 10 * 60 + 30 });
+
+  assert.equal(cellAt(week, "tuesday", 8).state, "missed");
+  assert.equal(cellAt(week, "tuesday", 11).state, "upcoming");
+});
+
+test("an hour still in progress is never reported as missed", () => {
+  const activities = emptyWeek();
+  activities.tuesday = [whTask({ startTime: "9:00 AM", endTime: "10:00 AM" })];
+
+  // 9:30 — halfway through the block. Scoring it now would call work-in-progress
+  // a failure, so the hour stays upcoming until it has fully passed.
+  const week = buildWeekHeatmap({ activities, todayISO: TUE, nowMinutes: 9 * 60 + 30 });
+
+  assert.equal(cellAt(week, "tuesday", 9).state, "upcoming");
+});
+
+test("a 1 AM block lands on hour row 1 of the next day, not row 25", () => {
+  const activities = emptyWeek();
+  // Authored on Monday, but 1 AM is past midnight — the app's 4 AM day boundary
+  // means slotInterval returns [1500, 1560). Bucketing that naively would put it
+  // in hour 25 and off the end of a 24-row grid.
+  activities.monday = [whTask({ startTime: "1:00 AM", endTime: "2:00 AM" })];
+
+  const week = buildWeekHeatmap({ activities, todayISO: THU, nowMinutes: 23 * 60 });
+
+  assert.deepEqual(week.hours, [1]);
+  assert.equal(cellAt(week, "monday", 1), undefined, "not on the authoring day");
+  assert.equal(cellAt(week, "tuesday", 1).scheduledMinutes, 60, "on the calendar day it runs");
+});
+
+test("an overnight block splits across both days it touches", () => {
+  const activities = emptyWeek();
+  activities.monday = [whTask({ startTime: "11:00 PM", endTime: "7:00 AM" })];
+
+  const week = buildWeekHeatmap({ activities, todayISO: THU, nowMinutes: 23 * 60 });
+
+  assert.equal(cellAt(week, "monday", 23).scheduledMinutes, 60, "the hour before midnight");
+  for (let h = 0; h < 7; h++) {
+    assert.equal(cellAt(week, "tuesday", h).scheduledMinutes, 60, `tuesday hour ${h}`);
+  }
+  assert.equal(cellAt(week, "tuesday", 7), undefined, "ends at 7am");
+  assert.equal(week.totalScheduledMinutes, 8 * 60, "eight hours, counted once");
+});
+
+test("commitments never enter the grid", () => {
+  const activities = emptyWeek();
+  activities.tuesday = [whTask({ taskType: "commitment" })];
+
+  const week = buildWeekHeatmap({ activities, todayISO: WED, nowMinutes: 12 * 60 });
+
+  assert.equal(week.cells.length, 0);
+  assert.equal(week.totalScheduledMinutes, 0, "held time is not something you can fail");
+});
+
+test("a half-done multi-slot task credits only the finished slot", () => {
+  const activities = emptyWeek();
+  activities.tuesday = [whTask({
+    startTime: "9:00 AM", endTime: "10:00 AM",
+    slots: [
+      { startTime: "9:00 AM", endTime: "10:00 AM" },
+      { startTime: "2:00 PM", endTime: "3:00 PM" },
+    ],
+    completedSlotIndices: [0],
+  })];
+
+  const week = buildWeekHeatmap({ activities, todayISO: TUE, nowMinutes: 23 * 60 });
+
+  assert.equal(cellAt(week, "tuesday", 9).state, "done");
+  assert.equal(cellAt(week, "tuesday", 14).state, "missed");
+  assert.equal(week.avgRate, 50, "one of two scheduled hours");
+});
+
+test("overlapping blocks in one hour are counted once", () => {
+  const activities = emptyWeek();
+  activities.tuesday = [
+    whTask({ id: "wide", startTime: "9:00 AM", endTime: "11:00 AM" }),
+    whTask({ id: "inner", startTime: "9:00 AM", endTime: "10:00 AM" }),
+  ];
+
+  const week = buildWeekHeatmap({ activities, todayISO: WED, nowMinutes: 12 * 60 });
+
+  assert.equal(cellAt(week, "tuesday", 9).scheduledMinutes, 60, "an hour holds 60 minutes, not 120");
+  assert.equal(week.totalScheduledMinutes, 120);
+});
+
+test("planWeekRate scores one plan and reports the whole week's hours", () => {
+  const activities = emptyWeek();
+  activities.tuesday = [
+    whTask({ id: "a", planId: "p1", startTime: "9:00 AM", endTime: "10:00 AM", completionHistory: doneOn(TUE) }),
+    whTask({ id: "b", planId: "p2", startTime: "1:00 PM", endTime: "2:00 PM" }),
+  ];
+  activities.thursday = [whTask({ id: "c", planId: "p1", startTime: "9:00 AM", endTime: "10:00 AM" })];
+
+  const p1 = planWeekRate(activities, "p1", WED, 12 * 60);
+  const p2 = planWeekRate(activities, "p2", WED, 12 * 60);
+
+  assert.equal(p1.scheduledMinutes, 120, "Tuesday plus the still-upcoming Thursday");
+  assert.equal(p1.rate, 100, "scored on the elapsed hour only");
+  assert.equal(p2.rate, 0, "a different plan's miss doesn't touch p1");
+});
+
+// ── Overnight tasks are valid data ───────────────────────────────────────────
+// The 4 AM timeline ceiling is a *drawing* limit, not a scheduling one. Enforcing
+// it in validation rejected Sleep 10 PM–5:45 AM while allowing the same block if
+// it ended at 3:59 AM, and contradicted the carry-over rendering and the donut's
+// midnight split, both of which handle these blocks.
+
+const vTask = (startTime, endTime) => ({ title: "Sleep", day: "monday", startTime, endTime });
+
+test("an overnight task may end after 4 AM", () => {
+  assert.equal(validateTaskTime(vTask("10:00 PM", "5:45 AM")), null, "the reported case");
+  assert.equal(validateTaskTime(vTask("11:00 PM", "7:00 AM")), null, "the Sleep block the app already renders");
+  assert.equal(validateTaskTime(vTask("11:00 PM", "3:00 AM")), null, "and the case that always passed");
+});
+
+test("duration, not the clock, is what bounds a block", () => {
+  // 16h is the cap: 6 AM → 10 PM is exactly at it, one more hour is over.
+  assert.equal(validateTaskTime(vTask("6:00 AM", "10:00 PM")), null);
+
+  const tooLong = validateTaskTime(vTask("5:00 AM", "10:00 PM"));
+  assert.equal(tooLong?.code, "too-long");
+
+  const tooShort = validateTaskTime(vTask("9:00 AM", "9:03 AM"));
+  assert.equal(tooShort?.code, "too-short");
 });
