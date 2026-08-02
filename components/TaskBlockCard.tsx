@@ -140,8 +140,8 @@ export function TaskBlockCard({
   }
 
   // The checkbox (or, for held time, the lock marker) — exactly one of the two.
-  // List cards render it beside the title so the control sits with the thing it
-  // completes; grid blocks are too tight for that and keep it in the top-right.
+  // Rendered beside the title in every variant so the control always sits with
+  // the thing it completes, rather than drifting to the far corner of the card.
   const statusControl =
     !isMultiSlotList && tracked ? (
       <button
@@ -196,14 +196,10 @@ export function TaskBlockCard({
             {plan!.title}
           </span>
         )}
-        {isList ? (
-          <div className="flex min-w-0 items-center gap-2.5">
-            {statusControl}
-            {title}
-          </div>
-        ) : (
-          title
-        )}
+        <div className={`flex min-w-0 items-center ${isList ? "gap-2.5" : "gap-1.5"}`}>
+          {statusControl}
+          {title}
+        </div>
         {subtaskPill?.hasItems && (
           <button
             type="button"
@@ -220,7 +216,6 @@ export function TaskBlockCard({
 
       <div className={`flex shrink-0 items-center ${isList ? "gap-2" : "gap-1"}`}>
         {trailing}
-        {!isList && statusControl}
       </div>
     </div>
   );
