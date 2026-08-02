@@ -56,14 +56,14 @@ function TaskStatusButton({
       aria-label={done ? "Mark not done" : "Mark done"}
       aria-pressed={done}
       onClick={onClick}
-      className={`grid h-9 w-9 shrink-0 place-items-center rounded-lg border-2 transition-colors ${
-        done ? "border-emerald-500 bg-emerald-500"
-        : missed ? "border-rose-500 bg-rose-500"
-        : "border-emerald-600/70 bg-transparent hover:border-emerald-600 dark:border-emerald-500/55"
+      className={`tap-target grid h-7 w-7 shrink-0 place-items-center rounded-lg border-2 transition-colors active:scale-95 ${
+        done ? "border-transparent bg-emerald-500"
+        : missed ? "border-transparent bg-rose-500"
+        : "border-neutral-500 bg-transparent hover:border-neutral-600 dark:border-white/[0.30] dark:hover:border-white/50"
       }`}
     >
-      <CheckDraw visible={done} size={17} strokeWidth={3} className="text-white" />
-      {missed && <IconX size={17} strokeWidth={3} className="text-white" />}
+      <CheckDraw visible={done} size={15} strokeWidth={3} className="text-white" />
+      {missed && <IconX size={15} strokeWidth={3} className="text-white" />}
     </button>
   );
 }
@@ -85,23 +85,21 @@ export default function TodayTaskList({
   onOpenSubtasks,
 }: TodayTaskListProps) {
   return (
-    <section data-testid="overview-today-card" className={`${CARD} p-4`}>
-      <div className="mb-3 flex items-center justify-between gap-3">
-        <div className="flex min-w-0 items-center gap-1.5">
-          <IconChecklist size={15} strokeWidth={2} className="shrink-0 text-neutral-400 dark:text-neutral-500" />
-          <h2 className="truncate text-[13px] font-extrabold text-neutral-800 dark:text-neutral-200">
-            Today&apos;s Task
-          </h2>
+    <section data-testid="overview-today-card" className={`${CARD} px-4 pt-4 pb-1`}>
+      <div className="mb-1 flex items-center justify-between gap-3">
+        <div className="flex min-w-0 items-center gap-1.5 text-neutral-500 dark:text-neutral-400">
+          <IconChecklist size={15} strokeWidth={2} className="shrink-0" />
+          <h2 className="truncate text-[13px] font-bold">Today&apos;s Task</h2>
         </div>
-        <span className="shrink-0 rounded-full border border-neutral-200 bg-neutral-50 px-2 py-1 text-[11px] font-black tabular-nums text-neutral-500 dark:border-white/[0.10] dark:bg-white/[0.05] dark:text-neutral-400">
+        <span className="shrink-0 rounded-full border border-neutral-200/70 px-2 py-0.5 text-[12px] font-bold tabular-nums text-neutral-500 dark:border-white/[0.07] dark:text-neutral-400">
           {done}/{total}
         </span>
       </div>
 
       {tasks.length === 0 ? (
-        <div className="rounded-xl border border-dashed border-neutral-200 px-4 py-6 text-center dark:border-white/[0.10]">
-          <p className="text-[15px] font-black text-neutral-950 dark:text-white">No tasks scheduled</p>
-          <p className="mt-1 text-[12px] font-semibold text-neutral-500 dark:text-neutral-400">
+        <div className="mb-3 rounded-xl border border-dashed border-neutral-200 px-4 py-6 text-center dark:border-white/[0.10]">
+          <p className="text-[15px] font-bold text-neutral-950 dark:text-white">Nothing to check off today</p>
+          <p className="mt-1 text-[12px] font-medium text-neutral-500 dark:text-neutral-400">
             Add the first block from Today.
           </p>
         </div>
@@ -124,15 +122,15 @@ export default function TodayTaskList({
                 : new Set(task.completedSlotIndices ?? []).size
               : 0;
             return (
-              <div key={task.id} className="flex items-center gap-3 py-3 first:pt-1 last:pb-0">
+              <div key={task.id} className="flex items-center gap-3 py-3">
                 <TaskStatusButton
                   done={isDone}
                   missed={isMissed}
-                  onClick={() => { haptic("light"); onMarkDone(task.id, taskCheckableIds(task)); }}
+                  onClick={() => { haptic("medium"); onMarkDone(task.id, taskCheckableIds(task)); }}
                 />
                 <div className="min-w-0 flex-1">
                   <p
-                    className={`truncate text-[15px] font-black leading-tight ${
+                    className={`truncate text-[15px] font-bold leading-tight ${
                       isDone ? "text-neutral-400 line-through dark:text-neutral-600"
                       : isMissed ? "text-neutral-400 line-through decoration-rose-400 dark:text-neutral-600"
                       : "text-neutral-950 dark:text-white"
@@ -141,11 +139,16 @@ export default function TodayTaskList({
                     {task.title}
                   </p>
                   {(task.startTime || plan) && (
-                    <p className="mt-1 truncate text-[12px] font-semibold text-neutral-500 dark:text-neutral-400">
-                      {isMultiSlot
-                        ? slots.map((s) => formatTaskTime(s.startTime)).join(" · ")
-                        : task.startTime && formatTaskTime(task.startTime)}
-                      {task.startTime && plan && " - "}
+                    <p className="mt-0.5 truncate text-[12px] font-medium text-neutral-500 dark:text-neutral-400">
+                      {/* Times are a set, so they join with a comma; the middot
+                          then separates the times from the plan without reading
+                          as one more time in the list. */}
+                      <span className="tabular-nums">
+                        {isMultiSlot
+                          ? slots.map((s) => formatTaskTime(s.startTime)).join(", ")
+                          : task.startTime && formatTaskTime(task.startTime)}
+                      </span>
+                      {task.startTime && plan && " · "}
                       {plan && plan.title}
                     </p>
                   )}
@@ -156,7 +159,7 @@ export default function TodayTaskList({
                     className="inline-flex min-h-[34px] shrink-0 items-center gap-1.5 rounded-full border border-neutral-200 px-2.5 text-neutral-500 dark:border-white/[0.10] dark:text-neutral-400"
                   >
                     <IconClock size={14} strokeWidth={2} className="shrink-0" />
-                    <span className="text-[12px] font-black tabular-nums">{slotsDone}/{slots.length}</span>
+                    <span className="text-[12px] font-bold tabular-nums">{slotsDone}/{slots.length}</span>
                   </span>
                 )}
                 {subTotal > 0 && onOpenSubtasks && (
@@ -167,7 +170,7 @@ export default function TodayTaskList({
                     className="inline-flex min-h-[34px] shrink-0 items-center gap-1.5 rounded-full border border-neutral-200 px-2.5 text-neutral-500 transition-colors hover:bg-neutral-50 dark:border-white/[0.10] dark:text-neutral-400 dark:hover:bg-white/[0.05]"
                   >
                     <IconListCheck size={14} strokeWidth={2} className="shrink-0" />
-                    <span className="text-[12px] font-black tabular-nums">{subDone}/{subTotal}</span>
+                    <span className="text-[12px] font-bold tabular-nums">{subDone}/{subTotal}</span>
                     <IconArrowUpRight size={13} strokeWidth={2.2} className="shrink-0" />
                   </button>
                 )}
