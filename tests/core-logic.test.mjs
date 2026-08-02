@@ -62,6 +62,9 @@ const { computeExecutionTrend, trendNarrative } = await import("../lib/execution
 const { getNowOnTimeline, mapMinutesToTimeline } = await import("../lib/timeline/displayWindow.ts");
 const { buildDayBreakdown, taskScheduledMinutes, donutSegments, HELD_TIME_ID } =
   await import("../lib/dayBreakdown.ts");
+const { selectTodayTasks } = await import("../lib/todayTasks.ts");
+const { CategoryRegistry } = await import("../lib/taskCategories.ts");
+const { taskIdentity, categoriesById } = await import("../lib/taskIdentity.ts");
 const { calculateExecutionStreak } = await import("../lib/consistency/calculateExecutionStreak.ts");
 const { localISODate, addDaysToISO } = await import("../lib/dateUtils.ts");
 const { parseTimeToMinutes, toScheduleDayMinutes } = await import("../lib/timeUtils.ts");
@@ -952,10 +955,9 @@ test("normalizeTasks round-trips a fully-populated task without losing a field",
     title: "Everything",
     startTime: "9:00 AM",
     endTime: "10:00 AM",
-    icon: "book",
-    color: "amber",
     planId: "plan-1",
     // every optional field, all set to something that must survive
+    categoryId: "cat-book",
     description: "a note",
     slots: [
       { startTime: "9:00 AM", endTime: "10:00 AM" },
@@ -1240,30 +1242,32 @@ test("taskScheduledMinutes sums every slot, including past midnight", () => {
   );
 });
 
-test("buildDayBreakdown groups by plan and pools commitments into held time", () => {
+test("buildDayBreakdown groups by category and pools commitments into held time", () => {
   const today = localISODate(new Date());
-  const plans = [
-    { id: "p-work", title: "Work", category: "work", emoji: "briefcase", color: "amber", items: [] },
-    { id: "p-gym", title: "Gym", category: "fitness", emoji: "run", color: "rose", items: [] },
+  const categories = [
+    { id: "cat-code", title: "Coding", icon: "code", color: "indigo" },
+    { id: "cat-barbell", title: "Workout", icon: "barbell", color: "orange" },
   ];
-  const t = (over) => ({ id: over.id, title: over.id, icon: "book", color: "amber", planId: over.planId ?? "", startTime: over.startTime, endTime: over.endTime, ...over });
+  const t = (over) => ({ id: over.id, title: over.id, planId: "p", startTime: over.startTime, endTime: over.endTime, ...over });
 
   const tasks = [
-    t({ id: "a", planId: "p-work", startTime: "9:00 AM", endTime: "11:00 AM" }),   // 120
-    t({ id: "b", planId: "p-work", startTime: "1:00 PM", endTime: "2:00 PM" }),    // 60  -> Work 180
-    t({ id: "c", planId: "p-gym", startTime: "7:00 AM", endTime: "8:00 AM" }),     // 60
-    t({ id: "d", planId: "", taskType: "commitment", startTime: "8:00 AM", endTime: "9:00 AM" }), // 60 held
-    t({ id: "e", planId: "ghost", startTime: "5:00 PM", endTime: "6:00 PM" }),     // dangling plan -> skipped
+    t({ id: "a", categoryId: "cat-code", startTime: "9:00 AM", endTime: "11:00 AM" }),   // 120
+    t({ id: "b", categoryId: "cat-code", startTime: "1:00 PM", endTime: "2:00 PM" }),    // 60  -> Coding 180
+    t({ id: "c", categoryId: "cat-barbell", startTime: "7:00 AM", endTime: "8:00 AM" }), // 60
+    t({ id: "d", categoryId: undefined, planId: "", taskType: "commitment", startTime: "8:00 AM", endTime: "9:00 AM" }), // 60 held
+    t({ id: "e", categoryId: "cat-ghost", startTime: "5:00 PM", endTime: "6:00 PM" }),   // deleted category -> skipped
+    t({ id: "f", startTime: "7:00 PM", endTime: "8:00 PM" }),                            // no category -> skipped
   ];
 
-  const { slices, totalMinutes } = buildDayBreakdown(tasks, plans, today);
-  assert.equal(totalMinutes, 300, "dangling-plan task is excluded");
+  const { slices, totalMinutes } = buildDayBreakdown(tasks, categories, today);
+  assert.equal(totalMinutes, 300, "dangling and uncategorised tasks are excluded");
   assert.deepEqual(
     slices.map((s) => [s.id, s.minutes, s.pct]),
-    [["p-work", 180, 60], ["p-gym", 60, 20], [HELD_TIME_ID, 60, 20]],
-    "largest first, held time pooled",
+    [["cat-code", 180, 60], [HELD_TIME_ID, 60, 20], ["cat-barbell", 60, 20]],
+    "largest first; equal slices break the tie on label (Held time < Workout)",
   );
-  assert.equal(slices[0].label, "Work");
+  assert.equal(slices[0].label, "Coding");
+  assert.equal(slices[0].color, "indigo", "wedge colour is the category's, so it matches the timeline");
   assert.equal(slices.find((s) => s.id === HELD_TIME_ID).label, "Held time");
   assert.equal(slices.find((s) => s.id === HELD_TIME_ID).color, null, "held time has no accent");
 });
@@ -1310,4 +1314,163 @@ test("a commitment keeps its empty planId through normalization", () => {
   const orphan = { ...held, taskType: "task" };
   const [rescued] = normalizeTasks([orphan], "plan-work");
   assert.equal(rescued.planId, "plan-work");
+});
+
+// ── selectTodayTasks (the shared Overview "Today's Task" selector) ──────────
+
+/** A schedule with every task in the given weekday bucket. */
+function scheduleWith(dayKey, tasks, plans = []) {
+  const activities = Object.fromEntries(DAYS.map((d) => [d, []]));
+  activities[dayKey] = tasks;
+  return { plans, activities, progressTrackers: [], metricEntries: [], milestones: [], rituals: [], strategies: [], ritualCompletions: [], notes: [], preferences: {} };
+}
+
+const todayKeyFor = (iso) => DAYS[(new Date(`${iso}T00:00:00`).getDay() + 6) % 7];
+
+test("selectTodayTasks applies per-date occurrence overrides", () => {
+  // Desktop never called resolveOccurrence, so a task retimed for a single date
+  // kept showing its template time on the dashboard.
+  const iso = localISODate(new Date());
+  const task = {
+    id: "t1", title: "Template title", startTime: "9:00 AM", endTime: "10:00 AM",
+    icon: "book", color: "amber", planId: "p",
+    exceptions: { [iso]: { startTime: "2:00 PM", endTime: "3:00 PM", title: "Override title" } },
+  };
+  const { tasks } = selectTodayTasks(scheduleWith(todayKeyFor(iso), [task]), iso, todayKeyFor(iso));
+  assert.equal(tasks.length, 1);
+  assert.equal(tasks[0].startTime, "2:00 PM", "override time wins");
+  assert.equal(tasks[0].title, "Override title", "override title wins");
+  assert.equal(tasks[0].id, "t1", "identity is preserved for completion callbacks");
+});
+
+test("selectTodayTasks excludes commitments so the list and the badge agree", () => {
+  // iOS rendered commitments but left them out of the count, so a 4-row list
+  // could show "0/3".
+  const iso = localISODate(new Date());
+  const base = { icon: "book", color: "amber", planId: "p", startTime: "9:00 AM", endTime: "10:00 AM" };
+  const tasksIn = [
+    { ...base, id: "work", title: "Work" },
+    { ...base, id: "commute", title: "Commute", planId: "", taskType: "commitment" },
+  ];
+  const { tasks, total } = selectTodayTasks(scheduleWith(todayKeyFor(iso), tasksIn), iso, todayKeyFor(iso));
+  assert.deepEqual(tasks.map((t) => t.id), ["work"], "commitment is not listed");
+  assert.equal(total, tasks.length, "badge denominator equals the row count");
+});
+
+test("selectTodayTasks sorts by the schedule day and honours sortOrder", () => {
+  const iso = localISODate(new Date());
+  const base = { icon: "book", color: "amber", planId: "p" };
+  const tasksIn = [
+    { ...base, id: "late", title: "Late", startTime: "11:00 PM", endTime: "11:30 PM" },
+    { ...base, id: "small-hours", title: "Small hours", startTime: "1:00 AM", endTime: "2:00 AM" },
+    { ...base, id: "morning", title: "Morning", startTime: "9:00 AM", endTime: "10:00 AM" },
+  ];
+  const { tasks } = selectTodayTasks(scheduleWith(todayKeyFor(iso), tasksIn), iso, todayKeyFor(iso));
+  assert.deepEqual(
+    tasks.map((t) => t.id),
+    ["morning", "late", "small-hours"],
+    "1 AM belongs to the end of the schedule day, not the start",
+  );
+
+  // Explicit ordering wins over the clock — desktop's old comparator ignored it.
+  const ordered = tasksIn.map((t, i) => ({ ...t, sortOrder: [2, 0, 1][i] }));
+  const { tasks: byOrder } = selectTodayTasks(scheduleWith(todayKeyFor(iso), ordered), iso, todayKeyFor(iso));
+  assert.deepEqual(byOrder.map((t) => t.id), ["small-hours", "morning", "late"]);
+});
+
+test("selectTodayTasks skips a skipped occurrence and counts completions", () => {
+  const iso = localISODate(new Date());
+  const base = { icon: "book", color: "amber", planId: "p", startTime: "9:00 AM", endTime: "10:00 AM" };
+  const tasksIn = [
+    { ...base, id: "done", title: "Done", completed: true },
+    { ...base, id: "open", title: "Open" },
+    { ...base, id: "skipped", title: "Skipped", exceptions: { [iso]: { skipped: true } } },
+  ];
+  const { tasks, done, total } = selectTodayTasks(scheduleWith(todayKeyFor(iso), tasksIn), iso, todayKeyFor(iso));
+  assert.deepEqual(tasks.map((t) => t.id), ["done", "open"], "skipped occurrence drops out");
+  assert.equal(done, 1);
+  assert.equal(total, 2);
+});
+
+// ── Category back-fill (the pre-categories upgrade path) ───────────────────
+
+test("normalizeTasks adopts a legacy icon+colour into a category", () => {
+  const registry = new CategoryRegistry();
+  const legacy = [
+    { id: "w1", title: "Lift", startTime: "6:00 AM", endTime: "7:00 AM", icon: "barbell", color: "orange", planId: "p" },
+    { id: "w2", title: "Lift again", startTime: "6:00 PM", endTime: "7:00 PM", icon: "barbell", color: "orange", planId: "p" },
+    // Minority colour on the same icon — the category takes the common one.
+    { id: "w3", title: "Odd one", startTime: "8:00 PM", endTime: "9:00 PM", icon: "barbell", color: "red", planId: "p" },
+    { id: "c1", title: "Study", startTime: "9:00 AM", endTime: "10:00 AM", icon: "school", color: "pink", planId: "p" },
+    // Commitments never adopt an identity — held time renders neutral.
+    { id: "h1", title: "Commute", startTime: "8:00 AM", endTime: "8:30 AM", icon: "car", color: "cyan", planId: "", taskType: "commitment" },
+  ];
+
+  const out = normalizeTasks(legacy, "fallback", undefined, undefined, registry);
+  assert.equal(out.find((t) => t.id === "w1").categoryId, "cat-barbell");
+  assert.equal(out.find((t) => t.id === "w3").categoryId, "cat-barbell", "same icon, same category");
+  assert.equal(out.find((t) => t.id === "c1").categoryId, "cat-school");
+  assert.equal(out.find((t) => t.id === "h1").categoryId, undefined, "commitments stay identity-free");
+  assert.equal(out.every((t) => t.icon === undefined && t.color === undefined), true, "per-task identity is gone");
+
+  const categories = registry.all();
+  assert.deepEqual(categories.map((c) => c.id).sort(), ["cat-barbell", "cat-school"]);
+  const barbell = categories.find((c) => c.id === "cat-barbell");
+  assert.equal(barbell.title, "Workout", "title comes from the icon's label");
+  assert.equal(barbell.icon, "barbell");
+  assert.equal(barbell.color, "orange", "the majority colour wins, not the first or last seen");
+});
+
+test("the category back-fill is idempotent across reloads", () => {
+  const legacy = [
+    { id: "w1", title: "Lift", startTime: "6:00 AM", endTime: "7:00 AM", icon: "barbell", color: "orange", planId: "p" },
+  ];
+
+  // First load: adopt.
+  const first = new CategoryRegistry();
+  const pass1 = normalizeTasks(legacy, "fallback", undefined, undefined, first);
+  const cats1 = first.all();
+  assert.equal(cats1.length, 1);
+
+  // Second load: the stored categories come back in, tasks already carry ids.
+  const second = new CategoryRegistry(cats1);
+  const pass2 = normalizeTasks(pass1, "fallback", undefined, undefined, second);
+  assert.deepEqual(second.all(), cats1, "no duplicate categories on reload");
+  assert.equal(pass2[0].categoryId, "cat-barbell");
+
+  // And a third, to be sure nothing accumulates.
+  const third = new CategoryRegistry(second.all());
+  normalizeTasks(pass2, "fallback", undefined, undefined, third);
+  assert.equal(third.all().length, 1);
+});
+
+test("a renamed category survives the back-fill untouched", () => {
+  // The user renamed "Workout" to "Gym" and recoloured it; a reload must not
+  // reset either just because the derived id still matches the icon.
+  const stored = [{ id: "cat-barbell", title: "Gym", icon: "barbell", color: "violet" }];
+  const tasks = [
+    { id: "w1", title: "Lift", startTime: "6:00 AM", endTime: "7:00 AM", categoryId: "cat-barbell", planId: "p" },
+  ];
+  const registry = new CategoryRegistry(stored);
+  const out = normalizeTasks(tasks, "fallback", undefined, undefined, registry);
+  assert.equal(out[0].categoryId, "cat-barbell");
+  assert.deepEqual(registry.all(), stored, "the user's title and colour are preserved");
+});
+
+test("taskIdentity resolves colour from the category, neutral otherwise", () => {
+  const categories = [{ id: "cat-code", title: "Coding", icon: "code", color: "indigo" }];
+  const byId = categoriesById(categories);
+  const base = { id: "t", title: "T", startTime: "9:00 AM", endTime: "10:00 AM", planId: "p" };
+
+  assert.deepEqual(
+    taskIdentity({ ...base, categoryId: "cat-code" }, byId),
+    { icon: "code", color: "indigo", category: categories[0] },
+  );
+  assert.equal(taskIdentity({ ...base }, byId).color, null, "no category -> neutral");
+  assert.equal(taskIdentity({ ...base, categoryId: "cat-gone" }, byId).color, null, "dangling -> neutral");
+  assert.equal(
+    taskIdentity({ ...base, categoryId: "cat-code", taskType: "commitment" }, byId).color,
+    null,
+    "held time is neutral even with a category",
+  );
 });

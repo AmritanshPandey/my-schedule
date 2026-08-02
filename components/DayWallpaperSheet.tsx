@@ -8,6 +8,7 @@ import Button from "@/components/ui/Button";
 import { SECTION_ICONS } from "@/components/SectionIcons";
 import type { DayKey, Schedule } from "@/lib/useScheduleDB";
 import { isTaskScheduledOn, resolveOccurrence } from "@/lib/taskOccurrence";
+import { taskIdentity, categoriesById } from "@/lib/taskIdentity";
 import { parseTimeToMinutes, formatDisplayTime } from "@/lib/timeUtils";
 import { localISODate } from "@/lib/dateUtils";
 import { haptic } from "@/lib/haptics";
@@ -54,6 +55,7 @@ export default function DayWallpaperSheet({ open, onClose, schedule, todayKey }:
   // The user then picks which of these actually render on the wallpaper.
   const allItems = useMemo(() => {
     const rows: Array<WallpaperItem & { id: string; iconName: string; minutes: number }> = [];
+    const categoryMap = categoriesById(schedule.categories);
 
     for (const task of schedule.activities[todayKey] ?? []) {
       if (!isTaskScheduledOn(task, todayISO, true)) continue;
@@ -64,7 +66,7 @@ export default function DayWallpaperSheet({ open, onClose, schedule, todayKey }:
         id: `task:${task.id}`,
         time: occ.startTime,
         title: occ.title,
-        iconName: task.icon || "star",
+        iconName: taskIdentity(task, categoryMap).icon,
         iconSvg: null,
         done: !!task.completed,
         minutes,

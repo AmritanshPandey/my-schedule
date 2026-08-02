@@ -3,11 +3,11 @@
 import type { CSSProperties, ReactNode } from "react";
 import { IconMinus, IconX, IconListCheck, IconArrowUpRight, IconLock } from "@tabler/icons-react";
 import CheckDraw from "@/components/ui/CheckDraw";
-import type { Plan, Task, TaskSlot } from "@/lib/useScheduleDB";
+import type { Plan, Task, TaskCategory, TaskSlot } from "@/lib/useScheduleDB";
 import type { TaskState } from "@/lib/taskCompletion";
 import { getTaskSubtaskSummary, isTrackedTask } from "@/lib/taskCompletion";
 import { getSlots } from "@/lib/taskMutations";
-import { resolveAccentColor, timelineCardStyles, TIMELINE_NEUTRAL_CARD } from "@/lib/colorSystem";
+import { timelineCardStyles, TIMELINE_NEUTRAL_CARD } from "@/lib/colorSystem";
 
 /**
  * Shared colored category block used in BOTH surfaces:
@@ -21,6 +21,15 @@ import { resolveAccentColor, timelineCardStyles, TIMELINE_NEUTRAL_CARD } from "@
 export interface TaskBlockCardProps {
   task: Task;
   plan: Plan | null;
+  /**
+   * The task's category, resolved by the parent (which already looks up `plan`
+   * the same way). Supplies the block's accent — held time and uncategorised
+   * tasks pass null and render neutral.
+   *
+   * Required, not optional: as an optional prop a caller that forgot it still
+   * type-checked and silently rendered every block neutral.
+   */
+  category: TaskCategory | null;
   variant: "grid" | "list";
   state: TaskState;
   duration: string | null;
@@ -72,6 +81,7 @@ export interface TaskBlockCardProps {
 export function TaskBlockCard({
   task,
   plan,
+  category,
   variant,
   state,
   duration,
@@ -90,10 +100,11 @@ export function TaskBlockCard({
   slotOverride,
   slotCompletions,
 }: TaskBlockCardProps) {
-  const accent = resolveAccentColor(task.color, task.icon);
   // Held time is neutral in both themes: it belongs to no plan and reports no
-  // progress, so it never spends a category accent.
-  const styles = isTrackedTask(task) ? timelineCardStyles(accent) : TIMELINE_NEUTRAL_CARD;
+  // progress, so it never spends a category accent. An uncategorised task is
+  // neutral for the same reason — there is no identity to spend.
+  const accent = isTrackedTask(task) ? category?.color ?? null : null;
+  const styles = accent ? timelineCardStyles(accent) : TIMELINE_NEUTRAL_CARD;
   const done = state === "completed";
   const partial = state === "partial";
   const missed = state === "missed";

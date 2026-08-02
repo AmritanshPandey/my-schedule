@@ -2,26 +2,32 @@
 
 import { IconEdit, IconMinus } from "@tabler/icons-react";
 import CheckDraw from "@/components/ui/CheckDraw";
-import type { Plan, Task } from "@/lib/useScheduleDB";
-import { accentStyles, resolveAccentColor } from "@/lib/colorSystem";
+import type { Plan, Task, TaskCategory } from "@/lib/useScheduleDB";
+import { accentStyles, PLAN_NEUTRAL } from "@/lib/colorSystem";
 import { getTaskCheckableItems, getTaskSubtaskSummary, resolveTaskState } from "@/lib/taskCompletion";
 
 interface CompactTaskCardProps {
   task: Task;
   plan: Plan | null;
+  /**
+   * Supplies the dot colour; null renders neutral (held time / uncategorised).
+   * Required rather than optional so a caller cannot forget it and silently
+   * render every card neutral — the exact bug that hid in TaskBlockCard.
+   */
+  category: TaskCategory | null;
   readOnly?: boolean;
   onToggleComplete: (taskId: string, allSubtaskIds: string[]) => void;
   onEdit: (task: Task) => void;
 }
 
-export function CompactTaskCard({ task, plan, readOnly = false, onToggleComplete, onEdit }: CompactTaskCardProps) {
+export function CompactTaskCard({ task, plan, category, readOnly = false, onToggleComplete, onEdit }: CompactTaskCardProps) {
   const allSubtaskIds = getTaskCheckableItems(task, plan).map((s) => s.id);
   const taskState = resolveTaskState(task, getTaskSubtaskSummary(task, plan).totalCount);
   const done = taskState === "completed";
   const partial = taskState === "partial";
-  // Colour comes from the task itself (icon-derived, user-overridable) — the
-  // plan no longer carries a hue.
-  const accent = accentStyles(resolveAccentColor(task.color, task.icon));
+  // Colour comes from the task's category, so every block of the same kind of
+  // work reads the same. No category (or held time) renders neutral.
+  const accent = category ? accentStyles(category.color) : PLAN_NEUTRAL;
 
   return (
     <div

@@ -11,7 +11,6 @@ import { uid } from "./id";
 import { localISODate } from "./dateUtils";
 import { parseTimeToMinutes, toScheduleDayMinutes } from "./timeUtils";
 import type { ScheduleEntry } from "@/components/ScheduleItem";
-import { colorFromIcon } from "./colorSystem";
 
 export { uid } from "./id";
 export type { TaskSlot } from "./useScheduleDB";
@@ -545,10 +544,6 @@ export function createSubtask(title: string, duration?: string): ScheduleEntry {
     duration: duration?.trim() || undefined,
   };
 }
-
-// ── Plan icon → color helper (re-exported for TaskSheet) ─────────────────────
-
-export { colorFromIcon };
 
 // ── Task sort ─────────────────────────────────────────────────────────────────
 
