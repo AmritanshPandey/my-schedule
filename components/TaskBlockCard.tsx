@@ -190,28 +190,31 @@ export function TaskBlockCard({
 
   const header = (
     <div className={`relative flex items-start justify-between ${isList ? "gap-3" : "gap-2"}`}>
-      <div className={`flex min-w-0 flex-col ${isList ? "gap-1" : "gap-px"}`}>
-        {showEyebrow && (
-          <span className={`truncate font-extrabold ${styles.planLabel} ${isList ? "text-[12px] leading-none" : "text-[9px] leading-none"}`}>
-            {plan!.title}
-          </span>
-        )}
-        <div className={`flex min-w-0 items-center ${isList ? "gap-2.5" : "gap-1.5"}`}>
-          {statusControl}
+      {/* The control sits left of the whole text column, not inline with the
+          title, so the plan eyebrow and the task name keep one shared left
+          edge instead of the title being indented under the eyebrow. */}
+      <div className={`flex min-w-0 items-center ${isList ? "gap-2.5" : "gap-1.5"}`}>
+        {statusControl}
+        <div className={`flex min-w-0 flex-col ${isList ? "gap-1" : "gap-px"}`}>
+          {showEyebrow && (
+            <span className={`truncate font-extrabold ${styles.planLabel} ${isList ? "text-[12px] leading-none" : "text-[9px] leading-none"}`}>
+              {plan!.title}
+            </span>
+          )}
           {title}
+          {subtaskPill?.hasItems && (
+            <button
+              type="button"
+              aria-label="Open subtasks"
+              onClick={(e) => { e.stopPropagation(); onOpenSubtasks?.(); }}
+              className="mt-1 inline-flex w-fit items-center gap-1 rounded-full border border-black/15 px-2 py-0.5 text-[11px] font-bold tabular-nums text-neutral-700 dark:border-white/20 dark:text-neutral-200"
+            >
+              <IconListCheck size={12} strokeWidth={2} />
+              {subtaskPill.completedCount}/{subtaskPill.totalCount}
+              {!narrow && <IconArrowUpRight size={11} strokeWidth={2.2} />}
+            </button>
+          )}
         </div>
-        {subtaskPill?.hasItems && (
-          <button
-            type="button"
-            aria-label="Open subtasks"
-            onClick={(e) => { e.stopPropagation(); onOpenSubtasks?.(); }}
-            className="mt-1 inline-flex w-fit items-center gap-1 rounded-full border border-black/15 px-2 py-0.5 text-[11px] font-bold tabular-nums text-neutral-700 dark:border-white/20 dark:text-neutral-200"
-          >
-            <IconListCheck size={12} strokeWidth={2} />
-            {subtaskPill.completedCount}/{subtaskPill.totalCount}
-            {!narrow && <IconArrowUpRight size={11} strokeWidth={2.2} />}
-          </button>
-        )}
       </div>
 
       <div className={`flex shrink-0 items-center ${isList ? "gap-2" : "gap-1"}`}>
