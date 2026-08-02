@@ -11,7 +11,8 @@ import { completionForDate, getTaskCheckableItems, getTaskSubtaskSummary, resolv
 import { isTaskScheduledOn, resolveOccurrence } from "@/lib/taskOccurrence";
 import { localISODate, todayISO } from "@/lib/dateUtils";
 import { currentMinutes, parseTimeToMinutes } from "@/lib/timeUtils";
-import { categoryHex, resolveAccentColor } from "@/lib/colorSystem";
+import { categoryHex } from "@/lib/colorSystem";
+import { taskIdentity, categoriesById } from "@/lib/taskIdentity";
 import { haptic } from "@/lib/haptics";
 import {
   DRAG_DEFAULT_DURATION,
@@ -139,6 +140,9 @@ function buildRitualMarks(rituals: Ritual[], day: DayKey, startMin: number, endM
     .sort(([a], [b]) => a - b)
     .map(([mapped, rs]) => ({ top: (mapped - startMin) * PX_MIN, rituals: rs }));
 }
+
+/** Held time / uncategorised blocks in the all-day band. */
+const NEUTRAL_UNTIMED_HEX = "#A3A3A3";
 
 interface WeekGridProps {
   schedule: Schedule;
@@ -569,7 +573,8 @@ export function WeekGrid({
               return (
                 <div key={day} className="flex flex-col gap-1 border-r border-neutral-100 p-1.5 last:border-r-0 dark:border-white/[0.06]">
                   {untimed.map((task) => {
-                    const hex = categoryHex(resolveAccentColor(task.color, task.icon));
+                    const identity = taskIdentity(task, categoriesById(schedule.categories));
+                    const hex = identity.color ? categoryHex(identity.color) : NEUTRAL_UNTIMED_HEX;
                     const linkedPlan = task.planId ? plansById.get(task.planId) ?? null : null;
                     const state = resolveTaskState(task, getTaskSubtaskSummary(task, linkedPlan).totalCount);
                     const done = state === "completed";

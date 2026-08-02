@@ -18,6 +18,7 @@ import { checkOllamaConnection, OLLAMA_URL_KEY, OLLAMA_MODEL_KEY, DEFAULT_OLLAMA
 import type { AIActionResult } from "@/lib/ai";
 import { AI_ENABLED } from "@/lib/featureFlags";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
+import type { CategoryDraft } from "@/components/category/CategorySheet";
 import { useAuth } from "@/contexts/AuthProvider";
 import { bootLog, isIOSSafeMode, isStandalonePWA } from "@/lib/iosSafeMode";
 
@@ -58,6 +59,7 @@ import {
   StrategyAsset,
   SummaryConfig,
   Task,
+  TaskCategory,
   TaskSlot,
   TaskTypeValue,
   categoryFromIcon,
@@ -67,10 +69,11 @@ import { useReminders } from "@/lib/useReminders";
 import RitualOverlayLayer from "@/components/timeline/RitualOverlayLayer";
 import RitualLegend from "@/components/timeline/RitualLegend";
 import {
-  colorFromIcon,
   resolveAccentColor,
   type AccentColor,
 } from "@/lib/colorSystem";
+import { taskIdentity, categoriesById } from "@/lib/taskIdentity";
+import { categoryForIcon, ensureCategoryIn } from "@/lib/taskCategories";
 import { SECTION_ICONS } from "@/components/SectionIcons";
 import {
   IconChevronLeft,
@@ -295,6 +298,7 @@ function IOSSafeDashboard({
                 key={task.id}
                 task={task}
                 linkedPlan={task.planId ? plansById.get(task.planId) ?? null : null}
+                category={taskIdentity(task, categoriesById(schedule.categories)).category}
                 onToggleComplete={() => onToggleTask(task)}
                 onToggleSubtask={onToggleSubtask}
                 onToggleSlot={onToggleSlot}
@@ -380,6 +384,7 @@ interface TimelineTaskLayout {
 const TimelineTaskBlock = memo(function TimelineTaskBlock({
   layout,
   plan,
+  category,
   isBeingMoved,
   isViewingToday,
   onPointerDown,
@@ -388,6 +393,7 @@ const TimelineTaskBlock = memo(function TimelineTaskBlock({
 }: {
   layout: TimelineTaskLayout;
   plan: Plan | null;
+  category: TaskCategory | null;
   isBeingMoved: boolean;
   isViewingToday: boolean;
   onPointerDown: (e: React.PointerEvent<HTMLDivElement>, task: Task, start: number, end: number, slotIndex: number) => void;
@@ -418,6 +424,7 @@ const TimelineTaskBlock = memo(function TimelineTaskBlock({
           variant="grid"
           task={layout.task}
           plan={plan}
+          category={category}
           state={state}
           duration={formatTaskDuration(layout.slot.startTime, layout.slot.endTime)}
           slotOverride={layout.isMultiSlot ? layout.slot : undefined}
@@ -1423,6 +1430,7 @@ export default function ScheduleApp() {
       });
 
       const activities = { ...prev.activities };
+      const categoryDraft = [...prev.categories];
       for (const d of result.days) {
         const created: Task[] = d.tasks.map((t) => {
           const { startTime, endTime } = resolveParsedTimes(t);
@@ -1442,15 +1450,14 @@ export default function ScheduleApp() {
             title: t.title,
             startTime,
             endTime,
-            icon: t.icon,
-            color: colorFromIcon(t.icon),
+            categoryId: ensureCategoryIn(categoryDraft, t.icon),
             planId: plan?.id ?? "",
             ...(subtasks !== undefined ? { subtasks } : {}),
           };
         });
         activities[d.day] = sortTasksByTime([...(activities[d.day] ?? []), ...created]);
       }
-      return { ...prev, plans: [...prev.plans, ...newPlans], activities };
+      return { ...prev, plans: [...prev.plans, ...newPlans], categories: categoryDraft, activities };
     });
     setToastMessage(result.plans.length > 0 ? "Plan & tasks imported" : "Tasks imported");
   }
@@ -1538,23 +1545,28 @@ export default function ScheduleApp() {
       return undefined;
     }
     const id = uid();
-    const task: Task = {
-      id,
-      title: input.title,
-      description: "Created from note",
-      ...quickTaskTimeRange(),
-      icon: plan.emoji,
-      color: colorFromIcon(plan.emoji),
-      planId: plan.id,
-      taskType: "task",
-    };
-    setSchedule((prev) => ({
-      ...prev,
-      activities: {
-        ...prev.activities,
-        [input.day]: [...(prev.activities[input.day] ?? []), task],
-      },
-    }));
+    setSchedule((prev) => {
+      // The plan's icon is the best guess at what kind of work this is; it
+      // creates the matching category if the user doesn't have one yet.
+      const categoryDraft = [...prev.categories];
+      const task: Task = {
+        id,
+        title: input.title,
+        description: "Created from note",
+        ...quickTaskTimeRange(),
+        categoryId: ensureCategoryIn(categoryDraft, plan.emoji),
+        planId: plan.id,
+        taskType: "task",
+      };
+      return {
+        ...prev,
+        categories: categoryDraft,
+        activities: {
+          ...prev.activities,
+          [input.day]: [...(prev.activities[input.day] ?? []), task],
+        },
+      };
+    });
     setToastMessage("Added to Today");
     return id;
   }
@@ -1591,6 +1603,7 @@ export default function ScheduleApp() {
 
     setSchedule((prev) => {
       const updatedActivities = { ...prev.activities };
+      const categoryDraft = [...prev.categories];
       const newTaskIds: string[] = [];
       for (const t of valid) {
         const taskId = uid();
@@ -1600,8 +1613,7 @@ export default function ScheduleApp() {
           title: t.title,
           startTime: t.startTime,
           endTime: t.endTime,
-          icon: t.icon || plan.emoji,
-          color: colorFromIcon(t.icon),
+          categoryId: ensureCategoryIn(categoryDraft, t.icon || plan.emoji),
           planId,
           subtasks: t.subtasks.map((s) => ({ id: uid(), task: s })),
         };
@@ -1614,7 +1626,7 @@ export default function ScheduleApp() {
               : m
           )
         : (prev.milestones ?? []);
-      return { ...prev, activities: updatedActivities, milestones: updatedMilestones };
+      return { ...prev, categories: categoryDraft, activities: updatedActivities, milestones: updatedMilestones };
     });
   }
 
@@ -1723,21 +1735,21 @@ export default function ScheduleApp() {
     };
     setSchedule((prev) => {
       const updatedActivities = { ...prev.activities };
+      const categoryDraft = [...prev.categories];
       for (const t of data.tasks) {
         const task: Task = {
           id: uid(),
           title: t.title,
           startTime: t.startTime,
           endTime: t.endTime,
-          icon: t.icon || plan.emoji,
-          color: colorFromIcon(t.icon),
+          categoryId: ensureCategoryIn(categoryDraft, t.icon || plan.emoji),
           planId,
           subtasks: (t.subtasks ?? []).map((s) => ({ id: uid(), task: s })),
         };
         const day = t.day as DayKey;
         updatedActivities[day] = [...(updatedActivities[day] ?? []), task];
       }
-      return { ...prev, plans: [...prev.plans, plan], activities: updatedActivities };
+      return { ...prev, plans: [...prev.plans, plan], categories: categoryDraft, activities: updatedActivities };
     });
     setSelectedPlanId(planId);
     return planId;
@@ -2135,6 +2147,9 @@ export default function ScheduleApp() {
     return m;
   }, [schedule.plans]);
 
+  // Same idea for categories, which now own every task's icon and colour.
+  const categoryMap = useMemo(() => categoriesById(schedule.categories), [schedule.categories]);
+
   const taskEffectiveItemCount = useCallback(
     (task: Task) => {
       const linkedPlan = task.planId ? plansById.get(task.planId) ?? null : null;
@@ -2343,16 +2358,19 @@ export default function ScheduleApp() {
   }
 
 
+  /** Persist a category created from inside the task sheet; returns its id. */
+  const handleCreateCategory = useCallback((draft: CategoryDraft) => {
+    const id = `cat-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 7)}`;
+    setSchedule((prev) => ({ ...prev, categories: [...prev.categories, { id, ...draft }] }));
+    return id;
+  }, [setSchedule]);
+
   function getTaskPresentation(task: Task) {
     const linkedPlan = task.planId ? plansById.get(task.planId) ?? null : null;
-    // Identity belongs to the task: its own icon and colour win, with the
-    // plan only as a fallback for legacy rows that never stored one.
-    const iconName = task.icon || linkedPlan?.emoji || "star";
-    return {
-      linkedPlan,
-      iconName,
-      color: resolveAccentColor(task.color, iconName),
-    };
+    // Identity belongs to the task's category. Held time and uncategorised
+    // tasks resolve to a null accent and render neutral.
+    const { icon, color, category } = taskIdentity(task, categoryMap);
+    return { linkedPlan, category, iconName: icon, color };
   }
 
   // Stable toggle for memoized timeline cards (mirrors the inline closure that
@@ -2474,7 +2492,7 @@ export default function ScheduleApp() {
   ) {
     // Unified visual: the shared TaskBlockCard (same component as the desktop
     // week grid + the mobile list). Size tiers map to its grid variants.
-    const { linkedPlan } = getTaskPresentation(task);
+    const { linkedPlan, category: taskCategory } = getTaskPresentation(task);
     const slots = getSlots(task);
     const isMultiSlot = slots.length > 1 && slotIndex !== undefined;
     const slot = isMultiSlot ? slots[slotIndex] : undefined;
@@ -2503,6 +2521,7 @@ export default function ScheduleApp() {
         slotOverride={slot}
         task={task}
         plan={linkedPlan}
+        category={taskCategory}
         state={taskState}
         duration={duration}
         readOnly={!isViewingToday}
@@ -2529,7 +2548,7 @@ export default function ScheduleApp() {
     slot?: TaskSlot,
     slotIndex?: number,
   ) {
-    const { linkedPlan } = getTaskPresentation(task);
+    const { linkedPlan, category: taskCategory } = getTaskPresentation(task);
     // Grid blocks are per-slot: show this slot's own duration.
     const duration = slot
       ? formatTaskDuration(slot.startTime, slot.endTime)
@@ -2550,6 +2569,7 @@ export default function ScheduleApp() {
         variant="grid"
         task={task}
         plan={linkedPlan}
+        category={taskCategory}
         state={taskState}
         duration={duration}
         slotOverride={slot}
@@ -3111,6 +3131,7 @@ export default function ScheduleApp() {
                                     <ListTaskCard
                                       task={task}
                                       linkedPlan={task.planId ? plansById.get(task.planId) ?? null : null}
+                                      category={taskIdentity(task, categoryMap).category}
                                       editMode
                                       onToggleComplete={handleToggleTaskComplete}
                                       onToggleSubtask={handleToggleSubtask}
@@ -3135,6 +3156,7 @@ export default function ScheduleApp() {
                               <ListTaskCard
                                 task={task}
                                 linkedPlan={linkedPlan}
+                                category={taskIdentity(task, categoryMap).category}
                                 readOnly={!isViewingToday}
                                 onToggleComplete={(id, ids) => handleToggleTaskComplete(id, ids, activeDay, activeDateISO)}
                                 onToggleSubtask={(id, sub) => handleToggleSubtask(id, sub, activeDay, activeDateISO)}
@@ -3293,6 +3315,7 @@ export default function ScheduleApp() {
                               key={`${layout.task.id}-${layout.slotIndex}`}
                               layout={layout}
                               plan={layout.task.planId ? plansById.get(layout.task.planId) ?? null : null}
+                              category={taskIdentity(layout.task, categoryMap).category}
                               isBeingMoved={dragMove?.taskId === layout.task.id && dragMove?.slotIndex === layout.slotIndex}
                               isViewingToday={isViewingToday}
                               onPointerDown={handleTaskPointerDown}
@@ -3531,6 +3554,7 @@ export default function ScheduleApp() {
             <ErrorBoundary section name="AI">
               <SettingsView
                 schedule={schedule}
+                setSchedule={setSchedule}
                 onClearData={clearData}
                 onClearProgress={clearProgress}
                 onRestoreData={restoreData}
@@ -3614,6 +3638,8 @@ export default function ScheduleApp() {
           mode={taskSheetMode}
           task={taskSheetTask}
           plans={schedule.plans}
+          categories={schedule.categories}
+          onCreateCategory={handleCreateCategory}
           activeDay={activeDay}
           activeDays={taskSheetActiveDays}
           activities={schedule.activities}

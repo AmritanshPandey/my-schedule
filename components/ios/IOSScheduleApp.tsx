@@ -15,7 +15,6 @@ import {
   IconClockHour3,
   IconEdit,
   IconFlame,
-  IconListCheck,
   IconDotsVertical,
   IconNotes,
   IconPhoto,
@@ -24,13 +23,15 @@ import {
   IconSettings,
   IconTargetArrow,
   IconTrash,
-  IconX,
 } from "@tabler/icons-react";
 import type { TaskSaveData } from "@/components/task/TaskSheet";
 import type { MilestoneSaveData } from "@/components/plan/MilestoneSheet";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
+import type { CategoryDraft } from "@/components/category/CategorySheet";
 import IOSBottomNav from "@/components/ios/IOSBottomNav";
 import IOSLightTaskCard from "@/components/ios/IOSLightTaskCard";
+import TodayTaskList from "@/components/today/TodayTaskList";
+import { selectTodayTasks } from "@/lib/todayTasks";
 import DayActionsSheet from "@/components/DayActionsSheet";
 import {
   DAYS,
@@ -49,7 +50,9 @@ import {
   resetStaleCompletions,
 } from "@/lib/useScheduleDB";
 import { useScheduleDB } from "@/lib/useScheduleDB";
-import { colorFromIcon, categoryHex, resolveAccentColor } from "@/lib/colorSystem";
+import { categoryHex, resolveAccentColor } from "@/lib/colorSystem";
+import { ensureCategoryIn } from "@/lib/taskCategories";
+import { taskIdentity, categoriesById } from "@/lib/taskIdentity";
 import { SECTION_ICONS } from "@/components/SectionIcons";
 import { useReminders } from "@/lib/useReminders";
 import { bootLog, isIOSSafeMode, isStandalonePWA } from "@/lib/iosSafeMode";
@@ -429,6 +432,15 @@ export default function IOSScheduleApp() {
   }, [toast]);
 
   const plansById = useMemo(() => new Map(schedule.plans.map((plan) => [plan.id, plan])), [schedule.plans]);
+  /** Persist a category created from inside the task sheet; returns its id. */
+  const handleCreateCategory = useCallback((draft: CategoryDraft) => {
+    const id = `cat-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 7)}`;
+    setSchedule((prev) => ({ ...prev, categories: [...prev.categories, { id, ...draft }] }));
+    return id;
+  }, [setSchedule]);
+
+  const categoryMap = useMemo(() => categoriesById(schedule.categories), [schedule.categories]);
+
   const taskEffectiveItemCount = useCallback(
     (task: Task) => {
       const linkedPlan = task.planId ? plansById.get(task.planId) ?? null : null;
@@ -455,12 +467,10 @@ export default function IOSScheduleApp() {
         }),
     [activeDateISO, dayTasks, isViewingToday]
   );
-  const todayTasks = useMemo(
-    () =>
-      sortTasksByTime(schedule.activities[todayKey] ?? [])
-        .filter((task) => isTaskScheduledOn(task, todayISO(), true))
-        .map((task) => resolveOccurrence(task, todayISO())),
-    [schedule.activities, todayKey]
+  // Shared with the desktop dashboard so the two cards can't drift again.
+  const { tasks: todayTasks, done: todayDone } = useMemo(
+    () => selectTodayTasks(schedule, todayISO(), todayKey),
+    [schedule, todayKey]
   );
   const selectedPlan = selectedPlanId ? plansById.get(selectedPlanId) ?? null : null;
   const completedRitualIds = useMemo(() => {
@@ -502,15 +512,14 @@ export default function IOSScheduleApp() {
     });
   }, [schedule.rituals, schedule.ritualCompletions, todayKey]);
 
-  // Counts cover tracked work only. dayTasksView / todayTasks themselves keep
-  // commitments — they also drive the rendered day list, which does show them.
+  // Counts cover tracked work only. dayTasksView keeps commitments — it drives
+  // the rendered day list, which does show them. todayTasks is already
+  // tracked-only (selectTodayTasks), so todayDone comes straight from it.
   const dayTracked = useMemo(() => dayTasksView.filter(isTrackedTask), [dayTasksView]);
-  const todayTracked = useMemo(() => todayTasks.filter(isTrackedTask), [todayTasks]);
   const dayDone = dayTracked.filter((task) => isTaskCompleted(task, taskEffectiveItemCount(task))).length;
-  const todayDone = todayTracked.filter((task) => isTaskCompleted(task, taskEffectiveItemCount(task))).length;
   const todayOpenTasks = useMemo(
-    () => todayTracked.filter((task) => !isTaskResolved(task, taskEffectiveItemCount(task))),
-    [todayTracked, taskEffectiveItemCount]
+    () => todayTasks.filter((task) => !isTaskResolved(task, taskEffectiveItemCount(task))),
+    [todayTasks, taskEffectiveItemCount]
   );
   const remainingPlannedMinutes = useMemo(
     () => todayOpenTasks.reduce((sum, task) => sum + taskDurationMinutes(task), 0),
@@ -524,7 +533,7 @@ export default function IOSScheduleApp() {
     () => todayRitualsDue.filter((ritual) => completedRitualIds.has(ritual.id)).length,
     [completedRitualIds, todayRitualsDue]
   );
-  const dashboardProgressPct = todayTracked.length > 0 ? Math.round((todayDone / todayTracked.length) * 100) : 0;
+  const dashboardProgressPct = todayTasks.length > 0 ? Math.round((todayDone / todayTasks.length) * 100) : 0;
   const executionStreak = useMemo(() => calculateExecutionStreak(schedule, todayISO()), [schedule]);
 	  const overviewTrackers = useMemo(() => {
 	    const storedTrackers = schedule.progressTrackers ?? [];
@@ -902,23 +911,28 @@ export default function IOSScheduleApp() {
       return undefined;
     }
     const id = uid();
-    const task: Task = {
-      id,
-      title: input.title,
-      description: "Created from note",
-      ...quickTaskTimeRange(),
-      icon: plan.emoji,
-      color: colorFromIcon(plan.emoji),
-      planId: plan.id,
-      taskType: "task",
-    };
-    setSchedule((prev) => ({
-      ...prev,
-      activities: {
-        ...prev.activities,
-        [input.day]: [...(prev.activities[input.day] ?? []), task],
-      },
-    }));
+    setSchedule((prev) => {
+      // The plan's icon is the best guess at what kind of work this is; it
+      // creates the matching category if the user doesn't have one yet.
+      const categoryDraft = [...prev.categories];
+      const task: Task = {
+        id,
+        title: input.title,
+        description: "Created from note",
+        ...quickTaskTimeRange(),
+        categoryId: ensureCategoryIn(categoryDraft, plan.emoji),
+        planId: plan.id,
+        taskType: "task",
+      };
+      return {
+        ...prev,
+        categories: categoryDraft,
+        activities: {
+          ...prev.activities,
+          [input.day]: [...(prev.activities[input.day] ?? []), task],
+        },
+      };
+    });
     setToast("Added to Today");
     return id;
   }
@@ -944,6 +958,7 @@ export default function IOSScheduleApp() {
             key={task.id}
             task={task}
             linkedPlan={task.planId ? plansById.get(task.planId) ?? null : null}
+            category={taskIdentity(task, categoryMap).category}
             readOnly={dateISO !== todayISO()}
             onToggleComplete={(id, ids) => handleToggleTaskComplete(id, ids, day, dateISO)}
             onToggleSlot={(id, slotIndex) => handleToggleSlot(id, slotIndex, day, dateISO)}
@@ -1078,77 +1093,16 @@ export default function IOSScheduleApp() {
               </div>
             </section>
 
-            <section data-testid="overview-today-card" className="rounded-2xl border border-neutral-200 bg-white p-4 dark:border-white/[0.08] dark:bg-neutral-900">
-              <div className="mb-3 flex items-center justify-between gap-3">
-                <div className="flex min-w-0 items-center gap-1.5">
-                  <IconListCheck size={15} strokeWidth={2} className="text-neutral-400 dark:text-neutral-500" />
-                  <h2 className="truncate text-[13px] font-extrabold text-neutral-800 dark:text-neutral-200">Today&apos;s Task</h2>
-                </div>
-                <span className="rounded-full border border-neutral-200 bg-neutral-50 px-2 py-1 text-[11px] font-black tabular-nums text-neutral-500 dark:border-white/[0.10] dark:bg-white/[0.05] dark:text-neutral-400">
-                  {todayDone}/{todayTracked.length}
-                </span>
-              </div>
-
-              {todayTasks.length === 0 ? (
-                <div className="rounded-xl border border-dashed border-neutral-200 px-4 py-6 text-center dark:border-white/[0.10]">
-                  <p className="text-[15px] font-black text-neutral-950 dark:text-white">No tasks scheduled</p>
-                  <p className="mt-1 text-[12px] font-semibold text-neutral-500 dark:text-neutral-400">Add the first block from Today.</p>
-                </div>
-              ) : (
-                <div className="divide-y divide-neutral-100 dark:divide-white/[0.06]">
-                  {todayTasks.map((task) => {
-                    const linkedPlan = task.planId ? plansById.get(task.planId) ?? null : null;
-                    const summary = getTaskSubtaskSummary(task, linkedPlan);
-                    const isDone = isTaskCompleted(task, summary.totalCount);
-                    const isMissed = !isDone && !!task.missed;
-                    const checkableIds = getTaskCheckableItems(task, linkedPlan).map((item) => item.id);
-                    return (
-                      <div key={task.id} className="flex items-center gap-3 py-3 first:pt-1 last:pb-0">
-                        <button
-                          type="button"
-                          aria-label={isDone ? "Mark not done" : "Mark done"}
-                          aria-pressed={isDone}
-                          onClick={() => {
-                            haptic("light");
-                            handleToggleTaskComplete(task.id, checkableIds, todayKey, todayISO());
-                          }}
-                          className={`grid h-9 w-9 shrink-0 place-items-center rounded-lg border-2 ${
-                            isDone
-                              ? "border-emerald-500 bg-emerald-500"
-                              : isMissed
-                                ? "border-rose-500 bg-rose-500"
-                                : "border-emerald-600/70 dark:border-emerald-500/55"
-                          }`}
-                        >
-                          {isDone && <IconCheck size={17} strokeWidth={3} className="text-white" />}
-                          {isMissed && <IconX size={17} strokeWidth={3} className="text-white" />}
-                        </button>
-                        <div className="min-w-0 flex-1">
-                          <p className={`truncate text-[15px] font-black leading-tight ${isDone || isMissed ? "text-neutral-400 line-through dark:text-neutral-600" : "text-neutral-950 dark:text-white"}`}>
-                            {task.title}
-                          </p>
-                          <p className="mt-1 truncate text-[12px] font-semibold text-neutral-500 dark:text-neutral-400">
-                            {task.startTime}
-                            {linkedPlan ? ` - ${linkedPlan.title}` : ""}
-                          </p>
-                        </div>
-                        {summary.totalCount > 0 && (
-                          <button
-                            type="button"
-                            aria-label={`Open subtasks (${summary.completedCount} of ${summary.totalCount} done)`}
-                            onClick={() => setSubtasksRef({ id: task.id, day: todayKey, dateISO: todayISO() })}
-                            className="inline-flex min-h-[34px] shrink-0 items-center gap-1.5 rounded-full border border-neutral-200 px-2.5 text-[12px] font-black tabular-nums text-neutral-500 dark:border-white/[0.10] dark:text-neutral-400"
-                          >
-                            <IconListCheck size={13} strokeWidth={2} />
-                            {summary.completedCount}/{summary.totalCount}
-                          </button>
-                        )}
-                      </div>
-                    );
-                  })}
-                </div>
-              )}
-            </section>
+            <TodayTaskList
+              tasks={todayTasks}
+              done={todayDone}
+              total={todayTasks.length}
+              plans={schedule.plans}
+              taskSummary={(task) => getTaskSubtaskSummary(task, task.planId ? plansById.get(task.planId) ?? null : null)}
+              taskCheckableIds={(task) => getTaskCheckableItems(task, task.planId ? plansById.get(task.planId) ?? null : null).map((item) => item.id)}
+              onMarkDone={(taskId, subtaskIds) => handleToggleTaskComplete(taskId, subtaskIds, todayKey, todayISO())}
+              onOpenSubtasks={(taskId) => setSubtasksRef({ id: taskId, day: todayKey, dateISO: todayISO() })}
+            />
 
             <section data-testid="overview-tracking-card" className="rounded-2xl border border-neutral-200 bg-white p-4 dark:border-white/[0.08] dark:bg-neutral-900">
               <div className="mb-2 flex items-center justify-between gap-3">
@@ -1214,7 +1168,7 @@ export default function IOSScheduleApp() {
                   icon={IconClockHour3}
                   value={`${dashboardProgressPct}%`}
                   label="This Week"
-                  detail={`${todayDone}/${todayTracked.length} tasks done`}
+                  detail={`${todayDone}/${todayTasks.length} tasks done`}
                 />
               </div>
               <div data-testid="overview-progress-card">
@@ -1229,7 +1183,7 @@ export default function IOSScheduleApp() {
 
             <DayBreakdownCard
               tasks={schedule.activities[todayKey] ?? []}
-              plans={schedule.plans}
+              categories={schedule.categories}
               dateISO={todayISO()}
             />
 
@@ -1490,6 +1444,7 @@ export default function IOSScheduleApp() {
           <ErrorBoundary section name="Settings">
             <SettingsView
               schedule={schedule}
+              setSchedule={setSchedule}
               onClearData={clearData}
               onClearProgress={clearProgress}
               onRestoreData={restoreData}
@@ -1604,6 +1559,8 @@ export default function IOSScheduleApp() {
             mode={taskSheetMode}
             task={taskSheetTask}
             plans={schedule.plans}
+          categories={schedule.categories}
+          onCreateCategory={handleCreateCategory}
             activeDay={activeDay}
             activeDays={taskSheetActiveDays}
             activities={schedule.activities}

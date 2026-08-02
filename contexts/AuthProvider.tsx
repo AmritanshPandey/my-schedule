@@ -17,7 +17,8 @@ import {
   signOut,
   type User,
 } from "firebase/auth";
-import { auth } from "@/lib/firebase";
+import { auth, isFirebaseConfigured } from "@/lib/firebase";
+import { AuthUnavailableError } from "@/lib/authErrors";
 import {
   initSync,
   destroySync,
@@ -34,6 +35,12 @@ interface AuthContextValue {
   /** True while the SDK is restoring the previous session. */
   authLoading: boolean;
   isGuest: boolean;
+  /**
+   * False when Firebase was never configured, so signing in is impossible in
+   * this build. Distinct from `isGuest`, which only means "no user yet" — the
+   * UI needs to tell "you can sign in" from "you can't" to avoid a dead click.
+   */
+  isAuthAvailable: boolean;
   login: () => Promise<void>;
   logout: () => Promise<void>;
 }
@@ -42,6 +49,7 @@ const AuthContext = createContext<AuthContextValue>({
   user: null,
   authLoading: true,
   isGuest: true,
+  isAuthAvailable: false,
   login: async () => {},
   logout: async () => {},
 });
@@ -59,6 +67,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     if (!auth) {
       // Firebase not configured (missing env vars) — run as guest.
       setAuthLoading(false);
+      // Terminate the boot log the same way the configured path does, so the
+      // diagnostics snapshot isn't left stuck mid-boot in guest-only builds.
+      bootLog("AUTH_READY");
       return;
     }
 
@@ -91,7 +102,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const login = useCallback(async () => {
-    if (!auth) return;
+    // Throw rather than resolve: a silent success here is indistinguishable
+    // from actually signing in, which is exactly how this failed invisibly.
+    if (!auth) throw new AuthUnavailableError();
     await signInWithPopup(auth, provider.current);
     // onAuthStateChanged fires automatically after login.
   }, []);
@@ -112,7 +125,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   // Memoized so consumers only re-render when user/authLoading actually change,
   // not on every AuthProvider render (login/logout are stable useCallbacks).
   const value = useMemo<AuthContextValue>(
-    () => ({ user, authLoading, isGuest: !user, login, logout }),
+    () => ({
+      user,
+      authLoading,
+      isGuest: !user,
+      isAuthAvailable: isFirebaseConfigured,
+      login,
+      logout,
+    }),
     [user, authLoading, login, logout],
   );
 

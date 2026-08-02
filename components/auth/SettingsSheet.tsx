@@ -24,6 +24,8 @@ import BottomSheet from "@/components/ui/BottomSheet";
 import BackupRows from "@/components/settings/BackupRows";
 import RemindersRows from "@/components/settings/RemindersRows";
 import { useAuth } from "@/contexts/AuthProvider";
+import { useGoogleSignIn } from "@/components/auth/useGoogleSignIn";
+import { AuthErrorNote } from "@/components/auth/AuthErrorNote";
 import { getSyncStatus, getLastSyncedAt, getLastSchedule, onSyncStatusChange, flushNow, deleteCloudData, type SyncStatus } from "@/lib/cloudSync";
 import { formatDisplayTime, minutesToInputTime } from "@/lib/timeUtils";
 import { versionLabel, BUILD_ID } from "@/lib/buildInfo";
@@ -817,14 +819,10 @@ export function SettingsSheet({
   schedule,
   onUpdatePreferences,
 }: SettingsSheetProps) {
-  const { user, isGuest, authLoading, login, logout } = useAuth();
+  const { user, isGuest, authLoading, logout } = useAuth();
+  const { signingIn, error: signInError, isAuthAvailable, signIn } = useGoogleSignIn();
   const [busy, setBusy] = useState(false);
   const [aiSettingsOpen, setAiSettingsOpen] = useState(false);
-
-  async function handleLogin() {
-    setBusy(true);
-    try { await login(); } catch { /* user dismissed */ } finally { setBusy(false); }
-  }
 
   async function handleLogout() {
     setBusy(true);
@@ -852,18 +850,28 @@ export function SettingsSheet({
                   </p>
                   <m.button
                     type="button"
-                    onClick={handleLogin}
-                    disabled={busy}
+                    onClick={signIn}
+                    disabled={signingIn || !isAuthAvailable}
+                    aria-describedby={
+                      !isAuthAvailable || signInError ? "settings-sheet-auth-note" : undefined
+                    }
                     whileTap={{ scale: 0.97 }}
                     className="inline-flex w-full items-center justify-center gap-2 rounded-xl border border-neutral-200 bg-neutral-50 px-4 py-2.5 text-[13px] font-semibold text-neutral-700 transition-colors hover:bg-white hover:border-neutral-300 dark:border-white/[0.08] dark:bg-white/[0.04] dark:text-white dark:hover:bg-white/[0.08] disabled:opacity-50"
                   >
-                    {busy ? (
+                    {signingIn ? (
                       <span className="h-3.5 w-3.5 animate-spin rounded-full border-2 border-neutral-300 border-t-neutral-600 dark:border-neutral-600 dark:border-t-neutral-300" />
                     ) : (
                       <GoogleLogo />
                     )}
-                    {busy ? "Signing in…" : "Continue with Google"}
+                    {signingIn ? "Signing in…" : "Continue with Google"}
                   </m.button>
+
+                  <AuthErrorNote
+                    id="settings-sheet-auth-note"
+                    message={signInError}
+                    unavailable={!isAuthAvailable}
+                    className="text-[11px]"
+                  />
                 </div>
               </SettingsCard>
             ) : (

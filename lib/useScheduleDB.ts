@@ -23,6 +23,7 @@ export type { DayKey } from "@/lib/scheduleConstants";
 // unit-testable). Re-exported here so existing import sites are unchanged.
 import { normalizeTasks, entryToTask, resetStaleCompletions } from "@/lib/scheduleNormalize";
 export { normalizeTasks, resetStaleCompletions } from "@/lib/scheduleNormalize";
+import { CategoryRegistry } from "@/lib/taskCategories";
 
 export type PlanCategory = "fitness" | "learning" | "work" | "health" | "routine";
 
@@ -98,8 +99,16 @@ export interface Task {
    * readers that only understand a single block.
    */
   slots?: TaskSlot[];
-  icon: string;
-  color: AccentColor;
+  /**
+   * The task's category — what *kind* of activity this is. Identity (icon and
+   * colour) comes from the category, never from the task itself, so every
+   * "Workout" block is the same hue without the user re-picking it each time.
+   *
+   * Optional because commitments carry no identity (they render neutral), and
+   * because a task whose category was deleted still has to load. Resolve it
+   * through `taskIdentity` (lib/taskIdentity.ts) rather than reading it raw.
+   */
+  categoryId?: string;
   planId: string;
   // ─── Completion state ───────────────────────────────────────
   completed?: boolean;
@@ -261,8 +270,26 @@ export interface SchedulePreferences {
   startDate?: string;
 }
 
+/**
+ * A kind of activity — "Workout", "Deep work", "Study".
+ *
+ * Owns the icon and colour that every task in it renders with, so a hue on the
+ * timeline encodes what you are doing rather than which task object you happen
+ * to be looking at. Categories are user-managed (Settings → Categories) and are
+ * back-filled from each task's old per-task icon on first load after upgrade.
+ */
+export interface TaskCategory {
+  id: string;
+  title: string;
+  /** A `SECTION_ICONS` name (components/SectionIcons.tsx). */
+  icon: string;
+  color: AccentColor;
+  sortOrder?: number;
+}
+
 export interface Schedule {
   plans: Plan[];
+  categories: TaskCategory[];
   activities: DayActivities;
   progressTrackers: ProgressTracker[];
   metricEntries: MetricEntry[];
@@ -594,12 +621,38 @@ function defaultPlans(): Plan[] {
   ];
 }
 
+/** Keep only well-formed stored categories; anything malformed is dropped. */
+function normalizeCategories(value: unknown): TaskCategory[] {
+  if (!Array.isArray(value)) return [];
+  const seen = new Set<string>();
+  return value.flatMap((item) => {
+    if (!item || typeof item !== "object") return [];
+    const c = item as Record<string, unknown>;
+    if (typeof c.id !== "string" || !c.id || seen.has(c.id)) return [];
+    if (typeof c.title !== "string" || !c.title.trim()) return [];
+    seen.add(c.id);
+    const icon = typeof c.icon === "string" && c.icon ? c.icon : "star";
+    return [{
+      id: c.id,
+      title: c.title.trim(),
+      icon,
+      color: resolveAccentColor(typeof c.color === "string" ? c.color : undefined, icon),
+      ...(typeof c.sortOrder === "number" ? { sortOrder: c.sortOrder } : {}),
+    }];
+  });
+}
+
 /** Migrate legacy day-activity data into flat per-day tasks plus dynamic plans. */
 function migrate(raw: unknown): Schedule {
   const empty = emptyEmpty();
   if (!raw || typeof raw !== "object") return empty;
   const r = raw as Record<string, unknown>;
   const preferences = normalizeSchedulePreferences(r.preferences);
+
+  // Seeded with whatever is stored, then handed to every normalizeTasks call so
+  // pre-category tasks can adopt their old icon/colour as a category. Once every
+  // task has a categoryId nothing is adopted, which makes this idempotent.
+  const categories = new CategoryRegistry(normalizeCategories(r.categories));
 
   // Already current shape or existing activities that still need per-day normalization.
   if (isPerDay(r.activities) && Array.isArray(r.plans)) {
@@ -656,11 +709,18 @@ function migrate(raw: unknown): Schedule {
         )
       : [];
 
+    // Normalize first: the registry only knows which categories to derive after
+    // every task has been through it. Reading `categories.all()` inline in this
+    // object literal would evaluate it before `activities` ran and return an
+    // empty list, silently un-categorising the whole schedule.
+    const migratedActivities = Object.fromEntries(
+      DAYS.map((day) => [day, normalizeTasks((r.activities as Record<string, unknown>)[day], fallbackPlanId, undefined, undefined, categories)])
+    ) as DayActivities;
+
     return {
       plans,
-      activities: Object.fromEntries(
-        DAYS.map((day) => [day, normalizeTasks((r.activities as Record<string, unknown>)[day], fallbackPlanId)])
-      ) as DayActivities,
+      categories: categories.all(),
+      activities: migratedActivities,
       progressTrackers,
       metricEntries,
       milestones: normalizedMilestones,
@@ -681,11 +741,15 @@ function migrate(raw: unknown): Schedule {
       : [];
     plans[0].items = Array.isArray(r.diet) ? (r.diet as ScheduleEntry[]) : [];
     plans[1].items = Array.isArray(r.workout) ? (r.workout as ScheduleEntry[]) : [];
+    // See the note in the branch above: normalize before reading the registry.
+    const migratedActivities = Object.fromEntries(
+      DAYS.map((day) => [day, normalizeTasks((r.activities as Record<string, unknown>)[day], plans[0].id, undefined, undefined, categories)])
+    ) as DayActivities;
+
     return {
       plans,
-      activities: Object.fromEntries(
-        DAYS.map((day) => [day, normalizeTasks((r.activities as Record<string, unknown>)[day], plans[0].id)])
-      ) as DayActivities,
+      categories: categories.all(),
+      activities: migratedActivities,
       progressTrackers,
       metricEntries,
       milestones: [],
@@ -707,8 +771,8 @@ function migrate(raw: unknown): Schedule {
       ? ((r.personal as Record<string, ScheduleEntry[]>)[day] ?? [])
       : day === "monday" && Array.isArray(r.personal) ? r.personal : [];
 
-    activities[day].push(...workItems.map((entry) => entryToTask(entry, "briefcase", "workout", "Work Schedule")));
-    activities[day].push(...personalItems.map((entry) => entryToTask(entry, "star", "diet", "Personal")));
+    activities[day].push(...workItems.map((entry) => entryToTask(entry, "briefcase", "workout", "Work Schedule", categories)));
+    activities[day].push(...personalItems.map((entry) => entryToTask(entry, "star", "diet", "Personal", categories)));
   }
 
   const plans = defaultPlans();
@@ -721,6 +785,7 @@ function migrate(raw: unknown): Schedule {
 
   return {
     plans,
+    categories: categories.all(),
     activities,
     progressTrackers,
     metricEntries,
@@ -791,6 +856,7 @@ function normalizeSchedulePreferences(raw: unknown): SchedulePreferences {
 function emptyEmpty(): Schedule {
   return {
     plans: [],
+    categories: [],
     activities: emptyDayActivities(),
     progressTrackers: [],
     metricEntries: [],

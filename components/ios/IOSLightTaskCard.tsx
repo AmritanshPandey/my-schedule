@@ -2,7 +2,7 @@
 
 import { IconArrowUpRight, IconEdit, IconListCheck } from "@tabler/icons-react";
 import { TaskBlockCard } from "@/components/TaskBlockCard";
-import type { Plan, Task } from "@/lib/useScheduleDB";
+import type { Plan, Task, TaskCategory } from "@/lib/useScheduleDB";
 import { calculateTaskProgress, getTaskCheckableItems, getTaskSubtaskSummary, isTrackedTask, resolveTaskState } from "@/lib/taskCompletion";
 import { formatSlotsDuration } from "@/lib/timeUtils";
 import { getSlots } from "@/lib/taskMutations";
@@ -11,6 +11,8 @@ import { haptic } from "@/lib/haptics";
 interface IOSLightTaskCardProps {
   task: Task;
   linkedPlan: Plan | null;
+  /** Owns the card's accent; null renders neutral (held time / uncategorised). */
+  category: TaskCategory | null;
   readOnly?: boolean;
   onToggleComplete: (taskId: string, allSubtaskIds: string[]) => void;
   /** Independent per-phase toggle for a multi-slot task (same-day multiple time blocks). */
@@ -22,6 +24,7 @@ interface IOSLightTaskCardProps {
 export default function IOSLightTaskCard({
   task,
   linkedPlan,
+  category,
   readOnly = false,
   onToggleComplete,
   onToggleSlot,
@@ -85,6 +88,7 @@ export default function IOSLightTaskCard({
       variant="list"
       task={task}
       plan={linkedPlan}
+      category={category}
       state={state}
       duration={duration}
       readOnly={readOnly}

@@ -8,9 +8,7 @@ import {
   IconChartLine,
   IconCheck,
   IconChecklist,
-  IconClock,
   IconClipboardList,
-  IconListCheck,
   IconFlame,
   IconMinus,
   IconPlus,
@@ -19,24 +17,21 @@ import {
   IconTarget,
   IconTrendingDown,
   IconTrendingUp,
-  IconX,
 } from "@tabler/icons-react";
 import type { DayKey, Plan, ProgressTracker, Schedule, Task } from "@/lib/useScheduleDB";
-import { getTaskCheckableItems, getTaskSubtaskSummary, isTaskCompleted, isTaskResolved, isTrackedTask } from "@/lib/taskCompletion";
-import { getSlots } from "@/lib/taskMutations";
+import { getTaskCheckableItems, getTaskSubtaskSummary, isTaskCompleted, isTrackedTask } from "@/lib/taskCompletion";
 import { getPlanCardStats } from "@/lib/planInsights";
 import { PLAN_NEUTRAL } from "@/lib/colorSystem";
 import DayBreakdownCard from "@/components/DayBreakdownCard";
+import TodayTaskList from "@/components/today/TodayTaskList";
+import { selectTodayTasks } from "@/lib/todayTasks";
 import ExecutionStreakBanner from "@/components/ExecutionStreakBanner";
 import ExecutionTrendCard from "@/components/ExecutionTrendCard";
 import { getTrendDirection, getTrendState, type TrendDirection, type TrendState } from "@/lib/trendUtils";
 import { addDaysToISO, localISODate } from "@/lib/dateUtils";
-import { parseTimeToMinutes, toScheduleDayMinutes } from "@/lib/timeUtils";
 import { calculateExecutionStreak, type ExecutionStreak } from "@/lib/consistency/calculateExecutionStreak";
-import { isTaskScheduledOn } from "@/lib/taskOccurrence";
 import { haptic } from "@/lib/haptics";
 import { CARD, CARD_INTERACTIVE, SOFT_PANEL } from "@/components/ui/surfaces";
-import CheckDraw from "@/components/ui/CheckDraw";
 import ProgressBar from "@/components/ui/ProgressBar";
 import AnimatedNumber from "@/components/ui/AnimatedNumber";
 
@@ -76,17 +71,6 @@ function progressFillClass(pct: number): string {
   if (pct >= 35) return "bg-amber-400";
   if (pct > 0) return "bg-rose-400";
   return "bg-neutral-300 dark:bg-white/15";
-}
-
-function formatTime(t?: string): string {
-  if (!t) return "";
-  const mins = parseTimeToMinutes(t);
-  if (mins === null) return t;
-  const h = Math.floor(mins / 60);
-  const m = mins % 60;
-  const suffix = h >= 12 ? "PM" : "AM";
-  const hour = h % 12 || 12;
-  return m === 0 ? `${hour} ${suffix}` : `${hour}:${String(m).padStart(2, "0")} ${suffix}`;
 }
 
 function TrendArrow({ direction, state }: { direction: TrendDirection; state: TrendState }) {
@@ -479,135 +463,6 @@ function PlanConsistencyCard({
   );
 }
 
-function TaskStatusButton({
-  done,
-  missed,
-  onClick,
-}: {
-  done: boolean;
-  missed: boolean;
-  onClick: () => void;
-}) {
-  return (
-    <button
-      type="button"
-      aria-label={done ? "Mark not done" : "Mark done"}
-      aria-pressed={done}
-      onClick={onClick}
-      className={`grid h-9 w-9 shrink-0 place-items-center rounded-lg border-2 transition-colors ${
-        done ? "border-emerald-500 bg-emerald-500"
-        : missed ? "border-rose-500 bg-rose-500"
-        : "border-emerald-600/70 bg-transparent hover:border-emerald-600 dark:border-emerald-500/55"
-      }`}
-    >
-      <CheckDraw visible={done} size={17} strokeWidth={3} className="text-white" />
-      {missed && <IconX size={17} strokeWidth={3} className="text-white" />}
-    </button>
-  );
-}
-
-function TodayTaskListCard({
-  tasks,
-  done,
-  total,
-  plans,
-  taskSummary,
-  taskCheckableIds,
-  onMarkDone,
-  onOpenSubtasks,
-}: {
-  tasks: Task[];
-  done: number;
-  total: number;
-  plans: Plan[];
-  taskSummary: (task: Task) => TaskSummary;
-  taskCheckableIds: (task: Task) => string[];
-  onMarkDone: (taskId: string, subtaskIds: string[]) => void;
-  onOpenSubtasks?: (taskId: string) => void;
-}) {
-  return (
-    <section data-testid="overview-today-card" className={`${CARD} px-4 py-4`}>
-      <SectionHeader icon={IconChecklist} title="Today's Task" meta={`${done}/${total}`} />
-      {tasks.length === 0 ? (
-        <div className="rounded-xl border border-dashed border-neutral-200 px-4 py-8 text-center dark:border-white/[0.09]">
-          <p className="text-[15px] font-bold text-neutral-950 dark:text-white">No tasks scheduled today</p>
-          <p className="mt-1 text-[12px] text-neutral-500 dark:text-neutral-400">Head to Today to add the next block.</p>
-        </div>
-      ) : (
-        <div className="divide-y divide-neutral-100 dark:divide-white/[0.06]">
-          {tasks.map((task) => {
-            const { completedCount: subDone, totalCount: subTotal } = taskSummary(task);
-            const isDone = isTaskCompleted(task, subTotal);
-            const isMissed = !isDone && !!task.missed;
-            const plan = plans.find((p) => p.id === task.planId);
-            // Multi-slot tasks run in several phases today; the summary shows
-            // every start time and how many phases are left, so the dashboard
-            // never under-reports the day. Checking off individual phases
-            // happens on Today (the execution surface), not here.
-            const slots = getSlots(task);
-            const isMultiSlot = slots.length > 1;
-            const slotsDone = isMultiSlot
-              ? isDone
-                ? slots.length
-                : new Set(task.completedSlotIndices ?? []).size
-              : 0;
-            return (
-              <div key={task.id} className="flex items-center gap-3 py-3.5">
-                <TaskStatusButton
-                  done={isDone}
-                  missed={isMissed}
-                  onClick={() => { haptic("light"); onMarkDone(task.id, taskCheckableIds(task)); }}
-                />
-                <div className="min-w-0 flex-1">
-                  <p
-                    className={`truncate text-[15px] font-bold leading-tight ${
-                      isDone ? "text-neutral-400 line-through dark:text-neutral-600"
-                      : isMissed ? "text-neutral-400 line-through decoration-rose-400 dark:text-neutral-600"
-                      : "text-neutral-950 dark:text-white"
-                    }`}
-                  >
-                    {task.title}
-                  </p>
-                  {(task.startTime || plan) && (
-                    <p className="mt-1 truncate text-[12px] font-medium text-neutral-500 dark:text-neutral-400">
-                      {isMultiSlot
-                        ? slots.map((s) => formatTime(s.startTime)).join(" · ")
-                        : task.startTime && formatTime(task.startTime)}
-                      {task.startTime && plan && " - "}
-                      {plan && plan.title}
-                    </p>
-                  )}
-                </div>
-                {isMultiSlot && (
-                  <span
-                    aria-label={`${slotsDone} of ${slots.length} phases done`}
-                    className="inline-flex min-h-[36px] shrink-0 items-center gap-1.5 rounded-full border border-neutral-200 px-2.5 text-neutral-500 dark:border-white/[0.10] dark:text-neutral-400"
-                  >
-                    <IconClock size={14} strokeWidth={2} className="shrink-0" />
-                    <span className="text-[12px] font-bold tabular-nums">{slotsDone}/{slots.length}</span>
-                  </span>
-                )}
-                {subTotal > 0 && (
-                  <button
-                    type="button"
-                    onClick={() => { haptic("light"); onOpenSubtasks?.(task.id); }}
-                    aria-label={`Open subtasks (${subDone} of ${subTotal} done)`}
-                    className="inline-flex min-h-[36px] shrink-0 items-center gap-1.5 rounded-full border border-neutral-200 px-2.5 text-neutral-500 transition-colors hover:bg-neutral-50 dark:border-white/[0.10] dark:text-neutral-400 dark:hover:bg-white/[0.05]"
-                  >
-                    <IconListCheck size={14} strokeWidth={2} className="shrink-0" />
-                    <span className="text-[12px] font-bold tabular-nums">{subDone}/{subTotal}</span>
-                    <IconArrowUpRight size={13} strokeWidth={2.2} className="shrink-0" />
-                  </button>
-                )}
-              </div>
-            );
-          })}
-        </div>
-      )}
-    </section>
-  );
-}
-
 interface SetupDone {
   plan: boolean;
   task: boolean;
@@ -767,22 +622,10 @@ export default function OverviewDashboard({
     [linkedPlanFor]
   );
 
-  const todayTasks = useMemo(() => {
-    const startKey = (task: Task) => {
-      const mins = parseTimeToMinutes(task.startTime ?? "");
-      return mins === null ? Infinity : toScheduleDayMinutes(mins);
-    };
-    return [...(schedule.activities[todayKey] ?? [])]
-      .filter((task) => isTaskScheduledOn(task, todayISO, true) && isTrackedTask(task))
-      .sort((a, b) => startKey(a) - startKey(b));
-  }, [schedule.activities, todayISO, todayKey]);
-
-  const { tasksDone, tasksTotal } = useMemo(() => {
-    const done = todayTasks.filter((task) => isTaskCompleted(task, taskSummary(task).totalCount)).length;
-    const missed = todayTasks.filter((task) => !isTaskCompleted(task, taskSummary(task).totalCount) && !!task.missed).length;
-    const unresolved = todayTasks.filter((task) => !isTaskResolved(task, taskSummary(task).totalCount)).length;
-    return { tasksDone: done, tasksTotal: todayTasks.length, missedCount: missed, unresolvedCount: unresolved };
-  }, [taskSummary, todayTasks]);
+  const { tasks: todayTasks, done: tasksDone, total: tasksTotal } = useMemo(
+    () => selectTodayTasks(schedule, todayISO, todayKey),
+    [schedule, todayISO, todayKey],
+  );
 
   const weeklyActivity = useMemo(() => {
     const todayIdx = new Date(todayISO + "T00:00:00").getDay();
@@ -958,7 +801,7 @@ export default function OverviewDashboard({
 
             <div className="stagger-rise grid gap-4 lg:grid-cols-[minmax(330px,0.92fr)_minmax(360px,1fr)] xl:grid-cols-[minmax(360px,0.9fr)_minmax(410px,1fr)_minmax(360px,0.92fr)]">
               <div className="space-y-4">
-                <TodayTaskListCard
+                <TodayTaskList
                   tasks={todayTasks}
                   done={tasksDone}
                   total={tasksTotal}
@@ -970,7 +813,7 @@ export default function OverviewDashboard({
                 />
                 <DayBreakdownCard
                   tasks={schedule.activities[todayKey] ?? []}
-                  plans={schedule.plans}
+                  categories={schedule.categories}
                   dateISO={todayISO}
                 />
                 <RoutineConsistencyCard rows={ritualConsistency} />

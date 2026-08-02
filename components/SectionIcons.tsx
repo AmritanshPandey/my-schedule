@@ -31,6 +31,7 @@ import {
   IconYoga,
 } from "@tabler/icons-react";
 import type { ComponentType } from "react";
+import { CATEGORY_LABELS, defaultCategoryTitle } from "@/lib/taskCategories";
 
 interface SectionIconEntry {
   name: string;
@@ -38,40 +39,55 @@ interface SectionIconEntry {
   icon: ComponentType<{ size?: number; strokeWidth?: number; className?: string }>;
 }
 
-export const SECTION_ICONS: SectionIconEntry[] = [
+/**
+ * Icon name → glyph. Labels come from `CATEGORY_LABELS` (lib/taskCategories.ts)
+ * so the picker label and the title a derived category gets can never disagree.
+ */
+const ICON_GLYPHS: Record<string, SectionIconEntry["icon"]> = {
   // Original 10
-  { name: "run",       label: "Cardio",    icon: IconRun },
-  { name: "school",    label: "Study",     icon: IconSchool },
-  { name: "book",      label: "Reading",   icon: IconBook },
-  { name: "sleep",     label: "Sleep",     icon: IconBed },
-  { name: "star",      label: "Routine",   icon: IconStar },
-  { name: "briefcase", label: "Work",      icon: IconBriefcase },
-  { name: "car",       label: "Commute",   icon: IconCar },
-  { name: "brain",     label: "Project",   icon: IconBrain },
-  { name: "barbell",   label: "Workout",   icon: IconBarbell },
-  { name: "code",      label: "Coding",    icon: IconCode },
+  run: IconRun,
+  school: IconSchool,
+  book: IconBook,
+  sleep: IconBed,
+  star: IconStar,
+  briefcase: IconBriefcase,
+  car: IconCar,
+  brain: IconBrain,
+  barbell: IconBarbell,
+  code: IconCode,
   // Extended
-  { name: "heart",     label: "Health",    icon: IconHeart },
-  { name: "music",     label: "Music",     icon: IconMusic },
-  { name: "palette",   label: "Art",       icon: IconPalette },
-  { name: "plane",     label: "Travel",    icon: IconPlane },
-  { name: "chefhat",   label: "Cooking",   icon: IconChefHat },
-  { name: "coin",      label: "Finance",   icon: IconCoin },
-  { name: "camera",    label: "Photos",    icon: IconCamera },
-  { name: "users",     label: "Social",    icon: IconUsers },
-  { name: "leaf",      label: "Nature",    icon: IconLeaf },
-  { name: "pencil",    label: "Writing",   icon: IconPencil },
-  { name: "yoga",      label: "Yoga",      icon: IconYoga },
-  { name: "bike",      label: "Cycling",   icon: IconBike },
-  { name: "mountain",  label: "Hiking",    icon: IconMountain },
-  { name: "droplet",   label: "Hydration", icon: IconDroplet },
-  { name: "moodsmile", label: "Mindset",   icon: IconMoodSmile },
-  { name: "flame",     label: "Streak",    icon: IconFlame },
-  { name: "language",  label: "Language",  icon: IconLanguage },
-  { name: "pill",      label: "Wellness",  icon: IconPill },
-  { name: "bolt",      label: "Energy",    icon: IconBolt },
-  { name: "dna",       label: "Science",   icon: IconDna },
-];
+  heart: IconHeart,
+  music: IconMusic,
+  palette: IconPalette,
+  plane: IconPlane,
+  chefhat: IconChefHat,
+  coin: IconCoin,
+  camera: IconCamera,
+  users: IconUsers,
+  leaf: IconLeaf,
+  pencil: IconPencil,
+  yoga: IconYoga,
+  bike: IconBike,
+  mountain: IconMountain,
+  droplet: IconDroplet,
+  moodsmile: IconMoodSmile,
+  flame: IconFlame,
+  language: IconLanguage,
+  pill: IconPill,
+  bolt: IconBolt,
+  dna: IconDna,
+};
+
+export const SECTION_ICONS: SectionIconEntry[] = Object.keys(CATEGORY_LABELS).map((name) => ({
+  name,
+  label: defaultCategoryTitle(name),
+  icon: ICON_GLYPHS[name] ?? IconStar,
+}));
+
+/** The glyph for an icon name, falling back to the neutral star. */
+export function iconGlyph(name: string): SectionIconEntry["icon"] {
+  return ICON_GLYPHS[name] ?? IconStar;
+}
 
 interface IconPickerStyle {
   tint: string;

@@ -8,7 +8,8 @@ import { taskLaneStyle } from "@/lib/timeline/taskLaneStyle";
 
 export interface HighlightLayout {
   task: Task;
-  color: string;
+  /** Null for held time and uncategorised tasks, which have no accent. */
+  color: string | null;
   start: number; // timeline-minute space (overnight already +1440)
   end: number;
   top: number;

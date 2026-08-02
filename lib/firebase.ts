@@ -51,6 +51,17 @@ if (isClient && isConfigured) {
     : getFirestore(_app);
 }
 
+/**
+ * True when the NEXT_PUBLIC_FIREBASE_* vars needed for auth are present.
+ *
+ * Deliberately derived from `isConfigured` alone and NOT from `auth !== null`:
+ * the guard above also requires `isClient`, so `auth` is null during SSR even
+ * when the config is present. A flag read from `auth` would therefore differ
+ * between server and client render and trip a hydration mismatch. On the
+ * client the two are equivalent — if configured, `_app` exists.
+ */
+export const isFirebaseConfigured = isConfigured;
+
 export const auth: Auth | null = _app ? getAuth(_app) : null;
 export const db: Firestore | null = _db;
 export const storage: FirebaseStorage | null = _app ? getStorage(_app) : null;

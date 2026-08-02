@@ -2,7 +2,7 @@
 
 import { useMemo } from "react";
 import { IconChartPie } from "@tabler/icons-react";
-import type { DayKey, Plan, Task } from "@/lib/useScheduleDB";
+import type { DayKey, Task, TaskCategory } from "@/lib/useScheduleDB";
 import { categoryHex } from "@/lib/colorSystem";
 import { CARD } from "@/components/ui/surfaces";
 import {
@@ -19,24 +19,24 @@ const CIRCUMFERENCE = 2 * Math.PI * RADIUS;
 
 interface DayBreakdownCardProps {
   tasks: readonly Task[];
-  plans: readonly Plan[];
+  categories: readonly TaskCategory[];
   dateISO: string;
   /** Only used for the empty-state copy. */
   dayKey?: DayKey;
 }
 
 /**
- * "Where the day goes" — today's scheduled time as a donut, one arc per plan,
- * with commitments collected into a neutral "Held time" arc.
+ * "Where the day goes" — today's scheduled time as a donut, one arc per
+ * category, with commitments collected into a neutral "Held time" arc.
  *
  * Deliberately a donut rather than a filled pie: the hole carries the total, so
  * the chart answers "how much of my day is committed" and "to what" at once.
  * Hand-rolled SVG — the project has no charting dependency and this needs none.
  */
-export default function DayBreakdownCard({ tasks, plans, dateISO }: DayBreakdownCardProps) {
+export default function DayBreakdownCard({ tasks, categories, dateISO }: DayBreakdownCardProps) {
   const { slices, totalMinutes } = useMemo(
-    () => buildDayBreakdown(tasks, plans, dateISO),
-    [tasks, plans, dateISO],
+    () => buildDayBreakdown(tasks, categories, dateISO),
+    [tasks, categories, dateISO],
   );
   const segments = useMemo(
     () => donutSegments(slices, totalMinutes, CIRCUMFERENCE),
