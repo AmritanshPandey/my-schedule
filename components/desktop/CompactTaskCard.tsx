@@ -9,8 +9,12 @@ import { getTaskCheckableItems, getTaskSubtaskSummary, resolveTaskState } from "
 interface CompactTaskCardProps {
   task: Task;
   plan: Plan | null;
-  /** Supplies the dot colour; null renders neutral (held time / uncategorised). */
-  category?: TaskCategory | null;
+  /**
+   * Supplies the dot colour; null renders neutral (held time / uncategorised).
+   * Required rather than optional so a caller cannot forget it and silently
+   * render every card neutral — the exact bug that hid in TaskBlockCard.
+   */
+  category: TaskCategory | null;
   readOnly?: boolean;
   onToggleComplete: (taskId: string, allSubtaskIds: string[]) => void;
   onEdit: (task: Task) => void;

@@ -2,7 +2,7 @@
 
 import { useMemo } from "react";
 import { IconChartPie } from "@tabler/icons-react";
-import type { DayKey, Task, TaskCategory } from "@/lib/useScheduleDB";
+import type { Task, TaskCategory } from "@/lib/useScheduleDB";
 import { categoryHex } from "@/lib/colorSystem";
 import { CARD } from "@/components/ui/surfaces";
 import {
@@ -21,8 +21,6 @@ interface DayBreakdownCardProps {
   tasks: readonly Task[];
   categories: readonly TaskCategory[];
   dateISO: string;
-  /** Only used for the empty-state copy. */
-  dayKey?: DayKey;
 }
 
 /**

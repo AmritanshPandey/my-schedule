@@ -159,10 +159,10 @@ export default function TodayTaskList({
                     <span className="text-[12px] font-black tabular-nums">{slotsDone}/{slots.length}</span>
                   </span>
                 )}
-                {subTotal > 0 && (
+                {subTotal > 0 && onOpenSubtasks && (
                   <button
                     type="button"
-                    onClick={() => { haptic("light"); onOpenSubtasks?.(task.id); }}
+                    onClick={() => { haptic("light"); onOpenSubtasks(task.id); }}
                     aria-label={`Open subtasks (${subDone} of ${subTotal} done)`}
                     className="inline-flex min-h-[34px] shrink-0 items-center gap-1.5 rounded-full border border-neutral-200 px-2.5 text-neutral-500 transition-colors hover:bg-neutral-50 dark:border-white/[0.10] dark:text-neutral-400 dark:hover:bg-white/[0.05]"
                   >
