@@ -675,7 +675,21 @@ export default function ScheduleApp() {
   const [todayKey, setTodayKey] = useState<DayKey>(() => JS_DAYS[new Date().getDay()]);
   const [activeDay, setActiveDay] = useState<DayKey>(() => JS_DAYS[new Date().getDay()]);
   const [editMode, setEditMode] = useState(false);
-  const [activeTab, setActiveTab] = useState(() => (iosSafeMode ? 4 : 0));
+  /**
+   * The tab the user explicitly chose, or null while they haven't chosen one.
+   *
+   * `activeTab` is derived from it rather than being seeded to 0 and corrected
+   * by an effect. An effect runs *after* the first render, so first launch used
+   * to mount the planner and then switch — and because tab content lives in an
+   * AnimatePresence with mode="wait", that switch could strand the app on the
+   * outgoing tab forever, showing an empty planner instead of the getting
+   * started guide. Deriving it means the first tab mounted is already correct.
+   */
+  const [tabSelection, setTabSelection] = useState<number | null>(null);
+  // iOS safe mode always opens on Overview; so does a true first launch (no
+  // stored data), once the DB has actually reported back.
+  const activeTab = tabSelection ?? (iosSafeMode || (ready && isFirstLaunch) ? 4 : 0);
+  const setActiveTab = useCallback((tab: number) => setTabSelection(tab), []);
   const [whatNextDismissed, setWhatNextDismissed] = useState(false);
 
   const [toastState, setToastState] = useState<ToastState | null>(null);
@@ -848,14 +862,6 @@ export default function ScheduleApp() {
     const t = setTimeout(() => setToastMessage(null), 2500);
     return () => clearTimeout(t);
   }, [toastState]);
-
-  // Land on the Overview page on true first launch (no stored data)
-  useEffect(() => {
-    if (iosSafeMode) return;
-    if (ready && isFirstLaunch) {
-      setActiveTab(4); // Overview
-    }
-  }, [ready, isFirstLaunch, iosSafeMode]);
 
   useEffect(() => {
     if (!iosSafeMode) return;
@@ -2885,10 +2891,20 @@ export default function ScheduleApp() {
          applied once by the body's padding-top, so we must NOT add it again
          here or it double-counts and leaves a gap under the header. */
       <div className="max-w-full pb-40 pt-16 lg:pt-0 lg:flex-1 lg:max-w-none lg:overflow-y-auto lg:pb-0">
+        {/* Tab content waits for `ready`.
+            Not cosmetic: `TabPresence` is AnimatePresence with mode="wait", so
+            the incoming tab only mounts once the outgoing one finishes exiting.
+            Mounting tab 0 before the DB reports first-launch meant the routing
+            effect below flipped to Overview mid-enter-animation, the exit never
+            completed, and the new tab never mounted — leaving a first-launch
+            user staring at an empty planner instead of the getting-started
+            guide. Deciding the tab before the first mount removes the
+            transition entirely, and with it the flash of the wrong screen. */}
         <TabPresence mode="wait" initial={false}>
+          {!ready && <div key="tab-booting" />}
 
         {/* ── Tasks Tab ────────────────────────────────────────────────────── */}
-        {activeTab === 0 && (
+        {ready && activeTab === 0 && (
           <m.div
             key="tab-tasks"
             initial={{ opacity: 0 }}
@@ -3415,7 +3431,7 @@ export default function ScheduleApp() {
         )}
 
         {/* ── Plan Tab ─────────────────────────────────────────────────────── */}
-        {activeTab === 1 && (
+        {ready && activeTab === 1 && (
           <m.div
             key="tab-plans"
             initial={{ opacity: 0 }}
@@ -3481,7 +3497,7 @@ export default function ScheduleApp() {
           </m.div>
         )}
         {/* ── Routine Tab ────────────────────────────────────────────────── */}
-        {activeTab === 2 && (
+        {ready && activeTab === 2 && (
           <m.div
             key="tab-routine"
             initial={{ opacity: 0 }}
@@ -3507,7 +3523,7 @@ export default function ScheduleApp() {
         )}
 
         {/* ── Overview Tab ───────────────────────────────────────────────── */}
-        {activeTab === 4 && (
+        {ready && activeTab === 4 && (
           <m.div
             key="tab-overview"
             initial={{ opacity: 0 }}
@@ -3545,7 +3561,7 @@ export default function ScheduleApp() {
         )}
 
         {/* ── Settings Tab ─────────────────────────────────────────────────── */}
-        {activeTab === 5 && (
+        {ready && activeTab === 5 && (
           <m.div
             key="tab-settings"
             initial={{ opacity: 0 }}
