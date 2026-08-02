@@ -415,7 +415,7 @@ function PlanConsistencyCard({
   if (rows.length === 0) return null;
   return (
     <section data-testid="overview-plan-card" className={`${CARD} px-4 py-4 lg:min-h-[520px]`}>
-      <SectionHeader icon={IconClipboardList} title="Plan Consistency" meta={`${rows.length} plans`} />
+      <SectionHeader icon={IconClipboardList} title="Plan Consistency" meta={`${rows.length} ${rows.length === 1 ? "plan" : "plans"}`} />
       <div className="divide-y divide-neutral-100 dark:divide-white/[0.06]">
         {rows.map(({ plan, consistency, milestonesTotal, milestonesDone }) => {
           const accent = PLAN_NEUTRAL;
@@ -431,21 +431,27 @@ function PlanConsistencyCard({
                   <span className={`h-2.5 w-2.5 shrink-0 rounded-full ${accent.dot}`} />
                   <p className="truncate text-[15px] font-bold text-neutral-950 dark:text-white">{plan.title}</p>
                 </div>
-                <p className="mt-1 text-[11px] font-semibold text-neutral-400 dark:text-neutral-500">
-                  {milestonesDone}/{milestonesTotal} milestones
-                </p>
-                {/* One dot per real milestone (capped at 10) — rows without any
-                    never reach here, so there are no placeholder dots. */}
-                <div className="mt-2 flex flex-wrap gap-1">
-                  {Array.from({ length: Math.min(milestonesTotal, 10) }, (_, i) => (
-                    <span
-                      key={i}
-                      className={`h-2 w-2 rounded-full ${
-                        i < milestonesDone ? "bg-emerald-500" : "bg-neutral-200 dark:bg-white/[0.10]"
-                      }`}
-                    />
-                  ))}
-                </div>
+                {/* Milestone line and dots only when the plan actually has
+                    milestones. One dot per real milestone (capped at 10), so a
+                    plan without any shows nothing here rather than a row of
+                    placeholders standing in for milestones that don't exist. */}
+                {milestonesTotal > 0 && (
+                  <>
+                    <p className="mt-1 text-[11px] font-semibold text-neutral-400 dark:text-neutral-500">
+                      {milestonesDone}/{milestonesTotal} milestones
+                    </p>
+                    <div className="mt-2 flex flex-wrap gap-1">
+                      {Array.from({ length: Math.min(milestonesTotal, 10) }, (_, i) => (
+                        <span
+                          key={i}
+                          className={`h-2 w-2 rounded-full ${
+                            i < milestonesDone ? "bg-emerald-500" : "bg-neutral-200 dark:bg-white/[0.10]"
+                          }`}
+                        />
+                      ))}
+                    </div>
+                  </>
+                )}
               </div>
               <div className="min-w-0">
                 <div className="mb-2 flex justify-end">
@@ -723,17 +729,18 @@ export default function OverviewDashboard({
       });
   }, [schedule.ritualCompletions, schedule.rituals, todayISO]);
 
-  // Only plans that actually have milestones. A plan without any rendered as a
-  // "No milestones" label plus a row of six grey placeholder dots, which read
-  // as six unfinished milestones that don't exist — noise, and misleading.
-  // The card hides itself entirely when nothing qualifies.
+  // Every plan, because consistency is the point of this card and every plan has
+  // a consistency score whether or not it has milestones. Milestone-less plans
+  // used to be dropped entirely: they rendered a "No milestones" label plus six
+  // grey placeholder dots that read as six unfinished milestones that don't
+  // exist. The row now simply omits the milestone line and dots instead, which
+  // removes the fiction without hiding real plans.
   const planConsistency = useMemo(() =>
-    schedule.plans.flatMap((plan) => {
+    schedule.plans.map((plan) => {
       const milestones = (schedule.milestones ?? []).filter((milestone) => milestone.planId === plan.id);
-      if (milestones.length === 0) return [];
       const { consistency } = getPlanCardStats(plan, schedule.activities, todayKey, schedule.preferences?.startDate);
       const milestonesDone = milestones.filter((milestone) => milestone.status === "completed").length;
-      return [{ plan, consistency, milestonesTotal: milestones.length, milestonesDone }];
+      return { plan, consistency, milestonesTotal: milestones.length, milestonesDone };
     }),
     [schedule.activities, schedule.milestones, schedule.plans, todayKey]
   );

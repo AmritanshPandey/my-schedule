@@ -591,15 +591,15 @@ export default function IOSScheduleApp() {
 	      .sort((a, b) => Number(b.hasEntries) - Number(a.hasEntries) || (b.latest?.date ?? "").localeCompare(a.latest?.date ?? "") || a.tracker.title.localeCompare(b.tracker.title));
 	  }, [schedule.metricEntries, schedule.plans, schedule.progressTrackers]);
 
-  // Only plans that actually have milestones — a "No milestones" row carries no
-  // information. The card hides itself when nothing qualifies.
+  // Every plan: consistency is what this card reports, and every plan has a
+  // consistency score with or without milestones. A milestone-less plan just
+  // omits its milestone line rather than being dropped from the list.
   const overviewPlanConsistency = useMemo(() =>
-    schedule.plans.flatMap((plan) => {
+    schedule.plans.map((plan) => {
       const milestones = (schedule.milestones ?? []).filter((milestone) => milestone.planId === plan.id);
-      if (milestones.length === 0) return [];
       const { consistency } = getPlanCardStats(plan, schedule.activities, todayKey, schedule.preferences?.startDate);
       const milestonesDone = milestones.filter((milestone) => milestone.status === "completed").length;
-      return [{ plan, consistency, milestonesTotal: milestones.length, milestonesDone }];
+      return { plan, consistency, milestonesTotal: milestones.length, milestonesDone };
     }),
     [schedule.activities, schedule.milestones, schedule.plans, todayKey]
   );
@@ -1209,9 +1209,13 @@ export default function IOSScheduleApp() {
                     >
                       <div className="min-w-0">
                         <p className="truncate text-[15px] font-black text-neutral-950 dark:text-white">{plan.title}</p>
-                        <p className="mt-0.5 text-[11px] font-semibold text-neutral-500 dark:text-neutral-400">
-                          {milestonesDone}/{milestonesTotal} milestones
-                        </p>
+                        {/* Omitted entirely when the plan has no milestones —
+                            "0/0 milestones" reports nothing. */}
+                        {milestonesTotal > 0 && (
+                          <p className="mt-0.5 text-[11px] font-semibold text-neutral-500 dark:text-neutral-400">
+                            {milestonesDone}/{milestonesTotal} milestones
+                          </p>
+                        )}
                       </div>
                       <div className="min-w-0">
                         <p className="mb-1 text-right text-[12px] font-black tabular-nums text-neutral-700 dark:text-neutral-300">{consistency}%</p>
