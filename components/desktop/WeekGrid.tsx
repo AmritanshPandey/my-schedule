@@ -1,7 +1,7 @@
 "use client";
 
 import type { PointerEvent as ReactPointerEvent, ReactNode } from "react";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { AnimatePresence, m } from "framer-motion";
 import { IconChevronLeft, IconChevronRight, IconDotsVertical } from "@tabler/icons-react";
 import type { DayKey, Plan, Ritual, RitualCompletion, Schedule, Task, TaskSlot } from "@/lib/useScheduleDB";
@@ -227,6 +227,10 @@ export function WeekGrid({
     dragging: boolean;
     lastEndMin: number;
   } | null>(null);
+
+  // Built once per render, not once per task: this feeds a doubly-nested loop
+  // (days -> untimed tasks), matching how ScheduleApp/IOSScheduleApp memoize it.
+  const categoryMap = useMemo(() => categoriesById(schedule.categories), [schedule.categories]);
 
   const days = weekDates.map(({ day, date }) => {
     const dateISO = localISODate(date);
@@ -573,7 +577,7 @@ export function WeekGrid({
               return (
                 <div key={day} className="flex flex-col gap-1 border-r border-neutral-100 p-1.5 last:border-r-0 dark:border-white/[0.06]">
                   {untimed.map((task) => {
-                    const identity = taskIdentity(task, categoriesById(schedule.categories));
+                    const identity = taskIdentity(task, categoryMap);
                     const hex = identity.color ? categoryHex(identity.color) : NEUTRAL_UNTIMED_HEX;
                     const linkedPlan = task.planId ? plansById.get(task.planId) ?? null : null;
                     const state = resolveTaskState(task, getTaskSubtaskSummary(task, linkedPlan).totalCount);

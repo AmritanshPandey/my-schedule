@@ -250,6 +250,8 @@ function IOSSafeDashboard({
   const total = trackedToday.length;
   const plans = schedule.plans.length;
   const rituals = schedule.rituals?.length ?? 0;
+  // Hoisted out of the task loop below — one Map per render, not per row.
+  const categoryMap = useMemo(() => categoriesById(schedule.categories), [schedule.categories]);
 
   return (
     <div className="px-4 pb-8 pt-5">
@@ -298,7 +300,7 @@ function IOSSafeDashboard({
                 key={task.id}
                 task={task}
                 linkedPlan={task.planId ? plansById.get(task.planId) ?? null : null}
-                category={taskIdentity(task, categoriesById(schedule.categories)).category}
+                category={taskIdentity(task, categoryMap).category}
                 onToggleComplete={() => onToggleTask(task)}
                 onToggleSubtask={onToggleSubtask}
                 onToggleSlot={onToggleSlot}
