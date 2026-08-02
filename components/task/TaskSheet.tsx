@@ -31,11 +31,10 @@ import Button from "@/components/ui/Button";
 import IconButton from "@/components/ui/IconButton";
 import Input, { FORM_INPUT_CLASS, FORM_LABEL, Textarea } from "@/components/ui/Input";
 import TimeSlotPicker, { type EditableSlot } from "@/components/TimeSlotPicker";
-import { SECTION_ICONS } from "@/components/SectionIcons";
-import { PlanColorPicker, iconPickerClass } from "@/components/plan/planFormShared";
-import { colorFromIcon, resolveAccentColor, type AccentColor } from "@/lib/colorSystem";
+import { CategorySelector } from "./CategorySelector";
+import CategorySheet, { type CategoryDraft } from "@/components/category/CategorySheet";
 import { haptic } from "@/lib/haptics";
-import type { DayKey, Plan, Task, TaskRecurrence, TaskTypeValue } from "@/lib/useScheduleDB";
+import type { DayKey, Plan, Task, TaskCategory, TaskRecurrence, TaskTypeValue } from "@/lib/useScheduleDB";
 import { DAYS, DAY_LABELS } from "@/lib/useScheduleDB";
 import { localISODate } from "@/lib/dateUtils";
 import type { ScheduleEntry } from "@/components/ScheduleItem";
@@ -81,6 +80,10 @@ export interface TaskSheetProps {
   mode: "create" | "edit";
   task?: Task | null;
   plans: Plan[];
+  /** Owns every task's icon and colour; see lib/taskCategories.ts. */
+  categories: TaskCategory[];
+  /** Persist a category created from inside this sheet, returning its id. */
+  onCreateCategory: (draft: CategoryDraft) => string;
   activeDay: DayKey;
   activeDays?: DayKey[];
   /** All weekday task lists — lets edit mode load each day's own slots (per-day times). */
@@ -164,6 +167,8 @@ export function TaskSheet({
   mode,
   task,
   plans,
+  categories,
+  onCreateCategory,
   activeDay,
   activeDays,
   activities,
@@ -216,11 +221,10 @@ export function TaskSheet({
   const [duplicateDays, setDuplicateDays] = useState<DayKey[]>([]);
   const [editScope, setEditScope] = useState<"all" | "occurrence">("all");
   // Recurrence: weekly (every matching weekday), interval (every N weeks), or once (single date).
-  // Identity: each task owns its icon and colour. Colour follows the icon
-  // (colorFromIcon) until the user picks one explicitly — then it sticks.
-  const [icon, setIcon] = useState<string>("star");
-  const [color, setColor] = useState<AccentColor>(() => colorFromIcon("star"));
-  const [colorTouched, setColorTouched] = useState(false);
+  // Identity comes from the task's category, so there is nothing to pick here
+  // beyond which category it is. See components/category/CategorySheet.tsx.
+  const [categoryId, setCategoryId] = useState<string>("");
+  const [categorySheetOpen, setCategorySheetOpen] = useState(false);
   const [repeatMode, setRepeatMode] = useState<"weekly" | "interval" | "once">("weekly");
   const [intervalWeeks, setIntervalWeeks] = useState(2);
   const [onceDate, setOnceDate] = useState("");
@@ -271,14 +275,7 @@ export function TaskSheet({
       setSameEveryDay(uniform);
       setEditDay(selectedDays.includes(activeDay) ? activeDay : selectedDays[0]);
       setRepeatDays(selectedDays);
-      // Existing tasks keep whatever identity they were saved with. Treat a
-      // stored colour that already matches its icon as "not overridden", so
-      // changing the icon still re-derives the colour.
-      const savedIcon = task.icon || "star";
-      const savedColor = resolveAccentColor(task.color, savedIcon);
-      setIcon(savedIcon);
-      setColor(savedColor);
-      setColorTouched(savedColor !== colorFromIcon(savedIcon));
+      setCategoryId(task.categoryId ?? "");
       // Load per-task subtasks; fall back to plan template for tasks created before this fix
       const taskSubtasks = task.subtasks ?? linkedPlan?.items ?? [];
       setSubtasks(taskSubtasks.map(entryToSubtaskDraft));
@@ -298,12 +295,10 @@ export function TaskSheet({
       setEditDay(activeDay);
       setRepeatDays([activeDay]);
       setSubtasks([]);
-      // New tasks start from the parent plan's icon, with the colour derived
-      // from it — so a fresh task is never colourless, and never a rainbow.
-      const seedIcon = plans.find((p) => p.id === pid)?.emoji || "star";
-      setIcon(seedIcon);
-      setColor(colorFromIcon(seedIcon));
-      setColorTouched(false);
+      // Seed from the category matching the plan's icon when the user already
+      // has one — a fresh task then lands in the right bucket without a pick.
+      const seedIcon = plans.find((p) => p.id === pid)?.emoji || "";
+      setCategoryId(categories.find((c) => c.icon === seedIcon)?.id ?? "");
       setRepeatMode("weekly");
       setIntervalWeeks(2);
       setOnceDate(baseDateISO);
@@ -336,16 +331,6 @@ export function TaskSheet({
     if (mode === "create") setSubtasks([]);
   }
 
-  /** Picking an icon re-derives the colour unless the user has set one. */
-  function handleSelectIcon(name: string) {
-    setIcon(name);
-    if (!colorTouched) setColor(colorFromIcon(name));
-  }
-
-  function handleSelectColor(next: AccentColor) {
-    setColor(next);
-    setColorTouched(true);
-  }
 
   // ── Subtask management ─────────────────────────────────────────────────────
   function addSubtask() {
@@ -438,7 +423,7 @@ export function TaskSheet({
   // plan requirement is lifted for it.
   const isCommitment = taskType === "commitment";
   const canSave =
-    (isCommitment || !!selectedPlan) &&
+    (isCommitment || (!!selectedPlan && !!categoryId)) &&
     title.trim().length > 0 &&
     allSlotsValidNow &&
     !timeError &&
@@ -480,11 +465,9 @@ export function TaskSheet({
       startTime: primary.startTime,
       endTime: primary.endTime,
       slots: baseDisplaySlots.length > 1 ? baseDisplaySlots : undefined,
-      icon,
-      color,
-      // A commitment belongs to no plan. Its stored icon/colour are left at
-      // their defaults and simply ignored — TaskBlockCard paints held time
-      // neutral in both themes rather than with an accent.
+      // A commitment belongs to no plan and carries no identity — held time
+      // paints neutral in both themes rather than spending an accent.
+      categoryId: isCommitment ? undefined : categoryId,
       planId: isCommitment ? "" : selectedPlan!.id,
       taskType,
       // Store subtasks on the task itself so each task has an independent list.
@@ -532,8 +515,7 @@ export function TaskSheet({
         startTime: dupSlots[0]?.startTime ?? "",
         endTime: dupSlots[0]?.endTime ?? "",
         slots: dupSlots.length > 1 ? dupSlots : undefined,
-        icon,
-        color,
+        categoryId: categoryId || undefined,
         planId: selectedPlan.id,
         taskType,
         subtasks: validSubtasks.length > 0 ? validSubtasks : undefined,
@@ -759,27 +741,12 @@ export function TaskSheet({
                   not to a single date's override. Also hidden for commitments,
                   which render neutral and carry no identity of their own. */}
               {!isOccurrenceScope && !isCommitment && (
-                <div>
-                  <p className={FORM_LABEL}>Icon</p>
-                  <div className="grid grid-cols-6 gap-2 sm:grid-cols-8">
-                    {SECTION_ICONS.map(({ name, label, icon: Icon }) => (
-                      <button
-                        key={name}
-                        type="button"
-                        aria-label={label}
-                        aria-pressed={icon === name}
-                        title={label}
-                        onClick={() => handleSelectIcon(name)}
-                        className={iconPickerClass(icon === name)}
-                      >
-                        <Icon size={18} strokeWidth={1.9} />
-                      </button>
-                    ))}
-                  </div>
-                  <div className="mt-4">
-                    <PlanColorPicker value={color} onChange={handleSelectColor} />
-                  </div>
-                </div>
+                <CategorySelector
+                  categories={categories}
+                  selectedId={categoryId}
+                  onSelect={(category) => setCategoryId(category.id)}
+                  onCreate={() => setCategorySheetOpen(true)}
+                />
               )}
 
               {/* Description */}
@@ -1020,6 +987,20 @@ export function TaskSheet({
     </>
   );
 
+  // Creating a category without leaving the task — otherwise a user who hasn't
+  // set one up yet is stuck at a disabled Save with no way forward.
+  const categorySheet = (
+    <CategorySheet
+      open={categorySheetOpen}
+      category={null}
+      onClose={() => setCategorySheetOpen(false)}
+      onSave={(draft) => {
+        setCategoryId(onCreateCategory(draft));
+        setCategorySheetOpen(false);
+      }}
+    />
+  );
+
   if (presentation === "page") {
     return (
       <AnimatePresence>
@@ -1034,6 +1015,7 @@ export function TaskSheet({
             style={{ paddingBottom: "env(safe-area-inset-bottom)" }}
           >
             {sheetContent}
+            {categorySheet}
           </m.div>
         )}
       </AnimatePresence>
@@ -1041,12 +1023,15 @@ export function TaskSheet({
   }
 
   return (
-    <BottomSheet
-      open={isOpen}
-      onClose={duplicateStep === "picking" ? () => setDuplicateStep("idle") : handleClose}
-      backdropClassName={keepBackdropLight ? "bg-black/24" : undefined}
-    >
-      {sheetContent}
-    </BottomSheet>
+    <>
+      <BottomSheet
+        open={isOpen}
+        onClose={duplicateStep === "picking" ? () => setDuplicateStep("idle") : handleClose}
+        backdropClassName={keepBackdropLight ? "bg-black/24" : undefined}
+      >
+        {sheetContent}
+      </BottomSheet>
+      {categorySheet}
+    </>
   );
 }

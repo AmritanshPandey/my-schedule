@@ -11,7 +11,7 @@
 
 import type { Schedule, Task } from "./useScheduleDB";
 import type { ScheduleEntry } from "@/components/ScheduleItem";
-import { colorFromIcon, resolveAccentColor } from "./colorSystem";
+import { CategoryRegistry } from "./taskCategories";
 import { DAYS } from "./scheduleConstants";
 import { localISODate } from "./dateUtils";
 
@@ -28,6 +28,7 @@ import { localISODate } from "./dateUtils";
  */
 const OPTIONAL_TASK_FIELDS = [
   "description",
+  "categoryId",
   "slots",
   "taskType",
   "completed",
@@ -76,7 +77,13 @@ export function splitLegacyTimeRange(value: string): { startTime: string; endTim
   return { startTime: raw, endTime: raw };
 }
 
-export function entryToTask(entry: ScheduleEntry, icon: string, planId: string, description?: string): Task {
+export function entryToTask(
+  entry: ScheduleEntry,
+  icon: string,
+  planId: string,
+  description?: string,
+  categories?: CategoryRegistry,
+): Task {
   const { startTime, endTime } = splitLegacyTimeRange(entry.time ?? "");
   return {
     id: entry.id,
@@ -84,19 +91,29 @@ export function entryToTask(entry: ScheduleEntry, icon: string, planId: string, 
     description,
     startTime,
     endTime,
-    icon,
-    color: colorFromIcon(icon),
+    // Legacy shapes describe identity with an icon; adopt it into a category so
+    // the old look survives the upgrade.
+    categoryId: categories?.adopt(icon),
     planId,
   };
 }
 
-export function normalizeTasks(value: unknown, fallbackPlanId: string, fallbackIcon = "briefcase", fallbackDescription?: string): Task[] {
+export function normalizeTasks(
+  value: unknown,
+  fallbackPlanId: string,
+  fallbackIcon = "briefcase",
+  fallbackDescription?: string,
+  categories: CategoryRegistry = new CategoryRegistry(),
+): Task[] {
   if (!Array.isArray(value)) return [];
 
   return value.flatMap((item) => {
     if (!item || typeof item !== "object") return [];
 
-    if ("startTime" in item && "endTime" in item && "title" in item && "icon" in item) {
+    // `icon` used to be part of this check, back when it was a required Task
+    // field. Post-categories a task has no icon, so requiring one here would
+    // send every current task down the legacy ScheduleEntry branch.
+    if ("startTime" in item && "endTime" in item && "title" in item) {
       const task = item as Task & Record<string, unknown>;
       // taskType is a whitelist, not a passthrough: anything unrecognised falls
       // through to undefined ("task"). A new type MUST be added here or it is
@@ -117,8 +134,6 @@ export function normalizeTasks(value: unknown, fallbackPlanId: string, fallbackI
         title: task.title,
         startTime: task.startTime,
         endTime: task.endTime,
-        icon: task.icon || fallbackIcon,
-        color: resolveAccentColor((task as Task & { color?: string }).color, task.icon || fallbackIcon),
         // A commitment deliberately has no plan, so an empty planId is its real
         // value — the fallback only rescues genuinely orphaned tasks. Without
         // this guard `"" || fallbackPlanId` silently adopted every commitment
@@ -135,16 +150,26 @@ export function normalizeTasks(value: unknown, fallbackPlanId: string, fallbackI
         }
       }
 
+      // Back-fill: a task written before categories existed carries `icon` and
+      // `color` instead of a `categoryId`. Adopt that identity into a category
+      // so the upgrade is invisible. Commitments are skipped — they render
+      // neutral and have never had an identity of their own.
+      if (!normalized.categoryId && taskType !== "commitment") {
+        const legacyIcon = typeof task.icon === "string" ? task.icon : "";
+        const legacyColor = typeof task.color === "string" ? task.color : undefined;
+        if (legacyIcon) normalized.categoryId = categories.adopt(legacyIcon, legacyColor);
+      }
+
       return [normalized];
     }
 
     if ("items" in item && Array.isArray((item as { items: unknown[] }).items)) {
       const section = item as { title?: string; iconName?: string; items: ScheduleEntry[] };
-      return section.items.map((entry) => entryToTask(entry, section.iconName ?? fallbackIcon, fallbackPlanId, section.title));
+      return section.items.map((entry) => entryToTask(entry, section.iconName ?? fallbackIcon, fallbackPlanId, section.title, categories));
     }
 
     if ("time" in item && "task" in item) {
-      return [entryToTask(item as ScheduleEntry, fallbackIcon, fallbackPlanId, fallbackDescription)];
+      return [entryToTask(item as ScheduleEntry, fallbackIcon, fallbackPlanId, fallbackDescription, categories)];
     }
 
     return [];

@@ -3,7 +3,7 @@
 import { memo, useMemo, useState } from "react";
 import { m, AnimatePresence, useMotionValue, useTransform, animate } from "framer-motion";
 import { IconArrowUpRight, IconCheck, IconChevronDown, IconEdit, IconListCheck, IconMinus, IconTrash, IconX } from "@tabler/icons-react";
-import type { Task, Plan } from "@/lib/useScheduleDB";
+import type { Task, Plan, TaskCategory } from "@/lib/useScheduleDB";
 import type { ScheduleEntry, MetaField } from "@/components/ScheduleItem";
 import { calculateTaskProgress, isTrackedTask, resolveTaskState } from "@/lib/taskCompletion";
 import type { TaskState } from "@/lib/taskCompletion";
@@ -131,6 +131,8 @@ function TaskCheckbox({ state, size = "lg", readOnly = false, onChange }: Checkb
 export interface ListTaskCardProps {
   task: Task;
   linkedPlan: Plan | null;
+  /** Owns the card's accent; null renders neutral (held time / uncategorised). */
+  category: TaskCategory | null;
   editMode?: boolean;
   /** Past/future day — show completion but don't allow toggling. */
   readOnly?: boolean;
@@ -150,6 +152,7 @@ const SWIPE_THRESHOLD = 72;
 function ListTaskCardInner({
   task,
   linkedPlan,
+  category,
   editMode = false,
   readOnly = false,
   onToggleComplete,
@@ -400,6 +403,7 @@ function ListTaskCardInner({
           variant="list"
           task={task}
           plan={linkedPlan}
+          category={category}
           state={taskState}
           duration={duration}
           readOnly={readOnly}

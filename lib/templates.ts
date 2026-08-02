@@ -6,6 +6,7 @@
 import type { Plan, Task, Milestone, Schedule, DayKey, PlanCategory } from "./useScheduleDB";
 import type { AccentColor } from "./colorSystem";
 import { colorFromIcon } from "./colorSystem";
+import { ensureCategoryIn } from "./taskCategories";
 import type { ScheduleEntry } from "@/components/ScheduleItem";
 import { recalculateRoadmapTimeline } from "@/lib/roadmapDates";
 import { localISODate } from "@/lib/dateUtils";
@@ -347,8 +348,6 @@ export function applyTemplate(template: Template): (prev: Schedule) => Schedule 
           description: tpl.description,
           startTime: tpl.startTime,
           endTime: tpl.endTime,
-          icon: template.emoji,
-          color: colorFromIcon(template.emoji),
           planId,
         },
       });
@@ -357,12 +356,17 @@ export function applyTemplate(template: Template): (prev: Schedule) => Schedule 
 
   return (prev) => {
     const activities = { ...prev.activities };
+    // The template's icon names the kind of work, so it becomes the category
+    // every task it creates belongs to (reusing the user's if they have one).
+    const categoryDraft = [...prev.categories];
+    const categoryId = ensureCategoryIn(categoryDraft, template.emoji);
     for (const { day, task } of taskEntries) {
-      activities[day] = [...(activities[day] ?? []), task];
+      activities[day] = [...(activities[day] ?? []), { ...task, categoryId }];
     }
     return {
       ...prev,
       plans: [...prev.plans, plan],
+      categories: categoryDraft,
       activities,
       milestones: [...prev.milestones, ...milestones],
     };

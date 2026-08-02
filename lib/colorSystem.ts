@@ -58,10 +58,11 @@ const CATEGORY_HEX: Record<AccentColor, string> = {
 /**
  * Plans are colour-neutral by design.
  *
- * Colour belongs to *tasks* (derived from their icon, overridable), so a hue on
- * the timeline encodes what kind of activity a block is — not which plan it
- * belongs to. A plan is recognised by its icon and title instead. This keeps
- * colour meaningful rather than decorative; see DESIGN.md.
+ * Colour belongs to a task's *category* (lib/taskCategories.ts), so a hue on the
+ * timeline encodes what kind of activity a block is — not which plan it belongs
+ * to, and not what the user happened to pick when they created that one task. A
+ * plan is recognised by its icon and title instead. This keeps colour meaningful
+ * rather than decorative; see DESIGN.md.
  */
 export const PLAN_NEUTRAL = {
   text:       "text-neutral-600 dark:text-neutral-300",

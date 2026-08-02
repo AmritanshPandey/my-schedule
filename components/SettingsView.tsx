@@ -22,6 +22,9 @@ import {
   IconChevronDown,
 } from "@tabler/icons-react";
 import { useAuth } from "@/contexts/AuthProvider";
+import CategoryManager from "@/components/category/CategoryManager";
+import { useGoogleSignIn } from "@/components/auth/useGoogleSignIn";
+import { AuthErrorNote } from "@/components/auth/AuthErrorNote";
 import { deleteCloudData } from "@/lib/cloudSync";
 import { useSyncStatus } from "@/lib/useSyncStatus";
 import { haptic } from "@/lib/haptics";
@@ -613,6 +616,8 @@ function GoogleLogo() {
 
 interface SettingsViewProps {
   schedule: Schedule;
+  /** Needed by the category manager, which edits schedule.categories. */
+  setSchedule: (updater: (prev: Schedule) => Schedule) => void;
   onClearData: () => Promise<void>;
   onClearProgress?: () => Promise<void>;
   onRestoreData?: (raw: unknown) => boolean;
@@ -622,13 +627,15 @@ interface SettingsViewProps {
 
 export function SettingsView({
   schedule,
+  setSchedule,
   onClearData,
   onClearProgress,
   onRestoreData,
   onUpdatePreferences,
   onClose,
 }: SettingsViewProps) {
-  const { user, isGuest, authLoading, login, logout } = useAuth();
+  const { user, isGuest, authLoading, logout } = useAuth();
+  const { signingIn, error: signInError, isAuthAvailable, signIn } = useGoogleSignIn();
   const [busy, setBusy]   = useState(false);
   const [theme, setTheme] = useState<ThemeMode>("light");
   const [themeReady, setThemeReady] = useState(false);
@@ -646,9 +653,6 @@ export function SettingsView({
 
   function setAppTheme(t: ThemeMode) { setTheme(t); applyTheme(t); }
 
-  async function handleLogin() {
-    setBusy(true); try { await login(); } catch { } finally { setBusy(false); }
-  }
   async function handleLogout() {
     setBusy(true); try { await logout(); } finally { setBusy(false); }
   }
@@ -708,11 +712,17 @@ export function SettingsView({
                     <p className="mb-3.5 text-[12px] text-neutral-400 dark:text-neutral-500">
                       Back up your data and access it across all your devices.
                     </p>
-                    <m.button type="button" onClick={handleLogin} disabled={busy} whileTap={{ scale: 0.97 }}
+                    <m.button type="button" onClick={signIn} disabled={signingIn || !isAuthAvailable} whileTap={{ scale: 0.97 }}
+                      aria-describedby={!isAuthAvailable || signInError ? "settings-view-auth-note" : undefined}
                       className="inline-flex w-full items-center justify-center gap-2 rounded-xl border border-neutral-200 bg-neutral-50 px-4 py-2.5 text-[13px] font-semibold text-neutral-700 hover:bg-white disabled:opacity-50 dark:border-white/[0.08] dark:bg-white/[0.04] dark:text-white">
-                      {busy ? <span className="h-3.5 w-3.5 animate-spin rounded-full border-2 border-neutral-300 border-t-neutral-600" /> : <GoogleLogo />}
-                      {busy ? "Signing in…" : "Continue with Google"}
+                      {signingIn ? <span className="h-3.5 w-3.5 animate-spin rounded-full border-2 border-neutral-300 border-t-neutral-600" /> : <GoogleLogo />}
+                      {signingIn ? "Signing in…" : "Continue with Google"}
                     </m.button>
+                    <AuthErrorNote
+                      id="settings-view-auth-note"
+                      message={signInError}
+                      unavailable={!isAuthAvailable}
+                    />
                   </div>
                 </Card>
               ) : (
@@ -744,6 +754,20 @@ export function SettingsView({
               <AISection />
             </div>
           )}
+
+          {/* ── Categories ──────────────────────────────────────────────────── */}
+          <div>
+            <SectionLabel>Categories</SectionLabel>
+            <Card>
+              <div className="px-4 py-3">
+                <p className="mb-3 text-[12px] text-neutral-500 dark:text-neutral-400">
+                  A task&apos;s category sets its icon and colour, and groups it in
+                  &ldquo;Where the day goes&rdquo;.
+                </p>
+                <CategoryManager schedule={schedule} setSchedule={setSchedule} />
+              </div>
+            </Card>
+          </div>
 
           {/* ── Appearance ──────────────────────────────────────────────────── */}
           <div>

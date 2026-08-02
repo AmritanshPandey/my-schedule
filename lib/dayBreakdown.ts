@@ -1,11 +1,11 @@
 /**
- * "Where the day goes" — today's scheduled minutes grouped by plan.
+ * "Where the day goes" — today's scheduled minutes grouped by category.
  *
  * Pure and dependency-light so it can be unit-tested directly. The dashboard
  * renders the result as a donut; this module owns all the arithmetic.
  */
 
-import type { DayKey, Plan, Task } from "./useScheduleDB";
+import type { Task, TaskCategory } from "./useScheduleDB";
 import { getSlots } from "./taskMutations";
 import { isTrackedTask } from "./taskCompletion";
 import { isTaskScheduledOn } from "./taskOccurrence";
@@ -45,19 +45,21 @@ export function taskScheduledMinutes(task: Task): number {
 }
 
 /**
- * Group a day's scheduled time by plan, largest first, with commitments
+ * Group a day's scheduled time by category, largest first, with commitments
  * collected into a single neutral "Held time" slice.
  *
- * Tasks whose plan no longer exists are skipped rather than shown as an
- * "Unknown" wedge — a dangling planId is a data artefact, not a category the
- * user would recognise.
+ * Grouping by category rather than by plan is what makes the wedge colours
+ * match the blocks on the timeline — both now resolve through the same
+ * category. Tasks with no category, or one that has been deleted, are skipped
+ * rather than shown as an "Unknown" wedge: a dangling id is a data artefact,
+ * not something the user would recognise.
  */
 export function buildDayBreakdown(
   tasks: readonly Task[],
-  plans: readonly Plan[],
+  categories: readonly TaskCategory[],
   dateISO: string,
 ): DayBreakdown {
-  const plansById = new Map(plans.map((p) => [p.id, p]));
+  const categoriesById = new Map(categories.map((c) => [c.id, c]));
   const minutesById = new Map<string, number>();
 
   for (const task of tasks) {
@@ -65,8 +67,8 @@ export function buildDayBreakdown(
     const minutes = taskScheduledMinutes(task);
     if (minutes <= 0) continue;
 
-    const key = isTrackedTask(task) ? task.planId : HELD_TIME_ID;
-    if (key !== HELD_TIME_ID && !plansById.has(key)) continue;
+    const key = isTrackedTask(task) ? task.categoryId ?? "" : HELD_TIME_ID;
+    if (key !== HELD_TIME_ID && !categoriesById.has(key)) continue;
     minutesById.set(key, (minutesById.get(key) ?? 0) + minutes);
   }
 
@@ -76,8 +78,8 @@ export function buildDayBreakdown(
   const slices: DaySlice[] = Array.from(minutesById.entries())
     .map(([id, minutes]) => ({
       id,
-      label: id === HELD_TIME_ID ? "Held time" : plansById.get(id)?.title ?? "",
-      color: id === HELD_TIME_ID ? null : plansById.get(id)?.color ?? null,
+      label: id === HELD_TIME_ID ? "Held time" : categoriesById.get(id)?.title ?? "",
+      color: id === HELD_TIME_ID ? null : categoriesById.get(id)?.color ?? null,
       minutes,
       pct: Math.round((minutes / totalMinutes) * 100),
     }))
