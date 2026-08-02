@@ -218,6 +218,41 @@ option {
   animation: bar-rise var(--dur-data) var(--ease-out-quint) backwards;
 }
 
+/* Completion checkmark: the mark draws itself in, the box pops. Deliberately CSS
+   and not framer — CheckDraw renders in surfaces that sit outside any LazyMotion
+   provider (the iOS Overview/Today lists), where `animate` never runs and only
+   `initial` is committed to the DOM, which left the tick permanently invisible.
+
+   NO fill-mode here, and that is the whole point: the resting state must be the
+   COMPLETE mark. Keyframes only ever subtract from it. `both` would pin the 0%
+   frame (stroke-dashoffset: 1 — a fully hidden mark) whenever the animation does
+   not tick: a hidden/throttled tab, a restored PWA, a frozen document timeline.
+   That is the exact failure this component exists to avoid, so the end state is
+   the default and the animation is pure decoration on top of it.
+
+   Pairs with pathLength="1" on the path so the dash math is independent of the
+   rendered size. Under reduced motion the block below collapses the duration to
+   0.01ms and the mark simply appears, already complete. */
+@keyframes check-draw {
+  from { stroke-dashoffset: 1; }
+  to   { stroke-dashoffset: 0; }
+}
+
+@keyframes check-pop {
+  from { transform: scale(0.7); }
+  to   { transform: scale(1); }
+}
+
+.animate-check-draw {
+  stroke-dasharray: 1;
+  stroke-dashoffset: 0;
+  animation: check-draw var(--dur-fast) var(--ease-out-quint);
+}
+
+.animate-check-pop {
+  animation: check-pop 180ms var(--ease-out-quint);
+}
+
 /* Skeleton placeholder — flat opacity pulse, no gradient shimmer (banned). */
 @keyframes skeleton-pulse {
   0%, 100% { opacity: 1; }

@@ -79,6 +79,8 @@ import { computeTrend } from "@/lib/trendUtils";
 import { getPlanCardStats } from "@/lib/planInsights";
 import { calculateExecutionStreak } from "@/lib/consistency/calculateExecutionStreak";
 import { haptic } from "@/lib/haptics";
+import { CARD } from "@/components/ui/surfaces";
+import CheckDraw from "@/components/ui/CheckDraw";
 import type { CreateTaskFromNoteInput } from "@/components/notes/NotesView";
 
 const IOSMotionBoundary = dynamic(() => import("@/components/ios/IOSMotionBoundary"), { ssr: false });
@@ -269,7 +271,7 @@ function StatTile({
   detail: string;
 }) {
   return (
-    <div className="rounded-2xl border border-neutral-200 bg-white p-3 dark:border-white/[0.08] dark:bg-neutral-900">
+    <div className={`${CARD} p-3`}>
       <div className="mb-2 flex items-center gap-1.5">
         <Icon size={13} strokeWidth={2} className="text-neutral-400 dark:text-neutral-500" />
         <p className="truncate text-[10px] font-bold uppercase tracking-[0.12em] text-neutral-400 dark:text-neutral-500">{label}</p>
@@ -458,7 +460,7 @@ export default function IOSScheduleApp() {
   const todayTasks = useMemo(
     () =>
       sortTasksByTime(schedule.activities[todayKey] ?? [])
-        .filter((task) => isTaskScheduledOn(task, todayISO(), true))
+        .filter((task) => isTaskScheduledOn(task, todayISO(), true) && isTrackedTask(task))
         .map((task) => resolveOccurrence(task, todayISO())),
     [schedule.activities, todayKey]
   );
@@ -502,8 +504,10 @@ export default function IOSScheduleApp() {
     });
   }, [schedule.rituals, schedule.ritualCompletions, todayKey]);
 
-  // Counts cover tracked work only. dayTasksView / todayTasks themselves keep
-  // commitments — they also drive the rendered day list, which does show them.
+  // Counts cover tracked work only. `dayTasksView` deliberately KEEPS commitments:
+  // it drives the Today timeline, and held time must still be drawn. `todayTasks`
+  // feeds only the Overview list — which shows checkable work — so it filters
+  // commitments at source, making `todayTracked` below a defensive no-op on it.
   const dayTracked = useMemo(() => dayTasksView.filter(isTrackedTask), [dayTasksView]);
   const todayTracked = useMemo(() => todayTasks.filter(isTrackedTask), [todayTasks]);
   const dayDone = dayTracked.filter((task) => isTaskCompleted(task, taskEffectiveItemCount(task))).length;
@@ -1043,7 +1047,7 @@ export default function IOSScheduleApp() {
                 </div>
               </section>
             )}
-            <section data-testid="overview-streak-card" className="rounded-2xl border border-neutral-200 bg-white p-4 dark:border-white/[0.08] dark:bg-neutral-900">
+            <section data-testid="overview-streak-card" className={`${CARD} p-4`}>
               <div className="flex items-center gap-3">
                 <span
                   className={`grid h-11 w-11 shrink-0 place-items-center rounded-2xl ${
@@ -1078,21 +1082,21 @@ export default function IOSScheduleApp() {
               </div>
             </section>
 
-            <section data-testid="overview-today-card" className="rounded-2xl border border-neutral-200 bg-white p-4 dark:border-white/[0.08] dark:bg-neutral-900">
-              <div className="mb-3 flex items-center justify-between gap-3">
-                <div className="flex min-w-0 items-center gap-1.5">
-                  <IconListCheck size={15} strokeWidth={2} className="text-neutral-400 dark:text-neutral-500" />
-                  <h2 className="truncate text-[13px] font-extrabold text-neutral-800 dark:text-neutral-200">Today&apos;s Task</h2>
+            <section data-testid="overview-today-card" className={`${CARD} px-4 pt-4 pb-1`}>
+              <div className="mb-1 flex items-center justify-between gap-3">
+                <div className="flex min-w-0 items-center gap-1.5 text-neutral-500 dark:text-neutral-400">
+                  <IconListCheck size={15} strokeWidth={2} />
+                  <h2 className="truncate text-[13px] font-bold">Today&apos;s Task</h2>
                 </div>
-                <span className="rounded-full border border-neutral-200 bg-neutral-50 px-2 py-1 text-[11px] font-black tabular-nums text-neutral-500 dark:border-white/[0.10] dark:bg-white/[0.05] dark:text-neutral-400">
+                <span className="shrink-0 rounded-full border border-neutral-200/70 px-2 py-0.5 text-[12px] font-bold tabular-nums text-neutral-500 dark:border-white/[0.07] dark:text-neutral-400">
                   {todayDone}/{todayTracked.length}
                 </span>
               </div>
 
               {todayTasks.length === 0 ? (
-                <div className="rounded-xl border border-dashed border-neutral-200 px-4 py-6 text-center dark:border-white/[0.10]">
-                  <p className="text-[15px] font-black text-neutral-950 dark:text-white">No tasks scheduled</p>
-                  <p className="mt-1 text-[12px] font-semibold text-neutral-500 dark:text-neutral-400">Add the first block from Today.</p>
+                <div className="mb-3 rounded-xl border border-dashed border-neutral-200 px-4 py-6 text-center dark:border-white/[0.10]">
+                  <p className="text-[15px] font-bold text-neutral-950 dark:text-white">Nothing to check off today</p>
+                  <p className="mt-1 text-[12px] font-medium text-neutral-500 dark:text-neutral-400">Add the first block from Today.</p>
                 </div>
               ) : (
                 <div className="divide-y divide-neutral-100 dark:divide-white/[0.06]">
@@ -1103,46 +1107,59 @@ export default function IOSScheduleApp() {
                     const isMissed = !isDone && !!task.missed;
                     const checkableIds = getTaskCheckableItems(task, linkedPlan).map((item) => item.id);
                     return (
-                      <div key={task.id} className="flex items-center gap-3 py-3 first:pt-1 last:pb-0">
+                      <div key={task.id} className="flex items-center gap-3 py-3">
                         <button
                           type="button"
                           aria-label={isDone ? "Mark not done" : "Mark done"}
                           aria-pressed={isDone}
                           onClick={() => {
-                            haptic("light");
+                            haptic("medium");
                             handleToggleTaskComplete(task.id, checkableIds, todayKey, todayISO());
                           }}
-                          className={`grid h-9 w-9 shrink-0 place-items-center rounded-lg border-2 ${
+                          className={`tap-target grid h-7 w-7 shrink-0 place-items-center rounded-lg border-2 transition-colors active:scale-95 ${
                             isDone
-                              ? "border-emerald-500 bg-emerald-500"
+                              ? "border-transparent bg-emerald-500"
                               : isMissed
-                                ? "border-rose-500 bg-rose-500"
-                                : "border-emerald-600/70 dark:border-emerald-500/55"
+                                ? "border-transparent bg-rose-500"
+                                : "border-neutral-500 bg-transparent dark:border-white/[0.30]"
                           }`}
                         >
-                          {isDone && <IconCheck size={17} strokeWidth={3} className="text-white" />}
-                          {isMissed && <IconX size={17} strokeWidth={3} className="text-white" />}
+                          <CheckDraw visible={isDone} size={15} strokeWidth={3} className="text-white" />
+                          {isMissed && <IconX size={15} strokeWidth={3} className="text-white" />}
                         </button>
-                        <div className="min-w-0 flex-1">
-                          <p className={`truncate text-[15px] font-black leading-tight ${isDone || isMissed ? "text-neutral-400 line-through dark:text-neutral-600" : "text-neutral-950 dark:text-white"}`}>
-                            {task.title}
-                          </p>
-                          <p className="mt-1 truncate text-[12px] font-semibold text-neutral-500 dark:text-neutral-400">
-                            {task.startTime}
-                            {linkedPlan ? ` - ${linkedPlan.title}` : ""}
-                          </p>
-                        </div>
-                        {summary.totalCount > 0 && (
-                          <button
-                            type="button"
-                            aria-label={`Open subtasks (${summary.completedCount} of ${summary.totalCount} done)`}
-                            onClick={() => setSubtasksRef({ id: task.id, day: todayKey, dateISO: todayISO() })}
-                            className="inline-flex min-h-[34px] shrink-0 items-center gap-1.5 rounded-full border border-neutral-200 px-2.5 text-[12px] font-black tabular-nums text-neutral-500 dark:border-white/[0.10] dark:text-neutral-400"
-                          >
-                            <IconListCheck size={13} strokeWidth={2} />
-                            {summary.completedCount}/{summary.totalCount}
-                          </button>
-                        )}
+                        {/* Row body opens the task detail. Sibling of the checkbox, not a
+                            parent of it, so the two never contend for the same tap. */}
+                        <button
+                          type="button"
+                          onClick={() => {
+                            haptic("light");
+                            setSubtasksRef({ id: task.id, day: todayKey, dateISO: todayISO() });
+                          }}
+                          className="flex min-w-0 flex-1 items-center gap-3 text-left transition-opacity active:opacity-60"
+                        >
+                          <span className="min-w-0 flex-1">
+                            <span className={`block truncate text-[15px] font-bold leading-tight ${
+                              isDone
+                                ? "text-neutral-400 line-through dark:text-neutral-600"
+                                : isMissed
+                                  ? "text-neutral-400 line-through decoration-rose-400 dark:text-neutral-600"
+                                  : "text-neutral-950 dark:text-white"
+                            }`}>
+                              {task.title}
+                            </span>
+                            <span className="mt-0.5 block truncate text-[12px] font-medium text-neutral-500 dark:text-neutral-400">
+                              <span className="tabular-nums">{task.startTime}</span>
+                              {linkedPlan ? ` · ${linkedPlan.title}` : ""}
+                            </span>
+                          </span>
+                          {summary.totalCount > 0 && (
+                            <span className="inline-flex shrink-0 items-center gap-1 rounded-full border border-neutral-200/70 px-2 py-0.5 text-[12px] font-bold tabular-nums text-neutral-500 dark:border-white/[0.07] dark:text-neutral-400">
+                              <IconListCheck size={13} strokeWidth={2} aria-hidden="true" />
+                              <span className="sr-only">{summary.completedCount} of {summary.totalCount} subtasks done</span>
+                              <span aria-hidden="true">{summary.completedCount}/{summary.totalCount}</span>
+                            </span>
+                          )}
+                        </button>
                       </div>
                     );
                   })}
@@ -1150,7 +1167,7 @@ export default function IOSScheduleApp() {
               )}
             </section>
 
-            <section data-testid="overview-tracking-card" className="rounded-2xl border border-neutral-200 bg-white p-4 dark:border-white/[0.08] dark:bg-neutral-900">
+            <section data-testid="overview-tracking-card" className={`${CARD} p-4`}>
               <div className="mb-2 flex items-center justify-between gap-3">
                 <div className="flex min-w-0 items-center gap-1.5 text-neutral-500 dark:text-neutral-400">
                   <IconTargetArrow size={16} strokeWidth={2.2} />
@@ -1234,7 +1251,7 @@ export default function IOSScheduleApp() {
             />
 
             {overviewPlanConsistency.length > 0 && (
-              <section data-testid="overview-plan-card" className="rounded-2xl border border-neutral-200 bg-white p-4 dark:border-white/[0.08] dark:bg-neutral-900">
+              <section data-testid="overview-plan-card" className={`${CARD} p-4`}>
                 <div className="mb-2 flex items-center gap-1.5 text-neutral-500 dark:text-neutral-400">
                   <IconClipboardList size={16} strokeWidth={2.2} />
                   <h2 className="text-[13px] font-extrabold">Plan Consistency</h2>
@@ -1269,7 +1286,7 @@ export default function IOSScheduleApp() {
               </section>
             )}
 
-            <section data-testid="overview-routine-card" className="rounded-2xl border border-neutral-200 bg-white p-4 dark:border-white/[0.08] dark:bg-neutral-900">
+            <section data-testid="overview-routine-card" className={`${CARD} p-4`}>
               <div className="mb-2 flex items-center gap-1.5 text-neutral-500 dark:text-neutral-400">
                 <IconRepeat size={16} strokeWidth={2.2} />
                 <h2 className="text-[13px] font-extrabold">Routine Consistency</h2>

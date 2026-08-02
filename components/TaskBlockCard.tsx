@@ -139,6 +139,55 @@ export function TaskBlockCard({
     );
   }
 
+  // The checkbox (or, for held time, the lock marker) — exactly one of the two.
+  // List cards render it beside the title so the control sits with the thing it
+  // completes; grid blocks are too tight for that and keep it in the top-right.
+  const statusControl =
+    !isMultiSlotList && tracked ? (
+      <button
+        type="button"
+        disabled={readOnly}
+        onClick={(e) => { e.stopPropagation(); if (!readOnly) onToggle(); }}
+        className={`flex shrink-0 items-center justify-center border-[1.5px] transition-colors disabled:opacity-100 ${readOnly ? "cursor-default" : ""} ${
+          isList ? "h-7 w-7 rounded-[8px]" : "h-[18px] w-[18px] rounded-pr-sm"
+        } ${
+          done || partial ? "border-transparent bg-green-500"
+          : missed ? "border-transparent bg-rose-500"
+          : readOnly ? "border-neutral-200 bg-neutral-100/80 dark:border-white/[0.08] dark:bg-white/[0.04]"
+          : "border-neutral-300 bg-white/80 dark:border-neutral-500 dark:bg-neutral-800"
+        }`}
+        aria-label={statusLabel}
+        aria-disabled={readOnly}
+        aria-pressed={done || partial}
+      >
+        <CheckDraw visible={done} size={isList ? 16 : 12} strokeWidth={3} className="text-white" />
+        {partial && <IconMinus size={isList ? 16 : 12} strokeWidth={3} className="text-white" />}
+        {missed && <IconX size={isList ? 16 : 12} strokeWidth={3} className="text-white" />}
+      </button>
+    ) : !tracked ? (
+      /* Held time — a quiet marker in the checkbox's place, so the row still
+         reads as deliberate rather than as a task missing its control. */
+      <span
+        aria-hidden="true"
+        title="Held time — not tracked"
+        className={`flex shrink-0 items-center justify-center text-neutral-500 dark:text-neutral-400 ${
+          isList ? "h-7 w-7" : "h-[18px] w-[18px]"
+        }`}
+      >
+        <IconLock size={isList ? 15 : 11} strokeWidth={2} />
+      </span>
+    ) : null;
+
+  const title = (
+    <span
+      className={`min-w-0 truncate font-extrabold leading-tight tracking-normal ${styles.title} ${
+        isList ? "text-[17px]" : compact ? "text-[11px]" : "text-[12.5px]"
+      } ${resolved && isList ? `line-through ${missed ? "decoration-rose-400" : "decoration-neutral-400"}` : ""}`}
+    >
+      {task.title}
+    </span>
+  );
+
   const header = (
     <div className={`relative flex items-start justify-between ${isList ? "gap-3" : "gap-2"}`}>
       <div className={`flex min-w-0 flex-col ${isList ? "gap-1" : "gap-px"}`}>
@@ -147,13 +196,14 @@ export function TaskBlockCard({
             {plan!.title}
           </span>
         )}
-        <span
-          className={`truncate font-extrabold leading-tight tracking-normal ${styles.title} ${
-            isList ? "text-[17px]" : compact ? "text-[11px]" : "text-[12.5px]"
-          } ${resolved && isList ? `line-through ${missed ? "decoration-rose-400" : "decoration-neutral-400"}` : ""}`}
-        >
-          {task.title}
-        </span>
+        {isList ? (
+          <div className="flex min-w-0 items-center gap-2.5">
+            {statusControl}
+            {title}
+          </div>
+        ) : (
+          title
+        )}
         {subtaskPill?.hasItems && (
           <button
             type="button"
@@ -170,41 +220,7 @@ export function TaskBlockCard({
 
       <div className={`flex shrink-0 items-center ${isList ? "gap-2" : "gap-1"}`}>
         {trailing}
-        {!isMultiSlotList && tracked && (
-          <button
-            type="button"
-            disabled={readOnly}
-            onClick={(e) => { e.stopPropagation(); if (!readOnly) onToggle(); }}
-            className={`flex shrink-0 items-center justify-center border-[1.5px] transition-colors disabled:opacity-100 ${readOnly ? "cursor-default" : ""} ${
-              isList ? "h-7 w-7 rounded-[8px]" : "h-[18px] w-[18px] rounded-pr-sm"
-            } ${
-              done || partial ? "border-transparent bg-green-500"
-              : missed ? "border-transparent bg-rose-500"
-              : readOnly ? "border-neutral-200 bg-neutral-100/80 dark:border-white/[0.08] dark:bg-white/[0.04]"
-              : "border-neutral-300 bg-white/80 dark:border-neutral-500 dark:bg-neutral-800"
-            }`}
-            aria-label={statusLabel}
-            aria-disabled={readOnly}
-            aria-pressed={done || partial}
-          >
-            <CheckDraw visible={done} size={isList ? 16 : 12} strokeWidth={3} className="text-white" />
-            {partial && <IconMinus size={isList ? 16 : 12} strokeWidth={3} className="text-white" />}
-            {missed && <IconX size={isList ? 16 : 12} strokeWidth={3} className="text-white" />}
-          </button>
-        )}
-        {/* Held time — a quiet marker in the checkbox's place, so the row still
-            reads as deliberate rather than as a task missing its control. */}
-        {!tracked && (
-          <span
-            aria-hidden="true"
-            title="Held time — not tracked"
-            className={`flex shrink-0 items-center justify-center text-neutral-500 dark:text-neutral-400 ${
-              isList ? "h-7 w-7" : "h-[18px] w-[18px]"
-            }`}
-          >
-            <IconLock size={isList ? 15 : 11} strokeWidth={2} />
-          </span>
-        )}
+        {!isList && statusControl}
       </div>
     </div>
   );
