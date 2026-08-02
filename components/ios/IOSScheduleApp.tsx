@@ -82,6 +82,8 @@ import { computeTrend } from "@/lib/trendUtils";
 import { getPlanCardStats } from "@/lib/planInsights";
 import { calculateExecutionStreak } from "@/lib/consistency/calculateExecutionStreak";
 import { haptic } from "@/lib/haptics";
+import { CARD } from "@/components/ui/surfaces";
+import CheckDraw from "@/components/ui/CheckDraw";
 import type { CreateTaskFromNoteInput } from "@/components/notes/NotesView";
 
 const IOSMotionBoundary = dynamic(() => import("@/components/ios/IOSMotionBoundary"), { ssr: false });
@@ -272,7 +274,7 @@ function StatTile({
   detail: string;
 }) {
   return (
-    <div className="rounded-2xl border border-neutral-200 bg-white p-3 dark:border-white/[0.08] dark:bg-neutral-900">
+    <div className={`${CARD} p-3`}>
       <div className="mb-2 flex items-center gap-1.5">
         <Icon size={13} strokeWidth={2} className="text-neutral-400 dark:text-neutral-500" />
         <p className="truncate text-[10px] font-bold uppercase tracking-[0.12em] text-neutral-400 dark:text-neutral-500">{label}</p>
@@ -1058,7 +1060,7 @@ export default function IOSScheduleApp() {
                 </div>
               </section>
             )}
-            <section data-testid="overview-streak-card" className="rounded-2xl border border-neutral-200 bg-white p-4 dark:border-white/[0.08] dark:bg-neutral-900">
+            <section data-testid="overview-streak-card" className={`${CARD} p-4`}>
               <div className="flex items-center gap-3">
                 <span
                   className={`grid h-11 w-11 shrink-0 place-items-center rounded-2xl ${
@@ -1104,7 +1106,7 @@ export default function IOSScheduleApp() {
               onOpenSubtasks={(taskId) => setSubtasksRef({ id: taskId, day: todayKey, dateISO: todayISO() })}
             />
 
-            <section data-testid="overview-tracking-card" className="rounded-2xl border border-neutral-200 bg-white p-4 dark:border-white/[0.08] dark:bg-neutral-900">
+            <section data-testid="overview-tracking-card" className={`${CARD} p-4`}>
               <div className="mb-2 flex items-center justify-between gap-3">
                 <div className="flex min-w-0 items-center gap-1.5 text-neutral-500 dark:text-neutral-400">
                   <IconTargetArrow size={16} strokeWidth={2.2} />
@@ -1188,7 +1190,7 @@ export default function IOSScheduleApp() {
             />
 
             {overviewPlanConsistency.length > 0 && (
-              <section data-testid="overview-plan-card" className="rounded-2xl border border-neutral-200 bg-white p-4 dark:border-white/[0.08] dark:bg-neutral-900">
+              <section data-testid="overview-plan-card" className={`${CARD} p-4`}>
                 <div className="mb-2 flex items-center gap-1.5 text-neutral-500 dark:text-neutral-400">
                   <IconClipboardList size={16} strokeWidth={2.2} />
                   <h2 className="text-[13px] font-extrabold">Plan Consistency</h2>
@@ -1223,7 +1225,7 @@ export default function IOSScheduleApp() {
               </section>
             )}
 
-            <section data-testid="overview-routine-card" className="rounded-2xl border border-neutral-200 bg-white p-4 dark:border-white/[0.08] dark:bg-neutral-900">
+            <section data-testid="overview-routine-card" className={`${CARD} p-4`}>
               <div className="mb-2 flex items-center gap-1.5 text-neutral-500 dark:text-neutral-400">
                 <IconRepeat size={16} strokeWidth={2.2} />
                 <h2 className="text-[13px] font-extrabold">Routine Consistency</h2>
