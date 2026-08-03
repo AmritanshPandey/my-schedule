@@ -454,6 +454,47 @@ test("renders seeded schedule in the configured viewport", async ({ page }, test
   await assertNoRuntimeErrors();
 });
 
+test("a missed task is counted and announced separately from completion", async ({ page }, testInfo) => {
+  const assertNoRuntimeErrors = collectRuntimeErrors(page, testInfo);
+  test.skip(testInfo.project.name === "desktop-chromium", "Overview card verified on the mobile shell");
+
+  await openSeededApp(page, "/?mobileShell=1");
+
+  const card = page.getByTestId("overview-today-card");
+  await expect(card).toBeVisible();
+
+  // Long-press the first checkbox: tap completes, hold marks missed.
+  const checkbox = card.getByRole("button", { name: /Mark done$/ }).first();
+  await expect(checkbox).toBeVisible();
+  const box = await checkbox.boundingBox();
+  expect(box).not.toBeNull();
+  await page.mouse.move(box!.x + box!.width / 2, box!.y + box!.height / 2);
+  await page.mouse.down();
+  await page.waitForTimeout(700);
+  await page.mouse.up();
+
+  // Missed is acknowledged in its own marker, never folded into the numerator.
+  const missed = page.getByTestId("overview-today-missed");
+  await expect(missed).toContainText("1 missed");
+  await expect(card).toContainText("0/");
+
+  // The state must reach assistive tech, which it never did before.
+  await expect(card.getByRole("button", { name: "Missed, Clear missed mark" }).first()).toBeVisible();
+
+  // Long-press is pointer-only, so the same action must be reachable by
+  // keyboard: the button is always in the tab order and reveals itself on
+  // focus. Without this a keyboard user could never mark a task missed.
+  const markMissed = card.getByRole("button", { name: "Mark missed" }).first();
+  await expect(markMissed).toHaveCount(1);
+  await markMissed.focus();
+  await expect(markMissed).toBeVisible();
+  await markMissed.press("Enter");
+  await expect(missed).toContainText("2 missed");
+
+  await expectNoBannedVisualEffects(page);
+  await assertNoRuntimeErrors();
+});
+
 test("exports a restorable JSON backup from Settings", async ({ page }, testInfo) => {
   const assertNoRuntimeErrors = collectRuntimeErrors(page, testInfo);
   test.skip(testInfo.project.name === "mobile-chromium", "Backup export covered on desktop nav");

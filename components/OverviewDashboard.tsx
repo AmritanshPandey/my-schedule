@@ -610,6 +610,7 @@ export default function OverviewDashboard({
   todayKey,
   onNavigate,
   onMarkTaskDone,
+  onMissedTask,
   onOpenSubtasks,
   onLogTracker,
 }: OverviewDashboardProps) {
@@ -816,6 +817,7 @@ export default function OverviewDashboard({
                   taskSummary={taskSummary}
                   taskCheckableIds={taskCheckableIds}
                   onMarkDone={onMarkTaskDone}
+                  onMissed={onMissedTask}
                   onOpenSubtasks={onOpenSubtasks}
                 />
                 <DayBreakdownCard

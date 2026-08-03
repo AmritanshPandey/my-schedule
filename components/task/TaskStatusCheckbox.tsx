@@ -2,6 +2,7 @@
 
 import { IconMinus, IconX } from "@tabler/icons-react";
 import type { TaskState } from "@/lib/taskCompletion";
+import { taskStatusLabel } from "@/lib/taskCompletion";
 import CheckDraw from "@/components/ui/CheckDraw";
 
 interface TaskStatusCheckboxProps {
@@ -29,15 +30,17 @@ export default function TaskStatusCheckbox({
   const done = checked ?? state === "completed";
   const partial = !checked && state === "partial";
   const missed = !done && state === "missed";
-  const statusLabel = readOnly
-    ? done
-      ? "Completed"
-      : missed
-      ? "Missed"
-      : partial
-      ? "Partially completed"
-      : "Not completed"
-    : label;
+  // Derived from the locals above, not from raw `state`: TaskChecklistItem
+  // passes the PARENT task's state alongside the subtask's own `checked`, so
+  // "missed parent, unchecked subtask" is a legitimate combination.
+  const effectiveState: TaskState = done
+    ? "completed"
+    : missed
+    ? "missed"
+    : partial
+    ? "partial"
+    : "incomplete";
+  const statusLabel = taskStatusLabel(effectiveState, readOnly, readOnly ? undefined : label);
 
   return (
     <button
@@ -49,7 +52,7 @@ export default function TaskStatusCheckbox({
       }}
       aria-label={statusLabel}
       aria-disabled={readOnly}
-      aria-pressed={done || partial}
+      aria-pressed={done}
       className={`tap-target flex shrink-0 items-center justify-center border-2 transition-colors disabled:opacity-100 ${
         sizeClasses[size]
       } ${readOnly ? "cursor-default" : "active:scale-95"} ${

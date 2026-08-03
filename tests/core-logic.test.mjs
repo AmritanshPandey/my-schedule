@@ -37,6 +37,9 @@ const {
   isTaskCompleted,
   resolveTaskState,
   getTaskSubtaskSummary,
+  markTaskMissed,
+  taskStatusLabel,
+  toggleTaskFromCheckbox,
 } = await import("../lib/taskCompletion.ts");
 const {
   applyTaskDelete,
@@ -118,6 +121,43 @@ function baseTask(id = "delete-me") {
     subtasks: [{ id: "sub-1", task: "Subtask" }],
   };
 }
+
+test("a checkbox tap on a missed task clears the mark instead of completing it", () => {
+  // Regression: the desktop shell had this branch inline and the iOS shell did
+  // not, so the same tap on the same shared card did opposite things.
+  const task = { id: "t1", title: "T", startTime: "9:00 AM", endTime: "10:00 AM", taskType: "task", subtasks: [] };
+  const missed = { ...task, ...markTaskMissed(task, []) };
+  assert.equal(missed.missed, true);
+
+  const patch = toggleTaskFromCheckbox(missed, []);
+  assert.equal(patch.missed, false);
+  assert.equal(patch.missedAt, undefined);
+  assert.notEqual(patch.completed, true, "un-missing must not complete the task");
+});
+
+test("a checkbox tap on a non-missed task is plain completion toggling", () => {
+  const task = { id: "t2", title: "T", startTime: "9:00 AM", endTime: "10:00 AM", taskType: "task", subtasks: [] };
+  const viaCheckbox = toggleTaskFromCheckbox(task, []);
+  const viaToggle = toggleTaskComplete(task, []);
+  assert.equal(viaCheckbox.completed, viaToggle.completed);
+  assert.equal(viaCheckbox.completed, true);
+});
+
+test("task status labels carry state in the accessible name", () => {
+  assert.equal(taskStatusLabel("incomplete", false), "Not completed, Mark done");
+  assert.equal(taskStatusLabel("partial", false), "Partially completed, Mark done");
+  assert.equal(taskStatusLabel("completed", false), "Completed, Mark not done");
+  assert.equal(taskStatusLabel("missed", false), "Missed, Clear missed mark");
+
+  // Read-only days invite nothing, so the verb is dropped.
+  assert.equal(taskStatusLabel("incomplete", true), "Not completed");
+  assert.equal(taskStatusLabel("partial", true), "Partially completed");
+  assert.equal(taskStatusLabel("completed", true), "Completed");
+  assert.equal(taskStatusLabel("missed", true), "Missed");
+
+  // Callers that own their wording override only the verb, never the state.
+  assert.equal(taskStatusLabel("missed", false, "Mark subtask done"), "Missed, Mark subtask done");
+});
 
 test("whole-task undo removes today's completion history", () => {
   const now = new Date().toISOString();

@@ -73,7 +73,7 @@ import {
   clearTaskException,
   type TaskDeleteScope,
 } from "@/lib/taskMutations";
-import { completionForDate, getTaskCheckableItems, getTaskSubtaskSummary, isTaskCompleted, isTaskResolved, isTrackedTask, markTaskMissed, toggleSlotComplete, toggleSubtaskComplete, toggleTaskComplete } from "@/lib/taskCompletion";
+import { completionForDate, getTaskCheckableItems, getTaskSubtaskSummary, isTaskCompleted, isTaskResolved, isTrackedTask, markTaskMissed, toggleSlotComplete, toggleSubtaskComplete, toggleTaskFromCheckbox } from "@/lib/taskCompletion";
 import { diffException, isTaskScheduledOn, resolveOccurrence } from "@/lib/taskOccurrence";
 import { cascadeMilestoneDates, normalizeMilestoneTimeline } from "@/lib/roadmapDates";
 import { toggleRitualCompletion } from "@/lib/ritualCompletions";
@@ -680,8 +680,10 @@ export default function IOSScheduleApp() {
       ...prev,
       activities: {
         ...prev.activities,
+        // A missed task un-marks rather than completing — shared with the
+        // desktop shell so the two can't disagree on what a tap means.
         [day]: (prev.activities[day] ?? []).map((task) =>
-          task.id === taskId ? { ...task, ...toggleTaskComplete(task, allSubtaskIds) } : task
+          task.id === taskId ? { ...task, ...toggleTaskFromCheckbox(task, allSubtaskIds) } : task
         ),
       },
     }));
@@ -963,6 +965,7 @@ export default function IOSScheduleApp() {
             category={taskIdentity(task, categoryMap).category}
             readOnly={dateISO !== todayISO()}
             onToggleComplete={(id, ids) => handleToggleTaskComplete(id, ids, day, dateISO)}
+            onMissed={(id, ids) => handleMarkTaskMissed(id, ids, day, dateISO)}
             onToggleSlot={(id, slotIndex) => handleToggleSlot(id, slotIndex, day, dateISO)}
             onEdit={() => openEditSheet(task, dateISO)}
             onOpenSubtasks={() => setSubtasksRef({ id: task.id, day, dateISO })}
@@ -1103,6 +1106,7 @@ export default function IOSScheduleApp() {
               taskSummary={(task) => getTaskSubtaskSummary(task, task.planId ? plansById.get(task.planId) ?? null : null)}
               taskCheckableIds={(task) => getTaskCheckableItems(task, task.planId ? plansById.get(task.planId) ?? null : null).map((item) => item.id)}
               onMarkDone={(taskId, subtaskIds) => handleToggleTaskComplete(taskId, subtaskIds, todayKey, todayISO())}
+              onMissed={(taskId, subtaskIds) => handleMarkTaskMissed(taskId, subtaskIds, todayKey, todayISO())}
               onOpenSubtasks={(taskId) => setSubtasksRef({ id: taskId, day: todayKey, dateISO: todayISO() })}
             />
 

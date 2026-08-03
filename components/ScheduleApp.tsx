@@ -110,7 +110,7 @@ import { CurrentTaskHighlightLayer } from "@/components/timeline/CurrentTaskHigh
 import TimelineDraftCard from "@/components/timeline/TimelineDraftCard";
 import { taskLaneStyle } from "@/lib/timeline/taskLaneStyle";
 import {
-  toggleTaskComplete,
+  toggleTaskFromCheckbox,
   toggleSubtaskComplete,
   toggleSlotComplete,
   isTrackedTask,
@@ -1300,13 +1300,12 @@ export default function ScheduleApp() {
         ...prev,
         activities: {
           ...prev.activities,
-          [day]: (prev.activities[day] ?? []).map((t) => {
-            if (t.id !== taskId) return t;
-            // Tapping the checkbox of a "missed" task clears it back to
-            // incomplete (un-miss) rather than completing it.
-            if (t.missed) return { ...t, ...markTaskMissed(t, allSubtaskIds) };
-            return { ...t, ...toggleTaskComplete(t, allSubtaskIds) };
-          }),
+          // Tapping the checkbox of a "missed" task clears it back to incomplete
+          // (un-miss) rather than completing it. The branch lives in
+          // toggleTaskFromCheckbox so the iOS shell cannot drift from it again.
+          [day]: (prev.activities[day] ?? []).map((t) =>
+            t.id === taskId ? { ...t, ...toggleTaskFromCheckbox(t, allSubtaskIds) } : t
+          ),
         },
       }));
     },
@@ -3177,6 +3176,7 @@ export default function ScheduleApp() {
                                 category={taskIdentity(task, categoryMap).category}
                                 readOnly={!isViewingToday}
                                 onToggleComplete={(id, ids) => handleToggleTaskComplete(id, ids, activeDay, activeDateISO)}
+                                onMissed={(id, ids) => handleMarkTaskMissed(id, ids, activeDay, activeDateISO)}
                                 onToggleSubtask={(id, sub) => handleToggleSubtask(id, sub, activeDay, activeDateISO)}
                                 onToggleSlot={(id, slotIndex) => handleToggleSlot(id, slotIndex, activeDay, activeDateISO)}
                                 onEdit={() => openEditSheet(task)}

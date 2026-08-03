@@ -239,7 +239,9 @@ export default function TaskDetailView({
         Done
       </m.button>
       )}
-      {tracked && onMissed && (
+      {/* `!done` matches the sheet variant. Without it, Missed on a completed
+          task silently un-completes it and strips today's history events. */}
+      {tracked && !done && onMissed && (
         <m.button
           type="button"
           whileTap={{ scale: 0.97 }}
