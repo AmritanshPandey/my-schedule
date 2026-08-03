@@ -5,7 +5,7 @@ import { m, AnimatePresence, useMotionValue, useTransform, animate } from "frame
 import { IconArrowUpRight, IconCheck, IconChevronDown, IconEdit, IconListCheck, IconMinus, IconTrash, IconX } from "@tabler/icons-react";
 import type { Task, Plan, TaskCategory } from "@/lib/useScheduleDB";
 import type { ScheduleEntry, MetaField } from "@/components/ScheduleItem";
-import { calculateTaskProgress, isTrackedTask, resolveTaskState } from "@/lib/taskCompletion";
+import { calculateTaskProgress, isTrackedTask, resolveTaskState, taskStatusLabel } from "@/lib/taskCompletion";
 import type { TaskState } from "@/lib/taskCompletion";
 import { formatSlotsDuration } from "@/lib/timeUtils";
 import { getSlots } from "@/lib/taskMutations";
@@ -55,17 +55,7 @@ function TaskCheckbox({ state, size = "lg", readOnly = false, onChange }: Checkb
   const iconSize = size === "lg" ? 14              : 12;
   const filled   = state === "completed" || state === "partial";
   const missed = state === "missed";
-  const statusLabel = readOnly
-    ? state === "completed"
-      ? "Completed"
-      : missed
-      ? "Missed"
-      : state === "partial"
-      ? "Partially completed"
-      : "Not completed"
-    : state === "completed"
-    ? "Mark incomplete"
-    : "Mark complete";
+  const statusLabel = taskStatusLabel(state, readOnly);
 
   return (
     <m.button
@@ -76,7 +66,7 @@ function TaskCheckbox({ state, size = "lg", readOnly = false, onChange }: Checkb
       onClick={(e) => { e.stopPropagation(); if (!readOnly) onChange(); }}
       aria-label={statusLabel}
       aria-disabled={readOnly}
-      aria-pressed={filled}
+      aria-pressed={state === "completed"}
       className={`shrink-0 ${dim} ${round} border-2 flex items-center justify-center transition-colors duration-150 disabled:opacity-100 ${readOnly ? "cursor-default" : ""} ${
         filled
           ? "border-transparent bg-green-500"
@@ -137,6 +127,8 @@ export interface ListTaskCardProps {
   /** Past/future day — show completion but don't allow toggling. */
   readOnly?: boolean;
   onToggleComplete: (taskId: string, allIds: string[]) => void;
+  /** Long-press the checkbox. Omitted → the gesture is inert (edit mode, read-only). */
+  onMissed?: (taskId: string, allIds: string[]) => void;
   onToggleSubtask: (taskId: string, subtaskId: string) => void;
   /** Independent per-phase toggle for a multi-slot task (same-day multiple time blocks). */
   onToggleSlot?: (taskId: string, slotIndex: number) => void;
@@ -156,6 +148,7 @@ function ListTaskCardInner({
   editMode = false,
   readOnly = false,
   onToggleComplete,
+  onMissed,
   onToggleSubtask,
   onToggleSlot,
   onEdit,
@@ -304,6 +297,18 @@ function ListTaskCardInner({
         <IconChevronDown size={18} strokeWidth={2} />
       </m.span>
     </button>
+  ) : tracked && onOpenSubtasks ? (
+    /* A tracked task with no subtasks still needs a route into its detail view,
+       which is where "Missed" lives. Commitments stay chip-free — they carry no
+       completion state to act on. */
+    <button
+      type="button"
+      onClick={(e) => { e.stopPropagation(); onOpenSubtasks(); }}
+      aria-label="Open task details"
+      className="flex h-8 w-8 items-center justify-center rounded-full bg-neutral-100 text-neutral-500 transition-colors hover:bg-neutral-200 dark:bg-white/[0.07] dark:text-neutral-400 dark:hover:bg-white/[0.12]"
+    >
+      <IconArrowUpRight size={16} strokeWidth={2.2} />
+    </button>
   ) : null;
 
   // ── Note + progress bar (below the time row) ────────────────────────────────
@@ -409,6 +414,10 @@ function ListTaskCardInner({
           readOnly={readOnly}
           slotCompletions={slotCompletions}
           onToggle={() => onToggleComplete(task.id, allSubtaskIds)}
+          // Inert in edit mode so the gesture can never race the dnd-kit drag.
+          onLongPressMissed={
+            onMissed && !editMode && !readOnly ? () => onMissed(task.id, allSubtaskIds) : undefined
+          }
           onClick={editMode ? undefined : handleCardTap}
           trailing={trailingNode}
           footer={footerNode}

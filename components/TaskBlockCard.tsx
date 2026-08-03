@@ -5,7 +5,8 @@ import { IconMinus, IconX, IconListCheck, IconArrowUpRight, IconLock } from "@ta
 import CheckDraw from "@/components/ui/CheckDraw";
 import type { Plan, Task, TaskCategory, TaskSlot } from "@/lib/useScheduleDB";
 import type { TaskState } from "@/lib/taskCompletion";
-import { getTaskSubtaskSummary, isTrackedTask } from "@/lib/taskCompletion";
+import { getTaskSubtaskSummary, isTrackedTask, taskStatusLabel } from "@/lib/taskCompletion";
+import { useLongPress } from "@/lib/useLongPress";
 import { getSlots } from "@/lib/taskMutations";
 import { timelineCardStyles, TIMELINE_NEUTRAL_CARD } from "@/lib/colorSystem";
 
@@ -56,6 +57,12 @@ export interface TaskBlockCardProps {
    */
   slotCompletions?: Array<{ done: boolean; onToggle: () => void }>;
   onToggle: () => void;
+  /**
+   * list variant only: long-press the status checkbox to mark the day missed.
+   * Omitted → the gesture is inert. Never wired for the grid variant, where the
+   * timeline already owns a 300ms long-press for drag-move.
+   */
+  onLongPressMissed?: () => void;
   onClick?: () => void;
   /**
    * Timeline (grid) only: when set and the task has subtasks/steps, a tappable
@@ -89,6 +96,7 @@ export function TaskBlockCard({
   compact = false,
   narrow = false,
   onToggle,
+  onLongPressMissed,
   onClick,
   onOpenSubtasks,
   trailing,
@@ -122,17 +130,15 @@ export function TaskBlockCard({
   const showEyebrow = !!plan && !narrow && !minimal;
   // Timeline (grid) subtask/session pill — only when wired and the task has items.
   const subtaskPill = onOpenSubtasks && !isList && !minimal ? getTaskSubtaskSummary(task, plan) : null;
-  const statusLabel = readOnly
-    ? done
-      ? "Completed"
-      : missed
-      ? "Missed"
-      : partial
-      ? "Partially completed"
-      : "Not completed"
-    : done
-    ? "Mark incomplete"
-    : "Mark complete";
+  const statusLabel = taskStatusLabel(state, readOnly);
+
+  // Long-press the checkbox to mark the day missed. List variant only: the
+  // timeline already owns a 300ms long-press on the whole grid block (including
+  // its checkbox) for drag-move, and a second one would race it. Inert on a
+  // completed task, since marking missed would silently un-complete it.
+  const canMiss =
+    !!onLongPressMissed && isList && tracked && !readOnly && !done && !isMultiSlotList;
+  const longPress = useLongPress(canMiss ? onLongPressMissed : undefined);
 
   // Tiny grid slot — colored chip with just the title.
   if (minimal) {
@@ -159,17 +165,20 @@ export function TaskBlockCard({
         type="button"
         disabled={readOnly}
         onClick={(e) => { e.stopPropagation(); if (!readOnly) onToggle(); }}
-        className={`flex shrink-0 items-center justify-center border-[1.5px] transition-colors disabled:opacity-100 ${readOnly ? "cursor-default" : ""} ${
+        {...longPress.pressHandlers}
+        className={`flex shrink-0 select-none items-center justify-center border-[1.5px] transition-colors [-webkit-touch-callout:none] disabled:opacity-100 motion-safe:duration-500 ${readOnly ? "cursor-default" : ""} ${
           isList ? "h-7 w-7 rounded-[8px]" : "h-[18px] w-[18px] rounded-pr-sm"
         } ${
           done || partial ? "border-transparent bg-green-500"
           : missed ? "border-transparent bg-rose-500"
           : readOnly ? "border-neutral-200 bg-neutral-100/80 dark:border-white/[0.08] dark:bg-white/[0.04]"
+          // Tints toward rose across the hold, landing exactly as it fires.
+          : longPress.pressing ? "bg-white/80 motion-safe:border-rose-400 dark:bg-neutral-800 dark:motion-safe:border-rose-400"
           : "border-neutral-300 bg-white/80 dark:border-neutral-500 dark:bg-neutral-800"
         }`}
         aria-label={statusLabel}
         aria-disabled={readOnly}
-        aria-pressed={done || partial}
+        aria-pressed={done}
       >
         <CheckDraw visible={done} size={isList ? 16 : 12} strokeWidth={3} className="text-white" />
         {partial && <IconMinus size={isList ? 16 : 12} strokeWidth={3} className="text-white" />}
@@ -295,6 +304,10 @@ export function TaskBlockCard({
       role={onClick ? "button" : undefined}
       tabIndex={onClick ? 0 : undefined}
       onClick={onClick}
+      // Swallows the click that follows a fired long-press — including one that
+      // lands on the card body after the finger drifted off the checkbox, which
+      // would otherwise open the task right after marking it missed.
+      {...longPress.clickGuard}
       className={`group relative flex flex-col overflow-hidden transition-all ${styles.cardBg} ${styles.blockBorder} ${
         resolved ? "opacity-60" : ""
       } ${

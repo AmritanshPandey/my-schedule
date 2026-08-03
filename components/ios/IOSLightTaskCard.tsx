@@ -15,6 +15,8 @@ interface IOSLightTaskCardProps {
   category: TaskCategory | null;
   readOnly?: boolean;
   onToggleComplete: (taskId: string, allSubtaskIds: string[]) => void;
+  /** Long-press the checkbox. Omitted → the gesture is inert. */
+  onMissed?: (taskId: string, allSubtaskIds: string[]) => void;
   /** Independent per-phase toggle for a multi-slot task (same-day multiple time blocks). */
   onToggleSlot?: (taskId: string, slotIndex: number) => void;
   onEdit: () => void;
@@ -27,6 +29,7 @@ export default function IOSLightTaskCard({
   category,
   readOnly = false,
   onToggleComplete,
+  onMissed,
   onToggleSlot,
   onEdit,
   onOpenSubtasks,
@@ -52,7 +55,10 @@ export default function IOSLightTaskCard({
 
   const trailing = (
     <div className="flex items-center gap-2">
-      {hasItems && onOpenSubtasks && (
+      {/* Gated on `tracked`, not `hasItems`: a task with no subtasks still needs
+          a route into its detail view, which is where "Missed" lives. Without
+          this a subtask-less task could never be marked missed at all. */}
+      {tracked && onOpenSubtasks && (
         <button
           type="button"
           onClick={(e) => {
@@ -60,11 +66,11 @@ export default function IOSLightTaskCard({
             haptic("light");
             onOpenSubtasks();
           }}
-          aria-label="Open subtasks"
+          aria-label={hasItems ? "Open subtasks" : "Open task details"}
           className="inline-flex h-9 items-center gap-1.5 rounded-full border border-black/10 bg-white/60 px-3 text-[12px] font-extrabold tabular-nums text-neutral-600 transition-colors active:bg-white/80 dark:border-white/[0.10] dark:bg-white/[0.08] dark:text-neutral-200 dark:active:bg-white/[0.12]"
         >
-          <IconListCheck size={14} strokeWidth={2} />
-          {completedCount}/{totalCount || itemCount}
+          {hasItems && <IconListCheck size={14} strokeWidth={2} />}
+          {hasItems && `${completedCount}/${totalCount || itemCount}`}
           <IconArrowUpRight size={13} strokeWidth={2.2} />
         </button>
       )}
@@ -97,6 +103,7 @@ export default function IOSLightTaskCard({
         haptic("medium");
         onToggleComplete(task.id, allSubtaskIds);
       }}
+      onLongPressMissed={onMissed ? () => onMissed(task.id, allSubtaskIds) : undefined}
       onClick={() => {
         // Held time can't be completed, so tapping the card must do nothing.
         if (!readOnly && !slotCompletions && tracked) {

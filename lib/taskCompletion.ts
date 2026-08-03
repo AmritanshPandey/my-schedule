@@ -213,6 +213,51 @@ export function isTaskResolved(task: Task, totalSubtasks: number): boolean {
   return isTaskCompleted(task, totalSubtasks) || !!task.missed;
 }
 
+/**
+ * The accessible name for a task status control.
+ *
+ * State is carried in the NAME rather than in `aria-pressed`, because pressed is
+ * binary and cannot express "partial" or "missed" — every editable control used
+ * to announce "Mark done" with pressed=false regardless of state, so a missed
+ * task was indistinguishable from an untouched one to a screen reader.
+ *
+ * `action` overrides the verb for callers that own their own wording; read-only
+ * returns the bare state, since there is nothing to invite.
+ */
+export function taskStatusLabel(state: TaskState, readOnly: boolean, action?: string): string {
+  const stateText =
+    state === "completed"
+      ? "Completed"
+      : state === "missed"
+      ? "Missed"
+      : state === "partial"
+      ? "Partially completed"
+      : "Not completed";
+  if (readOnly) return stateText;
+  const verb =
+    action ??
+    (state === "completed"
+      ? "Mark not done"
+      : state === "missed"
+      ? "Clear missed mark"
+      : "Mark done");
+  return `${stateText}, ${verb}`;
+}
+
+/**
+ * What a tap on a status checkbox means: a missed task un-marks, anything else
+ * toggles completion.
+ *
+ * Extracted because the desktop shell had this branch inline and the iOS shell
+ * did not, so the same tap on the same shared card cleared the missed mark on
+ * one surface and completed the task on the other.
+ */
+export function toggleTaskFromCheckbox(task: Task, allSubtaskIds: string[]): Partial<Task> {
+  return task.missed
+    ? markTaskMissed(task, allSubtaskIds)
+    : toggleTaskComplete(task, allSubtaskIds);
+}
+
 // ── Toggle task (whole task) ─────────────────────────────────────────────────
 
 /**
