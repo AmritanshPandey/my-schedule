@@ -413,8 +413,14 @@ function PlanConsistencyCard({
   onNavigate: (tab: number) => void;
 }) {
   if (rows.length === 0) return null;
+  // No min-height: PlanCard's lg:min-h-[220px] works because it pairs with
+  // lg:mt-auto on a footer that pushes down to meet it. This card has no such
+  // anchor, so a fixed min-height just leaves dead space below the rows
+  // whenever real content falls short of it — which it reliably did, since
+  // 520px didn't even match this card's own siblings' height. Let it be
+  // exactly as tall as its rows.
   return (
-    <section data-testid="overview-plan-card" className={`${CARD} px-4 py-4 lg:min-h-[520px]`}>
+    <section data-testid="overview-plan-card" className={`${CARD} px-4 py-4`}>
       <SectionHeader icon={IconClipboardList} title="Plan Consistency" meta={`${rows.length} ${rows.length === 1 ? "plan" : "plans"}`} />
       <div className="divide-y divide-neutral-100 dark:divide-white/[0.06]">
         {rows.map(({ plan, consistency, milestonesTotal, milestonesDone }) => {
@@ -424,7 +430,13 @@ function PlanConsistencyCard({
               key={plan.id}
               type="button"
               onClick={() => { haptic("light"); onNavigate(1); }}
-              className="grid w-full grid-cols-[minmax(0,1fr)_90px] items-center gap-4 py-3.5 text-left transition-colors lg:hover:bg-neutral-50/80 dark:lg:hover:bg-white/[0.03]"
+              // max-w keeps the plan name and its % pill close together even
+              // when the card spans the full 2-column grid at lg (~890px) —
+              // without it the flexible left track stretches to fill the
+              // container and strands the two ends of the row apart.
+              // -mx-2/px-2 so the hover wash reads as a row with breathing
+              // room around its content instead of a hard band flush to text.
+              className="-mx-2 grid w-full max-w-[520px] grid-cols-[minmax(0,1fr)_90px] items-center gap-4 rounded-lg px-2 py-3.5 text-left transition-colors lg:hover:bg-neutral-50/80 dark:lg:hover:bg-white/[0.03]"
             >
               <div className="min-w-0">
                 <div className="flex items-center gap-2">
@@ -838,6 +850,14 @@ export default function OverviewDashboard({
                 <ActiveTrackingCard rows={trackerData} onNavigate={onNavigate} onLogTracker={onLogTracker} />
               </div>
 
+              {/* col-span-2 at lg is load-bearing, not decorative: the grid only
+                  has 2 template columns until xl, so without a span this card
+                  becomes an orphan in column 1 of a new row, leaving column 2
+                  empty beside it for the rest of the page. At xl a real 3rd
+                  column exists, so col-span-1 there is correct. The row-level
+                  stretch this used to cause (title far from the % pill on an
+                  890px-wide banner) is fixed at the row, not by giving up the
+                  span — see the max-w on each row below. */}
               <div className="space-y-4 lg:col-span-2 xl:col-span-1">
                 <PlanConsistencyCard rows={planConsistency} onNavigate={onNavigate} />
               </div>
