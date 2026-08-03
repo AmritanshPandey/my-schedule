@@ -66,6 +66,7 @@ const { getNowOnTimeline, mapMinutesToTimeline } = await import("../lib/timeline
 const { buildDayBreakdown, taskScheduledMinutes, donutSegments, HELD_TIME_ID } =
   await import("../lib/dayBreakdown.ts");
 const { selectTodayTasks } = await import("../lib/todayTasks.ts");
+const { selectNeedsAttention, MISSED_LOOKBACK_DAYS, MIN_STREAK_TO_WARN } = await import("../lib/needsAttention.ts");
 const { CategoryRegistry } = await import("../lib/taskCategories.ts");
 const { taskIdentity, categoriesById } = await import("../lib/taskIdentity.ts");
 const { calculateExecutionStreak } = await import("../lib/consistency/calculateExecutionStreak.ts");
@@ -1513,4 +1514,136 @@ test("taskIdentity resolves colour from the category, neutral otherwise", () => 
     null,
     "held time is neutral even with a category",
   );
+});
+
+// ── selectNeedsAttention (the Overview catch-up card) ──────────────────────
+
+/** A schedule carrying milestones and a day of tasks. */
+function attentionSchedule({ tasks = [], plans = [], milestones = [], rituals = [], ritualCompletions = [], dayKey } = {}) {
+  const activities = Object.fromEntries(DAYS.map((d) => [d, []]));
+  if (dayKey) activities[dayKey] = tasks;
+  return { plans, categories: [], activities, progressTrackers: [], metricEntries: [], milestones, rituals, strategies: [], ritualCompletions, notes: [], preferences: {} };
+}
+
+const isoShift = (iso, days) => addDaysToISO(iso, days);
+/** A dated "missed" event, the shape completionHistory actually stores. */
+const missedEvent = (id, iso) => ({ id, taskId: id, completionType: "missed", completedAt: `${iso}T18:00:00.000Z` });
+
+test("selectNeedsAttention surfaces overdue milestones, most overdue first", () => {
+  const today = "2026-08-02";
+  const m = (over) => ({
+    planId: "p1", plannedDurationDays: 7, linkedActivities: [], linkedTrackers: [],
+    createdAt: "", updatedAt: "", sortOrder: 0, status: "active", ...over,
+  });
+  const schedule = attentionSchedule({
+    plans: [{ id: "p1", title: "GMAT", category: "learning", emoji: "school", color: "emerald", items: [] }],
+    milestones: [
+      m({ id: "a", title: "Quant drills", startDate: "2026-07-01", plannedEndDate: "2026-07-30" }), // 3 over
+      m({ id: "b", title: "Verbal set",   startDate: "2026-07-01", plannedEndDate: "2026-07-26" }), // 7 over
+      m({ id: "c", title: "Not yet due",  startDate: "2026-07-01", plannedEndDate: "2026-08-20" }),
+      m({ id: "d", title: "Already done", startDate: "2026-07-01", plannedEndDate: "2026-07-01", actualCompletedDate: "2026-07-01" }),
+    ],
+  });
+
+  const { overdueMilestones, total } = selectNeedsAttention(schedule, today);
+  assert.deepEqual(
+    overdueMilestones.map((r) => [r.milestone.id, r.daysOverdue]),
+    [["b", 7], ["a", 3]],
+    "longest-slipping first; future and completed milestones excluded",
+  );
+  assert.equal(overdueMilestones[0].plan.title, "GMAT", "the plan is resolved for the row subtitle");
+  assert.equal(total, 2);
+});
+
+test("selectNeedsAttention lists recent misses but never today's", () => {
+  const today = "2026-08-02";
+  const dayKey = todayKeyFor(today);
+  const base = { planId: "p1", startTime: "9:00 AM", endTime: "10:00 AM" };
+  const tasks = [
+    { ...base, id: "t-yesterday", title: "Yesterday", completionHistory: [missedEvent("t-yesterday", isoShift(today, -1))] },
+    { ...base, id: "t-today",     title: "Today",     completionHistory: [missedEvent("t-today", today)] },
+    { ...base, id: "t-old",       title: "Too old",   completionHistory: [missedEvent("t-old", isoShift(today, -(MISSED_LOOKBACK_DAYS + 1)))] },
+    { ...base, id: "t-done",      title: "Completed", completionHistory: [{ id: "e", taskId: "t-done", completionType: "task", completedAt: `${isoShift(today, -2)}T10:00:00.000Z` }] },
+  ];
+  const schedule = attentionSchedule({ dayKey, tasks, plans: [{ id: "p1", title: "Work", category: "work", emoji: "briefcase", color: "cyan", items: [] }] });
+
+  const { missedTasks } = selectNeedsAttention(schedule, today);
+  assert.deepEqual(
+    missedTasks.map((r) => [r.task.id, r.daysAgo]),
+    [["t-yesterday", 1]],
+    "today is excluded (already shown as missed on the Today card), and so is anything past the lookback",
+  );
+  assert.equal(missedTasks[0].plan.title, "Work");
+});
+
+test("selectNeedsAttention counts a recurring task's miss once, not once per weekday", () => {
+  const today = "2026-08-02";
+  const missedISO = isoShift(today, -1);
+  // A recurring task is the SAME object in several weekday buckets.
+  const task = { id: "recurring", title: "Lift", planId: "p1", startTime: "6:00 AM", endTime: "7:00 AM", completionHistory: [missedEvent("recurring", missedISO)] };
+  const activities = Object.fromEntries(DAYS.map((d) => [d, [task]]));
+  const schedule = { plans: [], categories: [], activities, progressTrackers: [], metricEntries: [], milestones: [], rituals: [], strategies: [], ritualCompletions: [], notes: [], preferences: {} };
+
+  const { missedTasks, total } = selectNeedsAttention(schedule, today);
+  assert.equal(missedTasks.length, 1, "deduped by task id + date");
+  assert.equal(total, 1);
+});
+
+test("selectNeedsAttention is empty for a user who is on top of things", () => {
+  const { atRiskRituals, overdueMilestones, missedTasks, total } = selectNeedsAttention(attentionSchedule({}), "2026-08-02");
+  assert.deepEqual(atRiskRituals, []);
+  assert.deepEqual(overdueMilestones, []);
+  assert.deepEqual(missedTasks, []);
+  assert.equal(total, 0, "the card renders nothing at all in this case");
+});
+
+test("selectNeedsAttention flags a ritual run that ends tonight", () => {
+  const today = "2026-08-02";
+  const dayKey = todayKeyFor(today);
+  const done = (id, n) => ({ ritualId: id, date: isoShift(today, -n) });
+  const schedule = attentionSchedule({
+    dayKey,
+    rituals: [
+      { id: "keep", title: "Morning pages", time: "07:00" },
+      { id: "short", title: "One-day only", time: "08:00" },
+      { id: "otherday", title: "Not due today", time: "09:00", repeatDays: [todayKeyFor("2026-08-02") === "monday" ? "tuesday" : "monday"] },
+      { id: "already", title: "Done today", time: "10:00" },
+    ],
+    ritualCompletions: [
+      done("keep", 1), done("keep", 2), done("keep", 3),
+      done("short", 1),
+      done("otherday", 1), done("otherday", 2),
+      done("already", 1), done("already", 2),
+    ],
+  });
+
+  const { atRiskRituals } = selectNeedsAttention(schedule, today, dayKey, new Set(["already"]));
+  assert.deepEqual(
+    atRiskRituals.map((r) => [r.ritual.id, r.streak]),
+    [["keep", 3]],
+    "only a run of >= MIN_STREAK_TO_WARN, due today, and not already completed",
+  );
+  assert.equal(MIN_STREAK_TO_WARN, 2);
+});
+
+test("selectNeedsAttention orders rows by how recoverable they are", () => {
+  // A streak can still be saved today, a milestone compounds, a miss is history.
+  const today = "2026-08-02";
+  const dayKey = todayKeyFor(today);
+  const schedule = attentionSchedule({
+    dayKey,
+    tasks: [{ id: "t", title: "Gym", planId: "", startTime: "7:00 AM", endTime: "8:00 AM",
+              completionHistory: [missedEvent("t", isoShift(today, -1))] }],
+    milestones: [{ id: "m", planId: "p", title: "Ship", startDate: "2026-07-01", plannedDurationDays: 7,
+                   plannedEndDate: isoShift(today, -2), status: "active", linkedActivities: [], linkedTrackers: [],
+                   createdAt: "", updatedAt: "", sortOrder: 0 }],
+    rituals: [{ id: "r", title: "Pages", time: "07:00" }],
+    ritualCompletions: [{ ritualId: "r", date: isoShift(today, -1) }, { ritualId: "r", date: isoShift(today, -2) }],
+  });
+
+  const r = selectNeedsAttention(schedule, today, dayKey, new Set());
+  assert.equal(r.total, 3, "one of each kind");
+  assert.equal(r.atRiskRituals.length, 1);
+  assert.equal(r.overdueMilestones.length, 1);
+  assert.equal(r.missedTasks.length, 1);
 });
