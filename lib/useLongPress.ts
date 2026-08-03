@@ -68,6 +68,11 @@ export function useLongPress(
     (e: ReactPointerEvent<HTMLElement>) => {
       // Secondary mouse buttons open menus; they are not a hold.
       if (e.pointerType === "mouse" && e.button !== 0) return;
+      // A second pointerdown before the matching pointerup would orphan the
+      // running timer and both would fire. Against a toggle callback that nets
+      // to no visible change — reachable with two fingers on one checkbox, or
+      // whenever a pointerup/pointercancel is never delivered.
+      cancel();
       originRef.current = { x: e.clientX, y: e.clientY };
       firedRef.current = false;
       setPressing(true);
@@ -79,7 +84,7 @@ export function useLongPress(
         onLongPress?.();
       }, delayMs);
     },
-    [delayMs, onLongPress]
+    [cancel, delayMs, onLongPress]
   );
 
   const onPointerMove = useCallback(

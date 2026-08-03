@@ -484,11 +484,15 @@ test("a missed task is counted and announced separately from completion", async 
   // Long-press is pointer-only, so the same action must be reachable by
   // keyboard: the button is always in the tab order and reveals itself on
   // focus. Without this a keyboard user could never mark a task missed.
-  const markMissed = card.getByRole("button", { name: "Mark missed" }).first();
-  await expect(markMissed).toHaveCount(1);
-  await markMissed.focus();
-  await expect(markMissed).toBeVisible();
-  await markMissed.press("Enter");
+  // Assert on the un-suffixed locator: the already-missed row drops its
+  // "Mark missed" button, so the remaining count is what makes the next
+  // assertion meaningful. `.first()` would resolve to one element by
+  // construction and prove nothing.
+  const markMissed = card.getByRole("button", { name: "Mark missed" });
+  await expect(markMissed).toHaveCount(2);
+  await markMissed.first().focus();
+  await expect(markMissed.first()).toBeVisible();
+  await markMissed.first().press("Enter");
   await expect(missed).toContainText("2 missed");
 
   await expectNoBannedVisualEffects(page);
