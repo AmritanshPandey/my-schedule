@@ -18,7 +18,6 @@ import { safeGetItem, safeSetItem } from "@/lib/safeStorage";
 import { useLongPress } from "@/lib/useLongPress";
 import { CARD, SOFT_PANEL } from "@/components/ui/surfaces";
 import CheckDraw from "@/components/ui/CheckDraw";
-import MarkMissedButton from "@/components/task/MarkMissedButton";
 
 type TaskSummary = ReturnType<typeof getTaskSubtaskSummary>;
 
@@ -138,7 +137,7 @@ function TodayTaskRow({
     : 0;
 
   return (
-    <div className="group/task-row flex items-center gap-3 py-3" {...longPress.clickGuard}>
+    <div className="flex items-center gap-3 py-3" {...longPress.clickGuard}>
       <TaskStatusButton
         state={state}
         onClick={() => {
@@ -148,7 +147,6 @@ function TodayTaskRow({
         pressHandlers={longPress.pressHandlers}
         pressing={longPress.pressing}
       />
-      {canMiss && <MarkMissedButton missed={isMissed} onToggle={toggleMissed} />}
       <div className="min-w-0 flex-1">
         <p
           className={`truncate text-[15px] font-bold leading-tight ${
@@ -187,20 +185,28 @@ function TodayTaskRow({
           </span>
         </span>
       )}
-      {subTotal > 0 && onOpenSubtasks && (
+      {/* Present for every task, not just those with subtasks: this is the
+          keyboard and screen-reader route into the detail view, where the
+          labelled "Missed" button lives. Long-press covers the same action on
+          touch. Mirrors IOSLightTaskCard's trailing chip. */}
+      {onOpenSubtasks && (
         <button
           type="button"
           onClick={() => {
             haptic("light");
             onOpenSubtasks(task.id);
           }}
-          aria-label={`Open subtasks (${subDone} of ${subTotal} done)`}
+          aria-label={
+            subTotal > 0 ? `Open subtasks (${subDone} of ${subTotal} done)` : "Open task details"
+          }
           className="inline-flex min-h-[34px] shrink-0 items-center gap-1.5 rounded-full border border-neutral-200 px-2.5 text-neutral-500 transition-colors hover:bg-neutral-50 dark:border-white/[0.10] dark:text-neutral-400 dark:hover:bg-white/[0.05]"
         >
-          <IconListCheck size={14} strokeWidth={2} className="shrink-0" />
-          <span className="text-[12px] font-bold tabular-nums">
-            {subDone}/{subTotal}
-          </span>
+          {subTotal > 0 && <IconListCheck size={14} strokeWidth={2} className="shrink-0" />}
+          {subTotal > 0 && (
+            <span className="text-[12px] font-bold tabular-nums">
+              {subDone}/{subTotal}
+            </span>
+          )}
           <IconArrowUpRight size={13} strokeWidth={2.2} className="shrink-0" />
         </button>
       )}
