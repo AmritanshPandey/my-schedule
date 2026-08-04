@@ -145,11 +145,7 @@ export default function DayWallpaperSheet({ open, onClose, schedule, todayKey }:
 
       if (cancelled) return;
       const { width, height } = wallpaperSize();
-      const dateLabel = new Date().toLocaleDateString("en-US", {
-        weekday: "long",
-        month: "short",
-        day: "numeric",
-      }).replace(",", " ·");
+      const dateLabel = new Date().toLocaleDateString("en-US", { weekday: "long" });
       renderDayWallpaper(canvasEl, { width, height, items, icons, background, dateLabel });
     })();
 

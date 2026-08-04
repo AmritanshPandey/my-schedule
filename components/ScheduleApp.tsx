@@ -158,7 +158,7 @@ import {
   DRAG_THRESHOLD_PX,
   LONG_PRESS_MS,
   DRAG_MIN_DURATION,
-  DRAG_DEFAULT_DURATION,
+  CLICK_DEFAULT_DURATION,
 } from "@/lib/timeline/dragTimeUtils";
 import {
   buildTimelineGridMarks,
@@ -1005,7 +1005,6 @@ export default function ScheduleApp() {
   function handleGridPointerDown(e: React.PointerEvent<HTMLDivElement>) {
     if (e.pointerType === "mouse" && e.button !== 0) return;
     if ((e.target as HTMLElement).closest("[data-task-block]")) return;
-    if (!dragHelpersRef.current.isViewingToday) return;
     const startMin = dragHelpersRef.current.snapAndClamp(
       dragHelpersRef.current.gridClientYToMinutes(e.clientY),
     );
@@ -1014,7 +1013,7 @@ export default function ScheduleApp() {
       startClientY: e.clientY,
       startMin,
       pointerId: e.pointerId,
-      lastEndMin: Math.min(startMin + DRAG_DEFAULT_DURATION, timelineEndMinutes),
+      lastEndMin: Math.min(startMin + CLICK_DEFAULT_DURATION, timelineEndMinutes),
     };
     // Capture so pointermove/pointerup on this element get all events even if
     // the pointer leaves the grid bounds.
@@ -1157,20 +1156,15 @@ export default function ScheduleApp() {
 
       // Drag-create commit
       if (createDragRef.current && createDragRef.current.pointerId === e.pointerId) {
-        const { dragging, startMin, lastEndMin } = createDragRef.current;
+        const { startMin, lastEndMin } = createDragRef.current;
         createDragRef.current = null;
         clearPendingDragFrame();
         h.setDragCreate(null);
-        if (!h.isViewingToday) return;
-        if (dragging) {
-          h.openCreateSheetWithTime(startMin, lastEndMin);
-        } else {
-          // tap on empty space → quick-create with default duration
-          h.openCreateSheetWithTime(
-            startMin,
-            Math.min(startMin + DRAG_DEFAULT_DURATION, timelineEndMinutes),
-          );
-        }
+        // A tap commits just like a drag — lastEndMin is seeded with the click
+        // default and overwritten by onPointerMove once a drag starts. Not
+        // gated on isViewingToday: openCreateSheetWithTime targets activeDay,
+        // so tapping an empty slot on any day creates it on that day.
+        h.openCreateSheetWithTime(startMin, lastEndMin);
         return;
       }
 
@@ -3373,7 +3367,7 @@ export default function ScheduleApp() {
                         ref={taskGridRef}
                         className="relative min-w-0 flex-1 border-l border-neutral-200/80 dark:border-white/[0.07]"
                         style={{ height: timelineHeight, contain: "layout style" }}
-                        onPointerDown={!iosSafeMode && isViewingToday ? handleGridPointerDown : undefined}
+                        onPointerDown={!iosSafeMode ? handleGridPointerDown : undefined}
                       >
                         {/* Grid lines */}
                         <div className="absolute inset-0 pointer-events-none">

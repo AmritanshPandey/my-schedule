@@ -15,12 +15,12 @@ import { categoryHex } from "@/lib/colorSystem";
 import { taskIdentity, categoriesById } from "@/lib/taskIdentity";
 import { haptic } from "@/lib/haptics";
 import {
-  DRAG_DEFAULT_DURATION,
+  CLICK_DEFAULT_DURATION,
   DRAG_MIN_DURATION,
   DRAG_THRESHOLD_PX,
   clampMinutes,
   minutesToDisplayTime,
-  pointerToScrollableMinutes,
+  pointerToMinutes,
   snapMinutes,
 } from "@/lib/timeline/dragTimeUtils";
 import {
@@ -342,9 +342,7 @@ export function WeekGrid({
       if (!drag.dragging) drag.dragging = true;
 
       e.preventDefault();
-      const scrollTop = scrollRef.current?.scrollTop ?? 0;
-      const gridTop = drag.columnEl.getBoundingClientRect().top;
-      const currentMin = pointerToScrollableMinutes(e.clientY, gridTop, scrollTop, PX_MIN, startMin);
+      const currentMin = pointerToMinutes(e.clientY, drag.columnEl, 0, PX_MIN * 60, startMin);
       const snapped = snapMinutes(currentMin);
       const clamped = clampMinutes(snapped, startMin, endMin - DRAG_MIN_DURATION);
       const nextEndMin = Math.max(clamped, drag.startMin + DRAG_MIN_DURATION);
@@ -363,7 +361,10 @@ export function WeekGrid({
       const drag = createDragRef.current;
       if (!drag || drag.pointerId !== e.pointerId) return;
       createDragRef.current = null;
-      if (!drag.dragging) return;
+      // No `if (!drag.dragging) return` here: a click that never crossed
+      // DRAG_THRESHOLD_PX still names a time, it just doesn't name a length.
+      // lastEndMin is seeded with the click default and overwritten by
+      // onPointerMove once a drag starts, so both gestures read the same field.
       haptic("light");
       onCreateTaskAtTime(drag.day, drag.startMin, drag.lastEndMin);
       if (clearDragCreateTimerRef.current) clearTimeout(clearDragCreateTimerRef.current);
@@ -429,9 +430,11 @@ export function WeekGrid({
       clearDragCreateTimerRef.current = null;
     }
     const columnEl = e.currentTarget;
-    const scrollTop = scrollRef.current?.scrollTop ?? 0;
-    const gridTop = columnEl.getBoundingClientRect().top;
-    const rawMin = pointerToScrollableMinutes(e.clientY, gridTop, scrollTop, PX_MIN, startMin);
+    // Measured against the column's own rect, which is inside the scroller and
+    // therefore already reflects scroll position. Adding scrollTop on top of it
+    // double-counts — that is what made a click land hours off once the grid
+    // had been scrolled.
+    const rawMin = pointerToMinutes(e.clientY, columnEl, 0, PX_MIN * 60, startMin);
     const startMinSnapped = clampMinutes(snapMinutes(rawMin), startMin, endMin - DRAG_MIN_DURATION);
     createDragRef.current = {
       day,
@@ -440,7 +443,7 @@ export function WeekGrid({
       startClientY: e.clientY,
       startMin: startMinSnapped,
       dragging: false,
-      lastEndMin: Math.min(startMinSnapped + DRAG_DEFAULT_DURATION, endMin),
+      lastEndMin: Math.min(startMinSnapped + CLICK_DEFAULT_DURATION, endMin),
     };
     columnEl.setPointerCapture(e.pointerId);
   }
@@ -549,11 +552,19 @@ export function WeekGrid({
           </div>
       </div>
 
-      <div className="min-h-0 flex-1 overflow-x-auto overscroll-x-contain rounded-2xl border border-neutral-200 bg-white dark:border-white/[0.08] dark:bg-neutral-950">
-        <div className="flex h-full min-w-full flex-col" style={{ width: `max(100%, ${minGridWidth}px)` }}>
+      {/* One scroller for BOTH axes. A nested y-scroller would become an
+          x-scroll container too (overflow-y:auto forces overflow-x away from
+          visible), and `sticky left-0` inside it would resolve against a box
+          whose scrollLeft is permanently 0 — i.e. do nothing. Sticky only
+          works against the scrollport that actually moves. */}
+      <div
+        ref={scrollRef}
+        className="min-h-0 flex-1 overflow-auto overscroll-contain rounded-2xl border border-neutral-200 bg-white dark:border-white/[0.08] dark:bg-neutral-950"
+      >
+        <div className="min-w-full" style={{ width: `max(100%, ${minGridWidth}px)` }}>
           {/* ── Fixed day-header row ─────────────────────────────────────────────── */}
           <div
-            className="grid h-[76px] shrink-0 border-b border-neutral-200 dark:border-white/[0.07]"
+            className="sticky top-0 z-30 grid h-[76px] border-b border-neutral-200 bg-white dark:border-white/[0.07] dark:bg-neutral-950"
             style={{ gridTemplateColumns: gridTemplate }}
           >
             <div className="sticky left-0 z-10 border-r border-neutral-200 bg-white dark:border-white/[0.07] dark:bg-neutral-950" />
@@ -601,13 +612,10 @@ export function WeekGrid({
             })}
           </div>
 
-          {/* ── Scrollable grid body ─────────────────────────────────────────────── */}
-          <div ref={scrollRef} className="min-h-0 flex-1 overflow-y-auto overflow-x-hidden overscroll-contain">
-
         {/* All-day / untimed band */}
         {hasUntimed && (
           <div className="grid border-b border-neutral-200 dark:border-white/[0.07]" style={{ gridTemplateColumns: gridTemplate }}>
-            <div className="sticky left-0 z-10 flex items-start justify-end border-r border-neutral-200 bg-white px-2 pt-2 dark:border-white/[0.07] dark:bg-neutral-950">
+            <div className="sticky left-0 z-20 flex items-start justify-end border-r border-neutral-200 bg-white px-2 pt-2 dark:border-white/[0.07] dark:bg-neutral-950">
               <span className="text-[9px] font-semibold uppercase tracking-wide text-neutral-300 dark:text-neutral-600">All day</span>
             </div>
             {days.map(({ day, tasks, dayIsToday, dateISO }) => {
@@ -645,8 +653,10 @@ export function WeekGrid({
           className="relative flex"
           style={{ height: totalPx }}
         >
-          {/* Time rail */}
-          <div className="sticky left-0 z-10 shrink-0 border-r border-neutral-200 bg-white dark:border-white/[0.07] dark:bg-neutral-950" style={{ width: RAIL_W }}>
+          {/* Time rail. z-20 so day-column content passes under it while the
+              grid scrolls sideways; still below the header row's z-30 so the
+              two don't fight over the corner. */}
+          <div className="sticky left-0 z-20 shrink-0 border-r border-neutral-200 bg-white dark:border-white/[0.07] dark:bg-neutral-950" style={{ width: RAIL_W }}>
             {railLabels.map((m) => {
               const onHour = m % 60 === 0;
               const isFirst = m === startMin;
@@ -790,7 +800,7 @@ export function WeekGrid({
                   const showDuration = dragCreate.endMin - dragCreate.startMin >= 30;
                   return (
                     <div
-                      className="pointer-events-none absolute left-0.5 right-0.5 z-40"
+                      className="pointer-events-none absolute left-0.5 right-0.5 z-[15]"
                       style={{ top, height }}
                     >
                       <TimelineDraftCard
@@ -816,7 +826,6 @@ export function WeekGrid({
             );
           })}
         </div>
-          </div>
         </div>
       </div>
     </div>
