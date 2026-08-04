@@ -9,6 +9,7 @@ import { addDaysToISO } from "@/lib/dateUtils";
 import { haptic } from "@/lib/haptics";
 import { CARD } from "@/components/ui/surfaces";
 import {
+  buildActiveHours,
   buildDayBreakdown,
   donutSegments,
   formatMinutesCompact,
@@ -30,6 +31,24 @@ interface DayBreakdownCardProps {
   todayKey: DayKey;
   /** Today's ISO date, the anchor the other weekdays are resolved against. */
   todayISO: string;
+  /**
+   * Supplies the waking-day start for the active-hours bar.
+   *
+   * Required, not optional: as an optional prop a shell that forgot to pass it
+   * would still type-check and silently report everyone's day as starting at
+   * the default — the same trap `TaskBlockCard.category` documents.
+   */
+  preferences: Schedule["preferences"];
+}
+
+/** "7 AM" / "11:30 PM" — the waking window's ends, read as a range. */
+function fmtClock(minutes: number): string {
+  const total = ((minutes % 1440) + 1440) % 1440;
+  const h24 = Math.floor(total / 60);
+  const mm = total % 60;
+  const suffix = h24 >= 12 ? "PM" : "AM";
+  const h = h24 % 12 || 12;
+  return mm === 0 ? `${h} ${suffix}` : `${h}:${String(mm).padStart(2, "0")} ${suffix}`;
 }
 
 /** The ISO date of `day` within the same Mon–Sun week as `todayISO`. */
@@ -48,12 +67,24 @@ function isoForWeekday(todayISO: string, todayKey: DayKey, day: DayKey): string 
  * the chart answers "how much of my day is committed" and "to what" at once.
  * Hand-rolled SVG — the project has no charting dependency and this needs none.
  */
-export default function DayBreakdownCard({ activities, categories, todayKey, todayISO }: DayBreakdownCardProps) {
+export default function DayBreakdownCard({ activities, categories, todayKey, todayISO, preferences }: DayBreakdownCardProps) {
   const [day, setDay] = useState<DayKey>(todayKey);
   const dateISO = useMemo(() => isoForWeekday(todayISO, todayKey, day), [todayISO, todayKey, day]);
+  // The previous weekday's overnight tails land inside this day, exactly where
+  // the timeline draws them, so they are counted here rather than on their
+  // start day. `activities` is weekday-keyed and dateless, so Monday simply
+  // reads the `sunday` bucket against the preceding Sunday's date.
+  const carryIn = useMemo(() => {
+    const prev = DAYS[(DAYS.indexOf(day) + 6) % 7];
+    return { tasks: activities[prev] ?? [], dateISO: addDaysToISO(dateISO, -1) };
+  }, [activities, day, dateISO]);
   const { slices, totalMinutes } = useMemo(
-    () => buildDayBreakdown(activities[day] ?? [], categories, dateISO),
-    [activities, day, categories, dateISO],
+    () => buildDayBreakdown(activities[day] ?? [], categories, dateISO, carryIn),
+    [activities, day, categories, dateISO, carryIn],
+  );
+  const active = useMemo(
+    () => buildActiveHours(totalMinutes, preferences?.dayStartTime),
+    [totalMinutes, preferences?.dayStartTime],
   );
   const segments = useMemo(
     () => donutSegments(slices, totalMinutes, CIRCUMFERENCE),
@@ -164,7 +195,10 @@ export default function DayBreakdownCard({ activities, categories, todayKey, tod
               <span className="text-[20px] font-extrabold leading-none tabular-nums text-neutral-950 dark:text-white">
                 {formatMinutesCompact(totalMinutes)}
               </span>
-              <span className="mt-1 text-[10px] font-bold uppercase tracking-[0.08em] text-neutral-400 dark:text-neutral-500">
+              {/* neutral-500/400 rather than 400/500: #A1A1A1 on white is
+                  2.5:1 and fails AA at this size, as does neutral-500 on the
+                  dark card. This pairing clears 4.5:1 in both themes. */}
+              <span className="mt-1 text-[10px] font-bold uppercase tracking-[0.08em] text-neutral-500 dark:text-neutral-400">
                 Scheduled
               </span>
             </div>
@@ -195,7 +229,7 @@ export default function DayBreakdownCard({ activities, categories, todayKey, tod
                   <span className="text-[12px] font-bold tabular-nums text-neutral-500 dark:text-neutral-400">
                     {formatMinutesCompact(slice.minutes)}
                   </span>
-                  <span className="w-8 text-right text-[12px] font-bold tabular-nums text-neutral-400 dark:text-neutral-500">
+                  <span className="w-8 text-right text-[12px] font-bold tabular-nums text-neutral-500 dark:text-neutral-400">
                     {slice.pct}%
                   </span>
                 </span>
@@ -204,6 +238,43 @@ export default function DayBreakdownCard({ activities, categories, todayKey, tod
           </ul>
         </div>
       )}
+
+      {/* Active hours. Sits outside the empty-state branch on purpose: a day
+          with nothing on it is exactly when "16h free" is worth saying. */}
+      <div className="mt-4 border-t border-neutral-200/70 pt-3 dark:border-white/[0.07]">
+        <div className="flex items-baseline justify-between gap-3">
+          <p className="text-[11px] font-bold uppercase tracking-[0.08em] text-neutral-500 dark:text-neutral-400">
+            Active hours
+          </p>
+          <p className="shrink-0 text-[12px] font-bold tabular-nums text-neutral-700 dark:text-neutral-300">
+            {formatMinutesCompact(active.scheduledMinutes)} / {formatMinutesCompact(active.wakingMinutes)}
+          </p>
+        </div>
+
+        {/* A plain div rather than <ProgressBar>: that component animates width
+            through framer's `m`, and the iOS Dashboard tab has no LazyMotion
+            ancestor, so the fill would sit at 0 forever there. Ink, not green —
+            hours committed is not forward motion, and a full bar is not a win. */}
+        <div aria-hidden="true" className="mt-2 h-1.5 w-full overflow-hidden rounded-full bg-neutral-200 dark:bg-white/10">
+          <div
+            className="h-full rounded-full bg-neutral-900 transition-[width] duration-500 motion-reduce:transition-none dark:bg-white"
+            style={{ width: `${active.pct}%` }}
+          />
+        </div>
+
+        <p className="mt-1.5 text-[11px] font-semibold text-neutral-500 dark:text-neutral-400">
+          {active.overbookedMinutes > 0 ? (
+            // Warning lives in the text, not the fill: At-Risk Amber on the
+            // neutral-200 track is 2.5:1, under the 3:1 WCAG 1.4.11 wants for a
+            // graphic that carries meaning. amber-700 on white is 5.0:1.
+            <span className="text-amber-700 dark:text-amber-400">
+              {formatMinutesCompact(active.overbookedMinutes)} more than a {Math.round(active.wakingMinutes / 60)}h day
+            </span>
+          ) : (
+            `${formatMinutesCompact(active.freeMinutes)} free · ${fmtClock(active.startMinutes)}–${fmtClock(active.endMinutes)}`
+          )}
+        </p>
+      </div>
     </section>
   );
 }
