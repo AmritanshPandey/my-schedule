@@ -42,7 +42,6 @@ const RitualView = dynamic(() => import("@/components/activity/RitualView"), { s
 const OverviewDashboard = dynamic(() => import("@/components/OverviewDashboard"), { ssr: false });
 const TrackerQuickBar = dynamic(() => import("@/components/TrackerQuickBar"), { ssr: false });
 import WhatNextCard from "@/components/WhatNextCard";
-import StreakAlertChips from "@/components/StreakAlertChips";
 import {
   useScheduleDB,
   DAYS,

@@ -23,6 +23,8 @@ import DayBreakdownCard from "@/components/DayBreakdownCard";
 import TodayTaskList from "@/components/today/TodayTaskList";
 import { selectTodayTasks } from "@/lib/todayTasks";
 import ExecutionStreakBanner from "@/components/ExecutionStreakBanner";
+import NeedsAttentionCard from "@/components/NeedsAttentionCard";
+import { selectNeedsAttention } from "@/lib/needsAttention";
 import ExecutionTrendCard from "@/components/ExecutionTrendCard";
 import { computeTrend, type TrendResult } from "@/lib/trendUtils";
 import { addDaysToISO, localISODate } from "@/lib/dateUtils";
@@ -622,6 +624,7 @@ export default function OverviewDashboard({
   onMarkTaskDone,
   onMissedTask,
   onOpenSubtasks,
+  completedRitualIds,
   onLogTracker,
 }: OverviewDashboardProps) {
   const todayISO = localISODate(new Date());
@@ -642,6 +645,13 @@ export default function OverviewDashboard({
   const { tasks: todayTasks, done: tasksDone, total: tasksTotal } = useMemo(
     () => selectTodayTasks(schedule, todayISO, todayKey),
     [schedule, todayISO, todayKey],
+  );
+
+  // What slipped while the app had no way to say so. Empty for a user who is
+  // on top of things, and the card renders nothing in that case.
+  const needsAttention = useMemo(
+    () => selectNeedsAttention(schedule, todayISO, todayKey, completedRitualIds),
+    [schedule, todayISO, todayKey, completedRitualIds],
   );
 
   const weeklyActivity = useMemo(() => {
@@ -826,6 +836,10 @@ export default function OverviewDashboard({
 
             <div className="stagger-rise grid gap-4 lg:grid-cols-[minmax(330px,0.92fr)_minmax(360px,1fr)] xl:grid-cols-[minmax(360px,0.9fr)_minmax(410px,1fr)_minmax(360px,0.92fr)]">
               <div className="space-y-4">
+                {/* Above Today's Task: catching up on what slipped comes before
+                    working the current day. Renders nothing when there is
+                    nothing to fix, so a clean week costs no space. */}
+                <NeedsAttentionCard data={needsAttention} onNavigate={onNavigate} />
                 <TodayTaskList
                   tasks={todayTasks}
                   done={tasksDone}
