@@ -16,8 +16,11 @@ export interface TaskIdentity {
   /** A `SECTION_ICONS` name; the neutral star when there is no category. */
   icon: string;
   /**
-   * The accent, or `null` when the task should render neutral — a commitment
-   * (held time has no identity by design) or a task whose category was deleted.
+   * The accent, or `null` when the task should render neutral. Neutral means
+   * exactly two things: the task carries no `categoryId`, or it carries one
+   * that no longer resolves (a deleted category). Task *type* does not enter
+   * into it — a categorised commitment reads in its category's colour, the
+   * same as it does in the day-breakdown donut.
    * Callers pair `null` with `TIMELINE_NEUTRAL_CARD` / `PLAN_NEUTRAL`.
    */
   color: AccentColor | null;

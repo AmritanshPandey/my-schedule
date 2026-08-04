@@ -749,6 +749,7 @@ export function TaskSheet({
                   categories={categories}
                   selectedId={categoryId}
                   onSelect={(category) => setCategoryId(category.id)}
+                  onClear={() => setCategoryId("")}
                   onCreate={() => setCategorySheetOpen(true)}
                   optional={isCommitment}
                 />

@@ -59,6 +59,10 @@ export default function DayBreakdownCard({ activities, categories, todayKey, tod
     () => donutSegments(slices, totalMinutes, CIRCUMFERENCE),
     [slices, totalMinutes],
   );
+  // The chart is the only thing the filter changes, so its label has to name
+  // the day too — otherwise a screen reader hears the same "today" for all
+  // seven selections.
+  const dayLabel = day === todayKey ? "today" : `on ${day[0].toUpperCase()}${day.slice(1)}`;
 
   return (
     <section data-testid="overview-day-breakdown" className={`${CARD} px-4 py-4`}>
@@ -121,7 +125,7 @@ export default function DayBreakdownCard({ activities, categories, todayKey, tod
               height={SIZE}
               viewBox={`0 0 ${SIZE} ${SIZE}`}
               role="img"
-              aria-label={`Scheduled time today: ${slices
+              aria-label={`Scheduled time ${dayLabel}: ${slices
                 .map((s) => `${s.label} ${formatMinutesCompact(s.minutes)}`)
                 .join(", ")}`}
               /* -90deg so the first arc starts at 12 o'clock. */
