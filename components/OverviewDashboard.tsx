@@ -10,30 +10,30 @@ import {
   IconChecklist,
   IconClipboardList,
   IconFlame,
-  IconMinus,
   IconPlus,
   IconRepeat,
   IconSparkles,
   IconTarget,
-  IconTrendingDown,
-  IconTrendingUp,
 } from "@tabler/icons-react";
 import type { DayKey, Plan, ProgressTracker, Schedule, Task } from "@/lib/useScheduleDB";
 import { getTaskCheckableItems, getTaskSubtaskSummary, isTaskCompleted, isTrackedTask } from "@/lib/taskCompletion";
 import { getPlanCardStats } from "@/lib/planInsights";
 import { PLAN_NEUTRAL } from "@/lib/colorSystem";
+import { SECTION_ICONS, getIconPickerStyle } from "@/components/SectionIcons";
 import DayBreakdownCard from "@/components/DayBreakdownCard";
 import TodayTaskList from "@/components/today/TodayTaskList";
 import { selectTodayTasks } from "@/lib/todayTasks";
 import ExecutionStreakBanner from "@/components/ExecutionStreakBanner";
 import ExecutionTrendCard from "@/components/ExecutionTrendCard";
-import { getTrendDirection, getTrendState, type TrendDirection, type TrendState } from "@/lib/trendUtils";
+import { computeTrend, type TrendResult } from "@/lib/trendUtils";
 import { addDaysToISO, localISODate } from "@/lib/dateUtils";
 import { calculateExecutionStreak, type ExecutionStreak } from "@/lib/consistency/calculateExecutionStreak";
 import { haptic } from "@/lib/haptics";
 import { CARD, CARD_INTERACTIVE, SOFT_PANEL } from "@/components/ui/surfaces";
 import ProgressBar from "@/components/ui/ProgressBar";
 import AnimatedNumber from "@/components/ui/AnimatedNumber";
+import Sparkline from "@/components/ui/Sparkline";
+import TrendChange from "@/components/ui/TrendChange";
 
 interface OverviewDashboardProps {
   schedule: Schedule;
@@ -54,7 +54,9 @@ type TaskSummary = ReturnType<typeof getTaskSubtaskSummary>;
 type TrackerRow = {
   tracker: ProgressTracker;
   latest?: { value: number };
-  trend: { direction: TrendDirection; state: TrendState } | null;
+  /** Up to the last 8 entries, chronological — feeds the row's sparkline. */
+  series: number[];
+  trend: TrendResult | null;
   plan?: Plan;
 };
 
@@ -71,15 +73,6 @@ function progressFillClass(pct: number): string {
   if (pct >= 35) return "bg-amber-400";
   if (pct > 0) return "bg-rose-400";
   return "bg-neutral-300 dark:bg-white/15";
-}
-
-function TrendArrow({ direction, state }: { direction: TrendDirection; state: TrendState }) {
-  const Icon = direction === "up" ? IconTrendingUp : direction === "down" ? IconTrendingDown : IconMinus;
-  const color =
-    state === "positive" ? "text-emerald-500" :
-    state === "negative" ? "text-rose-500" :
-    "text-neutral-400 dark:text-neutral-500";
-  return <Icon size={16} strokeWidth={2.4} className={`shrink-0 ${color}`} />;
 }
 
 function SectionHeader({
@@ -337,21 +330,34 @@ function ActiveTrackingCard({
         </div>
       ) : (
         <div className="divide-y divide-neutral-100 dark:divide-white/[0.06]">
-          {rows.map(({ tracker, latest, trend, plan }) => {
-            const accent = PLAN_NEUTRAL;
+          {rows.map(({ tracker, latest, series, trend, plan }) => {
+            // Same fallback (`?? SECTION_ICONS[0]`) used everywhere else a
+            // plan's emoji becomes an icon — see PlanSelector, TaskLinkPicker.
+            const iconEntry = SECTION_ICONS.find((entry) => entry.name === plan?.emoji) ?? SECTION_ICONS[0];
+            const Icon = iconEntry.icon;
+            const iconStyle = getIconPickerStyle(iconEntry.name);
+            const trendColorClass =
+              trend?.state === "positive"
+                ? "text-emerald-500 dark:text-emerald-400"
+                : trend?.state === "negative"
+                ? "text-rose-500 dark:text-rose-400"
+                : "text-neutral-300 dark:text-neutral-600";
             return (
               <div key={tracker.id} className="flex items-center gap-3 py-3">
-                <span className={`h-3 w-3 shrink-0 rounded-full ${accent.dot}`} />
+                <span className={`grid h-9 w-9 shrink-0 place-items-center rounded-xl ${iconStyle.tint} ${iconStyle.text}`}>
+                  <Icon size={18} strokeWidth={2} />
+                </span>
                 <div className="min-w-0 flex-1">
-                  <div className="flex items-center gap-1.5">
-                    <p className="truncate text-[15px] font-bold leading-tight text-neutral-950 dark:text-white">{tracker.title}</p>
-                    {trend && <TrendArrow direction={trend.direction} state={trend.state} />}
+                  <p className="truncate text-[15px] font-bold leading-tight text-neutral-950 dark:text-white">{tracker.title}</p>
+                  <div className="mt-0.5 flex min-w-0 items-center gap-1.5">
+                    <p className="truncate text-[12px] font-medium text-neutral-500 dark:text-neutral-400">
+                      {latest ? `${latest.value}${tracker.unit ?? ""}` : "No entries yet"}
+                      {plan ? ` · ${plan.title}` : ""}
+                    </p>
+                    {trend && <TrendChange direction={trend.direction} state={trend.state} pct={trend.pct} />}
                   </div>
-                  <p className="mt-0.5 truncate text-[12px] font-medium text-neutral-500 dark:text-neutral-400">
-                    {latest ? `${latest.value}${tracker.unit ?? ""}` : "No entries yet"}
-                    {plan ? ` - ${plan.title}` : ""}
-                  </p>
                 </div>
+                <Sparkline values={series} className={trendColorClass} />
                 <button
                   type="button"
                   aria-label={`Log ${tracker.title}`}
@@ -436,7 +442,7 @@ function PlanConsistencyCard({
               // container and strands the two ends of the row apart.
               // -mx-2/px-2 so the hover wash reads as a row with breathing
               // room around its content instead of a hard band flush to text.
-              className="-mx-2 grid w-full max-w-[520px] grid-cols-[minmax(0,1fr)_90px] items-center gap-4 rounded-lg px-2 py-3.5 text-left transition-colors lg:hover:bg-neutral-50/80 dark:lg:hover:bg-white/[0.03]"
+              className="-mx-2 grid w-full max-w-[520px] grid-cols-[minmax(0,1fr)_90px] items-center gap-4 px-2 py-3.5 text-left transition-colors lg:hover:bg-neutral-50/80 dark:lg:hover:bg-white/[0.03]"
             >
               <div className="min-w-0">
                 <div className="flex items-center gap-2">
@@ -765,18 +771,25 @@ export default function OverviewDashboard({
         .sort((a, b) => b.date.localeCompare(a.date));
       const latest = entries[0];
       const previous = entries[1];
+      // pct/direction are well-defined regardless of goalDirection; only the
+      // "is this good?" state needs one, so it falls back to a real direction
+      // but a neutral (gray) state when we have no basis to judge the move.
       const trend =
         latest && previous
-          ? {
-              direction: getTrendDirection(previous.value, latest.value),
-              state: tracker.goalDirection
-                ? getTrendState({ previous: previous.value, current: latest.value, goalDirection: tracker.goalDirection })
-                : "neutral",
-            }
+          ? (() => {
+              const result = computeTrend({
+                previous: previous.value,
+                current: latest.value,
+                goalDirection: tracker.goalDirection ?? "increase_good",
+              });
+              return tracker.goalDirection ? result : { ...result, state: "neutral" as const };
+            })()
           : null;
       return {
         tracker,
         latest,
+        // Chronological (oldest first) so the sparkline reads left-to-right.
+        series: entries.slice(0, 8).reverse().map((entry) => entry.value),
         trend,
         plan: schedule.plans.find((plan) => plan.id === tracker.planId),
       };

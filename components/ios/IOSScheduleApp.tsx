@@ -4,8 +4,6 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import dynamic from "next/dynamic";
 import {
   IconAlertCircle,
-  IconArrowDownRight,
-  IconArrowUpRight,
   IconCalendar,
   IconChevronLeft,
   IconChevronRight,
@@ -53,7 +51,7 @@ import { useScheduleDB } from "@/lib/useScheduleDB";
 import { categoryHex, resolveAccentColor } from "@/lib/colorSystem";
 import { ensureCategoryIn } from "@/lib/taskCategories";
 import { taskIdentity, categoriesById } from "@/lib/taskIdentity";
-import { SECTION_ICONS } from "@/components/SectionIcons";
+import { SECTION_ICONS, getIconPickerStyle } from "@/components/SectionIcons";
 import { useReminders } from "@/lib/useReminders";
 import { bootLog, isIOSSafeMode, isStandalonePWA } from "@/lib/iosSafeMode";
 import { todayISO, localISODate, addDaysToISO, formatDate } from "@/lib/dateUtils";
@@ -84,6 +82,8 @@ import { calculateExecutionStreak } from "@/lib/consistency/calculateExecutionSt
 import { haptic } from "@/lib/haptics";
 import { CARD } from "@/components/ui/surfaces";
 import CheckDraw from "@/components/ui/CheckDraw";
+import Sparkline from "@/components/ui/Sparkline";
+import TrendChange from "@/components/ui/TrendChange";
 import type { CreateTaskFromNoteInput } from "@/components/notes/NotesView";
 
 const IOSMotionBoundary = dynamic(() => import("@/components/ios/IOSMotionBoundary"), { ssr: false });
@@ -161,15 +161,6 @@ function quickTaskTimeRange(now = new Date()): { startTime: string; endTime: str
     endTime: inputToDisplayTime(minutesToInputTime(start + 15)),
   };
 }
-
-const TRACKER_DOT_CLASSES = [
-  "bg-pink-500",
-  "bg-orange-500",
-  "bg-indigo-500",
-  "bg-emerald-500",
-  "bg-sky-500",
-  "bg-violet-500",
-] as const;
 
 function formatTrackerValue(entry: MetricEntry | null, tracker: ProgressTracker): string {
   if (!entry) return "No entries yet";
@@ -564,7 +555,7 @@ export default function IOSScheduleApp() {
       });
 
     return [...storedTrackers, ...fallbackTrackers]
-      .map((tracker, index) => {
+      .map((tracker) => {
         const entries = (schedule.metricEntries ?? [])
           .filter((entry) => entry.trackerId === tracker.id)
           .map((entry, entryIndex) => ({ entry, entryIndex }))
@@ -583,13 +574,15 @@ export default function IOSScheduleApp() {
         return {
           tracker,
           latest,
+          // Chronological (oldest first) so the sparkline reads left-to-right.
+          series: entries.slice(-8).map((entry) => entry.value),
           trend,
-          dotClass: TRACKER_DOT_CLASSES[index % TRACKER_DOT_CLASSES.length],
+          plan: plansById.get(tracker.planId),
           hasEntries: entries.length > 0,
         };
       })
 	      .sort((a, b) => Number(b.hasEntries) - Number(a.hasEntries) || (b.latest?.date ?? "").localeCompare(a.latest?.date ?? "") || a.tracker.title.localeCompare(b.tracker.title));
-	  }, [schedule.metricEntries, schedule.plans, schedule.progressTrackers]);
+	  }, [schedule.metricEntries, schedule.plans, schedule.progressTrackers, plansById]);
 
   // Every plan: consistency is what this card reports, and every plan has a
   // consistency score with or without milestones. A milestone-less plan just
@@ -1129,27 +1122,32 @@ export default function IOSScheduleApp() {
                 </div>
               ) : (
                 <div className="divide-y divide-neutral-100 dark:divide-white/[0.06]">
-                  {overviewTrackers.map(({ tracker, latest, trend, dotClass }) => {
-                    const TrendIcon = trend?.direction === "down" ? IconArrowDownRight : IconArrowUpRight;
-                    const trendClass = trend?.state === "positive"
-                      ? "text-emerald-500"
+                  {overviewTrackers.map(({ tracker, latest, series, trend, plan }) => {
+                    // Same fallback used everywhere else a plan's emoji becomes
+                    // an icon — see PlanSelector, TaskLinkPicker.
+                    const iconEntry = SECTION_ICONS.find((entry) => entry.name === plan?.emoji) ?? SECTION_ICONS[0];
+                    const Icon = iconEntry.icon;
+                    const iconStyle = getIconPickerStyle(iconEntry.name);
+                    const trendColorClass = trend?.state === "positive"
+                      ? "text-emerald-500 dark:text-emerald-400"
                       : trend?.state === "negative"
-                        ? "text-rose-500"
-                        : "text-neutral-400 dark:text-neutral-500";
+                        ? "text-rose-500 dark:text-rose-400"
+                        : "text-neutral-300 dark:text-neutral-600";
                     return (
                       <div key={tracker.id} className="flex items-center gap-3 py-3 first:pt-2 last:pb-0">
-                        <span className={`h-3 w-3 shrink-0 rounded-full ${dotClass}`} />
+                        <span className={`grid h-9 w-9 shrink-0 place-items-center rounded-xl ${iconStyle.tint} ${iconStyle.text}`}>
+                          <Icon size={18} strokeWidth={2} />
+                        </span>
                         <div className="min-w-0 flex-1">
-                          <div className="flex min-w-0 items-center gap-1.5">
-                            <p className="truncate text-[15px] font-extrabold text-neutral-950 dark:text-white">{tracker.title}</p>
-                            {trend && trend.direction !== "neutral" && (
-                              <TrendIcon size={17} strokeWidth={2.4} className={`shrink-0 ${trendClass}`} />
-                            )}
+                          <p className="truncate text-[15px] font-extrabold text-neutral-950 dark:text-white">{tracker.title}</p>
+                          <div className="mt-0.5 flex min-w-0 items-center gap-1.5">
+                            <p className="truncate text-[13px] font-semibold text-neutral-500 dark:text-neutral-400">
+                              {formatTrackerValue(latest, tracker)}
+                            </p>
+                            {trend && <TrendChange direction={trend.direction} state={trend.state} pct={trend.pct} />}
                           </div>
-                          <p className="mt-0.5 truncate text-[13px] font-semibold text-neutral-500 dark:text-neutral-400">
-                            {formatTrackerValue(latest, tracker)}
-                          </p>
                         </div>
+                        <Sparkline values={series} className={trendColorClass} />
                         <button
                           type="button"
                           onClick={() => {
