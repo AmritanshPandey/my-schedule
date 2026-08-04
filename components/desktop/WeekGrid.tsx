@@ -15,12 +15,12 @@ import { categoryHex } from "@/lib/colorSystem";
 import { taskIdentity, categoriesById } from "@/lib/taskIdentity";
 import { haptic } from "@/lib/haptics";
 import {
-  DRAG_DEFAULT_DURATION,
+  CLICK_DEFAULT_DURATION,
   DRAG_MIN_DURATION,
   DRAG_THRESHOLD_PX,
   clampMinutes,
   minutesToDisplayTime,
-  pointerToScrollableMinutes,
+  pointerToMinutes,
   snapMinutes,
 } from "@/lib/timeline/dragTimeUtils";
 import {
@@ -304,9 +304,7 @@ export function WeekGrid({
       if (!drag.dragging) drag.dragging = true;
 
       e.preventDefault();
-      const scrollTop = scrollRef.current?.scrollTop ?? 0;
-      const gridTop = drag.columnEl.getBoundingClientRect().top;
-      const currentMin = pointerToScrollableMinutes(e.clientY, gridTop, scrollTop, PX_MIN, startMin);
+      const currentMin = pointerToMinutes(e.clientY, drag.columnEl, 0, PX_MIN * 60, startMin);
       const snapped = snapMinutes(currentMin);
       const clamped = clampMinutes(snapped, startMin, endMin - DRAG_MIN_DURATION);
       const nextEndMin = Math.max(clamped, drag.startMin + DRAG_MIN_DURATION);
@@ -325,7 +323,10 @@ export function WeekGrid({
       const drag = createDragRef.current;
       if (!drag || drag.pointerId !== e.pointerId) return;
       createDragRef.current = null;
-      if (!drag.dragging) return;
+      // No `if (!drag.dragging) return` here: a click that never crossed
+      // DRAG_THRESHOLD_PX still names a time, it just doesn't name a length.
+      // lastEndMin is seeded with the click default and overwritten by
+      // onPointerMove once a drag starts, so both gestures read the same field.
       haptic("light");
       onCreateTaskAtTime(drag.day, drag.startMin, drag.lastEndMin);
       if (clearDragCreateTimerRef.current) clearTimeout(clearDragCreateTimerRef.current);
@@ -391,9 +392,11 @@ export function WeekGrid({
       clearDragCreateTimerRef.current = null;
     }
     const columnEl = e.currentTarget;
-    const scrollTop = scrollRef.current?.scrollTop ?? 0;
-    const gridTop = columnEl.getBoundingClientRect().top;
-    const rawMin = pointerToScrollableMinutes(e.clientY, gridTop, scrollTop, PX_MIN, startMin);
+    // Measured against the column's own rect, which is inside the scroller and
+    // therefore already reflects scroll position. Adding scrollTop on top of it
+    // double-counts — that is what made a click land hours off once the grid
+    // had been scrolled.
+    const rawMin = pointerToMinutes(e.clientY, columnEl, 0, PX_MIN * 60, startMin);
     const startMinSnapped = clampMinutes(snapMinutes(rawMin), startMin, endMin - DRAG_MIN_DURATION);
     createDragRef.current = {
       day,
@@ -402,7 +405,7 @@ export function WeekGrid({
       startClientY: e.clientY,
       startMin: startMinSnapped,
       dragging: false,
-      lastEndMin: Math.min(startMinSnapped + DRAG_DEFAULT_DURATION, endMin),
+      lastEndMin: Math.min(startMinSnapped + CLICK_DEFAULT_DURATION, endMin),
     };
     columnEl.setPointerCapture(e.pointerId);
   }
@@ -511,11 +514,19 @@ export function WeekGrid({
           </div>
       </div>
 
-      <div className="min-h-0 flex-1 overflow-x-auto overscroll-x-contain rounded-2xl border border-neutral-200 bg-white dark:border-white/[0.08] dark:bg-neutral-950">
-        <div className="flex h-full min-w-full flex-col" style={{ width: `max(100%, ${minGridWidth}px)` }}>
-          {/* ── Fixed day-header row ─────────────────────────────────────────────── */}
+      {/* One scroller for BOTH axes. A nested y-scroller would become an
+          x-scroll container too (overflow-y:auto forces overflow-x away from
+          visible), and `sticky left-0` inside it would resolve against a box
+          whose scrollLeft is permanently 0 — i.e. do nothing. Sticky only
+          works against the scrollport that actually moves. */}
+      <div
+        ref={scrollRef}
+        className="min-h-0 flex-1 overflow-auto overscroll-contain rounded-2xl border border-neutral-200 bg-white dark:border-white/[0.08] dark:bg-neutral-950"
+      >
+        <div className="min-w-full" style={{ width: `max(100%, ${minGridWidth}px)` }}>
+          {/* ── Day-header row — pinned to the top of the scroller ───────────────── */}
           <div
-            className="grid h-[76px] shrink-0 border-b border-neutral-200 dark:border-white/[0.07]"
+            className="sticky top-0 z-30 grid h-[76px] border-b border-neutral-200 bg-white dark:border-white/[0.07] dark:bg-neutral-950"
             style={{ gridTemplateColumns: gridTemplate }}
           >
             <div className="sticky left-0 z-10 border-r border-neutral-200 bg-white dark:border-white/[0.07] dark:bg-neutral-950" />
@@ -563,206 +574,204 @@ export function WeekGrid({
             })}
           </div>
 
-          {/* ── Scrollable grid body ─────────────────────────────────────────────── */}
-          <div ref={scrollRef} className="min-h-0 flex-1 overflow-y-auto overflow-x-hidden overscroll-contain">
-
-        {/* All-day / untimed band */}
-        {hasUntimed && (
-          <div className="grid border-b border-neutral-200 dark:border-white/[0.07]" style={{ gridTemplateColumns: gridTemplate }}>
-            <div className="sticky left-0 z-10 flex items-start justify-end border-r border-neutral-200 bg-white px-2 pt-2 dark:border-white/[0.07] dark:bg-neutral-950">
-              <span className="text-[9px] font-semibold uppercase tracking-wide text-neutral-300 dark:text-neutral-600">All day</span>
+          {/* All-day / untimed band */}
+          {hasUntimed && (
+            <div className="grid border-b border-neutral-200 dark:border-white/[0.07]" style={{ gridTemplateColumns: gridTemplate }}>
+              <div className="sticky left-0 z-20 flex items-start justify-end border-r border-neutral-200 bg-white px-2 pt-2 dark:border-white/[0.07] dark:bg-neutral-950">
+                <span className="text-[9px] font-semibold uppercase tracking-wide text-neutral-300 dark:text-neutral-600">All day</span>
+              </div>
+              {days.map(({ day, tasks, dayIsToday, dateISO }) => {
+                const untimed = tasks.filter((t) => parseTimeToMinutes(t.startTime) == null);
+                return (
+                  <div key={day} className="flex flex-col gap-1 border-r border-neutral-100 p-1.5 last:border-r-0 dark:border-white/[0.06]">
+                    {untimed.map((task) => {
+                      const identity = taskIdentity(task, categoryMap);
+                      const hex = identity.color ? categoryHex(identity.color) : NEUTRAL_UNTIMED_HEX;
+                      const linkedPlan = task.planId ? plansById.get(task.planId) ?? null : null;
+                      const state = resolveTaskState(task, getTaskSubtaskSummary(task, linkedPlan).totalCount);
+                      const done = state === "completed";
+                      return (
+                        <button
+                          key={task.id}
+                          type="button"
+                          onClick={() => onEditTask(task)}
+                          className={`flex items-center gap-1.5 rounded-lg border border-neutral-200/70 bg-white px-2 py-1 text-left dark:border-white/[0.08] dark:bg-neutral-900 ${done ? "opacity-60" : ""}`}
+                        >
+                          <span className="h-1.5 w-1.5 shrink-0 rounded-full" style={{ background: hex }} />
+                          <span className={`truncate text-[11px] font-semibold ${done ? "text-neutral-400 line-through dark:text-neutral-600" : "text-neutral-800 dark:text-neutral-200"}`}>
+                            {task.title}
+                          </span>
+                        </button>
+                      );
+                    })}
+                  </div>
+                );
+              })}
             </div>
-            {days.map(({ day, tasks, dayIsToday, dateISO }) => {
-              const untimed = tasks.filter((t) => parseTimeToMinutes(t.startTime) == null);
-              return (
-                <div key={day} className="flex flex-col gap-1 border-r border-neutral-100 p-1.5 last:border-r-0 dark:border-white/[0.06]">
-                  {untimed.map((task) => {
-                    const identity = taskIdentity(task, categoryMap);
-                    const hex = identity.color ? categoryHex(identity.color) : NEUTRAL_UNTIMED_HEX;
-                    const linkedPlan = task.planId ? plansById.get(task.planId) ?? null : null;
-                    const state = resolveTaskState(task, getTaskSubtaskSummary(task, linkedPlan).totalCount);
-                    const done = state === "completed";
-                    return (
-                      <button
-                        key={task.id}
-                        type="button"
-                        onClick={() => onEditTask(task)}
-                        className={`flex items-center gap-1.5 rounded-lg border border-neutral-200/70 bg-white px-2 py-1 text-left dark:border-white/[0.08] dark:bg-neutral-900 ${done ? "opacity-60" : ""}`}
-                      >
-                        <span className="h-1.5 w-1.5 shrink-0 rounded-full" style={{ background: hex }} />
-                        <span className={`truncate text-[11px] font-semibold ${done ? "text-neutral-400 line-through dark:text-neutral-600" : "text-neutral-800 dark:text-neutral-200"}`}>
-                          {task.title}
-                        </span>
-                      </button>
-                    );
-                  })}
-                </div>
-              );
-            })}
-          </div>
-        )}
+          )}
 
-        {/* Time grid */}
-        <div
-          className="relative flex"
-          style={{ height: totalPx }}
-        >
-          {/* Time rail */}
-          <div className="sticky left-0 z-10 shrink-0 border-r border-neutral-200 bg-white dark:border-white/[0.07] dark:bg-neutral-950" style={{ width: RAIL_W }}>
-            {railLabels.map((m) => {
-              const onHour = m % 60 === 0;
-              const isFirst = m === startMin;
+          {/* Time grid */}
+          <div
+            className="relative flex"
+            style={{ height: totalPx }}
+          >
+            {/* Time rail. z-20 so day-column content passes under it while the
+                grid scrolls sideways; still below the header row's z-30 so the
+                two don't fight over the corner. */}
+            <div className="sticky left-0 z-20 shrink-0 border-r border-neutral-200 bg-white dark:border-white/[0.07] dark:bg-neutral-950" style={{ width: RAIL_W }}>
+              {railLabels.map((m) => {
+                const onHour = m % 60 === 0;
+                const isFirst = m === startMin;
+                return (
+                  <span
+                    key={m}
+                    className={`absolute right-3 whitespace-nowrap tabular-nums ${isFirst ? "" : "-translate-y-1/2"} ${
+                      onHour
+                        ? "text-[11px] font-bold text-neutral-500 dark:text-neutral-300"
+                        : "text-[10px] font-semibold text-neutral-300 dark:text-neutral-600"
+                    }`}
+                    style={{ top: isFirst ? 14 : (m - startMin) * PX_MIN }}
+                  >
+                    {fmtRail(m)}
+                  </span>
+                );
+              })}
+            </div>
+
+            {/* Day columns */}
+            {days.map(({ day, dayIsToday, dateISO, tasks }) => {
+              const { timed } = buildDayLayout(tasks, startMin, endMin);
+              const ritualMarks = buildRitualMarks(rituals, day, startMin, endMin);
+              const completedRituals = new Set(
+                ritualCompletions.filter((c) => c.date === dateISO).map((c) => c.ritualId),
+              );
+              const showNow = dayIsToday && now !== null;
+              const readOnly = !dayIsToday;
               return (
-                <span
-                  key={m}
-                  className={`absolute right-3 whitespace-nowrap tabular-nums ${isFirst ? "" : "-translate-y-1/2"} ${
-                    onHour
-                      ? "text-[11px] font-bold text-neutral-500 dark:text-neutral-300"
-                      : "text-[10px] font-semibold text-neutral-300 dark:text-neutral-600"
-                  }`}
-                  style={{ top: isFirst ? 14 : (m - startMin) * PX_MIN }}
+                <div
+                  key={day}
+                  className="relative min-w-0 flex-1 border-r border-neutral-200 last:border-r-0 dark:border-white/[0.06]"
+                  onPointerDown={(e) => handleDayPointerDown(day, e)}
                 >
-                  {fmtRail(m)}
-                </span>
-              );
-            })}
-          </div>
+                  <div className="pointer-events-none absolute inset-0">
+                    {railLabels.map((m) => {
+                      const onHour = m % 60 === 0;
+                      return (
+                        <div
+                          key={`${day}-grid-${m}`}
+                          className={`absolute left-0 right-0 border-t ${
+                            onHour
+                              ? "border-neutral-100/90 dark:border-white/[0.05]"
+                              : "border-dashed border-neutral-200/70 dark:border-white/[0.045]"
+                          }`}
+                          style={{ top: (m - startMin) * PX_MIN }}
+                        />
+                      );
+                    })}
+                  </div>
 
-          {/* Day columns */}
-          {days.map(({ day, dayIsToday, dateISO, tasks }) => {
-            const { timed } = buildDayLayout(tasks, startMin, endMin);
-            const ritualMarks = buildRitualMarks(rituals, day, startMin, endMin);
-            const completedRituals = new Set(
-              ritualCompletions.filter((c) => c.date === dateISO).map((c) => c.ritualId),
-            );
-            const showNow = dayIsToday && now !== null;
-            const readOnly = !dayIsToday;
-            return (
-              <div
-                key={day}
-                className="relative min-w-0 flex-1 border-r border-neutral-200 last:border-r-0 dark:border-white/[0.06]"
-                onPointerDown={(e) => handleDayPointerDown(day, e)}
-              >
-                <div className="pointer-events-none absolute inset-0">
-                  {railLabels.map((m) => {
-                    const onHour = m % 60 === 0;
+                  {timed.map((layout) => {
+                    const visualHeight = Math.max(22, layout.height - TASK_VERTICAL_INSET * 2);
+                    const linkedPlan = layout.task.planId ? plansById.get(layout.task.planId) ?? null : null;
+                    const allSubtaskIds = getTaskCheckableItems(layout.task, linkedPlan).map((item) => item.id);
+                    // Multi-slot tasks complete per phase; a single-slot task keeps
+                    // the whole-task flag.
+                    const totalSlots = getSlots(layout.task).length;
+                    const slotDone = totalSlots > 1
+                      ? (layout.task.completedSlotIndices ?? []).includes(layout.slotIndex)
+                      : !!layout.task.completed;
+                    // The block you should be executing right now — green ring
+                    // (progress signal). Sanctioned chrome-led depth → data-glass.
+                    const nowPx = now === null ? null : (now - startMin) * PX_MIN;
+                    const isCurrent =
+                      dayIsToday &&
+                      !slotDone &&
+                      !layout.task.missed &&
+                      nowPx !== null &&
+                      nowPx >= layout.top &&
+                      nowPx < layout.top + layout.height;
                     return (
                       <div
-                        key={`${day}-grid-${m}`}
-                        className={`absolute left-0 right-0 border-t ${
-                          onHour
-                            ? "border-neutral-100/90 dark:border-white/[0.05]"
-                            : "border-dashed border-neutral-200/70 dark:border-white/[0.045]"
-                        }`}
-                        style={{ top: (m - startMin) * PX_MIN }}
-                      />
+                        key={`${layout.task.id}-${layout.slotIndex}`}
+                        data-task-block
+                        data-glass={isCurrent ? "" : undefined}
+                        className={`absolute ${isCurrent ? "rounded-[10px] shadow-now" : ""}`}
+                        style={{
+                          top: layout.top + TASK_VERTICAL_INSET,
+                          height: visualHeight,
+                          left: `calc(${layout.leftPct}% + 5px)`,
+                          width: `calc(${layout.widthPct}% - 10px)`,
+                          minHeight: 22,
+                        }}
+                      >
+                        {renderCard(
+                          layout.task,
+                          layout.height,
+                          layout.widthPct,
+                          readOnly,
+                          () =>
+                            totalSlots > 1
+                              ? onToggleSlot(layout.task.id, layout.slotIndex, day, dateISO)
+                              : onToggleTaskComplete(layout.task.id, allSubtaskIds, day, dateISO),
+                          () => onDeleteTask(layout.task.id, day),
+                          layout.slot,
+                          layout.slotIndex,
+                        )}
+                      </div>
                     );
                   })}
+
+                  {ritualMarks.map((mark) => (
+                    <div
+                      key={`ritual-${mark.top}`}
+                      data-ritual-mark
+                      className="absolute right-1.5 z-[5] flex max-w-[70%] -translate-y-1/2 flex-row-reverse flex-wrap items-center justify-start gap-1"
+                      style={{ top: mark.top }}
+                    >
+                      {/* The name is revealed by the dot itself expanding into a
+                          capsule (see RitualStrip) — no floating tooltip layer. */}
+                      {mark.rituals.map((ritual) => (
+                        <RitualStrip
+                          key={ritual.id}
+                          ritual={ritual}
+                          completed={completedRituals.has(ritual.id)}
+                          onToggle={() => onToggleRitual(ritual.id, dateISO)}
+                        />
+                      ))}
+                    </div>
+                  ))}
+
+                  {dragCreate?.day === day && (() => {
+                    const top = (dragCreate.startMin - startMin) * PX_MIN;
+                    const height = Math.max((dragCreate.endMin - dragCreate.startMin) * PX_MIN, 24);
+                    const showDuration = dragCreate.endMin - dragCreate.startMin >= 30;
+                    return (
+                      <div
+                        className="pointer-events-none absolute left-0.5 right-0.5 z-[15]"
+                        style={{ top, height }}
+                      >
+                        <TimelineDraftCard
+                          startLabel={minutesToDisplayTime(dragCreate.startMin)}
+                          endLabel={minutesToDisplayTime(dragCreate.endMin)}
+                          durationLabel={showDuration ? `${Math.max(0, Math.round(dragCreate.endMin - dragCreate.startMin))}m` : null}
+                          compact={height < 56}
+                          className="h-full"
+                        />
+                      </div>
+                    );
+                  })()}
+
+                  {showNow && (
+                    <div
+                      className="pointer-events-none absolute inset-x-0 z-[4] border-t-[1.5px] border-rose-500"
+                      style={{ top: (now - startMin) * PX_MIN }}
+                    >
+                      <span className="absolute -left-[3px] -top-[4px] h-[7px] w-[7px] rounded-full bg-rose-500" />
+                    </div>
+                  )}
                 </div>
-
-                {timed.map((layout) => {
-                  const visualHeight = Math.max(22, layout.height - TASK_VERTICAL_INSET * 2);
-                  const linkedPlan = layout.task.planId ? plansById.get(layout.task.planId) ?? null : null;
-                  const allSubtaskIds = getTaskCheckableItems(layout.task, linkedPlan).map((item) => item.id);
-                  // Multi-slot tasks complete per phase; a single-slot task keeps
-                  // the whole-task flag.
-                  const totalSlots = getSlots(layout.task).length;
-                  const slotDone = totalSlots > 1
-                    ? (layout.task.completedSlotIndices ?? []).includes(layout.slotIndex)
-                    : !!layout.task.completed;
-                  // The block you should be executing right now — green ring
-                  // (progress signal). Sanctioned chrome-led depth → data-glass.
-                  const nowPx = now === null ? null : (now - startMin) * PX_MIN;
-                  const isCurrent =
-                    dayIsToday &&
-                    !slotDone &&
-                    !layout.task.missed &&
-                    nowPx !== null &&
-                    nowPx >= layout.top &&
-                    nowPx < layout.top + layout.height;
-                  return (
-                    <div
-                      key={`${layout.task.id}-${layout.slotIndex}`}
-                      data-task-block
-                      data-glass={isCurrent ? "" : undefined}
-                      className={`absolute ${isCurrent ? "rounded-[10px] shadow-now" : ""}`}
-                      style={{
-                        top: layout.top + TASK_VERTICAL_INSET,
-                        height: visualHeight,
-                        left: `calc(${layout.leftPct}% + 5px)`,
-                        width: `calc(${layout.widthPct}% - 10px)`,
-                        minHeight: 22,
-                      }}
-                    >
-                      {renderCard(
-                        layout.task,
-                        layout.height,
-                        layout.widthPct,
-                        readOnly,
-                        () =>
-                          totalSlots > 1
-                            ? onToggleSlot(layout.task.id, layout.slotIndex, day, dateISO)
-                            : onToggleTaskComplete(layout.task.id, allSubtaskIds, day, dateISO),
-                        () => onDeleteTask(layout.task.id, day),
-                        layout.slot,
-                        layout.slotIndex,
-                      )}
-                    </div>
-                  );
-                })}
-
-                {ritualMarks.map((mark) => (
-                  <div
-                    key={`ritual-${mark.top}`}
-                    data-ritual-mark
-                    className="absolute right-1.5 z-[5] flex max-w-[70%] -translate-y-1/2 flex-row-reverse flex-wrap items-center justify-start gap-1"
-                    style={{ top: mark.top }}
-                  >
-                    {/* The name is revealed by the dot itself expanding into a
-                        capsule (see RitualStrip) — no floating tooltip layer. */}
-                    {mark.rituals.map((ritual) => (
-                      <RitualStrip
-                        key={ritual.id}
-                        ritual={ritual}
-                        completed={completedRituals.has(ritual.id)}
-                        onToggle={() => onToggleRitual(ritual.id, dateISO)}
-                      />
-                    ))}
-                  </div>
-                ))}
-
-                {dragCreate?.day === day && (() => {
-                  const top = (dragCreate.startMin - startMin) * PX_MIN;
-                  const height = Math.max((dragCreate.endMin - dragCreate.startMin) * PX_MIN, 24);
-                  const showDuration = dragCreate.endMin - dragCreate.startMin >= 30;
-                  return (
-                    <div
-                      className="pointer-events-none absolute left-0.5 right-0.5 z-40"
-                      style={{ top, height }}
-                    >
-                      <TimelineDraftCard
-                        startLabel={minutesToDisplayTime(dragCreate.startMin)}
-                        endLabel={minutesToDisplayTime(dragCreate.endMin)}
-                        durationLabel={showDuration ? `${Math.max(0, Math.round(dragCreate.endMin - dragCreate.startMin))}m` : null}
-                        compact={height < 56}
-                        className="h-full"
-                      />
-                    </div>
-                  );
-                })()}
-
-                {showNow && (
-                  <div
-                    className="pointer-events-none absolute inset-x-0 z-[4] border-t-[1.5px] border-rose-500"
-                    style={{ top: (now - startMin) * PX_MIN }}
-                  >
-                    <span className="absolute -left-[3px] -top-[4px] h-[7px] w-[7px] rounded-full bg-rose-500" />
-                  </div>
-                )}
-              </div>
-            );
-          })}
-        </div>
+              );
+            })}
           </div>
         </div>
       </div>

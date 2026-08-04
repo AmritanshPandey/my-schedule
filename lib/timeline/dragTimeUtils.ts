@@ -7,6 +7,15 @@
 export const DRAG_SNAP_MINUTES = 15;
 export const DRAG_MIN_DURATION = 15;
 export const DRAG_DEFAULT_DURATION = 60;
+/**
+ * Length of a task created by a plain click/tap rather than a drag.
+ *
+ * Shorter than DRAG_DEFAULT_DURATION on purpose: a drag states its own length,
+ * so the only thing left to guess is the length of a slot the user pointed at
+ * without sizing. 30m is the most common real block and is a multiple of
+ * DRAG_SNAP_MINUTES, so a click lands on the same grid a drag would.
+ */
+export const CLICK_DEFAULT_DURATION = 30;
 /** Pixels the pointer must travel before drag-create activates. */
 export const DRAG_THRESHOLD_PX = 8;
 /** Milliseconds of stationary hold before drag-move activates. */
@@ -38,21 +47,6 @@ export function pointerToMinutes(
   const rect = gridEl.getBoundingClientRect();
   const y = clientY - rect.top;
   return ((y - timelineTopPadding) / hourHeight) * 60 + timelineStartMinutes;
-}
-
-/**
- * Convert a clientY inside a vertically scrollable grid into schedule minutes.
- * `gridTop` should be the column's viewport top edge and `scrollTop` is the
- * vertical scroll offset of the grid container.
- */
-export function pointerToScrollableMinutes(
-  clientY: number,
-  gridTop: number,
-  scrollTop: number,
-  pixelsPerMinute: number,
-  timelineStartMinutes: number,
-): number {
-  return ((clientY - gridTop + scrollTop) / pixelsPerMinute) + timelineStartMinutes;
 }
 
 /** Convert timeline minutes → px top offset within the task grid. */

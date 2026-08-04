@@ -72,7 +72,6 @@ const { calculateExecutionStreak } = await import("../lib/consistency/calculateE
 const { localISODate, addDaysToISO } = await import("../lib/dateUtils.ts");
 const { parseTimeToMinutes, toScheduleDayMinutes } = await import("../lib/timeUtils.ts");
 const { DAYS } = await import("../lib/scheduleConstants.ts");
-const { pointerToScrollableMinutes } = await import("../lib/timeline/dragTimeUtils.ts");
 const { toggleRitualCompletion } = await import("../lib/ritualCompletions.ts");
 const {
   checklistStatsFromBody,
@@ -799,10 +798,6 @@ test("time parsing and schedule-day conversion reject invalid clocks", () => {
   assert.equal(parseTimeToMinutes("9:99 AM"), null);
   assert.equal(toScheduleDayMinutes(parseTimeToMinutes("1:30 AM")), 1530);
   assert.equal(toScheduleDayMinutes(parseTimeToMinutes("4:00 AM")), 240);
-});
-
-test("pointerToScrollableMinutes accounts for vertical scroll position", () => {
-  assert.equal(pointerToScrollableMinutes(180, 100, 40, 2, 240), 300);
 });
 
 test("sync status: label + tone mapping and relative time buckets", () => {
