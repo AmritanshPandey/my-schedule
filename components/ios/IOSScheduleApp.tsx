@@ -1178,9 +1178,10 @@ export default function IOSScheduleApp() {
             </div>
 
             <DayBreakdownCard
-              tasks={schedule.activities[todayKey] ?? []}
+              activities={schedule.activities}
               categories={schedule.categories}
-              dateISO={todayISO()}
+              todayKey={todayKey}
+              todayISO={todayISO()}
             />
 
             {overviewPlanConsistency.length > 0 && (

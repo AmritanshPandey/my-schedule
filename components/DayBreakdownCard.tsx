@@ -1,9 +1,12 @@
 "use client";
 
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 import { IconChartPie } from "@tabler/icons-react";
-import type { Task, TaskCategory } from "@/lib/useScheduleDB";
+import type { DayKey, Schedule, TaskCategory } from "@/lib/useScheduleDB";
+import { DAYS } from "@/lib/scheduleConstants";
 import { categoryHex } from "@/lib/colorSystem";
+import { addDaysToISO } from "@/lib/dateUtils";
+import { haptic } from "@/lib/haptics";
 import { CARD } from "@/components/ui/surfaces";
 import {
   buildDayBreakdown,
@@ -17,24 +20,40 @@ const STROKE = 18;
 const RADIUS = (SIZE - STROKE) / 2;
 const CIRCUMFERENCE = 2 * Math.PI * RADIUS;
 
+const DAY_INITIALS = ["M", "T", "W", "T", "F", "S", "S"];
+
 interface DayBreakdownCardProps {
-  tasks: readonly Task[];
+  /** Every weekday bucket — the filter reads across all of them. */
+  activities: Schedule["activities"];
   categories: readonly TaskCategory[];
-  dateISO: string;
+  /** Today's weekday, used as the default selection. */
+  todayKey: DayKey;
+  /** Today's ISO date, the anchor the other weekdays are resolved against. */
+  todayISO: string;
+}
+
+/** The ISO date of `day` within the same Mon–Sun week as `todayISO`. */
+function isoForWeekday(todayISO: string, todayKey: DayKey, day: DayKey): string {
+  return addDaysToISO(todayISO, DAYS.indexOf(day) - DAYS.indexOf(todayKey));
 }
 
 /**
- * "Where the day goes" — today's scheduled time as a donut, one arc per
- * category, with commitments collected into a neutral "Held time" arc.
+ * "Where the day goes" — scheduled time as a donut, one arc per category.
+ *
+ * The weekday filter reads the schedule the way it is actually stored: tasks
+ * live in weekday buckets, so "which weekday" is the native question, and
+ * switching is a pure re-read rather than a fetch.
  *
  * Deliberately a donut rather than a filled pie: the hole carries the total, so
  * the chart answers "how much of my day is committed" and "to what" at once.
  * Hand-rolled SVG — the project has no charting dependency and this needs none.
  */
-export default function DayBreakdownCard({ tasks, categories, dateISO }: DayBreakdownCardProps) {
+export default function DayBreakdownCard({ activities, categories, todayKey, todayISO }: DayBreakdownCardProps) {
+  const [day, setDay] = useState<DayKey>(todayKey);
+  const dateISO = useMemo(() => isoForWeekday(todayISO, todayKey, day), [todayISO, todayKey, day]);
   const { slices, totalMinutes } = useMemo(
-    () => buildDayBreakdown(tasks, categories, dateISO),
-    [tasks, categories, dateISO],
+    () => buildDayBreakdown(activities[day] ?? [], categories, dateISO),
+    [activities, day, categories, dateISO],
   );
   const segments = useMemo(
     () => donutSegments(slices, totalMinutes, CIRCUMFERENCE),
@@ -55,9 +74,40 @@ export default function DayBreakdownCard({ tasks, categories, dateISO }: DayBrea
         )}
       </div>
 
+      {/* Weekday filter. Seven 1-char chips keep it to a single row on the
+          narrowest shell without wrapping or scrolling. */}
+      <div role="group" aria-label="Filter by weekday" className="mb-3 flex items-center gap-1">
+        {DAYS.map((d, i) => {
+          const selected = d === day;
+          const isToday = d === todayKey;
+          return (
+            <button
+              key={d}
+              type="button"
+              aria-pressed={selected}
+              aria-label={`${d[0].toUpperCase()}${d.slice(1)}${isToday ? " (today)" : ""}`}
+              onClick={() => { haptic("light"); setDay(d); }}
+              className={`h-7 flex-1 rounded-lg text-[11px] font-bold tabular-nums transition-colors ${
+                selected
+                  ? "bg-neutral-900 text-white dark:bg-white dark:text-neutral-900"
+                  : isToday
+                  // Today stays legible when it is not the selection, so the
+                  // filter never loses its anchor.
+                  ? "bg-neutral-100 text-neutral-900 dark:bg-white/[0.10] dark:text-white"
+                  : "text-neutral-500 hover:bg-neutral-100 dark:text-neutral-400 dark:hover:bg-white/[0.06]"
+              }`}
+            >
+              {DAY_INITIALS[i]}
+            </button>
+          );
+        })}
+      </div>
+
       {totalMinutes === 0 ? (
         <div className="rounded-xl border border-dashed border-neutral-200 px-4 py-8 text-center dark:border-white/[0.09]">
-          <p className="text-[15px] font-bold text-neutral-950 dark:text-white">Nothing scheduled today</p>
+          <p className="text-[15px] font-bold text-neutral-950 dark:text-white">
+            {day === todayKey ? "Nothing scheduled today" : "Nothing scheduled"}
+          </p>
           <p className="mt-1 text-[12px] text-neutral-500 dark:text-neutral-400">
             Block some time and this shows how it splits.
           </p>
@@ -119,7 +169,7 @@ export default function DayBreakdownCard({ tasks, categories, dateISO }: DayBrea
           {/* Legend */}
           <ul className="flex w-full min-w-0 flex-col gap-2">
             {slices.map((slice) => (
-              <li key={slice.id} className="flex items-center gap-2.5">
+              <li key={slice.id} className="flex items-center gap-2">
                 <span
                   aria-hidden="true"
                   className={`h-2.5 w-2.5 shrink-0 rounded-full ${
@@ -134,11 +184,16 @@ export default function DayBreakdownCard({ tasks, categories, dateISO }: DayBrea
                 <span className="min-w-0 flex-1 truncate text-[13px] font-semibold text-neutral-700 dark:text-neutral-300">
                   {slice.label}
                 </span>
-                <span className="shrink-0 text-[12px] font-bold tabular-nums text-neutral-500 dark:text-neutral-400">
-                  {formatMinutesCompact(slice.minutes)}
-                </span>
-                <span className="w-9 shrink-0 text-right text-[12px] font-bold tabular-nums text-neutral-400 dark:text-neutral-500">
-                  {slice.pct}%
+                {/* Duration and share read as one figure, so they sit closer
+                    to each other than to the label — which buys the label back
+                    the few pixels it needs in the narrow desktop column. */}
+                <span className="flex shrink-0 items-baseline gap-1.5">
+                  <span className="text-[12px] font-bold tabular-nums text-neutral-500 dark:text-neutral-400">
+                    {formatMinutesCompact(slice.minutes)}
+                  </span>
+                  <span className="w-8 text-right text-[12px] font-bold tabular-nums text-neutral-400 dark:text-neutral-500">
+                    {slice.pct}%
+                  </span>
                 </span>
               </li>
             ))}

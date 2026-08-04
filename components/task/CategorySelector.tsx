@@ -15,6 +15,12 @@ export interface CategorySelectorProps {
   onSelect: (category: TaskCategory) => void;
   /** Opens the category sheet so the user is never blocked mid-task. */
   onCreate: () => void;
+  /**
+   * Commitments may go uncategorised — held time is often genuinely anonymous.
+   * Labels the field so the requirement is visible rather than implied by a
+   * disabled Save button, and offers a way back to no category.
+   */
+  optional?: boolean;
 }
 
 /**
@@ -24,7 +30,7 @@ export interface CategorySelectorProps {
  * per category, not re-chosen on every task. Deliberately mirrors PlanSelector
  * so the two dropdowns in this sheet behave identically.
  */
-export function CategorySelector({ categories, selectedId, onSelect, onCreate }: CategorySelectorProps) {
+export function CategorySelector({ categories, selectedId, onSelect, onCreate, optional = false }: CategorySelectorProps) {
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
   const selected = categories.find((c) => c.id === selectedId) ?? null;
@@ -42,7 +48,7 @@ export function CategorySelector({ categories, selectedId, onSelect, onCreate }:
 
   return (
     <div ref={ref} className="relative">
-      <p className={`mb-1.5 ${SECTION_LABEL}`}>Category</p>
+      <p className={`mb-1.5 ${SECTION_LABEL}`}>Category{optional && " (optional)"}</p>
       <button
         type="button"
         onClick={() => setOpen((v) => !v)}
@@ -59,7 +65,7 @@ export function CategorySelector({ categories, selectedId, onSelect, onCreate }:
           </>
         ) : (
           <span className="flex-1 text-[14px] font-medium text-neutral-400 dark:text-neutral-500">
-            Select a category…
+            {optional ? "No category — counts as held time" : "Select a category…"}
           </span>
         )}
         <IconChevronDown

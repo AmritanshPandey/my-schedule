@@ -11,7 +11,6 @@
 
 import type { AccentColor } from "./colorSystem";
 import type { Task, TaskCategory } from "./useScheduleDB";
-import { isTrackedTask } from "./taskCompletion";
 
 export interface TaskIdentity {
   /** A `SECTION_ICONS` name; the neutral star when there is no category. */
@@ -31,8 +30,10 @@ export function taskIdentity(
   task: Task,
   categoriesById: ReadonlyMap<string, TaskCategory>,
 ): TaskIdentity {
-  // Held time stays neutral even if it somehow carries a category.
-  if (!isTrackedTask(task)) return NEUTRAL;
+  // Held time is no longer forced neutral: a commitment can be categorised
+  // ("Commute" is a real kind of time), and when it is, it should read the same
+  // here as it does in the day-breakdown donut. An *uncategorised* commitment
+  // still falls through to neutral below, which is the common case.
   if (!task.categoryId) return NEUTRAL;
   const category = categoriesById.get(task.categoryId);
   if (!category) return NEUTRAL; // dangling id — a data artefact, not a colour

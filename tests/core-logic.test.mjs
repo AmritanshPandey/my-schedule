@@ -1508,9 +1508,47 @@ test("taskIdentity resolves colour from the category, neutral otherwise", () => 
   );
   assert.equal(taskIdentity({ ...base }, byId).color, null, "no category -> neutral");
   assert.equal(taskIdentity({ ...base, categoryId: "cat-gone" }, byId).color, null, "dangling -> neutral");
+  // Commitments are no longer forced neutral: held time can be categorised
+  // ("Commute" is a real kind of time) and then reads the same everywhere.
   assert.equal(
     taskIdentity({ ...base, categoryId: "cat-code", taskType: "commitment" }, byId).color,
-    null,
-    "held time is neutral even with a category",
+    "indigo",
+    "a categorised commitment keeps its category colour",
   );
+  assert.equal(
+    taskIdentity({ ...base, taskType: "commitment" }, byId).color,
+    null,
+    "an uncategorised commitment is still neutral — the common case",
+  );
+});
+
+test("buildDayBreakdown gives a categorised commitment its own wedge", () => {
+  // Held time used to be one anonymous grey blob. A commitment the user has
+  // categorised now earns a labelled, coloured slice; only uncategorised ones
+  // still pool.
+  const today = localISODate(new Date());
+  const categories = [
+    { id: "cat-car", title: "Commute", icon: "car", color: "cyan" },
+    { id: "cat-code", title: "Coding", icon: "code", color: "indigo" },
+  ];
+  const t = (over) => ({ id: over.id, title: over.id, planId: "", ...over });
+
+  const tasks = [
+    t({ id: "work", categoryId: "cat-code", startTime: "9:00 AM", endTime: "11:00 AM" }),           // 120 Coding
+    t({ id: "drive", categoryId: "cat-car", taskType: "commitment", startTime: "8:00 AM", endTime: "9:00 AM" }),  // 60 Commute
+    t({ id: "anon", taskType: "commitment", startTime: "5:00 PM", endTime: "5:30 PM" }),            // 30 Held time
+    t({ id: "orphan", categoryId: "cat-gone", startTime: "1:00 PM", endTime: "2:00 PM" }),          // dangling -> skipped
+    t({ id: "bare", startTime: "3:00 PM", endTime: "4:00 PM" }),                                    // uncategorised tracked -> skipped
+  ];
+
+  const { slices, totalMinutes } = buildDayBreakdown(tasks, categories, today);
+  assert.equal(totalMinutes, 210, "dangling and uncategorised tracked tasks stay excluded");
+  assert.deepEqual(
+    slices.map((s) => [s.id, s.minutes]),
+    [["cat-code", 120], ["cat-car", 60], [HELD_TIME_ID, 30]],
+  );
+  const commute = slices.find((s) => s.id === "cat-car");
+  assert.equal(commute.label, "Commute");
+  assert.equal(commute.color, "cyan", "the commitment is coloured, not grey");
+  assert.equal(slices.find((s) => s.id === HELD_TIME_ID).color, null, "only the anonymous remainder stays neutral");
 });

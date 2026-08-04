@@ -465,9 +465,11 @@ export function TaskSheet({
       startTime: primary.startTime,
       endTime: primary.endTime,
       slots: baseDisplaySlots.length > 1 ? baseDisplaySlots : undefined,
-      // A commitment belongs to no plan and carries no identity — held time
-      // paints neutral in both themes rather than spending an accent.
-      categoryId: isCommitment ? undefined : categoryId,
+      // A commitment belongs to no plan, but it may still be categorised:
+      // "Commute" is a real kind of time and reads better in the day breakdown
+      // than an anonymous grey wedge. Leaving it blank keeps the old behaviour
+      // (neutral block, pooled into "Held time"), so this stays optional.
+      categoryId: categoryId || undefined,
       planId: isCommitment ? "" : selectedPlan!.id,
       taskType,
       // Store subtasks on the task itself so each task has an independent list.
@@ -736,16 +738,19 @@ export function TaskSheet({
                 aria-invalid={title.length > 0 && title.trim().length === 0}
               />
 
-              {/* Identity — icon drives the colour, colour can be overridden.
-                  Hidden in occurrence scope: identity belongs to the template,
-                  not to a single date's override. Also hidden for commitments,
-                  which render neutral and carry no identity of their own. */}
-              {!isOccurrenceScope && !isCommitment && (
+              {/* Category carries the icon and colour. Hidden in occurrence
+                  scope only: identity belongs to the template, not to a single
+                  date's override. Commitments DO get to pick one — optional for
+                  them (see `canSave`), because held time is often genuinely
+                  anonymous, but "Commute" is a real kind of time and deserves a
+                  wedge of its own in the day breakdown. */}
+              {!isOccurrenceScope && (
                 <CategorySelector
                   categories={categories}
                   selectedId={categoryId}
                   onSelect={(category) => setCategoryId(category.id)}
                   onCreate={() => setCategorySheetOpen(true)}
+                  optional={isCommitment}
                 />
               )}
 
