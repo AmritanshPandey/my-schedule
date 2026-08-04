@@ -48,10 +48,10 @@ import {
   resetStaleCompletions,
 } from "@/lib/useScheduleDB";
 import { useScheduleDB } from "@/lib/useScheduleDB";
-import { categoryHex, resolveAccentColor } from "@/lib/colorSystem";
+import { categoryHex, resolveAccentColor, PLAN_NEUTRAL } from "@/lib/colorSystem";
 import { ensureCategoryIn } from "@/lib/taskCategories";
 import { taskIdentity, categoriesById } from "@/lib/taskIdentity";
-import { SECTION_ICONS, getIconPickerStyle } from "@/components/SectionIcons";
+import { SECTION_ICONS } from "@/components/SectionIcons";
 import { useReminders } from "@/lib/useReminders";
 import { bootLog, isIOSSafeMode, isStandalonePWA } from "@/lib/iosSafeMode";
 import { todayISO, localISODate, addDaysToISO, formatDate } from "@/lib/dateUtils";
@@ -577,12 +577,11 @@ export default function IOSScheduleApp() {
           // Chronological (oldest first) so the sparkline reads left-to-right.
           series: entries.slice(-8).map((entry) => entry.value),
           trend,
-          plan: plansById.get(tracker.planId),
           hasEntries: entries.length > 0,
         };
       })
 	      .sort((a, b) => Number(b.hasEntries) - Number(a.hasEntries) || (b.latest?.date ?? "").localeCompare(a.latest?.date ?? "") || a.tracker.title.localeCompare(b.tracker.title));
-	  }, [schedule.metricEntries, schedule.plans, schedule.progressTrackers, plansById]);
+	  }, [schedule.metricEntries, schedule.plans, schedule.progressTrackers]);
 
   // Every plan: consistency is what this card reports, and every plan has a
   // consistency score with or without milestones. A milestone-less plan just
@@ -1122,12 +1121,7 @@ export default function IOSScheduleApp() {
                 </div>
               ) : (
                 <div className="divide-y divide-neutral-100 dark:divide-white/[0.06]">
-                  {overviewTrackers.map(({ tracker, latest, series, trend, plan }) => {
-                    // Same fallback used everywhere else a plan's emoji becomes
-                    // an icon — see PlanSelector, TaskLinkPicker.
-                    const iconEntry = SECTION_ICONS.find((entry) => entry.name === plan?.emoji) ?? SECTION_ICONS[0];
-                    const Icon = iconEntry.icon;
-                    const iconStyle = getIconPickerStyle(iconEntry.name);
+                  {overviewTrackers.map(({ tracker, latest, series, trend }) => {
                     const trendColorClass = trend?.state === "positive"
                       ? "text-emerald-500 dark:text-emerald-400"
                       : trend?.state === "negative"
@@ -1135,9 +1129,7 @@ export default function IOSScheduleApp() {
                         : "text-neutral-300 dark:text-neutral-600";
                     return (
                       <div key={tracker.id} className="flex items-center gap-3 py-3 first:pt-2 last:pb-0">
-                        <span className={`grid h-9 w-9 shrink-0 place-items-center rounded-xl ${iconStyle.tint} ${iconStyle.text}`}>
-                          <Icon size={18} strokeWidth={2} />
-                        </span>
+                        <span className={`h-3 w-3 shrink-0 rounded-full ${PLAN_NEUTRAL.dot}`} />
                         <div className="min-w-0 flex-1">
                           <p className="truncate text-[15px] font-extrabold text-neutral-950 dark:text-white">{tracker.title}</p>
                           <div className="mt-0.5 flex min-w-0 items-center gap-1.5">
