@@ -111,7 +111,7 @@ export function TaskBlockCard({
   // Held time is neutral in both themes: it belongs to no plan and reports no
   // progress, so it never spends a category accent. An uncategorised task is
   // neutral for the same reason — there is no identity to spend.
-  const accent = isTrackedTask(task) ? category?.color ?? null : null;
+  const accent = category?.color ?? null;
   const styles = accent ? timelineCardStyles(accent) : TIMELINE_NEUTRAL_CARD;
   const done = state === "completed";
   const partial = state === "partial";

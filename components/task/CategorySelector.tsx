@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { IconCheck, IconChevronDown, IconPlus } from "@tabler/icons-react";
+import { IconCheck, IconChevronDown, IconMinus, IconPlus } from "@tabler/icons-react";
 import type { TaskCategory } from "@/lib/useScheduleDB";
 import { accentStyles } from "@/lib/colorSystem";
 import { iconGlyph } from "@/components/SectionIcons";
@@ -13,8 +13,21 @@ export interface CategorySelectorProps {
   categories: TaskCategory[];
   selectedId: string;
   onSelect: (category: TaskCategory) => void;
+  /**
+   * Clears the selection back to no category. Required whenever `optional` is
+   * set: without it the field is a one-way door — the placeholder advertises
+   * "no category" as a valid state, but once one is picked there is no way
+   * back to it.
+   */
+  onClear?: () => void;
   /** Opens the category sheet so the user is never blocked mid-task. */
   onCreate: () => void;
+  /**
+   * Commitments may go uncategorised — held time is often genuinely anonymous.
+   * Labels the field so the requirement is visible rather than implied by a
+   * disabled Save button, and reveals the clear action above.
+   */
+  optional?: boolean;
 }
 
 /**
@@ -24,7 +37,7 @@ export interface CategorySelectorProps {
  * per category, not re-chosen on every task. Deliberately mirrors PlanSelector
  * so the two dropdowns in this sheet behave identically.
  */
-export function CategorySelector({ categories, selectedId, onSelect, onCreate }: CategorySelectorProps) {
+export function CategorySelector({ categories, selectedId, onSelect, onClear, onCreate, optional = false }: CategorySelectorProps) {
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
   const selected = categories.find((c) => c.id === selectedId) ?? null;
@@ -37,12 +50,13 @@ export function CategorySelector({ categories, selectedId, onSelect, onCreate }:
     return () => document.removeEventListener("mousedown", handler);
   }, []);
 
+  const showClear = optional && !!onClear;
   const SelectedIcon = selected ? iconGlyph(selected.icon) : null;
   const selectedAccent = selected ? accentStyles(selected.color) : null;
 
   return (
     <div ref={ref} className="relative">
-      <p className={`mb-1.5 ${SECTION_LABEL}`}>Category</p>
+      <p className={`mb-1.5 ${SECTION_LABEL}`}>Category{optional && " (optional)"}</p>
       <button
         type="button"
         onClick={() => setOpen((v) => !v)}
@@ -59,7 +73,7 @@ export function CategorySelector({ categories, selectedId, onSelect, onCreate }:
           </>
         ) : (
           <span className="flex-1 text-[14px] font-medium text-neutral-400 dark:text-neutral-500">
-            Select a category…
+            {optional ? "No category — counts as held time" : "Select a category…"}
           </span>
         )}
         <IconChevronDown
@@ -72,6 +86,29 @@ export function CategorySelector({ categories, selectedId, onSelect, onCreate }:
       {open && (
         <div className="absolute left-0 right-0 top-[calc(100%+4px)] z-10 overflow-hidden rounded-2xl border border-neutral-200 bg-white dark:border-white/10 dark:bg-neutral-900">
           <div className="max-h-[220px] overflow-y-auto">
+            {/* A selection in its own right, not an action like "New category"
+                below — so it carries the same check mark as a category row. */}
+            {showClear && (
+              <button
+                type="button"
+                onClick={() => { onClear!(); setOpen(false); }}
+                className={`flex w-full items-center gap-3 px-3 py-2.5 text-left transition-colors ${
+                  !selected ? "bg-neutral-50 dark:bg-white/[0.04]" : "hover:bg-neutral-50 dark:hover:bg-white/[0.04]"
+                }`}
+              >
+                <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg border border-dashed border-neutral-300 dark:border-white/20">
+                  <IconMinus size={14} strokeWidth={2} className="text-neutral-400 dark:text-neutral-500" />
+                </div>
+                <p className="min-w-0 flex-1 truncate text-[14px] font-semibold text-neutral-500 dark:text-neutral-400">
+                  No category — counts as held time
+                </p>
+                {!selected && (
+                  <div className="flex h-4 w-4 shrink-0 items-center justify-center rounded-full bg-neutral-200 text-neutral-600 dark:bg-white/[0.12] dark:text-neutral-200">
+                    <IconCheck size={10} strokeWidth={3} />
+                  </div>
+                )}
+              </button>
+            )}
             {categories.map((category, i) => {
               const Icon = iconGlyph(category.icon);
               const accent = accentStyles(category.color);
@@ -82,7 +119,7 @@ export function CategorySelector({ categories, selectedId, onSelect, onCreate }:
                   type="button"
                   onClick={() => { onSelect(category); setOpen(false); }}
                   className={`flex w-full items-center gap-3 px-3 py-2.5 text-left transition-colors ${
-                    i > 0 ? "border-t border-neutral-100 dark:border-white/[0.05]" : ""
+                    i > 0 || showClear ? "border-t border-neutral-100 dark:border-white/[0.05]" : ""
                   } ${sel ? "bg-neutral-50 dark:bg-white/[0.04]" : "hover:bg-neutral-50 dark:hover:bg-white/[0.04]"}`}
                 >
                   <div className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-lg ${accent.tint} ${accent.icon}`}>

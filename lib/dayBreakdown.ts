@@ -45,8 +45,12 @@ export function taskScheduledMinutes(task: Task): number {
 }
 
 /**
- * Group a day's scheduled time by category, largest first, with commitments
- * collected into a single neutral "Held time" slice.
+ * Group a day's scheduled time by category, largest first.
+ *
+ * Commitments are categorised like anything else when the user gives them one —
+ * "Commute" earns its own wedge rather than vanishing into an anonymous grey
+ * blob. Only *uncategorised* commitments pool into the neutral "Held time"
+ * slice, which is the fallback rather than the rule.
  *
  * Grouping by category rather than by plan is what makes the wedge colours
  * match the blocks on the timeline — both now resolve through the same
@@ -67,8 +71,13 @@ export function buildDayBreakdown(
     const minutes = taskScheduledMinutes(task);
     if (minutes <= 0) continue;
 
-    const key = isTrackedTask(task) ? task.categoryId ?? "" : HELD_TIME_ID;
-    if (key !== HELD_TIME_ID && !categoriesById.has(key)) continue;
+    // A categorised task — commitment or not — gets its own wedge. An
+    // uncategorised commitment pools into "Held time"; an uncategorised or
+    // dangling tracked task is skipped, since a missing id is a data artefact
+    // rather than a category the user would recognise.
+    const categorised = task.categoryId && categoriesById.has(task.categoryId);
+    if (!categorised && isTrackedTask(task)) continue;
+    const key = categorised ? task.categoryId! : HELD_TIME_ID;
     minutesById.set(key, (minutesById.get(key) ?? 0) + minutes);
   }
 
