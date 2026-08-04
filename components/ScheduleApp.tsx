@@ -72,7 +72,7 @@ import {
   type AccentColor,
 } from "@/lib/colorSystem";
 import { taskIdentity, categoriesById } from "@/lib/taskIdentity";
-import { categoryForIcon, ensureCategoryIn } from "@/lib/taskCategories";
+import { canDeleteCategory, categoryForIcon, categoryUsageCounts, ensureCategoryIn } from "@/lib/taskCategories";
 import { SECTION_ICONS } from "@/components/SectionIcons";
 import {
   IconChevronLeft,
@@ -157,7 +157,7 @@ import {
   DRAG_THRESHOLD_PX,
   LONG_PRESS_MS,
   DRAG_MIN_DURATION,
-  DRAG_DEFAULT_DURATION,
+  CLICK_DEFAULT_DURATION,
 } from "@/lib/timeline/dragTimeUtils";
 import {
   buildTimelineGridMarks,
@@ -165,6 +165,7 @@ import {
   mapMinutesToTimeline,
   TIMELINE_END_MINUTES,
 } from "@/lib/timeline/displayWindow";
+import { SCHEDULE_DAY_HANDOVER_MINUTES, taskContinuations } from "@/lib/timeline/overnight";
 import { todayISO, daysBetween as daysBetweenUtil, formatDate, addDaysToISO, localISODate } from "@/lib/dateUtils";
 import { getPlanCardStats } from "@/lib/planInsights";
 import { MainTitleSection, IconActionButton, CtaActionButton } from "@/components/ui/MainTitleSection";
@@ -359,6 +360,12 @@ function computeCardSize(height: number, laneCount: number): CardSize {
 // A multi-slot task contributes one layout per slot, so each phase is its own
 // positioned, independently-completable block.
 interface TimelineTaskLayout {
+  /**
+   * "continuation" = the tail of *yesterday's* task, finishing on this day.
+   * Derived and read-only: the task lives in the previous day's bucket, so
+   * every mutation path is gated on this rather than on `isViewingToday`.
+   */
+  kind: "task" | "continuation";
   task: Task;
   /** The specific time block this layout renders. */
   slot: TaskSlot;
@@ -367,8 +374,8 @@ interface TimelineTaskLayout {
   isMultiSlot: boolean;
   start: number;
   end: number;
-  isOvernight: boolean;
-  isTruncated: boolean;
+  /** Squared-off edge where the day boundary cuts an overnight block. */
+  edgeCut?: "top" | "bottom";
   top: number;
   height: number;
   lane: number;
@@ -402,6 +409,11 @@ const TimelineTaskBlock = memo(function TimelineTaskBlock({
   onOpenSubtasks: (task: Task) => void;
 }) {
   const cardSize = computeCardSize(layout.height, layout.laneCount);
+  // A continuation belongs to the previous day's bucket, so it is inert even
+  // when the day on screen is today: dragging it would retime yesterday, and
+  // completing it would write today's date onto yesterday's task.
+  const isContinuation = layout.kind === "continuation";
+  const interactive = isViewingToday && !isContinuation;
   // A phase of a multi-slot task completes on its own; a single-slot task keeps
   // the whole-task state (which folds in subtask progress).
   const state = layout.isMultiSlot
@@ -418,7 +430,7 @@ const TimelineTaskBlock = memo(function TimelineTaskBlock({
         isBeingMoved ? "opacity-25 pointer-events-none" : ""
       }`}
       style={{ ...taskLaneStyle(layout), willChange: isBeingMoved ? "opacity" : undefined }}
-      onPointerDown={isViewingToday ? (e) => onPointerDown(e, layout.task, layout.start, layout.end, layout.slotIndex) : undefined}
+      onPointerDown={interactive ? (e) => onPointerDown(e, layout.task, layout.start, layout.end, layout.slotIndex) : undefined}
     >
       <div className="relative h-full min-h-[20px]">
         <TaskBlockCard
@@ -429,11 +441,12 @@ const TimelineTaskBlock = memo(function TimelineTaskBlock({
           state={state}
           duration={formatTaskDuration(layout.slot.startTime, layout.slot.endTime)}
           slotOverride={layout.isMultiSlot ? layout.slot : undefined}
-          readOnly={!isViewingToday}
+          readOnly={!interactive}
+          edgeCut={layout.edgeCut}
           minimal={cardSize === "xsmall"}
           compact={cardSize === "small" || cardSize === "medium"}
           narrow={cardSize === "small"}
-          onToggle={() => onToggle(layout.task, layout.slotIndex, layout.isMultiSlot)}
+          onToggle={() => { if (interactive) onToggle(layout.task, layout.slotIndex, layout.isMultiSlot); }}
           onOpenSubtasks={() => onOpenSubtasks(layout.task)}
           className="h-full w-full"
         />
@@ -991,7 +1004,6 @@ export default function ScheduleApp() {
   function handleGridPointerDown(e: React.PointerEvent<HTMLDivElement>) {
     if (e.pointerType === "mouse" && e.button !== 0) return;
     if ((e.target as HTMLElement).closest("[data-task-block]")) return;
-    if (!dragHelpersRef.current.isViewingToday) return;
     const startMin = dragHelpersRef.current.snapAndClamp(
       dragHelpersRef.current.gridClientYToMinutes(e.clientY),
     );
@@ -1000,7 +1012,7 @@ export default function ScheduleApp() {
       startClientY: e.clientY,
       startMin,
       pointerId: e.pointerId,
-      lastEndMin: Math.min(startMin + DRAG_DEFAULT_DURATION, timelineEndMinutes),
+      lastEndMin: Math.min(startMin + CLICK_DEFAULT_DURATION, timelineEndMinutes),
     };
     // Capture so pointermove/pointerup on this element get all events even if
     // the pointer leaves the grid bounds.
@@ -1143,20 +1155,15 @@ export default function ScheduleApp() {
 
       // Drag-create commit
       if (createDragRef.current && createDragRef.current.pointerId === e.pointerId) {
-        const { dragging, startMin, lastEndMin } = createDragRef.current;
+        const { startMin, lastEndMin } = createDragRef.current;
         createDragRef.current = null;
         clearPendingDragFrame();
         h.setDragCreate(null);
-        if (!h.isViewingToday) return;
-        if (dragging) {
-          h.openCreateSheetWithTime(startMin, lastEndMin);
-        } else {
-          // tap on empty space → quick-create with default duration
-          h.openCreateSheetWithTime(
-            startMin,
-            Math.min(startMin + DRAG_DEFAULT_DURATION, timelineEndMinutes),
-          );
-        }
+        // A tap commits just like a drag — lastEndMin is seeded with the click
+        // default and overwritten by onPointerMove once a drag starts. Not
+        // gated on isViewingToday: openCreateSheetWithTime targets activeDay,
+        // so tapping an empty slot on any day creates it on that day.
+        h.openCreateSheetWithTime(startMin, lastEndMin);
         return;
       }
 
@@ -2032,13 +2039,28 @@ export default function ScheduleApp() {
     [dayTasks, isViewingToday, activeDateISO]
   );
 
+  // Yesterday's overnight tails, which finish inside the day being viewed.
+  // Resolved against the previous date so a skipped or retimed occurrence
+  // carries in what it actually ran rather than what the template says.
+  const carryInTasks = useMemo(() => {
+    const prevDay = DAYS[(DAYS.indexOf(activeDay) + 6) % 7];
+    const prevISO = addDaysToISO(activeDateISO, -1);
+    return (schedule.activities[prevDay] ?? [])
+      .filter((t) => isTaskScheduledOn(t, prevISO, true))
+      .map((t) => resolveOccurrence(t, prevISO))
+      .filter((t) => taskContinuations(t).length > 0);
+  }, [schedule.activities, activeDay, activeDateISO]);
+
   const timelineStartMinutes = useMemo(
     () =>
       getTimelineDisplayStartMinutes({
         dayStartTime: schedule.preferences?.dayStartTime,
         tasks: dayTasksView,
+        // A continuation opens at the handover, earlier than the window would
+        // otherwise start — without this floor it is clipped off the top.
+        mustShowFromMinutes: carryInTasks.length > 0 ? SCHEDULE_DAY_HANDOVER_MINUTES : undefined,
       }),
-    [dayTasksView, schedule.preferences?.dayStartTime]
+    [dayTasksView, schedule.preferences?.dayStartTime, carryInTasks]
   );
   const timelineEndMinutes = TIMELINE_END_MINUTES;
   const timelineHeight = useMemo(
@@ -2371,6 +2393,23 @@ export default function ScheduleApp() {
     return id;
   }, [setSchedule]);
 
+  const categoryUsage = useMemo(() => categoryUsageCounts(schedule.activities), [schedule.activities]);
+  const handleUpdateCategory = useCallback((id: string, draft: CategoryDraft) => {
+    setSchedule((prev) => ({
+      ...prev,
+      categories: prev.categories.map((c) => (c.id === id ? { ...c, ...draft } : c)),
+    }));
+  }, [setSchedule]);
+
+  // Refuses when the category is still in use — the picker disables the button
+  // for the same reason, this is the guard behind it.
+  const handleDeleteCategory = useCallback((id: string) => {
+    setSchedule((prev) => {
+      if (!canDeleteCategory(id, categoryUsageCounts(prev.activities))) return prev;
+      return { ...prev, categories: prev.categories.filter((c) => c.id !== id) };
+    });
+  }, [setSchedule]);
+
   function getTaskPresentation(task: Task) {
     const linkedPlan = task.planId ? plansById.get(task.planId) ?? null : null;
     // Identity belongs to the task's category. Held time and uncategorised
@@ -2397,40 +2436,65 @@ export default function ScheduleApp() {
   const timelineTaskLayouts = useMemo(() => {
     // One interval per SLOT, not per task — a multi-slot task occupies several
     // separate blocks on the day (mirrors WeekGrid.buildDayLayout on desktop).
-    const intervals = dayTasksView
-      .flatMap((task) => {
-        const slots = getSlots(task);
-        const isMultiSlot = slots.length > 1;
-        return slots.map((slot, slotIndex) => {
-          const parsedStart = parseTimeToMinutes(slot.startTime);
-          const start = parsedStart === null
-            ? timelineStartMinutes
-            : mapMinutesToTimeline(parsedStart, timelineStartMinutes, timelineEndMinutes);
-          const parsedEnd = parseTimeToMinutes(slot.endTime);
-          let end = parsedEnd === null
-            ? start + 30
-            : mapMinutesToTimeline(parsedEnd, timelineStartMinutes, timelineEndMinutes);
-          while (end <= start) end += 1440;
-          const isOvernight = end >= 1440;
-          const cs = clamp(start, timelineStartMinutes, timelineEndMinutes);
-          const ce = clamp(Math.max(end, cs + 15), timelineStartMinutes, timelineEndMinutes);
-          return {
-            task,
-            slot,
-            slotIndex,
-            isMultiSlot,
-            color: getTaskPresentation(task).color,
-            start: cs,
-            end: ce,
-            isOvernight,
-            isTruncated: isOvernight && end > timelineEndMinutes,
-            top: TIMELINE_TOP_PADDING + ((cs - timelineStartMinutes) / 60) * HOUR_HEIGHT,
-            height: ((ce - cs) / 60) * HOUR_HEIGHT,
-            lane: 0,
-            laneCount: 1,
-          };
-        });
-      })
+    const position = (cs: number, ce: number) => ({
+      start: cs,
+      end: ce,
+      top: TIMELINE_TOP_PADDING + ((cs - timelineStartMinutes) / 60) * HOUR_HEIGHT,
+      height: ((ce - cs) / 60) * HOUR_HEIGHT,
+      lane: 0,
+      laneCount: 1,
+    });
+
+    const own = dayTasksView.flatMap((task) => {
+      const slots = getSlots(task);
+      const isMultiSlot = slots.length > 1;
+      return slots.map((slot, slotIndex) => {
+        const parsedStart = parseTimeToMinutes(slot.startTime);
+        const start = parsedStart === null
+          ? timelineStartMinutes
+          : mapMinutesToTimeline(parsedStart, timelineStartMinutes, timelineEndMinutes);
+        const parsedEnd = parseTimeToMinutes(slot.endTime);
+        let end = parsedEnd === null
+          ? start + 30
+          : mapMinutesToTimeline(parsedEnd, timelineStartMinutes, timelineEndMinutes);
+        while (end <= start) end += 1440;
+        const cs = clamp(start, timelineStartMinutes, timelineEndMinutes);
+        const ce = clamp(Math.max(end, cs + 15), timelineStartMinutes, timelineEndMinutes);
+        return {
+          kind: "task" as const,
+          task,
+          slot,
+          slotIndex,
+          isMultiSlot,
+          color: getTaskPresentation(task).color,
+          // Cut at the bottom when the block runs out of day — the tail is drawn
+          // as a continuation on tomorrow rather than clamped away.
+          edgeCut: end > timelineEndMinutes ? ("bottom" as const) : undefined,
+          ...position(cs, ce),
+        };
+      });
+    });
+
+    // Carried-in tails join the same lane packing below rather than sitting on
+    // their own layer, so an early-morning continuation and a 6 AM task split
+    // the column like any other overlap.
+    const carried = carryInTasks.flatMap((task) =>
+      taskContinuations(task, timelineEndMinutes).map((c) => ({
+        kind: "continuation" as const,
+        task,
+        slot: c.slot,
+        slotIndex: c.slotIndex,
+        isMultiSlot: getSlots(task).length > 1,
+        color: getTaskPresentation(task).color,
+        edgeCut: "top" as const,
+        ...position(
+          clamp(c.interval.start, timelineStartMinutes, timelineEndMinutes),
+          clamp(c.interval.end, timelineStartMinutes, timelineEndMinutes),
+        ),
+      })),
+    );
+
+    const intervals = [...own, ...carried]
       .sort((a, b) => a.start - b.start || a.end - b.end || a.task.title.localeCompare(b.task.title));
 
     const layouts: typeof intervals = [];
@@ -2454,7 +2518,7 @@ export default function ScheduleApp() {
     });
     if (cluster.length > 0) finishCluster();
     return layouts;
-  }, [dayTasksView, timelineEndMinutes, timelineStartMinutes]);
+  }, [dayTasksView, carryInTasks, timelineEndMinutes, timelineStartMinutes]);
 
 
   // ─── Loading ───────────────────────────────────────────────────────────────
@@ -2553,6 +2617,7 @@ export default function ScheduleApp() {
     onDelete: () => void,
     slot?: TaskSlot,
     slotIndex?: number,
+    edgeCut?: "top" | "bottom",
   ) {
     const { linkedPlan, category: taskCategory } = getTaskPresentation(task);
     // Grid blocks are per-slot: show this slot's own duration.
@@ -2580,9 +2645,13 @@ export default function ScheduleApp() {
         duration={duration}
         slotOverride={slot}
         readOnly={readOnly}
+        edgeCut={edgeCut}
         compact={height < 56}
         narrow={widthPct < 60 || height < 88}
         onToggle={onToggle}
+        // Opening a continuation opens its source task: openEditSheet resolves
+        // the template by id across every weekday bucket, so it lands on the
+        // real task rather than on the day the tail happens to be drawn.
         onClick={() => openEditSheet(task)}
         onDelete={!readOnly ? onDelete : undefined}
         className="h-full w-full"
@@ -3297,7 +3366,7 @@ export default function ScheduleApp() {
                         ref={taskGridRef}
                         className="relative min-w-0 flex-1 border-l border-neutral-200/80 dark:border-white/[0.07]"
                         style={{ height: timelineHeight, contain: "layout style" }}
-                        onPointerDown={!iosSafeMode && isViewingToday ? handleGridPointerDown : undefined}
+                        onPointerDown={!iosSafeMode ? handleGridPointerDown : undefined}
                       >
                         {/* Grid lines */}
                         <div className="absolute inset-0 pointer-events-none">
@@ -3438,7 +3507,9 @@ export default function ScheduleApp() {
             exit={{ opacity: 0 }}
             transition={{ duration: 0.12, ease: "easeOut" }}
           >
-          <div className={selectedPlan ? "lg:mx-auto lg:max-w-4xl" : ""}>
+          {/* The lg:max-w-4xl that used to wrap this is gone: PlanDetailView
+              now lays itself out in three columns at lg and needs the width. */}
+          <div>
           {selectedPlan ? (
             <ErrorBoundary section name="Plans">
             <PlanDetailView
@@ -3657,6 +3728,9 @@ export default function ScheduleApp() {
           plans={schedule.plans}
           categories={schedule.categories}
           onCreateCategory={handleCreateCategory}
+          onUpdateCategory={handleUpdateCategory}
+          onDeleteCategory={handleDeleteCategory}
+          categoryUsage={categoryUsage}
           activeDay={activeDay}
           activeDays={taskSheetActiveDays}
           activities={schedule.activities}

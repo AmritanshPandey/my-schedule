@@ -1,11 +1,15 @@
 "use client";
 
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 import { IconChartPie } from "@tabler/icons-react";
-import type { Task, TaskCategory } from "@/lib/useScheduleDB";
+import type { DayKey, Schedule, TaskCategory } from "@/lib/useScheduleDB";
+import { DAYS } from "@/lib/scheduleConstants";
 import { categoryHex } from "@/lib/colorSystem";
+import { addDaysToISO } from "@/lib/dateUtils";
+import { haptic } from "@/lib/haptics";
 import { CARD } from "@/components/ui/surfaces";
 import {
+  buildActiveHours,
   buildDayBreakdown,
   donutSegments,
   formatMinutesCompact,
@@ -17,29 +21,79 @@ const STROKE = 18;
 const RADIUS = (SIZE - STROKE) / 2;
 const CIRCUMFERENCE = 2 * Math.PI * RADIUS;
 
+const DAY_INITIALS = ["M", "T", "W", "T", "F", "S", "S"];
+
 interface DayBreakdownCardProps {
-  tasks: readonly Task[];
+  /** Every weekday bucket — the filter reads across all of them. */
+  activities: Schedule["activities"];
   categories: readonly TaskCategory[];
-  dateISO: string;
+  /** Today's weekday, used as the default selection. */
+  todayKey: DayKey;
+  /** Today's ISO date, the anchor the other weekdays are resolved against. */
+  todayISO: string;
+  /**
+   * Supplies the waking-day start for the active-hours bar.
+   *
+   * Required, not optional: as an optional prop a shell that forgot to pass it
+   * would still type-check and silently report everyone's day as starting at
+   * the default — the same trap `TaskBlockCard.category` documents.
+   */
+  preferences: Schedule["preferences"];
+}
+
+/** "7 AM" / "11:30 PM" — the waking window's ends, read as a range. */
+function fmtClock(minutes: number): string {
+  const total = ((minutes % 1440) + 1440) % 1440;
+  const h24 = Math.floor(total / 60);
+  const mm = total % 60;
+  const suffix = h24 >= 12 ? "PM" : "AM";
+  const h = h24 % 12 || 12;
+  return mm === 0 ? `${h} ${suffix}` : `${h}:${String(mm).padStart(2, "0")} ${suffix}`;
+}
+
+/** The ISO date of `day` within the same Mon–Sun week as `todayISO`. */
+function isoForWeekday(todayISO: string, todayKey: DayKey, day: DayKey): string {
+  return addDaysToISO(todayISO, DAYS.indexOf(day) - DAYS.indexOf(todayKey));
 }
 
 /**
- * "Where the day goes" — today's scheduled time as a donut, one arc per
- * category, with commitments collected into a neutral "Held time" arc.
+ * "Where the day goes" — scheduled time as a donut, one arc per category.
+ *
+ * The weekday filter reads the schedule the way it is actually stored: tasks
+ * live in weekday buckets, so "which weekday" is the native question, and
+ * switching is a pure re-read rather than a fetch.
  *
  * Deliberately a donut rather than a filled pie: the hole carries the total, so
  * the chart answers "how much of my day is committed" and "to what" at once.
  * Hand-rolled SVG — the project has no charting dependency and this needs none.
  */
-export default function DayBreakdownCard({ tasks, categories, dateISO }: DayBreakdownCardProps) {
+export default function DayBreakdownCard({ activities, categories, todayKey, todayISO, preferences }: DayBreakdownCardProps) {
+  const [day, setDay] = useState<DayKey>(todayKey);
+  const dateISO = useMemo(() => isoForWeekday(todayISO, todayKey, day), [todayISO, todayKey, day]);
+  // The previous weekday's overnight tails land inside this day, exactly where
+  // the timeline draws them, so they are counted here rather than on their
+  // start day. `activities` is weekday-keyed and dateless, so Monday simply
+  // reads the `sunday` bucket against the preceding Sunday's date.
+  const carryIn = useMemo(() => {
+    const prev = DAYS[(DAYS.indexOf(day) + 6) % 7];
+    return { tasks: activities[prev] ?? [], dateISO: addDaysToISO(dateISO, -1) };
+  }, [activities, day, dateISO]);
   const { slices, totalMinutes } = useMemo(
-    () => buildDayBreakdown(tasks, categories, dateISO),
-    [tasks, categories, dateISO],
+    () => buildDayBreakdown(activities[day] ?? [], categories, dateISO, carryIn),
+    [activities, day, categories, dateISO, carryIn],
+  );
+  const active = useMemo(
+    () => buildActiveHours(totalMinutes, preferences?.dayStartTime),
+    [totalMinutes, preferences?.dayStartTime],
   );
   const segments = useMemo(
     () => donutSegments(slices, totalMinutes, CIRCUMFERENCE),
     [slices, totalMinutes],
   );
+  // The chart is the only thing the filter changes, so its label has to name
+  // the day too — otherwise a screen reader hears the same "today" for all
+  // seven selections.
+  const dayLabel = day === todayKey ? "today" : `on ${day[0].toUpperCase()}${day.slice(1)}`;
 
   return (
     <section data-testid="overview-day-breakdown" className={`${CARD} px-4 py-4`}>
@@ -55,9 +109,40 @@ export default function DayBreakdownCard({ tasks, categories, dateISO }: DayBrea
         )}
       </div>
 
+      {/* Weekday filter. Seven 1-char chips keep it to a single row on the
+          narrowest shell without wrapping or scrolling. */}
+      <div role="group" aria-label="Filter by weekday" className="mb-3 flex items-center gap-1">
+        {DAYS.map((d, i) => {
+          const selected = d === day;
+          const isToday = d === todayKey;
+          return (
+            <button
+              key={d}
+              type="button"
+              aria-pressed={selected}
+              aria-label={`${d[0].toUpperCase()}${d.slice(1)}${isToday ? " (today)" : ""}`}
+              onClick={() => { haptic("light"); setDay(d); }}
+              className={`h-7 flex-1 rounded-lg text-[11px] font-bold tabular-nums transition-colors ${
+                selected
+                  ? "bg-neutral-900 text-white dark:bg-white dark:text-neutral-900"
+                  : isToday
+                  // Today stays legible when it is not the selection, so the
+                  // filter never loses its anchor.
+                  ? "bg-neutral-100 text-neutral-900 dark:bg-white/[0.10] dark:text-white"
+                  : "text-neutral-500 hover:bg-neutral-100 dark:text-neutral-400 dark:hover:bg-white/[0.06]"
+              }`}
+            >
+              {DAY_INITIALS[i]}
+            </button>
+          );
+        })}
+      </div>
+
       {totalMinutes === 0 ? (
         <div className="rounded-xl border border-dashed border-neutral-200 px-4 py-8 text-center dark:border-white/[0.09]">
-          <p className="text-[15px] font-bold text-neutral-950 dark:text-white">Nothing scheduled today</p>
+          <p className="text-[15px] font-bold text-neutral-950 dark:text-white">
+            {day === todayKey ? "Nothing scheduled today" : "Nothing scheduled"}
+          </p>
           <p className="mt-1 text-[12px] text-neutral-500 dark:text-neutral-400">
             Block some time and this shows how it splits.
           </p>
@@ -71,7 +156,7 @@ export default function DayBreakdownCard({ tasks, categories, dateISO }: DayBrea
               height={SIZE}
               viewBox={`0 0 ${SIZE} ${SIZE}`}
               role="img"
-              aria-label={`Scheduled time today: ${slices
+              aria-label={`Scheduled time ${dayLabel}: ${slices
                 .map((s) => `${s.label} ${formatMinutesCompact(s.minutes)}`)
                 .join(", ")}`}
               /* -90deg so the first arc starts at 12 o'clock. */
@@ -110,7 +195,10 @@ export default function DayBreakdownCard({ tasks, categories, dateISO }: DayBrea
               <span className="text-[20px] font-extrabold leading-none tabular-nums text-neutral-950 dark:text-white">
                 {formatMinutesCompact(totalMinutes)}
               </span>
-              <span className="mt-1 text-[10px] font-bold uppercase tracking-[0.08em] text-neutral-400 dark:text-neutral-500">
+              {/* neutral-500/400 rather than 400/500: #A1A1A1 on white is
+                  2.5:1 and fails AA at this size, as does neutral-500 on the
+                  dark card. This pairing clears 4.5:1 in both themes. */}
+              <span className="mt-1 text-[10px] font-bold uppercase tracking-[0.08em] text-neutral-500 dark:text-neutral-400">
                 Scheduled
               </span>
             </div>
@@ -119,7 +207,7 @@ export default function DayBreakdownCard({ tasks, categories, dateISO }: DayBrea
           {/* Legend */}
           <ul className="flex w-full min-w-0 flex-col gap-2">
             {slices.map((slice) => (
-              <li key={slice.id} className="flex items-center gap-2.5">
+              <li key={slice.id} className="flex items-center gap-2">
                 <span
                   aria-hidden="true"
                   className={`h-2.5 w-2.5 shrink-0 rounded-full ${
@@ -134,17 +222,59 @@ export default function DayBreakdownCard({ tasks, categories, dateISO }: DayBrea
                 <span className="min-w-0 flex-1 truncate text-[13px] font-semibold text-neutral-700 dark:text-neutral-300">
                   {slice.label}
                 </span>
-                <span className="shrink-0 text-[12px] font-bold tabular-nums text-neutral-500 dark:text-neutral-400">
-                  {formatMinutesCompact(slice.minutes)}
-                </span>
-                <span className="w-9 shrink-0 text-right text-[12px] font-bold tabular-nums text-neutral-400 dark:text-neutral-500">
-                  {slice.pct}%
+                {/* Duration and share read as one figure, so they sit closer
+                    to each other than to the label — which buys the label back
+                    the few pixels it needs in the narrow desktop column. */}
+                <span className="flex shrink-0 items-baseline gap-1.5">
+                  <span className="text-[12px] font-bold tabular-nums text-neutral-500 dark:text-neutral-400">
+                    {formatMinutesCompact(slice.minutes)}
+                  </span>
+                  <span className="w-8 text-right text-[12px] font-bold tabular-nums text-neutral-500 dark:text-neutral-400">
+                    {slice.pct}%
+                  </span>
                 </span>
               </li>
             ))}
           </ul>
         </div>
       )}
+
+      {/* Active hours. Sits outside the empty-state branch on purpose: a day
+          with nothing on it is exactly when "16h free" is worth saying. */}
+      <div className="mt-4 border-t border-neutral-200/70 pt-3 dark:border-white/[0.07]">
+        <div className="flex items-baseline justify-between gap-3">
+          <p className="text-[11px] font-bold uppercase tracking-[0.08em] text-neutral-500 dark:text-neutral-400">
+            Active hours
+          </p>
+          <p className="shrink-0 text-[12px] font-bold tabular-nums text-neutral-700 dark:text-neutral-300">
+            {formatMinutesCompact(active.scheduledMinutes)} / {formatMinutesCompact(active.wakingMinutes)}
+          </p>
+        </div>
+
+        {/* A plain div rather than <ProgressBar>: that component animates width
+            through framer's `m`, and the iOS Dashboard tab has no LazyMotion
+            ancestor, so the fill would sit at 0 forever there. Ink, not green —
+            hours committed is not forward motion, and a full bar is not a win. */}
+        <div aria-hidden="true" className="mt-2 h-1.5 w-full overflow-hidden rounded-full bg-neutral-200 dark:bg-white/10">
+          <div
+            className="h-full rounded-full bg-neutral-900 transition-[width] duration-500 motion-reduce:transition-none dark:bg-white"
+            style={{ width: `${active.pct}%` }}
+          />
+        </div>
+
+        <p className="mt-1.5 text-[11px] font-semibold text-neutral-500 dark:text-neutral-400">
+          {active.overbookedMinutes > 0 ? (
+            // Warning lives in the text, not the fill: At-Risk Amber on the
+            // neutral-200 track is 2.5:1, under the 3:1 WCAG 1.4.11 wants for a
+            // graphic that carries meaning. amber-700 on white is 5.0:1.
+            <span className="text-amber-700 dark:text-amber-400">
+              {formatMinutesCompact(active.overbookedMinutes)} more than a {Math.round(active.wakingMinutes / 60)}h day
+            </span>
+          ) : (
+            `${formatMinutesCompact(active.freeMinutes)} free · ${fmtClock(active.startMinutes)}–${fmtClock(active.endMinutes)}`
+          )}
+        </p>
+      </div>
     </section>
   );
 }

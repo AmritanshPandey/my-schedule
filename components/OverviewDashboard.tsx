@@ -10,13 +10,10 @@ import {
   IconChecklist,
   IconClipboardList,
   IconFlame,
-  IconMinus,
   IconPlus,
   IconRepeat,
   IconSparkles,
   IconTarget,
-  IconTrendingDown,
-  IconTrendingUp,
 } from "@tabler/icons-react";
 import type { DayKey, Plan, ProgressTracker, Schedule, Task } from "@/lib/useScheduleDB";
 import { getTaskCheckableItems, getTaskSubtaskSummary, isTaskCompleted, isTrackedTask } from "@/lib/taskCompletion";
@@ -29,13 +26,15 @@ import ExecutionStreakBanner from "@/components/ExecutionStreakBanner";
 import NeedsAttentionCard from "@/components/NeedsAttentionCard";
 import { selectNeedsAttention } from "@/lib/needsAttention";
 import ExecutionTrendCard from "@/components/ExecutionTrendCard";
-import { getTrendDirection, getTrendState, type TrendDirection, type TrendState } from "@/lib/trendUtils";
+import { computeTrend, type TrendResult } from "@/lib/trendUtils";
 import { addDaysToISO, localISODate } from "@/lib/dateUtils";
 import { calculateExecutionStreak, type ExecutionStreak } from "@/lib/consistency/calculateExecutionStreak";
 import { haptic } from "@/lib/haptics";
 import { CARD, CARD_INTERACTIVE, SOFT_PANEL } from "@/components/ui/surfaces";
 import ProgressBar from "@/components/ui/ProgressBar";
 import AnimatedNumber from "@/components/ui/AnimatedNumber";
+import Sparkline from "@/components/ui/Sparkline";
+import TrendChange from "@/components/ui/TrendChange";
 
 interface OverviewDashboardProps {
   schedule: Schedule;
@@ -56,7 +55,9 @@ type TaskSummary = ReturnType<typeof getTaskSubtaskSummary>;
 type TrackerRow = {
   tracker: ProgressTracker;
   latest?: { value: number };
-  trend: { direction: TrendDirection; state: TrendState } | null;
+  /** Up to the last 8 entries, chronological — feeds the row's sparkline. */
+  series: number[];
+  trend: TrendResult | null;
   plan?: Plan;
 };
 
@@ -73,15 +74,6 @@ function progressFillClass(pct: number): string {
   if (pct >= 35) return "bg-amber-400";
   if (pct > 0) return "bg-rose-400";
   return "bg-neutral-300 dark:bg-white/15";
-}
-
-function TrendArrow({ direction, state }: { direction: TrendDirection; state: TrendState }) {
-  const Icon = direction === "up" ? IconTrendingUp : direction === "down" ? IconTrendingDown : IconMinus;
-  const color =
-    state === "positive" ? "text-emerald-500" :
-    state === "negative" ? "text-rose-500" :
-    "text-neutral-400 dark:text-neutral-500";
-  return <Icon size={16} strokeWidth={2.4} className={`shrink-0 ${color}`} />;
 }
 
 function SectionHeader({
@@ -153,7 +145,7 @@ function DashboardMetricCard({
       onClick={onClick ? () => { haptic("light"); onClick(); } : undefined}
       className={`px-4 py-4 ${onClick ? "text-left" : ""} ${
         primary
-          ? `rounded-2xl border border-green-700 bg-green-700 text-white shadow-[0_4px_24px_-8px_rgba(0,0,0,0.16)] dark:border-emerald-400/25 dark:bg-green-950 dark:shadow-[0_8px_30px_-12px_rgba(0,0,0,0.55)] ${onClick ? "transition-colors lg:hover:bg-green-800 dark:lg:hover:bg-[#07401F]" : ""}`
+          ? `rounded-2xl border border-green-700 bg-green-700 text-white shadow-hero dark:border-emerald-400/25 dark:bg-green-950 ${onClick ? "transition-colors lg:hover:bg-green-800 dark:lg:hover:bg-[#07401F]" : ""}`
           : `${onClick ? CARD_INTERACTIVE : CARD} text-neutral-950 dark:text-white`
       }`}
     >
@@ -339,21 +331,27 @@ function ActiveTrackingCard({
         </div>
       ) : (
         <div className="divide-y divide-neutral-100 dark:divide-white/[0.06]">
-          {rows.map(({ tracker, latest, trend, plan }) => {
-            const accent = PLAN_NEUTRAL;
+          {rows.map(({ tracker, latest, series, trend, plan }) => {
+            const trendColorClass =
+              trend?.state === "positive"
+                ? "text-emerald-500 dark:text-emerald-400"
+                : trend?.state === "negative"
+                ? "text-rose-500 dark:text-rose-400"
+                : "text-neutral-300 dark:text-neutral-600";
             return (
               <div key={tracker.id} className="flex items-center gap-3 py-3">
-                <span className={`h-3 w-3 shrink-0 rounded-full ${accent.dot}`} />
+                <span className={`h-3 w-3 shrink-0 rounded-full ${PLAN_NEUTRAL.dot}`} />
                 <div className="min-w-0 flex-1">
-                  <div className="flex items-center gap-1.5">
-                    <p className="truncate text-[15px] font-bold leading-tight text-neutral-950 dark:text-white">{tracker.title}</p>
-                    {trend && <TrendArrow direction={trend.direction} state={trend.state} />}
+                  <p className="truncate text-[15px] font-bold leading-tight text-neutral-950 dark:text-white">{tracker.title}</p>
+                  <div className="mt-0.5 flex min-w-0 items-center gap-1.5">
+                    <p className="truncate text-[12px] font-medium text-neutral-500 dark:text-neutral-400">
+                      {latest ? `${latest.value}${tracker.unit ?? ""}` : "No entries yet"}
+                      {plan ? ` · ${plan.title}` : ""}
+                    </p>
+                    {trend && <TrendChange direction={trend.direction} state={trend.state} pct={trend.pct} />}
                   </div>
-                  <p className="mt-0.5 truncate text-[12px] font-medium text-neutral-500 dark:text-neutral-400">
-                    {latest ? `${latest.value}${tracker.unit ?? ""}` : "No entries yet"}
-                    {plan ? ` - ${plan.title}` : ""}
-                  </p>
                 </div>
+                <Sparkline values={series} className={trendColorClass} />
                 <button
                   type="button"
                   aria-label={`Log ${tracker.title}`}
@@ -415,8 +413,14 @@ function PlanConsistencyCard({
   onNavigate: (tab: number) => void;
 }) {
   if (rows.length === 0) return null;
+  // No min-height: PlanCard's lg:min-h-[220px] works because it pairs with
+  // lg:mt-auto on a footer that pushes down to meet it. This card has no such
+  // anchor, so a fixed min-height just leaves dead space below the rows
+  // whenever real content falls short of it — which it reliably did, since
+  // 520px didn't even match this card's own siblings' height. Let it be
+  // exactly as tall as its rows.
   return (
-    <section data-testid="overview-plan-card" className={`${CARD} px-4 py-4 lg:min-h-[520px]`}>
+    <section data-testid="overview-plan-card" className={`${CARD} px-4 py-4`}>
       <SectionHeader icon={IconClipboardList} title="Plan Consistency" meta={`${rows.length} ${rows.length === 1 ? "plan" : "plans"}`} />
       <div className="divide-y divide-neutral-100 dark:divide-white/[0.06]">
         {rows.map(({ plan, consistency, milestonesTotal, milestonesDone }) => {
@@ -426,7 +430,13 @@ function PlanConsistencyCard({
               key={plan.id}
               type="button"
               onClick={() => { haptic("light"); onNavigate(1); }}
-              className="grid w-full grid-cols-[minmax(0,1fr)_90px] items-center gap-4 py-3.5 text-left transition-colors lg:hover:bg-neutral-50/80 dark:lg:hover:bg-white/[0.03]"
+              // max-w keeps the plan name and its % pill close together even
+              // when the card spans the full 2-column grid at lg (~890px) —
+              // without it the flexible left track stretches to fill the
+              // container and strands the two ends of the row apart.
+              // -mx-2/px-2 so the hover wash reads as a row with breathing
+              // room around its content instead of a hard band flush to text.
+              className="-mx-2 grid w-full max-w-[520px] grid-cols-[minmax(0,1fr)_90px] items-center gap-4 px-2 py-3.5 text-left transition-colors lg:hover:bg-neutral-50/80 dark:lg:hover:bg-white/[0.03]"
             >
               <div className="min-w-0">
                 <div className="flex items-center gap-2">
@@ -763,18 +773,25 @@ export default function OverviewDashboard({
         .sort((a, b) => b.date.localeCompare(a.date));
       const latest = entries[0];
       const previous = entries[1];
+      // pct/direction are well-defined regardless of goalDirection; only the
+      // "is this good?" state needs one, so it falls back to a real direction
+      // but a neutral (gray) state when we have no basis to judge the move.
       const trend =
         latest && previous
-          ? {
-              direction: getTrendDirection(previous.value, latest.value),
-              state: tracker.goalDirection
-                ? getTrendState({ previous: previous.value, current: latest.value, goalDirection: tracker.goalDirection })
-                : "neutral",
-            }
+          ? (() => {
+              const result = computeTrend({
+                previous: previous.value,
+                current: latest.value,
+                goalDirection: tracker.goalDirection ?? "increase_good",
+              });
+              return tracker.goalDirection ? result : { ...result, state: "neutral" as const };
+            })()
           : null;
       return {
         tracker,
         latest,
+        // Chronological (oldest first) so the sparkline reads left-to-right.
+        series: entries.slice(0, 8).reverse().map((entry) => entry.value),
         trend,
         plan: schedule.plans.find((plan) => plan.id === tracker.planId),
       };
@@ -835,9 +852,11 @@ export default function OverviewDashboard({
                   onOpenSubtasks={onOpenSubtasks}
                 />
                 <DayBreakdownCard
-                  tasks={schedule.activities[todayKey] ?? []}
+                  activities={schedule.activities}
                   categories={schedule.categories}
-                  dateISO={todayISO}
+                  todayKey={todayKey}
+                  todayISO={todayISO}
+                  preferences={schedule.preferences}
                 />
                 <RoutineConsistencyCard rows={ritualConsistency} />
               </div>
@@ -852,6 +871,14 @@ export default function OverviewDashboard({
                 <ActiveTrackingCard rows={trackerData} onNavigate={onNavigate} onLogTracker={onLogTracker} />
               </div>
 
+              {/* col-span-2 at lg is load-bearing, not decorative: the grid only
+                  has 2 template columns until xl, so without a span this card
+                  becomes an orphan in column 1 of a new row, leaving column 2
+                  empty beside it for the rest of the page. At xl a real 3rd
+                  column exists, so col-span-1 there is correct. The row-level
+                  stretch this used to cause (title far from the % pill on an
+                  890px-wide banner) is fixed at the row, not by giving up the
+                  span — see the max-w on each row below. */}
               <div className="space-y-4 lg:col-span-2 xl:col-span-1">
                 <PlanConsistencyCard rows={planConsistency} onNavigate={onNavigate} />
               </div>

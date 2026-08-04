@@ -4,8 +4,6 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import dynamic from "next/dynamic";
 import {
   IconAlertCircle,
-  IconArrowDownRight,
-  IconArrowUpRight,
   IconCalendar,
   IconChevronLeft,
   IconChevronRight,
@@ -50,8 +48,8 @@ import {
   resetStaleCompletions,
 } from "@/lib/useScheduleDB";
 import { useScheduleDB } from "@/lib/useScheduleDB";
-import { categoryHex, resolveAccentColor } from "@/lib/colorSystem";
-import { ensureCategoryIn } from "@/lib/taskCategories";
+import { categoryHex, resolveAccentColor, PLAN_NEUTRAL } from "@/lib/colorSystem";
+import { canDeleteCategory, categoryUsageCounts, ensureCategoryIn } from "@/lib/taskCategories";
 import { taskIdentity, categoriesById } from "@/lib/taskIdentity";
 import { SECTION_ICONS } from "@/components/SectionIcons";
 import { useReminders } from "@/lib/useReminders";
@@ -84,6 +82,8 @@ import { calculateExecutionStreak } from "@/lib/consistency/calculateExecutionSt
 import { haptic } from "@/lib/haptics";
 import { CARD } from "@/components/ui/surfaces";
 import CheckDraw from "@/components/ui/CheckDraw";
+import Sparkline from "@/components/ui/Sparkline";
+import TrendChange from "@/components/ui/TrendChange";
 import type { CreateTaskFromNoteInput } from "@/components/notes/NotesView";
 
 const IOSMotionBoundary = dynamic(() => import("@/components/ios/IOSMotionBoundary"), { ssr: false });
@@ -161,15 +161,6 @@ function quickTaskTimeRange(now = new Date()): { startTime: string; endTime: str
     endTime: inputToDisplayTime(minutesToInputTime(start + 15)),
   };
 }
-
-const TRACKER_DOT_CLASSES = [
-  "bg-pink-500",
-  "bg-orange-500",
-  "bg-indigo-500",
-  "bg-emerald-500",
-  "bg-sky-500",
-  "bg-violet-500",
-] as const;
 
 function formatTrackerValue(entry: MetricEntry | null, tracker: ProgressTracker): string {
   if (!entry) return "No entries yet";
@@ -441,6 +432,23 @@ export default function IOSScheduleApp() {
     return id;
   }, [setSchedule]);
 
+  const categoryUsage = useMemo(() => categoryUsageCounts(schedule.activities), [schedule.activities]);
+  const handleUpdateCategory = useCallback((id: string, draft: CategoryDraft) => {
+    setSchedule((prev) => ({
+      ...prev,
+      categories: prev.categories.map((c) => (c.id === id ? { ...c, ...draft } : c)),
+    }));
+  }, [setSchedule]);
+
+  // Refuses when the category is still in use — the picker disables the button
+  // for the same reason, this is the guard behind it.
+  const handleDeleteCategory = useCallback((id: string) => {
+    setSchedule((prev) => {
+      if (!canDeleteCategory(id, categoryUsageCounts(prev.activities))) return prev;
+      return { ...prev, categories: prev.categories.filter((c) => c.id !== id) };
+    });
+  }, [setSchedule]);
+
   const categoryMap = useMemo(() => categoriesById(schedule.categories), [schedule.categories]);
 
   const taskEffectiveItemCount = useCallback(
@@ -564,7 +572,7 @@ export default function IOSScheduleApp() {
       });
 
     return [...storedTrackers, ...fallbackTrackers]
-      .map((tracker, index) => {
+      .map((tracker) => {
         const entries = (schedule.metricEntries ?? [])
           .filter((entry) => entry.trackerId === tracker.id)
           .map((entry, entryIndex) => ({ entry, entryIndex }))
@@ -583,8 +591,9 @@ export default function IOSScheduleApp() {
         return {
           tracker,
           latest,
+          // Chronological (oldest first) so the sparkline reads left-to-right.
+          series: entries.slice(-8).map((entry) => entry.value),
           trend,
-          dotClass: TRACKER_DOT_CLASSES[index % TRACKER_DOT_CLASSES.length],
           hasEntries: entries.length > 0,
         };
       })
@@ -1129,27 +1138,25 @@ export default function IOSScheduleApp() {
                 </div>
               ) : (
                 <div className="divide-y divide-neutral-100 dark:divide-white/[0.06]">
-                  {overviewTrackers.map(({ tracker, latest, trend, dotClass }) => {
-                    const TrendIcon = trend?.direction === "down" ? IconArrowDownRight : IconArrowUpRight;
-                    const trendClass = trend?.state === "positive"
-                      ? "text-emerald-500"
+                  {overviewTrackers.map(({ tracker, latest, series, trend }) => {
+                    const trendColorClass = trend?.state === "positive"
+                      ? "text-emerald-500 dark:text-emerald-400"
                       : trend?.state === "negative"
-                        ? "text-rose-500"
-                        : "text-neutral-400 dark:text-neutral-500";
+                        ? "text-rose-500 dark:text-rose-400"
+                        : "text-neutral-300 dark:text-neutral-600";
                     return (
                       <div key={tracker.id} className="flex items-center gap-3 py-3 first:pt-2 last:pb-0">
-                        <span className={`h-3 w-3 shrink-0 rounded-full ${dotClass}`} />
+                        <span className={`h-3 w-3 shrink-0 rounded-full ${PLAN_NEUTRAL.dot}`} />
                         <div className="min-w-0 flex-1">
-                          <div className="flex min-w-0 items-center gap-1.5">
-                            <p className="truncate text-[15px] font-extrabold text-neutral-950 dark:text-white">{tracker.title}</p>
-                            {trend && trend.direction !== "neutral" && (
-                              <TrendIcon size={17} strokeWidth={2.4} className={`shrink-0 ${trendClass}`} />
-                            )}
+                          <p className="truncate text-[15px] font-extrabold text-neutral-950 dark:text-white">{tracker.title}</p>
+                          <div className="mt-0.5 flex min-w-0 items-center gap-1.5">
+                            <p className="truncate text-[13px] font-semibold text-neutral-500 dark:text-neutral-400">
+                              {formatTrackerValue(latest, tracker)}
+                            </p>
+                            {trend && <TrendChange direction={trend.direction} state={trend.state} pct={trend.pct} />}
                           </div>
-                          <p className="mt-0.5 truncate text-[13px] font-semibold text-neutral-500 dark:text-neutral-400">
-                            {formatTrackerValue(latest, tracker)}
-                          </p>
                         </div>
+                        <Sparkline values={series} className={trendColorClass} />
                         <button
                           type="button"
                           onClick={() => {
@@ -1188,9 +1195,11 @@ export default function IOSScheduleApp() {
             </div>
 
             <DayBreakdownCard
-              tasks={schedule.activities[todayKey] ?? []}
+              activities={schedule.activities}
               categories={schedule.categories}
-              dateISO={todayISO()}
+              todayKey={todayKey}
+              todayISO={todayISO()}
+              preferences={schedule.preferences}
             />
 
             {overviewPlanConsistency.length > 0 && (
@@ -1338,6 +1347,10 @@ export default function IOSScheduleApp() {
                 plan={selectedPlan}
                 schedule={schedule}
                 milestones={schedule.milestones ?? []}
+                // IOSHeader above already shows the title and the edit/delete
+                // menu. This shell also serves iPads, where the view's own
+                // lg: header would otherwise render a second copy of both.
+                hideHeader
                 onDeletePlan={handleDeletePlan}
                 onEditPlan={(planId) => setEditingPlanId(planId)}
                 onAddTask={(planId) => openCreateSheet(planId)}
@@ -1571,6 +1584,9 @@ export default function IOSScheduleApp() {
             plans={schedule.plans}
           categories={schedule.categories}
           onCreateCategory={handleCreateCategory}
+          onUpdateCategory={handleUpdateCategory}
+          onDeleteCategory={handleDeleteCategory}
+          categoryUsage={categoryUsage}
             activeDay={activeDay}
             activeDays={taskSheetActiveDays}
             activities={schedule.activities}

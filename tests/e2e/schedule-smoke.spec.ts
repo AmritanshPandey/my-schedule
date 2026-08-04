@@ -481,15 +481,18 @@ test("a missed task is counted and announced separately from completion", async 
   // The state must reach assistive tech, which it never did before.
   await expect(card.getByRole("button", { name: "Missed, Clear missed mark" }).first()).toBeVisible();
 
-  // Long-press is pointer-only, so the same action must be reachable by
-  // keyboard: the button is always in the tab order and reveals itself on
-  // focus. Without this a keyboard user could never mark a task missed.
-  const markMissed = card.getByRole("button", { name: "Mark missed" }).first();
-  await expect(markMissed).toHaveCount(1);
-  await markMissed.focus();
-  await expect(markMissed).toBeVisible();
-  await markMissed.press("Enter");
-  await expect(missed).toContainText("2 missed");
+  // Long-press is pointer-only, so the action must also be reachable by
+  // keyboard. Every row carries a trailing chip into the detail view, which is
+  // where the labelled "Missed" button lives — including tasks with no
+  // subtasks, which previously had no route in at all.
+  // One chip per row — "Open subtasks (n of m done)" when the task has items,
+  // "Open task details" when it does not. The seeded plans all carry template
+  // items, so this fixture exercises the former; the latter is what unblocks a
+  // subtask-less task, which previously had no route in at all.
+  const details = card.getByRole("button", { name: /^Open (subtasks|task details)/ });
+  await expect(details).toHaveCount(3);
+  await details.first().press("Enter");
+  await expect(page.getByRole("button", { name: "Missed" })).toBeVisible();
 
   await expectNoBannedVisualEffects(page);
   await assertNoRuntimeErrors();

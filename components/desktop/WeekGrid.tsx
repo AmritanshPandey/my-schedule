@@ -9,18 +9,18 @@ import { DAYS } from "@/lib/useScheduleDB";
 import { getSlots, sortTasksByTime } from "@/lib/taskMutations";
 import { completionForDate, getTaskCheckableItems, getTaskSubtaskSummary, resolveTaskState } from "@/lib/taskCompletion";
 import { isTaskScheduledOn, resolveOccurrence } from "@/lib/taskOccurrence";
-import { localISODate, todayISO } from "@/lib/dateUtils";
+import { addDaysToISO, localISODate, todayISO } from "@/lib/dateUtils";
 import { currentMinutes, parseTimeToMinutes } from "@/lib/timeUtils";
 import { categoryHex } from "@/lib/colorSystem";
 import { taskIdentity, categoriesById } from "@/lib/taskIdentity";
 import { haptic } from "@/lib/haptics";
 import {
-  DRAG_DEFAULT_DURATION,
+  CLICK_DEFAULT_DURATION,
   DRAG_MIN_DURATION,
   DRAG_THRESHOLD_PX,
   clampMinutes,
   minutesToDisplayTime,
-  pointerToScrollableMinutes,
+  pointerToMinutes,
   snapMinutes,
 } from "@/lib/timeline/dragTimeUtils";
 import {
@@ -30,6 +30,7 @@ import {
   mapMinutesToTimeline,
   TIMELINE_END_MINUTES,
 } from "@/lib/timeline/displayWindow";
+import { SCHEDULE_DAY_HANDOVER_MINUTES, taskContinuations } from "@/lib/timeline/overnight";
 import TimelineDraftCard from "@/components/timeline/TimelineDraftCard";
 import RitualStrip from "@/components/timeline/RitualStrip";
 
@@ -58,6 +59,13 @@ function fmtRail(m: number): string {
 }
 
 interface BlockLayout {
+  /**
+   * "continuation" = the tail of *yesterday's* task, finishing in this column.
+   * Derived and read-only: it has no identity of its own, and every mutation
+   * path is gated on this rather than on the column's day, because completing
+   * or deleting through it would write the source task into the wrong bucket.
+   */
+  kind: "task" | "continuation";
   task: Task;
   /** The specific slot this block renders (a multi-slot task yields one block per slot). */
   slot: TaskSlot;
@@ -68,9 +76,14 @@ interface BlockLayout {
   widthPct: number;
 }
 
-function buildDayLayout(tasks: Task[], startMin: number, endMin: number): { timed: BlockLayout[]; untimed: Task[] } {
+function buildDayLayout(
+  tasks: Task[],
+  startMin: number,
+  endMin: number,
+  carryIn: Task[] = [],
+): { timed: BlockLayout[]; untimed: Task[] } {
   const untimed: Task[] = [];
-  const parsed: { task: Task; slot: TaskSlot; slotIndex: number; s: number; e: number }[] = [];
+  const parsed: { kind: BlockLayout["kind"]; task: Task; slot: TaskSlot; slotIndex: number; s: number; e: number }[] = [];
   for (const t of tasks) {
     const slots = getSlots(t);
     let anyTimed = false;
@@ -83,9 +96,17 @@ function buildDayLayout(tasks: Task[], startMin: number, endMin: number): { time
       if (e == null) e = s + 30;
       else e = mapMinutesToTimeline(e, startMin, endMin);
       while (e <= s) e += 1440;
-      parsed.push({ task: t, slot, slotIndex, s, e });
+      parsed.push({ kind: "task", task: t, slot, slotIndex, s, e });
     });
     if (!anyTimed) untimed.push(t);
+  }
+  // Carried-in tails share the lane packing below rather than being drawn on a
+  // separate layer, so a 4-7 AM continuation and a 6 AM workout split the
+  // column like any other overlap instead of stacking on top of each other.
+  for (const t of carryIn) {
+    for (const c of taskContinuations(t, endMin)) {
+      parsed.push({ kind: "continuation", task: t, slot: c.slot, slotIndex: c.slotIndex, s: c.interval.start, e: c.interval.end });
+    }
   }
   parsed.sort((a, b) => a.s - b.s || a.e - b.e);
 
@@ -108,6 +129,7 @@ function buildDayLayout(tasks: Task[], startMin: number, endMin: number): { time
       const top = (Math.max(c.s, startMin) - startMin) * PX_MIN;
       const bottom = (Math.min(c.e, endMin) - startMin) * PX_MIN;
       timed.push({
+        kind: c.kind,
         task: c.task,
         slot: c.slot,
         slotIndex: c.slotIndex,
@@ -184,6 +206,8 @@ interface WeekGridProps {
     onDelete: () => void,
     slot?: TaskSlot,
     slotIndex?: number,
+    /** Squares off the edge an overnight block is cut on. */
+    edgeCut?: "top" | "bottom",
   ) => ReactNode;
 }
 
@@ -240,12 +264,26 @@ export function WeekGrid({
       const r = resolveOccurrence(t, dateISO);
       return dayIsToday ? r : { ...r, ...completionForDate(t, dateISO) };
     });
-    return { day, date, dateISO, dayIsToday, tasks };
+    // Yesterday's overnight tails, which finish inside this column. Resolved
+    // against the *previous* date so a skipped or retimed occurrence carries in
+    // what it actually ran. `activities` is weekday-keyed and dateless, so the
+    // week boundary needs no special case: Monday's carry-in is the `sunday`
+    // bucket read against the preceding Sunday's date.
+    const prevDay = DAYS[(DAYS.indexOf(day) + 6) % 7];
+    const prevISO = addDaysToISO(dateISO, -1);
+    const carryIn = (schedule.activities[prevDay] ?? [])
+      .filter((t) => isTaskScheduledOn(t, prevISO, true))
+      .map((t) => resolveOccurrence(t, prevISO));
+    return { day, date, dateISO, dayIsToday, tasks, carryIn };
   });
 
+  const hasCarryIn = days.some((d) => d.carryIn.some((t) => taskContinuations(t).length > 0));
   const startMin = getTimelineDisplayStartMinutes({
     dayStartTime: schedule.preferences?.dayStartTime,
     tasks: days.flatMap((day) => day.tasks),
+    // A continuation begins at the handover, which is earlier than the window
+    // would otherwise open — without this it would be clipped off the top.
+    mustShowFromMinutes: hasCarryIn ? SCHEDULE_DAY_HANDOVER_MINUTES : undefined,
   });
   const endMin = TIMELINE_END_MINUTES;
   // null when the clock is outside the visible window — see getNowOnTimeline.
@@ -304,9 +342,7 @@ export function WeekGrid({
       if (!drag.dragging) drag.dragging = true;
 
       e.preventDefault();
-      const scrollTop = scrollRef.current?.scrollTop ?? 0;
-      const gridTop = drag.columnEl.getBoundingClientRect().top;
-      const currentMin = pointerToScrollableMinutes(e.clientY, gridTop, scrollTop, PX_MIN, startMin);
+      const currentMin = pointerToMinutes(e.clientY, drag.columnEl, 0, PX_MIN * 60, startMin);
       const snapped = snapMinutes(currentMin);
       const clamped = clampMinutes(snapped, startMin, endMin - DRAG_MIN_DURATION);
       const nextEndMin = Math.max(clamped, drag.startMin + DRAG_MIN_DURATION);
@@ -325,7 +361,10 @@ export function WeekGrid({
       const drag = createDragRef.current;
       if (!drag || drag.pointerId !== e.pointerId) return;
       createDragRef.current = null;
-      if (!drag.dragging) return;
+      // No `if (!drag.dragging) return` here: a click that never crossed
+      // DRAG_THRESHOLD_PX still names a time, it just doesn't name a length.
+      // lastEndMin is seeded with the click default and overwritten by
+      // onPointerMove once a drag starts, so both gestures read the same field.
       haptic("light");
       onCreateTaskAtTime(drag.day, drag.startMin, drag.lastEndMin);
       if (clearDragCreateTimerRef.current) clearTimeout(clearDragCreateTimerRef.current);
@@ -391,9 +430,11 @@ export function WeekGrid({
       clearDragCreateTimerRef.current = null;
     }
     const columnEl = e.currentTarget;
-    const scrollTop = scrollRef.current?.scrollTop ?? 0;
-    const gridTop = columnEl.getBoundingClientRect().top;
-    const rawMin = pointerToScrollableMinutes(e.clientY, gridTop, scrollTop, PX_MIN, startMin);
+    // Measured against the column's own rect, which is inside the scroller and
+    // therefore already reflects scroll position. Adding scrollTop on top of it
+    // double-counts — that is what made a click land hours off once the grid
+    // had been scrolled.
+    const rawMin = pointerToMinutes(e.clientY, columnEl, 0, PX_MIN * 60, startMin);
     const startMinSnapped = clampMinutes(snapMinutes(rawMin), startMin, endMin - DRAG_MIN_DURATION);
     createDragRef.current = {
       day,
@@ -402,7 +443,7 @@ export function WeekGrid({
       startClientY: e.clientY,
       startMin: startMinSnapped,
       dragging: false,
-      lastEndMin: Math.min(startMinSnapped + DRAG_DEFAULT_DURATION, endMin),
+      lastEndMin: Math.min(startMinSnapped + CLICK_DEFAULT_DURATION, endMin),
     };
     columnEl.setPointerCapture(e.pointerId);
   }
@@ -511,11 +552,19 @@ export function WeekGrid({
           </div>
       </div>
 
-      <div className="min-h-0 flex-1 overflow-x-auto overscroll-x-contain rounded-2xl border border-neutral-200 bg-white dark:border-white/[0.08] dark:bg-neutral-950">
-        <div className="flex h-full min-w-full flex-col" style={{ width: `max(100%, ${minGridWidth}px)` }}>
+      {/* One scroller for BOTH axes. A nested y-scroller would become an
+          x-scroll container too (overflow-y:auto forces overflow-x away from
+          visible), and `sticky left-0` inside it would resolve against a box
+          whose scrollLeft is permanently 0 — i.e. do nothing. Sticky only
+          works against the scrollport that actually moves. */}
+      <div
+        ref={scrollRef}
+        className="min-h-0 flex-1 overflow-auto overscroll-contain rounded-2xl border border-neutral-200 bg-white dark:border-white/[0.08] dark:bg-neutral-950"
+      >
+        <div className="min-w-full" style={{ width: `max(100%, ${minGridWidth}px)` }}>
           {/* ── Fixed day-header row ─────────────────────────────────────────────── */}
           <div
-            className="grid h-[76px] shrink-0 border-b border-neutral-200 dark:border-white/[0.07]"
+            className="sticky top-0 z-30 grid h-[76px] border-b border-neutral-200 bg-white dark:border-white/[0.07] dark:bg-neutral-950"
             style={{ gridTemplateColumns: gridTemplate }}
           >
             <div className="sticky left-0 z-10 border-r border-neutral-200 bg-white dark:border-white/[0.07] dark:bg-neutral-950" />
@@ -563,13 +612,10 @@ export function WeekGrid({
             })}
           </div>
 
-          {/* ── Scrollable grid body ─────────────────────────────────────────────── */}
-          <div ref={scrollRef} className="min-h-0 flex-1 overflow-y-auto overflow-x-hidden overscroll-contain">
-
         {/* All-day / untimed band */}
         {hasUntimed && (
           <div className="grid border-b border-neutral-200 dark:border-white/[0.07]" style={{ gridTemplateColumns: gridTemplate }}>
-            <div className="sticky left-0 z-10 flex items-start justify-end border-r border-neutral-200 bg-white px-2 pt-2 dark:border-white/[0.07] dark:bg-neutral-950">
+            <div className="sticky left-0 z-20 flex items-start justify-end border-r border-neutral-200 bg-white px-2 pt-2 dark:border-white/[0.07] dark:bg-neutral-950">
               <span className="text-[9px] font-semibold uppercase tracking-wide text-neutral-300 dark:text-neutral-600">All day</span>
             </div>
             {days.map(({ day, tasks, dayIsToday, dateISO }) => {
@@ -607,8 +653,10 @@ export function WeekGrid({
           className="relative flex"
           style={{ height: totalPx }}
         >
-          {/* Time rail */}
-          <div className="sticky left-0 z-10 shrink-0 border-r border-neutral-200 bg-white dark:border-white/[0.07] dark:bg-neutral-950" style={{ width: RAIL_W }}>
+          {/* Time rail. z-20 so day-column content passes under it while the
+              grid scrolls sideways; still below the header row's z-30 so the
+              two don't fight over the corner. */}
+          <div className="sticky left-0 z-20 shrink-0 border-r border-neutral-200 bg-white dark:border-white/[0.07] dark:bg-neutral-950" style={{ width: RAIL_W }}>
             {railLabels.map((m) => {
               const onHour = m % 60 === 0;
               const isFirst = m === startMin;
@@ -629,8 +677,8 @@ export function WeekGrid({
           </div>
 
           {/* Day columns */}
-          {days.map(({ day, dayIsToday, dateISO, tasks }) => {
-            const { timed } = buildDayLayout(tasks, startMin, endMin);
+          {days.map(({ day, dayIsToday, dateISO, tasks, carryIn }) => {
+            const { timed } = buildDayLayout(tasks, startMin, endMin, carryIn);
             const ritualMarks = buildRitualMarks(rituals, day, startMin, endMin);
             const completedRituals = new Set(
               ritualCompletions.filter((c) => c.date === dateISO).map((c) => c.ritualId),
@@ -661,6 +709,12 @@ export function WeekGrid({
                 </div>
 
                 {timed.map((layout) => {
+                  const isContinuation = layout.kind === "continuation";
+                  // The source block is cut at the bottom by the day's end; the
+                  // continuation is cut at the top by the same instant.
+                  const cutAtBottom =
+                    !isContinuation &&
+                    taskContinuations(layout.task, endMin).some((c) => c.slotIndex === layout.slotIndex);
                   const visualHeight = Math.max(22, layout.height - TASK_VERTICAL_INSET * 2);
                   const linkedPlan = layout.task.planId ? plansById.get(layout.task.planId) ?? null : null;
                   const allSubtaskIds = getTaskCheckableItems(layout.task, linkedPlan).map((item) => item.id);
@@ -682,10 +736,13 @@ export function WeekGrid({
                     nowPx < layout.top + layout.height;
                   return (
                     <div
-                      key={`${layout.task.id}-${layout.slotIndex}`}
+                      // `kind` is part of the key because a daily overnight task
+                      // renders twice in the same column — today's block and
+                      // yesterday's tail — with the same id and slot index.
+                      key={`${layout.kind}-${layout.task.id}-${layout.slotIndex}`}
                       data-task-block
                       data-glass={isCurrent ? "" : undefined}
-                      className={`absolute ${isCurrent ? "rounded-[10px] shadow-[0_0_0_1.5px_rgba(0,166,62,0.55),0_8px_24px_-12px_rgba(0,166,62,0.35)] dark:shadow-[0_0_0_1.5px_rgba(47,212,110,0.5),0_8px_24px_-12px_rgba(47,212,110,0.4)]" : ""}`}
+                      className={`absolute ${isCurrent ? "rounded-[10px] shadow-now" : ""}`}
                       style={{
                         top: layout.top + TASK_VERTICAL_INSET,
                         height: visualHeight,
@@ -698,14 +755,20 @@ export function WeekGrid({
                         layout.task,
                         layout.height,
                         layout.widthPct,
-                        readOnly,
-                        () =>
-                          totalSlots > 1
-                            ? onToggleSlot(layout.task.id, layout.slotIndex, day, dateISO)
-                            : onToggleTaskComplete(layout.task.id, allSubtaskIds, day, dateISO),
-                        () => onDeleteTask(layout.task.id, day),
+                        // A continuation is read-only even in today's column:
+                        // `day`/`dateISO` here are *this* column's, but the task
+                        // lives in the previous day's bucket, so completing or
+                        // deleting through it would write to the wrong day.
+                        readOnly || isContinuation,
+                        () => {
+                          if (isContinuation) return;
+                          if (totalSlots > 1) onToggleSlot(layout.task.id, layout.slotIndex, day, dateISO);
+                          else onToggleTaskComplete(layout.task.id, allSubtaskIds, day, dateISO);
+                        },
+                        () => { if (!isContinuation) onDeleteTask(layout.task.id, day); },
                         layout.slot,
                         layout.slotIndex,
+                        isContinuation ? "top" : cutAtBottom ? "bottom" : undefined,
                       )}
                     </div>
                   );
@@ -737,7 +800,7 @@ export function WeekGrid({
                   const showDuration = dragCreate.endMin - dragCreate.startMin >= 30;
                   return (
                     <div
-                      className="pointer-events-none absolute left-0.5 right-0.5 z-40"
+                      className="pointer-events-none absolute left-0.5 right-0.5 z-[15]"
                       style={{ top, height }}
                     >
                       <TimelineDraftCard
@@ -763,7 +826,6 @@ export function WeekGrid({
             );
           })}
         </div>
-          </div>
         </div>
       </div>
     </div>

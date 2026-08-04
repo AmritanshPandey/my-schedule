@@ -145,11 +145,7 @@ export default function DayWallpaperSheet({ open, onClose, schedule, todayKey }:
 
       if (cancelled) return;
       const { width, height } = wallpaperSize();
-      const dateLabel = new Date().toLocaleDateString("en-US", {
-        weekday: "long",
-        month: "short",
-        day: "numeric",
-      }).replace(",", " ·");
+      const dateLabel = new Date().toLocaleDateString("en-US", { weekday: "long" });
       renderDayWallpaper(canvasEl, { width, height, items, icons, background, dateLabel });
     })();
 
@@ -214,7 +210,7 @@ export default function DayWallpaperSheet({ open, onClose, schedule, todayKey }:
             ref={setCanvasEl}
             data-glass
             aria-label="Wallpaper preview of today's schedule"
-            className="max-h-[44vh] w-auto rounded-2xl border border-neutral-200/70 shadow-[0_12px_40px_-12px_rgba(0,0,0,0.35)] dark:border-white/[0.10] dark:shadow-[0_12px_40px_-12px_rgba(0,0,0,0.7)]"
+            className="max-h-[44vh] w-auto rounded-2xl border border-neutral-200/70 shadow-popover dark:border-white/[0.10]"
           />
         </div>
 
