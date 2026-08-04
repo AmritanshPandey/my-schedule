@@ -49,7 +49,7 @@ import {
 } from "@/lib/useScheduleDB";
 import { useScheduleDB } from "@/lib/useScheduleDB";
 import { categoryHex, resolveAccentColor, PLAN_NEUTRAL } from "@/lib/colorSystem";
-import { ensureCategoryIn } from "@/lib/taskCategories";
+import { canDeleteCategory, categoryUsageCounts, ensureCategoryIn } from "@/lib/taskCategories";
 import { taskIdentity, categoriesById } from "@/lib/taskIdentity";
 import { SECTION_ICONS } from "@/components/SectionIcons";
 import { useReminders } from "@/lib/useReminders";
@@ -430,6 +430,23 @@ export default function IOSScheduleApp() {
     const id = `cat-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 7)}`;
     setSchedule((prev) => ({ ...prev, categories: [...prev.categories, { id, ...draft }] }));
     return id;
+  }, [setSchedule]);
+
+  const categoryUsage = useMemo(() => categoryUsageCounts(schedule.activities), [schedule.activities]);
+  const handleUpdateCategory = useCallback((id: string, draft: CategoryDraft) => {
+    setSchedule((prev) => ({
+      ...prev,
+      categories: prev.categories.map((c) => (c.id === id ? { ...c, ...draft } : c)),
+    }));
+  }, [setSchedule]);
+
+  // Refuses when the category is still in use — the picker disables the button
+  // for the same reason, this is the guard behind it.
+  const handleDeleteCategory = useCallback((id: string) => {
+    setSchedule((prev) => {
+      if (!canDeleteCategory(id, categoryUsageCounts(prev.activities))) return prev;
+      return { ...prev, categories: prev.categories.filter((c) => c.id !== id) };
+    });
   }, [setSchedule]);
 
   const categoryMap = useMemo(() => categoriesById(schedule.categories), [schedule.categories]);
@@ -1563,6 +1580,9 @@ export default function IOSScheduleApp() {
             plans={schedule.plans}
           categories={schedule.categories}
           onCreateCategory={handleCreateCategory}
+          onUpdateCategory={handleUpdateCategory}
+          onDeleteCategory={handleDeleteCategory}
+          categoryUsage={categoryUsage}
             activeDay={activeDay}
             activeDays={taskSheetActiveDays}
             activities={schedule.activities}

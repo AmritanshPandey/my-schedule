@@ -3,7 +3,7 @@
 import { useMemo, useState } from "react";
 import { IconPlus, IconTrash } from "@tabler/icons-react";
 import type { Schedule, TaskCategory } from "@/lib/useScheduleDB";
-import { DAYS } from "@/lib/scheduleConstants";
+import { canDeleteCategory, categoryUsageCounts } from "@/lib/taskCategories";
 import { accentStyles } from "@/lib/colorSystem";
 import { iconGlyph } from "@/components/SectionIcons";
 import { haptic } from "@/lib/haptics";
@@ -32,20 +32,7 @@ export default function CategoryManager({ schedule, setSchedule }: CategoryManag
   const [sheetOpen, setSheetOpen] = useState(false);
   const [editing, setEditing] = useState<TaskCategory | null>(null);
 
-  /** How many tasks reference each category, across every weekday bucket. */
-  const usageById = useMemo(() => {
-    const counts = new Map<string, number>();
-    const seen = new Set<string>();
-    for (const day of DAYS) {
-      for (const task of schedule.activities[day] ?? []) {
-        // Recurring tasks share one id across weekdays — count each task once.
-        if (!task.categoryId || seen.has(task.id)) continue;
-        seen.add(task.id);
-        counts.set(task.categoryId, (counts.get(task.categoryId) ?? 0) + 1);
-      }
-    }
-    return counts;
-  }, [schedule.activities]);
+  const usageById = useMemo(() => categoryUsageCounts(schedule.activities), [schedule.activities]);
 
   const categories = useMemo(
     () => [...schedule.categories].sort((a, b) => (a.sortOrder ?? 0) - (b.sortOrder ?? 0) || a.title.localeCompare(b.title)),
@@ -67,7 +54,7 @@ export default function CategoryManager({ schedule, setSchedule }: CategoryManag
   }
 
   function handleDelete(category: TaskCategory) {
-    if ((usageById.get(category.id) ?? 0) > 0) return;
+    if (!canDeleteCategory(category.id, usageById)) return;
     haptic("light");
     setSchedule((prev) => ({ ...prev, categories: prev.categories.filter((c) => c.id !== category.id) }));
   }

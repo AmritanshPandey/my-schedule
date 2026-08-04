@@ -73,7 +73,7 @@ import {
   type AccentColor,
 } from "@/lib/colorSystem";
 import { taskIdentity, categoriesById } from "@/lib/taskIdentity";
-import { categoryForIcon, ensureCategoryIn } from "@/lib/taskCategories";
+import { canDeleteCategory, categoryForIcon, categoryUsageCounts, ensureCategoryIn } from "@/lib/taskCategories";
 import { SECTION_ICONS } from "@/components/SectionIcons";
 import {
   IconChevronLeft,
@@ -2400,6 +2400,23 @@ export default function ScheduleApp() {
     return id;
   }, [setSchedule]);
 
+  const categoryUsage = useMemo(() => categoryUsageCounts(schedule.activities), [schedule.activities]);
+  const handleUpdateCategory = useCallback((id: string, draft: CategoryDraft) => {
+    setSchedule((prev) => ({
+      ...prev,
+      categories: prev.categories.map((c) => (c.id === id ? { ...c, ...draft } : c)),
+    }));
+  }, [setSchedule]);
+
+  // Refuses when the category is still in use — the picker disables the button
+  // for the same reason, this is the guard behind it.
+  const handleDeleteCategory = useCallback((id: string) => {
+    setSchedule((prev) => {
+      if (!canDeleteCategory(id, categoryUsageCounts(prev.activities))) return prev;
+      return { ...prev, categories: prev.categories.filter((c) => c.id !== id) };
+    });
+  }, [setSchedule]);
+
   function getTaskPresentation(task: Task) {
     const linkedPlan = task.planId ? plansById.get(task.planId) ?? null : null;
     // Identity belongs to the task's category. Held time and uncategorised
@@ -3716,6 +3733,9 @@ export default function ScheduleApp() {
           plans={schedule.plans}
           categories={schedule.categories}
           onCreateCategory={handleCreateCategory}
+          onUpdateCategory={handleUpdateCategory}
+          onDeleteCategory={handleDeleteCategory}
+          categoryUsage={categoryUsage}
           activeDay={activeDay}
           activeDays={taskSheetActiveDays}
           activities={schedule.activities}

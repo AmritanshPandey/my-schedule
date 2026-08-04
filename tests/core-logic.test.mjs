@@ -76,7 +76,7 @@ const {
 const { continuationInterval, SCHEDULE_DAY_HANDOVER_MINUTES } =
   await import("../lib/timeline/overnight.ts");
 const { selectTodayTasks } = await import("../lib/todayTasks.ts");
-const { CategoryRegistry } = await import("../lib/taskCategories.ts");
+const { CategoryRegistry, categoryUsageCounts, canDeleteCategory } = await import("../lib/taskCategories.ts");
 const { taskIdentity, categoriesById } = await import("../lib/taskIdentity.ts");
 const { calculateExecutionStreak } = await import("../lib/consistency/calculateExecutionStreak.ts");
 const { localISODate, addDaysToISO } = await import("../lib/dateUtils.ts");
@@ -1320,6 +1320,25 @@ test("buildDayBreakdown groups by category and pools commitments into held time"
   assert.equal(slices[0].color, "indigo", "wedge colour is the category's, so it matches the timeline");
   assert.equal(slices.find((s) => s.id === HELD_TIME_ID).label, "Held time");
   assert.equal(slices.find((s) => s.id === HELD_TIME_ID).color, null, "held time has no accent");
+});
+
+test("categoryUsageCounts counts a recurring task once, and guards delete", () => {
+  // Same id in three weekday buckets = one recurring task, not three.
+  const habit = { id: "t1", title: "Gym", categoryId: "cat-fit" };
+  const activities = {
+    monday: [habit, { id: "t2", title: "Read", categoryId: "cat-read" }],
+    wednesday: [habit],
+    friday: [habit, { id: "t3", title: "Untagged" }],
+  };
+
+  const usage = categoryUsageCounts(activities);
+  assert.equal(usage.get("cat-fit"), 1, "a Mon/Wed/Fri habit is one task, not three");
+  assert.equal(usage.get("cat-read"), 1);
+  assert.equal(usage.get("cat-none"), undefined, "an unused category has no entry");
+
+  assert.equal(canDeleteCategory("cat-fit", usage), false, "in use — refuse");
+  assert.equal(canDeleteCategory("cat-none", usage), true, "unused — allow");
+  assert.equal(canDeleteCategory("cat-fit", new Map()), true, "the map is the only evidence it reads");
 });
 
 test("taskDayMinutes splits an overnight task at the day boundary", () => {
