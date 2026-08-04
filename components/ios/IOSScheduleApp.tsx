@@ -1199,6 +1199,7 @@ export default function IOSScheduleApp() {
               categories={schedule.categories}
               todayKey={todayKey}
               todayISO={todayISO()}
+              preferences={schedule.preferences}
             />
 
             {overviewPlanConsistency.length > 0 && (

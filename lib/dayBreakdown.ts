@@ -8,8 +8,9 @@
 import type { Task, TaskCategory } from "./useScheduleDB";
 import { getSlots } from "./taskMutations";
 import { isTrackedTask } from "./taskCompletion";
-import { isTaskScheduledOn } from "./taskOccurrence";
+import { isTaskScheduledOn, resolveOccurrence } from "./taskOccurrence";
 import { parseTimeToMinutes, toScheduleDayMinutes } from "./timeUtils";
+import { getConfiguredDayStartMinutes, TIMELINE_END_MINUTES } from "./timeline/displayWindow";
 
 /** Bucket id used for commitments, which belong to no plan. */
 export const HELD_TIME_ID = "__held__";
@@ -29,9 +30,21 @@ export interface DayBreakdown {
   totalMinutes: number;
 }
 
-/** Minutes a task occupies on the day, summed across every slot. */
-export function taskScheduledMinutes(task: Task): number {
-  let total = 0;
+export interface TaskDayMinutes {
+  /** Minutes landing inside this schedule day's 4:00 → 28:00 window. */
+  sameDay: number;
+  /**
+   * Minutes past 28:00. They belong to the *next* schedule day, which is where
+   * the timeline draws them as a continuation block — so this is where the
+   * donut counts them too, and the two finally agree.
+   */
+  overflow: number;
+}
+
+/** Minutes a task occupies, split at the day boundary, summed across slots. */
+export function taskDayMinutes(task: Task): TaskDayMinutes {
+  let sameDay = 0;
+  let overflow = 0;
   for (const slot of getSlots(task)) {
     const rawStart = parseTimeToMinutes(slot.startTime);
     const rawEnd = parseTimeToMinutes(slot.endTime);
@@ -39,9 +52,19 @@ export function taskScheduledMinutes(task: Task): number {
     const start = toScheduleDayMinutes(rawStart);
     let end = toScheduleDayMinutes(rawEnd);
     if (end <= start) end += 24 * 60; // runs past midnight
-    total += end - start;
+    sameDay += Math.min(end, TIMELINE_END_MINUTES) - start;
+    overflow += Math.max(0, end - TIMELINE_END_MINUTES);
   }
-  return total;
+  return { sameDay, overflow };
+}
+
+/**
+ * The task's whole duration, both sides of the boundary. Kept for callers that
+ * want "how long is this task" rather than "how much of it lands on this day".
+ */
+export function taskScheduledMinutes(task: Task): number {
+  const { sameDay, overflow } = taskDayMinutes(task);
+  return sameDay + overflow;
 }
 
 /**
@@ -62,23 +85,39 @@ export function buildDayBreakdown(
   tasks: readonly Task[],
   categories: readonly TaskCategory[],
   dateISO: string,
+  /**
+   * The previous schedule day. Its overnight tails land on *this* day, so they
+   * are counted here rather than there — matching where the timeline draws them.
+   */
+  carryIn?: { tasks: readonly Task[]; dateISO: string },
 ): DayBreakdown {
   const categoriesById = new Map(categories.map((c) => [c.id, c]));
   const minutesById = new Map<string, number>();
 
-  for (const task of tasks) {
-    if (!isTaskScheduledOn(task, dateISO, true)) continue;
-    const minutes = taskScheduledMinutes(task);
-    if (minutes <= 0) continue;
-
-    // A categorised task — commitment or not — gets its own wedge. An
-    // uncategorised commitment pools into "Held time"; an uncategorised or
-    // dangling tracked task is skipped, since a missing id is a data artefact
-    // rather than a category the user would recognise.
+  // A categorised task — commitment or not — gets its own wedge. An
+  // uncategorised commitment pools into "Held time"; an uncategorised or
+  // dangling tracked task is skipped, since a missing id is a data artefact
+  // rather than a category the user would recognise.
+  function add(task: Task, minutes: number): void {
+    if (minutes <= 0) return;
     const categorised = task.categoryId && categoriesById.has(task.categoryId);
-    if (!categorised && isTrackedTask(task)) continue;
+    if (!categorised && isTrackedTask(task)) return;
     const key = categorised ? task.categoryId! : HELD_TIME_ID;
     minutesById.set(key, (minutesById.get(key) ?? 0) + minutes);
+  }
+
+  for (const task of tasks) {
+    if (!isTaskScheduledOn(task, dateISO, true)) continue;
+    add(task, taskDayMinutes(resolveOccurrence(task, dateISO)).sameDay);
+  }
+
+  // Gated on the *previous* date so a skipped or retimed occurrence carries in
+  // exactly what it actually ran, not what the template says.
+  if (carryIn) {
+    for (const task of carryIn.tasks) {
+      if (!isTaskScheduledOn(task, carryIn.dateISO, true)) continue;
+      add(task, taskDayMinutes(resolveOccurrence(task, carryIn.dateISO)).overflow);
+    }
   }
 
   const totalMinutes = Array.from(minutesById.values()).reduce((sum, m) => sum + m, 0);
@@ -98,6 +137,55 @@ export function buildDayBreakdown(
     .sort((a, b) => b.minutes - a.minutes || a.label.localeCompare(b.label));
 
   return { slices, totalMinutes };
+}
+
+/** How long a waking day is assumed to run. */
+export const WAKING_WINDOW_MINUTES = 16 * 60;
+
+/**
+ * Where a waking day starts when the user has not configured one.
+ *
+ * Deliberately *not* `DEFAULT_TIMELINE_START_MINUTES` (4:00). That constant is
+ * the schedule-day boundary — the point where one day's grid hands over to the
+ * next — not a wake time. Reusing it would tell an unconfigured user their day
+ * runs 4:00 AM to 8:00 PM and make every evening block read as falling outside
+ * their waking hours.
+ */
+export const DEFAULT_WAKING_START_MINUTES = 7 * 60;
+
+export interface ActiveHours {
+  startMinutes: number;
+  endMinutes: number;
+  wakingMinutes: number;
+  scheduledMinutes: number;
+  freeMinutes: number;
+  /** Minutes booked beyond the waking window; 0 unless overbooked. */
+  overbookedMinutes: number;
+  /** 0–100, already clamped — the fill can never leave its track. */
+  pct: number;
+}
+
+/**
+ * Scheduled time against the waking day, so free time becomes visible.
+ *
+ * A standalone function rather than a field on `DayBreakdown`: making it part of
+ * the breakdown would thread a preference through `buildDayBreakdown` purely to
+ * compute a derived scalar, couple category grouping to user settings, and have
+ * to survive that function's `totalMinutes === 0` early return. Keeping it apart
+ * also keeps free time *out* of `slices`, so the donut still tiles a full circle.
+ */
+export function buildActiveHours(scheduledMinutes: number, dayStartTime?: string): ActiveHours {
+  const startMinutes = getConfiguredDayStartMinutes(dayStartTime) ?? DEFAULT_WAKING_START_MINUTES;
+  const scheduled = Math.max(0, scheduledMinutes);
+  return {
+    startMinutes,
+    endMinutes: startMinutes + WAKING_WINDOW_MINUTES,
+    wakingMinutes: WAKING_WINDOW_MINUTES,
+    scheduledMinutes: scheduled,
+    freeMinutes: Math.max(0, WAKING_WINDOW_MINUTES - scheduled),
+    overbookedMinutes: Math.max(0, scheduled - WAKING_WINDOW_MINUTES),
+    pct: Math.min(100, (scheduled / WAKING_WINDOW_MINUTES) * 100),
+  };
 }
 
 /** "6h 30m" / "45m" — compact, for the centre readout and legend. */
