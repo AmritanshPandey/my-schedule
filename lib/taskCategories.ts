@@ -13,7 +13,42 @@
 
 import type { AccentColor } from "./colorSystem";
 import { colorFromIcon } from "./colorSystem";
-import type { TaskCategory } from "./useScheduleDB";
+import { DAYS } from "./scheduleConstants";
+import type { DayKey, Task, TaskCategory } from "./useScheduleDB";
+
+/**
+ * How many tasks reference each category, across every weekday bucket.
+ *
+ * A recurring task shares one id across the weekdays it repeats on, so ids are
+ * de-duplicated — otherwise a Mon/Wed/Fri habit would report as three tasks and
+ * make the "used by N" copy wrong.
+ */
+export function categoryUsageCounts(
+  activities: Partial<Record<DayKey, Task[]>>,
+): Map<string, number> {
+  const counts = new Map<string, number>();
+  const seen = new Set<string>();
+  for (const day of DAYS) {
+    for (const task of activities[day] ?? []) {
+      if (!task.categoryId || seen.has(task.id)) continue;
+      seen.add(task.id);
+      counts.set(task.categoryId, (counts.get(task.categoryId) ?? 0) + 1);
+    }
+  }
+  return counts;
+}
+
+/**
+ * Whether a category can be removed.
+ *
+ * Deleting one that is in use is blocked rather than cascading: silently
+ * stripping the colour from twelve tasks is not something a user can undo or
+ * would have asked for. Callers surface the count so the refusal is explainable
+ * rather than mysterious.
+ */
+export function canDeleteCategory(categoryId: string, usage: ReadonlyMap<string, number>): boolean {
+  return (usage.get(categoryId) ?? 0) === 0;
+}
 
 /**
  * Default category title for each icon name. Shared with `SECTION_ICONS`

@@ -9,7 +9,7 @@ import { DAYS } from "@/lib/useScheduleDB";
 import { getSlots, sortTasksByTime } from "@/lib/taskMutations";
 import { completionForDate, getTaskCheckableItems, getTaskSubtaskSummary, resolveTaskState } from "@/lib/taskCompletion";
 import { isTaskScheduledOn, resolveOccurrence } from "@/lib/taskOccurrence";
-import { localISODate, todayISO } from "@/lib/dateUtils";
+import { addDaysToISO, localISODate, todayISO } from "@/lib/dateUtils";
 import { currentMinutes, parseTimeToMinutes } from "@/lib/timeUtils";
 import { categoryHex } from "@/lib/colorSystem";
 import { taskIdentity, categoriesById } from "@/lib/taskIdentity";
@@ -30,6 +30,7 @@ import {
   mapMinutesToTimeline,
   TIMELINE_END_MINUTES,
 } from "@/lib/timeline/displayWindow";
+import { SCHEDULE_DAY_HANDOVER_MINUTES, taskContinuations } from "@/lib/timeline/overnight";
 import TimelineDraftCard from "@/components/timeline/TimelineDraftCard";
 import RitualStrip from "@/components/timeline/RitualStrip";
 
@@ -58,6 +59,13 @@ function fmtRail(m: number): string {
 }
 
 interface BlockLayout {
+  /**
+   * "continuation" = the tail of *yesterday's* task, finishing in this column.
+   * Derived and read-only: it has no identity of its own, and every mutation
+   * path is gated on this rather than on the column's day, because completing
+   * or deleting through it would write the source task into the wrong bucket.
+   */
+  kind: "task" | "continuation";
   task: Task;
   /** The specific slot this block renders (a multi-slot task yields one block per slot). */
   slot: TaskSlot;
@@ -68,9 +76,14 @@ interface BlockLayout {
   widthPct: number;
 }
 
-function buildDayLayout(tasks: Task[], startMin: number, endMin: number): { timed: BlockLayout[]; untimed: Task[] } {
+function buildDayLayout(
+  tasks: Task[],
+  startMin: number,
+  endMin: number,
+  carryIn: Task[] = [],
+): { timed: BlockLayout[]; untimed: Task[] } {
   const untimed: Task[] = [];
-  const parsed: { task: Task; slot: TaskSlot; slotIndex: number; s: number; e: number }[] = [];
+  const parsed: { kind: BlockLayout["kind"]; task: Task; slot: TaskSlot; slotIndex: number; s: number; e: number }[] = [];
   for (const t of tasks) {
     const slots = getSlots(t);
     let anyTimed = false;
@@ -83,9 +96,17 @@ function buildDayLayout(tasks: Task[], startMin: number, endMin: number): { time
       if (e == null) e = s + 30;
       else e = mapMinutesToTimeline(e, startMin, endMin);
       while (e <= s) e += 1440;
-      parsed.push({ task: t, slot, slotIndex, s, e });
+      parsed.push({ kind: "task", task: t, slot, slotIndex, s, e });
     });
     if (!anyTimed) untimed.push(t);
+  }
+  // Carried-in tails share the lane packing below rather than being drawn on a
+  // separate layer, so a 4-7 AM continuation and a 6 AM workout split the
+  // column like any other overlap instead of stacking on top of each other.
+  for (const t of carryIn) {
+    for (const c of taskContinuations(t, endMin)) {
+      parsed.push({ kind: "continuation", task: t, slot: c.slot, slotIndex: c.slotIndex, s: c.interval.start, e: c.interval.end });
+    }
   }
   parsed.sort((a, b) => a.s - b.s || a.e - b.e);
 
@@ -108,6 +129,7 @@ function buildDayLayout(tasks: Task[], startMin: number, endMin: number): { time
       const top = (Math.max(c.s, startMin) - startMin) * PX_MIN;
       const bottom = (Math.min(c.e, endMin) - startMin) * PX_MIN;
       timed.push({
+        kind: c.kind,
         task: c.task,
         slot: c.slot,
         slotIndex: c.slotIndex,
@@ -184,6 +206,8 @@ interface WeekGridProps {
     onDelete: () => void,
     slot?: TaskSlot,
     slotIndex?: number,
+    /** Squares off the edge an overnight block is cut on. */
+    edgeCut?: "top" | "bottom",
   ) => ReactNode;
 }
 
@@ -240,12 +264,26 @@ export function WeekGrid({
       const r = resolveOccurrence(t, dateISO);
       return dayIsToday ? r : { ...r, ...completionForDate(t, dateISO) };
     });
-    return { day, date, dateISO, dayIsToday, tasks };
+    // Yesterday's overnight tails, which finish inside this column. Resolved
+    // against the *previous* date so a skipped or retimed occurrence carries in
+    // what it actually ran. `activities` is weekday-keyed and dateless, so the
+    // week boundary needs no special case: Monday's carry-in is the `sunday`
+    // bucket read against the preceding Sunday's date.
+    const prevDay = DAYS[(DAYS.indexOf(day) + 6) % 7];
+    const prevISO = addDaysToISO(dateISO, -1);
+    const carryIn = (schedule.activities[prevDay] ?? [])
+      .filter((t) => isTaskScheduledOn(t, prevISO, true))
+      .map((t) => resolveOccurrence(t, prevISO));
+    return { day, date, dateISO, dayIsToday, tasks, carryIn };
   });
 
+  const hasCarryIn = days.some((d) => d.carryIn.some((t) => taskContinuations(t).length > 0));
   const startMin = getTimelineDisplayStartMinutes({
     dayStartTime: schedule.preferences?.dayStartTime,
     tasks: days.flatMap((day) => day.tasks),
+    // A continuation begins at the handover, which is earlier than the window
+    // would otherwise open — without this it would be clipped off the top.
+    mustShowFromMinutes: hasCarryIn ? SCHEDULE_DAY_HANDOVER_MINUTES : undefined,
   });
   const endMin = TIMELINE_END_MINUTES;
   // null when the clock is outside the visible window — see getNowOnTimeline.
@@ -524,7 +562,7 @@ export function WeekGrid({
         className="min-h-0 flex-1 overflow-auto overscroll-contain rounded-2xl border border-neutral-200 bg-white dark:border-white/[0.08] dark:bg-neutral-950"
       >
         <div className="min-w-full" style={{ width: `max(100%, ${minGridWidth}px)` }}>
-          {/* ── Day-header row — pinned to the top of the scroller ───────────────── */}
+          {/* ── Fixed day-header row ─────────────────────────────────────────────── */}
           <div
             className="sticky top-0 z-30 grid h-[76px] border-b border-neutral-200 bg-white dark:border-white/[0.07] dark:bg-neutral-950"
             style={{ gridTemplateColumns: gridTemplate }}
@@ -574,205 +612,220 @@ export function WeekGrid({
             })}
           </div>
 
-          {/* All-day / untimed band */}
-          {hasUntimed && (
-            <div className="grid border-b border-neutral-200 dark:border-white/[0.07]" style={{ gridTemplateColumns: gridTemplate }}>
-              <div className="sticky left-0 z-20 flex items-start justify-end border-r border-neutral-200 bg-white px-2 pt-2 dark:border-white/[0.07] dark:bg-neutral-950">
-                <span className="text-[9px] font-semibold uppercase tracking-wide text-neutral-300 dark:text-neutral-600">All day</span>
-              </div>
-              {days.map(({ day, tasks, dayIsToday, dateISO }) => {
-                const untimed = tasks.filter((t) => parseTimeToMinutes(t.startTime) == null);
-                return (
-                  <div key={day} className="flex flex-col gap-1 border-r border-neutral-100 p-1.5 last:border-r-0 dark:border-white/[0.06]">
-                    {untimed.map((task) => {
-                      const identity = taskIdentity(task, categoryMap);
-                      const hex = identity.color ? categoryHex(identity.color) : NEUTRAL_UNTIMED_HEX;
-                      const linkedPlan = task.planId ? plansById.get(task.planId) ?? null : null;
-                      const state = resolveTaskState(task, getTaskSubtaskSummary(task, linkedPlan).totalCount);
-                      const done = state === "completed";
-                      return (
-                        <button
-                          key={task.id}
-                          type="button"
-                          onClick={() => onEditTask(task)}
-                          className={`flex items-center gap-1.5 rounded-lg border border-neutral-200/70 bg-white px-2 py-1 text-left dark:border-white/[0.08] dark:bg-neutral-900 ${done ? "opacity-60" : ""}`}
-                        >
-                          <span className="h-1.5 w-1.5 shrink-0 rounded-full" style={{ background: hex }} />
-                          <span className={`truncate text-[11px] font-semibold ${done ? "text-neutral-400 line-through dark:text-neutral-600" : "text-neutral-800 dark:text-neutral-200"}`}>
-                            {task.title}
-                          </span>
-                        </button>
-                      );
-                    })}
-                  </div>
-                );
-              })}
+        {/* All-day / untimed band */}
+        {hasUntimed && (
+          <div className="grid border-b border-neutral-200 dark:border-white/[0.07]" style={{ gridTemplateColumns: gridTemplate }}>
+            <div className="sticky left-0 z-20 flex items-start justify-end border-r border-neutral-200 bg-white px-2 pt-2 dark:border-white/[0.07] dark:bg-neutral-950">
+              <span className="text-[9px] font-semibold uppercase tracking-wide text-neutral-300 dark:text-neutral-600">All day</span>
             </div>
-          )}
-
-          {/* Time grid */}
-          <div
-            className="relative flex"
-            style={{ height: totalPx }}
-          >
-            {/* Time rail. z-20 so day-column content passes under it while the
-                grid scrolls sideways; still below the header row's z-30 so the
-                two don't fight over the corner. */}
-            <div className="sticky left-0 z-20 shrink-0 border-r border-neutral-200 bg-white dark:border-white/[0.07] dark:bg-neutral-950" style={{ width: RAIL_W }}>
-              {railLabels.map((m) => {
-                const onHour = m % 60 === 0;
-                const isFirst = m === startMin;
-                return (
-                  <span
-                    key={m}
-                    className={`absolute right-3 whitespace-nowrap tabular-nums ${isFirst ? "" : "-translate-y-1/2"} ${
-                      onHour
-                        ? "text-[11px] font-bold text-neutral-500 dark:text-neutral-300"
-                        : "text-[10px] font-semibold text-neutral-300 dark:text-neutral-600"
-                    }`}
-                    style={{ top: isFirst ? 14 : (m - startMin) * PX_MIN }}
-                  >
-                    {fmtRail(m)}
-                  </span>
-                );
-              })}
-            </div>
-
-            {/* Day columns */}
-            {days.map(({ day, dayIsToday, dateISO, tasks }) => {
-              const { timed } = buildDayLayout(tasks, startMin, endMin);
-              const ritualMarks = buildRitualMarks(rituals, day, startMin, endMin);
-              const completedRituals = new Set(
-                ritualCompletions.filter((c) => c.date === dateISO).map((c) => c.ritualId),
-              );
-              const showNow = dayIsToday && now !== null;
-              const readOnly = !dayIsToday;
+            {days.map(({ day, tasks, dayIsToday, dateISO }) => {
+              const untimed = tasks.filter((t) => parseTimeToMinutes(t.startTime) == null);
               return (
-                <div
-                  key={day}
-                  className="relative min-w-0 flex-1 border-r border-neutral-200 last:border-r-0 dark:border-white/[0.06]"
-                  onPointerDown={(e) => handleDayPointerDown(day, e)}
-                >
-                  <div className="pointer-events-none absolute inset-0">
-                    {railLabels.map((m) => {
-                      const onHour = m % 60 === 0;
-                      return (
-                        <div
-                          key={`${day}-grid-${m}`}
-                          className={`absolute left-0 right-0 border-t ${
-                            onHour
-                              ? "border-neutral-100/90 dark:border-white/[0.05]"
-                              : "border-dashed border-neutral-200/70 dark:border-white/[0.045]"
-                          }`}
-                          style={{ top: (m - startMin) * PX_MIN }}
-                        />
-                      );
-                    })}
-                  </div>
-
-                  {timed.map((layout) => {
-                    const visualHeight = Math.max(22, layout.height - TASK_VERTICAL_INSET * 2);
-                    const linkedPlan = layout.task.planId ? plansById.get(layout.task.planId) ?? null : null;
-                    const allSubtaskIds = getTaskCheckableItems(layout.task, linkedPlan).map((item) => item.id);
-                    // Multi-slot tasks complete per phase; a single-slot task keeps
-                    // the whole-task flag.
-                    const totalSlots = getSlots(layout.task).length;
-                    const slotDone = totalSlots > 1
-                      ? (layout.task.completedSlotIndices ?? []).includes(layout.slotIndex)
-                      : !!layout.task.completed;
-                    // The block you should be executing right now — green ring
-                    // (progress signal). Sanctioned chrome-led depth → data-glass.
-                    const nowPx = now === null ? null : (now - startMin) * PX_MIN;
-                    const isCurrent =
-                      dayIsToday &&
-                      !slotDone &&
-                      !layout.task.missed &&
-                      nowPx !== null &&
-                      nowPx >= layout.top &&
-                      nowPx < layout.top + layout.height;
+                <div key={day} className="flex flex-col gap-1 border-r border-neutral-100 p-1.5 last:border-r-0 dark:border-white/[0.06]">
+                  {untimed.map((task) => {
+                    const identity = taskIdentity(task, categoryMap);
+                    const hex = identity.color ? categoryHex(identity.color) : NEUTRAL_UNTIMED_HEX;
+                    const linkedPlan = task.planId ? plansById.get(task.planId) ?? null : null;
+                    const state = resolveTaskState(task, getTaskSubtaskSummary(task, linkedPlan).totalCount);
+                    const done = state === "completed";
                     return (
-                      <div
-                        key={`${layout.task.id}-${layout.slotIndex}`}
-                        data-task-block
-                        data-glass={isCurrent ? "" : undefined}
-                        className={`absolute ${isCurrent ? "rounded-[10px] shadow-now" : ""}`}
-                        style={{
-                          top: layout.top + TASK_VERTICAL_INSET,
-                          height: visualHeight,
-                          left: `calc(${layout.leftPct}% + 5px)`,
-                          width: `calc(${layout.widthPct}% - 10px)`,
-                          minHeight: 22,
-                        }}
+                      <button
+                        key={task.id}
+                        type="button"
+                        onClick={() => onEditTask(task)}
+                        className={`flex items-center gap-1.5 rounded-lg border border-neutral-200/70 bg-white px-2 py-1 text-left dark:border-white/[0.08] dark:bg-neutral-900 ${done ? "opacity-60" : ""}`}
                       >
-                        {renderCard(
-                          layout.task,
-                          layout.height,
-                          layout.widthPct,
-                          readOnly,
-                          () =>
-                            totalSlots > 1
-                              ? onToggleSlot(layout.task.id, layout.slotIndex, day, dateISO)
-                              : onToggleTaskComplete(layout.task.id, allSubtaskIds, day, dateISO),
-                          () => onDeleteTask(layout.task.id, day),
-                          layout.slot,
-                          layout.slotIndex,
-                        )}
-                      </div>
+                        <span className="h-1.5 w-1.5 shrink-0 rounded-full" style={{ background: hex }} />
+                        <span className={`truncate text-[11px] font-semibold ${done ? "text-neutral-400 line-through dark:text-neutral-600" : "text-neutral-800 dark:text-neutral-200"}`}>
+                          {task.title}
+                        </span>
+                      </button>
                     );
                   })}
-
-                  {ritualMarks.map((mark) => (
-                    <div
-                      key={`ritual-${mark.top}`}
-                      data-ritual-mark
-                      className="absolute right-1.5 z-[5] flex max-w-[70%] -translate-y-1/2 flex-row-reverse flex-wrap items-center justify-start gap-1"
-                      style={{ top: mark.top }}
-                    >
-                      {/* The name is revealed by the dot itself expanding into a
-                          capsule (see RitualStrip) — no floating tooltip layer. */}
-                      {mark.rituals.map((ritual) => (
-                        <RitualStrip
-                          key={ritual.id}
-                          ritual={ritual}
-                          completed={completedRituals.has(ritual.id)}
-                          onToggle={() => onToggleRitual(ritual.id, dateISO)}
-                        />
-                      ))}
-                    </div>
-                  ))}
-
-                  {dragCreate?.day === day && (() => {
-                    const top = (dragCreate.startMin - startMin) * PX_MIN;
-                    const height = Math.max((dragCreate.endMin - dragCreate.startMin) * PX_MIN, 24);
-                    const showDuration = dragCreate.endMin - dragCreate.startMin >= 30;
-                    return (
-                      <div
-                        className="pointer-events-none absolute left-0.5 right-0.5 z-[15]"
-                        style={{ top, height }}
-                      >
-                        <TimelineDraftCard
-                          startLabel={minutesToDisplayTime(dragCreate.startMin)}
-                          endLabel={minutesToDisplayTime(dragCreate.endMin)}
-                          durationLabel={showDuration ? `${Math.max(0, Math.round(dragCreate.endMin - dragCreate.startMin))}m` : null}
-                          compact={height < 56}
-                          className="h-full"
-                        />
-                      </div>
-                    );
-                  })()}
-
-                  {showNow && (
-                    <div
-                      className="pointer-events-none absolute inset-x-0 z-[4] border-t-[1.5px] border-rose-500"
-                      style={{ top: (now - startMin) * PX_MIN }}
-                    >
-                      <span className="absolute -left-[3px] -top-[4px] h-[7px] w-[7px] rounded-full bg-rose-500" />
-                    </div>
-                  )}
                 </div>
               );
             })}
           </div>
+        )}
+
+        {/* Time grid */}
+        <div
+          className="relative flex"
+          style={{ height: totalPx }}
+        >
+          {/* Time rail. z-20 so day-column content passes under it while the
+              grid scrolls sideways; still below the header row's z-30 so the
+              two don't fight over the corner. */}
+          <div className="sticky left-0 z-20 shrink-0 border-r border-neutral-200 bg-white dark:border-white/[0.07] dark:bg-neutral-950" style={{ width: RAIL_W }}>
+            {railLabels.map((m) => {
+              const onHour = m % 60 === 0;
+              const isFirst = m === startMin;
+              return (
+                <span
+                  key={m}
+                  className={`absolute right-3 whitespace-nowrap tabular-nums ${isFirst ? "" : "-translate-y-1/2"} ${
+                    onHour
+                      ? "text-[11px] font-bold text-neutral-500 dark:text-neutral-300"
+                      : "text-[10px] font-semibold text-neutral-300 dark:text-neutral-600"
+                  }`}
+                  style={{ top: isFirst ? 14 : (m - startMin) * PX_MIN }}
+                >
+                  {fmtRail(m)}
+                </span>
+              );
+            })}
+          </div>
+
+          {/* Day columns */}
+          {days.map(({ day, dayIsToday, dateISO, tasks, carryIn }) => {
+            const { timed } = buildDayLayout(tasks, startMin, endMin, carryIn);
+            const ritualMarks = buildRitualMarks(rituals, day, startMin, endMin);
+            const completedRituals = new Set(
+              ritualCompletions.filter((c) => c.date === dateISO).map((c) => c.ritualId),
+            );
+            const showNow = dayIsToday && now !== null;
+            const readOnly = !dayIsToday;
+            return (
+              <div
+                key={day}
+                className="relative min-w-0 flex-1 border-r border-neutral-200 last:border-r-0 dark:border-white/[0.06]"
+                onPointerDown={(e) => handleDayPointerDown(day, e)}
+              >
+                <div className="pointer-events-none absolute inset-0">
+                  {railLabels.map((m) => {
+                    const onHour = m % 60 === 0;
+                    return (
+                      <div
+                        key={`${day}-grid-${m}`}
+                        className={`absolute left-0 right-0 border-t ${
+                          onHour
+                            ? "border-neutral-100/90 dark:border-white/[0.05]"
+                            : "border-dashed border-neutral-200/70 dark:border-white/[0.045]"
+                        }`}
+                        style={{ top: (m - startMin) * PX_MIN }}
+                      />
+                    );
+                  })}
+                </div>
+
+                {timed.map((layout) => {
+                  const isContinuation = layout.kind === "continuation";
+                  // The source block is cut at the bottom by the day's end; the
+                  // continuation is cut at the top by the same instant.
+                  const cutAtBottom =
+                    !isContinuation &&
+                    taskContinuations(layout.task, endMin).some((c) => c.slotIndex === layout.slotIndex);
+                  const visualHeight = Math.max(22, layout.height - TASK_VERTICAL_INSET * 2);
+                  const linkedPlan = layout.task.planId ? plansById.get(layout.task.planId) ?? null : null;
+                  const allSubtaskIds = getTaskCheckableItems(layout.task, linkedPlan).map((item) => item.id);
+                  // Multi-slot tasks complete per phase; a single-slot task keeps
+                  // the whole-task flag.
+                  const totalSlots = getSlots(layout.task).length;
+                  const slotDone = totalSlots > 1
+                    ? (layout.task.completedSlotIndices ?? []).includes(layout.slotIndex)
+                    : !!layout.task.completed;
+                  // The block you should be executing right now — green ring
+                  // (progress signal). Sanctioned chrome-led depth → data-glass.
+                  const nowPx = now === null ? null : (now - startMin) * PX_MIN;
+                  const isCurrent =
+                    dayIsToday &&
+                    !slotDone &&
+                    !layout.task.missed &&
+                    nowPx !== null &&
+                    nowPx >= layout.top &&
+                    nowPx < layout.top + layout.height;
+                  return (
+                    <div
+                      // `kind` is part of the key because a daily overnight task
+                      // renders twice in the same column — today's block and
+                      // yesterday's tail — with the same id and slot index.
+                      key={`${layout.kind}-${layout.task.id}-${layout.slotIndex}`}
+                      data-task-block
+                      data-glass={isCurrent ? "" : undefined}
+                      className={`absolute ${isCurrent ? "rounded-[10px] shadow-now" : ""}`}
+                      style={{
+                        top: layout.top + TASK_VERTICAL_INSET,
+                        height: visualHeight,
+                        left: `calc(${layout.leftPct}% + 5px)`,
+                        width: `calc(${layout.widthPct}% - 10px)`,
+                        minHeight: 22,
+                      }}
+                    >
+                      {renderCard(
+                        layout.task,
+                        layout.height,
+                        layout.widthPct,
+                        // A continuation is read-only even in today's column:
+                        // `day`/`dateISO` here are *this* column's, but the task
+                        // lives in the previous day's bucket, so completing or
+                        // deleting through it would write to the wrong day.
+                        readOnly || isContinuation,
+                        () => {
+                          if (isContinuation) return;
+                          if (totalSlots > 1) onToggleSlot(layout.task.id, layout.slotIndex, day, dateISO);
+                          else onToggleTaskComplete(layout.task.id, allSubtaskIds, day, dateISO);
+                        },
+                        () => { if (!isContinuation) onDeleteTask(layout.task.id, day); },
+                        layout.slot,
+                        layout.slotIndex,
+                        isContinuation ? "top" : cutAtBottom ? "bottom" : undefined,
+                      )}
+                    </div>
+                  );
+                })}
+
+                {ritualMarks.map((mark) => (
+                  <div
+                    key={`ritual-${mark.top}`}
+                    data-ritual-mark
+                    className="absolute right-1.5 z-[5] flex max-w-[70%] -translate-y-1/2 flex-row-reverse flex-wrap items-center justify-start gap-1"
+                    style={{ top: mark.top }}
+                  >
+                    {/* The name is revealed by the dot itself expanding into a
+                        capsule (see RitualStrip) — no floating tooltip layer. */}
+                    {mark.rituals.map((ritual) => (
+                      <RitualStrip
+                        key={ritual.id}
+                        ritual={ritual}
+                        completed={completedRituals.has(ritual.id)}
+                        onToggle={() => onToggleRitual(ritual.id, dateISO)}
+                      />
+                    ))}
+                  </div>
+                ))}
+
+                {dragCreate?.day === day && (() => {
+                  const top = (dragCreate.startMin - startMin) * PX_MIN;
+                  const height = Math.max((dragCreate.endMin - dragCreate.startMin) * PX_MIN, 24);
+                  const showDuration = dragCreate.endMin - dragCreate.startMin >= 30;
+                  return (
+                    <div
+                      className="pointer-events-none absolute left-0.5 right-0.5 z-[15]"
+                      style={{ top, height }}
+                    >
+                      <TimelineDraftCard
+                        startLabel={minutesToDisplayTime(dragCreate.startMin)}
+                        endLabel={minutesToDisplayTime(dragCreate.endMin)}
+                        durationLabel={showDuration ? `${Math.max(0, Math.round(dragCreate.endMin - dragCreate.startMin))}m` : null}
+                        compact={height < 56}
+                        className="h-full"
+                      />
+                    </div>
+                  );
+                })()}
+
+                {showNow && (
+                  <div
+                    className="pointer-events-none absolute inset-x-0 z-[4] border-t-[1.5px] border-rose-500"
+                    style={{ top: (now - startMin) * PX_MIN }}
+                  >
+                    <span className="absolute -left-[3px] -top-[4px] h-[7px] w-[7px] rounded-full bg-rose-500" />
+                  </div>
+                )}
+              </div>
+            );
+          })}
+        </div>
         </div>
       </div>
     </div>

@@ -838,9 +838,11 @@ export default function OverviewDashboard({
                   onOpenSubtasks={onOpenSubtasks}
                 />
                 <DayBreakdownCard
-                  tasks={schedule.activities[todayKey] ?? []}
+                  activities={schedule.activities}
                   categories={schedule.categories}
-                  dateISO={todayISO}
+                  todayKey={todayKey}
+                  todayISO={todayISO}
+                  preferences={schedule.preferences}
                 />
                 <RoutineConsistencyCard rows={ritualConsistency} />
               </div>

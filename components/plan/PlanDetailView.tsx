@@ -208,6 +208,13 @@ interface PlanDetailViewProps {
   plan: Plan;
   schedule: Schedule;
   milestones: Milestone[];
+  /**
+   * Set when the surrounding shell already renders the plan title and its
+   * edit/delete actions. The iOS shell does, and it routes *any* iPad
+   * regardless of width — so at >=1024px the `lg:` title here appeared as a
+   * second copy, stacked under the header's, with a duplicate action pair.
+   */
+  hideHeader?: boolean;
   onDeletePlan?: (planId: string) => void;
   onEditPlan?: (planId: string) => void;
   // Task handlers
@@ -250,6 +257,7 @@ export default function PlanDetailView({
   plan,
   schedule,
   milestones,
+  hideHeader = false,
   onDeletePlan,
   onEditPlan,
   onAddTask,
@@ -272,6 +280,12 @@ export default function PlanDetailView({
 }: PlanDetailViewProps) {
   // ── Tab state ───────────────────────────────────────────────────────────
   const [planTab, setPlanTab] = useState<"planning" | "roadmap" | "strategy">("planning");
+  // Tabs exist only below lg, where three columns will not fit. Coach is still
+  // gated on AI_ENABLED (currently false), so it ships to nobody today — but it
+  // keeps its entry point rather than being orphaned by the desktop rework.
+  const mobileTabs = (AI_ENABLED
+    ? ["planning", "roadmap", "strategy"]
+    : ["planning", "roadmap"]) as Array<"planning" | "roadmap" | "strategy">;
 
   // ── Unified AI actions (routes to Ollama or embedded automatically) ─────
   const ai = useAIActions(ollamaUrl, ollamaModel);
@@ -1064,9 +1078,14 @@ export default function PlanDetailView({
       <button
         type="button"
         onClick={() => { haptic("light"); setViewingMilestone(m); }}
-        className="relative w-full flex gap-[14px] px-1 pt-[14px] pb-[18px] text-left"
+        // No px-1: it put this row 4px inside the card above it, which reads as
+        // a misalignment against that card's border.
+        className="relative w-full flex gap-[14px] pt-[14px] pb-[18px] text-left"
       >
-        {/* Connector line to next item */}
+        {/* Connector line to next item. Runs past this row's bottom edge by the
+            next row's top padding, so it actually reaches the following marker
+            instead of stopping ~12px short — invisible while dashed, obvious on
+            the solid completed variant. */}
         {!isLast && (
           <div
             className={`absolute w-0 ${
@@ -1076,14 +1095,16 @@ export default function PlanDetailView({
                   ? "border-l-2 border-dashed border-amber-400 dark:border-amber-600"
                   : "border-l-2 border-dashed border-green-200 dark:border-green-800/60"
             }`}
-            style={{ top: 44, bottom: 0, left: 17 }}
+            style={{ top: 44, bottom: -16, left: 13 }}
           />
         )}
 
-        {/* Marker */}
+        {/* Marker. The ring masks the connector, so it has to match the surface
+            behind it — the page background, since this list has no card of its
+            own. ring-white sat as a visible halo on #F3F4F1. */}
         <div
           aria-hidden="true"
-          className={`relative z-10 mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-full ring-4 ring-white dark:ring-neutral-950 ${
+          className={`relative z-10 mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-full ring-4 ring-[#F3F4F1] dark:ring-[#0E0E0E] ${
             isCompleted
               ? "bg-green-500 text-white"
               : isDelayed
@@ -1572,17 +1593,11 @@ export default function PlanDetailView({
 
   // ── Planning tab ────────────────────────────────────────────────────────
 
-  function renderPlanningTab() {
+  /* AI sheets — overlays, so their position in the tree doesn't matter. Kept
+     out of the sections below so they mount once rather than once per layout. */
+  function renderAISheets() {
     return (
-      <m.div
-        key="planning"
-        initial={{ opacity: 0, y: 8 }}
-        animate={{ opacity: 1, y: 0 }}
-        exit={{ opacity: 0, y: -6 }}
-        transition={{ duration: 0.2, ease: "easeOut" }}
-      >
-
-        {/* AI sheets — rendered as overlays, position in tree doesn't matter */}
+      <>
         {ai.available && (
           <AIActionSheet
             open={genSheetOpen}
@@ -1627,14 +1642,18 @@ export default function PlanDetailView({
             onAdd={commitMilestoneTasks}
           />
         )}
+      </>
+    );
+  }
 
-        {/* Single-column stack keeps all cards the same width. */}
-        <div className="mt-6 flex flex-col gap-8">
+  /* ── Sections ──────────────────────────────────────────────────────────────
+     Each returns bare content with no horizontal padding of its own, so the
+     same section can sit in the mobile tab stack or a desktop column and take
+     its gutters from whichever container holds it. */
 
-          <div className="flex flex-col gap-8">
-
-            {/* Planned Tasks */}
-            <section className="px-4 lg:px-8">
+  function plannedTasksSection() {
+    return (
+            <section>
               <InternalSectionTitle
                 title="Planned Tasks"
                 className="mb-4"
@@ -1663,9 +1682,12 @@ export default function PlanDetailView({
                 )}
               </div>
             </section>
+    );
+  }
 
-            {/* Progress Tracking */}
-            <section className="px-4 lg:px-8">
+  function progressTrackingSection() {
+    return (
+            <section>
               <InternalSectionTitle
                 title="Progress Tracking"
                 className="mb-4"
@@ -1718,12 +1740,12 @@ export default function PlanDetailView({
                 </>
               )}
             </section>
+    );
+  }
 
-          </div>
-
-          {/* Accuracy Calendar */}
-          <div>
-            <section className="px-4 lg:px-8">
+  function accuracySection() {
+    return (
+            <section>
               <AccuracyCalendar
                 planId={plan.id}
                 activities={schedule.activities}
@@ -1732,43 +1754,26 @@ export default function PlanDetailView({
                 onAddTask={() => onAddTask(plan.id)}
               />
             </section>
-          </div>
-
-        </div>
-
-      </m.div>
     );
   }
 
-  // ── Roadmap tab ─────────────────────────────────────────────────────────
-
-  function renderRoadmapTab() {
-
+  /** Plan Progress + stat tiles + the milestone timeline, under one heading. */
+  function milestonesSection() {
     return (
-      <m.div
-        key="roadmap"
-        initial={{ opacity: 0, y: 8 }}
-        animate={{ opacity: 1, y: 0 }}
-        exit={{ opacity: 0, y: -6 }}
-        transition={{ duration: 0.2, ease: "easeOut" }}
-      >
-        {/* Overview: Plan Progress + Stats grid */}
-        <section className="mt-6 px-4 lg:px-8">{renderRoadmapOverview()}</section>
+        <section>
+          <InternalSectionTitle
+            title="Milestones"
+            className="mb-4"
+            actions={
+              <SectionIconButton
+                icon={<IconPlus size={20} strokeWidth={2} />}
+                onClick={openAddMilestone}
+                label="Add milestone"
+              />
+            }
+          />
 
-        {/* Milestones */}
-        <section className="mt-8 px-4 lg:px-8">
-          <div className="mb-2 flex items-center justify-between px-1">
-            <h2 className="text-[22px] font-extrabold tracking-[-0.7px] text-neutral-950 dark:text-white">
-              Milestones
-            </h2>
-            <button
-              type="button"
-              onClick={openAddMilestone}
-              className="flex h-[34px] w-[34px] items-center justify-center rounded-[9px] bg-transparent text-neutral-700 transition-colors hover:bg-neutral-100 dark:text-neutral-300 dark:hover:bg-white/[0.06]"
-            >
-              <IconPlus size={20} strokeWidth={2} />
-            </button>
-          </div>
+          <div className="mb-6">{renderRoadmapOverview()}</div>
 
           {planMilestones.length === 0 ? (
             <div className="rounded-2xl border border-dashed border-neutral-200 py-12 text-center dark:border-white/[0.08]">
@@ -1794,7 +1799,6 @@ export default function PlanDetailView({
             </div>
           )}
         </section>
-      </m.div>
     );
   }
 
@@ -1803,10 +1807,16 @@ export default function PlanDetailView({
   // ─────────────────────────────────────────────────────────────────────────
 
   return (
-    <div className="pb-32">
+    // No bottom padding of its own: both shells already pad for their bottom
+    // nav (iOS pb-36, mobile web pb-40), and adding pb-32 on top produced
+    // ~270px of dead scroll. Desktop, where the shell pads nothing, gets its
+    // own breathing room.
+    <div className="lg:pb-12">
+      {renderAISheets()}
+
       {/* Plan info */}
       <div className="space-y-2 px-4 pt-3 lg:px-8 lg:pt-6">
-        <div className="hidden items-start justify-between gap-4 lg:flex">
+        <div className={`items-start justify-between gap-4 ${hideHeader ? "hidden" : "hidden lg:flex"}`}>
           <h1 className="min-w-0 text-[32px] font-bold leading-tight text-neutral-950 dark:text-white">
             {plan.title}
           </h1>
@@ -1851,18 +1861,17 @@ export default function PlanDetailView({
         )}
       </div>
 
-      {/* Segmented tab switcher — mobile: 2 tabs, desktop: 3 tabs */}
-      <div className="mx-4 mt-6 lg:mx-8">
+      {/* ── Tab switcher — below lg only, where three columns will not fit ── */}
+      <div className="mx-4 mt-6 lg:hidden">
 
-        {/* ── Mobile: Planning + Roadmap only ─────────────────────────────── */}
-        <div className="relative flex rounded-2xl bg-neutral-100 dark:bg-white/[0.06] p-1 lg:hidden">
+        <div className="relative flex rounded-2xl bg-neutral-100 dark:bg-white/[0.06] p-1">
           <m.div
             className="absolute rounded-xl border border-neutral-200 bg-white dark:border-white/[0.08] dark:bg-neutral-800"
-            style={{ top: "4px", bottom: "4px", left: "4px", width: "calc((100% - 8px) / 2)", willChange: "transform" }}
-            animate={{ x: `${(planTab === "roadmap" ? 1 : 0) * 100}%` }}
+            style={{ top: "4px", bottom: "4px", left: "4px", width: `calc((100% - 8px) / ${mobileTabs.length})`, willChange: "transform" }}
+            animate={{ x: `${Math.max(mobileTabs.indexOf(planTab), 0) * 100}%` }}
             transition={{ type: "spring", stiffness: 400, damping: 30, mass: 0.8 }}
           />
-          {(["planning", "roadmap"] as const).map((tab) => (
+          {mobileTabs.map((tab) => (
             <button
               key={tab}
               type="button"
@@ -1871,55 +1880,40 @@ export default function PlanDetailView({
                 planTab === tab ? "text-neutral-950 dark:text-white" : "text-neutral-500 dark:text-neutral-400"
               }`}
             >
-              {tab === "planning" ? "Tasks" : "Milestones"}
+              {tab === "planning" ? "Tasks" : tab === "roadmap" ? "Milestones" : "Coach"}
             </button>
           ))}
         </div>
 
-        {/* ── Desktop: Planning + Roadmap (+ Coach when AI enabled) ────────── */}
-        <div className="relative hidden rounded-2xl bg-neutral-100 dark:bg-white/[0.06] p-1 lg:flex">
-          {(() => {
-            const desktopTabs = (AI_ENABLED
-              ? ["planning", "roadmap", "strategy"]
-              : ["planning", "roadmap"]) as Array<"planning" | "roadmap" | "strategy">;
-            const activeIndex = desktopTabs.indexOf(planTab);
-            return (
-              <>
-                <m.div
-                  className="absolute rounded-xl border border-neutral-200 bg-white dark:border-white/[0.08] dark:bg-neutral-800"
-                  style={{ top: "4px", bottom: "4px", left: "4px", width: `calc((100% - 8px) / ${desktopTabs.length})`, willChange: "transform" }}
-                  animate={{ x: `${Math.max(activeIndex, 0) * 100}%` }}
-                  transition={{ type: "spring", stiffness: 400, damping: 30, mass: 0.8 }}
-                />
-                {desktopTabs.map((tab) => (
-                  <button
-                    key={tab}
-                    type="button"
-                    onClick={() => setPlanTab(tab)}
-                    className={`relative flex-1 py-2.5 rounded-xl text-[13px] font-semibold transition-colors duration-200 z-10 capitalize ${
-                      planTab === tab ? "text-neutral-950 dark:text-white" : "text-neutral-500 dark:text-neutral-400"
-                    }`}
-                  >
-                    {tab === "planning" ? "Tasks" : tab === "roadmap" ? "Milestones" : "Coach"}
-                  </button>
-                ))}
-              </>
-            );
-          })()}
-        </div>
-
       </div>
 
-      {/* Tab content */}
-      <AnimatePresence mode="wait">
-        {planTab === "planning"
-          ? renderPlanningTab()
-          : planTab === "roadmap"
-          ? renderRoadmapTab()
-          : AI_ENABLED
-          ? renderStrategyTab()
-          : renderPlanningTab()}
-      </AnimatePresence>
+      {/* ── Content ─────────────────────────────────────────────────────────
+          Every section is rendered exactly once. At lg the container becomes a
+          three-column grid and `lg:flex` overrides each column's `hidden`, so
+          the whole plan is visible at once — the roadmap can finally be read
+          against the tasks that feed it. Below lg the grid is inert and the tab
+          decides which columns are shown.
+
+          Rendering a desktop copy and a mobile copy instead would double this
+          subtree (calendar, trackers, milestone list) and leave two nodes with
+          the same text, one of them permanently hidden — which is exactly what
+          broke the smoke test's `getByText(...).first()`. */}
+      <div className="mt-6 gap-6 px-4 lg:grid lg:grid-cols-3 lg:items-start lg:px-8 xl:gap-8">
+        <div className={`min-w-0 flex-col gap-8 lg:flex ${planTab === "planning" ? "flex" : "hidden"}`}>
+          {plannedTasksSection()}
+        </div>
+        <div className={`mt-8 min-w-0 flex-col gap-8 lg:mt-0 lg:flex ${planTab === "planning" ? "flex" : "hidden"}`}>
+          {accuracySection()}
+          {progressTrackingSection()}
+        </div>
+        <div className={`min-w-0 flex-col gap-8 lg:flex ${planTab === "roadmap" ? "flex" : "hidden"}`}>
+          {milestonesSection()}
+        </div>
+      </div>
+
+      {AI_ENABLED && planTab === "strategy" && (
+        <div className="mt-6 lg:hidden">{renderStrategyTab()}</div>
+      )}
 
       {/* Milestone sheet */}
       <MilestoneSheet
