@@ -1328,6 +1328,10 @@ export default function IOSScheduleApp() {
                 plan={selectedPlan}
                 schedule={schedule}
                 milestones={schedule.milestones ?? []}
+                // IOSHeader above already shows the title and the edit/delete
+                // menu. This shell also serves iPads, where the view's own
+                // lg: header would otherwise render a second copy of both.
+                hideHeader
                 onDeletePlan={handleDeletePlan}
                 onEditPlan={(planId) => setEditingPlanId(planId)}
                 onAddTask={(planId) => openCreateSheet(planId)}

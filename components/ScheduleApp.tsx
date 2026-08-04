@@ -3439,7 +3439,9 @@ export default function ScheduleApp() {
             exit={{ opacity: 0 }}
             transition={{ duration: 0.12, ease: "easeOut" }}
           >
-          <div className={selectedPlan ? "lg:mx-auto lg:max-w-4xl" : ""}>
+          {/* The lg:max-w-4xl that used to wrap this is gone: PlanDetailView
+              now lays itself out in three columns at lg and needs the width. */}
+          <div>
           {selectedPlan ? (
             <ErrorBoundary section name="Plans">
             <PlanDetailView
