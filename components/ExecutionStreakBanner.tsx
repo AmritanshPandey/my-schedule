@@ -42,7 +42,7 @@ export default function ExecutionStreakBanner({ data }: { data: ExecutionStreak 
       // Floating status strip above the grid — quiet hero shadow, data-glass
       // tagged so the e2e banned-effects guard exempts it.
       data-glass
-      className={`mb-3 flex items-center gap-3 rounded-2xl border px-4 py-3 shadow-[0_4px_16px_-8px_rgba(0,0,0,0.12)] dark:shadow-[0_4px_20px_-10px_rgba(0,0,0,0.5)] ${tone.ring}`}
+      className={`mb-3 flex items-center gap-3 rounded-2xl border px-4 py-3 shadow-hero ${tone.ring}`}
     >
       <div className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-white/70 dark:bg-white/[0.06] ${tone.icon}`}>
         <IconFlame size={20} strokeWidth={2} />

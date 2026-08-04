@@ -12,15 +12,20 @@ interface TextProps {
 // Import `typography` when you need to apply a style to an existing element
 // (e.g. a <label>, a <span> inside a flex row, etc.) rather than using the
 // component wrapper.
+//
+// Sizes come from the `--text-*` scale in app/globals.css. This file used to
+// declare its own ladder (28/20/18/16/14/12/11) alongside DESIGN.md's
+// (40/22/15/13/11), so the app carried two competing scales plus 22 raw
+// `text-[Npx]` values. There is now one ladder and this is a view onto it.
 
 export const typography = {
-  pageTitle:       "text-[28px] font-bold leading-tight tracking-[-0.3px] text-neutral-950 dark:text-white",
-  sectionTitle:    "text-[20px] font-bold leading-tight tracking-[-0.3px] text-neutral-950 dark:text-white",
-  sheetTitle:      "text-[18px] font-bold text-neutral-950 dark:text-white",
-  subsectionTitle: "text-[16px] font-semibold text-neutral-950 dark:text-white",
-  eyebrow:         "text-[11px] font-semibold uppercase tracking-[0.08em] text-neutral-400 dark:text-neutral-500",
-  body:            "text-[14px] font-medium leading-relaxed text-neutral-600 dark:text-neutral-400",
-  caption:         "text-[12px] font-medium text-neutral-400 dark:text-neutral-500",
+  pageTitle:       "text-display font-bold leading-tight tracking-[-0.3px] text-neutral-950 dark:text-white",
+  sectionTitle:    "text-headline font-bold leading-tight tracking-[-0.3px] text-neutral-950 dark:text-white",
+  sheetTitle:      "text-lead font-bold text-neutral-950 dark:text-white",
+  subsectionTitle: "text-subtitle font-semibold text-neutral-950 dark:text-white",
+  eyebrow:         "text-label font-semibold uppercase tracking-[0.08em] text-neutral-400 dark:text-neutral-500",
+  body:            "text-bodylg font-medium leading-relaxed text-neutral-600 dark:text-neutral-400",
+  caption:         "text-caption font-medium text-neutral-400 dark:text-neutral-500",
 } as const;
 
 // ── Component wrappers ────────────────────────────────────────────────────────

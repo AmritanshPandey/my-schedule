@@ -37,9 +37,7 @@ export default function AIMobileTeaser() {
             {/* Promo bar */}
             <div className="ai-promo-bar relative overflow-hidden">
               {/* Shader noise overlay for depth */}
-              <div className="pointer-events-none absolute inset-0 ai-promo-noise" />
               {/* Sweep shine */}
-              <div className="pointer-events-none absolute inset-0 ai-promo-sweep" />
 
               <div className="relative z-10 flex items-center gap-2 px-4 py-2.5">
                 {/* Sparkle */}
@@ -83,7 +81,6 @@ export default function AIMobileTeaser() {
           {/* Header */}
           <div className="mb-6 flex items-center gap-3">
             <div className="ai-promo-bar relative flex h-11 w-11 shrink-0 items-center justify-center overflow-hidden rounded-2xl">
-              <div className="pointer-events-none absolute inset-0 ai-promo-sweep" />
               <IconSparkles size={20} strokeWidth={2} className="relative z-10 text-white" />
             </div>
             <div>

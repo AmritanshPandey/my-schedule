@@ -77,7 +77,7 @@ function CurrentTaskHighlightLayerInner({
     <div
       aria-hidden="true"
       data-glass
-      className="pointer-events-none absolute z-20 rounded-[10px] transition-[top,height,left,width] duration-300 shadow-[0_0_0_1.5px_rgba(0,166,62,0.55),0_8px_24px_-12px_rgba(0,166,62,0.35)] dark:shadow-[0_0_0_1.5px_rgba(47,212,110,0.5),0_8px_24px_-12px_rgba(47,212,110,0.4)]"
+      className="pointer-events-none absolute z-20 rounded-[10px] transition-[top,height,left,width] duration-300 shadow-now"
       style={{
         top: lane.top - 2,
         height: lane.height + 4,

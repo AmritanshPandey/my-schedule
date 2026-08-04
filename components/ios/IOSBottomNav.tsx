@@ -144,7 +144,7 @@ export default function IOSBottomNav({
             role="navigation"
             aria-label="Main navigation"
             data-glass
-            className="relative flex h-[68px] w-full items-center justify-evenly rounded-full border border-neutral-200/70 bg-white/80 px-2 shadow-[0_8px_30px_-8px_rgba(0,0,0,0.18)] backdrop-blur-xl backdrop-saturate-150 supports-[backdrop-filter]:bg-white/70 dark:border-white/[0.09] dark:bg-neutral-900/75 dark:shadow-[0_8px_30px_-8px_rgba(0,0,0,0.6)] dark:supports-[backdrop-filter]:bg-neutral-900/65"
+            className="relative flex h-[68px] w-full items-center justify-evenly rounded-full border border-neutral-200/70 bg-white/80 px-2 shadow-nav backdrop-blur-xl backdrop-saturate-150 supports-[backdrop-filter]:bg-white/70 dark:border-white/[0.09] dark:bg-neutral-900/75 dark:supports-[backdrop-filter]:bg-neutral-900/65"
           >
             <button
               type="button"

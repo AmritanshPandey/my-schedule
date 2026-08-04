@@ -144,7 +144,7 @@ function DashboardMetricCard({
       onClick={onClick ? () => { haptic("light"); onClick(); } : undefined}
       className={`px-4 py-4 ${onClick ? "text-left" : ""} ${
         primary
-          ? `rounded-2xl border border-green-700 bg-green-700 text-white shadow-[0_4px_24px_-8px_rgba(0,0,0,0.16)] dark:border-emerald-400/25 dark:bg-green-950 dark:shadow-[0_8px_30px_-12px_rgba(0,0,0,0.55)] ${onClick ? "transition-colors lg:hover:bg-green-800 dark:lg:hover:bg-[#07401F]" : ""}`
+          ? `rounded-2xl border border-green-700 bg-green-700 text-white shadow-hero dark:border-emerald-400/25 dark:bg-green-950 ${onClick ? "transition-colors lg:hover:bg-green-800 dark:lg:hover:bg-[#07401F]" : ""}`
           : `${onClick ? CARD_INTERACTIVE : CARD} text-neutral-950 dark:text-white`
       }`}
     >
