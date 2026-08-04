@@ -84,6 +84,19 @@ export interface TaskSheetProps {
   categories: TaskCategory[];
   /** Persist a category created from inside this sheet, returning its id. */
   onCreateCategory: (draft: CategoryDraft) => string;
+  /**
+   * Rename / recolour an existing category without leaving the task. Omitted →
+   * the picker rows show no pencil.
+   */
+  onUpdateCategory?: (id: string, draft: CategoryDraft) => void;
+  /** Omitted → no trash on the picker rows. Guarded by `categoryUsage`. */
+  onDeleteCategory?: (id: string) => void;
+  /**
+   * Task counts per category, from `categoryUsageCounts`. Deleting one that is
+   * in use is blocked rather than cascading, and the count is what makes the
+   * refusal explainable.
+   */
+  categoryUsage?: ReadonlyMap<string, number>;
   activeDay: DayKey;
   activeDays?: DayKey[];
   /** All weekday task lists — lets edit mode load each day's own slots (per-day times). */
@@ -169,6 +182,9 @@ export function TaskSheet({
   plans,
   categories,
   onCreateCategory,
+  onUpdateCategory,
+  onDeleteCategory,
+  categoryUsage,
   activeDay,
   activeDays,
   activities,
@@ -225,6 +241,8 @@ export function TaskSheet({
   // beyond which category it is. See components/category/CategorySheet.tsx.
   const [categoryId, setCategoryId] = useState<string>("");
   const [categorySheetOpen, setCategorySheetOpen] = useState(false);
+  /** Non-null puts the category sheet in edit mode for that category. */
+  const [editingCategory, setEditingCategory] = useState<TaskCategory | null>(null);
   const [repeatMode, setRepeatMode] = useState<"weekly" | "interval" | "once">("weekly");
   const [intervalWeeks, setIntervalWeeks] = useState(2);
   const [onceDate, setOnceDate] = useState("");
@@ -750,7 +768,20 @@ export function TaskSheet({
                   selectedId={categoryId}
                   onSelect={(category) => setCategoryId(category.id)}
                   onClear={() => setCategoryId("")}
-                  onCreate={() => setCategorySheetOpen(true)}
+                  onCreate={() => { setEditingCategory(null); setCategorySheetOpen(true); }}
+                  onEdit={onUpdateCategory ? (category) => { setEditingCategory(category); setCategorySheetOpen(true); } : undefined}
+                  onDelete={
+                    onDeleteCategory
+                      ? (category) => {
+                          onDeleteCategory(category.id);
+                          // The field would otherwise point at an id that no
+                          // longer resolves, which renders as neutral with no
+                          // explanation.
+                          if (categoryId === category.id) setCategoryId("");
+                        }
+                      : undefined
+                  }
+                  usage={categoryUsage}
                   optional={isCommitment}
                 />
               )}
@@ -998,11 +1029,17 @@ export function TaskSheet({
   const categorySheet = (
     <CategorySheet
       open={categorySheetOpen}
-      category={null}
-      onClose={() => setCategorySheetOpen(false)}
+      // Was hardcoded to null, which pinned this sheet to create-only even
+      // though CategorySheet has been dual-mode all along.
+      category={editingCategory}
+      onClose={() => { setCategorySheetOpen(false); setEditingCategory(null); }}
       onSave={(draft) => {
-        setCategoryId(onCreateCategory(draft));
+        if (editingCategory) onUpdateCategory?.(editingCategory.id, draft);
+        // Creating from inside the task also selects the new category —
+        // otherwise the user makes one and still faces an empty field.
+        else setCategoryId(onCreateCategory(draft));
         setCategorySheetOpen(false);
+        setEditingCategory(null);
       }}
     />
   );
