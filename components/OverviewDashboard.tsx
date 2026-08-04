@@ -19,7 +19,6 @@ import type { DayKey, Plan, ProgressTracker, Schedule, Task } from "@/lib/useSch
 import { getTaskCheckableItems, getTaskSubtaskSummary, isTaskCompleted, isTrackedTask } from "@/lib/taskCompletion";
 import { getPlanCardStats } from "@/lib/planInsights";
 import { PLAN_NEUTRAL } from "@/lib/colorSystem";
-import { SECTION_ICONS, getIconPickerStyle } from "@/components/SectionIcons";
 import DayBreakdownCard from "@/components/DayBreakdownCard";
 import TodayTaskList from "@/components/today/TodayTaskList";
 import { selectTodayTasks } from "@/lib/todayTasks";
@@ -331,11 +330,6 @@ function ActiveTrackingCard({
       ) : (
         <div className="divide-y divide-neutral-100 dark:divide-white/[0.06]">
           {rows.map(({ tracker, latest, series, trend, plan }) => {
-            // Same fallback (`?? SECTION_ICONS[0]`) used everywhere else a
-            // plan's emoji becomes an icon — see PlanSelector, TaskLinkPicker.
-            const iconEntry = SECTION_ICONS.find((entry) => entry.name === plan?.emoji) ?? SECTION_ICONS[0];
-            const Icon = iconEntry.icon;
-            const iconStyle = getIconPickerStyle(iconEntry.name);
             const trendColorClass =
               trend?.state === "positive"
                 ? "text-emerald-500 dark:text-emerald-400"
@@ -344,9 +338,7 @@ function ActiveTrackingCard({
                 : "text-neutral-300 dark:text-neutral-600";
             return (
               <div key={tracker.id} className="flex items-center gap-3 py-3">
-                <span className={`grid h-9 w-9 shrink-0 place-items-center rounded-xl ${iconStyle.tint} ${iconStyle.text}`}>
-                  <Icon size={18} strokeWidth={2} />
-                </span>
+                <span className={`h-3 w-3 shrink-0 rounded-full ${PLAN_NEUTRAL.dot}`} />
                 <div className="min-w-0 flex-1">
                   <p className="truncate text-[15px] font-bold leading-tight text-neutral-950 dark:text-white">{tracker.title}</p>
                   <div className="mt-0.5 flex min-w-0 items-center gap-1.5">
