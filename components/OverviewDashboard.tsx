@@ -842,6 +842,7 @@ export default function OverviewDashboard({
                   categories={schedule.categories}
                   todayKey={todayKey}
                   todayISO={todayISO}
+                  preferences={schedule.preferences}
                 />
                 <RoutineConsistencyCard rows={ritualConsistency} />
               </div>

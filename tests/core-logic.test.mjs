@@ -63,8 +63,18 @@ const { normalizeMilestoneTimeline, cascadeMilestoneDates } = await import("../l
 const { resolveLinkedTasks } = await import("../lib/notes/linkedTasks.ts");
 const { computeExecutionTrend, trendNarrative } = await import("../lib/executionAnalytics.ts");
 const { getNowOnTimeline, mapMinutesToTimeline } = await import("../lib/timeline/displayWindow.ts");
-const { buildDayBreakdown, taskScheduledMinutes, donutSegments, HELD_TIME_ID } =
-  await import("../lib/dayBreakdown.ts");
+const {
+  buildDayBreakdown,
+  taskScheduledMinutes,
+  taskDayMinutes,
+  buildActiveHours,
+  donutSegments,
+  HELD_TIME_ID,
+  WAKING_WINDOW_MINUTES,
+  DEFAULT_WAKING_START_MINUTES,
+} = await import("../lib/dayBreakdown.ts");
+const { continuationInterval, SCHEDULE_DAY_HANDOVER_MINUTES } =
+  await import("../lib/timeline/overnight.ts");
 const { selectTodayTasks } = await import("../lib/todayTasks.ts");
 const { CategoryRegistry } = await import("../lib/taskCategories.ts");
 const { taskIdentity, categoriesById } = await import("../lib/taskIdentity.ts");
@@ -1310,6 +1320,87 @@ test("buildDayBreakdown groups by category and pools commitments into held time"
   assert.equal(slices[0].color, "indigo", "wedge colour is the category's, so it matches the timeline");
   assert.equal(slices.find((s) => s.id === HELD_TIME_ID).label, "Held time");
   assert.equal(slices.find((s) => s.id === HELD_TIME_ID).color, null, "held time has no accent");
+});
+
+test("taskDayMinutes splits an overnight task at the day boundary", () => {
+  const t = (startTime, endTime) => ({ id: "x", title: "x", startTime, endTime });
+
+  // Sleep 11 PM - 7 AM: five hours land today, three belong to tomorrow.
+  assert.deepEqual(taskDayMinutes(t("11:00 PM", "7:00 AM")), { sameDay: 300, overflow: 180 });
+  // The whole duration is unchanged, so callers that want it still get 8h.
+  assert.equal(taskScheduledMinutes(t("11:00 PM", "7:00 AM")), 480);
+
+  // 1-3 AM sits in the *tail* of its own schedule day (25:00-27:00), not past it.
+  assert.deepEqual(taskDayMinutes(t("1:00 AM", "3:00 AM")), { sameDay: 120, overflow: 0 });
+  // 1-5 AM genuinely crosses the 4 AM handover, so one hour carries over.
+  assert.deepEqual(taskDayMinutes(t("1:00 AM", "5:00 AM")), { sameDay: 180, overflow: 60 });
+
+  // An ordinary daytime task never overflows.
+  assert.deepEqual(taskDayMinutes(t("9:00 AM", "11:00 AM")), { sameDay: 120, overflow: 0 });
+});
+
+test("continuationInterval expresses the spill in the next day's coordinates", () => {
+  assert.equal(SCHEDULE_DAY_HANDOVER_MINUTES, 240, "28:00 on day D is 4:00 on day D+1");
+
+  // 11 PM - 7 AM -> 1380..1860; the tail is 4:00-7:00 tomorrow.
+  assert.deepEqual(continuationInterval({ start: 1380, end: 1860 }), { start: 240, end: 420 });
+  // Nothing past the window means no continuation at all.
+  assert.equal(continuationInterval({ start: 1380, end: 1620 }), null);
+  assert.equal(continuationInterval({ start: 540, end: 660 }), null);
+  // Exactly at the boundary is not an overrun.
+  assert.equal(continuationInterval({ start: 1380, end: 1680 }), null);
+  // Malformed data is clipped at the next day's end, never chained onward.
+  assert.deepEqual(continuationInterval({ start: 1400, end: 3600 }), { start: 240, end: 1680 });
+});
+
+test("buildDayBreakdown counts the previous day's overnight tail on this day", () => {
+  const today = "2026-08-05";
+  const yesterday = "2026-08-04";
+  const categories = [{ id: "cat-rest", title: "Rest", icon: "moon", color: "indigo" }];
+  const sleep = {
+    id: "sleep", title: "Sleep", planId: "", taskType: "commitment",
+    categoryId: "cat-rest", startTime: "11:00 PM", endTime: "7:00 AM",
+  };
+
+  // Yesterday's sleep keeps only the five hours that fell before the handover.
+  const own = buildDayBreakdown([sleep], categories, yesterday);
+  assert.equal(own.totalMinutes, 300, "the tail is no longer counted on the start day");
+
+  // Today receives the remaining three, matching the continuation block drawn there.
+  const carried = buildDayBreakdown([], categories, today, { tasks: [sleep], dateISO: yesterday });
+  assert.equal(carried.totalMinutes, 180);
+  assert.deepEqual(carried.slices.map((s) => [s.id, s.minutes]), [["cat-rest", 180]]);
+
+  // Nothing is invented when the previous occurrence was skipped.
+  const skipped = { ...sleep, exceptions: { [yesterday]: { skipped: true } } };
+  const none = buildDayBreakdown([], categories, today, { tasks: [skipped], dateISO: yesterday });
+  assert.equal(none.totalMinutes, 0, "a skipped occurrence carries nothing over");
+});
+
+test("buildActiveHours measures scheduled time against the waking day", () => {
+  assert.equal(WAKING_WINDOW_MINUTES, 16 * 60);
+  assert.equal(DEFAULT_WAKING_START_MINUTES, 7 * 60, "4 AM is the day boundary, not a wake time");
+
+  const typical = buildActiveHours(390);
+  assert.equal(typical.startMinutes, 7 * 60, "falls back to the waking default, not the timeline's");
+  assert.equal(typical.endMinutes, 23 * 60);
+  assert.equal(typical.freeMinutes, 960 - 390);
+  assert.equal(typical.overbookedMinutes, 0);
+  assert.equal(Math.round(typical.pct), 41);
+
+  // A configured day start moves the window.
+  assert.equal(buildActiveHours(0, "05:30").startMinutes, 330);
+
+  // Overbooked: pct is clamped so the fill can never leave its track.
+  const over = buildActiveHours(1035);
+  assert.equal(over.pct, 100);
+  assert.equal(over.freeMinutes, 0);
+  assert.equal(over.overbookedMinutes, 75);
+
+  // An empty day still reports a full window of free time.
+  const empty = buildActiveHours(0);
+  assert.equal(empty.pct, 0);
+  assert.equal(empty.freeMinutes, 960);
 });
 
 test("buildDayBreakdown is empty when nothing is scheduled", () => {

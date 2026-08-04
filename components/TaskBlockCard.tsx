@@ -35,6 +35,16 @@ export interface TaskBlockCardProps {
   state: TaskState;
   duration: string | null;
   readOnly?: boolean;
+  /**
+   * grid only: square off the edge where an overnight block is cut by the day
+   * boundary — "bottom" on the block that runs out of day, "top" on the
+   * continuation that picks it up the next morning. The standard calendar
+   * idiom: the flat edges read as one interrupted block without any extra
+   * chrome. Set as a prop rather than passed through `className` because
+   * Tailwind emits both radius utilities at equal specificity, so which one
+   * wins depends on stylesheet order rather than the order of the strings.
+   */
+  edgeCut?: "top" | "bottom";
   /** grid: short slot (shrink text + padding). */
   compact?: boolean;
   /** grid: overlapping lane / short — drop eyebrow + duration. */
@@ -93,6 +103,7 @@ export function TaskBlockCard({
   state,
   duration,
   readOnly = false,
+  edgeCut,
   compact = false,
   narrow = false,
   onToggle,
@@ -128,6 +139,8 @@ export function TaskBlockCard({
   const isMultiSlotList =
     tracked && isList && !slotOverride && !missed && !!slotCompletions && slotCompletions.length === displaySlots.length && displaySlots.length > 1;
   const showEyebrow = !!plan && !narrow && !minimal;
+  const gridRadius =
+    edgeCut === "bottom" ? "rounded-t-[8px]" : edgeCut === "top" ? "rounded-b-[8px]" : "rounded-[8px]";
   // Timeline (grid) subtask/session pill — only when wired and the task has items.
   const subtaskPill = onOpenSubtasks && !isList && !minimal ? getTaskSubtaskSummary(task, plan) : null;
   const statusLabel = taskStatusLabel(state, readOnly);
@@ -313,7 +326,7 @@ export function TaskBlockCard({
       } ${
         isList
           ? "rounded-2xl gap-3 px-5 py-4 active:scale-[0.995]"
-          : "rounded-[8px] justify-between " + (compact ? "gap-1 px-2.5 py-1.5" : "gap-1.5 pl-3 pr-2 py-2")
+          : `${gridRadius} justify-between ` + (compact ? "gap-1 px-2.5 py-1.5" : "gap-1.5 pl-3 pr-2 py-2")
       } ${onClick ? "cursor-pointer" : ""} ${className}`}
       style={style}
     >

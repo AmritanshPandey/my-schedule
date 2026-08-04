@@ -46,14 +46,27 @@ export function getEarliestTimedTaskStartMinutes(
 export function getTimelineDisplayStartMinutes({
   dayStartTime,
   tasks,
+  mustShowFromMinutes,
 }: {
   dayStartTime?: string;
   tasks: ReadonlyArray<SchedulePreferenceTasksScope>;
+  /**
+   * A minute the window must include, whatever the anchor says. Used for
+   * overnight continuations, which begin at the 4:00 handover: the computed
+   * start is normally later than that (it defaults to 6:00 with a 7:00 first
+   * task), so without this floor a carried-in block would be clipped off the
+   * top — the same silent truncation, moved to the other end of the day.
+   */
+  mustShowFromMinutes?: number;
 }): number {
   const configured = getConfiguredDayStartMinutes(dayStartTime);
   const earliestTask = getEarliestTimedTaskStartMinutes(tasks);
   const anchor = configured ?? earliestTask ?? DEFAULT_TIMELINE_START_MINUTES;
-  return Math.max(TIMELINE_MIN_DISPLAY_START_MINUTES, anchor - TIMELINE_LEAD_IN_MINUTES);
+  const computed = Math.max(TIMELINE_MIN_DISPLAY_START_MINUTES, anchor - TIMELINE_LEAD_IN_MINUTES);
+  // No lead-in for a carry-in: it starts exactly at the handover, and an extra
+  // empty hour above it would just be scroll.
+  if (mustShowFromMinutes === undefined) return computed;
+  return Math.min(computed, Math.max(TIMELINE_MIN_DISPLAY_START_MINUTES, mustShowFromMinutes));
 }
 
 export function buildTimelineGridMarks(startMin: number, endMin: number): number[] {

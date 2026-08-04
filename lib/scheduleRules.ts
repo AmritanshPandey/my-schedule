@@ -107,13 +107,11 @@ export function validateTaskTime(task: SchedulableTask): ValidationError | null 
     };
   }
 
-  if (normalizedEnd > TIMELINE_END_MINUTES) {
-    return {
-      code: "out-of-bounds",
-      message: `Task must end by ${TIMELINE_END_HOUR % 24}:00`,
-    };
-  }
-
+  // No end-of-window check. A task may legitimately run past 28:00 — sleep
+  // 23:00–07:00 is the ordinary case — and the timeline now draws the tail as a
+  // continuation block on the next day rather than clamping it away. The 16h
+  // duration cap above is what guarantees the overrun fits a single following
+  // window, so it is the only bound the rule engine needs.
   return null;
 }
 
