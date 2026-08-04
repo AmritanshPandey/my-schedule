@@ -12,26 +12,18 @@ colors:
   surface-dark: "#0A0A0A"
   card-dark: "#171717"
   muted: "#737373"
-  cat-cardio: "#FF6900"
-  cat-skin: "#5EA500"
-  cat-eng: "#155DFC"
-  cat-design: "#E17100"
-  cat-pink: "#EC003F"
-  cat-purple: "#AD46FF"
-  cat-cyan: "#00A6F4"
-  status-danger: "#FB2C36"
-  status-warn: "#E17100"
-  status-info: "#155DFC"
+# Type sizes mirror the --text-* ladder in app/globals.css. Category colour is
+# not listed here: it belongs to the user's TaskCategory records, not the theme.
 typography:
   display:
     fontFamily: "Nunito, ui-sans-serif, system-ui, sans-serif"
-    fontSize: "40px"
+    fontSize: "28px"
     fontWeight: 800
     lineHeight: 1
     letterSpacing: "-0.01em"
   headline:
     fontFamily: "Nunito, ui-sans-serif, system-ui, sans-serif"
-    fontSize: "22px"
+    fontSize: "20px"
     fontWeight: 800
     lineHeight: 1.1
   title:
@@ -210,11 +202,20 @@ only for genuinely floating layers (nav bar, popovers/sheets), and even then the
 whisper-soft.
 
 ### Shadow Vocabulary
-- **Card** (`box-shadow: 0 1px 2px rgb(0 0 0 / 0.04)`): Barely-there lift for resting
-  cards. Often the border does the work and this is omitted.
-- **Nav** (`box-shadow: 0 0 12px rgb(0 0 0 / 0.10)`): The floating bottom nav / app shell.
-- **Popover** (`box-shadow: 0 8px 24px rgb(0 0 0 / 0.12)`): Bottom sheets, menus, anything
-  that overlays content.
+
+Four tokens in `app/globals.css`, and nothing else. Each resolves through a
+theme-switched var, because a shadow tuned for white is invisible on `#0A0A0A`.
+
+- **`shadow-nav`** — the floating bottom nav / app shell.
+- **`shadow-popover`** — bottom sheets, menus, anything overlaying content.
+- **`shadow-hero`** — the two designated hero moments (streak banner, primary
+  dashboard metric). Not for ordinary cards.
+- **`shadow-now`** — the current-task ring. A *signal*, not depth: it is the one
+  place a shadow is allowed to spend Momentum Green.
+
+There is deliberately **no card shadow**. A resting card is a hairline over a
+tonal surface; see the rule directly below. Any element using one of these must
+carry `data-glass`, or `tests/e2e/schedule-smoke.spec.ts` fails the build.
 
 ### Named Rules
 **The Border-Before-Shadow Rule.** A resting surface is defined by its border and tone, not
@@ -230,7 +231,7 @@ fills, instant `active:scale` feedback, restraint over flourish.
 - **Shape:** Rounded — `rounded-xl`/`rounded-2xl` (16px) for standard buttons, `rounded-full`
   for primary CTAs and pill controls.
 - **Primary (default UI):** Ink fill (#0A0A0A) / white text; in dark mode it inverts to
-  white fill / ink text. Hover lightens to Ink Soft. Sizes: sm h-32px, md h-40px, lg h-48px.
+  white fill / ink text. Hover lightens to Ink Soft. Sizes: sm h-36px, md h-44px, lg h-48px (md meets the 44px touch minimum).
 - **CTA (affirmative):** Momentum Green fill (#00A63E) / white text, usually `rounded-full`.
   Reserved for Create / Complete / Log. Hover → Green Pressed (#008236).
 - **Secondary / Ghost:** Transparent or hairline-bordered, muted text (#737373), subtle
@@ -300,7 +301,7 @@ The colored task block on the desktop week grid (and its taller mobile list twin
 Three live readouts are the system's signature, all reading on one status ramp (green ≥70%,
 amber 40–69%, rose <40%) so a glance answers "on track / at risk / behind":
 - **Week bars:** Seven thin pills, height = completion, today ringed in green.
-- **Consistency ring:** A 44px `conic-gradient` ring with the percentage in a punched-out
+- **Consistency ring:** A 44px SVG `stroke-dasharray` ring with the percentage in a punched-out
   center (tabular-nums). The fill color is the status ramp; the track is `neutral-200`.
 - **Execution trend:** The 8-week chart on the Weekly Progress card.
 

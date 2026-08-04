@@ -685,7 +685,7 @@ export function WeekGrid({
                       key={`${layout.task.id}-${layout.slotIndex}`}
                       data-task-block
                       data-glass={isCurrent ? "" : undefined}
-                      className={`absolute ${isCurrent ? "rounded-[10px] shadow-[0_0_0_1.5px_rgba(0,166,62,0.55),0_8px_24px_-12px_rgba(0,166,62,0.35)] dark:shadow-[0_0_0_1.5px_rgba(47,212,110,0.5),0_8px_24px_-12px_rgba(47,212,110,0.4)]" : ""}`}
+                      className={`absolute ${isCurrent ? "rounded-[10px] shadow-now" : ""}`}
                       style={{
                         top: layout.top + TASK_VERTICAL_INSET,
                         height: visualHeight,
