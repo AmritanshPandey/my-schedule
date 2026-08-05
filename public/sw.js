@@ -1,6 +1,6 @@
 // ── PlanR Service Worker ──────────────────────────────────────────────────────
 // Strategy:
-//   • App shell (HTML)         → stale-while-revalidate (instant launch, refresh in bg)
+//   • App shell (HTML)         → network-first (fresh deploy online, cached offline)
 //   • Hashed JS/CSS chunks     → cache-first (immutable, versioned by filename)
 //   • Static images / icons    → cache-first, long-lived
 //   • Firebase / analytics     → skip (always network)
@@ -97,11 +97,11 @@ self.addEventListener('fetch', (e) => {
     return;
   }
 
-  // 4. App shell navigation — stale-while-revalidate: serve cached shell instantly,
-  //    refresh it in the background so the next launch is current. This makes the
-  //    installed PWA open without waiting on the network every time.
+  // 4. App shell navigation — network-first. Serving a stale shell online can
+  //    boot an old JS runtime that requests chunks removed by a new deploy.
+  //    Offline launches still fall back to the cached shell.
   if (request.mode === 'navigate') {
-    e.respondWith(staleWhileRevalidate(request, SHELL_CACHE, '/'));
+    e.respondWith(networkFirst(request, SHELL_CACHE, '/'));
     return;
   }
 
@@ -137,6 +137,27 @@ async function cacheFirst(request, cacheName) {
     return response;
   } catch {
     return new Response('Network error', { status: 408 });
+  }
+}
+
+// Fetch a fresh shell when online, and fall back to the cached shell when
+// offline or the network is unavailable.
+async function networkFirst(request, cacheName, fallbackPath) {
+  const cache = await caches.open(cacheName);
+  try {
+    const response = await fetch(request);
+    if (response.ok) {
+      cache.put(request, response.clone());
+    }
+    return response;
+  } catch {
+    const cached = await cache.match(request);
+    if (cached) return cached;
+    if (fallbackPath) {
+      const fallback = await cache.match(fallbackPath);
+      if (fallback) return fallback;
+    }
+    return new Response('Offline', { status: 503 });
   }
 }
 

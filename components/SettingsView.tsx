@@ -883,7 +883,7 @@ export function SettingsView({
                 <div className="min-w-0 flex-1">
                   <p className="text-[13px] font-semibold text-neutral-800 dark:text-white">Check for updates</p>
                   <p className="mt-0.5 text-[11px] leading-snug text-neutral-400 dark:text-neutral-500">
-                    Clears the app cache; reopen to fetch the latest version · keeps your data
+                    Clears the app cache and reloads the latest version · keeps your data
                   </p>
                 </div>
                 <button type="button" onClick={handleHardRefresh} disabled={refreshing}

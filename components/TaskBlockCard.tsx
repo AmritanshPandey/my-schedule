@@ -159,7 +159,7 @@ export function TaskBlockCard({
       <div
         role={onClick ? "button" : undefined}
         onClick={onClick}
-        className={`group relative flex items-center overflow-hidden rounded-[8px] px-2 ${styles.cardBg} ${styles.blockBorder} ${resolved ? "opacity-60" : ""} ${onClick ? "cursor-pointer" : ""} ${className}`}
+        className={`group relative flex items-center overflow-hidden rounded-[10px] px-2 ${styles.cardBg} ${styles.blockBorder} ${resolved ? "opacity-60" : ""} ${onClick ? "cursor-pointer" : ""} ${className}`}
         style={style}
       >
         <span className={`relative truncate text-[10px] font-bold leading-none text-neutral-900 dark:text-white ${resolved ? "line-through decoration-neutral-400" : ""}`}>

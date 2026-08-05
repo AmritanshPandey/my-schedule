@@ -5,17 +5,19 @@
  * that no longer exist on the server (and, because the SPA rewrite serves
  * index.html for any missing path, a stale chunk request comes back as HTML —
  * surfacing as "Failed to load chunk" / "Unexpected token '<'"). The fix is to
- * drop the stale caches and let the user manually reopen/refresh to pick up
- * the fresh build.
+ * drop stale caches, then reload once into a fresh app shell.
  *
  * These chunk failures arrive on THREE paths: a React render crash (caught by
  * ErrorBoundary), an uncaught `window` error, and — critically — an unhandled
  * promise rejection from a failed dynamic `import()`/prefetch, which never
- * reaches the React boundary. During the iOS crash investigation, automatic
- * reloads are disabled so Safari cannot fall into a repeated-problem loop.
+ * reaches the React boundary. Automatic reloads are loop-guarded because iOS
+ * Private Browsing may reject sessionStorage writes; the recovery count is also
+ * carried in the URL until a healthy boot removes it.
  */
 
 const RELOAD_KEY = "planr-chunk-reloads";
+const RECOVERY_PARAM = "__planr_recover";
+const REFRESH_PARAM = "__planr_refresh";
 export const MAX_RELOADS = 2;
 
 // In-memory mirror of the reload counter. iOS Private Browsing throws on every
@@ -25,6 +27,15 @@ export const MAX_RELOADS = 2;
 let memReloadCount = 0;
 let recovering = false;
 
+function readUrlReloadCount(): number {
+  if (typeof window === "undefined") return 0;
+  try {
+    return Number(new URL(window.location.href).searchParams.get(RECOVERY_PARAM)) || 0;
+  } catch {
+    return 0;
+  }
+}
+
 export function getReloadCount(): number {
   let stored = 0;
   try {
@@ -32,7 +43,7 @@ export function getReloadCount(): number {
   } catch {
     /* storage unavailable — rely on the in-memory mirror */
   }
-  return Math.max(stored, memReloadCount);
+  return Math.max(stored, memReloadCount, readUrlReloadCount());
 }
 
 export function setReloadCount(n: number): void {
@@ -50,6 +61,19 @@ export function resetReloadCount(): void {
     sessionStorage.removeItem(RELOAD_KEY);
   } catch {
     /* ignore */
+  }
+  if (typeof window !== "undefined") {
+    try {
+      const url = new URL(window.location.href);
+      const before = url.toString();
+      url.searchParams.delete(RECOVERY_PARAM);
+      url.searchParams.delete(REFRESH_PARAM);
+      if (url.toString() !== before) {
+        window.history.replaceState(window.history.state, "", url);
+      }
+    } catch {
+      /* ignore */
+    }
   }
 }
 
@@ -77,11 +101,22 @@ export async function clearStaleCaches(): Promise<void> {
   }
 }
 
+function reloadWithFreshShell(params: Record<string, string>): void {
+  if (typeof window === "undefined") return;
+  try {
+    const url = new URL(window.location.href);
+    Object.entries(params).forEach(([key, value]) => url.searchParams.set(key, value));
+    window.location.replace(url.toString());
+  } catch {
+    window.location.reload();
+  }
+}
+
 /**
- * User-initiated "update the app" used by the Settings refresh button. Unlike
- * unregisters the service worker and drops every cache so the next user-initiated
- * page load pulls the latest deploy. It does NOT touch IndexedDB or localStorage,
- * so the schedule, preferences, and sign-in are all preserved.
+ * User-initiated "update the app" used by the Settings refresh button. It
+ * unregisters service workers, drops every cache, and reloads through a
+ * cache-busted URL. It does NOT touch IndexedDB or localStorage, so the
+ * schedule, preferences, and sign-in are all preserved.
  */
 export async function hardRefreshApp(): Promise<void> {
   resetReloadCount(); // a manual refresh clears any prior chunk-recovery budget
@@ -103,20 +138,22 @@ export async function hardRefreshApp(): Promise<void> {
   } catch {
     /* best effort */
   }
+  reloadWithFreshShell({ [REFRESH_PARAM]: String(Date.now()) });
 }
 
-/**
- * Clear stale caches after a chunk failure. Automatic reload is disabled for the
- * iOS safe-mode build because reload loops are one suspected crash source.
- */
-export function recoverFromChunkError(_delayMs = 600): boolean {
+/** Clear stale caches after a chunk failure, then reload with a loop guard. */
+export function recoverFromChunkError(delayMs = 600): boolean {
   if (typeof window === "undefined") return false;
   if (recovering) return true;
-  if (getReloadCount() >= MAX_RELOADS) return false;
+  const currentReloads = getReloadCount();
+  if (currentReloads >= MAX_RELOADS) return false;
+  const nextReloads = currentReloads + 1;
   recovering = true;
-  setReloadCount(getReloadCount() + 1);
+  setReloadCount(nextReloads);
   clearStaleCaches().finally(() => {
-    recovering = false;
+    window.setTimeout(() => {
+      reloadWithFreshShell({ [RECOVERY_PARAM]: String(nextReloads) });
+    }, delayMs);
   });
   return true;
 }
