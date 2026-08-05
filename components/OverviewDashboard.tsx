@@ -18,7 +18,7 @@ import {
 import type { DayKey, Plan, ProgressTracker, Schedule, Task } from "@/lib/useScheduleDB";
 import { getTaskCheckableItems, getTaskSubtaskSummary, isTaskCompleted, isTrackedTask } from "@/lib/taskCompletion";
 import { getPlanCardStats } from "@/lib/planInsights";
-import { PLAN_NEUTRAL } from "@/lib/colorSystem";
+import { PLAN_NEUTRAL, accentStyles } from "@/lib/colorSystem";
 import DayBreakdownCard from "@/components/DayBreakdownCard";
 import TodayTaskList from "@/components/today/TodayTaskList";
 import { selectTodayTasks } from "@/lib/todayTasks";
@@ -338,9 +338,10 @@ function ActiveTrackingCard({
                 : trend?.state === "negative"
                 ? "text-rose-500 dark:text-rose-400"
                 : "text-neutral-300 dark:text-neutral-600";
+            const dotColor = plan ? accentStyles(plan.color).dot : "bg-neutral-400 dark:bg-neutral-500";
             return (
               <div key={tracker.id} className="flex items-center gap-3 py-3">
-                <span className={`h-3 w-3 shrink-0 rounded-full ${PLAN_NEUTRAL.dot}`} />
+                <span className={`h-3 w-3 shrink-0 rounded-full ${dotColor}`} />
                 <div className="min-w-0 flex-1">
                   <p className="truncate text-[15px] font-bold leading-tight text-neutral-950 dark:text-white">{tracker.title}</p>
                   <div className="mt-0.5 flex min-w-0 items-center gap-1.5">
