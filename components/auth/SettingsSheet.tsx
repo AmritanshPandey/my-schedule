@@ -636,7 +636,7 @@ function OllamaRow() {
               <select
                 value={model}
                 onChange={(e) => saveModel(e.target.value)}
-                className="h-9 w-full appearance-none rounded-xl border border-neutral-200 bg-neutral-50 px-3 pr-8 text-[12px] font-medium text-neutral-900 outline-none transition-colors focus:border-neutral-300 focus:bg-white dark:border-white/[0.08] dark:bg-neutral-900 dark:text-white dark:focus:border-white/20"
+                className="h-9 w-full appearance-none rounded-xl border border-neutral-200 bg-neutral-50 px-3 pr-10 text-[12px] font-medium text-neutral-900 outline-none transition-colors focus:border-neutral-300 focus:bg-white dark:border-white/[0.08] dark:bg-neutral-900 dark:text-white dark:focus:border-white/20"
               >
                 {availableModels.map((m) => (
                   <option key={m} value={m}>{m}</option>

@@ -477,7 +477,7 @@ function OllamaSection() {
           {availableModels.length > 0 ? (
             <div className="relative">
               <select value={model} onChange={(e) => saveModel(e.target.value)}
-                className="h-10 w-full appearance-none rounded-xl border border-neutral-200 bg-neutral-50 px-3 pr-8 text-[13px] font-medium text-neutral-900 outline-none dark:border-white/[0.08] dark:bg-neutral-900 dark:text-white">
+                className="h-10 w-full appearance-none rounded-xl border border-neutral-200 bg-neutral-50 px-3 pr-10 text-[13px] font-medium text-neutral-900 outline-none dark:border-white/[0.08] dark:bg-neutral-900 dark:text-white">
                 {availableModels.map((m) => <option key={m} value={m}>{m}</option>)}
               </select>
               <IconChevronDown size={12} strokeWidth={2} className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-neutral-400" />

@@ -168,7 +168,7 @@ export default function RemindersRows() {
                     aria-label="Nudge time"
                     value={settings.nudgeTime}
                     onChange={(e) => patch({ nudgeTime: e.target.value })}
-                    className={`${SETTINGS_CONTROL_CLASS} pr-9`}
+                    className={`${SETTINGS_CONTROL_CLASS} pr-10`}
                   >
                     {NUDGE_OPTIONS.map((o) => (
                       <option key={o.value} value={o.value}>{o.label}</option>

@@ -356,7 +356,7 @@ function OllamaCard() {
           {models.length > 0 ? (
             <div className="relative">
               <select value={model} onChange={(e) => saveModel(e.target.value)}
-                className="h-10 w-full appearance-none rounded-xl border border-neutral-200 bg-neutral-50 px-3 pr-8 text-[13px] text-neutral-900 outline-none dark:border-white/[0.08] dark:bg-neutral-900 dark:text-white">
+                className="h-10 w-full appearance-none rounded-xl border border-neutral-200 bg-neutral-50 px-3 pr-10 text-[13px] text-neutral-900 outline-none dark:border-white/[0.08] dark:bg-neutral-900 dark:text-white">
                 {models.map((m) => <option key={m} value={m}>{m}</option>)}
               </select>
               <IconChevronDown size={12} strokeWidth={2} className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-neutral-400" />
@@ -819,7 +819,7 @@ export function SettingsView({
                     aria-label="Start of day"
                     value={dayStartTime}
                     onChange={(e) => handleDayStartChange(e.target.value)}
-                    className={`${SETTINGS_CONTROL_CLASS} flex-1 pr-9 sm:w-44 sm:flex-none`}
+                    className={`${SETTINGS_CONTROL_CLASS} flex-1 pr-10 sm:w-44 sm:flex-none`}
                   >
                     <option value="">Auto from tasks</option>
                     {DAY_START_OPTIONS.map((option) => (
