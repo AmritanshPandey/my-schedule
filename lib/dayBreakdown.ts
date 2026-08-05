@@ -126,7 +126,7 @@ export function buildDayBreakdown(
   const slices: DaySlice[] = Array.from(minutesById.entries())
     .map(([id, minutes]) => ({
       id,
-      label: id === HELD_TIME_ID ? "Held time" : categoriesById.get(id)?.title ?? "",
+      label: id === HELD_TIME_ID ? "Rest" : categoriesById.get(id)?.title ?? "",
       color: id === HELD_TIME_ID ? null : categoriesById.get(id)?.color ?? null,
       minutes,
       pct: Math.round((minutes / totalMinutes) * 100),
