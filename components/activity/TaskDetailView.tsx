@@ -283,7 +283,7 @@ export default function TaskDetailView({
       )}
 
       {presentation === "sheet" && (
-        <div className="flex items-start gap-2.5 pr-10">
+        <div className="flex items-start gap-2.5 pr-9">
           {tracked && (
             <div className="mt-0.5">
               <TaskStatusCheckbox

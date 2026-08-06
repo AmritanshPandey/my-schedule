@@ -431,13 +431,12 @@ function PlanConsistencyCard({
               key={plan.id}
               type="button"
               onClick={() => { haptic("light"); onNavigate(1); }}
-              // max-w keeps the plan name and its % pill close together even
-              // when the card spans the full 2-column grid at lg (~890px) —
-              // without it the flexible left track stretches to fill the
-              // container and strands the two ends of the row apart.
-              // -mx-2/px-2 so the hover wash reads as a row with breathing
-              // room around its content instead of a hard band flush to text.
-              className="-mx-2 grid w-full max-w-[520px] grid-cols-[minmax(0,1fr)_90px] items-center gap-4 px-2 py-3.5 text-left transition-colors lg:hover:bg-neutral-50/80 dark:lg:hover:bg-white/[0.03]"
+              // max-w keeps the plan name and its % pill close together on very
+              // wide screens, while smaller tablet widths can let the row stretch
+              // to fill the card. -mx-2/px-2 means the hover wash reads as a row
+              // with breathing room around its content instead of a hard band
+              // flush to text.
+              className="-mx-2 grid w-full xl:max-w-[520px] grid-cols-[minmax(0,1fr)_minmax(90px,160px)] items-center gap-4 px-2 py-3.5 text-left transition-colors lg:hover:bg-neutral-50/80 dark:lg:hover:bg-white/[0.03]"
             >
               <div className="min-w-0">
                 <div className="flex items-center gap-2">

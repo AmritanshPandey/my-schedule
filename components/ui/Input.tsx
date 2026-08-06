@@ -39,7 +39,7 @@ export const FORM_INPUT_CLASS = `${FORM_CONTROL_BASE} h-11 px-4`;
  * real size — several of these controls used to carry `text-[12px]` and all
  * rendered at 16px anyway.
  */
-export const SETTINGS_CONTROL_CLASS = `${FORM_CONTROL_CHROME} h-10 px-3 pr-10 text-[16px] font-semibold`;
+export const SETTINGS_CONTROL_CLASS = `${FORM_CONTROL_CHROME} h-10 px-3 text-[16px] font-semibold`;
 
 /** The square icon button that pairs with a SETTINGS_CONTROL_CLASS field. */
 export const SETTINGS_ICON_BUTTON_CLASS =

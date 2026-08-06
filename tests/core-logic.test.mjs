@@ -1393,21 +1393,23 @@ test("buildDayBreakdown counts the previous day's overnight tail on this day", (
 });
 
 test("buildActiveHours measures scheduled time against the waking day", () => {
-  assert.equal(WAKING_WINDOW_MINUTES, 16 * 60);
+  assert.equal(WAKING_WINDOW_MINUTES, 24 * 60);
   assert.equal(DEFAULT_WAKING_START_MINUTES, 7 * 60, "4 AM is the day boundary, not a wake time");
 
   const typical = buildActiveHours(390);
   assert.equal(typical.startMinutes, 7 * 60, "falls back to the waking default, not the timeline's");
-  assert.equal(typical.endMinutes, 23 * 60);
-  assert.equal(typical.freeMinutes, 960 - 390);
+  // With a 24h waking window the end is the start + 1440 minutes.
+  assert.equal(typical.endMinutes, 1860);
+  assert.equal(typical.freeMinutes, 1440 - 390);
   assert.equal(typical.overbookedMinutes, 0);
-  assert.equal(Math.round(typical.pct), 41);
+  assert.equal(Math.round(typical.pct), 27);
 
   // A configured day start moves the window.
   assert.equal(buildActiveHours(0, "05:30").startMinutes, 330);
 
   // Overbooked: pct is clamped so the fill can never leave its track.
-  const over = buildActiveHours(1035);
+  // Use a value larger than 24h (1440) to exercise overbooked behavior.
+  const over = buildActiveHours(1440 + 75);
   assert.equal(over.pct, 100);
   assert.equal(over.freeMinutes, 0);
   assert.equal(over.overbookedMinutes, 75);
@@ -1415,7 +1417,7 @@ test("buildActiveHours measures scheduled time against the waking day", () => {
   // An empty day still reports a full window of free time.
   const empty = buildActiveHours(0);
   assert.equal(empty.pct, 0);
-  assert.equal(empty.freeMinutes, 960);
+  assert.equal(empty.freeMinutes, 1440);
 });
 
 test("buildDayBreakdown is empty when nothing is scheduled", () => {

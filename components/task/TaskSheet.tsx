@@ -980,7 +980,7 @@ export function TaskSheet({
                   aria-label="Duplicate task"
                   className="h-12 w-12 shrink-0 px-0 text-neutral-700 shadow-sm ring-1 ring-black/[0.03] hover:border-neutral-300 hover:bg-neutral-100 dark:bg-white/[0.06] dark:text-neutral-200 dark:ring-white/[0.06] dark:hover:bg-white/[0.10]"
                 >
-                  <IconCopyPlus size={20} strokeWidth={2.35} />
+                  <IconCopyPlus size={20} strokeWidth={2} />
                 </Button>
               )}
               {mode === "edit" && !isOccurrenceScope && onDelete && (
@@ -990,7 +990,7 @@ export function TaskSheet({
                   aria-label="Delete task"
                   className="h-12 w-12 shrink-0 px-0 text-rose-500 shadow-sm ring-1 ring-rose-500/10 hover:border-rose-300 hover:bg-rose-500/10 dark:bg-rose-500/[0.08] dark:text-rose-300 dark:ring-rose-400/10 dark:hover:border-rose-400/25 dark:hover:bg-rose-500/15"
                 >
-                  <IconTrash size={20} strokeWidth={2.25} />
+                  <IconTrash size={20} strokeWidth={2} />
                 </Button>
               )}
             </div>

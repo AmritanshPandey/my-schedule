@@ -262,6 +262,16 @@ export interface Note {
 export interface SchedulePreferences {
   dayStartTime?: string;
   /**
+   * Timeline end expressed as minutes from midnight. Allows values beyond 24h
+   * (e.g. 28:00 -> 1680) to represent an end into the next calendar day.
+   */
+  dayEndMinutes?: number;
+  /**
+   * When true, derive the timeline end from the last timed task rather than a fixed minute value.
+   * Mirrors the "Auto from tasks" behaviour used for the start-of-day setting.
+   */
+  dayEndAuto?: boolean;
+  /**
    * ISO date ("YYYY-MM-DD") from which analytics are measured. Streaks,
    * trends, and consistency ignore everything before it, so the empty weeks
    * that predate a user adopting the app don't drag their numbers down.
@@ -841,14 +851,26 @@ function normalizeNotes(raw: unknown): Note[] {
 
 function normalizeSchedulePreferences(raw: unknown): SchedulePreferences {
   if (!raw || typeof raw !== "object") return {};
-  const source = raw as { dayStartTime?: unknown; startDate?: unknown };
+  const source = raw as { dayStartTime?: unknown; dayEndMinutes?: unknown; dayEndAuto?: unknown; startDate?: unknown };
   const dayStartTime = normalizeDayStartTime(source.dayStartTime);
+  // Accept a numeric dayEndMinutes in minutes (may be > 1440 to represent next-day hours)
+  let dayEndMinutes: number | undefined = undefined;
+  if (typeof source.dayEndMinutes === "number" && Number.isFinite(source.dayEndMinutes)) {
+    const v = Math.floor(source.dayEndMinutes as number);
+    // Allow reasonable bounds: 24:00 (1440) .. 28:00 (1680)
+    if (v >= 24 * 60 && v <= 28 * 60) dayEndMinutes = v;
+  }
+  // Accept an explicit boolean to derive the end from tasks
+  const dayEndAuto = source.dayEndAuto === true ? true : undefined;
+
   const startDate =
     typeof source.startDate === "string" && /^\d{4}-\d{2}-\d{2}$/.test(source.startDate)
       ? source.startDate
       : undefined;
   return {
     ...(dayStartTime ? { dayStartTime } : {}),
+    ...(typeof dayEndMinutes === "number" ? { dayEndMinutes } : {}),
+    ...(dayEndAuto ? { dayEndAuto } : {}),
     ...(startDate ? { startDate } : {}),
   };
 }

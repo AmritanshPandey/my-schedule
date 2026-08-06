@@ -15,6 +15,10 @@ import {
   formatMinutesCompact,
   HELD_TIME_ID,
 } from "@/lib/dayBreakdown";
+import { DEFAULT_TIMELINE_START_MINUTES, TIMELINE_END_MINUTES, getConfiguredDayStartMinutes } from "@/lib/timeline/displayWindow";
+import { resolveOccurrence } from "@/lib/taskOccurrence";
+import { getSlots } from "@/lib/taskMutations";
+import { parseTimeToMinutes, toScheduleDayMinutes } from "@/lib/timeUtils";
 
 const SIZE = 132;
 const STROKE = 18;
@@ -240,7 +244,7 @@ export default function DayBreakdownCard({ activities, categories, todayKey, tod
       )}
 
       {/* Active hours. Sits outside the empty-state branch on purpose: a day
-          with nothing on it is exactly when "16h free" is worth saying. */}
+          with nothing on it is exactly when "24h free" is worth saying. */}
       <div className="mt-4 border-t border-neutral-200/70 pt-3 dark:border-white/[0.07]">
         <div className="flex items-baseline justify-between gap-3">
           <p className="text-[11px] font-bold uppercase tracking-[0.08em] text-neutral-500 dark:text-neutral-400">
@@ -253,27 +257,75 @@ export default function DayBreakdownCard({ activities, categories, todayKey, tod
 
         {/* A plain div rather than <ProgressBar>: that component animates width
             through framer's `m`, and the iOS Dashboard tab has no LazyMotion
-            ancestor, so the fill would sit at 0 forever there. Ink, not green —
-            hours committed is not forward motion, and a full bar is not a win. */}
-        <div aria-hidden="true" className="mt-2 h-1.5 w-full overflow-hidden rounded-full bg-neutral-200 dark:bg-white/10">
-          <div
-            className="h-full rounded-full bg-neutral-900 transition-[width] duration-500 motion-reduce:transition-none dark:bg-white"
-            style={{ width: `${active.pct}%` }}
-          />
+          ancestor, so the fill would sit at 0 forever there. The track now
+          represents the "Rest" portion and has a softer accent; the fill
+          shows scheduled time (green) or overbooked (amber). */}
+        <div aria-hidden="true" className="mt-2 h-3 w-full overflow-hidden rounded-full bg-indigo-100 dark:bg-indigo-900/20">
+        <div
+          className={`h-full rounded-full transition-[width] duration-500 motion-reduce:transition-none ${
+            active.overbookedMinutes > 0
+              ? "bg-amber-700 dark:bg-amber-400"
+              : "bg-emerald-600 dark:bg-emerald-400"
+          }`}
+          style={{ width: `${active.pct}%` }}
+        />
         </div>
 
-        <p className="mt-1.5 text-[11px] font-semibold text-neutral-500 dark:text-neutral-400">
-          {active.overbookedMinutes > 0 ? (
-            // Warning lives in the text, not the fill: At-Risk Amber on the
-            // neutral-200 track is 2.5:1, under the 3:1 WCAG 1.4.11 wants for a
-            // graphic that carries meaning. amber-700 on white is 5.0:1.
-            <span className="text-amber-700 dark:text-amber-400">
-              {formatMinutesCompact(active.overbookedMinutes)} more than a {Math.round(active.wakingMinutes / 60)}h day
-            </span>
-          ) : (
-            `${formatMinutesCompact(active.freeMinutes)} free · ${fmtClock(active.startMinutes)}–${fmtClock(active.endMinutes)}`
-          )}
+        {active.overbookedMinutes > 0 ? (
+        <p className="mt-2 text-[11px] font-semibold text-amber-700 dark:text-amber-400">
+          {formatMinutesCompact(active.overbookedMinutes)} more than a {Math.round(active.wakingMinutes / 60)}h day
         </p>
+        ) : (
+        <div className="mt-2 flex items-center justify-between">
+          <div className="flex items-center gap-2 text-[11px] font-semibold text-neutral-700 dark:text-neutral-300">
+            <span
+              aria-hidden
+              className="h-3 w-3 shrink-0 rounded-full bg-indigo-400 dark:bg-indigo-500"
+            />
+            <span>{formatMinutesCompact(active.freeMinutes)} rest</span>
+          </div>
+ 
+          <div className="flex items-center gap-2 text-[11px] font-semibold text-neutral-500 dark:text-neutral-400">
+            <span className="tabular-nums">{fmtClock(active.startMinutes)}</span>
+            <span aria-hidden className="text-neutral-300">—</span>
+            <span className="tabular-nums">
+              {preferences?.dayEndAuto
+                ? (() => {
+                    // Find the last timed slot end on this selected weekday.
+                    let lastEnd: number | null = null;
+                    const dayTasks = activities[day] ?? [];
+                    for (const t of dayTasks) {
+                      const occ = resolveOccurrence(t, dateISO);
+                      const slots = getSlots(occ);
+                      for (const s of slots) {
+                        const rawEnd = parseTimeToMinutes(s.endTime);
+                        const startRaw = parseTimeToMinutes(s.startTime);
+                        if (rawEnd === null || startRaw === null) continue;
+                        let end = toScheduleDayMinutes(rawEnd);
+                        let start = toScheduleDayMinutes(startRaw);
+                        if (end <= start) end += 24 * 60; // spans midnight
+                        if (lastEnd === null || end > lastEnd) lastEnd = end;
+                      }
+                    }
+                    return lastEnd !== null ? fmtClock(lastEnd) : fmtClock(active.endMinutes);
+                  })()
+                : fmtClock(preferences?.dayEndMinutes ?? active.endMinutes)}
+            </span>
+          </div>
+        </div>
+        )}
+      </div>
+
+      {/* Schedule day bounds (timeline window) */}
+      <div className="mt-2 flex items-center justify-between text-[11px] text-neutral-500 dark:text-neutral-400">
+        <div className="flex items-center gap-2">
+          <span className="font-semibold text-neutral-700 dark:text-neutral-300">Day start</span>
+          <span className="tabular-nums">{fmtClock(getConfiguredDayStartMinutes(preferences?.dayStartTime) ?? DEFAULT_TIMELINE_START_MINUTES)}</span>
+        </div>
+        <div className="flex items-center gap-2">
+          <span className="font-semibold text-neutral-700 dark:text-neutral-300">Day end</span>
+          <span className="tabular-nums">{fmtClock(preferences?.dayEndMinutes ?? TIMELINE_END_MINUTES)}</span>
+        </div>
       </div>
     </section>
   );

@@ -7,6 +7,7 @@ import {
   IconBrain,
   IconCheck,
   IconChevronRight,
+  IconClock,
   IconCloud,
   IconCopy,
   IconMoon,
@@ -87,6 +88,13 @@ function Divider() {
 const DAY_START_OPTIONS = Array.from({ length: 48 }, (_, index) => {
   const value = minutesToInputTime(index * 30);
   return { value, label: formatDisplayTime(value) };
+});
+
+const DAY_END_OPTIONS = Array.from({ length: 9 }, (_, i) => {
+  const minutes = 24 * 60 + i * 30; // 1440..1680
+  const baseLabel = formatDisplayTime(minutesToInputTime(minutes % 1440));
+  const label = minutes >= 1440 ? `${baseLabel} (next day)` : baseLabel;
+  return { value: String(minutes), label };
 });
 
 // ── Theme ─────────────────────────────────────────────────────────────────────
@@ -356,10 +364,10 @@ function OllamaCard() {
           {models.length > 0 ? (
             <div className="relative">
               <select value={model} onChange={(e) => saveModel(e.target.value)}
-                className="h-10 w-full appearance-none rounded-xl border border-neutral-200 bg-neutral-50 px-3 pr-10 text-[13px] text-neutral-900 outline-none dark:border-white/[0.08] dark:bg-neutral-900 dark:text-white">
+                className="h-10 w-full appearance-none rounded-xl border border-neutral-200 bg-neutral-50 px-3 pr-9 text-[13px] text-neutral-900 outline-none dark:border-white/[0.08] dark:bg-neutral-900 dark:text-white">
                 {models.map((m) => <option key={m} value={m}>{m}</option>)}
               </select>
-              <IconChevronDown size={12} strokeWidth={2} className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-neutral-400" />
+              <IconChevronDown size={14} strokeWidth={2} className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-neutral-400" />
             </div>
           ) : (
             <input type="text" value={model}
@@ -815,19 +823,22 @@ export function SettingsView({
                   </p>
                 </div>
                 <div className="flex w-full min-w-0 items-center gap-2 sm:w-auto sm:shrink-0">
-                  <select
-                    aria-label="Start of day"
-                    value={dayStartTime}
-                    onChange={(e) => handleDayStartChange(e.target.value)}
-                    className={`${SETTINGS_CONTROL_CLASS} flex-1 pr-10 sm:w-44 sm:flex-none`}
-                  >
-                    <option value="">Auto from tasks</option>
-                    {DAY_START_OPTIONS.map((option) => (
-                      <option key={option.value} value={option.value}>
-                        {option.label}
-                      </option>
-                    ))}
-                  </select>
+                  <div className="relative flex-1 sm:w-44 sm:flex-none">
+                    <select
+                      aria-label="Start of day"
+                      value={dayStartTime}
+                      onChange={(e) => handleDayStartChange(e.target.value)}
+                      className={`${SETTINGS_CONTROL_CLASS} w-full pr-9 appearance-none`}
+                    >
+                      <option value="">Auto from tasks</option>
+                      {DAY_START_OPTIONS.map((option) => (
+                        <option key={option.value} value={option.value}>
+                          {option.label}
+                        </option>
+                      ))}
+                    </select>
+                    <IconClock size={14} strokeWidth={2} className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-neutral-400" />
+                  </div>
                   <button
                     type="button"
                     aria-label="Clear start of day"
@@ -840,6 +851,60 @@ export function SettingsView({
                   </button>
                 </div>
               </Row>
+
+              <Row className="items-start max-sm:flex-col sm:items-center">
+                <div className="min-w-0 flex-1">
+                  <p className="text-[13px] font-semibold text-neutral-800 dark:text-white">End of day</p>
+                  <p className="mt-0.5 text-[11px] leading-snug text-neutral-400 dark:text-neutral-500">
+                    The timeline's end. Values after midnight appear as "(next day)".
+                  </p>
+                </div>
+                <div className="flex w-full min-w-0 items-center gap-2 sm:w-auto sm:shrink-0">
+                  <div className="relative flex-1 sm:w-44 sm:flex-none">
+                    <select
+                      aria-label="End of day"
+                      value={
+                        schedule.preferences?.dayEndAuto
+                          ? "auto"
+                          : typeof schedule.preferences?.dayEndMinutes === "number"
+                          ? String(schedule.preferences?.dayEndMinutes)
+                          : ""
+                      }
+                      onChange={(e) => {
+                        const v = e.target.value;
+                        if (v === "auto") {
+                          onUpdatePreferences?.({ dayEndAuto: true, dayEndMinutes: undefined });
+                        } else if (v === "") {
+                          onUpdatePreferences?.({ dayEndAuto: undefined, dayEndMinutes: undefined });
+                        } else {
+                          onUpdatePreferences?.({ dayEndAuto: undefined, dayEndMinutes: Number(v) });
+                        }
+                      }}
+                      className={`${SETTINGS_CONTROL_CLASS} w-full pr-9 appearance-none`}
+                    >
+                      <option value="">Default (28:00 / 4:00 AM)</option>
+                      <option value="auto">Auto from tasks (use last timed task)</option>
+                      {DAY_END_OPTIONS.map((option) => (
+                        <option key={option.value} value={option.value}>
+                          {option.label}
+                        </option>
+                      ))}
+                    </select>
+                    <IconClock size={14} strokeWidth={2} className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-neutral-400" />
+                  </div>
+                  <button
+                    type="button"
+                    aria-label="Clear end of day"
+                    title="Clear end of day"
+                    onClick={() => onUpdatePreferences?.({ dayEndMinutes: undefined, dayEndAuto: undefined })}
+                    disabled={schedule.preferences?.dayEndMinutes === undefined && !schedule.preferences?.dayEndAuto}
+                    className={SETTINGS_ICON_BUTTON_CLASS}
+                  >
+                    <IconX size={15} strokeWidth={2.2} />
+                  </button>
+                </div>
+              </Row>
+
               <Divider />
               <Row className="items-start max-sm:flex-col sm:items-center">
                 <div className="min-w-0 flex-1">

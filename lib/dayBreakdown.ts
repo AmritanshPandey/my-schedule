@@ -126,7 +126,7 @@ export function buildDayBreakdown(
   const slices: DaySlice[] = Array.from(minutesById.entries())
     .map(([id, minutes]) => ({
       id,
-      label: id === HELD_TIME_ID ? "Rest" : categoriesById.get(id)?.title ?? "",
+      label: id === HELD_TIME_ID ? "Held time" : categoriesById.get(id)?.title ?? "",
       color: id === HELD_TIME_ID ? null : categoriesById.get(id)?.color ?? null,
       minutes,
       pct: Math.round((minutes / totalMinutes) * 100),
@@ -140,7 +140,7 @@ export function buildDayBreakdown(
 }
 
 /** How long a waking day is assumed to run. */
-export const WAKING_WINDOW_MINUTES = 16 * 60;
+export const WAKING_WINDOW_MINUTES = 24 * 60;
 
 /**
  * Where a waking day starts when the user has not configured one.

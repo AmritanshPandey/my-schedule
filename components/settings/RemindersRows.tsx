@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { AnimatePresence, m } from "framer-motion";
-import { IconBell, IconBellOff } from "@tabler/icons-react";
+import { IconBell, IconBellOff, IconChevronDown, IconClock } from "@tabler/icons-react";
 import { haptic } from "@/lib/haptics";
 import {
   getReminderSettings,
@@ -164,19 +164,22 @@ export default function RemindersRows() {
                   <p className="min-w-0 flex-1 text-[12px] font-semibold text-neutral-700 dark:text-neutral-200">
                     Nudge time
                   </p>
-                  <select
-                    aria-label="Nudge time"
-                    value={settings.nudgeTime}
-                    onChange={(e) => patch({ nudgeTime: e.target.value })}
-                    className={`${SETTINGS_CONTROL_CLASS} pr-10`}
-                  >
-                    {NUDGE_OPTIONS.map((o) => (
-                      <option key={o.value} value={o.value}>{o.label}</option>
-                    ))}
-                  </select>
-                </div>
-              )}
-            </div>
+                  <div className="relative">
+                    <select
+                      aria-label="Nudge time"
+                      value={settings.nudgeTime}
+                      onChange={(e) => patch({ nudgeTime: e.target.value })}
+                      className={`${SETTINGS_CONTROL_CLASS} pr-9 appearance-none`}
+                    >
+                      {NUDGE_OPTIONS.map((o) => (
+                        <option key={o.value} value={o.value}>{o.label}</option>
+                      ))}
+                    </select>
+                    <IconClock size={14} strokeWidth={2} className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-neutral-400" />
+                   </div>
+                 </div>
+               )}
+             </div>
           </m.div>
         )}
       </AnimatePresence>

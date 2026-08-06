@@ -107,7 +107,7 @@ function RootHeader({ onOpenSettings, onNotes }: Pick<AppHeaderProps, "onOpenSet
       }}
     >
       {/* Left: logo mark + wordmark */}
-      <div className="flex items-center gap-2.5">
+      <div className="flex items-center gap-2.5 align-middle">
         <LogoMark className="text-neutral-900 dark:text-white" />
         <span className="text-[20px] font-bold tracking-[-0.5px] text-neutral-900 dark:text-white leading-none">
           planr.
@@ -115,7 +115,7 @@ function RootHeader({ onOpenSettings, onNotes }: Pick<AppHeaderProps, "onOpenSet
       </div>
 
       {/* Right: Notes pill + avatar */}
-      <div className="flex items-center gap-2.5">
+      <div className="flex items-center justify-center gap-2.5">
         <m.button
           type="button"
           whileTap={{ scale: 0.94 }}

@@ -16,6 +16,7 @@ import {
   IconWifiOff,
   IconRefresh,
   IconChevronDown,
+  IconClock,
   IconTerminal2,
   IconCopy,
   IconInfoCircle,
@@ -105,6 +106,15 @@ const DAY_START_OPTIONS = Array.from({ length: 48 }, (_, index) => {
   return { value, label: formatDisplayTime(value) };
 });
 
+const DAY_END_OPTIONS = Array.from({ length: 9 }, (_, i) => {
+  // 24:00 (1440) .. 28:00 (1680) in 30-min steps -> 9 entries
+  const minutes = 24 * 60 + i * 30;
+  // label: show human time and mark next-day when >= 1440
+  const baseLabel = formatDisplayTime(minutesToInputTime(minutes % 1440));
+  const label = minutes >= 1440 ? `${baseLabel} (next day)` : baseLabel;
+  return { value: String(minutes), label };
+});
+
 // ── Appearance toggle ─────────────────────────────────────────────────────────
 
 function AppearanceRow() {
@@ -176,25 +186,89 @@ function StartOfDayRow({
         </p>
       </div>
       <div className="flex w-full min-w-0 items-center gap-2 sm:w-auto sm:shrink-0">
-        <select
-          aria-label="Start of day"
-          value={dayStartTime}
-          onChange={(e) => onChange?.({ dayStartTime: normalizeDayStartTime(e.target.value) })}
-          className="h-10 min-w-0 flex-1 rounded-xl border border-neutral-200 bg-neutral-50 px-3 pr-9 text-[12px] font-semibold text-neutral-700 outline-none transition-colors focus:border-neutral-300 dark:border-white/[0.08] dark:bg-white/[0.04] dark:text-white sm:w-44 sm:flex-none"
-        >
-          <option value="">Auto from tasks</option>
-          {DAY_START_OPTIONS.map((option) => (
-            <option key={option.value} value={option.value}>
-              {option.label}
-            </option>
-          ))}
-        </select>
+        <div className="relative">
+          <select
+            aria-label="Start of day"
+            value={dayStartTime}
+            onChange={(e) => onChange?.({ dayStartTime: normalizeDayStartTime(e.target.value) })}
+            className="h-10 min-w-0 flex-1 rounded-xl border border-neutral-200 bg-neutral-50 px-3 pr-9 text-[12px] font-semibold text-neutral-700 outline-none transition-colors focus:border-neutral-300 dark:border-white/[0.08] dark:bg-white/[0.04] dark:text-white sm:w-44 sm:flex-none appearance-none"
+          >
+            <option value="">Auto from tasks</option>
+            {DAY_START_OPTIONS.map((option) => (
+              <option key={option.value} value={option.value}>
+                {option.label}
+              </option>
+            ))}
+          </select>
+          <IconClock size={14} strokeWidth={2} className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-neutral-400" />
+        </div>
         <button
           type="button"
           aria-label="Clear start of day"
           title="Clear start of day"
           onClick={() => onChange?.({ dayStartTime: undefined })}
           disabled={!dayStartTime}
+          className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-neutral-200 text-neutral-500 transition-colors hover:border-neutral-300 disabled:cursor-default disabled:opacity-35 dark:border-white/[0.08] dark:text-neutral-400"
+        >
+          <IconX size={15} strokeWidth={2.2} />
+        </button>
+      </div>
+    </div>
+  );
+}
+
+function EndOfDayRow({
+  value,
+  auto,
+  onChange,
+}: {
+  value?: number;
+  auto?: boolean;
+  onChange?: (patch: Partial<SchedulePreferences>) => void;
+}) {
+  const current = auto ? "auto" : value !== undefined ? String(value) : "";
+
+  return (
+    <div className="flex items-start gap-3 px-4 py-3.5 max-sm:flex-col sm:items-center">
+      <div className="min-w-0 flex-1">
+        <p className="text-[13px] font-semibold text-neutral-800 dark:text-white">End of day</p>
+        <p className="mt-0.5 text-[11px] leading-snug text-neutral-400 dark:text-neutral-500">
+          The timeline's end. Values after midnight appear as "(next day)".
+        </p>
+      </div>
+      <div className="flex w-full min-w-0 items-center gap-2 sm:w-auto sm:shrink-0">
+        <div className="relative">
+          <select
+            aria-label="End of day"
+            value={current}
+            onChange={(e) => {
+              const v = e.target.value;
+              if (v === "auto") {
+                onChange?.({ dayEndAuto: true, dayEndMinutes: undefined });
+              } else if (v === "") {
+                onChange?.({ dayEndAuto: undefined, dayEndMinutes: undefined });
+              } else {
+                onChange?.({ dayEndAuto: undefined, dayEndMinutes: Number(v) });
+              }
+            }}
+            className="h-10 min-w-0 flex-1 rounded-xl border border-neutral-200 bg-neutral-50 px-3 pr-9 text-[12px] font-semibold text-neutral-700 outline-none transition-colors focus:border-neutral-300 dark:border-white/[0.08] dark:bg-white/[0.04] dark:text-white sm:w-44 sm:flex-none appearance-none"
+          >
+            <option value="">Default (28:00 / 4:00 AM)</option>
+            <option value="auto">Auto from tasks (use last timed task)</option>
+            {DAY_END_OPTIONS.map((option) => (
+              <option key={option.value} value={option.value}>
+                {option.label}
+              </option>
+            ))}
+          </select>
+          <IconClock size={14} strokeWidth={2} className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-neutral-400" />
+        </div>
+        <button
+          type="button"
+          aria-label="Clear end of day"
+          title="Clear end of day"
+          onClick={() => onChange?.({ dayEndMinutes: undefined, dayEndAuto: undefined })}
+          disabled={current === ""}
           className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-neutral-200 text-neutral-500 transition-colors hover:border-neutral-300 disabled:cursor-default disabled:opacity-35 dark:border-white/[0.08] dark:text-neutral-400"
         >
           <IconX size={15} strokeWidth={2.2} />
@@ -346,7 +420,7 @@ function ClearDataRow({ onClearData, onDone }: ClearDataRowProps) {
                 onClick={() => setPhase("idle")}
                 className="flex flex-1 items-center justify-center gap-1.5 rounded-xl border border-neutral-200 bg-white py-2 text-[12px] font-semibold text-neutral-600 transition-colors hover:bg-neutral-100 dark:border-white/[0.08] dark:bg-white/[0.04] dark:text-neutral-400 dark:hover:bg-white/[0.08]"
               >
-                <IconX size={12} strokeWidth={2.5} />
+                <IconX size={14} strokeWidth={2.5} />
                 Cancel
               </button>
               <button
@@ -354,7 +428,7 @@ function ClearDataRow({ onClearData, onDone }: ClearDataRowProps) {
                 onClick={handleClear}
                 className="flex flex-1 items-center justify-center gap-1.5 rounded-xl border border-rose-200 bg-rose-50 py-2 text-[12px] font-semibold text-rose-600 transition-colors hover:bg-rose-100 dark:border-rose-500/20 dark:bg-rose-500/10 dark:text-rose-400 dark:hover:bg-rose-500/20"
               >
-                <IconTrash size={12} strokeWidth={2} />
+                <IconTrash size={14} strokeWidth={2} />
                 Delete everything
               </button>
             </div>
@@ -418,11 +492,11 @@ function ClearProgressRow({ onClearProgress }: { onClearProgress: () => Promise<
             <div className="flex gap-2">
               <button type="button" onClick={() => setPhase("idle")}
                 className="flex flex-1 items-center justify-center gap-1.5 rounded-xl border border-neutral-200 bg-white py-2 text-[12px] font-semibold text-neutral-600 transition-colors hover:bg-neutral-100 dark:border-white/[0.08] dark:bg-white/[0.04] dark:text-neutral-400">
-                <IconX size={12} strokeWidth={2.5} />Cancel
+                <IconX size={14} strokeWidth={2.5} />Cancel
               </button>
               <button type="button" onClick={handleClear}
                 className="flex flex-1 items-center justify-center gap-1.5 rounded-xl border border-amber-200 bg-amber-50 py-2 text-[12px] font-semibold text-amber-700 transition-colors hover:bg-amber-100 dark:border-amber-500/20 dark:bg-amber-500/10 dark:text-amber-400">
-                <IconRefresh size={12} strokeWidth={2} />Clear progress
+                <IconRefresh size={14} strokeWidth={2} />Clear progress
               </button>
             </div>
           </m.div>
@@ -636,13 +710,13 @@ function OllamaRow() {
               <select
                 value={model}
                 onChange={(e) => saveModel(e.target.value)}
-                className="h-9 w-full appearance-none rounded-xl border border-neutral-200 bg-neutral-50 px-3 pr-10 text-[12px] font-medium text-neutral-900 outline-none transition-colors focus:border-neutral-300 focus:bg-white dark:border-white/[0.08] dark:bg-neutral-900 dark:text-white dark:focus:border-white/20"
+                className="h-9 w-full appearance-none rounded-xl border border-neutral-200 bg-neutral-50 px-3 pr-9 text-[12px] font-medium text-neutral-900 outline-none transition-colors focus:border-neutral-300 focus:bg-white dark:border-white/[0.08] dark:bg-neutral-900 dark:text-white dark:focus:border-white/20"
               >
                 {availableModels.map((m) => (
                   <option key={m} value={m}>{m}</option>
                 ))}
               </select>
-              <IconChevronDown size={12} strokeWidth={2} className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-neutral-400" />
+              <IconChevronDown size={14} strokeWidth={2} className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-neutral-400" />
             </div>
           )}
 
@@ -709,7 +783,7 @@ function OllamaRow() {
             onClick={() => setShowSetup((v) => !v)}
             className="flex w-full items-center gap-2 px-3 py-2.5 text-left"
           >
-            <IconTerminal2 size={12} strokeWidth={2} className="shrink-0 text-neutral-400" />
+            <IconTerminal2 size={14} strokeWidth={2} className="shrink-0 text-neutral-400" />
             <span className="flex-1 text-[11px] font-semibold text-neutral-500 dark:text-neutral-400">
               Setup instructions
             </span>
@@ -752,7 +826,7 @@ function OllamaRow() {
                       )}
                       className="inline-flex items-center gap-1.5 rounded-xl border border-neutral-200 bg-neutral-50 px-3 py-1.5 text-[10px] font-semibold uppercase text-neutral-600 transition-colors hover:border-neutral-300 hover:bg-white dark:border-white/[0.08] dark:bg-white/[0.04] dark:text-white dark:hover:border-white/20 dark:hover:bg-white/[0.08]"
                     >
-                      <IconCopy size={12} strokeWidth={2} />
+                      <IconCopy size={14} strokeWidth={2} />
                       {copiedKey === "all" ? "Copied!" : "Copy all"}
                     </button>
                   </div>
@@ -773,7 +847,7 @@ function OllamaRow() {
                               onClick={() => void copyToClipboard(resolvedCmd, key)}
                               className="inline-flex items-center gap-1 rounded-xl border border-neutral-200 bg-white px-2.5 py-1 text-[10px] font-semibold text-neutral-600 transition-colors hover:border-neutral-300 hover:bg-neutral-50 dark:border-white/[0.08] dark:bg-white/[0.04] dark:text-white dark:hover:border-white/20 dark:hover:bg-white/[0.08]"
                             >
-                              <IconCopy size={12} strokeWidth={2} />
+                              <IconCopy size={14} strokeWidth={2} />
                               {copiedKey === key ? "Copied" : "Copy"}
                             </button>
                           </div>
@@ -903,7 +977,7 @@ export function SettingsSheet({
 
                 <div className="flex items-center justify-between gap-3 px-4 py-3">
                   <div className="flex items-center gap-1.5 text-emerald-500 dark:text-emerald-400">
-                    <IconCheck size={12} strokeWidth={2.5} />
+                    <IconCheck size={14} strokeWidth={2.5} />
                     <span className="text-[11px] font-semibold">Account connected</span>
                   </div>
                   <m.button
