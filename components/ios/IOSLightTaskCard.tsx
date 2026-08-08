@@ -73,9 +73,12 @@ export default function IOSLightTaskCard({
 
   const duration = singleSlot ? formatSlotsDuration([slots[slotIndex!]]) : formatSlotsDuration(slots);
   const hasItems = itemCount > 0;
+  // Nothing to open when the task has no subtasks and no note/detail — hide the
+  // arrow rather than routing to an empty detail page.
+  const hasDetail = hasItems || !!task.description?.trim();
   // Shared subtasks belong to the task, not a phase — only surface the route
   // into them on the first slot card so it isn't repeated per phase.
-  const showSubtasksButton = tracked && !!onOpenSubtasks && (!singleSlot || slotIndex === 0);
+  const showSubtasksButton = tracked && !!onOpenSubtasks && hasDetail && (!singleSlot || slotIndex === 0);
   const toggleSlot = () => { haptic("medium"); onToggleSlot?.(task.id, slotIndex!); };
 
   const trailing = (

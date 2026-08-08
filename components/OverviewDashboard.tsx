@@ -299,6 +299,23 @@ function ThisWeekCard({
   );
 }
 
+/** Bucket tracker rows under their plan, preserving first-seen order. */
+function groupTrackerRowsByPlan(rows: TrackerRow[]): Array<{ key: string; plan?: Plan; rows: TrackerRow[] }> {
+  const groups: Array<{ key: string; plan?: Plan; rows: TrackerRow[] }> = [];
+  const index = new Map<string, number>();
+  for (const row of rows) {
+    const key = row.plan?.id ?? "__none__";
+    let gi = index.get(key);
+    if (gi === undefined) {
+      gi = groups.length;
+      index.set(key, gi);
+      groups.push({ key, plan: row.plan, rows: [] });
+    }
+    groups[gi].rows.push(row);
+  }
+  return groups;
+}
+
 function ActiveTrackingCard({
   rows,
   onNavigate,
@@ -318,7 +335,7 @@ function ActiveTrackingCard({
           </span>
           <p className="mt-3 text-[14px] font-bold text-neutral-900 dark:text-white">No trackers yet</p>
           <p className="mx-auto mt-1 max-w-[250px] text-[12px] leading-snug text-neutral-500 dark:text-neutral-400">
-            Track metrics like pages, distance, or revenue to make progress visible here.
+            Track a metric on any plan to make your progress visible here.
           </p>
           <button
             type="button"
@@ -330,40 +347,55 @@ function ActiveTrackingCard({
           </button>
         </div>
       ) : (
-        <div className="divide-y divide-neutral-100 dark:divide-white/[0.06]">
-          {rows.map(({ tracker, latest, series, trend, plan }) => {
-            const trendColorClass =
-              trend?.state === "positive"
-                ? "text-emerald-500 dark:text-emerald-400"
-                : trend?.state === "negative"
-                ? "text-rose-500 dark:text-rose-400"
-                : "text-neutral-300 dark:text-neutral-600";
-            const dotColor = plan ? accentStyles(plan.color).dot : "bg-neutral-400 dark:bg-neutral-500";
-            return (
-              <div key={tracker.id} className="flex items-center gap-3 py-3">
-                <span className={`h-3 w-3 shrink-0 rounded-full ${dotColor}`} />
-                <div className="min-w-0 flex-1">
-                  <p className="truncate text-[15px] font-bold leading-tight text-neutral-950 dark:text-white">{tracker.title}</p>
-                  <div className="mt-0.5 flex min-w-0 items-center gap-1.5">
-                    <p className="truncate text-[12px] font-medium text-neutral-500 dark:text-neutral-400">
-                      {latest ? `${latest.value}${tracker.unit ?? ""}` : "No entries yet"}
-                      {plan ? ` · ${plan.title}` : ""}
-                    </p>
-                    {trend && <TrendChange direction={trend.direction} state={trend.state} pct={trend.pct} />}
-                  </div>
-                </div>
-                <Sparkline values={series} className={trendColorClass} />
-                <button
-                  type="button"
-                  aria-label={`Log ${tracker.title}`}
-                  onClick={() => { haptic("light"); onLogTracker(tracker); }}
-                  className="grid h-10 w-10 shrink-0 place-items-center rounded-full bg-neutral-950 text-white transition-colors hover:bg-neutral-800 dark:bg-white dark:text-neutral-950 dark:hover:bg-neutral-200"
-                >
-                  <IconPlus size={18} strokeWidth={2.5} />
-                </button>
+        <div className="flex flex-col">
+          {groupTrackerRowsByPlan(rows).map((group) => (
+            <div key={group.key} className="pt-3 first:pt-1">
+              {/* Plan heading — trackers are bifurcated under the plan they
+                  belong to, so the same metric name across plans reads apart. */}
+              <div className="mb-1 flex items-center gap-2">
+                <span
+                  className={`h-2 w-2 shrink-0 rounded-full ${
+                    group.plan ? accentStyles(group.plan.color).dot : "bg-neutral-400 dark:bg-neutral-500"
+                  }`}
+                />
+                <p className="truncate text-[11px] font-bold uppercase tracking-[0.08em] text-neutral-500 dark:text-neutral-400">
+                  {group.plan?.title ?? "Other"}
+                </p>
               </div>
-            );
-          })}
+              <div className="divide-y divide-neutral-100 dark:divide-white/[0.06]">
+                {group.rows.map(({ tracker, latest, series, trend }) => {
+                  const trendColorClass =
+                    trend?.state === "positive"
+                      ? "text-emerald-500 dark:text-emerald-400"
+                      : trend?.state === "negative"
+                      ? "text-rose-500 dark:text-rose-400"
+                      : "text-neutral-300 dark:text-neutral-600";
+                  return (
+                    <div key={tracker.id} className="flex items-center gap-3 py-3">
+                      <div className="min-w-0 flex-1">
+                        <p className="truncate text-[15px] font-bold leading-tight text-neutral-950 dark:text-white">{tracker.title}</p>
+                        <div className="mt-0.5 flex min-w-0 items-center gap-1.5">
+                          <p className="truncate text-[12px] font-medium text-neutral-500 dark:text-neutral-400">
+                            {latest ? `${latest.value}${tracker.unit ?? ""}` : "No entries yet"}
+                          </p>
+                          {trend && <TrendChange direction={trend.direction} state={trend.state} pct={trend.pct} />}
+                        </div>
+                      </div>
+                      <Sparkline values={series} className={trendColorClass} />
+                      <button
+                        type="button"
+                        aria-label={`Log ${tracker.title}`}
+                        onClick={() => { haptic("light"); onLogTracker(tracker); }}
+                        className="grid h-10 w-10 shrink-0 place-items-center rounded-full bg-neutral-950 text-white transition-colors hover:bg-neutral-800 dark:bg-white dark:text-neutral-950 dark:hover:bg-neutral-200"
+                      >
+                        <IconPlus size={18} strokeWidth={2.5} />
+                      </button>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          ))}
         </div>
       )}
     </section>

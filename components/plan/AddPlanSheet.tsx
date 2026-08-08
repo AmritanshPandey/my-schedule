@@ -211,7 +211,7 @@ export default function AddPlanSheet({ open, onClose, setSchedule }: AddPlanShee
                   addMetaField();
                 }
               }}
-              placeholder="e.g. Weight, Running Distance…"
+              placeholder="Metric name…"
             />
             <button
               type="button"
