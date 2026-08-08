@@ -46,7 +46,7 @@ import {
   getSlots,
 } from "@/lib/taskMutations";
 import type { TaskSlot } from "@/lib/useScheduleDB";
-import { parseTimeToMinutes, parseDurationMinutes, formatMinutes } from "@/lib/timeUtils";
+import { parseTimeToMinutes, formatMinutes } from "@/lib/timeUtils";
 import { resolveOccurrence } from "@/lib/taskOccurrence";
 import { PlanSelector } from "./PlanSelector";
 import SubtaskDraftRow, { type SubtaskDraft } from "./SubtaskDraftRow";
@@ -137,6 +137,7 @@ function entryToSubtaskDraft(e: ScheduleEntry): SubtaskDraft {
     title: e.task,
     info: e.info ?? "",
     duration: e.duration ?? "",
+    timeMinutes: e.timeMinutes,
     deadline: e.deadline,
     deadlineScope: e.deadlineScope,
   };
@@ -148,6 +149,7 @@ function subtaskDraftToEntry(d: SubtaskDraft): ScheduleEntry {
     task: d.title.trim(),
     info: (d.info ?? "").trim() || undefined,
     duration: (d.duration ?? "").trim() || undefined,
+    timeMinutes: d.timeMinutes != null && d.timeMinutes > 0 ? d.timeMinutes : undefined,
     deadline: d.deadline || undefined,
     deadlineScope: d.deadline ? d.deadlineScope ?? "day" : undefined,
   };
@@ -489,18 +491,17 @@ export function TaskSheet({
         .find(Boolean) ?? null
     : null;
 
-  // Subtask durations must add up to no more than the task's allotted time.
-  // `duration` is free text, so unparseable entries are treated as unknown
-  // (skipped) rather than zero — we only block when the *known* durations
-  // already overflow the schedule window.
+  // Subtask times must add up to no more than the task's allotted time. Only the
+  // dedicated `timeMinutes` field counts — the free-text `duration` holds
+  // reps/notes and is deliberately ignored here. Subtasks without a time are
+  // simply not counted, so we only block when the *entered* times overflow.
   const subtaskTotalMinutes = useMemo(() => {
     let total = 0;
     let any = false;
     for (const s of subtasks) {
       if (!s.title.trim()) continue;
-      const mins = parseDurationMinutes(s.duration);
-      if (mins != null && mins > 0) {
-        total += mins;
+      if (s.timeMinutes != null && s.timeMinutes > 0) {
+        total += s.timeMinutes;
         any = true;
       }
     }

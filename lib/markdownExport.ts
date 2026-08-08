@@ -10,7 +10,7 @@
 import type { Schedule, Task, DayKey } from "@/lib/useScheduleDB";
 import { DAYS, DAY_LABELS } from "@/lib/useScheduleDB";
 import { localISODate } from "@/lib/dateUtils";
-import { formatSlotsRange, formatSlotsDuration } from "@/lib/timeUtils";
+import { formatSlotsRange, formatSlotsDuration, formatMinutes } from "@/lib/timeUtils";
 import { getSlots } from "@/lib/taskMutations";
 import { isTrackedTask } from "@/lib/taskCompletion";
 import { calculateWeeklyHistory } from "@/lib/consistency/calculateWeeklyStats";
@@ -102,7 +102,7 @@ export function plansToMarkdown(schedule: Schedule): string {
       md += `- **${taskLine(task)}** — ${daysLabel(days)}\n`;
       const subtasks = task.subtasks ?? [];
       for (const s of subtasks) {
-        md += `  - ${s.task}${s.duration ? ` _(${s.duration})_` : ""}\n`;
+        md += `  - ${s.task}${s.timeMinutes ? ` _(${formatMinutes(s.timeMinutes)})_` : ""}${s.duration ? ` — ${s.duration}` : ""}\n`;
       }
     }
     md += `\n`;
@@ -167,7 +167,7 @@ export function tasksToMarkdown(schedule: Schedule): string {
     if (subtasks.length > 0) {
       md += `- **Subtasks:**\n`;
       for (const s of subtasks) {
-        md += `  - ${s.task}${s.duration ? ` _(${s.duration})_` : ""}\n`;
+        md += `  - ${s.task}${s.timeMinutes ? ` _(${formatMinutes(s.timeMinutes)})_` : ""}${s.duration ? ` — ${s.duration}` : ""}\n`;
       }
     }
     md += `\n`;
