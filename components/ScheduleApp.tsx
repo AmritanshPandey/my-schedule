@@ -79,11 +79,11 @@ import { SECTION_ICONS } from "@/components/SectionIcons";
 import {
   IconChevronLeft,
   IconCalendar,
+  IconCheck,
   IconChecklist,
   IconDeviceFloppy,
   IconChevronRight,
   IconClipboardList,
-  IconDotsVertical,
   IconEdit,
   IconLayoutList,
   IconMinus,
@@ -3153,30 +3153,21 @@ export default function ScheduleApp() {
               {/* Title row */}
               <div className="flex items-center justify-between">
                 <h1 className="text-[24px] font-bold leading-tight tracking-[-0.8px] text-neutral-900 dark:text-white">
-                  Today's Task
+                  {activeDateISO === todayISO()
+                    ? "Today's Task"
+                    : new Date(activeDateISO + "T00:00:00").toLocaleDateString(undefined, { weekday: "long" })}
                 </h1>
                 <div className="flex items-center gap-2.5">
                   {todayEditMode && (
-                    <>
-                      <IconButton
-                        label="Day actions"
-                        variant="soft"
-                        size="sm"
-                        radius="full"
-                        onClick={() => { haptic("light"); setDayActionsOpen(true); }}
-                      >
-                        <IconDotsVertical size={15} strokeWidth={2} />
-                      </IconButton>
-                      <IconButton
-                        label="Lock screen wallpaper"
-                        variant="soft"
-                        size="sm"
-                        radius="full"
-                        onClick={() => { haptic("light"); setWallpaperOpen(true); }}
-                      >
-                        <IconPhoto size={15} strokeWidth={2} />
-                      </IconButton>
-                    </>
+                    <IconButton
+                      label="Lock screen wallpaper"
+                      variant="soft"
+                      size="sm"
+                      radius="full"
+                      onClick={() => { haptic("light"); setWallpaperOpen(true); }}
+                    >
+                      <IconPhoto size={15} strokeWidth={2} />
+                    </IconButton>
                   )}
                   {viewMode === "timeline" && (
                     <button
@@ -3191,15 +3182,16 @@ export default function ScheduleApp() {
                   )}
                   <button
                     type="button"
-                    onClick={() => { haptic("light"); setTodayEditMode((v) => !v); }}
+                    aria-label={todayEditMode ? "Done editing" : "Edit day"}
                     aria-pressed={todayEditMode}
-                    className={`inline-flex h-8 items-center rounded-full px-3.5 text-[13px] font-bold transition-colors ${
+                    onClick={() => { haptic("light"); setTodayEditMode((v) => !v); }}
+                    className={`tap-target flex h-8 w-8 items-center justify-center rounded-full transition-colors ${
                       todayEditMode
-                        ? "bg-neutral-950 text-white dark:bg-white dark:text-neutral-950"
+                        ? "bg-neutral-200 text-neutral-900 dark:bg-white/[0.18] dark:text-white"
                         : "bg-neutral-100 text-neutral-600 dark:bg-white/[0.08] dark:text-neutral-300"
                     }`}
                   >
-                    {todayEditMode ? "Done" : "Edit"}
+                    {todayEditMode ? <IconCheck size={15} strokeWidth={2.4} /> : <IconEdit size={15} strokeWidth={2} />}
                   </button>
                   {dayProgress.total > 0 && (
                     <div className="flex items-center gap-1.5 text-neutral-400 dark:text-neutral-500">

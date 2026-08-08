@@ -1,7 +1,7 @@
 "use client";
 
 import type { CSSProperties, ReactNode } from "react";
-import { IconMinus, IconX, IconListCheck, IconArrowUpRight, IconLock } from "@tabler/icons-react";
+import { IconMinus, IconX, IconListCheck, IconArrowUpRight } from "@tabler/icons-react";
 import CheckDraw from "@/components/ui/CheckDraw";
 import type { Plan, Task, TaskCategory, TaskSlot } from "@/lib/useScheduleDB";
 import type { TaskState } from "@/lib/taskCompletion";
@@ -119,26 +119,24 @@ export function TaskBlockCard({
   slotOverride,
   slotCompletions,
 }: TaskBlockCardProps) {
-  // Held time is neutral in both themes: it belongs to no plan and reports no
-  // progress, so it never spends a category accent. An uncategorised task is
-  // neutral for the same reason — there is no identity to spend.
+  // A commitment is held time, not work: it reports no completion state, so it
+  // carries no checkbox at all. Derived from the task itself so every surface
+  // that renders through this card inherits the behaviour without a prop.
+  const tracked = isTrackedTask(task);
+  // Held time is neutral grey in both themes — never a category hue, even when
+  // the commitment is categorised — so it always reads as a muted, non-actionable
+  // block. An uncategorised task is neutral for the same reason (no identity to
+  // spend). Tracked + categorised tasks keep their accent.
   const accent = category?.color ?? null;
-  const styles = accent ? timelineCardStyles(accent) : TIMELINE_NEUTRAL_CARD;
+  const styles = accent && tracked ? timelineCardStyles(accent) : TIMELINE_NEUTRAL_CARD;
   const done = state === "completed";
   const partial = state === "partial";
   const missed = state === "missed";
   const resolved = done || missed;
   const isList = variant === "list";
-  // A commitment is held time, not work: it reports no completion state, so it
-  // carries no checkbox at all (neither the header one nor per-slot boxes).
-  // Derived from the task itself so every surface that renders through this
-  // card inherits the behaviour without threading a prop.
-  const tracked = isTrackedTask(task);
-  // A commitment is held time, not work — render it as a thinner, quieter slab
-  // so tracked tasks read as primary. Chiefly for the list (iOS) surface, where
-  // cards are natural-height; on the grid it just tightens the internal padding
-  // (height stays time-proportional, so a repeating commitment still shows once
-  // per occurrence as before).
+  // A commitment renders as a thinner, quieter slab so tracked tasks read as
+  // primary. Chiefly for the list (iOS) surface; on the grid it just tightens
+  // the internal padding (height stays time-proportional).
   const slim = !tracked;
   // Grid blocks show only the slot being positioned; list cards show every slot.
   const displaySlots = slotOverride ? [slotOverride] : getSlots(task);
@@ -203,18 +201,6 @@ export function TaskBlockCard({
         {partial && <IconMinus size={isList ? 16 : 12} strokeWidth={3} className="text-white" />}
         {missed && <IconX size={isList ? 16 : 12} strokeWidth={3} className="text-white" />}
       </button>
-    ) : !tracked ? (
-      /* Held time — a quiet marker in the checkbox's place, so the row still
-         reads as deliberate rather than as a task missing its control. */
-      <span
-        aria-hidden="true"
-        title="Held time — not tracked"
-        className={`flex shrink-0 items-center justify-center text-neutral-500 dark:text-neutral-400 ${
-          isList ? "h-7 w-7" : "h-[18px] w-[18px]"
-        }`}
-      >
-        <IconLock size={isList ? 15 : 11} strokeWidth={2} />
-      </span>
     ) : null;
 
   const title = (

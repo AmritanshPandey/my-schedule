@@ -13,7 +13,6 @@ import {
   IconClockHour3,
   IconEdit,
   IconFlame,
-  IconDotsVertical,
   IconNotes,
   IconPhoto,
   IconPlus,
@@ -63,6 +62,7 @@ import {
   createTaskDeleteSnapshot,
   restoreTaskDelete,
   sortTasksByTime,
+  getSlots,
   uid,
   updateTaskDays,
   updateTaskPerDay,
@@ -961,34 +961,55 @@ export default function IOSScheduleApp() {
     return Array.from(byId.values());
   }, [schedule.activities]);
 
-  const renderTaskList = (tasks: Task[], day: DayKey, dateISO: string, emptyAction?: () => void, editMode = true) => (
-    <div className="flex flex-col gap-3">
-      {tasks.length === 0 ? (
-        <EmptyPanel
-          icon={IconCalendar}
-          title="Nothing scheduled"
-          description="Add your first task for this day to start building your schedule."
-          action={emptyAction ? { label: "Add Task", onClick: emptyAction } : undefined}
-        />
-      ) : (
-        tasks.map((task) => (
-          <IOSLightTaskCard
-            key={task.id}
-            task={task}
-            linkedPlan={task.planId ? plansById.get(task.planId) ?? null : null}
-            category={taskIdentity(task, categoryMap).category}
-            readOnly={dateISO !== todayISO()}
-            editMode={editMode}
-            onToggleComplete={(id, ids) => handleToggleTaskComplete(id, ids, day, dateISO)}
-            onMissed={(id, ids) => handleMarkTaskMissed(id, ids, day, dateISO)}
-            onToggleSlot={(id, slotIndex) => handleToggleSlot(id, slotIndex, day, dateISO)}
-            onEdit={() => openEditSheet(task, dateISO)}
-            onOpenSubtasks={() => setSubtasksRef({ id: task.id, day, dateISO })}
+  const renderTaskList = (tasks: Task[], day: DayKey, dateISO: string, emptyAction?: () => void, editMode = true) => {
+    // A task scheduled at several times appears as its own entry at each time —
+    // expand multi-slot tasks into per-slot rows and order the whole list
+    // chronologically so slots interleave with other tasks by start time.
+    const rows = tasks
+      .flatMap((task) => {
+        const slots = getSlots(task);
+        return slots.length > 1
+          ? slots.map((_, i) => ({ task, slotIndex: i as number | undefined }))
+          : [{ task, slotIndex: undefined as number | undefined }];
+      })
+      .sort((a, b) => {
+        const at = getSlots(a.task)[a.slotIndex ?? 0]?.startTime ?? "";
+        const bt = getSlots(b.task)[b.slotIndex ?? 0]?.startTime ?? "";
+        const am = parseTimeToMinutes(at);
+        const bm = parseTimeToMinutes(bt);
+        return toScheduleDayMinutes(am ?? 0) - toScheduleDayMinutes(bm ?? 0);
+      });
+
+    return (
+      <div className="flex flex-col gap-3">
+        {rows.length === 0 ? (
+          <EmptyPanel
+            icon={IconCalendar}
+            title="Nothing scheduled"
+            description="Add your first task for this day to start building your schedule."
+            action={emptyAction ? { label: "Add Task", onClick: emptyAction } : undefined}
           />
-        ))
-      )}
-    </div>
-  );
+        ) : (
+          rows.map(({ task, slotIndex }) => (
+            <IOSLightTaskCard
+              key={slotIndex != null ? `${task.id}:${slotIndex}` : task.id}
+              task={task}
+              slotIndex={slotIndex}
+              linkedPlan={task.planId ? plansById.get(task.planId) ?? null : null}
+              category={taskIdentity(task, categoryMap).category}
+              readOnly={dateISO !== todayISO()}
+              editMode={editMode}
+              onToggleComplete={(id, ids) => handleToggleTaskComplete(id, ids, day, dateISO)}
+              onMissed={(id, ids) => handleMarkTaskMissed(id, ids, day, dateISO)}
+              onToggleSlot={(id, si) => handleToggleSlot(id, si, day, dateISO)}
+              onEdit={() => openEditSheet(task, dateISO)}
+              onOpenSubtasks={() => setSubtasksRef({ id: task.id, day, dateISO })}
+            />
+          ))
+        )}
+      </div>
+    );
+  };
 
   const content = (() => {
     if (!ready) {
@@ -1312,7 +1333,11 @@ export default function IOSScheduleApp() {
 
             <div className="flex items-center justify-between">
               <div>
-                <h2 className="text-[22px] font-black text-neutral-950 dark:text-white">{activeDay === todayKey ? "Today's Task" : DAY_LABELS[activeDay]}</h2>
+                <h2 className="text-[22px] font-black text-neutral-950 dark:text-white">
+                  {activeDay === todayKey
+                    ? "Today's Task"
+                    : new Date(activeDateISO + "T00:00:00").toLocaleDateString(undefined, { weekday: "long" })}
+                </h2>
                 <p className="text-[13px] font-semibold text-neutral-500 dark:text-neutral-400">{dayDone}/{dayTracked.length} done</p>
               </div>
               <div className="flex items-center gap-2">
@@ -1320,23 +1345,19 @@ export default function IOSScheduleApp() {
                   <>
                     <button
                       type="button"
-                      aria-label="Day actions"
-                      onClick={() => { haptic("light"); setDayActionsOpen(true); }}
-                      className="flex h-10 w-10 items-center justify-center rounded-full bg-neutral-100 text-neutral-500 dark:bg-white/[0.08] dark:text-neutral-300"
+                      aria-label="Lock screen wallpaper"
+                      onClick={() => { haptic("light"); setWallpaperOpen(true); }}
+                      className="flex h-10 w-10 items-center justify-center rounded-full bg-neutral-100 text-neutral-600 dark:bg-white/[0.08] dark:text-neutral-300"
                     >
-                      <IconDotsVertical size={17} strokeWidth={2} />
+                      <IconPhoto size={18} strokeWidth={2} />
                     </button>
                     <button
                       type="button"
-                      aria-label="Lock screen wallpaper"
-                      onClick={() => { haptic("light"); setWallpaperOpen(true); }}
-                      className="flex h-10 w-10 items-center justify-center rounded-full bg-neutral-100 text-neutral-500 dark:bg-white/[0.08] dark:text-neutral-300"
+                      aria-label="Add task"
+                      onClick={() => openCreateSheet()}
+                      className="flex h-10 w-10 items-center justify-center rounded-full bg-neutral-100 text-neutral-600 dark:bg-white/[0.08] dark:text-neutral-300"
                     >
-                      <IconPhoto size={17} strokeWidth={2} />
-                    </button>
-                    <button type="button" onClick={() => openCreateSheet()} className="inline-flex h-10 items-center gap-1 rounded-full bg-neutral-950 px-4 text-[13px] font-bold text-white dark:bg-white dark:text-neutral-950">
-                      <IconPlus size={16} strokeWidth={2.4} />
-                      Task
+                      <IconPlus size={19} strokeWidth={2.4} />
                     </button>
                   </>
                 )}
@@ -1344,13 +1365,14 @@ export default function IOSScheduleApp() {
                   type="button"
                   onClick={() => { haptic("light"); setTodayEditMode((v) => !v); }}
                   aria-pressed={todayEditMode}
-                  className={`inline-flex h-10 items-center rounded-full px-4 text-[13px] font-bold transition-colors ${
+                  aria-label={todayEditMode ? "Done editing" : "Edit day"}
+                  className={`flex h-10 w-10 items-center justify-center rounded-full transition-colors ${
                     todayEditMode
-                      ? "bg-neutral-950 text-white dark:bg-white dark:text-neutral-950"
+                      ? "bg-neutral-200 text-neutral-900 dark:bg-white/[0.18] dark:text-white"
                       : "bg-neutral-100 text-neutral-600 dark:bg-white/[0.08] dark:text-neutral-300"
                   }`}
                 >
-                  {todayEditMode ? "Done" : "Edit"}
+                  {todayEditMode ? <IconCheck size={19} strokeWidth={2.4} /> : <IconEdit size={18} strokeWidth={2} />}
                 </button>
               </div>
             </div>

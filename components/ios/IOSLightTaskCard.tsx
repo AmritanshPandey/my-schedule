@@ -3,7 +3,7 @@
 import { IconArrowUpRight, IconEdit, IconListCheck } from "@tabler/icons-react";
 import { TaskBlockCard } from "@/components/TaskBlockCard";
 import type { Plan, Task, TaskCategory } from "@/lib/useScheduleDB";
-import { calculateTaskProgress, getTaskCheckableItems, getTaskSubtaskSummary, isTrackedTask, resolveTaskState } from "@/lib/taskCompletion";
+import { calculateTaskProgress, getTaskCheckableItems, getTaskSubtaskSummary, isTrackedTask, resolveTaskState, type TaskState } from "@/lib/taskCompletion";
 import { formatSlotsDuration } from "@/lib/timeUtils";
 import { getSlots } from "@/lib/taskMutations";
 import { haptic } from "@/lib/haptics";
@@ -16,6 +16,12 @@ interface IOSLightTaskCardProps {
   readOnly?: boolean;
   /** When false, the per-card edit (pencil) affordance is hidden (Today edit mode off). */
   editMode?: boolean;
+  /**
+   * When set, render only this one slot of a multi-slot task, with its own
+   * checkbox — so a task scheduled at several times appears as a separate entry
+   * at each time in the day list (sorted chronologically by the caller).
+   */
+  slotIndex?: number;
   onToggleComplete: (taskId: string, allSubtaskIds: string[]) => void;
   /** Long-press the checkbox. Omitted → the gesture is inert. */
   onMissed?: (taskId: string, allSubtaskIds: string[]) => void;
@@ -31,6 +37,7 @@ export default function IOSLightTaskCard({
   category,
   readOnly = false,
   editMode = true,
+  slotIndex,
   onToggleComplete,
   onMissed,
   onToggleSlot,
@@ -40,28 +47,43 @@ export default function IOSLightTaskCard({
   const summary = getTaskSubtaskSummary(task, linkedPlan);
   const itemCount = summary.totalCount;
   const allSubtaskIds = getTaskCheckableItems(task, linkedPlan).map((item) => item.id);
-  const state = resolveTaskState(task, task.taskType === "session" ? 0 : itemCount);
   const { completedCount, totalCount } = task.taskType === "session"
     ? summary
     : calculateTaskProgress(task, itemCount);
   const tracked = isTrackedTask(task);
   const slots = getSlots(task);
   const isMultiSlot = slots.length > 1;
-  const slotCompletions = tracked && isMultiSlot && onToggleSlot
+
+  // Rendering a single slot of a multi-slot task as its own entry.
+  const singleSlot = slotIndex != null && slotIndex >= 0 && slotIndex < slots.length;
+  const slotDone = singleSlot ? (task.completedSlotIndices ?? []).includes(slotIndex!) : false;
+
+  const state: TaskState = singleSlot && tracked
+    ? (slotDone ? "completed" : "incomplete")
+    : resolveTaskState(task, task.taskType === "session" ? 0 : itemCount);
+
+  // Per-phase checkboxes-within-one-card only apply when NOT already split into
+  // one card per slot.
+  const slotCompletions = !singleSlot && tracked && isMultiSlot && onToggleSlot
     ? slots.map((_, i) => ({
         done: (task.completedSlotIndices ?? []).includes(i),
         onToggle: () => onToggleSlot(task.id, i),
       }))
     : undefined;
-  const duration = formatSlotsDuration(slots);
+
+  const duration = singleSlot ? formatSlotsDuration([slots[slotIndex!]]) : formatSlotsDuration(slots);
   const hasItems = itemCount > 0;
+  // Shared subtasks belong to the task, not a phase — only surface the route
+  // into them on the first slot card so it isn't repeated per phase.
+  const showSubtasksButton = tracked && !!onOpenSubtasks && (!singleSlot || slotIndex === 0);
+  const toggleSlot = () => { haptic("medium"); onToggleSlot?.(task.id, slotIndex!); };
 
   const trailing = (
     <div className="flex items-center gap-2">
       {/* Gated on `tracked`, not `hasItems`: a task with no subtasks still needs
           a route into its detail view, which is where "Missed" lives. Without
           this a subtask-less task could never be marked missed at all. */}
-      {tracked && onOpenSubtasks && (
+      {showSubtasksButton && onOpenSubtasks && (
         <button
           type="button"
           onClick={(e) => {
@@ -103,15 +125,22 @@ export default function IOSLightTaskCard({
       state={state}
       duration={duration}
       readOnly={readOnly}
+      slotOverride={singleSlot ? slots[slotIndex!] : undefined}
       slotCompletions={slotCompletions}
-      onToggle={() => {
-        haptic("medium");
-        onToggleComplete(task.id, allSubtaskIds);
-      }}
-      onLongPressMissed={onMissed ? () => onMissed(task.id, allSubtaskIds) : undefined}
+      onToggle={singleSlot
+        ? toggleSlot
+        : () => {
+            haptic("medium");
+            onToggleComplete(task.id, allSubtaskIds);
+          }}
+      // A single-slot card's checkbox is the phase toggle; whole-day "missed"
+      // stays on the unsplit card only.
+      onLongPressMissed={!singleSlot && onMissed ? () => onMissed(task.id, allSubtaskIds) : undefined}
       onClick={() => {
-        // Held time can't be completed, so tapping the card must do nothing.
-        if (!readOnly && !slotCompletions && tracked) {
+        if (readOnly || !tracked) return; // held time / past days aren't tappable
+        if (singleSlot) { toggleSlot(); return; }
+        // Multi-slot (unsplit) uses per-row checkboxes, so a body tap is inert.
+        if (!slotCompletions) {
           haptic("light");
           onToggleComplete(task.id, allSubtaskIds);
         }
