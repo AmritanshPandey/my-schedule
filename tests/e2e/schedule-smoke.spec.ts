@@ -295,7 +295,8 @@ async function exerciseTaskSheetInputs(page: Page, isMobile: boolean) {
 
   await page.getByRole("button", { name: /Add Subtask|Add Step/ }).click();
   await page.getByLabel("Subtask name").first().fill("Prepare input states");
-  await page.getByLabel("Subtask duration").first().fill("10m");
+  await page.getByLabel("Subtask time (minutes or hours)").first().fill("10m");
+  await page.getByLabel("Subtask reps or note").first().fill("3x10");
   await page.getByLabel("Subtask info").first().fill("No overflow on mobile");
   await page.getByLabel("Subtask deadline date").first().fill("2026-06-27");
 
