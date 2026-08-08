@@ -26,7 +26,8 @@ import type { MilestoneSaveData } from "@/components/plan/MilestoneSheet";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
 import type { CategoryDraft } from "@/components/category/CategorySheet";
 import IOSBottomNav from "@/components/ios/IOSBottomNav";
-import IOSLightTaskCard from "@/components/ios/IOSLightTaskCard";
+import IOSTimelineRow from "@/components/ios/IOSTimelineRow";
+import { useNowMinutes } from "@/lib/timeline/useNowMinutes";
 import SignInPrompt from "@/components/auth/SignInPrompt";
 import TodayTaskList from "@/components/today/TodayTaskList";
 import { selectTodayTasks } from "@/lib/todayTasks";
@@ -359,6 +360,10 @@ export default function IOSScheduleApp() {
   // Today tab starts as a clean execution surface; editing affordances (per-card
   // pencil, day actions, wallpaper, add-task) are revealed only in edit mode.
   const [todayEditMode, setTodayEditMode] = useState(false);
+  // Drives the timeline "in progress" ring on today's list. One 30s tick for the
+  // whole Today list (the desktop isolates this to a leaf layer; the mobile list
+  // is small enough to re-render).
+  const nowMinutes = useNowMinutes();
   const [activeTab, setActiveTab] = useState(4);
   const [iosSetupDismissed, setIosSetupDismissed] = useState(() => {
     try {
@@ -980,8 +985,34 @@ export default function IOSScheduleApp() {
         return toScheduleDayMinutes(am ?? 0) - toScheduleDayMinutes(bm ?? 0);
       });
 
+    // The row whose slot window contains "now" — the green "in progress" ring.
+    // Only on today; skips done/missed/held-time. Mirrors CurrentTaskHighlightLayer.
+    const rowKeyOf = (task: Task, slotIndex?: number) =>
+      slotIndex != null ? `${task.id}:${slotIndex}` : task.id;
+    let currentKey: string | null = null;
+    if (dateISO === todayISO()) {
+      const nowSched = toScheduleDayMinutes(nowMinutes);
+      for (const { task, slotIndex } of rows) {
+        if (!isTrackedTask(task)) continue;
+        const s = getSlots(task)[slotIndex ?? 0];
+        const sm = parseTimeToMinutes(s?.startTime ?? "");
+        const em = parseTimeToMinutes(s?.endTime ?? "");
+        if (sm == null || em == null) continue;
+        const start = toScheduleDayMinutes(sm);
+        let end = toScheduleDayMinutes(em);
+        if (end <= start) end += 24 * 60; // spans midnight
+        const done = slotIndex != null
+          ? (task.completedSlotIndices ?? []).includes(slotIndex)
+          : !!task.completed;
+        if (nowSched >= start && nowSched < end && !done && !task.missed) {
+          currentKey = rowKeyOf(task, slotIndex);
+          break;
+        }
+      }
+    }
+
     return (
-      <div className="flex flex-col gap-3">
+      <div className="flex flex-col">
         {rows.length === 0 ? (
           <EmptyPanel
             icon={IconCalendar}
@@ -990,22 +1021,27 @@ export default function IOSScheduleApp() {
             action={emptyAction ? { label: "Add Task", onClick: emptyAction } : undefined}
           />
         ) : (
-          rows.map(({ task, slotIndex }) => (
-            <IOSLightTaskCard
-              key={slotIndex != null ? `${task.id}:${slotIndex}` : task.id}
-              task={task}
-              slotIndex={slotIndex}
-              linkedPlan={task.planId ? plansById.get(task.planId) ?? null : null}
-              category={taskIdentity(task, categoryMap).category}
-              readOnly={dateISO !== todayISO()}
-              editMode={editMode}
-              onToggleComplete={(id, ids) => handleToggleTaskComplete(id, ids, day, dateISO)}
-              onMissed={(id, ids) => handleMarkTaskMissed(id, ids, day, dateISO)}
-              onToggleSlot={(id, si) => handleToggleSlot(id, si, day, dateISO)}
-              onEdit={() => openEditSheet(task, dateISO)}
-              onOpenSubtasks={() => setSubtasksRef({ id: task.id, day, dateISO })}
-            />
-          ))
+          rows.map(({ task, slotIndex }, i) => {
+            const rowKey = rowKeyOf(task, slotIndex);
+            return (
+              <IOSTimelineRow
+                key={rowKey}
+                task={task}
+                slotIndex={slotIndex}
+                isCurrent={rowKey === currentKey}
+                isLast={i === rows.length - 1}
+                linkedPlan={task.planId ? plansById.get(task.planId) ?? null : null}
+                category={taskIdentity(task, categoryMap).category}
+                readOnly={dateISO !== todayISO()}
+                editMode={editMode}
+                onToggleComplete={(id, ids) => handleToggleTaskComplete(id, ids, day, dateISO)}
+                onMissed={(id, ids) => handleMarkTaskMissed(id, ids, day, dateISO)}
+                onToggleSlot={(id, si) => handleToggleSlot(id, si, day, dateISO)}
+                onEdit={() => openEditSheet(task, dateISO)}
+                onOpenSubtasks={() => setSubtasksRef({ id: task.id, day, dateISO })}
+              />
+            );
+          })
         )}
       </div>
     );
