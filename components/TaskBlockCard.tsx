@@ -134,6 +134,12 @@ export function TaskBlockCard({
   // Derived from the task itself so every surface that renders through this
   // card inherits the behaviour without threading a prop.
   const tracked = isTrackedTask(task);
+  // A commitment is held time, not work — render it as a thinner, quieter slab
+  // so tracked tasks read as primary. Chiefly for the list (iOS) surface, where
+  // cards are natural-height; on the grid it just tightens the internal padding
+  // (height stays time-proportional, so a repeating commitment still shows once
+  // per occurrence as before).
+  const slim = !tracked;
   // Grid blocks show only the slot being positioned; list cards show every slot.
   const displaySlots = slotOverride ? [slotOverride] : getSlots(task);
   const isMultiSlotList =
@@ -214,7 +220,7 @@ export function TaskBlockCard({
   const title = (
     <span
       className={`min-w-0 truncate font-extrabold leading-tight tracking-normal ${styles.title} ${
-        isList ? "text-[17px]" : compact ? "text-[11px]" : "text-[12.5px]"
+        isList ? (slim ? "text-[14px]" : "text-[17px]") : compact ? "text-[11px]" : "text-[12.5px]"
       } ${resolved && isList ? `line-through ${missed ? "decoration-rose-400" : "decoration-neutral-400"}` : ""}`}
     >
       {task.title}
@@ -325,14 +331,14 @@ export function TaskBlockCard({
         resolved ? "opacity-60" : ""
       } ${
         isList
-          ? "rounded-2xl gap-3 px-5 py-4 active:scale-[0.995]"
-          : `${gridRadius} justify-between ` + (compact ? "gap-1 px-2.5 py-1.5" : "gap-1.5 pl-3 pr-2 py-2")
+          ? (slim ? "rounded-2xl gap-1.5 px-4 py-2.5 active:scale-[0.995]" : "rounded-2xl gap-3 px-5 py-4 active:scale-[0.995]")
+          : `${gridRadius} justify-between ` + (slim ? "gap-1 pl-3 pr-2 py-1" : compact ? "gap-1 px-2.5 py-1.5" : "gap-1.5 pl-3 pr-2 py-2")
       } ${onClick ? "cursor-pointer" : ""} ${className}`}
       style={style}
     >
       {isList && (
         <>
-          <div className={`pointer-events-none absolute inset-y-4 left-0 w-1 rounded-r-full ${styles.dot}`} />
+          <div className={`pointer-events-none absolute ${slim ? "inset-y-2" : "inset-y-4"} left-0 w-1 rounded-r-full ${styles.dot}`} />
         </>
       )}
       {header}

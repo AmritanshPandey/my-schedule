@@ -43,6 +43,8 @@ const OPTIONAL_TASK_FIELDS = [
   "subtasks",
   "exceptions",
   "recurrence",
+  "activeFrom",
+  "activeUntil",
 ] as const;
 
 /** Exposed for the round-trip test that guards against silent field loss. */

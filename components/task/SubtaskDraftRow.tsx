@@ -1,6 +1,6 @@
 "use client";
 
-import { IconGripVertical, IconTrash } from "@tabler/icons-react";
+import { IconCopy, IconCornerDownRight, IconGripVertical, IconTrash } from "@tabler/icons-react";
 import { useSortable } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 import { memo, useState } from "react";
@@ -24,6 +24,10 @@ interface SubtaskDraftRowProps {
   draft: SubtaskDraft;
   onChange: (id: string, updated: SubtaskDraft) => void;
   onDelete: (id: string) => void;
+  /** Duplicate this subtask within the current task (inserts a copy below). */
+  onDuplicate?: (id: string) => void;
+  /** Copy this subtask into other tasks (opens a target picker). */
+  onCopyToTask?: (id: string) => void;
   autoFocus?: boolean;
   showDeadline?: boolean;
 }
@@ -37,6 +41,8 @@ function SubtaskDraftRow({
   draft,
   onChange,
   onDelete,
+  onDuplicate,
+  onCopyToTask,
   autoFocus,
   showDeadline,
 }: SubtaskDraftRowProps) {
@@ -140,15 +146,39 @@ function SubtaskDraftRow({
           </div>
         </div>
 
-        <IconButton
-          label="Delete subtask"
-          variant="dangerGhost"
-          size="xs"
-          radius="lg"
-          onClick={() => { haptic("light"); setDeleteOpen(true); }}
-        >
-          <IconTrash size={15} />
-        </IconButton>
+        <div className="flex shrink-0 flex-col items-center gap-0.5">
+          {onDuplicate && (
+            <IconButton
+              label="Duplicate subtask"
+              variant="ghost"
+              size="xs"
+              radius="lg"
+              onClick={() => { haptic("light"); onDuplicate(draft.id); }}
+            >
+              <IconCopy size={15} />
+            </IconButton>
+          )}
+          {onCopyToTask && (
+            <IconButton
+              label="Copy subtask to another task"
+              variant="ghost"
+              size="xs"
+              radius="lg"
+              onClick={() => { haptic("light"); onCopyToTask(draft.id); }}
+            >
+              <IconCornerDownRight size={15} />
+            </IconButton>
+          )}
+          <IconButton
+            label="Delete subtask"
+            variant="dangerGhost"
+            size="xs"
+            radius="lg"
+            onClick={() => { haptic("light"); setDeleteOpen(true); }}
+          >
+            <IconTrash size={15} />
+          </IconButton>
+        </div>
       </div>
 
       <ConfirmSheet

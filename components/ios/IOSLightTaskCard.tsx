@@ -14,6 +14,8 @@ interface IOSLightTaskCardProps {
   /** Owns the card's accent; null renders neutral (held time / uncategorised). */
   category: TaskCategory | null;
   readOnly?: boolean;
+  /** When false, the per-card edit (pencil) affordance is hidden (Today edit mode off). */
+  editMode?: boolean;
   onToggleComplete: (taskId: string, allSubtaskIds: string[]) => void;
   /** Long-press the checkbox. Omitted → the gesture is inert. */
   onMissed?: (taskId: string, allSubtaskIds: string[]) => void;
@@ -28,6 +30,7 @@ export default function IOSLightTaskCard({
   linkedPlan,
   category,
   readOnly = false,
+  editMode = true,
   onToggleComplete,
   onMissed,
   onToggleSlot,
@@ -74,18 +77,20 @@ export default function IOSLightTaskCard({
           <IconArrowUpRight size={13} strokeWidth={2.2} />
         </button>
       )}
-      <button
-        type="button"
-        onClick={(e) => {
-          e.stopPropagation();
-          haptic("light");
-          onEdit();
-        }}
-        aria-label="Edit task"
-        className="flex h-9 w-9 items-center justify-center rounded-full border border-black/10 bg-white/60 text-neutral-600 transition-colors active:bg-white/80 dark:border-white/[0.10] dark:bg-white/[0.08] dark:text-neutral-200 dark:active:bg-white/[0.12]"
-      >
-        <IconEdit size={16} strokeWidth={2} />
-      </button>
+      {editMode && (
+        <button
+          type="button"
+          onClick={(e) => {
+            e.stopPropagation();
+            haptic("light");
+            onEdit();
+          }}
+          aria-label="Edit task"
+          className="flex h-9 w-9 items-center justify-center rounded-full border border-black/10 bg-white/60 text-neutral-600 transition-colors active:bg-white/80 dark:border-white/[0.10] dark:bg-white/[0.08] dark:text-neutral-200 dark:active:bg-white/[0.12]"
+        >
+          <IconEdit size={16} strokeWidth={2} />
+        </button>
+      )}
     </div>
   );
 

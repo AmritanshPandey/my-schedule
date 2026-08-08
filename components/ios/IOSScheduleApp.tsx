@@ -28,6 +28,7 @@ import { ErrorBoundary } from "@/components/ErrorBoundary";
 import type { CategoryDraft } from "@/components/category/CategorySheet";
 import IOSBottomNav from "@/components/ios/IOSBottomNav";
 import IOSLightTaskCard from "@/components/ios/IOSLightTaskCard";
+import SignInPrompt from "@/components/auth/SignInPrompt";
 import TodayTaskList from "@/components/today/TodayTaskList";
 import { selectTodayTasks } from "@/lib/todayTasks";
 import DayActionsSheet from "@/components/DayActionsSheet";
@@ -69,6 +70,7 @@ import {
   duplicateDay,
   setTaskException,
   clearTaskException,
+  addSubtaskToTasks,
   type TaskDeleteScope,
 } from "@/lib/taskMutations";
 import { completionForDate, getTaskCheckableItems, getTaskSubtaskSummary, isTaskCompleted, isTaskResolved, isTrackedTask, markTaskMissed, toggleSlotComplete, toggleSubtaskComplete, toggleTaskFromCheckbox } from "@/lib/taskCompletion";
@@ -354,6 +356,9 @@ export default function IOSScheduleApp() {
   const [todayKey, setTodayKey] = useState<DayKey>(() => JS_DAYS[new Date().getDay()]);
   const [activeDay, setActiveDay] = useState<DayKey>(() => JS_DAYS[new Date().getDay()]);
   const [dayActionsOpen, setDayActionsOpen] = useState(false);
+  // Today tab starts as a clean execution surface; editing affordances (per-card
+  // pencil, day actions, wallpaper, add-task) are revealed only in edit mode.
+  const [todayEditMode, setTodayEditMode] = useState(false);
   const [activeTab, setActiveTab] = useState(4);
   const [iosSetupDismissed, setIosSetupDismissed] = useState(() => {
     try {
@@ -956,7 +961,7 @@ export default function IOSScheduleApp() {
     return Array.from(byId.values());
   }, [schedule.activities]);
 
-  const renderTaskList = (tasks: Task[], day: DayKey, dateISO: string, emptyAction?: () => void) => (
+  const renderTaskList = (tasks: Task[], day: DayKey, dateISO: string, emptyAction?: () => void, editMode = true) => (
     <div className="flex flex-col gap-3">
       {tasks.length === 0 ? (
         <EmptyPanel
@@ -973,6 +978,7 @@ export default function IOSScheduleApp() {
             linkedPlan={task.planId ? plansById.get(task.planId) ?? null : null}
             category={taskIdentity(task, categoryMap).category}
             readOnly={dateISO !== todayISO()}
+            editMode={editMode}
             onToggleComplete={(id, ids) => handleToggleTaskComplete(id, ids, day, dateISO)}
             onMissed={(id, ids) => handleMarkTaskMissed(id, ids, day, dateISO)}
             onToggleSlot={(id, slotIndex) => handleToggleSlot(id, slotIndex, day, dateISO)}
@@ -1310,29 +1316,46 @@ export default function IOSScheduleApp() {
                 <p className="text-[13px] font-semibold text-neutral-500 dark:text-neutral-400">{dayDone}/{dayTracked.length} done</p>
               </div>
               <div className="flex items-center gap-2">
+                {todayEditMode && (
+                  <>
+                    <button
+                      type="button"
+                      aria-label="Day actions"
+                      onClick={() => { haptic("light"); setDayActionsOpen(true); }}
+                      className="flex h-10 w-10 items-center justify-center rounded-full bg-neutral-100 text-neutral-500 dark:bg-white/[0.08] dark:text-neutral-300"
+                    >
+                      <IconDotsVertical size={17} strokeWidth={2} />
+                    </button>
+                    <button
+                      type="button"
+                      aria-label="Lock screen wallpaper"
+                      onClick={() => { haptic("light"); setWallpaperOpen(true); }}
+                      className="flex h-10 w-10 items-center justify-center rounded-full bg-neutral-100 text-neutral-500 dark:bg-white/[0.08] dark:text-neutral-300"
+                    >
+                      <IconPhoto size={17} strokeWidth={2} />
+                    </button>
+                    <button type="button" onClick={() => openCreateSheet()} className="inline-flex h-10 items-center gap-1 rounded-full bg-neutral-950 px-4 text-[13px] font-bold text-white dark:bg-white dark:text-neutral-950">
+                      <IconPlus size={16} strokeWidth={2.4} />
+                      Task
+                    </button>
+                  </>
+                )}
                 <button
                   type="button"
-                  aria-label="Day actions"
-                  onClick={() => { haptic("light"); setDayActionsOpen(true); }}
-                  className="flex h-10 w-10 items-center justify-center rounded-full bg-neutral-100 text-neutral-500 dark:bg-white/[0.08] dark:text-neutral-300"
+                  onClick={() => { haptic("light"); setTodayEditMode((v) => !v); }}
+                  aria-pressed={todayEditMode}
+                  className={`inline-flex h-10 items-center rounded-full px-4 text-[13px] font-bold transition-colors ${
+                    todayEditMode
+                      ? "bg-neutral-950 text-white dark:bg-white dark:text-neutral-950"
+                      : "bg-neutral-100 text-neutral-600 dark:bg-white/[0.08] dark:text-neutral-300"
+                  }`}
                 >
-                  <IconDotsVertical size={17} strokeWidth={2} />
-                </button>
-                <button
-                  type="button"
-                  aria-label="Lock screen wallpaper"
-                  onClick={() => { haptic("light"); setWallpaperOpen(true); }}
-                  className="flex h-10 w-10 items-center justify-center rounded-full bg-neutral-100 text-neutral-500 dark:bg-white/[0.08] dark:text-neutral-300"
-                >
-                  <IconPhoto size={17} strokeWidth={2} />
-                </button>
-                <button type="button" onClick={() => openCreateSheet()} className="inline-flex h-10 items-center gap-1 rounded-full bg-neutral-950 px-4 text-[13px] font-bold text-white dark:bg-white dark:text-neutral-950">
-                  <IconPlus size={16} strokeWidth={2.4} />
-                  Task
+                  {todayEditMode ? "Done" : "Edit"}
                 </button>
               </div>
             </div>
-            {renderTaskList(dayTasksView, activeDay, activeDateISO, () => openCreateSheet())}
+            <SignInPrompt />
+            {renderTaskList(dayTasksView, activeDay, activeDateISO, () => openCreateSheet(), todayEditMode)}
           </div>
         </ErrorBoundary>
       );
@@ -1600,6 +1623,10 @@ export default function IOSScheduleApp() {
             onSave={handleTaskSheetSave}
             onDelete={taskSheetTask ? () => { requestDeleteTask(taskSheetTask.id, activeDay); closeTaskSheet(); } : undefined}
             onResetOccurrence={taskSheetTask && taskSheetDateISO ? () => setSchedule(clearTaskException(taskSheetTask.id, taskSheetDateISO)) : undefined}
+            onCopySubtaskToTasks={(entry, targetTaskIds) => {
+              setSchedule(addSubtaskToTasks(targetTaskIds, entry));
+              setToast(`Subtask copied to ${targetTaskIds.length} task${targetTaskIds.length === 1 ? "" : "s"}`);
+            }}
           />
           <AddPlanSheet open={addingPlan} onClose={() => setAddingPlan(false)} setSchedule={setSchedule} />
           {editingPlanId && (

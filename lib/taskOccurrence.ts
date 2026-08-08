@@ -44,6 +44,11 @@ export function isTaskScheduledOn(task: Task, dateISO: string, weekdayHasTask: b
   if (!weekdayHasTask) return false;
   if (task.exceptions?.[dateISO]?.skipped) return false;
 
+  // Active window (inclusive). ISO "YYYY-MM-DD" strings compare correctly
+  // lexicographically, so no Date parsing is needed.
+  if (task.activeFrom && dateISO < task.activeFrom) return false;
+  if (task.activeUntil && dateISO > task.activeUntil) return false;
+
   const r = task.recurrence;
   if (r) {
     if (r.type === "once") return dateISO === r.dateISO;

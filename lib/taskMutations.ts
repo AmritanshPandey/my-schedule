@@ -545,6 +545,34 @@ export function createSubtask(title: string, duration?: string): ScheduleEntry {
   };
 }
 
+/**
+ * Append a copy of a subtask to each target task. Each target gets its own fresh
+ * subtask id (shared across that task's weekday copies so the recurring task
+ * stays consistent). Lets a user reuse a subtask across other tasks without
+ * retyping it.
+ */
+export function addSubtaskToTasks(
+  targetTaskIds: string[],
+  entry: ScheduleEntry
+): (prev: Schedule) => Schedule {
+  const idSet = new Set(targetTaskIds);
+  const newIds = new Map<string, string>();
+  for (const id of targetTaskIds) newIds.set(id, uid());
+  return (prev) => {
+    const activities = Object.fromEntries(
+      DAYS.map((day) => [
+        day,
+        (prev.activities[day] ?? []).map((t) =>
+          idSet.has(t.id)
+            ? { ...t, subtasks: [...(t.subtasks ?? []), { ...entry, id: newIds.get(t.id)! }] }
+            : t
+        ),
+      ])
+    ) as Schedule["activities"];
+    return { ...prev, activities };
+  };
+}
+
 // ── Task sort ─────────────────────────────────────────────────────────────────
 
 export function sortTasksByTime(tasks: Task[]): Task[] {

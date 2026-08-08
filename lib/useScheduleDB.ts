@@ -130,6 +130,14 @@ export interface Task {
   taskType?: TaskTypeValue;            // undefined treated as "task"
   exceptions?: Record<string, TaskException>; // per-date overrides, keyed by ISO date
   recurrence?: TaskRecurrence;         // absent = weekly (every matching weekday)
+  /**
+   * Optional active window (ISO "YYYY-MM-DD"). The task only appears on dates
+   * within [activeFrom, activeUntil]; either bound may be omitted for an open
+   * start/end. Layers on top of the weekday template and recurrence rule, so a
+   * habit can run only Mar 1–Apr 30 without editing each weekday copy.
+   */
+  activeFrom?: string;
+  activeUntil?: string;
 }
 
 export interface SummaryConfig {
