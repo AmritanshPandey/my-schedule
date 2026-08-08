@@ -13,7 +13,6 @@ import {
   IconClockHour3,
   IconEdit,
   IconFlame,
-  IconDotsVertical,
   IconNotes,
   IconPhoto,
   IconPlus,
@@ -27,7 +26,9 @@ import type { MilestoneSaveData } from "@/components/plan/MilestoneSheet";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
 import type { CategoryDraft } from "@/components/category/CategorySheet";
 import IOSBottomNav from "@/components/ios/IOSBottomNav";
-import IOSLightTaskCard from "@/components/ios/IOSLightTaskCard";
+import IOSTimelineRow from "@/components/ios/IOSTimelineRow";
+import { useNowMinutes } from "@/lib/timeline/useNowMinutes";
+import SignInPrompt from "@/components/auth/SignInPrompt";
 import TodayTaskList from "@/components/today/TodayTaskList";
 import { selectTodayTasks } from "@/lib/todayTasks";
 import DayActionsSheet from "@/components/DayActionsSheet";
@@ -62,6 +63,7 @@ import {
   createTaskDeleteSnapshot,
   restoreTaskDelete,
   sortTasksByTime,
+  getSlots,
   uid,
   updateTaskDays,
   updateTaskPerDay,
@@ -69,6 +71,7 @@ import {
   duplicateDay,
   setTaskException,
   clearTaskException,
+  addSubtaskToTasks,
   type TaskDeleteScope,
 } from "@/lib/taskMutations";
 import { completionForDate, getTaskCheckableItems, getTaskSubtaskSummary, isTaskCompleted, isTaskResolved, isTrackedTask, markTaskMissed, toggleSlotComplete, toggleSubtaskComplete, toggleTaskFromCheckbox } from "@/lib/taskCompletion";
@@ -354,6 +357,13 @@ export default function IOSScheduleApp() {
   const [todayKey, setTodayKey] = useState<DayKey>(() => JS_DAYS[new Date().getDay()]);
   const [activeDay, setActiveDay] = useState<DayKey>(() => JS_DAYS[new Date().getDay()]);
   const [dayActionsOpen, setDayActionsOpen] = useState(false);
+  // Today tab starts as a clean execution surface; editing affordances (per-card
+  // pencil, day actions, wallpaper, add-task) are revealed only in edit mode.
+  const [todayEditMode, setTodayEditMode] = useState(false);
+  // Drives the timeline "in progress" ring on today's list. One 30s tick for the
+  // whole Today list (the desktop isolates this to a leaf layer; the mobile list
+  // is small enough to re-render).
+  const nowMinutes = useNowMinutes();
   const [activeTab, setActiveTab] = useState(4);
   const [iosSetupDismissed, setIosSetupDismissed] = useState(() => {
     try {
@@ -956,33 +966,86 @@ export default function IOSScheduleApp() {
     return Array.from(byId.values());
   }, [schedule.activities]);
 
-  const renderTaskList = (tasks: Task[], day: DayKey, dateISO: string, emptyAction?: () => void) => (
-    <div className="flex flex-col gap-3">
-      {tasks.length === 0 ? (
-        <EmptyPanel
-          icon={IconCalendar}
-          title="Nothing scheduled"
-          description="Add your first task for this day to start building your schedule."
-          action={emptyAction ? { label: "Add Task", onClick: emptyAction } : undefined}
-        />
-      ) : (
-        tasks.map((task) => (
-          <IOSLightTaskCard
-            key={task.id}
-            task={task}
-            linkedPlan={task.planId ? plansById.get(task.planId) ?? null : null}
-            category={taskIdentity(task, categoryMap).category}
-            readOnly={dateISO !== todayISO()}
-            onToggleComplete={(id, ids) => handleToggleTaskComplete(id, ids, day, dateISO)}
-            onMissed={(id, ids) => handleMarkTaskMissed(id, ids, day, dateISO)}
-            onToggleSlot={(id, slotIndex) => handleToggleSlot(id, slotIndex, day, dateISO)}
-            onEdit={() => openEditSheet(task, dateISO)}
-            onOpenSubtasks={() => setSubtasksRef({ id: task.id, day, dateISO })}
+  const renderTaskList = (tasks: Task[], day: DayKey, dateISO: string, emptyAction?: () => void, editMode = true) => {
+    // A task scheduled at several times appears as its own entry at each time —
+    // expand multi-slot tasks into per-slot rows and order the whole list
+    // chronologically so slots interleave with other tasks by start time.
+    const rows = tasks
+      .flatMap((task) => {
+        const slots = getSlots(task);
+        return slots.length > 1
+          ? slots.map((_, i) => ({ task, slotIndex: i as number | undefined }))
+          : [{ task, slotIndex: undefined as number | undefined }];
+      })
+      .sort((a, b) => {
+        const at = getSlots(a.task)[a.slotIndex ?? 0]?.startTime ?? "";
+        const bt = getSlots(b.task)[b.slotIndex ?? 0]?.startTime ?? "";
+        const am = parseTimeToMinutes(at);
+        const bm = parseTimeToMinutes(bt);
+        return toScheduleDayMinutes(am ?? 0) - toScheduleDayMinutes(bm ?? 0);
+      });
+
+    // The row whose slot window contains "now" — the green "in progress" ring.
+    // Only on today; skips done/missed/held-time. Mirrors CurrentTaskHighlightLayer.
+    const rowKeyOf = (task: Task, slotIndex?: number) =>
+      slotIndex != null ? `${task.id}:${slotIndex}` : task.id;
+    let currentKey: string | null = null;
+    if (dateISO === todayISO()) {
+      const nowSched = toScheduleDayMinutes(nowMinutes);
+      for (const { task, slotIndex } of rows) {
+        if (!isTrackedTask(task)) continue;
+        const s = getSlots(task)[slotIndex ?? 0];
+        const sm = parseTimeToMinutes(s?.startTime ?? "");
+        const em = parseTimeToMinutes(s?.endTime ?? "");
+        if (sm == null || em == null) continue;
+        const start = toScheduleDayMinutes(sm);
+        let end = toScheduleDayMinutes(em);
+        if (end <= start) end += 24 * 60; // spans midnight
+        const done = slotIndex != null
+          ? (task.completedSlotIndices ?? []).includes(slotIndex)
+          : !!task.completed;
+        if (nowSched >= start && nowSched < end && !done && !task.missed) {
+          currentKey = rowKeyOf(task, slotIndex);
+          break;
+        }
+      }
+    }
+
+    return (
+      <div className="flex flex-col">
+        {rows.length === 0 ? (
+          <EmptyPanel
+            icon={IconCalendar}
+            title="Nothing scheduled"
+            description="Add your first task for this day to start building your schedule."
+            action={emptyAction ? { label: "Add Task", onClick: emptyAction } : undefined}
           />
-        ))
-      )}
-    </div>
-  );
+        ) : (
+          rows.map(({ task, slotIndex }, i) => {
+            const rowKey = rowKeyOf(task, slotIndex);
+            return (
+              <IOSTimelineRow
+                key={rowKey}
+                task={task}
+                slotIndex={slotIndex}
+                isCurrent={rowKey === currentKey}
+                isLast={i === rows.length - 1}
+                linkedPlan={task.planId ? plansById.get(task.planId) ?? null : null}
+                category={taskIdentity(task, categoryMap).category}
+                readOnly={dateISO !== todayISO()}
+                editMode={editMode}
+                onToggleComplete={(id, ids) => handleToggleTaskComplete(id, ids, day, dateISO)}
+                onMissed={(id, ids) => handleMarkTaskMissed(id, ids, day, dateISO)}
+                onToggleSlot={(id, si) => handleToggleSlot(id, si, day, dateISO)}
+                onEdit={() => openEditSheet(task, dateISO)}
+                onOpenSubtasks={() => setSubtasksRef({ id: task.id, day, dateISO })}
+              />
+            );
+          })
+        )}
+      </div>
+    );
+  };
 
   const content = (() => {
     if (!ready) {
@@ -1306,33 +1369,51 @@ export default function IOSScheduleApp() {
 
             <div className="flex items-center justify-between">
               <div>
-                <h2 className="text-[22px] font-black text-neutral-950 dark:text-white">{activeDay === todayKey ? "Today's Task" : DAY_LABELS[activeDay]}</h2>
+                <h2 className="text-[22px] font-black text-neutral-950 dark:text-white">
+                  {activeDay === todayKey
+                    ? "Today's Task"
+                    : new Date(activeDateISO + "T00:00:00").toLocaleDateString(undefined, { weekday: "long" })}
+                </h2>
                 <p className="text-[13px] font-semibold text-neutral-500 dark:text-neutral-400">{dayDone}/{dayTracked.length} done</p>
               </div>
               <div className="flex items-center gap-2">
+                {todayEditMode && (
+                  <>
+                    <button
+                      type="button"
+                      aria-label="Lock screen wallpaper"
+                      onClick={() => { haptic("light"); setWallpaperOpen(true); }}
+                      className="flex h-10 w-10 items-center justify-center rounded-full bg-neutral-100 text-neutral-600 dark:bg-white/[0.08] dark:text-neutral-300"
+                    >
+                      <IconPhoto size={18} strokeWidth={2} />
+                    </button>
+                    <button
+                      type="button"
+                      aria-label="Add task"
+                      onClick={() => openCreateSheet()}
+                      className="flex h-10 w-10 items-center justify-center rounded-full bg-neutral-100 text-neutral-600 dark:bg-white/[0.08] dark:text-neutral-300"
+                    >
+                      <IconPlus size={19} strokeWidth={2.4} />
+                    </button>
+                  </>
+                )}
                 <button
                   type="button"
-                  aria-label="Day actions"
-                  onClick={() => { haptic("light"); setDayActionsOpen(true); }}
-                  className="flex h-10 w-10 items-center justify-center rounded-full bg-neutral-100 text-neutral-500 dark:bg-white/[0.08] dark:text-neutral-300"
+                  onClick={() => { haptic("light"); setTodayEditMode((v) => !v); }}
+                  aria-pressed={todayEditMode}
+                  aria-label={todayEditMode ? "Done editing" : "Edit day"}
+                  className={`flex h-10 w-10 items-center justify-center rounded-full transition-colors ${
+                    todayEditMode
+                      ? "bg-neutral-200 text-neutral-900 dark:bg-white/[0.18] dark:text-white"
+                      : "bg-neutral-100 text-neutral-600 dark:bg-white/[0.08] dark:text-neutral-300"
+                  }`}
                 >
-                  <IconDotsVertical size={17} strokeWidth={2} />
-                </button>
-                <button
-                  type="button"
-                  aria-label="Lock screen wallpaper"
-                  onClick={() => { haptic("light"); setWallpaperOpen(true); }}
-                  className="flex h-10 w-10 items-center justify-center rounded-full bg-neutral-100 text-neutral-500 dark:bg-white/[0.08] dark:text-neutral-300"
-                >
-                  <IconPhoto size={17} strokeWidth={2} />
-                </button>
-                <button type="button" onClick={() => openCreateSheet()} className="inline-flex h-10 items-center gap-1 rounded-full bg-neutral-950 px-4 text-[13px] font-bold text-white dark:bg-white dark:text-neutral-950">
-                  <IconPlus size={16} strokeWidth={2.4} />
-                  Task
+                  {todayEditMode ? <IconCheck size={19} strokeWidth={2.4} /> : <IconEdit size={18} strokeWidth={2} />}
                 </button>
               </div>
             </div>
-            {renderTaskList(dayTasksView, activeDay, activeDateISO, () => openCreateSheet())}
+            <SignInPrompt />
+            {renderTaskList(dayTasksView, activeDay, activeDateISO, () => openCreateSheet(), todayEditMode)}
           </div>
         </ErrorBoundary>
       );
@@ -1600,6 +1681,10 @@ export default function IOSScheduleApp() {
             onSave={handleTaskSheetSave}
             onDelete={taskSheetTask ? () => { requestDeleteTask(taskSheetTask.id, activeDay); closeTaskSheet(); } : undefined}
             onResetOccurrence={taskSheetTask && taskSheetDateISO ? () => setSchedule(clearTaskException(taskSheetTask.id, taskSheetDateISO)) : undefined}
+            onCopySubtaskToTasks={(entry, targetTaskIds) => {
+              setSchedule(addSubtaskToTasks(targetTaskIds, entry));
+              setToast(`Subtask copied to ${targetTaskIds.length} task${targetTaskIds.length === 1 ? "" : "s"}`);
+            }}
           />
           <AddPlanSheet open={addingPlan} onClose={() => setAddingPlan(false)} setSchedule={setSchedule} />
           {editingPlanId && (

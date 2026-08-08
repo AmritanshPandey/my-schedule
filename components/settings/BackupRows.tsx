@@ -2,10 +2,11 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { AnimatePresence, m } from "framer-motion";
-import { IconChevronDown, IconDownload, IconHistory, IconUpload } from "@tabler/icons-react";
+import { IconChevronDown, IconDownload, IconFileText, IconHistory, IconUpload } from "@tabler/icons-react";
 import ConfirmSheet from "@/components/ui/ConfirmSheet";
 import { useAuth } from "@/contexts/AuthProvider";
 import { downloadBackup, parseBackup } from "@/lib/backup";
+import { downloadMarkdown, type MarkdownScope } from "@/lib/markdownExport";
 import { listCloudBackups, fetchCloudBackup, type CloudBackupMeta } from "@/lib/cloudSync";
 import { haptic } from "@/lib/haptics";
 import type { Schedule } from "@/lib/useScheduleDB";
@@ -55,6 +56,16 @@ export default function BackupRows({
     try {
       downloadBackup(schedule);
       showFeedback("done", "Backup downloaded.");
+    } catch {
+      showFeedback("error", "Export failed — try again.");
+    }
+  }, [schedule, showFeedback]);
+
+  const handleMarkdown = useCallback((scope: MarkdownScope) => {
+    haptic("light");
+    try {
+      downloadMarkdown(scope, schedule);
+      showFeedback("done", `${scope[0].toUpperCase()}${scope.slice(1)} exported as Markdown.`);
     } catch {
       showFeedback("error", "Export failed — try again.");
     }
@@ -144,6 +155,30 @@ export default function BackupRows({
         >
           Export
         </button>
+      </div>
+      <div className="mx-4 border-t border-neutral-100 dark:border-white/[0.05]" />
+      <div className="flex items-center gap-3 px-4 py-3.5">
+        <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl border border-neutral-100 bg-neutral-50 text-neutral-500 dark:border-white/[0.06] dark:bg-white/[0.04] dark:text-neutral-300">
+          <IconFileText size={14} strokeWidth={2} />
+        </div>
+        <div className="min-w-0 flex-1">
+          <p className="text-[13px] font-semibold text-neutral-800 dark:text-white">Export for AI analysis</p>
+          <p className="mt-0.5 text-[11px] leading-snug text-neutral-400 dark:text-neutral-500">
+            Readable Markdown · paste into an AI chat to review execution
+          </p>
+        </div>
+        <div className="flex shrink-0 gap-1.5">
+          {(["plans", "weeklies", "tasks"] as const).map((scope) => (
+            <button
+              key={scope}
+              type="button"
+              onClick={() => handleMarkdown(scope)}
+              className="rounded-xl border border-neutral-200 bg-neutral-50 px-2.5 py-1.5 text-[11px] font-semibold capitalize text-neutral-700 hover:bg-neutral-100 dark:border-white/[0.08] dark:bg-white/[0.04] dark:text-neutral-200"
+            >
+              {scope}
+            </button>
+          ))}
+        </div>
       </div>
       {onRestoreData && (
         <>

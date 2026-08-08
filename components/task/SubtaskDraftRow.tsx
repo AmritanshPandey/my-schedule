@@ -1,12 +1,13 @@
 "use client";
 
-import { IconGripVertical, IconTrash } from "@tabler/icons-react";
+import { IconCopy, IconCornerDownRight, IconGripVertical, IconTrash } from "@tabler/icons-react";
 import { useSortable } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 import { memo, useState } from "react";
 import IconButton from "@/components/ui/IconButton";
 import { FORM_CONTROL_BASE } from "@/components/ui/Input";
 import type { DeadlineScope } from "@/lib/subtaskDeadline";
+import { parseDurationMinutes, formatMinutes } from "@/lib/timeUtils";
 import { haptic } from "@/lib/haptics";
 import ConfirmSheet from "@/components/ui/ConfirmSheet";
 import { buildDeleteConfirmationCopy } from "@/lib/deleteConfirm";
@@ -15,7 +16,10 @@ export interface SubtaskDraft {
   id: string;
   title: string;
   info?: string;
+  /** Free-text detail — reps/sets ("3×10") or a note. */
   duration?: string;
+  /** Dedicated time budget in minutes (see ScheduleEntry.timeMinutes). */
+  timeMinutes?: number;
   deadline?: string;
   deadlineScope?: DeadlineScope;
 }
@@ -24,6 +28,10 @@ interface SubtaskDraftRowProps {
   draft: SubtaskDraft;
   onChange: (id: string, updated: SubtaskDraft) => void;
   onDelete: (id: string) => void;
+  /** Duplicate this subtask within the current task (inserts a copy below). */
+  onDuplicate?: (id: string) => void;
+  /** Copy this subtask into other tasks (opens a target picker). */
+  onCopyToTask?: (id: string) => void;
   autoFocus?: boolean;
   showDeadline?: boolean;
 }
@@ -37,6 +45,8 @@ function SubtaskDraftRow({
   draft,
   onChange,
   onDelete,
+  onDuplicate,
+  onCopyToTask,
   autoFocus,
   showDeadline,
 }: SubtaskDraftRowProps) {
@@ -46,6 +56,19 @@ function SubtaskDraftRow({
     name: draft.title.trim() || undefined,
     description: "This subtask will be removed from the task.",
   });
+
+  // The dedicated time field is edited as free text (so "1h 30m" can be typed)
+  // but stored as canonical minutes. Local text state holds the in-progress
+  // string; `timeMinutes` on the draft is the parsed value used for summing.
+  const [timeText, setTimeText] = useState(() =>
+    draft.timeMinutes != null ? formatMinutes(draft.timeMinutes) : ""
+  );
+  const timeInvalid = timeText.trim() !== "" && parseDurationMinutes(timeText) == null;
+  function handleTimeChange(text: string) {
+    setTimeText(text);
+    const mins = parseDurationMinutes(text);
+    onChange(draft.id, { ...draft, timeMinutes: mins != null && mins > 0 ? mins : undefined });
+  }
 
   return (
     <div
@@ -80,18 +103,41 @@ function SubtaskDraftRow({
               spellCheck
               className={`h-10 min-w-[150px] flex-[1_1_180px] font-semibold ${ROW_INPUT}`}
             />
+            {/* Dedicated time — accepts only a time (min/hour); this is what
+                counts toward the task's allotted-time budget. */}
             <input
-              value={draft.duration ?? ""}
-              onChange={(e) => onChange(draft.id, { ...draft, duration: e.target.value })}
-              placeholder="5min"
-              aria-label="Subtask duration"
+              value={timeText}
+              onChange={(e) => handleTimeChange(e.target.value)}
+              placeholder="Time · 15min"
+              aria-label="Subtask time (minutes or hours)"
+              aria-invalid={timeInvalid}
               autoComplete="off"
               inputMode="text"
-              className={`h-10 w-[92px] shrink-0 text-center font-bold text-sky-700 dark:text-sky-300 ${ROW_INPUT}`}
+              className={`h-10 w-[104px] shrink-0 text-center font-bold ${ROW_INPUT} ${
+                timeInvalid
+                  ? "text-rose-600 ring-1 ring-rose-400 dark:text-rose-400"
+                  : "text-sky-700 dark:text-sky-300"
+              }`}
             />
           </div>
 
+          {timeInvalid && (
+            <p className="text-[11px] font-semibold text-rose-500 dark:text-rose-400">
+              Use a time like 15min, 1h, or 1h30m.
+            </p>
+          )}
+
           <div className="flex flex-wrap items-center gap-2">
+            {/* Free-text detail — reps/sets or a short note. */}
+            <input
+              value={draft.duration ?? ""}
+              onChange={(e) => onChange(draft.id, { ...draft, duration: e.target.value })}
+              placeholder="Reps / note · 3×10"
+              aria-label="Subtask reps or note"
+              autoComplete="off"
+              spellCheck
+              className={`h-10 min-w-[120px] flex-[1_1_150px] font-semibold text-neutral-600 dark:text-neutral-300 ${ROW_INPUT}`}
+            />
             <input
               value={draft.info ?? ""}
               onChange={(e) => onChange(draft.id, { ...draft, info: e.target.value })}
@@ -99,7 +145,7 @@ function SubtaskDraftRow({
               aria-label="Subtask info"
               autoComplete="off"
               spellCheck
-              className={`h-10 min-w-[150px] flex-[1_1_190px] text-neutral-600 dark:text-neutral-300 ${ROW_INPUT}`}
+              className={`h-10 min-w-[120px] flex-[1_1_150px] text-neutral-600 dark:text-neutral-300 ${ROW_INPUT}`}
             />
             {showDeadline && (
               <div className="flex min-w-0 flex-wrap items-center gap-1.5">
@@ -140,15 +186,39 @@ function SubtaskDraftRow({
           </div>
         </div>
 
-        <IconButton
-          label="Delete subtask"
-          variant="dangerGhost"
-          size="xs"
-          radius="lg"
-          onClick={() => { haptic("light"); setDeleteOpen(true); }}
-        >
-          <IconTrash size={15} />
-        </IconButton>
+        <div className="flex shrink-0 flex-col items-center gap-0.5">
+          {onDuplicate && (
+            <IconButton
+              label="Duplicate subtask"
+              variant="ghost"
+              size="xs"
+              radius="lg"
+              onClick={() => { haptic("light"); onDuplicate(draft.id); }}
+            >
+              <IconCopy size={15} />
+            </IconButton>
+          )}
+          {onCopyToTask && (
+            <IconButton
+              label="Copy subtask to another task"
+              variant="ghost"
+              size="xs"
+              radius="lg"
+              onClick={() => { haptic("light"); onCopyToTask(draft.id); }}
+            >
+              <IconCornerDownRight size={15} />
+            </IconButton>
+          )}
+          <IconButton
+            label="Delete subtask"
+            variant="dangerGhost"
+            size="xs"
+            radius="lg"
+            onClick={() => { haptic("light"); setDeleteOpen(true); }}
+          >
+            <IconTrash size={15} />
+          </IconButton>
+        </div>
       </div>
 
       <ConfirmSheet

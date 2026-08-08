@@ -10,6 +10,7 @@ import {
   formatDeadline,
   type DeadlineState,
 } from "@/lib/subtaskDeadline";
+import { formatMinutes } from "@/lib/timeUtils";
 
 const DEADLINE_BADGE: Record<DeadlineState, string> = {
   overdue: "border-rose-500/30 bg-rose-500/10 text-rose-600 dark:text-rose-400",
@@ -21,6 +22,7 @@ export function getTaskDetailPill(entry: ScheduleEntry): string | null {
   const info = entry.info?.trim() || entry.note?.trim();
   const details: string[] = [];
   if (info) details.push(info);
+  if (entry.timeMinutes != null && entry.timeMinutes > 0) details.push(formatMinutes(entry.timeMinutes));
   if (entry.duration) details.push(entry.duration);
   if (details.length > 0) return details.join(" · ");
   const meta = (entry as ScheduleEntry & { meta?: MetaField[] }).meta;

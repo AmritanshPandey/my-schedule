@@ -46,6 +46,7 @@ import {
   getSlots,
 } from "@/lib/taskMutations";
 import type { TaskSlot } from "@/lib/useScheduleDB";
+import { parseTimeToMinutes, formatMinutes } from "@/lib/timeUtils";
 import { resolveOccurrence } from "@/lib/taskOccurrence";
 import { PlanSelector } from "./PlanSelector";
 import SubtaskDraftRow, { type SubtaskDraft } from "./SubtaskDraftRow";
@@ -118,6 +119,12 @@ export interface TaskSheetProps {
   onClose: () => void;
   onSave: (data: TaskSaveData) => void;
   onDuplicate?: (data: TaskSaveData) => void;
+  /**
+   * Copy a subtask into other existing tasks. Persists immediately (outside this
+   * sheet's draft) via the parent's schedule reducer. Omitted → the row's
+   * "copy to another task" affordance is hidden.
+   */
+  onCopySubtaskToTasks?: (entry: ScheduleEntry, targetTaskIds: string[]) => void;
   onDelete?: () => void;
   /** Clear this date's per-date override (restore the recurring template). */
   onResetOccurrence?: () => void;
@@ -130,6 +137,7 @@ function entryToSubtaskDraft(e: ScheduleEntry): SubtaskDraft {
     title: e.task,
     info: e.info ?? "",
     duration: e.duration ?? "",
+    timeMinutes: e.timeMinutes,
     deadline: e.deadline,
     deadlineScope: e.deadlineScope,
   };
@@ -141,6 +149,7 @@ function subtaskDraftToEntry(d: SubtaskDraft): ScheduleEntry {
     task: d.title.trim(),
     info: (d.info ?? "").trim() || undefined,
     duration: (d.duration ?? "").trim() || undefined,
+    timeMinutes: d.timeMinutes != null && d.timeMinutes > 0 ? d.timeMinutes : undefined,
     deadline: d.deadline || undefined,
     deadlineScope: d.deadline ? d.deadlineScope ?? "day" : undefined,
   };
@@ -201,6 +210,7 @@ export function TaskSheet({
   onClose,
   onSave,
   onDuplicate,
+  onCopySubtaskToTasks,
   onDelete,
   onResetOccurrence,
   presentation = "sheet",
@@ -247,6 +257,9 @@ export function TaskSheet({
   const [repeatMode, setRepeatMode] = useState<"weekly" | "interval" | "once">("weekly");
   const [intervalWeeks, setIntervalWeeks] = useState(2);
   const [onceDate, setOnceDate] = useState("");
+  // Optional active window — the task only appears within [activeFrom, activeUntil].
+  const [activeFrom, setActiveFrom] = useState("");
+  const [activeUntil, setActiveUntil] = useState("");
 
   const titleRef = useRef<HTMLInputElement>(null);
 
@@ -302,6 +315,8 @@ export function TaskSheet({
       if (r?.type === "once") { setRepeatMode("once"); setOnceDate(r.dateISO); }
       else if (r?.type === "weekly" && r.interval > 1) { setRepeatMode("interval"); setIntervalWeeks(r.interval); setOnceDate(baseDateISO); }
       else { setRepeatMode("weekly"); setOnceDate(baseDateISO); }
+      setActiveFrom(task.activeFrom ?? "");
+      setActiveUntil(task.activeUntil ?? "");
     } else {
       const pid = initialPlanId ?? plans[0]?.id ?? "";
       setPlanId(pid);
@@ -321,6 +336,8 @@ export function TaskSheet({
       setRepeatMode("weekly");
       setIntervalWeeks(2);
       setOnceDate(baseDateISO);
+      setActiveFrom("");
+      setActiveUntil("");
     }
     setFocusNewSubtask(false);
     setDuplicateStep("idle");
@@ -364,6 +381,47 @@ export function TaskSheet({
   const removeSubtask = useCallback((id: string) => {
     setSubtasks((prev) => prev.filter((s) => s.id !== id));
   }, []);
+
+  // Duplicate a subtask within this task — insert a fresh-id copy right below it.
+  const duplicateSubtask = useCallback((id: string) => {
+    setSubtasks((prev) => {
+      const i = prev.findIndex((s) => s.id === id);
+      if (i === -1) return prev;
+      const copy: SubtaskDraft = { ...prev[i], id: uid() };
+      return [...prev.slice(0, i + 1), copy, ...prev.slice(i + 1)];
+    });
+  }, []);
+
+  // Copy a subtask into *other* tasks — opens a picker of candidate tasks.
+  const [copySubtaskId, setCopySubtaskId] = useState<string | null>(null);
+  const [copyTargetIds, setCopyTargetIds] = useState<string[]>([]);
+
+  // Every other task (deduped across weekday buckets), for the copy-to picker.
+  const copyCandidates = useMemo(() => {
+    const map = new Map<string, { id: string; title: string; planId: string }>();
+    for (const day of DAYS) {
+      for (const t of activities?.[day] ?? []) {
+        if (t.id === task?.id) continue;
+        if (!map.has(t.id)) map.set(t.id, { id: t.id, title: t.title, planId: t.planId });
+      }
+    }
+    return [...map.values()];
+  }, [activities, task?.id]);
+
+  function openCopyToTask(id: string) {
+    setCopySubtaskId(id);
+    setCopyTargetIds([]);
+  }
+
+  function confirmCopyToTask() {
+    if (!copySubtaskId || !onCopySubtaskToTasks || copyTargetIds.length === 0) return;
+    const draft = subtasks.find((s) => s.id === copySubtaskId);
+    if (draft && draft.title.trim()) {
+      onCopySubtaskToTasks(subtaskDraftToEntry(draft), copyTargetIds);
+    }
+    setCopySubtaskId(null);
+    setCopyTargetIds([]);
+  }
 
   const subtaskSensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 8 } }));
   const subtaskIds = useMemo(() => subtasks.map((s) => s.id), [subtasks]);
@@ -433,6 +491,51 @@ export function TaskSheet({
         .find(Boolean) ?? null
     : null;
 
+  // Subtask times must add up to no more than the task's allotted time. Only the
+  // dedicated `timeMinutes` field counts — the free-text `duration` holds
+  // reps/notes and is deliberately ignored here. Subtasks without a time are
+  // simply not counted, so we only block when the *entered* times overflow.
+  const subtaskTotalMinutes = useMemo(() => {
+    let total = 0;
+    let any = false;
+    for (const s of subtasks) {
+      if (!s.title.trim()) continue;
+      if (s.timeMinutes != null && s.timeMinutes > 0) {
+        total += s.timeMinutes;
+        any = true;
+      }
+    }
+    return any ? total : null;
+  }, [subtasks]);
+
+  const allottedMinutes = useMemo(() => {
+    let total = 0;
+    for (const s of slots) {
+      const start = parseTimeToMinutes(s.startTime);
+      let end = parseTimeToMinutes(s.endTime);
+      if (start == null || end == null) continue;
+      if (end < start) end += 1440; // overnight
+      if (end > start) total += end - start;
+    }
+    return total > 0 ? total : null;
+  }, [slots]);
+
+  const subtaskDurationError =
+    taskType !== "commitment" &&
+    subtaskTotalMinutes != null &&
+    allottedMinutes != null &&
+    subtaskTotalMinutes > allottedMinutes
+      ? `Subtasks add up to ${formatMinutes(subtaskTotalMinutes)}, but this task only has ${formatMinutes(allottedMinutes)}. Trim durations or extend the time.`
+      : null;
+
+  // The active window only applies to recurring tasks (a one-off already has its
+  // single date). Guard against an inverted range.
+  const showActiveWindow = !isOccurrenceScope && repeatMode !== "once";
+  const dateWindowError =
+    showActiveWindow && activeFrom && activeUntil && activeFrom > activeUntil
+      ? "Start date must be on or before the end date."
+      : null;
+
   const repeatOk = isOccurrenceScope
     ? true
     : repeatMode === "once"
@@ -446,6 +549,8 @@ export function TaskSheet({
     title.trim().length > 0 &&
     allSlotsValidNow &&
     !timeError &&
+    !subtaskDurationError &&
+    !dateWindowError &&
     repeatOk;
 
   function handleSave() {
@@ -501,6 +606,9 @@ export function TaskSheet({
           ? validSubtasks
           : undefined,
       recurrence,
+      // Active window only applies to recurring tasks; a one-off carries its own date.
+      activeFrom: showActiveWindow && activeFrom ? activeFrom : undefined,
+      activeUntil: showActiveWindow && activeUntil ? activeUntil : undefined,
     };
 
     onSave({
@@ -902,6 +1010,58 @@ export function TaskSheet({
                 </div>
               )}
 
+              {/* Active window — optional start/end dates for a recurring task */}
+              {showActiveWindow && (
+                <div className="space-y-2">
+                  <p className={`mb-1.5 ${SECTION_LABEL}`}>Active dates (optional)</p>
+                  <div className="grid grid-cols-2 gap-2">
+                    <div>
+                      <label className={FORM_LABEL} htmlFor="task-active-from">Starts</label>
+                      <input
+                        id="task-active-from"
+                        type="date"
+                        value={activeFrom}
+                        max={activeUntil || undefined}
+                        onChange={(e) => setActiveFrom(e.target.value)}
+                        aria-label="Task start date"
+                        className={`${FORM_INPUT_CLASS} px-3`}
+                      />
+                    </div>
+                    <div>
+                      <label className={FORM_LABEL} htmlFor="task-active-until">Ends</label>
+                      <input
+                        id="task-active-until"
+                        type="date"
+                        value={activeUntil}
+                        min={activeFrom || undefined}
+                        onChange={(e) => setActiveUntil(e.target.value)}
+                        aria-label="Task end date"
+                        className={`${FORM_INPUT_CLASS} px-3`}
+                      />
+                    </div>
+                  </div>
+                  {(activeFrom || activeUntil) && (
+                    <div className="flex items-center justify-between">
+                      <p className="text-[12px] leading-snug text-neutral-400 dark:text-neutral-500">
+                        Only shows on the schedule within this range.
+                      </p>
+                      <button
+                        type="button"
+                        onClick={() => { setActiveFrom(""); setActiveUntil(""); }}
+                        className="text-[12px] font-semibold text-emerald-600 underline-offset-2 hover:underline dark:text-emerald-400"
+                      >
+                        Clear
+                      </button>
+                    </div>
+                  )}
+                  {dateWindowError && (
+                    <p className="text-[12px] font-semibold text-rose-500 dark:text-rose-400">
+                      {dateWindowError}
+                    </p>
+                  )}
+                </div>
+              )}
+
               {/* Subtasks / Session Steps */}
               {/* Commitments have nothing to check off, so no subtask list. */}
               {selectedPlan && !isOccurrenceScope && taskType !== "commitment" && (
@@ -939,6 +1099,10 @@ export function TaskSheet({
                             showDeadline={taskType === "task"}
                             onChange={updateSubtask}
                             onDelete={removeSubtask}
+                            onDuplicate={duplicateSubtask}
+                            onCopyToTask={
+                              onCopySubtaskToTasks && copyCandidates.length > 0 ? openCopyToTask : undefined
+                            }
                           />
                         </m.div>
                       ))}
@@ -953,6 +1117,21 @@ export function TaskSheet({
                     <IconPlus size={14} strokeWidth={2.5} />
                     {taskType === "session" ? "Add Step" : "Add Subtask"}
                   </button>
+
+                  {/* Durations must fit the task's allotted time. */}
+                  {subtaskTotalMinutes != null && allottedMinutes != null && (
+                    <p
+                      className={`text-[12px] font-semibold ${
+                        subtaskDurationError
+                          ? "text-rose-500 dark:text-rose-400"
+                          : "text-neutral-400 dark:text-neutral-500"
+                      }`}
+                    >
+                      {subtaskDurationError
+                        ? subtaskDurationError
+                        : `Subtasks: ${formatMinutes(subtaskTotalMinutes)} of ${formatMinutes(allottedMinutes)} allotted`}
+                    </p>
+                  )}
                 </section>
               )}
             </div>
@@ -1045,6 +1224,71 @@ export function TaskSheet({
     />
   );
 
+  // Copy-a-subtask-into-other-tasks picker. Rendered as a sibling sheet (like
+  // categorySheet) so it layers over the form without disturbing draft state.
+  const copySubtaskSheet = (
+    <BottomSheet open={copySubtaskId !== null} onClose={() => setCopySubtaskId(null)}>
+      <div className="flex flex-col px-5 pb-6 pt-4">
+        <SheetHeader
+          eyebrow="Copy subtask"
+          title="Add to other tasks"
+          onClose={() => setCopySubtaskId(null)}
+        />
+        <p className="mb-3 mt-3 text-[13px] text-neutral-500 dark:text-neutral-400">
+          Pick the tasks that should also get this subtask.
+        </p>
+        <div className="mb-5 max-h-[46vh] space-y-2 overflow-y-auto">
+          {copyCandidates.length === 0 ? (
+            <p className="py-6 text-center text-[13px] text-neutral-400 dark:text-neutral-500">
+              No other tasks to copy into yet.
+            </p>
+          ) : (
+            copyCandidates.map((c) => {
+              const sel = copyTargetIds.includes(c.id);
+              const planTitle = plans.find((p) => p.id === c.planId)?.title;
+              return (
+                <button
+                  key={c.id}
+                  type="button"
+                  onClick={() =>
+                    setCopyTargetIds((prev) =>
+                      sel ? prev.filter((id) => id !== c.id) : [...prev, c.id]
+                    )
+                  }
+                  className={`flex w-full items-center gap-3 rounded-2xl border px-4 py-3 text-left transition-colors ${
+                    sel
+                      ? "border-neutral-900 bg-neutral-900 text-white dark:border-white dark:bg-white dark:text-neutral-900"
+                      : "border-neutral-200 bg-white text-neutral-700 dark:border-white/10 dark:bg-white/[0.04] dark:text-neutral-200"
+                  }`}
+                >
+                  <span
+                    className={`flex h-5 w-5 shrink-0 items-center justify-center rounded-md border ${
+                      sel ? "border-transparent bg-white/20 dark:bg-black/10" : "border-neutral-300 dark:border-white/20"
+                    }`}
+                  >
+                    {sel && <IconCheck size={13} strokeWidth={3} />}
+                  </span>
+                  <span className="min-w-0 flex-1">
+                    <span className="block truncate text-[14px] font-semibold">{c.title}</span>
+                    {planTitle && (
+                      <span className={`block truncate text-[12px] ${sel ? "opacity-70" : "text-neutral-400 dark:text-neutral-500"}`}>
+                        {planTitle}
+                      </span>
+                    )}
+                  </span>
+                </button>
+              );
+            })
+          )}
+        </div>
+        <Button fullWidth onClick={confirmCopyToTask} disabled={copyTargetIds.length === 0}>
+          <IconCopy size={15} />
+          Copy to {copyTargetIds.length || ""} task{copyTargetIds.length === 1 ? "" : "s"}
+        </Button>
+      </div>
+    </BottomSheet>
+  );
+
   if (presentation === "page") {
     return (
       <AnimatePresence>
@@ -1060,6 +1304,7 @@ export function TaskSheet({
           >
             {sheetContent}
             {categorySheet}
+            {copySubtaskSheet}
           </m.div>
         )}
       </AnimatePresence>
@@ -1076,6 +1321,7 @@ export function TaskSheet({
         {sheetContent}
       </BottomSheet>
       {categorySheet}
+      {copySubtaskSheet}
     </>
   );
 }

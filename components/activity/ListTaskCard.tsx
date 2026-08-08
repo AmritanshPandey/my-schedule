@@ -7,7 +7,7 @@ import type { Task, Plan, TaskCategory } from "@/lib/useScheduleDB";
 import type { ScheduleEntry, MetaField } from "@/components/ScheduleItem";
 import { calculateTaskProgress, isTrackedTask, resolveTaskState, taskStatusLabel } from "@/lib/taskCompletion";
 import type { TaskState } from "@/lib/taskCompletion";
-import { formatSlotsDuration } from "@/lib/timeUtils";
+import { formatSlotsDuration, formatMinutes } from "@/lib/timeUtils";
 import { getSlots } from "@/lib/taskMutations";
 import { haptic } from "@/lib/haptics";
 import { TaskBlockCard } from "@/components/TaskBlockCard";
@@ -31,6 +31,7 @@ function subtaskDetailPill(entry: ScheduleEntry): string | null {
   const info = entry.info?.trim() || entry.note?.trim();
   const details = [] as string[];
   if (info) details.push(info);
+  if (entry.timeMinutes != null && entry.timeMinutes > 0) details.push(formatMinutes(entry.timeMinutes));
   if (entry.duration) details.push(entry.duration);
   if (details.length > 0) return details.join(" · ");
 

@@ -851,7 +851,7 @@ export default function PlanDetailView({
                 onChange={(e) =>
                   setEditTrackerDraft((d) => ({ ...d, unit: e.target.value }))
                 }
-                placeholder="Unit (e.g. kg, km, hr)"
+                placeholder="Unit (optional)"
                 className="h-10 w-full rounded-xl border border-neutral-200 bg-neutral-50 px-3 text-[14px] text-neutral-700 outline-none focus:border-neutral-400 focus:bg-neutral-100 dark:border-white/10 dark:bg-white/[0.04] dark:text-neutral-300 dark:focus:border-white/20 dark:focus:bg-white/[0.07] transition-colors"
               />
               <input
@@ -1814,8 +1814,10 @@ export default function PlanDetailView({
     <div className="lg:pb-12">
       {renderAISheets()}
 
-      {/* Plan info */}
-      <div className="space-y-2 px-4 pt-3 lg:px-8 lg:pt-6">
+      {/* Plan info. When the shell owns the header (hideHeader, iOS/mobile), it
+          already pads the content below its fixed header — so skip our own top
+          padding to keep the plan content flush under it, with no gap strip. */}
+      <div className={`space-y-2 px-4 lg:px-8 lg:pt-6 ${hideHeader ? "pt-0" : "pt-3"}`}>
         <div className={`items-start justify-between gap-4 ${hideHeader ? "hidden" : "hidden lg:flex"}`}>
           <h1 className="min-w-0 text-[32px] font-bold leading-tight text-neutral-950 dark:text-white">
             {plan.title}
@@ -1958,7 +1960,7 @@ export default function PlanDetailView({
             <Input
               value={newTrackerTitle}
               onChange={(e) => setNewTrackerTitle(e.target.value)}
-              placeholder="Tracker name (e.g. Weight, Distance)"
+              placeholder="Tracker name"
               autoFocus
               onKeyDown={(e) => {
                 if (e.key === "Enter" && newTrackerTitle.trim()) handleAddTracker();
@@ -1967,7 +1969,7 @@ export default function PlanDetailView({
             <Input
               value={newTrackerUnit}
               onChange={(e) => setNewTrackerUnit(e.target.value)}
-              placeholder="Unit (e.g. kg, km, hr) — optional"
+              placeholder="Unit (optional)"
             />
             <Input
               type="number"

@@ -20,6 +20,8 @@ import { AI_ENABLED } from "@/lib/featureFlags";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
 import type { CategoryDraft } from "@/components/category/CategorySheet";
 import { useAuth } from "@/contexts/AuthProvider";
+import SignInPrompt from "@/components/auth/SignInPrompt";
+import { flushNow } from "@/lib/cloudSync";
 import { bootLog, isIOSSafeMode, isStandalonePWA } from "@/lib/iosSafeMode";
 
 // ── Deferred heavy components (separate JS chunks, loaded on demand) ──────────
@@ -77,10 +79,11 @@ import { SECTION_ICONS } from "@/components/SectionIcons";
 import {
   IconChevronLeft,
   IconCalendar,
+  IconCheck,
   IconChecklist,
+  IconDeviceFloppy,
   IconChevronRight,
   IconClipboardList,
-  IconDotsVertical,
   IconEdit,
   IconLayoutList,
   IconMinus,
@@ -135,6 +138,7 @@ import {
   duplicateDay,
   setTaskException,
   clearTaskException,
+  addSubtaskToTasks,
   getSlots,
   retimeSlot,
   type TaskDeleteScope,
@@ -751,6 +755,10 @@ export default function ScheduleApp() {
   const [templatesOpen, setTemplatesOpen] = useState(false);
   const [wallpaperOpen, setWallpaperOpen] = useState(false);
   const [dayActionsOpen, setDayActionsOpen] = useState(false);
+  // Today (narrow) header: reveal editing chrome (day actions, wallpaper) only
+  // in edit mode, matching the iOS shell's clean-by-default execution surface.
+  const [todayEditMode, setTodayEditMode] = useState(false);
+  const [savingTimeline, setSavingTimeline] = useState(false);
   const [sessionTask, setSessionTask] = useState<Task | null>(null);
   // Task whose subtasks are shown in the bottom sheet — stored by id+day so the
   // sheet always reflects the live task (completion updates create new objects).
@@ -813,6 +821,23 @@ export default function ScheduleApp() {
 
   function setToastMessage(next: string | ToastState | null) {
     setToastState(typeof next === "string" ? { message: next } : next);
+  }
+
+  // Explicit "Save" for the timeline. Edits already auto-save locally; this
+  // force-flushes to the cloud and confirms, for reassurance after a batch of
+  // drag edits. For guests flushNow() is a no-op, so we confirm the local write.
+  async function handleTimelineSave() {
+    if (savingTimeline) return;
+    haptic("light");
+    setSavingTimeline(true);
+    try {
+      await flushNow(scheduleRef.current);
+      setToastMessage(isGuest ? "Saved on this device" : "Saved & synced");
+    } catch {
+      setToastMessage("Saved locally — cloud sync will retry");
+    } finally {
+      setSavingTimeline(false);
+    }
   }
 
   const timelineScrollRef = useRef<HTMLDivElement | null>(null);
@@ -3128,27 +3153,46 @@ export default function ScheduleApp() {
               {/* Title row */}
               <div className="flex items-center justify-between">
                 <h1 className="text-[24px] font-bold leading-tight tracking-[-0.8px] text-neutral-900 dark:text-white">
-                  Today's Task
+                  {activeDateISO === todayISO()
+                    ? "Today's Task"
+                    : new Date(activeDateISO + "T00:00:00").toLocaleDateString(undefined, { weekday: "long" })}
                 </h1>
                 <div className="flex items-center gap-2.5">
-                  <IconButton
-                    label="Day actions"
-                    variant="soft"
-                    size="sm"
-                    radius="full"
-                    onClick={() => { haptic("light"); setDayActionsOpen(true); }}
+                  {todayEditMode && (
+                    <IconButton
+                      label="Lock screen wallpaper"
+                      variant="soft"
+                      size="sm"
+                      radius="full"
+                      onClick={() => { haptic("light"); setWallpaperOpen(true); }}
+                    >
+                      <IconPhoto size={15} strokeWidth={2} />
+                    </IconButton>
+                  )}
+                  {viewMode === "timeline" && (
+                    <button
+                      type="button"
+                      onClick={handleTimelineSave}
+                      disabled={savingTimeline}
+                      className="inline-flex h-8 items-center gap-1.5 rounded-full bg-emerald-600 px-3.5 text-[13px] font-bold text-white transition-colors hover:bg-emerald-700 disabled:opacity-60 dark:bg-emerald-500 dark:hover:bg-emerald-400 dark:text-neutral-950"
+                    >
+                      <IconDeviceFloppy size={15} strokeWidth={2} />
+                      {savingTimeline ? "Saving…" : "Save"}
+                    </button>
+                  )}
+                  <button
+                    type="button"
+                    aria-label={todayEditMode ? "Done editing" : "Edit day"}
+                    aria-pressed={todayEditMode}
+                    onClick={() => { haptic("light"); setTodayEditMode((v) => !v); }}
+                    className={`tap-target flex h-8 w-8 items-center justify-center rounded-full transition-colors ${
+                      todayEditMode
+                        ? "bg-neutral-200 text-neutral-900 dark:bg-white/[0.18] dark:text-white"
+                        : "bg-neutral-100 text-neutral-600 dark:bg-white/[0.08] dark:text-neutral-300"
+                    }`}
                   >
-                    <IconDotsVertical size={15} strokeWidth={2} />
-                  </IconButton>
-                  <IconButton
-                    label="Lock screen wallpaper"
-                    variant="soft"
-                    size="sm"
-                    radius="full"
-                    onClick={() => { haptic("light"); setWallpaperOpen(true); }}
-                  >
-                    <IconPhoto size={15} strokeWidth={2} />
-                  </IconButton>
+                    {todayEditMode ? <IconCheck size={15} strokeWidth={2.4} /> : <IconEdit size={15} strokeWidth={2} />}
+                  </button>
                   {dayProgress.total > 0 && (
                     <div className="flex items-center gap-1.5 text-neutral-400 dark:text-neutral-500">
                       <IconChecklist size={16} strokeWidth={1.8} />
@@ -3164,6 +3208,7 @@ export default function ScheduleApp() {
               {dayProgress.total > 0 && (
                 <ProgressBar pct={dayProgress.pct} height={6} className="mt-3" />
               )}
+              <SignInPrompt className="mt-3" />
             </div>
 
             {/* Task content */}
@@ -3770,6 +3815,12 @@ export default function ScheduleApp() {
             closeTaskSheet();
             setToastMessage("Task duplicated");
             setTimeout(() => openEditSheet(newTask), 350);
+          }}
+          onCopySubtaskToTasks={(entry, targetTaskIds) => {
+            setSchedule(addSubtaskToTasks(targetTaskIds, entry));
+            setToastMessage(
+              `Subtask copied to ${targetTaskIds.length} task${targetTaskIds.length === 1 ? "" : "s"}`
+            );
           }}
           onDelete={taskSheetMode === "edit" && taskSheetTask ? () => {
             const sourceDay = taskSheetActiveDays.includes(activeDay)

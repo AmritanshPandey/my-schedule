@@ -8,6 +8,7 @@ import SheetHeader from "@/components/ui/SheetHeader";
 import Pill from "@/components/ui/Pill";
 import type { Task, Plan } from "@/lib/useScheduleDB";
 import type { ScheduleEntry } from "@/components/ScheduleItem";
+import { formatMinutes } from "@/lib/timeUtils";
 
 interface SessionSheetProps {
   isOpen: boolean;
@@ -79,6 +80,11 @@ export default function SessionSheet({
                     </p>
                   ) : null}
                 </div>
+                {item.timeMinutes != null && item.timeMinutes > 0 && (
+                  <Pill variant="subtle" size="md" className="border-transparent text-sky-700 dark:text-sky-300">
+                    {formatMinutes(item.timeMinutes)}
+                  </Pill>
+                )}
                 {item.duration && (
                   <Pill variant="subtle" size="md" className="border-transparent text-neutral-600 dark:text-neutral-400">
                     {item.duration}

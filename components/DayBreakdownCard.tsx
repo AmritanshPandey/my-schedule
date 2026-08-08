@@ -90,6 +90,26 @@ export default function DayBreakdownCard({ activities, categories, todayKey, tod
     () => buildActiveHours(totalMinutes, preferences?.dayStartTime),
     [totalMinutes, preferences?.dayStartTime],
   );
+  // The day's real end: a fixed "End of day" caps an abnormally late task;
+  // otherwise it's the end of the last timed task on this weekday (never the
+  // 4 AM schedule boundary). Null when nothing is timed.
+  const resolvedDayEndMinutes = useMemo(() => {
+    if (typeof preferences?.dayEndMinutes === "number") return preferences.dayEndMinutes;
+    let lastEnd: number | null = null;
+    for (const t of activities[day] ?? []) {
+      const occ = resolveOccurrence(t, dateISO);
+      for (const s of getSlots(occ)) {
+        const rawEnd = parseTimeToMinutes(s.endTime);
+        const rawStart = parseTimeToMinutes(s.startTime);
+        if (rawEnd === null || rawStart === null) continue;
+        let end = toScheduleDayMinutes(rawEnd);
+        const start = toScheduleDayMinutes(rawStart);
+        if (end <= start) end += 24 * 60; // spans midnight
+        if (lastEnd === null || end > lastEnd) lastEnd = end;
+      }
+    }
+    return lastEnd;
+  }, [activities, day, dateISO, preferences?.dayEndMinutes]);
   const segments = useMemo(
     () => donutSegments(slices, totalMinutes, CIRCUMFERENCE),
     [slices, totalMinutes],
@@ -276,42 +296,12 @@ export default function DayBreakdownCard({ activities, categories, todayKey, tod
           {formatMinutesCompact(active.overbookedMinutes)} more than a {Math.round(active.wakingMinutes / 60)}h day
         </p>
         ) : (
-        <div className="mt-2 flex items-center justify-between">
-          <div className="flex items-center gap-2 text-[11px] font-semibold text-neutral-700 dark:text-neutral-300">
-            <span
-              aria-hidden
-              className="h-3 w-3 shrink-0 rounded-full bg-indigo-400 dark:bg-indigo-500"
-            />
-            <span>{formatMinutesCompact(active.freeMinutes)} rest</span>
-          </div>
- 
-          <div className="flex items-center gap-2 text-[11px] font-semibold text-neutral-500 dark:text-neutral-400">
-            <span className="tabular-nums">{fmtClock(active.startMinutes)}</span>
-            <span aria-hidden className="text-neutral-300">—</span>
-            <span className="tabular-nums">
-              {preferences?.dayEndAuto
-                ? (() => {
-                    // Find the last timed slot end on this selected weekday.
-                    let lastEnd: number | null = null;
-                    const dayTasks = activities[day] ?? [];
-                    for (const t of dayTasks) {
-                      const occ = resolveOccurrence(t, dateISO);
-                      const slots = getSlots(occ);
-                      for (const s of slots) {
-                        const rawEnd = parseTimeToMinutes(s.endTime);
-                        const startRaw = parseTimeToMinutes(s.startTime);
-                        if (rawEnd === null || startRaw === null) continue;
-                        let end = toScheduleDayMinutes(rawEnd);
-                        let start = toScheduleDayMinutes(startRaw);
-                        if (end <= start) end += 24 * 60; // spans midnight
-                        if (lastEnd === null || end > lastEnd) lastEnd = end;
-                      }
-                    }
-                    return lastEnd !== null ? fmtClock(lastEnd) : fmtClock(active.endMinutes);
-                  })()
-                : fmtClock(preferences?.dayEndMinutes ?? active.endMinutes)}
-            </span>
-          </div>
+        <div className="mt-2 flex items-center gap-2 text-[11px] font-semibold text-neutral-700 dark:text-neutral-300">
+          <span
+            aria-hidden
+            className="h-3 w-3 shrink-0 rounded-full bg-indigo-400 dark:bg-indigo-500"
+          />
+          <span>{formatMinutesCompact(active.freeMinutes)} rest</span>
         </div>
         )}
       </div>
@@ -324,7 +314,7 @@ export default function DayBreakdownCard({ activities, categories, todayKey, tod
         </div>
         <div className="flex items-center gap-2">
           <span className="font-semibold text-neutral-700 dark:text-neutral-300">Day end</span>
-          <span className="tabular-nums">{fmtClock(preferences?.dayEndMinutes ?? TIMELINE_END_MINUTES)}</span>
+          <span className="tabular-nums">{fmtClock(resolvedDayEndMinutes ?? TIMELINE_END_MINUTES)}</span>
         </div>
       </div>
     </section>

@@ -186,6 +186,54 @@ export function formatMinutes(total: number): string {
 }
 
 /**
+ * Parse a free-text subtask duration into minutes. Accepts the loose formats
+ * users actually type: "5min", "5m", "1h", "1h30m", "1h 30", "90", "90m",
+ * "1:30" (h:mm), "1.5h". Returns null when nothing numeric can be extracted so
+ * callers can treat unparseable durations as "unknown" rather than zero.
+ */
+export function parseDurationMinutes(value: string | undefined | null): number | null {
+  if (typeof value !== "string") return null;
+  const raw = value.trim().toLowerCase();
+  if (!raw) return null;
+
+  // "1:30" → 1h 30m
+  const clock = raw.match(/^(\d{1,2}):(\d{2})$/);
+  if (clock) {
+    const h = Number(clock[1]);
+    const m = Number(clock[2]);
+    if (m > 59) return null;
+    return h * 60 + m;
+  }
+
+  // "1.5h" / "1.5 hr" → fractional hours
+  const fractionalHours = raw.match(/^(\d+(?:\.\d+)?)\s*(?:h|hr|hrs|hour|hours)$/);
+  if (fractionalHours) {
+    return Math.round(Number(fractionalHours[1]) * 60);
+  }
+
+  // "1h30m", "1h 30", "2h", "45m", "30 min", "20mins"
+  const hoursMatch = raw.match(/(\d+(?:\.\d+)?)\s*(?:h|hr|hrs|hour|hours)/);
+  const minutesMatch = raw.match(/(\d+)\s*(?:m|min|mins|minute|minutes)\b/);
+  if (hoursMatch || minutesMatch) {
+    let total = 0;
+    if (hoursMatch) total += Number(hoursMatch[1]) * 60;
+    if (minutesMatch) total += Number(minutesMatch[1]);
+    // "1h 30" — a trailing bare number after the hours is minutes.
+    if (hoursMatch && !minutesMatch) {
+      const trailing = raw.slice(raw.indexOf(hoursMatch[0]) + hoursMatch[0].length).match(/(\d+)/);
+      if (trailing) total += Number(trailing[1]);
+    }
+    return Math.round(total);
+  }
+
+  // Bare number → minutes.
+  const bare = raw.match(/^(\d+(?:\.\d+)?)$/);
+  if (bare) return Math.round(Number(bare[1]));
+
+  return null;
+}
+
+/**
  * Get the current clock time as minutes from midnight.
  */
 export function currentMinutes(): number {

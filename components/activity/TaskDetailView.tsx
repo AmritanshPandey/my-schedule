@@ -145,7 +145,11 @@ export default function TaskDetailView({
               key={item.id}
               item={item}
               isDone={(task.completedSubtaskIds ?? []).includes(item.id)}
-              state={state}
+              // Each subtask carries its OWN state, not the parent's: a partial
+              // parent must never render its unchecked subtasks as a "partial"
+              // (green minus) — they're simply not done. A missed day still
+              // shows unchecked subtasks as missed.
+              state={state === "missed" ? "missed" : "incomplete"}
               today={today}
               readOnly={readOnly}
               onToggle={() => onToggleSubtask(task.id, item.id)}
