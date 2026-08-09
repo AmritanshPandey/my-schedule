@@ -35,7 +35,10 @@ export default function CompletionTrendCard({ schedule }: { schedule: Schedule }
   const narrative = useMemo(() => trendNarrative(trend), [trend]);
 
   const n = weeks.length;
-  const maxCompleted = Math.max(1, ...weeks.map((w) => w.completed));
+  // Bars encode outcome *volume* (done + missed), so a week where most tasks
+  // slipped reads as a tall mostly-rose bar rather than a misleading full-green
+  // one. Normalised to the busiest week so heights stay comparable.
+  const maxActioned = Math.max(1, ...weeks.map((w) => w.completed + w.missed));
 
   // x is the column centre as a 0–100 fraction; y is inverted pct. The line SVG
   // uses a 0 0 100 100 viewBox with a non-scaling stroke, so these map straight
@@ -57,22 +60,9 @@ export default function CompletionTrendCard({ schedule }: { schedule: Schedule }
 
   return (
     <div data-testid="completion-trend-card" className={`${CARD} px-5 py-4`}>
-      <div className="mb-4 flex items-center justify-between gap-3">
-        <div className="flex min-w-0 items-center gap-2">
-          <IconChartBar size={14} strokeWidth={2} className="shrink-0 text-neutral-400 dark:text-neutral-500" />
-          <p className="truncate text-[13px] font-bold text-neutral-800 dark:text-neutral-200">Task completion trend</p>
-        </div>
-        {/* Legend — bar = count, line = rate */}
-        <div className="flex shrink-0 items-center gap-3 text-[10px] font-semibold text-neutral-500 dark:text-neutral-400">
-          <span className="flex items-center gap-1">
-            <span aria-hidden className="h-2.5 w-2 rounded-[2px] bg-emerald-500" />
-            Done
-          </span>
-          <span className="flex items-center gap-1">
-            <span aria-hidden className="h-0.5 w-3.5 rounded-full bg-emerald-600 dark:bg-emerald-400" />
-            Rate
-          </span>
-        </div>
+      <div className="mb-4 flex items-center gap-2">
+        <IconChartBar size={14} strokeWidth={2} className="shrink-0 text-neutral-400 dark:text-neutral-500" />
+        <p className="truncate text-[13px] font-bold text-neutral-800 dark:text-neutral-200">Task completion trend</p>
       </div>
 
       {/* Headline: big number + plain sentence */}
@@ -107,23 +97,42 @@ export default function CompletionTrendCard({ schedule }: { schedule: Schedule }
         <p className="mt-3 text-[12px] font-medium text-neutral-500 dark:text-neutral-400">{narrative}</p>
       )}
 
-      {/* Combo chart — bars (completed count) + line (completion rate) */}
-      <div className="relative mt-5" style={{ height: PLOT_H }}>
-        {/* Bars */}
+      {/* Legend — bars split done vs missed, line = rate */}
+      <div className="mt-5 flex items-center justify-end gap-3 text-[10px] font-semibold text-neutral-500 dark:text-neutral-400">
+        <span className="flex items-center gap-1">
+          <span aria-hidden className="h-2.5 w-2 rounded-[2px] bg-emerald-500" />
+          Done
+        </span>
+        <span className="flex items-center gap-1">
+          <span aria-hidden className="h-2.5 w-2 rounded-[2px] bg-rose-500" />
+          Missed
+        </span>
+        <span className="flex items-center gap-1">
+          <span aria-hidden className="h-0.5 w-3.5 rounded-full bg-emerald-600 dark:bg-emerald-400" />
+          Rate
+        </span>
+      </div>
+
+      {/* Combo chart — stacked done/missed bars + completion-rate line */}
+      <div className="relative mt-2" style={{ height: PLOT_H }}>
+        {/* Bars — each a done (emerald) + missed (rose) stack, grown from the
+            baseline. Past weeks recede; the live week stays full strength. */}
         <div className="absolute inset-0 flex items-end gap-1">
           {weeks.map((week, i) => {
-            const h = Math.max(3, Math.round((week.completed / maxCompleted) * PLOT_H));
+            const doneH = Math.round((week.completed / maxActioned) * PLOT_H);
+            const missH = Math.round((week.missed / maxActioned) * PLOT_H);
+            const empty = doneH === 0 && missH === 0;
             return (
               <div
                 key={week.monStr}
-                className={`animate-bar-rise flex-1 rounded-t ${
-                  week.isCurrentWeek
-                    ? "bg-emerald-500"
-                    : "bg-neutral-200 dark:bg-white/[0.10]"
-                }`}
-                style={{ height: h, animationDelay: `${i * 30}ms` }}
-                title={`Week of ${week.label}: ${week.completed} done · ${week.pct}%`}
-              />
+                className={`animate-bar-rise flex flex-1 flex-col justify-end ${week.isCurrentWeek ? "" : "opacity-60"}`}
+                style={{ animationDelay: `${i * 30}ms` }}
+                title={`Week of ${week.label}: ${week.completed} done · ${week.missed} missed · ${week.pct}%`}
+              >
+                {missH > 0 && <div className="rounded-t bg-rose-500" style={{ height: missH }} />}
+                {doneH > 0 && <div className={`bg-emerald-500 ${missH > 0 ? "" : "rounded-t"}`} style={{ height: doneH }} />}
+                {empty && <div className="h-[3px] rounded-t bg-neutral-200 dark:bg-white/[0.10]" />}
+              </div>
             );
           })}
         </div>
@@ -160,7 +169,7 @@ export default function CompletionTrendCard({ schedule }: { schedule: Schedule }
       </div>
 
       <div className="mt-2 flex items-center justify-between text-[10px] text-neutral-400 dark:text-neutral-500">
-        <span>{n} weeks ago</span>
+        <span>{n > 1 ? `${n} weeks` : " "}</span>
         <span>Avg {averagePct}% · Best {bestPct}%</span>
         <span className="font-semibold text-neutral-500 dark:text-neutral-400">This week</span>
       </div>

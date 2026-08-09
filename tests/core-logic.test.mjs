@@ -1873,3 +1873,70 @@ test("calculateRitualStats: adherence = completed / scheduled over the 30-day wi
   assert.equal(stats.dots.length, 7);
   assert.equal(stats.dots[6], true, "the last dot is uptoISO itself");
 });
+
+// ── Auto-miss rollover (lib/consistency/autoMiss.ts) ─────────────────────────
+
+const autoMissWkKey = (iso) => DAYS[(new Date(`${iso}T00:00:00`).getDay() + 6) % 7];
+function autoMissSchedule(preferences = {}) {
+  return { ...emptySchedule(), categories: [], preferences };
+}
+
+test("applyAutoMissed first run adopts a watermark and misses nothing (forward-only)", () => {
+  const now = new Date(2026, 0, 15, 10, 0, 0); // Thu Jan 15 2026, 10:00 local
+  const D = "2026-01-14"; // yesterday (Wed)
+  const task = { id: "t-open", title: "Open", startTime: "9:00 AM", endTime: "10:00 AM", taskType: "task", subtasks: [] };
+  const sched = autoMissSchedule({}); // no watermark yet
+  sched.activities[autoMissWkKey(D)] = [task];
+
+  const r = applyAutoMissed(sched, now);
+  assert.equal(r.preferences.lastRolloverISO, "2026-01-15", "watermark adopts the active day");
+  assert.equal((r.activities[autoMissWkKey(D)][0].completionHistory ?? []).length, 0, "nothing missed on first run");
+});
+
+test("applyAutoMissed marks past un-actioned tracked tasks missed, sparing done + commitments", () => {
+  const now = new Date(2026, 0, 15, 10, 0, 0);
+  const D = "2026-01-14";
+  const open = { id: "t-open", title: "Open", startTime: "9:00 AM", endTime: "10:00 AM", taskType: "task", subtasks: [] };
+  const done = { id: "t-done", title: "Done", startTime: "9:00 AM", endTime: "10:00 AM", taskType: "task", subtasks: [],
+    completionHistory: [event("t-done", "task", new Date(`${D}T12:00:00`).toISOString())] };
+  const commit = { id: "t-commit", title: "Commute", startTime: "8:00 AM", endTime: "8:30 AM", taskType: "commitment", subtasks: [] };
+  const sched = autoMissSchedule({ lastRolloverISO: "2026-01-13" });
+  sched.activities[autoMissWkKey(D)] = [open, done, commit];
+
+  const r = applyAutoMissed(sched, now);
+  const bucket = r.activities[autoMissWkKey(D)];
+  const openMissed = (bucket.find((t) => t.id === "t-open").completionHistory ?? []).filter((e) => e.completionType === "missed" && !e.subtaskId);
+  assert.equal(openMissed.length, 1, "the un-actioned task gets one missed event");
+  assert.equal(localISODate(new Date(openMissed[0].completedAt)), D, "the missed event is dated to the occurrence");
+  assert.equal((bucket.find((t) => t.id === "t-done").completionHistory ?? []).filter((e) => e.completionType === "missed").length, 0, "a completed task is spared");
+  assert.equal((bucket.find((t) => t.id === "t-commit").completionHistory ?? []).length, 0, "a commitment never misses");
+  assert.equal(r.preferences.lastRolloverISO, "2026-01-15", "watermark advances to the active day");
+
+  const r2 = applyAutoMissed(r, now);
+  assert.equal(r2, r, "re-run with no new rollover returns the same reference (idempotent)");
+});
+
+test("applyAutoMissed treats before-day-start as the previous schedule day", () => {
+  const now = new Date(2026, 0, 15, 2, 0, 0); // 2 AM, before the default 4 AM start
+  const D = "2026-01-14"; // Wed
+  const open = { id: "t-open", title: "Open", startTime: "9:00 AM", endTime: "10:00 AM", taskType: "task", subtasks: [] };
+  const sched = autoMissSchedule({ lastRolloverISO: "2026-01-13" });
+  sched.activities[autoMissWkKey(D)] = [open];
+
+  const r = applyAutoMissed(sched, now);
+  assert.equal(r.preferences.lastRolloverISO, "2026-01-14", "active day is yesterday before the day-start");
+  assert.equal((r.activities[autoMissWkKey(D)][0].completionHistory ?? []).length, 0, "the still-active day is not missed yet");
+});
+
+test("computeExecutionTrend counts missed occurrences per week", () => {
+  const today = localISODate(new Date());
+  const missedTask = { id: "m1", title: "Missed", startTime: "9:00 AM", endTime: "10:00 AM", taskType: "task", subtasks: [],
+    completionHistory: [event("m1", "missed", new Date().toISOString())] };
+  const sched = autoMissSchedule({});
+  sched.activities[autoMissWkKey(today)] = [missedTask];
+
+  const trend = computeExecutionTrend(sched);
+  assert.equal(trend.currentMissed, 1, "this week's missed count");
+  assert.ok(trend.totalMissed >= 1, "missed rolls into the window total");
+  assert.equal(trend.current.missed, 1, "the current week row carries missed");
+});
