@@ -198,7 +198,7 @@ export default function ConsistencyOverview({
               <p className="text-[10px] font-semibold uppercase tracking-[0.07em] text-neutral-400 dark:text-neutral-500 mb-0.5">
                 Completed
               </p>
-              <p className="text-[15px] font-bold text-neutral-950 dark:text-white tabular-nums leading-snug">
+              <p className="text-[16px] font-bold text-neutral-950 dark:text-white tabular-nums leading-snug">
                 {thisWeekCompleted}
                 <span className="text-[12px] font-semibold text-neutral-400 dark:text-neutral-500">
                   /{thisWeekScheduled}
@@ -209,7 +209,7 @@ export default function ConsistencyOverview({
               <p className="text-[10px] font-semibold uppercase tracking-[0.07em] text-neutral-400 dark:text-neutral-500 mb-0.5">
                 Streak
               </p>
-              <p className="text-[15px] font-bold text-neutral-950 dark:text-white tabular-nums leading-snug">
+              <p className="text-[16px] font-bold text-neutral-950 dark:text-white tabular-nums leading-snug">
                 {streak}
                 <span className="text-[12px] font-semibold text-neutral-400 dark:text-neutral-500">
                   {" "}days

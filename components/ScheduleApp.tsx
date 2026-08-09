@@ -2791,19 +2791,19 @@ export default function ScheduleApp() {
                   </p>
                   <div className="mt-3 space-y-2">
                     <div className="flex items-center justify-between border-b border-neutral-100 pb-2 dark:border-white/[0.06]">
-                      <span className="text-[13px] font-semibold text-neutral-500 dark:text-neutral-400">Planned tasks</span>
-                      <span className="text-[13px] font-black tabular-nums text-neutral-950 dark:text-white">{totalPlanTasks}</span>
+                      <span className="text-[12px] font-semibold text-neutral-500 dark:text-neutral-400">Planned tasks</span>
+                      <span className="text-[12px] font-black tabular-nums text-neutral-950 dark:text-white">{totalPlanTasks}</span>
                     </div>
                     <div className="flex items-center justify-between border-b border-neutral-100 pb-2 dark:border-white/[0.06]">
-                      <span className="text-[13px] font-semibold text-neutral-500 dark:text-neutral-400">Trackers</span>
-                      <span className="text-[13px] font-black tabular-nums text-neutral-950 dark:text-white">{totalTrackers}</span>
+                      <span className="text-[12px] font-semibold text-neutral-500 dark:text-neutral-400">Trackers</span>
+                      <span className="text-[12px] font-black tabular-nums text-neutral-950 dark:text-white">{totalTrackers}</span>
                     </div>
                     <div className="flex items-center justify-between">
-                      <span className="text-[13px] font-semibold text-neutral-500 dark:text-neutral-400">Templates</span>
+                      <span className="text-[12px] font-semibold text-neutral-500 dark:text-neutral-400">Templates</span>
                       <button
                         type="button"
                         onClick={() => setTemplatesOpen(true)}
-                        className="text-[13px] font-bold text-neutral-950 transition-colors hover:text-neutral-600 dark:text-white dark:hover:text-neutral-300"
+                        className="text-[12px] font-bold text-neutral-950 transition-colors hover:text-neutral-600 dark:text-white dark:hover:text-neutral-300"
                       >
                         Browse
                       </button>

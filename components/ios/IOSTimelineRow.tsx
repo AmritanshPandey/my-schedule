@@ -26,6 +26,8 @@ interface IOSTimelineRowProps {
   isCurrent?: boolean;
   /** Last row in the day — draw no connector tail. */
   isLast?: boolean;
+  /** First row in the day — draw no connector above the node. */
+  isFirst?: boolean;
   readOnly?: boolean;
   /** Reveal the per-row edit pencil (Today edit mode). */
   editMode?: boolean;
@@ -43,6 +45,7 @@ export default function IOSTimelineRow({
   slotIndex,
   isCurrent = false,
   isLast = false,
+  isFirst = false,
   readOnly = false,
   editMode = true,
   onToggleComplete,
@@ -130,7 +133,14 @@ export default function IOSTimelineRow({
     );
   }
 
-  const connectorClass = done ? "bg-emerald-500/40" : "bg-neutral-200 dark:bg-white/10";
+  // The connector reads as a progress spine: completed segments glow emerald, the
+  // live segment breathes (the app's calm "alive" primitive — no shimmer/gradient),
+  // upcoming stays neutral.
+  const connectorClass = isCurrent
+    ? "bg-emerald-500/60 animate-status-pulse"
+    : done
+    ? "bg-emerald-500/40"
+    : "bg-neutral-200 dark:bg-white/10";
 
   // ── Trailing status ─────────────────────────────────────────────────────────
   let trailing: React.ReactNode = null;
@@ -166,20 +176,27 @@ export default function IOSTimelineRow({
     : "border-neutral-200/70 bg-white dark:border-white/[0.07] dark:bg-neutral-900";
 
   return (
-    <div className="flex items-stretch gap-3" {...longPress.clickGuard}>
-      {/* Time */}
-      <div className="w-[52px] shrink-0 pt-2 text-right text-[13px] font-semibold tabular-nums leading-none text-neutral-500 dark:text-neutral-400">
+    <div className="flex items-stretch gap-3 pb-3" {...longPress.clickGuard}>
+      {/* Time — centered on the card so the whole row shares one baseline. */}
+      <div className="flex w-[52px] shrink-0 items-center justify-end text-right text-[13px] font-semibold tabular-nums leading-none text-neutral-500 dark:text-neutral-400">
         {timeLabel}
       </div>
 
-      {/* Rail: node + connector */}
-      <div className="flex shrink-0 flex-col items-center">
-        <div className="pt-1">{node}</div>
-        {!isLast && <span className={`mt-1 w-px flex-1 rounded-full ${connectorClass}`} />}
+      {/* Rail: one continuous line behind a vertically-centered node. The line
+          spans the card height and reaches -bottom-3 into the next row's top so
+          segments join; it's clipped at the node centre on the first/last row. */}
+      <div className="relative flex w-7 shrink-0 items-center justify-center">
+        <span
+          aria-hidden
+          className={`absolute left-1/2 w-[1.5px] -translate-x-1/2 rounded-full ${connectorClass} ${
+            isFirst ? "top-1/2" : "top-0"
+          } ${isLast ? "bottom-1/2" : "-bottom-3"}`}
+        />
+        <div className="relative z-10">{node}</div>
       </div>
 
       {/* Card */}
-      <div className="min-w-0 flex-1 pb-3">
+      <div className="min-w-0 flex-1">
         <div
           role={hasDetail ? "button" : undefined}
           tabIndex={hasDetail ? 0 : undefined}
@@ -189,7 +206,7 @@ export default function IOSTimelineRow({
           className={`flex items-start justify-between gap-3 rounded-2xl border px-4 py-3 transition-colors ${cardClass} ${hasDetail ? "cursor-pointer active:scale-[0.995]" : ""}`}
         >
           <div className="min-w-0 flex-1">
-            <p className={`truncate text-[15px] font-bold leading-tight ${
+            <p className={`truncate text-[16px] font-bold leading-tight ${
               !tracked ? "text-neutral-500 dark:text-neutral-400"
               : missed ? "text-neutral-500 line-through decoration-rose-400 dark:text-neutral-500"
               : "text-neutral-900 dark:text-white"

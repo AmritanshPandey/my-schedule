@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import dynamic from "next/dynamic";
 import {
   IconAlertCircle,
+  IconAlertTriangle,
   IconCalendar,
   IconChevronLeft,
   IconChevronRight,
@@ -83,6 +84,9 @@ import { computeTrend } from "@/lib/trendUtils";
 import { getPlanCardStats } from "@/lib/planInsights";
 import { calculateExecutionStreak } from "@/lib/consistency/calculateExecutionStreak";
 import { calculateRitualStats, ritualScheduledOn } from "@/lib/consistency/calculateRitualStreak";
+import { computeExecutionTrend } from "@/lib/executionAnalytics";
+import { selectNeedsAttention } from "@/lib/needsAttention";
+import NeedsAttentionCard from "@/components/NeedsAttentionCard";
 import { haptic } from "@/lib/haptics";
 import { CARD } from "@/components/ui/surfaces";
 import CheckDraw from "@/components/ui/CheckDraw";
@@ -101,7 +105,7 @@ const RitualView = dynamic(() => import("@/components/activity/RitualView"), { s
 const DayBreakdownCard = dynamic(() => import("@/components/DayBreakdownCard"), { ssr: false });
 // Companion analytics — same hand-rolled, framer-free SVG/CSS as the donut, so
 // they render on the Dashboard tab which has no LazyMotion ancestor.
-const WeeklyHeatmapCard = dynamic(() => import("@/components/analytics/WeeklyHeatmapCard"), { ssr: false });
+
 const CompletionTrendCard = dynamic(() => import("@/components/analytics/CompletionTrendCard"), { ssr: false });
 const SettingsView = dynamic(() => import("@/components/SettingsView").then((m) => ({ default: m.SettingsView })), { ssr: false });
 const DayWallpaperSheet = dynamic(() => import("@/components/DayWallpaperSheet"), { ssr: false });
@@ -201,11 +205,11 @@ function IOSHeader({
               onClick={onBack}
               className="-ml-1.5 flex items-center gap-1 text-left"
             >
-              <IconChevronLeft size={26} strokeWidth={2.4} className="shrink-0 text-neutral-400 dark:text-neutral-500" />
-              <h1 className="truncate text-[22px] font-black leading-none text-neutral-950 dark:text-white">{title}</h1>
+              <IconChevronLeft size={24} strokeWidth={1.5} className="shrink-0 text-neutral-950 dark:text-neutral-white" />
+              <h1 className="truncate text-[16px] font-semibold leading-none text-neutral-950 dark:text-white">{title}</h1>
             </button>
           ) : (
-            <h1 className="truncate text-[22px] font-black leading-none text-neutral-950 dark:text-white">{title}</h1>
+            <h1 className="truncate text-[16px] font-semibold leading-none text-neutral-950 dark:text-white">{title}</h1>
           )}
         </div>
         <div className="flex shrink-0 items-center gap-1">
@@ -218,7 +222,7 @@ function IOSHeader({
                   type="button"
                   onClick={action.onClick}
                   aria-label={action.label}
-                  className={`flex h-10 w-10 items-center justify-center rounded-full transition-colors ${
+                  className={`flex h-12 w-12 items-center justify-center rounded-full transition-colors ${
                     action.destructive
                       ? "text-neutral-500 hover:bg-rose-500/10 hover:text-rose-500 dark:text-neutral-400 dark:hover:text-rose-400"
                       : "text-neutral-500 hover:bg-neutral-200/70 hover:text-neutral-800 dark:text-neutral-400 dark:hover:bg-white/[0.07] dark:hover:text-white"
@@ -235,7 +239,7 @@ function IOSHeader({
                   type="button"
                   onClick={onNotes}
                   aria-label="Notes"
-                  className="flex h-10 w-10 items-center justify-center rounded-full text-neutral-500 dark:text-neutral-400"
+                  className="flex h-12 w-12 items-center justify-center rounded-full text-neutral-500 dark:text-neutral-400"
                 >
                   <IconNotes size={20} strokeWidth={2} />
                 </button>
@@ -245,7 +249,7 @@ function IOSHeader({
                   type="button"
                   onClick={onSettings}
                   aria-label="Settings"
-                  className="flex h-10 w-10 items-center justify-center rounded-full text-neutral-500 dark:text-neutral-400"
+                  className="flex h-12 w-12 items-center justify-center rounded-full text-neutral-500 dark:text-neutral-400"
                 >
                   <IconSettings size={20} strokeWidth={2} />
                 </button>
@@ -263,19 +267,21 @@ function StatTile({
   value,
   label,
   detail,
+  iconClass,
 }: {
   icon: React.ComponentType<{ size?: number; strokeWidth?: number; className?: string }>;
   value: number | string;
   label: string;
   detail: string;
+  iconClass?: string;
 }) {
   return (
     <div className={`${CARD} p-3`}>
       <div className="mb-2 flex items-center gap-1.5">
-        <Icon size={13} strokeWidth={2} className="text-neutral-400 dark:text-neutral-500" />
+        <Icon size={13} strokeWidth={2} className={iconClass ?? "text-neutral-400 dark:text-neutral-500"} />
         <p className="truncate text-[10px] font-bold uppercase tracking-[0.12em] text-neutral-400 dark:text-neutral-500">{label}</p>
       </div>
-      <p className="truncate text-[22px] font-black leading-none text-neutral-900 dark:text-white">{value}</p>
+      <p className="truncate text-[24px] font-bold leading-none text-neutral-900 dark:text-white">{value}</p>
       <p className="mt-1 truncate text-[11px] font-semibold text-neutral-500 dark:text-neutral-400">{detail}</p>
     </div>
   );
@@ -297,7 +303,7 @@ function EmptyPanel({
       <div className="mx-auto mb-3 flex h-10 w-10 items-center justify-center rounded-xl bg-neutral-100 dark:bg-white/[0.06]">
         <Icon size={19} strokeWidth={1.8} className="text-neutral-400 dark:text-neutral-500" />
       </div>
-      <p className="text-[15px] font-extrabold text-neutral-900 dark:text-white">{title}</p>
+      <p className="text-[16px] font-extrabold text-neutral-900 dark:text-white">{title}</p>
       <p className="mx-auto mt-1 max-w-[260px] text-[13px] font-medium leading-snug text-neutral-500 dark:text-neutral-400">{description}</p>
       {action && (
         <button
@@ -545,6 +551,13 @@ export default function IOSScheduleApp() {
   );
   const dashboardProgressPct = todayTasks.length > 0 ? Math.round((todayDone / todayTasks.length) * 100) : 0;
   const executionStreak = useMemo(() => calculateExecutionStreak(schedule, todayISO()), [schedule]);
+  const missedThisWeek = useMemo(() => computeExecutionTrend(schedule).currentMissed, [schedule]);
+  const needsAttention = useMemo(() => {
+    const doneRitualIds = new Set(
+      (schedule.ritualCompletions ?? []).filter((c) => c.date === todayISO()).map((c) => c.ritualId),
+    );
+    return selectNeedsAttention(schedule, todayISO(), todayKey, doneRitualIds);
+  }, [schedule, todayKey]);
   // All routines with streak/adherence/dots (shared helper), due-today first then
   // most-at-risk — matches the desktop Routine Consistency card.
   const ritualConsistency = useMemo(() => {
@@ -1033,6 +1046,7 @@ export default function IOSScheduleApp() {
                 slotIndex={slotIndex}
                 isCurrent={rowKey === currentKey}
                 isLast={i === rows.length - 1}
+                isFirst={i === 0}
                 linkedPlan={task.planId ? plansById.get(task.planId) ?? null : null}
                 category={taskIdentity(task, categoryMap).category}
                 readOnly={dateISO !== todayISO()}
@@ -1141,7 +1155,7 @@ export default function IOSScheduleApp() {
             <section data-testid="overview-streak-card" className={`${CARD} p-4`}>
               <div className="flex items-center gap-3">
                 <span
-                  className={`grid h-11 w-11 shrink-0 place-items-center rounded-2xl ${
+                  className={`grid h-12 w-12 shrink-0 place-items-center rounded-2xl ${
                     executionStreak.atRisk
                       ? "bg-amber-500/12 text-amber-500 dark:bg-amber-400/12 dark:text-amber-400"
                       : "bg-emerald-500/12 text-emerald-600 dark:bg-emerald-400/12 dark:text-emerald-400"
@@ -1150,7 +1164,7 @@ export default function IOSScheduleApp() {
                   <IconFlame size={22} strokeWidth={2} />
                 </span>
                 <div className="min-w-0 flex-1">
-                  <p className="truncate text-[19px] font-black leading-none text-neutral-950 dark:text-white">
+                  <p className="truncate text-[16px] font-bold leading-none text-neutral-950 dark:text-white">
                     {executionStreak.streak === 0 ? "No streak yet" : `${executionStreak.streak}-day streak`}
                   </p>
                   <p className="mt-1.5 truncate text-[12px] font-semibold text-neutral-500 dark:text-neutral-400">
@@ -1164,7 +1178,7 @@ export default function IOSScheduleApp() {
                   </p>
                 </div>
                 {executionStreak.streak > 0 && (
-                  <span className={`shrink-0 text-[26px] font-black tabular-nums leading-none ${
+                  <span className={`shrink-0 text-[24px] font-semibold tabular-nums leading-none ${
                     executionStreak.atRisk ? "text-amber-500 dark:text-amber-400" : "text-emerald-600 dark:text-emerald-400"
                   }`}>
                     {executionStreak.streak}
@@ -1172,6 +1186,9 @@ export default function IOSScheduleApp() {
                 )}
               </div>
             </section>
+
+            {/* Recently missed / overdue — renders nothing when all clear. */}
+            <NeedsAttentionCard data={needsAttention} onNavigate={setActiveTab} />
 
             <TodayTaskList
               tasks={todayTasks}
@@ -1214,9 +1231,9 @@ export default function IOSScheduleApp() {
                       <div key={tracker.id} className="flex items-center gap-3 py-3 first:pt-2 last:pb-0">
                         <span className={`h-3 w-3 shrink-0 rounded-full ${PLAN_NEUTRAL.dot}`} />
                         <div className="min-w-0 flex-1">
-                          <p className="truncate text-[15px] font-extrabold text-neutral-950 dark:text-white">{tracker.title}</p>
-                          <div className="mt-0.5 flex min-w-0 items-center gap-1.5">
-                            <p className="truncate text-[13px] font-semibold text-neutral-500 dark:text-neutral-400">
+                          <p className="truncate text-[16px] font-semibold text-neutral-950 dark:text-white">{tracker.title}</p>
+                          <div className=" flex min-w-0 items-center gap-1.5">
+                            <p className="truncate text-[14px] font-semibold text-neutral-500 dark:text-neutral-400">
                               {formatTrackerValue(latest, tracker)}
                             </p>
                             {trend && <TrendChange direction={trend.direction} state={trend.state} pct={trend.pct} />}
@@ -1241,13 +1258,13 @@ export default function IOSScheduleApp() {
               )}
             </section>
 
-            <div className="grid grid-cols-2 gap-2.5">
+            <div className="grid grid-cols-3 gap-2.5">
               <div data-testid="overview-week-card">
                 <StatTile
                   icon={IconClockHour3}
                   value={`${dashboardProgressPct}%`}
                   label="This Week"
-                  detail={`${todayDone}/${todayTasks.length} tasks done`}
+                  detail={`${todayDone}/${todayTasks.length} done`}
                 />
               </div>
               <div data-testid="overview-progress-card">
@@ -1255,7 +1272,16 @@ export default function IOSScheduleApp() {
                   icon={IconClipboardData}
                   value={formatMinutesBrief(remainingPlannedMinutes)}
                   label="Weekly Progress"
-                  detail={todayOpenTasks.length > 0 ? `${todayOpenTasks.length} open tasks` : "No workload left"}
+                  detail={todayOpenTasks.length > 0 ? `${todayOpenTasks.length} open` : "Clear"}
+                />
+              </div>
+              <div data-testid="overview-missed-card">
+                <StatTile
+                  icon={IconAlertTriangle}
+                  iconClass="text-rose-500 dark:text-rose-400"
+                  value={missedThisWeek}
+                  label="Missed"
+                  detail={missedThisWeek === 0 ? "none this week" : "this week"}
                 />
               </div>
             </div>
@@ -1266,12 +1292,6 @@ export default function IOSScheduleApp() {
               todayKey={todayKey}
               todayISO={todayISO()}
               preferences={schedule.preferences}
-            />
-
-            <WeeklyHeatmapCard
-              activities={schedule.activities}
-              todayKey={todayKey}
-              todayISO={todayISO()}
             />
 
             {DAYS.some((d) => (schedule.activities[d] ?? []).length > 0) && (
@@ -1297,7 +1317,7 @@ export default function IOSScheduleApp() {
                       className="grid w-full grid-cols-[minmax(0,1fr)_72px] items-center gap-3 py-3 first:pt-1 last:pb-0 text-left"
                     >
                       <div className="min-w-0">
-                        <p className="truncate text-[15px] font-black text-neutral-950 dark:text-white">{plan.title}</p>
+                        <p className="truncate text-[16px] font-semibold text-neutral-950 dark:text-white">{plan.title}</p>
                         {/* Omitted entirely when the plan has no milestones —
                             "0/0 milestones" reports nothing. */}
                         {milestonesTotal > 0 && (
@@ -1324,13 +1344,13 @@ export default function IOSScheduleApp() {
                 <h2 className="text-[13px] font-extrabold">Routine Consistency</h2>
               </div>
               {ritualConsistency.length === 0 ? (
-                <p className="py-2 text-[13px] font-semibold text-neutral-500 dark:text-neutral-400">No routines yet.</p>
+                <p className="py-2 text-[12px] font-semibold text-neutral-500 dark:text-neutral-400">No routines yet.</p>
               ) : (
                 <div className="divide-y divide-neutral-100 dark:divide-white/[0.06]">
                   {ritualConsistency.map(({ ritual, streak, adherencePct, dots, dueToday }) => (
                     <div key={ritual.id} className={`flex items-center justify-between gap-3 py-3 first:pt-1 last:pb-0 ${dueToday ? "" : "opacity-70"}`}>
                       <div className="min-w-0">
-                        <p className="truncate text-[15px] font-black text-neutral-950 dark:text-white">
+                        <p className="truncate text-[16px] font-semibold text-neutral-950 dark:text-white">
                           {ritual.title}
                           {ritual.time && <span className="ml-1.5 text-[12px] font-semibold text-neutral-400 dark:text-neutral-500">{ritual.time}</span>}
                         </p>
@@ -1341,7 +1361,7 @@ export default function IOSScheduleApp() {
                               {streak}d
                             </span>
                           )}
-                          <span className="text-[11px] font-semibold tabular-nums text-neutral-400 dark:text-neutral-500">{adherencePct}% · 30d</span>
+                          <span className="text-[12px] font-semibold tabular-nums text-neutral-400 dark:text-neutral-500">{adherencePct}% · 30d</span>
                         </div>
                       </div>
                       <div className="flex shrink-0 gap-1">
@@ -1363,11 +1383,11 @@ export default function IOSScheduleApp() {
       return (
         <ErrorBoundary section name="Today list">
           <div className="space-y-5 px-4 pt-5">
-            <div>
-              <div className="mb-3 flex items-center justify-between">
+            <div className="bg-white py-4 rounded-2xl dark:bg-neutral-950">
+              <div className="mb-3 flex items-center justify-between px-4">
                 <span className="text-[20px] font-bold text-neutral-900 dark:text-white">{weekLabel}</span>
-                <div className="flex items-center gap-1">
-                  <button type="button" onClick={() => { setWeekOffset(0); setActiveDay(todayKey); }} className="mr-1 text-[12px] font-bold text-emerald-600 dark:text-emerald-400">
+                <div className="flex items-center">
+                  <button type="button" onClick={() => { setWeekOffset(0); setActiveDay(todayKey); }} className="text-[14px] font-bold text-emerald-600 dark:text-emerald-400">
                     Today
                   </button>
                   <button type="button" onClick={() => setWeekOffset((offset) => offset - 1)} aria-label="Previous week" className="flex h-8 w-8 items-center justify-center rounded-full text-neutral-500 dark:text-neutral-400">
@@ -1378,7 +1398,7 @@ export default function IOSScheduleApp() {
                   </button>
                 </div>
               </div>
-              <div className="grid grid-cols-7 gap-0.5 border-b border-neutral-200/80 pb-3 dark:border-white/[0.06]">
+              <div className="grid grid-cols-7 px-2">
                 {weekDates.map(({ day, date }) => {
                   const isActive = day === activeDay;
                   const isToday = localISODate(date) === todayISO();
@@ -1394,12 +1414,12 @@ export default function IOSScheduleApp() {
 
             <div className="flex items-center justify-between">
               <div>
-                <h2 className="text-[22px] font-black text-neutral-950 dark:text-white">
+                <h2 className="text-[20px] font-semibold text-neutral-950 dark:text-white">
                   {activeDay === todayKey
                     ? "Today's Task"
                     : new Date(activeDateISO + "T00:00:00").toLocaleDateString(undefined, { weekday: "long" })}
                 </h2>
-                <p className="text-[13px] font-semibold text-neutral-500 dark:text-neutral-400">{dayDone}/{dayTracked.length} done</p>
+                <p className="text-[12px] font-semibold text-neutral-500 dark:text-neutral-400">{dayDone}/{dayTracked.length} done</p>
               </div>
               <div className="flex items-center gap-2">
                 {todayEditMode && (
@@ -1408,17 +1428,17 @@ export default function IOSScheduleApp() {
                       type="button"
                       aria-label="Lock screen wallpaper"
                       onClick={() => { haptic("light"); setWallpaperOpen(true); }}
-                      className="flex h-10 w-10 items-center justify-center rounded-full bg-neutral-100 text-neutral-600 dark:bg-white/[0.08] dark:text-neutral-300"
+                      className="flex h-12 w-12 items-center justify-center rounded-full bg-neutral-100 text-neutral-600 dark:bg-white/[0.08] dark:text-neutral-300"
                     >
-                      <IconPhoto size={18} strokeWidth={2} />
+                      <IconPhoto size={24} strokeWidth={2} />
                     </button>
                     <button
                       type="button"
                       aria-label="Add task"
                       onClick={() => openCreateSheet()}
-                      className="flex h-10 w-10 items-center justify-center rounded-full bg-neutral-100 text-neutral-600 dark:bg-white/[0.08] dark:text-neutral-300"
+                      className="flex h-12 w-12 items-center justify-center rounded-full bg-neutral-100 text-neutral-600 dark:bg-white/[0.08] dark:text-neutral-300"
                     >
-                      <IconPlus size={19} strokeWidth={2.4} />
+                      <IconPlus size={24} strokeWidth={2} />
                     </button>
                   </>
                 )}
@@ -1427,13 +1447,13 @@ export default function IOSScheduleApp() {
                   onClick={() => { haptic("light"); setTodayEditMode((v) => !v); }}
                   aria-pressed={todayEditMode}
                   aria-label={todayEditMode ? "Done editing" : "Edit day"}
-                  className={`flex h-10 w-10 items-center justify-center rounded-full transition-colors ${
+                  className={`flex h-12 w-12 items-center justify-center rounded-full transition-colors ${
                     todayEditMode
                       ? "bg-neutral-200 text-neutral-900 dark:bg-white/[0.18] dark:text-white"
                       : "bg-neutral-100 text-neutral-600 dark:bg-white/[0.08] dark:text-neutral-300"
                   }`}
                 >
-                  {todayEditMode ? <IconCheck size={19} strokeWidth={2.4} /> : <IconEdit size={18} strokeWidth={2} />}
+                  {todayEditMode ? <IconCheck size={24} strokeWidth={2} /> : <IconEdit size={24} strokeWidth={2} />}
                 </button>
               </div>
             </div>
@@ -1525,18 +1545,18 @@ export default function IOSScheduleApp() {
                   >
                     <div className="mb-3 flex items-start gap-3">
                       <span
-                        className="grid h-11 w-11 shrink-0 place-items-center rounded-xl"
+                        className="grid h-12 w-12 shrink-0 place-items-center rounded-xl"
                         style={{ backgroundColor: `${planHex}1F`, color: planHex }}
                       >
-                        <PlanIcon size={22} strokeWidth={2} />
+                        <PlanIcon size={24} strokeWidth={1.5} />
                       </span>
                       <div className="min-w-0 flex-1">
-                        <p className="truncate text-[17px] font-black text-neutral-950 dark:text-white">{plan.title}</p>
-                        <p className="mt-1 truncate text-[13px] font-semibold text-neutral-500 dark:text-neutral-400">{range}</p>
+                        <p className="truncate text-[16px] font-semibold text-neutral-950 dark:text-white">{plan.title}</p>
+                        <p className="mt-1 truncate text-[14px] font-medium text-neutral-500 dark:text-neutral-400">{range}</p>
                       </div>
                       <span className="shrink-0 rounded-full bg-neutral-100 px-2.5 py-1 text-[12px] font-bold text-neutral-500 dark:bg-white/[0.07] dark:text-neutral-300">{taskCount} tasks</span>
                     </div>
-                    {plan.description && <p className="line-clamp-2 text-[13px] font-medium leading-snug text-neutral-500 dark:text-neutral-400">{plan.description}</p>}
+                    {plan.description && <p className="line-clamp-2 text-[12px] font-normal leading-snug text-neutral-500 dark:text-neutral-400">{plan.description}</p>}
                   </button>
                 );
               })

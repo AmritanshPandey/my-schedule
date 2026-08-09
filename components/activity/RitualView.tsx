@@ -591,7 +591,7 @@ export default function RitualView({
               <IconCheck size={20} strokeWidth={3} />
             </span>
             <div className="min-w-0">
-              <p className="text-[15px] font-black leading-tight text-emerald-700 dark:text-emerald-300">Daily practice complete</p>
+              <p className="text-[16px] font-black leading-tight text-emerald-700 dark:text-emerald-300">Daily practice complete</p>
               <p className="mt-0.5 text-[13px] font-semibold text-emerald-600/80 dark:text-emerald-400/80">
                 All {total} done for {DAY_SHORT[selectedDay]}.
               </p>
@@ -741,16 +741,16 @@ export default function RitualView({
                 </p>
                 <div className="mt-3 space-y-2">
                   <div className="flex items-center justify-between border-b border-neutral-100 pb-2 dark:border-white/[0.06]">
-                    <span className="text-[13px] font-semibold text-neutral-500 dark:text-neutral-400">Active routines</span>
-                    <span className="text-[13px] font-black tabular-nums text-neutral-950 dark:text-white">{rituals.length}</span>
+                    <span className="text-[12px] font-semibold text-neutral-500 dark:text-neutral-400">Active routines</span>
+                    <span className="text-[12px] font-black tabular-nums text-neutral-950 dark:text-white">{rituals.length}</span>
                   </div>
                   <div className="flex items-center justify-between border-b border-neutral-100 pb-2 dark:border-white/[0.06]">
-                    <span className="text-[13px] font-semibold text-neutral-500 dark:text-neutral-400">Scheduled {DAY_SHORT[selectedDay]}</span>
-                    <span className="text-[13px] font-black tabular-nums text-neutral-950 dark:text-white">{total}</span>
+                    <span className="text-[12px] font-semibold text-neutral-500 dark:text-neutral-400">Scheduled {DAY_SHORT[selectedDay]}</span>
+                    <span className="text-[12px] font-black tabular-nums text-neutral-950 dark:text-white">{total}</span>
                   </div>
                   <div className="flex items-center justify-between">
-                    <span className="text-[13px] font-semibold text-neutral-500 dark:text-neutral-400">Done today</span>
-                    <span className="text-[13px] font-black tabular-nums text-neutral-950 dark:text-white">{completedToday}</span>
+                    <span className="text-[12px] font-semibold text-neutral-500 dark:text-neutral-400">Done today</span>
+                    <span className="text-[12px] font-black tabular-nums text-neutral-950 dark:text-white">{completedToday}</span>
                   </div>
                 </div>
               </div>

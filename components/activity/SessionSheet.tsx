@@ -120,7 +120,7 @@ export default function SessionSheet({
               onComplete(task.id, allItemIds);
               if (!done) onClose();
             }}
-            className={`ml-auto flex items-center gap-2 rounded-full px-6 py-3.5 text-[15px] font-bold transition-colors duration-200 ${
+            className={`ml-auto flex items-center gap-2 rounded-full px-6 py-3.5 text-[16px] font-bold transition-colors duration-200 ${
               done
                 ? "bg-neutral-100 text-neutral-500 dark:bg-white/[0.07] dark:text-neutral-400"
                 : "bg-neutral-900 text-white dark:bg-white dark:text-neutral-950"

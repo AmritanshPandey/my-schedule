@@ -23,6 +23,7 @@ export type { DayKey } from "@/lib/scheduleConstants";
 // unit-testable). Re-exported here so existing import sites are unchanged.
 import { normalizeTasks, entryToTask, resetStaleCompletions } from "@/lib/scheduleNormalize";
 export { normalizeTasks, resetStaleCompletions } from "@/lib/scheduleNormalize";
+import { applyAutoMissed } from "@/lib/consistency/autoMiss";
 import { CategoryRegistry } from "@/lib/taskCategories";
 
 export type PlanCategory = "fitness" | "learning" | "work" | "health" | "routine";
@@ -286,6 +287,12 @@ export interface SchedulePreferences {
    * Unset = measure over all history (the original behaviour).
    */
   startDate?: string;
+  /**
+   * Watermark for the auto-miss rollover: the last schedule day whose tasks have
+   * been reconciled into missed marks. Advances forward only, so past days are
+   * never re-scanned and adopting the feature doesn't retroactively miss history.
+   */
+  lastRolloverISO?: string;
 }
 
 /**
@@ -859,7 +866,7 @@ function normalizeNotes(raw: unknown): Note[] {
 
 function normalizeSchedulePreferences(raw: unknown): SchedulePreferences {
   if (!raw || typeof raw !== "object") return {};
-  const source = raw as { dayStartTime?: unknown; dayEndMinutes?: unknown; dayEndAuto?: unknown; startDate?: unknown };
+  const source = raw as { dayStartTime?: unknown; dayEndMinutes?: unknown; dayEndAuto?: unknown; startDate?: unknown; lastRolloverISO?: unknown };
   const dayStartTime = normalizeDayStartTime(source.dayStartTime);
   // Accept a numeric dayEndMinutes in minutes (may be > 1440 to represent next-day hours)
   let dayEndMinutes: number | undefined = undefined;
@@ -875,11 +882,16 @@ function normalizeSchedulePreferences(raw: unknown): SchedulePreferences {
     typeof source.startDate === "string" && /^\d{4}-\d{2}-\d{2}$/.test(source.startDate)
       ? source.startDate
       : undefined;
+  const lastRolloverISO =
+    typeof source.lastRolloverISO === "string" && /^\d{4}-\d{2}-\d{2}$/.test(source.lastRolloverISO)
+      ? source.lastRolloverISO
+      : undefined;
   return {
     ...(dayStartTime ? { dayStartTime } : {}),
     ...(typeof dayEndMinutes === "number" ? { dayEndMinutes } : {}),
     ...(dayEndAuto ? { dayEndAuto } : {}),
     ...(startDate ? { startDate } : {}),
+    ...(lastRolloverISO ? { lastRolloverISO } : {}),
   };
 }
 
@@ -924,7 +936,9 @@ function logWriteError(err: unknown): void {
  */
 function safeMigrate(raw: unknown): Schedule | null {
   try {
-    return resetStaleCompletions(migrate(raw), localISODate(new Date()));
+    // Auto-miss past rolled-over occurrences (dated history events) before the
+    // reset clears today-relative live flags — the two touch disjoint fields.
+    return resetStaleCompletions(applyAutoMissed(migrate(raw), new Date()), localISODate(new Date()));
   } catch (err) {
     logError("indexeddb:migrate", err);
     return null;
@@ -1056,7 +1070,7 @@ export function useScheduleDB() {
             if (cancelled) return;
             if (guestData && hasMeaningfulData(guestData)) {
               const now = Date.now();
-              const migrated = resetStaleCompletions(migrate(guestData), localISODate(new Date()));
+              const migrated = resetStaleCompletions(applyAutoMissed(migrate(guestData), new Date()), localISODate(new Date()));
               loadedKeyRef.current = activeStorageKey;
               skipNextWriteRef.current = true; // persisted + synced manually below
               setScheduleState(migrated);
@@ -1164,6 +1178,18 @@ export function useScheduleDB() {
   const setSchedule = useCallback((updater: (prev: Schedule) => Schedule) => {
     setScheduleState(updater);
   }, []);
+
+  // Auto-miss also runs on load (safeMigrate); this catches the case where the
+  // app stays open across the day-start boundary. `applyAutoMissed` returns the
+  // same reference until a new day has actually rolled over, so this minute
+  // tick is a cheap no-op (React bails, nothing persists) on every other tick.
+  useEffect(() => {
+    if (!ready) return;
+    const id = setInterval(() => {
+      setScheduleState((prev) => applyAutoMissed(prev, new Date()));
+    }, 60_000);
+    return () => clearInterval(id);
+  }, [ready]);
 
   /**
    * Replace the whole schedule with data restored from a backup file. The raw

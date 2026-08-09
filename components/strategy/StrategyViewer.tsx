@@ -89,7 +89,7 @@ export default function StrategyViewer({ asset, onClose }: StrategyViewerProps) 
             {asset.type === "pdf" && iosSafeMode && (
               <div className="flex h-full items-center justify-center px-6 text-center">
                 <div>
-                  <p className="text-[15px] font-bold text-white">PDF viewer paused on iOS</p>
+                  <p className="text-[16px] font-bold text-white">PDF viewer paused on iOS</p>
                   <p className="mt-1 text-[13px] leading-snug text-white/45">
                     Safe mode is active while the iPhone crash is being isolated.
                   </p>

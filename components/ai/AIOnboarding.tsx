@@ -136,7 +136,7 @@ export default function AIOnboarding() {
                         type="button"
                         onClick={handleEnable}
                         whileTap={{ scale: 0.97 }}
-                        className="flex w-full items-center justify-center gap-2.5 rounded-full bg-neutral-900 py-4 text-[15px] font-bold text-white dark:bg-white dark:text-neutral-900"
+                        className="flex w-full items-center justify-center gap-2.5 rounded-full bg-neutral-900 py-4 text-[16px] font-bold text-white dark:bg-white dark:text-neutral-900"
                       >
                         <IconBrain size={18} strokeWidth={2} />
                         Enable Local Intelligence

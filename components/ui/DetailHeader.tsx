@@ -28,7 +28,7 @@ interface DetailHeaderProps {
 export default function DetailHeader({ title, onBack, actions, rightSlot, className = "" }: DetailHeaderProps) {
   return (
     <header
-      className={`flex h-12 shrink-0 items-center justify-between gap-3 border-b border-neutral-200 bg-white px-4 dark:border-white/[0.08] dark:bg-neutral-950 ${className}`}
+      className={`flex h-16 shrink-0 items-center justify-between gap-3 border-b border-neutral-200 bg-white px-4 dark:border-white/[0.08] dark:bg-neutral-950 ${className}`}
     >
       <m.button
         type="button"
@@ -37,8 +37,8 @@ export default function DetailHeader({ title, onBack, actions, rightSlot, classN
         aria-label="Back"
         className="-ml-1.5 flex min-w-0 items-center gap-1 text-left"
       >
-        <IconChevronLeft size={26} strokeWidth={2.4} className="shrink-0 text-neutral-400 dark:text-neutral-500" />
-        <h1 className="truncate text-[22px] font-black leading-none text-neutral-950 dark:text-white">{title}</h1>
+        <IconChevronLeft size={24} strokeWidth={1.5} className="shrink-0 text-neutral-950 dark:text-neutral-white" />
+        <h2 className="truncate text-[16px] font-semibold leading-none text-neutral-950 dark:text-white">{title}</h2>
       </m.button>
 
       <div className="flex shrink-0 items-center gap-1">
@@ -57,9 +57,9 @@ export default function DetailHeader({ title, onBack, actions, rightSlot, classN
               whileTap={{ scale: 0.86 }}
               onClick={action.onClick}
               aria-label={action.label}
-              className={`flex h-10 w-10 items-center justify-center rounded-full transition-colors ${tone}`}
+              className={`flex h-12 w-12 items-center justify-center rounded-full transition-colors ${tone}`}
             >
-              <Icon size={21} strokeWidth={2} />
+              <Icon size={24} strokeWidth={2} />
             </m.button>
           );
         })}

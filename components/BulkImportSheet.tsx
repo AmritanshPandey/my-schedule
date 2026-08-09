@@ -241,7 +241,7 @@ export function BulkImportFlow({ plans, fallbackDay = "monday", onCommit, onDone
             onChange={(e) => setText(e.target.value)}
             spellCheck={false}
             placeholder={SAMPLE}
-            className="h-[210px] w-full resize-y bg-transparent px-4 py-3 font-sans text-[15px] leading-7 text-neutral-900 outline-none placeholder:text-neutral-300 dark:text-white dark:placeholder:text-neutral-600"
+            className="h-[210px] w-full resize-y bg-transparent px-4 py-3 font-sans text-[16px] leading-7 text-neutral-900 outline-none placeholder:text-neutral-300 dark:text-white dark:placeholder:text-neutral-600"
           />
           <span className="pointer-events-none absolute bottom-2 right-3 text-[11px] text-neutral-300 dark:text-neutral-600">
             {text.length}/2000
@@ -267,7 +267,7 @@ export function BulkImportFlow({ plans, fallbackDay = "monday", onCommit, onDone
                   const Icon = PLAN_ICONS[p.emoji] ?? IconCalendarEvent;
                   return (
                     <div key={p.ref} className="flex items-start gap-3 rounded-2xl border border-neutral-200 bg-white px-4 py-3.5 dark:border-white/[0.08] dark:bg-neutral-900">
-                      <span className="grid h-11 w-11 shrink-0 place-items-center rounded-2xl bg-emerald-500/12 text-emerald-600 dark:text-emerald-400">
+                      <span className="grid h-12 w-12 shrink-0 place-items-center rounded-2xl bg-emerald-500/12 text-emerald-600 dark:text-emerald-400">
                         <Icon size={17} strokeWidth={2} />
                       </span>
                       <div className="min-w-0 flex-1">
@@ -275,7 +275,7 @@ export function BulkImportFlow({ plans, fallbackDay = "monday", onCommit, onDone
                           <span className="inline-flex items-center gap-1 rounded-full bg-emerald-500/15 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.08em] text-emerald-600 dark:text-emerald-400">
                             <IconSparkles size={11} strokeWidth={2.5} />New plan
                           </span>
-                          <span className="truncate text-[15px] font-bold text-neutral-900 dark:text-white">{p.title}</span>
+                          <span className="truncate text-[16px] font-bold text-neutral-900 dark:text-white">{p.title}</span>
                         </div>
                         {p.description && (
                           <p className="mt-1 truncate text-[13px] text-neutral-500 dark:text-neutral-400">{p.description}</p>
@@ -299,7 +299,7 @@ export function BulkImportFlow({ plans, fallbackDay = "monday", onCommit, onDone
                     <button type="button" onClick={() => toggleDay(d.day)} className="flex w-full items-center gap-2.5 text-left">
                       <div className="flex w-full items-center gap-2.5 px-4 py-3.5">
                         <IconCalendarEvent size={16} strokeWidth={2} className="shrink-0 text-emerald-600 dark:text-emerald-400" />
-                        <span className="text-[15px] font-bold text-neutral-900 dark:text-white">{d.label}</span>
+                        <span className="text-[16px] font-bold text-neutral-900 dark:text-white">{d.label}</span>
                         <span className="ml-auto text-[12px] font-semibold text-emerald-600 dark:text-emerald-400">{d.tasks.length} task{d.tasks.length !== 1 ? "s" : ""}</span>
                         <IconChevronDown size={16} strokeWidth={2} className={`shrink-0 text-neutral-400 transition-transform ${isCollapsed ? "-rotate-90" : ""}`} />
                       </div>
@@ -421,7 +421,7 @@ export function BulkImportFlow({ plans, fallbackDay = "monday", onCommit, onDone
           onClick={commit}
           className="mt-1 flex w-full flex-col items-center gap-0.5 rounded-full bg-neutral-900 py-3.5 text-white transition-colors hover:bg-neutral-800 disabled:opacity-50 dark:bg-white dark:text-neutral-900 dark:hover:bg-neutral-100"
         >
-          <span className="flex items-center gap-2 text-[15px] font-bold">
+          <span className="flex items-center gap-2 text-[16px] font-bold">
             <IconCircleCheck size={18} strokeWidth={2} />
             {newPlans.length > 0
               ? `Create Plan + ${total} Task${total !== 1 ? "s" : ""}`

@@ -70,9 +70,7 @@ export default function AddEntryModal({ isOpen, onClose, onSave, metric }: AddEn
             <IconCheck size={16} strokeWidth={2.5} />
             Save Entry
           </Button>
-          <Button variant="secondary" onClick={handleClose}>
-            Cancel
-          </Button>
+         
         </div>
       </div>
     </BottomSheet>

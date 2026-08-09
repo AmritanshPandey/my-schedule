@@ -708,7 +708,7 @@ export function TaskSheet({
             {/* Title preview */}
             <div className="mb-5 rounded-2xl border border-neutral-200 bg-neutral-50 px-4 py-3 dark:border-white/[0.08] dark:bg-white/[0.03]">
               <p className="mb-0.5 text-[11px] font-bold uppercase tracking-[0.08em] text-neutral-400">New title</p>
-              <p className="text-[15px] font-semibold text-neutral-900 dark:text-white">Copy of {title}</p>
+              <p className="text-[16px] font-semibold text-neutral-900 dark:text-white">Copy of {title}</p>
             </div>
 
             {/* Day selector */}
@@ -987,7 +987,7 @@ export function TaskSheet({
                       <span className="text-[13px] text-neutral-500 dark:text-neutral-400">Every</span>
                       <button type="button" onClick={() => setIntervalWeeks((n) => Math.max(2, n - 1))}
                         className="flex h-8 w-8 items-center justify-center rounded-full border border-neutral-200 text-[16px] font-bold text-neutral-600 dark:border-white/10 dark:text-neutral-300">−</button>
-                      <span className="w-6 text-center text-[15px] font-bold tabular-nums text-neutral-900 dark:text-white">{intervalWeeks}</span>
+                      <span className="w-6 text-center text-[16px] font-bold tabular-nums text-neutral-900 dark:text-white">{intervalWeeks}</span>
                       <button type="button" onClick={() => setIntervalWeeks((n) => Math.min(8, n + 1))}
                         className="flex h-8 w-8 items-center justify-center rounded-full border border-neutral-200 text-[16px] font-bold text-neutral-600 dark:border-white/10 dark:text-neutral-300">+</button>
                       <span className="text-[13px] text-neutral-500 dark:text-neutral-400">weeks</span>

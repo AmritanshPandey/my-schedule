@@ -106,7 +106,7 @@ export class ErrorBoundary extends Component<Props, State> {
       return (
         <div className="flex min-h-screen flex-col items-center justify-center gap-5 p-8 text-center">
           <div className="rounded-2xl border border-neutral-200 bg-white p-8 dark:border-white/[0.08] dark:bg-neutral-900 max-w-sm w-full">
-            <p className="text-[15px] font-semibold text-neutral-900 dark:text-white mb-1">
+            <p className="text-[16px] font-semibold text-neutral-900 dark:text-white mb-1">
               Something went wrong
             </p>
             <p className="text-[12px] text-neutral-400 dark:text-neutral-500 mb-5 font-mono break-all">

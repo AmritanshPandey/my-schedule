@@ -230,7 +230,7 @@ export function RitualSheet({ open, onClose, initial, onSave, onDelete }: Ritual
             type="button"
             onClick={handleSave}
             disabled={!canSave}
-            className="flex w-full items-center justify-center gap-2 rounded-2xl bg-neutral-900 py-3.5 text-[15px] font-bold text-white transition-opacity disabled:opacity-40 dark:bg-white dark:text-neutral-950"
+            className="flex w-full items-center justify-center gap-2 rounded-2xl bg-neutral-900 py-3.5 text-[16px] font-bold text-white transition-opacity disabled:opacity-40 dark:bg-white dark:text-neutral-950"
           >
             {isEdit ? <IconCheck size={16} strokeWidth={2.5} /> : <IconPlus size={16} strokeWidth={2.5} />}
             {isEdit ? "Save Routine" : "Add Routine"}

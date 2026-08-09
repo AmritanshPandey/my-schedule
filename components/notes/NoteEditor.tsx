@@ -502,7 +502,7 @@ export default function NoteEditor({ note, onUpdate, onDelete, onBack, tasks, pl
     <div className="flex h-full min-h-0 flex-col bg-white dark:bg-neutral-950">
       <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain">
         <div className="sticky top-0 z-30 border-b border-neutral-200 bg-white dark:border-white/[0.08] dark:bg-neutral-950">
-          <div className="mx-auto flex h-12 w-full max-w-4xl items-center gap-2.5 px-3 sm:px-5 lg:max-w-5xl xl:max-w-6xl">
+          <div className="mx-auto flex h-16 w-full max-w-4xl items-center gap-2.5 px-3 sm:px-5 lg:max-w-5xl xl:max-w-6xl">
             <IconButton
               label="Back"
               variant="ghost"
@@ -511,7 +511,7 @@ export default function NoteEditor({ note, onUpdate, onDelete, onBack, tasks, pl
               onClick={flushAndBack}
               className="lg:hidden"
             >
-              <IconChevronLeft size={24} strokeWidth={2.2} />
+              <IconChevronLeft size={24} strokeWidth={1.5} />
             </IconButton>
 
             <div className="min-w-0 flex-1">
@@ -519,7 +519,7 @@ export default function NoteEditor({ note, onUpdate, onDelete, onBack, tasks, pl
                 value={title}
                 onChange={(e) => setTitle(e.target.value)}
                 placeholder="Title"
-                className="w-full bg-transparent text-[19px] font-bold leading-tight text-neutral-900 placeholder-neutral-300 outline-none sm:text-[21px] dark:text-white dark:placeholder-neutral-700"
+                className="w-full bg-transparent text-[16px] font-semibold leading-tight text-neutral-900 placeholder-neutral-300 outline-none sm:text-[21px] dark:text-white dark:placeholder-neutral-700"
               />
             </div>
 

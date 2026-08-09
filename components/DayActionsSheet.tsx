@@ -79,10 +79,10 @@ export default function DayActionsSheet({
                   className="flex w-full items-center gap-3 rounded-2xl border border-neutral-200 bg-white px-4 py-3.5 text-left transition-colors hover:border-neutral-300 dark:border-white/[0.08] dark:bg-white/[0.03] dark:hover:border-white/20"
                 >
                   <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-neutral-100 text-neutral-600 dark:bg-white/[0.08] dark:text-neutral-200">
-                    <IconArrowsExchange size={18} strokeWidth={2} />
+                    <IconArrowsExchange size={24} strokeWidth={2} />
                   </span>
                   <span className="min-w-0">
-                    <span className="block text-[15px] font-bold text-neutral-900 dark:text-white">Swap with day…</span>
+                    <span className="block text-[16px] font-bold text-neutral-900 dark:text-white">Swap with day…</span>
                     <span className="block text-[12px] font-medium text-neutral-500 dark:text-neutral-400">Exchange this day&apos;s whole schedule</span>
                   </span>
                 </button>
@@ -95,7 +95,7 @@ export default function DayActionsSheet({
                     <IconCopy size={18} strokeWidth={2} />
                   </span>
                   <span className="min-w-0">
-                    <span className="block text-[15px] font-bold text-neutral-900 dark:text-white">Duplicate day to…</span>
+                    <span className="block text-[16px] font-bold text-neutral-900 dark:text-white">Duplicate day to…</span>
                     <span className="block text-[12px] font-medium text-neutral-500 dark:text-neutral-400">Copy these tasks onto other days</span>
                   </span>
                 </button>

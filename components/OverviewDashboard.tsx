@@ -9,6 +9,7 @@ import {
   IconCheck,
   IconChecklist,
   IconClipboardList,
+  IconAlertTriangle,
   IconFlame,
   IconPlus,
   IconRepeat,
@@ -26,7 +27,8 @@ import ExecutionStreakBanner from "@/components/ExecutionStreakBanner";
 import NeedsAttentionCard from "@/components/NeedsAttentionCard";
 import { selectNeedsAttention } from "@/lib/needsAttention";
 import CompletionTrendCard from "@/components/analytics/CompletionTrendCard";
-import WeeklyHeatmapCard from "@/components/analytics/WeeklyHeatmapCard";
+import { computeExecutionTrend } from "@/lib/executionAnalytics";
+
 import { computeTrend, type TrendResult } from "@/lib/trendUtils";
 import { addDaysToISO, localISODate } from "@/lib/dateUtils";
 import { calculateExecutionStreak, type ExecutionStreak } from "@/lib/consistency/calculateExecutionStreak";
@@ -197,6 +199,7 @@ function StatGrid({
   tasksDone,
   tasksTotal,
   weekPct,
+  missed,
   plans,
   trackers,
   streak,
@@ -205,6 +208,7 @@ function StatGrid({
   tasksDone: number;
   tasksTotal: number;
   weekPct: number;
+  missed: number;
   plans: number;
   trackers: number;
   streak: ExecutionStreak;
@@ -212,7 +216,7 @@ function StatGrid({
 }) {
   const taskPct = ratioPct(tasksDone, tasksTotal);
   return (
-    <div className="stagger-rise grid gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5">
+    <div className="stagger-rise grid gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6">
       <DashboardMetricCard
         primary
         icon={IconChecklist}
@@ -228,6 +232,14 @@ function StatGrid({
         value={`${weekPct}%`}
         detail="tasks completed"
         pct={weekPct}
+      />
+      <DashboardMetricCard
+        icon={IconAlertTriangle}
+        iconClass="bg-rose-500/12 text-rose-600 dark:bg-rose-400/12 dark:text-rose-400"
+        label="Missed"
+        value={String(missed)}
+        detail={missed === 0 ? "none this week" : "this week"}
+        onClick={() => onNavigate(0)}
       />
       <DashboardMetricCard
         icon={IconFlame}
@@ -332,8 +344,8 @@ function ActiveTrackingCard({
       <SectionHeader icon={IconTarget} title="Active Tracking" meta={rows.length > 0 ? `${rows.length}` : undefined} />
       {rows.length === 0 ? (
         <div className="rounded-xl border border-dashed border-neutral-200 px-4 py-5 text-center dark:border-white/[0.09]">
-          <span className="mx-auto grid h-11 w-11 place-items-center rounded-xl bg-emerald-500/10 text-emerald-600 dark:bg-emerald-400/10 dark:text-emerald-400">
-            <IconChartLine size={21} strokeWidth={2} />
+          <span className="mx-auto grid h-12 w-12 place-items-center rounded-xl bg-emerald-500/10 text-emerald-600 dark:bg-emerald-400/10 dark:text-emerald-400">
+            <IconChartLine size={24} strokeWidth={2} />
           </span>
           <p className="mt-3 text-[14px] font-bold text-neutral-900 dark:text-white">No trackers yet</p>
           <p className="mx-auto mt-1 max-w-[250px] text-[12px] leading-snug text-neutral-500 dark:text-neutral-400">
@@ -375,7 +387,7 @@ function ActiveTrackingCard({
                   return (
                     <div key={tracker.id} className="flex items-center gap-3 py-3">
                       <div className="min-w-0 flex-1">
-                        <p className="truncate text-[15px] font-bold leading-tight text-neutral-950 dark:text-white">{tracker.title}</p>
+                        <p className="truncate text-[16px] font-semibold leading-tight text-neutral-950 dark:text-white">{tracker.title}</p>
                         <div className="mt-0.5 flex min-w-0 items-center gap-1.5">
                           <p className="truncate text-[12px] font-medium text-neutral-500 dark:text-neutral-400">
                             {latest ? `${latest.value}${tracker.unit ?? ""}` : "No entries yet"}
@@ -428,7 +440,7 @@ function RoutineConsistencyCard({
                     {streak}d streak
                   </span>
                 )}
-                <span className="text-[11px] font-semibold tabular-nums text-neutral-400 dark:text-neutral-500">
+                <span className="text-[12px] font-semibold tabular-nums text-neutral-400 dark:text-neutral-500">
                   {adherencePct}% · 30d
                 </span>
               </div>
@@ -480,7 +492,7 @@ function PlanConsistencyCard({
               <div className="min-w-0">
                 <div className="flex items-center gap-2">
                   <span className={`h-2.5 w-2.5 shrink-0 rounded-full ${accent.dot}`} />
-                  <p className="truncate text-[15px] font-bold text-neutral-950 dark:text-white">{plan.title}</p>
+                  <p className="truncate text-[16px] font-bold text-neutral-950 dark:text-white">{plan.title}</p>
                 </div>
                 {/* Milestone line and dots only when the plan actually has
                     milestones. One dot per real milestone (capped at 10), so a
@@ -593,7 +605,7 @@ function GettingStarted({
         <button
           type="button"
           onClick={() => { haptic("light"); onNavigate(nextStep.tab); }}
-          className="mt-8 inline-flex min-h-[48px] w-full items-center justify-center rounded-xl bg-neutral-950 px-5 text-[15px] font-extrabold text-white transition-colors hover:bg-neutral-800"
+          className="mt-8 inline-flex min-h-[48px] w-full items-center justify-center rounded-xl bg-neutral-950 px-5 text-[16px] font-extrabold text-white transition-colors hover:bg-neutral-800"
         >
           {ctaLabel}
         </button>
@@ -636,7 +648,7 @@ function GettingStarted({
                     {stepDone ? <IconCheck size={11} strokeWidth={3.2} /> : n}
                   </span>
                   <p
-                    className={`truncate text-[15px] font-bold ${
+                    className={`truncate text-[16px] font-bold ${
                       stepDone
                         ? "text-neutral-400 line-through decoration-neutral-300 dark:text-neutral-500 dark:decoration-neutral-600"
                         : "text-neutral-950 dark:text-white"
@@ -692,6 +704,10 @@ export default function OverviewDashboard({
     () => selectNeedsAttention(schedule, todayISO, todayKey, completedRitualIds),
     [schedule, todayISO, todayKey, completedRitualIds],
   );
+
+  // Tasks missed this week — from the same trend engine the chart uses, so the
+  // stat and the trend never disagree.
+  const missedThisWeek = useMemo(() => computeExecutionTrend(schedule).currentMissed, [schedule]);
 
   const weeklyActivity = useMemo(() => {
     const todayIdx = new Date(todayISO + "T00:00:00").getDay();
@@ -861,6 +877,7 @@ export default function OverviewDashboard({
               tasksDone={tasksDone}
               tasksTotal={tasksTotal}
               weekPct={weeklyActivity?.tasksPct ?? 0}
+              missed={missedThisWeek}
               plans={schedule.plans.length}
               trackers={trackerData.length}
               streak={executionStreak}
@@ -891,11 +908,7 @@ export default function OverviewDashboard({
                   todayISO={todayISO}
                   preferences={schedule.preferences}
                 />
-                <WeeklyHeatmapCard
-                  activities={schedule.activities}
-                  todayKey={todayKey}
-                  todayISO={todayISO}
-                />
+        
                 <RoutineConsistencyCard rows={ritualConsistency} />
               </div>
 

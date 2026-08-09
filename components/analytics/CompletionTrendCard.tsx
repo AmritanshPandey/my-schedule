@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo } from "react";
-import { IconTrendingUp, IconTrendingDown, IconMinus, IconChartBar } from "@tabler/icons-react";
+import { IconTrendingUp, IconTrendingDown, IconMinus, IconChartBar, IconX } from "@tabler/icons-react";
 import type { Schedule } from "@/lib/useScheduleDB";
 import { computeExecutionTrend, trendNarrative } from "@/lib/executionAnalytics";
 import { CARD } from "@/components/ui/surfaces";
@@ -31,7 +31,7 @@ const PLOT_H = 76;
  */
 export default function CompletionTrendCard({ schedule }: { schedule: Schedule }) {
   const trend = useMemo(() => computeExecutionTrend(schedule), [schedule]);
-  const { weeks, current, deltaPct, averagePct, bestPct } = trend;
+  const { weeks, current, deltaPct, averagePct, bestPct, currentMissed } = trend;
   const narrative = useMemo(() => trendNarrative(trend), [trend]);
 
   const n = weeks.length;
@@ -79,7 +79,7 @@ export default function CompletionTrendCard({ schedule }: { schedule: Schedule }
       <div className="flex items-end justify-between gap-3">
         <div>
           <div className="flex items-baseline gap-1">
-            <span className={`text-[40px] font-extrabold leading-none tabular-nums ${valueColor(current.pct)}`}>
+            <span className={`text-[40px] font-bold leading-none tabular-nums ${valueColor(current.pct)}`}>
               <AnimatedNumber value={current.pct} />
             </span>
             <span className={`text-[20px] font-extrabold ${valueColor(current.pct)}`}>%</span>
@@ -90,6 +90,12 @@ export default function CompletionTrendCard({ schedule }: { schedule: Schedule }
           <p className="text-[12px] text-neutral-400 dark:text-neutral-500">
             {current.completed} of {current.scheduled} tasks
           </p>
+          {currentMissed > 0 && (
+            <p className="mt-1 flex items-center gap-1 text-[12px] font-bold tabular-nums text-rose-600 dark:text-rose-400">
+              <IconX size={13} strokeWidth={2.5} />
+              {currentMissed} missed this week
+            </p>
+          )}
         </div>
         <span className={`flex items-center gap-1 text-right text-[12px] font-bold ${comparison.cls}`}>
           <comparison.Icon size={15} strokeWidth={2.5} />

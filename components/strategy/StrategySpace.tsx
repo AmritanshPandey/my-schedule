@@ -65,9 +65,9 @@ export default function StrategySpace({ strategies, uploadOpen, onUploadOpen, on
             type="button"
             whileTap={{ scale: 0.9 }}
             onClick={() => { haptic("medium"); onUploadOpen(); }}
-            className="shrink-0 flex h-10 w-10 items-center justify-center rounded-full bg-neutral-900 text-white dark:bg-white dark:text-neutral-950"
+            className="shrink-0 flex h-12 w-12 items-center justify-center rounded-full bg-neutral-900 text-white dark:bg-white dark:text-neutral-950"
           >
-            <IconPlus size={20} strokeWidth={2.2} />
+            <IconPlus size={24} strokeWidth={2} />
           </m.button>
         </div>
 

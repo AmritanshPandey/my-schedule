@@ -77,6 +77,7 @@ const { continuationInterval, SCHEDULE_DAY_HANDOVER_MINUTES } =
   await import("../lib/timeline/overnight.ts");
 const { buildWeeklyHeatmap, levelForMinutes, BAND_COUNT } =
   await import("../lib/analytics/weeklyHeatmap.ts");
+const { applyAutoMissed } = await import("../lib/consistency/autoMiss.ts");
 const { selectTodayTasks } = await import("../lib/todayTasks.ts");
 const { selectNeedsAttention, MISSED_LOOKBACK_DAYS, MIN_STREAK_TO_WARN } = await import("../lib/needsAttention.ts");
 const { CategoryRegistry, categoryUsageCounts, canDeleteCategory } = await import("../lib/taskCategories.ts");

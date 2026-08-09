@@ -451,7 +451,7 @@ export default function AIAssistant({
           <div className="flex h-8 w-8 items-center justify-center rounded-xl border border-violet-500 bg-[#AD46FF]">
             <IconSparkles size={15} strokeWidth={2} className="text-white" />
           </div>
-          <span className="text-[15px] font-bold text-neutral-900 dark:text-white tracking-[-0.2px]">
+          <span className="text-[16px] font-bold text-neutral-900 dark:text-white tracking-[-0.2px]">
             AI Assistant
           </span>
         </div>

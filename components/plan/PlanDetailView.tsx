@@ -896,7 +896,7 @@ export default function PlanDetailView({
                 <h3 className="text-[20px] font-bold text-neutral-950 dark:text-white leading-tight">
                   {tracker.title}
                   {tracker.unit && (
-                    <span className="ml-1.5 text-[15px] font-normal text-neutral-400 dark:text-neutral-500">
+                    <span className="ml-1.5 text-[16px] font-normal text-neutral-400 dark:text-neutral-500">
                       ({tracker.unit})
                     </span>
                   )}
@@ -972,7 +972,7 @@ export default function PlanDetailView({
                   <p className="text-[10px] font-semibold uppercase tracking-[0.08em] text-neutral-400 dark:text-neutral-500">
                     {label}
                   </p>
-                  <p className="mt-0.5 text-[15px] font-bold tabular-nums text-neutral-950 dark:text-white">
+                  <p className="mt-0.5 text-[16px] font-bold tabular-nums text-neutral-950 dark:text-white">
                     {value}
                   </p>
                 </div>
@@ -1268,7 +1268,7 @@ export default function PlanDetailView({
             <div className="flex h-14 w-14 items-center justify-center rounded-[20px] bg-neutral-100 dark:bg-white/[0.06] mx-auto">
               <IconSparkles size={24} strokeWidth={1.5} className="text-neutral-400 dark:text-neutral-500" />
             </div>
-            <p className="text-[15px] font-semibold text-neutral-700 dark:text-neutral-200">AI Coach</p>
+            <p className="text-[16px] font-semibold text-neutral-700 dark:text-neutral-200">AI Coach</p>
             <p className="text-[13px] text-neutral-400 dark:text-neutral-500 max-w-[220px] mx-auto leading-relaxed">
               Connect an AI model in Settings to start coaching sessions for this plan.
             </p>
@@ -1351,7 +1351,7 @@ export default function PlanDetailView({
                                 ul: ({ children }) => <ul className="my-1.5 list-disc space-y-0.5 pl-4">{children}</ul>,
                                 ol: ({ children }) => <ol className="my-1.5 list-decimal space-y-0.5 pl-4">{children}</ol>,
                                 li: ({ children }) => <li>{children}</li>,
-                                h1: ({ children }) => <h1 className="mb-1.5 mt-2 text-[15px] font-bold">{children}</h1>,
+                                h1: ({ children }) => <h1 className="mb-1.5 mt-2 text-[16px] font-bold">{children}</h1>,
                                 h2: ({ children }) => <h2 className="mb-1 mt-2 text-[14px] font-semibold">{children}</h2>,
                                 h3: ({ children }) => <h3 className="mb-0.5 mt-1.5 text-[13px] font-semibold">{children}</h3>,
                                 code: ({ children, className }) =>
@@ -2059,7 +2059,7 @@ export default function PlanDetailView({
               <div className="space-y-3 mb-5">
                 <div className="flex items-center gap-3">
                   <IconCalendar size={16} strokeWidth={1.8} className="shrink-0 text-neutral-400" />
-                  <span className="text-[15px] font-medium text-neutral-700 dark:text-neutral-300">
+                  <span className="text-[16px] font-medium text-neutral-700 dark:text-neutral-300">
                     {formatDate(m.startDate)} – {formatDate(m.plannedEndDate)}
                     <span className="ml-2 text-[13px] text-neutral-400">
                       · {m.plannedDurationDays} day{m.plannedDurationDays === 1 ? "" : "s"}
@@ -2069,7 +2069,7 @@ export default function PlanDetailView({
                 {isCompleted && m.actualCompletedDate && (
                   <div className="flex items-center gap-3">
                     <IconCheck size={16} strokeWidth={2} className="shrink-0 text-green-500" />
-                    <span className="text-[15px] font-medium text-neutral-700 dark:text-neutral-300">
+                    <span className="text-[16px] font-medium text-neutral-700 dark:text-neutral-300">
                       Completed {formatDate(m.actualCompletedDate)}
                     </span>
                   </div>
@@ -2082,7 +2082,7 @@ export default function PlanDetailView({
                   <p className="mb-1.5 text-[11px] font-bold uppercase tracking-[0.08em] text-neutral-400 dark:text-neutral-500">
                     Description
                   </p>
-                  <p className="text-[15px] leading-relaxed text-neutral-700 dark:text-neutral-300">
+                  <p className="text-[16px] leading-relaxed text-neutral-700 dark:text-neutral-300">
                     {m.description}
                   </p>
                 </div>
@@ -2094,7 +2094,7 @@ export default function PlanDetailView({
                   <p className="mb-1.5 text-[11px] font-bold uppercase tracking-[0.08em] text-neutral-400 dark:text-neutral-500">
                     Notes
                   </p>
-                  <p className="text-[15px] leading-relaxed text-neutral-700 dark:text-neutral-300">
+                  <p className="text-[16px] leading-relaxed text-neutral-700 dark:text-neutral-300">
                     {m.notes}
                   </p>
                 </div>
@@ -2105,7 +2105,7 @@ export default function PlanDetailView({
                 <button
                   type="button"
                   onClick={() => { onCompleteMilestone(m.id); setViewingMilestone(null); }}
-                  className="mb-3 flex w-full items-center justify-center gap-2 rounded-2xl bg-green-600 py-3.5 text-[15px] font-semibold text-white transition-colors hover:bg-green-700"
+                  className="mb-3 flex w-full items-center justify-center gap-2 rounded-2xl bg-green-600 py-3.5 text-[16px] font-semibold text-white transition-colors hover:bg-green-700"
                 >
                   <IconCheck size={16} strokeWidth={2.5} />
                   Mark as Done
@@ -2127,7 +2127,7 @@ export default function PlanDetailView({
                 <button
                   type="button"
                   onClick={() => { setViewingMilestone(null); openEditMilestone(m); }}
-                  className="flex h-12 flex-1 items-center justify-center gap-2 rounded-2xl bg-neutral-900 text-[15px] font-semibold text-white dark:bg-white dark:text-neutral-900"
+                  className="flex h-12 flex-1 items-center justify-center gap-2 rounded-2xl bg-neutral-900 text-[16px] font-semibold text-white dark:bg-white dark:text-neutral-900"
                 >
                   <IconEdit size={16} strokeWidth={2} />
                   Edit Milestone
@@ -2169,7 +2169,7 @@ export default function PlanDetailView({
                 {(task.startTime || task.endTime) && (
                   <div className="flex items-center gap-3">
                     <IconClock size={16} strokeWidth={1.8} className="shrink-0 text-neutral-400" />
-                    <span className="text-[15px] font-medium text-neutral-700 dark:text-neutral-300">
+                    <span className="text-[16px] font-medium text-neutral-700 dark:text-neutral-300">
                       {task.startTime}{task.endTime && ` – ${task.endTime}`}
                       {duration && (
                         <span className="ml-1.5 text-[13px] text-neutral-400">· {duration}</span>
@@ -2230,7 +2230,7 @@ export default function PlanDetailView({
                     onEditTask(task);
                     setViewingTask(null);
                   }}
-                  className="flex h-12 flex-1 items-center justify-center gap-2 rounded-2xl bg-neutral-900 text-[15px] font-semibold text-white dark:bg-white dark:text-neutral-900"
+                  className="flex h-12 flex-1 items-center justify-center gap-2 rounded-2xl bg-neutral-900 text-[16px] font-semibold text-white dark:bg-white dark:text-neutral-900"
                 >
                   <IconEdit size={16} strokeWidth={2} />
                   Edit Task

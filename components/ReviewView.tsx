@@ -586,7 +586,7 @@ function PlanHealthSection({
                 </div>
               </div>
               <div className="shrink-0 text-right">
-                <p className={`text-[15px] font-extrabold tabular-nums leading-none ${healthColor}`}>
+                <p className={`text-[16px] font-extrabold tabular-nums leading-none ${healthColor}`}>
                   {consistency}%
                 </p>
                 <p className="text-[9px] font-medium text-neutral-400 dark:text-neutral-500 mt-0.5">consistency</p>
@@ -1007,7 +1007,7 @@ function MetricsLogSection({ schedule }: { schedule: Schedule }) {
                     )}
                   </div>
                   {plan && (
-                    <p className="truncate text-[11px] text-neutral-400 dark:text-neutral-500">{plan.title}</p>
+                    <p className="truncate text-[12px] text-neutral-400 dark:text-neutral-500">{plan.title}</p>
                   )}
                 </div>
                 {/* Trend direction badge */}

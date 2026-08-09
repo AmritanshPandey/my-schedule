@@ -149,7 +149,7 @@ function TodayTaskRow({
       />
       <div className="min-w-0 flex-1">
         <p
-          className={`truncate text-[15px] font-bold leading-tight ${
+          className={`truncate text-[16px] font-bold leading-tight ${
             isDone
               ? "text-neutral-400 line-through dark:text-neutral-600"
               : isMissed
@@ -291,7 +291,7 @@ export default function TodayTaskList({
 
       {tasks.length === 0 ? (
         <div className="mb-3 rounded-xl border border-dashed border-neutral-200 px-4 py-6 text-center dark:border-white/[0.10]">
-          <p className="text-[15px] font-bold text-neutral-950 dark:text-white">Nothing to check off today</p>
+          <p className="text-[16px] font-bold text-neutral-950 dark:text-white">Nothing to check off today</p>
           <p className="mt-1 text-[12px] font-medium text-neutral-500 dark:text-neutral-400">
             Add the first block from Today.
           </p>

@@ -357,7 +357,7 @@ export default function AIPlanCreatorSheet({
             value={title}
             onChange={(e) => setTitle(e.target.value)}
             placeholder="Plan title"
-            className="w-full rounded-xl border border-neutral-200 bg-neutral-50 px-4 py-2.5 text-[15px] font-semibold text-neutral-900 outline-none placeholder:text-neutral-400 focus:border-neutral-300 focus:bg-white dark:border-white/10 dark:bg-white/[0.04] dark:text-white dark:focus:border-white/20"
+            className="w-full rounded-xl border border-neutral-200 bg-neutral-50 px-4 py-2.5 text-[16px] font-semibold text-neutral-900 outline-none placeholder:text-neutral-400 focus:border-neutral-300 focus:bg-white dark:border-white/10 dark:bg-white/[0.04] dark:text-white dark:focus:border-white/20"
           />
           <input
             value={desc}

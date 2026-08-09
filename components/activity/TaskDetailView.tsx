@@ -99,7 +99,7 @@ export default function TaskDetailView({
             />
           )}
           <div className="min-w-0 pt-0.5">
-            <p className="truncate text-[15px] font-semibold text-neutral-400 dark:text-neutral-500">{eyebrow}</p>
+            <p className="truncate text-[16px] font-semibold text-neutral-400 dark:text-neutral-500">{eyebrow}</p>
           </div>
         </div>
       )}

@@ -569,6 +569,16 @@ function datedSlotEvent(taskId: string, dateISO: string, slotIndex: number): Tas
   return { id: uid(), taskId, completedAt: new Date(`${dateISO}T12:00:00`).toISOString(), completionType: "slot", slotIndex };
 }
 
+/**
+ * A dated whole-task "missed" event for a PAST occurrence — the record the
+ * rollover auto-miss pass writes. Local-noon timestamp so `localISODate` reads
+ * back exactly `dateISO`. Never sets the live `missed`/`missedAt` flags (those
+ * describe today only); the durable signal is this history event.
+ */
+export function datedMissedEvent(taskId: string, dateISO: string): TaskCompletionEvent {
+  return { id: uid(), taskId, completedAt: new Date(`${dateISO}T12:00:00`).toISOString(), completionType: "missed" };
+}
+
 /** Toggle whole-task completion for a non-today date — history only. */
 export function toggleTaskCompleteForDate(
   task: Task,

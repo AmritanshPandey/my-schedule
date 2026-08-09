@@ -192,7 +192,7 @@ export default function AIActionSheet({
               <IconSparkles size={16} strokeWidth={2} className="text-emerald-500" />
             </div>
             <div>
-              <p className="text-[15px] font-bold text-neutral-900 dark:text-white">{title}</p>
+              <p className="text-[16px] font-bold text-neutral-900 dark:text-white">{title}</p>
               {contextLabel && (
                 <p className="text-[12px] font-medium text-neutral-400 dark:text-neutral-500">{contextLabel}</p>
               )}

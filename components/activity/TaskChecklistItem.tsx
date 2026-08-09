@@ -83,7 +83,7 @@ export default function TaskChecklistItem({
         label={isDone ? "Mark subtask not done" : "Mark subtask done"}
         onClick={onToggle}
       />
-      <span className={`min-w-0 flex-1 text-[15px] font-semibold ${
+      <span className={`min-w-0 flex-1 text-[16px] font-semibold ${
         isDone ? "text-neutral-400 line-through dark:text-neutral-500"
         : state === "missed" ? "text-neutral-400 line-through decoration-rose-400 dark:text-neutral-500"
         : "text-neutral-800 dark:text-neutral-200"

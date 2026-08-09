@@ -967,7 +967,7 @@ export function SettingsSheet({
                     <p className="truncate text-[14px] font-bold text-neutral-900 dark:text-white">
                       {user?.displayName ?? "User"}
                     </p>
-                    <p className="truncate text-[11px] text-neutral-400 dark:text-neutral-500">
+                    <p className="truncate text-[12px] text-neutral-400 dark:text-neutral-500">
                       {user?.email}
                     </p>
                   </div>

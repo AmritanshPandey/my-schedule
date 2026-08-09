@@ -98,7 +98,7 @@ function NoteCard({
   const content = (
     <>
       <div className="flex items-baseline justify-between gap-3">
-        <span className="truncate text-[15px] font-semibold text-neutral-900 dark:text-white">
+        <span className="truncate text-[16px] font-semibold text-neutral-900 dark:text-white">
           {deriveTitle(note)}
         </span>
         <div className="flex shrink-0 items-center gap-1.5">
@@ -463,7 +463,7 @@ export default function NotesView({
                 <Icon size={20} strokeWidth={1.8} />
               </span>
               <div className="min-w-0 flex-1">
-                <p className="text-[15px] font-bold text-neutral-900 dark:text-white">{label}</p>
+                <p className="text-[16px] font-bold text-neutral-900 dark:text-white">{label}</p>
                 <p className="mt-0.5 text-[13px] text-neutral-400 dark:text-neutral-500">{description}</p>
               </div>
             </button>

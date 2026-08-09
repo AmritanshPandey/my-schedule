@@ -168,7 +168,7 @@ export default function DayBreakdownCard({ activities, categories, todayKey, tod
 
       {totalMinutes === 0 ? (
         <div className="rounded-xl border border-dashed border-neutral-200 px-4 py-8 text-center dark:border-white/[0.09]">
-          <p className="text-[15px] font-bold text-neutral-950 dark:text-white">
+          <p className="text-[16px] font-bold text-neutral-950 dark:text-white">
             {day === todayKey ? "Nothing scheduled today" : "Nothing scheduled"}
           </p>
           <p className="mt-1 text-[12px] text-neutral-500 dark:text-neutral-400">

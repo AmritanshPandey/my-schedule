@@ -743,10 +743,10 @@ export function SettingsView({
                     )}
                     <div className="min-w-0 flex-1">
                       <p className="truncate text-[14px] font-bold text-neutral-900 dark:text-white">{user?.displayName ?? "User"}</p>
-                      <p className="truncate text-[11px] text-neutral-400 dark:text-neutral-500">{user?.email}</p>
+                      <p className="truncate text-[12px] text-neutral-400 dark:text-neutral-500">{user?.email}</p>
                     </div>
                     <m.button type="button" onClick={handleLogout} disabled={busy} whileTap={{ scale: 0.94 }}
-                      className="rounded-xl border border-neutral-200 px-3 py-1.5 text-[11px] font-semibold text-neutral-500 hover:border-neutral-300 dark:border-white/[0.08] dark:text-neutral-400 disabled:opacity-50">
+                      className="rounded-lg border border-neutral-200 px-3 py-2 text-[12px] font-semibold text-neutral-500 hover:border-neutral-300 dark:border-white/[0.08] dark:text-neutral-400 disabled:opacity-50">
                       {busy ? "…" : "Sign out"}
                     </m.button>
                   </Row>

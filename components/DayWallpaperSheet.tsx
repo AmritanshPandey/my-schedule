@@ -298,7 +298,7 @@ export default function DayWallpaperSheet({ open, onClose, schedule, todayKey }:
             aria-label="Use your own photo"
             aria-pressed={bgId === "photo"}
             onClick={() => { haptic("light"); fileRef.current?.click(); }}
-            className={`flex h-10 w-10 items-center justify-center rounded-full border-2 bg-neutral-100 text-neutral-500 dark:bg-white/[0.08] dark:text-neutral-300 ${
+            className={`flex h-12 w-12 items-center justify-center rounded-full border-2 bg-neutral-100 text-neutral-500 dark:bg-white/[0.08] dark:text-neutral-300 ${
               bgId === "photo"
                 ? "border-neutral-900 dark:border-white"
                 : "border-neutral-200/80 dark:border-white/[0.12]"

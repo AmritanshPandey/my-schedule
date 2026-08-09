@@ -261,7 +261,7 @@ function PlanCardInner({
         )}
 
         {plan.startDate && !plan.endDate && (
-          <span className="shrink-0 text-[11px] font-semibold tabular-nums text-neutral-400 dark:text-neutral-500">
+          <span className="shrink-0 text-[12px] font-semibold tabular-nums text-neutral-400 dark:text-neutral-500">
             Ongoing
           </span>
         )}

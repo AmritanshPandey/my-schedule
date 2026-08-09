@@ -284,7 +284,7 @@ export default function MilestoneSheet({
             <p className="text-[11px] font-semibold uppercase tracking-[0.08em] text-neutral-400 dark:text-neutral-500">
               Calculated End
             </p>
-            <p className="mt-1 text-[15px] font-bold text-neutral-900 dark:text-white">
+            <p className="mt-1 text-[16px] font-bold text-neutral-900 dark:text-white">
               {draft.startDate && plannedEndDate
                 ? `${formatDate(draft.startDate)} - ${formatDate(plannedEndDate)}`
                 : "Set a start date"}

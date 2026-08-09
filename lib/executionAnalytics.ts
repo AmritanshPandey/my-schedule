@@ -26,6 +26,7 @@ export interface ExecutionWeek {
   sunStr: string;        // ISO date of that week's Sunday
   label: string;         // "May 12"
   completed: number;     // distinct tasks completed that week
+  missed: number;        // distinct tasks missed that week (auto or manual)
   scheduled: number;     // scheduled tasks per week (current schedule)
   pct: number;           // 0..100, clamped
   isCurrentWeek: boolean;
@@ -39,6 +40,8 @@ export interface ExecutionTrend {
   averagePct: number;     // mean pct across the window
   bestPct: number;        // best single week
   totalCompleted: number; // sum of completed across the window
+  totalMissed: number;    // sum of missed across the window
+  currentMissed: number;  // tasks missed this week
   scheduled: number;      // tasks scheduled per week
 }
 
@@ -72,31 +75,42 @@ export function computeExecutionTrend(schedule: Schedule, weeksCount = 8): Execu
     return count;
   };
 
-  // Bucket distinct completed task ids by their week's Monday.
+  // Bucket distinct completed / missed task ids by their week's Monday. Both are
+  // de-duped per occurrence per week, so a task toggled repeatedly counts once.
   const weekDone = new Map<string, Set<string>>();
-  const markDone = (weekMon: string, occurrenceId: string) => {
-    let set = weekDone.get(weekMon);
-    if (!set) { set = new Set(); weekDone.set(weekMon, set); }
+  const weekMissed = new Map<string, Set<string>>();
+  const markInto = (map: Map<string, Set<string>>, weekMon: string, occurrenceId: string) => {
+    let set = map.get(weekMon);
+    if (!set) { set = new Set(); map.set(weekMon, set); }
     set.add(occurrenceId);
   };
   const weekMondayOf = (iso: string): string => localISODate(mondayOf(new Date(iso + "T00:00:00")));
 
   for (const day of DAYS) {
     for (const task of schedule.activities[day] ?? []) {
-      const dates = new Set<string>();
+      const doneDates = new Set<string>();
+      const missedDates = new Set<string>();
       if (Array.isArray(task.completionHistory)) {
         for (const ev of task.completionHistory) {
-          if (ev.completionType === "task" && ev.completedAt) {
-            dates.add(localISODate(new Date(ev.completedAt)));
+          if (!ev.completedAt) continue;
+          if (ev.completionType === "task") {
+            doneDates.add(localISODate(new Date(ev.completedAt)));
+          } else if (ev.completionType === "missed" && !ev.subtaskId) {
+            missedDates.add(localISODate(new Date(ev.completedAt)));
           }
         }
       }
       // Legacy fallback: completed flag with no event history.
-      if (dates.size === 0 && task.completed && task.completedAt) {
-        dates.add(localISODate(new Date(task.completedAt)));
+      if (doneDates.size === 0 && task.completed && task.completedAt) {
+        doneDates.add(localISODate(new Date(task.completedAt)));
       }
       const occurrenceId = `${day}:${task.id}`;
-      for (const d of dates) markDone(weekMondayOf(d), occurrenceId);
+      for (const d of doneDates) markInto(weekDone, weekMondayOf(d), occurrenceId);
+      // A completion wins over a missed mark for the same occurrence/week.
+      for (const d of missedDates) {
+        const wk = weekMondayOf(d);
+        if (!(weekDone.get(wk)?.has(occurrenceId))) markInto(weekMissed, wk, occurrenceId);
+      }
     }
   }
 
@@ -116,12 +130,14 @@ export function computeExecutionTrend(schedule: Schedule, weeksCount = 8): Execu
     if (i !== 0 && trackingStart && localISODate(sun) < trackingStart) continue;
     const scheduled = scheduledInWeek(mon);
     const completed = Math.min(weekDone.get(monStr)?.size ?? 0, scheduled || Infinity);
+    const missed = Math.min(weekMissed.get(monStr)?.size ?? 0, scheduled || Infinity);
     const pct = scheduled > 0 ? Math.min(100, Math.round((completed / scheduled) * 100)) : 0;
     weeks.push({
       monStr,
       sunStr: localISODate(sun),
       label: mon.toLocaleDateString("en-US", { month: "short", day: "numeric" }),
       completed,
+      missed,
       scheduled,
       pct,
       isCurrentWeek: i === 0,
@@ -135,6 +151,7 @@ export function computeExecutionTrend(schedule: Schedule, weeksCount = 8): Execu
     : 0;
   const bestPct = weeks.reduce((m, w) => Math.max(m, w.pct), 0);
   const totalCompleted = weeks.reduce((s, w) => s + w.completed, 0);
+  const totalMissed = weeks.reduce((s, w) => s + w.missed, 0);
 
   return {
     weeks,
@@ -144,6 +161,8 @@ export function computeExecutionTrend(schedule: Schedule, weeksCount = 8): Execu
     averagePct,
     bestPct,
     totalCompleted,
+    totalMissed,
+    currentMissed: current.missed,
     scheduled: current.scheduled,
   };
 }

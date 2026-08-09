@@ -210,7 +210,7 @@ export default function AccuracyCalendar({
             >
               <IconChevronLeft size={24} strokeWidth={2} />
             </button>
-            <p className="text-[15px] font-bold tracking-[-0.3px] text-neutral-900 dark:text-white">
+            <p className="text-[16px] font-bold tracking-[-0.3px] text-neutral-900 dark:text-white">
               {MONTHS[month]} {year}
             </p>
             <button
