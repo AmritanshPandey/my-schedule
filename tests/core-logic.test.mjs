@@ -1792,3 +1792,44 @@ test("buildDayBreakdown gives a categorised commitment its own wedge", () => {
   assert.equal(commute.color, "cyan", "the commitment is coloured, not grey");
   assert.equal(slices.find((s) => s.id === HELD_TIME_ID).color, null, "only the anonymous remainder stays neutral");
 });
+
+// ── Ritual (routine) streak + adherence — the one shared helper ────────────────
+const isoOf = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+const comp = (dates) => dates.map((date) => ({ ritualId: "r1", date }));
+
+test("calculateRitualStats: streak = consecutive completed scheduled days back from uptoISO", async () => {
+  const { calculateRitualStats } = await import("../lib/consistency/calculateRitualStreak.ts");
+  const ritual = { id: "r1", title: "Meditate", time: "07:00" }; // no repeatDays = every day
+  // 2026-08-07 back to 2026-08-04 done; 2026-08-03 missing -> streak 4.
+  const stats = calculateRitualStats(ritual, comp(["2026-08-07", "2026-08-06", "2026-08-05", "2026-08-04"]), "2026-08-07");
+  assert.equal(stats.streak, 4);
+});
+
+test("calculateRitualStats: an unchecked today does NOT break the streak (grace)", async () => {
+  const { calculateRitualStats } = await import("../lib/consistency/calculateRitualStreak.ts");
+  const today = new Date();
+  const daysAgo = (n) => { const d = new Date(today); d.setDate(d.getDate() - n); return isoOf(d); };
+  const ritual = { id: "r1", title: "Read", time: "21:00" };
+  // today NOT completed; the two prior days are. Grace keeps the run at 2.
+  assert.equal(calculateRitualStats(ritual, comp([daysAgo(1), daysAgo(2)]), isoOf(today)).streak, 2);
+});
+
+test("calculateRitualStats: an off-day (weekend) gap doesn't reset a weekday routine", async () => {
+  const { calculateRitualStats } = await import("../lib/consistency/calculateRitualStreak.ts");
+  // 2026-08-07 is a Friday; Aug 1/2 are Sat/Sun (not scheduled), Jul 31 is a Friday.
+  const ritual = { id: "r1", title: "Standup", time: "09:00", repeatDays: ["monday", "tuesday", "wednesday", "thursday", "friday"] };
+  const done = comp(["2026-08-03", "2026-08-04", "2026-08-05", "2026-08-06", "2026-08-07"]); // Mon–Fri
+  // The unscheduled weekend is skipped; the run is 5 (breaks at the missed Jul 31 Friday).
+  assert.equal(calculateRitualStats(ritual, done, "2026-08-07").streak, 5);
+});
+
+test("calculateRitualStats: adherence = completed / scheduled over the 30-day window", async () => {
+  const { calculateRitualStats } = await import("../lib/consistency/calculateRitualStreak.ts");
+  const ritual = { id: "r1", title: "Water", time: "08:00" }; // every day -> 30 scheduled days
+  // Complete 15 of the last 30 days ending at a past date (so no today-skip).
+  const dates = Array.from({ length: 15 }, (_, i) => { const d = new Date("2026-08-07T00:00:00"); d.setDate(d.getDate() - i); return isoOf(d); });
+  const stats = calculateRitualStats(ritual, comp(dates), "2026-08-07");
+  assert.equal(stats.adherencePct, 50);
+  assert.equal(stats.dots.length, 7);
+  assert.equal(stats.dots[6], true, "the last dot is uptoISO itself");
+});

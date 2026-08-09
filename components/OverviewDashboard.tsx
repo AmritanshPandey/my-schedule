@@ -29,6 +29,7 @@ import ExecutionTrendCard from "@/components/ExecutionTrendCard";
 import { computeTrend, type TrendResult } from "@/lib/trendUtils";
 import { addDaysToISO, localISODate } from "@/lib/dateUtils";
 import { calculateExecutionStreak, type ExecutionStreak } from "@/lib/consistency/calculateExecutionStreak";
+import { calculateRitualStats, ritualScheduledOn } from "@/lib/consistency/calculateRitualStreak";
 import { haptic } from "@/lib/haptics";
 import { CARD, CARD_INTERACTIVE, SOFT_PANEL } from "@/components/ui/surfaces";
 import ProgressBar from "@/components/ui/ProgressBar";
@@ -405,26 +406,31 @@ function ActiveTrackingCard({
 function RoutineConsistencyCard({
   rows,
 }: {
-  rows: { ritual: { id: string; title: string; time: string }; streak: number; dots: boolean[] }[];
+  rows: { ritual: { id: string; title: string; time: string }; streak: number; adherencePct: number; dots: boolean[]; dueToday: boolean }[];
 }) {
   if (rows.length === 0) return null;
   return (
     <section data-testid="overview-routine-card" className={`${CARD} px-4 py-4`}>
       <SectionHeader icon={IconRepeat} title="Routine Consistency" meta={`${rows.length}`} />
       <div className="divide-y divide-neutral-100 dark:divide-white/[0.06]">
-        {rows.map(({ ritual, streak, dots }) => (
-          <div key={ritual.id} className="flex items-center justify-between gap-3 py-3">
+        {rows.map(({ ritual, streak, adherencePct, dots, dueToday }) => (
+          <div key={ritual.id} className={`flex items-center justify-between gap-3 py-3 ${dueToday ? "" : "opacity-70"}`}>
             <div className="min-w-0">
               <p className="truncate text-[14px] font-bold text-neutral-950 dark:text-white">
                 {ritual.title}
                 {ritual.time && <span className="ml-1.5 font-semibold text-neutral-400 dark:text-neutral-500">{ritual.time}</span>}
               </p>
-              {streak > 0 && (
-                <span className="mt-1 inline-flex items-center gap-1 text-[11px] font-bold text-rose-500 dark:text-rose-400">
-                  <IconFlame size={12} strokeWidth={2} />
-                  {streak}d streak
+              <div className="mt-1 flex items-center gap-2.5">
+                {streak > 0 && (
+                  <span className="inline-flex items-center gap-1 text-[11px] font-bold text-rose-500 dark:text-rose-400">
+                    <IconFlame size={12} strokeWidth={2} />
+                    {streak}d streak
+                  </span>
+                )}
+                <span className="text-[11px] font-semibold tabular-nums text-neutral-400 dark:text-neutral-500">
+                  {adherencePct}% · 30d
                 </span>
-              )}
+              </div>
             </div>
             <div className="flex shrink-0 gap-1">
               {dots.map((on, i) => (
@@ -761,25 +767,19 @@ export default function OverviewDashboard({
 
   const ritualConsistency = useMemo(() => {
     const completions = schedule.ritualCompletions ?? [];
-    const doneSet = new Set(completions.map((completion) => `${completion.ritualId}|${completion.date}`));
-    const last7 = Array.from({ length: 7 }, (_, i) => addDaysToISO(todayISO, -(6 - i)));
     const todayDay = JS_DAY_KEYS[new Date(todayISO + "T00:00:00").getDay()];
+    // All routines, not just today's — an off-day routine still shows its
+    // streak/adherence so the card reviews overall follow-through. Uses the one
+    // shared streak helper so the number matches the Routine tab.
     return (schedule.rituals ?? [])
-      .filter((ritual) => !ritual.repeatDays || ritual.repeatDays.length === 0 || ritual.repeatDays.includes(todayDay))
       .map((ritual) => {
-        let streak = 0;
-        let cursor = addDaysToISO(todayISO, -1);
-        for (let i = 0; i < 90; i++) {
-          const day = JS_DAY_KEYS[new Date(cursor + "T00:00:00").getDay()];
-          const scheduled = !ritual.repeatDays || ritual.repeatDays.length === 0 || ritual.repeatDays.includes(day);
-          if (scheduled) {
-            if (doneSet.has(`${ritual.id}|${cursor}`)) streak++;
-            else break;
-          }
-          cursor = addDaysToISO(cursor, -1);
-        }
-        return { ritual, streak, dots: last7.map((date) => doneSet.has(`${ritual.id}|${date}`)) };
-      });
+        const { streak, adherencePct, dots } = calculateRitualStats(ritual, completions, todayISO);
+        return { ritual, streak, adherencePct, dots, dueToday: ritualScheduledOn(ritual, todayDay) };
+      })
+      // Due today first, then most-at-risk (lowest adherence) so what's slipping surfaces.
+      .sort((a, b) =>
+        a.dueToday !== b.dueToday ? (a.dueToday ? -1 : 1) : a.adherencePct - b.adherencePct,
+      );
   }, [schedule.ritualCompletions, schedule.rituals, todayISO]);
 
   // Every plan, because consistency is the point of this card and every plan has
