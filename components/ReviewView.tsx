@@ -29,7 +29,7 @@ import {
   DEFAULT_OLLAMA_MODEL,
 } from "@/lib/ai";
 import MilestoneTimeline from "@/components/MilestoneTimeline";
-import ExecutionTrendCard from "@/components/ExecutionTrendCard";
+import CompletionTrendCard from "@/components/analytics/CompletionTrendCard";
 
 // ── Shared type (mirrored from ScheduleApp.tsx) ───────────────────────────────
 
@@ -418,9 +418,9 @@ function ThisWeekSection({
 // ─────────────────────────────────────────────────────────────────────────────
 
 function ExecutionTrendSection({ schedule }: { schedule: Schedule }) {
-  // Logic lives in the shared ExecutionTrendCard / computeExecutionTrend util,
+  // Logic lives in the shared CompletionTrendCard / computeExecutionTrend util,
   // so Overview and Review stay in sync.
-  return <ExecutionTrendCard schedule={schedule} />;
+  return <CompletionTrendCard schedule={schedule} />;
 }
 
 // ─────────────────────────────────────────────────────────────────────────────

@@ -18,6 +18,7 @@ import {
 import type { Ritual, RitualColor, RitualCompletion, DayKey } from "@/lib/useScheduleDB";
 import { DAYS } from "@/lib/useScheduleDB";
 import { localISODate, todayISO } from "@/lib/dateUtils";
+import { calculateRitualStats, ritualScheduledOn } from "@/lib/consistency/calculateRitualStreak";
 import { parseTimeToMinutes } from "@/lib/timeUtils";
 import { haptic } from "@/lib/haptics";
 import EmptyState from "@/components/ui/EmptyState";
@@ -48,28 +49,12 @@ const DAY_SHORT: Record<DayKey, string> = {
 };
 
 function appliesToDay(ritual: Ritual, day: DayKey): boolean {
-  return !ritual.repeatDays || ritual.repeatDays.length === 0 || ritual.repeatDays.includes(day);
+  return ritualScheduledOn(ritual, day);
 }
 
-/**
- * Consecutive completed due-days for a ritual, counting back from `uptoISO`.
- * Today counts as "not yet broken" — an unchecked today doesn't reset the run.
- */
+/** Consecutive completed due-days for a ritual, via the shared helper. */
 function ritualStreak(ritual: Ritual, completions: RitualCompletion[], uptoISO: string): number {
-  const done = new Set(completions.filter((c) => c.ritualId === ritual.id).map((c) => c.date));
-  const today = todayISO();
-  const cursor = new Date(`${uptoISO}T00:00:00`);
-  let streak = 0;
-  for (let i = 0; i < 180; i++) {
-    const iso = localISODate(cursor);
-    const weekday = JS_TO_DAY[cursor.getDay()];
-    if (appliesToDay(ritual, weekday)) {
-      if (done.has(iso)) streak++;
-      else if (iso !== today) break; // an unchecked today is in-progress, not a miss
-    }
-    cursor.setDate(cursor.getDate() - 1);
-  }
-  return streak;
+  return calculateRitualStats(ritual, completions, uptoISO).streak;
 }
 
 // Chronological buckets so a daily practice reads morning → evening.
@@ -360,8 +345,6 @@ export default function RitualView({
       })
     : null;
 
-  const MAX_RITUALS = 8;
-
   const sorted = useMemo(() => [...rituals].sort((a, b) => {
     const ao = a.sortOrder ?? Infinity, bo = b.sortOrder ?? Infinity;
     return ao !== bo ? ao - bo : a.time.localeCompare(b.time);
@@ -586,15 +569,11 @@ export default function RitualView({
               {rituals.length > 0 && (
                 <DateActionButton value={selectedDateISO} onChange={setSelectedDateISO} />
               )}
-              {rituals.length < MAX_RITUALS ? (
-                <CtaActionButton
-                  label="Add Routine"
-                  icon={<IconPlus size={14} strokeWidth={2.5} />}
-                  onClick={() => { haptic("medium"); onAddOpenChange(true); }}
-                />
-              ) : (
-                <span className="text-[11px] font-semibold text-neutral-400 dark:text-neutral-500">Max {MAX_RITUALS}</span>
-              )}
+              <CtaActionButton
+                label="Add Routine"
+                icon={<IconPlus size={14} strokeWidth={2.5} />}
+                onClick={() => { haptic("medium"); onAddOpenChange(true); }}
+              />
             </>
           }
           className="mb-4"

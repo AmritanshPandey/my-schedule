@@ -82,6 +82,7 @@ import { inputToDisplayTime, minutesToInputTime, parseTimeToMinutes, toScheduleD
 import { computeTrend } from "@/lib/trendUtils";
 import { getPlanCardStats } from "@/lib/planInsights";
 import { calculateExecutionStreak } from "@/lib/consistency/calculateExecutionStreak";
+import { calculateRitualStats, ritualScheduledOn } from "@/lib/consistency/calculateRitualStreak";
 import { haptic } from "@/lib/haptics";
 import { CARD } from "@/components/ui/surfaces";
 import CheckDraw from "@/components/ui/CheckDraw";
@@ -98,6 +99,10 @@ const RitualView = dynamic(() => import("@/components/activity/RitualView"), { s
 // Small hand-rolled SVG donut with no chart dependency — safe to load eagerly
 // in the iOS shell (see the first-load guard in tests/core-logic.test.mjs).
 const DayBreakdownCard = dynamic(() => import("@/components/DayBreakdownCard"), { ssr: false });
+// Companion analytics — same hand-rolled, framer-free SVG/CSS as the donut, so
+// they render on the Dashboard tab which has no LazyMotion ancestor.
+const WeeklyHeatmapCard = dynamic(() => import("@/components/analytics/WeeklyHeatmapCard"), { ssr: false });
+const CompletionTrendCard = dynamic(() => import("@/components/analytics/CompletionTrendCard"), { ssr: false });
 const SettingsView = dynamic(() => import("@/components/SettingsView").then((m) => ({ default: m.SettingsView })), { ssr: false });
 const DayWallpaperSheet = dynamic(() => import("@/components/DayWallpaperSheet"), { ssr: false });
 const NotesView = dynamic(() => import("@/components/notes/NotesView"), { ssr: false });
@@ -133,9 +138,6 @@ function getWeekDates(offset: number): Array<{ day: DayKey; date: Date }> {
   });
 }
 
-function isRitualDueOnDay(ritual: Ritual, day: DayKey): boolean {
-  return !ritual.repeatDays || ritual.repeatDays.length === 0 || ritual.repeatDays.includes(day);
-}
 
 function taskDurationMinutes(task: Task): number {
   const start = parseTimeToMinutes(task.startTime);
@@ -493,10 +495,6 @@ export default function IOSScheduleApp() {
     [schedule, todayKey]
   );
   const selectedPlan = selectedPlanId ? plansById.get(selectedPlanId) ?? null : null;
-  const completedRitualIds = useMemo(() => {
-    const today = todayISO();
-    return new Set((schedule.ritualCompletions ?? []).filter((item) => item.date === today).map((item) => item.ritualId));
-  }, [schedule.ritualCompletions, todayKey]);
   const taskSheetActiveDays = useMemo(() => {
     if (taskSheetMode !== "edit" || !taskSheetTask) return [activeDay];
     const days = DAYS.filter((day) => schedule.activities[day].some((task) => task.id === taskSheetTask.id));
@@ -545,16 +543,21 @@ export default function IOSScheduleApp() {
     () => todayOpenTasks.reduce((sum, task) => sum + taskDurationMinutes(task), 0),
     [todayOpenTasks]
   );
-  const todayRitualsDue = useMemo(
-    () => (schedule.rituals ?? []).filter((ritual) => isRitualDueOnDay(ritual, todayKey)),
-    [schedule.rituals, todayKey]
-  );
-  const todayRitualDone = useMemo(
-    () => todayRitualsDue.filter((ritual) => completedRitualIds.has(ritual.id)).length,
-    [completedRitualIds, todayRitualsDue]
-  );
   const dashboardProgressPct = todayTasks.length > 0 ? Math.round((todayDone / todayTasks.length) * 100) : 0;
   const executionStreak = useMemo(() => calculateExecutionStreak(schedule, todayISO()), [schedule]);
+  // All routines with streak/adherence/dots (shared helper), due-today first then
+  // most-at-risk — matches the desktop Routine Consistency card.
+  const ritualConsistency = useMemo(() => {
+    const completions = schedule.ritualCompletions ?? [];
+    return (schedule.rituals ?? [])
+      .map((ritual) => {
+        const { streak, adherencePct, dots } = calculateRitualStats(ritual, completions, todayISO());
+        return { ritual, streak, adherencePct, dots, dueToday: ritualScheduledOn(ritual, todayKey) };
+      })
+      .sort((a, b) =>
+        a.dueToday !== b.dueToday ? (a.dueToday ? -1 : 1) : a.adherencePct - b.adherencePct,
+      );
+  }, [schedule.rituals, schedule.ritualCompletions, todayKey]);
 	  const overviewTrackers = useMemo(() => {
 	    const storedTrackers = schedule.progressTrackers ?? [];
     const fallbackTrackers: ProgressTracker[] = storedTrackers.length > 0
@@ -1265,6 +1268,16 @@ export default function IOSScheduleApp() {
               preferences={schedule.preferences}
             />
 
+            <WeeklyHeatmapCard
+              activities={schedule.activities}
+              todayKey={todayKey}
+              todayISO={todayISO()}
+            />
+
+            {DAYS.some((d) => (schedule.activities[d] ?? []).length > 0) && (
+              <CompletionTrendCard schedule={schedule} />
+            )}
+
             {overviewPlanConsistency.length > 0 && (
               <section data-testid="overview-plan-card" className={`${CARD} p-4`}>
                 <div className="mb-2 flex items-center gap-1.5 text-neutral-500 dark:text-neutral-400">
@@ -1310,22 +1323,34 @@ export default function IOSScheduleApp() {
                 <IconRepeat size={16} strokeWidth={2.2} />
                 <h2 className="text-[13px] font-extrabold">Routine Consistency</h2>
               </div>
-              {todayRitualsDue.length === 0 ? (
-                <p className="py-2 text-[13px] font-semibold text-neutral-500 dark:text-neutral-400">No routines due today.</p>
+              {ritualConsistency.length === 0 ? (
+                <p className="py-2 text-[13px] font-semibold text-neutral-500 dark:text-neutral-400">No routines yet.</p>
               ) : (
                 <div className="divide-y divide-neutral-100 dark:divide-white/[0.06]">
-                  {todayRitualsDue.map((ritual) => {
-                    const done = completedRitualIds.has(ritual.id);
-                    return (
-                      <div key={ritual.id} className="flex items-center justify-between gap-3 py-3 first:pt-1 last:pb-0">
-                        <div className="min-w-0">
-                          <p className={`truncate text-[15px] font-black ${done ? "text-neutral-400 line-through dark:text-neutral-600" : "text-neutral-950 dark:text-white"}`}>{ritual.title}</p>
-                          <p className="mt-0.5 text-[12px] font-semibold text-neutral-500 dark:text-neutral-400">{ritual.time || "Anytime"}</p>
+                  {ritualConsistency.map(({ ritual, streak, adherencePct, dots, dueToday }) => (
+                    <div key={ritual.id} className={`flex items-center justify-between gap-3 py-3 first:pt-1 last:pb-0 ${dueToday ? "" : "opacity-70"}`}>
+                      <div className="min-w-0">
+                        <p className="truncate text-[15px] font-black text-neutral-950 dark:text-white">
+                          {ritual.title}
+                          {ritual.time && <span className="ml-1.5 text-[12px] font-semibold text-neutral-400 dark:text-neutral-500">{ritual.time}</span>}
+                        </p>
+                        <div className="mt-0.5 flex items-center gap-2.5">
+                          {streak > 0 && (
+                            <span className="inline-flex items-center gap-1 text-[11px] font-bold text-rose-500 dark:text-rose-400">
+                              <IconFlame size={12} strokeWidth={2} />
+                              {streak}d
+                            </span>
+                          )}
+                          <span className="text-[11px] font-semibold tabular-nums text-neutral-400 dark:text-neutral-500">{adherencePct}% · 30d</span>
                         </div>
-                        <span className={`h-2.5 w-2.5 shrink-0 rounded-full ${done ? "bg-emerald-500" : "bg-neutral-200 dark:bg-white/[0.10]"}`} />
                       </div>
-                    );
-                  })}
+                      <div className="flex shrink-0 gap-1">
+                        {dots.map((on, i) => (
+                          <span key={i} className={`h-2 w-2 rounded-full ${on ? "bg-emerald-500" : "bg-neutral-200 dark:bg-white/[0.10]"}`} />
+                        ))}
+                      </div>
+                    </div>
+                  ))}
                 </div>
               )}
             </section>

@@ -73,6 +73,9 @@ function isoForWeekday(todayISO: string, todayKey: DayKey, day: DayKey): string 
  */
 export default function DayBreakdownCard({ activities, categories, todayKey, todayISO, preferences }: DayBreakdownCardProps) {
   const [day, setDay] = useState<DayKey>(todayKey);
+  // Hovering/focusing a legend row lifts its wedge and swaps the centre readout
+  // to that slice — an informative peek, not decoration. Null = show the total.
+  const [hoveredId, setHoveredId] = useState<string | null>(null);
   const dateISO = useMemo(() => isoForWeekday(todayISO, todayKey, day), [todayISO, todayKey, day]);
   // The previous weekday's overnight tails land inside this day, exactly where
   // the timeline draws them, so they are counted here rather than on their
@@ -118,9 +121,10 @@ export default function DayBreakdownCard({ activities, categories, todayKey, tod
   // the day too — otherwise a screen reader hears the same "today" for all
   // seven selections.
   const dayLabel = day === todayKey ? "today" : `on ${day[0].toUpperCase()}${day.slice(1)}`;
+  const hoveredSlice = hoveredId ? slices.find((s) => s.id === hoveredId) ?? null : null;
 
   return (
-    <section data-testid="overview-day-breakdown" className={`${CARD} px-4 py-4`}>
+    <section data-testid="overview-day-breakdown" className={`${CARD} px-5 py-4`}>
       <div className="mb-3 flex items-center justify-between gap-3">
         <div className="flex min-w-0 items-center gap-2">
           <IconChartPie size={15} strokeWidth={2} className="shrink-0 text-neutral-400 dark:text-neutral-500" />
@@ -210,20 +214,25 @@ export default function DayBreakdownCard({ activities, categories, todayKey, tod
                     strokeDasharray={`${Math.max(0, seg.dash - 1.5)} ${CIRCUMFERENCE}`}
                     strokeDashoffset={-seg.offset}
                     stroke={isHeld ? undefined : categoryHex(slice.color ?? "cyan")}
-                    className={isHeld ? "stroke-neutral-400 dark:stroke-neutral-500" : undefined}
+                    // Dim the other wedges when a legend row is active, so the
+                    // hovered slice reads as the figure and the rest as ground.
+                    style={{ opacity: hoveredId && hoveredId !== seg.id ? 0.22 : 1 }}
+                    className={`transition-opacity duration-200 motion-reduce:transition-none ${
+                      isHeld ? "stroke-neutral-400 dark:stroke-neutral-500" : ""
+                    }`}
                   />
                 );
               })}
             </svg>
-            <div className="pointer-events-none absolute inset-0 flex flex-col items-center justify-center">
-              <span className="text-[20px] font-extrabold leading-none tabular-nums text-neutral-950 dark:text-white">
-                {formatMinutesCompact(totalMinutes)}
+            <div className="pointer-events-none absolute inset-0 flex flex-col items-center justify-center px-6 text-center">
+              <span className="text-[22px] font-extrabold leading-none tabular-nums text-neutral-950 dark:text-white">
+                {formatMinutesCompact(hoveredSlice ? hoveredSlice.minutes : totalMinutes)}
               </span>
               {/* neutral-500/400 rather than 400/500: #A1A1A1 on white is
                   2.5:1 and fails AA at this size, as does neutral-500 on the
                   dark card. This pairing clears 4.5:1 in both themes. */}
-              <span className="mt-1 text-[10px] font-bold uppercase tracking-[0.08em] text-neutral-500 dark:text-neutral-400">
-                Scheduled
+              <span className="mt-1 max-w-full truncate text-[10px] font-bold uppercase tracking-[0.08em] text-neutral-500 dark:text-neutral-400">
+                {hoveredSlice ? hoveredSlice.label : "Scheduled"}
               </span>
             </div>
           </div>
@@ -231,7 +240,17 @@ export default function DayBreakdownCard({ activities, categories, todayKey, tod
           {/* Legend */}
           <ul className="flex w-full min-w-0 flex-col gap-2">
             {slices.map((slice) => (
-              <li key={slice.id} className="flex items-center gap-2">
+              <li
+                key={slice.id}
+                tabIndex={0}
+                onMouseEnter={() => setHoveredId(slice.id)}
+                onMouseLeave={() => setHoveredId(null)}
+                onFocus={() => setHoveredId(slice.id)}
+                onBlur={() => setHoveredId(null)}
+                className={`-mx-1.5 flex items-center gap-2 rounded-md px-1.5 py-0.5 outline-none transition-colors motion-reduce:transition-none focus-visible:ring-2 focus-visible:ring-neutral-900/20 dark:focus-visible:ring-white/25 ${
+                  hoveredId === slice.id ? "bg-neutral-50 dark:bg-white/[0.04]" : ""
+                }`}
+              >
                 <span
                   aria-hidden="true"
                   className={`h-2.5 w-2.5 shrink-0 rounded-full ${

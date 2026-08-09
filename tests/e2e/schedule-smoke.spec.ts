@@ -318,7 +318,9 @@ async function expectOverviewDashboard(page: Page, isMobile: boolean) {
   await expect(dashboard).toBeVisible();
   await expect(page.getByTestId("overview-today-card")).toContainText("Morning Run");
   await expect(page.getByTestId("overview-week-card")).toContainText("This Week");
-  await expect(page.getByTestId("overview-progress-card")).toContainText("Weekly Progress");
+  await expect(page.getByTestId("overview-progress-card")).toContainText(
+    isMobile ? "Weekly Progress" : "Task completion trend",
+  );
   await expect(page.getByTestId("overview-tracking-card")).toContainText("Run Distance");
   await expect(page.getByTestId("overview-plan-card")).toContainText("Cardio");
   await expect(page.getByTestId("overview-routine-card")).toContainText("Hydrate");
