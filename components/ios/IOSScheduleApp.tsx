@@ -99,6 +99,10 @@ const RitualView = dynamic(() => import("@/components/activity/RitualView"), { s
 // Small hand-rolled SVG donut with no chart dependency — safe to load eagerly
 // in the iOS shell (see the first-load guard in tests/core-logic.test.mjs).
 const DayBreakdownCard = dynamic(() => import("@/components/DayBreakdownCard"), { ssr: false });
+// Companion analytics — same hand-rolled, framer-free SVG/CSS as the donut, so
+// they render on the Dashboard tab which has no LazyMotion ancestor.
+const WeeklyHeatmapCard = dynamic(() => import("@/components/analytics/WeeklyHeatmapCard"), { ssr: false });
+const CompletionTrendCard = dynamic(() => import("@/components/analytics/CompletionTrendCard"), { ssr: false });
 const SettingsView = dynamic(() => import("@/components/SettingsView").then((m) => ({ default: m.SettingsView })), { ssr: false });
 const DayWallpaperSheet = dynamic(() => import("@/components/DayWallpaperSheet"), { ssr: false });
 const NotesView = dynamic(() => import("@/components/notes/NotesView"), { ssr: false });
@@ -1263,6 +1267,16 @@ export default function IOSScheduleApp() {
               todayISO={todayISO()}
               preferences={schedule.preferences}
             />
+
+            <WeeklyHeatmapCard
+              activities={schedule.activities}
+              todayKey={todayKey}
+              todayISO={todayISO()}
+            />
+
+            {DAYS.some((d) => (schedule.activities[d] ?? []).length > 0) && (
+              <CompletionTrendCard schedule={schedule} />
+            )}
 
             {overviewPlanConsistency.length > 0 && (
               <section data-testid="overview-plan-card" className={`${CARD} p-4`}>

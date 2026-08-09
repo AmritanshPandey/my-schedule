@@ -25,7 +25,8 @@ import { selectTodayTasks } from "@/lib/todayTasks";
 import ExecutionStreakBanner from "@/components/ExecutionStreakBanner";
 import NeedsAttentionCard from "@/components/NeedsAttentionCard";
 import { selectNeedsAttention } from "@/lib/needsAttention";
-import ExecutionTrendCard from "@/components/ExecutionTrendCard";
+import CompletionTrendCard from "@/components/analytics/CompletionTrendCard";
+import WeeklyHeatmapCard from "@/components/analytics/WeeklyHeatmapCard";
 import { computeTrend, type TrendResult } from "@/lib/trendUtils";
 import { addDaysToISO, localISODate } from "@/lib/dateUtils";
 import { calculateExecutionStreak, type ExecutionStreak } from "@/lib/consistency/calculateExecutionStreak";
@@ -890,6 +891,11 @@ export default function OverviewDashboard({
                   todayISO={todayISO}
                   preferences={schedule.preferences}
                 />
+                <WeeklyHeatmapCard
+                  activities={schedule.activities}
+                  todayKey={todayKey}
+                  todayISO={todayISO}
+                />
                 <RoutineConsistencyCard rows={ritualConsistency} />
               </div>
 
@@ -897,7 +903,7 @@ export default function OverviewDashboard({
                 <ThisWeekCard activity={weeklyActivity} />
                 {hasScheduledTasks && (
                   <div data-testid="overview-progress-card">
-                    <ExecutionTrendCard schedule={schedule} />
+                    <CompletionTrendCard schedule={schedule} />
                   </div>
                 )}
                 <ActiveTrackingCard rows={trackerData} onNavigate={onNavigate} onLogTracker={onLogTracker} />

@@ -75,6 +75,8 @@ const {
 } = await import("../lib/dayBreakdown.ts");
 const { continuationInterval, SCHEDULE_DAY_HANDOVER_MINUTES } =
   await import("../lib/timeline/overnight.ts");
+const { buildWeeklyHeatmap, levelForMinutes, BAND_COUNT } =
+  await import("../lib/analytics/weeklyHeatmap.ts");
 const { selectTodayTasks } = await import("../lib/todayTasks.ts");
 const { selectNeedsAttention, MISSED_LOOKBACK_DAYS, MIN_STREAK_TO_WARN } = await import("../lib/needsAttention.ts");
 const { CategoryRegistry, categoryUsageCounts, canDeleteCategory } = await import("../lib/taskCategories.ts");
@@ -1316,6 +1318,43 @@ test("buildDayBreakdown groups by category and pools commitments into held time"
   assert.equal(slices[0].color, "indigo", "wedge colour is the category's, so it matches the timeline");
   assert.equal(slices.find((s) => s.id === HELD_TIME_ID).label, "Held time");
   assert.equal(slices.find((s) => s.id === HELD_TIME_ID).color, null, "held time has no accent");
+});
+
+test("buildWeeklyHeatmap buckets scheduled minutes into weekday × time bands", () => {
+  const empty = Object.fromEntries(DAYS.map((d) => [d, []]));
+  const activities = {
+    ...empty,
+    monday: [{ id: "m1", title: "Focus", startTime: "9:00 AM", endTime: "11:00 AM" }], // 8 AM band, 120
+    tuesday: [{ id: "t1", title: "Sleep", startTime: "10:00 PM", endTime: "1:00 AM" }], // 8 PM band 120 + 12 AM band 60
+  };
+  const now = new Date();
+  const todayKey = DAYS[(now.getDay() + 6) % 7]; // JS Sun=0 → our Mon=0
+  const hm = buildWeeklyHeatmap(activities, localISODate(now), todayKey);
+
+  assert.equal(hm.grid.length, 7, "one row per weekday");
+  assert.equal(hm.grid[0].length, BAND_COUNT, "six 4-hour bands");
+  assert.equal(hm.grid[0][2], 120, "Mon 9–11 AM lands wholly in the 8 AM band");
+  assert.equal(hm.grid[1][5], 120, "Tue 10 PM–midnight lands in the 8 PM band");
+  assert.equal(hm.grid[1][0], 60, "the post-midnight tail wraps into the 12 AM band");
+  assert.equal(hm.totalMinutes, 300);
+  assert.equal(hm.maxMinutes, 120, "the busiest cell sets the normalisation ceiling");
+  assert.equal(hm.columnTotals[1], 180, "Tuesday's column sums both of its bands");
+});
+
+test("buildWeeklyHeatmap is empty when nothing is scheduled", () => {
+  const empty = Object.fromEntries(DAYS.map((d) => [d, []]));
+  const hm = buildWeeklyHeatmap(empty, localISODate(new Date()), "monday");
+  assert.equal(hm.totalMinutes, 0);
+  assert.equal(hm.maxMinutes, 0);
+});
+
+test("levelForMinutes normalises intensity against the week's peak", () => {
+  assert.equal(levelForMinutes(0, 200), 0, "no time → level 0");
+  assert.equal(levelForMinutes(200, 0), 0, "no peak → level 0 (no divide-by-zero)");
+  assert.equal(levelForMinutes(50, 200), 1); // 0.25
+  assert.equal(levelForMinutes(100, 200), 2); // 0.50
+  assert.equal(levelForMinutes(150, 200), 3); // 0.75
+  assert.equal(levelForMinutes(200, 200), 4); // 1.00 — the peak
 });
 
 test("categoryUsageCounts counts a recurring task once, and guards delete", () => {
