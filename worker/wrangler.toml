@@ -1,0 +1,17 @@
+name = "planr-reminders"
+main = "src/index.ts"
+compatibility_date = "2024-09-23"
+compatibility_flags = ["nodejs_compat"]
+
+# Free plan includes Cron Triggers down to 1-minute precision.
+[triggers]
+crons = ["* * * * *"]
+
+# All configuration is stored as encrypted secrets, NOT here. Set them with
+# `wrangler secret put <NAME>` (see README.md):
+#   FIREBASE_PROJECT_ID     e.g. planr-75429
+#   FIREBASE_CLIENT_EMAIL   from the service-account JSON
+#   FIREBASE_PRIVATE_KEY    from the service-account JSON (PEM, keep the \n)
+#   VAPID_PUBLIC_KEY        from `npx web-push generate-vapid-keys`
+#   VAPID_PRIVATE_KEY       from `npx web-push generate-vapid-keys`
+#   VAPID_SUBJECT           e.g. mailto:you@example.com

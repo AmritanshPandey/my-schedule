@@ -1,0 +1,19 @@
+{
+  "name": "planr-reminders-worker",
+  "description": "Free (Cloudflare Workers) scheduled Web Push reminders for PlanR",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "dev": "wrangler dev --test-scheduled",
+    "deploy": "wrangler deploy"
+  },
+  "dependencies": {
+    "@block65/webcrypto-web-push": "^1.0.2"
+  },
+  "devDependencies": {
+    "@cloudflare/workers-types": "^4.20240909.0",
+    "typescript": "^5.6.0",
+    "wrangler": "^3.114.0"
+  }
+}

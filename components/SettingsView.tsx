@@ -819,98 +819,80 @@ export function SettingsView({
                 <div className="min-w-0 flex-1">
                   <p className="text-[13px] font-semibold text-neutral-800 dark:text-white">Start of day</p>
                   <p className="mt-0.5 text-[11px] leading-snug text-neutral-400 dark:text-neutral-500">
-                    Auto follows the first timed task. A fixed time starts the timeline one hour earlier.
+                    When your day begins on the timeline.
                   </p>
                 </div>
-                <div className="flex w-full min-w-0 items-center gap-2 sm:w-auto sm:shrink-0">
-                  <div className="relative flex-1 sm:w-44 sm:flex-none">
-                    <select
-                      aria-label="Start of day"
-                      value={dayStartTime}
-                      onChange={(e) => handleDayStartChange(e.target.value)}
-                      className={`${SETTINGS_CONTROL_CLASS} w-full pr-9 appearance-none`}
-                    >
-                      <option value="">Auto from tasks</option>
-                      {DAY_START_OPTIONS.map((option) => (
-                        <option key={option.value} value={option.value}>
-                          {option.label}
-                        </option>
-                      ))}
-                    </select>
-                    <IconClock size={14} strokeWidth={2} className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-neutral-400" />
-                  </div>
-                  <button
-                    type="button"
-                    aria-label="Clear start of day"
-                    title="Clear start of day"
-                    onClick={() => handleDayStartChange("")}
-                    disabled={!dayStartTime}
-                    className={SETTINGS_ICON_BUTTON_CLASS}
+                <div className="relative w-full sm:w-64 sm:shrink-0">
+                  <select
+                    aria-label="Start of day"
+                    value={dayStartTime}
+                    onChange={(e) => handleDayStartChange(e.target.value)}
+                    className={`${SETTINGS_CONTROL_CLASS} w-full pr-9 appearance-none`}
                   >
-                    <IconX size={15} strokeWidth={2.2} />
-                  </button>
+                    <option value="">Auto (first task)</option>
+                    {DAY_START_OPTIONS.map((option) => (
+                      <option key={option.value} value={option.value}>
+                        {option.label}
+                      </option>
+                    ))}
+                  </select>
+                  <IconClock size={14} strokeWidth={2} className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-neutral-400" />
                 </div>
               </Row>
+
+              <Divider />
 
               <Row className="items-start max-sm:flex-col sm:items-center">
                 <div className="min-w-0 flex-1">
                   <p className="text-[13px] font-semibold text-neutral-800 dark:text-white">End of day</p>
                   <p className="mt-0.5 text-[11px] leading-snug text-neutral-400 dark:text-neutral-500">
-                    The timeline's end. Values after midnight appear as "(next day)".
+                    When the timeline ends. Times past midnight show as &quot;(next day)&quot;.
                   </p>
                 </div>
-                <div className="flex w-full min-w-0 items-center gap-2 sm:w-auto sm:shrink-0">
-                  <div className="relative flex-1 sm:w-44 sm:flex-none">
-                    <select
-                      aria-label="End of day"
-                      value={
-                        schedule.preferences?.dayEndAuto
-                          ? "auto"
-                          : typeof schedule.preferences?.dayEndMinutes === "number"
-                          ? String(schedule.preferences?.dayEndMinutes)
-                          : ""
+                <div className="relative w-full sm:w-64 sm:shrink-0">
+                  <select
+                    aria-label="End of day"
+                    value={
+                      schedule.preferences?.dayEndAuto
+                        ? "auto"
+                        : typeof schedule.preferences?.dayEndMinutes === "number"
+                        ? String(schedule.preferences?.dayEndMinutes)
+                        : ""
+                    }
+                    onChange={(e) => {
+                      const v = e.target.value;
+                      if (v === "auto") {
+                        onUpdatePreferences?.({ dayEndAuto: true, dayEndMinutes: undefined });
+                      } else if (v === "") {
+                        onUpdatePreferences?.({ dayEndAuto: undefined, dayEndMinutes: undefined });
+                      } else {
+                        onUpdatePreferences?.({ dayEndAuto: undefined, dayEndMinutes: Number(v) });
                       }
-                      onChange={(e) => {
-                        const v = e.target.value;
-                        if (v === "auto") {
-                          onUpdatePreferences?.({ dayEndAuto: true, dayEndMinutes: undefined });
-                        } else if (v === "") {
-                          onUpdatePreferences?.({ dayEndAuto: undefined, dayEndMinutes: undefined });
-                        } else {
-                          onUpdatePreferences?.({ dayEndAuto: undefined, dayEndMinutes: Number(v) });
-                        }
-                      }}
-                      className={`${SETTINGS_CONTROL_CLASS} w-full pr-9 appearance-none`}
-                    >
-                      <option value="">Default (28:00 / 4:00 AM)</option>
-                      <option value="auto">Auto from tasks (use last timed task)</option>
-                      {DAY_END_OPTIONS.map((option) => (
-                        <option key={option.value} value={option.value}>
-                          {option.label}
-                        </option>
-                      ))}
-                    </select>
-                    <IconClock size={14} strokeWidth={2} className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-neutral-400" />
-                  </div>
-                  <button
-                    type="button"
-                    aria-label="Clear end of day"
-                    title="Clear end of day"
-                    onClick={() => onUpdatePreferences?.({ dayEndMinutes: undefined, dayEndAuto: undefined })}
-                    disabled={schedule.preferences?.dayEndMinutes === undefined && !schedule.preferences?.dayEndAuto}
-                    className={SETTINGS_ICON_BUTTON_CLASS}
+                    }}
+                    className={`${SETTINGS_CONTROL_CLASS} w-full pr-9 appearance-none`}
                   >
-                    <IconX size={15} strokeWidth={2.2} />
-                  </button>
+                    <option value="">Default (4:00 AM)</option>
+                    <option value="auto">Follow last task</option>
+                    {DAY_END_OPTIONS.map((option) => (
+                      <option key={option.value} value={option.value}>
+                        {option.label}
+                      </option>
+                    ))}
+                  </select>
+                  <IconClock size={14} strokeWidth={2} className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-neutral-400" />
                 </div>
               </Row>
+            </Card>
+          </div>
 
-              <Divider />
+          <div>
+            <SectionLabel>Tracking</SectionLabel>
+            <Card>
               <Row className="items-start max-sm:flex-col sm:items-center">
                 <div className="min-w-0 flex-1">
                   <p className="text-[13px] font-semibold text-neutral-800 dark:text-white">Tracking starts</p>
                   <p className="mt-0.5 text-[11px] leading-snug text-neutral-400 dark:text-neutral-500">
-                    Streaks, trends, and consistency ignore anything before this date · leave empty to use all history
+                    Streaks and trends ignore days before this. Off = count all history.
                   </p>
                 </div>
                 <div className="flex w-full min-w-0 items-center gap-2 sm:w-auto sm:shrink-0">
@@ -924,8 +906,8 @@ export function SettingsView({
                   />
                   <button
                     type="button"
-                    aria-label="Clear tracking start date"
-                    title="Clear tracking start date"
+                    aria-label="Use all history"
+                    title="All history"
                     onClick={() => handleTrackingStartChange("")}
                     disabled={!trackingStart}
                     className={SETTINGS_ICON_BUTTON_CLASS}

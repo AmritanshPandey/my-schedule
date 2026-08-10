@@ -200,12 +200,34 @@ async function staleWhileRevalidate(request, cacheName, fallbackPath) {
 }
 
 // ── Notifications ─────────────────────────────────────────────────────────────
-// Reminders are shown via registration.showNotification from the page (see
-// lib/reminders.ts). Clicking one focuses an existing PlanR window or opens
-// a fresh one.
+// Reminders arrive two ways, both landing here: while the app is open,
+// lib/reminders.ts calls registration.showNotification directly; while it is
+// closed, the server sends a Web Push (VAPID) message that fires the `push`
+// event below. Both use the same `tag` (planr-task-… / planr-ritual-… /
+// planr-nudge-…) so a foreground and a server notification collapse into one.
+
+self.addEventListener('push', (event) => {
+  let payload = {};
+  try {
+    payload = event.data ? event.data.json() : {};
+  } catch {
+    payload = { title: 'PlanR', body: event.data ? event.data.text() : '' };
+  }
+  const title = payload.title || 'PlanR';
+  const options = {
+    body: payload.body || '',
+    tag: payload.tag || undefined,
+    renotify: !!payload.tag,
+    icon: '/icons/icon.svg',
+    badge: '/icons/icon.svg',
+    data: { url: payload.url || '/' },
+  };
+  event.waitUntil(self.registration.showNotification(title, options));
+});
 
 self.addEventListener('notificationclick', (e) => {
   e.notification.close();
+  const url = (e.notification.data && e.notification.data.url) || '/';
   e.waitUntil(
     self.clients
       .matchAll({ type: 'window', includeUncontrolled: true })
@@ -213,7 +235,7 @@ self.addEventListener('notificationclick', (e) => {
         for (const client of clientList) {
           if ('focus' in client) return client.focus();
         }
-        return self.clients.openWindow('/');
+        return self.clients.openWindow(url);
       })
   );
 });

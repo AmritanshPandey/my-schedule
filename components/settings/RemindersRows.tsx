@@ -14,6 +14,9 @@ import {
 } from "@/lib/reminders";
 import { formatDisplayTime, minutesToInputTime } from "@/lib/timeUtils";
 import { SETTINGS_CONTROL_CLASS } from "@/components/ui/Input";
+import { useAuth } from "@/contexts/AuthProvider";
+import { subscribeToPush, unsubscribeFromPush, isPushSupported } from "@/lib/push/webPush";
+import { savePushConfig, savePushSubscription, removePushSubscription } from "@/lib/push/pushConfig";
 
 const NUDGE_OPTIONS = Array.from({ length: 12 }, (_, i) => {
   const value = minutesToInputTime((16 * 60) + i * 30); // 16:00 → 21:30
@@ -71,27 +74,51 @@ function SubRow({
  * reminders fire while PlanR is open — there is no push backend yet.
  */
 export default function RemindersRows() {
+  const { user } = useAuth();
+  const uid = user?.uid ?? null;
   const [settings, setSettings] = useState<ReminderSettings | null>(null);
   const [support, setSupport] = useState<NotificationSupport>("unsupported");
+  // Background delivery needs a public VAPID key AND a signed-in user (the server
+  // reads the subscription from that user's Firestore). Without both, reminders
+  // stay foreground-only and the copy says so.
+  const backgroundCapable = isPushSupported() && !!uid;
 
   useEffect(() => {
     setSettings(getReminderSettings());
     setSupport(notificationSupport());
   }, []);
 
+  // Every settings write mirrors into Firestore so the scheduled Cloud Function
+  // knows what to send. No-op for guests / unconfigured Firebase.
   const patch = useCallback((p: Partial<ReminderSettings>) => {
-    setSettings(setReminderSettings(p));
-  }, []);
+    const next = setReminderSettings(p);
+    setSettings(next);
+    void savePushConfig(uid, next);
+  }, [uid]);
 
   const handleMainToggle = useCallback(async (next: boolean) => {
     if (!next) {
       patch({ enabled: false });
+      try {
+        const removed = await unsubscribeFromPush();
+        if (removed) void removePushSubscription(uid, removed);
+      } catch {
+        // best-effort teardown; the server prunes dead subscriptions anyway
+      }
       return;
     }
     const perm = support === "granted" ? "granted" : await requestNotificationPermission();
     setSupport(perm);
     patch({ enabled: perm === "granted" });
-  }, [support, patch]);
+    if (perm === "granted") {
+      try {
+        const sub = await subscribeToPush();
+        if (sub) void savePushSubscription(uid, sub);
+      } catch {
+        // push subscription can fail (e.g. no VAPID key yet) — foreground still works
+      }
+    }
+  }, [support, patch, uid]);
 
   if (!settings) return null;
 
@@ -122,7 +149,9 @@ export default function RemindersRows() {
         <div className="min-w-0 flex-1">
           <p className="text-[13px] font-semibold text-neutral-800 dark:text-white">Reminders</p>
           <p className="mt-0.5 text-[11px] leading-snug text-neutral-400 dark:text-neutral-500">
-            Fire while PlanR is open · at task and routine times
+            {backgroundCapable
+              ? "At your task and routine times — even when PlanR is closed"
+              : "At your task and routine times, while PlanR is open"}
           </p>
         </div>
         <Toggle on={enabled} onChange={(v) => void handleMainToggle(v)} label="Reminders" />
