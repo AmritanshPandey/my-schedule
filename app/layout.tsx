@@ -74,7 +74,13 @@ try{
           fixed mobile header adds the inset to its own height, and the mobile
           scroll content offsets by just the header's base height (64px) — the
           body padding supplies the inset, so it is NOT added again there. */}
-      <body className="min-h-full flex flex-col bg-neutral-50 text-neutral-900 dark:bg-neutral-950 dark:text-white font-sans" style={{ paddingTop: "env(safe-area-inset-top)", paddingLeft: "env(safe-area-inset-left)", paddingRight: "env(safe-area-inset-right)" }}>
+      {/* No paddingTop:safe-area here — every shell/header/sheet (IOSHeader,
+          ScheduleApp headers, BottomSheet, TaskSheet) already applies
+          env(safe-area-inset-top) itself. Padding it on <body> too double-counted
+          the inset on notched iPhones: a ~2× top gap plus the body's own
+          bg-neutral-50 showing as a band under the white header. Left/right stay
+          (nothing else handles the landscape notch). */}
+      <body className="min-h-full flex flex-col bg-neutral-50 text-neutral-900 dark:bg-neutral-950 dark:text-white font-sans" style={{ paddingLeft: "env(safe-area-inset-left)", paddingRight: "env(safe-area-inset-right)" }}>
         <LandscapeBlocker />
         <ErrorReporter />
         <ServiceWorkerRegistration />
