@@ -225,7 +225,16 @@ function PlanCardInner({
         <div className="flex flex-1 items-center gap-1.5 rounded-xl bg-neutral-50 dark:bg-white/[0.04] px-3 py-2 text-[12px] font-semibold text-neutral-500 dark:text-neutral-400">
           <IconChecklist size={12} strokeWidth={2.2} className="shrink-0" />
           {taskCount} task{taskCount !== 1 ? "s" : ""}
-          {trackerCount > 0 && <span className="text-neutral-400 dark:text-neutral-600"> · {trackerCount} tracked</span>}
+          {/* "trackers", not "tracked": this counts ProgressTracker rows — the
+              numeric metrics behind the plan's "Progress Tracking" section — and
+              has nothing to do with isTrackedTask, which is what "tracked"
+              means everywhere else. "5 tasks · 0 tracked" would have implied
+              those tasks don't count toward anything, which is false. */}
+          {trackerCount > 0 && (
+            <span className="text-neutral-400 dark:text-neutral-600">
+              {" "}· {trackerCount} tracker{trackerCount !== 1 ? "s" : ""}
+            </span>
+          )}
         </div>
         {onQuickLog && trackerCount > 0 && (
           <button
@@ -260,9 +269,12 @@ function PlanCardInner({
           </span>
         )}
 
+        {/* This says something about the plan's *dates*, not its execution —
+            it renders purely on "has a start but no end". Sitting on the same
+            row as "Completed Today", "Ongoing" read as a progress state. */}
         {plan.startDate && !plan.endDate && (
-          <span className="shrink-0 text-[12px] font-semibold tabular-nums text-neutral-400 dark:text-neutral-500">
-            Ongoing
+          <span className="shrink-0 text-[12px] font-semibold text-neutral-400 dark:text-neutral-500">
+            No end date
           </span>
         )}
       </div>

@@ -1312,6 +1312,12 @@ export default function IOSScheduleApp() {
                   <IconClipboardList size={16} strokeWidth={2.2} />
                   <h2 className="text-[13px] font-extrabold">Plan Consistency</h2>
                 </div>
+                {/* Mirrors the desktop card: the percentage counts days, the
+                    milestone line counts milestones. Naming the unit once is
+                    what stops "0/5 milestones" beside "50%" reading as a bug. */}
+                <p className="mb-3 text-[12px] text-neutral-500 dark:text-neutral-400">
+                  % of days you&rsquo;ve completed at least one task
+                </p>
                 <div className="divide-y divide-neutral-100 dark:divide-white/[0.06]">
                   {overviewPlanConsistency.slice(0, 5).map(({ plan, consistency, milestonesTotal, milestonesDone }) => (
                     <button
@@ -1330,7 +1336,7 @@ export default function IOSScheduleApp() {
                             "0/0 milestones" reports nothing. */}
                         {milestonesTotal > 0 && (
                           <p className="mt-0.5 text-[11px] font-semibold text-neutral-500 dark:text-neutral-400">
-                            {milestonesDone}/{milestonesTotal} milestones
+                            {milestonesDone} of {milestonesTotal} milestones
                           </p>
                         )}
                       </div>
