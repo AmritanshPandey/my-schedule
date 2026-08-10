@@ -24,6 +24,9 @@ interface IOSTimelineRowProps {
   slotIndex?: number;
   /** True when this row's slot window contains "now" (today only). */
   isCurrent?: boolean;
+  /** True when this row's slot has already elapsed (today only). Fills the
+   *  connector spine emerald so the line reads as continuous progress up to now. */
+  isPast?: boolean;
   /** Last row in the day — draw no connector tail. */
   isLast?: boolean;
   /** First row in the day — draw no connector above the node. */
@@ -44,6 +47,7 @@ export default function IOSTimelineRow({
   category,
   slotIndex,
   isCurrent = false,
+  isPast = false,
   isLast = false,
   isFirst = false,
   readOnly = false,
@@ -133,13 +137,17 @@ export default function IOSTimelineRow({
     );
   }
 
-  // The connector reads as a progress spine: completed segments glow emerald, the
-  // live segment breathes (the app's calm "alive" primitive — no shimmer/gradient),
-  // upcoming stays neutral.
-  const connectorClass = isCurrent
-    ? "bg-emerald-500/60 animate-status-pulse"
-    : done
-    ? "bg-emerald-500/40"
+  // The connector reads as a continuous progress spine: everything up to "now"
+  // is coloured so the line fills without gaps — missed segments turn red, and
+  // completed *or* simply-elapsed segments (including held-time rows between
+  // tasks) glow emerald. The live segment breathes (the app's calm "alive"
+  // primitive — no shimmer/gradient); upcoming stays neutral.
+  const connectorClass = missed
+    ? "bg-rose-500/50"
+    : isCurrent
+    ? "bg-emerald-500/70 animate-status-pulse"
+    : done || isPast
+    ? "bg-emerald-500/70"
     : "bg-neutral-200 dark:bg-white/10";
 
   // ── Trailing status ─────────────────────────────────────────────────────────

@@ -37,7 +37,7 @@ export default function DetailHeader({ title, onBack, actions, rightSlot, classN
         aria-label="Back"
         className="-ml-1.5 flex min-w-0 items-center gap-1 text-left"
       >
-        <IconChevronLeft size={24} strokeWidth={1.5} className="shrink-0 text-neutral-950 dark:text-neutral-white" />
+        <IconChevronLeft size={24} strokeWidth={1.5} className="shrink-0 text-neutral-950 dark:text-white" />
         <h2 className="truncate text-[16px] font-semibold leading-none text-neutral-950 dark:text-white">{title}</h2>
       </m.button>
 

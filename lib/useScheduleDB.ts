@@ -293,6 +293,12 @@ export interface SchedulePreferences {
    * never re-scanned and adopting the feature doesn't retroactively miss history.
    */
   lastRolloverISO?: string;
+  /**
+   * Missed occurrences the user has handled (dismissed or rescheduled), as
+   * `${taskId}|${dateISO}` keys. "Needs attention" hides these; the underlying
+   * `"missed"` history event is kept so analytics stay accurate.
+   */
+  acknowledgedMisses?: string[];
 }
 
 /**
@@ -866,7 +872,7 @@ function normalizeNotes(raw: unknown): Note[] {
 
 function normalizeSchedulePreferences(raw: unknown): SchedulePreferences {
   if (!raw || typeof raw !== "object") return {};
-  const source = raw as { dayStartTime?: unknown; dayEndMinutes?: unknown; dayEndAuto?: unknown; startDate?: unknown; lastRolloverISO?: unknown };
+  const source = raw as { dayStartTime?: unknown; dayEndMinutes?: unknown; dayEndAuto?: unknown; startDate?: unknown; lastRolloverISO?: unknown; acknowledgedMisses?: unknown };
   const dayStartTime = normalizeDayStartTime(source.dayStartTime);
   // Accept a numeric dayEndMinutes in minutes (may be > 1440 to represent next-day hours)
   let dayEndMinutes: number | undefined = undefined;
@@ -886,12 +892,20 @@ function normalizeSchedulePreferences(raw: unknown): SchedulePreferences {
     typeof source.lastRolloverISO === "string" && /^\d{4}-\d{2}-\d{2}$/.test(source.lastRolloverISO)
       ? source.lastRolloverISO
       : undefined;
+  // Handled-miss keys ("taskId|YYYY-MM-DD"). Capped so the set can't grow without
+  // bound; stale keys past the 7-day attention window are harmless (never read).
+  const acknowledgedMisses = Array.isArray(source.acknowledgedMisses)
+    ? (source.acknowledgedMisses.filter(
+        (k): k is string => typeof k === "string" && /\|\d{4}-\d{2}-\d{2}$/.test(k),
+      ).slice(-200))
+    : undefined;
   return {
     ...(dayStartTime ? { dayStartTime } : {}),
     ...(typeof dayEndMinutes === "number" ? { dayEndMinutes } : {}),
     ...(dayEndAuto ? { dayEndAuto } : {}),
     ...(startDate ? { startDate } : {}),
     ...(lastRolloverISO ? { lastRolloverISO } : {}),
+    ...(acknowledgedMisses && acknowledgedMisses.length ? { acknowledgedMisses } : {}),
   };
 }
 

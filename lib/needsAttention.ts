@@ -120,6 +120,9 @@ export function selectNeedsAttention(
   // ever describes today).
   const cutoff = shiftISO(todayISO, -MISSED_LOOKBACK_DAYS);
   const seen = new Set<string>();
+  // Misses the user has handled (dismissed or rescheduled) — hidden here, but
+  // their "missed" history event stays, so analytics remain accurate.
+  const acknowledged = new Set(schedule.preferences?.acknowledgedMisses ?? []);
   const missedTasks: MissedTask[] = [];
 
   for (const day of DAYS) {
@@ -131,7 +134,7 @@ export function selectNeedsAttention(
         // A recurring task shares one id across weekday buckets, so the same
         // event would otherwise be counted once per bucket it appears in.
         const key = `${task.id}|${dateISO}`;
-        if (seen.has(key)) continue;
+        if (seen.has(key) || acknowledged.has(key)) continue;
         seen.add(key);
         missedTasks.push({
           task,

@@ -96,6 +96,30 @@ export default function RemindersRows() {
     void savePushConfig(uid, next);
   }, [uid]);
 
+  // Self-heal: if Reminders are already ON when the page loads (remembered from a
+  // prior session), the toggle handler never runs — so make sure this device is
+  // subscribed and its config is in Firestore, otherwise the server has nothing
+  // to send to. Idempotent: subscribeToPush reuses an existing subscription and
+  // the writes are merges.
+  useEffect(() => {
+    if (!uid || support !== "granted" || !isPushSupported()) return;
+    const current = getReminderSettings();
+    if (!current.enabled) return;
+    let cancelled = false;
+    void (async () => {
+      try {
+        void savePushConfig(uid, current);
+        const sub = await subscribeToPush();
+        if (sub && !cancelled) void savePushSubscription(uid, sub);
+      } catch {
+        // foreground reminders still work even if the subscription can't be set up
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [uid, support, settings?.enabled]);
+
   const handleMainToggle = useCallback(async (next: boolean) => {
     if (!next) {
       patch({ enabled: false });

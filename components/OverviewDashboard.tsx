@@ -25,7 +25,7 @@ import TodayTaskList from "@/components/today/TodayTaskList";
 import { selectTodayTasks } from "@/lib/todayTasks";
 import ExecutionStreakBanner from "@/components/ExecutionStreakBanner";
 import NeedsAttentionCard from "@/components/NeedsAttentionCard";
-import { selectNeedsAttention } from "@/lib/needsAttention";
+import { selectNeedsAttention, type MissedTask } from "@/lib/needsAttention";
 import CompletionTrendCard from "@/components/analytics/CompletionTrendCard";
 import { computeExecutionTrend } from "@/lib/executionAnalytics";
 
@@ -49,6 +49,8 @@ interface OverviewDashboardProps {
   onOpenSubtasks?: (taskId: string) => void;
   completedRitualIds: Set<string>;
   onLogTracker: (tracker: ProgressTracker) => void;
+  /** Open the recovery sheet for a missed task in "Needs attention". */
+  onHandleMissed?: (missed: MissedTask) => void;
 }
 
 const DAYS_ORDER: DayKey[] = ["monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday"];
@@ -677,6 +679,7 @@ export default function OverviewDashboard({
   onOpenSubtasks,
   completedRitualIds,
   onLogTracker,
+  onHandleMissed,
 }: OverviewDashboardProps) {
   const todayISO = localISODate(new Date());
   const plansById = useMemo(() => new Map(schedule.plans.map((plan) => [plan.id, plan])), [schedule.plans]);
@@ -889,7 +892,7 @@ export default function OverviewDashboard({
                 {/* Above Today's Task: catching up on what slipped comes before
                     working the current day. Renders nothing when there is
                     nothing to fix, so a clean week costs no space. */}
-                <NeedsAttentionCard data={needsAttention} onNavigate={onNavigate} />
+                <NeedsAttentionCard data={needsAttention} onNavigate={onNavigate} onHandleMissed={onHandleMissed} />
                 <TodayTaskList
                   tasks={todayTasks}
                   done={tasksDone}

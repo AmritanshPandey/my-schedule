@@ -85,8 +85,10 @@ import { getPlanCardStats } from "@/lib/planInsights";
 import { calculateExecutionStreak } from "@/lib/consistency/calculateExecutionStreak";
 import { calculateRitualStats, ritualScheduledOn } from "@/lib/consistency/calculateRitualStreak";
 import { computeExecutionTrend } from "@/lib/executionAnalytics";
-import { selectNeedsAttention } from "@/lib/needsAttention";
+import { selectNeedsAttention, type MissedTask } from "@/lib/needsAttention";
 import NeedsAttentionCard from "@/components/NeedsAttentionCard";
+import MissedTaskSheet from "@/components/MissedTaskSheet";
+import { rescheduleMissedTaskOnce, acknowledgeMiss } from "@/lib/missedRecovery";
 import { haptic } from "@/lib/haptics";
 import { CARD } from "@/components/ui/surfaces";
 import CheckDraw from "@/components/ui/CheckDraw";
@@ -205,7 +207,7 @@ function IOSHeader({
               onClick={onBack}
               className="-ml-1.5 flex items-center gap-1 text-left"
             >
-              <IconChevronLeft size={24} strokeWidth={1.5} className="shrink-0 text-neutral-950 dark:text-neutral-white" />
+              <IconChevronLeft size={24} strokeWidth={1.5} className="shrink-0 text-neutral-950 dark:text-white" />
               <h1 className="truncate text-[16px] font-semibold leading-none text-neutral-950 dark:text-white">{title}</h1>
             </button>
           ) : (
@@ -365,6 +367,7 @@ export default function IOSScheduleApp() {
   const [todayKey, setTodayKey] = useState<DayKey>(() => JS_DAYS[new Date().getDay()]);
   const [activeDay, setActiveDay] = useState<DayKey>(() => JS_DAYS[new Date().getDay()]);
   const [dayActionsOpen, setDayActionsOpen] = useState(false);
+  const [missedSheet, setMissedSheet] = useState<MissedTask | null>(null);
   // Today tab starts as a clean execution surface; editing affordances (per-card
   // pencil, day actions, wallpaper, add-task) are revealed only in edit mode.
   const [todayEditMode, setTodayEditMode] = useState(false);
@@ -1001,15 +1004,18 @@ export default function IOSScheduleApp() {
         return toScheduleDayMinutes(am ?? 0) - toScheduleDayMinutes(bm ?? 0);
       });
 
-    // The row whose slot window contains "now" — the green "in progress" ring.
-    // Only on today; skips done/missed/held-time. Mirrors CurrentTaskHighlightLayer.
+    // Progress spine, today only: currentKey = the row whose slot window contains
+    // "now" (the green pulsing ring); pastKeys = every row whose slot has already
+    // elapsed. The connector fills emerald continuously up to now — including
+    // held-time rows (Commute, Breakfast) that sit between completed tasks — so
+    // the line reads as one connected progress bar instead of scattered green bits.
     const rowKeyOf = (task: Task, slotIndex?: number) =>
       slotIndex != null ? `${task.id}:${slotIndex}` : task.id;
     let currentKey: string | null = null;
+    const pastKeys = new Set<string>();
     if (dateISO === todayISO()) {
       const nowSched = toScheduleDayMinutes(nowMinutes);
       for (const { task, slotIndex } of rows) {
-        if (!isTrackedTask(task)) continue;
         const s = getSlots(task)[slotIndex ?? 0];
         const sm = parseTimeToMinutes(s?.startTime ?? "");
         const em = parseTimeToMinutes(s?.endTime ?? "");
@@ -1017,12 +1023,13 @@ export default function IOSScheduleApp() {
         const start = toScheduleDayMinutes(sm);
         let end = toScheduleDayMinutes(em);
         if (end <= start) end += 24 * 60; // spans midnight
-        const done = slotIndex != null
-          ? (task.completedSlotIndices ?? []).includes(slotIndex)
-          : !!task.completed;
-        if (nowSched >= start && nowSched < end && !done && !task.missed) {
-          currentKey = rowKeyOf(task, slotIndex);
-          break;
+        const key = rowKeyOf(task, slotIndex);
+        if (nowSched >= end) pastKeys.add(key);
+        if (currentKey == null && isTrackedTask(task) && nowSched >= start && nowSched < end) {
+          const done = slotIndex != null
+            ? (task.completedSlotIndices ?? []).includes(slotIndex)
+            : !!task.completed;
+          if (!done && !task.missed) currentKey = key;
         }
       }
     }
@@ -1045,6 +1052,7 @@ export default function IOSScheduleApp() {
                 task={task}
                 slotIndex={slotIndex}
                 isCurrent={rowKey === currentKey}
+                isPast={pastKeys.has(rowKey)}
                 isLast={i === rows.length - 1}
                 isFirst={i === 0}
                 linkedPlan={task.planId ? plansById.get(task.planId) ?? null : null}
@@ -1188,7 +1196,7 @@ export default function IOSScheduleApp() {
             </section>
 
             {/* Recently missed / overdue — renders nothing when all clear. */}
-            <NeedsAttentionCard data={needsAttention} onNavigate={setActiveTab} />
+            <NeedsAttentionCard data={needsAttention} onNavigate={setActiveTab} onHandleMissed={setMissedSheet} />
 
             <TodayTaskList
               tasks={todayTasks}
@@ -1637,8 +1645,13 @@ export default function IOSScheduleApp() {
     return null;
   })();
 
+  // shrink-0 on <main>: it is a flex child of <body> (via a display:contents
+  // wrapper). Without it, when the day's content is taller than one screen the
+  // flex column shrinks <main> back to its min-height (100dvh), so its
+  // bg-[#F3F4F1] only paints the first screenful and the taller content
+  // overflows onto the body's lighter bg — a two-tone band mid-list.
   return (
-    <main className="min-h-dvh bg-[#F3F4F1] text-neutral-900 dark:bg-[#0E0E0E] dark:text-white">
+    <main className="min-h-dvh shrink-0 bg-[#F3F4F1] text-neutral-900 dark:bg-[#0E0E0E] dark:text-white">
       {!subtasksRef && activeTab !== 6 && (
         <IOSHeader
           title={selectedPlan ? selectedPlan.title : activeTab === 0 ? "Today" : activeTab === 1 ? "Plans" : activeTab === 2 ? "Routine" : activeTab === 5 ? "Settings" : activeTab === 6 ? "Notes" : "Dashboard"}
@@ -1679,6 +1692,19 @@ export default function IOSScheduleApp() {
         onSwap={(target) => setSchedule(swapDays(activeDay, target))}
         onDuplicate={(targets) => setSchedule(duplicateDay(activeDay, targets))}
       />
+
+      {missedSheet && (
+        <IOSMotionBoundary>
+          <MissedTaskSheet
+            missed={missedSheet}
+            onClose={() => setMissedSheet(null)}
+            onReschedule={(m, dateISO, startMinutes) =>
+              setSchedule((prev) => rescheduleMissedTaskOnce(prev, m.task, m.dateISO, dateISO, startMinutes))
+            }
+            onDismiss={(m) => setSchedule((prev) => acknowledgeMiss(prev, m.task.id, m.dateISO))}
+          />
+        </IOSMotionBoundary>
+      )}
 
       {activeTab !== 6 && !subtasksRef && !taskSheetOpen && (
         <IOSBottomNav
