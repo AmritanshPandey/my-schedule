@@ -42,8 +42,11 @@ const DayWallpaperSheet = dynamic(() => import("@/components/DayWallpaperSheet")
 const DayActionsSheet = dynamic(() => import("@/components/DayActionsSheet"), { ssr: false });
 const RitualView = dynamic(() => import("@/components/activity/RitualView"), { ssr: false });
 const OverviewDashboard = dynamic(() => import("@/components/OverviewDashboard"), { ssr: false });
+const MissedTaskSheet = dynamic(() => import("@/components/MissedTaskSheet"), { ssr: false });
 const TrackerQuickBar = dynamic(() => import("@/components/TrackerQuickBar"), { ssr: false });
 import WhatNextCard from "@/components/WhatNextCard";
+import type { MissedTask } from "@/lib/needsAttention";
+import { rescheduleMissedTaskOnce, acknowledgeMiss } from "@/lib/missedRecovery";
 import {
   useScheduleDB,
   DAYS,
@@ -755,6 +758,7 @@ export default function ScheduleApp() {
   const [templatesOpen, setTemplatesOpen] = useState(false);
   const [wallpaperOpen, setWallpaperOpen] = useState(false);
   const [dayActionsOpen, setDayActionsOpen] = useState(false);
+  const [missedSheet, setMissedSheet] = useState<MissedTask | null>(null);
   // Today (narrow) header: reveal editing chrome (day actions, wallpaper) only
   // in edit mode, matching the iOS shell's clean-by-default execution surface.
   const [todayEditMode, setTodayEditMode] = useState(false);
@@ -2930,6 +2934,15 @@ export default function ScheduleApp() {
         onDuplicate={(targets) => setSchedule(duplicateDay(activeDay, targets))}
       />
 
+      <MissedTaskSheet
+        missed={missedSheet}
+        onClose={() => setMissedSheet(null)}
+        onReschedule={(m, dateISO, startMinutes) =>
+          setSchedule((prev) => rescheduleMissedTaskOnce(prev, m.task, m.dateISO, dateISO, startMinutes))
+        }
+        onDismiss={(m) => setSchedule((prev) => acknowledgeMiss(prev, m.task.id, m.dateISO))}
+      />
+
       {/* ── Content ────────────────────────────────────────────────────────── */}
       {/* paddingTop offsets the fixed header (64px) + iOS safe-area inset — mobile only.
           (Tailwind arbitrary value so `lg:pt-0` can actually override it; an inline
@@ -3669,6 +3682,7 @@ export default function ScheduleApp() {
                 onOpenSubtasks={(id) => setSubtasksRef({ id, day: todayKey, dateISO: todayISO() })}
                 completedRitualIds={completedRitualIds}
                 onLogTracker={(tracker) => setEntryTracker(tracker)}
+                onHandleMissed={setMissedSheet}
               />
             )}
             </ErrorBoundary>

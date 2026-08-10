@@ -6,6 +6,7 @@ import { haptic } from "@/lib/haptics";
 import {
   formatDaysAgo,
   formatDaysOverdue,
+  type MissedTask,
   type NeedsAttention,
 } from "@/lib/needsAttention";
 
@@ -16,6 +17,8 @@ interface NeedsAttentionCardProps {
   data: NeedsAttention;
   /** Overdue milestones live on Plans; missed occurrences live on Today. */
   onNavigate: (tab: number) => void;
+  /** Open the recovery sheet (reschedule / dismiss) for a missed task. */
+  onHandleMissed?: (missed: MissedTask) => void;
 }
 
 function Row({
@@ -79,7 +82,7 @@ function Row({
  * nothing at all when there is nothing wrong: a card that is always present
  * stops being a signal and starts being a nag, and PlanR's voice "never nags".
  */
-export default function NeedsAttentionCard({ data, onNavigate }: NeedsAttentionCardProps) {
+export default function NeedsAttentionCard({ data, onNavigate, onHandleMissed }: NeedsAttentionCardProps) {
   if (data.total === 0) return null;
 
   // Ordered by how recoverable each item is. A ritual streak can still be saved
@@ -110,7 +113,7 @@ export default function NeedsAttentionCard({ data, onNavigate }: NeedsAttentionC
       title: row.task.title,
       detail: row.plan ? `${row.plan.title} · missed ${formatDaysAgo(row.daysAgo)}` : `Missed ${formatDaysAgo(row.daysAgo)}`,
       pill: formatDaysAgo(row.daysAgo),
-      onClick: () => onNavigate(0),
+      onClick: () => (onHandleMissed ? onHandleMissed(row) : onNavigate(0)),
     })),
   ];
 

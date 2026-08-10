@@ -503,16 +503,17 @@ export default function NoteEditor({ note, onUpdate, onDelete, onBack, tasks, pl
       <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain">
         <div className="sticky top-0 z-30 border-b border-neutral-200 bg-white dark:border-white/[0.08] dark:bg-neutral-950">
           <div className="mx-auto flex h-16 w-full max-w-4xl items-center gap-2.5 px-3 sm:px-5 lg:max-w-5xl xl:max-w-6xl">
-            <IconButton
-              label="Back"
-              variant="ghost"
-              size="md"
-              radius="xl"
+            {/* Bare chevron matching DetailHeader / IOSHeader (Plan, Task, Notes
+                list) so every internal-page back reads identically. Desktop is a
+                two-pane master/detail, so the back stays lg:hidden there. */}
+            <button
+              type="button"
               onClick={flushAndBack}
-              className="lg:hidden"
+              aria-label="Back"
+              className="-ml-1.5 flex shrink-0 items-center text-neutral-950 transition-transform active:scale-90 lg:hidden dark:text-white"
             >
-              <IconChevronLeft size={24} strokeWidth={1.5} />
-            </IconButton>
+              <IconChevronLeft size={24} strokeWidth={1.5} className="shrink-0" />
+            </button>
 
             <div className="min-w-0 flex-1">
               <input
@@ -688,7 +689,11 @@ export default function NoteEditor({ note, onUpdate, onDelete, onBack, tasks, pl
         onClose={() => setLinkPickerOpen(false)}
       />
 
-      <div className="shrink-0 border-t border-neutral-100 bg-white px-2 py-2 dark:border-white/[0.06] dark:bg-neutral-950" style={{ paddingBottom: "max(8px, env(safe-area-inset-bottom))" }}>
+      {/* Match IOSBottomNav's home-indicator clearance (max(20px, env+8)). The
+          old max(8px, env) floored too low: when iOS reports a small/zero bottom
+          inset (Safari tab states, some standalone renders) the buttons slid
+          under the home indicator and looked cropped. */}
+      <div className="shrink-0 border-t border-neutral-100 bg-white px-2 py-2 dark:border-white/[0.06] dark:bg-neutral-950" style={{ paddingBottom: "max(20px, calc(env(safe-area-inset-bottom) + 8px))" }}>
         <div className="mx-auto flex w-full max-w-4xl flex-col gap-2 px-3 lg:max-w-5xl xl:max-w-6xl">
           {isTableActive && (
             <div className="flex items-center gap-1 overflow-x-auto rounded-2xl border border-neutral-200 bg-neutral-50 px-2 py-2 dark:border-white/[0.08] dark:bg-white/[0.04]">

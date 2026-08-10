@@ -80,6 +80,7 @@ const { buildWeeklyHeatmap, levelForMinutes, BAND_COUNT } =
 const { applyAutoMissed } = await import("../lib/consistency/autoMiss.ts");
 const { selectTodayTasks } = await import("../lib/todayTasks.ts");
 const { selectNeedsAttention, MISSED_LOOKBACK_DAYS, MIN_STREAK_TO_WARN } = await import("../lib/needsAttention.ts");
+const { acknowledgeMiss, rescheduleMissedTaskOnce, missKey } = await import("../lib/missedRecovery.ts");
 const { CategoryRegistry, categoryUsageCounts, canDeleteCategory } = await import("../lib/taskCategories.ts");
 const { taskIdentity, categoriesById } = await import("../lib/taskIdentity.ts");
 const { calculateExecutionStreak } = await import("../lib/consistency/calculateExecutionStreak.ts");
@@ -1939,4 +1940,52 @@ test("computeExecutionTrend counts missed occurrences per week", () => {
   assert.equal(trend.currentMissed, 1, "this week's missed count");
   assert.ok(trend.totalMissed >= 1, "missed rolls into the window total");
   assert.equal(trend.current.missed, 1, "the current week row carries missed");
+});
+
+// ── Missed-task recovery: dismiss / reschedule (lib/missedRecovery.ts) ────────
+
+test("acknowledgeMiss hides a miss from Needs Attention but keeps the history event", () => {
+  const today = "2026-08-02";
+  const dayKey = todayKeyFor(today);
+  const y = isoShift(today, -1);
+  const base = { planId: "p1", startTime: "9:00 AM", endTime: "10:00 AM" };
+  const tasks = [
+    { ...base, id: "t-a", title: "A", completionHistory: [missedEvent("t-a", y)] },
+    { ...base, id: "t-b", title: "B", completionHistory: [missedEvent("t-b", y)] },
+  ];
+  const schedule = attentionSchedule({ dayKey, tasks, plans: [{ id: "p1", title: "Work", category: "work", emoji: "briefcase", color: "cyan", items: [] }] });
+
+  const acked = acknowledgeMiss(schedule, "t-a", y);
+  const { missedTasks } = selectNeedsAttention(acked, today);
+  assert.deepEqual(missedTasks.map((r) => r.task.id), ["t-b"], "the acknowledged miss is hidden; others remain");
+  assert.deepEqual(acked.preferences.acknowledgedMisses, [missKey("t-a", y)]);
+  const taskA = acked.activities[dayKey].find((t) => t.id === "t-a");
+  assert.equal(taskA.completionHistory.filter((e) => e.completionType === "missed").length, 1, "the missed event is preserved (analytics stay accurate)");
+  const again = acknowledgeMiss(acked, "t-a", y);
+  assert.equal(again.preferences.acknowledgedMisses.length, 1, "idempotent — no duplicate ack key");
+});
+
+test("rescheduleMissedTaskOnce adds a fresh one-off and dismisses the source miss", () => {
+  const today = "2026-08-02";
+  const dayKey = todayKeyFor(today);
+  const y = isoShift(today, -1);
+  const task = { id: "t-run", title: "Run", planId: "p1", categoryId: "cat-fit", taskType: "task", startTime: "6:00 AM", endTime: "7:30 AM", subtasks: [], completionHistory: [missedEvent("t-run", y)] };
+  const schedule = attentionSchedule({ dayKey, tasks: [task], plans: [] });
+
+  const target = isoShift(today, 1);
+  const targetKey = todayKeyFor(target);
+  const next = rescheduleMissedTaskOnce(schedule, task, y, target, 8 * 60); // custom time 8:00 AM
+
+  const added = next.activities[targetKey].find((t) => t.recurrence?.type === "once");
+  assert.ok(added, "a one-off clone landed in the target date's weekday bucket");
+  assert.equal(added.recurrence.dateISO, target);
+  assert.equal(added.startTime, "08:00 AM");
+  assert.equal(added.endTime, "09:30 AM", "duration (90m) preserved");
+  assert.equal(added.title, "Run");
+  assert.equal(added.categoryId, "cat-fit", "identity preserved");
+  assert.notEqual(added.id, "t-run", "fresh id, not the source task");
+  assert.equal(added.completed ?? false, false);
+  assert.equal((added.completionHistory ?? []).length, 0, "clean completion state");
+  assert.deepEqual(next.preferences.acknowledgedMisses, [missKey("t-run", y)], "the source miss is dismissed");
+  assert.equal(selectNeedsAttention(next, today).missedTasks.length, 0, "the handled miss no longer shows");
 });
