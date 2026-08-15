@@ -123,6 +123,12 @@ export interface Task {
   sortOrder?: number;                 // drag-reorder position within a day
   subtasks?: ScheduleEntry[];         // per-task subtask list (overrides plan.items)
   /**
+   * Standard rest inserted between session steps, in minutes. Counts toward the
+   * step total (and the "fits the allotted time" check) but never moves the
+   * task's start/end. Only meaningful for `taskType: "session"`.
+   */
+  stepBufferMinutes?: number;
+  /**
    * "task" (default) and "session" are executed and tracked. "commitment" is
    * held time — commute, fixed office hours — that blocks the calendar but is
    * never checked off and never counts toward any statistic. See

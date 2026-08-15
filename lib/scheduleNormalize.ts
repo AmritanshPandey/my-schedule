@@ -45,6 +45,7 @@ const OPTIONAL_TASK_FIELDS = [
   "recurrence",
   "activeFrom",
   "activeUntil",
+  "stepBufferMinutes",
 ] as const;
 
 /** Exposed for the round-trip test that guards against silent field loss. */
@@ -65,6 +66,8 @@ function keepField(key: (typeof OPTIONAL_TASK_FIELDS)[number], value: unknown): 
     case "exceptions":
     case "recurrence":
       return isPlainObject(value);
+    case "stepBufferMinutes":
+      return typeof value === "number" && value > 0 && value <= 60;
     default:
       return value !== undefined;
   }

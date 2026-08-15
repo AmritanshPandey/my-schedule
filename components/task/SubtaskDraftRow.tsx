@@ -1,6 +1,6 @@
 "use client";
 
-import { IconCopy, IconCornerDownRight, IconGripVertical, IconTrash } from "@tabler/icons-react";
+import { IconClock, IconCopy, IconCornerDownRight, IconGripVertical, IconTrash } from "@tabler/icons-react";
 import { useSortable } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 import { memo, useState } from "react";
@@ -16,7 +16,7 @@ export interface SubtaskDraft {
   id: string;
   title: string;
   info?: string;
-  /** Free-text detail — reps/sets ("3×10") or a note. */
+  /** Free-text detail — a quantity, spec, or short note; whatever fits the step. */
   duration?: string;
   /** Dedicated time budget in minutes (see ScheduleEntry.timeMinutes). */
   timeMinutes?: number;
@@ -78,7 +78,7 @@ function SubtaskDraftRow({
         transition,
         opacity: isDragging ? 0.7 : 1,
       }}
-      className="group rounded-xl border border-neutral-200 bg-neutral-50/60 p-2.5 dark:border-white/[0.08] dark:bg-white/[0.02]"
+      className="group rounded-2xl border border-neutral-200 bg-neutral-50/60 p-2.5 transition-colors hover:border-neutral-300 dark:border-white/[0.08] dark:bg-white/[0.02] dark:hover:border-white/[0.14]"
     >
       <div className="flex items-start gap-2">
         <button
@@ -105,20 +105,29 @@ function SubtaskDraftRow({
             />
             {/* Dedicated time — accepts only a time (min/hour); this is what
                 counts toward the task's allotted-time budget. */}
-            <input
-              value={timeText}
-              onChange={(e) => handleTimeChange(e.target.value)}
-              placeholder="Time · 15min"
-              aria-label="Subtask time (minutes or hours)"
-              aria-invalid={timeInvalid}
-              autoComplete="off"
-              inputMode="text"
-              className={`h-10 w-[104px] shrink-0 text-center font-bold ${ROW_INPUT} ${
-                timeInvalid
-                  ? "text-rose-600 ring-1 ring-rose-400 dark:text-rose-400"
-                  : "text-sky-700 dark:text-sky-300"
-              }`}
-            />
+            <div className="relative h-10 w-[112px] shrink-0">
+              <IconClock
+                size={13}
+                strokeWidth={2.2}
+                className={`pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2 ${
+                  timeInvalid ? "text-rose-500 dark:text-rose-400" : "text-blue-500 dark:text-blue-400"
+                }`}
+              />
+              <input
+                value={timeText}
+                onChange={(e) => handleTimeChange(e.target.value)}
+                placeholder="15min"
+                aria-label="Subtask time (minutes or hours)"
+                aria-invalid={timeInvalid}
+                autoComplete="off"
+                inputMode="text"
+                className={`h-10 w-full text-center font-bold ${ROW_INPUT} !pl-6 ${
+                  timeInvalid
+                    ? "text-rose-600 ring-1 ring-rose-400 dark:text-rose-400"
+                    : "text-blue-600 dark:text-blue-400"
+                }`}
+              />
+            </div>
           </div>
 
           {timeInvalid && (
@@ -128,12 +137,13 @@ function SubtaskDraftRow({
           )}
 
           <div className="flex flex-wrap items-center gap-2">
-            {/* Free-text detail — reps/sets or a short note. */}
+            {/* Free-text detail — a short note, quantity, or spec; whatever
+                this step needs (e.g. "3 pages", "2 sets", "medium heat"). */}
             <input
               value={draft.duration ?? ""}
               onChange={(e) => onChange(draft.id, { ...draft, duration: e.target.value })}
-              placeholder="Reps / note · 3×10"
-              aria-label="Subtask reps or note"
+              placeholder="Detail · optional"
+              aria-label="Subtask detail"
               autoComplete="off"
               spellCheck
               className={`h-10 min-w-[120px] flex-[1_1_150px] font-semibold text-neutral-600 dark:text-neutral-300 ${ROW_INPUT}`}

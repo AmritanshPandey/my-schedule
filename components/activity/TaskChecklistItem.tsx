@@ -18,17 +18,32 @@ const DEADLINE_BADGE: Record<DeadlineState, string> = {
   upcoming: "border-neutral-200 bg-white text-neutral-500 dark:border-white/[0.12] dark:bg-transparent dark:text-neutral-400",
 };
 
-export function getTaskDetailPill(entry: ScheduleEntry): string | null {
+interface DetailSegment {
+  text: string;
+  /** Marks the segment as the time figure, so it renders in Info Blue. */
+  isTime?: boolean;
+}
+
+/** Structured detail pieces for a checklist item — info, then time, then any
+ *  free-text detail — so the time figure can be styled distinctly from the rest. */
+export function getTaskDetailSegments(entry: ScheduleEntry): DetailSegment[] | null {
   const info = entry.info?.trim() || entry.note?.trim();
-  const details: string[] = [];
-  if (info) details.push(info);
-  if (entry.timeMinutes != null && entry.timeMinutes > 0) details.push(formatMinutes(entry.timeMinutes));
-  if (entry.duration) details.push(entry.duration);
-  if (details.length > 0) return details.join(" · ");
+  const segments: DetailSegment[] = [];
+  if (info) segments.push({ text: info });
+  if (entry.timeMinutes != null && entry.timeMinutes > 0) {
+    segments.push({ text: formatMinutes(entry.timeMinutes), isTime: true });
+  }
+  if (entry.duration) segments.push({ text: entry.duration });
+  if (segments.length > 0) return segments;
   const meta = (entry as ScheduleEntry & { meta?: MetaField[] }).meta;
-  if (meta && meta.length > 0) return meta.map((m) => m.value).join(" | ");
-  if (entry.time) return entry.time;
+  if (meta && meta.length > 0) return meta.map((m) => ({ text: m.value }));
+  if (entry.time) return [{ text: entry.time }];
   return null;
+}
+
+export function getTaskDetailPill(entry: ScheduleEntry): string | null {
+  const segments = getTaskDetailSegments(entry);
+  return segments ? segments.map((s) => s.text).join(" · ") : null;
 }
 
 interface TaskChecklistItemProps {
@@ -48,7 +63,7 @@ export default function TaskChecklistItem({
   readOnly = false,
   onToggle,
 }: TaskChecklistItemProps) {
-  const detail = getTaskDetailPill(item);
+  const detailSegments = getTaskDetailSegments(item);
   const deadline = item.deadline
     ? {
         label: formatDeadline(item.deadline, item.deadlineScope ?? "day"),
@@ -103,9 +118,14 @@ export default function TaskChecklistItem({
           {deadline.label}
         </Pill>
       )}
-      {detail && (
+      {detailSegments && (
         <Pill variant="neutral" size="md" className="text-[13px]">
-          {detail}
+          {detailSegments.map((seg, i) => (
+            <span key={i} className={seg.isTime ? "font-extrabold tabular-nums text-blue-600 dark:text-blue-400" : undefined}>
+              {i > 0 && <span className="mx-1 text-neutral-300 dark:text-neutral-600">·</span>}
+              {seg.text}
+            </span>
+          ))}
         </Pill>
       )}
     </div>

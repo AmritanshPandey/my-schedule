@@ -13,6 +13,7 @@ import { arrayMove, SortableContext, verticalListSortingStrategy } from "@dnd-ki
 import {
   IconArrowLeft,
   IconCheck,
+  IconClock,
   IconCopy,
   IconCopyPlus,
   IconPlus,
@@ -243,6 +244,10 @@ export function TaskSheet({
   const [editDay, setEditDay] = useState<DayKey>(activeDay);
   const [repeatDays, setRepeatDays] = useState<DayKey[]>([activeDay]);
   const [subtasks, setSubtasks] = useState<SubtaskDraft[]>([]);
+  // Standard rest inserted between session steps. Session-only; counts toward
+  // the step total (and the allotted-time check) but never moves the task's
+  // own start/end — see `Task.stepBufferMinutes`.
+  const [stepBuffer, setStepBuffer] = useState<number | undefined>(undefined);
   const [focusNewSubtask, setFocusNewSubtask] = useState(false);
   const [duplicateStep, setDuplicateStep] = useState<"idle" | "picking">("idle");
   const [duplicateDays, setDuplicateDays] = useState<DayKey[]>([]);
@@ -311,6 +316,7 @@ export function TaskSheet({
       // Load per-task subtasks; fall back to plan template for tasks created before this fix
       const taskSubtasks = task.subtasks ?? linkedPlan?.items ?? [];
       setSubtasks(taskSubtasks.map(entryToSubtaskDraft));
+      setStepBuffer(task.stepBufferMinutes);
       const r = task.recurrence;
       if (r?.type === "once") { setRepeatMode("once"); setOnceDate(r.dateISO); }
       else if (r?.type === "weekly" && r.interval > 1) { setRepeatMode("interval"); setIntervalWeeks(r.interval); setOnceDate(baseDateISO); }
@@ -329,6 +335,7 @@ export function TaskSheet({
       setEditDay(activeDay);
       setRepeatDays([activeDay]);
       setSubtasks([]);
+      setStepBuffer(undefined);
       // Seed from the category matching the plan's icon when the user already
       // has one — a fresh task then lands in the right bucket without a pick.
       const seedIcon = plans.find((p) => p.id === pid)?.emoji || "";
@@ -508,6 +515,24 @@ export function TaskSheet({
     return any ? total : null;
   }, [subtasks]);
 
+  // How many real steps exist (titled, whether or not they carry a time) —
+  // drives both the buffer picker's visibility and the gap count below.
+  const stepCount = useMemo(() => subtasks.filter((s) => s.title.trim().length > 0).length, [subtasks]);
+
+  // Standard rest between steps, session-only. It's a flat add-on to the total
+  // — one gap per pair of consecutive steps — and never touches the task's own
+  // start/end time.
+  const stepBufferTotalMinutes =
+    taskType === "session" && stepBuffer && stepCount > 1 ? stepBuffer * (stepCount - 1) : 0;
+
+  // The figure actually shown/compared: subtask time plus buffer, whenever
+  // either is present. Always visible once there are steps, independent of
+  // whether the task has a valid time slot to compare against.
+  const combinedStepMinutes =
+    subtaskTotalMinutes != null || stepBufferTotalMinutes > 0
+      ? (subtaskTotalMinutes ?? 0) + stepBufferTotalMinutes
+      : null;
+
   const allottedMinutes = useMemo(() => {
     let total = 0;
     for (const s of slots) {
@@ -522,10 +547,12 @@ export function TaskSheet({
 
   const subtaskDurationError =
     taskType !== "commitment" &&
-    subtaskTotalMinutes != null &&
+    combinedStepMinutes != null &&
     allottedMinutes != null &&
-    subtaskTotalMinutes > allottedMinutes
-      ? `Subtasks add up to ${formatMinutes(subtaskTotalMinutes)}, but this task only has ${formatMinutes(allottedMinutes)}. Trim durations or extend the time.`
+    combinedStepMinutes > allottedMinutes
+      ? `${taskType === "session" ? "Steps" : "Subtasks"} add up to ${formatMinutes(combinedStepMinutes)}${
+          stepBufferTotalMinutes > 0 ? ` (incl. ${formatMinutes(stepBufferTotalMinutes)} buffer)` : ""
+        }, but this task only has ${formatMinutes(allottedMinutes)}. Trim durations or extend the time.`
       : null;
 
   // The active window only applies to recurring tasks (a one-off already has its
@@ -609,6 +636,7 @@ export function TaskSheet({
       // Active window only applies to recurring tasks; a one-off carries its own date.
       activeFrom: showActiveWindow && activeFrom ? activeFrom : undefined,
       activeUntil: showActiveWindow && activeUntil ? activeUntil : undefined,
+      stepBufferMinutes: taskType === "session" && stepBuffer ? stepBuffer : undefined,
     };
 
     onSave({
@@ -1118,18 +1146,68 @@ export function TaskSheet({
                     {taskType === "session" ? "Add Step" : "Add Subtask"}
                   </button>
 
-                  {/* Durations must fit the task's allotted time. */}
-                  {subtaskTotalMinutes != null && allottedMinutes != null && (
-                    <p
-                      className={`text-[12px] font-semibold ${
+                  {/* Standard rest between steps — session-only, and purely additive:
+                      it feeds the total below but never nudges the task's own time. */}
+                  {taskType === "session" && stepCount > 0 && (
+                    <div className="flex flex-wrap items-center gap-2">
+                      <span className="text-[12px] font-semibold text-neutral-400 dark:text-neutral-500">
+                        Buffer between steps
+                      </span>
+                      <div className="flex gap-1">
+                        {[0, 1, 2, 5, 10].map((m) => {
+                          const active = (stepBuffer ?? 0) === m;
+                          return (
+                            <button
+                              key={m}
+                              type="button"
+                              onClick={() => { haptic("light"); setStepBuffer(m === 0 ? undefined : m); }}
+                              aria-pressed={active}
+                              className={`h-8 min-w-[36px] rounded-full px-2.5 text-[12px] font-bold tabular-nums transition-colors ${
+                                active
+                                  ? "bg-blue-600 text-white dark:bg-blue-500"
+                                  : "border border-neutral-200 text-neutral-400 hover:text-neutral-600 dark:border-white/10 dark:text-neutral-500 dark:hover:text-neutral-300"
+                              }`}
+                            >
+                              {m === 0 ? "None" : `${m}m`}
+                            </button>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Total step/subtask time — always visible once there's anything
+                      to add up, whether or not the task has a valid time slot yet. */}
+                  {(stepCount > 0 || combinedStepMinutes != null) && (
+                    <div
+                      className={`flex items-center justify-between gap-3 rounded-xl border px-3 py-2 ${
                         subtaskDurationError
-                          ? "text-rose-500 dark:text-rose-400"
-                          : "text-neutral-400 dark:text-neutral-500"
+                          ? "border-rose-300/60 bg-rose-50/60 dark:border-rose-400/25 dark:bg-rose-500/[0.06]"
+                          : "border-blue-200/60 bg-blue-50/50 dark:border-blue-400/20 dark:bg-blue-500/[0.06]"
                       }`}
                     >
-                      {subtaskDurationError
-                        ? subtaskDurationError
-                        : `Subtasks: ${formatMinutes(subtaskTotalMinutes)} of ${formatMinutes(allottedMinutes)} allotted`}
+                      <span className="flex items-center gap-1.5 text-[12px] font-semibold text-neutral-500 dark:text-neutral-400">
+                        <IconClock size={13} strokeWidth={2.2} className={subtaskDurationError ? "text-rose-500 dark:text-rose-400" : "text-blue-500 dark:text-blue-400"} />
+                        Total {taskType === "session" ? "step" : "subtask"} time
+                        {stepBufferTotalMinutes > 0 && ` (incl. ${formatMinutes(stepBufferTotalMinutes)} buffer)`}
+                      </span>
+                      <span
+                        className={`text-[13px] font-extrabold tabular-nums ${
+                          subtaskDurationError
+                            ? "text-rose-600 dark:text-rose-400"
+                            : "text-blue-600 dark:text-blue-400"
+                        }`}
+                      >
+                        {combinedStepMinutes != null ? formatMinutes(combinedStepMinutes) : "—"}
+                        {allottedMinutes != null && (
+                          <span className="text-neutral-400 dark:text-neutral-500"> / {formatMinutes(allottedMinutes)}</span>
+                        )}
+                      </span>
+                    </div>
+                  )}
+                  {subtaskDurationError && (
+                    <p className="text-[12px] font-semibold text-rose-500 dark:text-rose-400">
+                      {subtaskDurationError}
                     </p>
                   )}
                 </section>
