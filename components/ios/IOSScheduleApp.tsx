@@ -62,7 +62,6 @@ import {
   applyTaskDelete,
   createTask,
   createTaskDeleteSnapshot,
-  restoreTaskDelete,
   sortTasksByTime,
   getSlots,
   uid,

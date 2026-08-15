@@ -44,7 +44,6 @@ const {
 const {
   applyTaskDelete,
   createTaskDeleteSnapshot,
-  restoreTaskDelete,
   updateTaskDays,
   updateTaskPerDay,
   setTaskException,
@@ -88,6 +87,8 @@ const { localISODate, addDaysToISO } = await import("../lib/dateUtils.ts");
 const { parseTimeToMinutes, toScheduleDayMinutes } = await import("../lib/timeUtils.ts");
 const { DAYS } = await import("../lib/scheduleConstants.ts");
 const { toggleRitualCompletion } = await import("../lib/ritualCompletions.ts");
+const { pushHistory, popHistory, HISTORY_LIMIT } = await import("../lib/scheduleHistory.ts");
+const { isEditableTarget } = await import("../lib/keyboardEvents.ts");
 const {
   checklistStatsFromBody,
   mergeNoteTags,
@@ -427,35 +428,13 @@ test("all-occurrences repeated task delete removes every day and milestone links
   assert.deepEqual(result.milestones[0].linkedActivities, ["other-task"]);
 });
 
-test("task delete undo restores removed occurrences and milestone links", () => {
-  const schedule = emptySchedule();
-  const first = { ...baseTask("repeat-me"), title: "First" };
-  const second = { ...baseTask("repeat-me"), title: "Second" };
-  schedule.activities.monday = [{ ...baseTask("before"), title: "Before" }, first, { ...baseTask("after"), title: "After" }];
-  schedule.activities.wednesday = [second];
-  schedule.milestones = [{
-    id: "milestone-1",
-    planId: "plan-1",
-    title: "Milestone",
-    startDate: "2026-06-01",
-    plannedDurationDays: 7,
-    plannedEndDate: "2026-06-08",
-    status: "active",
-    linkedActivities: ["repeat-me", "other-task"],
-    linkedTrackers: [],
-    createdAt: new Date().toISOString(),
-    updatedAt: new Date().toISOString(),
-    sortOrder: 0,
-  }];
-
-  const snapshot = createTaskDeleteSnapshot(schedule, "repeat-me", "monday", "all");
-  const deleted = applyTaskDelete(snapshot)(schedule);
-  const restored = restoreTaskDelete(snapshot)(deleted);
-
-  assert.deepEqual(restored.activities.monday.map((task) => task.title), ["Before", "First", "After"]);
-  assert.deepEqual(restored.activities.wednesday, [second]);
-  assert.deepEqual(restored.milestones[0].linkedActivities, ["repeat-me", "other-task"]);
-});
+// restoreTaskDelete's own index-precise splice-back test was removed along
+// with the function (lib/taskMutations.ts) — it's superseded by the general
+// Cmd+Z undo stack (lib/scheduleHistory.ts), which restores the whole prior
+// Schedule object by reference rather than re-deriving indices, so there's no
+// separate restore logic left to test here (see the pushHistory/popHistory
+// tests above — popHistory returning the exact prior snapshot is the whole
+// guarantee undo needs).
 
 test("rich note helpers keep legacy checklist stats and tag merging stable", () => {
   assert.deepEqual(checklistStatsFromBody("- [x] Done\n- [ ] Todo"), { done: 1, total: 2 });
@@ -1988,4 +1967,41 @@ test("rescheduleMissedTaskOnce adds a fresh one-off and dismisses the source mis
   assert.equal((added.completionHistory ?? []).length, 0, "clean completion state");
   assert.deepEqual(next.preferences.acknowledgedMisses, [missKey("t-run", y)], "the source miss is dismissed");
   assert.equal(selectNeedsAttention(next, today).missedTasks.length, 0, "the handled miss no longer shows");
+});
+
+// ── Cmd+Z undo history stack (lib/scheduleHistory.ts) ──────────────────────────
+// useScheduleDB's setSchedule/undo are hook-level (React state + refs) and are
+// covered by the manual browser check instead; the cap/push/pop logic itself
+// is pure and tested directly here.
+
+test("pushHistory appends without mutating the input array", () => {
+  const stack = ["a", "b"];
+  const next = pushHistory(stack, "c", HISTORY_LIMIT);
+  assert.deepEqual(stack, ["a", "b"], "original stack untouched");
+  assert.deepEqual(next, ["a", "b", "c"]);
+});
+
+test("pushHistory drops the oldest entry once it exceeds the cap", () => {
+  let stack = [];
+  for (let i = 0; i < 5; i++) stack = pushHistory(stack, i, 3);
+  assert.deepEqual(stack, [2, 3, 4], "only the 3 most recent survive, oldest-first");
+});
+
+test("popHistory returns [undefined, unchanged] on an empty stack", () => {
+  const [popped, rest] = popHistory([]);
+  assert.equal(popped, undefined);
+  assert.deepEqual(rest, []);
+});
+
+test("popHistory pops the most recent entry and leaves the rest in order", () => {
+  const [popped, rest] = popHistory(["a", "b", "c"]);
+  assert.equal(popped, "c", "undo restores the *last* pushed snapshot first");
+  assert.deepEqual(rest, ["a", "b"]);
+});
+
+test("push then pop round-trips to the prior state (the undo() shape)", () => {
+  let stack = pushHistory([], "before", HISTORY_LIMIT);
+  const [restored, rest] = popHistory(stack);
+  assert.equal(restored, "before");
+  assert.deepEqual(rest, []);
 });

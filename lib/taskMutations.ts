@@ -504,36 +504,11 @@ export function applyTaskDelete(snapshot: TaskDeleteSnapshot): (prev: Schedule) 
   };
 }
 
-export function restoreTaskDelete(snapshot: TaskDeleteSnapshot): (prev: Schedule) => Schedule {
-  return (prev) => {
-    const restoredActivities = { ...prev.activities };
-
-    for (const { day, entries } of snapshot.affectedDays) {
-      const withoutDeletedTask = restoredActivities[day].filter((task) => task.id !== snapshot.taskId);
-      const restored = [...withoutDeletedTask];
-      for (const { index, task } of [...entries].sort((a, b) => a.index - b.index)) {
-        restored.splice(Math.min(index, restored.length), 0, task);
-      }
-      restoredActivities[day] = restored;
-    }
-
-    const milestoneLinks = new Map(
-      snapshot.milestoneLinks.map(({ milestoneId, linkedActivities }) => [milestoneId, linkedActivities])
-    );
-
-    return {
-      ...prev,
-      activities: restoredActivities,
-      milestones: milestoneLinks.size > 0
-        ? prev.milestones.map((milestone) =>
-            milestoneLinks.has(milestone.id)
-              ? { ...milestone, linkedActivities: [...milestoneLinks.get(milestone.id)!] }
-              : milestone
-          )
-        : prev.milestones,
-    };
-  };
-}
+// Superseded by useScheduleDB's general undo stack (Cmd+Z / the delete
+// toast's "Undo" both now call the same `undo()`) — restoreTaskDelete used to
+// be a second, independent restore path keyed off this snapshot, which risked
+// double-restoring a task if both were triggered. createTaskDeleteSnapshot/
+// applyTaskDelete above are still used to *perform* the delete itself.
 
 // ── Subtask factory ───────────────────────────────────────────────────────────
 

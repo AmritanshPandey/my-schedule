@@ -73,6 +73,15 @@ export interface TaskBlockCardProps {
    * timeline already owns a 300ms long-press for drag-move.
    */
   onLongPressMissed?: () => void;
+  /**
+   * grid only: a hover/focus-revealed icon button in the block's top-right
+   * corner — the grid variant's equivalent of the list variant's long-press-
+   * to-miss (which is inert here; see onLongPressMissed above). Used for
+   * "mark missed" / "handle missed → reschedule" so a WeekGrid block can
+   * reach that flow without a gesture that would collide with drag-to-retime
+   * (WeekGrid's pointerdown handler already excludes button targets).
+   */
+  gridMenuAction?: { label: string; icon: ReactNode; onClick: () => void };
   onClick?: () => void;
   /**
    * Timeline (grid) only: when set and the task has subtasks/steps, a tappable
@@ -108,6 +117,7 @@ export function TaskBlockCard({
   narrow = false,
   onToggle,
   onLongPressMissed,
+  gridMenuAction,
   onClick,
   onOpenSubtasks,
   trailing,
@@ -326,6 +336,16 @@ export function TaskBlockCard({
         <>
           <div className={`pointer-events-none absolute ${slim ? "inset-y-2" : "inset-y-4"} left-0 w-1 rounded-r-full ${styles.dot}`} />
         </>
+      )}
+      {!isList && !minimal && gridMenuAction && (
+        <button
+          type="button"
+          aria-label={gridMenuAction.label}
+          onClick={(e) => { e.stopPropagation(); gridMenuAction.onClick(); }}
+          className="absolute right-1 top-1 z-10 flex h-6 w-6 items-center justify-center rounded-full bg-white/80 text-neutral-500 opacity-0 backdrop-blur-sm transition-opacity hover:bg-white hover:text-neutral-800 focus-visible:opacity-100 group-hover:opacity-100 group-focus-within:opacity-100 dark:bg-neutral-900/80 dark:text-neutral-400 dark:hover:bg-neutral-900 dark:hover:text-white"
+        >
+          {gridMenuAction.icon}
+        </button>
       )}
       {header}
       {timeRow}
