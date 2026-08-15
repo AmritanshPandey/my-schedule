@@ -59,6 +59,8 @@ const {
 } = await import("../lib/scheduleNormalize.ts");
 const { isTaskScheduledOn, resolveOccurrence, diffException, weeksBetween } = await import("../lib/taskOccurrence.ts");
 const { normalizeMilestoneTimeline, cascadeMilestoneDates } = await import("../lib/roadmapDates.ts");
+const { computeRoadmapStats } = await import("../lib/roadmapEngine.ts");
+const { calculateLinkedTaskProgress, calculateMilestoneProgress, calculatePlanProgress } = await import("../lib/planProgress.ts");
 const { resolveLinkedTasks } = await import("../lib/notes/linkedTasks.ts");
 const { computeExecutionTrend, trendNarrative } = await import("../lib/executionAnalytics.ts");
 const { getNowOnTimeline, mapMinutesToTimeline } = await import("../lib/timeline/displayWindow.ts");
@@ -2004,4 +2006,150 @@ test("push then pop round-trips to the prior state (the undo() shape)", () => {
   const [restored, rest] = popHistory(stack);
   assert.equal(restored, "before");
   assert.deepEqual(rest, []);
+});
+
+// ── Progress rollup: Task/Subtask → Milestone → Plan (lib/planProgress.ts) ────
+
+test("calculateLinkedTaskProgress excludes commitments and returns null for a deleted task", () => {
+  const sched = emptySchedule();
+  sched.activities.monday = [
+    { id: "c1", title: "Commute", startTime: "8:00 AM", endTime: "9:00 AM", planId: "p1", taskType: "commitment" },
+  ];
+  assert.equal(calculateLinkedTaskProgress("c1", sched.activities, null), null, "commitments are never tracked");
+  assert.equal(calculateLinkedTaskProgress("gone", sched.activities, null), null, "a deleted/missing task id resolves to null");
+});
+
+test("calculateLinkedTaskProgress merges completion across weekday-bucket copies of a recurring task", () => {
+  const sched = emptySchedule();
+  const subtasks = [{ id: "s1", task: "Learn" }, { id: "s2", task: "Practice" }, { id: "s3", task: "Review" }];
+  // Same id, two weekday buckets — each accumulates its own completionHistory
+  // (every toggle handler writes into just the one day's array), so "ever
+  // completed" has to look across both to see s1 AND s2 are done.
+  sched.activities.monday = [{
+    id: "r1", title: "Study", startTime: "9:00 AM", endTime: "10:00 AM", planId: "p1",
+    subtasks, completedSubtaskIds: ["s1"],
+    completionHistory: [event("r1", "subtask", "2026-06-01T12:00:00Z", "s1")],
+  }];
+  sched.activities.wednesday = [{
+    id: "r1", title: "Study", startTime: "9:00 AM", endTime: "10:00 AM", planId: "p1",
+    subtasks, completedSubtaskIds: ["s2"],
+    completionHistory: [event("r1", "subtask", "2026-06-03T12:00:00Z", "s2")],
+  }];
+
+  const progress = calculateLinkedTaskProgress("r1", sched.activities, null);
+  assert.equal(progress.totalCount, 3);
+  assert.equal(progress.completedCount, 2, "s1 (from monday) + s2 (from wednesday) — union across buckets, not just one");
+  assert.equal(progress.pct, 67);
+});
+
+test("linked task progress survives a resetStaleCompletions pass (progress never un-earns itself overnight)", () => {
+  const today = localISODate(new Date());
+  const yesterday = addDaysToISO(today, -1);
+  const subtasks = [{ id: "s1", task: "Learn" }, { id: "s2", task: "Practice" }];
+  const sched = emptySchedule();
+  sched.activities.monday = [{
+    id: "r2", title: "Session", startTime: "9:00 AM", endTime: "10:00 AM", planId: "p1",
+    subtasks, completed: true, completedSubtaskIds: ["s1", "s2"],
+    completionHistory: [
+      event("r2", "subtask", new Date(`${yesterday}T12:00:00`).toISOString(), "s1"),
+      event("r2", "subtask", new Date(`${yesterday}T12:00:00`).toISOString(), "s2"),
+      event("r2", "task", new Date(`${yesterday}T12:00:00`).toISOString()),
+    ],
+  }];
+
+  const before = calculateLinkedTaskProgress("r2", sched.activities, null);
+  assert.equal(before.pct, 100);
+
+  const reset = resetStaleCompletions(sched, today);
+  assert.equal(reset.activities.monday[0].completed, false, "sanity check: the live flag really was wiped for the new day");
+  const after = calculateLinkedTaskProgress("r2", reset.activities, null);
+  assert.equal(after.pct, 100, "durable completionHistory keeps the progress even though the live flags were reset");
+});
+
+test("calculateMilestoneProgress returns hasLinkedTasks:false for zero/deleted-only links, and sums mixed tasks otherwise", () => {
+  const sched = emptySchedule();
+  const mkTask = (id, subtaskIds, completedIds) => ({
+    id, title: id, startTime: "9:00 AM", endTime: "10:00 AM", planId: "p1",
+    subtasks: subtaskIds.map((sid) => ({ id: sid, task: sid })),
+    completedSubtaskIds: completedIds,
+    completionHistory: completedIds.map((sid) => event(id, "subtask", "2026-06-01T12:00:00Z", sid)),
+  });
+  sched.activities.monday = [
+    mkTask("t1", ["a", "b"], ["a", "b"]),  // 2/2
+    mkTask("t2", ["c", "d"], ["c"]),        // 1/2
+  ];
+
+  const noLinks = { id: "m0", planId: "p1", linkedActivities: [] };
+  assert.deepEqual(calculateMilestoneProgress(noLinks, sched.activities, null), {
+    milestoneId: "m0", hasLinkedTasks: false, completedCount: 0, totalCount: 0, pct: null, taskBreakdown: [],
+  });
+
+  const deletedOnly = { id: "m1", planId: "p1", linkedActivities: ["gone"] };
+  assert.equal(calculateMilestoneProgress(deletedOnly, sched.activities, null).hasLinkedTasks, false);
+
+  const linked = { id: "m2", planId: "p1", linkedActivities: ["t1", "t2", "t1"] }; // duplicate id
+  const progress = calculateMilestoneProgress(linked, sched.activities, null);
+  assert.equal(progress.hasLinkedTasks, true);
+  assert.equal(progress.taskBreakdown.length, 2, "duplicate linked id is deduped");
+  assert.equal(progress.completedCount, 3, "2 (t1) + 1 (t2)");
+  assert.equal(progress.totalCount, 4, "2 (t1) + 2 (t2)");
+  assert.equal(progress.pct, 75);
+});
+
+test("calculatePlanProgress averages per-milestone pct with equal weight, not per-task", () => {
+  const sched = emptySchedule();
+  const mkTask = (id, total, completed) => ({
+    id, title: id, startTime: "9:00 AM", endTime: "10:00 AM", planId: "p1",
+    subtasks: Array.from({ length: total }, (_, i) => ({ id: `${id}-${i}`, task: `${id}-${i}` })),
+    completedSubtaskIds: Array.from({ length: completed }, (_, i) => `${id}-${i}`),
+    completionHistory: Array.from({ length: completed }, (_, i) => event(id, "subtask", "2026-06-01T12:00:00Z", `${id}-${i}`)),
+  });
+  // Milestone A: one task, fully done. Milestone B: one 10-subtask task, 10% done.
+  sched.activities.monday = [mkTask("a", 1, 1), mkTask("b", 10, 1)];
+
+  const plan = { id: "p1" };
+  const milestones = [
+    { id: "m-a", planId: "p1", linkedActivities: ["a"] },
+    { id: "m-b", planId: "p1", linkedActivities: ["b"] },
+  ];
+  const progress = calculatePlanProgress(plan, milestones, sched.activities);
+  assert.equal(progress.hasLinkedTasks, true);
+  assert.equal(progress.pct, 55, "average of 100% and 10% — equal per-milestone weight, not a per-task-weighted ~18%");
+});
+
+test("calculatePlanProgress falls back to hasLinkedTasks:false when no milestone has linked tasks", () => {
+  const sched = emptySchedule();
+  const plan = { id: "p1" };
+  const progress = calculatePlanProgress(plan, [{ id: "m0", planId: "p1", linkedActivities: [] }], sched.activities);
+  assert.equal(progress.hasLinkedTasks, false);
+  assert.equal(progress.pct, null);
+});
+
+test("computeRoadmapStats overallPct rolls up linked-task progress, falling back to consistency otherwise", () => {
+  const sched = emptySchedule();
+  const plan = { id: "p1", title: "P", category: "learning", emoji: "book", color: "blue", items: [], startDate: "2026-06-01" };
+
+  // No milestones at all → falls back to consistencyPct, flagged as such.
+  const noMilestones = computeRoadmapStats("p1", sched.activities, [], plan);
+  assert.equal(noMilestones.overallPctFromLinkedTasks, false);
+  assert.equal(noMilestones.overallPct, noMilestones.consistencyPct);
+
+  // A milestone exists but has no linked tasks → same fallback, not a false 0.
+  const unlinkedMilestone = {
+    id: "m0", planId: "p1", linkedActivities: [], sortOrder: 0, status: "upcoming",
+    startDate: "2026-06-01", plannedEndDate: "2026-06-07", plannedDurationDays: 7, createdAt: "", updatedAt: "",
+  };
+  const noLinks = computeRoadmapStats("p1", sched.activities, [unlinkedMilestone], plan);
+  assert.equal(noLinks.overallPctFromLinkedTasks, false);
+
+  // A milestone with a fully-done linked task → overallPct comes from the
+  // rollup (100), independent of the day-consistency scan.
+  sched.activities.monday = [{
+    id: "t1", title: "T", startTime: "9:00 AM", endTime: "10:00 AM", planId: "p1",
+    completed: true, completionHistory: [event("t1", "task", "2026-06-01T12:00:00Z")],
+  }];
+  const linkedMilestone = { ...unlinkedMilestone, linkedActivities: ["t1"] };
+  const withLinks = computeRoadmapStats("p1", sched.activities, [linkedMilestone], plan);
+  assert.equal(withLinks.overallPctFromLinkedTasks, true);
+  assert.equal(withLinks.overallPct, 100);
 });

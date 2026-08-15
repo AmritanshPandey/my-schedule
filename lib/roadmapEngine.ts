@@ -4,9 +4,10 @@
  */
 
 import type { Task, Milestone, Plan } from "./useScheduleDB";
-import { DAYS } from "./useScheduleDB";
+import { DAYS } from "./scheduleConstants";
 import type { DayKey } from "./useScheduleDB";
 import { localISODate } from "./dateUtils";
+import { calculatePlanProgress } from "./planProgress";
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -37,6 +38,10 @@ export interface StatusSegment {
 
 export interface RoadmapStats {
   overallPct: number;
+  /** True when `overallPct` came from the live linked-task/subtask rollup
+   *  rather than falling back to `consistencyPct` (no milestones, or none
+   *  with linked tasks yet). Drives the "Plan Progress" source note. */
+  overallPctFromLinkedTasks: boolean;
   consistencyPct: number;
   streakDays: number;
   statusSummary: string;
@@ -270,13 +275,15 @@ export function computeRoadmapStats(
   const currentPhaseName = firstPending?.title ?? null;
 
   // ── Overall % ────────────────────────────────────────────────────────────
-  let overallPct: number;
-  if (totalMilestones > 0) {
-    const milestonePct = Math.round((completedMilestones / totalMilestones) * 100);
-    overallPct = Math.round(milestonePct * 0.6 + consistencyPct * 0.4);
-  } else {
-    overallPct = consistencyPct;
-  }
+  // Live rollup of linked-task/subtask completion across the plan's
+  // milestones — not a blend with the milestone-completed-count (that would
+  // double-count the same signal through two lenses: a milestone marked
+  // "done" is, almost by definition, one whose linked tasks are done).
+  // Milestone `status` itself stays untouched — this is a purely
+  // informational live % layered on top, never auto-completion.
+  const planProgress = calculatePlanProgress(plan, planMilestones, activities);
+  const overallPctFromLinkedTasks = totalMilestones > 0 && planProgress.hasLinkedTasks;
+  const overallPct = overallPctFromLinkedTasks ? (planProgress.pct as number) : consistencyPct;
 
   // ── Status summary ───────────────────────────────────────────────────────
   let statusSummary: string;
@@ -290,6 +297,7 @@ export function computeRoadmapStats(
 
   return {
     overallPct,
+    overallPctFromLinkedTasks,
     consistencyPct,
     streakDays,
     statusSummary,

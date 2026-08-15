@@ -33,6 +33,7 @@ import IconButton from "@/components/ui/IconButton";
 import Input from "@/components/ui/Input";
 import MilestoneSheet, { type MilestoneSaveData } from "@/components/plan/MilestoneSheet";
 import { computeRoadmapStats } from "@/lib/roadmapEngine";
+import { calculateMilestoneProgress, type MilestoneProgress } from "@/lib/planProgress";
 import { resolveMilestoneStatus } from "@/lib/roadmapDates";
 import { computeTrend } from "@/lib/trendUtils";
 import { getTaskCheckableItems } from "@/lib/taskCompletion";
@@ -452,6 +453,13 @@ export default function PlanDetailView({
     [plan.id, schedule.activities]
   );
 
+  // Task-id → title lookup for the milestone task-breakdown list — reuses
+  // uniqueTasks rather than a second activities scan.
+  const taskTitleById = useMemo(
+    () => new Map(uniqueTasks.map(({ task }) => [task.id, task.title])),
+    [uniqueTasks]
+  );
+
   const trackers = useMemo(
     () => schedule.progressTrackers.filter((t) => t.planId === plan.id),
     [plan.id, schedule.progressTrackers]
@@ -476,6 +484,17 @@ export default function PlanDetailView({
         .sort((a, b) => a.sortOrder - b.sortOrder),
     [milestones, plan.id]
   );
+
+  // Live linked-task/subtask completion per milestone — computed once for the
+  // whole list (not per-row) and reused by both the row's progress bar and
+  // the detail sheet's task breakdown. Same cost class as roadmapStats below.
+  const milestoneProgressById = useMemo(() => {
+    const map = new Map<string, MilestoneProgress>();
+    for (const m of planMilestones) {
+      map.set(m.id, calculateMilestoneProgress(m, schedule.activities as unknown as Record<string, Task[]>, plan));
+    }
+    return map;
+  }, [planMilestones, schedule.activities, plan]);
 
   const roadmapStats = useMemo(
     () =>
@@ -1083,6 +1102,7 @@ export default function PlanDetailView({
   function renderMilestoneCard(m: Milestone, isLast: boolean) {
     const status = resolveMilestoneStatus(m);
     const isCompleted = status === "completed";
+    const progress = milestoneProgressById.get(m.id);
     const isActive   = status === "active";
     const isDelayed  = status === "delayed";
     const daysLabel = `${m.plannedDurationDays} Day${m.plannedDurationDays === 1 ? "" : "s"}`;
@@ -1174,13 +1194,18 @@ export default function PlanDetailView({
               {daysLabel}
             </span>
           </div>
-          {/* Linked tasks + tracker badges */}
+          {/* Linked tasks + tracker badges — the task badge shows live
+              linked-task/subtask completion when there's anything to show
+              (calculateMilestoneProgress), falling back to the plain linked
+              count for a milestone with nothing trackable linked yet. */}
           {((m.linkedActivities?.length ?? 0) > 0 || (m.linkedTrackers?.length ?? 0) > 0) && (
             <div className="mt-1.5 flex items-center gap-2">
               {(m.linkedActivities?.length ?? 0) > 0 && (
                 <span className="flex items-center gap-1 text-[11px] font-semibold text-emerald-600 dark:text-emerald-400">
                   <IconCheck size={11} strokeWidth={2.5} />
-                  {m.linkedActivities!.length} task{m.linkedActivities!.length !== 1 ? "s" : ""}
+                  {progress?.hasLinkedTasks
+                    ? `${progress.completedCount}/${progress.totalCount} tasks · ${progress.pct}%`
+                    : `${m.linkedActivities!.length} task${m.linkedActivities!.length !== 1 ? "s" : ""}`}
                 </span>
               )}
               {(m.linkedTrackers?.length ?? 0) > 0 && (
@@ -1189,6 +1214,14 @@ export default function PlanDetailView({
                 </span>
               )}
             </div>
+          )}
+          {progress?.hasLinkedTasks && (
+            <ProgressBar
+              pct={progress.pct!}
+              height={4}
+              fillClassName={isCompleted ? "bg-neutral-300 dark:bg-white/20" : "bg-emerald-500"}
+              className="mt-1.5 max-w-[160px]"
+            />
           )}
         </div>
 
@@ -1202,7 +1235,7 @@ export default function PlanDetailView({
   // ── Roadmap overview ─────────────────────────────────────────────────────
 
   function renderRoadmapOverview() {
-    const { currentPhaseName, consistencyPct, overallPct, totalMilestones } = roadmapStats;
+    const { currentPhaseName, consistencyPct, overallPct, overallPctFromLinkedTasks, totalMilestones } = roadmapStats;
     const targetLabel = roadmapStats.targetDate ? formatPlanDate(roadmapStats.targetDate) : "—";
     const progressSummary =
       overallPct === 0
@@ -1210,11 +1243,19 @@ export default function PlanDetailView({
         : overallPct >= 80
         ? "You're on track."
         : "Progress is building as you complete plan tasks.";
-    // This is a *different* number from Task Consistency below (and from
-    // Accuracy on the Planning tab) — spell out the blend so the three
-    // percentages on this plan don't read as disagreeing with each other.
+    // Plan Progress is a live rollup of linked-task/subtask completion across
+    // this plan's milestones (lib/planProgress.ts) — a different, purposely
+    // more granular number from Task Consistency below (which measures daily
+    // execution rhythm, not linked-scope completion) and from Accuracy on the
+    // Planning tab (month-scoped day accuracy). The note names the source so
+    // the two/three percentages on this plan read as complementary, not
+    // disagreeing.
     const progressBlendNote =
-      totalMilestones > 0 ? "60% milestones · 40% consistency" : "= Task Consistency (no milestones yet)";
+      totalMilestones === 0
+        ? "= Task Consistency (no milestones yet)"
+        : overallPctFromLinkedTasks
+          ? "Based on linked task & subtask completion"
+          : "= Task Consistency (no linked tasks yet)";
 
     return (
       <div className="space-y-[10px]">
@@ -2053,6 +2094,8 @@ export default function PlanDetailView({
           const isCompleted = status === "completed";
           const isDelayed   = status === "delayed";
           const isActive    = status === "active";
+          const progress = milestoneProgressById.get(m.id);
+          const readyToComplete = !!progress?.hasLinkedTasks && progress.pct === 100 && !isCompleted;
 
           return (
             <div className="px-5 pb-8 pt-4">
@@ -2127,12 +2170,47 @@ export default function PlanDetailView({
                 </div>
               )}
 
+              {/* Linked tasks — read-only breakdown of what this milestone's
+                  progress is actually made of. Not tappable this pass (no
+                  navigation to the task) — an obvious, easy fast-follow. */}
+              {progress?.hasLinkedTasks && (
+                <div className="mb-5">
+                  <p className="mb-2 text-[11px] font-bold uppercase tracking-[0.08em] text-neutral-400 dark:text-neutral-500">
+                    Linked Tasks
+                  </p>
+                  <div className="space-y-2">
+                    {progress.taskBreakdown.map((t) => (
+                      <div key={t.taskId} className="flex items-center justify-between gap-3">
+                        <span className="min-w-0 flex-1 truncate text-[14px] font-medium text-neutral-700 dark:text-neutral-300">
+                          {taskTitleById.get(t.taskId) ?? "Deleted task"}
+                        </span>
+                        <span className="shrink-0 text-[12px] font-semibold text-neutral-400 dark:text-neutral-500">
+                          {t.completedCount}/{t.totalCount}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Ready-to-complete nudge — purely informational, still a
+                  manual click; never auto-completes. */}
+              {readyToComplete && (
+                <p className="mb-2 text-center text-[12.5px] font-medium text-emerald-600 dark:text-emerald-400">
+                  All linked tasks are complete — ready to mark this milestone done.
+                </p>
+              )}
+
               {/* Mark Done — any non-completed milestone */}
               {!isCompleted && (
                 <button
                   type="button"
                   onClick={() => { onCompleteMilestone(m.id); setViewingMilestone(null); }}
-                  className="mb-3 flex w-full items-center justify-center gap-2 rounded-2xl bg-green-600 py-3.5 text-[16px] font-semibold text-white transition-colors hover:bg-green-700"
+                  className={`mb-3 flex w-full items-center justify-center gap-2 rounded-2xl py-3.5 text-[16px] font-semibold text-white transition-colors ${
+                    readyToComplete
+                      ? "bg-emerald-600 ring-2 ring-emerald-300 hover:bg-emerald-700 dark:ring-emerald-500/40"
+                      : "bg-green-600 hover:bg-green-700"
+                  }`}
                 >
                   <IconCheck size={16} strokeWidth={2.5} />
                   Mark as Done

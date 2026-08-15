@@ -1,9 +1,10 @@
 "use client";
 
-import { useMemo, useRef, useEffect, useState } from "react";
+import { Fragment, useMemo, useRef, useEffect, useState } from "react";
 import { IconMap2 } from "@tabler/icons-react";
-import type { Schedule, Milestone, Plan } from "@/lib/useScheduleDB";
+import type { Schedule, Milestone, Plan, Task } from "@/lib/useScheduleDB";
 import { addDaysToISO, localISODate, todayISO as getTodayISO } from "@/lib/dateUtils";
+import { calculateMilestoneProgress, type MilestoneProgress } from "@/lib/planProgress";
 
 interface MilestoneTimelineProps {
   schedule: Schedule;
@@ -214,6 +215,19 @@ export default function MilestoneTimeline({ schedule }: MilestoneTimelineProps) 
     return { rangeStart, totalDays, todayOffset, planRows, monthMarks };
   }, [schedule.milestones, schedule.plans, todayISO]);
 
+  // Live linked-task/subtask completion per milestone, computed once for
+  // every milestone across every plan row (not per-dot) — same memoization
+  // pattern used elsewhere for per-plan/per-milestone activities scans.
+  const progressById = useMemo(() => {
+    const map = new Map<string, MilestoneProgress>();
+    for (const { plan, milestones } of planRows) {
+      for (const m of milestones) {
+        map.set(m.id, calculateMilestoneProgress(m, schedule.activities as unknown as Record<string, Task[]>, plan));
+      }
+    }
+    return map;
+  }, [planRows, schedule.activities]);
+
   // Scroll so today is roughly 1/3 from the left on mount
   useEffect(() => {
     if (scrollRef.current) {
@@ -325,18 +339,41 @@ export default function MilestoneTimeline({ schedule }: MilestoneTimelineProps) 
                   );
                   const cx = endOffset * PX_PER_DAY;
                   const isSelected = selectedId === m.id;
+                  const progress = progressById.get(m.id);
+                  // Only the plain "upcoming" dot gets a progress ring —
+                  // completed/delayed/active already have a strong, sufficient
+                  // solid-color read of their own; a ring on top of those
+                  // would be noise, not signal. Static fill (not an
+                  // animation), so no reduced-motion guard is needed.
+                  const showProgressRing =
+                    m.status !== "completed" &&
+                    m.status !== "delayed" &&
+                    m.status !== "active" &&
+                    !!progress?.hasLinkedTasks &&
+                    (progress.pct ?? 0) > 0;
 
                   return (
-                    <button
-                      key={m.id}
-                      type="button"
-                      className={dotClasses(m.status, isSelected)}
-                      style={{ left: cx }}
-                      onClick={() => setSelectedId(isSelected ? null : m.id)}
-                      title={m.title}
-                    >
-                      {dotInner(m)}
-                    </button>
+                    <Fragment key={m.id}>
+                      {showProgressRing && (
+                        <div
+                          aria-hidden="true"
+                          className="absolute top-1/2 h-[24px] w-[24px] -translate-x-1/2 -translate-y-1/2 rounded-full"
+                          style={{
+                            left: cx,
+                            background: `conic-gradient(rgb(16 185 129) ${(progress!.pct as number) * 3.6}deg, transparent 0deg)`,
+                          }}
+                        />
+                      )}
+                      <button
+                        type="button"
+                        className={dotClasses(m.status, isSelected)}
+                        style={{ left: cx }}
+                        onClick={() => setSelectedId(isSelected ? null : m.id)}
+                        title={m.title}
+                      >
+                        {dotInner(m)}
+                      </button>
+                    </Fragment>
                   );
                 })}
               </div>
@@ -375,6 +412,9 @@ export default function MilestoneTimeline({ schedule }: MilestoneTimelineProps) 
         ))}
         <span className="text-[10px] text-neutral-400 dark:text-neutral-500">
           · number = linked tasks
+        </span>
+        <span className="text-[10px] text-neutral-400 dark:text-neutral-500">
+          · ring = task progress (upcoming milestones)
         </span>
       </div>
 
