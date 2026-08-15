@@ -181,10 +181,14 @@ export default function AccuracyCalendar({
       {/* Section header — eyebrow + title + month accuracy */}
       <div className="flex items-start justify-between mb-3">
         <div>
-        
-          <h3 className="text-[20px] font-bold leading-tight tracking-[-0.35px] text-neutral-950 dark:text-white mb-1">
+          <h3 className="text-[20px] font-bold leading-tight tracking-[-0.35px] text-neutral-950 dark:text-white">
             Accuracy
           </h3>
+          {/* Scoped to the visible month, unlike Task Consistency (whole plan
+              to date) on the Milestones tab — different numbers, on purpose. */}
+          <p className="mt-0.5 text-[11px] font-medium text-neutral-400 dark:text-neutral-500">
+            {MONTHS[month]} · {stats.completed + stats.missed + stats.partial} scheduled days
+          </p>
         </div>
         <m.p
           key={`acc-${year}-${month}`}

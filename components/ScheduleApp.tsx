@@ -132,7 +132,6 @@ import {
   applyTaskDelete,
   createTask,
   createTaskDeleteSnapshot,
-  restoreTaskDelete,
   uid,
   sortTasksByTime,
   updateTaskDays,
@@ -689,7 +688,7 @@ export default function ScheduleApp() {
     void isStandalonePWA();
   }
   const { user, isGuest, authLoading } = useAuth();
-  const { schedule, setSchedule, ready, clearData, clearProgress, restoreData, isFirstLaunch } = useScheduleDB();
+  const { schedule, setSchedule, ready, clearData, clearProgress, restoreData, isFirstLaunch, undo } = useScheduleDB();
   useReminders(schedule, ready);
   const [todayKey, setTodayKey] = useState<DayKey>(() => JS_DAYS[new Date().getDay()]);
   const [activeDay, setActiveDay] = useState<DayKey>(() => JS_DAYS[new Date().getDay()]);
@@ -1447,6 +1446,34 @@ export default function ScheduleApp() {
       }));
     },
     [activeDay, setSchedule]
+  );
+
+  /** WeekGrid block hover-icon → opens the same MissedTaskSheet Overview's
+   *  Needs Attention card already opens (setMissedSheet), just from a second
+   *  entry point on the timeline itself. */
+  const handleOpenMissedRecovery = useCallback(
+    ({ task, plan, dateISO }: { task: Task; plan: Plan | null; dateISO: string }) => {
+      setMissedSheet({ task, plan, dateISO, daysAgo: daysBetween(dateISO, todayISO()) ?? 1 });
+    },
+    []
+  );
+
+  /** Cmd/Ctrl-drag reschedule from WeekGrid — today's column only (WeekGrid
+   *  itself gates the drag to today; this mirrors the single-day timeline's
+   *  own drag-move commit, retimeSlot-safe for multi-slot tasks). */
+  const handleRetimeTask = useCallback(
+    (taskId: string, day: DayKey, slotIndex: number, startTime: string, endTime: string) => {
+      setSchedule((prev) => ({
+        ...prev,
+        activities: {
+          ...prev.activities,
+          [day]: (prev.activities[day] ?? []).map((t) =>
+            t.id !== taskId ? t : retimeSlot(t, slotIndex, startTime, endTime),
+          ),
+        },
+      }));
+    },
+    [setSchedule]
   );
 
   function handleBulkImport(result: import("@/lib/scheduleParser").ParseResult) {
@@ -2302,11 +2329,16 @@ export default function ScheduleApp() {
     setSchedule(applyTaskDelete(snapshot));
     setTaskDeleteRequest(null);
     haptic("medium");
+    // Routes through the general undo stack (setSchedule above already pushed
+    // the pre-delete schedule onto it) rather than restoreTaskDelete's own
+    // snapshot-based restore — two independent restore paths risked a
+    // double-restore bug (Cmd+Z, then also clicking this now-stale toast,
+    // would re-splice the task back a second time).
     setToastMessage({
       message: `Deleted "${taskDeleteDetails.task.title}"`,
       actionLabel: "Undo",
       onAction: () => {
-        setSchedule(restoreTaskDelete(snapshot));
+        undo();
         setToastMessage(null);
         haptic("light");
       },
@@ -2647,6 +2679,7 @@ export default function ScheduleApp() {
     slot?: TaskSlot,
     slotIndex?: number,
     edgeCut?: "top" | "bottom",
+    gridMenuAction?: { label: string; icon: React.ReactNode; onClick: () => void },
   ) {
     const { linkedPlan, category: taskCategory } = getTaskPresentation(task);
     // Grid blocks are per-slot: show this slot's own duration.
@@ -2677,6 +2710,7 @@ export default function ScheduleApp() {
         edgeCut={edgeCut}
         compact={height < 56}
         narrow={widthPct < 60 || height < 88}
+        gridMenuAction={gridMenuAction}
         onToggle={onToggle}
         // Opening a continuation opens its source task: openEditSheet resolves
         // the template by id across every weekday bucket, so it lands on the
@@ -3035,6 +3069,9 @@ export default function ScheduleApp() {
                 onDaySelect={setActiveDay}
                 onDayActions={(day) => { setActiveDay(day); setDayActionsOpen(true); }}
                 onCreateTaskAtTime={(day, startMin, endMin) => openCreateSheetWithTime(startMin, endMin, day)}
+                onRetimeTask={handleRetimeTask}
+                onMarkMissed={handleMarkTaskMissed}
+                onOpenMissedRecovery={handleOpenMissedRecovery}
                 onWeekPrev={() => {
                   if (calendarView === "1day") navigateByDays(-1);
                   else if (calendarView === "3day") navigateByDays(-3);

@@ -166,6 +166,13 @@ function GoalDirectionPicker({
           );
         })}
       </div>
+      {/* Ties the abstract choice to what it actually changes below — the
+          trend badge and entry-list arrows silently flip color on this without
+          otherwise explaining themselves anywhere in the UI. */}
+      <p className="mt-1.5 text-[11px] text-neutral-400 dark:text-neutral-500">
+        Going {value === "increase_good" ? "up" : "down"} will show{" "}
+        <span className="font-semibold text-green-600 dark:text-green-400">green</span>
+      </p>
     </div>
   );
 }
@@ -941,12 +948,19 @@ export default function PlanDetailView({
         {!isEditingThis && (
           <div className="px-3 pb-3">
             {entries.length > 0 ? (
-              <ProgressChart
-                entries={entries}
-                color={plan.color}
-                metric={{ name: tracker.title, unit: tracker.unit ?? "" }}
-                goalValue={tracker.goalValue}
-              />
+              <>
+                <ProgressChart
+                  entries={entries}
+                  color={plan.color}
+                  metric={{ name: tracker.title, unit: tracker.unit ?? "" }}
+                  goalValue={tracker.goalValue}
+                />
+                {/* The chart/trend-badge color is driven by goalDirection, set
+                    once in the tracker form and otherwise invisible here. */}
+                <p className="mt-1.5 text-[10px] text-neutral-400 dark:text-neutral-500">
+                  <span className="font-semibold text-green-600 dark:text-green-400">Green</span> = trending toward your goal
+                </p>
+              </>
             ) : (
               <div className="rounded-xl bg-neutral-50 dark:bg-white/[0.03] py-8 text-center text-[13px] text-neutral-400 dark:text-neutral-500">
                 No entries yet
@@ -964,9 +978,9 @@ export default function PlanDetailView({
           return (
             <div className="flex items-stretch divide-x divide-neutral-100 border-t border-neutral-100 dark:divide-white/[0.06] dark:border-white/[0.06]">
               {[
-                { label: "Last",   value: `${last.value}${unit}` },
-                { label: "Avg",    value: `${fmtAvg}${unit}` },
-                { label: "Logged", value: `${entries.length}` },
+                { label: "Last",     value: `${last.value}${unit}` },
+                { label: "Avg (all)", value: `${fmtAvg}${unit}` },
+                { label: "Logged",   value: `${entries.length}` },
               ].map(({ label, value }) => (
                 <div key={label} className="flex-1 px-4 py-3 text-center">
                   <p className="text-[10px] font-semibold uppercase tracking-[0.08em] text-neutral-400 dark:text-neutral-500">
@@ -1188,7 +1202,7 @@ export default function PlanDetailView({
   // ── Roadmap overview ─────────────────────────────────────────────────────
 
   function renderRoadmapOverview() {
-    const { currentPhaseName, consistencyPct, overallPct } = roadmapStats;
+    const { currentPhaseName, consistencyPct, overallPct, totalMilestones } = roadmapStats;
     const targetLabel = roadmapStats.targetDate ? formatPlanDate(roadmapStats.targetDate) : "—";
     const progressSummary =
       overallPct === 0
@@ -1196,6 +1210,11 @@ export default function PlanDetailView({
         : overallPct >= 80
         ? "You're on track."
         : "Progress is building as you complete plan tasks.";
+    // This is a *different* number from Task Consistency below (and from
+    // Accuracy on the Planning tab) — spell out the blend so the three
+    // percentages on this plan don't read as disagreeing with each other.
+    const progressBlendNote =
+      totalMilestones > 0 ? "60% milestones · 40% consistency" : "= Task Consistency (no milestones yet)";
 
     return (
       <div className="space-y-[10px]">
@@ -1222,16 +1241,19 @@ export default function PlanDetailView({
           <p className="text-[13px] font-medium text-neutral-500 dark:text-neutral-400">
             {progressSummary}
           </p>
+          <p className="mt-1 text-[11px] text-neutral-400 dark:text-neutral-500">
+            {progressBlendNote}
+          </p>
         </div>
 
         {/* 2×2 stats grid */}
         <div className="grid grid-cols-2 gap-[10px]">
           {([
-            { label: "Current Focus",  value: currentPhaseName ?? "Starting out" },
-            { label: "Task Consistency", value: `${consistencyPct}%` },
-            { label: "Days Left", value: roadmapStats.targetDate ? String(Math.max(0, Math.ceil((new Date(roadmapStats.targetDate).getTime() - Date.now()) / 86_400_000))) : "—" },
-            { label: "Target Date",   value: targetLabel },
-          ] as { label: string; value: string }[]).map(({ label, value }) => (
+            { label: "Current Focus",  value: currentPhaseName ?? "Starting out", caption: null },
+            { label: "Task Consistency", value: `${consistencyPct}%`, caption: "Since plan start" },
+            { label: "Days Left", value: roadmapStats.targetDate ? String(Math.max(0, Math.ceil((new Date(roadmapStats.targetDate).getTime() - Date.now()) / 86_400_000))) : "—", caption: null },
+            { label: "Target Date",   value: targetLabel, caption: null },
+          ] as { label: string; value: string; caption: string | null }[]).map(({ label, value, caption }) => (
             <div
               key={label}
               className="rounded-[14px] border border-neutral-200 bg-neutral-50 px-[14px] py-3 dark:border-white/[0.08] dark:bg-white/[0.03]"
@@ -1242,6 +1264,11 @@ export default function PlanDetailView({
               <p className="text-[19px] font-extrabold leading-[1.1] tracking-[-0.5px] text-neutral-950 dark:text-white">
                 {value}
               </p>
+              {/* Distinguishes this from Accuracy's month-scoped % on the
+                  Planning tab — same-looking numbers, different windows. */}
+              {caption && (
+                <p className="mt-0.5 text-[10px] font-medium text-neutral-400 dark:text-neutral-500">{caption}</p>
+              )}
             </div>
           ))}
         </div>

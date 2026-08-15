@@ -3,11 +3,11 @@
 import type { PointerEvent as ReactPointerEvent, ReactNode } from "react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { AnimatePresence, m } from "framer-motion";
-import { IconChevronLeft, IconChevronRight, IconDotsVertical } from "@tabler/icons-react";
+import { IconChevronLeft, IconChevronRight, IconDotsVertical, IconX, IconAlertTriangle } from "@tabler/icons-react";
 import type { DayKey, Plan, Ritual, RitualCompletion, Schedule, Task, TaskSlot } from "@/lib/useScheduleDB";
 import { DAYS } from "@/lib/useScheduleDB";
 import { getSlots, sortTasksByTime } from "@/lib/taskMutations";
-import { completionForDate, getTaskCheckableItems, getTaskSubtaskSummary, resolveTaskState } from "@/lib/taskCompletion";
+import { completionForDate, getTaskCheckableItems, getTaskSubtaskSummary, isTrackedTask, resolveTaskState } from "@/lib/taskCompletion";
 import { isTaskScheduledOn, resolveOccurrence } from "@/lib/taskOccurrence";
 import { addDaysToISO, localISODate, todayISO } from "@/lib/dateUtils";
 import { currentMinutes, parseTimeToMinutes } from "@/lib/timeUtils";
@@ -193,6 +193,18 @@ interface WeekGridProps {
   onToggleSlot: (taskId: string, slotIndex: number, day: DayKey, dateISO: string) => void;
   onCreateTaskAtTime: (day: DayKey, startMin: number, endMin: number) => void;
   /**
+   * Reschedule one slot of a task by dragging its block — only fires for
+   * today's column (see the drag handler for why). `startTime`/`endTime` are
+   * display-time strings ("9:30 AM"), same shape `retimeSlot` expects.
+   */
+  onRetimeTask?: (taskId: string, day: DayKey, slotIndex: number, startTime: string, endTime: string) => void;
+  /** Grid block hover-icon, today only, not-yet-missed: mark it missed. */
+  onMarkMissed?: (taskId: string, allSubtaskIds: string[], day: DayKey, dateISO: string) => void;
+  /** Grid block hover-icon, any column showing an already-missed occurrence:
+   *  opens the reschedule/dismiss sheet (same one Overview's Needs Attention
+   *  card opens — this just adds a second entry point from the timeline). */
+  onOpenMissedRecovery?: (params: { task: Task; plan: Plan | null; dateISO: string }) => void;
+  /**
    * Render prop for the task card inside each time block.
    * WeekGrid handles positioning; the parent injects the card so
    * visual changes on mobile automatically apply here too.
@@ -208,6 +220,8 @@ interface WeekGridProps {
     slotIndex?: number,
     /** Squares off the edge an overnight block is cut on. */
     edgeCut?: "top" | "bottom",
+    /** Hover-revealed "mark/handle missed" icon — see TaskBlockCard.gridMenuAction. */
+    gridMenuAction?: { label: string; icon: ReactNode; onClick: () => void },
   ) => ReactNode;
 }
 
@@ -235,6 +249,9 @@ export function WeekGrid({
   onToggleTaskComplete,
   onToggleSlot,
   onCreateTaskAtTime,
+  onRetimeTask,
+  onMarkMissed,
+  onOpenMissedRecovery,
   renderCard,
 }: WeekGridProps) {
   const [showCustomPicker, setShowCustomPicker] = useState(false);
@@ -251,6 +268,45 @@ export function WeekGrid({
     dragging: boolean;
     lastEndMin: number;
   } | null>(null);
+
+  // ── Cmd/Ctrl-drag to reschedule (today's column only — see handler) ────────
+  // Preview state for the ghost block; the original block dims in place while
+  // dragging (mirrors ScheduleApp's single-day dragMove pattern).
+  const [dragMove, setDragMove] = useState<{
+    taskId: string; slotIndex: number; day: DayKey; previewStartMin: number; durationMin: number;
+  } | null>(null);
+  const moveDragRef = useRef<{
+    taskId: string; slotIndex: number; day: DayKey; task: Task; slot: TaskSlot;
+    durationMin: number; grabOffsetMin: number; pointerId: number;
+    dragging: boolean; startClientY: number; columnEl: HTMLDivElement; currentPreviewStartMin: number;
+  } | null>(null);
+  // Set true the instant a drag crosses the threshold; consumed by the
+  // block's onClickCapture so the native click that otherwise follows
+  // pointerup doesn't also open the edit sheet after a real drag.
+  const suppressClickRef = useRef(false);
+  // Cmd/Ctrl-held affordance (cursor-grab) so the gesture is discoverable
+  // before a user ever drags. `blur` resets it so alt-tabbing away while
+  // holding the key can't leave it stuck on.
+  const [modifierHeld, setModifierHeld] = useState(false);
+  useEffect(() => {
+    function onKeyDown(e: KeyboardEvent) {
+      if (e.key === "Meta" || e.key === "Control") setModifierHeld(true);
+    }
+    function onKeyUp(e: KeyboardEvent) {
+      if (e.key === "Meta" || e.key === "Control") setModifierHeld(false);
+    }
+    function onBlur() {
+      setModifierHeld(false);
+    }
+    window.addEventListener("keydown", onKeyDown);
+    window.addEventListener("keyup", onKeyUp);
+    window.addEventListener("blur", onBlur);
+    return () => {
+      window.removeEventListener("keydown", onKeyDown);
+      window.removeEventListener("keyup", onKeyUp);
+      window.removeEventListener("blur", onBlur);
+    };
+  }, []);
 
   // Built once per render, not once per task: this feeds a doubly-nested loop
   // (days -> untimed tasks), matching how ScheduleApp/IOSScheduleApp memoize it.
@@ -447,6 +503,135 @@ export function WeekGrid({
     };
     columnEl.setPointerCapture(e.pointerId);
   }
+
+  // ── Cmd/Ctrl-drag to reschedule a task block ────────────────────────────────
+  // Scoped to today's column only: past/future columns render *resolved*
+  // occurrences (resolveOccurrence/completionForDate), and retiming those has
+  // no defined semantics yet (one-off exception vs. moving the template?) —
+  // same reasoning as the existing `readOnly = !dayIsToday` gate below.
+  function handleTaskBlockPointerDown(
+    e: ReactPointerEvent<HTMLDivElement>,
+    day: DayKey,
+    dayIsToday: boolean,
+    isContinuation: boolean,
+    layout: BlockLayout,
+  ) {
+    if (!onRetimeTask || isContinuation || !dayIsToday) return;
+    if (!(e.metaKey || e.ctrlKey)) return; // no modifier — let the click/checkbox behave normally
+    if (e.pointerType === "mouse" && e.button !== 0) return;
+    if ((e.target as HTMLElement).closest("button")) return; // checkbox / grid-menu icon
+    e.stopPropagation(); // don't also let the day column's create-drag fire
+    const columnEl = (e.currentTarget as HTMLElement).closest<HTMLDivElement>("[data-day-col]");
+    if (!columnEl) return;
+
+    const slotStart = parseTimeToMinutes(layout.slot.startTime);
+    if (slotStart == null) return;
+    let slotEnd = parseTimeToMinutes(layout.slot.endTime) ?? slotStart + 30;
+    if (slotEnd <= slotStart) slotEnd += 1440; // overnight
+    const durationMin = slotEnd - slotStart;
+
+    // layout.top/height are already in the mapped-minute domain PX_MIN
+    // encodes (mapMinutesToTimeline), the same domain pointerToMinutes
+    // resolves the pointer into — so grabOffset/newStart stay in that domain
+    // right up until the final minutesToDisplayTime conversion on release.
+    const blockStartMappedMin = startMin + layout.top / PX_MIN;
+    const grabMin = pointerToMinutes(e.clientY, columnEl, 0, PX_MIN * 60, startMin);
+    const grabOffsetMin = clampMinutes(grabMin - blockStartMappedMin, 0, durationMin);
+
+    moveDragRef.current = {
+      taskId: layout.task.id,
+      slotIndex: layout.slotIndex,
+      day,
+      task: layout.task,
+      slot: layout.slot,
+      durationMin,
+      grabOffsetMin,
+      pointerId: e.pointerId,
+      dragging: false,
+      startClientY: e.clientY,
+      columnEl,
+      currentPreviewStartMin: blockStartMappedMin,
+    };
+  }
+
+  useEffect(() => {
+    if (!onRetimeTask) return;
+    const retime = onRetimeTask; // narrowed once — closures below can't retain the guard's narrowing
+    let rafId: number | null = null;
+    let pendingPreviewMin: number | null = null;
+
+    function flush() {
+      rafId = null;
+      if (pendingPreviewMin !== null) {
+        const min = pendingPreviewMin;
+        pendingPreviewMin = null;
+        setDragMove((prev) => (prev ? { ...prev, previewStartMin: min } : prev));
+      }
+    }
+    function scheduleFlush() {
+      if (rafId === null) rafId = requestAnimationFrame(flush);
+    }
+
+    function onPointerMove(e: PointerEvent) {
+      const drag = moveDragRef.current;
+      if (!drag || drag.pointerId !== e.pointerId) return;
+      if (!drag.dragging) {
+        if (Math.abs(e.clientY - drag.startClientY) < DRAG_THRESHOLD_PX) return;
+        drag.dragging = true;
+        suppressClickRef.current = true;
+        haptic("medium");
+        setDragMove({ taskId: drag.taskId, slotIndex: drag.slotIndex, day: drag.day, previewStartMin: drag.currentPreviewStartMin, durationMin: drag.durationMin });
+      }
+      e.preventDefault();
+      const currentMin = pointerToMinutes(e.clientY, drag.columnEl, 0, PX_MIN * 60, startMin);
+      const newStartMin = clampMinutes(snapMinutes(currentMin - drag.grabOffsetMin), startMin, endMin - drag.durationMin);
+      drag.currentPreviewStartMin = newStartMin;
+      if (pendingPreviewMin !== newStartMin) {
+        pendingPreviewMin = newStartMin;
+        scheduleFlush();
+      }
+    }
+
+    function onPointerUp(e: PointerEvent) {
+      const drag = moveDragRef.current;
+      if (!drag || drag.pointerId !== e.pointerId) return;
+      moveDragRef.current = null;
+      pendingPreviewMin = null;
+      if (rafId !== null) { cancelAnimationFrame(rafId); rafId = null; }
+      if (!drag.dragging) {
+        // Modifier held, but released without crossing the threshold — no
+        // click was suppressed, so this falls through to the normal
+        // click-to-edit behavior exactly as if the modifier weren't held.
+        setDragMove(null);
+        return;
+      }
+      e.preventDefault();
+      const newStartMin = drag.currentPreviewStartMin;
+      const newEndMin = newStartMin + drag.durationMin;
+      retime(drag.taskId, drag.day, drag.slotIndex, minutesToDisplayTime(newStartMin), minutesToDisplayTime(newEndMin));
+      haptic("light");
+      setDragMove(null);
+    }
+
+    function onPointerCancel(e: PointerEvent) {
+      const drag = moveDragRef.current;
+      if (!drag || drag.pointerId !== e.pointerId) return;
+      moveDragRef.current = null;
+      pendingPreviewMin = null;
+      if (rafId !== null) { cancelAnimationFrame(rafId); rafId = null; }
+      setDragMove(null);
+    }
+
+    document.addEventListener("pointermove", onPointerMove, { passive: false });
+    document.addEventListener("pointerup", onPointerUp);
+    document.addEventListener("pointercancel", onPointerCancel);
+    return () => {
+      document.removeEventListener("pointermove", onPointerMove);
+      document.removeEventListener("pointerup", onPointerUp);
+      document.removeEventListener("pointercancel", onPointerCancel);
+      if (rafId !== null) cancelAnimationFrame(rafId);
+    };
+  }, [endMin, onRetimeTask, startMin]);
 
   return (
     <div className="flex h-full w-full min-w-0 flex-col overflow-hidden">
@@ -688,6 +873,7 @@ export function WeekGrid({
             return (
               <div
                 key={day}
+                data-day-col
                 className="relative min-w-0 flex-1 border-r border-neutral-200 last:border-r-0 dark:border-white/[0.06]"
                 onPointerDown={(e) => handleDayPointerDown(day, e)}
               >
@@ -734,6 +920,20 @@ export function WeekGrid({
                     nowPx !== null &&
                     nowPx >= layout.top &&
                     nowPx < layout.top + layout.height;
+                  const isBeingMoved =
+                    dragMove?.taskId === layout.task.id && dragMove?.slotIndex === layout.slotIndex && dragMove?.day === day;
+                  const canDragToRetime = !!onRetimeTask && dayIsToday && !isContinuation;
+                  // Hover-icon: "mark missed" (today, not yet missed/done) or
+                  // "handle missed" (any column showing an already-missed
+                  // occurrence — completionForDate above already resolved the
+                  // right historical flag for past days). Never on a continuation.
+                  const gridMenuAction = isContinuation
+                    ? undefined
+                    : layout.task.missed && onOpenMissedRecovery
+                    ? { label: "Handle missed", icon: <IconAlertTriangle size={13} strokeWidth={2} />, onClick: () => onOpenMissedRecovery({ task: layout.task, plan: linkedPlan, dateISO }) }
+                    : dayIsToday && !layout.task.missed && !slotDone && isTrackedTask(layout.task) && onMarkMissed
+                    ? { label: "Mark missed", icon: <IconX size={13} strokeWidth={2.5} />, onClick: () => onMarkMissed(layout.task.id, allSubtaskIds, day, dateISO) }
+                    : undefined;
                   return (
                     <div
                       // `kind` is part of the key because a daily overnight task
@@ -742,7 +942,9 @@ export function WeekGrid({
                       key={`${layout.kind}-${layout.task.id}-${layout.slotIndex}`}
                       data-task-block
                       data-glass={isCurrent ? "" : undefined}
-                      className={`absolute ${isCurrent ? "rounded-[10px] shadow-now" : ""}`}
+                      className={`absolute ${isCurrent ? "rounded-[10px] shadow-now" : ""} ${
+                        isBeingMoved ? "opacity-30" : ""
+                      } ${canDragToRetime && modifierHeld ? "cursor-grab" : ""}`}
                       style={{
                         top: layout.top + TASK_VERTICAL_INSET,
                         height: visualHeight,
@@ -750,6 +952,18 @@ export function WeekGrid({
                         width: `calc(${layout.widthPct}% - 10px)`,
                         minHeight: 22,
                       }}
+                      onPointerDown={canDragToRetime ? (e) => handleTaskBlockPointerDown(e, day, dayIsToday, isContinuation, layout) : undefined}
+                      onClickCapture={
+                        canDragToRetime
+                          ? (e) => {
+                              if (suppressClickRef.current) {
+                                e.preventDefault();
+                                e.stopPropagation();
+                                suppressClickRef.current = false;
+                              }
+                            }
+                          : undefined
+                      }
                     >
                       {renderCard(
                         layout.task,
@@ -769,6 +983,7 @@ export function WeekGrid({
                         layout.slot,
                         layout.slotIndex,
                         isContinuation ? "top" : cutAtBottom ? "bottom" : undefined,
+                        gridMenuAction,
                       )}
                     </div>
                   );
@@ -810,6 +1025,24 @@ export function WeekGrid({
                         compact={height < 56}
                         className="h-full"
                       />
+                    </div>
+                  );
+                })()}
+
+                {/* Drag-move ghost — the real block dims (isBeingMoved above)
+                    while this tracks the pointer at the snapped new time. */}
+                {dragMove?.day === day && (() => {
+                  const movingTask = tasks.find((t) => t.id === dragMove.taskId);
+                  if (!movingTask) return null;
+                  const top = (dragMove.previewStartMin - startMin) * PX_MIN;
+                  const height = Math.max(dragMove.durationMin * PX_MIN, 24);
+                  const previewSlot: TaskSlot = {
+                    startTime: minutesToDisplayTime(dragMove.previewStartMin),
+                    endTime: minutesToDisplayTime(dragMove.previewStartMin + dragMove.durationMin),
+                  };
+                  return (
+                    <div className="pointer-events-none absolute left-0.5 right-0.5 z-[16] opacity-90" style={{ top, height }}>
+                      {renderCard(movingTask, height, 100, true, () => {}, () => {}, previewSlot, dragMove.slotIndex, undefined)}
                     </div>
                   );
                 })()}

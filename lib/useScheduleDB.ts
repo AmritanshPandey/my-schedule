@@ -25,6 +25,8 @@ import { normalizeTasks, entryToTask, resetStaleCompletions } from "@/lib/schedu
 export { normalizeTasks, resetStaleCompletions } from "@/lib/scheduleNormalize";
 import { applyAutoMissed } from "@/lib/consistency/autoMiss";
 import { CategoryRegistry } from "@/lib/taskCategories";
+import { isEditableTarget } from "@/lib/keyboardEvents";
+import { pushHistory, popHistory, HISTORY_LIMIT } from "@/lib/scheduleHistory";
 
 export type PlanCategory = "fitness" | "learning" | "work" | "health" | "routine";
 
@@ -989,6 +991,13 @@ export function useScheduleDB() {
   const [ready, setReady] = useState(false);
   const [isFirstLaunch, setIsFirstLaunch] = useState(false);
   const dbRef = useRef<IDBDatabase | null>(null);
+  // Undo (Cmd+Z) support. scheduleRef always mirrors the latest `schedule` —
+  // including updates that bypass `setSchedule` (cloud-merge, auto-miss,
+  // restore, clear) — via the sync effect below, so `setSchedule` always
+  // computes/pushes against the true current value even across renders.
+  const scheduleRef = useRef(schedule);
+  const historyRef = useRef<Schedule[]>([]);
+  const [canUndo, setCanUndo] = useState(false);
   // The storage key the in-memory `schedule` was hydrated for. The write effect
   // only persists when this matches the current `storageKey`, so data for one
   // identity can never be written under another's key (or while auth is still
@@ -1193,11 +1202,65 @@ export function useScheduleDB() {
     };
   }, [schedule, ready, storageKey, storageUid]);
 
+  // Keep scheduleRef current regardless of *how* `schedule` changed, so
+  // setSchedule's synchronous read below is never stale — e.g. right after a
+  // cloud-merge or auto-miss tick, both of which call setScheduleState
+  // directly and don't go through setSchedule/history at all (by design: a
+  // stray Cmd+Z should never undo a background sync or a day-rollover).
+  useEffect(() => {
+    scheduleRef.current = schedule;
+  }, [schedule]);
+
   // Stable identity (setScheduleState is stable) so downstream effects and
   // useCallback hooks that depend on it don't re-run/recreate every render.
+  //
+  // Resolves the updater synchronously against scheduleRef (rather than
+  // passing the updater through to React's functional setState form) so it
+  // can push the pre-mutation value onto the undo stack exactly once. Doing
+  // that push *inside* a functional setScheduleState(updater) instead would
+  // risk double-recording if React ever replays the updater (StrictMode's
+  // dev double-invoke, concurrent-mode interruption).
   const setSchedule = useCallback((updater: (prev: Schedule) => Schedule) => {
-    setScheduleState(updater);
+    const prev = scheduleRef.current;
+    const next = updater(prev);
+    if (next !== prev) {
+      historyRef.current = pushHistory(historyRef.current, prev, HISTORY_LIMIT);
+      scheduleRef.current = next;
+      setCanUndo(true);
+    }
+    setScheduleState(next);
   }, []);
+
+  /** Cmd/Ctrl+Z: pop the last snapshot off the undo stack and restore it.
+   *  No-op when the stack is empty. */
+  const undo = useCallback(() => {
+    const [restored, rest] = popHistory(historyRef.current);
+    if (restored === undefined) return;
+    historyRef.current = rest;
+    scheduleRef.current = restored;
+    setCanUndo(rest.length > 0);
+    setScheduleState(restored);
+  }, []);
+
+  // Global Cmd+Z (Mac) / Ctrl+Z (Windows/Linux) — one listener covers
+  // whichever shell (iOS or desktop) is mounted, since useScheduleDB is
+  // called exactly once per shell and only one shell renders at a time.
+  // Falls through to the browser's/tiptap's own text-undo while focus is in
+  // an editable element (isEditableTarget), and deliberately ignores
+  // Cmd+Shift+Z (redo) since no redo exists yet — better to leave that chord
+  // untouched than fire a single undo on it.
+  useEffect(() => {
+    function onKeyDown(e: KeyboardEvent) {
+      if (!(e.metaKey || e.ctrlKey) || e.shiftKey) return;
+      if (e.key.toLowerCase() !== "z") return;
+      if (isEditableTarget(e.target)) return;
+      if (historyRef.current.length === 0) return;
+      e.preventDefault();
+      undo();
+    }
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [undo]);
 
   // Auto-miss also runs on load (safeMigrate); this catches the case where the
   // app stays open across the day-start boundary. `applyAutoMissed` returns the
@@ -1269,5 +1332,5 @@ export function useScheduleDB() {
     }
   }
 
-  return { schedule, setSchedule, ready, clearData, clearProgress, restoreData, isFirstLaunch };
+  return { schedule, setSchedule, ready, clearData, clearProgress, restoreData, isFirstLaunch, undo, canUndo };
 }

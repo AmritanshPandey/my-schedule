@@ -55,7 +55,7 @@ export default function RitualStrip({ ritual, completed, onToggle }: RitualStrip
     >
       <span
         className={`
-          absolute right-0 top-1/2 flex h-4 max-w-[150px] -translate-y-1/2 items-center
+          absolute right-0 top-1/2 flex h-6 max-w-[150px] -translate-y-1/2 items-center
           rounded-full ring-2 ring-white transition-[filter] duration-150 dark:ring-neutral-950
           group-hover/ritual:brightness-110 group-active/ritual:brightness-95
           ${completed ? "opacity-60" : "opacity-100"}
@@ -82,8 +82,8 @@ export default function RitualStrip({ ritual, completed, onToggle }: RitualStrip
         </span>
 
         {/* Round end-cap — always 16px, holds the tick once done. */}
-        <span className="flex h-4 w-4 shrink-0 items-center justify-center">
-          {completed && <IconCheck size={9} strokeWidth={3.5} className="text-neutral-950" />}
+        <span className="flex h-6 w-6 shrink-0 items-center justify-center">
+          {completed && <IconCheck size={16} strokeWidth={2} className="text-neutral-950" />}
         </span>
       </span>
     </m.button>

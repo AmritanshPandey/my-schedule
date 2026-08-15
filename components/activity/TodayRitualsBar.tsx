@@ -70,7 +70,7 @@ export default function TodayRitualsBar({
                   : "border-neutral-200/80 bg-white dark:border-white/[0.08] dark:bg-neutral-900"
               }`}
             >
-              <span className={`flex h-4 w-4 shrink-0 items-center justify-center rounded-full transition-colors ${
+              <span className={`flex h-6 w-6 shrink-0 items-center justify-center rounded-full transition-colors ${
                 done ? "bg-green-500" : `${dot}`
               }`}>
                 {done && <IconCheck size={9} strokeWidth={3} className="text-white" />}
