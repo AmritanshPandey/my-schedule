@@ -196,15 +196,29 @@ export default function TaskDetailView({
     )
   ) : (
     <div className="mt-1 space-y-2">
+      {/* `onToggleComplete` is a TOGGLE, so an unconditional "Done" reversed a
+          task that was already finished and then closed on top of it — the
+          user watched their work come undone on the way back to Overview.
+          Note the Missed button below already carries a `!done` guard for
+          exactly this reason; the primary never got one.
+
+          Once complete this reports state instead of offering an action: it
+          reads "Completed", is tinted rather than solid (it is no longer a
+          call to action), and only dismisses. Undoing stays on the header
+          checkbox, which is already labelled "Mark task not done". */}
       {tracked && (
         <m.button
           type="button"
           whileTap={{ scale: 0.97 }}
-          onClick={() => { onToggleComplete(task.id, allIds); onClose(); }}
-          className="flex min-h-[48px] w-full items-center justify-center gap-1.5 rounded-full bg-[#00A63E] px-4 text-[14px] font-bold text-white transition-colors hover:bg-[#008236] dark:bg-[#2FD46E] dark:text-neutral-950 dark:hover:bg-[#2FD46E]/90"
+          onClick={() => { if (!done) onToggleComplete(task.id, allIds); onClose(); }}
+          className={`flex min-h-[48px] w-full items-center justify-center gap-1.5 rounded-full px-4 text-[14px] font-bold transition-colors ${
+            done
+              ? "bg-green-600/10 text-green-700 dark:bg-emerald-400/[0.12] dark:text-emerald-300"
+              : "bg-[#00A63E] text-white hover:bg-[#008236] dark:bg-[#2FD46E] dark:text-neutral-950 dark:hover:bg-[#2FD46E]/90"
+          }`}
         >
           <IconCheck size={18} strokeWidth={2.6} />
-          Done
+          {done ? "Completed" : "Done"}
         </m.button>
       )}
 
