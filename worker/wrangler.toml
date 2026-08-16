@@ -18,8 +18,18 @@ crons = ["* * * * *"]
 # not derived from a live quota check — confirm the actual current Gemini
 # free-tier RPM/RPD for GEMINI_MODEL in Google AI Studio when you generate the
 # key, and adjust here if needed.
+#
+# GEMINI_MODEL: Google retires Gemini model IDs on a rolling schedule (every
+# /ai/chat call started 404ing with "model ... is no longer available" once
+# gemini-2.0-flash was retired June 1 2026 — see ai.google.dev/gemini-api/docs/deprecations).
+# gemini-2.5-flash is the current "best price-performance" tier (per
+# ai.google.dev/gemini-api/docs/models as of Aug 2026), matching what
+# gemini-2.0-flash was chosen for. It has its own scheduled retirement
+# (Oct 16 2026) — when /ai/chat starts 404ing again, that's why; check the
+# deprecations page above for the current replacement before just swapping
+# the string blindly.
 [vars]
-GEMINI_MODEL = "gemini-2.0-flash"
+GEMINI_MODEL = "gemini-2.5-flash"
 AI_PER_USER_DAILY_CAP = "20"
 AI_GLOBAL_DAILY_CAP = "300"
 

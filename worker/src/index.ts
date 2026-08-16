@@ -110,7 +110,9 @@ async function handleAiChat(request: Request, env: Env): Promise<Response> {
     });
   }
 
-  const model = env.GEMINI_MODEL || "gemini-2.0-flash";
+  // Kept in sync with wrangler.toml's GEMINI_MODEL var — see that file's
+  // comment for why this needs periodic updating as Google retires model IDs.
+  const model = env.GEMINI_MODEL || "gemini-2.5-flash";
   let upstream: Response;
   try {
     upstream = await streamGemini(env.GEMINI_API_KEY, model, systemPrompt, messages, tokenBudget);
