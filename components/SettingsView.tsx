@@ -153,7 +153,7 @@ function SyncRow({ schedule: _schedule }: { schedule: Schedule }) {
         <p className={`text-[11px] font-medium ${color}`}>{lastResult || label}</p>
       </div>
       <m.button type="button" onClick={syncNow} disabled={isBusy} whileTap={{ scale: 0.93 }}
-        className="flex items-center gap-1.5 rounded-xl border border-neutral-200 bg-neutral-50 px-3 py-1.5 text-[11px] font-semibold text-neutral-600 hover:bg-white disabled:opacity-40 dark:border-white/[0.08] dark:bg-white/[0.04] dark:text-neutral-300">
+        className="flex items-center gap-1.5 rounded-xl border border-neutral-200 bg-neutral-50 px-3 py-1.5 text-[11px] font-semibold text-neutral-600 hover:bg-white disabled:opacity-40 dark:border-white/[0.08] dark:bg-white/[0.04] dark:text-neutral-300 dark:hover:bg-white/[0.07]">
         <m.span animate={isBusy ? { rotate: 360 } : {}} transition={isBusy ? { repeat: Infinity, duration: 0.9, ease: "linear" } : {}}>
           <IconCloud size={11} strokeWidth={2} />
         </m.span>
@@ -411,7 +411,7 @@ export function SettingsView({
                     </p>
                     <m.button type="button" onClick={signIn} disabled={signingIn || !isAuthAvailable} whileTap={{ scale: 0.97 }}
                       aria-describedby={!isAuthAvailable || signInError ? "settings-view-auth-note" : undefined}
-                      className="inline-flex w-full items-center justify-center gap-2 rounded-xl border border-neutral-200 bg-neutral-50 px-4 py-2.5 text-[13px] font-semibold text-neutral-700 hover:bg-white disabled:opacity-50 dark:border-white/[0.08] dark:bg-white/[0.04] dark:text-white">
+                      className="inline-flex w-full items-center justify-center gap-2 rounded-xl border border-neutral-200 bg-neutral-50 px-4 py-2.5 text-[13px] font-semibold text-neutral-700 hover:bg-white disabled:opacity-50 dark:border-white/[0.08] dark:bg-white/[0.04] dark:text-white dark:hover:bg-white/[0.07]">
                       {signingIn ? <span className="h-3.5 w-3.5 animate-spin rounded-full border-2 border-neutral-300 border-t-neutral-600" /> : <GoogleLogo />}
                       {signingIn ? "Signing in…" : "Continue with Google"}
                     </m.button>
@@ -623,7 +623,7 @@ export function SettingsView({
                   </p>
                 </div>
                 <button type="button" onClick={handleHardRefresh} disabled={refreshing}
-                  className="shrink-0 rounded-xl border border-neutral-200 bg-neutral-50 px-3 py-1.5 text-[11px] font-semibold text-neutral-700 hover:bg-neutral-100 disabled:opacity-50 dark:border-white/[0.08] dark:bg-white/[0.04] dark:text-neutral-200">
+                  className="shrink-0 rounded-xl border border-neutral-200 bg-neutral-50 px-3 py-1.5 text-[11px] font-semibold text-neutral-700 hover:bg-neutral-100 disabled:opacity-50 dark:border-white/[0.08] dark:bg-white/[0.04] dark:text-neutral-200 dark:hover:bg-white/[0.07]">
                   {refreshing ? "Updating…" : "Update"}
                 </button>
               </div>
@@ -667,7 +667,7 @@ export function SettingsView({
                             <p className="text-[11px] text-neutral-400 dark:text-neutral-500">Resets completions & logged values · keeps your plans and tasks</p>
                           </div>
                           <button type="button" onClick={() => setProgressPhase("confirm")}
-                            className="shrink-0 rounded-xl border border-amber-200 bg-amber-50 px-3 py-1.5 text-[11px] font-semibold text-amber-700 hover:bg-amber-100 dark:border-amber-500/20 dark:bg-amber-500/10 dark:text-amber-400">
+                            className="shrink-0 rounded-xl border border-amber-200 bg-amber-50 px-3 py-1.5 text-[11px] font-semibold text-amber-700 hover:bg-amber-100 dark:border-amber-500/20 dark:bg-amber-500/10 dark:text-amber-400 dark:hover:bg-amber-500/15">
                             Reset
                           </button>
                         </m.div>
@@ -679,11 +679,11 @@ export function SettingsView({
                           </p>
                           <div className="flex gap-2">
                             <button type="button" onClick={() => setProgressPhase("idle")}
-                              className="flex flex-1 items-center justify-center gap-1.5 rounded-xl border border-neutral-200 bg-white py-2 text-[12px] font-semibold text-neutral-600 hover:bg-neutral-50 dark:border-white/[0.08] dark:bg-white/[0.04]">
+                              className="flex flex-1 items-center justify-center gap-1.5 rounded-xl border border-neutral-200 bg-white py-2 text-[12px] font-semibold text-neutral-600 hover:bg-neutral-50 dark:border-white/[0.08] dark:bg-white/[0.04] dark:hover:bg-white/[0.07]">
                               <IconX size={12} strokeWidth={2.5} />Cancel
                             </button>
                             <button type="button" onClick={handleClearProgress}
-                              className="flex flex-1 items-center justify-center gap-1.5 rounded-xl border border-amber-200 bg-amber-50 py-2 text-[12px] font-semibold text-amber-700 hover:bg-amber-100 dark:border-amber-500/20 dark:bg-amber-500/10 dark:text-amber-400">
+                              className="flex flex-1 items-center justify-center gap-1.5 rounded-xl border border-amber-200 bg-amber-50 py-2 text-[12px] font-semibold text-amber-700 hover:bg-amber-100 dark:border-amber-500/20 dark:bg-amber-500/10 dark:text-amber-400 dark:hover:bg-amber-500/15">
                               <IconRefresh size={12} strokeWidth={2} />Clear progress
                             </button>
                           </div>
@@ -712,7 +712,7 @@ export function SettingsView({
                       </div>
                       <span className="flex-1 text-[13px] font-semibold text-neutral-800 dark:text-white">Clear all data</span>
                       <button type="button" onClick={() => { haptic("light"); setClearConfirmOpen(true); }}
-                        className="rounded-xl border border-rose-200 bg-rose-50 px-3 py-1.5 text-[11px] font-semibold text-rose-600 hover:bg-rose-100 dark:border-rose-500/20 dark:bg-rose-500/10 dark:text-rose-400">
+                        className="rounded-xl border border-rose-200 bg-rose-50 px-3 py-1.5 text-[11px] font-semibold text-rose-600 hover:bg-rose-100 dark:border-rose-500/20 dark:bg-rose-500/10 dark:text-rose-400 dark:hover:bg-rose-500/15">
                         Clear
                       </button>
                     </m.div>
