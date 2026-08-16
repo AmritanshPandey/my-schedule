@@ -2,10 +2,12 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { AnimatePresence, m } from "framer-motion";
-import { IconChevronDown, IconDownload, IconFileText, IconHistory, IconUpload } from "@tabler/icons-react";
+import { IconChevronDown, IconDownload, IconFileText, IconHistory, IconSparkles, IconUpload } from "@tabler/icons-react";
 import ConfirmSheet from "@/components/ui/ConfirmSheet";
 import { useAuth } from "@/contexts/AuthProvider";
 import { downloadBackup, parseBackup } from "@/lib/backup";
+import { buildDemoSchedule } from "@/lib/demoData";
+import { DAYS } from "@/lib/scheduleConstants";
 import { downloadMarkdown, type MarkdownScope } from "@/lib/markdownExport";
 import { listCloudBackups, fetchCloudBackup, type CloudBackupMeta } from "@/lib/cloudSync";
 import { haptic } from "@/lib/haptics";
@@ -15,6 +17,16 @@ function formatBackupDate(isoDate: string): string {
   const date = new Date(`${isoDate}T00:00:00`);
   if (Number.isNaN(date.getTime())) return isoDate;
   return new Intl.DateTimeFormat(undefined, { weekday: "short", month: "short", day: "numeric" }).format(date);
+}
+
+/** Whether there is anything here worth rescuing before it gets replaced. */
+function hasAnyData(schedule: Schedule): boolean {
+  return (
+    schedule.plans.length > 0 ||
+    schedule.notes.length > 0 ||
+    schedule.rituals.length > 0 ||
+    DAYS.some((day) => (schedule.activities[day]?.length ?? 0) > 0)
+  );
 }
 
 /**
@@ -40,6 +52,7 @@ export default function BackupRows({
   const [historyLoading, setHistoryLoading] = useState(false);
   const [cloudRestoreId, setCloudRestoreId] = useState<string | null>(null);
   const [cloudRestoring, setCloudRestoring] = useState(false);
+  const [demoOpen, setDemoOpen] = useState(false);
 
   useEffect(() => () => {
     if (feedbackTimer.current) clearTimeout(feedbackTimer.current);
@@ -95,6 +108,41 @@ export default function BackupRows({
       ok ? "Backup restored." : "That backup couldn't be loaded — your data is unchanged.",
     );
   }, [pendingRaw, onRestoreData, showFeedback]);
+
+  /**
+   * Install the demo dataset, saving what's already here first.
+   *
+   * The backup is not a formality: this replaces the entire schedule, and
+   * "Clear all data" is not a way back for a signed-in user because it deletes
+   * the cloud copy too. The downloaded file is the only route back, so a failed
+   * download aborts the whole thing rather than proceeding unprotected.
+   */
+  const handleDemoConfirm = useCallback(() => {
+    setDemoOpen(false);
+    if (!onRestoreData) return;
+
+    let backedUp = false;
+    if (hasAnyData(schedule)) {
+      try {
+        downloadBackup(schedule);
+        backedUp = true;
+      } catch {
+        showFeedback("error", "Couldn't save a backup first — nothing was replaced.");
+        return;
+      }
+    }
+
+    const ok = onRestoreData(buildDemoSchedule());
+    if (ok) haptic("light");
+    showFeedback(
+      ok ? "done" : "error",
+      ok
+        ? backedUp
+          ? "Demo data loaded. Your previous data was downloaded as a backup file."
+          : "Demo data loaded."
+        : "Couldn't load the demo data — your data is unchanged.",
+    );
+  }, [schedule, onRestoreData, showFeedback]);
 
   const toggleHistory = useCallback(async () => {
     haptic("light");
@@ -208,6 +256,25 @@ export default function BackupRows({
               onChange={handleFile}
             />
           </div>
+          <div className="mx-4 border-t border-neutral-100 dark:border-white/[0.05]" />
+          <div className="flex items-center gap-3 px-4 py-3.5">
+            <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl border border-neutral-100 bg-neutral-50 text-neutral-500 dark:border-white/[0.06] dark:bg-white/[0.04] dark:text-neutral-300">
+              <IconSparkles size={14} strokeWidth={2} />
+            </div>
+            <div className="min-w-0 flex-1">
+              <p className="text-[13px] font-semibold text-neutral-800 dark:text-white">Load demo data</p>
+              <p className="mt-0.5 text-[11px] leading-snug text-neutral-400 dark:text-neutral-500">
+                Ten weeks of sample history · see every screen with real numbers
+              </p>
+            </div>
+            <button
+              type="button"
+              onClick={() => { haptic("light"); setDemoOpen(true); }}
+              className="shrink-0 rounded-xl border border-neutral-200 bg-neutral-50 px-3 py-1.5 text-[11px] font-semibold text-neutral-700 hover:bg-neutral-100 dark:border-white/[0.08] dark:bg-white/[0.04] dark:text-neutral-200"
+            >
+              Load
+            </button>
+          </div>
         </>
       )}
       {!isGuest && onRestoreData && (
@@ -308,6 +375,18 @@ export default function BackupRows({
         title={cloudRestoreId ? `Restore ${formatBackupDate(cloudRestoreId)}?` : "Restore snapshot?"}
         description="Everything currently in the app is replaced with that day's snapshot. Consider exporting a backup of the current data first."
         confirmLabel="Restore snapshot"
+      />
+      <ConfirmSheet
+        open={demoOpen}
+        onClose={() => setDemoOpen(false)}
+        onConfirm={handleDemoConfirm}
+        title="Load demo data?"
+        description={
+          hasAnyData(schedule)
+            ? "Everything currently in the app is replaced with a sample dataset. Your current data downloads as a backup file first — restore it from there to come back."
+            : "Fills the app with a sample dataset: three plans, ten weeks of history, trackers and notes."
+        }
+        confirmLabel="Load demo data"
       />
     </>
   );

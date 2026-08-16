@@ -3481,7 +3481,11 @@ export default function ScheduleApp() {
                         <div className="absolute inset-0">
                           {timelineTaskLayouts.map((layout) => (
                             <TimelineTaskBlock
-                              key={`${layout.task.id}-${layout.slotIndex}`}
+                              // `kind` is part of the key because a daily overnight
+                              // task renders twice on the same day — today's block
+                              // and yesterday's tail — with the same id and slot
+                              // index. Matches WeekGrid, which already guards this.
+                              key={`${layout.kind}-${layout.task.id}-${layout.slotIndex}`}
                               layout={layout}
                               plan={layout.task.planId ? plansById.get(layout.task.planId) ?? null : null}
                               category={taskIdentity(layout.task, categoryMap).category}
