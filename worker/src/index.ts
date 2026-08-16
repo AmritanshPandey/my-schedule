@@ -1,20 +1,30 @@
 /**
- * PlanR background reminders — a Cloudflare Worker (free plan, 1-minute cron)
- * that sends Web Push notifications while the app is closed.
+ * PlanR's Cloudflare Worker — two independent responsibilities on one free
+ * Worker (shared secrets, shared Firestore client, one deploy):
  *
- * Each run walks every user with reminders enabled, reads their synced schedule
- * + settings + timezone from Firestore (REST), computes which reminders just
- * came due in their local time, and sends a Web Push to each registered
- * subscription. A per-user/per-day "sent" marker makes each reminder fire at
- * most once; subscriptions that 404/410 are pruned.
+ * 1. `scheduled` (1-minute cron): sends Web Push notifications while the app
+ *    is closed. Each run walks every user with reminders enabled, reads their
+ *    synced schedule + settings + timezone from Firestore (REST), computes
+ *    which reminders just came due in their local time, and sends a Web Push
+ *    to each registered subscription. A per-user/per-day "sent" marker makes
+ *    each reminder fire at most once; subscriptions that 404/410 are pruned.
+ *    Notifications use the same `tag` as the in-app foreground reminders
+ *    (lib/reminders.ts), so the two collapse into one instead of double-notifying.
  *
- * Notifications use the same `tag` as the in-app foreground reminders
- * (lib/reminders.ts), so the two collapse into one instead of double-notifying.
+ * 2. `fetch` (`POST /ai/chat`): proxies Gemini AI calls behind a shared,
+ *    developer-owned API key that must never reach the client (this app is a
+ *    static export — anything in the JS bundle is public). Verifies the
+ *    caller's Firebase Auth ID token (auth.ts), enforces a per-user + global
+ *    daily cap on the shared key (usage.ts), then streams Gemini's response
+ *    straight back (gemini.ts).
  */
 
 import { buildPushPayload } from "@block65/webcrypto-web-push";
 import { Firestore, uidFromName, idFromName, type Env } from "./firestore.js";
 import { computeDueReminders, type ReminderSettings, type Schedule } from "./reminders.js";
+import { verifyFirebaseIdToken } from "./auth.js";
+import { streamGemini, type GeminiMessage } from "./gemini.js";
+import { checkAndIncrement, type UsageCaps } from "./usage.js";
 
 interface Subscription {
   endpoint: string;
@@ -22,9 +32,92 @@ interface Subscription {
   expirationTime?: number | null;
 }
 
+// No cookies/credentials are used (auth is a Bearer token whose CONTENT is
+// verified server-side, not the request's origin), so a wildcard origin is
+// safe here — it doesn't grant access to anything, it just permits the
+// browser to let JS read the response. A custom `authorization` header still
+// triggers a CORS preflight, hence the OPTIONS handling below.
+const CORS_HEADERS: Record<string, string> = {
+  "access-control-allow-origin": "*",
+  "access-control-allow-methods": "POST, OPTIONS",
+  "access-control-allow-headers": "authorization, content-type",
+};
+
+function json(status: number, body: unknown): Response {
+  return new Response(JSON.stringify(body), {
+    status,
+    headers: { "content-type": "application/json", ...CORS_HEADERS },
+  });
+}
+
+async function handleAiChat(request: Request, env: Env): Promise<Response> {
+  const authHeader = request.headers.get("authorization") ?? "";
+  const idToken = authHeader.replace(/^Bearer\s+/i, "").trim();
+  if (!idToken) return json(401, { error: "missing bearer token" });
+
+  const verified = await verifyFirebaseIdToken(idToken, env.FIREBASE_PROJECT_ID);
+  if (!verified) return json(401, { error: "invalid or expired token" });
+
+  let payload: { systemPrompt?: string; messages?: GeminiMessage[]; maxOutputTokens?: number };
+  try {
+    payload = await request.json();
+  } catch {
+    return json(400, { error: "invalid JSON body" });
+  }
+  const { systemPrompt, messages, maxOutputTokens } = payload;
+  if (!systemPrompt || !Array.isArray(messages) || messages.length === 0) {
+    return json(400, { error: "systemPrompt and a non-empty messages array are required" });
+  }
+  // Clamped, not trusted as-is — a client-supplied token budget still needs a
+  // ceiling so it can't be used to run up the shared key's quota per call.
+  const tokenBudget = Math.min(Math.max(Number(maxOutputTokens) || 1024, 256), 4096);
+
+  const fs = new Firestore(env);
+  const caps: UsageCaps = {
+    perUser: Number(env.AI_PER_USER_DAILY_CAP) || 20,
+    global: Number(env.AI_GLOBAL_DAILY_CAP) || 300,
+  };
+  const usage = await checkAndIncrement(fs, verified.uid, caps);
+  if (!usage.ok) {
+    return json(429, {
+      error: "daily AI limit reached",
+      reason: usage.reason,
+    });
+  }
+
+  const model = env.GEMINI_MODEL || "gemini-2.0-flash";
+  let upstream: Response;
+  try {
+    upstream = await streamGemini(env.GEMINI_API_KEY, model, systemPrompt, messages, tokenBudget);
+  } catch (err) {
+    return json(502, { error: "gemini request failed", detail: String(err) });
+  }
+  if (!upstream.ok || !upstream.body) {
+    const detail = await upstream.text().catch(() => "");
+    console.error("gemini upstream error", upstream.status, detail);
+    return json(upstream.status || 502, { error: "gemini error" });
+  }
+
+  return new Response(upstream.body, {
+    status: 200,
+    headers: { "content-type": "text/event-stream", ...CORS_HEADERS },
+  });
+}
+
 export default {
   async scheduled(_event: ScheduledController, env: Env, ctx: ExecutionContext): Promise<void> {
     ctx.waitUntil(run(env));
+  },
+
+  async fetch(request: Request, env: Env, _ctx: ExecutionContext): Promise<Response> {
+    if (request.method === "OPTIONS") {
+      return new Response(null, { status: 204, headers: CORS_HEADERS });
+    }
+    const { pathname } = new URL(request.url);
+    if (pathname === "/ai/chat" && request.method === "POST") {
+      return handleAiChat(request, env);
+    }
+    return json(404, { error: "not found" });
   },
 };
 

@@ -12,8 +12,11 @@ import BottomSheet from "@/components/ui/BottomSheet";
 import SheetHeader from "@/components/ui/SheetHeader";
 import Button from "@/components/ui/Button";
 import { SECTION_ICONS, getIconPickerStyle } from "@/components/SectionIcons";
-import { streamOllamaChat, buildSystemPrompt, parseAIAction, type AITask } from "@/lib/ai";
+import { buildSystemPrompt, parseAIAction, type AITask, type AIMilestone } from "@/lib/ai";
+import { streamGeminiChat } from "@/lib/aiClient";
 import { useAIActions } from "@/lib/ai/useAIActions";
+import { useAuth } from "@/contexts/AuthProvider";
+import AISignInGate from "@/components/auth/AISignInGate";
 import { resolveAccentColor, type AccentColor } from "@/lib/colorSystem";
 import { localISODate, todayISO } from "@/lib/dateUtils";
 import type { Plan } from "@/lib/useScheduleDB";
@@ -28,14 +31,13 @@ export interface AIPlanCreatorData {
   startDate?: string;
   endDate?: string;
   tasks: AITask[];
+  milestones: AIMilestone[];
 }
 
 interface AIPlanCreatorSheetProps {
   open: boolean;
   onClose: () => void;
   onCreatePlan: (data: AIPlanCreatorData) => void;
-  ollamaUrl?: string;
-  ollamaModel?: string;
   existingPlans?: Pick<Plan, "title" | "category" | "description">[];
 }
 
@@ -113,8 +115,6 @@ export default function AIPlanCreatorSheet({
   open,
   onClose,
   onCreatePlan,
-  ollamaUrl,
-  ollamaModel,
   existingPlans = [],
 }: AIPlanCreatorSheetProps) {
   const [step, setStep] = useState<"input" | "review">("input");
@@ -130,8 +130,10 @@ export default function AIPlanCreatorSheet({
   const [startDate, setStartDate] = useState("");
   const [endDate, setEndDate] = useState("");
   const [tasks, setTasks] = useState<AITask[]>([]);
+  const [milestones, setMilestones] = useState<AIMilestone[]>([]);
 
-  const ai = useAIActions(ollamaUrl, ollamaModel);
+  const ai = useAIActions();
+  const { user: aiUser } = useAuth();
   const abortRef = useRef<AbortController | null>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
@@ -144,7 +146,7 @@ export default function AIPlanCreatorSheet({
         setStreaming(false);
         setErrorMsg(null);
         setTitle(""); setDesc(""); setEmoji("brain");
-        setColor("violet"); setStartDate(""); setEndDate(""); setTasks([]);
+        setColor("violet"); setStartDate(""); setEndDate(""); setTasks([]); setMilestones([]);
       }, 300);
       return () => clearTimeout(t);
     }
@@ -163,51 +165,33 @@ export default function AIPlanCreatorSheet({
 
     let accumulated = "";
     try {
-      if (ai.hasOllama) {
-        // Ollama: full plan creation with tasks in one shot
-        const systemPrompt = buildSystemPrompt("plans", undefined, existingPlans);
-        for await (const chunk of streamOllamaChat(
-          ollamaUrl!, ollamaModel!,
-          [{ role: "user", content: goal }],
-          systemPrompt, false, controller.signal,
-        )) {
-          accumulated += chunk;
-        }
-        const action = parseAIAction(accumulated);
-        if (action?.type === "create_plan") {
-          const p = action.payload;
-          setTitle(p.title);
-          setDesc(p.description);
-          setEmoji(p.emoji ?? "brain");
-          setColor(resolveAccentColor(p.color, p.emoji ?? "brain"));
-          setStartDate(p.startDate ?? "");
-          setEndDate(p.endDate ?? "");
-          setTasks(p.tasks ?? []);
-          setStep("review");
-        } else {
-          setErrorMsg("The AI didn't return a valid plan. Try rephrasing your goal.");
-        }
-      } else {
-        // Embedded AI: generate tasks for the goal, build plan around them
-        const generatedTasks = await ai.streamTasks(goal, goal + " — create a structured weekly plan");
-        // collect full output
-        for await (const chunk of (async function* () { yield generatedTasks; })()) {
-          accumulated += chunk;
-        }
-        const words = goal.trim().split(/\s+/);
-        const planTitle = words.length <= 5 ? goal.trim() : words.slice(0, 5).join(" ") + "…";
-        setTitle(planTitle);
-        setDesc(goal.trim());
-        setEmoji("brain");
-        setColor("violet");
-        setStartDate(todayISO());
-        setEndDate("");
-        setTasks([]);
+      // Full plan creation with tasks in one shot.
+      const systemPrompt = buildSystemPrompt("plans", undefined, existingPlans);
+      for await (const chunk of streamGeminiChat(
+        aiUser,
+        [{ role: "user", content: goal }],
+        systemPrompt, false, controller.signal,
+      )) {
+        accumulated += chunk;
+      }
+      const action = parseAIAction(accumulated);
+      if (action?.type === "create_plan") {
+        const p = action.payload;
+        setTitle(p.title);
+        setDesc(p.description);
+        setEmoji(p.emoji ?? "brain");
+        setColor(resolveAccentColor(p.color, p.emoji ?? "brain"));
+        setStartDate(p.startDate ?? "");
+        setEndDate(p.endDate ?? "");
+        setTasks(p.tasks ?? []);
+        setMilestones(p.milestones ?? []);
         setStep("review");
+      } else {
+        setErrorMsg("The AI didn't return a valid plan. Try rephrasing your goal.");
       }
     } catch (err) {
       if (!(err instanceof Error && err.name === "AbortError")) {
-        setErrorMsg("Generation failed. Check your AI settings.");
+        setErrorMsg(err instanceof Error ? err.message : "Generation failed. Try again.");
       }
     } finally {
       setStreaming(false);
@@ -216,10 +200,8 @@ export default function AIPlanCreatorSheet({
 
   function handleCreate() {
     if (!title.trim()) return;
-    onCreatePlan({ title, description: desc, emoji, color, startDate, endDate, tasks });
+    onCreatePlan({ title, description: desc, emoji, color, startDate, endDate, tasks, milestones });
   }
-
-  const noOllama = !ai.available;
 
   // ── Step 1: Input ────────────────────────────────────────────────────────
 
@@ -232,16 +214,8 @@ export default function AIPlanCreatorSheet({
           onClose={onClose}
         />
 
-        {noOllama ? (
-          <div className="flex flex-col items-center gap-3 rounded-2xl border border-neutral-200 bg-neutral-50 px-4 py-8 text-center dark:border-white/[0.08] dark:bg-white/[0.03]">
-            <div className="flex h-12 w-12 items-center justify-center rounded-[18px] bg-neutral-100 dark:bg-white/[0.06]">
-              <IconSparkles size={22} strokeWidth={1.5} className="text-neutral-400 dark:text-neutral-500" />
-            </div>
-            <p className="text-[14px] font-semibold text-neutral-700 dark:text-neutral-200">No AI model connected</p>
-            <p className="max-w-[220px] text-[13px] leading-relaxed text-neutral-400 dark:text-neutral-500">
-              Connect an Ollama model in Settings to create plans with AI.
-            </p>
-          </div>
+        {!ai.available ? (
+          <AISignInGate />
         ) : (
           <>
             <div className="space-y-3">
@@ -471,6 +445,37 @@ export default function AIPlanCreatorSheet({
                   <button
                     type="button"
                     onClick={() => setTasks((prev) => prev.filter((_, j) => j !== i))}
+                    className="shrink-0 rounded-lg p-1 text-neutral-400 transition-colors hover:bg-neutral-100 hover:text-neutral-600 dark:hover:bg-white/[0.06] dark:hover:text-neutral-300"
+                  >
+                    <IconX size={13} strokeWidth={2} />
+                  </button>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* Milestones */}
+        {milestones.length > 0 && (
+          <div>
+            <p className="mb-2 text-[11px] font-semibold uppercase tracking-[0.08em] text-neutral-400 dark:text-neutral-500">
+              Generated Milestones ({milestones.length})
+            </p>
+            <div className="overflow-hidden rounded-2xl border border-neutral-200 dark:border-white/[0.08]">
+              {milestones.map((m, i) => (
+                <div
+                  key={i}
+                  className="flex items-center gap-3 border-b border-neutral-100 px-3 py-2.5 last:border-0 dark:border-white/[0.06]"
+                >
+                  <div className="min-w-0 flex-1">
+                    <p className="truncate text-[13px] font-semibold text-neutral-800 dark:text-neutral-200">{m.title}</p>
+                    {m.targetDate && (
+                      <p className="text-[11px] text-neutral-400 dark:text-neutral-500">{m.targetDate}</p>
+                    )}
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setMilestones((prev) => prev.filter((_, j) => j !== i))}
                     className="shrink-0 rounded-lg p-1 text-neutral-400 transition-colors hover:bg-neutral-100 hover:text-neutral-600 dark:hover:bg-white/[0.06] dark:hover:text-neutral-300"
                   >
                     <IconX size={13} strokeWidth={2} />

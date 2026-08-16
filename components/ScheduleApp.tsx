@@ -14,8 +14,7 @@ import AppHeader from "@/components/AppHeader";
 import BottomNav from "@/components/BottomNav";
 import DesktopSidebar from "@/components/desktop/DesktopSidebar";
 import { WeekGrid } from "@/components/desktop/WeekGrid";
-import { checkOllamaConnection, OLLAMA_URL_KEY, OLLAMA_MODEL_KEY, DEFAULT_OLLAMA_URL, DEFAULT_OLLAMA_MODEL } from "@/lib/ai";
-import type { AIActionResult } from "@/lib/ai";
+import type { AIActionResult, AIMilestone } from "@/lib/ai";
 import { AI_ENABLED } from "@/lib/featureFlags";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
 import type { CategoryDraft } from "@/components/category/CategorySheet";
@@ -678,6 +677,40 @@ type TaskDeleteRequest = {
   sourceDay: DayKey;
 };
 
+/**
+ * Turns AI-suggested milestones into real Milestone records for a plan (fresh
+ * `id`, `upcoming`/`pending` status, sortOrder appended after any existing
+ * ones). Callers still run the result through `normalizeMilestoneTimeline` —
+ * this only builds the raw entries, matching the shape both the AI-plan-create
+ * flow and the Coach's `suggest_milestones` flow need identically.
+ */
+function buildMilestonesFromAI(
+  aiMilestones: AIMilestone[],
+  planId: string,
+  existingCount: number,
+): Milestone[] {
+  const now = new Date().toISOString();
+  const today = todayISO();
+  return aiMilestones.map((m, i) => ({
+    id: uid(),
+    planId,
+    title: m.title,
+    description: m.description || undefined,
+    startDate: m.targetDate ?? today,
+    plannedDurationDays: 14,
+    plannedEndDate: m.targetDate ?? today,
+    status: "upcoming" as const,
+    linkedActivities: [],
+    linkedTrackers: [],
+    createdAt: now,
+    updatedAt: now,
+    targetDate: m.targetDate ?? today,
+    estimatedDays: 14,
+    completionStatus: "pending" as const,
+    sortOrder: existingCount + i,
+  }));
+}
+
 // ─── Main component ───────────────────────────────────────────────────────────
 
 export default function ScheduleApp() {
@@ -784,36 +817,6 @@ export default function ScheduleApp() {
     onConfirm: () => void;
   } | null>(null);
   const [taskDeleteRequest, setTaskDeleteRequest] = useState<TaskDeleteRequest | null>(null);
-
-  const [ollamaUrl, setOllamaUrl] = useState(() =>
-    typeof window !== "undefined" ? (localStorage.getItem(OLLAMA_URL_KEY) ?? DEFAULT_OLLAMA_URL) : DEFAULT_OLLAMA_URL
-  );
-  const [ollamaModel, setOllamaModel] = useState(() =>
-    typeof window !== "undefined" ? (localStorage.getItem(OLLAMA_MODEL_KEY) ?? DEFAULT_OLLAMA_MODEL) : DEFAULT_OLLAMA_MODEL
-  );
-
-  useEffect(() => {
-    // AI is feature-flagged off — don't fire a localhost connection probe on
-    // every app start (needless work; on iOS the mixed-content fetch is dead
-    // weight). Re-enabling AI_ENABLED restores this automatically.
-    if (!AI_ENABLED || iosSafeMode) return;
-    if (typeof window === "undefined") return;
-    let cancelled = false;
-
-    async function syncInstalledModel() {
-      try {
-        const models = await checkOllamaConnection(ollamaUrl);
-        if (cancelled || models.length === 0 || models.includes(ollamaModel)) return;
-        localStorage.setItem(OLLAMA_MODEL_KEY, models[0]);
-        setOllamaModel(models[0]);
-      } catch {
-        // Ollama may be offline; keep the saved model and let the status UI show it.
-      }
-    }
-
-    void syncInstalledModel();
-    return () => { cancelled = true; };
-  }, [ollamaUrl, ollamaModel, iosSafeMode]);
 
   function openConfirm(
     copy: { title: string; description: string; confirmLabel?: string },
@@ -1818,7 +1821,16 @@ export default function ScheduleApp() {
         const day = t.day as DayKey;
         updatedActivities[day] = [...(updatedActivities[day] ?? []), task];
       }
-      return { ...prev, plans: [...prev.plans, plan], categories: categoryDraft, activities: updatedActivities };
+      const newMilestones = data.milestones?.length
+        ? normalizeMilestoneTimeline(buildMilestonesFromAI(data.milestones, planId, 0), plan.startDate)
+        : [];
+      return {
+        ...prev,
+        plans: [...prev.plans, plan],
+        categories: categoryDraft,
+        activities: updatedActivities,
+        milestones: [...(prev.milestones ?? []), ...newMilestones],
+      };
     });
     setSelectedPlanId(planId);
     return planId;
@@ -1839,6 +1851,7 @@ export default function ScheduleApp() {
         startDate: action.payload.startDate,
         endDate: action.payload.endDate,
         tasks: action.payload.tasks ?? [],
+        milestones: action.payload.milestones ?? [],
       });
       setToastMessage(`Created plan "${action.payload.title}"`);
       return;
@@ -1886,30 +1899,11 @@ export default function ScheduleApp() {
       if (!milestones.length) return;
       const planId = selectedPlanId ?? schedule.plans[0]?.id;
       if (!planId) return;
-      const now = new Date().toISOString();
-      const today = todayISO();
       setSchedule((prev) => {
         const plan = prev.plans.find((p) => p.id === planId);
         const otherMilestones = (prev.milestones ?? []).filter((m) => m.planId !== planId);
         const existing = (prev.milestones ?? []).filter((m) => m.planId === planId);
-        const newMilestones = milestones.map((m, i) => ({
-          id: uid(),
-          planId,
-          title: m.title,
-          description: m.description || undefined,
-          startDate: m.targetDate ?? today,
-          plannedDurationDays: 14,
-          plannedEndDate: m.targetDate ?? today,
-          status: "upcoming" as const,
-          linkedActivities: [],
-          linkedTrackers: [],
-          createdAt: now,
-          updatedAt: now,
-          targetDate: m.targetDate ?? today,
-          estimatedDays: 14,
-          completionStatus: "pending" as const,
-          sortOrder: existing.length + i,
-        }));
+        const newMilestones = buildMilestonesFromAI(milestones, planId, existing.length);
         return {
           ...prev,
           milestones: [
@@ -2885,8 +2879,6 @@ export default function ScheduleApp() {
         <DesktopSidebar
           activeTab={activeTab}
           collapsed={sidebarCollapsed}
-          ollamaUrl={ollamaUrl}
-          ollamaModel={ollamaModel}
           onTabChange={(tab) => { setActiveTab(tab); setSelectedPlanId(null); }}
           onToggleCollapse={() => setSidebarCollapsed((v) => !v)}
           onCreateTask={() => openCreateSheet()}
@@ -2931,11 +2923,7 @@ export default function ScheduleApp() {
       {!iosSafeMode && (
         <SettingsSheet
           open={settingsOpen}
-          onClose={() => {
-            setSettingsOpen(false);
-            setOllamaUrl(localStorage.getItem(OLLAMA_URL_KEY) ?? DEFAULT_OLLAMA_URL);
-            setOllamaModel(localStorage.getItem(OLLAMA_MODEL_KEY) ?? DEFAULT_OLLAMA_MODEL);
-          }}
+          onClose={() => setSettingsOpen(false)}
           onClearData={clearData}
           onClearProgress={clearProgress}
           onRestoreData={restoreData}
@@ -3650,8 +3638,6 @@ export default function ScheduleApp() {
               onUpdateMilestone={handleUpdateMilestone}
               onDeleteMilestone={handleDeleteMilestone}
               onCompleteMilestone={handleCompleteMilestone}
-              ollamaUrl={ollamaUrl}
-              ollamaModel={ollamaModel}
               onAddGeneratedTasks={handleAddGeneratedTasks}
               onLinkTrackerToMilestone={handleLinkTrackerToMilestone}
               onUpdateCoachMessages={handleUpdateCoachMessages}
@@ -3776,6 +3762,7 @@ export default function ScheduleApp() {
           open={addingPlan}
           onClose={() => setAddingPlan(false)}
           setSchedule={setSchedule}
+          onUseAI={() => { setAddingPlan(false); setAiPlanCreating(true); }}
         />
       )}
 
@@ -3785,8 +3772,6 @@ export default function ScheduleApp() {
           open={aiPlanCreating}
           onClose={() => setAiPlanCreating(false)}
           onCreatePlan={handleCreateAIPlan}
-          ollamaUrl={ollamaUrl}
-          ollamaModel={ollamaModel}
           existingPlans={schedule.plans.map((p) => ({ title: p.title, category: p.category, description: p.description }))}
         />
       )}
@@ -3848,8 +3833,6 @@ export default function ScheduleApp() {
                 }
               : undefined
           }
-          ollamaUrl={ollamaUrl}
-          ollamaModel={ollamaModel}
           onClose={closeTaskSheet}
           onSave={handleTaskSheetSave}
           onDuplicate={(data) => {
@@ -4038,8 +4021,6 @@ export default function ScheduleApp() {
             plans={schedule.plans}
             schedule={schedule}
             initialPlanId={selectedPlanId}
-            ollamaUrl={ollamaUrl}
-            ollamaModel={ollamaModel}
             onAddGeneratedTasks={handleAddGeneratedTasks}
             onApplyAction={handleApplyAction}
             onNavigateToPlan={(planId) => { setActiveTab(1); setSelectedPlanId(planId); setAiOpen(false); }}

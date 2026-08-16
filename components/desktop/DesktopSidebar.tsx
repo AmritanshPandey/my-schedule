@@ -16,8 +16,6 @@ import {
   IconSun,
 } from "@tabler/icons-react";
 import { haptic } from "@/lib/haptics";
-import { checkModelStatus } from "@/lib/ai";
-import { useAIRuntime } from "@/lib/ai/useAIRuntime";
 import { AI_ENABLED } from "@/lib/featureFlags";
 import { useAuth } from "@/contexts/AuthProvider";
 import { useSyncStatus } from "@/lib/useSyncStatus";
@@ -26,8 +24,6 @@ import SyncDot from "@/components/sync/SyncDot";
 interface DesktopSidebarProps {
   activeTab: number;
   collapsed: boolean;
-  ollamaUrl: string;
-  ollamaModel: string;
   onTabChange: (tab: number) => void;
   onToggleCollapse: () => void;
   onCreateTask: () => void;
@@ -47,7 +43,6 @@ const NAV_ITEMS = [
   { tab: 2, label: "Routine",  Icon: IconRepeat },
 ] as const;
 
-type ConnectionStatus = "checking" | "connected" | "no-model" | "offline";
 type ThemeMode = "light" | "dark";
 
 function applyTheme(theme: ThemeMode) {
@@ -62,16 +57,8 @@ function detectInitialTheme(): ThemeMode {
   return window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
 }
 
-function StatusDot({ status }: { status: ConnectionStatus }) {
-  if (status === "checking") {
-    return (
-      <span className="relative flex h-2 w-2 shrink-0">
-        <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-neutral-400 opacity-60" />
-        <span className="relative inline-flex h-2 w-2 rounded-full bg-neutral-400" />
-      </span>
-    );
-  }
-  if (status === "connected") {
+function StatusDot({ ready }: { ready: boolean }) {
+  if (ready) {
     return (
       <span className="relative flex h-2 w-2 shrink-0">
         <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-400 opacity-50" style={{ animationDuration: "2.5s" }} />
@@ -79,17 +66,12 @@ function StatusDot({ status }: { status: ConnectionStatus }) {
       </span>
     );
   }
-  if (status === "no-model") {
-    return <span className="h-2 w-2 shrink-0 rounded-full bg-amber-400 dark:bg-amber-500" />;
-  }
   return <span className="h-2 w-2 shrink-0 rounded-full bg-neutral-300 dark:bg-neutral-600" />;
 }
 
 export default function DesktopSidebar({
   activeTab,
   collapsed,
-  ollamaUrl,
-  ollamaModel,
   onTabChange,
   onToggleCollapse,
   onCreateTask,
@@ -101,11 +83,8 @@ export default function DesktopSidebar({
   onOpenNotes,
   onOpenWallpaper,
 }: DesktopSidebarProps) {
-  const [status, setStatus] = useState<ConnectionStatus>("checking");
-  const [checkTick, setCheckTick] = useState(0);
   const [theme, setTheme] = useState<ThemeMode>("light");
   const [themeReady, setThemeReady] = useState(false);
-  const runtime = useAIRuntime();
   const { isGuest } = useAuth();
   const sync = useSyncStatus();
   const syncColor =
@@ -117,21 +96,6 @@ export default function DesktopSidebar({
     applyTheme(initial);
     setThemeReady(true);
   }, []);
-
-  // Check connection on mount, when url/model changes, on manual refresh, and every 15s
-  useEffect(() => {
-    let cancelled = false;
-
-    async function check() {
-      setStatus("checking");
-      const result = await checkModelStatus(ollamaUrl, ollamaModel);
-      if (!cancelled) setStatus(result);
-    }
-
-    void check();
-    const interval = setInterval(() => { void check(); }, 15_000);
-    return () => { cancelled = true; clearInterval(interval); };
-  }, [ollamaUrl, ollamaModel, checkTick]);
 
   function handleCreate() {
     haptic("medium");
@@ -152,50 +116,11 @@ export default function DesktopSidebar({
     setMode(theme === "dark" ? "light" : "dark");
   }
 
-  // Short display name for the Ollama model — strip tag if generic
-  const modelShort = ollamaModel.replace(/:latest$/, "");
-
-  // When Ollama isn't connected, surface the on-device model that's actually
-  // running instead of "Ollama offline". Capability tier stands in for the model
-  // name (we never show raw model IDs to users).
-  const capLabel = runtime.capabilityLevel === "standard" ? "Standard" : "Basic";
-  // A cached model is effectively ready even while it loads from disk (instant),
-  // so treat it as ready and never show a "preparing" state for it.
-  const embeddedReady = runtime.enabled && (runtime.status === "ready" || runtime.modelCached);
-  const embeddedLoading =
-    runtime.enabled && !runtime.modelCached &&
-    (runtime.status === "enabling" || runtime.status === "downloading");
-
-  let displayStatus: ConnectionStatus;
-  let statusLabel: string;
-
-  if (status === "connected") {
-    displayStatus = "connected";
-    statusLabel = modelShort;
-  } else if (status === "checking") {
-    displayStatus = "checking";
-    statusLabel = "Connecting…";
-  } else if (embeddedReady) {
-    displayStatus = "connected";
-    statusLabel = `${capLabel} · On-device`;
-  } else if (embeddedLoading) {
-    displayStatus = "checking";
-    statusLabel =
-      runtime.status === "downloading"
-        ? `Downloading AI… ${runtime.downloadProgress}%`
-        : "Starting AI…";
-  } else if (status === "no-model") {
-    displayStatus = "no-model";
-    statusLabel = "Model not found";
-  } else {
-    displayStatus = "offline";
-    statusLabel = "AI offline";
-  }
-
-  const statusColor =
-    displayStatus === "connected" ? "text-emerald-600 dark:text-emerald-400" :
-    displayStatus === "no-model"  ? "text-amber-600 dark:text-amber-400" :
-    "text-neutral-400 dark:text-neutral-500";
+  // AI runs on one shared Gemini key — "ready" just means signed in, since
+  // that's what unlocks it (per-user caps are enforced server-side).
+  const aiReady = !isGuest;
+  const statusLabel = aiReady ? "AI ready" : "Sign in for AI";
+  const statusColor = aiReady ? "text-emerald-600 dark:text-emerald-400" : "text-neutral-400 dark:text-neutral-500";
 
   return (
     <aside className={`hidden lg:flex h-full shrink-0 flex-col overflow-hidden rounded-2xl border border-neutral-200 bg-white transition-[width] duration-200 dark:border-white/[0.08] dark:bg-neutral-950 ${collapsed ? "w-[76px]" : "w-[236px]"}`}>
@@ -277,15 +202,15 @@ export default function DesktopSidebar({
       {/* ── Bottom: AI status + settings + collapse ───────────────────────────── */}
       <div className={`shrink-0 border-t border-neutral-200/50 dark:border-white/[0.05] py-2 ${collapsed ? "px-2" : "px-2.5"}`}>
 
-        {/* AI status row — click to re-check (hidden while AI is disabled) */}
+        {/* AI status row — click opens Settings, where sign-in lives (hidden while AI is disabled) */}
         {AI_ENABLED && (
           <button
             type="button"
-            onClick={() => { haptic("light"); setCheckTick((n) => n + 1); }}
-            title={collapsed ? statusLabel : `AI: ${statusLabel} — click to refresh`}
+            onClick={() => { haptic("light"); if (onOpenSettingsTab) onOpenSettingsTab(); else onOpenSettings(); }}
+            title={collapsed ? statusLabel : (aiReady ? "AI ready" : "Sign in for AI — click to open Settings")}
             className={`flex w-full items-center rounded-xl py-2 transition-colors hover:bg-neutral-100 dark:hover:bg-white/[0.04] ${collapsed ? "justify-center px-0" : "gap-2.5 px-3.5"}`}
           >
-            <StatusDot status={displayStatus} />
+            <StatusDot ready={aiReady} />
             {!collapsed && (
               <span className={`truncate text-[12px] font-semibold transition-colors ${statusColor}`}>
                 {statusLabel}

@@ -11,7 +11,8 @@ import {
 import { uid } from "@/lib/id";
 import { colorFromIcon, type AccentColor } from "@/lib/colorSystem";
 import { SECTION_ICONS } from "@/components/SectionIcons";
-import { IconPlus, IconX } from "@tabler/icons-react";
+import { IconPlus, IconSparkles, IconX } from "@tabler/icons-react";
+import { AI_ENABLED } from "@/lib/featureFlags";
 import BottomSheet from "@/components/ui/BottomSheet";
 import SheetHeader from "@/components/ui/SheetHeader";
 import Button from "@/components/ui/Button";
@@ -48,9 +49,13 @@ interface AddPlanSheetProps {
   open: boolean;
   onClose: () => void;
   setSchedule: SetScheduleFn;
+  /** Switches to the AI plan creator instead — builds tasks, subtasks, and
+   * dated milestones from a one-line goal. Omitted (or AI disabled) hides the
+   * entry point entirely rather than showing a dead button. */
+  onUseAI?: () => void;
 }
 
-export default function AddPlanSheet({ open, onClose, setSchedule }: AddPlanSheetProps) {
+export default function AddPlanSheet({ open, onClose, setSchedule, onUseAI }: AddPlanSheetProps) {
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
   const [startDate, setStartDate] = useState("");
@@ -120,6 +125,22 @@ export default function AddPlanSheet({ open, onClose, setSchedule }: AddPlanShee
     <BottomSheet open={open} onClose={handleClose}>
       <div className="space-y-4 p-5 pb-8">
         <SheetHeader eyebrow="New" title="Create Plan" onClose={handleClose} />
+
+        {AI_ENABLED && onUseAI && (
+          <button
+            type="button"
+            onClick={onUseAI}
+            className="flex w-full items-center gap-2.5 rounded-2xl border border-violet-200 bg-violet-50 px-4 py-3 text-left transition-colors hover:border-violet-300 dark:border-violet-500/20 dark:bg-violet-500/[0.08] dark:hover:border-violet-500/30"
+          >
+            <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl bg-[#AD46FF]">
+              <IconSparkles size={14} strokeWidth={2} className="text-white" />
+            </div>
+            <div className="min-w-0 flex-1">
+              <p className="text-[13px] font-bold text-neutral-900 dark:text-white">Build this with AI instead</p>
+              <p className="text-[11px] text-neutral-500 dark:text-neutral-400">Describe your goal — get tasks, subtasks, and dated milestones</p>
+            </div>
+          </button>
+        )}
 
         <div className="space-y-2.5">
           <div>

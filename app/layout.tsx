@@ -7,8 +7,6 @@ import LandscapeBlocker from "@/components/LandscapeBlocker";
 import { AuthProvider } from "@/contexts/AuthProvider";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
 import ErrorReporter from "@/components/ErrorReporter";
-import AIMobileTeaser from "@/components/ai/AIMobileTeaser";
-import { AI_ENABLED } from "@/lib/featureFlags";
 
 const nunito = Nunito({
   subsets: ["latin"],
@@ -85,8 +83,6 @@ try{
         <ErrorReporter />
         <ServiceWorkerRegistration />
         <PWAInstallPrompt />
-        {/* AI teaser sits above everything — mobile only, dismissable (hidden while AI is disabled) */}
-        {AI_ENABLED && <AIMobileTeaser />}
         <AuthProvider>
           <ErrorBoundary>
             {children}

@@ -28,7 +28,7 @@ interface AuthErrorNoteProps {
  * Borderless by design — two of the three hosts sit inside a bordered card,
  * and DESIGN.md forbids nesting a bordered box in another.
  *
- * Intentionally NOT animated, unlike the Ollama status lines it sits near.
+ * Intentionally NOT animated, unlike some status lines it sits near.
  * Both Framer entrances were tried here and both stranded the message
  * invisible: `height: "auto"` re-measured against the collapsed element on any
  * re-render (a theme toggle would do it) and latched at height:0, and the

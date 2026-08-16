@@ -9,8 +9,6 @@ import type { AIActionResult } from "@/lib/ai";
 import type { Plan, Ritual } from "@/lib/useScheduleDB";
 
 interface AIFabProps {
-  ollamaUrl: string;
-  ollamaModel: string;
   context: "plans" | "routine" | "strategy";
   plans: Plan[];
   rituals: Ritual[];
@@ -22,8 +20,6 @@ interface AIFabProps {
 }
 
 export function AIFab({
-  ollamaUrl,
-  ollamaModel,
   context,
   plans,
   rituals,
@@ -52,8 +48,6 @@ export function AIFab({
 
   const panel = (
     <AIPanel
-      ollamaUrl={ollamaUrl}
-      ollamaModel={ollamaModel}
       context={context}
       plans={plans}
       rituals={rituals}

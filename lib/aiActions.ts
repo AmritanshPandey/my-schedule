@@ -4,6 +4,7 @@
  */
 
 import type { DayKey } from "./useScheduleDB";
+import { streamGeminiAction, type IdTokenSource } from "./aiClient";
 
 export interface AIGeneratedTask {
   title: string;
@@ -41,71 +42,6 @@ export interface AIGeneratedMilestone {
   targetDate?: string;
 }
 
-const OLLAMA_OPTIONS_FOCUSED = {
-  temperature: 0.3,
-  top_p: 0.9,
-  top_k: 40,
-  repeat_penalty: 1.1,
-  num_ctx: 4096,
-  num_predict: 512,
-};
-
-async function* streamOllamaAction(
-  baseUrl: string,
-  model: string,
-  systemPrompt: string,
-  userMessage: string,
-  signal?: AbortSignal,
-): AsyncGenerator<string> {
-  let response: Response;
-  try {
-    response = await fetch(`${baseUrl}/api/chat`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        model,
-        messages: [
-          { role: "system", content: systemPrompt },
-          { role: "user", content: userMessage },
-        ],
-        stream: true,
-        options: OLLAMA_OPTIONS_FOCUSED,
-      }),
-      signal,
-    });
-  } catch (err) {
-    if (err instanceof Error && err.name === "AbortError") throw err;
-    throw new Error("Ollama not reachable — is it running? Start with: ollama serve");
-  }
-
-  if (!response.ok) {
-    const errText = await response.text().catch(() => response.statusText);
-    throw new Error(`Ollama error ${response.status}: ${errText}`);
-  }
-
-  const reader = response.body?.getReader();
-  if (!reader) throw new Error("No response body from Ollama");
-
-  const decoder = new TextDecoder();
-  let buffer = "";
-
-  while (true) {
-    const { done, value } = await reader.read();
-    if (done) break;
-    buffer += decoder.decode(value, { stream: true });
-    const lines = buffer.split("\n");
-    buffer = lines.pop() ?? "";
-    for (const line of lines) {
-      const trimmed = line.trim();
-      if (!trimmed) continue;
-      try {
-        const data = JSON.parse(trimmed);
-        if (!data.done && data.message?.content) yield data.message.content as string;
-      } catch { /* skip malformed */ }
-    }
-  }
-}
-
 function tryParseJSON<T>(raw: string): T | null {
   const cleaned = raw
     .trim()
@@ -126,13 +62,12 @@ function extractArray(text: string): string | null {
 // ── Task generation ──────────────────────────────────────────────────────────
 
 export function streamGenerateTasks(
-  baseUrl: string,
-  model: string,
+  user: IdTokenSource | null,
   plan: { title: string; description?: string },
   signal?: AbortSignal,
 ): AsyncGenerator<string> {
   const userMessage = `Generate tasks for: "${plan.title}"${plan.description ? `. ${plan.description}` : ""}`;
-  return streamOllamaAction(baseUrl, model, TASK_GEN_PROMPT, userMessage, signal);
+  return streamGeminiAction(user, TASK_GEN_PROMPT, userMessage, signal);
 }
 
 export function parseGeneratedTasks(text: string): AIGeneratedTask[] {
@@ -159,13 +94,12 @@ export function parseGeneratedTasks(text: string): AIGeneratedTask[] {
 // ── Subtask generation ───────────────────────────────────────────────────────
 
 export function streamGenerateSubtasks(
-  baseUrl: string,
-  model: string,
+  user: IdTokenSource | null,
   taskTitle: string,
   planTitle?: string,
 ): AsyncGenerator<string> {
   const userMessage = `Generate subtasks for: "${taskTitle}"${planTitle ? ` (part of "${planTitle}")` : ""}`;
-  return streamOllamaAction(baseUrl, model, SUBTASK_GEN_PROMPT, userMessage);
+  return streamGeminiAction(user, SUBTASK_GEN_PROMPT, userMessage);
 }
 
 export function parseGeneratedSubtasks(text: string): string[] {
@@ -179,8 +113,7 @@ export function parseGeneratedSubtasks(text: string): string[] {
 // ── Milestone generation ─────────────────────────────────────────────────────
 
 export function streamGenerateMilestones(
-  baseUrl: string,
-  model: string,
+  user: IdTokenSource | null,
   plan: { title: string; description?: string; startDate?: string; endDate?: string },
   signal?: AbortSignal,
 ): AsyncGenerator<string> {
@@ -190,7 +123,7 @@ export function streamGenerateMilestones(
     plan.startDate ? `Start: ${plan.startDate}` : "",
     plan.endDate ? `End: ${plan.endDate}` : "",
   ].filter(Boolean).join(". ");
-  return streamOllamaAction(baseUrl, model, MILESTONE_GEN_PROMPT, `Generate milestones for: ${context}`, signal);
+  return streamGeminiAction(user, MILESTONE_GEN_PROMPT, `Generate milestones for: ${context}`, signal);
 }
 
 export function parseGeneratedMilestones(text: string): AIGeneratedMilestone[] {
@@ -219,8 +152,7 @@ Days: monday tuesday wednesday thursday friday saturday sunday
 Times: HH:MM 24-hour. Spread tasks across the week. Each task needs 2-3 subtasks.`;
 
 export function streamGenerateMilestoneTasks(
-  baseUrl: string,
-  model: string,
+  user: IdTokenSource | null,
   milestone: { title: string; description?: string },
   plan: { title: string; description?: string },
   signal?: AbortSignal,
@@ -229,7 +161,7 @@ export function streamGenerateMilestoneTasks(
     `Generate tasks for milestone: "${milestone.title}"${milestone.description ? ` — ${milestone.description}` : ""}.`,
     `Part of plan: "${plan.title}"${plan.description ? ` (${plan.description})` : ""}.`,
   ].join(" ");
-  return streamOllamaAction(baseUrl, model, MILESTONE_TASK_GEN_PROMPT, userMessage, signal);
+  return streamGeminiAction(user, MILESTONE_TASK_GEN_PROMPT, userMessage, signal);
 }
 
 // ── Weekly insight generation ─────────────────────────────────────────────────
@@ -241,14 +173,12 @@ const WEEKLY_INSIGHT_PROMPT = `You are a personal performance coach reviewing so
  * `weekContext` should be a compact summary string (built by the caller from schedule data).
  */
 export function streamWeeklyInsight(
-  baseUrl: string,
-  model: string,
+  user: IdTokenSource | null,
   weekContext: string,
   signal?: AbortSignal,
 ): AsyncGenerator<string> {
-  return streamOllamaAction(
-    baseUrl,
-    model,
+  return streamGeminiAction(
+    user,
     WEEKLY_INSIGHT_PROMPT,
     `Weekly stats:\n${weekContext}\n\nProvide your coaching insight:`,
     signal,

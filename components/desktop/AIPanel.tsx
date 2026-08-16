@@ -4,10 +4,11 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { AnimatePresence, m } from "framer-motion";
 import { IconArrowRight, IconBrain, IconEraser, IconSend, IconSparkles, IconX } from "@tabler/icons-react";
 import ReactMarkdown from "react-markdown";
-import { streamOllamaChat, parseAIAction, buildSystemPrompt, buildPlanContext } from "@/lib/ai";
+import { parseAIAction, buildSystemPrompt, buildPlanContext } from "@/lib/ai";
 import type { AIActionResult } from "@/lib/ai";
+import { streamGeminiChat } from "@/lib/aiClient";
+import { useAuth } from "@/contexts/AuthProvider";
 import type { Plan, Ritual } from "@/lib/useScheduleDB";
-import { DEFAULT_OLLAMA_MODEL } from "@/lib/ai";
 import { SECTION_ICONS, getIconPickerStyle } from "@/components/SectionIcons";
 import type { AITask } from "@/lib/ai";
 
@@ -18,8 +19,6 @@ interface Message {
 }
 
 interface AIPanelProps {
-  ollamaUrl: string;
-  ollamaModel: string;
   context: "plans" | "routine" | "strategy";
   plans: Plan[];
   rituals: Ritual[];
@@ -310,7 +309,8 @@ function stripJsonBlocks(text: string): string {
   return text.replace(/```json[\s\S]*?```/g, "").trim();
 }
 
-export function AIPanel({ ollamaUrl, ollamaModel, context, plans, rituals, activePlan, initialMessage, onApplyAction, onClose }: AIPanelProps) {
+export function AIPanel({ context, plans, rituals, activePlan, initialMessage, onApplyAction, onClose }: AIPanelProps) {
+  const { user } = useAuth();
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState("");
   const [streaming, setStreaming] = useState(false);
@@ -324,8 +324,6 @@ export function AIPanel({ ollamaUrl, ollamaModel, context, plans, rituals, activ
   useEffect(() => {
     return () => { abortRef.current?.abort(); };
   }, []);
-
-  const model = ollamaModel || DEFAULT_OLLAMA_MODEL;
 
   const systemPrompt = useMemo(
     () => buildSystemPrompt(context, activePlan ? buildPlanContext(activePlan) : undefined, plans, rituals),
@@ -358,7 +356,7 @@ export function AIPanel({ ollamaUrl, ollamaModel, context, plans, rituals, activ
 
     let fullText = "";
     try {
-      for await (const chunk of streamOllamaChat(ollamaUrl, model, history, systemPrompt, context === "strategy", controller.signal)) {
+      for await (const chunk of streamGeminiChat(user, history, systemPrompt, context === "strategy", controller.signal)) {
         fullText += chunk;
         setMessages((prev) => {
           const updated = [...prev];
@@ -407,7 +405,7 @@ export function AIPanel({ ollamaUrl, ollamaModel, context, plans, rituals, activ
           <div className="min-w-0">
             <p className="truncate text-sm font-semibold text-neutral-900 dark:text-white">AI Assistant</p>
             <p className="truncate text-[12px] text-neutral-500 dark:text-neutral-400">
-              {contextLabel}{activePlan ? ` · ${activePlan.title}` : ""} · {model}
+              {contextLabel}{activePlan ? ` · ${activePlan.title}` : ""}
             </p>
           </div>
         </div>
@@ -454,12 +452,6 @@ export function AIPanel({ ollamaUrl, ollamaModel, context, plans, rituals, activ
           >
             <p className="flex-1 text-[12px] font-medium text-rose-700 dark:text-rose-400">
               {error}
-              {error.includes("not reachable") && (
-                <span className="mt-1 block text-[11px] text-rose-500">
-                  Run: <code className="font-mono">ollama serve</code> then{" "}
-                  <code className="font-mono">ollama pull {model}</code>
-                </span>
-              )}
             </p>
             <button
               type="button"
@@ -525,17 +517,6 @@ export function AIPanel({ ollamaUrl, ollamaModel, context, plans, rituals, activ
                   </m.button>
                 ))}
               </div>
-
-              {!ollamaUrl.includes("localhost") && (
-                <m.p
-                  initial={{ opacity: 0 }}
-                  animate={{ opacity: 1 }}
-                  transition={{ delay: 0.4 }}
-                  className="max-w-[220px] rounded-xl border border-amber-200 bg-amber-50 p-2 text-[11px] text-amber-700 dark:border-amber-500/20 dark:bg-amber-500/10 dark:text-amber-400"
-                >
-                  Non-localhost URL detected. Make sure Ollama CORS allows this origin.
-                </m.p>
-              )}
             </m.div>
           )}
         </AnimatePresence>

@@ -5,6 +5,7 @@
   "type": "module",
   "scripts": {
     "typecheck": "tsc --noEmit",
+    "test": "node --experimental-strip-types --test tests/*.test.mjs",
     "dev": "wrangler dev --test-scheduled",
     "deploy": "wrangler deploy"
   },
