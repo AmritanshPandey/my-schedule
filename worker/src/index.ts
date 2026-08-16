@@ -61,6 +61,40 @@ function json(status: number, body: unknown): Response {
   });
 }
 
+// ── Gemini model selection ───────────────────────────────────────────────────
+
+/**
+ * Google retires/restricts Gemini model IDs on a rolling, hard-to-predict
+ * schedule — three different failure modes hit this Worker within one debug
+ * session: a model fully shut down (gemini-2.0-flash, June 2026), and then
+ * the next candidate turned out to be blocked for this Worker's specific API
+ * key with "no longer available to NEW USERS" (gemini-2.5-flash) — a
+ * DIFFERENT restriction than the announced deprecation schedule, undocumented
+ * on Google's own deprecations page as of Aug 2026. A single hardcoded model
+ * name is fragile against this, so /ai/chat tries `env.GEMINI_MODEL` first
+ * and falls back once to `FALLBACK_MODEL` on a 404 specifically (model
+ * unavailable — never on other error codes, which don't mean "wrong model").
+ * This buys time to update the primary without an outage; it does NOT make
+ * model selection maintenance-free — see wrangler.toml's GEMINI_MODEL comment.
+ */
+const FALLBACK_MODEL = "gemini-3.1-flash-lite";
+
+async function callGeminiWithFallback(
+  env: Env,
+  systemPrompt: string,
+  messages: GeminiMessage[],
+  tokenBudget: number,
+): Promise<Response> {
+  // Kept in sync with wrangler.toml's GEMINI_MODEL var.
+  const primary = env.GEMINI_MODEL || "gemini-3.5-flash";
+  const first = await streamGemini(env.GEMINI_API_KEY, primary, systemPrompt, messages, tokenBudget);
+  if (first.status !== 404 || primary === FALLBACK_MODEL) return first;
+
+  const detail = await first.text().catch(() => "");
+  console.warn("gemini model unavailable, retrying with fallback", primary, "->", FALLBACK_MODEL, detail);
+  return streamGemini(env.GEMINI_API_KEY, FALLBACK_MODEL, systemPrompt, messages, tokenBudget);
+}
+
 // ── POST /ai/chat ────────────────────────────────────────────────────────────
 
 async function handleAiChat(request: Request, env: Env): Promise<Response> {
@@ -110,12 +144,9 @@ async function handleAiChat(request: Request, env: Env): Promise<Response> {
     });
   }
 
-  // Kept in sync with wrangler.toml's GEMINI_MODEL var — see that file's
-  // comment for why this needs periodic updating as Google retires model IDs.
-  const model = env.GEMINI_MODEL || "gemini-2.5-flash";
   let upstream: Response;
   try {
-    upstream = await streamGemini(env.GEMINI_API_KEY, model, systemPrompt, messages, tokenBudget);
+    upstream = await callGeminiWithFallback(env, systemPrompt, messages, tokenBudget);
   } catch (err) {
     return json(502, { error: "gemini request failed", detail: String(err) });
   }
