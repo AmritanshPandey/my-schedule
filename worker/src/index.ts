@@ -31,7 +31,7 @@ import { Firestore, uidFromName, idFromName, type Env } from "./firestore.js";
 import { computeDueReminders, type ReminderSettings, type Schedule } from "./reminders.js";
 import { verifyFirebaseIdToken } from "./auth.js";
 import { streamGemini, type GeminiMessage } from "./gemini.js";
-import { checkAndIncrement, type UsageCaps } from "./usage.js";
+import { checkAndIncrement, type UsageCaps, type UsageCheck } from "./usage.js";
 
 interface Subscription {
   endpoint: string;
@@ -90,7 +90,19 @@ async function handleAiChat(request: Request, env: Env): Promise<Response> {
     perUser: Number(env.AI_PER_USER_DAILY_CAP) || 20,
     global: Number(env.AI_GLOBAL_DAILY_CAP) || 300,
   };
-  const usage = await checkAndIncrement(fs, verified.uid, caps);
+  // Guarded like the streamGemini call below: an uncaught throw here (a
+  // Firestore REST error, a transient network blip) would otherwise crash
+  // the whole handler — Cloudflare's own generic error page has no CORS
+  // headers, which the browser then reports as a confusing "blocked by CORS
+  // policy" rather than the real cause. Fail closed (503) with a real error
+  // body instead, so it's diagnosable and doesn't cost Gemini budget.
+  let usage: UsageCheck;
+  try {
+    usage = await checkAndIncrement(fs, verified.uid, caps);
+  } catch (err) {
+    console.error("usage check failed", String(err));
+    return json(503, { error: "usage check failed, try again" });
+  }
   if (!usage.ok) {
     return json(429, {
       error: "daily AI limit reached",

@@ -45,7 +45,13 @@ export async function checkAndIncrement(
 ): Promise<UsageCheck> {
   const date = todayUTC(now);
   const userPath = `users/${uid}/aiUsage/${date}`;
-  const globalPath = `system/aiUsage/${date}`;
+  // Firestore document paths must alternate collection/document (an even
+  // segment count) — "system/aiUsage/{date}" is 3 segments, which addresses a
+  // COLLECTION named {date} under document "system/aiUsage", not a document.
+  // Firestore's REST API rejects that as an invalid document reference,
+  // which crashed every /ai/chat call (uncaught, since this read wasn't
+  // wrapped in a try/catch in index.ts — see the fix there too).
+  const globalPath = `system/aiUsage/global/${date}`;
 
   const [userCount, globalCount] = await Promise.all([
     readCount(fs, userPath, date),

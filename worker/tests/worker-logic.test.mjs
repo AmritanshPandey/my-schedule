@@ -72,25 +72,25 @@ test("checkAndIncrement allows a fresh user/day and increments both counters", a
   const result = await checkAndIncrement(fs, "uid-1", { perUser: 5, global: 10 }, now);
   assert.deepEqual(result, { ok: true });
   assert.deepEqual(fs.store.get("users/uid-1/aiUsage/2026-03-05"), { date: "2026-03-05", count: 1 });
-  assert.deepEqual(fs.store.get("system/aiUsage/2026-03-05"), { date: "2026-03-05", count: 1 });
+  assert.deepEqual(fs.store.get("system/aiUsage/global/2026-03-05"), { date: "2026-03-05", count: 1 });
 });
 
 test("checkAndIncrement rejects once the per-user cap is met, without incrementing", async () => {
   const fs = mockFirestore({
     "users/uid-1/aiUsage/2026-03-05": { date: "2026-03-05", count: 5 },
-    "system/aiUsage/2026-03-05": { date: "2026-03-05", count: 5 },
+    "system/aiUsage/global/2026-03-05": { date: "2026-03-05", count: 5 },
   });
   const now = new Date("2026-03-05T12:00:00Z");
   const result = await checkAndIncrement(fs, "uid-1", { perUser: 5, global: 100 }, now);
   assert.deepEqual(result, { ok: false, reason: "per-user-cap" });
   // Rejected requests don't cost budget — count stays exactly where it was.
   assert.equal(fs.store.get("users/uid-1/aiUsage/2026-03-05").count, 5);
-  assert.equal(fs.store.get("system/aiUsage/2026-03-05").count, 5);
+  assert.equal(fs.store.get("system/aiUsage/global/2026-03-05").count, 5);
 });
 
 test("checkAndIncrement rejects on the global cap even when the user is under their own", async () => {
   const fs = mockFirestore({
-    "system/aiUsage/2026-03-05": { date: "2026-03-05", count: 300 },
+    "system/aiUsage/global/2026-03-05": { date: "2026-03-05", count: 300 },
   });
   const now = new Date("2026-03-05T12:00:00Z");
   const result = await checkAndIncrement(fs, "uid-2", { perUser: 20, global: 300 }, now);
@@ -105,6 +105,27 @@ test("checkAndIncrement treats a stale prior-day counter as reset", async () => 
   const result = await checkAndIncrement(fs, "uid-1", { perUser: 20, global: 300 }, now);
   assert.deepEqual(result, { ok: true }, "yesterday's counter doesn't carry over to today's key");
   assert.equal(fs.store.get("users/uid-1/aiUsage/2026-03-05").count, 1);
+});
+
+// Firestore document paths must alternate collection/document (an even
+// segment count) — an odd-segment path like "system/aiUsage/{date}" actually
+// addresses a COLLECTION, and Firestore's REST API rejects it as an invalid
+// document reference. mockFirestore is a plain string-keyed map, so it can't
+// catch this itself (any string "works" as a key) — this is the real
+// production bug that slipped through despite full test coverage, caught
+// only via a live `wrangler tail` capture. Assert the shape directly so a
+// future path change can't reintroduce the same class of bug silently.
+test("checkAndIncrement's Firestore paths have an even segment count (real document references, not collections)", async () => {
+  const fs = mockFirestore();
+  const now = new Date("2026-03-05T12:00:00Z");
+  await checkAndIncrement(fs, "uid-1", { perUser: 5, global: 10 }, now);
+  for (const path of fs.store.keys()) {
+    assert.equal(
+      path.split("/").length % 2,
+      0,
+      `"${path}" has an odd segment count — Firestore would reject it as a document reference`,
+    );
+  }
 });
 
 // ── validateClaims ──────────────────────────────────────────────────────────
