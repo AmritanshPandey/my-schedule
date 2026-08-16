@@ -184,6 +184,9 @@ async function handleTestPush(request: Request, env: Env): Promise<Response> {
         : `Push service returned ${res.status}.`,
     });
   } catch (err) {
+    if (err instanceof InvalidSubscriptionError) {
+      return json(500, { ok: false, error: "This subscription's stored key data is invalid — turn Reminders off and on again." });
+    }
     return json(500, { ok: false, error: err instanceof Error ? err.message : "Unknown error" });
   }
 }
@@ -213,10 +216,22 @@ export default {
 // ── Shared send-one-push helper ─────────────────────────────────────────────
 
 /**
+ * Thrown when `buildPushPayload` itself fails — i.e. the subscription's
+ * *stored* `p256dh`/`auth` keys are malformed (e.g. "Invalid EC key in JSON
+ * Web Key"). Unlike a `fetch` failure (which may be a transient network blip,
+ * worth retrying next cron tick), this is permanent: the same bad bytes are
+ * read from Firestore every time, so it will never succeed. Callers should
+ * prune the subscription rather than log-and-retry it forever.
+ */
+class InvalidSubscriptionError extends Error {}
+
+/**
  * Sends one Web Push message to one subscription. Returns the upstream push
  * service's Response so callers can branch on 404/410 (dead subscription) vs
  * other failures — used by both the cron run and the test-push endpoint so
- * they can't drift on how a send actually happens.
+ * they can't drift on how a send actually happens. Throws
+ * `InvalidSubscriptionError` specifically when the stored keys themselves are
+ * unusable, so callers can distinguish "prune this" from "try again later."
  */
 async function sendPush(
   sub: Subscription,
@@ -224,11 +239,16 @@ async function sendPush(
   vapid: Vapid,
   ttlSeconds: number,
 ): Promise<Response> {
-  const payload = await buildPushPayload(
-    { data: JSON.stringify(message), options: { ttl: ttlSeconds } },
-    { endpoint: sub.endpoint, keys: sub.keys, expirationTime: sub.expirationTime ?? null },
-    vapid,
-  );
+  let payload: RequestInit;
+  try {
+    payload = await buildPushPayload(
+      { data: JSON.stringify(message), options: { ttl: ttlSeconds } },
+      { endpoint: sub.endpoint, keys: sub.keys, expirationTime: sub.expirationTime ?? null },
+      vapid,
+    );
+  } catch (err) {
+    throw new InvalidSubscriptionError(err instanceof Error ? err.message : String(err));
+  }
   return fetch(sub.endpoint, payload);
 }
 
@@ -278,7 +298,16 @@ async function run(env: Env): Promise<void> {
                 sent++;
               }
             } catch (err) {
-              console.warn("push send failed", uid, String(err));
+              if (err instanceof InvalidSubscriptionError) {
+                // Permanently broken (bad stored keys, not a network blip) —
+                // pruned so it stops erroring on every single cron tick
+                // forever. The device gets a fresh, valid subscription next
+                // time it re-enables Reminders.
+                console.warn("pruning subscription with invalid keys", uid, err.message);
+                await fs.deleteDoc(`users/${uid}/pushSubscriptions/${id}`).catch(() => {});
+              } else {
+                console.warn("push send failed", uid, String(err));
+              }
             }
           }),
         );
