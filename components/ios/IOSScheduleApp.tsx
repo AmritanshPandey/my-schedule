@@ -74,7 +74,7 @@ import {
   addSubtaskToTasks,
   type TaskDeleteScope,
 } from "@/lib/taskMutations";
-import { completionForDate, getTaskCheckableItems, getTaskSubtaskSummary, isTaskCompleted, isTaskResolved, isTrackedTask, markTaskMissed, toggleSlotComplete, toggleSubtaskComplete, toggleTaskFromCheckbox } from "@/lib/taskCompletion";
+import { completionForDate, getTaskCheckableItems, getTaskSubtaskSummary, isTaskCompleted, isTaskResolved, isTrackedTask, markTaskMissed, snoozeTaskLater, toggleSlotComplete, toggleSubtaskComplete, toggleTaskFromCheckbox } from "@/lib/taskCompletion";
 import { diffException, isTaskScheduledOn, resolveOccurrence } from "@/lib/taskOccurrence";
 import { cascadeMilestoneDates, normalizeMilestoneTimeline } from "@/lib/roadmapDates";
 import { toggleRitualCompletion } from "@/lib/ritualCompletions";
@@ -773,6 +773,46 @@ export default function IOSScheduleApp() {
     }));
   }
 
+  /**
+   * Push a task to the next free slot later today. Ports the desktop handler
+   * (ScheduleApp.handleSnoozeTaskLater) so both shells defer identically —
+   * this shell previously offered no way to defer a task at all.
+   */
+  function handleSnoozeTaskLater(taskId: string, day: DayKey = activeDay, dateISO?: string) {
+    // Only today is editable — deferring a past/future occurrence is meaningless.
+    if (dateISO && dateISO !== todayISO()) return;
+    const task = (schedule.activities[day] ?? []).find((t) => t.id === taskId);
+    if (!task) return;
+    const patch = snoozeTaskLater(task);
+    // No room left later today — say so rather than silently doing nothing.
+    if (!patch.startTime) {
+      haptic("light");
+      setToast("No room left today — try tomorrow");
+      return;
+    }
+    haptic("medium");
+    setSchedule((prev) => ({
+      ...prev,
+      activities: {
+        ...prev.activities,
+        [day]: (prev.activities[day] ?? []).map((t) => (t.id === taskId ? { ...t, ...patch } : t)),
+      },
+    }));
+    setToast(`Moved to ${patch.startTime}`);
+  }
+
+  /** Mark this date's occurrence skipped (or restore it). Mirrors desktop. */
+  function handleSkipOccurrence(taskId: string, dateISO?: string) {
+    const date = dateISO ?? todayISO();
+    const isSkipped = DAYS.some((day) =>
+      (schedule.activities[day] ?? []).some((t) => t.id === taskId && t.exceptions?.[date]?.skipped)
+    );
+    haptic("medium");
+    // `{ skipped: false }` un-skips while preserving any other per-date edits.
+    setSchedule(setTaskException(taskId, date, { skipped: !isSkipped }));
+    setToast(isSkipped ? "Restored this day" : "Skipped this day");
+  }
+
   function requestDeleteTask(taskId: string, sourceDay: DayKey = activeDay) {
     setTaskDeleteRequest({ taskId, sourceDay });
   }
@@ -1092,6 +1132,10 @@ export default function IOSScheduleApp() {
               onToggleSubtask={(taskId, subtaskId) => handleToggleSubtask(taskId, subtaskId, subtasksRef.day, subtasksRef.dateISO)}
               onToggleComplete={(taskId, ids) => handleToggleTaskComplete(taskId, ids, subtasksRef.day, subtasksRef.dateISO)}
               onMissed={(taskId, ids) => handleMarkTaskMissed(taskId, ids, subtasksRef.day, subtasksRef.dateISO)}
+              onSnooze={(taskId) => handleSnoozeTaskLater(taskId, subtasksRef.day, subtasksRef.dateISO)}
+              onSkip={(taskId) => handleSkipOccurrence(taskId, subtasksRef.dateISO)}
+              skipped={!!subtasksTask?.exceptions?.[subtasksRef.dateISO]?.skipped}
+              canSkip={subtasksRef.dateISO >= todayISO()}
               onEdit={subtasksTask ? () => { openEditSheet(subtasksTask, subtasksRef.dateISO); setSubtasksRef(null); } : undefined}
               presentation="page"
             />
