@@ -43,11 +43,24 @@ export interface AIGeneratedMilestone {
 }
 
 function tryParseJSON<T>(raw: string): T | null {
-  const cleaned = raw
-    .trim()
-    .replace(/,\s*([}\]])/g, "$1")
-    .replace(/'/g, '"');
-  try { return JSON.parse(cleaned) as T; } catch { return null; }
+  const trimmed = raw.trim().replace(/,\s*([}\]])/g, "$1");
+  // Gemini reliably emits well-formed double-quoted JSON per the prompt, and
+  // real generated text often contains genuine apostrophes (e.g. "today's
+  // schedule"). Try the untouched string first so those aren't corrupted.
+  try {
+    return JSON.parse(trimmed) as T;
+  } catch {
+    // Fall back to blind single-quote-to-double-quote conversion only if the
+    // clean parse failed — a last resort for the rare case of a model
+    // actually emitting single-quoted JSON-like output. This can still
+    // mangle apostrophes inside string values, but only on an input that
+    // wasn't parseable anyway.
+    try {
+      return JSON.parse(trimmed.replace(/'/g, '"')) as T;
+    } catch {
+      return null;
+    }
+  }
 }
 
 function extractArray(text: string): string | null {
