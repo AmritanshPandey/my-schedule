@@ -225,10 +225,16 @@ function extractJSONCandidate(text: string): string | null {
   // 1. Prefer fenced ```json … ``` blocks (take the last one)
   const fenced = [...text.matchAll(/```(?:json)?\s*([\s\S]*?)```/g)];
   if (fenced.length > 0) return fenced[fenced.length - 1][1];
-  // 2. Fall back to the last bare {...} object in the text
-  const bare = [...text.matchAll(/\{[\s\S]*?\}/g)];
-  if (bare.length > 0) return bare[bare.length - 1][0];
-  return null;
+  // 2. Fall back to the widest bare {...} span in the text — greedy, from the
+  // first "{" to the LAST "}". A lazy match here (stopping at the first "}")
+  // corrupts any nested object, e.g. add_task's payload is itself an object:
+  // {"type":"add_task","payload":{"title":"...", ...}} — a lazy match only
+  // captures through payload's closing brace, dropping the outer one, which
+  // is invalid JSON. Confirmed live: Qwen3 (MLX) doesn't reliably wrap its
+  // output in a ```json fence the way Gemini did, so this fallback path is
+  // exercised far more often now than it used to be.
+  const bare = text.match(/\{[\s\S]*\}/);
+  return bare ? bare[0] : null;
 }
 
 function parseAITaskFields(t: Record<string, unknown>): AITask {

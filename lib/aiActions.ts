@@ -4,7 +4,7 @@
  */
 
 import type { DayKey, TaskTypeValue } from "./useScheduleDB";
-import { streamGeminiAction, type IdTokenSource } from "./aiClient";
+import { streamAIAction } from "./aiClient";
 
 export interface AIGeneratedTask {
   title: string;
@@ -48,8 +48,8 @@ export interface AIGeneratedMilestone {
 
 function tryParseJSON<T>(raw: string): T | null {
   const trimmed = raw.trim().replace(/,\s*([}\]])/g, "$1");
-  // Gemini reliably emits well-formed double-quoted JSON per the prompt, and
-  // real generated text often contains genuine apostrophes (e.g. "today's
+  // The model reliably emits well-formed double-quoted JSON per the prompt,
+  // and real generated text often contains genuine apostrophes (e.g. "today's
   // schedule"). Try the untouched string first so those aren't corrupted.
   try {
     return JSON.parse(trimmed) as T;
@@ -79,12 +79,11 @@ function extractArray(text: string): string | null {
 // ── Task generation ──────────────────────────────────────────────────────────
 
 export function streamGenerateTasks(
-  user: IdTokenSource | null,
   plan: { title: string; description?: string },
   signal?: AbortSignal,
 ): AsyncGenerator<string> {
   const userMessage = `Generate tasks for: "${plan.title}"${plan.description ? `. ${plan.description}` : ""}`;
-  return streamGeminiAction(user, TASK_GEN_PROMPT, userMessage, signal);
+  return streamAIAction(TASK_GEN_PROMPT, userMessage, signal);
 }
 
 export function parseGeneratedTasks(text: string): AIGeneratedTask[] {
@@ -112,12 +111,11 @@ export function parseGeneratedTasks(text: string): AIGeneratedTask[] {
 // ── Subtask generation ───────────────────────────────────────────────────────
 
 export function streamGenerateSubtasks(
-  user: IdTokenSource | null,
   taskTitle: string,
   planTitle?: string,
 ): AsyncGenerator<string> {
   const userMessage = `Generate subtasks for: "${taskTitle}"${planTitle ? ` (part of "${planTitle}")` : ""}`;
-  return streamGeminiAction(user, SUBTASK_GEN_PROMPT, userMessage);
+  return streamAIAction(SUBTASK_GEN_PROMPT, userMessage);
 }
 
 export function parseGeneratedSubtasks(text: string): string[] {
@@ -131,7 +129,6 @@ export function parseGeneratedSubtasks(text: string): string[] {
 // ── Milestone generation ─────────────────────────────────────────────────────
 
 export function streamGenerateMilestones(
-  user: IdTokenSource | null,
   plan: { title: string; description?: string; startDate?: string; endDate?: string },
   signal?: AbortSignal,
 ): AsyncGenerator<string> {
@@ -141,7 +138,7 @@ export function streamGenerateMilestones(
     plan.startDate ? `Start: ${plan.startDate}` : "",
     plan.endDate ? `End: ${plan.endDate}` : "",
   ].filter(Boolean).join(". ");
-  return streamGeminiAction(user, MILESTONE_GEN_PROMPT, `Generate milestones for: ${context}`, signal);
+  return streamAIAction(MILESTONE_GEN_PROMPT, `Generate milestones for: ${context}`, signal);
 }
 
 export function parseGeneratedMilestones(text: string): AIGeneratedMilestone[] {
@@ -171,7 +168,6 @@ Days: monday tuesday wednesday thursday friday saturday sunday
 Times: HH:MM 24-hour. Spread tasks across the week. Each task needs 2-3 subtasks.`;
 
 export function streamGenerateMilestoneTasks(
-  user: IdTokenSource | null,
   milestone: { title: string; description?: string },
   plan: { title: string; description?: string },
   signal?: AbortSignal,
@@ -180,7 +176,7 @@ export function streamGenerateMilestoneTasks(
     `Generate tasks for milestone: "${milestone.title}"${milestone.description ? ` — ${milestone.description}` : ""}.`,
     `Part of plan: "${plan.title}"${plan.description ? ` (${plan.description})` : ""}.`,
   ].join(" ");
-  return streamGeminiAction(user, MILESTONE_TASK_GEN_PROMPT, userMessage, signal);
+  return streamAIAction(MILESTONE_TASK_GEN_PROMPT, userMessage, signal);
 }
 
 // ── Weekly insight generation ─────────────────────────────────────────────────
@@ -192,12 +188,10 @@ const WEEKLY_INSIGHT_PROMPT = `You are a personal performance coach reviewing so
  * `weekContext` should be a compact summary string (built by the caller from schedule data).
  */
 export function streamWeeklyInsight(
-  user: IdTokenSource | null,
   weekContext: string,
   signal?: AbortSignal,
 ): AsyncGenerator<string> {
-  return streamGeminiAction(
-    user,
+  return streamAIAction(
     WEEKLY_INSIGHT_PROMPT,
     `Weekly stats:\n${weekContext}\n\nProvide your coaching insight:`,
     signal,

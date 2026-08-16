@@ -1,21 +1,20 @@
 "use client";
 
 /**
- * useAIActions — unified AI action hook. Every action runs through Gemini via
- * the Cloudflare Worker proxy (lib/aiClient.ts) — there's no backend routing
- * here anymore (this hook used to branch between a user-run Ollama server and
- * an in-browser Transformers.js runtime; both are gone, replaced by one
- * shared, sign-in-gated cloud backend). `available` just means "AI is
- * configured and the caller is signed in" — the actual per-user/global rate
- * limiting happens server-side in the Worker, not here, so it can't be
- * bypassed by anything client-side.
+ * useAIActions — unified AI action hook. Every action runs through the local
+ * MLX provider (lib/aiClient.ts) — there's no auth or sign-in gating here:
+ * a local model has no per-call cost, so there's nothing to protect the way
+ * the old shared, sign-in-gated Gemini key needed. `available` just means
+ * "a provider is configured" (always true given MLX's built-in defaults,
+ * false only if the user clears the server URL in AI Settings) — actual
+ * reachability is what AI Settings' "Test connection" and the try/catch
+ * around every real generate() call are for.
  *
  * All methods return AsyncGenerator<string> so they plug directly into
  * AIActionSheet's onGenerate prop unchanged from before this rewrite.
  */
 
 import { useCallback } from "react";
-import { useAuth } from "@/contexts/AuthProvider";
 import { isAiConfigured } from "@/lib/aiClient";
 import {
   streamGenerateTasks,
@@ -26,7 +25,7 @@ import {
 } from "@/lib/aiActions";
 
 export interface AIActionsHandle {
-  /** AI is configured (Worker URL set at build time) and the caller is signed in. */
+  /** A provider is configured — see the module doc comment above. */
   available: boolean;
 
   streamTasks: (
@@ -52,7 +51,7 @@ export interface AIActionsHandle {
   ) => AsyncGenerator<string>;
 
   /** Returns null when AI isn't available — callers already skip rendering
-   *  the insight in that case, matching the old Ollama-only gating shape. */
+   *  the insight in that case. */
   streamWeeklyInsight: (
     weekContext: string,
     signal?: AbortSignal,
@@ -60,27 +59,26 @@ export interface AIActionsHandle {
 }
 
 export function useAIActions(): AIActionsHandle {
-  const { user, isGuest } = useAuth();
-  const available = isAiConfigured() && !isGuest;
+  const available = isAiConfigured();
 
   const streamTasks = useCallback(
     (planTitle: string, description?: string, signal?: AbortSignal): AsyncGenerator<string> =>
-      streamGenerateTasks(user, { title: planTitle, description }, signal),
-    [user],
+      streamGenerateTasks({ title: planTitle, description }, signal),
+    [],
   );
 
   const streamSubtasks = useCallback(
     (taskTitle: string, planTitle?: string): AsyncGenerator<string> =>
-      streamGenerateSubtasks(user, taskTitle, planTitle),
-    [user],
+      streamGenerateSubtasks(taskTitle, planTitle),
+    [],
   );
 
   const streamMilestonesAction = useCallback(
     (
       plan: { title: string; description?: string; startDate?: string; endDate?: string },
       signal?: AbortSignal,
-    ): AsyncGenerator<string> => streamGenerateMilestones(user, plan, signal),
-    [user],
+    ): AsyncGenerator<string> => streamGenerateMilestones(plan, signal),
+    [],
   );
 
   const streamMilestoneTasksAction = useCallback(
@@ -88,16 +86,16 @@ export function useAIActions(): AIActionsHandle {
       milestone: { title: string; description?: string },
       plan: { title: string; description?: string },
       signal?: AbortSignal,
-    ): AsyncGenerator<string> => streamGenerateMilestoneTasks(user, milestone, plan, signal),
-    [user],
+    ): AsyncGenerator<string> => streamGenerateMilestoneTasks(milestone, plan, signal),
+    [],
   );
 
   const streamWeeklyInsightAction = useCallback(
     (weekContext: string, signal?: AbortSignal): AsyncGenerator<string> | null => {
       if (!available) return null;
-      return streamWeeklyInsight(user, weekContext, signal);
+      return streamWeeklyInsight(weekContext, signal);
     },
-    [available, user],
+    [available],
   );
 
   return {

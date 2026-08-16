@@ -4,7 +4,6 @@ import { useCallback, useEffect, useState } from "react";
 import Image from "next/image";
 import { AnimatePresence, m } from "framer-motion";
 import {
-  IconBrain,
   IconCheck,
   IconClock,
   IconCloud,
@@ -20,6 +19,7 @@ import {
   IconChevronDown,
 } from "@tabler/icons-react";
 import { useAuth } from "@/contexts/AuthProvider";
+import { StatusCard } from "@/components/ai/AISettingsSheet";
 import CategoryManager from "@/components/category/CategoryManager";
 import { useGoogleSignIn } from "@/components/auth/useGoogleSignIn";
 import { AuthErrorNote } from "@/components/auth/AuthErrorNote";
@@ -97,42 +97,6 @@ function applyTheme(t: ThemeMode) {
 function readTheme(): ThemeMode {
   const s = localStorage.getItem("theme");
   return s === "light" || s === "dark" ? s : matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
-}
-
-// ── AI section ────────────────────────────────────────────────────────────────
-//
-// AI runs on one shared, developer-owned Gemini key — there's no model or
-// server to configure. Sign-in (above, in Account) is what unlocks it; this
-// card just states that plainly.
-
-function AISection() {
-  const { isGuest } = useAuth();
-
-  return (
-    <Card>
-      <Row>
-        <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-[#AD46FF]">
-          <IconBrain size={18} strokeWidth={1.8} className="text-white" />
-        </div>
-        <div className="min-w-0 flex-1">
-          <p className="text-[14px] font-bold text-neutral-900 dark:text-white">Gemini AI</p>
-          <p className={`text-[12px] font-medium ${
-            isGuest ? "text-neutral-400 dark:text-neutral-500" : "text-emerald-600 dark:text-emerald-400"
-          }`}>
-            {isGuest ? "Sign in above to use it" : "Ready · Free, with a daily limit"}
-          </p>
-        </div>
-      </Row>
-      <Divider />
-      <Row>
-        <IconShield size={14} strokeWidth={2} className="shrink-0 text-emerald-500" />
-        <p className="text-[12px] text-neutral-500 dark:text-neutral-400">
-          Powered by Google Gemini through PlanR&apos;s server. Each account gets a daily
-          limit so the shared quota holds up for everyone.
-        </p>
-      </Row>
-    </Card>
-  );
 }
 
 // ── Sync row ──────────────────────────────────────────────────────────────────
@@ -448,7 +412,7 @@ export function SettingsView({
           {AI_ENABLED && (
             <div>
               <SectionLabel>Intelligence</SectionLabel>
-              <AISection />
+              <StatusCard />
             </div>
           )}
 

@@ -14,10 +14,11 @@
  */
 
 const VAPID_PUBLIC_KEY = process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY;
-// Same Cloudflare Worker as the AI chat proxy (worker/src/index.ts serves both
-// POST /ai/chat and POST /push/test off one deployed origin) — reusing the var
-// rather than adding a second one that would always point at the same host.
-const WORKER_URL = process.env.NEXT_PUBLIC_AI_WORKER_URL;
+// worker/src/index.ts's deployed origin — serves POST /push/test. It used to
+// also proxy Gemini AI calls (hence the old var name, NEXT_PUBLIC_AI_WORKER_URL);
+// AI now runs on a local MLX model the browser talks to directly, so this
+// Worker is push-only these days.
+const WORKER_URL = process.env.NEXT_PUBLIC_REMINDERS_WORKER_URL;
 
 export function isPushSupported(): boolean {
   return (
@@ -83,7 +84,7 @@ export type TestPushResult = { ok: true } | { ok: false; error: string };
  */
 export async function sendTestPush(subscription: PushSubscriptionJSON): Promise<TestPushResult> {
   if (!WORKER_URL || WORKER_URL.includes("<your-subdomain>")) {
-    return { ok: false, error: "The reminders worker isn't configured yet (NEXT_PUBLIC_AI_WORKER_URL)." };
+    return { ok: false, error: "The reminders worker isn't configured yet (NEXT_PUBLIC_REMINDERS_WORKER_URL)." };
   }
   try {
     const res = await fetch(`${WORKER_URL.replace(/\/$/, "")}/push/test`, {

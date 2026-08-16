@@ -1,179 +1,75 @@
 /**
- * Client for PlanR's AI features — a thin, authenticated, streaming fetch to
- * the Cloudflare Worker that proxies Gemini (worker/src/index.ts's
- * `POST /ai/chat`). The Worker holds the one shared, developer-owned Gemini
- * API key server-side and enforces per-user + global daily caps on it; this
- * module never sees the key and has no local rate-limiting of its own — the
- * cap that matters is server-side.
+ * The one entry point every AI feature streams through — `streamAIChat`
+ * (multi-turn) and `streamAIAction` (one-shot). Neither caller nor consumer
+ * needs to know which provider is behind them; this file is the router.
  *
- * `streamGeminiChat`/`streamGeminiAction` are drop-in replacements for the
- * old `streamOllamaChat`/`streamOllamaAction`: both are AsyncGenerator<string>
- * yielding INCREMENTAL text deltas (never accumulated-so-far text — callers
- * do their own `accumulated += chunk`), and both respect a trailing
- * AbortSignal. This is the first authenticated fetch to an external endpoint
- * in this codebase — everything else talks to Firebase via its SDK (implicit
- * auth) or, historically, to an unauthenticated local Ollama server.
+ * Today there's exactly one provider (MLX, lib/ai/providers/mlx.ts), talking
+ * directly to a local `mlx_lm.server` from the browser — see mlx.ts's own
+ * comment for why that's a direct client→localhost call rather than routed
+ * through a server. This app is a static export: `next.config`'s
+ * `output: "export"` means there is no Next.js server anywhere, dev or prod,
+ * so "the AI Gateway" is necessarily a client-side router, not a server tier.
+ *
+ * A previous version of this file proxied Gemini through a Cloudflare Worker
+ * (worker/src/index.ts's old `POST /ai/chat`, since removed) using a single
+ * shared, developer-owned API key with server-enforced daily caps — that's
+ * why every function used to take a Firebase user and could throw
+ * AiAuthError/AiCapError. None of that applies to a local model with no per-
+ * call cost, so this version drops the auth/cap machinery entirely. Adding a
+ * remote provider back later (a real hosted API) would reintroduce a need for
+ * server-held secrets for THAT provider specifically — it wouldn't change
+ * this file's shape, just add a second case in `activeProvider()`.
  */
 
-const WORKER_URL = process.env.NEXT_PUBLIC_AI_WORKER_URL;
+import { getMLXConfig } from "./ai/config";
+import { MLXProvider } from "./ai/providers/mlx";
+import type { AIMessage } from "./ai/types";
 
-export interface AiClientMessage {
-  role: "user" | "assistant";
-  content: string;
-}
+export type { AIMessage };
 
-/** Anything with Firebase's `User.getIdToken` shape — accepted as a parameter
- *  rather than imported from AuthProvider, so this module doesn't need to
- *  know about React/context. */
-export interface IdTokenSource {
-  getIdToken(forceRefresh?: boolean): Promise<string>;
-}
-
-/** Not signed in, or the Worker rejected the token as missing/invalid/expired
- *  even after one forced-refresh retry. Call sites should prompt sign-in. */
-export class AiAuthError extends Error {
-  constructor(message = "Sign in to use AI features.") {
+/** The active AI request couldn't reach its provider at all — as opposed to
+ *  the provider responding with an error, which means it's at least running.
+ *  Callers show this directly; it's already written to be user-facing. */
+export class AiConnectionError extends Error {
+  constructor(message = "Can't reach your local AI — make sure MLX is running.") {
     super(message);
-    this.name = "AiAuthError";
+    this.name = "AiConnectionError";
   }
 }
 
-/** The daily usage cap (this user's own, or the shared app-wide budget) is
- *  reached. `reason` lets the UI show the right one of two distinct messages. */
-export class AiCapError extends Error {
-  reason: "per-user-cap" | "global-cap";
-  constructor(reason: "per-user-cap" | "global-cap") {
-    super(
-      reason === "per-user-cap"
-        ? "You've used today's free AI limit — it resets tomorrow."
-        : "PlanR's daily AI limit is reached — try again tomorrow.",
-    );
-    this.name = "AiCapError";
-    this.reason = reason;
-  }
-}
-
+/** MLX always has a usable default (localhost:8080, Qwen3-4B) — "configured"
+ *  here means "has a non-empty base URL to try," not "verified reachable."
+ *  Actual reachability is what `testConnection()` (surfaced in AI Settings)
+ *  and the try/catch around every real `generate()` call are for. */
 export function isAiConfigured(): boolean {
-  return !!WORKER_URL;
+  return !!getMLXConfig().baseUrl;
 }
 
-async function* streamFromWorker(
-  idToken: string,
-  systemPrompt: string,
-  messages: AiClientMessage[],
-  maxOutputTokens?: number,
-  signal?: AbortSignal,
-): AsyncGenerator<string> {
-  let response: Response;
-  try {
-    response = await fetch(`${WORKER_URL}/ai/chat`, {
-      method: "POST",
-      headers: { "content-type": "application/json", authorization: `Bearer ${idToken}` },
-      body: JSON.stringify({ systemPrompt, messages, maxOutputTokens }),
-      signal,
-    });
-  } catch (err) {
-    if (err instanceof Error && err.name === "AbortError") throw err;
-    throw new Error("AI service not reachable — check your connection and try again.");
-  }
-
-  if (response.status === 401) throw new AiAuthError();
-  if (response.status === 429) {
-    const body = (await response.json().catch(() => ({}))) as { reason?: string };
-    throw new AiCapError(body.reason === "global-cap" ? "global-cap" : "per-user-cap");
-  }
-  if (!response.ok) {
-    const errText = await response.text().catch(() => response.statusText);
-    throw new Error(`AI error ${response.status}: ${errText}`);
-  }
-
-  const reader = response.body?.getReader();
-  if (!reader) throw new Error("No response body from AI service");
-
-  // Same NDJSON-style reader loop as the old streamOllamaChat, just parsing
-  // Gemini's SSE `data: {...}` lines instead of Ollama's bare-JSON lines.
-  const decoder = new TextDecoder();
-  let buffer = "";
-
-  while (true) {
-    const { done, value } = await reader.read();
-    if (done) break;
-    buffer += decoder.decode(value, { stream: true });
-    const lines = buffer.split("\n");
-    buffer = lines.pop() ?? "";
-    for (const line of lines) {
-      const trimmed = line.trim();
-      if (!trimmed.startsWith("data:")) continue;
-      const jsonStr = trimmed.slice(5).trim();
-      if (!jsonStr || jsonStr === "[DONE]") continue;
-      try {
-        const data = JSON.parse(jsonStr);
-        const text = data?.candidates?.[0]?.content?.parts?.[0]?.text;
-        if (typeof text === "string" && text.length > 0) yield text;
-      } catch {
-        // skip malformed/partial lines — the next chunk usually completes them
-      }
-    }
-  }
+function activeProvider(): MLXProvider {
+  return new MLXProvider(getMLXConfig());
 }
 
 /**
- * Resolves an ID token and streams from the Worker, retrying once with a
- * forced-fresh token if the first attempt comes back unauthenticated (the
- * token may simply have expired mid-session).
+ * Multi-turn streaming chat. `maxTokens` is a ceiling, not a forced length —
+ * pass a larger budget for surfaces that might produce long output (a full
+ * plan with bundled tasks, a written strategy doc) and a smaller one for
+ * quick single-turn replies.
  */
-async function* streamAuthenticated(
-  user: IdTokenSource | null,
+export function streamAIChat(
+  messages: AIMessage[],
   systemPrompt: string,
-  messages: AiClientMessage[],
-  maxOutputTokens?: number,
+  maxTokens = 1024,
   signal?: AbortSignal,
 ): AsyncGenerator<string> {
-  if (!user) throw new AiAuthError();
-  if (!isAiConfigured()) throw new Error("AI isn't configured (missing NEXT_PUBLIC_AI_WORKER_URL).");
-
-  let idToken: string;
-  try {
-    idToken = await user.getIdToken();
-  } catch {
-    throw new AiAuthError();
-  }
-
-  try {
-    yield* streamFromWorker(idToken, systemPrompt, messages, maxOutputTokens, signal);
-  } catch (err) {
-    if (!(err instanceof AiAuthError)) throw err;
-    const fresh = await user.getIdToken(true).catch(() => null);
-    if (!fresh) throw err;
-    yield* streamFromWorker(fresh, systemPrompt, messages, maxOutputTokens, signal);
-  }
+  return activeProvider().generate(systemPrompt, messages, { maxTokens, signal });
 }
 
-/**
- * Drop-in replacement for lib/ai.ts's old streamOllamaChat — same signature
- * shape minus baseUrl/model (Gemini's model choice lives server-side in the
- * Worker's config, not picked per-call by the client).
- */
-export function streamGeminiChat(
-  user: IdTokenSource | null,
-  messages: AiClientMessage[],
-  systemPrompt: string,
-  isStrategy = false,
-  signal?: AbortSignal,
-): AsyncGenerator<string> {
-  return streamAuthenticated(user, systemPrompt, messages, isStrategy ? 4096 : 1024, signal);
-}
-
-/**
- * Drop-in replacement for lib/aiActions.ts's old streamOllamaAction — backs
- * all five one-shot generate* functions (tasks/subtasks/milestones/
- * milestone-tasks/weekly-insight) via a single user message.
- */
-export function streamGeminiAction(
-  user: IdTokenSource | null,
+/** One-shot generation from a single user message — backs every structured
+ *  generator in lib/aiActions.ts (tasks/subtasks/milestones/insight). */
+export function streamAIAction(
   systemPrompt: string,
   userMessage: string,
   signal?: AbortSignal,
 ): AsyncGenerator<string> {
-  return streamAuthenticated(user, systemPrompt, [{ role: "user", content: userMessage }], 1024, signal);
+  return streamAIChat([{ role: "user", content: userMessage }], systemPrompt, 1024, signal);
 }

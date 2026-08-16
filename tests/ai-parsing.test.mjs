@@ -40,6 +40,24 @@ function fenced(obj) {
   return "Sure, here you go:\n```json\n" + JSON.stringify(obj) + "\n```";
 }
 
+// MLX (Qwen3) doesn't reliably wrap its JSON in a ```json fence the way
+// Gemini did — confirmed live: a real "add_task" response came back as bare
+// JSON with no fence at all. extractJSONCandidate's fenceless fallback used
+// to be a lazy /\{[\s\S]*?\}/ match, which stops at the FIRST "}" it finds —
+// for a nested payload like add_task's, that's the payload's closing brace,
+// dropping the outer object's closing brace and producing invalid JSON. This
+// locks in the fix (a greedy match spanning the whole nested structure).
+test("parseAIAction handles unfenced JSON with a nested payload object (no markdown fence at all)", () => {
+  const raw = 'Sure, adding that.\n' + JSON.stringify({
+    type: "add_task",
+    payload: { title: "Dentist Appointment", taskType: "commitment", day: "thursday", startTime: "14:00", endTime: "15:00", icon: "star" },
+  });
+  const action = parseAIAction(raw);
+  assert.equal(action.type, "add_task");
+  assert.equal(action.payload.title, "Dentist Appointment");
+  assert.equal(action.payload.taskType, "commitment");
+});
+
 test("add_task defaults an invalid/missing taskType to \"task\"", () => {
   const withInvalid = parseAIAction(fenced({
     type: "add_task",

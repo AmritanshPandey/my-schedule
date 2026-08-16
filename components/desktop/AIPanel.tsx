@@ -6,10 +6,7 @@ import { IconArrowRight, IconBrain, IconEraser, IconSend, IconSparkles, IconX } 
 import ReactMarkdown from "react-markdown";
 import { parseAIAction, buildSystemPrompt, buildPlanContext } from "@/lib/ai";
 import type { AIActionResult } from "@/lib/ai";
-import { streamGeminiChat } from "@/lib/aiClient";
-import { useAuth } from "@/contexts/AuthProvider";
-import { useAIActions } from "@/lib/ai/useAIActions";
-import AISignInGate from "@/components/auth/AISignInGate";
+import { streamAIChat } from "@/lib/aiClient";
 import { findPlanByTitle, findTasksByTitle } from "@/lib/planLookup";
 import type { Plan, Ritual, Schedule } from "@/lib/useScheduleDB";
 import { SECTION_ICONS, getIconPickerStyle } from "@/components/SectionIcons";
@@ -383,12 +380,17 @@ const STARTER_PROMPTS: Record<"plans" | "routine" | "strategy", string[]> = {
 };
 
 function stripJsonBlocks(text: string): string {
-  return text.replace(/```json[\s\S]*?```/g, "").trim();
+  const withoutFenced = text.replace(/```json[\s\S]*?```/g, "").trim();
+  if (withoutFenced !== text.trim()) return withoutFenced;
+  // The model doesn't always wrap its JSON in a fence (confirmed live with
+  // MLX/Qwen3, unlike Gemini which mostly did) — strip a trailing bare
+  // {...} object too, mirroring lib/ai.ts's extractJSONCandidate fallback.
+  // Anchored to the end of the string so a stray "{" earlier in genuine
+  // prose is never touched.
+  return text.replace(/\{[\s\S]*\}\s*$/, "").trim();
 }
 
 export function AIPanel({ context, plans, rituals, schedule, activePlan, initialMessage, onApplyAction, onClose }: AIPanelProps) {
-  const { user } = useAuth();
-  const { available } = useAIActions();
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState("");
   const [streaming, setStreaming] = useState(false);
@@ -437,7 +439,7 @@ export function AIPanel({ context, plans, rituals, schedule, activePlan, initial
       // Always request the larger token budget: with the unified prompt, any
       // context can now emit a long create_strategy doc or a create_plan with
       // several bundled tasks — it's a ceiling, not a forced length.
-      for await (const chunk of streamGeminiChat(user, history, systemPrompt, true, controller.signal)) {
+      for await (const chunk of streamAIChat(history, systemPrompt, 4096, controller.signal)) {
         fullText += chunk;
         setMessages((prev) => {
           const updated = [...prev];
@@ -522,15 +524,6 @@ export function AIPanel({ context, plans, rituals, schedule, activePlan, initial
         </div>
       </div>
 
-      {!available ? (
-        // AIPanel is always dark-styled regardless of the app's theme
-        // setting — force AISignInGate's own dark: variants on so it isn't
-        // rendered in its light palette against this permanently-dark panel.
-        <div className="dark flex flex-1 items-center justify-center overflow-y-auto px-3">
-          <AISignInGate message="Sign in to chat with AI and create plans, tasks, trackers, and more — it's free, with a daily limit per account." />
-        </div>
-      ) : (
-      <>
       {/* Error banner */}
       <AnimatePresence>
         {error && (
@@ -695,8 +688,6 @@ export function AIPanel({ context, plans, rituals, schedule, activePlan, initial
           Shift+Enter for new line · Enter to send
         </p>
       </div>
-      </>
-      )}
     </div>
   );
 }

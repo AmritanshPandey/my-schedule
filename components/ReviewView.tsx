@@ -22,7 +22,6 @@ import { computeTrend } from "@/lib/trendUtils";
 import { todayISO, addDaysToISO, localISODate } from "@/lib/dateUtils";
 import { isTaskScheduledOn } from "@/lib/taskOccurrence";
 import { useAIActions } from "@/lib/ai/useAIActions";
-import AISignInGate from "@/components/auth/AISignInGate";
 import MilestoneTimeline from "@/components/MilestoneTimeline";
 import CompletionTrendCard from "@/components/analytics/CompletionTrendCard";
 
@@ -200,7 +199,7 @@ function WeeklyAIInsightCard({
     try {
       const context = buildWeeklyContext(schedule, todayKey, ritualWeekHistory);
       const stream = ai.streamWeeklyInsight(context, ctrl.signal);
-      if (!stream) return; // not available (see the sign-in gate below)
+      if (!stream) return; // AI isn't configured
       for await (const chunk of stream) {
         if (ctrl.signal.aborted) break;
         setText((prev) => prev + chunk);

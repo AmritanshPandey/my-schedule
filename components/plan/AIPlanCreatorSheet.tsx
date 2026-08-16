@@ -13,10 +13,8 @@ import SheetHeader from "@/components/ui/SheetHeader";
 import Button from "@/components/ui/Button";
 import { SECTION_ICONS, getIconPickerStyle } from "@/components/SectionIcons";
 import { buildSystemPrompt, parseAIAction, type AITask, type AIMilestone } from "@/lib/ai";
-import { streamGeminiChat } from "@/lib/aiClient";
+import { streamAIChat } from "@/lib/aiClient";
 import { useAIActions } from "@/lib/ai/useAIActions";
-import { useAuth } from "@/contexts/AuthProvider";
-import AISignInGate from "@/components/auth/AISignInGate";
 import { resolveAccentColor, type AccentColor } from "@/lib/colorSystem";
 import { localISODate, todayISO } from "@/lib/dateUtils";
 import type { Plan } from "@/lib/useScheduleDB";
@@ -133,7 +131,6 @@ export default function AIPlanCreatorSheet({
   const [milestones, setMilestones] = useState<AIMilestone[]>([]);
 
   const ai = useAIActions();
-  const { user: aiUser } = useAuth();
   const abortRef = useRef<AbortController | null>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
@@ -167,10 +164,9 @@ export default function AIPlanCreatorSheet({
     try {
       // Full plan creation with tasks in one shot.
       const systemPrompt = buildSystemPrompt("plans", undefined, existingPlans);
-      for await (const chunk of streamGeminiChat(
-        aiUser,
+      for await (const chunk of streamAIChat(
         [{ role: "user", content: goal }],
-        systemPrompt, false, controller.signal,
+        systemPrompt, 1024, controller.signal,
       )) {
         accumulated += chunk;
       }
@@ -214,11 +210,7 @@ export default function AIPlanCreatorSheet({
           onClose={onClose}
         />
 
-        {!ai.available ? (
-          <AISignInGate />
-        ) : (
-          <>
-            <div className="space-y-3">
+        <div className="space-y-3">
               <p className="text-[11px] font-semibold uppercase tracking-[0.08em] text-neutral-400 dark:text-neutral-500">
                 What&apos;s your goal?
               </p>
@@ -289,8 +281,6 @@ export default function AIPlanCreatorSheet({
             >
               {streaming ? "Generating…" : "Generate Plan →"}
             </Button>
-          </>
-        )}
       </div>
     );
   }

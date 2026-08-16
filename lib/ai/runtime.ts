@@ -1,8 +1,8 @@
 /**
- * AI action taxonomy — still-useful UI vocabulary for what an AI call is doing,
- * even though there's only one backend (Gemini, via the Cloudflare Worker proxy)
- * now. Kept as its own module so `AIAssistant.tsx`'s suggestion cards don't need
- * to import from `lib/aiActions.ts` just for a type.
+ * AI action taxonomy — still-useful UI vocabulary for what an AI call is
+ * doing, even though there's only one backend (local MLX) now. Kept as its
+ * own module so `AIAssistant.tsx`'s suggestion cards don't need to import
+ * from `lib/aiActions.ts` just for a type.
  */
 export type AIActionType =
   | "generate-subtasks"

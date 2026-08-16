@@ -676,7 +676,7 @@ export function SettingsSheet({
                 </div>
                 <div className="min-w-0 flex-1">
                   <p className="text-[13px] font-semibold text-neutral-800 dark:text-white">AI Configuration</p>
-                  <p className="text-[11px] text-neutral-400 dark:text-neutral-500">Gemini · Free · Sign-in required</p>
+                  <p className="text-[11px] text-neutral-400 dark:text-neutral-500">MLX · Local · Free</p>
                 </div>
                 <IconChevronDown size={14} strokeWidth={2} className="-rotate-90 text-neutral-400" />
               </button>

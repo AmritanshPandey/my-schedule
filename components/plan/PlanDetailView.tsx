@@ -64,10 +64,8 @@ import {
   type AIGeneratedMilestone,
 } from "@/lib/aiActions";
 import { parseAIAction, PLAN_COACH_PROMPT, buildCoachContext } from "@/lib/ai";
-import { streamGeminiChat } from "@/lib/aiClient";
+import { streamAIChat } from "@/lib/aiClient";
 import { useAIActions } from "@/lib/ai/useAIActions";
-import { useAuth } from "@/contexts/AuthProvider";
-import AISignInGate from "@/components/auth/AISignInGate";
 import { getCoachSkillPrompt, detectCoachSkill, SKILL_LABELS } from "@/lib/coachSkills";
 import { AI_ENABLED } from "@/lib/featureFlags";
 import AIActionSheet, { type ResultItem } from "@/components/ai/AIActionSheet";
@@ -294,8 +292,7 @@ export default function PlanDetailView({
     ? ["planning", "roadmap", "strategy"]
     : ["planning", "roadmap"]) as Array<"planning" | "roadmap" | "strategy">;
 
-  // ── Unified AI actions (Gemini, via the Worker proxy) ───────────────────
-  const { user: aiUser } = useAuth();
+  // ── Unified AI actions (local MLX provider) ─────────────────────────────
   const ai = useAIActions();
 
   // ── AI task generation state ────────────────────────────────────────────
@@ -617,7 +614,7 @@ export default function PlanDetailView({
           ? m.content.replace(/```json[\s\S]*?```/g, "").trim()
           : m.content,
       }));
-      for await (const chunk of streamGeminiChat(aiUser, history, systemPrompt, false, controller.signal)) {
+      for await (const chunk of streamAIChat(history, systemPrompt, 1024, controller.signal)) {
         accumulated += chunk;
         setCoachMessages((prev) => {
           const updated = [...prev];
@@ -1330,11 +1327,7 @@ export default function PlanDetailView({
         className="mx-4 mt-6 flex flex-col lg:mx-8"
         style={{ height: "clamp(360px, calc(100vh - 300px), 640px)" }}
       >
-        {!ai.available ? (
-          <AISignInGate message="Sign in to start coaching sessions for this plan." />
-        ) : (
-          <>
-            {/* Auto-generate button + skill badge */}
+        {/* Auto-generate button + skill badge */}
             <div className="shrink-0 flex items-center gap-2 px-4 pt-4 pb-3">
               <button
                 type="button"
@@ -1363,7 +1356,14 @@ export default function PlanDetailView({
             <div className="flex-1 overflow-y-auto space-y-4 px-4 pb-2" style={{ scrollbarWidth: "none" } as React.CSSProperties}>
               {coachMessages.map((msg, msgIdx) => {
                 const isStreamingThis = coachStreaming && msgIdx === coachMessages.length - 1 && msg.role === "assistant";
-                const cleanText = msg.content.replace(/```(?:json)?\s*\{[\s\S]*?\}\s*```/g, "").trim();
+                // The model doesn't always wrap its JSON in a fence (confirmed
+                // live with MLX/Qwen3, unlike Gemini which mostly did) — strip
+                // a trailing bare {...} object too if there was no fence to
+                // strip, so raw JSON never shows in the chat bubble.
+                const withoutFenced = msg.content.replace(/```(?:json)?\s*\{[\s\S]*?\}\s*```/g, "").trim();
+                const cleanText = withoutFenced !== msg.content.trim()
+                  ? withoutFenced
+                  : msg.content.replace(/\{[\s\S]*\}\s*$/, "").trim();
                 const isUser = msg.role === "user";
 
                 return (
@@ -1644,8 +1644,6 @@ export default function PlanDetailView({
                 )}
               </div>
             </div>
-          </>
-        )}
       </m.div>
     );
   }

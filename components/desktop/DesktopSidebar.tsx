@@ -17,6 +17,7 @@ import {
 } from "@tabler/icons-react";
 import { haptic } from "@/lib/haptics";
 import { AI_ENABLED } from "@/lib/featureFlags";
+import { isAiConfigured } from "@/lib/aiClient";
 import { useAuth } from "@/contexts/AuthProvider";
 import { useSyncStatus } from "@/lib/useSyncStatus";
 import SyncDot from "@/components/sync/SyncDot";
@@ -116,10 +117,11 @@ export default function DesktopSidebar({
     setMode(theme === "dark" ? "light" : "dark");
   }
 
-  // AI runs on one shared Gemini key — "ready" just means signed in, since
-  // that's what unlocks it (per-user caps are enforced server-side).
-  const aiReady = !isGuest;
-  const statusLabel = aiReady ? "AI ready" : "Sign in for AI";
+  // AI runs on a local MLX model — no sign-in needed. "Ready" means a
+  // provider is configured (always true given MLX's built-in defaults);
+  // actual live reachability is what AI Settings' "Test connection" is for.
+  const aiReady = isAiConfigured();
+  const statusLabel = aiReady ? "AI ready" : "AI not configured";
   const statusColor = aiReady ? "text-emerald-600 dark:text-emerald-400" : "text-neutral-400 dark:text-neutral-500";
 
   return (
@@ -207,7 +209,7 @@ export default function DesktopSidebar({
           <button
             type="button"
             onClick={() => { haptic("light"); if (onOpenSettingsTab) onOpenSettingsTab(); else onOpenSettings(); }}
-            title={collapsed ? statusLabel : (aiReady ? "AI ready" : "Sign in for AI — click to open Settings")}
+            title={collapsed ? statusLabel : (aiReady ? "AI ready" : "AI not configured — click to open Settings")}
             className={`flex w-full items-center rounded-xl py-2 transition-colors hover:bg-neutral-100 dark:hover:bg-white/[0.04] ${collapsed ? "justify-center px-0" : "gap-2.5 px-3.5"}`}
           >
             <StatusDot ready={aiReady} />
