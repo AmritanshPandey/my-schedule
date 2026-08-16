@@ -33,6 +33,9 @@ const ACTION_LABELS: Record<AIActionResult["type"], string> = {
   create_ritual: "New Ritual",
   create_strategy: "New Strategy",
   suggest_milestones: "Milestones",
+  add_tracker: "New Tracker",
+  add_task: "New Task",
+  add_subtasks: "New Subtasks",
 };
 
 function ThinkingDots() {
@@ -230,7 +233,9 @@ function ActionCard({ action, onApply }: { action: AIActionResult; onApply: (upd
   }
 
   if (action.type === "suggest_milestones") return null;
-  const title = action.payload.title;
+  const title = action.type === "add_subtasks"
+    ? `${action.payload.subtasks.length} step${action.payload.subtasks.length !== 1 ? "s" : ""} → "${action.payload.taskTitle}"`
+    : action.payload.title;
   const htmlExcerpt =
     action.type === "create_strategy" && action.payload.htmlContent
       ? action.payload.htmlContent
@@ -291,7 +296,7 @@ const STARTER_PROMPTS: Record<"plans" | "routine" | "strategy", string[]> = {
   plans: [
     "Create a 30-day fitness plan",
     "Build a 90-day learning roadmap",
-    "Design a personal project plan",
+    "Add a tracker to an existing plan",
   ],
   routine: [
     "Design a productive morning routine",
@@ -356,7 +361,10 @@ export function AIPanel({ context, plans, rituals, activePlan, initialMessage, o
 
     let fullText = "";
     try {
-      for await (const chunk of streamGeminiChat(user, history, systemPrompt, context === "strategy", controller.signal)) {
+      // Always request the larger token budget: with the unified prompt, any
+      // context can now emit a long create_strategy doc or a create_plan with
+      // several bundled tasks — it's a ceiling, not a forced length.
+      for await (const chunk of streamGeminiChat(user, history, systemPrompt, true, controller.signal)) {
         fullText += chunk;
         setMessages((prev) => {
           const updated = [...prev];

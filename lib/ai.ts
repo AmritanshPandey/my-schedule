@@ -1,4 +1,4 @@
-import type { DayKey, Plan, RitualColor } from "./useScheduleDB";
+import type { DayKey, Plan, RitualColor, TaskTypeValue } from "./useScheduleDB";
 import { todayISO } from "./dateUtils";
 
 export interface AITask {
@@ -8,6 +8,7 @@ export interface AITask {
   endTime: string;
   icon: string;
   subtasks?: string[];
+  taskType?: TaskTypeValue;
 }
 
 export interface AIMilestone {
@@ -20,45 +21,72 @@ export type AIActionResult =
   | { type: "create_plan"; payload: { title: string; description: string; emoji: string; color: string; startDate?: string; endDate?: string; tasks?: AITask[]; milestones?: AIMilestone[] } }
   | { type: "create_ritual"; payload: { title: string; time: string; duration: number; repeatDays: DayKey[]; color: RitualColor } }
   | { type: "create_strategy"; payload: { title: string; description: string; htmlContent: string } }
-  | { type: "suggest_milestones"; payload: { milestones: AIMilestone[] } };
+  | { type: "suggest_milestones"; payload: { milestones: AIMilestone[]; planTitle?: string } }
+  | { type: "add_tracker"; payload: { planTitle?: string; title: string; unit?: string; goalDirection: "increase_good" | "decrease_good"; goalValue?: number } }
+  | { type: "add_task"; payload: { title: string; taskType: TaskTypeValue; day: DayKey; days?: DayKey[]; startTime: string; endTime: string; icon: string; subtasks?: string[]; planTitle?: string } }
+  | { type: "add_subtasks"; payload: { taskTitle: string; subtasks: string[] } };
 
 const VALID_COLORS = ["blue", "emerald", "violet", "pink", "amber", "cyan"] as const;
 const VALID_RITUAL_COLORS = ["rose", "sky", "violet", "amber", "emerald", "fuchsia", "orange", "cyan", "indigo", "teal"] as const;
 const VALID_DAYS: DayKey[] = ["monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday"];
+const VALID_TASK_TYPES: TaskTypeValue[] = ["task", "session", "commitment"];
+const VALID_GOAL_DIRECTIONS = ["increase_good", "decrease_good"] as const;
 
-const SYSTEM_PROMPT: Record<"plans" | "routine" | "strategy", string> = {
-  plans: `You are a planning assistant inside PlanR. Be concise — 1-2 sentences, then the JSON.
+const GENERAL_PROMPT = `You are the AI assistant inside PlanR, a personal execution-OS app. Be concise — 1-3 sentences of conversational reply, then (only when the user is asking you to create or add something) exactly ONE fenced JSON block at the very end. Never explain the JSON. Never output more than one JSON block per reply.
 
-OUTPUT RULE: When creating a plan, output exactly one JSON block with the plan, 3-5 recurring weekly tasks, AND 3-5 dated milestones:
+Decide which action fits what the user asked for:
+- A brand-new plan (with or without recurring tasks/milestones) → "create_plan"
+- A recurring daily/weekly habit not tied to a specific plan's task list → "create_ritual"
+- A single task, commitment, or session — one-off or recurring, optionally attached to an existing plan by name → "add_task"
+- Adding steps/subtasks to a task the user already has → "add_subtasks"
+- A numeric goal/metric to track under an existing plan → "add_tracker"
+- Milestones for a plan the user ALREADY HAS (check "User's existing plans" below) → "suggest_milestones"
+- A long-form written guide or program → "create_strategy"
+Prefer attaching to something the user already has (their existing plans/rituals, listed below) over creating a duplicate.
+
+JSON shapes:
+
+create_plan — new plan + 3-5 recurring weekly tasks + 3-5 dated milestones:
 \`\`\`json
-{"type":"create_plan","payload":{"title":"Plan Title","description":"One sentence.","emoji":"barbell","color":"emerald","startDate":"YYYY-MM-DD","endDate":"YYYY-MM-DD","tasks":[{"title":"Task Name","day":"monday","startTime":"07:00","endTime":"08:00","icon":"run","subtasks":["Subtask 1","Subtask 2"]},{"title":"Task 2","day":"wednesday","startTime":"18:00","endTime":"19:00","icon":"barbell","subtasks":["Step A","Step B"]}],"milestones":[{"title":"Milestone 1","description":"One sentence.","targetDate":"YYYY-MM-DD"},{"title":"Milestone 2","description":"One sentence.","targetDate":"YYYY-MM-DD"}]}}
+{"type":"create_plan","payload":{"title":"Plan Title","description":"One sentence.","emoji":"barbell","color":"emerald","startDate":"YYYY-MM-DD","endDate":"YYYY-MM-DD","tasks":[{"title":"Task Name","day":"monday","startTime":"07:00","endTime":"08:00","icon":"run","taskType":"task","subtasks":["Subtask 1","Subtask 2"]}],"milestones":[{"title":"Milestone 1","description":"One sentence.","targetDate":"YYYY-MM-DD"}]}}
 \`\`\`
-Rules:
-- "emoji" and task "icon": pick from: run, school, book, sleep, star, briefcase, car, brain, barbell, code, heart, music, palette, plane, chefhat, coin, camera, users, leaf, pencil, yoga, bike, mountain, droplet, moodsmile, flame, language, pill, bolt, dna
-- "color": blue, emerald, violet, pink, amber, or cyan
-- "day" (tasks recur weekly on this day, no calendar date): monday tuesday wednesday thursday friday saturday sunday
-- Each task needs 2-4 subtasks. Times are HH:MM 24-hour.
-- "startDate": today's date (given below) unless the user names a different start. "endDate": derive from any timeframe/deadline the user gives (e.g. "in 8 weeks", "by October") relative to today. If the user gives no timeframe at all, default to a 90-day plan from today rather than omitting dates.
-- "milestones": 3-5 concrete checkpoints with "targetDate" spread evenly between startDate and endDate (never before startDate or after endDate). Keep titles 3-6 words.
-- ONE JSON block only. No explanation of the JSON.`,
+"startDate": today unless the user names a different start. "endDate": derive from any timeframe the user gives, or default to a 90-day plan if none given. Each task needs 2-4 subtasks and a "taskType" (see add_task below).
 
-  routine: `You are a routine coach inside PlanR. Be concise — reply in 2-3 sentences max, then the JSON if needed.
-
-OUTPUT RULE: If the user wants a recurring habit or ritual, end your reply with exactly one JSON block:
+create_ritual — a recurring habit/routine, not tied to one plan's task list:
 \`\`\`json
 {"type":"create_ritual","payload":{"title":"Habit Title","time":"07:00","duration":30,"repeatDays":["monday","tuesday","wednesday","thursday","friday"],"color":"emerald"}}
 \`\`\`
-Allowed colors: rose, sky, violet, amber, emerald, fuchsia. time is HH:MM. duration is minutes.
-For a written guide use type "create_strategy" instead.
-DO NOT explain the JSON. DO NOT output more than one JSON block. For questions, reply in 1-3 sentences only.`,
+Ritual "color": rose, sky, violet, amber, emerald, fuchsia, orange, cyan, indigo, or teal. time is HH:MM, duration is minutes.
 
-  strategy: `You are a strategy document writer for PlanR, a personal productivity app.
-The user will describe a plan or goal. You will produce a comprehensive, well-formatted HTML strategy guide they can save and reference.
+add_task — one task/commitment/session, optionally attached to an existing plan:
+\`\`\`json
+{"type":"add_task","payload":{"title":"Task Name","taskType":"commitment","day":"thursday","days":["thursday"],"startTime":"14:00","endTime":"15:00","icon":"star","subtasks":[],"planTitle":"Plan Title"}}
+\`\`\`
+"taskType" is one of: "task" (default — checked off, tracked), "session" (a tracked workout/practice block), "commitment" (fixed held time that's never checked off, e.g. commute, an appointment, work hours). "days" is optional — set it (instead of relying on just "day") when the same task recurs on more than one weekday under one id. Omit "planTitle" entirely for a commitment or any task with no specific plan.
 
-IMPORTANT — HTML FORMAT RULES:
-1. Output a COMPLETE HTML document: <!DOCTYPE html>, <head> with <meta charset="UTF-8"> and a <style> block, and <body>.
-2. Use only a <style> block for styling — no Tailwind, no Bootstrap, no external CDN links.
-3. Base typography styles:
+add_subtasks — add steps to an existing task the user names:
+\`\`\`json
+{"type":"add_subtasks","payload":{"taskTitle":"Existing Task Name","subtasks":["Step 1","Step 2"]}}
+\`\`\`
+"taskTitle" must match (even loosely) a task the user already has.
+
+add_tracker — a numeric goal/metric under an existing plan:
+\`\`\`json
+{"type":"add_tracker","payload":{"planTitle":"Plan Title","title":"Metric name","unit":"glasses","goalDirection":"increase_good","goalValue":8}}
+\`\`\`
+"goalDirection" is "increase_good" (higher is better) or "decrease_good" (lower is better). "unit"/"goalValue" are optional.
+
+suggest_milestones — milestones for a plan the user already has:
+\`\`\`json
+{"type":"suggest_milestones","payload":{"planTitle":"Plan Title","milestones":[{"title":"Short title","description":"one sentence","targetDate":"YYYY-MM-DD"}]}}
+\`\`\`
+3-5 milestones, titles 3-6 words, dates spread across the plan's remaining timeframe. Only use this for a plan that already exists — for a brand-new plan, bundle milestones into "create_plan" instead.
+
+create_strategy — a long-form written guide the user can save and reference:
+\`\`\`json
+{"type":"create_strategy","payload":{"title":"...","description":"one-sentence summary","htmlContent":"<!DOCTYPE html>..."}}
+\`\`\`
+htmlContent must be a COMPLETE, self-contained HTML document: <!DOCTYPE html>, <head> with <meta charset="UTF-8"> and a <style> block (no Tailwind/Bootstrap/CDN links), <body>. Base typography:
    body { font-family: system-ui, -apple-system, sans-serif; line-height: 1.7; max-width: 680px; margin: 0 auto; padding: 2rem; color: #1a1a1a; }
    h1 { font-size: 1.8rem; color: #6366f1; margin-bottom: 0.5rem; }
    h2 { font-size: 1.15rem; font-weight: 700; color: #374151; margin: 1.75rem 0 0.5rem; border-bottom: 2px solid #e5e7eb; padding-bottom: 0.25rem; }
@@ -68,22 +96,18 @@ IMPORTANT — HTML FORMAT RULES:
    th { background: #f3f4f6; text-align: left; padding: 0.5rem 0.75rem; font-weight: 600; }
    td { padding: 0.5rem 0.75rem; border-bottom: 1px solid #e5e7eb; }
    .callout { border-left: 4px solid #6366f1; padding: 0.75rem 1rem; background: #f5f3ff; border-radius: 0 8px 8px 0; margin: 1rem 0; font-size: 0.9rem; }
-4. STRUCTURE every strategy guide with these sections (use <h2> for section headings):
-   - <h1> title
-   - Overview (2-3 sentence summary of the strategy)
-   - Key Principles (3-5 bullet points — core mindset or rules)
-   - Schedule / Structure (weekly plan or phase breakdown as a table)
-   - Daily Habits (micro-habits to build; can reference PlanR rituals)
-   - Tips & Troubleshooting (3-5 practical tips)
-   - Optional: Resources (books, tools, links as a plain list)
-5. Use <div class="callout"> for 1-2 important highlighted notes.
-6. Aim for 600-900 words of visible body text — comprehensive but scannable.
+Structure every guide with <h2> sections: Overview, Key Principles (3-5 bullets), Schedule/Structure (table), Daily Habits, Tips & Troubleshooting (3-5 tips), optional Resources. Use <div class="callout"> for 1-2 highlights. Aim for 600-900 words of visible body text. Escape double-quotes inside htmlContent as \\".
 
-After your conversational response, output a SINGLE JSON code block:
-\`\`\`json
-{ "type": "create_strategy", "payload": { "title": "...", "description": "one-sentence summary", "htmlContent": "<!DOCTYPE html>..." } }
-\`\`\`
-The htmlContent must be a complete, self-contained HTML string. Escape any double-quotes inside it as \\". Only one JSON block per response.`,
+Shared rules:
+- "emoji"/task "icon": pick from: run, school, book, sleep, star, briefcase, car, brain, barbell, code, heart, music, palette, plane, chefhat, coin, camera, users, leaf, pencil, yoga, bike, mountain, droplet, moodsmile, flame, language, pill, bolt, dna
+- Plan "color": blue, emerald, violet, pink, amber, or cyan
+- "day"/"days": monday tuesday wednesday thursday friday saturday sunday (recurs weekly, no calendar date)
+- Times are HH:MM 24-hour.`;
+
+const FRAMING: Record<"plans" | "routine" | "strategy", string> = {
+  plans: "The user opened this from the Plans view — lean toward plan/task/milestone/tracker actions if the ask is ambiguous, but still handle any other request.",
+  routine: "The user opened this from the Routines view — lean toward suggesting a ritual (create_ritual) if the ask is ambiguous, but still handle any other request.",
+  strategy: "The user opened this from the Strategy view — lean toward a written guide (create_strategy) if the ask is ambiguous, but still handle any other request.",
 };
 
 export const PLAN_COACH_PROMPT = `You are a coaching AI inside PlanR, dedicated exclusively to the user's plan.
@@ -172,7 +196,7 @@ export function buildSystemPrompt(
   existingPlans?: Pick<Plan, "title" | "category" | "description">[],
   existingRituals?: Pick<{ title: string; time: string; duration?: number }, "title" | "time" | "duration">[],
 ): string {
-  const parts: string[] = [SYSTEM_PROMPT[context], `Today's date: ${todayISO()}`];
+  const parts: string[] = [GENERAL_PROMPT, FRAMING[context], `Today's date: ${todayISO()}`];
   if (planContext) parts.push(`Current plan context: ${planContext}`);
   if (existingPlans && existingPlans.length > 0) {
     const list = existingPlans.map((p) => `- "${p.title}" (${p.category}${p.description ? `: ${p.description}` : ""})`).join("\n");
@@ -207,6 +231,18 @@ function extractJSONCandidate(text: string): string | null {
   return null;
 }
 
+function parseAITaskFields(t: Record<string, unknown>): AITask {
+  return {
+    title: String(t.title),
+    day: VALID_DAYS.includes(t.day as DayKey) ? (t.day as DayKey) : "monday",
+    startTime: typeof t.startTime === "string" ? t.startTime : "09:00",
+    endTime: typeof t.endTime === "string" ? t.endTime : "10:00",
+    icon: typeof t.icon === "string" ? t.icon : "star",
+    subtasks: Array.isArray(t.subtasks) ? t.subtasks.filter((s): s is string => typeof s === "string") : [],
+    taskType: VALID_TASK_TYPES.includes(t.taskType as TaskTypeValue) ? (t.taskType as TaskTypeValue) : "task",
+  };
+}
+
 function parseAIMilestones(raw: unknown): AIMilestone[] {
   if (!Array.isArray(raw)) return [];
   return raw
@@ -230,14 +266,7 @@ export function parseAIAction(text: string): AIActionResult | null {
       const rawTasks = Array.isArray(p.tasks) ? p.tasks : [];
       const tasks: AITask[] = rawTasks
         .filter((t): t is Record<string, unknown> => typeof t === "object" && t !== null && typeof (t as Record<string,unknown>).title === "string")
-        .map((t) => ({
-          title: String(t.title),
-          day: VALID_DAYS.includes(t.day as DayKey) ? (t.day as DayKey) : "monday",
-          startTime: typeof t.startTime === "string" ? t.startTime : "09:00",
-          endTime: typeof t.endTime === "string" ? t.endTime : "10:00",
-          icon: typeof t.icon === "string" ? t.icon : "star",
-          subtasks: Array.isArray(t.subtasks) ? t.subtasks.filter((s): s is string => typeof s === "string") : [],
-        }));
+        .map(parseAITaskFields);
       const milestones = parseAIMilestones(p.milestones);
       return {
         type: "create_plan",
@@ -282,11 +311,62 @@ export function parseAIAction(text: string): AIActionResult | null {
       };
     }
     if (parsed.type === "suggest_milestones") {
+      const p = parsed.payload as Record<string, unknown>;
       return {
         type: "suggest_milestones",
         payload: {
-          milestones: parseAIMilestones((parsed.payload as Record<string, unknown>)?.milestones),
+          milestones: parseAIMilestones(p?.milestones),
+          planTitle: typeof p?.planTitle === "string" ? p.planTitle : undefined,
         },
+      };
+    }
+    if (parsed.type === "add_tracker") {
+      const p = parsed.payload as Record<string, unknown>;
+      if (typeof p?.title !== "string") return null;
+      return {
+        type: "add_tracker",
+        payload: {
+          planTitle: typeof p.planTitle === "string" ? p.planTitle : undefined,
+          title: String(p.title),
+          unit: typeof p.unit === "string" ? p.unit : undefined,
+          goalDirection: VALID_GOAL_DIRECTIONS.includes(p.goalDirection as typeof VALID_GOAL_DIRECTIONS[number])
+            ? (p.goalDirection as "increase_good" | "decrease_good")
+            : "increase_good",
+          goalValue: typeof p.goalValue === "number" ? p.goalValue : undefined,
+        },
+      };
+    }
+    if (parsed.type === "add_task") {
+      const p = parsed.payload as Record<string, unknown>;
+      if (typeof p?.title !== "string") return null;
+      const task = parseAITaskFields(p);
+      const rawDays = Array.isArray(p.days) ? p.days : [];
+      const days = rawDays.filter((d) => VALID_DAYS.includes(d as DayKey)) as DayKey[];
+      return {
+        type: "add_task",
+        payload: {
+          title: task.title,
+          taskType: task.taskType ?? "task",
+          day: task.day,
+          days: days.length > 0 ? days : undefined,
+          startTime: task.startTime,
+          endTime: task.endTime,
+          icon: task.icon,
+          subtasks: task.subtasks,
+          planTitle: typeof p.planTitle === "string" ? p.planTitle : undefined,
+        },
+      };
+    }
+    if (parsed.type === "add_subtasks") {
+      const p = parsed.payload as Record<string, unknown>;
+      if (typeof p?.taskTitle !== "string" || !p.taskTitle.trim()) return null;
+      const subtasks = Array.isArray(p.subtasks)
+        ? p.subtasks.filter((s): s is string => typeof s === "string" && s.trim().length > 0)
+        : [];
+      if (subtasks.length === 0) return null;
+      return {
+        type: "add_subtasks",
+        payload: { taskTitle: p.taskTitle, subtasks },
       };
     }
     return null;

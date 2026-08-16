@@ -3,7 +3,7 @@
  * These are NOT conversational. Each function streams a single structured output.
  */
 
-import type { DayKey } from "./useScheduleDB";
+import type { DayKey, TaskTypeValue } from "./useScheduleDB";
 import { streamGeminiAction, type IdTokenSource } from "./aiClient";
 
 export interface AIGeneratedTask {
@@ -13,17 +13,21 @@ export interface AIGeneratedTask {
   endTime: string;
   icon: string;
   subtasks: string[];
+  taskType: TaskTypeValue;
 }
 
 const VALID_DAYS: DayKey[] = [
   "monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday",
 ];
 
+const VALID_TASK_TYPES: TaskTypeValue[] = ["task", "session", "commitment"];
+
 const TASK_GEN_PROMPT = `You are a task planner. Generate 4-7 concrete weekly tasks for a plan.
 Output ONLY a raw JSON array — no explanation, no markdown fences, no preamble.
-[{"title":"...","day":"monday","startTime":"07:00","endTime":"08:00","icon":"barbell","subtasks":["Step 1","Step 2"]},...]
+[{"title":"...","day":"monday","startTime":"07:00","endTime":"08:00","icon":"barbell","taskType":"task","subtasks":["Step 1","Step 2"]},...]
 Icons (pick most relevant): run, school, book, sleep, star, briefcase, car, brain, barbell, code, heart, music, palette, plane, chefhat, coin, camera, users, leaf, pencil, yoga, bike, mountain, droplet, moodsmile, flame, language, pill, bolt, dna
 Days: monday tuesday wednesday thursday friday saturday sunday
+"taskType": "task" (default, checked off and tracked), "session" (a tracked workout/practice block), or "commitment" (fixed held time, never checked off).
 Times: HH:MM 24-hour. Spread tasks across the week. Each task needs 2-3 subtasks.`;
 
 const SUBTASK_GEN_PROMPT = `You are a task breakdown assistant.
@@ -101,6 +105,7 @@ export function parseGeneratedTasks(text: string): AIGeneratedTask[] {
       subtasks: Array.isArray(t.subtasks)
         ? (t.subtasks as unknown[]).filter((s): s is string => typeof s === "string")
         : [],
+      taskType: VALID_TASK_TYPES.includes(t.taskType as TaskTypeValue) ? (t.taskType as TaskTypeValue) : "task",
     }));
 }
 
@@ -159,9 +164,10 @@ export function parseGeneratedMilestones(text: string): AIGeneratedMilestone[] {
 
 const MILESTONE_TASK_GEN_PROMPT = `You are a task planner. Generate 4-6 concrete weekly tasks that directly help achieve a specific milestone.
 Output ONLY a raw JSON array — no explanation, no markdown fences, no preamble.
-[{"title":"...","day":"monday","startTime":"07:00","endTime":"08:00","icon":"barbell","subtasks":["Step 1","Step 2"]},...]
+[{"title":"...","day":"monday","startTime":"07:00","endTime":"08:00","icon":"barbell","taskType":"task","subtasks":["Step 1","Step 2"]},...]
 Icons (pick most relevant): run, school, book, sleep, star, briefcase, car, brain, barbell, code, heart, music, palette, plane, chefhat, coin, camera, users, leaf, pencil, yoga, bike, mountain, droplet, moodsmile, flame, language, pill, bolt, dna
 Days: monday tuesday wednesday thursday friday saturday sunday
+"taskType": "task" (default, checked off and tracked), "session" (a tracked workout/practice block), or "commitment" (fixed held time, never checked off).
 Times: HH:MM 24-hour. Spread tasks across the week. Each task needs 2-3 subtasks.`;
 
 export function streamGenerateMilestoneTasks(

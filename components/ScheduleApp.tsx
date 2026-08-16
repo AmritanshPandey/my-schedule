@@ -25,6 +25,7 @@ import { bootLog, isIOSSafeMode, isStandalonePWA } from "@/lib/iosSafeMode";
 
 // ── Deferred heavy components (separate JS chunks, loaded on demand) ──────────
 const AIAssistant = dynamic(() => import("@/components/ai/AIAssistant"), { ssr: false });
+const AIFab = dynamic(() => import("@/components/desktop/AIFab").then(m => ({ default: m.AIFab })), { ssr: false });
 const TaskSheet = dynamic(() => import("@/components/task/TaskSheet").then(m => ({ default: m.TaskSheet })), { ssr: false });
 const PlanDetailView = dynamic(() => import("@/components/plan/PlanDetailView"), { ssr: false });
 const AIPlanCreatorSheet = dynamic(() => import("@/components/plan/AIPlanCreatorSheet"), { ssr: false });
@@ -140,10 +141,12 @@ import {
   setTaskException,
   clearTaskException,
   addSubtaskToTasks,
+  createSubtask,
   getSlots,
   retimeSlot,
   type TaskDeleteScope,
 } from "@/lib/taskMutations";
+import { findPlanByTitle, findTasksByTitle } from "@/lib/planLookup";
 import { isTaskScheduledOn, resolveOccurrence, diffException } from "@/lib/taskOccurrence";
 import type { AIGeneratedTask } from "@/lib/aiActions";
 import { applyScheduleRules } from "@/lib/scheduleRules";
@@ -1687,6 +1690,7 @@ export default function ScheduleApp() {
           endTime: t.endTime,
           categoryId: ensureCategoryIn(categoryDraft, t.icon || plan.emoji),
           planId,
+          taskType: t.taskType,
           subtasks: t.subtasks.map((s) => ({ id: uid(), task: s })),
         };
         updatedActivities[t.day] = [...(updatedActivities[t.day] ?? []), task];
@@ -1816,6 +1820,7 @@ export default function ScheduleApp() {
           endTime: t.endTime,
           categoryId: ensureCategoryIn(categoryDraft, t.icon || plan.emoji),
           planId,
+          taskType: t.taskType,
           subtasks: (t.subtasks ?? []).map((s) => ({ id: uid(), task: s })),
         };
         const day = t.day as DayKey;
@@ -1897,7 +1902,11 @@ export default function ScheduleApp() {
     if (action.type === "suggest_milestones") {
       const milestones = action.payload.milestones;
       if (!milestones.length) return;
-      const planId = selectedPlanId ?? schedule.plans[0]?.id;
+      const targetPlan =
+        findPlanByTitle(schedule.plans, action.payload.planTitle) ??
+        (selectedPlanId ? schedule.plans.find((p) => p.id === selectedPlanId) : undefined) ??
+        schedule.plans[0];
+      const planId = targetPlan?.id;
       if (!planId) return;
       setSchedule((prev) => {
         const plan = prev.plans.find((p) => p.id === planId);
@@ -1912,10 +1921,78 @@ export default function ScheduleApp() {
           ],
         };
       });
-      setToastMessage(`Added ${milestones.length} milestone${milestones.length > 1 ? "s" : ""} to roadmap`);
+      setToastMessage(`Added ${milestones.length} milestone${milestones.length > 1 ? "s" : ""} to "${targetPlan?.title}"`);
       setActiveTab(1);
-      if (planId) setSelectedPlanId(planId);
+      setSelectedPlanId(planId);
+      return;
     }
+
+    if (action.type === "add_tracker") {
+      const targetPlan =
+        findPlanByTitle(schedule.plans, action.payload.planTitle) ??
+        (selectedPlanId ? schedule.plans.find((p) => p.id === selectedPlanId) : undefined) ??
+        schedule.plans[0];
+      if (!targetPlan) {
+        setToastMessage("Create a plan first, then I can add a tracker to it");
+        return;
+      }
+      const tracker: ProgressTracker = {
+        id: uid(),
+        planId: targetPlan.id,
+        title: action.payload.title,
+        type: "number",
+        unit: action.payload.unit || undefined,
+        goalDirection: action.payload.goalDirection,
+        goalValue: action.payload.goalValue,
+      };
+      setSchedule((prev) => ({
+        ...prev,
+        progressTrackers: [...prev.progressTrackers, tracker],
+      }));
+      setToastMessage(`Added tracker "${action.payload.title}" to "${targetPlan.title}"`);
+      setActiveTab(1);
+      setSelectedPlanId(targetPlan.id);
+      return;
+    }
+
+    if (action.type === "add_task") {
+      const targetPlan = findPlanByTitle(schedule.plans, action.payload.planTitle);
+      const days = action.payload.days?.length ? action.payload.days : [action.payload.day];
+      setSchedule((prev) => {
+        const categoryDraft = [...prev.categories];
+        const draft: Omit<Task, "id"> = {
+          title: action.payload.title,
+          startTime: action.payload.startTime,
+          endTime: action.payload.endTime,
+          categoryId: ensureCategoryIn(categoryDraft, action.payload.icon || targetPlan?.emoji || "star"),
+          planId: targetPlan?.id ?? "",
+          taskType: action.payload.taskType,
+          subtasks: (action.payload.subtasks ?? []).map((s) => ({ id: uid(), task: s })),
+        };
+        return createTask(draft, days, null)({ ...prev, categories: categoryDraft });
+      });
+      setToastMessage(`Added ${action.payload.taskType}${targetPlan ? ` to "${targetPlan.title}"` : ""}`);
+      return;
+    }
+
+    if (action.type === "add_subtasks") {
+      const matches = findTasksByTitle(schedule, action.payload.taskTitle);
+      if (matches.length === 0) {
+        setToastMessage(`Couldn't find a task named "${action.payload.taskTitle}"`);
+        return;
+      }
+      setSchedule((prev) =>
+        action.payload.subtasks.reduce(
+          (acc, title) => addSubtaskToTasks(matches, createSubtask(title))(acc),
+          prev
+        )
+      );
+      setToastMessage(`Added ${action.payload.subtasks.length} subtask${action.payload.subtasks.length > 1 ? "s" : ""} to "${action.payload.taskTitle}"`);
+      return;
+    }
+
+    const _exhaustive: never = action;
+    return _exhaustive;
   }
 
   function handleDeleteTracker(trackerId: string) {
@@ -4032,7 +4109,20 @@ export default function ScheduleApp() {
         </ErrorBoundary>
       )}
 
-      {/* ── AI trigger button (floating, mobile + desktop) ────────────────── */}
+      {/* ── AI chat (desktop-only free chat: Plan/Task/Subtasks/Milestone/Tracker/Ritual) ── */}
+      {AI_ENABLED && !iosSafeMode && (
+        <ErrorBoundary section name="AI Chat">
+          <AIFab
+            context="plans"
+            plans={schedule.plans}
+            rituals={schedule.rituals ?? []}
+            activePlan={selectedPlan ?? undefined}
+            onApplyAction={handleApplyAction}
+          />
+        </ErrorBoundary>
+      )}
+
+      {/* ── AI trigger button (floating, mobile only — desktop uses AIFab's own button) ── */}
       {AI_ENABLED && !iosSafeMode && (
         <AnimatePresence>
           {!aiOpen && (
@@ -4046,7 +4136,7 @@ export default function ScheduleApp() {
               whileTap={{ scale: 0.92 }}
               onClick={() => setAiOpen(true)}
               aria-label="Open AI Assistant"
-              className="fixed bottom-24 right-4 z-40 flex h-12 w-12 items-center justify-center rounded-full border border-violet-500 bg-[#AD46FF] text-white lg:bottom-8 lg:right-8"
+              className="fixed bottom-24 right-4 z-40 flex h-12 w-12 items-center justify-center rounded-full border border-violet-500 bg-[#AD46FF] text-white lg:hidden"
             >
               <IconSparkles size={20} strokeWidth={2} />
             </m.button>
