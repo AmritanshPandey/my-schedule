@@ -3,13 +3,15 @@ main = "src/index.ts"
 compatibility_date = "2024-09-23"
 compatibility_flags = ["nodejs_compat"]
 
+# A free *.workers.dev URL for the fetch handler (POST /ai/chat, POST
+# /push/test) — the cron trigger below is unaffected; both coexist on the
+# same Worker. Must be top-level, not nested under [triggers] — TOML scopes
+# every key after a [table] header to that table until the next header.
+workers_dev = true
+
 # Free plan includes Cron Triggers down to 1-minute precision.
 [triggers]
 crons = ["* * * * *"]
-
-# A free *.workers.dev URL for the fetch handler (POST /ai/chat) — the cron
-# trigger above is unaffected; both triggers coexist on the same Worker.
-workers_dev = true
 
 # Tunable, non-secret AI caps — plain vars so they're adjustable without a
 # `wrangler secret put` round-trip. These are conservative starting defaults,
