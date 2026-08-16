@@ -6,12 +6,13 @@ import { IconSparkles, IconX } from "@tabler/icons-react";
 import { AIPanel } from "./AIPanel";
 import BottomSheet from "@/components/ui/BottomSheet";
 import type { AIActionResult } from "@/lib/ai";
-import type { Plan, Ritual } from "@/lib/useScheduleDB";
+import type { Plan, Ritual, Schedule } from "@/lib/useScheduleDB";
 
 interface AIFabProps {
   context: "plans" | "routine" | "strategy";
   plans: Plan[];
   rituals: Ritual[];
+  schedule: Schedule;
   activePlan?: Plan;
   initialMessage?: string;
   open?: boolean;
@@ -23,6 +24,7 @@ export function AIFab({
   context,
   plans,
   rituals,
+  schedule,
   activePlan,
   initialMessage,
   open: controlledOpen,
@@ -51,6 +53,7 @@ export function AIFab({
       context={context}
       plans={plans}
       rituals={rituals}
+      schedule={schedule}
       activePlan={activePlan}
       initialMessage={initialMessage}
       onApplyAction={(result) => { onApplyAction(result); setOpen(false); }}

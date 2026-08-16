@@ -8,7 +8,10 @@ import { parseAIAction, buildSystemPrompt, buildPlanContext } from "@/lib/ai";
 import type { AIActionResult } from "@/lib/ai";
 import { streamGeminiChat } from "@/lib/aiClient";
 import { useAuth } from "@/contexts/AuthProvider";
-import type { Plan, Ritual } from "@/lib/useScheduleDB";
+import { useAIActions } from "@/lib/ai/useAIActions";
+import AISignInGate from "@/components/auth/AISignInGate";
+import { findPlanByTitle, findTasksByTitle } from "@/lib/planLookup";
+import type { Plan, Ritual, Schedule } from "@/lib/useScheduleDB";
 import { SECTION_ICONS, getIconPickerStyle } from "@/components/SectionIcons";
 import type { AITask } from "@/lib/ai";
 
@@ -22,6 +25,7 @@ interface AIPanelProps {
   context: "plans" | "routine" | "strategy";
   plans: Plan[];
   rituals: Ritual[];
+  schedule: Schedule;
   activePlan?: Plan;
   initialMessage?: string;
   onApplyAction: (result: AIActionResult) => void;
@@ -227,15 +231,77 @@ function PlanDraftCard({ action, onApply }: { action: Extract<AIActionResult, { 
   );
 }
 
-function ActionCard({ action, onApply }: { action: AIActionResult; onApply: (updated?: AIActionResult) => void }) {
+/**
+ * What the card should show BEFORE Apply is clicked, for actions whose real
+ * target (a plan, a set of tasks) is resolved by name at apply-time — so a
+ * bad or ambiguous match is visible upfront instead of only discoverable
+ * after the fact. Every path here is still safe to Apply (handleApplyAction
+ * has its own fallback/toast for an unresolved target); this is purely
+ * informational.
+ */
+function resolvePreview(
+  action: Exclude<AIActionResult, { type: "create_plan" }>,
+  plans: Plan[],
+  schedule: Schedule,
+  activePlan: Plan | undefined,
+): { title: string; detail: string | null; warn: boolean } {
+  switch (action.type) {
+    case "create_ritual":
+    case "create_strategy":
+      return { title: action.payload.title, detail: null, warn: false };
+
+    case "add_task": {
+      const plan = findPlanByTitle(plans, action.payload.planTitle);
+      if (action.payload.planTitle && !plan) {
+        return { title: action.payload.title, detail: `No plan matched "${action.payload.planTitle}" — will add without one`, warn: true };
+      }
+      return { title: action.payload.title, detail: plan ? `→ ${plan.title}` : "No plan (standalone)", warn: false };
+    }
+
+    case "add_tracker": {
+      const plan = findPlanByTitle(plans, action.payload.planTitle) ?? activePlan ?? plans[0];
+      if (!plan) return { title: action.payload.title, detail: "No plan exists yet — create one first", warn: true };
+      return { title: action.payload.title, detail: `→ ${plan.title}`, warn: false };
+    }
+
+    case "suggest_milestones": {
+      const count = action.payload.milestones.length;
+      const label = `${count} milestone${count !== 1 ? "s" : ""}`;
+      const plan = findPlanByTitle(plans, action.payload.planTitle) ?? activePlan ?? plans[0];
+      if (!plan) return { title: label, detail: "No plan exists yet — create one first", warn: true };
+      return { title: label, detail: `→ ${plan.title}`, warn: false };
+    }
+
+    case "add_subtasks": {
+      const count = action.payload.subtasks.length;
+      const label = `${count} step${count !== 1 ? "s" : ""}`;
+      const matches = findTasksByTitle(schedule, action.payload.taskTitle);
+      if (matches.length === 0) {
+        return { title: label, detail: `No task found named "${action.payload.taskTitle}"`, warn: true };
+      }
+      return { title: label, detail: `→ "${action.payload.taskTitle}"`, warn: false };
+    }
+  }
+}
+
+function ActionCard({
+  action,
+  plans,
+  schedule,
+  activePlan,
+  onApply,
+}: {
+  action: AIActionResult;
+  plans: Plan[];
+  schedule: Schedule;
+  activePlan?: Plan;
+  onApply: (updated?: AIActionResult) => void;
+}) {
   if (action.type === "create_plan") {
     return <PlanDraftCard action={action} onApply={onApply} />;
   }
 
-  if (action.type === "suggest_milestones") return null;
-  const title = action.type === "add_subtasks"
-    ? `${action.payload.subtasks.length} step${action.payload.subtasks.length !== 1 ? "s" : ""} → "${action.payload.taskTitle}"`
-    : action.payload.title;
+  const { title, detail, warn } = resolvePreview(action, plans, schedule, activePlan);
   const htmlExcerpt =
     action.type === "create_strategy" && action.payload.htmlContent
       ? action.payload.htmlContent
@@ -259,6 +325,11 @@ function ActionCard({ action, onApply }: { action: AIActionResult; onApply: (upd
             {ACTION_LABELS[action.type]}
           </span>
           <p className="mt-1 truncate text-[13px] font-semibold text-neutral-900 dark:text-white">{title}</p>
+          {detail && (
+            <p className={`mt-0.5 truncate text-[11px] leading-relaxed ${warn ? "text-amber-600 dark:text-amber-400" : "text-neutral-400 dark:text-neutral-500"}`}>
+              {warn ? "⚠ " : ""}{detail}
+            </p>
+          )}
           {htmlExcerpt && (
             <p className="mt-0.5 line-clamp-2 text-[11px] leading-relaxed text-neutral-400 dark:text-neutral-500">
               {htmlExcerpt}…
@@ -295,13 +366,14 @@ const mdComponents = {
 const STARTER_PROMPTS: Record<"plans" | "routine" | "strategy", string[]> = {
   plans: [
     "Create a 30-day fitness plan",
-    "Build a 90-day learning roadmap",
+    "Add a commitment for an appointment",
     "Add a tracker to an existing plan",
+    "Suggest milestones for an existing plan",
   ],
   routine: [
     "Design a productive morning routine",
     "Create an evening wind-down ritual",
-    "Build a focused deep work habit",
+    "Add subtasks to an existing task",
   ],
   strategy: [
     "Write a progressive overload program",
@@ -314,8 +386,9 @@ function stripJsonBlocks(text: string): string {
   return text.replace(/```json[\s\S]*?```/g, "").trim();
 }
 
-export function AIPanel({ context, plans, rituals, activePlan, initialMessage, onApplyAction, onClose }: AIPanelProps) {
+export function AIPanel({ context, plans, rituals, schedule, activePlan, initialMessage, onApplyAction, onClose }: AIPanelProps) {
   const { user } = useAuth();
+  const { available } = useAIActions();
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState("");
   const [streaming, setStreaming] = useState(false);
@@ -449,6 +522,15 @@ export function AIPanel({ context, plans, rituals, activePlan, initialMessage, o
         </div>
       </div>
 
+      {!available ? (
+        // AIPanel is always dark-styled regardless of the app's theme
+        // setting — force AISignInGate's own dark: variants on so it isn't
+        // rendered in its light palette against this permanently-dark panel.
+        <div className="dark flex flex-1 items-center justify-center overflow-y-auto px-3">
+          <AISignInGate message="Sign in to chat with AI and create plans, tasks, trackers, and more — it's free, with a daily limit per account." />
+        </div>
+      ) : (
+      <>
       {/* Error banner */}
       <AnimatePresence>
         {error && (
@@ -560,6 +642,9 @@ export function AIPanel({ context, plans, rituals, activePlan, initialMessage, o
                 {msg.action && (
                   <ActionCard
                     action={msg.action}
+                    plans={plans}
+                    schedule={schedule}
+                    activePlan={activePlan}
                     onApply={(updated) => onApplyAction(updated ?? msg.action!)}
                   />
                 )}
@@ -610,6 +695,8 @@ export function AIPanel({ context, plans, rituals, activePlan, initialMessage, o
           Shift+Enter for new line · Enter to send
         </p>
       </div>
+      </>
+      )}
     </div>
   );
 }

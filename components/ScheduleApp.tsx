@@ -1907,7 +1907,10 @@ export default function ScheduleApp() {
         (selectedPlanId ? schedule.plans.find((p) => p.id === selectedPlanId) : undefined) ??
         schedule.plans[0];
       const planId = targetPlan?.id;
-      if (!planId) return;
+      if (!planId) {
+        setToastMessage("Create a plan first, then I can suggest milestones for it");
+        return;
+      }
       setSchedule((prev) => {
         const plan = prev.plans.find((p) => p.id === planId);
         const otherMilestones = (prev.milestones ?? []).filter((m) => m.planId !== planId);
@@ -4116,6 +4119,7 @@ export default function ScheduleApp() {
             context="plans"
             plans={schedule.plans}
             rituals={schedule.rituals ?? []}
+            schedule={schedule}
             activePlan={selectedPlan ?? undefined}
             onApplyAction={handleApplyAction}
           />
