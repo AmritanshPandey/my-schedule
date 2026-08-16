@@ -16,10 +16,16 @@ gateways) is free. This replaces the need for Firebase Cloud Functions / Blaze.
 - A per-user/per-day marker (`users/{uid}/push/sent`) fires each reminder once.
 - Dead subscriptions (404/410) are pruned. Notifications share the app's `tag`,
   so a foreground and a background copy collapse into one.
+- Also serves `POST /push/test` (see `fetch` in `src/index.ts`) — sends one push
+  at whatever subscription the caller supplies, no cron wait. Its only "auth" is
+  that a subscription's endpoint+keys are a bearer credential the caller must
+  already possess (there's no public way to obtain someone else's), so it
+  doesn't need to verify a Firebase ID token.
 
 The client half is already wired: `lib/push/webPush.ts` (subscribe with the
-public VAPID key), `lib/push/pushConfig.ts` (writes config + subscription to
-Firestore), and the `push` handler in `public/sw.js`.
+public VAPID key, plus `sendTestPush()` for the on-demand test), `lib/push/pushConfig.ts`
+(writes config + subscription to Firestore), the `push` handler in `public/sw.js`,
+and the "Send test" button in `components/settings/RemindersRows.tsx`.
 
 ## One-time setup (all free)
 
@@ -55,8 +61,15 @@ npx wrangler deploy
    and grant permission.
 2. Confirm `users/{uid}/push/config` and `users/{uid}/pushSubscriptions/*` exist in
    Firestore.
-3. Schedule a task a couple minutes out, fully close the app, and wait for the push.
-4. Tail logs: `npx wrangler tail`.
+3. Tap **Settings → Reminders → Send test** to fire one push at this device on
+   demand via `POST /push/test` — the fastest way to check the full chain
+   (browser → Worker → push service → device) without waiting on the cron or
+   scheduling a real task. Needs `NEXT_PUBLIC_AI_WORKER_URL` set to this
+   Worker's deployed URL (shared with the AI chat proxy — same Worker, both
+   routes).
+4. For the real end-to-end path: schedule a task a couple minutes out, fully
+   close the app, and wait for the push.
+5. Tail logs: `npx wrangler tail`.
 
 ## Free-plan note
 

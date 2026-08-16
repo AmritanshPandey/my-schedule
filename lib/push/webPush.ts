@@ -14,6 +14,10 @@
  */
 
 const VAPID_PUBLIC_KEY = process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY;
+// Same Cloudflare Worker as the AI chat proxy (worker/src/index.ts serves both
+// POST /ai/chat and POST /push/test off one deployed origin) — reusing the var
+// rather than adding a second one that would always point at the same host.
+const WORKER_URL = process.env.NEXT_PUBLIC_AI_WORKER_URL;
 
 export function isPushSupported(): boolean {
   return (
@@ -64,4 +68,33 @@ export async function unsubscribeFromPush(): Promise<PushSubscriptionJSON | null
   const json = sub.toJSON();
   await sub.unsubscribe();
   return json;
+}
+
+export type TestPushResult = { ok: true } | { ok: false; error: string };
+
+/**
+ * Fire one test push at this device's own subscription, via the Worker's
+ * POST /push/test — the "Send test notification" button in Settings. Requires
+ * an existing subscription (pass the result of `subscribeToPush()`) and the
+ * Worker's deployed URL to be configured; both failures come back as a
+ * readable `error` string rather than throwing, since this is a diagnostic
+ * action a user triggers directly and expects a plain answer, not a console
+ * error.
+ */
+export async function sendTestPush(subscription: PushSubscriptionJSON): Promise<TestPushResult> {
+  if (!WORKER_URL || WORKER_URL.includes("<your-subdomain>")) {
+    return { ok: false, error: "The reminders worker isn't configured yet (NEXT_PUBLIC_AI_WORKER_URL)." };
+  }
+  try {
+    const res = await fetch(`${WORKER_URL.replace(/\/$/, "")}/push/test`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ subscription }),
+    });
+    const data = await res.json().catch(() => null) as { ok?: boolean; error?: string } | null;
+    if (res.ok && data?.ok) return { ok: true };
+    return { ok: false, error: data?.error || `Request failed (${res.status}).` };
+  } catch {
+    return { ok: false, error: "Couldn't reach the reminders worker — check your connection." };
+  }
 }

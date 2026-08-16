@@ -1,8 +1,8 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { AnimatePresence, m } from "framer-motion";
-import { IconBell, IconBellOff, IconChevronDown, IconClock } from "@tabler/icons-react";
+import { IconBell, IconBellOff, IconChevronDown, IconClock, IconSend } from "@tabler/icons-react";
 import { haptic } from "@/lib/haptics";
 import {
   getReminderSettings,
@@ -15,7 +15,7 @@ import {
 import { formatDisplayTime, minutesToInputTime } from "@/lib/timeUtils";
 import { SETTINGS_CONTROL_CLASS } from "@/components/ui/Input";
 import { useAuth } from "@/contexts/AuthProvider";
-import { subscribeToPush, unsubscribeFromPush, isPushSupported } from "@/lib/push/webPush";
+import { subscribeToPush, unsubscribeFromPush, isPushSupported, sendTestPush, type TestPushResult } from "@/lib/push/webPush";
 import { savePushConfig, savePushSubscription, removePushSubscription } from "@/lib/push/pushConfig";
 
 const NUDGE_OPTIONS = Array.from({ length: 12 }, (_, i) => {
@@ -70,14 +70,18 @@ function SubRow({
 
 /**
  * "Reminders" card content for both settings surfaces. Handles the permission
- * dance and the per-device reminder settings. Copy is honest about scope:
- * reminders fire while PlanR is open — there is no push backend yet.
+ * dance, the per-device reminder settings, and a "Send test" button that fires
+ * one push at this device on demand (worker/src/index.ts's POST /push/test)
+ * rather than waiting on the real 1-minute cron.
  */
 export default function RemindersRows() {
   const { user } = useAuth();
   const uid = user?.uid ?? null;
   const [settings, setSettings] = useState<ReminderSettings | null>(null);
   const [support, setSupport] = useState<NotificationSupport>("unsupported");
+  const [sendingTest, setSendingTest] = useState(false);
+  const [testResult, setTestResult] = useState<TestPushResult | null>(null);
+  const clearResultTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   // Background delivery needs a public VAPID key AND a signed-in user (the server
   // reads the subscription from that user's Firestore). Without both, reminders
   // stay foreground-only and the copy says so.
@@ -143,6 +147,34 @@ export default function RemindersRows() {
       }
     }
   }, [support, patch, uid]);
+
+  // Fires one real push at this device via the Worker's /push/test — a quick
+  // way to check the full chain (browser → Worker → push service → this
+  // device) without waiting on the real cron, which only checks once a
+  // minute. Re-subscribes first (cheap: reuses the existing subscription if
+  // there is one) so "no subscription yet" surfaces as a clear message
+  // instead of a generic failure.
+  const handleSendTest = useCallback(async () => {
+    if (sendingTest) return;
+    haptic("light");
+    setSendingTest(true);
+    setTestResult(null);
+    if (clearResultTimer.current) clearTimeout(clearResultTimer.current);
+    try {
+      const sub = await subscribeToPush();
+      const result = sub
+        ? await sendTestPush(sub)
+        : { ok: false as const, error: "No push subscription on this device yet — try toggling Reminders off and on." };
+      setTestResult(result);
+    } catch {
+      setTestResult({ ok: false, error: "Something went wrong sending the test." });
+    } finally {
+      setSendingTest(false);
+      clearResultTimer.current = setTimeout(() => setTestResult(null), 6000);
+    }
+  }, [sendingTest]);
+
+  useEffect(() => () => { if (clearResultTimer.current) clearTimeout(clearResultTimer.current); }, []);
 
   if (!settings) return null;
 
@@ -232,6 +264,31 @@ export default function RemindersRows() {
                    </div>
                  </div>
                )}
+               <div className="flex items-center justify-between gap-3 py-2.5">
+                 <div className="min-w-0 flex-1">
+                   <p className="text-[12px] font-semibold text-neutral-700 dark:text-neutral-200">
+                     Test this device
+                   </p>
+                   {testResult && (
+                     <p className={`mt-0.5 text-[11px] leading-snug ${
+                       testResult.ok
+                         ? "font-semibold text-emerald-600 dark:text-emerald-400"
+                         : "text-rose-500 dark:text-rose-400"
+                     }`}>
+                       {testResult.ok ? "Sent — check your notifications" : testResult.error}
+                     </p>
+                   )}
+                 </div>
+                 <button
+                   type="button"
+                   onClick={() => void handleSendTest()}
+                   disabled={sendingTest}
+                   className="flex h-9 shrink-0 items-center gap-1.5 whitespace-nowrap rounded-full border border-neutral-200 px-3.5 text-[12px] font-semibold text-neutral-600 transition-colors hover:bg-neutral-50 disabled:opacity-50 dark:border-white/10 dark:text-neutral-300 dark:hover:bg-white/[0.04]"
+                 >
+                   <IconSend size={13} strokeWidth={2.2} />
+                   {sendingTest ? "Sending…" : "Send test"}
+                 </button>
+               </div>
              </div>
           </m.div>
         )}
