@@ -20,21 +20,16 @@ import {
 import BottomSheet from "@/components/ui/BottomSheet";
 import { AISettingsSheet } from "@/components/ai/AISettingsSheet";
 import AIActionSheet, { type ResultItem } from "@/components/ai/AIActionSheet";
-import EnableIntelligencePrompt from "@/components/ai/EnableIntelligencePrompt";
+import AISignInGate from "@/components/auth/AISignInGate";
 import {
-  streamGenerateTasks,
   parseGeneratedTasks,
-  streamGenerateMilestones,
   parseGeneratedMilestones,
-  streamGenerateMilestoneTasks,
-  streamWeeklyInsight,
 } from "@/lib/aiActions";
 import type { AIGeneratedTask, AIGeneratedMilestone } from "@/lib/aiActions";
 import type { AIActionResult } from "@/lib/ai";
 import type { Plan, Schedule } from "@/lib/useScheduleDB";
 import { DAYS } from "@/lib/useScheduleDB";
 import { SECTION_ICONS } from "@/components/SectionIcons";
-import { useAIRuntime } from "@/lib/ai/useAIRuntime";
 import { useAIActions } from "@/lib/ai/useAIActions";
 import type { AIActionType } from "@/lib/ai/runtime";
 import { IconLock } from "@tabler/icons-react";
@@ -45,8 +40,6 @@ interface AIAssistantProps {
   plans: Plan[];
   schedule: Schedule;
   initialPlanId?: string | null;
-  ollamaUrl: string;
-  ollamaModel: string;
   onAddGeneratedTasks: (tasks: AIGeneratedTask[], planId: string, milestoneId?: string) => void;
   onApplyAction: (action: AIActionResult) => void;
   onNavigateToPlan?: (planId: string) => void;
@@ -98,18 +91,14 @@ export default function AIAssistant({
   plans,
   schedule,
   initialPlanId,
-  ollamaUrl,
-  ollamaModel,
   onAddGeneratedTasks,
   onApplyAction,
   onNavigateToPlan,
 }: AIAssistantProps) {
-  const runtime = useAIRuntime();
-  const ai = useAIActions(ollamaUrl, ollamaModel);
+  const ai = useAIActions();
 
   const [selectedPlanId, setSelectedPlanId] = useState<string | null>(initialPlanId ?? null);
   const [aiSettingsOpen, setAiSettingsOpen] = useState(false);
-  const [showEnablePrompt, setShowEnablePrompt] = useState(false);
   const [customGoal, setCustomGoal] = useState("");
   const [planPickerOpen, setPlanPickerOpen] = useState(false);
   const [sheetConfig, setSheetConfig] = useState<SheetConfig | null>(null);
@@ -167,17 +156,16 @@ export default function AIAssistant({
   const parsedTasksRef = useRef<AIGeneratedTask[]>([]);
   const parsedMilestonesRef = useRef<AIGeneratedMilestone[]>([]);
 
+  // The button that would call this is disabled while `!ai.available` (the
+  // suggestions are gated below), so this is a defensive no-op, not the
+  // primary gate — AISignInGate rendered in place of the panel is that.
   function guardAction(fn: () => void) {
-    if (!ai.available) {
-      setShowEnablePrompt(true);
-      return;
-    }
+    if (!ai.available) return;
     fn();
   }
 
   function buildTaskSheet(label: string, planCtx?: { title: string; description?: string }): SheetConfig {
     const plan = planCtx ?? { title: selectedPlan?.title ?? "plan", description: selectedPlan?.description };
-    const useOllama = !!(ollamaUrl && ollamaModel);
     return {
       title: label,
       contextLabel: selectedPlan?.title ?? "",
@@ -185,14 +173,9 @@ export default function AIAssistant({
       quickPicks: ["Mornings", "Evenings", "Weekdays only", "Short sessions", "High intensity"],
       resultSingular: "task",
       resultPlural: "tasks",
-      onGenerate: async function* (goal, picks) {
+      onGenerate: (goal, picks) => {
         const hints = [customGoal, goal, ...picks].filter(Boolean).join(". ");
-        if (useOllama) {
-          yield* streamGenerateTasks(ollamaUrl, ollamaModel, { title: plan.title, description: hints || plan.description });
-          return;
-        }
-        const tasks = await runtime.generateTasks(plan.title, hints || plan.description);
-        yield JSON.stringify(tasks);
+        return ai.streamTasks(plan.title, hints || plan.description);
       },
       onParseResults: (raw) => {
         const tasks = parseGeneratedTasks(raw);
@@ -293,7 +276,7 @@ export default function AIAssistant({
   async function handleAnalyzeConsistency() {
     if (!weekContext) return;
     const insightStream = ai.streamWeeklyInsight(weekContext);
-    if (!insightStream) return; // needs Ollama for long-context analysis
+    if (!insightStream) return;
     setInsightState("loading");
     abortRef.current?.abort();
     const controller = new AbortController();
@@ -424,16 +407,18 @@ export default function AIAssistant({
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedPlan, planMilestones, activeMilestone, insightState, customGoal, schedule.activities]);
 
-  // Gate each suggestion by what the current model/backend is trusted to do.
-  // Locked items stay visible with a hint instead of disappearing.
+  // With one uniform backend (Gemini), there's no more per-action capability
+  // tiering to gate on — every suggestion is either available (signed in) or
+  // not. Kept as a map (not a plain boolean check inline) so `locked`/
+  // `lockedReason` stay on each item, matching the existing render below.
   const gatedSuggestions = useMemo(
     () =>
-      suggestions.map((s) => {
-        if (!s.actionType) return s;
-        const a = ai.availability(s.actionType);
-        return { ...s, locked: !a.available, lockedReason: a.lockedReason };
-      }),
-    [suggestions, ai],
+      suggestions.map((s) => ({
+        ...s,
+        locked: !ai.available,
+        lockedReason: ai.available ? undefined : "Sign in to use AI",
+      })),
+    [suggestions, ai.available],
   );
 
   function handleSend() {
@@ -491,28 +476,10 @@ export default function AIAssistant({
           </p>
         </div>
 
-        {/* Enable local intelligence prompt */}
-        <AnimatePresence>
-          {(showEnablePrompt || (!runtime.enabled && runtime.status === "disabled")) && (
-            <EnableIntelligencePrompt
-              status={runtime.status}
-              downloadProgress={runtime.downloadProgress}
-              modelSizeMB={runtime.modelSizeMB}
-              onEnable={() => { runtime.enable(); setShowEnablePrompt(false); }}
-              onDismiss={() => setShowEnablePrompt(false)}
-            />
-          )}
-          {runtime.enabled && !runtime.modelCached && runtime.status !== "ready" && runtime.status !== "disabled" && (
-            <EnableIntelligencePrompt
-              status={runtime.status}
-              downloadProgress={runtime.downloadProgress}
-              modelSizeMB={runtime.modelSizeMB}
-              onEnable={runtime.enable}
-              onDismiss={() => {}}
-            />
-          )}
-        </AnimatePresence>
-
+        {!ai.available ? (
+          <AISignInGate />
+        ) : (
+        <>
         {/* Input card */}
         <div className="mb-5 rounded-2xl border border-neutral-200 bg-white dark:border-white/[0.08] dark:bg-neutral-900/60">
 
@@ -722,6 +689,8 @@ export default function AIAssistant({
             </m.button>
           </div>
         </div>
+        </>
+        )}
       </div>
 
       {/* Action sheet */}

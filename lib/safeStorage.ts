@@ -7,7 +7,7 @@
  * inside React, trips its ErrorBoundary). These helpers swallow those failures
  * so persistence stays best-effort — a write that can't happen is a degraded
  * experience, not a crash. Mirrors the swallow-on-failure pattern already used
- * in lib/errorLog.ts and lib/ai/runtime.ts:markModelDownloaded.
+ * in lib/errorLog.ts.
  */
 
 type Store = "local" | "session";

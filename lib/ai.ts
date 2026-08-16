@@ -1,4 +1,5 @@
 import type { DayKey, Plan, RitualColor } from "./useScheduleDB";
+import { todayISO } from "./dateUtils";
 
 export interface AITask {
   title: string;
@@ -9,16 +10,17 @@ export interface AITask {
   subtasks?: string[];
 }
 
+export interface AIMilestone {
+  title: string;
+  description: string;
+  targetDate?: string;
+}
+
 export type AIActionResult =
-  | { type: "create_plan"; payload: { title: string; description: string; emoji: string; color: string; startDate?: string; endDate?: string; tasks?: AITask[] } }
+  | { type: "create_plan"; payload: { title: string; description: string; emoji: string; color: string; startDate?: string; endDate?: string; tasks?: AITask[]; milestones?: AIMilestone[] } }
   | { type: "create_ritual"; payload: { title: string; time: string; duration: number; repeatDays: DayKey[]; color: RitualColor } }
   | { type: "create_strategy"; payload: { title: string; description: string; htmlContent: string } }
-  | { type: "suggest_milestones"; payload: { milestones: Array<{ title: string; description: string; targetDate?: string }> } };
-
-export const OLLAMA_URL_KEY = "planr_ollama_url";
-export const OLLAMA_MODEL_KEY = "planr_ollama_model";
-export const DEFAULT_OLLAMA_URL = "http://localhost:11434";
-export const DEFAULT_OLLAMA_MODEL = "gemma4:e2b";
+  | { type: "suggest_milestones"; payload: { milestones: AIMilestone[] } };
 
 const VALID_COLORS = ["blue", "emerald", "violet", "pink", "amber", "cyan"] as const;
 const VALID_RITUAL_COLORS = ["rose", "sky", "violet", "amber", "emerald", "fuchsia", "orange", "cyan", "indigo", "teal"] as const;
@@ -27,16 +29,17 @@ const VALID_DAYS: DayKey[] = ["monday", "tuesday", "wednesday", "thursday", "fri
 const SYSTEM_PROMPT: Record<"plans" | "routine" | "strategy", string> = {
   plans: `You are a planning assistant inside PlanR. Be concise — 1-2 sentences, then the JSON.
 
-OUTPUT RULE: When creating a plan, output exactly one JSON block with the plan AND 3-5 tasks inside it:
+OUTPUT RULE: When creating a plan, output exactly one JSON block with the plan, 3-5 recurring weekly tasks, AND 3-5 dated milestones:
 \`\`\`json
-{"type":"create_plan","payload":{"title":"Plan Title","description":"One sentence.","emoji":"barbell","color":"emerald","tasks":[{"title":"Task Name","day":"monday","startTime":"07:00","endTime":"08:00","icon":"run","subtasks":["Subtask 1","Subtask 2"]},{"title":"Task 2","day":"wednesday","startTime":"18:00","endTime":"19:00","icon":"barbell","subtasks":["Step A","Step B"]}]}}
+{"type":"create_plan","payload":{"title":"Plan Title","description":"One sentence.","emoji":"barbell","color":"emerald","startDate":"YYYY-MM-DD","endDate":"YYYY-MM-DD","tasks":[{"title":"Task Name","day":"monday","startTime":"07:00","endTime":"08:00","icon":"run","subtasks":["Subtask 1","Subtask 2"]},{"title":"Task 2","day":"wednesday","startTime":"18:00","endTime":"19:00","icon":"barbell","subtasks":["Step A","Step B"]}],"milestones":[{"title":"Milestone 1","description":"One sentence.","targetDate":"YYYY-MM-DD"},{"title":"Milestone 2","description":"One sentence.","targetDate":"YYYY-MM-DD"}]}}
 \`\`\`
 Rules:
 - "emoji" and task "icon": pick from: run, school, book, sleep, star, briefcase, car, brain, barbell, code, heart, music, palette, plane, chefhat, coin, camera, users, leaf, pencil, yoga, bike, mountain, droplet, moodsmile, flame, language, pill, bolt, dna
 - "color": blue, emerald, violet, pink, amber, or cyan
-- "day": monday tuesday wednesday thursday friday saturday sunday
+- "day" (tasks recur weekly on this day, no calendar date): monday tuesday wednesday thursday friday saturday sunday
 - Each task needs 2-4 subtasks. Times are HH:MM 24-hour.
-- Add "startDate"/"endDate" (YYYY-MM-DD) only if user gives dates.
+- "startDate": today's date (given below) unless the user names a different start. "endDate": derive from any timeframe/deadline the user gives (e.g. "in 8 weeks", "by October") relative to today. If the user gives no timeframe at all, default to a 90-day plan from today rather than omitting dates.
+- "milestones": 3-5 concrete checkpoints with "targetDate" spread evenly between startDate and endDate (never before startDate or after endDate). Keep titles 3-6 words.
 - ONE JSON block only. No explanation of the JSON.`,
 
   routine: `You are a routine coach inside PlanR. Be concise — reply in 2-3 sentences max, then the JSON if needed.
@@ -121,7 +124,7 @@ export function buildCoachContext(
     trackers?: Array<{ title: string; unit?: string; goalDirection?: string; goalValue?: number }>;
   } = {},
 ): string {
-  const parts: string[] = [];
+  const parts: string[] = [`Today's date: ${todayISO()}`];
 
   const basic = [`Plan: "${plan.title}"`, `Category: ${plan.category}`];
   if (plan.description) basic.push(`Description: ${plan.description}`);
@@ -169,7 +172,7 @@ export function buildSystemPrompt(
   existingPlans?: Pick<Plan, "title" | "category" | "description">[],
   existingRituals?: Pick<{ title: string; time: string; duration?: number }, "title" | "time" | "duration">[],
 ): string {
-  const parts: string[] = [SYSTEM_PROMPT[context]];
+  const parts: string[] = [SYSTEM_PROMPT[context], `Today's date: ${todayISO()}`];
   if (planContext) parts.push(`Current plan context: ${planContext}`);
   if (existingPlans && existingPlans.length > 0) {
     const list = existingPlans.map((p) => `- "${p.title}" (${p.category}${p.description ? `: ${p.description}` : ""})`).join("\n");
@@ -180,79 +183,6 @@ export function buildSystemPrompt(
     parts.push(`User's existing rituals:\n${list}`);
   }
   return parts.join("\n\n");
-}
-
-// Lower temperature = more deterministic/accurate structured output.
-// num_ctx ensures the full conversation + system prompt fits in context.
-const OLLAMA_OPTIONS = {
-  temperature: 0.35,
-  top_p: 0.9,
-  top_k: 40,
-  repeat_penalty: 1.1,
-  num_ctx: 8192,
-  num_predict: 512,  // cap response length — increase for strategy context
-};
-
-export async function* streamOllamaChat(
-  baseUrl: string,
-  model: string,
-  messages: { role: "user" | "assistant"; content: string }[],
-  systemPrompt: string,
-  isStrategy = false,
-  signal?: AbortSignal,
-): AsyncGenerator<string> {
-  const allMessages = [
-    { role: "system" as const, content: systemPrompt },
-    ...messages,
-  ];
-
-  const options = isStrategy
-    ? { ...OLLAMA_OPTIONS, num_predict: 2048 }
-    : { ...OLLAMA_OPTIONS, num_predict: 1024 };
-
-  let response: Response;
-  try {
-    response = await fetch(`${baseUrl}/api/chat`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ model, messages: allMessages, stream: true, options }),
-      signal,
-    });
-  } catch (err) {
-    if (err instanceof Error && err.name === "AbortError") throw err;
-    throw new Error("Ollama not reachable — is it running? Start with: ollama serve");
-  }
-
-  if (!response.ok) {
-    const errText = await response.text().catch(() => response.statusText);
-    throw new Error(`Ollama error ${response.status}: ${errText}`);
-  }
-
-  const reader = response.body?.getReader();
-  if (!reader) throw new Error("No response body from Ollama");
-
-  const decoder = new TextDecoder();
-  let buffer = "";
-
-  while (true) {
-    const { done, value } = await reader.read();
-    if (done) break;
-    buffer += decoder.decode(value, { stream: true });
-    const lines = buffer.split("\n");
-    buffer = lines.pop() ?? "";
-    for (const line of lines) {
-      const trimmed = line.trim();
-      if (!trimmed) continue;
-      try {
-        const data = JSON.parse(trimmed);
-        if (!data.done && data.message?.content) {
-          yield data.message.content as string;
-        }
-      } catch {
-        // skip malformed lines
-      }
-    }
-  }
 }
 
 function tryParseJSON(raw: string): { type?: string; payload?: unknown } | null {
@@ -277,6 +207,17 @@ function extractJSONCandidate(text: string): string | null {
   return null;
 }
 
+function parseAIMilestones(raw: unknown): AIMilestone[] {
+  if (!Array.isArray(raw)) return [];
+  return raw
+    .filter((m): m is Record<string, unknown> => typeof m === "object" && m !== null && typeof (m as Record<string, unknown>).title === "string")
+    .map((m) => ({
+      title: String(m.title),
+      description: typeof m.description === "string" ? m.description : "",
+      targetDate: typeof m.targetDate === "string" ? m.targetDate : undefined,
+    }));
+}
+
 export function parseAIAction(text: string): AIActionResult | null {
   const candidate = extractJSONCandidate(text);
   if (!candidate) return null;
@@ -297,6 +238,7 @@ export function parseAIAction(text: string): AIActionResult | null {
           icon: typeof t.icon === "string" ? t.icon : "star",
           subtasks: Array.isArray(t.subtasks) ? t.subtasks.filter((s): s is string => typeof s === "string") : [],
         }));
+      const milestones = parseAIMilestones(p.milestones);
       return {
         type: "create_plan",
         payload: {
@@ -307,6 +249,7 @@ export function parseAIAction(text: string): AIActionResult | null {
           startDate: typeof p.startDate === "string" ? p.startDate : undefined,
           endDate: typeof p.endDate === "string" ? p.endDate : undefined,
           tasks: tasks.length > 0 ? tasks : undefined,
+          milestones: milestones.length > 0 ? milestones : undefined,
         },
       };
     }
@@ -339,148 +282,15 @@ export function parseAIAction(text: string): AIActionResult | null {
       };
     }
     if (parsed.type === "suggest_milestones") {
-      const raw = Array.isArray((parsed.payload as Record<string, unknown>)?.milestones)
-        ? (parsed.payload as Record<string, unknown>).milestones as unknown[]
-        : [];
       return {
         type: "suggest_milestones",
         payload: {
-          milestones: raw
-            .filter((m): m is Record<string, unknown> => typeof m === "object" && m !== null && typeof (m as Record<string, unknown>).title === "string")
-            .map((m) => ({
-              title: String(m.title),
-              description: typeof m.description === "string" ? m.description : "",
-              targetDate: typeof m.targetDate === "string" ? m.targetDate : undefined,
-            })),
+          milestones: parseAIMilestones((parsed.payload as Record<string, unknown>)?.milestones),
         },
       };
     }
     return null;
   } catch {
     return null;
-  }
-}
-
-function normalizeOllamaBaseUrl(baseUrl: string) {
-  return baseUrl.trim().replace(/\/+$/, "");
-}
-
-/**
- * True when the page is served over HTTPS but the Ollama URL is plain HTTP
- * (e.g. http://localhost on the deployed mobile site). Such requests are
- * unconditionally blocked by the browser as insecure "mixed content" — and on
- * WebKit/Safari the blocked fetch surfaces as an uncaught error that can take
- * the whole page down. Ollama is a desktop-localhost feature and can never be
- * reached from a deployed HTTPS origin, so we skip the request entirely.
- */
-function isMixedContentBlocked(normalizedBaseUrl: string): boolean {
-  if (typeof window === "undefined") return false;
-  return window.location.protocol === "https:" && /^http:\/\//i.test(normalizedBaseUrl);
-}
-
-function parseModelArray(raw: unknown): string[] {
-  if (!Array.isArray(raw)) return [];
-  return raw
-    .map((item) => {
-      if (typeof item === "string") return item;
-      if (item && typeof item === "object" && typeof (item as Record<string, unknown>).name === "string") {
-        return (item as Record<string, unknown>).name;
-      }
-      return null;
-    })
-    .filter((name): name is string => typeof name === "string");
-}
-
-function parseOllamaModels(data: unknown): string[] {
-  if (Array.isArray(data)) {
-    return parseModelArray(data);
-  }
-
-  if (!data || typeof data !== "object") return [];
-  const payload = data as Record<string, unknown>;
-
-  if (Array.isArray(payload.models)) {
-    return parseModelArray(payload.models);
-  }
-
-  if (Array.isArray(payload.tags)) {
-    return payload.tags.filter((tag): tag is string => typeof tag === "string");
-  }
-
-  return [];
-}
-
-function makeOllamaCORSMessage(endpoint: string): string {
-  return `Ollama returned 403 Forbidden for ${endpoint}. This usually means the browser origin is blocked by Ollama CORS. Restart Ollama with: ollama serve --cors "*" or ollama serve --cors "https://your-firebase-app.web.app".`;
-}
-
-export async function checkOllamaConnection(baseUrl: string): Promise<string[]> {
-  const normalizedBaseUrl = normalizeOllamaBaseUrl(baseUrl);
-  if (isMixedContentBlocked(normalizedBaseUrl)) {
-    throw new Error("Ollama not reachable from this site (use the desktop app for local AI).");
-  }
-  const endpoints = ["/api/models", "/api/tags"];
-  let serverReachable = false;
-
-  for (const endpoint of endpoints) {
-    try {
-      const response = await fetch(`${normalizedBaseUrl}${endpoint}`, {
-        cache: "no-store",
-        mode: "cors",
-        headers: { Accept: "application/json" },
-      });
-      serverReachable = true;
-      if (!response.ok) {
-        if (response.status === 403) {
-          throw new Error(makeOllamaCORSMessage(endpoint));
-        }
-        continue;
-      }
-      const data = await response.json();
-      const models = parseOllamaModels(data);
-      if (models.length > 0) return models;
-    } catch (err) {
-      if (err instanceof TypeError) {
-        throw new Error("Network/CORS issue connecting to Ollama. Ensure the browser can reach the server and Ollama allows requests from this origin.");
-      }
-      throw err;
-    }
-  }
-
-  if (serverReachable) {
-    throw new Error("Ollama is reachable, but no models were found. Verify the selected model and installed Ollama models.");
-  }
-
-  throw new Error("Ollama not reachable. Make sure ollama serve is running and the URL is correct.");
-}
-
-/**
- * Returns "connected" if the model exists on disk, "no-model" if the server
- * is up but the model is missing, or "offline" if the server is unreachable.
- */
-export async function checkModelStatus(
-  baseUrl: string,
-  model: string,
-): Promise<"connected" | "no-model" | "offline"> {
-  if (isMixedContentBlocked(normalizeOllamaBaseUrl(baseUrl))) return "offline";
-  try {
-    // /api/show is the definitive check — 200 means model is present, 404 means it isn't
-    const res = await fetch(`${baseUrl}/api/show`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ name: model }),
-      cache: "no-store",
-      mode: "cors",
-    });
-    if (res.ok) return "connected";
-    if (res.status === 403) {
-      throw new Error(makeOllamaCORSMessage("/api/show"));
-    }
-    if (res.status === 404) return "no-model";
-    // Any other non-ok response from a live server still means server is up
-    return "no-model";
-  } catch (err) {
-    if (err instanceof Error && err.message.includes("CORS")) throw err;
-    return "offline";
   }
 }

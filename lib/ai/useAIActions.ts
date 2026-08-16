@@ -1,65 +1,33 @@
 "use client";
 
 /**
- * useAIActions — unified AI action hook.
- *
- * Routes all AI actions to the best available backend:
- *   Ollama configured  → Ollama (higher quality, streaming)
- *   Embedded enabled   → Transformers.js worker (offline, private)
- *   Neither            → unavailable (show enable prompt)
+ * useAIActions — unified AI action hook. Every action runs through Gemini via
+ * the Cloudflare Worker proxy (lib/aiClient.ts) — there's no backend routing
+ * here anymore (this hook used to branch between a user-run Ollama server and
+ * an in-browser Transformers.js runtime; both are gone, replaced by one
+ * shared, sign-in-gated cloud backend). `available` just means "AI is
+ * configured and the caller is signed in" — the actual per-user/global rate
+ * limiting happens server-side in the Worker, not here, so it can't be
+ * bypassed by anything client-side.
  *
  * All methods return AsyncGenerator<string> so they plug directly into
- * AIActionSheet's onGenerate prop regardless of which backend runs.
+ * AIActionSheet's onGenerate prop unchanged from before this rewrite.
  */
 
 import { useCallback } from "react";
-import { useAIRuntime } from "@/lib/ai/useAIRuntime";
-import {
-  resolveActionAvailability,
-  type AIActionType,
-  type ActionAvailability,
-  type CapabilityLevel,
-} from "@/lib/ai/runtime";
-import { getDeviceCapabilities } from "@/lib/performance/detectLowEndDevice";
+import { useAuth } from "@/contexts/AuthProvider";
+import { isAiConfigured } from "@/lib/aiClient";
 import {
   streamGenerateTasks,
   streamGenerateSubtasks,
   streamGenerateMilestones,
   streamGenerateMilestoneTasks,
   streamWeeklyInsight,
-  parseGeneratedTasks,
-  parseGeneratedMilestones,
-  type AIGeneratedTask,
-  type AIGeneratedMilestone,
 } from "@/lib/aiActions";
-import {
-  OLLAMA_URL_KEY,
-  OLLAMA_MODEL_KEY,
-  DEFAULT_OLLAMA_URL,
-  DEFAULT_OLLAMA_MODEL,
-} from "@/lib/ai";
-
-// ── Helpers ───────────────────────────────────────────────────────────────────
-
-// Wraps a Promise result as a single-chunk AsyncGenerator so it's compatible
-// with streaming consumers (AIActionSheet expects AsyncGenerator<string>).
-async function* promiseToStream(fn: () => Promise<string>): AsyncGenerator<string> {
-  yield await fn();
-}
-
-// ── Hook ──────────────────────────────────────────────────────────────────────
 
 export interface AIActionsHandle {
-  /** Any AI backend is available and ready to use. */
+  /** AI is configured (Worker URL set at build time) and the caller is signed in. */
   available: boolean;
-  /** Ollama is configured (URL + model set in settings). */
-  hasOllama: boolean;
-  /** Embedded AI (Transformers.js) is enabled and loaded. */
-  hasEmbedded: boolean;
-  /** Highest capability tier currently reachable (coach via Ollama, else on-device). */
-  capabilityLevel: CapabilityLevel;
-  /** Whether a specific action is available, and why it's locked if not. */
-  availability: (action: AIActionType) => ActionAvailability;
 
   streamTasks: (
     planTitle: string,
@@ -83,141 +51,57 @@ export interface AIActionsHandle {
     signal?: AbortSignal,
   ) => AsyncGenerator<string>;
 
-  /** Weekly insight — Ollama only (needs long context). Returns null if unavailable. */
+  /** Returns null when AI isn't available — callers already skip rendering
+   *  the insight in that case, matching the old Ollama-only gating shape. */
   streamWeeklyInsight: (
     weekContext: string,
     signal?: AbortSignal,
   ) => AsyncGenerator<string> | null;
 }
 
-export function useAIActions(
-  ollamaUrlProp?: string,
-  ollamaModelProp?: string,
-): AIActionsHandle {
-  const runtime = useAIRuntime();
-
-  // Read Ollama config from props first, fall back to localStorage
-  const ollamaUrl =
-    ollamaUrlProp ||
-    (typeof window !== "undefined" ? localStorage.getItem(OLLAMA_URL_KEY) : null) ||
-    DEFAULT_OLLAMA_URL;
-  const ollamaModel =
-    ollamaModelProp ||
-    (typeof window !== "undefined" ? localStorage.getItem(OLLAMA_MODEL_KEY) : null) ||
-    DEFAULT_OLLAMA_MODEL;
-
-  // Ollama is "configured" if a non-default URL is set OR the user explicitly stored a model
-  const hasOllama = !!(
-    ollamaUrlProp ||
-    (typeof window !== "undefined" && localStorage.getItem(OLLAMA_URL_KEY))
-  );
-  const hasEmbedded = runtime.enabled && runtime.status === "ready";
-  const available = hasOllama || hasEmbedded || runtime.enabled;
-
-  const { tier, isDesktop } = getDeviceCapabilities();
-  const capabilityLevel: CapabilityLevel = hasOllama ? "coach" : runtime.capabilityLevel;
-
-  const availability = useCallback(
-    (action: AIActionType): ActionAvailability =>
-      resolveActionAvailability(action, {
-        tier,
-        isDesktop,
-        ollamaConnected: hasOllama,
-        aiEnabled: runtime.enabled,
-        modelCapability: runtime.capabilityLevel,
-      }),
-    [tier, isDesktop, hasOllama, runtime.enabled, runtime.capabilityLevel],
-  );
+export function useAIActions(): AIActionsHandle {
+  const { user, isGuest } = useAuth();
+  const available = isAiConfigured() && !isGuest;
 
   const streamTasks = useCallback(
-    async function* (
-      planTitle: string,
-      description?: string,
-      signal?: AbortSignal,
-    ): AsyncGenerator<string> {
-      if (hasOllama) {
-        return yield* streamGenerateTasks(ollamaUrl, ollamaModel, { title: planTitle, description }, signal);
-      }
-      return yield* promiseToStream(async () => {
-        const tasks = await runtime.generateTasks(planTitle, description);
-        return JSON.stringify(tasks);
-      });
-    },
-    [hasOllama, ollamaUrl, ollamaModel, runtime],
+    (planTitle: string, description?: string, signal?: AbortSignal): AsyncGenerator<string> =>
+      streamGenerateTasks(user, { title: planTitle, description }, signal),
+    [user],
   );
 
   const streamSubtasks = useCallback(
-    async function* (taskTitle: string, planTitle?: string): AsyncGenerator<string> {
-      if (hasOllama) {
-        return yield* streamGenerateSubtasks(ollamaUrl, ollamaModel, taskTitle, planTitle);
-      }
-      return yield* promiseToStream(async () => {
-        const steps = await runtime.generateSubtasks(taskTitle, planTitle);
-        return JSON.stringify(steps);
-      });
-    },
-    [hasOllama, ollamaUrl, ollamaModel, runtime],
+    (taskTitle: string, planTitle?: string): AsyncGenerator<string> =>
+      streamGenerateSubtasks(user, taskTitle, planTitle),
+    [user],
   );
 
   const streamMilestonesAction = useCallback(
-    async function* (
+    (
       plan: { title: string; description?: string; startDate?: string; endDate?: string },
       signal?: AbortSignal,
-    ): AsyncGenerator<string> {
-      if (hasOllama) {
-        return yield* streamGenerateMilestones(ollamaUrl, ollamaModel, plan, signal);
-      }
-      // Embedded: generate tasks and reshape as milestones
-      return yield* promiseToStream(async () => {
-        const tasks = await runtime.generateTasks(
-          plan.title,
-          plan.description ? `Create milestone-style phases: ${plan.description}` : undefined,
-        );
-        const milestones: AIGeneratedMilestone[] = tasks.map((t, i) => ({
-          title: t.title,
-          description: `Phase ${i + 1} of the plan`,
-          targetDate: undefined,
-        }));
-        return JSON.stringify(milestones);
-      });
-    },
-    [hasOllama, ollamaUrl, ollamaModel, runtime],
+    ): AsyncGenerator<string> => streamGenerateMilestones(user, plan, signal),
+    [user],
   );
 
   const streamMilestoneTasksAction = useCallback(
-    async function* (
+    (
       milestone: { title: string; description?: string },
       plan: { title: string; description?: string },
       signal?: AbortSignal,
-    ): AsyncGenerator<string> {
-      if (hasOllama) {
-        return yield* streamGenerateMilestoneTasks(ollamaUrl, ollamaModel, milestone, plan, signal);
-      }
-      return yield* promiseToStream(async () => {
-        const tasks = await runtime.generateTasks(
-          plan.title,
-          `For milestone "${milestone.title}": ${milestone.description ?? ""}`,
-        );
-        return JSON.stringify(tasks);
-      });
-    },
-    [hasOllama, ollamaUrl, ollamaModel, runtime],
+    ): AsyncGenerator<string> => streamGenerateMilestoneTasks(user, milestone, plan, signal),
+    [user],
   );
 
   const streamWeeklyInsightAction = useCallback(
     (weekContext: string, signal?: AbortSignal): AsyncGenerator<string> | null => {
-      if (!hasOllama) return null;
-      return streamWeeklyInsight(ollamaUrl, ollamaModel, weekContext, signal);
+      if (!available) return null;
+      return streamWeeklyInsight(user, weekContext, signal);
     },
-    [hasOllama, ollamaUrl, ollamaModel],
+    [available, user],
   );
 
   return {
     available,
-    hasOllama,
-    hasEmbedded,
-    capabilityLevel,
-    availability,
     streamTasks,
     streamSubtasks,
     streamMilestones: streamMilestonesAction,

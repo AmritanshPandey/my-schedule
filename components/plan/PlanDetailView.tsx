@@ -63,8 +63,11 @@ import {
   parseGeneratedMilestones,
   type AIGeneratedMilestone,
 } from "@/lib/aiActions";
-import { streamOllamaChat, parseAIAction, PLAN_COACH_PROMPT, buildCoachContext } from "@/lib/ai";
+import { parseAIAction, PLAN_COACH_PROMPT, buildCoachContext } from "@/lib/ai";
+import { streamGeminiChat } from "@/lib/aiClient";
 import { useAIActions } from "@/lib/ai/useAIActions";
+import { useAuth } from "@/contexts/AuthProvider";
+import AISignInGate from "@/components/auth/AISignInGate";
 import { getCoachSkillPrompt, detectCoachSkill, SKILL_LABELS } from "@/lib/coachSkills";
 import { AI_ENABLED } from "@/lib/featureFlags";
 import AIActionSheet, { type ResultItem } from "@/components/ai/AIActionSheet";
@@ -252,8 +255,6 @@ interface PlanDetailViewProps {
   onDeleteMilestone: (id: string) => void;
   onCompleteMilestone: (id: string) => void;
   // AI
-  ollamaUrl?: string;
-  ollamaModel?: string;
   onAddGeneratedTasks?: (tasks: AIGeneratedTask[], planId: string, milestoneId?: string) => void;
   onLinkTrackerToMilestone?: (milestoneId: string, trackerId: string) => void;
   onUpdateCoachMessages?: (planId: string, messages: PlanCoachMessage[]) => void;
@@ -280,8 +281,6 @@ export default function PlanDetailView({
   onUpdateMilestone,
   onDeleteMilestone,
   onCompleteMilestone,
-  ollamaUrl,
-  ollamaModel,
   onAddGeneratedTasks,
   onLinkTrackerToMilestone,
   onUpdateCoachMessages,
@@ -295,8 +294,9 @@ export default function PlanDetailView({
     ? ["planning", "roadmap", "strategy"]
     : ["planning", "roadmap"]) as Array<"planning" | "roadmap" | "strategy">;
 
-  // ── Unified AI actions (routes to Ollama or embedded automatically) ─────
-  const ai = useAIActions(ollamaUrl, ollamaModel);
+  // ── Unified AI actions (Gemini, via the Worker proxy) ───────────────────
+  const { user: aiUser } = useAuth();
+  const ai = useAIActions();
 
   // ── AI task generation state ────────────────────────────────────────────
   const [genSheetOpen, setGenSheetOpen] = useState(false);
@@ -401,7 +401,7 @@ export default function PlanDetailView({
     if (targetPlan.coachMessages && targetPlan.coachMessages.length > 0) {
       return targetPlan.coachMessages;
     }
-    return ai.hasOllama
+    return ai.available
       ? [{ role: "assistant", content: `I'm here to help you build out "${targetPlan.title}". What's your main goal for this plan?` }]
       : [];
   };
@@ -507,12 +507,12 @@ export default function PlanDetailView({
     [plan, schedule.activities, milestones]
   );
 
-  // Greet when Ollama becomes available mid-session (was unconfigured at mount)
+  // Greet once AI becomes available mid-session (e.g. the user just signed in)
   useEffect(() => {
-    if (ai.hasOllama && coachMessages.length === 0) {
+    if (ai.available && coachMessages.length === 0) {
       setCoachMessages([{ role: "assistant", content: `I'm here to help you build out "${plan.title}". What's your main goal for this plan?` }]);
     }
-  }, [ollamaUrl, ollamaModel]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [ai.available]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     setCoachMessages(initialCoachMessages(plan));
@@ -589,7 +589,7 @@ export default function PlanDetailView({
   // ── AI Coach handlers ───────────────────────────────────────────────────
 
   async function handleSendCoachMessage() {
-    if (!ai.hasOllama || !coachInput.trim() || coachStreaming) return;
+    if (!ai.available || !coachInput.trim() || coachStreaming) return;
     const userMsg: ChatMessage = { role: "user", content: coachInput.trim() };
     const newMessages = [...coachMessages, userMsg];
     setCoachMessages(newMessages);
@@ -617,7 +617,7 @@ export default function PlanDetailView({
           ? m.content.replace(/```json[\s\S]*?```/g, "").trim()
           : m.content,
       }));
-      for await (const chunk of streamOllamaChat(ollamaUrl ?? "", ollamaModel ?? "", history, systemPrompt, false, controller.signal)) {
+      for await (const chunk of streamGeminiChat(aiUser, history, systemPrompt, false, controller.signal)) {
         accumulated += chunk;
         setCoachMessages((prev) => {
           const updated = [...prev];
@@ -640,7 +640,7 @@ export default function PlanDetailView({
       } else {
         setCoachMessages((prev) => {
           const updated = [...prev];
-          updated[assistantIdx] = { role: "assistant", content: "Sorry, I couldn't reach the AI. Is Ollama running?" };
+          updated[assistantIdx] = { role: "assistant", content: "Sorry, something went wrong reaching the AI. Try again." };
           return updated;
         });
       }
@@ -1320,7 +1320,6 @@ export default function PlanDetailView({
   // ── AI Coach tab ─────────────────────────────────────────────────────────
 
   function renderStrategyTab() {
-    const noOllama = !ai.hasOllama;
     return (
       <m.div
         key="strategy"
@@ -1331,16 +1330,8 @@ export default function PlanDetailView({
         className="mx-4 mt-6 flex flex-col lg:mx-8"
         style={{ height: "clamp(360px, calc(100vh - 300px), 640px)" }}
       >
-        {noOllama ? (
-          <div className="flex flex-col items-center justify-center gap-3 py-16 text-center px-4">
-            <div className="flex h-14 w-14 items-center justify-center rounded-[20px] bg-neutral-100 dark:bg-white/[0.06] mx-auto">
-              <IconSparkles size={24} strokeWidth={1.5} className="text-neutral-400 dark:text-neutral-500" />
-            </div>
-            <p className="text-[16px] font-semibold text-neutral-700 dark:text-neutral-200">AI Coach</p>
-            <p className="text-[13px] text-neutral-400 dark:text-neutral-500 max-w-[220px] mx-auto leading-relaxed">
-              Connect an AI model in Settings to start coaching sessions for this plan.
-            </p>
-          </div>
+        {!ai.available ? (
+          <AISignInGate message="Sign in to start coaching sessions for this plan." />
         ) : (
           <>
             {/* Auto-generate button + skill badge */}

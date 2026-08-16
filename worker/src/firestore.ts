@@ -6,6 +6,8 @@
  * decoded/encoded.
  */
 
+import { base64url } from "./base64url.js";
+
 export interface Env {
   FIREBASE_PROJECT_ID: string;
   FIREBASE_CLIENT_EMAIL: string;
@@ -13,18 +15,17 @@ export interface Env {
   VAPID_PUBLIC_KEY: string;
   VAPID_PRIVATE_KEY: string;
   VAPID_SUBJECT: string;
+  /** Secret — the shared Gemini API key (Google AI Studio). Never sent to clients. */
+  GEMINI_API_KEY: string;
+  /** Plain var, not a secret — tunable without `wrangler secret put`. */
+  GEMINI_MODEL?: string;
+  AI_PER_USER_DAILY_CAP?: string;
+  AI_GLOBAL_DAILY_CAP?: string;
 }
 
 // ── Auth (service-account JWT → access token) ────────────────────────────────
 
 let _token: { value: string; exp: number } | null = null;
-
-function base64url(bytes: ArrayBuffer | Uint8Array): string {
-  const arr = bytes instanceof Uint8Array ? bytes : new Uint8Array(bytes);
-  let str = "";
-  for (let i = 0; i < arr.length; i++) str += String.fromCharCode(arr[i]);
-  return btoa(str).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
-}
 
 function pemToPkcs8(pem: string): ArrayBuffer {
   const body = pem

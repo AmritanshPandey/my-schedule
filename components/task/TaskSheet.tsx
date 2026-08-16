@@ -21,12 +21,11 @@ import {
   IconTrash,
   IconX,
 } from "@tabler/icons-react";
-import { streamGenerateSubtasks, parseGeneratedSubtasks } from "@/lib/aiActions";
+import { parseGeneratedSubtasks } from "@/lib/aiActions";
 import AIActionSheet, { type ResultItem } from "@/components/ai/AIActionSheet";
-import { useAIRuntime } from "@/lib/ai/useAIRuntime";
-import { resolveAIRoute } from "@/lib/ai/runtime";
+import { useAIActions } from "@/lib/ai/useAIActions";
+import { useAuth } from "@/contexts/AuthProvider";
 import { AI_ENABLED } from "@/lib/featureFlags";
-import { getDeviceCapabilities } from "@/lib/performance/detectLowEndDevice";
 import BottomSheet from "@/components/ui/BottomSheet";
 import SheetHeader from "@/components/ui/SheetHeader";
 import Button from "@/components/ui/Button";
@@ -115,8 +114,6 @@ export interface TaskSheetProps {
   occurrenceDateISO?: string;
   /** Whether editing just this occurrence is allowed (today/future only). */
   canEditOccurrence?: boolean;
-  ollamaUrl?: string;
-  ollamaModel?: string;
   onClose: () => void;
   onSave: (data: TaskSaveData) => void;
   onDuplicate?: (data: TaskSaveData) => void;
@@ -206,8 +203,6 @@ export function TaskSheet({
   initialEndTime,
   occurrenceDateISO,
   canEditOccurrence = false,
-  ollamaUrl,
-  ollamaModel,
   onClose,
   onSave,
   onDuplicate,
@@ -216,18 +211,14 @@ export function TaskSheet({
   onResetOccurrence,
   presentation = "sheet",
 }: TaskSheetProps) {
-  // ── AI routing ────────────────────────────────────────────────────────────
-  const aiRuntime = useAIRuntime();
-  const { tier, isDesktop } = getDeviceCapabilities();
-  const aiRoute = resolveAIRoute("generate-subtasks", {
-    tier,
-    isDesktop,
-    ollamaConnected: !!(ollamaUrl && ollamaModel),
-    aiEnabled: aiRuntime.enabled,
-  });
+  // ── AI ────────────────────────────────────────────────────────────────────
+  const ai = useAIActions();
+  const { isGuest } = useAuth();
   const keepBackdropLight = mode === "create" && (!!initialStartTime || !!initialEndTime);
-  // AI is globally hidden for now — gate the "Expand" affordance behind the flag.
-  const canExpand = AI_ENABLED && aiRoute.backend !== "none";
+  // AI is globally hidden for now (AI_ENABLED) and, once on, needs sign-in —
+  // hidden rather than shown-and-blocked, since this is a small inline
+  // affordance with no room for its own gate card.
+  const canExpand = AI_ENABLED && !isGuest;
 
   // ── Form state ─────────────────────────────────────────────────────────────
   const [planId, setPlanId] = useState("");
@@ -449,16 +440,7 @@ export function TaskSheet({
     if (!title.trim()) return;
     const hints = [goal.trim(), ...picks].filter(Boolean).join(". ");
     const taskLabel = hints ? `${title.trim()} — ${hints}` : title.trim();
-
-    if (aiRoute.backend === "ollama" && ollamaUrl && ollamaModel) {
-      yield* streamGenerateSubtasks(ollamaUrl, ollamaModel, taskLabel, selectedPlan?.title);
-      return;
-    }
-
-    if (aiRoute.backend === "transformers") {
-      const results = await aiRuntime.generateSubtasks(taskLabel, selectedPlan?.title);
-      yield JSON.stringify(results);
-    }
+    yield* ai.streamSubtasks(taskLabel, selectedPlan?.title);
   }
 
   function parseSubtaskResults(raw: string): ResultItem[] {

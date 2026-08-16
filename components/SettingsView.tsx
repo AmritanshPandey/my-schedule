@@ -6,19 +6,16 @@ import { AnimatePresence, m } from "framer-motion";
 import {
   IconBrain,
   IconCheck,
-  IconChevronRight,
   IconClock,
   IconCloud,
   IconCopy,
   IconMoon,
   IconRefresh,
-  IconServer,
   IconShield,
   IconSparkles,
   IconSun,
   IconTerminal2,
   IconTrash,
-  IconWifiOff,
   IconX,
   IconChevronDown,
 } from "@tabler/icons-react";
@@ -35,15 +32,7 @@ import { collectDiagnostics, formatDiagnostics, type DiagnosticsSnapshot } from 
 import { clearErrorLog } from "@/lib/errorLog";
 import { isErrorTelemetryEnabled, setErrorTelemetryEnabled } from "@/lib/errorTelemetry";
 import { clearBootLog } from "@/lib/iosSafeMode";
-import {
-  checkOllamaConnection, checkModelStatus,
-  OLLAMA_URL_KEY, OLLAMA_MODEL_KEY,
-  DEFAULT_OLLAMA_URL, DEFAULT_OLLAMA_MODEL,
-} from "@/lib/ai";
-import { useAIRuntime } from "@/lib/ai/useAIRuntime";
-import { resolveTransformersModel, MODEL_SIZES, type AIPerformanceMode } from "@/lib/ai/runtime";
 import { AI_ENABLED } from "@/lib/featureFlags";
-import { getDeviceCapabilities } from "@/lib/performance/detectLowEndDevice";
 import { formatDisplayTime, minutesToInputTime } from "@/lib/timeUtils";
 import type { Schedule, SchedulePreferences } from "@/lib/useScheduleDB";
 import ConfirmSheet from "@/components/ui/ConfirmSheet";
@@ -110,338 +99,38 @@ function readTheme(): ThemeMode {
   return s === "light" || s === "dark" ? s : matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
 }
 
-// ── AI modes ──────────────────────────────────────────────────────────────────
-
-const MODES: Array<{ id: AIPerformanceMode; label: string; desc: string; badge?: string }> = [
-  { id: "lightweight", label: "Lightweight", desc: "Fastest. Minimal battery and memory use." },
-  { id: "balanced",    label: "Balanced",    desc: "Best for most people. Great quality, low impact.", badge: "Default" },
-  { id: "advanced",    label: "Advanced",    desc: "Higher quality reasoning. Needs more RAM." },
-];
+// ── AI section ────────────────────────────────────────────────────────────────
+//
+// AI runs on one shared, developer-owned Gemini key — there's no model or
+// server to configure. Sign-in (above, in Account) is what unlocks it; this
+// card just states that plainly.
 
 function AISection() {
-  const runtime = useAIRuntime();
-  const { tier, isDesktop } = getDeviceCapabilities();
-  const model = resolveTransformersModel(runtime.mode, tier, isDesktop);
-  const sizeMB = MODEL_SIZES[model] ?? 300;
-  const sizeLabel = sizeMB < 1000 ? `${sizeMB} MB` : `${(sizeMB / 1000).toFixed(1)} GB`;
-
-  return (
-    <div className="space-y-3">
-      {/* Status hero */}
-      <Card>
-        <Row>
-          <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-[#AD46FF]">
-            <IconBrain size={18} strokeWidth={1.8} className="text-white" />
-          </div>
-          <div className="min-w-0 flex-1">
-            <p className="text-[14px] font-bold text-neutral-900 dark:text-white">
-              {runtime.status === "ready" ? "Embedded Intelligence" : "Local Intelligence"}
-            </p>
-            <p className={`text-[12px] font-medium ${
-              runtime.status === "ready" ? "text-emerald-600 dark:text-emerald-400" :
-              runtime.status === "error"  ? "text-rose-500 dark:text-rose-400" :
-              runtime.status === "disabled" ? "text-neutral-400 dark:text-neutral-500" :
-              "text-amber-500 dark:text-amber-400"
-            }`}>
-              {runtime.status === "ready"       ? "Ready · Works Offline" :
-               runtime.status === "downloading" ? `Downloading… ${runtime.downloadProgress}%` :
-               runtime.status === "enabling"    ? "Starting up…" :
-               runtime.status === "error"       ? "Setup failed" :
-               "Not enabled"}
-            </p>
-          </div>
-          {runtime.enabled ? (
-            <button
-              type="button"
-              onClick={runtime.disable}
-              className="rounded-xl border border-neutral-200 px-3 py-1.5 text-[12px] font-semibold text-neutral-500 hover:border-neutral-300 dark:border-white/[0.08] dark:text-neutral-400"
-            >
-              Disable
-            </button>
-          ) : (
-            <m.button
-              type="button"
-              onClick={runtime.enable}
-              whileTap={{ scale: 0.95 }}
-              className="rounded-xl bg-neutral-900 px-3 py-1.5 text-[12px] font-bold text-white dark:bg-white dark:text-neutral-900"
-            >
-              Enable
-            </m.button>
-          )}
-        </Row>
-
-        {/* Download progress */}
-        {(runtime.status === "downloading" || runtime.status === "enabling") && (
-          <div className="mx-4 mb-3.5">
-            <div className="h-1.5 w-full overflow-hidden rounded-full bg-neutral-100 dark:bg-white/[0.06]">
-              <m.div
-                className="h-full rounded-full bg-emerald-500"
-                animate={{ width: `${Math.max(runtime.downloadProgress, 3)}%` }}
-                transition={{ duration: 0.4 }}
-              />
-            </div>
-            <p className="mt-1.5 text-[10px] text-neutral-400 dark:text-neutral-500">
-              Downloading offline AI model ({sizeLabel})… You can keep using the app.
-            </p>
-          </div>
-        )}
-
-        {runtime.status === "ready" && (
-          <>
-            <Divider />
-            <Row>
-              <IconShield size={14} strokeWidth={2} className="shrink-0 text-emerald-500" />
-              <p className="text-[12px] text-neutral-500 dark:text-neutral-400">
-                Runs entirely on this device. No data sent to any AI cloud service.
-              </p>
-            </Row>
-          </>
-        )}
-      </Card>
-
-      {/* Performance mode */}
-      <Card>
-        <div className="px-4 py-3.5">
-          <p className="mb-3 text-[12px] font-bold text-neutral-900 dark:text-white">Performance mode</p>
-          <div className="space-y-2">
-            {MODES.map((m) => {
-              const active = runtime.mode === m.id;
-              const mModel = resolveTransformersModel(m.id, tier, isDesktop);
-              const mSize = MODEL_SIZES[mModel] ?? 300;
-              const mSizeLabel = mSize < 1000 ? `~${mSize} MB` : `~${(mSize / 1000).toFixed(1)} GB`;
-              return (
-                <button
-                  key={m.id}
-                  type="button"
-                  onClick={() => runtime.setMode(m.id)}
-                  className={`flex w-full items-center gap-3.5 rounded-2xl border px-4 py-3 text-left transition-all ${
-                    active
-                      ? "border-neutral-900 bg-neutral-900 dark:border-white dark:bg-white"
-                      : "border-neutral-200 bg-neutral-50 hover:border-neutral-300 dark:border-white/[0.07] dark:bg-white/[0.02] dark:hover:border-white/[0.12]"
-                  }`}
-                >
-                  {/* Radio */}
-                  <div className={`flex h-4 w-4 shrink-0 items-center justify-center rounded-full border-2 ${
-                    active ? "border-white bg-white dark:border-neutral-900 dark:bg-neutral-900" : "border-neutral-300 dark:border-neutral-600"
-                  }`}>
-                    {active && <div className="h-1.5 w-1.5 rounded-full bg-neutral-900 dark:bg-white" />}
-                  </div>
-                  <div className="min-w-0 flex-1">
-                    <div className="flex items-center gap-2">
-                      <p className={`text-[13px] font-bold ${active ? "text-white dark:text-neutral-900" : "text-neutral-900 dark:text-white"}`}>
-                        {m.label}
-                      </p>
-                      {m.badge && (
-                        <span className={`rounded-full px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wide ${
-                          active ? "bg-white/20 text-white dark:bg-neutral-900/20 dark:text-neutral-900"
-                                 : "bg-emerald-100 text-emerald-700 dark:bg-emerald-500/15 dark:text-emerald-400"
-                        }`}>
-                          {m.badge}
-                        </span>
-                      )}
-                      <span className={`ml-auto text-[10px] font-medium ${active ? "text-white/60 dark:text-neutral-900/60" : "text-neutral-400"}`}>
-                        {mSizeLabel}
-                      </span>
-                    </div>
-                    <p className={`mt-0.5 text-[11px] leading-snug ${active ? "text-white/70 dark:text-neutral-900/70" : "text-neutral-500 dark:text-neutral-400"}`}>
-                      {m.desc}
-                    </p>
-                  </div>
-                </button>
-              );
-            })}
-          </div>
-          <p className="mt-2.5 text-[10px] text-neutral-400 dark:text-neutral-500">
-            Changing modes downloads a new model once, then caches it permanently.
-          </p>
-        </div>
-      </Card>
-
-      {/* Ollama (desktop strategic AI) */}
-      <OllamaCard />
-    </div>
-  );
-}
-
-// ── Ollama card ───────────────────────────────────────────────────────────────
-
-const OLLAMA_STEPS = [
-  { cmd: "brew install ollama",             desc: "Install Ollama" },
-  { cmd: 'ollama serve --cors "<origin>"',  desc: "Start with browser CORS" },
-  { cmd: `ollama pull ${DEFAULT_OLLAMA_MODEL}`, desc: "Download the default model" },
-];
-
-function OllamaCard() {
-  const [url, setUrl]       = useState(() => typeof window !== "undefined" ? (localStorage.getItem(OLLAMA_URL_KEY) ?? DEFAULT_OLLAMA_URL) : DEFAULT_OLLAMA_URL);
-  const [model, setModel]   = useState(() => typeof window !== "undefined" ? (localStorage.getItem(OLLAMA_MODEL_KEY) ?? DEFAULT_OLLAMA_MODEL) : DEFAULT_OLLAMA_MODEL);
-  const [models, setModels] = useState<string[]>([]);
-  const [fetching, setFetching] = useState(false);
-  const [testing, setTesting]   = useState(false);
-  const [connOk, setConnOk]     = useState<null | boolean>(null);
-  const [errMsg, setErrMsg]     = useState<string | null>(null);
-  const [showSetup, setShowSetup] = useState(false);
-  const [copied, setCopied]     = useState<string | null>(null);
-  const [origin, setOrigin]     = useState("https://your-app.web.app");
-
-  useEffect(() => { if (typeof window !== "undefined") setOrigin(window.location.origin); }, []);
-
-  function saveUrl(v: string)   { const val = v.trim() || DEFAULT_OLLAMA_URL;   localStorage.setItem(OLLAMA_URL_KEY, val);   setUrl(val); }
-  function saveModel(v: string) { const val = v.trim() || DEFAULT_OLLAMA_MODEL; localStorage.setItem(OLLAMA_MODEL_KEY, val); setModel(val); }
-
-  const serveCmd = `ollama serve --cors "${origin}"`;
-
-  async function cp(text: string, key: string) {
-    try { await navigator.clipboard.writeText(text); } catch { return; }
-    setCopied(key); setTimeout(() => setCopied((c) => c === key ? null : c), 1800);
-  }
-
-  async function fetchModels(u = url) {
-    setFetching(true); setErrMsg(null);
-    try {
-      const ms = await checkOllamaConnection(u);
-      setModels(ms);
-      if (ms.length > 0 && !ms.includes(model)) saveModel(ms[0]);
-    } catch (e) { setModels([]); setErrMsg(e instanceof Error ? e.message : String(e)); }
-    finally { setFetching(false); }
-  }
-
-  async function test() {
-    setTesting(true); setErrMsg(null);
-    try {
-      const s = await checkModelStatus(url, model);
-      setConnOk(s === "connected");
-      if (s !== "connected") setErrMsg(s === "no-model" ? "Ollama reachable but model not installed." : "Ollama not reachable.");
-    } catch (e) { setConnOk(false); setErrMsg(e instanceof Error ? e.message : String(e)); }
-    finally { setTesting(false); }
-  }
-
-  useEffect(() => { void fetchModels(); }, []); // eslint-disable-line
-
-  const dot = connOk === true ? "bg-emerald-500" : connOk === false ? "bg-rose-500" : models.length > 0 ? "bg-emerald-500" : "bg-neutral-300 dark:bg-neutral-600";
+  const { isGuest } = useAuth();
 
   return (
     <Card>
       <Row>
-        <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-blue-50 dark:bg-blue-500/10">
-          <IconServer size={16} strokeWidth={1.8} className="text-blue-600 dark:text-blue-400" />
+        <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-[#AD46FF]">
+          <IconBrain size={18} strokeWidth={1.8} className="text-white" />
         </div>
         <div className="min-w-0 flex-1">
-          <p className="text-[13px] font-bold text-neutral-900 dark:text-white">Strategic AI</p>
-          <p className="text-[11px] text-neutral-400 dark:text-neutral-500">Ollama · Desktop · Deep planning</p>
+          <p className="text-[14px] font-bold text-neutral-900 dark:text-white">Gemini AI</p>
+          <p className={`text-[12px] font-medium ${
+            isGuest ? "text-neutral-400 dark:text-neutral-500" : "text-emerald-600 dark:text-emerald-400"
+          }`}>
+            {isGuest ? "Sign in above to use it" : "Ready · Free, with a daily limit"}
+          </p>
         </div>
-        <span className={`h-2 w-2 rounded-full ${dot}`} />
       </Row>
-
       <Divider />
-
-      <div className="space-y-3 px-4 py-3.5">
-        {/* URL */}
-        <div>
-          <p className="mb-1.5 text-[11px] font-semibold text-neutral-500 dark:text-neutral-400">Server URL</p>
-          <input type="text" value={url}
-            onChange={(e) => setUrl(e.target.value)}
-            onBlur={(e) => { saveUrl(e.target.value); void fetchModels(e.target.value.trim() || DEFAULT_OLLAMA_URL); }}
-            placeholder={DEFAULT_OLLAMA_URL}
-            className="h-10 w-full rounded-xl border border-neutral-200 bg-neutral-50 px-3 text-[13px] text-neutral-900 outline-none focus:border-neutral-400 focus:bg-white dark:border-white/[0.08] dark:bg-white/[0.04] dark:text-white"
-          />
-        </div>
-
-        {/* Model */}
-        <div>
-          <div className="mb-1.5 flex items-center justify-between">
-            <p className="text-[11px] font-semibold text-neutral-500 dark:text-neutral-400">Model</p>
-            <div className="flex gap-1.5">
-              <button type="button" onClick={() => void fetchModels()} disabled={fetching}
-                className="rounded-lg border border-neutral-200 bg-neutral-50 px-2 py-1 text-[10px] font-semibold text-neutral-500 hover:bg-white disabled:opacity-50 dark:border-white/[0.08] dark:bg-white/[0.04]">
-                <IconRefresh size={10} strokeWidth={2} className={fetching ? "animate-spin" : ""} />
-              </button>
-              <button type="button" onClick={test} disabled={testing}
-                className="rounded-lg border border-neutral-200 bg-neutral-50 px-2.5 py-1 text-[10px] font-semibold text-neutral-500 hover:bg-white disabled:opacity-50 dark:border-white/[0.08] dark:bg-white/[0.04]">
-                {testing ? "…" : "Test"}
-              </button>
-            </div>
-          </div>
-          {models.length > 0 ? (
-            <div className="relative">
-              <select value={model} onChange={(e) => saveModel(e.target.value)}
-                className="h-10 w-full appearance-none rounded-xl border border-neutral-200 bg-neutral-50 px-3 pr-9 text-[13px] text-neutral-900 outline-none dark:border-white/[0.08] dark:bg-neutral-900 dark:text-white">
-                {models.map((m) => <option key={m} value={m}>{m}</option>)}
-              </select>
-              <IconChevronDown size={14} strokeWidth={2} className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-neutral-400" />
-            </div>
-          ) : (
-            <input type="text" value={model}
-              onChange={(e) => setModel(e.target.value)}
-              onBlur={(e) => saveModel(e.target.value)}
-              placeholder={DEFAULT_OLLAMA_MODEL}
-              className="h-10 w-full rounded-xl border border-neutral-200 bg-neutral-50 px-3 text-[13px] text-neutral-900 outline-none focus:border-neutral-400 focus:bg-white dark:border-white/[0.08] dark:bg-white/[0.04] dark:text-white"
-            />
-          )}
-          <AnimatePresence>
-            {errMsg && (
-              <m.p key="err" initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: "auto" }} exit={{ opacity: 0, height: 0 }}
-                className="mt-1.5 flex items-start gap-1.5 overflow-hidden text-[11px] text-rose-500 dark:text-rose-400">
-                <IconWifiOff size={11} strokeWidth={2} className="mt-px shrink-0" />{errMsg}
-              </m.p>
-            )}
-            {!errMsg && connOk && (
-              <m.p key="ok" initial={{ opacity: 0 }} animate={{ opacity: 1 }}
-                className="mt-1.5 flex items-center gap-1.5 text-[11px] text-emerald-600 dark:text-emerald-400">
-                <IconCheck size={11} strokeWidth={2.5} />Connected · {models.length} model{models.length !== 1 ? "s" : ""} available
-              </m.p>
-            )}
-          </AnimatePresence>
-        </div>
-
-        {/* CORS command */}
-        <div className="rounded-xl border border-neutral-100 bg-neutral-50 px-3 py-2.5 dark:border-white/[0.06] dark:bg-white/[0.03]">
-          <div className="mb-1 flex justify-between">
-            <p className="text-[10px] font-semibold text-neutral-500">Recommended start command</p>
-            <button type="button" onClick={() => void cp(serveCmd, "serve")} className="flex items-center gap-1 text-[10px] font-semibold text-neutral-400 hover:text-neutral-700">
-              <IconCopy size={10} strokeWidth={2} />{copied === "serve" ? "Copied!" : "Copy"}
-            </button>
-          </div>
-          <code className="block overflow-x-auto whitespace-nowrap text-[11px] font-mono text-neutral-700 dark:text-neutral-300">{serveCmd}</code>
-        </div>
-      </div>
-
-      <Divider />
-      <button type="button" onClick={() => setShowSetup((v) => !v)}
-        className="flex w-full items-center gap-2.5 px-4 py-3 text-left">
-        <IconTerminal2 size={13} strokeWidth={2} className="text-neutral-400" />
-        <span className="flex-1 text-[12px] font-semibold text-neutral-500 dark:text-neutral-400">Setup instructions</span>
-        <m.span animate={{ rotate: showSetup ? 90 : 0 }} transition={{ duration: 0.16 }}>
-          <IconChevronRight size={13} strokeWidth={2} className="text-neutral-400" />
-        </m.span>
-      </button>
-      <AnimatePresence initial={false}>
-        {showSetup && (
-          <m.div initial={{ height: 0, opacity: 0 }} animate={{ height: "auto", opacity: 1 }}
-            exit={{ height: 0, opacity: 0 }} transition={{ duration: 0.2 }} className="overflow-hidden">
-            <div className="space-y-2 border-t border-neutral-100 px-4 pb-4 pt-3 dark:border-white/[0.06]">
-              {OLLAMA_STEPS.map(({ cmd, desc }, i) => {
-                const resolved = cmd.includes("<origin>") ? serveCmd : cmd;
-                const key = `s${i}`;
-                return (
-                  <div key={key} className="rounded-xl border border-neutral-100 bg-neutral-50 px-3 py-2.5 dark:border-white/[0.06] dark:bg-white/[0.03]">
-                    <div className="mb-1.5 flex items-center justify-between">
-                      <div>
-                        <p className="text-[11px] font-bold text-neutral-900 dark:text-white">Step {i + 1}</p>
-                        <p className="text-[10px] text-neutral-500 dark:text-neutral-400">{desc}</p>
-                      </div>
-                      <button type="button" onClick={() => void cp(resolved, key)}
-                        className="flex items-center gap-1 rounded-lg border border-neutral-200 bg-white px-2 py-1 text-[10px] font-semibold text-neutral-500 dark:border-white/[0.08] dark:bg-white/[0.04]">
-                        <IconCopy size={10} strokeWidth={2} />{copied === key ? "Copied" : "Copy"}
-                      </button>
-                    </div>
-                    <code className="block overflow-x-auto rounded-lg bg-neutral-100 px-2.5 py-1.5 text-[10px] font-mono text-neutral-700 dark:bg-white/[0.06] dark:text-neutral-300">{resolved}</code>
-                  </div>
-                );
-              })}
-            </div>
-          </m.div>
-        )}
-      </AnimatePresence>
+      <Row>
+        <IconShield size={14} strokeWidth={2} className="shrink-0 text-emerald-500" />
+        <p className="text-[12px] text-neutral-500 dark:text-neutral-400">
+          Powered by Google Gemini through PlanR&apos;s server. Each account gets a daily
+          limit so the shared quota holds up for everyone.
+        </p>
+      </Row>
     </Card>
   );
 }

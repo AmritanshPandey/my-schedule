@@ -21,13 +21,8 @@ import ProgressBar from "@/components/ui/ProgressBar";
 import { computeTrend } from "@/lib/trendUtils";
 import { todayISO, addDaysToISO, localISODate } from "@/lib/dateUtils";
 import { isTaskScheduledOn } from "@/lib/taskOccurrence";
-import { streamWeeklyInsight } from "@/lib/aiActions";
-import {
-  OLLAMA_URL_KEY,
-  OLLAMA_MODEL_KEY,
-  DEFAULT_OLLAMA_URL,
-  DEFAULT_OLLAMA_MODEL,
-} from "@/lib/ai";
+import { useAIActions } from "@/lib/ai/useAIActions";
+import AISignInGate from "@/components/auth/AISignInGate";
 import MilestoneTimeline from "@/components/MilestoneTimeline";
 import CompletionTrendCard from "@/components/analytics/CompletionTrendCard";
 
@@ -84,7 +79,7 @@ function SectionLabel({ children, icon: Icon }: { children: React.ReactNode; ico
 // Weekly AI Insight — context builder + card
 // ─────────────────────────────────────────────────────────────────────────────
 
-/** Build a compact, token-efficient stats summary for the Ollama prompt. */
+/** Build a compact, token-efficient stats summary for the AI prompt. */
 function buildWeeklyContext(
   schedule: Schedule,
   todayKey: DayKey,
@@ -185,6 +180,7 @@ function WeeklyAIInsightCard({
   todayKey,
   ritualWeekHistory,
 }: ReviewViewProps) {
+  const ai = useAIActions();
   const [text, setText] = useState("");
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -196,15 +192,6 @@ function WeeklyAIInsightCard({
     const ctrl = new AbortController();
     abortRef.current = ctrl;
 
-    const baseUrl =
-      typeof window !== "undefined"
-        ? (localStorage.getItem(OLLAMA_URL_KEY) ?? DEFAULT_OLLAMA_URL)
-        : DEFAULT_OLLAMA_URL;
-    const model =
-      typeof window !== "undefined"
-        ? (localStorage.getItem(OLLAMA_MODEL_KEY) ?? DEFAULT_OLLAMA_MODEL)
-        : DEFAULT_OLLAMA_MODEL;
-
     setText("");
     setError(null);
     setIsLoading(true);
@@ -212,18 +199,19 @@ function WeeklyAIInsightCard({
 
     try {
       const context = buildWeeklyContext(schedule, todayKey, ritualWeekHistory);
-      const stream = streamWeeklyInsight(baseUrl, model, context, ctrl.signal);
+      const stream = ai.streamWeeklyInsight(context, ctrl.signal);
+      if (!stream) return; // not available (see the sign-in gate below)
       for await (const chunk of stream) {
         if (ctrl.signal.aborted) break;
         setText((prev) => prev + chunk);
       }
     } catch (err) {
       if (err instanceof Error && err.name === "AbortError") return;
-      setError(err instanceof Error ? err.message : "Could not reach Ollama");
+      setError(err instanceof Error ? err.message : "Something went wrong. Try again.");
     } finally {
       setIsLoading(false);
     }
-  }, [schedule, todayKey, ritualWeekHistory]);
+  }, [schedule, todayKey, ritualWeekHistory, ai]);
 
   useEffect(() => {
     if (hasGenerated) {
@@ -296,11 +284,7 @@ function WeeklyAIInsightCard({
 
       {/* Error */}
       {!isLoading && error && (
-        <p className="text-[13px] text-rose-500 dark:text-rose-400">
-          {error.includes("not reachable") || error.includes("fetch")
-            ? "Ollama is offline. Start it with: ollama serve"
-            : error}
-        </p>
+        <p className="text-[13px] text-rose-500 dark:text-rose-400">{error}</p>
       )}
     </div>
   );
