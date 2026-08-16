@@ -342,7 +342,12 @@ export function TaskBlockCard({
           type="button"
           aria-label={gridMenuAction.label}
           onClick={(e) => { e.stopPropagation(); gridMenuAction.onClick(); }}
-          className="absolute right-1 top-1 z-10 flex h-6 w-6 items-center justify-center rounded-full bg-white/80 text-neutral-500 opacity-0 backdrop-blur-sm transition-opacity hover:bg-white hover:text-neutral-800 focus-visible:opacity-100 group-hover:opacity-100 group-focus-within:opacity-100 dark:bg-neutral-900/80 dark:text-neutral-400 dark:hover:bg-neutral-900 dark:hover:text-white"
+          // No backdrop-blur: `data-glass` is for floating chrome (nav, header,
+          // sheets), not a button sitting on a card, so this tripped the e2e
+          // banned-effects guard. The 90% fill carries the affordance on its
+          // own — the blur was doing nothing a slightly more opaque background
+          // doesn't do, behind a 24px icon.
+          className="absolute right-1 top-1 z-10 flex h-6 w-6 items-center justify-center rounded-full bg-white/90 text-neutral-500 opacity-0 transition-opacity hover:bg-white hover:text-neutral-800 focus-visible:opacity-100 group-hover:opacity-100 group-focus-within:opacity-100 dark:bg-neutral-900/90 dark:text-neutral-400 dark:hover:bg-neutral-900 dark:hover:text-white"
         >
           {gridMenuAction.icon}
         </button>
