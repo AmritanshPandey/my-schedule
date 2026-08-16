@@ -476,6 +476,13 @@ function PlanConsistencyCard({
   return (
     <section data-testid="overview-plan-card" className={`${CARD} px-4 py-4`}>
       <SectionHeader icon={IconClipboardList} title="Plan Consistency" meta={`${rows.length} ${rows.length === 1 ? "plan" : "plans"}`} />
+      {/* Each row carries two figures that measure different things: the
+          percentage counts *days* (calculateConsistency), the line under the
+          title counts milestones. Said once here rather than per row —
+          without it "0/5 milestones" beside "50%" reads as a contradiction. */}
+      <p className="-mt-1 mb-3 text-[12px] text-neutral-500 dark:text-neutral-400">
+        % of days you&rsquo;ve completed at least one task
+      </p>
       <div className="divide-y divide-neutral-100 dark:divide-white/[0.06]">
         {rows.map(({ plan, consistency, milestonesTotal, milestonesDone }) => {
           const accent = PLAN_NEUTRAL;
@@ -502,8 +509,13 @@ function PlanConsistencyCard({
                     placeholders standing in for milestones that don't exist. */}
                 {milestonesTotal > 0 && (
                   <>
-                    <p className="mt-1 text-[11px] font-semibold text-neutral-400 dark:text-neutral-500">
-                      {milestonesDone}/{milestonesTotal} milestones
+                    {/* "N of M", not "N/M": a slash reads as a fraction that
+                        ought to agree with the percentage beside it, and it
+                        never will — the two count different things.
+                        neutral-500/400 rather than 400/500 because #A1A1A1 on
+                        white is 2.5:1 and fails AA at this size. */}
+                    <p className="mt-1 text-[11px] font-semibold text-neutral-500 dark:text-neutral-400">
+                      {milestonesDone} of {milestonesTotal} milestones
                     </p>
                     <div className="mt-2 flex flex-wrap gap-1">
                       {Array.from({ length: Math.min(milestonesTotal, 10) }, (_, i) => (
