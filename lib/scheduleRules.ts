@@ -273,6 +273,141 @@ export function applyScheduleRules<T extends SchedulableTask>(
   return { valid, conflicts, errors };
 }
 
+// ── Date-aware validation ─────────────────────────────────────────────────────
+
+/**
+ * A task destined for one specific date rather than a repeating weekday.
+ */
+export interface DatedTask {
+  title: string;
+  dateISO: string;
+  startTime: string;
+  endTime: string;
+}
+
+export interface DateConflict {
+  taskTitle: string;
+  dateISO: string;
+  /** What it clashes with, and when — enough to name the problem to the user. */
+  conflictsWith: string;
+  conflictStart: string;
+  conflictEnd: string;
+}
+
+export interface DatedRuleResult<T extends DatedTask> {
+  valid: T[];
+  conflicts: Array<{ task: T; conflict: DateConflict }>;
+  errors: Array<{ task: T; error: ValidationError }>;
+}
+
+/** Monday-first weekday key for an ISO date. `Date.getDay()` is Sunday-first. */
+function weekdayOfISO(dateISO: string): DayKey {
+  const d = new Date(`${dateISO}T12:00:00`);
+  return DAY_ORDER[(d.getDay() + 6) % 7];
+}
+
+const DAY_ORDER: DayKey[] = [
+  "monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday",
+];
+
+/**
+ * Validate dated tasks against what is really on each of those dates.
+ *
+ * `applyScheduleRules` above tracks occupancy per **weekday**, which is correct
+ * for a repeating template and wrong for a dated one. A twelve-week curriculum
+ * has twelve Thursday sessions on twelve different dates; the weekday-scoped
+ * engine reads them as twelve collisions on "thursday", pushes each later in the
+ * day, and then rejects the rest as "schedule too full". This resolves the day a
+ * task actually falls on, so those twelve are simply twelve separate days.
+ *
+ * Reports conflicts instead of nudging. A curriculum states its own times — a
+ * 7:00 session quietly relocated to 10:15 is not the plan the user approved — so
+ * the caller surfaces the clash and lets them decide.
+ *
+ * `occupancyFor` is injected rather than importing the schedule here, keeping
+ * this module free of `taskOccurrence`/`taskMutations` and trivially testable.
+ */
+export function validateDatedTasks<T extends DatedTask>(
+  incoming: T[],
+  occupancyFor: (dateISO: string, weekday: DayKey) => ExistingTask[],
+): DatedRuleResult<T> {
+  const valid: T[] = [];
+  const conflicts: DatedRuleResult<T>["conflicts"] = [];
+  const errors: DatedRuleResult<T>["errors"] = [];
+
+  /** Per-date occupancy: existing tasks, plus everything accepted so far. */
+  const byDate = new Map<string, Array<{ title: string; start: number; end: number }>>();
+
+  const occupancy = (dateISO: string) => {
+    let list = byDate.get(dateISO);
+    if (!list) {
+      list = [];
+      for (const t of occupancyFor(dateISO, weekdayOfISO(dateISO))) {
+        const start = toMinutes(t.startTime);
+        const end = toMinutes(t.endTime);
+        if (start === null || end === null) continue;
+        list.push({ title: t.title, start, end: end <= start ? end + 1440 : end });
+      }
+      byDate.set(dateISO, list);
+    }
+    return list;
+  };
+
+  const seen = new Set<string>();
+
+  for (const task of incoming) {
+    const dupKey = `${task.title.trim().toLowerCase()}|${task.dateISO}|${task.startTime}`;
+    if (seen.has(dupKey)) {
+      errors.push({
+        task,
+        error: {
+          code: "duplicate",
+          message: `Duplicate: "${task.title}" on ${task.dateISO} at ${task.startTime}`,
+        },
+      });
+      continue;
+    }
+    seen.add(dupKey);
+
+    const timeError = validateTaskTime({
+      title: task.title,
+      day: weekdayOfISO(task.dateISO),
+      startTime: task.startTime,
+      endTime: task.endTime,
+    });
+    if (timeError) {
+      errors.push({ task, error: timeError });
+      continue;
+    }
+
+    const start = toMinutes(task.startTime)!;
+    let end = toMinutes(task.endTime)!;
+    if (end <= start) end += 1440; // overnight
+    const interval: TimeInterval = { start, end };
+
+    const occupied = occupancy(task.dateISO);
+    const clash = occupied.find((iv) => intervalsOverlap(iv, interval));
+    if (clash) {
+      conflicts.push({
+        task,
+        conflict: {
+          taskTitle: task.title,
+          dateISO: task.dateISO,
+          conflictsWith: clash.title,
+          conflictStart: minutesToTime(clash.start),
+          conflictEnd: minutesToTime(clash.end),
+        },
+      });
+      continue;
+    }
+
+    occupied.push({ title: task.title, start, end });
+    valid.push(task);
+  }
+
+  return { valid, conflicts, errors };
+}
+
 /**
  * Validate a single manually-entered task against the current day's schedule.
  * Returns null if valid, or a ValidationError to surface to the user.

@@ -91,7 +91,12 @@ export function AIFab({
           type="button"
           onClick={() => setOpen(!open)}
           whileTap={{ scale: 0.93 }}
-          className="relative z-10 flex h-13 w-13 items-center justify-center rounded-full border border-emerald-600 bg-white text-neutral-950 transition-colors duration-200 hover:bg-neutral-100 dark:border-emerald-400 dark:bg-neutral-950 dark:text-white"
+          // `dark:hover:` is not optional here. Without it the bare
+          // `hover:bg-neutral-100` applies in dark mode too, so the fill jumps
+          // from near-black to near-white while the icon stays `dark:text-white`
+          // — a white sparkle on a white circle, i.e. the button disappears
+          // under the cursor. Each theme steps one shade off its own base.
+          className="relative z-10 flex h-13 w-13 items-center justify-center rounded-full border border-emerald-600 bg-white text-neutral-950 transition-colors duration-200 hover:bg-neutral-100 dark:border-emerald-400 dark:bg-neutral-950 dark:text-white dark:hover:bg-neutral-800"
           aria-label={open ? "Close AI assistant" : "Open AI assistant"}
         >
           <AnimatePresence mode="wait" initial={false}>

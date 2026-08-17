@@ -29,6 +29,14 @@ export interface ParsedTask {
   suggestedTime?: string;     // smart suggestion for the missing-info Q&A
   needsTime: boolean;         // true when no explicit time was found
   subtasks?: ParsedSubtask[];
+  /**
+   * A single date this task belongs to, rather than every matching weekday.
+   * Set by the curriculum importer, where week 1's Thursday and week 2's
+   * Thursday are different sessions with different checklists. The commit path
+   * turns this into `recurrence: { type: "once", dateISO }`; absent means the
+   * task recurs weekly as before.
+   */
+  dateISO?: string;
 }
 
 export interface ParsedDay {
