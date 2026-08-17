@@ -19,6 +19,9 @@ import type { DayKey } from "@/lib/useScheduleDB";
 import { DAYS } from "@/lib/scheduleConstants";
 import { addDaysToISO, localISODate } from "@/lib/dateUtils";
 import { parseTimeToMinutes } from "@/lib/timeUtils";
+import { categoryFromIcon, colorFromIcon } from "@/lib/colorSystem";
+import { uid } from "@/lib/taskMutations";
+import type { ParsedDay, ParsedPlan, ParseResult, ParsedTask } from "@/lib/scheduleParser";
 
 export interface CurriculumSubtask {
   id: string;
@@ -429,4 +432,95 @@ export function scheduleCurriculum(
   }
 
   return out;
+}
+
+// ── Bridging into the existing import flow ────────────────────────────────────
+
+/** Keyword → icon, so an imported curriculum gets a sensible colour/category. */
+const ICON_KEYWORDS: [RegExp, string][] = [
+  [/\b(gmat|gre|sat|lsat|exam|test|study|revision)\b/i, "school"],
+  [/\b(read|reading|book)\b/i, "book"],
+  [/\b(run|running|marathon|cardio)\b/i, "run"],
+  [/\b(gym|lift|strength|workout|fitness)\b/i, "barbell"],
+  [/\b(code|coding|program|dev|build)\b/i, "code"],
+  [/\b(language|spanish|french|german|vocab)\b/i, "language"],
+];
+
+/** Best-guess icon from the whole curriculum's text. */
+export function iconForCurriculum(curriculum: ParsedCurriculum): string {
+  const haystack = [
+    ...curriculum.weeks.map((w) => `${w.theme ?? ""} ${w.note ?? ""}`),
+    ...allSessions(curriculum).flatMap((s) => [s.title, ...s.subtasks.map((x) => x.title)]),
+  ].join(" ");
+  for (const [re, icon] of ICON_KEYWORDS) if (re.test(haystack)) return icon;
+  return "school";
+}
+
+export interface CurriculumImportOptions extends CurriculumScheduleOptions {
+  /** Title for the plan the sessions are created under. */
+  planTitle: string;
+  planDescription?: string;
+  /** Overrides the inferred icon. */
+  icon?: string;
+}
+
+/**
+ * Express a curriculum in the shape the existing bulk-import flow already
+ * renders and commits (`ParseResult`), so the preview, the plan creation and the
+ * commit path are reused rather than duplicated.
+ *
+ * Tasks are grouped into weekday buckets as the flow expects, but each carries
+ * its own `dateISO`, and `needsTime` is false because every session has been
+ * resolved to a real time by this point. The commit path reads `dateISO` and
+ * writes `recurrence: { type: "once", dateISO }`.
+ */
+export function curriculumToParseResult(
+  curriculum: ParsedCurriculum,
+  options: CurriculumImportOptions,
+): ParseResult {
+  const placed = scheduleCurriculum(curriculum, options);
+  const icon = options.icon ?? iconForCurriculum(curriculum);
+
+  const plan: ParsedPlan = {
+    ref: uid(),
+    title: options.planTitle.trim() || "Imported plan",
+    ...(options.planDescription ? { description: options.planDescription } : {}),
+    startDate: placed[0]?.dateISO,
+    endDate: placed.length ? placed[placed.length - 1].dateISO : undefined,
+    emoji: icon,
+    color: colorFromIcon(icon),
+    category: categoryFromIcon(icon),
+  };
+
+  const byDay = new Map<DayKey, ParsedTask[]>();
+  for (const p of placed) {
+    const task: ParsedTask = {
+      id: p.session.id,
+      title: p.session.title,
+      startTime: p.startTime,
+      endTime: p.endTime,
+      planRef: plan.ref,
+      icon,
+      needsTime: false,
+      dateISO: p.dateISO,
+      subtasks: p.session.subtasks.map((s) => ({
+        id: s.id,
+        title: s.title,
+        ...(s.info ? { info: s.info } : {}),
+        ...(s.duration ? { duration: s.duration } : {}),
+      })),
+    };
+    const list = byDay.get(p.session.weekday);
+    if (list) list.push(task);
+    else byDay.set(p.session.weekday, [task]);
+  }
+
+  const days: ParsedDay[] = DAYS.filter((d) => byDay.has(d)).map((d) => ({
+    day: d,
+    label: capitalize(d),
+    // Chronological within the bucket, so 12 weeks of Thursdays read in order.
+    tasks: (byDay.get(d) ?? []).sort((a, b) => (a.dateISO ?? "").localeCompare(b.dateISO ?? "")),
+  }));
+
+  return { days, plans: [plan] };
 }

@@ -324,6 +324,54 @@ test("untimed sessions fall back rather than being dropped", () => {
   assert.ok(thu.every((p) => p.startTime === "9:00 AM"));
 });
 
+// ── Bridging into the existing import flow ────────────────────────────────────
+
+const { curriculumToParseResult, iconForCurriculum } = await import("@/lib/curriculumParser.ts");
+
+const IMPORTED = curriculumToParseResult(parsed, {
+  planTitle: "GMAT",
+  startDateISO: START,
+  startTimeByWeekday: { thursday: "6:30 PM", saturday: "9:00 AM" },
+});
+
+test("the curriculum converts to one plan and 48 dated tasks", () => {
+  assert.equal(IMPORTED.plans.length, 1);
+  assert.equal(IMPORTED.plans[0].title, "GMAT");
+  const tasks = IMPORTED.days.flatMap((d) => d.tasks);
+  assert.equal(tasks.length, 48);
+  assert.ok(tasks.every((t) => t.dateISO), "every task must carry its own date");
+  assert.ok(tasks.every((t) => t.needsTime === false), "times are already resolved");
+  assert.ok(tasks.every((t) => t.planRef === IMPORTED.plans[0].ref), "all attach to the new plan");
+});
+
+test("checklists survive the conversion intact", () => {
+  const tasks = IMPORTED.days.flatMap((d) => d.tasks);
+  const total = tasks.reduce((n, t) => n + (t.subtasks?.length ?? 0), 0);
+  assert.equal(total, 313);
+  const thu1 = tasks.find((t) => t.title === "Quantitative Review");
+  assert.equal(thu1.subtasks.length, 9);
+  assert.equal(thu1.subtasks[0].title, "Read Quantitative Review: Integers & Number Properties");
+});
+
+test("only the weekdays actually used appear, each in date order", () => {
+  assert.deepEqual(IMPORTED.days.map((d) => d.day), ["thursday", "saturday", "sunday"]);
+  for (const d of IMPORTED.days) {
+    const dates = d.tasks.map((t) => t.dateISO);
+    assert.deepEqual(dates, [...dates].sort(), `${d.day} is not in date order`);
+  }
+  assert.equal(IMPORTED.days.find((d) => d.day === "sunday").tasks.length, 24);
+});
+
+test("the plan spans the curriculum's first and last dates", () => {
+  const p = IMPORTED.plans[0];
+  assert.equal(p.startDate, "2026-09-10", "week 1 Thursday");
+  assert.equal(p.endDate, "2026-11-29", "week 12 Sunday");
+});
+
+test("the icon is inferred from the content", () => {
+  assert.equal(iconForCurriculum(parsed), "school", "a GMAT plan should read as study");
+});
+
 // ── The rule engine: date-aware vs weekday-scoped ─────────────────────────────
 
 const { validateDatedTasks, applyScheduleRules } = await import("@/lib/scheduleRules.ts");
