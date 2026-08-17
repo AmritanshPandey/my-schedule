@@ -44,6 +44,15 @@ function slotsAllDone(task: Task): boolean {
   return new Set(task.completedSlotIndices ?? []).size >= total;
 }
 
+/** Mirrors slotsAllDone — the whole-task `missed` flag for a multi-slot task
+ *  is true only once every phase has been individually missed, the same
+ *  "every slot" convention completion already uses. */
+function slotsAllMissed(task: Task): boolean {
+  const total = getSlots(task).length;
+  if (total <= 1) return true;
+  return new Set(task.missedSlotIndices ?? []).size >= total;
+}
+
 function stripTodayCompletionEvents(history: TaskCompletionEvent[] | undefined): TaskCompletionEvent[] {
   const today = localISODate(new Date());
   return (history ?? []).filter(
@@ -87,6 +96,26 @@ function stripTodaySlotEvent(
 
 function createSlotEvent(taskId: string, slotIndex: number): TaskCompletionEvent {
   return { id: uid(), taskId, completedAt: new Date().toISOString(), completionType: "slot", slotIndex };
+}
+
+/** A "missed" event scoped to one phase — same completionType as a whole-task
+ *  miss, distinguished by carrying `slotIndex` (mirrors how "slot" events
+ *  distinguish themselves from "task" events). An older whole-task missed
+ *  event (no slotIndex) still means "every phase", so nothing that reads
+ *  history needs to change to understand pre-existing data. */
+function createMissedSlotEvent(taskId: string, slotIndex: number): TaskCompletionEvent {
+  return { id: uid(), taskId, completedAt: new Date().toISOString(), completionType: "missed", slotIndex };
+}
+
+function stripTodayMissedSlotEvent(
+  history: TaskCompletionEvent[] | undefined,
+  slotIndex: number
+): TaskCompletionEvent[] {
+  const today = localISODate(new Date());
+  return (history ?? []).filter((ev) => {
+    if (localISODate(new Date(ev.completedAt)) !== today) return true;
+    return !(ev.completionType === "missed" && ev.slotIndex === slotIndex);
+  });
 }
 
 // ── Event factory ────────────────────────────────────────────────────────────
@@ -214,6 +243,26 @@ export function isTaskResolved(task: Task, totalSubtasks: number): boolean {
 }
 
 /**
+ * The single-phase analogue of resolveTaskState — what one occurrence of a
+ * multi-slot task (a task scheduled several times in the same day) should
+ * show, independent of its other occurrences.
+ *
+ * Deliberately does NOT fall back to the whole-task `missed`/`completed`
+ * flags the way the grid's block layout used to: those describe every phase
+ * at once, so reading them here is exactly the bug this function exists to
+ * fix — every block of a repeated-same-day task rendering identically
+ * "missed" the moment ANY one of them was, with no way to tell them apart.
+ * "Partial" has no per-slot meaning (a slot's subtasks aren't split by
+ * phase), so a slot is only ever completed, missed, or incomplete.
+ */
+export function resolveSlotState(task: Task, slotIndex: number): TaskState {
+  if (!isTrackedTask(task)) return "incomplete";
+  if ((task.completedSlotIndices ?? []).includes(slotIndex)) return "completed";
+  if ((task.missedSlotIndices ?? []).includes(slotIndex)) return "missed";
+  return "incomplete";
+}
+
+/**
  * The accessible name for a task status control.
  *
  * State is carried in the NAME rather than in `aria-pressed`, because pressed is
@@ -298,9 +347,12 @@ export function toggleTaskComplete(
     // "Mark the whole task done" implies every phase is done — otherwise the
     // timeline/list would show unchecked phases on a task that reads complete.
     completedSlotIndices: slotIndices,
-    // Completing clears a prior "missed" mark for today.
+    // Completing clears a prior "missed" mark for today — every phase, since
+    // this is the whole-task toggle (unlike toggleSlotComplete, which only
+    // un-misses the one phase it's completing).
     missed: false,
     missedAt: undefined,
+    missedSlotIndices: [],
     completionHistory: [...stripTodayEvents(task.completionHistory, ["missed"]), ...events],
   };
 }
@@ -317,6 +369,7 @@ export function markTaskMissed(task: Task, allSubtaskIds: string[]): Partial<Tas
     return {
       missed: false,
       missedAt: undefined,
+      missedSlotIndices: [],
       completionHistory: stripTodayEvents(task.completionHistory, ["missed"]),
     };
   }
@@ -333,7 +386,58 @@ export function markTaskMissed(task: Task, allSubtaskIds: string[]): Partial<Tas
     completedSlotIndices: [],
     missed: true,
     missedAt: new Date().toISOString(),
+    // Mirrors completedSlotIndices above: a whole-task miss means every phase
+    // reads missed too, so a per-slot reader (resolveSlotState) stays in sync
+    // with this whole-task call path, not just the per-phase markSlotMissed.
+    missedSlotIndices: allSlotIndices(task),
     completionHistory: [...cleared, ...events],
+  };
+}
+
+/**
+ * The per-slot analogue of markTaskMissed — toggle ONE phase's "missed" mark
+ * for TODAY, independent of a repeated-same-day task's other occurrences.
+ * Marking a slot missed clears that slot's own completion (if any) and
+ * records a slot-scoped missed event; tapping again un-marks just that slot.
+ *
+ * Subtasks are deliberately untouched here (unlike markTaskMissed, which also
+ * marks every subtask missed): a task's subtasks aren't split by phase, so
+ * there's no single slot they belong to — clearing them for one phase being
+ * missed would wrongly affect the others too.
+ *
+ * The whole-task `missed`/`missedAt` flags stay in sync as a derived summary:
+ * true only once EVERY phase has individually been missed (slotsAllMissed),
+ * mirroring the "every slot" convention `completed`/`completedSlotIndices`
+ * already uses.
+ */
+export function markSlotMissed(task: Task, slotIndex: number): Partial<Task> {
+  const currentMissed = task.missedSlotIndices ?? [];
+  const isMissed = currentMissed.includes(slotIndex);
+
+  if (isMissed) {
+    return {
+      missedSlotIndices: currentMissed.filter((i) => i !== slotIndex),
+      // Un-missing any one phase means "every phase" is no longer true.
+      missed: false,
+      missedAt: undefined,
+      completionHistory: stripTodayMissedSlotEvent(task.completionHistory, slotIndex),
+    };
+  }
+
+  const nextMissed = Array.from(new Set([...currentMissed, slotIndex]));
+  const allNowMissed = slotsAllMissed({ ...task, missedSlotIndices: nextMissed });
+  // A missed phase can't also read as a completed one, and marking any single
+  // phase missed means the whole task is no longer "done" today either.
+  const cleared = stripTodayEvents(stripTodaySlotEvent(task.completionHistory, slotIndex), ["task"]);
+
+  return {
+    completedSlotIndices: (task.completedSlotIndices ?? []).filter((i) => i !== slotIndex),
+    completed: false,
+    completedAt: undefined,
+    missedSlotIndices: nextMissed,
+    missed: allNowMissed,
+    missedAt: allNowMissed ? new Date().toISOString() : undefined,
+    completionHistory: [...cleared, createMissedSlotEvent(task.id, slotIndex)],
   };
 }
 
@@ -377,6 +481,7 @@ export function snoozeTaskLater(task: Task, byMinutes = 60): Partial<Task> {
     // A deferred task is not missed.
     missed: false,
     missedAt: undefined,
+    missedSlotIndices: [],
     completionHistory: stripTodayEvents(task.completionHistory, ["missed"]),
   };
 }
@@ -483,14 +588,19 @@ export function toggleSlotComplete(
   if (!isDone) {
     const events: TaskCompletionEvent[] = [createSlotEvent(task.id, slotIndex)];
     if (allNowDone) events.push(createCompletionEvent(task.id, "task"));
+    // Completing THIS phase un-misses just it — stripTodayEvents(history,
+    // ["missed"]) used to clear every missed event for today regardless of
+    // which slot it belonged to, so completing one phase of a repeated-
+    // same-day task silently un-missed its sibling phases too.
+    const nextMissedSlots = (task.missedSlotIndices ?? []).filter((i) => i !== slotIndex);
     return {
       completedSlotIndices: next,
       completed: allNowDone,
       completedAt: allNowDone ? now : undefined,
-      // Any progress clears a prior "missed" mark for today.
+      missedSlotIndices: nextMissedSlots,
       missed: false,
       missedAt: undefined,
-      completionHistory: [...stripTodayEvents(history, ["missed"]), ...events],
+      completionHistory: [...stripTodayMissedSlotEvent(history, slotIndex), ...events],
     };
   }
 
@@ -528,7 +638,7 @@ export function toggleSlotComplete(
 export function completionForDate(
   task: Task,
   dateISO: string
-): { completed: boolean; completedSubtaskIds: string[]; completedSlotIndices: number[]; missed: boolean } {
+): { completed: boolean; completedSubtaskIds: string[]; completedSlotIndices: number[]; missed: boolean; missedSlotIndices: number[] } {
   const onDate = (task.completionHistory ?? []).filter(
     (e) => localISODate(new Date(e.completedAt)) === dateISO
   );
@@ -547,9 +657,26 @@ export function completionForDate(
       completedSubtaskIds: allSubIds,
       completedSlotIndices: totalSlots > 1 ? Array.from({ length: totalSlots }, (_, i) => i) : slotIndices,
       missed: false,
+      missedSlotIndices: [],
     };
   }
-  const missed = onDate.some((e) => e.completionType === "missed" && !e.subtaskId);
+  // A missed event carrying a slotIndex is scoped to that one phase; a
+  // whole-task miss (older data, or an explicit "mark missed" on a
+  // single-slot task) carries neither slotIndex nor subtaskId. The
+  // whole-task `missed` summary is true either way it was recorded, or once
+  // every phase has individually been missed — same "every slot" convention
+  // `completed`/`completedSlotIndices` already uses above.
+  const missedSlotIndices = Array.from(
+    new Set(
+      onDate
+        .filter((e) => e.completionType === "missed" && e.slotIndex !== undefined)
+        .map((e) => e.slotIndex as number)
+    )
+  );
+  const wholeTaskMissedEvent = onDate.some(
+    (e) => e.completionType === "missed" && !e.subtaskId && e.slotIndex === undefined
+  );
+  const missed = wholeTaskMissedEvent || (totalSlots > 1 && missedSlotIndices.length >= totalSlots);
   const subIds = Array.from(
     new Set(onDate.filter((e) => e.completionType === "subtask" && e.subtaskId).map((e) => e.subtaskId as string))
   );
@@ -558,6 +685,7 @@ export function completionForDate(
     completedSubtaskIds: subIds,
     completedSlotIndices: slotIndices,
     missed,
+    missedSlotIndices,
   };
 }
 
@@ -577,6 +705,13 @@ function datedSlotEvent(taskId: string, dateISO: string, slotIndex: number): Tas
  */
 export function datedMissedEvent(taskId: string, dateISO: string): TaskCompletionEvent {
   return { id: uid(), taskId, completedAt: new Date(`${dateISO}T12:00:00`).toISOString(), completionType: "missed" };
+}
+
+/** The per-slot analogue of datedMissedEvent — a dated miss scoped to ONE
+ *  phase of a multi-slot task, so the rollover pass can miss just the phases
+ *  that were actually left unresolved instead of the whole task. */
+export function datedMissedSlotEvent(taskId: string, dateISO: string, slotIndex: number): TaskCompletionEvent {
+  return { id: uid(), taskId, completedAt: new Date(`${dateISO}T12:00:00`).toISOString(), completionType: "missed", slotIndex };
 }
 
 /** Toggle whole-task completion for a non-today date — history only. */

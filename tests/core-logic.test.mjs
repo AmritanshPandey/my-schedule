@@ -38,6 +38,8 @@ const {
   resolveTaskState,
   getTaskSubtaskSummary,
   markTaskMissed,
+  markSlotMissed,
+  resolveSlotState,
   taskStatusLabel,
   toggleTaskFromCheckbox,
 } = await import("../lib/taskCompletion.ts");
@@ -943,6 +945,133 @@ test("completionForDate derives per-slot completion from history for a past date
   const derived = completionForDate(task, today);
   assert.deepEqual(derived.completedSlotIndices, [0]);
   assert.equal(derived.completed, false);
+});
+
+// ── Per-slot "missed" (a task occurring multiple times in the same day) ──────
+// Regression coverage for the bug where every block of a repeated-same-day
+// task showed the same "missed" state the moment any ONE of them was —
+// there was no way to miss (or tell apart) one occurrence independently of
+// its siblings.
+
+function multiSlotTask(overrides = {}) {
+  return {
+    id: "multi-4",
+    title: "Portfolio",
+    startTime: "9:30 AM",
+    endTime: "12:15 PM",
+    slots: [
+      { startTime: "9:30 AM", endTime: "12:15 PM" },
+      { startTime: "12:15 PM", endTime: "1:15 PM" },
+    ],
+    icon: "code",
+    color: "violet",
+    planId: "plan-1",
+    ...overrides,
+  };
+}
+
+test("markSlotMissed misses one phase independent of its sibling", () => {
+  const task = multiSlotTask();
+
+  const afterFirst = { ...task, ...markSlotMissed(task, 0) };
+  assert.deepEqual(afterFirst.missedSlotIndices, [0]);
+  assert.equal(afterFirst.missed, false, "one of two phases missed is not the whole task missed");
+  assert.equal(resolveSlotState(afterFirst, 0), "missed");
+  assert.equal(resolveSlotState(afterFirst, 1), "incomplete", "the sibling phase is untouched");
+
+  const afterSecond = { ...afterFirst, ...markSlotMissed(afterFirst, 1) };
+  assert.deepEqual(afterSecond.missedSlotIndices.sort(), [0, 1]);
+  assert.equal(afterSecond.missed, true, "every phase missed now reads as the whole task missed");
+
+  const afterUndo = { ...afterSecond, ...markSlotMissed(afterSecond, 0) };
+  assert.deepEqual(afterUndo.missedSlotIndices, [1]);
+  assert.equal(afterUndo.missed, false, "un-missing one phase clears the whole-task summary again");
+  assert.equal(resolveSlotState(afterUndo, 1), "missed", "the still-missed sibling is unaffected by the undo");
+});
+
+test("markSlotMissed clears that phase's own completion, not its sibling's", () => {
+  const task = { ...multiSlotTask(), completedSlotIndices: [1] }; // phase 1 already done
+  const missedFirst = { ...task, ...markSlotMissed(task, 0) };
+  assert.deepEqual(missedFirst.missedSlotIndices, [0]);
+  assert.deepEqual(missedFirst.completedSlotIndices, [1], "the already-done sibling phase stays done");
+});
+
+test("completing a phase un-misses only that phase (not a sibling's independent miss)", () => {
+  // The bug: toggleSlotComplete used to strip EVERY missed event for today,
+  // so completing phase 1 while phase 0 was separately missed silently
+  // un-missed phase 0 too.
+  const task = multiSlotTask();
+  const bothPending = { ...task, ...markSlotMissed(task, 0) };
+  const afterCompletingOther = { ...bothPending, ...toggleSlotComplete(bothPending, 1, 0) };
+  assert.deepEqual(afterCompletingOther.completedSlotIndices, [1]);
+  assert.deepEqual(afterCompletingOther.missedSlotIndices, [0], "phase 0's miss survives phase 1 being completed");
+  assert.equal(resolveSlotState(afterCompletingOther, 0), "missed");
+  assert.equal(resolveSlotState(afterCompletingOther, 1), "completed");
+});
+
+test("resolveSlotState never falls back to the whole-task missed/completed flags", () => {
+  // A stale/legacy whole-task `missed: true` with no per-slot data must not
+  // make every phase read as missed — that's exactly the "can't tell the
+  // blocks apart" bug this function exists to avoid reintroducing.
+  const task = { ...multiSlotTask(), missed: true, completed: false };
+  assert.equal(resolveSlotState(task, 0), "incomplete");
+  assert.equal(resolveSlotState(task, 1), "incomplete");
+});
+
+test("completionForDate reads a per-slot missed event as that phase only, not the whole day", () => {
+  const today = localISODate(new Date());
+  const task = {
+    ...multiSlotTask(),
+    id: "multi-5",
+    completionHistory: [
+      { id: "e1", taskId: "multi-5", completionType: "missed", slotIndex: 0, completedAt: new Date(`${today}T12:00:00`).toISOString() },
+    ],
+  };
+  const derived = completionForDate(task, today);
+  assert.deepEqual(derived.missedSlotIndices, [0]);
+  assert.equal(derived.missed, false, "one missed phase of two is not the whole day missed");
+});
+
+test("completionForDate reports the whole day missed once every phase has its own missed event", () => {
+  const today = localISODate(new Date());
+  const task = {
+    ...multiSlotTask(),
+    id: "multi-6",
+    completionHistory: [
+      { id: "e1", taskId: "multi-6", completionType: "missed", slotIndex: 0, completedAt: new Date(`${today}T12:00:00`).toISOString() },
+      { id: "e2", taskId: "multi-6", completionType: "missed", slotIndex: 1, completedAt: new Date(`${today}T12:00:00`).toISOString() },
+    ],
+  };
+  const derived = completionForDate(task, today);
+  assert.deepEqual(derived.missedSlotIndices.sort(), [0, 1]);
+  assert.equal(derived.missed, true);
+});
+
+test("applyAutoMissed only misses a multi-slot task's unresolved phases, not the done one", () => {
+  const now = new Date(2026, 0, 15, 10, 0, 0);
+  const D = "2026-01-14";
+  const task = {
+    ...multiSlotTask(),
+    id: "t-multi-open",
+    taskType: "task",
+    subtasks: [],
+    // Phase 0 was completed that day; phase 1 was left untouched.
+    completionHistory: [
+      { id: "e1", taskId: "t-multi-open", completionType: "slot", slotIndex: 0, completedAt: new Date(`${D}T12:00:00`).toISOString() },
+    ],
+  };
+  const sched = autoMissSchedule({ lastRolloverISO: "2026-01-13" });
+  sched.activities[autoMissWkKey(D)] = [task];
+
+  const r = applyAutoMissed(sched, now);
+  const missedEvents = (r.activities[autoMissWkKey(D)][0].completionHistory ?? []).filter((e) => e.completionType === "missed");
+  assert.equal(missedEvents.length, 1, "only the unresolved phase gets a missed event");
+  assert.equal(missedEvents[0].slotIndex, 1, "phase 0 (already done) is spared");
+
+  const derived = completionForDate(r.activities[autoMissWkKey(D)][0], D);
+  assert.deepEqual(derived.completedSlotIndices, [0]);
+  assert.deepEqual(derived.missedSlotIndices, [1]);
+  assert.equal(derived.missed, false, "half-done, half-missed is not the whole day missed");
 });
 
 // ── normalizeTasks field-loss guard ──────────────────────────────────────────

@@ -58,6 +58,15 @@ export interface TaskBlockCardProps {
    */
   slotOverride?: TaskSlot;
   /**
+   * Index of `slotOverride` into getSlots(task) — paired with it so a "1/2"
+   * phase badge can render when a repeated-same-day task is split into
+   * separate blocks. Without this, two blocks of the same task sitting back
+   * to back (e.g. a morning and an afternoon session) look identical apart
+   * from their time, easy to mistake for a scheduling duplicate rather than
+   * two phases of one task.
+   */
+  slotIndex?: number;
+  /**
    * list only: independent completion state + toggle per slot, aligned 1:1
    * with getSlots(task). When the task has more than one slot and this is
    * provided, each phase renders its own row and checkbox — "N things to
@@ -127,6 +136,7 @@ export function TaskBlockCard({
   style,
   minimal = false,
   slotOverride,
+  slotIndex,
   slotCompletions,
 }: TaskBlockCardProps) {
   // A commitment is held time, not work: it reports no completion state, so it
@@ -153,6 +163,12 @@ export function TaskBlockCard({
   const isMultiSlotList =
     tracked && isList && !slotOverride && !missed && !!slotCompletions && slotCompletions.length === displaySlots.length && displaySlots.length > 1;
   const showEyebrow = !!plan && !narrow && !minimal;
+  // "1/2" phase badge — the only thing that told two blocks of a repeated-
+  // same-day task apart used to be their time, so two back-to-back blocks
+  // (say, a morning and an afternoon session) read as identical at a glance
+  // and were easy to mistake for an accidental scheduling duplicate.
+  const totalTaskSlots = getSlots(task).length;
+  const showPhaseBadge = slotIndex !== undefined && totalTaskSlots > 1 && !narrow && !minimal;
   const gridRadius =
     edgeCut === "bottom" ? "rounded-t-[8px]" : edgeCut === "top" ? "rounded-b-[8px]" : "rounded-[8px]";
   // Timeline (grid) subtask/session pill — only when wired and the task has items.
@@ -231,10 +247,24 @@ export function TaskBlockCard({
       <div className={`flex min-w-0 items-center ${isList ? "gap-2.5" : "gap-1.5"}`}>
         {statusControl}
         <div className={`flex min-w-0 flex-col ${isList ? "gap-1" : "gap-px"}`}>
-          {showEyebrow && (
-            <span className={`truncate font-extrabold ${styles.planLabel} ${isList ? "text-[12px] leading-none" : "text-[9px] leading-none"}`}>
-              {plan!.title}
-            </span>
+          {(showEyebrow || showPhaseBadge) && (
+            <div className="flex min-w-0 items-center gap-1">
+              {showEyebrow && (
+                <span className={`truncate font-extrabold ${styles.planLabel} ${isList ? "text-[12px] leading-none" : "text-[9px] leading-none"}`}>
+                  {plan!.title}
+                </span>
+              )}
+              {showPhaseBadge && (
+                <span
+                  aria-label={`Phase ${slotIndex! + 1} of ${totalTaskSlots}`}
+                  className={`shrink-0 rounded-full border border-current/40 font-extrabold tabular-nums ${styles.durationBadge} ${
+                    isList ? "px-1.5 text-[10px] leading-4" : "px-1 text-[8px] leading-[13px]"
+                  }`}
+                >
+                  {slotIndex! + 1}/{totalTaskSlots}
+                </span>
+              )}
+            </div>
           )}
           {title}
           {subtaskPill?.hasItems && (

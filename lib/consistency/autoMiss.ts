@@ -18,8 +18,9 @@ import type { Schedule, Task } from "../useScheduleDB";
 import { DAYS } from "../scheduleConstants";
 import { localISODate, addDaysToISO } from "../dateUtils";
 import { getConfiguredDayStartMinutes, DEFAULT_TIMELINE_START_MINUTES } from "../timeline/displayWindow";
-import { isTrackedTask, completionForDate, datedMissedEvent } from "../taskCompletion";
+import { isTrackedTask, completionForDate, datedMissedEvent, datedMissedSlotEvent } from "../taskCompletion";
 import { isTaskScheduledOn } from "../taskOccurrence";
+import { getSlots } from "../taskMutations";
 
 /** Never backfill more than a month, so a long-absent user isn't flooded. */
 export const MAX_LOOKBACK_DAYS = 31;
@@ -75,6 +76,29 @@ export function applyAutoMissed(schedule: Schedule, now: Date): Schedule {
       if (!isTaskScheduledOn(task, d, true)) return task; // honors recurrence/skips/active window
       const state = completionForDate(task, d);
       if (state.completed || state.missed) return task; // already resolved for that date
+
+      const totalSlots = getSlots(task).length;
+      if (totalSlots > 1) {
+        // A repeated-same-day task misses ONLY the phases still unresolved —
+        // never the whole task — so a task with one done phase and one
+        // skipped phase reads as half-missed, not entirely missed. See
+        // taskCompletion.ts's markSlotMissed/resolveSlotState for the same
+        // per-phase principle applied to today's live state.
+        const unresolved = Array.from({ length: totalSlots }, (_, i) => i).filter(
+          (i) => !state.completedSlotIndices.includes(i) && !state.missedSlotIndices.includes(i),
+        );
+        if (unresolved.length === 0) return task; // every phase already resolved
+        bucketChanged = true;
+        changed = true;
+        return {
+          ...task,
+          completionHistory: [
+            ...(task.completionHistory ?? []),
+            ...unresolved.map((i) => datedMissedSlotEvent(task.id, d, i)),
+          ],
+        };
+      }
+
       bucketChanged = true;
       changed = true;
       return { ...task, completionHistory: [...(task.completionHistory ?? []), datedMissedEvent(task.id, d)] };

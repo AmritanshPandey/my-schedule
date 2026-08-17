@@ -1069,7 +1069,15 @@ export default function IOSScheduleApp() {
           const done = slotIndex != null
             ? (task.completedSlotIndices ?? []).includes(slotIndex)
             : !!task.completed;
-          if (!done && !task.missed) currentKey = key;
+          // Per-phase, not whole-task: otherwise the whole task's `missed`
+          // flag (true once EVERY phase is missed) would still correctly gate
+          // this, but reading it here instead of the phase's own flag is the
+          // same "every block reads the same state" bug fixed elsewhere for
+          // a repeated-same-day task with a mix of resolved/unresolved phases.
+          const rowMissed = slotIndex != null
+            ? (task.missedSlotIndices ?? []).includes(slotIndex)
+            : !!task.missed;
+          if (!done && !rowMissed) currentKey = key;
         }
       }
     }

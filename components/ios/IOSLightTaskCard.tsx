@@ -3,7 +3,7 @@
 import { IconArrowUpRight, IconEdit, IconListCheck } from "@tabler/icons-react";
 import { TaskBlockCard } from "@/components/TaskBlockCard";
 import type { Plan, Task, TaskCategory } from "@/lib/useScheduleDB";
-import { calculateTaskProgress, getTaskCheckableItems, getTaskSubtaskSummary, isTrackedTask, resolveTaskState, type TaskState } from "@/lib/taskCompletion";
+import { calculateTaskProgress, getTaskCheckableItems, getTaskSubtaskSummary, isTrackedTask, resolveSlotState, resolveTaskState, type TaskState } from "@/lib/taskCompletion";
 import { formatSlotsDuration } from "@/lib/timeUtils";
 import { getSlots } from "@/lib/taskMutations";
 import { haptic } from "@/lib/haptics";
@@ -54,12 +54,15 @@ export default function IOSLightTaskCard({
   const slots = getSlots(task);
   const isMultiSlot = slots.length > 1;
 
-  // Rendering a single slot of a multi-slot task as its own entry.
+  // Rendering a single slot of a multi-slot task as its own entry. There's no
+  // per-slot "mark missed" gesture on this surface yet (see onLongPressMissed
+  // below), but resolveSlotState still reads it correctly when it was set
+  // from elsewhere (the desktop week grid), instead of always reporting
+  // "incomplete" for a phase that's actually missed.
   const singleSlot = slotIndex != null && slotIndex >= 0 && slotIndex < slots.length;
-  const slotDone = singleSlot ? (task.completedSlotIndices ?? []).includes(slotIndex!) : false;
 
   const state: TaskState = singleSlot && tracked
-    ? (slotDone ? "completed" : "incomplete")
+    ? resolveSlotState(task, slotIndex!)
     : resolveTaskState(task, task.taskType === "session" ? 0 : itemCount);
 
   // Per-phase checkboxes-within-one-card only apply when NOT already split into
@@ -129,6 +132,7 @@ export default function IOSLightTaskCard({
       duration={duration}
       readOnly={readOnly}
       slotOverride={singleSlot ? slots[slotIndex!] : undefined}
+      slotIndex={singleSlot ? slotIndex : undefined}
       slotCompletions={slotCompletions}
       onToggle={singleSlot
         ? toggleSlot

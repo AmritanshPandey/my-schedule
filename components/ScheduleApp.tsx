@@ -121,11 +121,13 @@ import {
   toggleSlotComplete,
   isTrackedTask,
   markTaskMissed,
+  markSlotMissed,
   snoozeTaskLater,
   completionForDate,
   isTaskCompleted,
   isTaskResolved,
   resolveTaskState,
+  resolveSlotState,
   getTaskCheckableItems,
   getTaskSubtaskSummary,
 } from "@/lib/taskCompletion";
@@ -1455,6 +1457,26 @@ export default function ScheduleApp() {
     [activeDay, setSchedule]
   );
 
+  /** The per-phase analogue of handleMarkTaskMissed — marks just ONE occurrence
+   *  of a repeated-same-day task missed, independent of its other blocks that
+   *  day. Mirrors handleToggleSlot's shape, keyed by slot index. */
+  const handleMarkSlotMissed = useCallback(
+    (taskId: string, slotIndex: number, day: DayKey = activeDay, dateISO?: string) => {
+      if (dateISO && dateISO !== todayISO()) return; // only today is editable
+      haptic("medium");
+      setSchedule((prev) => ({
+        ...prev,
+        activities: {
+          ...prev.activities,
+          [day]: (prev.activities[day] ?? []).map((t) =>
+            t.id === taskId ? { ...t, ...markSlotMissed(t, slotIndex) } : t
+          ),
+        },
+      }));
+    },
+    [activeDay, setSchedule]
+  );
+
   /** WeekGrid block hover-icon → opens the same MissedTaskSheet Overview's
    *  Needs Attention card already opens (setMissedSheet), just from a second
    *  entry point on the timeline itself. */
@@ -2707,12 +2729,11 @@ export default function ScheduleApp() {
       : formatTaskDuration(task.startTime, task.endTime);
     const subtaskSummary = getTaskSubtaskSummary(task, linkedPlan);
     const allSubtaskIds = subtaskSummary.hasItems ? getTaskCheckableItems(task, linkedPlan).map((i) => i.id) : [];
+    // Same per-phase principle as renderWeekCard below: reading the whole-task
+    // `missed` flag here made every block of a repeated-same-day task show the
+    // same state the moment any ONE of them changed.
     const taskState = isMultiSlot
-      ? task.missed
-        ? "missed"
-        : (task.completedSlotIndices ?? []).includes(slotIndex)
-        ? "completed"
-        : "incomplete"
+      ? resolveSlotState(task, slotIndex)
       : resolveTaskState(task, subtaskSummary.totalCount);
     const toggle = () => {
       haptic("light");
@@ -2725,6 +2746,7 @@ export default function ScheduleApp() {
       <TaskBlockCard
         variant="grid"
         slotOverride={slot}
+        slotIndex={isMultiSlot ? slotIndex : undefined}
         task={task}
         plan={linkedPlan}
         category={taskCategory}
@@ -2761,16 +2783,15 @@ export default function ScheduleApp() {
     const duration = slot
       ? formatTaskDuration(slot.startTime, slot.endTime)
       : formatTaskDuration(task.startTime, task.endTime);
-    // A multi-slot task completes per phase — this block's state reflects just
-    // its own slot, not the whole task (which only flips once every slot is done).
+    // A multi-slot task completes AND misses per phase — this block's state
+    // reflects just its own slot, never the whole task's `missed`/`completed`
+    // flags (which only flip once every slot is done/missed) — otherwise every
+    // block of a repeated-same-day task shows the same state the moment any
+    // ONE of them changes, with no way to tell the blocks apart.
     const totalSlots = getSlots(task).length;
     const taskState =
       totalSlots > 1 && slotIndex !== undefined
-        ? task.missed
-          ? "missed"
-          : (task.completedSlotIndices ?? []).includes(slotIndex)
-          ? "completed"
-          : "incomplete"
+        ? resolveSlotState(task, slotIndex)
         : resolveTaskState(task, getTaskSubtaskSummary(task, linkedPlan).totalCount);
     return (
       <TaskBlockCard
@@ -2781,6 +2802,7 @@ export default function ScheduleApp() {
         state={taskState}
         duration={duration}
         slotOverride={slot}
+        slotIndex={totalSlots > 1 ? slotIndex : undefined}
         readOnly={readOnly}
         edgeCut={edgeCut}
         compact={height < 56}
@@ -3159,6 +3181,7 @@ export default function ScheduleApp() {
                 onDeleteTask={requestDeleteTask}
                 onToggleTaskComplete={handleToggleTaskComplete}
                 onToggleSlot={handleToggleSlot}
+                onMarkSlotMissed={handleMarkSlotMissed}
                 renderCard={renderWeekCard}
               />
             </div>

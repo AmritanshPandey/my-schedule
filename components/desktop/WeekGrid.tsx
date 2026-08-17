@@ -7,7 +7,7 @@ import { IconChevronLeft, IconChevronRight, IconDotsVertical, IconX, IconAlertTr
 import type { DayKey, Plan, Ritual, RitualCompletion, Schedule, Task, TaskSlot } from "@/lib/useScheduleDB";
 import { DAYS } from "@/lib/useScheduleDB";
 import { getSlots, sortTasksByTime } from "@/lib/taskMutations";
-import { completionForDate, getTaskCheckableItems, getTaskSubtaskSummary, isTrackedTask, resolveTaskState } from "@/lib/taskCompletion";
+import { completionForDate, getTaskCheckableItems, getTaskSubtaskSummary, isTrackedTask, resolveSlotState, resolveTaskState } from "@/lib/taskCompletion";
 import { isTaskScheduledOn, resolveOccurrence } from "@/lib/taskOccurrence";
 import { addDaysToISO, localISODate, todayISO } from "@/lib/dateUtils";
 import { currentMinutes, parseTimeToMinutes } from "@/lib/timeUtils";
@@ -200,6 +200,12 @@ interface WeekGridProps {
   onRetimeTask?: (taskId: string, day: DayKey, slotIndex: number, startTime: string, endTime: string) => void;
   /** Grid block hover-icon, today only, not-yet-missed: mark it missed. */
   onMarkMissed?: (taskId: string, allSubtaskIds: string[], day: DayKey, dateISO: string) => void;
+  /**
+   * The per-phase analogue of onMarkMissed, for a block belonging to a
+   * repeated-same-day task (getSlots(task).length > 1) — marks just THIS
+   * occurrence missed, independent of the task's other blocks that day.
+   */
+  onMarkSlotMissed?: (taskId: string, slotIndex: number, day: DayKey, dateISO: string) => void;
   /** Grid block hover-icon, any column showing an already-missed occurrence:
    *  opens the reschedule/dismiss sheet (same one Overview's Needs Attention
    *  card opens — this just adds a second entry point from the timeline). */
@@ -251,6 +257,7 @@ export function WeekGrid({
   onCreateTaskAtTime,
   onRetimeTask,
   onMarkMissed,
+  onMarkSlotMissed,
   onOpenMissedRecovery,
   renderCard,
 }: WeekGridProps) {
@@ -904,19 +911,26 @@ export function WeekGrid({
                   const visualHeight = Math.max(22, layout.height - TASK_VERTICAL_INSET * 2);
                   const linkedPlan = layout.task.planId ? plansById.get(layout.task.planId) ?? null : null;
                   const allSubtaskIds = getTaskCheckableItems(layout.task, linkedPlan).map((item) => item.id);
-                  // Multi-slot tasks complete per phase; a single-slot task keeps
-                  // the whole-task flag.
+                  // Multi-slot tasks complete AND miss per phase — reading the
+                  // whole-task `completed`/`missed` flags here (as this used to)
+                  // makes every block of a repeated-same-day task show the same
+                  // state the moment any ONE of them changes, with no way to
+                  // tell the blocks apart. A single-slot task keeps the
+                  // whole-task flags (there's only one phase to have).
                   const totalSlots = getSlots(layout.task).length;
                   const slotDone = totalSlots > 1
                     ? (layout.task.completedSlotIndices ?? []).includes(layout.slotIndex)
                     : !!layout.task.completed;
+                  const slotMissed = totalSlots > 1
+                    ? (layout.task.missedSlotIndices ?? []).includes(layout.slotIndex)
+                    : !!layout.task.missed;
                   // The block you should be executing right now — green ring
                   // (progress signal). Sanctioned chrome-led depth → data-glass.
                   const nowPx = now === null ? null : (now - startMin) * PX_MIN;
                   const isCurrent =
                     dayIsToday &&
                     !slotDone &&
-                    !layout.task.missed &&
+                    !slotMissed &&
                     nowPx !== null &&
                     nowPx >= layout.top &&
                     nowPx < layout.top + layout.height;
@@ -927,12 +941,21 @@ export function WeekGrid({
                   // "handle missed" (any column showing an already-missed
                   // occurrence — completionForDate above already resolved the
                   // right historical flag for past days). Never on a continuation.
+                  // A multi-slot task's mark-missed dispatches per-phase
+                  // (onMarkSlotMissed) instead of whole-task (onMarkMissed).
                   const gridMenuAction = isContinuation
                     ? undefined
-                    : layout.task.missed && onOpenMissedRecovery
+                    : slotMissed && onOpenMissedRecovery
                     ? { label: "Handle missed", icon: <IconAlertTriangle size={13} strokeWidth={2} />, onClick: () => onOpenMissedRecovery({ task: layout.task, plan: linkedPlan, dateISO }) }
-                    : dayIsToday && !layout.task.missed && !slotDone && isTrackedTask(layout.task) && onMarkMissed
-                    ? { label: "Mark missed", icon: <IconX size={13} strokeWidth={2.5} />, onClick: () => onMarkMissed(layout.task.id, allSubtaskIds, day, dateISO) }
+                    : dayIsToday && !slotMissed && !slotDone && isTrackedTask(layout.task) && (totalSlots > 1 ? onMarkSlotMissed : onMarkMissed)
+                    ? {
+                        label: "Mark missed",
+                        icon: <IconX size={13} strokeWidth={2.5} />,
+                        onClick: () =>
+                          totalSlots > 1
+                            ? onMarkSlotMissed!(layout.task.id, layout.slotIndex, day, dateISO)
+                            : onMarkMissed!(layout.task.id, allSubtaskIds, day, dateISO),
+                      }
                     : undefined;
                   return (
                     <div

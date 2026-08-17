@@ -37,6 +37,7 @@ const OPTIONAL_TASK_FIELDS = [
   "completedSlotIndices",
   "missed",
   "missedAt",
+  "missedSlotIndices",
   "completionHistory",
   "streakEnabled",
   "sortOrder",
@@ -61,6 +62,7 @@ function keepField(key: (typeof OPTIONAL_TASK_FIELDS)[number], value: unknown): 
     case "slots":
       return Array.isArray(value) && value.length > 0;
     case "completedSlotIndices":
+    case "missedSlotIndices":
     case "subtasks":
       return Array.isArray(value);
     case "exceptions":
@@ -197,7 +199,7 @@ export function resetStaleCompletions(schedule: Schedule, todayISO: string): Sch
     if (!tasks?.length) continue;
     let dayChanged = false;
     const next = tasks.map((t) => {
-      const hasLiveState = !!t.completed || !!t.missed || (t.completedSubtaskIds?.length ?? 0) > 0 || (t.completedSlotIndices?.length ?? 0) > 0;
+      const hasLiveState = !!t.completed || !!t.missed || (t.completedSubtaskIds?.length ?? 0) > 0 || (t.completedSlotIndices?.length ?? 0) > 0 || (t.missedSlotIndices?.length ?? 0) > 0;
       if (!hasLiveState) return t;
       const activeToday =
         (t.completedAt && localISODate(new Date(t.completedAt)) === todayISO) ||
@@ -205,7 +207,7 @@ export function resetStaleCompletions(schedule: Schedule, todayISO: string): Sch
         (t.completionHistory ?? []).some((e) => localISODate(new Date(e.completedAt)) === todayISO);
       if (activeToday) return t;
       dayChanged = true;
-      return { ...t, completed: false, completedAt: undefined, completedSubtaskIds: [], completedSlotIndices: [], missed: false, missedAt: undefined };
+      return { ...t, completed: false, completedAt: undefined, completedSubtaskIds: [], completedSlotIndices: [], missed: false, missedAt: undefined, missedSlotIndices: [] };
     });
     if (dayChanged) {
       activities[day] = next;

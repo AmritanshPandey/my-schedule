@@ -54,20 +54,25 @@ function CurrentTaskHighlightLayerInner({
 
   if (activeDay !== todayKey) return null;
 
-  // A multi-slot task's `completed` flag only flips once EVERY phase is done, so
-  // the ring has to read this phase's own state — otherwise a finished 9am block
-  // keeps glowing as "do this now" while you're inside it.
+  // A multi-slot task's `completed`/`missed` flags only flip once EVERY phase
+  // is done/missed, so the ring has to read this phase's own state —
+  // otherwise a finished (or missed) 9am block keeps glowing as "do this now"
+  // while you're inside its afternoon sibling instead.
   const isBlockDone = (l: HighlightLayout) =>
     l.isMultiSlot && l.slotIndex !== undefined
       ? (l.task.completedSlotIndices ?? []).includes(l.slotIndex)
       : !!l.task.completed;
+  const isBlockMissed = (l: HighlightLayout) =>
+    l.isMultiSlot && l.slotIndex !== undefined
+      ? (l.task.missedSlotIndices ?? []).includes(l.slotIndex)
+      : !!l.task.missed;
 
   const current = layouts.find(
     (l) =>
       nowMinutes >= l.start &&
       nowMinutes < l.end &&
       !isBlockDone(l) &&
-      !l.task.missed,
+      !isBlockMissed(l),
   );
   if (!current) return null;
 

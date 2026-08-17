@@ -118,8 +118,15 @@ export interface Task {
   completedAt?: string;               // ISO timestamp of last full completion
   completedSubtaskIds?: string[];
   completedSlotIndices?: number[];    // indices into getSlots(task) completed today (multi-slot tasks)
-  missed?: boolean;                   // today's occurrence was marked "missed"
+  missed?: boolean;                   // today's occurrence was marked "missed" — for a
+                                       // multi-slot task this means EVERY slot is missed;
+                                       // see missedSlotIndices for one phase at a time.
   missedAt?: string;                  // ISO timestamp it was marked missed
+  missedSlotIndices?: number[];       // indices into getSlots(task) marked missed today
+                                       // (multi-slot tasks) — the per-phase analogue of
+                                       // completedSlotIndices, so one occurrence of a
+                                       // repeated-same-day task can be missed independently
+                                       // of its other occurrences.
   completionHistory?: TaskCompletionEvent[]; // append-only event log
   streakEnabled?: boolean;            // opt-in to streak tracking
   sortOrder?: number;                 // drag-reorder position within a day
@@ -1309,8 +1316,8 @@ export function useScheduleDB() {
       const activities = {} as Schedule["activities"];
       for (const day of DAYS) {
         activities[day] = (schedule.activities[day] ?? []).map((t) => {
-          const { completed: _c, completedAt: _a, completedSubtaskIds: _s, completedSlotIndices: _sl, completionHistory: _h, missed: _m, missedAt: _ma, ...rest } = t;
-          void _c; void _a; void _s; void _sl; void _h; void _m; void _ma;
+          const { completed: _c, completedAt: _a, completedSubtaskIds: _s, completedSlotIndices: _sl, completionHistory: _h, missed: _m, missedAt: _ma, missedSlotIndices: _msl, ...rest } = t;
+          void _c; void _a; void _s; void _sl; void _h; void _m; void _ma; void _msl;
           return rest;
         });
       }

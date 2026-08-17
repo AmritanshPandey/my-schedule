@@ -9,6 +9,7 @@ import {
   getTaskCheckableItems,
   getTaskSubtaskSummary,
   isTrackedTask,
+  resolveSlotState,
   resolveTaskState,
 } from "@/lib/taskCompletion";
 import { getSlots } from "@/lib/taskMutations";
@@ -69,10 +70,13 @@ export default function IOSTimelineRow({
   const slots = getSlots(task);
   const singleSlot = slotIndex != null && slotIndex >= 0 && slotIndex < slots.length;
   const slot = singleSlot ? slots[slotIndex!] : slots[0];
-  const slotDone = singleSlot ? (task.completedSlotIndices ?? []).includes(slotIndex!) : false;
 
+  // No per-slot "mark missed" gesture on this row yet, but resolveSlotState
+  // still reads it correctly when it was set elsewhere (the desktop week
+  // grid), instead of always reporting "incomplete" for a phase that's
+  // actually missed.
   const state = singleSlot && tracked
-    ? (slotDone ? "completed" : "incomplete")
+    ? resolveSlotState(task, slotIndex!)
     : resolveTaskState(task, task.taskType === "session" ? 0 : itemCount);
   const done = state === "completed";
   const missed = state === "missed";
