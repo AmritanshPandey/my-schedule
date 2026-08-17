@@ -19,7 +19,7 @@ import {
   IconChevronDown,
 } from "@tabler/icons-react";
 import { useAuth } from "@/contexts/AuthProvider";
-import { StatusCard } from "@/components/ai/AISettingsSheet";
+import { getAIProviderState } from "@/lib/ai/config";
 import CategoryManager from "@/components/category/CategoryManager";
 import { useGoogleSignIn } from "@/components/auth/useGoogleSignIn";
 import { AuthErrorNote } from "@/components/auth/AuthErrorNote";
@@ -43,6 +43,8 @@ import { SETTINGS_CONTROL_CLASS, SETTINGS_ICON_BUTTON_CLASS } from "@/components
 import { buildDeleteConfirmationCopy } from "@/lib/deleteConfirm";
 import { normalizeDayStartTime } from "@/lib/timeline/displayWindow";
 import { localISODate } from "@/lib/dateUtils";
+
+const PROVIDER_LABEL: Record<string, string> = { mlx: "MLX", ollama: "Ollama", "openai-compatible": "API Provider" };
 
 // ── Primitives ────────────────────────────────────────────────────────────────
 
@@ -284,6 +286,7 @@ interface SettingsViewProps {
   onRestoreData?: (raw: unknown) => boolean;
   onUpdatePreferences?: (patch: Partial<SchedulePreferences>) => void;
   onClose?: () => void;
+  onOpenAI: () => void;
 }
 
 export function SettingsView({
@@ -294,6 +297,7 @@ export function SettingsView({
   onRestoreData,
   onUpdatePreferences,
   onClose,
+  onOpenAI,
 }: SettingsViewProps) {
   const { user, isGuest, authLoading, logout } = useAuth();
   const { signingIn, error: signInError, isAuthAvailable, signIn } = useGoogleSignIn();
@@ -412,7 +416,24 @@ export function SettingsView({
           {AI_ENABLED && (
             <div>
               <SectionLabel>Intelligence</SectionLabel>
-              <StatusCard />
+              <Card>
+                <button
+                  type="button"
+                  onClick={onOpenAI}
+                  className="flex w-full items-center gap-3 px-4 py-3.5 text-left transition-colors hover:bg-neutral-50 dark:hover:bg-white/[0.03]"
+                >
+                  <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-[#AD46FF]">
+                    <IconSparkles size={18} strokeWidth={1.8} className="text-white" />
+                  </div>
+                  <div className="min-w-0 flex-1">
+                    <p className="text-[14px] font-bold text-neutral-900 dark:text-white">AI Configuration</p>
+                    <p className="text-[12px] font-medium text-neutral-400 dark:text-neutral-500">
+                      {PROVIDER_LABEL[getAIProviderState().active] ?? "MLX"} · Provider, instructions
+                    </p>
+                  </div>
+                  <IconChevronDown size={14} strokeWidth={2} className="-rotate-90 text-neutral-400" />
+                </button>
+              </Card>
             </div>
           )}
 

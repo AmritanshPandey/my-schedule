@@ -4,19 +4,28 @@
  * one place that picks a concrete `AIProvider` and hands it to callers.
  */
 
+export type ProviderKind = "mlx" | "ollama" | "openai-compatible";
+
 export interface AIMessage {
   role: "user" | "assistant";
   content: string;
 }
 
-/** What a provider needs to reach its server. Every field here is safe to
- *  store in localStorage — none of it is a secret. A provider that DID need
- *  a secret (a remote API key) would hold it server-side instead, the way
- *  the retired Gemini integration held its key as a Worker secret — never
- *  in this config, never in the client bundle. */
+/**
+ * What a provider needs to reach its server. `apiKey` is only ever set for a
+ * remote provider the user brings their own key to (OpenAI, OpenRouter, a
+ * custom OpenAI-compatible endpoint) — MLX and Ollama never use it, since
+ * they're local and need no credential. Everything here is stored in
+ * localStorage, on THIS device only, entered by the user themselves: this is
+ * not the shared, developer-owned secret the old Gemini integration held
+ * server-side (worker/src/gemini.ts, since removed) — a user's own key on
+ * their own machine is a different threat model, and this app has no server
+ * to hold a secret behind even if it wanted to (static export, no backend).
+ */
 export interface AIProviderConfig {
   baseUrl: string;
   model: string;
+  apiKey?: string;
 }
 
 export interface AIConnectionTestResult {
@@ -36,9 +45,20 @@ export interface AIGenerateOptions {
  * One local or remote model backend. `generate` yields incremental text
  * deltas (never accumulated-so-far text — callers do their own
  * `accumulated += chunk`), matching every existing caller's expectations.
+ * `listModels` is optional — not every provider exposes model discovery.
  */
 export interface AIProvider {
-  readonly kind: string;
+  readonly kind: ProviderKind;
   generate(systemPrompt: string, messages: AIMessage[], opts?: AIGenerateOptions): AsyncGenerator<string>;
   testConnection(): Promise<AIConnectionTestResult>;
+  listModels?(): Promise<string[]>;
+}
+
+/** Per-category system-prompt additions the user can customize — see
+ *  lib/ai/instructions.ts. Empty/unset means "use the built-in prompt as-is." */
+export interface AIInstructions {
+  plan?: string;
+  task?: string;
+  subtask?: string;
+  milestone?: string;
 }

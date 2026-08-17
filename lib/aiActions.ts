@@ -5,6 +5,7 @@
 
 import type { DayKey, TaskTypeValue } from "./useScheduleDB";
 import { streamAIAction } from "./aiClient";
+import { getAIInstructions, withInstructions } from "./ai/instructions";
 
 export interface AIGeneratedTask {
   title: string;
@@ -83,7 +84,8 @@ export function streamGenerateTasks(
   signal?: AbortSignal,
 ): AsyncGenerator<string> {
   const userMessage = `Generate tasks for: "${plan.title}"${plan.description ? `. ${plan.description}` : ""}`;
-  return streamAIAction(TASK_GEN_PROMPT, userMessage, signal);
+  const prompt = withInstructions(TASK_GEN_PROMPT, "Tasks", getAIInstructions().task);
+  return streamAIAction(prompt, userMessage, signal);
 }
 
 export function parseGeneratedTasks(text: string): AIGeneratedTask[] {
@@ -115,7 +117,8 @@ export function streamGenerateSubtasks(
   planTitle?: string,
 ): AsyncGenerator<string> {
   const userMessage = `Generate subtasks for: "${taskTitle}"${planTitle ? ` (part of "${planTitle}")` : ""}`;
-  return streamAIAction(SUBTASK_GEN_PROMPT, userMessage);
+  const prompt = withInstructions(SUBTASK_GEN_PROMPT, "Subtasks", getAIInstructions().subtask);
+  return streamAIAction(prompt, userMessage);
 }
 
 export function parseGeneratedSubtasks(text: string): string[] {
@@ -138,7 +141,8 @@ export function streamGenerateMilestones(
     plan.startDate ? `Start: ${plan.startDate}` : "",
     plan.endDate ? `End: ${plan.endDate}` : "",
   ].filter(Boolean).join(". ");
-  return streamAIAction(MILESTONE_GEN_PROMPT, `Generate milestones for: ${context}`, signal);
+  const prompt = withInstructions(MILESTONE_GEN_PROMPT, "Milestones", getAIInstructions().milestone);
+  return streamAIAction(prompt, `Generate milestones for: ${context}`, signal);
 }
 
 export function parseGeneratedMilestones(text: string): AIGeneratedMilestone[] {
@@ -176,7 +180,8 @@ export function streamGenerateMilestoneTasks(
     `Generate tasks for milestone: "${milestone.title}"${milestone.description ? ` — ${milestone.description}` : ""}.`,
     `Part of plan: "${plan.title}"${plan.description ? ` (${plan.description})` : ""}.`,
   ].join(" ");
-  return streamAIAction(MILESTONE_TASK_GEN_PROMPT, userMessage, signal);
+  const prompt = withInstructions(MILESTONE_TASK_GEN_PROMPT, "Tasks", getAIInstructions().task);
+  return streamAIAction(prompt, userMessage, signal);
 }
 
 // ── Weekly insight generation ─────────────────────────────────────────────────

@@ -32,6 +32,7 @@ const AIPlanCreatorSheet = dynamic(() => import("@/components/plan/AIPlanCreator
 const SettingsSheet = dynamic(() => import("@/components/auth/SettingsSheet").then(m => ({ default: m.SettingsSheet })), { ssr: false });
 const SettingsView = dynamic(() => import("@/components/SettingsView").then(m => ({ default: m.SettingsView })), { ssr: false });
 const AIOnboarding = dynamic(() => import("@/components/ai/AIOnboarding"), { ssr: false });
+const AIView = dynamic(() => import("@/components/AIView").then(m => ({ default: m.AIView })), { ssr: false });
 const NotesView = dynamic(() => import("@/components/notes/NotesView"), { ssr: false });
 const TemplatesSheet = dynamic(() => import("@/components/TemplatesSheet").then(m => ({ default: m.TemplatesSheet })), { ssr: false });
 const SessionSheet = dynamic(() => import("@/components/activity/SessionSheet"), { ssr: false });
@@ -3017,6 +3018,7 @@ export default function ScheduleApp() {
               },
             }))
           }
+          onOpenAI={() => { setSettingsOpen(false); setActiveTab(7); }}
         />
       )}
       <TemplatesSheet open={templatesOpen} onClose={() => setTemplatesOpen(false)} onApply={handleApplyTemplate} />
@@ -3822,7 +3824,23 @@ export default function ScheduleApp() {
                   }))
                 }
                 onClose={() => setActiveTab(0)}
+                onOpenAI={() => setActiveTab(7)}
               />
+            </ErrorBoundary>
+          </m.div>
+        )}
+
+        {/* ── AI Tab ───────────────────────────────────────────────────────── */}
+        {ready && AI_ENABLED && !iosSafeMode && activeTab === 7 && (
+          <m.div
+            key="tab-ai"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            transition={{ duration: 0.12, ease: "easeOut" }}
+          >
+            <ErrorBoundary section name="AI">
+              <AIView onClose={() => setActiveTab(5)} />
             </ErrorBoundary>
           </m.div>
         )}
@@ -4108,6 +4126,7 @@ export default function ScheduleApp() {
             onAddGeneratedTasks={handleAddGeneratedTasks}
             onApplyAction={handleApplyAction}
             onNavigateToPlan={(planId) => { setActiveTab(1); setSelectedPlanId(planId); setAiOpen(false); }}
+            onOpenAISettings={() => { setAiOpen(false); setActiveTab(7); }}
           />
         </ErrorBoundary>
       )}
@@ -4149,7 +4168,7 @@ export default function ScheduleApp() {
       )}
 
       {/* ── AI onboarding — shown once when app opens ─────────────────────── */}
-      {AI_ENABLED && !iosSafeMode && <AIOnboarding />}
+      {AI_ENABLED && !iosSafeMode && <AIOnboarding onOpenAISettings={() => setActiveTab(7)} />}
 
     </main>
   );

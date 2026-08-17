@@ -109,6 +109,7 @@ const DayBreakdownCard = dynamic(() => import("@/components/DayBreakdownCard"), 
 
 const CompletionTrendCard = dynamic(() => import("@/components/analytics/CompletionTrendCard"), { ssr: false });
 const SettingsView = dynamic(() => import("@/components/SettingsView").then((m) => ({ default: m.SettingsView })), { ssr: false });
+const AIView = dynamic(() => import("@/components/AIView").then((m) => ({ default: m.AIView })), { ssr: false });
 const DayWallpaperSheet = dynamic(() => import("@/components/DayWallpaperSheet"), { ssr: false });
 const NotesView = dynamic(() => import("@/components/notes/NotesView"), { ssr: false });
 const TaskDetailView = dynamic(() => import("@/components/activity/TaskDetailView"), { ssr: false });
@@ -1656,7 +1657,18 @@ export default function IOSScheduleApp() {
               onRestoreData={restoreData}
               onUpdatePreferences={(patch) => setSchedule((prev) => ({ ...prev, preferences: { ...prev.preferences, ...patch } }))}
               onClose={() => setActiveTab(4)}
+              onOpenAI={() => setActiveTab(7)}
             />
+          </ErrorBoundary>
+        </IOSMotionBoundary>
+      );
+    }
+
+    if (activeTab === 7) {
+      return (
+        <IOSMotionBoundary>
+          <ErrorBoundary section name="AI">
+            <AIView onClose={() => setActiveTab(5)} />
           </ErrorBoundary>
         </IOSMotionBoundary>
       );

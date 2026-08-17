@@ -26,7 +26,7 @@ import { getSyncStatus, getLastSyncedAt, getLastSchedule, onSyncStatusChange, fl
 import { formatDisplayTime, minutesToInputTime } from "@/lib/timeUtils";
 import { versionLabel, BUILD_ID } from "@/lib/buildInfo";
 import type { Schedule, SchedulePreferences } from "@/lib/useScheduleDB";
-import { AISettingsSheet } from "@/components/ai/AISettingsSheet";
+import { getAIProviderState } from "@/lib/ai/config";
 import { AI_ENABLED } from "@/lib/featureFlags";
 import { normalizeDayStartTime } from "@/lib/timeline/displayWindow";
 
@@ -529,7 +529,10 @@ interface SettingsSheetProps {
   onRestoreData?: (raw: unknown) => boolean;
   schedule: Schedule;
   onUpdatePreferences?: (patch: Partial<SchedulePreferences>) => void;
+  onOpenAI: () => void;
 }
+
+const PROVIDER_LABEL: Record<string, string> = { mlx: "MLX", ollama: "Ollama", "openai-compatible": "API Provider" };
 
 export function SettingsSheet({
   open,
@@ -539,11 +542,12 @@ export function SettingsSheet({
   onRestoreData,
   schedule,
   onUpdatePreferences,
+  onOpenAI,
 }: SettingsSheetProps) {
   const { user, isGuest, authLoading, logout } = useAuth();
   const { signingIn, error: signInError, isAuthAvailable, signIn } = useGoogleSignIn();
   const [busy, setBusy] = useState(false);
-  const [aiSettingsOpen, setAiSettingsOpen] = useState(false);
+  const aiProviderLabel = PROVIDER_LABEL[getAIProviderState().active] ?? "MLX";
 
   async function handleLogout() {
     setBusy(true);
@@ -668,7 +672,7 @@ export function SettingsSheet({
             <SettingsCard>
               <button
                 type="button"
-                onClick={() => setAiSettingsOpen(true)}
+                onClick={onOpenAI}
                 className="flex w-full items-center gap-3 px-4 py-3.5 text-left transition-colors hover:bg-neutral-50 dark:hover:bg-white/[0.03]"
               >
                 <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl bg-[#AD46FF]">
@@ -676,13 +680,11 @@ export function SettingsSheet({
                 </div>
                 <div className="min-w-0 flex-1">
                   <p className="text-[13px] font-semibold text-neutral-800 dark:text-white">AI Configuration</p>
-                  <p className="text-[11px] text-neutral-400 dark:text-neutral-500">MLX · Local · Free</p>
+                  <p className="text-[11px] text-neutral-400 dark:text-neutral-500">{aiProviderLabel} · Provider, instructions</p>
                 </div>
                 <IconChevronDown size={14} strokeWidth={2} className="-rotate-90 text-neutral-400" />
               </button>
             </SettingsCard>
-
-            <AISettingsSheet open={aiSettingsOpen} onClose={() => setAiSettingsOpen(false)} />
           </>
         )}
 

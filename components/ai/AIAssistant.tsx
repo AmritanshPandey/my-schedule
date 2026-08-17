@@ -18,7 +18,6 @@ import {
   IconX,
 } from "@tabler/icons-react";
 import BottomSheet from "@/components/ui/BottomSheet";
-import { AISettingsSheet } from "@/components/ai/AISettingsSheet";
 import AIActionSheet, { type ResultItem } from "@/components/ai/AIActionSheet";
 import {
   parseGeneratedTasks,
@@ -42,6 +41,7 @@ interface AIAssistantProps {
   onAddGeneratedTasks: (tasks: AIGeneratedTask[], planId: string, milestoneId?: string) => void;
   onApplyAction: (action: AIActionResult) => void;
   onNavigateToPlan?: (planId: string) => void;
+  onOpenAISettings: () => void;
 }
 
 interface SheetConfig {
@@ -93,11 +93,11 @@ export default function AIAssistant({
   onAddGeneratedTasks,
   onApplyAction,
   onNavigateToPlan,
+  onOpenAISettings,
 }: AIAssistantProps) {
   const ai = useAIActions();
 
   const [selectedPlanId, setSelectedPlanId] = useState<string | null>(initialPlanId ?? null);
-  const [aiSettingsOpen, setAiSettingsOpen] = useState(false);
   const [customGoal, setCustomGoal] = useState("");
   const [planPickerOpen, setPlanPickerOpen] = useState(false);
   const [sheetConfig, setSheetConfig] = useState<SheetConfig | null>(null);
@@ -320,7 +320,7 @@ export default function AIAssistant({
           actionType: "weekly-insight",
           iconBg: "bg-sky-100 dark:bg-sky-500/15",
           icon: <IconFileText size={14} strokeWidth={2} className="text-sky-600 dark:text-sky-400" />,
-          onAction: () => guardAction(() => setAiSettingsOpen(true)),
+          onAction: () => guardAction(() => onOpenAISettings()),
         },
         {
           id: "roadmap",
@@ -397,7 +397,7 @@ export default function AIAssistant({
         actionType: "weekly-insight",
         iconBg: "bg-amber-100 dark:bg-amber-500/15",
         icon: <IconFileText size={14} strokeWidth={2} className="text-amber-600 dark:text-amber-400" />,
-        onAction: () => guardAction(() => setAiSettingsOpen(true)),
+        onAction: () => guardAction(() => onOpenAISettings()),
       });
     }
 
@@ -441,7 +441,7 @@ export default function AIAssistant({
         <div className="flex items-center gap-1">
           <button
             type="button"
-            onClick={() => setAiSettingsOpen(true)}
+            onClick={() => onOpenAISettings()}
             className="flex h-8 w-8 items-center justify-center rounded-xl text-neutral-400 transition-colors hover:bg-neutral-100 hover:text-neutral-600 dark:hover:bg-white/[0.06] dark:hover:text-neutral-300"
             title="AI Settings"
           >
@@ -455,8 +455,6 @@ export default function AIAssistant({
             <IconX size={16} strokeWidth={2} />
           </button>
         </div>
-
-        <AISettingsSheet open={aiSettingsOpen} onClose={() => setAiSettingsOpen(false)} />
       </div>
 
       {/* ── Scrollable body ─────────────────────────────────────────────────── */}

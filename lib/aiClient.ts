@@ -3,27 +3,30 @@
  * (multi-turn) and `streamAIAction` (one-shot). Neither caller nor consumer
  * needs to know which provider is behind them; this file is the router.
  *
- * Today there's exactly one provider (MLX, lib/ai/providers/mlx.ts), talking
- * directly to a local `mlx_lm.server` from the browser — see mlx.ts's own
- * comment for why that's a direct client→localhost call rather than routed
- * through a server. This app is a static export: `next.config`'s
- * `output: "export"` means there is no Next.js server anywhere, dev or prod,
- * so "the AI Gateway" is necessarily a client-side router, not a server tier.
+ * Three providers exist (Settings → AI): MLX and Ollama (lib/ai/providers/
+ * mlx.ts, ollama.ts — local, talking directly to a server on this machine)
+ * and a generic OpenAI-compatible remote provider (lib/ai/providers/
+ * openai-compatible.ts — OpenAI, OpenRouter, or any custom endpoint, with
+ * the user's own API key). All three are called directly from the browser,
+ * not through a server: this app is a static export (`next.config`'s
+ * `output: "export"` — no Next.js server anywhere, dev or prod), and even a
+ * real server tier couldn't reach `localhost` on a user's own machine for
+ * the local providers. See lib/ai/config.ts for how the active provider and
+ * each provider's own settings are chosen and persisted.
  *
  * A previous version of this file proxied Gemini through a Cloudflare Worker
- * (worker/src/index.ts's old `POST /ai/chat`, since removed) using a single
- * shared, developer-owned API key with server-enforced daily caps — that's
- * why every function used to take a Firebase user and could throw
- * AiAuthError/AiCapError. None of that applies to a local model with no per-
- * call cost, so this version drops the auth/cap machinery entirely. Adding a
- * remote provider back later (a real hosted API) would reintroduce a need for
- * server-held secrets for THAT provider specifically — it wouldn't change
- * this file's shape, just add a second case in `activeProvider()`.
+ * using a single shared, developer-owned API key with server-enforced daily
+ * caps — that's why every function used to take a Firebase user and could
+ * throw AiAuthError/AiCapError. None of that applies here: local providers
+ * have no per-call cost, and a remote provider's key is the user's own, so
+ * there's nothing to protect with sign-in or a usage cap.
  */
 
-import { getMLXConfig } from "./ai/config";
+import { getAIProviderState } from "./ai/config";
 import { MLXProvider } from "./ai/providers/mlx";
-import type { AIMessage } from "./ai/types";
+import { OllamaProvider } from "./ai/providers/ollama";
+import { OpenAICompatibleProvider } from "./ai/providers/openai-compatible";
+import type { AIMessage, AIProvider } from "./ai/types";
 
 export type { AIMessage };
 
@@ -31,22 +34,33 @@ export type { AIMessage };
  *  the provider responding with an error, which means it's at least running.
  *  Callers show this directly; it's already written to be user-facing. */
 export class AiConnectionError extends Error {
-  constructor(message = "Can't reach your local AI — make sure MLX is running.") {
+  constructor(message = "Can't reach your AI provider — check it's running and configured correctly.") {
     super(message);
     this.name = "AiConnectionError";
   }
 }
 
-/** MLX always has a usable default (localhost:8080, Qwen3-4B) — "configured"
- *  here means "has a non-empty base URL to try," not "verified reachable."
- *  Actual reachability is what `testConnection()` (surfaced in AI Settings)
- *  and the try/catch around every real `generate()` call are for. */
+/** Local providers always have a usable default; a remote provider needs at
+ *  least a base URL and model. "Configured" means "has enough to try," not
+ *  "verified reachable" — that's what testConnection() (AI Settings) and the
+ *  try/catch around every real generate() call are for. */
 export function isAiConfigured(): boolean {
-  return !!getMLXConfig().baseUrl;
+  const state = getAIProviderState();
+  if (state.active === "openai-compatible") return !!state.remote.baseUrl && !!state.remote.model;
+  return true;
 }
 
-function activeProvider(): MLXProvider {
-  return new MLXProvider(getMLXConfig());
+export function activeProvider(): AIProvider {
+  const state = getAIProviderState();
+  switch (state.active) {
+    case "ollama":
+      return new OllamaProvider(state.ollama);
+    case "openai-compatible":
+      return new OpenAICompatibleProvider(state.remote);
+    case "mlx":
+    default:
+      return new MLXProvider(state.mlx);
+  }
 }
 
 /**

@@ -1,5 +1,6 @@
 import type { DayKey, Plan, RitualColor, TaskTypeValue } from "./useScheduleDB";
 import { todayISO } from "./dateUtils";
+import { getAIInstructions } from "./ai/instructions";
 
 export interface AITask {
   title: string;
@@ -205,6 +206,19 @@ export function buildSystemPrompt(
   if (existingRituals && existingRituals.length > 0) {
     const list = existingRituals.map((r) => `- "${r.title}" at ${r.time}${r.duration ? `, ${r.duration}min` : ""}`).join("\n");
     parts.push(`User's existing rituals:\n${list}`);
+  }
+  // Custom instructions (Settings → AI → Instructions) — this prompt can
+  // produce any category's action, so include every non-empty one rather
+  // than guessing which applies before the model has even replied.
+  const instructions = getAIInstructions();
+  const customLines = [
+    instructions.plan && `- Plans: ${instructions.plan}`,
+    instructions.task && `- Tasks: ${instructions.task}`,
+    instructions.subtask && `- Subtasks: ${instructions.subtask}`,
+    instructions.milestone && `- Milestones: ${instructions.milestone}`,
+  ].filter(Boolean);
+  if (customLines.length > 0) {
+    parts.push(`Additional instructions from the user, by category — follow these unless they conflict with the output format rules above:\n${customLines.join("\n")}`);
   }
   return parts.join("\n\n");
 }
