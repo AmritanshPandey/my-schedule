@@ -143,7 +143,7 @@ export default function BottomSheet({
               exit={{ opacity: 0, scale: 0.97, y: 10 }}
               transition={DESKTOP_EASE}
               data-glass
-              className={`relative w-full ${desktopWidth} overflow-y-auto overscroll-contain rounded-2xl border border-neutral-200/80 bg-white shadow-2xl shadow-black/10 outline-none dark:border-white/[0.08] dark:bg-neutral-900 dark:shadow-black/40 ${className}`}
+              className={`relative w-full ${desktopWidth} overflow-x-hidden overflow-y-auto overscroll-contain rounded-2xl border border-neutral-200/80 bg-white shadow-2xl shadow-black/10 outline-none dark:border-white/[0.08] dark:bg-neutral-900 dark:shadow-black/40 ${className}`}
               style={{ maxHeight: "88vh" }}
             >
               {children}
@@ -179,7 +179,7 @@ export default function BottomSheet({
               exit={{ y: "100%" }}
               transition={MOBILE_SPRING}
               style={{ maxHeight, willChange: "transform" }}
-              className={`relative w-full max-w-lg overflow-y-auto overscroll-contain rounded-t-2xl border-t border-neutral-200 bg-white pb-[env(safe-area-inset-bottom)] outline-none dark:border-white/[0.08] dark:bg-neutral-900 ${className}`}
+              className={`relative w-full max-w-lg overflow-x-hidden overflow-y-auto overscroll-contain rounded-t-2xl border-t border-neutral-200 bg-white pb-[env(safe-area-inset-bottom)] outline-none dark:border-white/[0.08] dark:bg-neutral-900 ${className}`}
             >
               {/* Drag handle */}
               <div className="sticky top-0 z-10 flex justify-center rounded-t-2xl bg-white pb-1 pt-3 dark:bg-neutral-900">

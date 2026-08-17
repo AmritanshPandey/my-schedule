@@ -175,11 +175,15 @@ function PlanDraftCard({ action, onApply }: { action: Extract<AIActionResult, { 
                     <entry.icon size={12} strokeWidth={2} className={st.text} />
                   </div>
                   <div className="min-w-0 flex-1">
-                    <div className="flex items-center gap-1.5">
-                      <span className="rounded bg-neutral-200 px-1 py-0.5 text-[9px] font-bold text-neutral-600 dark:bg-white/[0.10] dark:text-neutral-400">
+                    <div className="flex min-w-0 items-center gap-1.5">
+                      <span className="shrink-0 rounded bg-neutral-200 px-1 py-0.5 text-[9px] font-bold text-neutral-600 dark:bg-white/[0.10] dark:text-neutral-400">
                         {DAY_SHORT[t.day] ?? t.day}
                       </span>
-                      <span className="text-[11px] font-semibold text-neutral-800 dark:text-neutral-200 truncate">{t.title}</span>
+                      {/* min-w-0 is required here: as a flex item, its default
+                          min-width is content-based, which silently defeats
+                          `truncate` and lets long titles push the row wider
+                          than the card. */}
+                      <span className="min-w-0 truncate text-[11px] font-semibold text-neutral-800 dark:text-neutral-200">{t.title}</span>
                       <span className="ml-auto shrink-0 text-[10px] text-neutral-400">{t.startTime}–{t.endTime}</span>
                     </div>
                     {t.subtasks && t.subtasks.length > 0 && (
@@ -355,8 +359,14 @@ const mdComponents = {
   h1: ({ children }: { children?: React.ReactNode }) => <p className="mb-1 font-bold text-[14px]">{children}</p>,
   h2: ({ children }: { children?: React.ReactNode }) => <p className="mb-1 font-bold">{children}</p>,
   h3: ({ children }: { children?: React.ReactNode }) => <p className="mb-0.5 font-semibold">{children}</p>,
+  // Fenced code blocks render as <pre><code>…</code></pre> with no wrap by
+  // default — a long line would otherwise force the whole chat frame wider.
+  // Let the block scroll horizontally within itself instead.
+  pre: ({ children }: { children?: React.ReactNode }) => (
+    <pre className="my-1.5 max-w-full overflow-x-auto rounded-lg bg-black/10 p-2 text-[11px] dark:bg-white/10">{children}</pre>
+  ),
   code: ({ children }: { children?: React.ReactNode }) => (
-    <code className="rounded bg-black/10 px-1 font-mono text-[11px] dark:bg-white/10">{children}</code>
+    <code className="break-words rounded bg-black/10 px-1 font-mono text-[11px] dark:bg-white/10">{children}</code>
   ),
 };
 
@@ -548,7 +558,7 @@ export function AIPanel({ context, plans, rituals, schedule, activePlan, initial
       </AnimatePresence>
 
       {/* Messages */}
-      <div className="flex-1 overflow-y-auto overscroll-contain px-3 py-3">
+      <div className="flex-1 overflow-x-hidden overflow-y-auto overscroll-contain px-3 py-3">
         <AnimatePresence mode="wait">
           {messages.length === 0 && (
             <m.div
@@ -617,8 +627,13 @@ export function AIPanel({ context, plans, rituals, schedule, activePlan, initial
               transition={{ duration: 0.2, ease: "easeOut" }}
               className={`mb-3 flex ${msg.role === "user" ? "justify-end" : "justify-start"}`}
             >
-              <div className={`max-w-[85%] ${msg.role === "user" ? "items-end" : "items-start"} flex flex-col`}>
-                <div className={`rounded-2xl px-4 py-3 text-[13px] leading-relaxed ${bubbleClass}`}>
+              <div className={`min-w-0 max-w-[85%] ${msg.role === "user" ? "items-end" : "items-start"} flex flex-col`}>
+                {/* max-w-full is load-bearing, not decorative: the wrapper's
+                    items-end/items-start keeps this a shrink-to-fit flex
+                    item, so overflow-wrap alone won't force it to shrink —
+                    without an explicit max-width an unbroken token still
+                    grows the box past the frame before wrapping engages. */}
+                <div className={`min-w-0 max-w-full break-words rounded-2xl px-4 py-3 text-[13px] leading-relaxed [overflow-wrap:anywhere] ${bubbleClass}`}>
                   {msg.role === "user" ? (
                     msg.text
                   ) : msg.text ? (
