@@ -4159,7 +4159,12 @@ export default function ScheduleApp() {
               whileTap={{ scale: 0.92 }}
               onClick={() => setAiOpen(true)}
               aria-label="Open AI Assistant"
-              className="fixed bottom-24 right-4 z-40 flex h-12 w-12 items-center justify-center rounded-full border border-violet-500 bg-[#AD46FF] text-white lg:hidden"
+              // `lg:hidden` keeps this the mobile entry point; the hover pair
+              // still matters for a narrow desktop window, where a pointer can
+              // reach it. Each theme needs its own value: the fill is the same
+              // violet in both, so a lone `hover:` would apply in dark mode too
+              // and drag the button toward its light-mode hover.
+              className="fixed bottom-24 right-4 z-40 flex h-12 w-12 items-center justify-center rounded-full border border-violet-500 bg-[#AD46FF] text-white transition-colors hover:bg-[#9333EA] dark:hover:bg-[#C07CFF] lg:hidden"
             >
               <IconSparkles size={20} strokeWidth={2} />
             </m.button>
