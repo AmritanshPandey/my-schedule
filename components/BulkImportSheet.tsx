@@ -5,11 +5,14 @@ import { m, AnimatePresence } from "framer-motion";
 import {
   IconSparkles, IconCheck, IconCircleCheck, IconClock, IconTrash,
   IconChevronDown, IconX, IconCalendarEvent, IconDownload, IconUpload,
+  IconWand,
 } from "@tabler/icons-react";
 import BottomSheet from "@/components/ui/BottomSheet";
 import SheetHeader from "@/components/ui/SheetHeader";
 import type { Plan } from "@/lib/useScheduleDB";
 import { parseSchedule, countTasks, type ParsedDay, type ParseResult } from "@/lib/scheduleParser";
+import { streamAIScheduleParse, parseAIScheduleResult } from "@/lib/aiScheduleParser";
+import { isAiConfigured } from "@/lib/aiClient";
 import { SECTION_ICONS } from "@/components/SectionIcons";
 import { haptic } from "@/lib/haptics";
 
@@ -46,6 +49,36 @@ const TEMPLATE = `// PlanR schedule template — edit this, then upload it back.
 //
 ${SAMPLE}
 `;
+
+// ── AI parsing status ────────────────────────────────────────────────────────
+// Mirrors AIPlanCreatorSheet.tsx's GenStreamingStatus pattern (same rotating-
+// phrase rhythm) rather than inventing a third loading-status style for a
+// sibling one-shot-generate flow. Phrases are tied to the actual work being
+// done (reading text → finding tasks → matching times → grouping by day),
+// not a generic "please wait".
+const AI_PARSE_PHRASES = ["Reading your text…", "Finding your tasks…", "Matching times…", "Organizing by day…"];
+
+function AIParseStatus() {
+  const [idx, setIdx] = useState(0);
+  useEffect(() => {
+    const id = setInterval(() => setIdx((p) => (p + 1) % AI_PARSE_PHRASES.length), 1400);
+    return () => clearInterval(id);
+  }, []);
+  return (
+    <AnimatePresence mode="wait">
+      <m.span
+        key={AI_PARSE_PHRASES[idx]}
+        initial={{ opacity: 0, y: 3 }}
+        animate={{ opacity: 1, y: 0 }}
+        exit={{ opacity: 0, y: -3 }}
+        transition={{ duration: 0.22 }}
+        className="text-[13px] font-medium text-violet-600 dark:text-violet-400"
+      >
+        {AI_PARSE_PHRASES[idx]}
+      </m.span>
+    </AnimatePresence>
+  );
+}
 
 const TIME_OPTS: { label: string; sub: string; time: string }[] = [
   { label: "Morning", sub: "6 AM – 12 PM", time: "9:00 AM" },
@@ -104,12 +137,53 @@ export function BulkImportFlow({ plans, fallbackDay = "monday", onCommit, onDone
   const [result, setResult] = useState<ParseResult>({ days: [], plans: [] });
   const [collapsed, setCollapsed] = useState<Set<string>>(new Set());
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const [aiParsing, setAiParsing] = useState(false);
+  const [aiError, setAiError] = useState<string | null>(null);
+  const aiAbortRef = useRef<AbortController | null>(null);
+  const aiAvailable = useMemo(() => isAiConfigured(), []);
 
-  // Re-parse on text change (cheap, synchronous).
+  // Re-parse on text change (cheap, synchronous) — this is the instant,
+  // offline path. AI parsing (handleAIParse below) is a separate, explicit
+  // action: it overwrites `result` directly without touching `text`, so
+  // editing the textarea afterward falls back to re-running this effect,
+  // same as editing after a manual paste always has.
   useEffect(() => {
     setResult(parseSchedule(text, plans, fallbackDay));
     setCollapsed(new Set());
+    setAiError(null);
   }, [text, plans, fallbackDay]);
+
+  useEffect(() => () => { aiAbortRef.current?.abort(); }, []);
+
+  async function handleAIParse() {
+    if (!text.trim() || aiParsing) return;
+    haptic("light");
+    setAiParsing(true);
+    setAiError(null);
+    aiAbortRef.current?.abort();
+    const controller = new AbortController();
+    aiAbortRef.current = controller;
+
+    let accumulated = "";
+    try {
+      for await (const chunk of streamAIScheduleParse(text, plans, controller.signal)) {
+        accumulated += chunk;
+      }
+      const aiResult = parseAIScheduleResult(accumulated, plans);
+      if (countTasks(aiResult.days) === 0) {
+        setAiError("Couldn't find any tasks in that text — try adding more detail, or use the manual format below.");
+        return;
+      }
+      setResult(aiResult);
+      setCollapsed(new Set());
+    } catch (err) {
+      if (!(err instanceof Error && err.name === "AbortError")) {
+        setAiError(err instanceof Error ? err.message : "AI parsing failed — check your AI provider in Settings and try again.");
+      }
+    } finally {
+      setAiParsing(false);
+    }
+  }
 
   const { days, plans: newPlans } = result;
   const total = countTasks(days);
@@ -231,6 +305,16 @@ export function BulkImportFlow({ plans, fallbackDay = "monday", onCommit, onDone
             onChange={handleUpload}
             className="hidden"
           />
+          <button
+            type="button"
+            onClick={() => void handleAIParse()}
+            disabled={!text.trim() || aiParsing || !aiAvailable}
+            title={!aiAvailable ? "Set up an AI provider in Settings first" : "Understands freeform text, not just this format"}
+            className="ml-auto inline-flex items-center gap-1.5 rounded-xl border border-violet-300 bg-violet-50 px-3 py-2 text-[12px] font-semibold text-violet-700 transition-colors hover:border-violet-400 hover:bg-violet-100 disabled:cursor-default disabled:opacity-50 dark:border-violet-500/30 dark:bg-violet-500/10 dark:text-violet-300 dark:hover:bg-violet-500/15"
+          >
+            <IconWand size={14} strokeWidth={2} />
+            {aiParsing ? "Parsing…" : "Parse with AI"}
+          </button>
         </div>
         <div className="relative overflow-hidden rounded-2xl border border-neutral-200 bg-white dark:border-white/[0.08] dark:bg-neutral-900">
           <div className="border-b border-neutral-100 px-4 py-2.5 text-[11px] font-semibold uppercase tracking-[0.08em] text-neutral-400 dark:border-white/[0.06] dark:text-neutral-500">
@@ -247,7 +331,27 @@ export function BulkImportFlow({ plans, fallbackDay = "monday", onCommit, onDone
             {text.length}/2000
           </span>
         </div>
-        {total > 0 && (
+        <AnimatePresence>
+          {aiParsing && (
+            <m.div
+              initial={{ opacity: 0, y: 4 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -4 }}
+              className="flex items-center gap-2 px-1"
+            >
+              <IconWand size={14} strokeWidth={2} className="animate-pulse text-violet-500" />
+              <AIParseStatus />
+            </m.div>
+          )}
+        </AnimatePresence>
+
+        {aiError && !aiParsing && (
+          <div className="rounded-xl border border-red-100 bg-red-50 px-3.5 py-2.5 text-[13px] text-red-600 dark:border-red-500/10 dark:bg-red-500/5 dark:text-red-400">
+            {aiError}
+          </div>
+        )}
+
+        {total > 0 && !aiParsing && (
           <div className="flex items-center gap-2 text-[13px]">
             <span className="grid h-[18px] w-[18px] place-items-center rounded-full bg-emerald-500/15 text-emerald-600 dark:text-emerald-400">
               <IconCheck size={12} strokeWidth={3} />

@@ -63,7 +63,7 @@ const DAY_ALIASES: Record<string, DayKey> = {
   fri: "friday", friday: "friday",
   sat: "saturday", saturday: "saturday",
 };
-const DAY_LABEL: Record<DayKey, string> = {
+export const DAY_LABEL: Record<DayKey, string> = {
   sunday: "Sunday", monday: "Monday", tuesday: "Tuesday", wednesday: "Wednesday",
   thursday: "Thursday", friday: "Friday", saturday: "Saturday",
 };
@@ -135,8 +135,10 @@ function durationMinutes(text: string): number | null {
   return /^h/i.test(d[2]) ? n * 60 : n;
 }
 
-/** Match a line against the plan list by a significant word overlap. */
-function matchPlan(text: string, plans: Plan[]): Plan | null {
+/** Match a line against the plan list by a significant word overlap. Exported
+ *  so lib/aiScheduleParser.ts can link AI-parsed tasks to existing plans the
+ *  same way the deterministic parser does, instead of a second heuristic. */
+export function matchPlan(text: string, plans: Plan[]): Plan | null {
   const lower = text.toLowerCase();
   for (const plan of plans) {
     const words = plan.title.toLowerCase().split(/\s+/).filter((w) => w.length >= 3);
@@ -157,7 +159,10 @@ const ICON_KEYWORDS: [RegExp, string][] = [
   [/\b(sleep|rest|nap|recovery|wind down)\b/i, "sleep"],
 ];
 
-function iconForTitle(title: string): string {
+/** Exported so lib/aiScheduleParser.ts infers icon/color/category the same
+ *  way the deterministic parser does — the AI path supplies structure and
+ *  timing, not icon choice, so the two parsers' output looks consistent. */
+export function iconForTitle(title: string): string {
   for (const [re, icon] of ICON_KEYWORDS) {
     if (re.test(title)) return icon;
   }

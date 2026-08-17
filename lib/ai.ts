@@ -223,19 +223,43 @@ export function buildSystemPrompt(
   return parts.join("\n\n");
 }
 
-function tryParseJSON(raw: string): { type?: string; payload?: unknown } | null {
+/**
+ * Loose JSON.parse for AI output — tolerates the two malformations MLX/Qwen3
+ * reliably produce that Gemini rarely did: trailing commas, and single
+ * quotes used as string delimiters. Exported so other AI-JSON consumers
+ * (e.g. lib/aiScheduleParser.ts) don't reimplement this same cleanup and
+ * risk drifting from whatever gets fixed here later.
+ *
+ * NOTE the blind `'` → `"` replace is exactly why lib/ai.ts's own JSON
+ * generation prompts avoid contractions in copy — a genuine apostrophe
+ * ("don't") would otherwise get corrupted into a stray quote. Callers with
+ * looser prompts (free-form user text passed through, not just prompt
+ * copy) should keep that in mind before trusting this on arbitrary input.
+ */
+export function tryParseJSONLoose<T = Record<string, unknown>>(raw: string): T | null {
   const cleaned = raw
     .trim()
     .replace(/,\s*([}\]])/g, "$1")   // trailing commas
     .replace(/'/g, '"');              // single → double quotes
   try {
-    return JSON.parse(cleaned) as { type?: string; payload?: unknown };
+    return JSON.parse(cleaned) as T;
   } catch {
     return null;
   }
 }
 
-function extractJSONCandidate(text: string): string | null {
+function tryParseJSON(raw: string): { type?: string; payload?: unknown } | null {
+  return tryParseJSONLoose(raw);
+}
+
+/**
+ * Pull the most likely JSON object out of raw AI output — fenced ```json
+ * blocks preferred (last one wins), falling back to the widest bare {...}
+ * span. Exported so other AI-JSON consumers reuse the exact same
+ * extraction (see the greedy-vs-lazy history below — reimplementing this
+ * elsewhere risks reintroducing the same bug from scratch).
+ */
+export function extractJSONCandidate(text: string): string | null {
   // 1. Prefer fenced ```json … ``` blocks (take the last one)
   const fenced = [...text.matchAll(/```(?:json)?\s*([\s\S]*?)```/g)];
   if (fenced.length > 0) return fenced[fenced.length - 1][1];
