@@ -7,6 +7,7 @@ import ReactMarkdown from "react-markdown";
 import { parseAIAction, buildSystemPrompt, buildPlanContext } from "@/lib/ai";
 import type { AIActionResult } from "@/lib/ai";
 import { streamAIChat } from "@/lib/aiClient";
+import { getAIProviderState } from "@/lib/ai/config";
 import { findPlanByTitle, findTasksByTitle } from "@/lib/planLookup";
 import type { Plan, Ritual, Schedule } from "@/lib/useScheduleDB";
 import { SECTION_ICONS, getIconPickerStyle } from "@/components/SectionIcons";
@@ -39,17 +40,58 @@ const ACTION_LABELS: Record<AIActionResult["type"], string> = {
   add_subtasks: "New Subtasks",
 };
 
-function ThinkingDots() {
+/**
+ * Shown only while waiting for the FIRST token — once real text starts
+ * streaming in, that token-by-token appearance already is the honest
+ * progress signal, so this steps aside (see the `msg.text ? … : …` branch
+ * below). The copy here is deliberately elapsed-time-based rather than a
+ * fabricated checklist ("Analyzing…", "Drafting…") that would play out
+ * identically no matter what's actually happening — a local model can
+ * genuinely take several seconds before its first token, so the label
+ * escalates honestly instead of pretending nothing changed, and it plateaus
+ * (doesn't loop) so a long wait doesn't start to feel like it's lying.
+ */
+const THINKING_PHASES: { atMs: number; local: string; remote: string }[] = [
+  { atMs: 0, local: "Thinking on your device…", remote: "Thinking…" },
+  { atMs: 3500, local: "Still working…", remote: "Still working…" },
+  { atMs: 9000, local: "Local models can take a moment — hang tight", remote: "Taking longer than usual…" },
+];
+
+function ThinkingStatus({ isLocal }: { isLocal: boolean }) {
+  const [phaseIdx, setPhaseIdx] = useState(0);
+
+  useEffect(() => {
+    setPhaseIdx(0);
+    const timers = THINKING_PHASES.slice(1).map((phase, i) => setTimeout(() => setPhaseIdx(i + 1), phase.atMs));
+    return () => timers.forEach(clearTimeout);
+  }, []);
+
+  const label = isLocal ? THINKING_PHASES[phaseIdx].local : THINKING_PHASES[phaseIdx].remote;
+
   return (
-    <span className="inline-flex items-center gap-1 px-0.5 py-1">
-      {[0, 1, 2].map((i) => (
+    <span className="inline-flex items-center gap-2 py-0.5">
+      <span className="inline-flex items-center gap-1">
+        {[0, 1, 2].map((i) => (
+          <m.span
+            key={i}
+            className="block h-1.5 w-1.5 rounded-full bg-neutral-400 dark:bg-neutral-500"
+            animate={{ scale: [0.6, 1.2, 0.6], opacity: [0.4, 1, 0.4] }}
+            transition={{ duration: 1.2, repeat: Infinity, delay: i * 0.2, ease: "easeInOut" }}
+          />
+        ))}
+      </span>
+      <AnimatePresence mode="wait">
         <m.span
-          key={i}
-          className="block h-1.5 w-1.5 rounded-full bg-neutral-400 dark:bg-neutral-500"
-          animate={{ scale: [0.6, 1.2, 0.6], opacity: [0.4, 1, 0.4] }}
-          transition={{ duration: 1.2, repeat: Infinity, delay: i * 0.2, ease: "easeInOut" }}
-        />
-      ))}
+          key={label}
+          initial={{ opacity: 0, y: 3 }}
+          animate={{ opacity: 1, y: 0 }}
+          exit={{ opacity: 0, y: -3 }}
+          transition={{ duration: 0.2 }}
+          className="text-[12px] font-medium text-neutral-500 dark:text-neutral-400"
+        >
+          {label}
+        </m.span>
+      </AnimatePresence>
     </span>
   );
 }
@@ -410,6 +452,9 @@ export function AIPanel({ context, plans, rituals, schedule, activePlan, initial
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const didAutoSend = useRef(false);
   const abortRef = useRef<AbortController | null>(null);
+  // Local (mlx/ollama) vs remote changes the honest thing to say while
+  // waiting on a first token — see ThinkingStatus above.
+  const isLocalProvider = useMemo(() => getAIProviderState().active !== "openai-compatible", []);
 
   useEffect(() => {
     return () => { abortRef.current?.abort(); };
@@ -644,7 +689,7 @@ export function AIPanel({ context, plans, rituals, schedule, activePlan, initial
                       {isStreamingThis && <StreamingCursor />}
                     </>
                   ) : (
-                    <ThinkingDots />
+                    <ThinkingStatus isLocal={isLocalProvider} />
                   )}
                 </div>
                 {msg.action && (
