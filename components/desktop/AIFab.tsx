@@ -78,7 +78,7 @@ export function AIFab({
       )}
 
       {isDesktop && open && (
-        <div className="fixed bottom-24 right-6 z-50 flex w-[26rem] max-w-[95vw] flex-col overflow-hidden rounded-2xl border border-white/10 bg-neutral-950">
+        <div className="fixed bottom-24 right-6 z-50 flex w-[26rem] max-w-[95vw] flex-col overflow-hidden rounded-2xl border border-neutral-200 bg-white dark:border-white/10 dark:bg-neutral-950">
           <div className="h-[74vh] min-h-[520px] overflow-hidden">
             {panel}
           </div>
