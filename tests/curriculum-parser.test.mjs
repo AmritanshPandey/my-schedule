@@ -40,6 +40,7 @@ const {
   countSubtasks,
   weekdaysNeedingTime,
   sessionsNeedingTime,
+  scheduleCurriculum,
 } = await import("@/lib/curriculumParser.ts");
 
 const GMAT = readFileSync(new URL("./fixtures/gmat-curriculum.txt", import.meta.url), "utf8");
@@ -86,6 +87,22 @@ test("12 weeks, 4 sessions each, 48 sessions total", () => {
 
 test("week 1's checklists are exactly 9 / 7 / 8 / 6", () => {
   assert.deepEqual(sessionsOf(1).map((s) => s.subtasks.length), [9, 7, 8, 6]);
+});
+
+test("two same-weekday sessions in one week get distinguishable titles", () => {
+  // Weeks 2-11 name no sessions, so both Sunday sessions would fall back to
+  // "Sunday — <theme>" and be indistinguishable in the task list.
+  for (const w of parsed.weeks) {
+    const titles = w.sessions.map((s) => s.title);
+    assert.equal(
+      new Set(titles).size,
+      titles.length,
+      `week ${w.number} has duplicate session titles: ${JSON.stringify(titles)}`,
+    );
+  }
+  const w2 = sessionsOf(2).filter((s) => s.weekday === "sunday");
+  assert.equal(w2[0].title, "Sunday 7:00 AM — Fractions, Decimals & Percentages");
+  assert.equal(w2[1].title, "Sunday 9:30 AM — Fractions, Decimals & Percentages");
 });
 
 test("no session is empty, and no checklist item is empty", () => {
@@ -203,4 +220,202 @@ test("a sentence that merely starts with a weekday is not a session header", () 
 
 test("parsing is deterministic", () => {
   assert.deepEqual(parseCurriculum(GMAT), parseCurriculum(GMAT));
+});
+
+// ── Placing it on the calendar ────────────────────────────────────────────────
+
+// A Monday, so week arithmetic is easy to read in the assertions.
+const START = "2026-09-07";
+const PLACED = scheduleCurriculum(parsed, {
+  startDateISO: START,
+  startTimeByWeekday: { thursday: "6:30 PM", saturday: "9:00 AM" },
+});
+
+const weekdayOf = (iso) => {
+  const d = new Date(`${iso}T12:00:00`);
+  return ["monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday"][
+    (d.getDay() + 6) % 7
+  ];
+};
+
+test("every session lands on a real date matching its weekday", () => {
+  assert.equal(PLACED.length, 48);
+  for (const p of PLACED) {
+    assert.match(p.dateISO, /^\d{4}-\d{2}-\d{2}$/);
+    assert.equal(
+      weekdayOf(p.dateISO),
+      p.session.weekday,
+      `week ${p.session.weekNumber} ${p.session.weekday} landed on ${weekdayOf(p.dateISO)}`,
+    );
+  }
+});
+
+test("consecutive weeks are exactly 7 days apart on the same weekday", () => {
+  // This is the case the weekday-scoped rule engine could not represent at all.
+  for (const day of ["thursday", "saturday"]) {
+    const dates = PLACED.filter((p) => p.session.weekday === day).map((p) => p.dateISO);
+    assert.equal(dates.length, 12);
+    for (let i = 1; i < dates.length; i++) {
+      const gap =
+        (new Date(`${dates[i]}T12:00:00`) - new Date(`${dates[i - 1]}T12:00:00`)) / 86_400_000;
+      assert.equal(gap, 7, `${day}: ${dates[i - 1]} → ${dates[i]} is ${gap} days`);
+    }
+  }
+  // 12 weeks from the anchor Monday.
+  assert.equal(PLACED.find((p) => p.session.weekNumber === 1 && p.session.weekday === "thursday").dateISO, "2026-09-10");
+  assert.equal(PLACED.find((p) => p.session.weekNumber === 12 && p.session.weekday === "thursday").dateISO, "2026-11-26");
+});
+
+test("all 48 date+time slots are unique", () => {
+  const keys = PLACED.map((p) => `${p.dateISO}|${p.startTime}`);
+  assert.equal(new Set(keys).size, 48, "two sessions share a date and start time");
+});
+
+test("answered weekday times are applied to every week", () => {
+  for (const p of PLACED.filter((x) => x.session.weekday === "thursday")) {
+    assert.equal(p.startTime, "6:30 PM");
+    assert.equal(p.endTime, "9:45 PM", "6:30 PM + 3h15m");
+  }
+  for (const p of PLACED.filter((x) => x.session.weekday === "saturday")) {
+    assert.equal(p.startTime, "9:00 AM");
+    assert.equal(p.endTime, "12:00 PM", "9:00 AM + 3h");
+  }
+});
+
+test("times written in the text win over the answers", () => {
+  const sundays = PLACED.filter((p) => p.session.weekday === "sunday");
+  assert.equal(sundays.length, 24);
+  const early = sundays.filter((p) => p.startTime === "7:00 AM");
+  const late = sundays.filter((p) => p.startTime === "9:30 AM");
+  assert.equal(early.length, 12);
+  assert.equal(late.length, 12);
+  assert.ok(early.every((p) => p.endTime === "9:15 AM"), "7:00 + 2h15m");
+  assert.ok(late.every((p) => p.endTime === "11:45 AM"), "9:30 + 2h15m");
+});
+
+test("the two Sunday sessions never overlap on the same date", () => {
+  const byDate = new Map();
+  for (const p of PLACED.filter((x) => x.session.weekday === "sunday")) {
+    (byDate.get(p.dateISO) ?? byDate.set(p.dateISO, []).get(p.dateISO)).push(p);
+  }
+  assert.equal(byDate.size, 12, "each week should contribute one Sunday date");
+  const mins = (t) => {
+    const [, h, m, ap] = t.match(/^(\d{1,2}):(\d{2})\s*(AM|PM)$/);
+    return ((Number(h) % 12) + (ap === "PM" ? 12 : 0)) * 60 + Number(m);
+  };
+  for (const [date, pair] of byDate) {
+    assert.equal(pair.length, 2, `${date} has ${pair.length} Sunday sessions`);
+    const [a, b] = pair.sort((x, y) => mins(x.startTime) - mins(y.startTime));
+    assert.ok(mins(a.endTime) <= mins(b.startTime), `${date}: ${a.endTime} runs past ${b.startTime}`);
+  }
+});
+
+test("a start date mid-week still anchors week 1 to that week", () => {
+  // Wednesday of the same week — week 1's Thursday should be the next day.
+  const midWeek = scheduleCurriculum(parsed, { startDateISO: "2026-09-09" });
+  const thu1 = midWeek.find((p) => p.session.weekNumber === 1 && p.session.weekday === "thursday");
+  assert.equal(thu1.dateISO, "2026-09-10");
+});
+
+test("untimed sessions fall back rather than being dropped", () => {
+  const noAnswers = scheduleCurriculum(parsed, { startDateISO: START });
+  const thu = noAnswers.filter((p) => p.session.weekday === "thursday");
+  assert.equal(thu.length, 12);
+  assert.ok(thu.every((p) => p.startTime === "9:00 AM"));
+});
+
+// ── The rule engine: date-aware vs weekday-scoped ─────────────────────────────
+
+const { validateDatedTasks, applyScheduleRules } = await import("@/lib/scheduleRules.ts");
+
+/** Every placed session as a DatedTask, against an empty schedule. */
+const datedTasks = PLACED.map((p) => ({
+  title: `${p.session.title} (wk ${p.session.weekNumber})`,
+  dateISO: p.dateISO,
+  startTime: p.startTime,
+  endTime: p.endTime,
+}));
+
+test("the whole 48-session curriculum validates with zero conflicts", () => {
+  const result = validateDatedTasks(datedTasks, () => []);
+  assert.equal(result.errors.length, 0, JSON.stringify(result.errors.slice(0, 3)));
+  assert.equal(result.conflicts.length, 0, JSON.stringify(result.conflicts.slice(0, 3)));
+  assert.equal(result.valid.length, 48);
+});
+
+test("REGRESSION: the weekday-scoped engine mangles what the date-aware one accepts", () => {
+  // This is the reported bug. Twelve Thursday sessions on twelve different dates
+  // are twelve separate days, but `applyScheduleRules` keys occupancy on the
+  // weekday, so it sees twelve collisions on "thursday".
+  const thursdays = PLACED.filter((p) => p.session.weekday === "thursday");
+  assert.equal(thursdays.length, 12);
+
+  const asWeekday = thursdays.map((p) => ({
+    title: `${p.session.title} (wk ${p.session.weekNumber})`,
+    day: "thursday",
+    startTime: p.startTime,
+    endTime: p.endTime,
+  }));
+  const old = applyScheduleRules(asWeekday, {});
+  const mangled = old.conflicts.length + old.errors.length;
+  assert.ok(
+    mangled > 0,
+    "expected the weekday-scoped engine to move or reject these — if not, the premise changed",
+  );
+
+  // The date-aware engine leaves all twelve exactly where the plan put them.
+  const dated = validateDatedTasks(
+    thursdays.map((p) => ({
+      title: `${p.session.title} (wk ${p.session.weekNumber})`,
+      dateISO: p.dateISO,
+      startTime: p.startTime,
+      endTime: p.endTime,
+    })),
+    () => [],
+  );
+  assert.equal(dated.conflicts.length, 0);
+  assert.equal(dated.errors.length, 0);
+  assert.deepEqual(
+    dated.valid.map((t) => t.startTime),
+    thursdays.map((p) => p.startTime),
+    "no session was silently moved",
+  );
+});
+
+test("a real clash on one date is reported, not nudged", () => {
+  const busy = { title: "Standing meeting", startTime: "6:30 PM", endTime: "7:30 PM" };
+  const target = PLACED.find((p) => p.session.weekday === "thursday");
+  const result = validateDatedTasks(datedTasks, (dateISO) =>
+    dateISO === target.dateISO ? [busy] : [],
+  );
+
+  assert.equal(result.conflicts.length, 1, "only the one clashing date should fail");
+  assert.equal(result.valid.length, 47);
+  const c = result.conflicts[0].conflict;
+  assert.equal(c.dateISO, target.dateISO);
+  assert.equal(c.conflictsWith, "Standing meeting");
+  assert.equal(c.conflictStart, "18:30");
+  // And nothing was relocated: every accepted task is byte-identical to its
+  // input, which is the whole point of reporting instead of nudging.
+  for (const t of result.valid) {
+    assert.ok(datedTasks.includes(t), `${t.title} on ${t.dateISO} was rewritten`);
+  }
+});
+
+test("the two Sunday sessions coexist on one date without conflicting", () => {
+  const oneSunday = PLACED.filter(
+    (p) => p.session.weekday === "sunday" && p.session.weekNumber === 1,
+  );
+  assert.equal(oneSunday.length, 2);
+  const result = validateDatedTasks(
+    oneSunday.map((p) => ({
+      title: p.session.title,
+      dateISO: p.dateISO,
+      startTime: p.startTime,
+      endTime: p.endTime,
+    })),
+    () => [],
+  );
+  assert.equal(result.conflicts.length, 0, "7:00–9:15 and 9:30–11:45 must not clash");
+  assert.equal(result.valid.length, 2);
 });

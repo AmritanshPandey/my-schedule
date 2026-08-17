@@ -17,6 +17,8 @@
 
 import type { DayKey } from "@/lib/useScheduleDB";
 import { DAYS } from "@/lib/scheduleConstants";
+import { addDaysToISO, localISODate } from "@/lib/dateUtils";
+import { parseTimeToMinutes } from "@/lib/timeUtils";
 
 export interface CurriculumSubtask {
   id: string;
@@ -296,7 +298,13 @@ export function parseCurriculum(text: string): ParsedCurriculum {
         }
       }
       if (!s.title) {
-        s.title = w.theme ? `${capitalize(s.weekday)} — ${w.theme}` : capitalize(s.weekday);
+        // Weeks 2–11 name no sessions, so the fallback has to carry the
+        // distinction itself: two Sunday sessions in one week would otherwise
+        // both read "Sunday — <theme>" and be impossible to tell apart in the
+        // task list. The time is what separates them, so it goes in the title.
+        const sameDay = w.sessions.filter((x) => x.weekday === s.weekday);
+        const label = capitalize(s.weekday) + (sameDay.length > 1 && s.startTime ? ` ${s.startTime}` : "");
+        s.title = w.theme ? `${label} — ${w.theme}` : label;
       }
     }
   }
@@ -332,4 +340,93 @@ export function weekdaysNeedingTime(curriculum: ParsedCurriculum): DayKey[] {
   const seen = new Set<DayKey>();
   for (const s of sessionsNeedingTime(curriculum)) seen.add(s.weekday);
   return DAYS.filter((d) => seen.has(d));
+}
+
+// ── Placing a curriculum on the calendar ──────────────────────────────────────
+
+/** Fallbacks for anything the text never stated and the user never answered. */
+export const DEFAULT_SESSION_START = "9:00 AM";
+export const DEFAULT_SESSION_MINUTES = 60;
+
+export interface CurriculumScheduleOptions {
+  /** Any date inside the first week; its Mon–Sun week anchors week 1. */
+  startDateISO: string;
+  /** One answer per weekday, covering every week's session on that day. */
+  startTimeByWeekday?: Partial<Record<DayKey, string>>;
+  defaultStartTime?: string;
+  defaultDurationMinutes?: number;
+}
+
+export interface ScheduledSession {
+  session: CurriculumSession;
+  /** ISO date this occurrence lands on. */
+  dateISO: string;
+  startTime: string;
+  endTime: string;
+  durationMinutes: number;
+}
+
+/** Monday of the ISO week containing `dateISO`, as ISO. */
+function mondayOfISO(dateISO: string): string {
+  const d = new Date(`${dateISO}T12:00:00`);
+  // getDay() is Sunday-first; DAYS is Monday-first.
+  return localISODate(new Date(d.getTime() - ((d.getDay() + 6) % 7) * 86_400_000));
+}
+
+function formatMinutes(total: number): string {
+  const wrapped = ((total % 1440) + 1440) % 1440;
+  const h24 = Math.floor(wrapped / 60);
+  const m = wrapped % 60;
+  const ampm = h24 >= 12 ? "PM" : "AM";
+  const h = h24 % 12 || 12;
+  return `${h}:${String(m).padStart(2, "0")} ${ampm}`;
+}
+
+/**
+ * Resolve every session to a concrete date and time range.
+ *
+ * Weeks are placed **relative to the first week in the text**, not by absolute
+ * number, so a plan that starts at `WEEK 3` still begins on the chosen date and
+ * a gap in the numbering pushes later weeks out rather than silently collapsing.
+ *
+ * Each result is destined to become one task with
+ * `recurrence: { type: "once", dateISO }`. That is forced rather than chosen:
+ * `TaskException` carries no subtasks field, so a single weekly-recurring task
+ * cannot hold week 1's checklist and week 2's different one. Dated occurrences
+ * are the only shape that keeps each week's items intact.
+ */
+export function scheduleCurriculum(
+  curriculum: ParsedCurriculum,
+  options: CurriculumScheduleOptions,
+): ScheduledSession[] {
+  const {
+    startDateISO,
+    startTimeByWeekday = {},
+    defaultStartTime = DEFAULT_SESSION_START,
+    defaultDurationMinutes = DEFAULT_SESSION_MINUTES,
+  } = options;
+
+  const firstWeekNumber = curriculum.weeks[0]?.number ?? 1;
+  const anchorMonday = mondayOfISO(startDateISO);
+  const out: ScheduledSession[] = [];
+
+  for (const week of curriculum.weeks) {
+    const weekMonday = addDaysToISO(anchorMonday, (week.number - firstWeekNumber) * 7);
+    for (const session of week.sessions) {
+      const dateISO = addDaysToISO(weekMonday, DAYS.indexOf(session.weekday));
+      const startTime =
+        session.startTime ?? startTimeByWeekday[session.weekday] ?? defaultStartTime;
+      const durationMinutes = session.durationMinutes ?? defaultDurationMinutes;
+      const startMinutes = parseTimeToMinutes(startTime) ?? 9 * 60;
+      out.push({
+        session,
+        dateISO,
+        startTime,
+        endTime: formatMinutes(startMinutes + durationMinutes),
+        durationMinutes,
+      });
+    }
+  }
+
+  return out;
 }
