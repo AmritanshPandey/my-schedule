@@ -45,6 +45,8 @@ const {
 const { checkLimits, countCreations, clampMaxTokens, SOFT_LIMITS, MAX_TOKENS_CEILING } =
   await import("@/lib/ai/limits.ts");
 
+const { describeAction, canConfirm } = await import("@/lib/ai/checklist.ts");
+
 const DAYS = ["monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday"];
 
 function scheduleWith(tasks) {
@@ -215,4 +217,93 @@ test("a question creates nothing", () => {
     payload: { question: "Which plan?", options: ["A", "B"] },
   });
   assert.equal(counts.total, 0);
+});
+
+// ── The review gate's contract ───────────────────────────────────────────────
+// These are the rules the review sheet renders: what blocks the confirm, and
+// what merely shows as unset. Asserted here rather than through the UI so they
+// hold regardless of how the sheet is laid out.
+
+function fullSchedule(plans, tasks = []) {
+  return { ...scheduleWith(tasks), plans, milestones: [], progressTrackers: [], rituals: [] };
+}
+
+test("an unresolved plan blocks the confirm", () => {
+  const sched = fullSchedule(PLANS);
+  const review = describeAction(
+    { type: "add_tracker", payload: { planTitle: "Nope", title: "Distance", goalDirection: "increase_good" } },
+    sched,
+  );
+  assert.ok(review.blockers.length > 0);
+  assert.equal(canConfirm(review, false), false);
+});
+
+test("a resolved plan with every required field is ready in one tap", () => {
+  const sched = fullSchedule(PLANS);
+  const review = describeAction(
+    { type: "add_tracker", payload: { planTitle: "Marathon Training", title: "Distance", goalDirection: "increase_good" } },
+    sched,
+  );
+  assert.deepEqual(review.blockers, []);
+  assert.equal(canConfirm(review, false), true);
+  // The optional fields are surfaced but never block.
+  const optional = review.fields.filter((f) => !f.required).map((f) => f.key);
+  assert.ok(optional.includes("unit"));
+  assert.ok(optional.includes("goalValue"));
+});
+
+test("a missing required field blocks, a missing optional one does not", () => {
+  const sched = fullSchedule(PLANS);
+  const missingTime = describeAction(
+    { type: "add_task", payload: { title: "Swim", taskType: "task", day: "monday", startTime: "", endTime: "", icon: "star" } },
+    sched,
+  );
+  assert.ok(missingTime.blockers.some((b) => /start time/i.test(b)));
+  assert.equal(canConfirm(missingTime, false), false);
+
+  const complete = describeAction(
+    { type: "add_task", payload: { title: "Swim", taskType: "task", day: "monday", startTime: "07:00", endTime: "08:00", icon: "star" } },
+    sched,
+  );
+  assert.deepEqual(complete.blockers, []);
+  assert.equal(canConfirm(complete, false), true, "no plan named is fine — held time has none");
+});
+
+test("a soft-cap breach needs an explicit acknowledgement", () => {
+  const sched = fullSchedule(PLANS);
+  const review = describeAction(bigPlan(SOFT_LIMITS.tasks + 5), sched);
+  assert.deepEqual(review.blockers, [], "large is not invalid");
+  assert.equal(canConfirm(review, false), false, "but it must not go through unnoticed");
+  assert.equal(canConfirm(review, true), true, "and it does once confirmed");
+});
+
+test("an oversized response is blocked outright, acknowledgement or not", () => {
+  const sched = fullSchedule(PLANS);
+  const review = describeAction(bigPlan(400), sched);
+  assert.ok(review.blockers.some((b) => /too large/i.test(b)));
+  assert.equal(canConfirm(review, true), false);
+});
+
+test("add_subtasks names the one task it will touch", () => {
+  const sched = fullSchedule(PLANS, [
+    { id: "t1", title: "Run", planId: "p1", days: ["monday"] },
+    { id: "t2", title: "Long run", planId: "p1", days: ["saturday"] },
+  ]);
+  const review = describeAction(
+    { type: "add_subtasks", payload: { taskTitle: "run", subtasks: ["A", "B"] } },
+    sched,
+  );
+  assert.equal(review.target.kind, "task");
+  assert.equal(review.target.match.status, "resolved");
+  assert.equal(review.target.match.value.title, "Run");
+  assert.equal(canConfirm(review, false), true);
+});
+
+test("a question has nothing to review", () => {
+  const review = describeAction(
+    { type: "ask_clarification", payload: { question: "Which plan?" } },
+    fullSchedule(PLANS),
+  );
+  assert.equal(review.target.kind, "none");
+  assert.equal(review.limits.counts.total, 0);
 });

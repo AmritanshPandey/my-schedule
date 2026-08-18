@@ -39,6 +39,7 @@ const SessionSheet = dynamic(() => import("@/components/activity/SessionSheet"),
 const SubtasksSheet = dynamic(() => import("@/components/activity/SubtasksSheet"), { ssr: false });
 const TaskDetailView = dynamic(() => import("@/components/activity/TaskDetailView"), { ssr: false });
 const BulkImportSheet = dynamic(() => import("@/components/BulkImportSheet"), { ssr: false });
+const AIReviewSheet = dynamic(() => import("@/components/ai/AIReviewSheet"), { ssr: false });
 const DayWallpaperSheet = dynamic(() => import("@/components/DayWallpaperSheet"), { ssr: false });
 const DayActionsSheet = dynamic(() => import("@/components/DayActionsSheet"), { ssr: false });
 const RitualView = dynamic(() => import("@/components/activity/RitualView"), { ssr: false });
@@ -806,6 +807,7 @@ export default function ScheduleApp() {
   // sheet always reflects the live task (completion updates create new objects).
   const [subtasksRef, setSubtasksRef] = useState<{ id: string; day: DayKey; dateISO: string } | null>(null);
   const [bulkImportOpen, setBulkImportOpen] = useState(false);
+  const [pendingAIAction, setPendingAIAction] = useState<AIActionResult | null>(null);
   const completedRitualIds = useMemo(() => {
     const today = todayISO();
     return new Set(
@@ -1869,7 +1871,22 @@ export default function ScheduleApp() {
     setAiPlanCreating(false);
   }
 
+  /**
+   * The gate every AI write passes through.
+   *
+   * Both chat surfaces call this — AIPanel only previews and delegates here — so
+   * gating at this one point covers them both. Nothing reaches the schedule
+   * until the review sheet confirms the target and the required fields, which is
+   * what stops a confidently wrong response becoming a silent edit.
+   */
   function handleApplyAction(action: AIActionResult) {
+    // A question is not a change; the chat renders it and there is nothing to
+    // review or apply.
+    if (action.type === "ask_clarification") return;
+    setPendingAIAction(action);
+  }
+
+  function applyReviewedAction(action: AIActionResult) {
     if (action.type === "create_plan") {
       createPlanFromAIAction({
         title: action.payload.title,
@@ -4207,6 +4224,17 @@ export default function ScheduleApp() {
             </m.button>
           )}
         </AnimatePresence>
+      )}
+
+      {/* ── AI review — the gate between a parsed action and the schedule ── */}
+      {AI_ENABLED && pendingAIAction && (
+        <AIReviewSheet
+          open={pendingAIAction !== null}
+          action={pendingAIAction}
+          schedule={schedule}
+          onCancel={() => setPendingAIAction(null)}
+          onConfirm={(reviewed) => { setPendingAIAction(null); applyReviewedAction(reviewed); }}
+        />
       )}
 
       {/* ── AI onboarding — shown once when app opens ─────────────────────── */}
