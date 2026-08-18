@@ -149,7 +149,7 @@ import {
   retimeSlot,
   type TaskDeleteScope,
 } from "@/lib/taskMutations";
-import { findPlanByTitle, findTasksByTitle } from "@/lib/planLookup";
+import { resolvePlanTarget, resolveTaskTarget, describeTargetProblem } from "@/lib/ai/targets";
 import { isTaskScheduledOn, resolveOccurrence, diffException } from "@/lib/taskOccurrence";
 import type { AIGeneratedTask } from "@/lib/aiActions";
 import { applyScheduleRules } from "@/lib/scheduleRules";
@@ -1925,15 +1925,15 @@ export default function ScheduleApp() {
     if (action.type === "suggest_milestones") {
       const milestones = action.payload.milestones;
       if (!milestones.length) return;
-      const targetPlan =
-        findPlanByTitle(schedule.plans, action.payload.planTitle) ??
-        (selectedPlanId ? schedule.plans.find((p) => p.id === selectedPlanId) : undefined) ??
-        schedule.plans[0];
-      const planId = targetPlan?.id;
-      if (!planId) {
-        setToastMessage("Create a plan first, then I can suggest milestones for it");
+      // Resolve, or say so. This used to fall through to `schedule.plans[0]`,
+      // so milestones for a plan the model misnamed landed on an unrelated one
+      // with no warning.
+      const planTarget = resolvePlanTarget(schedule.plans, action.payload.planTitle);
+      if (planTarget.status !== "resolved") {
+        setToastMessage(describeTargetProblem(planTarget, "plan") ?? "Which plan should these go to?");
         return;
       }
+      const planId = planTarget.value.id;
       setSchedule((prev) => {
         const plan = prev.plans.find((p) => p.id === planId);
         const otherMilestones = (prev.milestones ?? []).filter((m) => m.planId !== planId);
@@ -1947,17 +1947,19 @@ export default function ScheduleApp() {
           ],
         };
       });
-      setToastMessage(`Added ${milestones.length} milestone${milestones.length > 1 ? "s" : ""} to "${targetPlan?.title}"`);
+      setToastMessage(`Added ${milestones.length} milestone${milestones.length > 1 ? "s" : ""} to "${planTarget.value.title}"`);
       setActiveTab(1);
       setSelectedPlanId(planId);
       return;
     }
 
     if (action.type === "add_tracker") {
-      const targetPlan =
-        findPlanByTitle(schedule.plans, action.payload.planTitle) ??
-        (selectedPlanId ? schedule.plans.find((p) => p.id === selectedPlanId) : undefined) ??
-        schedule.plans[0];
+      const trackerTarget = resolvePlanTarget(schedule.plans, action.payload.planTitle);
+      if (trackerTarget.status !== "resolved") {
+        setToastMessage(describeTargetProblem(trackerTarget, "plan") ?? "Which plan should this tracker go to?");
+        return;
+      }
+      const targetPlan: Plan | undefined = trackerTarget.value;
       if (!targetPlan) {
         setToastMessage("Create a plan first, then I can add a tracker to it");
         return;
@@ -1982,7 +1984,15 @@ export default function ScheduleApp() {
     }
 
     if (action.type === "add_task") {
-      const targetPlan = findPlanByTitle(schedule.plans, action.payload.planTitle);
+      // A plan is optional for a task — held time has none — so "unspecified"
+      // is acceptable here. A name that was given but doesn't resolve is not:
+      // that used to silently create the task with no plan at all.
+      const taskPlanTarget = resolvePlanTarget(schedule.plans, action.payload.planTitle);
+      if (action.payload.planTitle && taskPlanTarget.status !== "resolved") {
+        setToastMessage(describeTargetProblem(taskPlanTarget, "plan") ?? "Which plan should this task go to?");
+        return;
+      }
+      const targetPlan = taskPlanTarget.status === "resolved" ? taskPlanTarget.value : undefined;
       const days = action.payload.days?.length ? action.payload.days : [action.payload.day];
       setSchedule((prev) => {
         const categoryDraft = [...prev.categories];
@@ -2002,11 +2012,15 @@ export default function ScheduleApp() {
     }
 
     if (action.type === "add_subtasks") {
-      const matches = findTasksByTitle(schedule, action.payload.taskTitle);
-      if (matches.length === 0) {
-        setToastMessage(`Couldn't find a task named "${action.payload.taskTitle}"`);
+      // One task, not every loose match. `addSubtaskToTasks` takes an array, and
+      // passing the whole match list is what made "add steps to Run" write to
+      // Run, Long run and Recovery run at once.
+      const taskTarget = resolveTaskTarget(schedule, action.payload.taskTitle);
+      if (taskTarget.status !== "resolved") {
+        setToastMessage(describeTargetProblem(taskTarget, "task") ?? "Which task should these go to?");
         return;
       }
+      const matches = [taskTarget.value.id];
       setSchedule((prev) =>
         action.payload.subtasks.reduce(
           (acc, title) => addSubtaskToTasks(matches, createSubtask(title))(acc),
@@ -2014,6 +2028,11 @@ export default function ScheduleApp() {
         )
       );
       setToastMessage(`Added ${action.payload.subtasks.length} subtask${action.payload.subtasks.length > 1 ? "s" : ""} to "${action.payload.taskTitle}"`);
+      return;
+    }
+
+    if (action.type === "ask_clarification") {
+      // A question, not a change — the chat renders it; there is nothing to apply.
       return;
     }
 

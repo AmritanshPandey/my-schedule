@@ -8,7 +8,7 @@ import { parseAIAction, buildSystemPrompt, buildPlanContext } from "@/lib/ai";
 import type { AIActionResult } from "@/lib/ai";
 import { streamAIChat } from "@/lib/aiClient";
 import { getAIProviderState } from "@/lib/ai/config";
-import { findPlanByTitle, findTasksByTitle } from "@/lib/planLookup";
+import { resolvePlanTarget, resolveTaskTarget, describeTargetProblem } from "@/lib/ai/targets";
 import type { Plan, Ritual, Schedule } from "@/lib/useScheduleDB";
 import { SECTION_ICONS, getIconPickerStyle } from "@/components/SectionIcons";
 import type { AITask } from "@/lib/ai";
@@ -38,6 +38,7 @@ const ACTION_LABELS: Record<AIActionResult["type"], string> = {
   add_tracker: "New Tracker",
   add_task: "New Task",
   add_subtasks: "New Subtasks",
+  ask_clarification: "Question",
 };
 
 /**
@@ -283,7 +284,7 @@ function PlanDraftCard({ action, onApply }: { action: Extract<AIActionResult, { 
  * informational.
  */
 function resolvePreview(
-  action: Exclude<AIActionResult, { type: "create_plan" }>,
+  action: Exclude<AIActionResult, { type: "create_plan" } | { type: "ask_clarification" }>,
   plans: Plan[],
   schedule: Schedule,
   activePlan: Plan | undefined,
@@ -293,38 +294,98 @@ function resolvePreview(
     case "create_strategy":
       return { title: action.payload.title, detail: null, warn: false };
 
+    // Every branch below resolves exactly as the apply path does. They used to
+    // fall back to `activePlan ?? plans[0]`, so the card promised "→ Marathon
+    // Training" for a plan the model had misnamed — and the write then went
+    // somewhere else, or nowhere. A preview that disagrees with the apply is
+    // worse than no preview.
     case "add_task": {
-      const plan = findPlanByTitle(plans, action.payload.planTitle);
-      if (action.payload.planTitle && !plan) {
-        return { title: action.payload.title, detail: `No plan matched "${action.payload.planTitle}" — will add without one`, warn: true };
+      const target = resolvePlanTarget(plans, action.payload.planTitle);
+      if (action.payload.planTitle && target.status !== "resolved") {
+        return {
+          title: action.payload.title,
+          detail: describeTargetProblem(target, "plan"),
+          warn: true,
+        };
       }
-      return { title: action.payload.title, detail: plan ? `→ ${plan.title}` : "No plan (standalone)", warn: false };
+      return {
+        title: action.payload.title,
+        detail: target.status === "resolved" ? `→ ${target.value.title}` : "No plan (standalone)",
+        warn: false,
+      };
     }
 
     case "add_tracker": {
-      const plan = findPlanByTitle(plans, action.payload.planTitle) ?? activePlan ?? plans[0];
-      if (!plan) return { title: action.payload.title, detail: "No plan exists yet — create one first", warn: true };
-      return { title: action.payload.title, detail: `→ ${plan.title}`, warn: false };
+      const target = resolvePlanTarget(plans, action.payload.planTitle);
+      if (target.status !== "resolved") {
+        return { title: action.payload.title, detail: describeTargetProblem(target, "plan"), warn: true };
+      }
+      return { title: action.payload.title, detail: `→ ${target.value.title}`, warn: false };
     }
 
     case "suggest_milestones": {
       const count = action.payload.milestones.length;
       const label = `${count} milestone${count !== 1 ? "s" : ""}`;
-      const plan = findPlanByTitle(plans, action.payload.planTitle) ?? activePlan ?? plans[0];
-      if (!plan) return { title: label, detail: "No plan exists yet — create one first", warn: true };
-      return { title: label, detail: `→ ${plan.title}`, warn: false };
+      const target = resolvePlanTarget(plans, action.payload.planTitle);
+      if (target.status !== "resolved") {
+        return { title: label, detail: describeTargetProblem(target, "plan"), warn: true };
+      }
+      return { title: label, detail: `→ ${target.value.title}`, warn: false };
     }
 
     case "add_subtasks": {
       const count = action.payload.subtasks.length;
       const label = `${count} step${count !== 1 ? "s" : ""}`;
-      const matches = findTasksByTitle(schedule, action.payload.taskTitle);
-      if (matches.length === 0) {
-        return { title: label, detail: `No task found named "${action.payload.taskTitle}"`, warn: true };
+      const target = resolveTaskTarget(schedule, action.payload.taskTitle);
+      if (target.status !== "resolved") {
+        return { title: label, detail: describeTargetProblem(target, "task"), warn: true };
       }
-      return { title: label, detail: `→ "${action.payload.taskTitle}"`, warn: false };
+      return { title: label, detail: `→ "${target.value.title}"`, warn: false };
     }
   }
+}
+
+/**
+ * The model asking which plan or task was meant.
+ *
+ * Rendered instead of an Apply card: there is nothing to approve yet. Options
+ * are the real names it could have meant, so answering is a tap rather than
+ * retyping a title the matcher then has to guess at again.
+ */
+function ClarificationCard({
+  payload,
+  onAnswer,
+}: {
+  payload: { question: string; options?: string[]; field?: string };
+  onAnswer?: (answer: string) => void;
+}) {
+  return (
+    <m.div
+      initial={{ opacity: 0, y: 6 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ duration: 0.25, ease: "easeOut" }}
+      className="mt-2 rounded-2xl border border-amber-300/60 bg-amber-50/60 p-3 dark:border-amber-400/25 dark:bg-amber-400/[0.07]"
+    >
+      <span className="inline-block rounded-md bg-amber-100 px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wide text-amber-700 dark:bg-amber-400/20 dark:text-amber-300">
+        Needs an answer
+      </span>
+      <p className="mt-1 text-[13px] font-semibold text-neutral-900 dark:text-white">{payload.question}</p>
+      {payload.options && payload.options.length > 0 && (
+        <div className="mt-2 flex flex-wrap gap-1.5">
+          {payload.options.map((option) => (
+            <button
+              key={option}
+              type="button"
+              onClick={() => onAnswer?.(option)}
+              className="rounded-full border border-amber-300 bg-white px-2.5 py-1 text-[11px] font-semibold text-amber-800 transition-colors hover:bg-amber-100 dark:border-amber-400/35 dark:bg-neutral-900 dark:text-amber-200 dark:hover:bg-amber-400/10"
+            >
+              {option}
+            </button>
+          ))}
+        </div>
+      )}
+    </m.div>
+  );
 }
 
 function ActionCard({
@@ -333,15 +394,24 @@ function ActionCard({
   schedule,
   activePlan,
   onApply,
+  onAnswer,
 }: {
   action: AIActionResult;
   plans: Plan[];
   schedule: Schedule;
   activePlan?: Plan;
   onApply: (updated?: AIActionResult) => void;
+  onAnswer?: (answer: string) => void;
 }) {
   if (action.type === "create_plan") {
     return <PlanDraftCard action={action} onApply={onApply} />;
+  }
+
+  // A question is not a change to approve — it has no Apply. Answering it sends
+  // the choice back as the next message, which is how the model learns which
+  // plan or task was meant instead of picking one itself.
+  if (action.type === "ask_clarification") {
+    return <ClarificationCard payload={action.payload} onAnswer={onAnswer} />;
   }
 
   const { title, detail, warn } = resolvePreview(action, plans, schedule, activePlan);

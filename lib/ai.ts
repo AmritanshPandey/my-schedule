@@ -25,7 +25,14 @@ export type AIActionResult =
   | { type: "suggest_milestones"; payload: { milestones: AIMilestone[]; planTitle?: string } }
   | { type: "add_tracker"; payload: { planTitle?: string; title: string; unit?: string; goalDirection: "increase_good" | "decrease_good"; goalValue?: number } }
   | { type: "add_task"; payload: { title: string; taskType: TaskTypeValue; day: DayKey; days?: DayKey[]; startTime: string; endTime: string; icon: string; subtasks?: string[]; planTitle?: string } }
-  | { type: "add_subtasks"; payload: { taskTitle: string; subtasks: string[] } };
+  | { type: "add_subtasks"; payload: { taskTitle: string; subtasks: string[] } }
+  /**
+   * Not a write — a question back to the user. Emitted when the request doesn't
+   * say which plan or task it means and there is more than one candidate, so
+   * the model asks instead of picking. Rendered as a question with tappable
+   * options; it never reaches the schedule.
+   */
+  | { type: "ask_clarification"; payload: { question: string; options?: string[]; field?: string } };
 
 const VALID_COLORS = ["blue", "emerald", "violet", "pink", "amber", "cyan"] as const;
 const VALID_RITUAL_COLORS = ["rose", "sky", "violet", "amber", "emerald", "fuchsia", "orange", "cyan", "indigo", "teal"] as const;
@@ -44,6 +51,8 @@ Decide which action fits what the user asked for:
 - Milestones for a plan the user ALREADY HAS (check "User's existing plans" below) → "suggest_milestones"
 - A long-form written guide or program → "create_strategy"
 Prefer attaching to something the user already has (their existing plans/rituals, listed below) over creating a duplicate.
+
+ASK BEFORE YOU GUESS. If the request needs a plan or a task and does not say which one, and the user has more than one it could mean, reply with "ask_clarification" instead of choosing. Never invent a plan or task name that is not in the lists below, and never silently attach to the first one. Asking a short question is always better than editing the wrong thing.
 
 JSON shapes:
 
@@ -64,6 +73,12 @@ add_task — one task/commitment/session, optionally attached to an existing pla
 {"type":"add_task","payload":{"title":"Task Name","taskType":"commitment","day":"thursday","days":["thursday"],"startTime":"14:00","endTime":"15:00","icon":"star","subtasks":[],"planTitle":"Plan Title"}}
 \`\`\`
 "taskType" is one of: "task" (default — checked off, tracked), "session" (a tracked workout/practice block), "commitment" (fixed held time that's never checked off, e.g. commute, an appointment, work hours). "days" is optional — set it (instead of relying on just "day") when the same task recurs on more than one weekday under one id. Omit "planTitle" entirely for a commitment or any task with no specific plan.
+
+ask_clarification — you need one more detail before you can act:
+\`\`\`json
+{"type":"ask_clarification","payload":{"question":"Which plan should that go to?","options":["Marathon Training","Spanish Fluency"],"field":"planTitle"}}
+\`\`\`
+Use it whenever the target is unclear. "options" should list the real names the user could mean, taken from their existing plans/tasks below.
 
 add_subtasks — add steps to an existing task the user names:
 \`\`\`json
@@ -380,6 +395,23 @@ export function parseAIAction(text: string): AIActionResult | null {
         },
       };
     }
+    if (parsed.type === "ask_clarification") {
+      const p = parsed.payload as Record<string, unknown>;
+      const question = typeof p?.question === "string" ? p.question.trim() : "";
+      if (!question) return null;
+      const options = Array.isArray(p.options)
+        ? p.options.filter((o): o is string => typeof o === "string" && o.trim().length > 0).slice(0, 8)
+        : undefined;
+      return {
+        type: "ask_clarification",
+        payload: {
+          question,
+          ...(options && options.length > 0 ? { options } : {}),
+          ...(typeof p.field === "string" && p.field ? { field: p.field } : {}),
+        },
+      };
+    }
+
     if (parsed.type === "add_task") {
       const p = parsed.payload as Record<string, unknown>;
       if (typeof p?.title !== "string") return null;
