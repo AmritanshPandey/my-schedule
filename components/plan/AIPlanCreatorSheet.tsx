@@ -16,7 +16,6 @@ import { buildSystemPrompt, parseAIAction, type AITask, type AIMilestone } from 
 import { streamAI } from "@/lib/ai/providers/router";
 import { useAIActions } from "@/lib/ai/useAIActions";
 import { useAuth } from "@/contexts/AuthProvider";
-import AISignInGate from "@/components/auth/AISignInGate";
 import { resolveAccentColor, type AccentColor } from "@/lib/colorSystem";
 import { localISODate, todayISO } from "@/lib/dateUtils";
 import { validateTaskShapes, type TaskShapeIssue } from "@/lib/ai/validation/taskSchema";
@@ -304,10 +303,7 @@ export default function AIPlanCreatorSheet({
           onClose={onClose}
         />
 
-        {!ai.available ? (
-          <AISignInGate />
-        ) : (
-          <>
+        <>
             <div className="space-y-3">
               <p className="text-[11px] font-semibold uppercase tracking-[0.08em] text-neutral-400 dark:text-neutral-500">
                 What&apos;s your goal?
@@ -379,8 +375,7 @@ export default function AIPlanCreatorSheet({
             >
               {streaming ? "Generating…" : "Generate Plan →"}
             </Button>
-          </>
-        )}
+        </>
       </div>
     );
   }

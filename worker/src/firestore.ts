@@ -15,12 +15,6 @@ export interface Env {
   VAPID_PUBLIC_KEY: string;
   VAPID_PRIVATE_KEY: string;
   VAPID_SUBJECT: string;
-  /** Secret — the shared Gemini API key (Google AI Studio). Never sent to clients. */
-  GEMINI_API_KEY: string;
-  /** Plain var, not a secret — tunable without `wrangler secret put`. */
-  GEMINI_MODEL?: string;
-  AI_PER_USER_DAILY_CAP?: string;
-  AI_GLOBAL_DAILY_CAP?: string;
 }
 
 // ── Auth (service-account JWT → access token) ────────────────────────────────

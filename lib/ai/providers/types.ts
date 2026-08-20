@@ -1,15 +1,13 @@
 /**
  * The AI provider abstraction — the seam that lets PlanR call one `streamAI()`
- * without caring whether it's talking to Gemini (via the Cloudflare Worker,
- * which holds the real secret) or a local MLX server (a direct browser fetch,
- * since no server this app has can ever reach the user's own `localhost`).
+ * without caring whether it's talking to MLX, Ollama, or an OpenAI-compatible
+ * API. All providers are configured by the user and called through one seam.
  *
- * Deliberately small: no model registry, no tool-calling, no provider plugin
- * system — sized for exactly the two providers that exist today. Grow it when
- * a third provider actually shows up, not before.
+ * Deliberately small: provider-specific settings stay outside this contract so
+ * future providers can be added without changing feature call sites.
  */
 
-export type AIProviderType = "gemini" | "mlx";
+export type AIProviderType = "mlx" | "ollama" | "api";
 
 export interface AIMessage {
   role: "user" | "assistant";
@@ -54,8 +52,7 @@ export interface AIProvider {
   readonly id: AIProviderType;
   readonly label: string;
   generate(request: AIRequest): Promise<AIResponse>;
-  /** AsyncGenerator<string> of incremental text deltas (Gemini streams several;
-   *  MLX yields exactly one chunk this pass) — callers never need to know which. */
+  /** Providers may return one complete chunk or incremental text deltas. */
   streamChat(request: AIChatRequest): AsyncGenerator<string>;
   testConnection(): Promise<ConnectionResult>;
 }

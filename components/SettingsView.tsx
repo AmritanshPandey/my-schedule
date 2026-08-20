@@ -109,19 +109,15 @@ function readTheme(): ThemeMode {
 // A thin row that opens the shared AISettingsSheet — the same component the
 // mobile "AI Configuration" row (components/auth/SettingsSheet.tsx) and the
 // AI Assistant's gear icon open. Previously this rendered its own separate,
-// Gemini-only-copy card that bypassed AISettingsSheet entirely; now there's
-// one source of truth for AI settings (provider picker, Gemini status, MLX
+// Provider summary card that opens the shared AISettingsSheet. There is one
+// source of truth for provider selection and connection settings.
 // config) with two thin entry points instead of three divergent surfaces.
 
 function AISection() {
-  const { isGuest } = useAuth();
   const [open, setOpen] = useState(false);
   const [provider, setProvider] = useState(() => getActiveProviderType());
 
-  const statusLabel =
-    provider === "mlx"
-      ? "MLX (local) · No sign-in"
-      : isGuest ? "Sign in to use it" : "Ready · Free, with a daily limit";
+  const statusLabel = provider === "mlx" ? "MLX · Local default" : provider === "ollama" ? "Ollama · Local" : "API · OpenAI-compatible";
 
   return (
     <>
@@ -136,7 +132,7 @@ function AISection() {
           </div>
           <div className="min-w-0 flex-1">
             <p className="text-[14px] font-bold text-neutral-900 dark:text-white">
-              {provider === "mlx" ? "MLX AI" : "Gemini AI"}
+              {provider === "mlx" ? "MLX AI" : provider === "ollama" ? "Ollama AI" : "API AI"}
             </p>
             <p className="text-[12px] font-medium text-neutral-400 dark:text-neutral-500">{statusLabel}</p>
           </div>

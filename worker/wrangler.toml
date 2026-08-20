@@ -3,7 +3,7 @@ main = "src/index.ts"
 compatibility_date = "2024-09-23"
 compatibility_flags = ["nodejs_compat"]
 
-# A free *.workers.dev URL for the fetch handler (POST /ai/chat, POST
+# A free *.workers.dev URL for the fetch handler (POST
 # /push/test) — the cron trigger below is unaffected; both coexist on the
 # same Worker. Must be top-level, not nested under [triggers] — TOML scopes
 # every key after a [table] header to that table until the next header.
@@ -13,29 +13,6 @@ workers_dev = true
 [triggers]
 crons = ["* * * * *"]
 
-# Tunable, non-secret AI caps — plain vars so they're adjustable without a
-# `wrangler secret put` round-trip. These are conservative starting defaults,
-# not derived from a live quota check — confirm the actual current Gemini
-# free-tier RPM/RPD for GEMINI_MODEL in Google AI Studio when you generate the
-# key, and adjust here if needed.
-#
-# GEMINI_MODEL: Google's model availability moved twice in one debug session:
-# gemini-2.0-flash was fully retired (June 1 2026), and the next candidate,
-# gemini-2.5-flash, turned out to be blocked specifically for THIS Worker's
-# (newly-created) API key with "no longer available to NEW USERS" — a
-# separate, undocumented restriction from the announced deprecation schedule
-# (ai.google.dev/gemini-api/docs/deprecations doesn't mention it as of Aug
-# 2026). New API keys are being steered toward the 3.x generation instead.
-# gemini-3.5-flash is the current pick; index.ts's callGeminiWithFallback
-# also retries once against FALLBACK_MODEL (gemini-3.1-flash-lite) on a 404
-# specifically, so a future move doesn't need a redeploy to recover from —
-# but if BOTH start 404ing, check Google AI Studio's model picker for
-# whatever your specific key can actually see, not just the docs page.
-[vars]
-GEMINI_MODEL = "gemini-3.5-flash"
-AI_PER_USER_DAILY_CAP = "20"
-AI_GLOBAL_DAILY_CAP = "300"
-
 # All configuration is stored as encrypted secrets, NOT here. Set them with
 # `wrangler secret put <NAME>` (see README.md):
 #   FIREBASE_PROJECT_ID     e.g. planr-75429
@@ -44,6 +21,3 @@ AI_GLOBAL_DAILY_CAP = "300"
 #   VAPID_PUBLIC_KEY        from `npx web-push generate-vapid-keys`
 #   VAPID_PRIVATE_KEY       from `npx web-push generate-vapid-keys`
 #   VAPID_SUBJECT           e.g. mailto:you@example.com
-#   GEMINI_API_KEY          from Google AI Studio (aistudio.google.com/apikey)
-#                           — this is the ONE shared key every user's AI calls
-#                           run through; never expose it client-side.

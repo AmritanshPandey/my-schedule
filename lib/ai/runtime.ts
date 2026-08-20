@@ -1,6 +1,6 @@
 /**
  * AI action taxonomy — still-useful UI vocabulary for what an AI call is doing,
- * even though there's only one backend (Gemini, via the Cloudflare Worker proxy)
+ * independent of the configured provider.
  * now. Kept as its own module so `AIAssistant.tsx`'s suggestion cards don't need
  * to import from `lib/aiActions.ts` just for a type.
  */

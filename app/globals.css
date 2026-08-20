@@ -79,7 +79,18 @@ option {
 @theme inline {
   --color-background: var(--color-neutral-50);
   --color-foreground: var(--color-neutral-900);
-  --font-sans: var(--font-nunito), ui-sans-serif, system-ui, sans-serif;
+  --font-sans: "Avenir Next", ui-rounded, ui-sans-serif, system-ui, sans-serif;
+}
+
+/* ── Typography weight ceiling ──────────────────────────────────────────────
+   PlanR is an execution surface, so hierarchy comes from scale, color, and
+   spacing rather than heavy type. Existing components use Tailwind's bold
+   utilities extensively; cap those legacy utilities at 600 to keep every
+   surface visually consistent while body/supporting copy remains at 500. */
+.font-bold,
+.font-extrabold,
+.font-black {
+  font-weight: 600;
 }
 
 /* ── PlanR design tokens ─────────────────────────────────────────────────────

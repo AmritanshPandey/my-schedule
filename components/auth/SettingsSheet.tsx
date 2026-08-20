@@ -726,7 +726,7 @@ export function SettingsSheet({
                 <div className="min-w-0 flex-1">
                   <p className="text-[13px] font-semibold text-neutral-800 dark:text-white">AI Configuration</p>
                   <p className="text-[11px] text-neutral-400 dark:text-neutral-500">
-                    {aiProvider === "mlx" ? "MLX (local) · No sign-in" : "Gemini · Free · Sign-in required"}
+                    {aiProvider === "mlx" ? "MLX · Local default" : aiProvider === "ollama" ? "Ollama · Local" : "API · OpenAI-compatible"}
                   </p>
                 </div>
                 <IconChevronDown size={14} strokeWidth={2} className="-rotate-90 text-neutral-400" />

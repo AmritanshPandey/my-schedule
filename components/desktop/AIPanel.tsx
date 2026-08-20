@@ -9,7 +9,6 @@ import type { AIActionResult } from "@/lib/ai";
 import { streamAI } from "@/lib/ai/providers/router";
 import { useAuth } from "@/contexts/AuthProvider";
 import { useAIActions } from "@/lib/ai/useAIActions";
-import AISignInGate from "@/components/auth/AISignInGate";
 import { findPlanByTitle, findTasksByTitle } from "@/lib/planLookup";
 import type { Plan, Ritual, Schedule } from "@/lib/useScheduleDB";
 import { SECTION_ICONS, getIconPickerStyle } from "@/components/SectionIcons";
@@ -478,10 +477,10 @@ export function AIPanel({ context, plans, rituals, schedule, activePlan, initial
   const contextLabel = context === "plans" ? "Plans" : context === "strategy" ? "Strategy" : "Routine";
 
   return (
-    <div className="flex h-full w-full flex-col overflow-hidden rounded-2xl border border-white/10 bg-neutral-950 text-white">
-      <div className="flex h-[76px] shrink-0 items-center justify-between gap-3 border-b border-white/10 bg-neutral-950 px-4">
+    <div className="flex h-full w-full flex-col overflow-hidden rounded-2xl border border-neutral-200 bg-white text-neutral-900 dark:border-white/10 dark:bg-neutral-950 dark:text-white">
+      <div className="flex h-[76px] shrink-0 items-center justify-between gap-3 border-b border-neutral-200 bg-white px-4 dark:border-white/10 dark:bg-neutral-950">
         <div className="flex items-center gap-3">
-          <div className="flex h-10 w-10 items-center justify-center rounded-2xl border border-blue-500/15 bg-blue-500/10 dark:bg-blue-500/10">
+          <div className="flex h-10 w-10 items-center justify-center rounded-2xl border border-blue-200 bg-blue-50 dark:border-blue-500/15 dark:bg-blue-500/10">
             <IconSparkles size={18} strokeWidth={2} className="text-blue-600 dark:text-blue-300" />
           </div>
           <div className="min-w-0">
@@ -523,14 +522,6 @@ export function AIPanel({ context, plans, rituals, schedule, activePlan, initial
         </div>
       </div>
 
-      {!available ? (
-        // AIPanel is always dark-styled regardless of the app's theme
-        // setting — force AISignInGate's own dark: variants on so it isn't
-        // rendered in its light palette against this permanently-dark panel.
-        <div className="dark flex flex-1 items-center justify-center overflow-y-auto px-3">
-          <AISignInGate message="Sign in to chat with AI and create plans, tasks, trackers, and more — it's free, with a daily limit per account." />
-        </div>
-      ) : (
       <>
       {/* Error banner */}
       <AnimatePresence>
@@ -570,16 +561,16 @@ export function AIPanel({ context, plans, rituals, schedule, activePlan, initial
                 initial={{ scale: 0.7, opacity: 0 }}
                 animate={{ scale: 1, opacity: 1 }}
                 transition={{ delay: 0.05, type: "spring", stiffness: 260, damping: 20 }}
-                className="flex h-11 w-11 items-center justify-center rounded-2xl border border-white/10 bg-white/10"
+                className="flex h-11 w-11 items-center justify-center rounded-2xl border border-neutral-200 bg-neutral-100 dark:border-white/10 dark:bg-white/10"
               >
-                <IconBrain size={20} strokeWidth={1.5} className="text-white" />
+                <IconBrain size={20} strokeWidth={1.5} className="text-neutral-700 dark:text-white" />
               </m.div>
 
               <m.p
                 initial={{ opacity: 0, y: 6 }}
                 animate={{ opacity: 1, y: 0 }}
                 transition={{ delay: 0.1 }}
-                className="text-[13px] font-semibold text-white/90"
+                className="text-[13px] font-semibold text-neutral-800 dark:text-white/90"
               >
                 What would you like to build?
               </m.p>
@@ -596,15 +587,15 @@ export function AIPanel({ context, plans, rituals, schedule, activePlan, initial
                     disabled={streaming}
                     whileHover={streaming ? {} : { x: 2 }}
                     whileTap={{ scale: 0.98 }}
-                    className="flex items-center justify-between rounded-full border border-white/10 bg-white/5 px-4 py-3 text-left text-[13px] font-medium text-white transition hover:border-white/20 hover:bg-white/10"
+                    className="flex items-center justify-between rounded-full border border-neutral-200 bg-neutral-50 px-4 py-3 text-left text-[13px] font-medium text-neutral-800 transition hover:border-neutral-300 hover:bg-neutral-100 dark:border-white/10 dark:bg-white/5 dark:text-white dark:hover:border-white/20 dark:hover:bg-white/10"
                   >
                     <span className="flex items-center gap-3">
-                      <span className="inline-flex h-9 w-9 items-center justify-center rounded-full bg-white/10 text-white">
+                      <span className="inline-flex h-9 w-9 items-center justify-center rounded-full bg-neutral-200 text-neutral-700 dark:bg-white/10 dark:text-white">
                         <IconSparkles size={14} strokeWidth={2} />
                       </span>
                       {prompt}
                     </span>
-                    <IconArrowRight size={14} strokeWidth={2} className="ml-2 shrink-0 text-white/70" />
+                    <IconArrowRight size={14} strokeWidth={2} className="ml-2 shrink-0 text-neutral-400 dark:text-white/70" />
                   </m.button>
                 ))}
               </div>
@@ -616,7 +607,7 @@ export function AIPanel({ context, plans, rituals, schedule, activePlan, initial
           const isStreamingThis = streaming && i === messages.length - 1 && msg.role === "assistant";
           const bubbleClass = msg.role === "user"
             ? "ml-auto rounded-2xl rounded-br-[10px] bg-blue-600 text-white"
-            : "mr-auto rounded-2xl rounded-bl-[10px] border border-white/10 bg-white/5 text-white";
+            : "mr-auto rounded-2xl rounded-bl-[10px] border border-neutral-200 bg-neutral-50 text-neutral-800 dark:border-white/10 dark:bg-white/5 dark:text-white";
           return (
             <m.div
               key={i}
@@ -657,11 +648,10 @@ export function AIPanel({ context, plans, rituals, schedule, activePlan, initial
       </div>
 
       {/* Input */}
-      <div className="shrink-0 border-t border-white/10 px-3 py-3">
+      <div className="shrink-0 border-t border-neutral-200 px-3 py-3 dark:border-white/10">
         <m.div
           transition={{ duration: 0.15 }}
-          className={`flex items-end gap-2 rounded-2xl border bg-white/5 px-3 py-2 transition-colors ${focused ? "border-blue-500/30" : "border-white/10"}`}
-          style={{ borderColor: focused ? "rgba(59,130,246,0.25)" : undefined }}
+          className={`flex items-end gap-2 rounded-2xl border bg-neutral-50 px-3 py-2 transition-colors dark:bg-white/5 ${focused ? "border-blue-500/50 dark:border-blue-500/30" : "border-neutral-200 dark:border-white/10"}`}
         >
           <textarea
             ref={inputRef}
@@ -678,7 +668,7 @@ export function AIPanel({ context, plans, rituals, schedule, activePlan, initial
             placeholder={`Ask about ${contextLabel.toLowerCase()}…`}
             rows={3}
             disabled={streaming}
-            className="flex-1 resize-none bg-transparent text-[13px] text-white outline-none placeholder:text-white/50 disabled:opacity-50"
+            className="flex-1 resize-none bg-transparent text-[13px] text-neutral-900 outline-none placeholder:text-neutral-400 disabled:opacity-50 dark:text-white dark:placeholder:text-white/50"
             style={{ minHeight: "72px", maxHeight: "160px" }}
           />
           <m.button
@@ -692,12 +682,11 @@ export function AIPanel({ context, plans, rituals, schedule, activePlan, initial
             <IconSend size={13} strokeWidth={2.5} />
           </m.button>
         </m.div>
-        <p className="mt-1.5 text-[10px] text-white/50">
+        <p className="mt-1.5 text-[10px] text-neutral-400 dark:text-white/50">
           Shift+Enter for new line · Enter to send
         </p>
       </div>
       </>
-      )}
     </div>
   );
 }

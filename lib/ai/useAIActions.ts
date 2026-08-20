@@ -2,21 +2,16 @@
 
 /**
  * useAIActions — unified AI action hook. Every action routes through
- * lib/ai/providers/router.ts, which resolves the active provider (Gemini via
- * the Cloudflare Worker, or a local MLX server) — this hook doesn't know or
- * care which. `available` means "the active provider is usable right now":
- * for Gemini that's still "configured and signed in" (the Worker enforces
- * the real per-user/global caps, unbypassable client-side); for MLX it's
- * always true, since a local server needs no auth — an unreachable MLX
- * server surfaces as a friendly error at generation time instead.
+ * lib/ai/providers/router.ts, which resolves the active provider. Connection
+ * failures are reported by that provider when a request or test is made.
  *
  * All methods return AsyncGenerator<string> so they plug directly into
  * AIActionSheet's onGenerate prop unchanged from before this rewrite.
  */
 
-import { useCallback } from "react";
-import { useAuth } from "@/contexts/AuthProvider";
+import { useCallback, useEffect, useState } from "react";
 import { isAiAvailable } from "@/lib/ai/providers/router";
+import { AI_SETTINGS_CHANGED_EVENT } from "@/lib/ai/providers/settings";
 import {
   streamGenerateTasks,
   streamGenerateSubtasks,
@@ -27,7 +22,7 @@ import {
 } from "@/lib/aiActions";
 
 export interface AIActionsHandle {
-  /** AI is configured (Worker URL set at build time) and the caller is signed in. */
+  /** AI is enabled; the selected provider reports connection errors separately. */
   available: boolean;
 
   streamTasks: (
@@ -64,19 +59,29 @@ export interface AIActionsHandle {
 }
 
 export function useAIActions(): AIActionsHandle {
-  const { user, isGuest } = useAuth();
-  const available = isAiAvailable(isGuest);
+  const [available, setAvailable] = useState(false);
+
+  useEffect(() => {
+    const refresh = () => setAvailable(isAiAvailable(false));
+    refresh();
+    window.addEventListener(AI_SETTINGS_CHANGED_EVENT, refresh);
+    window.addEventListener("storage", refresh);
+    return () => {
+      window.removeEventListener(AI_SETTINGS_CHANGED_EVENT, refresh);
+      window.removeEventListener("storage", refresh);
+    };
+  }, []);
 
   const streamTasks = useCallback(
     (planTitle: string, description?: string, signal?: AbortSignal, followUp?: AIFollowUp): AsyncGenerator<string> =>
-      streamGenerateTasks(user, { title: planTitle, description }, signal, followUp),
-    [user],
+      streamGenerateTasks(null, { title: planTitle, description }, signal, followUp),
+    [],
   );
 
   const streamSubtasks = useCallback(
     (taskTitle: string, planTitle?: string): AsyncGenerator<string> =>
-      streamGenerateSubtasks(user, taskTitle, planTitle),
-    [user],
+      streamGenerateSubtasks(null, taskTitle, planTitle),
+    [],
   );
 
   const streamMilestonesAction = useCallback(
@@ -84,8 +89,8 @@ export function useAIActions(): AIActionsHandle {
       plan: { title: string; description?: string; startDate?: string; endDate?: string },
       signal?: AbortSignal,
       followUp?: AIFollowUp,
-    ): AsyncGenerator<string> => streamGenerateMilestones(user, plan, signal, followUp),
-    [user],
+    ): AsyncGenerator<string> => streamGenerateMilestones(null, plan, signal, followUp),
+    [],
   );
 
   const streamMilestoneTasksAction = useCallback(
@@ -94,16 +99,16 @@ export function useAIActions(): AIActionsHandle {
       plan: { title: string; description?: string },
       signal?: AbortSignal,
       followUp?: AIFollowUp,
-    ): AsyncGenerator<string> => streamGenerateMilestoneTasks(user, milestone, plan, signal, followUp),
-    [user],
+    ): AsyncGenerator<string> => streamGenerateMilestoneTasks(null, milestone, plan, signal, followUp),
+    [],
   );
 
   const streamWeeklyInsightAction = useCallback(
     (weekContext: string, signal?: AbortSignal): AsyncGenerator<string> | null => {
       if (!available) return null;
-      return streamWeeklyInsight(user, weekContext, signal);
+      return streamWeeklyInsight(null, weekContext, signal);
     },
-    [available, user],
+    [available],
   );
 
   return {

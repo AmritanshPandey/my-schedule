@@ -12,7 +12,7 @@ import type { Plan, Task } from "@/lib/useScheduleDB";
 import type { TaskState } from "@/lib/taskCompletion";
 import { getTaskSubtaskSummary, resolveTaskState, taskStatusLabel } from "@/lib/taskCompletion";
 import { getSlots } from "@/lib/taskMutations";
-import { formatDisplayTime } from "@/lib/timeUtils";
+import { formatDisplayTime, parseTimeToMinutes, toScheduleDayMinutes } from "@/lib/timeUtils";
 import { haptic } from "@/lib/haptics";
 import { safeGetItem, safeSetItem } from "@/lib/safeStorage";
 import { useLongPress } from "@/lib/useLongPress";
@@ -20,6 +20,7 @@ import { CARD, SOFT_PANEL } from "@/components/ui/surfaces";
 import CheckDraw from "@/components/ui/CheckDraw";
 
 type TaskSummary = ReturnType<typeof getTaskSubtaskSummary>;
+type TaskRow = { task: Task; slotIndex?: number };
 
 const HINT_KEY = "planr-missed-hint-seen";
 
@@ -92,6 +93,7 @@ function TodayTaskRow({
   onMissed,
   onOpenSubtasks,
   onMissedFired,
+  slotIndex,
 }: {
   task: Task;
   plans: Plan[];
@@ -251,6 +253,19 @@ export default function TodayTaskList({
     () => tasks.filter((t) => resolveTaskState(t, taskSummary(t).totalCount) === "missed").length,
     [tasks, taskSummary]
   );
+  const rows: TaskRow[] = tasks
+    .flatMap((task): TaskRow[] => {
+      const slots = getSlots(task);
+      return slots.length > 1
+        ? slots.map((_, slotIndex) => ({ task, slotIndex }))
+        : [{ task }];
+    })
+    .sort((a, b) => {
+      const aTime = getSlots(a.task)[a.slotIndex ?? 0]?.startTime ?? "";
+      const bTime = getSlots(b.task)[b.slotIndex ?? 0]?.startTime ?? "";
+      return toScheduleDayMinutes(parseTimeToMinutes(aTime) ?? 0)
+        - toScheduleDayMinutes(parseTimeToMinutes(bTime) ?? 0);
+    });
 
   return (
     <section data-testid="overview-today-card" className={`${CARD} px-4 pt-4 pb-1`}>
@@ -299,19 +314,7 @@ export default function TodayTaskList({
         </div>
       ) : (
         <div className="divide-y divide-neutral-100 dark:divide-white/[0.06]">
-          {tasks
-            .flatMap((task) => {
-              const slots = getSlots(task);
-              return slots.length > 1
-                ? slots.map((_, slotIndex) => ({ task, slotIndex }))
-                : [{ task, slotIndex: undefined }];
-            })
-            .sort((a, b) => {
-              const aTime = getSlots(a.task)[a.slotIndex ?? 0]?.startTime ?? "";
-              const bTime = getSlots(b.task)[b.slotIndex ?? 0]?.startTime ?? "";
-              return aTime.localeCompare(bTime);
-            })
-            .map(({ task, slotIndex }) => (
+          {rows.map(({ task, slotIndex }) => (
             <TodayTaskRow
               key={slotIndex === undefined ? task.id : `${task.id}:${slotIndex}`}
               task={task}

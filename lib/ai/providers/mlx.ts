@@ -12,8 +12,8 @@
  * to `localhost` on the user's machine. `localhost` means "this machine" to
  * whoever makes the request, so only code running in the same browser tab,
  * on the same Mac as mlx_lm.server, can ever reach it. This is safe
- * specifically because MLX has no API key to protect — unlike Gemini, which
- * correctly stays behind the Worker (see ./gemini.ts).
+ * specifically because MLX has no API key to protect and runs on the user's
+ * own machine.
  *
  * Non-streaming this pass: awaits the full chat-completion response and
  * yields it as a single chunk, satisfying the same AsyncGenerator<string>

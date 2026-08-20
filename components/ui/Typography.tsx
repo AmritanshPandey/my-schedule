@@ -19,9 +19,9 @@ interface TextProps {
 // `text-[Npx]` values. There is now one ladder and this is a view onto it.
 
 export const typography = {
-  pageTitle:       "text-display font-bold leading-tight tracking-[-0.3px] text-neutral-950 dark:text-white",
-  sectionTitle:    "text-headline font-bold leading-tight tracking-[-0.3px] text-neutral-950 dark:text-white",
-  sheetTitle:      "text-lead font-bold text-neutral-950 dark:text-white",
+  pageTitle:       "text-display font-semibold leading-tight tracking-[-0.3px] text-neutral-950 dark:text-white",
+  sectionTitle:    "text-headline font-semibold leading-tight tracking-[-0.3px] text-neutral-950 dark:text-white",
+  sheetTitle:      "text-lead font-semibold text-neutral-950 dark:text-white",
   subsectionTitle: "text-subtitle font-semibold text-neutral-950 dark:text-white",
   eyebrow:         "text-label font-semibold uppercase tracking-[0.08em] text-neutral-400 dark:text-neutral-500",
   body:            "text-bodylg font-medium leading-relaxed text-neutral-600 dark:text-neutral-400",

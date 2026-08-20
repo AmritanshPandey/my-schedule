@@ -67,7 +67,6 @@ import { parseAIAction, PLAN_COACH_PROMPT, buildCoachContext } from "@/lib/ai";
 import { streamAI } from "@/lib/ai/providers/router";
 import { useAIActions } from "@/lib/ai/useAIActions";
 import { useAuth } from "@/contexts/AuthProvider";
-import AISignInGate from "@/components/auth/AISignInGate";
 import { getCoachSkillPrompt, detectCoachSkill, SKILL_LABELS } from "@/lib/coachSkills";
 import { AI_ENABLED } from "@/lib/featureFlags";
 import AIActionSheet, { type ResultItem } from "@/components/ai/AIActionSheet";
@@ -294,7 +293,7 @@ export default function PlanDetailView({
     ? ["planning", "roadmap", "strategy"]
     : ["planning", "roadmap"]) as Array<"planning" | "roadmap" | "strategy">;
 
-  // ── Unified AI actions (Gemini, via the Worker proxy) ───────────────────
+  // ── Unified AI actions through the configured provider ──────────────────
   const { user: aiUser } = useAuth();
   const ai = useAIActions();
 
@@ -1129,7 +1128,7 @@ export default function PlanDetailView({
                   ? "border-l-2 border-dashed border-amber-400 dark:border-amber-600"
                   : "border-l-2 border-dashed border-green-200 dark:border-green-800/60"
             }`}
-            style={{ top: 44, bottom: -16, left: 13 }}
+            style={{ top: 44, bottom: -16, left: 26 }}
           />
         )}
 
@@ -1330,10 +1329,7 @@ export default function PlanDetailView({
         className="mx-4 mt-6 flex flex-col lg:mx-8"
         style={{ height: "clamp(360px, calc(100vh - 300px), 640px)" }}
       >
-        {!ai.available ? (
-          <AISignInGate message="Sign in to start coaching sessions for this plan." />
-        ) : (
-          <>
+        <>
             {/* Auto-generate button + skill badge */}
             <div className="shrink-0 flex items-center gap-2 px-4 pt-4 pb-3">
               <button
@@ -1644,8 +1640,7 @@ export default function PlanDetailView({
                 )}
               </div>
             </div>
-          </>
-        )}
+        </>
       </m.div>
     );
   }

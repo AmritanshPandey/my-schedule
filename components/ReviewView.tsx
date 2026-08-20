@@ -22,7 +22,6 @@ import { computeTrend } from "@/lib/trendUtils";
 import { todayISO, addDaysToISO, localISODate } from "@/lib/dateUtils";
 import { isTaskScheduledOn } from "@/lib/taskOccurrence";
 import { useAIActions } from "@/lib/ai/useAIActions";
-import AISignInGate from "@/components/auth/AISignInGate";
 import MilestoneTimeline from "@/components/MilestoneTimeline";
 import CompletionTrendCard from "@/components/analytics/CompletionTrendCard";
 

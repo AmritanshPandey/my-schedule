@@ -119,11 +119,10 @@ export default function DesktopSidebar({
     setMode(theme === "dark" ? "light" : "dark");
   }
 
-  // Gemini needs sign-in (per-user caps are enforced server-side); MLX needs
-  // neither an account nor a server, so it's ready as soon as it's selected
-  // in Settings — isAiAvailable already knows the difference.
+  // All supported providers are user-linked and available to guest users;
+  // connection errors are surfaced when the selected provider is tested or used.
   const aiReady = isAiAvailable(isGuest);
-  const statusLabel = aiReady ? "AI ready" : "Sign in for AI";
+  const statusLabel = aiReady ? "AI ready" : "Configure AI";
   const statusColor = aiReady ? "text-emerald-600 dark:text-emerald-400" : "text-neutral-400 dark:text-neutral-500";
 
   return (

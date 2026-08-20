@@ -17,7 +17,7 @@ PlanR is a local-first personal execution OS. It turns plans into weekday-based 
 - **Mobile/iOS:** fast daily execution, timeline interaction, completion, tracker logging, reminders, and recovery.
 - **Desktop:** planning, plan detail, milestones, task structure, strategy assets, analytics, and broader schedule manipulation.
 
-**Confirmed by implementation:** the primary runtime is a statically exported Next.js 16 application using React 19 and TypeScript. The browser stores the working `Schedule` in IndexedDB. Signed-in users can sync a whole schedule snapshot and daily backups to Firestore. Firebase Authentication uses Google sign-in. A Cloudflare Worker provides Gemini AI proxying and push-reminder infrastructure. A local MLX/OpenAI-compatible provider and a Transformers.js worker are also present.
+**Confirmed by implementation:** the primary runtime is a statically exported Next.js 16 application using React 19 and TypeScript. The browser stores the working `Schedule` in IndexedDB. Signed-in users can sync a whole schedule snapshot and daily backups to Firestore. Firebase Authentication uses Google sign-in. A Cloudflare Worker provides push-reminder infrastructure. AI is user-configured through MLX (default), Ollama, or an OpenAI-compatible API, with a Transformers.js worker also present.
 
 The most important architectural characteristic is the single aggregate schedule document. It makes local-first reads and migrations simple, but it also creates payload, concurrency, conflict-resolution, and data-isolation risks as plans, notes, strategy assets, completion history, and trackers grow.
 
@@ -77,7 +77,7 @@ Backend
 +- Local database: IndexedDB in the browser
 +- Storage: Firebase Storage client is initialized; actual asset-storage policy is not verified
 +- Serverless functions: Cloudflare Worker cron and fetch handler
-+- External services: Firebase, Google Gemini, browser Push services, optional local MLX server
++- External services: Firebase, browser Push services, optional local MLX/Ollama/API providers
 ```
 
 Exact dependency and script versions are in [`package.json`](package.json). No lock file was identified in the repository inventory used for this report; the resolved transitive dependency graph is therefore not documented here.
@@ -344,7 +344,6 @@ There is no Redux, Zustand, React Query, SWR, or server-state cache. React state
 
 | Endpoint/function | Purpose | Input/output | Auth |
 |---|---|---|---|
-| `POST /ai/chat` | Gemini proxy and streaming chat | conversation/system context -> streamed model response | Firebase ID token / Worker validation path |
 | `POST /push/test` | push delivery test path | subscription payload | route-specific validation requires review |
 | Cron `* * * * *` | scheduled reminder processing | Firestore REST/config data | Worker secrets |
 
@@ -354,14 +353,14 @@ There is no Redux, Zustand, React Query, SWR, or server-state cache. React state
 
 The repository contains multiple AI paths.
 
-### Gemini through Worker
+### User-linked AI providers
 
 - Trigger: AI assistant, plan coach, AI plan creator, task/milestone/subtask generation, or AI action surface.
 - Input: user prompt plus plan, task, milestone, or schedule context.
 - Prompt construction: `lib/ai.ts`, `lib/aiActions.ts`, `lib/coachSkills.ts`, and feature-specific builders.
-- Transport: client AI router -> Cloudflare Worker `/ai/chat`.
-- Model: Worker-configured Gemini model with fallback behavior documented in `worker/wrangler.toml` and implemented in Worker code.
-- Auth: signed-in Firebase user token; Worker-owned Gemini key is not intended for the client.
+- Transport: client AI router -> selected MLX, Ollama, or OpenAI-compatible endpoint.
+- Default: local MLX server at `http://localhost:8080` using `mlx-community/Qwen3-4B-4bit`.
+- Configuration: provider URL, model, and optional API key are stored per browser in AI Settings.
 - Output: streamed text or structured-looking text parsed by local parsers.
 - Persistence: accepted tasks, milestones, plans, tracker links, and coach messages are written back into `Schedule`; raw transient responses are UI state.
 - Error handling: abort controllers, fallback model behavior, user-facing error messages, and AI availability gates.

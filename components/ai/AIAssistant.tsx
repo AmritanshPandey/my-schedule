@@ -21,7 +21,6 @@ import {
 import BottomSheet from "@/components/ui/BottomSheet";
 import { AISettingsSheet } from "@/components/ai/AISettingsSheet";
 import AIActionSheet, { type ResultItem } from "@/components/ai/AIActionSheet";
-import AISignInGate from "@/components/auth/AISignInGate";
 import {
   parseGeneratedTasks,
   parseGeneratedMilestones,
@@ -159,7 +158,7 @@ export default function AIAssistant({
 
   // The button that would call this is disabled while `!ai.available` (the
   // suggestions are gated below), so this is a defensive no-op, not the
-  // primary gate — AISignInGate rendered in place of the panel is that.
+  // Defensive guard for future provider availability checks.
   function guardAction(fn: () => void) {
     if (!ai.available) return;
     fn();
@@ -414,7 +413,7 @@ export default function AIAssistant({
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedPlan, planMilestones, activeMilestone, insightState, customGoal, schedule.activities]);
 
-  // With one uniform backend (Gemini), there's no more per-action capability
+  // Provider capability is configured globally; action suggestions share one route.
   // tiering to gate on — every suggestion is either available (signed in) or
   // not. Kept as a map (not a plain boolean check inline) so `locked`/
   // `lockedReason` stay on each item, matching the existing render below.
@@ -483,9 +482,6 @@ export default function AIAssistant({
           </p>
         </div>
 
-        {!ai.available ? (
-          <AISignInGate />
-        ) : (
         <>
         {/* Input card */}
         <div className="mb-5 rounded-2xl border border-neutral-200 bg-white dark:border-white/[0.08] dark:bg-neutral-900/60">
@@ -697,7 +693,6 @@ export default function AIAssistant({
           </div>
         </div>
         </>
-        )}
       </div>
 
       {/* Action sheet */}

@@ -4,7 +4,6 @@
  */
 
 import type { DayKey, TaskTypeValue } from "./useScheduleDB";
-import type { IdTokenSource } from "./aiClient";
 import { generateAI, streamAI } from "./ai/providers/router";
 
 /**
@@ -80,7 +79,7 @@ export interface AIGeneratedMilestone {
 
 function tryParseJSON<T>(raw: string): T | null {
   const trimmed = raw.trim().replace(/,\s*([}\]])/g, "$1");
-  // Gemini reliably emits well-formed double-quoted JSON per the prompt, and
+  // Providers generally emit well-formed double-quoted JSON per the prompt, and
   // real generated text often contains genuine apostrophes (e.g. "today's
   // schedule"). Try the untouched string first so those aren't corrupted.
   try {
@@ -111,7 +110,7 @@ function extractArray(text: string): string | null {
 // ── Task generation ──────────────────────────────────────────────────────────
 
 export function streamGenerateTasks(
-  user: IdTokenSource | null,
+  user: unknown,
   plan: { title: string; description?: string },
   signal?: AbortSignal,
   followUp?: AIFollowUp,
@@ -145,7 +144,7 @@ export function parseGeneratedTasks(text: string): AIGeneratedTask[] {
 // ── Subtask generation ───────────────────────────────────────────────────────
 
 export function streamGenerateSubtasks(
-  user: IdTokenSource | null,
+  user: unknown,
   taskTitle: string,
   planTitle?: string,
 ): AsyncGenerator<string> {
@@ -164,7 +163,7 @@ export function parseGeneratedSubtasks(text: string): string[] {
 // ── Milestone generation ─────────────────────────────────────────────────────
 
 export function streamGenerateMilestones(
-  user: IdTokenSource | null,
+  user: unknown,
   plan: { title: string; description?: string; startDate?: string; endDate?: string },
   signal?: AbortSignal,
   followUp?: AIFollowUp,
@@ -207,7 +206,7 @@ Times: HH:MM 24-hour. Spread tasks across the week. Each task needs 2-3 subtasks
 If the milestone description gives no real focus to work from (empty or a placeholder) and no scheduling signal at all, don't guess — reply with ONLY one short plain-text question instead of the JSON array. If a question was already asked earlier in this conversation, don't ask again — generate the array now using your best judgment.`;
 
 export function streamGenerateMilestoneTasks(
-  user: IdTokenSource | null,
+  user: unknown,
   milestone: { title: string; description?: string },
   plan: { title: string; description?: string },
   signal?: AbortSignal,
@@ -229,7 +228,7 @@ const WEEKLY_INSIGHT_PROMPT = `You are a personal performance coach reviewing so
  * `weekContext` should be a compact summary string (built by the caller from schedule data).
  */
 export function streamWeeklyInsight(
-  user: IdTokenSource | null,
+  user: unknown,
   weekContext: string,
   signal?: AbortSignal,
 ): AsyncGenerator<string> {

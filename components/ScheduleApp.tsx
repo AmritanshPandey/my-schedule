@@ -34,7 +34,6 @@ const PlanDetailView = dynamic(() => import("@/components/plan/PlanDetailView"),
 const AIPlanCreatorSheet = dynamic(() => import("@/components/plan/AIPlanCreatorSheet"), { ssr: false });
 const SettingsSheet = dynamic(() => import("@/components/auth/SettingsSheet").then(m => ({ default: m.SettingsSheet })), { ssr: false });
 const SettingsView = dynamic(() => import("@/components/SettingsView").then(m => ({ default: m.SettingsView })), { ssr: false });
-const AIOnboarding = dynamic(() => import("@/components/ai/AIOnboarding"), { ssr: false });
 const CoachMarks = dynamic(() => import("@/components/onboarding/CoachMarks"), { ssr: false });
 const NotesView = dynamic(() => import("@/components/notes/NotesView"), { ssr: false });
 const TemplatesSheet = dynamic(() => import("@/components/TemplatesSheet").then(m => ({ default: m.TemplatesSheet })), { ssr: false });
@@ -4211,9 +4210,6 @@ export default function ScheduleApp() {
           )}
         </AnimatePresence>
       )}
-
-      {/* ── AI onboarding — shown once when app opens ─────────────────────── */}
-      {AI_ENABLED && aiAvailable && !iosSafeMode && <AIOnboarding />}
 
       {/* ── Per-tab guided tour — short, skippable, once per device ───────── */}
       {activeTourId && (

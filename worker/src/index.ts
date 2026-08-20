@@ -11,14 +11,7 @@
  *    Notifications use the same `tag` as the in-app foreground reminders
  *    (lib/reminders.ts), so the two collapse into one instead of double-notifying.
  *
- * 2. `fetch` (`POST /ai/chat`): proxies Gemini AI calls behind a shared,
- *    developer-owned API key that must never reach the client (this app is a
- *    static export — anything in the JS bundle is public). Verifies the
- *    caller's Firebase Auth ID token (auth.ts), enforces a per-user + global
- *    daily cap on the shared key (usage.ts), then streams Gemini's response
- *    straight back (gemini.ts).
- *
- * 3. `fetch` (`POST /push/test`): lets a signed-in device fire a single test
+ * 2. `fetch` (`POST /push/test`): lets a signed-in device fire a single test
  *    push at itself on demand (Settings → Reminders → "Send test") instead of
  *    waiting up to a minute for the real cron. No auth beyond "you already
  *    possess a valid PushSubscription object" — see the handler's own comment
@@ -29,9 +22,6 @@
 import { buildPushPayload } from "@block65/webcrypto-web-push";
 import { Firestore, uidFromName, idFromName, type Env } from "./firestore.js";
 import { computeDueReminders, type ReminderSettings, type Schedule } from "./reminders.js";
-import { verifyFirebaseIdToken } from "./auth.js";
-import { streamGemini, type GeminiMessage } from "./gemini.js";
-import { checkAndIncrement, type UsageCaps, type UsageCheck } from "./usage.js";
 
 interface Subscription {
   endpoint: string;
@@ -51,114 +41,13 @@ type Vapid = { subject: string; publicKey: string; privateKey: string };
 const CORS_HEADERS: Record<string, string> = {
   "access-control-allow-origin": "*",
   "access-control-allow-methods": "POST, OPTIONS",
-  "access-control-allow-headers": "authorization, content-type",
+  "access-control-allow-headers": "content-type",
 };
 
 function json(status: number, body: unknown): Response {
   return new Response(JSON.stringify(body), {
     status,
     headers: { "content-type": "application/json", ...CORS_HEADERS },
-  });
-}
-
-// ── Gemini model selection ───────────────────────────────────────────────────
-
-/**
- * Google retires/restricts Gemini model IDs on a rolling, hard-to-predict
- * schedule — three different failure modes hit this Worker within one debug
- * session: a model fully shut down (gemini-2.0-flash, June 2026), and then
- * the next candidate turned out to be blocked for this Worker's specific API
- * key with "no longer available to NEW USERS" (gemini-2.5-flash) — a
- * DIFFERENT restriction than the announced deprecation schedule, undocumented
- * on Google's own deprecations page as of Aug 2026. A single hardcoded model
- * name is fragile against this, so /ai/chat tries `env.GEMINI_MODEL` first
- * and falls back once to `FALLBACK_MODEL` on a 404 specifically (model
- * unavailable — never on other error codes, which don't mean "wrong model").
- * This buys time to update the primary without an outage; it does NOT make
- * model selection maintenance-free — see wrangler.toml's GEMINI_MODEL comment.
- */
-const FALLBACK_MODEL = "gemini-3.1-flash-lite";
-
-async function callGeminiWithFallback(
-  env: Env,
-  systemPrompt: string,
-  messages: GeminiMessage[],
-  tokenBudget: number,
-): Promise<Response> {
-  // Kept in sync with wrangler.toml's GEMINI_MODEL var.
-  const primary = env.GEMINI_MODEL || "gemini-3.5-flash";
-  const first = await streamGemini(env.GEMINI_API_KEY, primary, systemPrompt, messages, tokenBudget);
-  if (first.status !== 404 || primary === FALLBACK_MODEL) return first;
-
-  const detail = await first.text().catch(() => "");
-  console.warn("gemini model unavailable, retrying with fallback", primary, "->", FALLBACK_MODEL, detail);
-  return streamGemini(env.GEMINI_API_KEY, FALLBACK_MODEL, systemPrompt, messages, tokenBudget);
-}
-
-// ── POST /ai/chat ────────────────────────────────────────────────────────────
-
-async function handleAiChat(request: Request, env: Env): Promise<Response> {
-  const authHeader = request.headers.get("authorization") ?? "";
-  const idToken = authHeader.replace(/^Bearer\s+/i, "").trim();
-  if (!idToken) return json(401, { error: "missing bearer token" });
-
-  const verified = await verifyFirebaseIdToken(idToken, env.FIREBASE_PROJECT_ID);
-  if (!verified) return json(401, { error: "invalid or expired token" });
-
-  let payload: { systemPrompt?: string; messages?: GeminiMessage[]; maxOutputTokens?: number };
-  try {
-    payload = await request.json();
-  } catch {
-    return json(400, { error: "invalid JSON body" });
-  }
-  const { systemPrompt, messages, maxOutputTokens } = payload;
-  if (!systemPrompt || !Array.isArray(messages) || messages.length === 0) {
-    return json(400, { error: "systemPrompt and a non-empty messages array are required" });
-  }
-  // Clamped, not trusted as-is — a client-supplied token budget still needs a
-  // ceiling so it can't be used to run up the shared key's quota per call.
-  const tokenBudget = Math.min(Math.max(Number(maxOutputTokens) || 1024, 256), 4096);
-
-  const fs = new Firestore(env);
-  const caps: UsageCaps = {
-    perUser: Number(env.AI_PER_USER_DAILY_CAP) || 20,
-    global: Number(env.AI_GLOBAL_DAILY_CAP) || 300,
-  };
-  // Guarded like the streamGemini call below: an uncaught throw here (a
-  // Firestore REST error, a transient network blip) would otherwise crash
-  // the whole handler — Cloudflare's own generic error page has no CORS
-  // headers, which the browser then reports as a confusing "blocked by CORS
-  // policy" rather than the real cause. Fail closed (503) with a real error
-  // body instead, so it's diagnosable and doesn't cost Gemini budget.
-  let usage: UsageCheck;
-  try {
-    usage = await checkAndIncrement(fs, verified.uid, caps);
-  } catch (err) {
-    console.error("usage check failed", String(err));
-    return json(503, { error: "usage check failed, try again" });
-  }
-  if (!usage.ok) {
-    return json(429, {
-      error: "daily AI limit reached",
-      reason: usage.reason,
-    });
-  }
-
-  let upstream: Response;
-  try {
-    upstream = await callGeminiWithFallback(env, systemPrompt, messages, tokenBudget);
-  } catch (err) {
-    return json(502, { error: "gemini request failed", detail: String(err) });
-  }
-  if (!upstream.ok || !upstream.body) {
-    const detail = await upstream.text().catch(() => "");
-    console.error("gemini upstream error", upstream.status, detail);
-    return json(upstream.status || 502, { error: "gemini error" });
-  }
-
-  return new Response(upstream.body, {
-    status: 200,
-    headers: { "content-type": "text/event-stream", ...CORS_HEADERS },
   });
 }
 
@@ -236,9 +125,6 @@ export default {
       return new Response(null, { status: 204, headers: CORS_HEADERS });
     }
     const { pathname } = new URL(request.url);
-    if (pathname === "/ai/chat" && request.method === "POST") {
-      return handleAiChat(request, env);
-    }
     if (pathname === "/push/test" && request.method === "POST") {
       return handleTestPush(request, env);
     }
