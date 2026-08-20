@@ -66,7 +66,7 @@ export default function BottomNav({
     flex h-[56px] w-[64px] flex-col items-center justify-center gap-[2px]
     rounded-full transition-all duration-200
     ${active
-      ? "bg-black/[0.05] text-neutral-950 dark:bg-white/[0.10] dark:text-white"
+    ? "bg-emerald-50 text-emerald-700 ring-1 ring-inset ring-emerald-200/70 dark:bg-emerald-500/[0.14] dark:text-emerald-300 dark:ring-emerald-400/20"
       : "text-neutral-500 dark:text-neutral-400"
     }
   `;
@@ -164,6 +164,7 @@ export default function BottomNav({
           {/* ── FLOATING PLUS BUTTON ─────────────────────────────────────── */}
           <m.button
             type="button"
+            data-tour="new-item-button"
             whileTap={{ scale: 0.94 }}
             onClick={() => { haptic("medium"); setExpanded((v) => !v); }}
             aria-label="Create"
@@ -173,8 +174,8 @@ export default function BottomNav({
               flex h-[52px] w-[52px]
               -translate-x-1/2 -translate-y-1/2
               items-center justify-center rounded-full
-              bg-neutral-950 text-white
-              dark:bg-white dark:text-neutral-950
+              bg-[#00A63E] text-white shadow-[0_8px_20px_-8px_rgba(0,166,62,0.75)]
+              dark:bg-[#2FD46E] dark:text-neutral-950 dark:shadow-[0_8px_20px_-8px_rgba(47,212,110,0.55)]
             "
           >
             <m.div

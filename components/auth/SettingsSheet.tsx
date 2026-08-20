@@ -7,6 +7,7 @@ import {
   IconMoon,
   IconSun,
   IconCloud,
+  IconCompass,
   IconTrash,
   IconCheck,
   IconX,
@@ -27,6 +28,10 @@ import { formatDisplayTime, minutesToInputTime } from "@/lib/timeUtils";
 import { versionLabel, BUILD_ID } from "@/lib/buildInfo";
 import type { Schedule, SchedulePreferences } from "@/lib/useScheduleDB";
 import { AISettingsSheet } from "@/components/ai/AISettingsSheet";
+import { getActiveProviderType } from "@/lib/ai/providers/settings";
+import { resetTour } from "@/lib/onboarding/useCoachTour";
+import { TOUR_IDS } from "@/lib/onboarding/tours";
+import { haptic } from "@/lib/haptics";
 import { AI_ENABLED } from "@/lib/featureFlags";
 import { normalizeDayStartTime } from "@/lib/timeline/displayWindow";
 
@@ -93,6 +98,44 @@ function SettingsCard({ children }: { children: React.ReactNode }) {
 
 function Divider() {
   return <div className="mx-4 border-t border-neutral-100 dark:border-white/[0.06]" />;
+}
+
+// ── Replay guided tours row ──────────────────────────────────────────────────
+//
+// The per-tab coach-mark tour only ever auto-starts once per device; this is
+// the way back in. See components/onboarding/CoachMarks.tsx.
+
+function ReplayToursRow() {
+  const [justReset, setJustReset] = useState(false);
+
+  function handleReplay() {
+    haptic("light");
+    TOUR_IDS.forEach(resetTour);
+    setJustReset(true);
+    window.setTimeout(() => setJustReset(false), 2200);
+  }
+
+  return (
+    <div className="flex items-center gap-3 px-4 py-3.5">
+      <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl border border-neutral-100 bg-neutral-50 text-neutral-500 dark:border-white/[0.06] dark:bg-white/[0.04] dark:text-neutral-300">
+        <IconCompass size={14} strokeWidth={2} />
+      </div>
+      <div className="min-w-0 flex-1">
+        <p className="text-[13px] font-semibold text-neutral-800 dark:text-white">Guided tours</p>
+        <p className="mt-0.5 text-[11px] leading-snug text-neutral-400 dark:text-neutral-500">
+          {justReset ? "Reset — they'll show again as you visit each tab." : "Short intro to Today, Plans, and Routine"}
+        </p>
+      </div>
+      <button
+        type="button"
+        onClick={handleReplay}
+        disabled={justReset}
+        className="shrink-0 rounded-xl border border-neutral-200 bg-neutral-50 px-3 py-1.5 text-[11px] font-semibold text-neutral-700 hover:bg-neutral-100 disabled:opacity-50 dark:border-white/[0.08] dark:bg-white/[0.04] dark:text-neutral-200"
+      >
+        {justReset ? "Done" : "Replay"}
+      </button>
+    </div>
+  );
 }
 
 const DAY_START_OPTIONS = Array.from({ length: 48 }, (_, index) => {
@@ -544,6 +587,7 @@ export function SettingsSheet({
   const { signingIn, error: signInError, isAuthAvailable, signIn } = useGoogleSignIn();
   const [busy, setBusy] = useState(false);
   const [aiSettingsOpen, setAiSettingsOpen] = useState(false);
+  const [aiProvider, setAiProvider] = useState(() => getActiveProviderType());
 
   async function handleLogout() {
     setBusy(true);
@@ -661,6 +705,11 @@ export function SettingsSheet({
           />
         </SettingsCard>
 
+        <SectionLabel>Help</SectionLabel>
+        <SettingsCard>
+          <ReplayToursRow />
+        </SettingsCard>
+
         {/* ── AI (hidden while AI is disabled) ─────────────────────────────── */}
         {AI_ENABLED && (
           <>
@@ -676,13 +725,18 @@ export function SettingsSheet({
                 </div>
                 <div className="min-w-0 flex-1">
                   <p className="text-[13px] font-semibold text-neutral-800 dark:text-white">AI Configuration</p>
-                  <p className="text-[11px] text-neutral-400 dark:text-neutral-500">Gemini · Free · Sign-in required</p>
+                  <p className="text-[11px] text-neutral-400 dark:text-neutral-500">
+                    {aiProvider === "mlx" ? "MLX (local) · No sign-in" : "Gemini · Free · Sign-in required"}
+                  </p>
                 </div>
                 <IconChevronDown size={14} strokeWidth={2} className="-rotate-90 text-neutral-400" />
               </button>
             </SettingsCard>
 
-            <AISettingsSheet open={aiSettingsOpen} onClose={() => setAiSettingsOpen(false)} />
+            <AISettingsSheet
+              open={aiSettingsOpen}
+              onClose={() => { setAiSettingsOpen(false); setAiProvider(getActiveProviderType()); }}
+            />
           </>
         )}
 

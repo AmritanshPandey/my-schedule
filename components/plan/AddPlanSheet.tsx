@@ -84,31 +84,33 @@ export default function AddPlanSheet({ open, onClose, setSchedule, onUseAI }: Ad
   function handleSubmit() {
     const trimmedTitle = title.trim();
     if (!trimmedTitle) return;
-    const plan: Plan = {
-      id: uid(),
-      title: trimmedTitle,
-      description: description.trim() || undefined,
-      startDate: startDate || undefined,
-      endDate: endDate || undefined,
-      category: categoryFromIcon(iconName),
-      emoji: iconName,
-      color,
-      items: [],
-      metaFields,
-      summary: createSummaryFromMeta(metaFields),
-    };
-    const trackers: ProgressTracker[] = metaFields.map((field) => ({
-      id: uid(),
-      planId: plan.id,
-      title: field,
-      type: "number",
-      unit: inferUnit(field),
-    }));
-    setSchedule((prev) => ({
-      ...prev,
-      plans: [...prev.plans, plan],
-      progressTrackers: [...prev.progressTrackers, ...trackers],
-    }));
+    setSchedule((prev) => {
+      const plan: Plan = {
+        id: uid(),
+        title: trimmedTitle,
+        description: description.trim() || undefined,
+        startDate: startDate || prev.preferences?.startDate,
+        endDate: endDate || undefined,
+        category: categoryFromIcon(iconName),
+        emoji: iconName,
+        color,
+        items: [],
+        metaFields,
+        summary: createSummaryFromMeta(metaFields),
+      };
+      const trackers: ProgressTracker[] = metaFields.map((field) => ({
+        id: uid(),
+        planId: plan.id,
+        title: field,
+        type: "number",
+        unit: inferUnit(field),
+      }));
+      return {
+        ...prev,
+        plans: [...prev.plans, plan],
+        progressTrackers: [...prev.progressTrackers, ...trackers],
+      };
+    });
     reset();
     onClose();
   }

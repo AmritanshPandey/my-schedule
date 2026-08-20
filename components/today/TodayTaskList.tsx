@@ -12,7 +12,7 @@ import type { Plan, Task } from "@/lib/useScheduleDB";
 import type { TaskState } from "@/lib/taskCompletion";
 import { getTaskSubtaskSummary, resolveTaskState, taskStatusLabel } from "@/lib/taskCompletion";
 import { getSlots } from "@/lib/taskMutations";
-import { parseTimeToMinutes } from "@/lib/timeUtils";
+import { formatDisplayTime } from "@/lib/timeUtils";
 import { haptic } from "@/lib/haptics";
 import { safeGetItem, safeSetItem } from "@/lib/safeStorage";
 import { useLongPress } from "@/lib/useLongPress";
@@ -32,6 +32,7 @@ export interface TodayTaskListProps {
   taskSummary: (task: Task) => TaskSummary;
   taskCheckableIds: (task: Task) => string[];
   onMarkDone: (taskId: string, subtaskIds: string[]) => void;
+  onToggleSlot: (taskId: string, slotIndex: number) => void;
   /** Omitted → the missed affordances are absent and the gesture is inert. */
   onMissed?: (taskId: string, subtaskIds: string[]) => void;
   onOpenSubtasks?: (taskId: string) => void;
@@ -39,14 +40,7 @@ export interface TodayTaskListProps {
 
 /** "6 AM" / "12:30 PM" — the dashboard reads as prose, not as a 24-hour log. */
 export function formatTaskTime(t?: string): string {
-  if (!t) return "";
-  const mins = parseTimeToMinutes(t);
-  if (mins === null) return t;
-  const h = Math.floor(mins / 60);
-  const m = mins % 60;
-  const suffix = h >= 12 ? "PM" : "AM";
-  const hour = h % 12 || 12;
-  return m === 0 ? `${hour} ${suffix}` : `${hour}:${String(m).padStart(2, "0")} ${suffix}`;
+  return t ? formatDisplayTime(t) : "";
 }
 
 function TaskStatusButton({
@@ -94,6 +88,7 @@ function TodayTaskRow({
   taskSummary,
   taskCheckableIds,
   onMarkDone,
+  onToggleSlot,
   onMissed,
   onOpenSubtasks,
   onMissedFired,
@@ -103,14 +98,25 @@ function TodayTaskRow({
   taskSummary: (task: Task) => TaskSummary;
   taskCheckableIds: (task: Task) => string[];
   onMarkDone: (taskId: string, subtaskIds: string[]) => void;
+  onToggleSlot: (taskId: string, slotIndex: number) => void;
   onMissed?: (taskId: string, subtaskIds: string[]) => void;
   onOpenSubtasks?: (taskId: string) => void;
   onMissedFired: () => void;
+  slotIndex?: number;
 }) {
   const { completedCount: subDone, totalCount: subTotal } = taskSummary(task);
   // One derivation, so the checkbox, the strikethrough, the label and the
   // header count can never disagree about what state this row is in.
-  const state = resolveTaskState(task, subTotal);
+  const slots = getSlots(task);
+  const isMultiSlot = slots.length > 1;
+  const isSlotRow = isMultiSlot && slotIndex !== undefined;
+  const state: TaskState = isSlotRow
+    ? task.missed
+      ? "missed"
+      : (task.completedSlotIndices ?? []).includes(slotIndex)
+        ? "completed"
+        : "incomplete"
+    : resolveTaskState(task, subTotal);
   const isDone = state === "completed";
   const isMissed = state === "missed";
   const plan = plans.find((p) => p.id === task.planId);
@@ -118,23 +124,14 @@ function TodayTaskRow({
   // Marking a completed task missed would silently un-complete it and strip
   // today's history, so the gesture is inert there — matching the guard on
   // TaskDetailView's Missed button.
-  const canMiss = !!onMissed && !isDone;
+  const canMiss = !!onMissed && !isDone && !isSlotRow;
   const toggleMissed = () => {
     onMissed?.(task.id, taskCheckableIds(task));
     onMissedFired();
   };
   const longPress = useLongPress(canMiss ? toggleMissed : undefined);
 
-  // Multi-slot tasks run in several phases today; the summary shows every start
-  // time and how many phases are left, so the dashboard never under-reports the
-  // day. Checking off individual phases happens on Today, not here.
-  const slots = getSlots(task);
-  const isMultiSlot = slots.length > 1;
-  const slotsDone = isMultiSlot
-    ? isDone
-      ? slots.length
-      : new Set(task.completedSlotIndices ?? []).size
-    : 0;
+  const displaySlot = isSlotRow ? slots[slotIndex] : undefined;
 
   return (
     <div className="flex items-center gap-3 py-3" {...longPress.clickGuard}>
@@ -142,7 +139,8 @@ function TodayTaskRow({
         state={state}
         onClick={() => {
           haptic("medium");
-          onMarkDone(task.id, taskCheckableIds(task));
+          if (isSlotRow) onToggleSlot(task.id, slotIndex);
+          else onMarkDone(task.id, taskCheckableIds(task));
         }}
         pressHandlers={longPress.pressHandlers}
         pressing={longPress.pressing}
@@ -165,8 +163,10 @@ function TodayTaskRow({
                 separates the times from the plan without reading as one more
                 time in the list. */}
             <span className="tabular-nums">
-              {isMultiSlot
-                ? slots.map((s) => formatTaskTime(s.startTime)).join(", ")
+              {isSlotRow
+                ? formatTaskTime(displaySlot?.startTime)
+                : isMultiSlot
+                ? slots.map((slot) => formatTaskTime(slot.startTime)).join(", ")
                 : task.startTime && formatTaskTime(task.startTime)}
             </span>
             {task.startTime && plan && " · "}
@@ -174,14 +174,14 @@ function TodayTaskRow({
           </p>
         )}
       </div>
-      {isMultiSlot && (
+      {isMultiSlot && !isSlotRow && (
         <span
-          aria-label={`${slotsDone} of ${slots.length} phases done`}
+          aria-label={`${new Set(task.completedSlotIndices ?? []).size} of ${slots.length} phases done`}
           className="inline-flex min-h-[34px] shrink-0 items-center gap-1.5 rounded-full border border-neutral-200 px-2.5 text-neutral-500 dark:border-white/[0.10] dark:text-neutral-400"
         >
           <IconClock size={14} strokeWidth={2} className="shrink-0" />
           <span className="text-[12px] font-bold tabular-nums">
-            {slotsDone}/{slots.length}
+            {new Set(task.completedSlotIndices ?? []).size}/{slots.length}
           </span>
         </span>
       )}
@@ -189,7 +189,7 @@ function TodayTaskRow({
           keyboard and screen-reader route into the detail view, where the
           labelled "Missed" button lives. Long-press covers the same action on
           touch. Mirrors IOSLightTaskCard's trailing chip. */}
-      {onOpenSubtasks && (
+      {onOpenSubtasks && (!isSlotRow || slotIndex === 0) && (
         <button
           type="button"
           onClick={() => {
@@ -229,6 +229,7 @@ export default function TodayTaskList({
   taskSummary,
   taskCheckableIds,
   onMarkDone,
+  onToggleSlot,
   onMissed,
   onOpenSubtasks,
 }: TodayTaskListProps) {
@@ -298,14 +299,28 @@ export default function TodayTaskList({
         </div>
       ) : (
         <div className="divide-y divide-neutral-100 dark:divide-white/[0.06]">
-          {tasks.map((task) => (
+          {tasks
+            .flatMap((task) => {
+              const slots = getSlots(task);
+              return slots.length > 1
+                ? slots.map((_, slotIndex) => ({ task, slotIndex }))
+                : [{ task, slotIndex: undefined }];
+            })
+            .sort((a, b) => {
+              const aTime = getSlots(a.task)[a.slotIndex ?? 0]?.startTime ?? "";
+              const bTime = getSlots(b.task)[b.slotIndex ?? 0]?.startTime ?? "";
+              return aTime.localeCompare(bTime);
+            })
+            .map(({ task, slotIndex }) => (
             <TodayTaskRow
-              key={task.id}
+              key={slotIndex === undefined ? task.id : `${task.id}:${slotIndex}`}
               task={task}
+              slotIndex={slotIndex}
               plans={plans}
               taskSummary={taskSummary}
               taskCheckableIds={taskCheckableIds}
               onMarkDone={onMarkDone}
+              onToggleSlot={onToggleSlot}
               onMissed={onMissed}
               onOpenSubtasks={onOpenSubtasks}
               onMissedFired={dismissHint}

@@ -10,6 +10,7 @@ import Button from "@/components/ui/Button";
 import Input from "@/components/ui/Input";
 import { daysBetween as daysBetweenUtil } from "@/lib/dateUtils";
 import { recalculateRoadmapTimeline } from "@/lib/roadmapDates";
+import { constrainTaskToPlanWindow } from "@/lib/planTaskWindow";
 import {
   PLAN_TITLE_MAX,
   DurationPresets,
@@ -56,6 +57,13 @@ export default function EditPlanSheet({ planId, plan, setSchedule, onClose }: Ed
     // task (derived from its icon, overridable), so a plan-level edit must not
     // stomp choices the user made per task.
     setSchedule((prev) => {
+      const existingPlan = prev.plans.find((item) => item.id === planId);
+      if (!existingPlan) return prev;
+      const updatedPlan = {
+        ...existingPlan,
+        startDate: draft.startDate || undefined,
+        endDate: draft.endDate || undefined,
+      };
       return {
         ...prev,
         plans: prev.plans.map((p) =>
@@ -72,6 +80,14 @@ export default function EditPlanSheet({ planId, plan, setSchedule, onClose }: Ed
               }
             : p
         ),
+        activities: Object.fromEntries(
+          Object.entries(prev.activities).map(([day, tasks]) => [
+            day,
+            tasks.map((task) =>
+              task.planId === planId ? constrainTaskToPlanWindow(task, updatedPlan) : task
+            ),
+          ])
+        ) as Schedule["activities"],
         milestones: [
           ...(prev.milestones ?? []).filter((m) => m.planId !== planId),
           ...recalculateRoadmapTimeline(

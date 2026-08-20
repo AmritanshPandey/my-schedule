@@ -64,7 +64,7 @@ export default function DayWallpaperSheet({ open, onClose, schedule, todayKey }:
       if (minutes == null) continue;
       rows.push({
         id: `task:${task.id}`,
-        time: occ.startTime,
+        time: formatDisplayTime(occ.startTime),
         title: occ.title,
         iconName: taskIdentity(task, categoryMap).icon,
         iconSvg: null,

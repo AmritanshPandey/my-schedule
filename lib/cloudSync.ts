@@ -23,6 +23,7 @@ import type { Schedule } from "@/lib/useScheduleDB";
 import { logError } from "@/lib/errorLog";
 import { getLocalLastUpdated } from "@/lib/localMeta";
 import { localISODate } from "@/lib/dateUtils";
+import { schedulePayloadBytes, validateSchedule } from "@/lib/scheduleSchema";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -54,6 +55,7 @@ let _lastPullAt = 0; // throttle resume/reconnect pulls (rapid visibility toggle
 let _status: SyncStatus = "idle";
 
 const PULL_THROTTLE_MS = 10_000; // at most one resume-pull per 10 s
+const LARGE_PAYLOAD_WARNING_BYTES = 750_000;
 
 const _listeners = new Set<(s: SyncStatus) => void>();
 
@@ -394,7 +396,12 @@ function trimForSync(schedule: Schedule): Schedule {
 const MAX_DOC_BYTES = 900_000;
 
 function encodedBytes(value: unknown): number {
-  return new TextEncoder().encode(JSON.stringify(value)).length;
+  return schedulePayloadBytes(value);
+}
+
+/** Exported for diagnostics/tests without exposing the sync singleton. */
+export function serializedScheduleSize(schedule: Schedule): number {
+  return schedulePayloadBytes(schedule);
 }
 
 function capPayloadSize(schedule: Schedule): { payload: Schedule; oversizedFields: number } {
@@ -456,8 +463,21 @@ async function performSync(schedule: Schedule): Promise<void> {
   const now = Date.now();
   try {
     const { payload, oversizedFields } = capPayloadSize(trimForSync(schedule));
+    const validation = validateSchedule(payload);
+    if (!validation.success) {
+      const issue = validation.error.issues[0];
+      logError("cloudsync:validation", `Schedule validation failed at ${issue?.path.join(".") || "root"}: ${issue?.message || "invalid data"}`);
+      setStatus("error");
+      return;
+    }
+    const payloadBytes = serializedScheduleSize(payload);
+    if (payloadBytes >= LARGE_PAYLOAD_WARNING_BYTES && process.env.NODE_ENV !== "production") {
+      console.warn(
+        `[CloudSync] Schedule payload is unusually large: ${(payloadBytes / 1_000_000).toFixed(2)} MB. Large content may come from notes, strategy assets, completion history, or embedded document data.`
+      );
+    }
     await setDoc(firestoreRef(_uid), {
-      schedule: payload,
+      schedule: validation.data,
       lastUpdated: now,
       syncedAt: serverTimestamp(),
     });
@@ -469,7 +489,7 @@ async function performSync(schedule: Schedule): Promise<void> {
     setStatus("idle");
     // Fire-and-forget: the daily safety-net snapshot must never block or fail
     // the main sync. First successful push of the day wins; pruning rides along.
-    void writeDailyBackup(_uid, payload, now).catch((err) => {
+    void writeDailyBackup(_uid, validation.data, now).catch((err) => {
       console.warn("[CloudSync] daily backup failed:", err);
     });
     if (oversizedFields > 0) {

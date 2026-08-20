@@ -79,6 +79,139 @@ export function retimeSlot<T extends Task | Omit<Task, "id">>(
   return withSlots({ ...task, slots: next });
 }
 
+/**
+ * Relocate one slot of a task between weekday buckets (Cmd/Ctrl-drag a block
+ * to a different day column). Same-day is a plain retimeSlot; cross-day
+ * removes the slot from sourceDay (dropping the whole entry if it was the
+ * last slot there) and appends it to targetDay (merging into an existing
+ * copy of the same task id if one already exists there, else creating a new
+ * entry). completedSlotIndices is remapped through both the removal and the
+ * merge-sort so the checkbox state travels with the moved slot, not a stale
+ * position. completionHistory follows a full relocation, but never a split:
+ * when the source entry remains, its dated history stays there because
+ * analytics identifies occurrences by weekday and task id. On a merge after a
+ * full relocation, the two independent per-bucket histories are concatenated.
+ *
+ * `targetDateISO` matters only for a `recurrence: { type: "once" }` task (one
+ * pinned to a single calendar date rather than every matching weekday):
+ * without repinning `dateISO` to the drop date, isTaskScheduledOn would keep
+ * checking the *old* date against the new weekday bucket — which that bucket
+ * is never queried with — and the relocated task would stop rendering
+ * anywhere at all.
+ */
+export function moveTaskSlot(
+  taskId: string,
+  sourceDay: DayKey,
+  slotIndex: number,
+  targetDay: DayKey,
+  targetDateISO: string,
+  startTime: string,
+  endTime: string
+): (prev: Schedule) => Schedule {
+  return (prev) => {
+    const sourceList = prev.activities[sourceDay] ?? [];
+    const sourceTask = sourceList.find((t) => t.id === taskId);
+    if (!sourceTask) return prev; // dragged task vanished mid-drag — no-op
+
+    if (sourceDay === targetDay) {
+      return {
+        ...prev,
+        activities: {
+          ...prev.activities,
+          [sourceDay]: sourceList.map((t) =>
+            t.id === taskId ? retimeSlot(t, slotIndex, startTime, endTime) : t
+          ),
+        },
+      };
+    }
+
+    // ── Cross-day ──────────────────────────────────────────────────────────
+    const sourceSlots = getSlots(sourceTask);
+    const remainingSourceSlots = sourceSlots.filter((_, i) => i !== slotIndex);
+    const sourceEntryRemains = remainingSourceSlots.length > 0;
+    const movedSlotWasCompleted = (sourceTask.completedSlotIndices ?? []).includes(slotIndex);
+    const remapAfterRemoval = (indices: number[] | undefined): number[] =>
+      (indices ?? []).filter((i) => i !== slotIndex).map((i) => (i > slotIndex ? i - 1 : i));
+
+    const nextSourceList =
+      !sourceEntryRemains
+        ? sourceList.filter((t) => t.id !== taskId)
+        : sourceList.map((t) =>
+            t.id !== taskId
+              ? t
+              : withSlots({
+                  ...t,
+                  slots: remainingSourceSlots,
+                  completedSlotIndices: remapAfterRemoval(t.completedSlotIndices),
+                })
+          );
+
+    const targetList = prev.activities[targetDay] ?? [];
+    const targetTaskIdx = targetList.findIndex((t) => t.id === taskId);
+    const newSlot: TaskSlot = { startTime, endTime };
+
+    let nextTargetList: Task[];
+    if (targetTaskIdx === -1) {
+      // No existing copy on targetDay — relocate the whole task there.
+      const relocatedSource = sourceEntryRemains
+        ? (() => {
+            const { completionHistory: _history, ...withoutHistory } = sourceTask;
+            return withoutHistory;
+          })()
+        : sourceTask;
+      const relocated = withSlots<Task>({
+        ...relocatedSource,
+        ...(sourceTask.recurrence?.type === "once"
+          ? { recurrence: { ...sourceTask.recurrence, dateISO: targetDateISO } }
+          : null),
+        slots: [newSlot],
+        completedSlotIndices: movedSlotWasCompleted ? [0] : [],
+      });
+      nextTargetList = [...targetList, relocated];
+    } else {
+      // Merge into the existing copy. withSlots' internal sort reorders the
+      // *same* slot object references (a shallow [...slots].sort(), no
+      // per-slot cloning — confirmed in withSlots' implementation), so
+      // completedSlotIndices can be remapped by reference lookup rather than
+      // assuming append position == final sorted index.
+      const existingTarget = targetList[targetTaskIdx];
+      const existingSlots = getSlots(existingTarget);
+      const sorted = withSlots<Task>({ ...existingTarget, slots: [...existingSlots, newSlot] });
+      const finalSlots = getSlots(sorted);
+      const existingCompletedIndices = existingTarget.completed
+        ? existingSlots.map((_, index) => index)
+        : existingTarget.completedSlotIndices ?? [];
+      const carriedCompleted = existingCompletedIndices
+        .map((i) => finalSlots.indexOf(existingSlots[i]))
+        .filter((i) => i !== -1);
+      const newSlotFinalIndex = finalSlots.indexOf(newSlot);
+      const completedSlotIndices = movedSlotWasCompleted
+        ? [...carriedCompleted, newSlotFinalIndex]
+        : carriedCompleted;
+      const allSlotsCompleted = completedSlotIndices.length === finalSlots.length;
+      nextTargetList = targetList.map((t, i) =>
+        i !== targetTaskIdx
+          ? t
+          : {
+              ...sorted,
+              completedSlotIndices,
+              completed: allSlotsCompleted,
+              completedAt: allSlotsCompleted ? existingTarget.completedAt : undefined,
+              completionHistory: [
+                ...(existingTarget.completionHistory ?? []),
+                ...(!sourceEntryRemains ? sourceTask.completionHistory ?? [] : []),
+              ],
+            }
+      );
+    }
+
+    return {
+      ...prev,
+      activities: { ...prev.activities, [sourceDay]: nextSourceList, [targetDay]: nextTargetList },
+    };
+  };
+}
+
 // ── Time format converters — re-exported from timeUtils for convenience ───────
 
 export { displayToInputTime, inputToDisplayTime } from "./timeUtils";

@@ -1,14 +1,14 @@
 "use client";
 
 /**
- * useAIActions — unified AI action hook. Every action runs through Gemini via
- * the Cloudflare Worker proxy (lib/aiClient.ts) — there's no backend routing
- * here anymore (this hook used to branch between a user-run Ollama server and
- * an in-browser Transformers.js runtime; both are gone, replaced by one
- * shared, sign-in-gated cloud backend). `available` just means "AI is
- * configured and the caller is signed in" — the actual per-user/global rate
- * limiting happens server-side in the Worker, not here, so it can't be
- * bypassed by anything client-side.
+ * useAIActions — unified AI action hook. Every action routes through
+ * lib/ai/providers/router.ts, which resolves the active provider (Gemini via
+ * the Cloudflare Worker, or a local MLX server) — this hook doesn't know or
+ * care which. `available` means "the active provider is usable right now":
+ * for Gemini that's still "configured and signed in" (the Worker enforces
+ * the real per-user/global caps, unbypassable client-side); for MLX it's
+ * always true, since a local server needs no auth — an unreachable MLX
+ * server surfaces as a friendly error at generation time instead.
  *
  * All methods return AsyncGenerator<string> so they plug directly into
  * AIActionSheet's onGenerate prop unchanged from before this rewrite.
@@ -16,13 +16,14 @@
 
 import { useCallback } from "react";
 import { useAuth } from "@/contexts/AuthProvider";
-import { isAiConfigured } from "@/lib/aiClient";
+import { isAiAvailable } from "@/lib/ai/providers/router";
 import {
   streamGenerateTasks,
   streamGenerateSubtasks,
   streamGenerateMilestones,
   streamGenerateMilestoneTasks,
   streamWeeklyInsight,
+  type AIFollowUp,
 } from "@/lib/aiActions";
 
 export interface AIActionsHandle {
@@ -33,6 +34,7 @@ export interface AIActionsHandle {
     planTitle: string,
     description?: string,
     signal?: AbortSignal,
+    followUp?: AIFollowUp,
   ) => AsyncGenerator<string>;
 
   streamSubtasks: (
@@ -43,12 +45,14 @@ export interface AIActionsHandle {
   streamMilestones: (
     plan: { title: string; description?: string; startDate?: string; endDate?: string },
     signal?: AbortSignal,
+    followUp?: AIFollowUp,
   ) => AsyncGenerator<string>;
 
   streamMilestoneTasks: (
     milestone: { title: string; description?: string },
     plan: { title: string; description?: string },
     signal?: AbortSignal,
+    followUp?: AIFollowUp,
   ) => AsyncGenerator<string>;
 
   /** Returns null when AI isn't available — callers already skip rendering
@@ -61,11 +65,11 @@ export interface AIActionsHandle {
 
 export function useAIActions(): AIActionsHandle {
   const { user, isGuest } = useAuth();
-  const available = isAiConfigured() && !isGuest;
+  const available = isAiAvailable(isGuest);
 
   const streamTasks = useCallback(
-    (planTitle: string, description?: string, signal?: AbortSignal): AsyncGenerator<string> =>
-      streamGenerateTasks(user, { title: planTitle, description }, signal),
+    (planTitle: string, description?: string, signal?: AbortSignal, followUp?: AIFollowUp): AsyncGenerator<string> =>
+      streamGenerateTasks(user, { title: planTitle, description }, signal, followUp),
     [user],
   );
 
@@ -79,7 +83,8 @@ export function useAIActions(): AIActionsHandle {
     (
       plan: { title: string; description?: string; startDate?: string; endDate?: string },
       signal?: AbortSignal,
-    ): AsyncGenerator<string> => streamGenerateMilestones(user, plan, signal),
+      followUp?: AIFollowUp,
+    ): AsyncGenerator<string> => streamGenerateMilestones(user, plan, signal, followUp),
     [user],
   );
 
@@ -88,7 +93,8 @@ export function useAIActions(): AIActionsHandle {
       milestone: { title: string; description?: string },
       plan: { title: string; description?: string },
       signal?: AbortSignal,
-    ): AsyncGenerator<string> => streamGenerateMilestoneTasks(user, milestone, plan, signal),
+      followUp?: AIFollowUp,
+    ): AsyncGenerator<string> => streamGenerateMilestoneTasks(user, milestone, plan, signal, followUp),
     [user],
   );
 

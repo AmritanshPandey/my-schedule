@@ -149,10 +149,10 @@ function PlanCardInner({
       tabIndex={0}
       onClick={onSelect}
       onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); onSelect(); } }}
-      whileHover={{ y: 0 }}
+      whileHover={{ y: -3 }}
       whileTap={{ scale: 0.985 }}
       transition={{ type: "spring", stiffness: 420, damping: 30 }}
-      className={`group relative flex w-full cursor-pointer flex-col px-5 pb-4 pt-5 text-left lg:min-h-[220px] ${CARD_INTERACTIVE}`}
+      className={`group relative flex w-full cursor-pointer flex-col px-5 pb-4 pt-5 text-left outline-none transition-[border-color,background-color,box-shadow] duration-150 focus-visible:ring-2 focus-visible:ring-emerald-500/60 lg:min-h-[220px] ${CARD_INTERACTIVE}`}
     >
       {/* Delete — corner affordance. The absolute position lives on this wrapper
           because IconButton's `tap-target` class sets `position: relative`, which
@@ -222,7 +222,7 @@ function PlanCardInner({
 
       {/* ── Row 3: insight chip ──────────────────────────────────────────── */}
       <div className="mt-3.5 flex items-center gap-2 lg:mt-auto lg:pt-4">
-        <div className="flex flex-1 items-center gap-1.5 rounded-xl bg-neutral-50 dark:bg-white/[0.04] px-3 py-2 text-[12px] font-semibold text-neutral-500 dark:text-neutral-400">
+        <div className="flex flex-1 items-center gap-1.5 rounded-xl border border-transparent bg-neutral-50 px-3 py-2 text-[12px] font-semibold text-neutral-500 transition-colors group-hover:border-neutral-200 group-hover:bg-white dark:bg-white/[0.04] dark:group-hover:border-white/[0.10] dark:group-hover:bg-white/[0.06] dark:text-neutral-400">
           <IconChecklist size={12} strokeWidth={2.2} className="shrink-0" />
           {taskCount} task{taskCount !== 1 ? "s" : ""}
           {/* "trackers", not "tracked": this counts ProgressTracker rows — the
@@ -231,7 +231,7 @@ function PlanCardInner({
               means everywhere else. "5 tasks · 0 tracked" would have implied
               those tasks don't count toward anything, which is false. */}
           {trackerCount > 0 && (
-            <span className="text-neutral-400 dark:text-neutral-600">
+              <span className="text-neutral-400 transition-colors group-hover:text-neutral-500 dark:text-neutral-600 dark:group-hover:text-neutral-400">
               {" "}· {trackerCount} tracker{trackerCount !== 1 ? "s" : ""}
             </span>
           )}

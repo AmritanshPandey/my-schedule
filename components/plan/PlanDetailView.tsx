@@ -51,7 +51,7 @@ import type {
 } from "@/lib/useScheduleDB";
 import { DAYS } from "@/lib/useScheduleDB";
 import { timelineCardStyles } from "@/lib/colorSystem";
-import { formatDuration } from "@/lib/timeUtils";
+import { formatDisplayTime, formatDuration } from "@/lib/timeUtils";
 import { formatDate, formatDateShort, todayISO } from "@/lib/dateUtils";
 import { DayPill } from "@/components/ui/Badge";
 import { InternalSectionTitle, SectionIconButton } from "@/components/ui/InternalSectionTitle";
@@ -64,7 +64,7 @@ import {
   type AIGeneratedMilestone,
 } from "@/lib/aiActions";
 import { parseAIAction, PLAN_COACH_PROMPT, buildCoachContext } from "@/lib/ai";
-import { streamGeminiChat } from "@/lib/aiClient";
+import { streamAI } from "@/lib/ai/providers/router";
 import { useAIActions } from "@/lib/ai/useAIActions";
 import { useAuth } from "@/contexts/AuthProvider";
 import AISignInGate from "@/components/auth/AISignInGate";
@@ -317,7 +317,7 @@ export default function PlanDetailView({
       return {
         id,
         label: t.title,
-        meta: `${t.day.charAt(0).toUpperCase() + t.day.slice(1)} · ${t.startTime}–${t.endTime}${t.subtasks.length > 0 ? ` · ${t.subtasks.length} subtasks` : ""}`,
+                meta: `${t.day.charAt(0).toUpperCase() + t.day.slice(1)} · ${formatDisplayTime(t.startTime)}–${formatDisplayTime(t.endTime)}${t.subtasks.length > 0 ? ` · ${t.subtasks.length} subtasks` : ""}`,
         badge: t.icon,
       };
     });
@@ -349,7 +349,7 @@ export default function PlanDetailView({
       return {
         id,
         label: t.title,
-        meta: `${t.day.charAt(0).toUpperCase() + t.day.slice(1)} · ${t.startTime}–${t.endTime}${t.subtasks.length > 0 ? ` · ${t.subtasks.length} subtasks` : ""}`,
+        meta: `${t.day.charAt(0).toUpperCase() + t.day.slice(1)} · ${formatDisplayTime(t.startTime)}–${formatDisplayTime(t.endTime)}${t.subtasks.length > 0 ? ` · ${t.subtasks.length} subtasks` : ""}`,
         badge: t.icon,
       };
     });
@@ -617,7 +617,7 @@ export default function PlanDetailView({
           ? m.content.replace(/```json[\s\S]*?```/g, "").trim()
           : m.content,
       }));
-      for await (const chunk of streamGeminiChat(aiUser, history, systemPrompt, false, controller.signal)) {
+      for await (const chunk of streamAI(aiUser, history, systemPrompt, false, controller.signal)) {
         accumulated += chunk;
         setCoachMessages((prev) => {
           const updated = [...prev];
@@ -795,7 +795,7 @@ export default function PlanDetailView({
         key={`${task.id}-${activeDays.join("")}`}
         type="button"
         onClick={() => setViewingTask({ task, activeDays })}
-        className="w-full flex items-center gap-3 px-1 py-3.5 border-b border-neutral-100 last:border-b-0 dark:border-white/[0.05] text-left transition-colors active:bg-neutral-50 dark:active:bg-white/[0.03]"
+        className="group w-full flex items-center gap-3 rounded-xl border-b border-neutral-100 px-3 py-3.5 text-left transition-colors last:border-b-0 hover:bg-neutral-50 active:bg-neutral-100 dark:border-white/[0.05] dark:hover:bg-white/[0.04] dark:active:bg-white/[0.06]"
       >
         <div className="flex-1 min-w-0">
           {/* Line 1: Title */}
@@ -806,7 +806,7 @@ export default function PlanDetailView({
           <div className="flex items-center gap-2 mt-1.5 flex-wrap">
             {hasTime && (
               <p className="text-[13px] font-medium shrink-0 text-neutral-500 dark:text-neutral-400">
-                {task.startTime}{task.endTime && ` – ${task.endTime}`}
+                {formatDisplayTime(task.startTime)}{task.endTime && ` – ${formatDisplayTime(task.endTime)}`}
                 {duration && ` · ${duration}`}
               </p>
             )}
@@ -833,7 +833,7 @@ export default function PlanDetailView({
             ))}
           </div>
         </div>
-        <IconChevronRight size={16} strokeWidth={2} className="shrink-0 text-neutral-300 dark:text-neutral-600" />
+        <IconChevronRight size={16} strokeWidth={2} className="shrink-0 text-neutral-300 transition-transform group-hover:translate-x-0.5 group-hover:text-neutral-500 dark:text-neutral-600 dark:group-hover:text-neutral-300" />
       </button>
     );
   }
@@ -1114,7 +1114,7 @@ export default function PlanDetailView({
         onClick={() => { haptic("light"); setViewingMilestone(m); }}
         // No px-1: it put this row 4px inside the card above it, which reads as
         // a misalignment against that card's border.
-        className="relative w-full flex gap-[14px] pt-[14px] pb-[18px] text-left"
+        className="group relative w-full flex gap-[14px] rounded-xl px-3 pt-[14px] pb-[18px] text-left transition-colors hover:bg-white/60 dark:hover:bg-white/[0.03]"
       >
         {/* Connector line to next item. Runs past this row's bottom edge by the
             next row's top padding, so it actually reaches the following marker
@@ -1225,7 +1225,7 @@ export default function PlanDetailView({
           )}
         </div>
 
-        <IconChevronRight size={16} strokeWidth={2} className="shrink-0 self-center text-neutral-300 dark:text-neutral-600" />
+        <IconChevronRight size={16} strokeWidth={2} className="shrink-0 self-center text-neutral-300 transition-transform group-hover:translate-x-0.5 group-hover:text-neutral-500 dark:text-neutral-600 dark:group-hover:text-neutral-300" />
       </button>
     );
   }
@@ -2266,7 +2266,7 @@ export default function PlanDetailView({
                   <div className="flex items-center gap-3">
                     <IconClock size={16} strokeWidth={1.8} className="shrink-0 text-neutral-400" />
                     <span className="text-[16px] font-medium text-neutral-700 dark:text-neutral-300">
-                      {task.startTime}{task.endTime && ` – ${task.endTime}`}
+                      {formatDisplayTime(task.startTime)}{task.endTime && ` – ${formatDisplayTime(task.endTime)}`}
                       {duration && (
                         <span className="ml-1.5 text-[13px] text-neutral-400">· {duration}</span>
                       )}

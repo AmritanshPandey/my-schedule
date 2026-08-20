@@ -27,6 +27,7 @@ import { applyAutoMissed } from "@/lib/consistency/autoMiss";
 import { CategoryRegistry } from "@/lib/taskCategories";
 import { isEditableTarget } from "@/lib/keyboardEvents";
 import { pushHistory, popHistory, HISTORY_LIMIT } from "@/lib/scheduleHistory";
+import { validateSchedule } from "@/lib/scheduleSchema";
 
 export type PlanCategory = "fitness" | "learning" | "work" | "health" | "routine";
 
@@ -256,6 +257,23 @@ export type ProgressEntry = MetricEntry;
 
 type DayActivities = Record<DayKey, Task[]>;
 
+function applyPlanStartDates(activities: DayActivities, plans: Plan[]): DayActivities {
+  const startDateByPlanId = new Map(
+    plans.flatMap((plan) => (plan.startDate ? [[plan.id, plan.startDate] as const] : [])),
+  );
+
+  return Object.fromEntries(
+    DAYS.map((day) => [
+      day,
+      activities[day].map((task) => {
+        const planStartDate = startDateByPlanId.get(task.planId);
+        if (!planStartDate || (task.activeFrom && task.activeFrom >= planStartDate)) return task;
+        return { ...task, activeFrom: planStartDate };
+      }),
+    ]),
+  ) as DayActivities;
+}
+
 function emptyDayActivities(): DayActivities {
   return Object.fromEntries(DAYS.map((d) => [d, []])) as unknown as DayActivities;
 }
@@ -373,6 +391,11 @@ function readDB(db: IDBDatabase, key: string): Promise<Schedule | null> {
 }
 
 function writeDB(db: IDBDatabase, key: string, data: Schedule): Promise<void> {
+  const validation = validateSchedule(data);
+  if (!validation.success) {
+    const issue = validation.error.issues[0];
+    return Promise.reject(new Error(`Schedule validation failed at ${issue?.path.join(".") || "root"}: ${issue?.message || "invalid data"}`));
+  }
   return new Promise((resolve, reject) => {
     const tx = db.transaction(STORE, "readwrite");
     tx.objectStore(STORE).put(data, key);
@@ -759,7 +782,7 @@ function migrate(raw: unknown): Schedule {
     return {
       plans,
       categories: categories.all(),
-      activities: migratedActivities,
+      activities: applyPlanStartDates(migratedActivities, plans),
       progressTrackers,
       metricEntries,
       milestones: normalizedMilestones,
@@ -958,9 +981,26 @@ function logWriteError(err: unknown): void {
  */
 function safeMigrate(raw: unknown): Schedule | null {
   try {
+    if (!raw || typeof raw !== "object" || Array.isArray(raw)) {
+      logError("indexeddb:validation", "Schedule payload is not an object");
+      return null;
+    }
+    const source = raw as Record<string, unknown>;
+    const hasScheduleSignal = ["plans", "activities", "work", "personal", "diet", "workout"].some((key) => key in source);
+    if (!hasScheduleSignal) {
+      logError("indexeddb:validation", "Schedule payload has no recognized schedule structure");
+      return null;
+    }
     // Auto-miss past rolled-over occurrences (dated history events) before the
     // reset clears today-relative live flags — the two touch disjoint fields.
-    return resetStaleCompletions(applyAutoMissed(migrate(raw), new Date()), localISODate(new Date()));
+    const migrated = resetStaleCompletions(applyAutoMissed(migrate(raw), new Date()), localISODate(new Date()));
+    const validation = validateSchedule(migrated);
+    if (!validation.success) {
+      const issue = validation.error.issues[0];
+      logError("indexeddb:validation", `Schedule validation failed at ${issue?.path.join(".") || "root"}: ${issue?.message || "invalid data"}`);
+      return null;
+    }
+    return validation.data;
   } catch (err) {
     logError("indexeddb:migrate", err);
     return null;
@@ -1099,7 +1139,11 @@ export function useScheduleDB() {
             if (cancelled) return;
             if (guestData && hasMeaningfulData(guestData)) {
               const now = Date.now();
-              const migrated = resetStaleCompletions(applyAutoMissed(migrate(guestData), new Date()), localISODate(new Date()));
+              const migrated = safeMigrate(guestData);
+              if (!migrated) {
+                setIsFirstLaunch(true);
+                return;
+              }
               loadedKeyRef.current = activeStorageKey;
               skipNextWriteRef.current = true; // persisted + synced manually below
               setScheduleState(migrated);

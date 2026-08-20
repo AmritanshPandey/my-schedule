@@ -3,6 +3,7 @@
 import { m } from "framer-motion";
 import { IconCheck } from "@tabler/icons-react";
 import type { Ritual, RitualColor } from "@/lib/useScheduleDB";
+import { formatDisplayTime } from "@/lib/timeUtils";
 
 export const COLOR_DOTS: Record<RitualColor, string> = {
   rose:    "bg-rose-400",
@@ -49,7 +50,7 @@ export default function RitualStrip({ ritual, completed, onToggle }: RitualStrip
       transition={{ type: "spring", stiffness: 500, damping: 28 }}
       onClick={onToggle}
       aria-pressed={completed}
-      aria-label={`${ritual.title}${ritual.time ? ` at ${ritual.time}` : ""} — ${completed ? "done, tap to undo" : "tap to mark done"}`}
+      aria-label={`${ritual.title}${ritual.time ? ` at ${formatDisplayTime(ritual.time)}` : ""} — ${completed ? "done, tap to undo" : "tap to mark done"}`}
       title={ritual.title}
       className="group/ritual pointer-events-auto relative h-4 w-4 shrink-0 cursor-pointer select-none rounded-full hover:z-20 focus-visible:z-20"
     >
@@ -76,7 +77,7 @@ export default function RitualStrip({ ritual, completed, onToggle }: RitualStrip
               {ritual.title}
             </span>
             {ritual.time && (
-              <span className="font-semibold tabular-nums text-neutral-950/60">{ritual.time}</span>
+              <span className="font-semibold tabular-nums text-neutral-950/60">{formatDisplayTime(ritual.time)}</span>
             )}
           </span>
         </span>

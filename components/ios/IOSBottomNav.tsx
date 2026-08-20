@@ -125,6 +125,7 @@ export default function IOSBottomNav({
 
           <button
             type="button"
+            data-tour="new-item-button"
             onClick={() => {
               haptic("medium");
               setExpanded((v) => !v);

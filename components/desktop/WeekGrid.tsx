@@ -186,18 +186,28 @@ interface WeekGridProps {
   onWeekToday: () => void;
   onCalendarViewChange: (v: CalendarView) => void;
   onCustomDaysChange: (days: DayKey[]) => void;
-  onEditTask: (task: Task) => void;
+  onEditTask: (task: Task, dateISO?: string) => void;
   onDeleteTask: (taskId: string, day: DayKey) => void;
   onToggleTaskComplete: (taskId: string, allSubtaskIds: string[], day: DayKey, dateISO: string) => void;
   /** Independent completion for one phase of a multi-slot task. */
   onToggleSlot: (taskId: string, slotIndex: number, day: DayKey, dateISO: string) => void;
   onCreateTaskAtTime: (day: DayKey, startMin: number, endMin: number) => void;
   /**
-   * Reschedule one slot of a task by dragging its block — only fires for
-   * today's column (see the drag handler for why). `startTime`/`endTime` are
-   * display-time strings ("9:30 AM"), same shape `retimeSlot` expects.
+   * Reschedule (and optionally relocate to a different day) one slot of a
+   * task by Cmd/Ctrl-dragging its block. `targetDateISO` is the calendar
+   * date the drop-target column currently represents, used to clear any
+   * stale per-date exception on that date. `startTime`/`endTime` are
+   * display-time strings ("9:30 AM"), same shape `moveTaskSlot` expects.
    */
-  onRetimeTask?: (taskId: string, day: DayKey, slotIndex: number, startTime: string, endTime: string) => void;
+  onMoveTask?: (
+    taskId: string,
+    sourceDay: DayKey,
+    slotIndex: number,
+    targetDay: DayKey,
+    targetDateISO: string,
+    startTime: string,
+    endTime: string,
+  ) => void;
   /** Grid block hover-icon, today only, not-yet-missed: mark it missed. */
   onMarkMissed?: (taskId: string, allSubtaskIds: string[], day: DayKey, dateISO: string) => void;
   /** Grid block hover-icon, any column showing an already-missed occurrence:
@@ -222,6 +232,8 @@ interface WeekGridProps {
     edgeCut?: "top" | "bottom",
     /** Hover-revealed "mark/handle missed" icon — see TaskBlockCard.gridMenuAction. */
     gridMenuAction?: { label: string; icon: ReactNode; onClick: () => void },
+    /** The concrete calendar date represented by this task block. */
+    dateISO?: string,
   ) => ReactNode;
 }
 
@@ -249,7 +261,7 @@ export function WeekGrid({
   onToggleTaskComplete,
   onToggleSlot,
   onCreateTaskAtTime,
-  onRetimeTask,
+  onMoveTask,
   onMarkMissed,
   onOpenMissedRecovery,
   renderCard,
@@ -269,16 +281,31 @@ export function WeekGrid({
     lastEndMin: number;
   } | null>(null);
 
-  // ── Cmd/Ctrl-drag to reschedule (today's column only — see handler) ────────
-  // Preview state for the ghost block; the original block dims in place while
-  // dragging (mirrors ScheduleApp's single-day dragMove pattern).
+  // ── Cmd/Ctrl-drag to reschedule, relocate, or resize a task block ───────────
+  // Three gestures share this one drag machinery, distinguished by `mode`:
+  //  - "move" (grab the card body): both edges shift together, duration fixed,
+  //    can cross into a different day column (see targetDay).
+  //  - "resize-start" / "resize-end" (grab the top/bottom edge strip): only
+  //    one edge moves, the other stays anchored, duration changes. Same-day
+  //    only — targetDay is never updated away from sourceDay for these.
+  // Preview state for the ghost block; the original block dims in place at
+  // sourceDay while dragging (mirrors ScheduleApp's single-day dragMove
+  // pattern), and the ghost itself follows the pointer into whichever
+  // column — sourceDay or a different one — is currently hovered (targetDay).
   const [dragMove, setDragMove] = useState<{
-    taskId: string; slotIndex: number; day: DayKey; previewStartMin: number; durationMin: number;
+    taskId: string; slotIndex: number; task: Task;
+    sourceDay: DayKey; targetDay: DayKey; previewStartMin: number; previewDurationMin: number;
   } | null>(null);
   const moveDragRef = useRef<{
-    taskId: string; slotIndex: number; day: DayKey; task: Task; slot: TaskSlot;
+    taskId: string; slotIndex: number; task: Task; slot: TaskSlot;
+    sourceDay: DayKey; targetDay: DayKey;
+    mode: "move" | "resize-start" | "resize-end";
+    // Original block bounds (mapped-minute domain), captured once at
+    // pointerdown — the anchor a resize holds fixed on one side.
+    fixedStartMin: number; fixedEndMin: number;
     durationMin: number; grabOffsetMin: number; pointerId: number;
-    dragging: boolean; startClientY: number; columnEl: HTMLDivElement; currentPreviewStartMin: number;
+    dragging: boolean; startClientX: number; startClientY: number; columnEl: HTMLDivElement;
+    currentPreviewStartMin: number; currentPreviewDurationMin: number;
   } | null>(null);
   // Set true the instant a drag crosses the threshold; consumed by the
   // block's onClickCapture so the native click that otherwise follows
@@ -504,23 +531,27 @@ export function WeekGrid({
     columnEl.setPointerCapture(e.pointerId);
   }
 
-  // ── Cmd/Ctrl-drag to reschedule a task block ────────────────────────────────
-  // Scoped to today's column only: past/future columns render *resolved*
-  // occurrences (resolveOccurrence/completionForDate), and retiming those has
-  // no defined semantics yet (one-off exception vs. moving the template?) —
-  // same reasoning as the existing `readOnly = !dayIsToday` gate below.
+  // ── Cmd/Ctrl-drag to reschedule, relocate, or resize a task block ───────────
+  // Available on every column, any day (past, present, future) — only a
+  // continuation block (the tail of an overnight task) stays excluded, since
+  // it belongs to the *previous* day's bucket and dragging it here would be
+  // ambiguous. See moveTaskSlot (lib/taskMutations.ts) for what a commit
+  // writes for cross-day drops; resizes always commit same-day.
   function handleTaskBlockPointerDown(
     e: ReactPointerEvent<HTMLDivElement>,
     day: DayKey,
-    dayIsToday: boolean,
     isContinuation: boolean,
     layout: BlockLayout,
+    mode: "move" | "resize-start" | "resize-end" = "move",
   ) {
-    if (!onRetimeTask || isContinuation || !dayIsToday) return;
+    if (!onMoveTask || isContinuation) return;
     if (!(e.metaKey || e.ctrlKey)) return; // no modifier — let the click/checkbox behave normally
     if (e.pointerType === "mouse" && e.button !== 0) return;
     if ((e.target as HTMLElement).closest("button")) return; // checkbox / grid-menu icon
-    e.stopPropagation(); // don't also let the day column's create-drag fire
+    // eslint-disable-next-line no-console
+    console.log("[weekgrid] pointerdown", { mode, clientY: e.clientY, target: (e.target as HTMLElement).className });
+    e.stopPropagation(); // don't also let the day column's create-drag (or, for
+    // the edge strips, the card's own "move" pointerdown) also fire
     const columnEl = (e.currentTarget as HTMLElement).closest<HTMLDivElement>("[data-day-col]");
     if (!columnEl) return;
 
@@ -535,37 +566,65 @@ export function WeekGrid({
     // resolves the pointer into — so grabOffset/newStart stay in that domain
     // right up until the final minutesToDisplayTime conversion on release.
     const blockStartMappedMin = startMin + layout.top / PX_MIN;
-    const grabMin = pointerToMinutes(e.clientY, columnEl, 0, PX_MIN * 60, startMin);
-    const grabOffsetMin = clampMinutes(grabMin - blockStartMappedMin, 0, durationMin);
+    const blockEndMappedMin = blockStartMappedMin + durationMin;
+
+    // A resize grabs the edge itself (an 8px strip) and tracks the pointer
+    // 1:1, no offset needed — unlike "move", there's no meaningful "where
+    // within the block did you grab it" for an edge drag.
+    let grabOffsetMin = 0;
+    if (mode === "move") {
+      const grabMin = pointerToMinutes(e.clientY, columnEl, 0, PX_MIN * 60, startMin);
+      grabOffsetMin = clampMinutes(grabMin - blockStartMappedMin, 0, durationMin);
+    }
 
     moveDragRef.current = {
       taskId: layout.task.id,
       slotIndex: layout.slotIndex,
-      day,
       task: layout.task,
       slot: layout.slot,
+      sourceDay: day,
+      targetDay: day,
+      mode,
+      fixedStartMin: blockStartMappedMin,
+      fixedEndMin: blockEndMappedMin,
       durationMin,
       grabOffsetMin,
       pointerId: e.pointerId,
       dragging: false,
+      startClientX: e.clientX,
       startClientY: e.clientY,
       columnEl,
       currentPreviewStartMin: blockStartMappedMin,
+      currentPreviewDurationMin: durationMin,
     };
   }
 
   useEffect(() => {
-    if (!onRetimeTask) return;
-    const retime = onRetimeTask; // narrowed once — closures below can't retain the guard's narrowing
+    if (!onMoveTask) return;
+    const moveTask = onMoveTask; // narrowed once — closures below can't retain the guard's narrowing
     let rafId: number | null = null;
     let pendingPreviewMin: number | null = null;
+    let pendingPreviewDuration: number | null = null;
+    let pendingTargetDay: DayKey | null = null;
 
     function flush() {
       rafId = null;
-      if (pendingPreviewMin !== null) {
+      if (pendingPreviewMin !== null || pendingPreviewDuration !== null || pendingTargetDay !== null) {
         const min = pendingPreviewMin;
+        const dur = pendingPreviewDuration;
+        const target = pendingTargetDay;
         pendingPreviewMin = null;
-        setDragMove((prev) => (prev ? { ...prev, previewStartMin: min } : prev));
+        pendingPreviewDuration = null;
+        pendingTargetDay = null;
+        setDragMove((prev) => {
+          if (!prev) return prev;
+          return {
+            ...prev,
+            previewStartMin: min ?? prev.previewStartMin,
+            previewDurationMin: dur ?? prev.previewDurationMin,
+            targetDay: target ?? prev.targetDay,
+          };
+        });
       }
     }
     function scheduleFlush() {
@@ -576,18 +635,59 @@ export function WeekGrid({
       const drag = moveDragRef.current;
       if (!drag || drag.pointerId !== e.pointerId) return;
       if (!drag.dragging) {
-        if (Math.abs(e.clientY - drag.startClientY) < DRAG_THRESHOLD_PX) return;
+        const distance = Math.hypot(e.clientX - drag.startClientX, e.clientY - drag.startClientY);
+        if (distance < DRAG_THRESHOLD_PX) return;
         drag.dragging = true;
         suppressClickRef.current = true;
         haptic("medium");
-        setDragMove({ taskId: drag.taskId, slotIndex: drag.slotIndex, day: drag.day, previewStartMin: drag.currentPreviewStartMin, durationMin: drag.durationMin });
+        setDragMove({
+          taskId: drag.taskId, slotIndex: drag.slotIndex, task: drag.task,
+          sourceDay: drag.sourceDay, targetDay: drag.targetDay,
+          previewStartMin: drag.currentPreviewStartMin, previewDurationMin: drag.currentPreviewDurationMin,
+        });
       }
       e.preventDefault();
+      // Vertical position always reads against the *origin* column's rect —
+      // every day column shares the same top offset in this layout (one flex
+      // row, no per-column vertical shift), so the minute math is identical
+      // regardless of which day is currently hovered.
       const currentMin = pointerToMinutes(e.clientY, drag.columnEl, 0, PX_MIN * 60, startMin);
-      const newStartMin = clampMinutes(snapMinutes(currentMin - drag.grabOffsetMin), startMin, endMin - drag.durationMin);
+
+      let newStartMin: number;
+      let newDurationMin: number;
+      if (drag.mode === "move") {
+        newStartMin = clampMinutes(snapMinutes(currentMin - drag.grabOffsetMin), startMin, endMin - drag.durationMin);
+        newDurationMin = drag.durationMin; // fixed — both edges shift together
+      } else if (drag.mode === "resize-start") {
+        // Top edge follows the pointer; the bottom edge (fixedEndMin) stays put.
+        newStartMin = clampMinutes(snapMinutes(currentMin), startMin, drag.fixedEndMin - DRAG_MIN_DURATION);
+        newDurationMin = drag.fixedEndMin - newStartMin;
+      } else {
+        // resize-end: bottom edge follows the pointer; the top edge (fixedStartMin) stays put.
+        newStartMin = drag.fixedStartMin;
+        const newEndMin = clampMinutes(snapMinutes(currentMin), drag.fixedStartMin + DRAG_MIN_DURATION, endMin);
+        newDurationMin = newEndMin - drag.fixedStartMin;
+      }
       drag.currentPreviewStartMin = newStartMin;
-      if (pendingPreviewMin !== newStartMin) {
+      drag.currentPreviewDurationMin = newDurationMin;
+      if (pendingPreviewMin !== newStartMin || pendingPreviewDuration !== newDurationMin) {
         pendingPreviewMin = newStartMin;
+        pendingPreviewDuration = newDurationMin;
+        scheduleFlush();
+      }
+
+      // Horizontal position picks the day — "move" only. A resize never
+      // changes which day the block is on, so target stays pinned to source.
+      if (drag.mode !== "move") return;
+      // Hit-test whatever's under the pointer right now. If it's outside any
+      // column (over the header, the time rail, or off-grid), keep the last
+      // known target rather than snapping back to origin — avoids flicker
+      // near the grid's edges.
+      const hitEl = document.elementFromPoint(e.clientX, e.clientY)?.closest<HTMLDivElement>("[data-day-col]");
+      const hitDay = hitEl?.dataset.dayCol as DayKey | undefined;
+      if (hitDay && hitDay !== drag.targetDay) {
+        drag.targetDay = hitDay;
+        pendingTargetDay = hitDay;
         scheduleFlush();
       }
     }
@@ -597,6 +697,8 @@ export function WeekGrid({
       if (!drag || drag.pointerId !== e.pointerId) return;
       moveDragRef.current = null;
       pendingPreviewMin = null;
+      pendingPreviewDuration = null;
+      pendingTargetDay = null;
       if (rafId !== null) { cancelAnimationFrame(rafId); rafId = null; }
       if (!drag.dragging) {
         // Modifier held, but released without crossing the threshold — no
@@ -607,8 +709,15 @@ export function WeekGrid({
       }
       e.preventDefault();
       const newStartMin = drag.currentPreviewStartMin;
-      const newEndMin = newStartMin + drag.durationMin;
-      retime(drag.taskId, drag.day, drag.slotIndex, minutesToDisplayTime(newStartMin), minutesToDisplayTime(newEndMin));
+      const newEndMin = newStartMin + drag.currentPreviewDurationMin;
+      const targetDateISO = localISODate(
+        weekDates.find((w) => w.day === drag.targetDay)?.date
+          ?? weekDates.find((w) => w.day === drag.sourceDay)!.date
+      );
+      moveTask(
+        drag.taskId, drag.sourceDay, drag.slotIndex, drag.targetDay, targetDateISO,
+        minutesToDisplayTime(newStartMin), minutesToDisplayTime(newEndMin),
+      );
       haptic("light");
       setDragMove(null);
     }
@@ -618,6 +727,8 @@ export function WeekGrid({
       if (!drag || drag.pointerId !== e.pointerId) return;
       moveDragRef.current = null;
       pendingPreviewMin = null;
+      pendingPreviewDuration = null;
+      pendingTargetDay = null;
       if (rafId !== null) { cancelAnimationFrame(rafId); rafId = null; }
       setDragMove(null);
     }
@@ -631,13 +742,13 @@ export function WeekGrid({
       document.removeEventListener("pointercancel", onPointerCancel);
       if (rafId !== null) cancelAnimationFrame(rafId);
     };
-  }, [endMin, onRetimeTask, startMin]);
+  }, [endMin, onMoveTask, startMin, weekDates]);
 
   return (
     <div className="flex h-full w-full min-w-0 flex-col overflow-hidden">
 
       {/* ── Nav bar ─────────────────────────────────────────────────────────── */}
-      <div className="relative z-20 mb-8 flex shrink-0 items-start justify-between gap-6">
+      <div className="relative z-40 mb-8 flex shrink-0 items-start justify-between gap-6">
         <div className="min-w-0">
           <span className="block min-w-0 truncate text-[17px] font-semibold leading-none text-neutral-950 dark:text-white">
             {displayLabel}
@@ -671,7 +782,7 @@ export function WeekGrid({
                   animate={{ opacity: 1, y: 0, scale: 1 }}
                   exit={{ opacity: 0, y: -6, scale: 0.98 }}
                   transition={{ duration: 0.15, ease: [0.22, 1, 0.36, 1] }}
-                  className="absolute left-0 top-full z-30 mt-2 w-72 rounded-2xl border border-neutral-200 bg-white p-3 dark:border-white/[0.08] dark:bg-neutral-900"
+                  className="absolute left-0 top-full z-50 mt-2 w-72 rounded-2xl border border-neutral-200 bg-white p-3 dark:border-white/[0.08] dark:bg-neutral-900"
                 >
                   <p className="mb-2 text-[10px] font-semibold uppercase tracking-wider text-neutral-400 dark:text-neutral-500">
                     Pick days · {customDays.length} selected
@@ -817,7 +928,7 @@ export function WeekGrid({
                       <button
                         key={task.id}
                         type="button"
-                        onClick={() => onEditTask(task)}
+                        onClick={() => onEditTask(task, dateISO)}
                         className={`flex items-center gap-1.5 rounded-lg border border-neutral-200/70 bg-white px-2 py-1 text-left dark:border-white/[0.08] dark:bg-neutral-900 ${done ? "opacity-60" : ""}`}
                       >
                         <span className="h-1.5 w-1.5 shrink-0 rounded-full" style={{ background: hex }} />
@@ -870,11 +981,21 @@ export function WeekGrid({
             );
             const showNow = dayIsToday && now !== null;
             const readOnly = !dayIsToday;
+            // Only the column currently under the pointer during a genuine
+            // cross-day drag gets the drop-target treatment — hovering back
+            // over the origin column mid-drag is just "dragging," not
+            // "targeting a drop."
+            const isCrossDayDropTarget =
+              dragMove != null && dragMove.targetDay === day && dragMove.targetDay !== dragMove.sourceDay;
             return (
               <div
                 key={day}
-                data-day-col
-                className="relative min-w-0 flex-1 border-r border-neutral-200 last:border-r-0 dark:border-white/[0.06]"
+                data-day-col={day}
+                className={`relative min-w-0 flex-1 border-r border-neutral-200 last:border-r-0 dark:border-white/[0.06] transition-colors duration-100 ${
+                  isCrossDayDropTarget
+                    ? "bg-neutral-100/80 outline outline-1 -outline-offset-1 outline-neutral-300 dark:bg-white/[0.05] dark:outline-white/15"
+                    : ""
+                }`}
                 onPointerDown={(e) => handleDayPointerDown(day, e)}
               >
                 <div className="pointer-events-none absolute inset-0">
@@ -920,9 +1041,11 @@ export function WeekGrid({
                     nowPx !== null &&
                     nowPx >= layout.top &&
                     nowPx < layout.top + layout.height;
+                  // Dims the *origin* block for the whole drag, regardless of
+                  // which column the ghost is currently hovering over.
                   const isBeingMoved =
-                    dragMove?.taskId === layout.task.id && dragMove?.slotIndex === layout.slotIndex && dragMove?.day === day;
-                  const canDragToRetime = !!onRetimeTask && dayIsToday && !isContinuation;
+                    dragMove?.taskId === layout.task.id && dragMove?.slotIndex === layout.slotIndex && dragMove?.sourceDay === day;
+                  const canDragToMove = !!onMoveTask && !isContinuation;
                   // Hover-icon: "mark missed" (today, not yet missed/done) or
                   // "handle missed" (any column showing an already-missed
                   // occurrence — completionForDate above already resolved the
@@ -944,7 +1067,7 @@ export function WeekGrid({
                       data-glass={isCurrent ? "" : undefined}
                       className={`absolute ${isCurrent ? "rounded-[10px] shadow-now" : ""} ${
                         isBeingMoved ? "opacity-30" : ""
-                      } ${canDragToRetime && modifierHeld ? "cursor-grab" : ""}`}
+                      } ${canDragToMove && modifierHeld ? "cursor-grab" : ""}`}
                       style={{
                         top: layout.top + TASK_VERTICAL_INSET,
                         height: visualHeight,
@@ -952,9 +1075,9 @@ export function WeekGrid({
                         width: `calc(${layout.widthPct}% - 10px)`,
                         minHeight: 22,
                       }}
-                      onPointerDown={canDragToRetime ? (e) => handleTaskBlockPointerDown(e, day, dayIsToday, isContinuation, layout) : undefined}
+                      onPointerDown={canDragToMove ? (e) => handleTaskBlockPointerDown(e, day, isContinuation, layout) : undefined}
                       onClickCapture={
-                        canDragToRetime
+                        canDragToMove
                           ? (e) => {
                               if (suppressClickRef.current) {
                                 e.preventDefault();
@@ -965,6 +1088,27 @@ export function WeekGrid({
                           : undefined
                       }
                     >
+                      {/* Cmd/Ctrl-held resize handles — grab the top or bottom
+                          edge to extend/shrink just that side, independent of
+                          the "move" gesture that covers the rest of the card.
+                          Inert (no pointer-events) until the modifier is held,
+                          so a plain hover never intercepts normal clicks. */}
+                      {canDragToMove && modifierHeld && (
+                        <>
+                          <div
+                            className="absolute inset-x-0 top-0 z-[1] flex h-2 cursor-ns-resize items-start justify-center pt-0.5"
+                            onPointerDown={(e) => handleTaskBlockPointerDown(e, day, isContinuation, layout, "resize-start")}
+                          >
+                            <div className="h-[3px] w-6 rounded-full bg-neutral-500/70 dark:bg-white/40" />
+                          </div>
+                          <div
+                            className="absolute inset-x-0 bottom-0 z-[1] flex h-2 cursor-ns-resize items-end justify-center pb-0.5"
+                            onPointerDown={(e) => handleTaskBlockPointerDown(e, day, isContinuation, layout, "resize-end")}
+                          >
+                            <div className="h-[3px] w-6 rounded-full bg-neutral-500/70 dark:bg-white/40" />
+                          </div>
+                        </>
+                      )}
                       {renderCard(
                         layout.task,
                         layout.height,
@@ -984,6 +1128,7 @@ export function WeekGrid({
                         layout.slotIndex,
                         isContinuation ? "top" : cutAtBottom ? "bottom" : undefined,
                         gridMenuAction,
+                        dateISO,
                       )}
                     </div>
                   );
@@ -1029,20 +1174,26 @@ export function WeekGrid({
                   );
                 })()}
 
-                {/* Drag-move ghost — the real block dims (isBeingMoved above)
-                    while this tracks the pointer at the snapped new time. */}
-                {dragMove?.day === day && (() => {
-                  const movingTask = tasks.find((t) => t.id === dragMove.taskId);
-                  if (!movingTask) return null;
+                {/* Drag ghost — covers move, resize-start, and resize-end
+                    alike, since all three just drive previewStartMin/
+                    previewDurationMin differently. The real block dims
+                    (isBeingMoved above, at sourceDay) while this tracks the
+                    live preview, in whichever column (targetDay) is
+                    currently hovered — always sourceDay for a resize.
+                    dragMove carries its own resolved task rather than
+                    looking it up in this column's `tasks`, since a
+                    cross-day hover's target column never has the dragged
+                    task in its own list. */}
+                {dragMove?.targetDay === day && (() => {
                   const top = (dragMove.previewStartMin - startMin) * PX_MIN;
-                  const height = Math.max(dragMove.durationMin * PX_MIN, 24);
+                  const height = Math.max(dragMove.previewDurationMin * PX_MIN, 24);
                   const previewSlot: TaskSlot = {
                     startTime: minutesToDisplayTime(dragMove.previewStartMin),
-                    endTime: minutesToDisplayTime(dragMove.previewStartMin + dragMove.durationMin),
+                    endTime: minutesToDisplayTime(dragMove.previewStartMin + dragMove.previewDurationMin),
                   };
                   return (
                     <div className="pointer-events-none absolute left-0.5 right-0.5 z-[16] opacity-90" style={{ top, height }}>
-                      {renderCard(movingTask, height, 100, true, () => {}, () => {}, previewSlot, dragMove.slotIndex, undefined)}
+                      {renderCard(dragMove.task, height, 100, true, () => {}, () => {}, previewSlot, dragMove.slotIndex, undefined)}
                     </div>
                   );
                 })()}

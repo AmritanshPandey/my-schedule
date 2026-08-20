@@ -8,6 +8,7 @@ import Button from "@/components/ui/Button";
 import type { Ritual, RitualColor, DayKey } from "@/lib/useScheduleDB";
 import { DAYS, DAY_LABELS, RITUAL_COLORS } from "@/lib/useScheduleDB";
 import { haptic } from "@/lib/haptics";
+import TimeInput from "@/components/ui/TimeInput";
 
 const COLOR_DOT: Record<RitualColor, string> = {
   rose:    "bg-rose-400",
@@ -36,20 +37,6 @@ const COLOR_RING: Record<RitualColor, string> = {
 };
 
 const DURATION_PRESETS = [5, 10, 15, 20, 30, 45, 60];
-
-function formatTimeDraft(raw: string): string {
-  const digits = raw.replace(/\D/g, "").slice(0, 4);
-  if (digits.length <= 2) return digits;
-  return `${digits.slice(0, 2)}:${digits.slice(2)}`;
-}
-
-function normalizeTimeDraft(raw: string): string {
-  const match = raw.match(/^(\d{1,2}):?(\d{0,2})$/);
-  if (!match) return "";
-  const h = Math.min(23, parseInt(match[1], 10));
-  const m = Math.min(59, parseInt(match[2] || "0", 10));
-  return `${String(h).padStart(2, "0")}:${String(m).padStart(2, "0")}`;
-}
 
 interface RitualSheetProps {
   open: boolean;
@@ -119,19 +106,7 @@ export function RitualSheet({ open, onClose, initial, onSave, onDelete }: Ritual
           />
 
           {/* Time */}
-          <div>
-            <p className={`mb-1.5 ${typography.eyebrow}`}>Time</p>
-            <input
-              type="text"
-              inputMode="numeric"
-              autoComplete="off"
-              placeholder="08:00"
-              value={time}
-              onChange={(e) => setTime(formatTimeDraft(e.target.value))}
-              onBlur={(e) => setTime(normalizeTimeDraft(e.target.value) || time)}
-              className="h-11 w-full appearance-none rounded-xl border border-neutral-200 bg-neutral-50 px-3 text-[16px] font-semibold tabular-nums text-neutral-700 outline-none transition-colors placeholder:text-neutral-400 focus:border-neutral-300 focus:bg-white dark:border-white/10 dark:bg-white/[0.04] dark:text-white dark:placeholder:text-neutral-600 dark:focus:border-white/20 dark:focus:bg-white/[0.08]"
-            />
-          </div>
+          <TimeInput label="Time" value={time} onChange={setTime} ariaLabel="Routine time" />
 
           {/* Duration */}
           <div>

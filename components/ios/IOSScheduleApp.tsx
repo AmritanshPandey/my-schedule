@@ -50,9 +50,10 @@ import {
   resetStaleCompletions,
 } from "@/lib/useScheduleDB";
 import { useScheduleDB } from "@/lib/useScheduleDB";
-import { categoryHex, resolveAccentColor, PLAN_NEUTRAL } from "@/lib/colorSystem";
+import { accentStyles, categoryHex, resolveAccentColor } from "@/lib/colorSystem";
 import { canDeleteCategory, categoryUsageCounts, ensureCategoryIn } from "@/lib/taskCategories";
 import { taskIdentity, categoriesById } from "@/lib/taskIdentity";
+import { constrainTaskToPlanWindow } from "@/lib/planTaskWindow";
 import { SECTION_ICONS } from "@/components/SectionIcons";
 import { useReminders } from "@/lib/useReminders";
 import { bootLog, isIOSSafeMode, isStandalonePWA } from "@/lib/iosSafeMode";
@@ -78,7 +79,7 @@ import { completionForDate, getTaskCheckableItems, getTaskSubtaskSummary, isTask
 import { diffException, isTaskScheduledOn, resolveOccurrence } from "@/lib/taskOccurrence";
 import { cascadeMilestoneDates, normalizeMilestoneTimeline } from "@/lib/roadmapDates";
 import { toggleRitualCompletion } from "@/lib/ritualCompletions";
-import { inputToDisplayTime, minutesToInputTime, parseTimeToMinutes, toScheduleDayMinutes } from "@/lib/timeUtils";
+import { formatDisplayTime, inputToDisplayTime, minutesToInputTime, parseTimeToMinutes, toScheduleDayMinutes } from "@/lib/timeUtils";
 import { computeTrend } from "@/lib/trendUtils";
 import { getPlanCardStats } from "@/lib/planInsights";
 import { calculateExecutionStreak } from "@/lib/consistency/calculateExecutionStreak";
@@ -94,6 +95,8 @@ import CheckDraw from "@/components/ui/CheckDraw";
 import Sparkline from "@/components/ui/Sparkline";
 import TrendChange from "@/components/ui/TrendChange";
 import type { CreateTaskFromNoteInput } from "@/components/notes/NotesView";
+import { useCoachTour } from "@/lib/onboarding/useCoachTour";
+import { TOUR_STEPS, type TourId } from "@/lib/onboarding/tours";
 
 const IOSMotionBoundary = dynamic(() => import("@/components/ios/IOSMotionBoundary"), { ssr: false });
 const TaskSheet = dynamic(() => import("@/components/task/TaskSheet").then((m) => ({ default: m.TaskSheet })), { ssr: false });
@@ -113,6 +116,7 @@ const DayWallpaperSheet = dynamic(() => import("@/components/DayWallpaperSheet")
 const NotesView = dynamic(() => import("@/components/notes/NotesView"), { ssr: false });
 const TaskDetailView = dynamic(() => import("@/components/activity/TaskDetailView"), { ssr: false });
 const AddEntryModal = dynamic(() => import("@/components/AddEntryModal"), { ssr: false });
+const CoachMarks = dynamic(() => import("@/components/onboarding/CoachMarks"), { ssr: false });
 
 const JS_DAYS: DayKey[] = ["sunday", "monday", "tuesday", "wednesday", "thursday", "friday", "saturday"];
 
@@ -197,7 +201,7 @@ function IOSHeader({
   onNotes?: () => void;
 }) {
   return (
-    <header className="fixed inset-x-0 top-0 z-30 border-b border-neutral-200 bg-white px-4 pb-2 pt-[calc(env(safe-area-inset-top)+10px)] dark:border-white/[0.08] dark:bg-neutral-950">
+    <header data-glass className="fixed inset-x-0 top-0 z-30 border-b border-neutral-200/80 bg-[#F3F4F1]/90 px-4 pb-2 pt-[calc(env(safe-area-inset-top)+10px)] backdrop-blur-xl dark:border-white/[0.08] dark:bg-[#0E0E0E]/90">
       <div className="flex h-12 items-center justify-between gap-3">
         <div className="min-w-0">
           {onBack ? (
@@ -223,7 +227,7 @@ function IOSHeader({
                   type="button"
                   onClick={action.onClick}
                   aria-label={action.label}
-                  className={`flex h-12 w-12 items-center justify-center rounded-full transition-colors ${
+                    className={`flex h-10 w-10 items-center justify-center rounded-xl transition-colors ${
                     action.destructive
                       ? "text-neutral-500 hover:bg-rose-500/10 hover:text-rose-500 dark:text-neutral-400 dark:hover:text-rose-400"
                       : "text-neutral-500 hover:bg-neutral-200/70 hover:text-neutral-800 dark:text-neutral-400 dark:hover:bg-white/[0.07] dark:hover:text-white"
@@ -240,7 +244,7 @@ function IOSHeader({
                   type="button"
                   onClick={onNotes}
                   aria-label="Notes"
-                  className="flex h-12 w-12 items-center justify-center rounded-full text-neutral-500 dark:text-neutral-400"
+                  className="flex h-10 w-10 items-center justify-center rounded-xl text-neutral-500 transition-colors hover:bg-neutral-200/70 dark:text-neutral-400 dark:hover:bg-white/[0.07]"
                 >
                   <IconNotes size={20} strokeWidth={2} />
                 </button>
@@ -250,7 +254,7 @@ function IOSHeader({
                   type="button"
                   onClick={onSettings}
                   aria-label="Settings"
-                  className="flex h-12 w-12 items-center justify-center rounded-full text-neutral-500 dark:text-neutral-400"
+                  className="flex h-10 w-10 items-center justify-center rounded-xl text-neutral-500 transition-colors hover:bg-neutral-200/70 dark:text-neutral-400 dark:hover:bg-white/[0.07]"
                 >
                   <IconSettings size={20} strokeWidth={2} />
                 </button>
@@ -375,6 +379,17 @@ export default function IOSScheduleApp() {
   // is small enough to re-render).
   const nowMinutes = useNowMinutes();
   const [activeTab, setActiveTab] = useState(4);
+
+  // A short, skippable coach-mark tour per tab — mirrors the desktop shell's
+  // wiring in ScheduleApp.tsx. This is the mobile shell (see
+  // ScheduleAppClient.tsx's shouldUseIOSAppShell fork), a completely separate
+  // component tree, so it needs its own copy of this hook-up rather than
+  // inheriting the desktop one. Overview (4) and Settings (5) intentionally
+  // have no entry in TOUR_STEPS — see lib/onboarding/tours.ts.
+  const activeTourId: TourId | null =
+    activeTab === 0 ? "today" : activeTab === 1 ? "plans" : activeTab === 2 ? "routine" : null;
+  const tour = useCoachTour(activeTourId ?? "none", { enabled: activeTourId !== null, delayMs: 1200 });
+
   const [iosSetupDismissed, setIosSetupDismissed] = useState(() => {
     try {
       return localStorage.getItem("planr-getting-started-dismissed") === "1";
@@ -619,6 +634,7 @@ export default function IOSScheduleApp() {
         return {
           tracker,
           latest,
+          plan: schedule.plans.find((plan) => plan.id === tracker.planId),
           // Chronological (oldest first) so the sparkline reads left-to-right.
           series: entries.slice(-8).map((entry) => entry.value),
           trend,
@@ -627,6 +643,22 @@ export default function IOSScheduleApp() {
       })
 	      .sort((a, b) => Number(b.hasEntries) - Number(a.hasEntries) || (b.latest?.date ?? "").localeCompare(a.latest?.date ?? "") || a.tracker.title.localeCompare(b.tracker.title));
 	  }, [schedule.metricEntries, schedule.plans, schedule.progressTrackers]);
+
+  const overviewTrackerGroups = useMemo(() => {
+    const groups: Array<{ key: string; plan?: Plan; trackers: typeof overviewTrackers }> = [];
+    const byPlan = new Map<string, number>();
+    for (const row of overviewTrackers) {
+      const key = row.plan?.id ?? "__other__";
+      let index = byPlan.get(key);
+      if (index === undefined) {
+        index = groups.length;
+        byPlan.set(key, index);
+        groups.push({ key, plan: row.plan, trackers: [] });
+      }
+      groups[index].trackers.push(row);
+    }
+    return groups;
+  }, [overviewTrackers]);
 
   // Every plan: consistency is what this card reports, and every plan has a
   // consistency score with or without milestones. A milestone-less plan just
@@ -798,7 +830,7 @@ export default function IOSScheduleApp() {
         [day]: (prev.activities[day] ?? []).map((t) => (t.id === taskId ? { ...t, ...patch } : t)),
       },
     }));
-    setToast(`Moved to ${patch.startTime}`);
+    setToast(`Moved to ${formatDisplayTime(patch.startTime)}`);
   }
 
   /** Mark this date's occurrence skipped (or restore it). Mirrors desktop. */
@@ -1003,6 +1035,7 @@ export default function IOSScheduleApp() {
         ...quickTaskTimeRange(),
         categoryId: ensureCategoryIn(categoryDraft, plan.emoji),
         planId: plan.id,
+        ...constrainTaskToPlanWindow({}, plan),
         taskType: "task",
       };
       return {
@@ -1249,6 +1282,7 @@ export default function IOSScheduleApp() {
               taskSummary={(task) => getTaskSubtaskSummary(task, task.planId ? plansById.get(task.planId) ?? null : null)}
               taskCheckableIds={(task) => getTaskCheckableItems(task, task.planId ? plansById.get(task.planId) ?? null : null).map((item) => item.id)}
               onMarkDone={(taskId, subtaskIds) => handleToggleTaskComplete(taskId, subtaskIds, todayKey, todayISO())}
+              onToggleSlot={(taskId, slotIndex) => handleToggleSlot(taskId, slotIndex, todayKey, todayISO())}
               onMissed={(taskId, subtaskIds) => handleMarkTaskMissed(taskId, subtaskIds, todayKey, todayISO())}
               onOpenSubtasks={(taskId) => setSubtasksRef({ id: taskId, day: todayKey, dateISO: todayISO() })}
             />
@@ -1271,40 +1305,56 @@ export default function IOSScheduleApp() {
                   </p>
                 </div>
               ) : (
-                <div className="divide-y divide-neutral-100 dark:divide-white/[0.06]">
-                  {overviewTrackers.map(({ tracker, latest, series, trend }) => {
-                    const trendColorClass = trend?.state === "positive"
-                      ? "text-emerald-500 dark:text-emerald-400"
-                      : trend?.state === "negative"
-                        ? "text-rose-500 dark:text-rose-400"
-                        : "text-neutral-300 dark:text-neutral-600";
-                    return (
-                      <div key={tracker.id} className="flex items-center gap-3 py-3 first:pt-2 last:pb-0">
-                        <span className={`h-3 w-3 shrink-0 rounded-full ${PLAN_NEUTRAL.dot}`} />
-                        <div className="min-w-0 flex-1">
-                          <p className="truncate text-[16px] font-semibold text-neutral-950 dark:text-white">{tracker.title}</p>
-                          <div className=" flex min-w-0 items-center gap-1.5">
-                            <p className="truncate text-[14px] font-semibold text-neutral-500 dark:text-neutral-400">
-                              {formatTrackerValue(latest, tracker)}
-                            </p>
-                            {trend && <TrendChange direction={trend.direction} state={trend.state} pct={trend.pct} />}
-                          </div>
+                <div className="space-y-3">
+                  {overviewTrackerGroups.map((group) => (
+                    <div key={group.key} className="rounded-2xl border border-neutral-200/80 bg-neutral-50/70 px-3 dark:border-white/[0.07] dark:bg-white/[0.025]">
+                      <div className="flex items-center justify-between gap-3 border-b border-neutral-200/70 py-2.5 dark:border-white/[0.06]">
+                        <div className="flex min-w-0 items-center gap-2">
+                          <span className={`h-2 w-2 shrink-0 rounded-full ${group.plan ? accentStyles(group.plan.color).dot : "bg-neutral-400 dark:bg-neutral-500"}`} />
+                          <p className="truncate text-[11px] font-extrabold uppercase tracking-[0.08em] text-neutral-500 dark:text-neutral-400">
+                            {group.plan?.title ?? "Other"}
+                          </p>
                         </div>
-                        <Sparkline values={series} className={trendColorClass} />
-                        <button
-                          type="button"
-                          onClick={() => {
-                            haptic("light");
-                            setEntryTracker(tracker);
-                          }}
-                          aria-label={`Log ${tracker.title}`}
-                          className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-neutral-950 text-white dark:bg-white dark:text-neutral-950"
-                        >
-                          <IconPlus size={21} strokeWidth={2.2} />
-                        </button>
+                        <span className="shrink-0 text-[11px] font-bold tabular-nums text-neutral-400 dark:text-neutral-500">
+                          {group.trackers.length}
+                        </span>
                       </div>
-                    );
-                  })}
+                      <div className="divide-y divide-neutral-200/70 dark:divide-white/[0.06]">
+                        {group.trackers.map(({ tracker, latest, series, trend }) => {
+                          const trendColorClass = trend?.state === "positive"
+                            ? "text-emerald-500 dark:text-emerald-400"
+                            : trend?.state === "negative"
+                              ? "text-rose-500 dark:text-rose-400"
+                              : "text-neutral-300 dark:text-neutral-600";
+                          return (
+                            <div key={tracker.id} className="flex items-center gap-3 py-3 first:pt-3 last:pb-3">
+                              <div className="min-w-0 flex-1">
+                                <p className="truncate text-[16px] font-semibold text-neutral-950 dark:text-white">{tracker.title}</p>
+                                <div className="flex min-w-0 items-center gap-1.5">
+                                  <p className="truncate text-[14px] font-semibold text-neutral-500 dark:text-neutral-400">
+                                    {formatTrackerValue(latest, tracker)}
+                                  </p>
+                                  {trend && <TrendChange direction={trend.direction} state={trend.state} pct={trend.pct} />}
+                                </div>
+                              </div>
+                              <Sparkline values={series} className={trendColorClass} />
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  haptic("light");
+                                  setEntryTracker(tracker);
+                                }}
+                                aria-label={`Log ${tracker.title}`}
+                                className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-neutral-950 text-white transition-transform active:scale-95 dark:bg-white dark:text-neutral-950"
+                              >
+                                <IconPlus size={21} strokeWidth={2.2} />
+                              </button>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  ))}
                 </div>
               )}
             </section>
@@ -1409,7 +1459,7 @@ export default function IOSScheduleApp() {
                       <div className="min-w-0">
                         <p className="truncate text-[16px] font-semibold text-neutral-950 dark:text-white">
                           {ritual.title}
-                          {ritual.time && <span className="ml-1.5 text-[12px] font-semibold text-neutral-400 dark:text-neutral-500">{ritual.time}</span>}
+                          {ritual.time && <span className="ml-1.5 text-[12px] font-semibold text-neutral-400 dark:text-neutral-500">{formatDisplayTime(ritual.time)}</span>}
                         </p>
                         <div className="mt-0.5 flex items-center gap-2.5">
                           {streak > 0 && (
@@ -1439,7 +1489,7 @@ export default function IOSScheduleApp() {
     if (activeTab === 0) {
       return (
         <ErrorBoundary section name="Today list">
-          <div className="space-y-5 px-4 pt-5">
+          <div className="space-y-5 px-4 pt-5" data-tour="today-timeline">
             <div className="bg-white py-4 rounded-2xl dark:bg-neutral-950">
               <div className="mb-3 flex items-center justify-between px-4">
                 <span className="text-[20px] font-bold text-neutral-900 dark:text-white">{weekLabel}</span>
@@ -1582,7 +1632,7 @@ export default function IOSScheduleApp() {
       }
       return (
         <ErrorBoundary section name="Plans">
-          <div className="space-y-3 px-4 pt-5">
+          <div className="space-y-3 px-4 pt-5" data-tour="plans-list">
             {schedule.plans.length === 0 ? (
               <EmptyPanel icon={IconClipboardData} title="No plans yet" description="Create a plan first, then add tasks to schedule your day." action={{ label: "Create Plan", onClick: () => setAddingPlan(true) }} />
             ) : (
@@ -1627,18 +1677,20 @@ export default function IOSScheduleApp() {
       return (
         <IOSMotionBoundary>
           <ErrorBoundary section name="Routine">
-            <RitualView
-              rituals={schedule.rituals ?? []}
-              ritualCompletions={schedule.ritualCompletions ?? []}
-              onToggleComplete={handleToggleRitualComplete}
-              onAdd={handleAddRitual}
-              onUpdate={handleUpdateRitual}
-              onDelete={handleDeleteRitual}
-              onReorder={(reordered) => setSchedule((prev) => ({ ...prev, rituals: reordered }))}
-              addOpen={ritualAddOpen}
-              onAddOpenChange={setRitualAddOpen}
-              weekHistory={ritualWeekHistory}
-            />
+            <div data-tour="routine-view">
+              <RitualView
+                rituals={schedule.rituals ?? []}
+                ritualCompletions={schedule.ritualCompletions ?? []}
+                onToggleComplete={handleToggleRitualComplete}
+                onAdd={handleAddRitual}
+                onUpdate={handleUpdateRitual}
+                onDelete={handleDeleteRitual}
+                onReorder={(reordered) => setSchedule((prev) => ({ ...prev, rituals: reordered }))}
+                addOpen={ritualAddOpen}
+                onAddOpenChange={setRitualAddOpen}
+                weekHistory={ritualWeekHistory}
+              />
+            </div>
           </ErrorBoundary>
         </IOSMotionBoundary>
       );
@@ -1764,6 +1816,18 @@ export default function IOSScheduleApp() {
           onCreateRitual={() => { setActiveTab(2); setRitualAddOpen(true); }}
           onCreateNote={openQuickNote}
         />
+      )}
+
+      {/* ── Per-tab guided tour — short, skippable, once per device ─────────
+          CoachMarks uses framer-motion's `m.*` primitives, which render
+          inert (frozen at their `initial` style — opacity: 0 here) without a
+          LazyMotion ancestor. The desktop shell has one wrapping its whole
+          tree; this shell only wraps individual sections, so it needs its
+          own boundary here. */}
+      {activeTourId && (
+        <IOSMotionBoundary>
+          <CoachMarks open={tour.open} steps={TOUR_STEPS[activeTourId]} onFinish={tour.finish} />
+        </IOSMotionBoundary>
       )}
 
       {wallpaperOpen && (

@@ -6,7 +6,7 @@ import { IconArrowRight, IconBrain, IconEraser, IconSend, IconSparkles, IconX } 
 import ReactMarkdown from "react-markdown";
 import { parseAIAction, buildSystemPrompt, buildPlanContext } from "@/lib/ai";
 import type { AIActionResult } from "@/lib/ai";
-import { streamGeminiChat } from "@/lib/aiClient";
+import { streamAI } from "@/lib/ai/providers/router";
 import { useAuth } from "@/contexts/AuthProvider";
 import { useAIActions } from "@/lib/ai/useAIActions";
 import AISignInGate from "@/components/auth/AISignInGate";
@@ -14,6 +14,7 @@ import { findPlanByTitle, findTasksByTitle } from "@/lib/planLookup";
 import type { Plan, Ritual, Schedule } from "@/lib/useScheduleDB";
 import { SECTION_ICONS, getIconPickerStyle } from "@/components/SectionIcons";
 import type { AITask } from "@/lib/ai";
+import { formatDisplayTime } from "@/lib/timeUtils";
 
 interface Message {
   role: "user" | "assistant";
@@ -183,7 +184,7 @@ function PlanDraftCard({ action, onApply }: { action: Extract<AIActionResult, { 
                         {DAY_SHORT[t.day] ?? t.day}
                       </span>
                       <span className="text-[11px] font-semibold text-neutral-800 dark:text-neutral-200 truncate">{t.title}</span>
-                      <span className="ml-auto shrink-0 text-[10px] text-neutral-400">{t.startTime}–{t.endTime}</span>
+                      <span className="ml-auto shrink-0 text-[10px] text-neutral-400">{formatDisplayTime(t.startTime)}–{formatDisplayTime(t.endTime)}</span>
                     </div>
                     {t.subtasks && t.subtasks.length > 0 && (
                       <p className="mt-0.5 text-[10px] text-neutral-400 dark:text-neutral-500 truncate">
@@ -437,7 +438,7 @@ export function AIPanel({ context, plans, rituals, schedule, activePlan, initial
       // Always request the larger token budget: with the unified prompt, any
       // context can now emit a long create_strategy doc or a create_plan with
       // several bundled tasks — it's a ceiling, not a forced length.
-      for await (const chunk of streamGeminiChat(user, history, systemPrompt, true, controller.signal)) {
+      for await (const chunk of streamAI(user, history, systemPrompt, true, controller.signal)) {
         fullText += chunk;
         setMessages((prev) => {
           const updated = [...prev];
@@ -659,7 +660,7 @@ export function AIPanel({ context, plans, rituals, schedule, activePlan, initial
       <div className="shrink-0 border-t border-white/10 px-3 py-3">
         <m.div
           transition={{ duration: 0.15 }}
-          className={`flex items-center gap-2 rounded-full border bg-white/5 px-3 py-2 transition-colors ${focused ? "border-blue-500/30" : "border-white/10"}`}
+          className={`flex items-end gap-2 rounded-2xl border bg-white/5 px-3 py-2 transition-colors ${focused ? "border-blue-500/30" : "border-white/10"}`}
           style={{ borderColor: focused ? "rgba(59,130,246,0.25)" : undefined }}
         >
           <textarea
@@ -675,10 +676,10 @@ export function AIPanel({ context, plans, rituals, schedule, activePlan, initial
               }
             }}
             placeholder={`Ask about ${contextLabel.toLowerCase()}…`}
-            rows={1}
+            rows={3}
             disabled={streaming}
             className="flex-1 resize-none bg-transparent text-[13px] text-white outline-none placeholder:text-white/50 disabled:opacity-50"
-            style={{ minHeight: "22px", maxHeight: "80px" }}
+            style={{ minHeight: "72px", maxHeight: "160px" }}
           />
           <m.button
             type="button"

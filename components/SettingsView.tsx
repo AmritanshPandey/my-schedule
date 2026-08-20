@@ -8,6 +8,7 @@ import {
   IconCheck,
   IconClock,
   IconCloud,
+  IconCompass,
   IconCopy,
   IconMoon,
   IconRefresh,
@@ -33,6 +34,10 @@ import { clearErrorLog } from "@/lib/errorLog";
 import { isErrorTelemetryEnabled, setErrorTelemetryEnabled } from "@/lib/errorTelemetry";
 import { clearBootLog } from "@/lib/iosSafeMode";
 import { AI_ENABLED } from "@/lib/featureFlags";
+import { AISettingsSheet } from "@/components/ai/AISettingsSheet";
+import { getActiveProviderType } from "@/lib/ai/providers/settings";
+import { resetTour } from "@/lib/onboarding/useCoachTour";
+import { TOUR_IDS } from "@/lib/onboarding/tours";
 import { formatDisplayTime, minutesToInputTime } from "@/lib/timeUtils";
 import type { Schedule, SchedulePreferences } from "@/lib/useScheduleDB";
 import ConfirmSheet from "@/components/ui/ConfirmSheet";
@@ -101,37 +106,92 @@ function readTheme(): ThemeMode {
 
 // ── AI section ────────────────────────────────────────────────────────────────
 //
-// AI runs on one shared, developer-owned Gemini key — there's no model or
-// server to configure. Sign-in (above, in Account) is what unlocks it; this
-// card just states that plainly.
+// A thin row that opens the shared AISettingsSheet — the same component the
+// mobile "AI Configuration" row (components/auth/SettingsSheet.tsx) and the
+// AI Assistant's gear icon open. Previously this rendered its own separate,
+// Gemini-only-copy card that bypassed AISettingsSheet entirely; now there's
+// one source of truth for AI settings (provider picker, Gemini status, MLX
+// config) with two thin entry points instead of three divergent surfaces.
 
 function AISection() {
   const { isGuest } = useAuth();
+  const [open, setOpen] = useState(false);
+  const [provider, setProvider] = useState(() => getActiveProviderType());
+
+  const statusLabel =
+    provider === "mlx"
+      ? "MLX (local) · No sign-in"
+      : isGuest ? "Sign in to use it" : "Ready · Free, with a daily limit";
 
   return (
-    <Card>
-      <Row>
-        <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-[#AD46FF]">
-          <IconBrain size={18} strokeWidth={1.8} className="text-white" />
+    <>
+      <Card>
+        <button
+          type="button"
+          onClick={() => setOpen(true)}
+          className="flex w-full items-center gap-3 px-4 py-3.5 text-left transition-colors hover:bg-neutral-50 dark:hover:bg-white/[0.03]"
+        >
+          <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-[#AD46FF]">
+            <IconBrain size={18} strokeWidth={1.8} className="text-white" />
+          </div>
+          <div className="min-w-0 flex-1">
+            <p className="text-[14px] font-bold text-neutral-900 dark:text-white">
+              {provider === "mlx" ? "MLX AI" : "Gemini AI"}
+            </p>
+            <p className="text-[12px] font-medium text-neutral-400 dark:text-neutral-500">{statusLabel}</p>
+          </div>
+          <IconChevronDown size={14} strokeWidth={2} className="-rotate-90 shrink-0 text-neutral-400" />
+        </button>
+      </Card>
+
+      <AISettingsSheet
+        open={open}
+        onClose={() => { setOpen(false); setProvider(getActiveProviderType()); }}
+      />
+    </>
+  );
+}
+
+// ── Replay guided tours row ──────────────────────────────────────────────────
+//
+// Clears every per-page tour's "seen" flag so the short coach-mark intro
+// shows again the next time each tab is visited — the tour engine itself
+// only ever auto-starts once per device, so this is the one way back in
+// (matches "make replayable" for guided tours).
+
+function ReplayToursRow() {
+  const [justReset, setJustReset] = useState(false);
+
+  function handleReplay() {
+    haptic("light");
+    TOUR_IDS.forEach(resetTour);
+    setJustReset(true);
+    window.setTimeout(() => setJustReset(false), 2200);
+  }
+
+  return (
+    <>
+      <Divider />
+      <div className="flex items-center gap-3 px-4 py-3.5">
+        <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl border border-neutral-200 bg-neutral-50 text-neutral-500 dark:border-white/[0.08] dark:bg-white/[0.04] dark:text-neutral-300">
+          <IconCompass size={14} strokeWidth={2} />
         </div>
         <div className="min-w-0 flex-1">
-          <p className="text-[14px] font-bold text-neutral-900 dark:text-white">Gemini AI</p>
-          <p className={`text-[12px] font-medium ${
-            isGuest ? "text-neutral-400 dark:text-neutral-500" : "text-emerald-600 dark:text-emerald-400"
-          }`}>
-            {isGuest ? "Sign in above to use it" : "Ready · Free, with a daily limit"}
+          <p className="text-[13px] font-semibold text-neutral-800 dark:text-white">Guided tours</p>
+          <p className="mt-0.5 text-[11px] leading-snug text-neutral-400 dark:text-neutral-500">
+            {justReset ? "Reset — they'll show again as you visit each tab." : "Short intro to Today, Plans, and Routine"}
           </p>
         </div>
-      </Row>
-      <Divider />
-      <Row>
-        <IconShield size={14} strokeWidth={2} className="shrink-0 text-emerald-500" />
-        <p className="text-[12px] text-neutral-500 dark:text-neutral-400">
-          Powered by Google Gemini through PlanR&apos;s server. Each account gets a daily
-          limit so the shared quota holds up for everyone.
-        </p>
-      </Row>
-    </Card>
+        <button
+          type="button"
+          onClick={handleReplay}
+          disabled={justReset}
+          className="shrink-0 rounded-xl border border-neutral-200 bg-neutral-50 px-3 py-1.5 text-[11px] font-semibold text-neutral-700 hover:bg-neutral-100 disabled:opacity-50 dark:border-white/[0.08] dark:bg-white/[0.04] dark:text-neutral-200"
+        >
+          {justReset ? "Done" : "Replay"}
+        </button>
+      </div>
+    </>
   );
 }
 
@@ -627,6 +687,7 @@ export function SettingsView({
                   {refreshing ? "Updating…" : "Update"}
                 </button>
               </div>
+              <ReplayToursRow />
               <Divider />
               <div className="px-4 py-2.5">
                 <p className="text-[10px] text-neutral-300 dark:text-neutral-600">{versionLabel()}</p>

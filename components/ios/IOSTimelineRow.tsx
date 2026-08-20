@@ -104,10 +104,11 @@ export default function IOSTimelineRow({
   // ── Rail node ───────────────────────────────────────────────────────────────
   let node: React.ReactNode;
   if (!tracked) {
-    // Held time — a quiet, non-actionable marker.
+    // Held time stays non-actionable, but its marker still joins the progress
+    // spine once its time has elapsed so the timeline reads continuously.
     node = (
       <span className="flex h-7 w-7 items-center justify-center">
-        <span className="h-2.5 w-2.5 rounded-full bg-neutral-300 dark:bg-white/25" />
+        <span className={`h-2.5 w-2.5 rounded-full ${isPast ? "bg-emerald-500 dark:bg-emerald-400" : "bg-neutral-300 dark:bg-white/25"}`} />
       </span>
     );
   } else {

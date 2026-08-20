@@ -8,7 +8,7 @@ import SheetHeader from "@/components/ui/SheetHeader";
 import Pill from "@/components/ui/Pill";
 import type { Task, Plan } from "@/lib/useScheduleDB";
 import type { ScheduleEntry } from "@/components/ScheduleItem";
-import { formatMinutes } from "@/lib/timeUtils";
+import { formatDisplayTime, formatMinutes } from "@/lib/timeUtils";
 
 interface SessionSheetProps {
   isOpen: boolean;
@@ -52,7 +52,7 @@ export default function SessionSheet({
         {(task.startTime || task.endTime) && (
           <div className="flex items-center gap-2">
             <Pill variant="subtle" size="md" className="px-3.5 py-1.5 text-neutral-600 dark:text-neutral-400">
-              {task.startTime}{task.endTime ? ` – ${task.endTime}` : ""}
+              {formatDisplayTime(task.startTime)}{task.endTime ? ` – ${formatDisplayTime(task.endTime)}` : ""}
             </Pill>
           </div>
         )}

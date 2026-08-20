@@ -105,7 +105,8 @@ export function inputToDisplayTime(value: string): string {
  * run a value through this before showing it. Returns the trimmed input
  * unchanged if it can't be parsed.
  */
-export function formatDisplayTime(value: string): string {
+export function formatDisplayTime(value: string | undefined | null): string {
+  if (!value) return "";
   const minutes = parseTimeToMinutes(value);
   if (minutes === null) return value.trim();
   let h = Math.floor(minutes / 60) % 24;

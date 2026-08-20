@@ -1,3 +1,4 @@
+import { formatDisplayTime } from "@/lib/timeUtils";
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
@@ -52,7 +53,7 @@ interface SheetConfig {
   quickPicks: string[];
   resultSingular: string;
   resultPlural: string;
-  onGenerate: (goal: string, picks: string[]) => AsyncGenerator<string>;
+  onGenerate: (goal: string, picks: string[], followUp?: { question: string; answer: string }) => AsyncGenerator<string>;
   onParseResults: (raw: string) => ResultItem[];
   onAdd: (items: ResultItem[]) => void;
 }
@@ -173,9 +174,9 @@ export default function AIAssistant({
       quickPicks: ["Mornings", "Evenings", "Weekdays only", "Short sessions", "High intensity"],
       resultSingular: "task",
       resultPlural: "tasks",
-      onGenerate: (goal, picks) => {
+      onGenerate: (goal, picks, followUp) => {
         const hints = [customGoal, goal, ...picks].filter(Boolean).join(". ");
-        return ai.streamTasks(plan.title, hints || plan.description);
+        return ai.streamTasks(plan.title, hints || plan.description, undefined, followUp);
       },
       onParseResults: (raw) => {
         const tasks = parseGeneratedTasks(raw);
@@ -183,7 +184,7 @@ export default function AIAssistant({
         return tasks.map((t, i) => ({
           id: String(i),
           label: t.title,
-          meta: `${t.day.charAt(0).toUpperCase() + t.day.slice(1)} · ${t.startTime}–${t.endTime}`,
+          meta: `${t.day.charAt(0).toUpperCase() + t.day.slice(1)} · ${formatDisplayTime(t.startTime)}–${formatDisplayTime(t.endTime)}`,
           badge: t.icon,
         }));
       },
@@ -206,12 +207,14 @@ export default function AIAssistant({
       quickPicks: ["Step-by-step", "Quick wins", "Deep work", "Weekly check-ins"],
       resultSingular: "task",
       resultPlural: "tasks",
-      onGenerate: async function* (goal, picks) {
+      onGenerate: async function* (goal, picks, followUp) {
         if (!activeMilestone || !selectedPlan) return;
         const hints = [customGoal, goal, ...picks].filter(Boolean).join(". ");
         yield* ai.streamMilestoneTasks(
           { title: activeMilestone.title, description: hints || activeMilestone.description },
           { title: selectedPlan.title, description: selectedPlan.description },
+          undefined,
+          followUp,
         );
       },
       onParseResults: (raw) => {
@@ -220,7 +223,7 @@ export default function AIAssistant({
         return tasks.map((t, i) => ({
           id: String(i),
           label: t.title,
-          meta: `${t.day.charAt(0).toUpperCase() + t.day.slice(1)} · ${t.startTime}–${t.endTime}`,
+          meta: `${t.day.charAt(0).toUpperCase() + t.day.slice(1)} · ${formatDisplayTime(t.startTime)}–${formatDisplayTime(t.endTime)}`,
           badge: t.icon,
         }));
       },
@@ -244,15 +247,19 @@ export default function AIAssistant({
       quickPicks: ["Quarterly", "Monthly", "Bi-weekly", "Ambitious", "Conservative"],
       resultSingular: "milestone",
       resultPlural: "milestones",
-      onGenerate: async function* (goal, picks) {
+      onGenerate: async function* (goal, picks, followUp) {
         if (!selectedPlan) return;
         const hints = [customGoal, goal, ...picks].filter(Boolean).join(". ");
-        yield* ai.streamMilestones({
-          title: selectedPlan.title,
-          description: hints || selectedPlan.description,
-          startDate: selectedPlan.startDate,
-          endDate: selectedPlan.endDate,
-        });
+        yield* ai.streamMilestones(
+          {
+            title: selectedPlan.title,
+            description: hints || selectedPlan.description,
+            startDate: selectedPlan.startDate,
+            endDate: selectedPlan.endDate,
+          },
+          undefined,
+          followUp,
+        );
       },
       onParseResults: (raw) => {
         const milestones = parseGeneratedMilestones(raw);
