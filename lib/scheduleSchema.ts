@@ -80,6 +80,16 @@ export const TaskSchema = z.object({
   activeUntil: isoDate.optional(),
 }).passthrough();
 
+const planMetricGoal = z.object({
+  id: nonEmptyId,
+  metric: z.string(),
+  target: z.number().finite(),
+  direction: z.enum(["below", "above"]),
+  unit: z.string(),
+  startDate: isoDate,
+  deadline: isoDate.optional(),
+}).passthrough();
+
 export const PlanSchema = z.object({
   id: nonEmptyId,
   title: z.string(),
@@ -92,15 +102,7 @@ export const PlanSchema = z.object({
   items: z.array(scheduleEntry),
   metaFields: z.array(z.string()).optional(),
   summary: z.array(z.object({ label: z.string(), metaKey: z.string(), unit: z.string(), colorClass: z.string().optional() }).passthrough()).optional(),
-  goals: z.array(z.object({
-    id: nonEmptyId,
-    metric: z.string(),
-    target: z.number().finite(),
-    direction: z.enum(["below", "above"]),
-    unit: z.string(),
-    startDate: isoDate,
-    deadline: isoDate.optional(),
-  }).passthrough()).optional(),
+  goals: z.array(planMetricGoal).optional(),
   metric: z.object({ name: z.string(), unit: z.string() }).optional(),
   coachMessages: z.array(z.object({
     role: z.enum(["user", "assistant"]),
@@ -108,6 +110,31 @@ export const PlanSchema = z.object({
     type: z.literal("confirmation").optional(),
     suggestedMilestones: z.array(z.object({ title: z.string(), description: z.string(), targetDate: isoDate.optional() }).passthrough()).optional(),
   }).passthrough()).optional(),
+  // Optional link to a first-class Goal (Schedule.goals). Absent on every
+  // existing Plan — never required.
+  goalId: z.string().optional(),
+}).passthrough();
+
+export const GoalStatusSchema = z.enum(["active", "completed", "paused", "archived"]);
+
+export const GoalSchema = z.object({
+  id: nonEmptyId,
+  title: z.string(),
+  description: z.string().optional(),
+  status: GoalStatusSchema,
+  startDate: isoDate.optional(),
+  targetDate: isoDate.optional(),
+  createdAt: isoDateTime,
+  updatedAt: isoDateTime,
+  schemaVersion: z.number().finite().nonnegative(),
+}).passthrough();
+
+export const ScheduleEventSchema = z.object({
+  id: nonEmptyId,
+  type: z.enum(["GOAL_CREATED", "GOAL_UPDATED", "GOAL_COMPLETED", "GOAL_ARCHIVED", "GOAL_DELETED"]),
+  entityId: nonEmptyId,
+  timestamp: isoDateTime,
+  data: z.record(z.string(), z.unknown()).optional(),
 }).passthrough();
 
 export const ProgressTrackerSchema = z.object({
@@ -200,6 +227,7 @@ const preferences = z.object({
 }).passthrough();
 
 export const ScheduleSchema = z.object({
+  goals: z.array(GoalSchema),
   plans: z.array(PlanSchema),
   categories: z.array(z.object({ id: nonEmptyId, title: z.string(), icon: z.string(), color: accentColor, sortOrder: z.number().finite().optional() }).passthrough()),
   activities: z.object(Object.fromEntries(DAYS.map((day) => [day, z.array(TaskSchema)])) as Record<string, z.ZodType>).passthrough(),
@@ -210,6 +238,7 @@ export const ScheduleSchema = z.object({
   strategies: z.array(StrategySchema),
   ritualCompletions: z.array(RitualCompletionSchema),
   notes: z.array(NoteSchema),
+  events: z.array(ScheduleEventSchema),
   preferences,
 }).passthrough();
 

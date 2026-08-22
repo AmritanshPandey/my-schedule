@@ -102,6 +102,7 @@ import {
   IconX,
   IconClipboardData,
   IconStack2,
+  IconTargetArrow,
 } from "@tabler/icons-react";
 import { DndContext, DragEndEvent, PointerSensor, useSensor, useSensors } from "@dnd-kit/core";
 import { arrayMove, SortableContext, useSortable, verticalListSortingStrategy } from "@dnd-kit/sortable";
@@ -186,6 +187,8 @@ import ProgressBar from "@/components/ui/ProgressBar";
 import { normalizeMilestoneTimeline, cascadeMilestoneDates } from "@/lib/roadmapDates";
 import AddPlanSheet from "@/components/plan/AddPlanSheet";
 import EditPlanSheet from "@/components/plan/EditPlanSheet";
+import GoalListSheet from "@/components/goal/GoalListSheet";
+import { deleteGoal } from "@/lib/goalMutations";
 import { haptic } from "@/lib/haptics";
 import { buildDeleteConfirmationCopy } from "@/lib/deleteConfirm";
 import { resolveCustomVisibleDates } from "@/lib/customView";
@@ -801,6 +804,7 @@ export default function ScheduleApp() {
   } | null>(null);
 
   const [addingPlan, setAddingPlan] = useState(false);
+  const [goalsSheetOpen, setGoalsSheetOpen] = useState(false);
   const [aiPlanCreating, setAiPlanCreating] = useState(false);
   const [aiOpen, setAiOpen] = useState(false);
   const [aiInitialMessage, setAiInitialMessage] = useState("");
@@ -1780,6 +1784,17 @@ export default function ScheduleApp() {
         }));
         setSelectedPlanId((cur) => (cur === planId ? null : cur));
       }
+    );
+  }
+
+  function handleDeleteGoal(goalId: string) {
+    const goal = schedule.goals?.find((g) => g.id === goalId);
+    openConfirm(
+      buildDeleteConfirmationCopy("goal", {
+        name: goal?.title,
+        description: "Linked plans are kept — they'll just no longer be tied to this goal.",
+      }),
+      () => setSchedule((prev) => deleteGoal(prev, goalId))
     );
   }
 
@@ -2885,11 +2900,18 @@ export default function ScheduleApp() {
             label="Stay on track"
             title="My Plans"
             actions={
-              <CtaActionButton
-                label="Add New Plan"
-                icon={<IconPlus size={14} strokeWidth={2.5} />}
-                onClick={() => setAddingPlan(true)}
-              />
+              <div className="flex items-center gap-2">
+                <CtaActionButton
+                  label="Goals"
+                  icon={<IconTargetArrow size={14} strokeWidth={2.5} />}
+                  onClick={() => setGoalsSheetOpen(true)}
+                />
+                <CtaActionButton
+                  label="Add New Plan"
+                  icon={<IconPlus size={14} strokeWidth={2.5} />}
+                  onClick={() => setAddingPlan(true)}
+                />
+              </div>
             }
             className="mb-6"
           />
@@ -3895,8 +3917,17 @@ export default function ScheduleApp() {
           plan={plansById.get(editingPlanId) ?? null}
           setSchedule={setSchedule}
           onClose={() => setEditingPlanId(null)}
+          goals={schedule.goals ?? []}
         />
       )}
+      {/* ── Goals Sheet (list + detail + create/edit) ───────────────────────── */}
+      <GoalListSheet
+        open={goalsSheetOpen}
+        onClose={() => setGoalsSheetOpen(false)}
+        schedule={schedule}
+        setSchedule={setSchedule}
+        onDeleteGoal={handleDeleteGoal}
+      />
       {/* ── Add Plan Bottom Sheet ───────────────────────────────────────────── */}
       {addingPlan && (
         <AddPlanSheet
@@ -3908,6 +3939,7 @@ export default function ScheduleApp() {
               ? () => { setAddingPlan(false); setAiPlanCreating(true); }
               : undefined
           }
+          goals={schedule.goals ?? []}
         />
       )}
 

@@ -12,7 +12,7 @@ import { logError } from "@/lib/errorLog";
 import { useAuth } from "@/contexts/AuthProvider";
 import { calculateMilestoneEndDate, normalizeMilestoneTimeline } from "@/lib/roadmapDates";
 import { localISODate } from "@/lib/dateUtils";
-import { DAYS, DAY_LABELS, type DayKey } from "@/lib/scheduleConstants";
+import { DAYS, DAY_LABELS, type DayKey, MAX_SCHEDULE_EVENTS } from "@/lib/scheduleConstants";
 import { normalizeDayStartTime } from "@/lib/timeline/displayWindow";
 import { bootLog } from "@/lib/iosSafeMode";
 
@@ -31,7 +31,12 @@ import { validateSchedule } from "@/lib/scheduleSchema";
 
 export type PlanCategory = "fitness" | "learning" | "work" | "health" | "routine";
 
-export interface Goal {
+/**
+ * A per-Plan metric target (e.g. "burn 500 kcal/day by March 1"), stored on
+ * `Plan.goals`. Predates — and is unrelated to — the first-class `Goal`
+ * outcome entity below; named distinctly so the two don't collide.
+ */
+export interface PlanMetricGoal {
   id: string;
   metric: string;
   target: number;
@@ -39,6 +44,51 @@ export interface Goal {
   unit: string;
   startDate: string;
   deadline?: string;
+}
+
+/** Explicit user/system state for a Goal. Deliberately small for now — derived
+ * states (at-risk, overdue, blocked) belong to a future intelligence layer. */
+export type GoalStatus = "active" | "completed" | "paused" | "archived";
+
+/**
+ * A first-class outcome the user is ultimately trying to achieve — the "why"
+ * above a Plan's "what". Purely descriptive for now: no health/risk/score,
+ * no derived progress. Plans optionally reference a Goal via `Plan.goalId`;
+ * a Goal never stores its own Plan ids (see lib/goalMutations.ts).
+ */
+export interface Goal {
+  id: string;
+  title: string;
+  description?: string;
+  status: GoalStatus;
+  startDate?: string;
+  targetDate?: string;
+  createdAt: string;
+  updatedAt: string;
+  schemaVersion: number;
+}
+
+/** Domain event types recorded for Goal actions (see lib/goalMutations.ts). */
+export type GoalEventType =
+  | "GOAL_CREATED"
+  | "GOAL_UPDATED"
+  | "GOAL_COMPLETED"
+  | "GOAL_ARCHIVED"
+  | "GOAL_DELETED";
+
+/**
+ * A minimal append-only domain event log, persisted on `Schedule.events`.
+ * Currently only Goal actions are recorded; the shape is intentionally
+ * generic so future domain events (Plan, Milestone, ...) can reuse it
+ * without a redesign. Capped (see MAX_SCHEDULE_EVENTS) so it can't grow
+ * unbounded.
+ */
+export interface ScheduleEvent {
+  id: string;
+  type: GoalEventType;
+  entityId: string;
+  timestamp: string; // ISO 8601
+  data?: Record<string, unknown>;
 }
 
 export interface TaskCompletionEvent {
@@ -176,9 +226,17 @@ export interface Plan {
   items: ScheduleEntry[];
   metaFields?: string[];
   summary?: SummaryConfig[];
-  goals?: Goal[];
+  goals?: PlanMetricGoal[];
   metric?: { name: string; unit: string };
   coachMessages?: PlanCoachMessage[];
+  /**
+   * Optional link to a first-class Goal (the outcome this plan serves).
+   * Undefined = no Goal, which is the default for every existing Plan and
+   * remains fully valid — never made mandatory. A Goal's plans are derived
+   * by filtering on this field (see lib/goalMutations.ts); it is never
+   * stored as a reverse list on Goal.
+   */
+  goalId?: string;
 }
 
 export interface ProgressTracker {
@@ -345,6 +403,7 @@ export interface TaskCategory {
 }
 
 export interface Schedule {
+  goals: Goal[];
   plans: Plan[];
   categories: TaskCategory[];
   activities: DayActivities;
@@ -355,6 +414,7 @@ export interface Schedule {
   strategies: StrategyAsset[];
   ritualCompletions: RitualCompletion[];
   notes: Note[];
+  events: ScheduleEvent[];
   preferences: SchedulePreferences;
 }
 
@@ -419,6 +479,7 @@ function deleteDBKey(db: IDBDatabase, key: string): Promise<void> {
  * account. Empty/untouched guest records are ignored.
  */
 function hasMeaningfulData(s: Schedule): boolean {
+  if ((s.goals?.length ?? 0) > 0) return true;
   if ((s.plans?.length ?? 0) > 0) return true;
   if ((s.notes?.length ?? 0) > 0) return true;
   if ((s.progressTrackers?.length ?? 0) > 0) return true;
@@ -521,7 +582,60 @@ function normalizePlan(value: unknown): Plan | null {
     goals: Array.isArray(p.goals) ? p.goals : [],
     metric,
     coachMessages,
+    goalId: typeof (p as Plan & { goalId?: unknown }).goalId === "string" ? (p as Plan & { goalId: string }).goalId : undefined,
   };
+}
+
+/** Keep only well-formed stored Goals; anything malformed is dropped. */
+function normalizeGoal(value: unknown): Goal | null {
+  if (!value || typeof value !== "object") return null;
+  const g = value as Record<string, unknown>;
+  if (typeof g.id !== "string" || !g.id) return null;
+  if (typeof g.title !== "string" || !g.title.trim()) return null;
+  const now = new Date().toISOString();
+  const status: GoalStatus =
+    g.status === "completed" || g.status === "paused" || g.status === "archived" ? g.status : "active";
+  return {
+    id: g.id,
+    title: g.title,
+    description: typeof g.description === "string" ? g.description : undefined,
+    status,
+    startDate: typeof g.startDate === "string" ? g.startDate : undefined,
+    targetDate: typeof g.targetDate === "string" ? g.targetDate : undefined,
+    createdAt: typeof g.createdAt === "string" ? g.createdAt : now,
+    updatedAt: typeof g.updatedAt === "string" ? g.updatedAt : now,
+    schemaVersion: typeof g.schemaVersion === "number" ? g.schemaVersion : 1,
+  };
+}
+
+function normalizeGoals(raw: unknown): Goal[] {
+  if (!Array.isArray(raw)) return [];
+  return raw.map(normalizeGoal).filter((g): g is Goal => g !== null);
+}
+
+const GOAL_EVENT_TYPES: readonly GoalEventType[] = [
+  "GOAL_CREATED",
+  "GOAL_UPDATED",
+  "GOAL_COMPLETED",
+  "GOAL_ARCHIVED",
+  "GOAL_DELETED",
+];
+
+function normalizeScheduleEvent(value: unknown): ScheduleEvent | null {
+  if (!value || typeof value !== "object") return null;
+  const e = value as Record<string, unknown>;
+  if (typeof e.id !== "string" || !e.id) return null;
+  if (typeof e.entityId !== "string" || !e.entityId) return null;
+  if (typeof e.timestamp !== "string") return null;
+  if (typeof e.type !== "string" || !GOAL_EVENT_TYPES.includes(e.type as GoalEventType)) return null;
+  const data = e.data && typeof e.data === "object" && !Array.isArray(e.data) ? (e.data as Record<string, unknown>) : undefined;
+  return { id: e.id, type: e.type as GoalEventType, entityId: e.entityId, timestamp: e.timestamp, data };
+}
+
+function normalizeScheduleEvents(raw: unknown): ScheduleEvent[] {
+  if (!Array.isArray(raw)) return [];
+  const events = raw.map(normalizeScheduleEvent).filter((e): e is ScheduleEvent => e !== null);
+  return events.length > MAX_SCHEDULE_EVENTS ? events.slice(events.length - MAX_SCHEDULE_EVENTS) : events;
 }
 
 function defaultTrackerId(planId: string): string {
@@ -780,6 +894,7 @@ function migrate(raw: unknown): Schedule {
     ) as DayActivities;
 
     return {
+      goals: normalizeGoals(r.goals),
       plans,
       categories: categories.all(),
       activities: applyPlanStartDates(migratedActivities, plans),
@@ -790,6 +905,7 @@ function migrate(raw: unknown): Schedule {
       strategies,
       ritualCompletions,
       notes,
+      events: normalizeScheduleEvents(r.events),
       preferences,
     };
   }
@@ -809,6 +925,7 @@ function migrate(raw: unknown): Schedule {
     ) as DayActivities;
 
     return {
+      goals: normalizeGoals(r.goals),
       plans,
       categories: categories.all(),
       activities: migratedActivities,
@@ -819,6 +936,7 @@ function migrate(raw: unknown): Schedule {
       strategies: [],
       ritualCompletions: [],
       notes: normalizeNotes(r.notes),
+      events: normalizeScheduleEvents(r.events),
       preferences,
     };
   }
@@ -846,6 +964,7 @@ function migrate(raw: unknown): Schedule {
   plans[1].items = Array.isArray(r.workout) ? (r.workout as ScheduleEntry[]) : [];
 
   return {
+    goals: normalizeGoals(r.goals),
     plans,
     categories: categories.all(),
     activities,
@@ -856,6 +975,7 @@ function migrate(raw: unknown): Schedule {
     strategies: [],
     ritualCompletions: [],
     notes: normalizeNotes(r.notes),
+    events: normalizeScheduleEvents(r.events),
     preferences,
   };
 }
@@ -942,6 +1062,7 @@ function normalizeSchedulePreferences(raw: unknown): SchedulePreferences {
 
 function emptyEmpty(): Schedule {
   return {
+    goals: [],
     plans: [],
     categories: [],
     activities: emptyDayActivities(),
@@ -952,6 +1073,7 @@ function emptyEmpty(): Schedule {
     strategies: [],
     ritualCompletions: [],
     notes: [],
+    events: [],
     preferences: {},
   };
 }

@@ -7,6 +7,7 @@ import {
   type ProgressTracker,
   type Plan,
   type Schedule,
+  type Goal,
 } from "@/lib/useScheduleDB";
 import { uid } from "@/lib/id";
 import { colorFromIcon, type AccentColor } from "@/lib/colorSystem";
@@ -53,9 +54,12 @@ interface AddPlanSheetProps {
    * dated milestones from a one-line goal. Omitted (or AI disabled) hides the
    * entry point entirely rather than showing a dead button. */
   onUseAI?: () => void;
+  /** First-class Goals available to optionally link this Plan to. Omitted /
+   * empty simply hides the picker — the relationship is always optional. */
+  goals?: Goal[];
 }
 
-export default function AddPlanSheet({ open, onClose, setSchedule, onUseAI }: AddPlanSheetProps) {
+export default function AddPlanSheet({ open, onClose, setSchedule, onUseAI, goals = [] }: AddPlanSheetProps) {
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
   const [startDate, setStartDate] = useState("");
@@ -64,6 +68,7 @@ export default function AddPlanSheet({ open, onClose, setSchedule, onUseAI }: Ad
   const [color, setColor] = useState<AccentColor>(() => colorFromIcon("brain"));
   const [metaFields, setMetaFields] = useState<string[]>([]);
   const [metaInput, setMetaInput] = useState("");
+  const [goalId, setGoalId] = useState("");
 
   function reset() {
     setTitle("");
@@ -74,6 +79,7 @@ export default function AddPlanSheet({ open, onClose, setSchedule, onUseAI }: Ad
     setColor(colorFromIcon("brain"));
     setMetaFields([]);
     setMetaInput("");
+    setGoalId("");
   }
 
   function handleClose() {
@@ -97,6 +103,7 @@ export default function AddPlanSheet({ open, onClose, setSchedule, onUseAI }: Ad
         items: [],
         metaFields,
         summary: createSummaryFromMeta(metaFields),
+        goalId: goalId || undefined,
       };
       const trackers: ProgressTracker[] = metaFields.map((field) => ({
         id: uid(),
@@ -192,6 +199,24 @@ export default function AddPlanSheet({ open, onClose, setSchedule, onUseAI }: Ad
             onSelect={(s, e) => { setStartDate(s); setEndDate(e); }}
           />
         </div>
+
+        {goals.length > 0 && (
+          <div>
+            <p className="mb-1 text-[11px] font-semibold uppercase tracking-[0.08em] text-neutral-400 dark:text-neutral-500">
+              Goal <span className="normal-case font-normal text-neutral-400">(optional)</span>
+            </p>
+            <select
+              value={goalId}
+              onChange={(e) => setGoalId(e.target.value)}
+              className="h-11 w-full min-w-0 rounded-xl border border-neutral-200 bg-neutral-50 px-3 text-[14px] text-neutral-900 outline-none transition-colors focus:border-neutral-300 focus:bg-neutral-100 dark:border-white/10 dark:bg-white/[0.04] dark:text-white dark:focus:border-white/20 dark:focus:bg-white/[0.07] dark:[color-scheme:dark]"
+            >
+              <option value="">No Goal</option>
+              {goals.map((g) => (
+                <option key={g.id} value={g.id}>{g.title}</option>
+              ))}
+            </select>
+          </div>
+        )}
 
         <div>
           <p className="mb-2 text-[11px] font-semibold uppercase tracking-[0.08em] text-neutral-400 dark:text-neutral-500">Icon</p>

@@ -146,6 +146,7 @@ function baseTask(id = "delete-me") {
 
 function validSchedule() {
   return {
+    goals: [],
     plans: [{
       id: "plan-1",
       title: "Plan",
@@ -163,6 +164,7 @@ function validSchedule() {
     strategies: [],
     ritualCompletions: [],
     notes: [],
+    events: [],
     preferences: {},
   };
 }

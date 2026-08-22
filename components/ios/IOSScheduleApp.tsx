@@ -79,6 +79,7 @@ import { completionForDate, getTaskCheckableItems, getTaskSubtaskSummary, isTask
 import { diffException, isTaskScheduledOn, resolveOccurrence } from "@/lib/taskOccurrence";
 import { cascadeMilestoneDates, normalizeMilestoneTimeline } from "@/lib/roadmapDates";
 import { toggleRitualCompletion } from "@/lib/ritualCompletions";
+import { deleteGoal } from "@/lib/goalMutations";
 import { formatDisplayTime, inputToDisplayTime, minutesToInputTime, parseTimeToMinutes, toScheduleDayMinutes } from "@/lib/timeUtils";
 import { computeTrend } from "@/lib/trendUtils";
 import { getPlanCardStats } from "@/lib/planInsights";
@@ -103,6 +104,7 @@ const TaskSheet = dynamic(() => import("@/components/task/TaskSheet").then((m) =
 const AddPlanSheet = dynamic(() => import("@/components/plan/AddPlanSheet"), { ssr: false });
 const EditPlanSheet = dynamic(() => import("@/components/plan/EditPlanSheet"), { ssr: false });
 const PlanDetailView = dynamic(() => import("@/components/plan/PlanDetailView"), { ssr: false });
+const GoalListSheet = dynamic(() => import("@/components/goal/GoalListSheet"), { ssr: false });
 const RitualView = dynamic(() => import("@/components/activity/RitualView"), { ssr: false });
 // Small hand-rolled SVG donut with no chart dependency — safe to load eagerly
 // in the iOS shell (see the first-load guard in tests/core-logic.test.mjs).
@@ -415,6 +417,7 @@ export default function IOSScheduleApp() {
   const [taskSheetDateISO, setTaskSheetDateISO] = useState("");
   const [taskSheetInitialType, setTaskSheetInitialType] = useState<TaskTypeValue>("task");
   const [addingPlan, setAddingPlan] = useState(false);
+  const [goalsSheetOpen, setGoalsSheetOpen] = useState(false);
   const [editingPlanId, setEditingPlanId] = useState<string | null>(null);
   const [ritualAddOpen, setRitualAddOpen] = useState(false);
   const [subtasksRef, setSubtasksRef] = useState<{ id: string; day: DayKey; dateISO: string } | null>(null);
@@ -915,6 +918,19 @@ export default function IOSScheduleApp() {
         }));
         setSelectedPlanId((current) => (current === planId ? null : current));
       },
+    });
+  }
+
+  function handleDeleteGoal(goalId: string) {
+    const goal = schedule.goals?.find((item) => item.id === goalId);
+    openConfirm({
+      title: "Delete goal?",
+      description: goal?.title
+        ? `"${goal.title}" will be deleted. Linked plans are kept — they'll just no longer be tied to this goal.`
+        : "This goal will be deleted. Linked plans are kept.",
+      confirmLabel: "Delete",
+      destructive: true,
+      onConfirm: () => setSchedule((prev) => deleteGoal(prev, goalId)),
     });
   }
 
@@ -1778,6 +1794,17 @@ export default function IOSScheduleApp() {
                     },
                   },
                 ]
+              : activeTab === 1
+              ? [
+                  {
+                    icon: IconTargetArrow,
+                    label: "Goals",
+                    onClick: () => {
+                      haptic("light");
+                      setGoalsSheetOpen(true);
+                    },
+                  },
+                ]
               : undefined
           }
           onSettings={() => { setSelectedPlanId(null); setActiveTab(5); }}
@@ -1841,7 +1868,7 @@ export default function IOSScheduleApp() {
         </IOSMotionBoundary>
       )}
 
-      {(taskSheetOpen || addingPlan || editingPlanId || entryTracker) && (
+      {(taskSheetOpen || addingPlan || editingPlanId || entryTracker || goalsSheetOpen) && (
         <IOSMotionBoundary>
           <TaskSheet
             mode={taskSheetMode}
@@ -1870,15 +1897,23 @@ export default function IOSScheduleApp() {
               setToast(`Subtask copied to ${targetTaskIds.length} task${targetTaskIds.length === 1 ? "" : "s"}`);
             }}
           />
-          <AddPlanSheet open={addingPlan} onClose={() => setAddingPlan(false)} setSchedule={setSchedule} />
+          <AddPlanSheet open={addingPlan} onClose={() => setAddingPlan(false)} setSchedule={setSchedule} goals={schedule.goals ?? []} />
           {editingPlanId && (
             <EditPlanSheet
               planId={editingPlanId}
               plan={plansById.get(editingPlanId) ?? null}
               setSchedule={setSchedule}
               onClose={() => setEditingPlanId(null)}
+              goals={schedule.goals ?? []}
             />
           )}
+          <GoalListSheet
+            open={goalsSheetOpen}
+            onClose={() => setGoalsSheetOpen(false)}
+            schedule={schedule}
+            setSchedule={setSchedule}
+            onDeleteGoal={handleDeleteGoal}
+          />
           <AddEntryModal
             isOpen={!!entryTracker}
             onClose={() => setEntryTracker(null)}
