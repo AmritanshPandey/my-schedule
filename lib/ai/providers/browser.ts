@@ -8,30 +8,34 @@
  * Design principles:
  * ─────────────────
  * • No cloud API calls. All inference happens on the user's own device.
- * • Lazy init: the model pipeline is NOT created on page load. It initialises
- *   the first time a request arrives, so the browser stays snappy until the
- *   user explicitly triggers an AI feature.
- * • Singleton: one pipeline shared across all requests; re-entrant callers
- *   wait for the in-flight initialisation to complete rather than starting a
- *   second download.
+ * • Lazy init: the pipeline is NOT created on page load. It initialises the
+ *   first time a request arrives, keeping the browser snappy until the user
+ *   explicitly triggers an AI feature.
+ * • Singleton: one pipeline shared across all requests. Re-entrant callers
+ *   await the in-flight initialisation promise rather than starting a second
+ *   download.
  * • WebGPU → WASM fallback: attempts GPU-accelerated inference and silently
  *   falls back to the WASM/CPU backend when the browser or hardware doesn't
  *   support WebGPU.
- * • Progress events: dispatches `planr-browser-ai-status` CustomEvents on
- *   `window` so any UI component can render a live download / init indicator
- *   without being coupled to this module.
+ * • q4 quantization: enforced at pipeline() call time via `dtype: "q4"` so
+ *   Transformers.js fetches the model_q4.onnx variant (~100–140 MB for
+ *   SmolLM2-360M) rather than the larger fp16 default.
+ * • Real token streaming: TextStreamer callbacks are bridged to an AsyncGenerator
+ *   via a queue, giving the UI progressive "Found N tasks…" updates.
+ * • PlanR-specialized prompts: all requests are rewritten via rewriteForBrowserModel()
+ *   from browserPrompts.ts before inference — compact, few-shot-guided prompts
+ *   tuned for <500M instruction models. aiActions.ts is not modified.
+ * • Progress events: planr-browser-ai-status CustomEvents on window so any UI
+ *   component can render a live download indicator without coupling.
  *
- * Status event shape (BrowserAIStatusEvent):
+ * Status event shape (BrowserAIStatus):
  *   { phase: "loading"|"ready"|"error", progress?: number, message?: string }
- *
- * Integration:
- *   This module implements the same AIProvider interface as the MLX, Ollama,
- *   and OpenAI-compatible providers. The router in providers/router.ts picks it
- *   when the user selects the "browser" provider in Settings.
  */
 
 import { getBrowserModel, BROWSER_AI_STATUS_EVENT } from "./settings";
 import type { AIChatRequest, AIProvider, AIRequest, AIResponse, ConnectionResult } from "./types";
+import { rewriteForBrowserModel, type BrowserAIChatRequest } from "./browserPrompts";
+import type { TextGenerationPipeline, PreTrainedTokenizer } from "@huggingface/transformers";
 
 // ─── Status event ────────────────────────────────────────────────────────────
 
@@ -49,7 +53,10 @@ function emitStatus(status: BrowserAIStatus): void {
 
 // ─── Pipeline singleton ───────────────────────────────────────────────────────
 
-import type { TextGenerationPipeline } from "@huggingface/transformers";
+// TextStreamer is stored after the first dynamic import so streamChat can use it
+// without a redundant await import(). Type is the class constructor, not an instance.
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+let _TextStreamer: (new (tokenizer: PreTrainedTokenizer, opts: Record<string, unknown>) => any) | null = null;
 
 let _pipeline: TextGenerationPipeline | null = null;
 let _initPromise: Promise<TextGenerationPipeline> | null = null;
@@ -58,30 +65,37 @@ let _loadedModel = "";
 async function getPipeline(): Promise<TextGenerationPipeline> {
   const model = getBrowserModel();
 
-  // Re-use the cached pipeline if the model hasn't changed.
+  // Return the cached pipeline if the model hasn't changed.
   if (_pipeline && _loadedModel === model) return _pipeline;
 
-  // If a load is already in-flight (another concurrent caller), await it.
+  // If a load is already in-flight, await it (deduplication).
   if (_initPromise) return _initPromise;
 
   _initPromise = (async (): Promise<TextGenerationPipeline> => {
     emitStatus({ phase: "loading", progress: 0, message: "Initialising…" });
 
-    const { pipeline, env } = await import("@huggingface/transformers");
+    const { pipeline, env, TextStreamer } = await import("@huggingface/transformers");
+    // Store TextStreamer for use in streamChat without re-importing.
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    _TextStreamer = TextStreamer as any;
 
-    // Allow the library to cache model files in the browser's Cache API.
+    // Use the browser's built-in Cache API for model files (persists across reloads).
     env.useBrowserCache = true;
-    // Never try to load from a local filesystem path.
+    // Never try to resolve local filesystem paths.
     env.allowLocalModels = false;
 
-    // Progress callback — converts raw file-download progress to a 0-100
-    // percentage and forwards it as a window event so the UI can react.
-    function onProgress(event: { status: string; progress?: number; file?: string; loaded?: number; total?: number }) {
+    function onProgress(event: {
+      status: string;
+      progress?: number;
+      file?: string;
+    }) {
       if (event.status === "progress" && typeof event.progress === "number") {
         emitStatus({
           phase: "loading",
           progress: Math.round(event.progress),
-          message: event.file ? `Downloading ${event.file.split("/").pop()}…` : "Downloading model…",
+          message: event.file
+            ? `Downloading ${event.file.split("/").pop()}…`
+            : "Downloading model…",
         });
       } else if (event.status === "initiate") {
         emitStatus({ phase: "loading", progress: 0, message: "Preparing…" });
@@ -90,26 +104,28 @@ async function getPipeline(): Promise<TextGenerationPipeline> {
       }
     }
 
-    // Detect WebGPU availability; fall back to WASM/CPU.
+    // Detect WebGPU; fall back to WASM/CPU.
     const device =
       typeof navigator !== "undefined" && "gpu" in navigator
         ? "webgpu"
         : "wasm";
 
-    // Cast to TextGenerationPipeline — we always call pipeline("text-generation")
-    // so the specific union member is known even though TypeScript can't narrow it.
     let pipe: TextGenerationPipeline;
     try {
       pipe = (await pipeline("text-generation", model, {
         device,
+        // q4 forces Transformers.js to fetch model_q4.onnx (~100–140 MB for
+        // SmolLM2-360M) instead of the larger fp16 default.
+        dtype: "q4",
         progress_callback: onProgress,
       })) as TextGenerationPipeline;
     } catch (gpuErr) {
       if (device === "webgpu") {
-        // WebGPU init failed (driver issue, unsupported GPU, etc.) — retry on WASM.
+        // WebGPU init failed (driver issue, unsupported GPU…) — retry on WASM.
         emitStatus({ phase: "loading", progress: 0, message: "Falling back to CPU…" });
         pipe = (await pipeline("text-generation", model, {
           device: "wasm",
+          dtype: "q4",
           progress_callback: onProgress,
         })) as TextGenerationPipeline;
       } else {
@@ -122,7 +138,7 @@ async function getPipeline(): Promise<TextGenerationPipeline> {
     _initPromise = null;
     emitStatus({ phase: "ready", message: model });
     return pipe;
-  })().catch((err) => {
+  })().catch((err: unknown) => {
     _initPromise = null;
     const message = err instanceof Error ? err.message : "Unknown error loading model.";
     emitStatus({ phase: "error", message });
@@ -132,31 +148,17 @@ async function getPipeline(): Promise<TextGenerationPipeline> {
   return _initPromise;
 }
 
-// ─── Inference ────────────────────────────────────────────────────────────────
+// ─── Inference helpers ────────────────────────────────────────────────────────
 
-/**
- * Build a single-string prompt from the request.
- * Follows the standard chat-template format understood by Qwen2.5 / Qwen3.
- */
-function buildPrompt(req: AIRequest): { messages: Array<{ role: string; content: string }> } {
-  return {
-    messages: [
-      { role: "system", content: req.systemPrompt },
-      ...req.messages,
-    ],
-  };
-}
-
-async function complete(req: AIRequest): Promise<AIResponse> {
+async function complete(req: AIRequest | BrowserAIChatRequest): Promise<AIResponse> {
   const started = performance.now();
   const pipe = await getPipeline();
+  const rewritten = rewriteForBrowserModel(req) as BrowserAIChatRequest;
 
-  const maxTokens = req.maxTokens ?? (req.isStrategy ? 1024 : 512);
-  const temperature = req.temperature ?? 0.4;
+  const maxTokens = rewritten._maxNewTokens ?? (rewritten.isStrategy ? 1024 : 512);
+  const temperature = rewritten._temperature ?? 0.1;
 
-  // `apply_chat_template` is called internally by the pipeline when `messages`
-  // are passed as an array of {role, content} objects.
-  const result = await pipe(buildPrompt(req).messages, {
+  const result = await pipe(rewritten.messages, {
     max_new_tokens: maxTokens,
     temperature,
     do_sample: temperature > 0,
@@ -164,13 +166,12 @@ async function complete(req: AIRequest): Promise<AIResponse> {
     ...(req.signal ? { signal: req.signal } : {}),
   });
 
-  // Transformers.js returns Array<{ generated_text: string | MessageOutput[] }>
+  // Extract text from the various generated_text shapes Transformers.js may return.
   const raw = Array.isArray(result) ? result[0] : result;
   let text = "";
   if (typeof raw?.generated_text === "string") {
     text = raw.generated_text;
   } else if (Array.isArray(raw?.generated_text)) {
-    // Some pipelines return the messages array; extract assistant turn.
     const last = raw.generated_text[raw.generated_text.length - 1] as unknown;
     if (typeof last === "string") {
       text = last;
@@ -188,19 +189,81 @@ async function complete(req: AIRequest): Promise<AIResponse> {
   };
 }
 
-/** Stream by yielding the full completion as a single chunk (same pattern as Ollama). */
+// ─── Real token streaming ─────────────────────────────────────────────────────
+//
+// TextStreamer.put() fires synchronously inside each generation step of pipe().
+// We bridge it to an AsyncGenerator via a callback queue:
+//   • Tokens accumulate in `chunks[]`
+//   • `notify()` resolves the generator's current suspension point
+//   • The generator drains the queue, then suspends again until the next token
+// JS is single-threaded so there are no race conditions; the queue handles burst
+// arrivals (multiple tokens before the generator resumes).
+
 async function* streamChat(req: AIChatRequest): AsyncGenerator<string> {
-  yield (await complete(req)).text;
+  const pipe = await getPipeline();
+  const rewritten = rewriteForBrowserModel(req) as BrowserAIChatRequest;
+
+  const maxNewTokens = rewritten._maxNewTokens ?? (rewritten.isStrategy ? 1024 : 512);
+  const temperature  = rewritten._temperature  ?? 0.1;
+
+  // Fallback to batch completion if TextStreamer wasn't stored yet (shouldn't
+  // happen since getPipeline() above sets it, but guard defensively).
+  if (!_TextStreamer) {
+    yield (await complete(req)).text;
+    return;
+  }
+
+  const chunks: string[] = [];
+  let isDone = false;
+  let notify: () => void = () => {};
+
+  // The Transformers.js type omits .tokenizer but it exists on the runtime object.
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const tokenizer = (pipe as any).tokenizer as PreTrainedTokenizer;
+  const streamer = new _TextStreamer(tokenizer, {
+    skip_prompt: true,
+    skip_special_tokens: true,
+    callback_function: (text: string) => {
+      chunks.push(text);
+      notify(); // wake the generator if it's waiting
+    },
+  });
+
+  const inferencePromise = (pipe(rewritten.messages, {
+    max_new_tokens: maxNewTokens,
+    temperature,
+    do_sample: temperature > 0,
+    return_full_text: false,
+    streamer,
+    ...(req.signal ? { signal: req.signal } : {}),
+  }) as Promise<unknown>)
+    .then(() => { isDone = true; notify(); })
+    .catch((err: unknown) => { isDone = true; notify(); throw err; });
+
+  // Drain the queue; suspend between tokens.
+  while (!isDone || chunks.length > 0) {
+    if (chunks.length > 0) {
+      yield chunks.shift()!;
+    } else {
+      await new Promise<void>((resolve) => { notify = resolve; });
+    }
+  }
+
+  // Re-throw any inference error so aiActions.ts error handling still fires.
+  await inferencePromise;
 }
+
+// ─── Test connection ──────────────────────────────────────────────────────────
 
 async function testConnection(): Promise<ConnectionResult> {
   try {
     const result = await complete({
       messages: [{ role: "user", content: "Reply with: OK" }],
-      systemPrompt: "You are a terse assistant. Reply only with the text requested.",
+      systemPrompt:
+        "You are a terse assistant. Reply only with the text requested.",
       maxTokens: 16,
       temperature: 0,
-    });
+    } as AIRequest);
     const ok = result.text.trim().length > 0;
     return {
       ok,
@@ -212,12 +275,15 @@ async function testConnection(): Promise<ConnectionResult> {
   } catch (error) {
     return {
       ok: false,
-      message: error instanceof Error ? error.message : "Could not initialise in-browser model.",
+      message:
+        error instanceof Error
+          ? error.message
+          : "Could not initialise in-browser model.",
     };
   }
 }
 
-// ─── Export ───────────────────────────────────────────────────────────────────
+// ─── Exports ──────────────────────────────────────────────────────────────────
 
 export const browserProvider: AIProvider = {
   id: "browser",
@@ -228,12 +294,12 @@ export const browserProvider: AIProvider = {
 };
 
 /**
- * Imperatively pre-warm the pipeline. Call this when the user explicitly opts
- * into browser AI in Settings (not on app startup) so the download starts in
- * the background before their first actual request.
+ * Imperatively pre-warm the pipeline. Call when the user explicitly opts into
+ * browser AI (e.g. selects "Browser" in Settings) so the download starts before
+ * their first action sheet request.
  */
 export function prewarmBrowserAI(): void {
   getPipeline().catch(() => {
-    // Error is already surfaced via the status event — no need to re-throw here.
+    // Errors are surfaced via the status event — no need to re-throw here.
   });
 }

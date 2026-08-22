@@ -192,6 +192,12 @@ function ProviderCard({ provider }: { provider: AIProviderType }) {
 
 export function AISettingsSheet({ open, onClose }: { open: boolean; onClose: () => void }) {
   const [provider, setProvider] = useState<AIProviderType>(() => getActiveProviderType());
-  function changeProvider(next: AIProviderType) { setActiveProviderType(next); setProvider(next); }
+  function changeProvider(next: AIProviderType) {
+    setActiveProviderType(next);
+    setProvider(next);
+    // Start the model download immediately when the user selects browser AI,
+    // so it's loading in the background before they open an action sheet.
+    if (next === "browser") prewarmBrowserAI();
+  }
   return <BottomSheet open={open} onClose={onClose} desktopWidth="max-w-[560px]"><div className="px-5 pt-4" style={{ paddingBottom: "max(40px, calc(env(safe-area-inset-bottom) + 24px))" }}><div className="mb-5 flex items-center justify-between"><div><p className="text-[17px] font-bold text-neutral-900 dark:text-white">AI Settings</p><p className="text-[12px] text-neutral-400 dark:text-neutral-500">Choose where PlanR sends AI requests</p></div><button type="button" onClick={onClose} aria-label="Close AI settings" className="flex h-8 w-8 items-center justify-center rounded-xl text-neutral-400 hover:bg-neutral-100 dark:hover:bg-white/[0.06]"><IconX size={16} /></button></div><div className="mb-4"><ProviderPicker value={provider} onChange={changeProvider} /></div><ProviderCard key={provider} provider={provider} /></div></BottomSheet>;
 }

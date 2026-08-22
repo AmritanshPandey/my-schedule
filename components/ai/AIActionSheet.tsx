@@ -10,6 +10,9 @@ import { useEffect, useRef, useState } from "react";
 import { AnimatePresence, m } from "framer-motion";
 import { IconCheck, IconSparkles, IconX } from "@tabler/icons-react";
 import BottomSheet from "@/components/ui/BottomSheet";
+import { useBrowserAI } from "@/lib/ai/useBrowserAI";
+import { getActiveProviderType, AI_SETTINGS_CHANGED_EVENT } from "@/lib/ai/providers/settings";
+import { BrowserAIStatusBar } from "@/components/ai/BrowserAIStatusBar";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -105,6 +108,25 @@ export default function AIActionSheet({
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const answerRef = useRef<HTMLTextAreaElement>(null);
   const abortRef = useRef(false);
+
+  // ── Browser AI model-load awareness ─────────────────────────────────────
+  // When the browser provider is active and the model is still downloading,
+  // show an inline progress bar and disable the CTA until it's ready.
+  const [isBrowserProvider, setIsBrowserProvider] = useState(
+    () => typeof window !== "undefined" && getActiveProviderType() === "browser",
+  );
+  const { status: browserAIStatus } = useBrowserAI();
+
+  useEffect(() => {
+    const refresh = () => setIsBrowserProvider(getActiveProviderType() === "browser");
+    window.addEventListener(AI_SETTINGS_CHANGED_EVENT, refresh);
+    return () => window.removeEventListener(AI_SETTINGS_CHANGED_EVENT, refresh);
+  }, []);
+
+  // Block the CTA only during an active download — not when status is null
+  // (never triggered; user can click and getPipeline() will start downloading
+  // with live status showing in the bar) or when status is "ready".
+  const modelIsLoading = isBrowserProvider && browserAIStatus?.phase === "loading";
 
   // Reset on open
   useEffect(() => {
@@ -314,19 +336,33 @@ export default function AIActionSheet({
                 </div>
               )}
 
+              {/* Browser AI model-load progress (only visible when loading) */}
+              {isBrowserProvider && (
+                <div className="mb-4">
+                  <BrowserAIStatusBar variant="bar" />
+                </div>
+              )}
+
               {/* CTA */}
               <m.button
                 type="button"
                 onClick={handleGenerate}
-                disabled={loading}
-                whileTap={!loading ? { scale: 0.97 } : undefined}
+                disabled={loading || modelIsLoading}
+                whileTap={!(loading || modelIsLoading) ? { scale: 0.97 } : undefined}
                 className="flex w-full items-center justify-center gap-2 rounded-2xl bg-emerald-500 py-3.5 text-[14px] font-bold text-white transition-all hover:bg-emerald-600 disabled:cursor-default disabled:opacity-70 dark:bg-emerald-500 dark:hover:bg-emerald-400"
               >
-                {loading ? (
+                {modelIsLoading ? (
+                  <>
+                    <ThinkingDots />
+                    <span>Waiting for model…</span>
+                  </>
+                ) : loading ? (
                   <>
                     <ThinkingDots />
                     <span>
-                      {streamCount > 0 ? `Found ${streamCount} ${streamCount === 1 ? resultSingular : resultPlural}…` : "Thinking…"}
+                      {streamCount > 0
+                        ? `Found ${streamCount} ${streamCount === 1 ? resultSingular : resultPlural}…`
+                        : "Thinking…"}
                     </span>
                   </>
                 ) : (

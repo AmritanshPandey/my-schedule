@@ -38,7 +38,13 @@ export const DEFAULT_AI_PROVIDER: AIProviderType = "mlx";
  * (onnx-community or any model with an /onnx subfolder). The browser provider
  * downloads and caches it via the browser's built-in Cache API on first use.
  */
-export const DEFAULT_BROWSER_MODEL = "onnx-community/Qwen2.5-0.5B-Instruct";
+/**
+ * SmolLM2-360M-Instruct with q4 quantization downloads ~100–140 MB
+ * (vs ~400 MB for Qwen2.5-0.5B) and is purpose-built by HuggingFace for
+ * browser/edge inference. The q4 dtype is enforced at pipeline() call time
+ * in lib/ai/providers/browser.ts.
+ */
+export const DEFAULT_BROWSER_MODEL = "onnx-community/SmolLM2-360M-Instruct";
 
 export function getActiveProviderType(): AIProviderType {
   if (typeof window === "undefined") return DEFAULT_AI_PROVIDER;
