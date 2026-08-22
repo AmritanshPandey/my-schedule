@@ -70,18 +70,26 @@ export function parseBackup(text: string): unknown {
   }
   const obj = parsed as Record<string, unknown>;
 
+  function hasPlausibleScheduleShape(value: unknown): boolean {
+    if (!value || typeof value !== "object" || Array.isArray(value)) return false;
+    const schedule = value as Record<string, unknown>;
+    if ("plans" in schedule && !Array.isArray(schedule.plans)) return false;
+    if ("activities" in schedule && (!schedule.activities || typeof schedule.activities !== "object" || Array.isArray(schedule.activities))) return false;
+    return "activities" in schedule || "work" in schedule || "personal" in schedule || "diet" in schedule || "workout" in schedule;
+  }
+
   if (obj.app === "PlanR") {
     if (typeof obj.format === "number" && obj.format > BACKUP_FORMAT) {
       throw new Error("This backup came from a newer version of PlanR. Update the app, then try again.");
     }
-    if (!obj.schedule || typeof obj.schedule !== "object") {
+    if (!hasPlausibleScheduleShape(obj.schedule)) {
       throw new Error("This backup file has no schedule data in it.");
     }
     return obj.schedule;
   }
 
   // Bare schedule (e.g., copied straight out of IndexedDB or Firestore).
-  if ("plans" in obj || "activities" in obj) return parsed;
+  if (hasPlausibleScheduleShape(parsed)) return parsed;
 
   throw new Error("That file isn't a PlanR backup.");
 }

@@ -19,7 +19,7 @@ import type { Ritual, RitualColor, RitualCompletion, DayKey } from "@/lib/useSch
 import { DAYS } from "@/lib/useScheduleDB";
 import { localISODate, todayISO } from "@/lib/dateUtils";
 import { calculateRitualStats, ritualScheduledOn } from "@/lib/consistency/calculateRitualStreak";
-import { parseTimeToMinutes } from "@/lib/timeUtils";
+import { formatDisplayTime, parseTimeToMinutes } from "@/lib/timeUtils";
 import { haptic } from "@/lib/haptics";
 import EmptyState from "@/components/ui/EmptyState";
 import ConfirmSheet from "@/components/ui/ConfirmSheet";
@@ -454,7 +454,7 @@ export default function RitualView({
             {ritual.title}
           </p>
           <p className="mt-1 flex items-center gap-1.5 truncate text-[13px] font-medium text-neutral-500 dark:text-neutral-400">
-            <span className="tabular-nums">{ritual.time}</span>
+            <span className="tabular-nums">{formatDisplayTime(ritual.time)}</span>
             <span aria-hidden="true">·</span>
             <span className="truncate">{missed ? "Missed · " : ""}{dayLabel}</span>
             {streak >= 2 && (
@@ -520,7 +520,7 @@ export default function RitualView({
               {ritual.title}
             </p>
             <p className="mt-1 truncate text-[13px] font-medium text-neutral-500 dark:text-neutral-400">
-              <span className="tabular-nums">{ritual.time}</span> · {missed ? "Missed · " : ""}{dayLabel}
+              <span className="tabular-nums">{formatDisplayTime(ritual.time)}</span> · {missed ? "Missed · " : ""}{dayLabel}
             </p>
           </button>
 

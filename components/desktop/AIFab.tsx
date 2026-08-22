@@ -7,6 +7,7 @@ import { AIPanel } from "./AIPanel";
 import BottomSheet from "@/components/ui/BottomSheet";
 import type { AIActionResult } from "@/lib/ai";
 import type { Plan, Ritual, Schedule } from "@/lib/useScheduleDB";
+import { useAIActions } from "@/lib/ai/useAIActions";
 
 interface AIFabProps {
   context: "plans" | "routine" | "strategy";
@@ -31,6 +32,7 @@ export function AIFab({
   onOpenChange,
   onApplyAction,
 }: AIFabProps) {
+  const { available } = useAIActions();
   const [internalOpen, setInternalOpen] = useState(false);
   const [isDesktop, setIsDesktop] = useState(false);
   const open = controlledOpen ?? internalOpen;
@@ -42,6 +44,8 @@ export function AIFab({
     mq.addEventListener("change", handler);
     return () => mq.removeEventListener("change", handler);
   }, []);
+
+  if (!available) return null;
 
   function setOpen(v: boolean) {
     setInternalOpen(v);

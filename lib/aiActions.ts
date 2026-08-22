@@ -4,8 +4,33 @@
  */
 
 import type { DayKey, TaskTypeValue } from "./useScheduleDB";
-import { streamAIAction } from "./aiClient";
+import { streamAIAction, streamAIChat, type AIMessage } from "./aiClient";
 import { getAIInstructions, withInstructions } from "./ai/instructions";
+
+/**
+ * A single bounded clarifying round: the question the AI asked in its first
+ * reply, and what the user answered (or "" if they skipped it). Passing this
+ * back turns a generator's second call into a 3-message conversation instead
+ * of a fresh one-shot — the client-side half of the "ask once, then proceed"
+ * prompt rule below (tasks/milestones/milestone-tasks only; subtasks and the
+ * weekly insight always have enough signal to answer in one shot).
+ */
+export interface AIFollowUp {
+  question: string;
+  answer: string;
+}
+
+/** Builds the message array for a generator call: just the user's ask, or —
+ *  on the bounded second call after a clarifying question — that plus the
+ *  AI's question and the user's (possibly empty) answer. */
+function toMessages(userMessage: string, followUp?: AIFollowUp): AIMessage[] {
+  const messages: AIMessage[] = [{ role: "user", content: userMessage }];
+  if (followUp) {
+    messages.push({ role: "assistant", content: followUp.question });
+    messages.push({ role: "user", content: followUp.answer || "(no answer given — use your best judgment)" });
+  }
+  return messages;
+}
 
 export interface AIGeneratedTask {
   title: string;
@@ -29,7 +54,8 @@ Output ONLY a raw JSON array — no explanation, no markdown fences, no preamble
 Icons (pick most relevant): run, school, book, sleep, star, briefcase, car, brain, barbell, code, heart, music, palette, plane, chefhat, coin, camera, users, leaf, pencil, yoga, bike, mountain, droplet, moodsmile, flame, language, pill, bolt, dna
 Days: monday tuesday wednesday thursday friday saturday sunday
 "taskType": "task" (default, checked off and tracked), "session" (a tracked workout/practice block), or "commitment" (fixed held time, never checked off).
-Times: HH:MM 24-hour. Spread tasks across the week. Each task needs 2-3 subtasks.`;
+Times: HH:MM 24-hour. Spread tasks across the week. Each task needs 2-3 subtasks.
+If the plan description gives no real focus to work from (empty or a placeholder) and no scheduling signal at all, don't guess — reply with ONLY one short plain-text question instead of the JSON array. If a question was already asked earlier in this conversation, don't ask again — generate the array now using your best judgment.`;
 
 const SUBTASK_GEN_PROMPT = `You are a task breakdown assistant.
 Output ONLY a raw JSON array of strings — no explanation, no markdown fences.
@@ -39,7 +65,8 @@ Generate 3-5 concrete, actionable steps for the given task.`;
 const MILESTONE_GEN_PROMPT = `You are a milestones planner. Generate 4-6 key milestones for a plan.
 Output ONLY a raw JSON array — no explanation, no markdown fences.
 [{"title":"...","description":"one sentence","targetDate":"YYYY-MM-DD"}]
-Space milestones evenly across the plan duration. Keep titles concise (3-6 words).`;
+Space milestones evenly across the plan duration. Keep titles concise (3-6 words).
+If the plan has no known start/end date and no duration or deadline was mentioned, don't guess dates — reply with ONLY one short plain-text question asking for a rough timeframe instead of the JSON array. If already asked once in this conversation, proceed now with your best judgment.`;
 
 export interface AIGeneratedMilestone {
   title: string;
@@ -82,10 +109,11 @@ function extractArray(text: string): string | null {
 export function streamGenerateTasks(
   plan: { title: string; description?: string },
   signal?: AbortSignal,
+  followUp?: AIFollowUp,
 ): AsyncGenerator<string> {
   const userMessage = `Generate tasks for: "${plan.title}"${plan.description ? `. ${plan.description}` : ""}`;
   const prompt = withInstructions(TASK_GEN_PROMPT, "Tasks", getAIInstructions().task);
-  return streamAIAction(prompt, userMessage, signal);
+  return streamAIChat(toMessages(userMessage, followUp), prompt, 1024, signal);
 }
 
 export function parseGeneratedTasks(text: string): AIGeneratedTask[] {
@@ -134,6 +162,7 @@ export function parseGeneratedSubtasks(text: string): string[] {
 export function streamGenerateMilestones(
   plan: { title: string; description?: string; startDate?: string; endDate?: string },
   signal?: AbortSignal,
+  followUp?: AIFollowUp,
 ): AsyncGenerator<string> {
   const context = [
     `Plan: "${plan.title}"`,
@@ -142,7 +171,8 @@ export function streamGenerateMilestones(
     plan.endDate ? `End: ${plan.endDate}` : "",
   ].filter(Boolean).join(". ");
   const prompt = withInstructions(MILESTONE_GEN_PROMPT, "Milestones", getAIInstructions().milestone);
-  return streamAIAction(prompt, `Generate milestones for: ${context}`, signal);
+  const userMessage = `Generate milestones for: ${context}`;
+  return streamAIChat(toMessages(userMessage, followUp), prompt, 1024, signal);
 }
 
 export function parseGeneratedMilestones(text: string): AIGeneratedMilestone[] {
@@ -169,19 +199,21 @@ Output ONLY a raw JSON array — no explanation, no markdown fences, no preamble
 Icons (pick most relevant): run, school, book, sleep, star, briefcase, car, brain, barbell, code, heart, music, palette, plane, chefhat, coin, camera, users, leaf, pencil, yoga, bike, mountain, droplet, moodsmile, flame, language, pill, bolt, dna
 Days: monday tuesday wednesday thursday friday saturday sunday
 "taskType": "task" (default, checked off and tracked), "session" (a tracked workout/practice block), or "commitment" (fixed held time, never checked off).
-Times: HH:MM 24-hour. Spread tasks across the week. Each task needs 2-3 subtasks.`;
+Times: HH:MM 24-hour. Spread tasks across the week. Each task needs 2-3 subtasks.
+If the milestone description gives no real focus to work from (empty or a placeholder) and no scheduling signal at all, don't guess — reply with ONLY one short plain-text question instead of the JSON array. If a question was already asked earlier in this conversation, don't ask again — generate the array now using your best judgment.`;
 
 export function streamGenerateMilestoneTasks(
   milestone: { title: string; description?: string },
   plan: { title: string; description?: string },
   signal?: AbortSignal,
+  followUp?: AIFollowUp,
 ): AsyncGenerator<string> {
   const userMessage = [
     `Generate tasks for milestone: "${milestone.title}"${milestone.description ? ` — ${milestone.description}` : ""}.`,
     `Part of plan: "${plan.title}"${plan.description ? ` (${plan.description})` : ""}.`,
   ].join(" ");
   const prompt = withInstructions(MILESTONE_TASK_GEN_PROMPT, "Tasks", getAIInstructions().task);
-  return streamAIAction(prompt, userMessage, signal);
+  return streamAIChat(toMessages(userMessage, followUp), prompt, 1024, signal);
 }
 
 // ── Weekly insight generation ─────────────────────────────────────────────────

@@ -17,18 +17,18 @@
 
 /** Standard card: flat, hairline border, one dark surface across the app. */
 export const CARD =
-  "rounded-2xl border border-neutral-200/70 bg-white dark:border-white/[0.07] dark:bg-neutral-900";
+  "rounded-2xl border border-neutral-200/80 bg-white dark:border-white/[0.08] dark:bg-neutral-900";
 
 /**
  * Card that navigates or acts on click/tap. Hover stays flat — border shift +
  * subtle bg tint, never shadow. Only apply where hover implies clickability.
  */
 export const CARD_INTERACTIVE =
-  `${CARD} transition-colors lg:hover:border-neutral-300/80 lg:hover:bg-neutral-50/60 dark:lg:hover:border-white/[0.13] dark:lg:hover:bg-[#1B1B1B]`;
+  `${CARD} transition-[border-color,background-color,transform] duration-200 lg:hover:border-neutral-300 lg:hover:bg-neutral-50/80 dark:lg:hover:border-white/[0.15] dark:lg:hover:bg-[#1B1B1B]`;
 
 /** Recessed inner panel that sits inside a CARD. */
 export const SOFT_PANEL =
-  "rounded-xl border border-neutral-200/70 bg-neutral-50 dark:border-white/[0.06] dark:bg-white/[0.04]";
+  "rounded-xl border border-neutral-200/80 bg-neutral-50/90 dark:border-white/[0.07] dark:bg-white/[0.045]";
 
 /** Hairline border colors alone (for dividers and custom containers). */
 export const HAIRLINE = "border-neutral-200/70 dark:border-white/[0.07]";

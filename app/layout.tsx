@@ -1,5 +1,4 @@
 import type { Metadata, Viewport } from "next";
-import { Nunito } from "next/font/google";
 import "./globals.css";
 import ServiceWorkerRegistration from "@/components/ServiceWorkerRegistration";
 import PWAInstallPrompt from "@/components/PWAInstallPrompt";
@@ -7,12 +6,6 @@ import LandscapeBlocker from "@/components/LandscapeBlocker";
 import { AuthProvider } from "@/contexts/AuthProvider";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
 import ErrorReporter from "@/components/ErrorReporter";
-
-const nunito = Nunito({
-  subsets: ["latin"],
-  variable: "--font-nunito",
-  display: "swap",
-});
 
 export const metadata: Metadata = {
   title: "PlanR",
@@ -43,7 +36,7 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="en" className={`${nunito.variable} h-full antialiased`} suppressHydrationWarning>
+    <html lang="en" className="h-full antialiased" suppressHydrationWarning>
       {/* Inline theme script runs synchronously before first paint — eliminates dark-mode flash */}
       <head>
         <script

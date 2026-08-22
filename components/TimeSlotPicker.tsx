@@ -4,7 +4,7 @@ import { useState } from "react";
 import { IconPlus, IconX } from "@tabler/icons-react";
 import type { DayKey } from "@/lib/useScheduleDB";
 import { parseTimeToMinutes, minutesToInputTime, currentMinutes } from "@/lib/timeUtils";
-import { stopTextEditKeyPropagation } from "@/lib/keyboardEvents";
+import TimeInput from "@/components/ui/TimeInput";
 
 const REPEAT_DAYS: DayKey[] = ["sunday", "monday", "tuesday", "wednesday", "thursday", "friday", "saturday"];
 
@@ -60,34 +60,6 @@ function durationMinutes(startTime: string, endTime: string): number | null {
   const end = inputToMinutes(endTime);
   if (start === null || end === null || end <= start) return null;
   return end - start;
-}
-
-function TimeInput({
-  label,
-  value,
-  onChange,
-  onFocus,
-}: {
-  label: string;
-  value: string;
-  onChange: (value: string) => void;
-  onFocus?: () => void;
-}) {
-  return (
-    <div>
-      <p className={`mb-1.5 ${LABEL}`}>{label}</p>
-      <input
-        type="time"
-        step={60}
-        value={value}
-        aria-label={`${label} time`}
-        onFocus={onFocus}
-        onChange={(e) => onChange(e.currentTarget.value)}
-        onKeyDown={stopTextEditKeyPropagation}
-        className="h-11 w-full min-w-0 appearance-none rounded-xl border border-neutral-200 bg-neutral-50 px-3 pr-9 text-[16px] font-semibold tabular-nums text-neutral-900 outline-none ring-0 transition-colors placeholder:text-neutral-400 focus:border-neutral-300 focus:bg-white focus:outline-none focus:ring-0 focus-visible:outline-none focus-visible:ring-0 dark:border-white/10 dark:bg-white/[0.04] dark:text-white dark:placeholder:text-neutral-600 dark:focus:border-white/20 dark:focus:bg-white/[0.07] dark:[color-scheme:dark]"
-      />
-    </div>
-  );
 }
 
 function durationLabel(minutes: number | null): string {
@@ -196,9 +168,10 @@ export default function TimeSlotPicker({
         {slots.map((slot, index) => (
           <div key={index} className="flex items-end gap-2">
             <div className="grid flex-1 grid-cols-2 gap-3">
-              <TimeInput
+                <TimeInput
                 label={slots.length > 1 ? `Start ${index + 1}` : "Start"}
                 value={slot.startTime}
+                  ariaLabel={`${slots.length > 1 ? `Start ${index + 1}` : "Start"} time`}
                 onFocus={() => setFocusedIndex(index)}
                 onChange={(value) => {
                   setFocusedIndex(index);
@@ -210,9 +183,10 @@ export default function TimeSlotPicker({
                   });
                 }}
               />
-              <TimeInput
+                <TimeInput
                 label={slots.length > 1 ? `End ${index + 1}` : "End"}
                 value={slot.endTime}
+                  ariaLabel={`${slots.length > 1 ? `End ${index + 1}` : "End"} time`}
                 onFocus={() => setFocusedIndex(index)}
                 onChange={(value) => {
                   setFocusedIndex(index);

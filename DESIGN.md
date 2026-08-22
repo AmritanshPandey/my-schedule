@@ -18,18 +18,18 @@ typography:
   display:
     fontFamily: "Nunito, ui-sans-serif, system-ui, sans-serif"
     fontSize: "28px"
-    fontWeight: 800
+    fontWeight: 600
     lineHeight: 1
     letterSpacing: "-0.01em"
   headline:
     fontFamily: "Nunito, ui-sans-serif, system-ui, sans-serif"
     fontSize: "20px"
-    fontWeight: 800
+    fontWeight: 600
     lineHeight: 1.1
   title:
     fontFamily: "Nunito, ui-sans-serif, system-ui, sans-serif"
     fontSize: "15px"
-    fontWeight: 700
+    fontWeight: 600
     lineHeight: 1.3
   body:
     fontFamily: "Nunito, ui-sans-serif, system-ui, sans-serif"
@@ -39,7 +39,7 @@ typography:
   label:
     fontFamily: "Nunito, ui-sans-serif, system-ui, sans-serif"
     fontSize: "11px"
-    fontWeight: 700
+    fontWeight: 600
     lineHeight: 1.2
     letterSpacing: "0.08em"
 rounded:

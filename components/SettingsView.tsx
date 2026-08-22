@@ -7,6 +7,7 @@ import {
   IconCheck,
   IconClock,
   IconCloud,
+  IconCompass,
   IconCopy,
   IconMoon,
   IconRefresh,
@@ -20,6 +21,9 @@ import {
 } from "@tabler/icons-react";
 import { useAuth } from "@/contexts/AuthProvider";
 import { getAIProviderState } from "@/lib/ai/config";
+import { useBrowserAI } from "@/lib/ai/useBrowserAI";
+import { resetTour } from "@/lib/onboarding/useCoachTour";
+import { TOUR_IDS } from "@/lib/onboarding/tours";
 import CategoryManager from "@/components/category/CategoryManager";
 import { useGoogleSignIn } from "@/components/auth/useGoogleSignIn";
 import { AuthErrorNote } from "@/components/auth/AuthErrorNote";
@@ -44,7 +48,60 @@ import { buildDeleteConfirmationCopy } from "@/lib/deleteConfirm";
 import { normalizeDayStartTime } from "@/lib/timeline/displayWindow";
 import { localISODate } from "@/lib/dateUtils";
 
-const PROVIDER_LABEL: Record<string, string> = { mlx: "MLX", ollama: "Ollama", "openai-compatible": "API Provider" };
+const PROVIDER_LABEL: Record<string, string> = {
+  mlx: "MLX",
+  ollama: "Ollama",
+  "openai-compatible": "API Provider",
+  browser: "Browser",
+};
+
+// ── AI nav subtitle — live status while the in-browser model downloads ─────────
+
+function useAINavLabel(): string {
+  const type = getAIProviderState().active;
+  const { status } = useBrowserAI();
+  if (type === "browser") {
+    if (status?.phase === "loading") return "Browser · Loading model…";
+    if (status?.phase === "error")   return "Browser · Error";
+    return "Browser · On-device";
+  }
+  return `${PROVIDER_LABEL[type] ?? "MLX"} · Provider, instructions`;
+}
+
+// ── Replay tours row ─────────────────────────────────────────────────────────
+
+function ReplayToursRow() {
+  const [justReset, setJustReset] = useState(false);
+
+  function handleReplay() {
+    haptic("light");
+    TOUR_IDS.forEach(resetTour);
+    setJustReset(true);
+    window.setTimeout(() => setJustReset(false), 2200);
+  }
+
+  return (
+    <Row>
+      <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl border border-neutral-100 bg-neutral-50 text-neutral-500 dark:border-white/[0.06] dark:bg-white/[0.04] dark:text-neutral-300">
+        <IconCompass size={14} strokeWidth={2} />
+      </div>
+      <div className="min-w-0 flex-1">
+        <p className="text-[13px] font-semibold text-neutral-800 dark:text-white">Guided tours</p>
+        <p className="mt-0.5 text-[11px] leading-snug text-neutral-400 dark:text-neutral-500">
+          {justReset ? "Reset — they'll show again as you visit each tab." : "Short intro to Today, Plans, and Routine"}
+        </p>
+      </div>
+      <button
+        type="button"
+        onClick={handleReplay}
+        disabled={justReset}
+        className="shrink-0 rounded-xl border border-neutral-200 bg-neutral-50 px-3 py-1.5 text-[11px] font-semibold text-neutral-700 hover:bg-neutral-100 disabled:opacity-50 dark:border-white/[0.08] dark:bg-white/[0.04] dark:text-neutral-200"
+      >
+        {justReset ? "Done" : "Replay"}
+      </button>
+    </Row>
+  );
+}
 
 // ── Primitives ────────────────────────────────────────────────────────────────
 
@@ -301,6 +358,7 @@ export function SettingsView({
 }: SettingsViewProps) {
   const { user, isGuest, authLoading, logout } = useAuth();
   const { signingIn, error: signInError, isAuthAvailable, signIn } = useGoogleSignIn();
+  const aiNavLabel = useAINavLabel();
   const [busy, setBusy]   = useState(false);
   const [theme, setTheme] = useState<ThemeMode>("light");
   const [themeReady, setThemeReady] = useState(false);
@@ -427,15 +485,21 @@ export function SettingsView({
                   </div>
                   <div className="min-w-0 flex-1">
                     <p className="text-[14px] font-bold text-neutral-900 dark:text-white">AI Configuration</p>
-                    <p className="text-[12px] font-medium text-neutral-400 dark:text-neutral-500">
-                      {PROVIDER_LABEL[getAIProviderState().active] ?? "MLX"} · Provider, instructions
-                    </p>
+                    <p className="text-[12px] font-medium text-neutral-400 dark:text-neutral-500">{aiNavLabel}</p>
                   </div>
                   <IconChevronDown size={14} strokeWidth={2} className="-rotate-90 text-neutral-400" />
                 </button>
               </Card>
             </div>
           )}
+
+          {/* ── Help ───────────────────────────────────────────────────────── */}
+          <div>
+            <SectionLabel>Help</SectionLabel>
+            <Card>
+              <ReplayToursRow />
+            </Card>
+          </div>
 
           {/* ── Categories ──────────────────────────────────────────────────── */}
           <div>

@@ -10,6 +10,9 @@ import { useEffect, useRef, useState } from "react";
 import { AnimatePresence, m } from "framer-motion";
 import { IconCheck, IconSparkles, IconX } from "@tabler/icons-react";
 import BottomSheet from "@/components/ui/BottomSheet";
+import { useBrowserAI } from "@/lib/ai/useBrowserAI";
+import { getAIProviderState, AI_SETTINGS_CHANGED_EVENT } from "@/lib/ai/config";
+import { BrowserAIStatusBar } from "@/components/ai/BrowserAIStatusBar";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -38,8 +41,11 @@ interface AIActionSheetProps {
   resultPlural?: string;      // "tasks"
   addLabel?: string;          // overrides the computed "Add N tasks"
 
-  // Generate + parse — parent provides these
-  onGenerate: (goal: string, picks: string[]) => AsyncGenerator<string>;
+  // Generate + parse — parent provides these. `followUp` is set on the one
+  // bounded retry after the AI asked a clarifying question instead of
+  // producing results (see the "question" phase below) — omitted, this
+  // behaves exactly as it always has.
+  onGenerate: (goal: string, picks: string[], followUp?: { question: string; answer: string }) => AsyncGenerator<string>;
   onParseResults: (raw: string) => ResultItem[];
 
   // Commit
@@ -79,8 +85,13 @@ export default function AIActionSheet({
   onParseResults,
   onAdd,
 }: AIActionSheetProps) {
-  type Phase = "prompt" | "loading" | "result";
+  // "loading" is a separate flag, not a phase — both the initial generate
+  // AND the post-answer retry stream while sitting in "prompt"/"question"
+  // respectively, so overloading it into `phase` would make an in-flight
+  // retry flash back to the goal textarea.
+  type Phase = "prompt" | "question" | "result";
   const [phase, setPhase] = useState<Phase>("prompt");
+  const [loading, setLoading] = useState(false);
   const [goal, setGoal] = useState("");
   const [activePicks, setActivePicks] = useState<Set<string>>(new Set());
   const [error, setError] = useState<string | null>(null);
@@ -89,19 +100,47 @@ export default function AIActionSheet({
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [streamCount, setStreamCount] = useState(0);
 
+  // The AI's clarifying question (set at most once — see runGeneration) and
+  // the user's reply to it.
+  const [question, setQuestion] = useState("");
+  const [answer, setAnswer] = useState("");
+
   const inputRef = useRef<HTMLTextAreaElement>(null);
+  const answerRef = useRef<HTMLTextAreaElement>(null);
   const abortRef = useRef(false);
+
+  // ── Browser AI model-load awareness ─────────────────────────────────────
+  // When the browser provider is active and the model is still downloading,
+  // show an inline progress bar and disable the CTA until it's ready.
+  const [isBrowserProvider, setIsBrowserProvider] = useState(
+    () => typeof window !== "undefined" && getAIProviderState().active === "browser",
+  );
+  const { status: browserAIStatus } = useBrowserAI();
+
+  useEffect(() => {
+    const refresh = () => setIsBrowserProvider(getAIProviderState().active === "browser");
+    window.addEventListener(AI_SETTINGS_CHANGED_EVENT, refresh);
+    return () => window.removeEventListener(AI_SETTINGS_CHANGED_EVENT, refresh);
+  }, []);
+
+  // Block the CTA only during an active download — not when status is null
+  // (never triggered; user can click and getPipeline() will start downloading
+  // with live status showing in the bar) or when status is "ready".
+  const modelIsLoading = isBrowserProvider && browserAIStatus?.phase === "loading";
 
   // Reset on open
   useEffect(() => {
     if (open) {
       setPhase("prompt");
+      setLoading(false);
       setGoal("");
       setActivePicks(new Set());
       setError(null);
       setResults([]);
       setSelected(new Set());
       setStreamCount(0);
+      setQuestion("");
+      setAnswer("");
       abortRef.current = false;
       setTimeout(() => inputRef.current?.focus(), 120);
     } else {
@@ -127,8 +166,8 @@ export default function AIActionSheet({
     });
   }
 
-  async function handleGenerate() {
-    setPhase("loading");
+  async function runGeneration(followUp?: { question: string; answer: string }) {
+    setLoading(true);
     setError(null);
     setResults([]);
     setStreamCount(0);
@@ -136,7 +175,7 @@ export default function AIActionSheet({
 
     try {
       let accumulated = "";
-      const stream = onGenerate(goal.trim(), [...activePicks]);
+      const stream = onGenerate(goal.trim(), [...activePicks], followUp);
 
       for await (const chunk of stream) {
         if (abortRef.current) break;
@@ -151,6 +190,19 @@ export default function AIActionSheet({
 
       const final = onParseResults(accumulated);
       if (final.length === 0) {
+        const trimmed = accumulated.trim();
+        // Only the FIRST call (no followUp yet) can turn into a question — a
+        // plain-text reply that isn't obviously broken/truncated JSON. The
+        // retry after an answer always falls through to the error below,
+        // which is what keeps this bounded to one clarifying round.
+        const looksLikeJSON = /^[[{]/.test(trimmed) || trimmed.includes("```");
+        if (!followUp && trimmed.length > 0 && !looksLikeJSON) {
+          setQuestion(trimmed);
+          setAnswer("");
+          setPhase("question");
+          setTimeout(() => answerRef.current?.focus(), 120);
+          return;
+        }
         setError("Couldn't parse results — try rephrasing your goal.");
         setPhase("prompt");
         return;
@@ -162,9 +214,23 @@ export default function AIActionSheet({
     } catch (err) {
       if (!abortRef.current) {
         setError(err instanceof Error ? err.message : "Generation failed");
-        setPhase("prompt");
+        setPhase(followUp ? "question" : "prompt");
       }
+    } finally {
+      setLoading(false);
     }
+  }
+
+  function handleGenerate() {
+    void runGeneration();
+  }
+
+  function handleAnswerSubmit() {
+    void runGeneration({ question, answer: answer.trim() });
+  }
+
+  function handleSkipQuestion() {
+    void runGeneration({ question, answer: "" });
   }
 
   function handleAdd() {
@@ -210,7 +276,7 @@ export default function AIActionSheet({
         <AnimatePresence mode="wait" initial={false}>
 
           {/* ── Phase 1: Prompt ───────────────────────────────────────────── */}
-          {(phase === "prompt" || phase === "loading") && (
+          {phase === "prompt" && (
             <m.div
               key="prompt"
               initial={{ opacity: 0, y: 8 }}
@@ -229,7 +295,7 @@ export default function AIActionSheet({
                   onChange={(e) => setGoal(e.target.value)}
                   placeholder={inputPlaceholder}
                   rows={2}
-                  disabled={phase === "loading"}
+                  disabled={loading}
                   className="w-full resize-none rounded-xl border border-neutral-200 bg-neutral-50 px-3.5 py-2.5 text-[14px] font-medium text-neutral-900 placeholder-neutral-400 outline-none transition-all focus:border-neutral-300 focus:bg-neutral-100 disabled:opacity-50 dark:border-white/[0.08] dark:bg-white/[0.04] dark:text-white dark:placeholder-neutral-500 dark:focus:border-white/20 dark:focus:bg-white/[0.07]"
                 />
               </div>
@@ -248,7 +314,7 @@ export default function AIActionSheet({
                           key={pick}
                           type="button"
                           onClick={() => togglePick(pick)}
-                          disabled={phase === "loading"}
+                          disabled={loading}
                           className={`rounded-full border px-3 py-1.5 text-[12px] font-semibold transition-all disabled:opacity-50 ${
                             on
                               ? "border-emerald-400 bg-emerald-50 text-emerald-700 dark:border-emerald-500/50 dark:bg-emerald-500/10 dark:text-emerald-400"
@@ -270,19 +336,33 @@ export default function AIActionSheet({
                 </div>
               )}
 
+              {/* Browser AI model-load progress (only visible when loading) */}
+              {isBrowserProvider && (
+                <div className="mb-4">
+                  <BrowserAIStatusBar variant="bar" />
+                </div>
+              )}
+
               {/* CTA */}
               <m.button
                 type="button"
                 onClick={handleGenerate}
-                disabled={phase === "loading"}
-                whileTap={phase !== "loading" ? { scale: 0.97 } : undefined}
+                disabled={loading || modelIsLoading}
+                whileTap={!(loading || modelIsLoading) ? { scale: 0.97 } : undefined}
                 className="flex w-full items-center justify-center gap-2 rounded-2xl bg-emerald-500 py-3.5 text-[14px] font-bold text-white transition-all hover:bg-emerald-600 disabled:cursor-default disabled:opacity-70 dark:bg-emerald-500 dark:hover:bg-emerald-400"
               >
-                {phase === "loading" ? (
+                {modelIsLoading ? (
+                  <>
+                    <ThinkingDots />
+                    <span>Waiting for model…</span>
+                  </>
+                ) : loading ? (
                   <>
                     <ThinkingDots />
                     <span>
-                      {streamCount > 0 ? `Found ${streamCount} ${streamCount === 1 ? resultSingular : resultPlural}…` : "Thinking…"}
+                      {streamCount > 0
+                        ? `Found ${streamCount} ${streamCount === 1 ? resultSingular : resultPlural}…`
+                        : "Thinking…"}
                     </span>
                   </>
                 ) : (
@@ -292,6 +372,76 @@ export default function AIActionSheet({
                   </>
                 )}
               </m.button>
+            </m.div>
+          )}
+
+          {/* ── Phase 2: Clarifying question ─────────────────────────────── */}
+          {phase === "question" && (
+            <m.div
+              key="question"
+              initial={{ opacity: 0, y: 8 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -8 }}
+              transition={{ duration: 0.18 }}
+            >
+              <div className="mb-4 rounded-xl border border-emerald-100 bg-emerald-50/60 px-3.5 py-2.5 dark:border-emerald-500/15 dark:bg-emerald-500/5">
+                <p className="mb-1 flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-[0.08em] text-emerald-700 dark:text-emerald-400">
+                  <IconSparkles size={11} strokeWidth={2.2} />
+                  One quick thing
+                </p>
+                <p className="text-[14px] font-medium leading-snug text-neutral-800 dark:text-neutral-200">
+                  {question}
+                </p>
+              </div>
+
+              <textarea
+                ref={answerRef}
+                value={answer}
+                onChange={(e) => setAnswer(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" && !e.shiftKey && !loading) {
+                    e.preventDefault();
+                    handleAnswerSubmit();
+                  }
+                }}
+                placeholder="Your answer…"
+                rows={2}
+                disabled={loading}
+                className="mb-4 w-full resize-none rounded-xl border border-neutral-200 bg-neutral-50 px-3.5 py-2.5 text-[14px] font-medium text-neutral-900 placeholder-neutral-400 outline-none transition-all focus:border-neutral-300 focus:bg-neutral-100 disabled:opacity-50 dark:border-white/[0.08] dark:bg-white/[0.04] dark:text-white dark:placeholder-neutral-500 dark:focus:border-white/20 dark:focus:bg-white/[0.07]"
+              />
+
+              {error && (
+                <div className="mb-4 rounded-xl border border-red-100 bg-red-50 px-3.5 py-2.5 text-[13px] text-red-600 dark:border-red-500/10 dark:bg-red-500/5 dark:text-red-400">
+                  {error}
+                </div>
+              )}
+
+              <div className="flex gap-2">
+                <button
+                  type="button"
+                  onClick={handleSkipQuestion}
+                  disabled={loading}
+                  className="flex h-12 items-center gap-1.5 rounded-2xl border border-neutral-200 px-4 text-[13px] font-semibold text-neutral-500 transition-colors hover:border-neutral-300 hover:text-neutral-700 disabled:opacity-50 dark:border-white/[0.08] dark:text-neutral-400 dark:hover:border-white/[0.15]"
+                >
+                  Skip
+                </button>
+                <m.button
+                  type="button"
+                  onClick={handleAnswerSubmit}
+                  disabled={loading}
+                  whileTap={!loading ? { scale: 0.97 } : undefined}
+                  className="flex h-12 flex-1 items-center justify-center gap-2 rounded-2xl bg-emerald-500 text-[14px] font-bold text-white transition-all hover:bg-emerald-600 disabled:cursor-default disabled:opacity-70 dark:bg-emerald-500 dark:hover:bg-emerald-400"
+                >
+                  {loading ? (
+                    <>
+                      <ThinkingDots />
+                      <span>Thinking…</span>
+                    </>
+                  ) : (
+                    "Continue"
+                  )}
+                </m.button>
+              </div>
             </m.div>
           )}
 

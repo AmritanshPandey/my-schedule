@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { AnimatePresence, m } from "framer-motion";
 import {
   IconArrowLeft,
@@ -17,7 +17,12 @@ import { streamAIChat } from "@/lib/aiClient";
 import { useAIActions } from "@/lib/ai/useAIActions";
 import { resolveAccentColor, type AccentColor } from "@/lib/colorSystem";
 import { localISODate, todayISO } from "@/lib/dateUtils";
-import type { Plan } from "@/lib/useScheduleDB";
+import { validateTaskShapes, type TaskShapeIssue } from "@/lib/ai/validation/taskSchema";
+import { runBusinessRules, resolveDayWindowMinutes, type RuleIssue } from "@/lib/ai/validation/businessRules";
+import { buildTaskGenerationContext } from "@/lib/ai/context/planGenerationContext";
+import { isTrackedTask } from "@/lib/taskCompletion";
+import { formatDisplayTime } from "@/lib/timeUtils";
+import { DAYS, type DayKey, type Plan, type Schedule } from "@/lib/useScheduleDB";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -37,6 +42,11 @@ interface AIPlanCreatorSheetProps {
   onClose: () => void;
   onCreatePlan: (data: AIPlanCreatorData) => void;
   existingPlans?: Pick<Plan, "title" | "category" | "description">[];
+  /** Used to build generation context (today's load, deadlines) and to run
+   *  business-rule checks (time budget, duplicates) against the real
+   *  schedule before the plan is ever created. */
+  schedule: Schedule;
+  todayKey: DayKey;
 }
 
 // ── Streaming status ──────────────────────────────────────────────────────────
@@ -114,11 +124,18 @@ export default function AIPlanCreatorSheet({
   onClose,
   onCreatePlan,
   existingPlans = [],
+  schedule,
+  todayKey,
 }: AIPlanCreatorSheetProps) {
-  const [step, setStep] = useState<"input" | "review">("input");
+  const [step, setStep] = useState<"input" | "question" | "review">("input");
   const [goal, setGoal] = useState("");
   const [streaming, setStreaming] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
+
+  // Set at most once per generation attempt — see runGenerate's "ask once,
+  // then proceed" bound.
+  const [clarifyingQuestion, setClarifyingQuestion] = useState("");
+  const [answer, setAnswer] = useState("");
 
   // Editable draft fields
   const [title, setTitle] = useState("");
@@ -129,10 +146,12 @@ export default function AIPlanCreatorSheet({
   const [endDate, setEndDate] = useState("");
   const [tasks, setTasks] = useState<AITask[]>([]);
   const [milestones, setMilestones] = useState<AIMilestone[]>([]);
+  const [ruleIssues, setRuleIssues] = useState<RuleIssue[]>([]);
 
   const ai = useAIActions();
   const abortRef = useRef<AbortController | null>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const answerRef = useRef<HTMLTextAreaElement>(null);
 
   // Reset when sheet closes
   useEffect(() => {
@@ -142,8 +161,10 @@ export default function AIPlanCreatorSheet({
         setGoal("");
         setStreaming(false);
         setErrorMsg(null);
+        setClarifyingQuestion(""); setAnswer("");
         setTitle(""); setDesc(""); setEmoji("brain");
         setColor("violet"); setStartDate(""); setEndDate(""); setTasks([]); setMilestones([]);
+        setRuleIssues([]);
       }, 300);
       return () => clearTimeout(t);
     }
@@ -152,7 +173,7 @@ export default function AIPlanCreatorSheet({
   // Cleanup abort on unmount
   useEffect(() => () => { abortRef.current?.abort(); }, []);
 
-  async function handleGenerate() {
+  async function runGenerate(followUp?: { question: string; answer: string }) {
     if (!ai.available || !goal.trim() || streaming) return;
     setStreaming(true);
     setErrorMsg(null);
@@ -160,31 +181,65 @@ export default function AIPlanCreatorSheet({
     const controller = new AbortController();
     abortRef.current = controller;
 
+    const messages: { role: "user" | "assistant"; content: string }[] = [{ role: "user", content: goal }];
+    if (followUp) {
+      messages.push({ role: "assistant", content: followUp.question });
+      messages.push({ role: "user", content: followUp.answer || "(no answer given — use your best judgment)" });
+    }
+
     let accumulated = "";
     try {
-      // Full plan creation with tasks in one shot.
-      const systemPrompt = buildSystemPrompt("plans", undefined, existingPlans);
-      for await (const chunk of streamAIChat(
-        [{ role: "user", content: goal }],
-        systemPrompt, 1024, controller.signal,
-      )) {
+      // Full plan creation with tasks in one shot. planContext carries
+      // today's real load (existing tasks/rituals/deadlines) so generated
+      // tasks don't ignore what's already on the calendar.
+      const planContext = buildTaskGenerationContext(schedule, todayKey);
+      const systemPrompt = buildSystemPrompt("plans", planContext, existingPlans);
+      for await (const chunk of streamAIChat(messages, systemPrompt, 1024, controller.signal)) {
         accumulated += chunk;
       }
       const action = parseAIAction(accumulated);
       if (action?.type === "create_plan") {
         const p = action.payload;
+
+        // Shape validation (Zod) — additive, on top of parseAIAction's own
+        // lenient coercion. Drops any task whose shape or duration remains
+        // invalid after that, reporting why.
+        const { valid: shapeValidTasks, issues: shapeIssues } = validateTaskShapes(p.tasks ?? []);
+
         setTitle(p.title);
         setDesc(p.description);
         setEmoji(p.emoji ?? "brain");
         setColor(resolveAccentColor(p.color, p.emoji ?? "brain"));
         setStartDate(p.startDate ?? "");
         setEndDate(p.endDate ?? "");
-        setTasks(p.tasks ?? []);
+        setTasks(shapeValidTasks);
         setMilestones(p.milestones ?? []);
+        setRuleIssues([
+          // Shape-invalid tasks are already excluded from `tasks` above —
+          // there's nothing left to "fix", so this is informational, not
+          // blocking (only genuine business-rule violations block Create).
+          ...shapeIssues.map((i: TaskShapeIssue): RuleIssue => ({
+            severity: "warning",
+            message: `Dropped "${i.title}" — ${i.message}`,
+          })),
+        ]);
         setStep("review");
-      } else {
-        setErrorMsg("The AI didn't return a valid plan. Try rephrasing your goal.");
+        return;
       }
+
+      const trimmed = accumulated.trim();
+      // Only the FIRST call (no followUp yet) can turn into a question — the
+      // retry after an answer always falls through to the error below, which
+      // is what keeps this bounded to one clarifying round.
+      const looksLikeJSON = /^[[{]/.test(trimmed) || trimmed.includes("```");
+      if (!followUp && trimmed.length > 0 && !looksLikeJSON) {
+        setClarifyingQuestion(trimmed);
+        setAnswer("");
+        setStep("question");
+        setTimeout(() => answerRef.current?.focus(), 120);
+        return;
+      }
+      setErrorMsg("The AI didn't return a valid plan. Try rephrasing your goal.");
     } catch (err) {
       if (!(err instanceof Error && err.name === "AbortError")) {
         setErrorMsg(err instanceof Error ? err.message : "Generation failed. Try again.");
@@ -194,8 +249,44 @@ export default function AIPlanCreatorSheet({
     }
   }
 
+  function handleGenerate() {
+    void runGenerate();
+  }
+
+  function handleAnswerSubmit() {
+    void runGenerate({ question: clarifyingQuestion, answer: answer.trim() });
+  }
+
+  function handleSkipQuestion() {
+    void runGenerate({ question: clarifyingQuestion, answer: "" });
+  }
+
+  // Re-run semantic checks from the editable draft. Otherwise an issue from a
+  // generated task or milestone would still block creation after its removal.
+  const businessRuleIssues = useMemo(() => {
+    const { dayStartMinutes, dayEndMinutes } = resolveDayWindowMinutes(schedule.preferences ?? {});
+    const existingTasksByDay = DAYS.reduce<Partial<Record<DayKey, { title: string; startTime: string; endTime: string }[]>>>(
+      (acc, day) => {
+        acc[day] = (schedule.activities[day] ?? []).filter(isTrackedTask);
+        return acc;
+      },
+      {},
+    );
+    return runBusinessRules(tasks, milestones, {
+      existingTasksByDay,
+      rituals: schedule.rituals ?? [],
+      dayStartMinutes,
+      dayEndMinutes,
+      planEndDate: endDate || undefined,
+      todayISO: todayISO(),
+    });
+  }, [endDate, milestones, schedule.activities, schedule.preferences, schedule.rituals, tasks]);
+
+  const displayedRuleIssues = [...ruleIssues, ...businessRuleIssues];
+  const hasBlockingIssues = displayedRuleIssues.some((i) => i.severity === "error");
+
   function handleCreate() {
-    if (!title.trim()) return;
+    if (!title.trim() || hasBlockingIssues) return;
     onCreatePlan({ title, description: desc, emoji, color, startDate, endDate, tasks, milestones });
   }
 
@@ -285,7 +376,69 @@ export default function AIPlanCreatorSheet({
     );
   }
 
-  // ── Step 2: Review & Edit ─────────────────────────────────────────────────
+  // ── Step 2: Clarifying question ──────────────────────────────────────────
+
+  function renderQuestion() {
+    return (
+      <div className="space-y-5 p-5 pb-8">
+        <SheetHeader eyebrow="AI" title="Plan with AI" onClose={onClose} />
+
+        <div className="rounded-xl border border-emerald-100 bg-emerald-50/60 px-3.5 py-2.5 dark:border-emerald-500/15 dark:bg-emerald-500/5">
+          <p className="mb-1 flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-[0.08em] text-emerald-700 dark:text-emerald-400">
+            <IconSparkles size={11} strokeWidth={2.2} />
+            One quick thing
+          </p>
+          <p className="text-[14px] font-medium leading-snug text-neutral-800 dark:text-neutral-200">
+            {clarifyingQuestion}
+          </p>
+        </div>
+
+        <textarea
+          ref={answerRef}
+          value={answer}
+          rows={2}
+          onChange={(e) => setAnswer(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === "Enter" && !e.shiftKey && !streaming) {
+              e.preventDefault();
+              handleAnswerSubmit();
+            }
+          }}
+          placeholder="Your answer…"
+          disabled={streaming}
+          className="w-full resize-none rounded-xl border border-neutral-200 bg-neutral-50 px-4 py-3 text-[14px] text-neutral-900 outline-none placeholder:text-neutral-400 focus:border-neutral-300 focus:bg-white disabled:opacity-60 dark:border-white/10 dark:bg-white/[0.04] dark:text-white dark:placeholder:text-neutral-600 dark:focus:border-white/20 dark:focus:bg-white/[0.07]"
+        />
+
+        {streaming && (
+          <div className="flex items-center gap-2 px-1">
+            <GenStreamingStatus />
+          </div>
+        )}
+
+        {errorMsg && !streaming && (
+          <p className="text-[13px] text-red-500 dark:text-red-400">{errorMsg}</p>
+        )}
+
+        <div className="flex gap-2">
+          <button
+            type="button"
+            onClick={handleSkipQuestion}
+            disabled={streaming}
+            className="flex h-12 items-center gap-1.5 rounded-xl border border-neutral-200 px-4 text-[13px] font-semibold text-neutral-500 transition-colors hover:bg-neutral-50 disabled:opacity-40 dark:border-white/10 dark:text-neutral-400 dark:hover:bg-white/[0.04]"
+          >
+            Skip
+          </button>
+          <div className="flex-1">
+            <Button fullWidth onClick={handleAnswerSubmit} disabled={streaming}>
+              {streaming ? "Generating…" : "Continue"}
+            </Button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // ── Step 3: Review & Edit ─────────────────────────────────────────────────
 
   function renderReview() {
     const today = todayISO();
@@ -414,6 +567,36 @@ export default function AIPlanCreatorSheet({
           </div>
         </div>
 
+        {/* Rule issues — shape drops + business-rule warnings, surfaced before commit */}
+        {displayedRuleIssues.length > 0 && (
+          <div className="space-y-1.5">
+            {["error", "warning"].map((severity) => {
+              const group = displayedRuleIssues.filter((i) => i.severity === severity);
+              if (group.length === 0) return null;
+              const isError = severity === "error";
+              return (
+                <div
+                  key={severity}
+                  className={`rounded-xl border px-3.5 py-2.5 text-[12px] leading-snug ${
+                    isError
+                      ? "border-red-100 bg-red-50 text-red-700 dark:border-red-500/15 dark:bg-red-500/5 dark:text-red-300"
+                      : "border-amber-100 bg-amber-50 text-amber-800 dark:border-amber-500/15 dark:bg-amber-500/5 dark:text-amber-300"
+                  }`}
+                >
+                  <p className="mb-1 font-semibold uppercase tracking-[0.06em] text-[10px]">
+                    {isError ? "Needs attention" : "Worth a look"}
+                  </p>
+                  <ul className="space-y-0.5">
+                    {group.map((issue, i) => (
+                      <li key={i}>{issue.message}</li>
+                    ))}
+                  </ul>
+                </div>
+              );
+            })}
+          </div>
+        )}
+
         {/* Tasks */}
         {tasks.length > 0 && (
           <div>
@@ -429,7 +612,7 @@ export default function AIPlanCreatorSheet({
                   <div className="min-w-0 flex-1">
                     <p className="truncate text-[13px] font-semibold text-neutral-800 dark:text-neutral-200">{t.title}</p>
                     <p className="text-[11px] capitalize text-neutral-400 dark:text-neutral-500">
-                      {t.day} · {t.startTime}–{t.endTime}
+                      {t.day} · {formatDisplayTime(t.startTime)}–{formatDisplayTime(t.endTime)}
                     </p>
                   </div>
                   <button
@@ -476,8 +659,8 @@ export default function AIPlanCreatorSheet({
           </div>
         )}
 
-        <Button fullWidth onClick={handleCreate} disabled={!title.trim()}>
-          Create Plan
+        <Button fullWidth onClick={handleCreate} disabled={!title.trim() || hasBlockingIssues}>
+          {hasBlockingIssues ? "Resolve issues above to continue" : "Create Plan"}
         </Button>
       </div>
     );
@@ -486,7 +669,7 @@ export default function AIPlanCreatorSheet({
   return (
     <BottomSheet open={open} onClose={onClose}>
       <AnimatePresence mode="wait">
-        {step === "input" ? (
+        {step === "input" && (
           <m.div
             key="input"
             initial={{ opacity: 0, x: -20 }}
@@ -496,7 +679,19 @@ export default function AIPlanCreatorSheet({
           >
             {renderInput()}
           </m.div>
-        ) : (
+        )}
+        {step === "question" && (
+          <m.div
+            key="question"
+            initial={{ opacity: 0, x: 20 }}
+            animate={{ opacity: 1, x: 0 }}
+            exit={{ opacity: 0, x: 20 }}
+            transition={{ duration: 0.2 }}
+          >
+            {renderQuestion()}
+          </m.div>
+        )}
+        {step === "review" && (
           <m.div
             key="review"
             initial={{ opacity: 0, x: 20 }}

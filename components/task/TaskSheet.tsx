@@ -48,6 +48,7 @@ import {
 import type { TaskSlot } from "@/lib/useScheduleDB";
 import { parseTimeToMinutes, formatMinutes } from "@/lib/timeUtils";
 import { resolveOccurrence } from "@/lib/taskOccurrence";
+import { constrainTaskToPlanWindow } from "@/lib/planTaskWindow";
 import { PlanSelector } from "./PlanSelector";
 import SubtaskDraftRow, { type SubtaskDraft } from "./SubtaskDraftRow";
 import { validateTaskSlots } from "@/lib/scheduleRules";
@@ -592,6 +593,15 @@ export function TaskSheet({
       }
     }
 
+    const taskWindow = selectedPlan
+      ? constrainTaskToPlanWindow(
+          {
+            activeFrom: showActiveWindow && activeFrom ? activeFrom : undefined,
+            activeUntil: showActiveWindow && activeUntil ? activeUntil : undefined,
+          },
+          selectedPlan
+        )
+      : { activeFrom: undefined, activeUntil: undefined };
     const taskDraft: Omit<Task, "id"> = {
       title: title.trim(),
       description: description.trim() || undefined,
@@ -616,8 +626,8 @@ export function TaskSheet({
           : undefined,
       recurrence,
       // Active window only applies to recurring tasks; a one-off carries its own date.
-      activeFrom: showActiveWindow && activeFrom ? activeFrom : undefined,
-      activeUntil: showActiveWindow && activeUntil ? activeUntil : undefined,
+      activeFrom: taskWindow.activeFrom,
+      activeUntil: taskWindow.activeUntil,
       stepBufferMinutes: taskType === "session" && stepBuffer ? stepBuffer : undefined,
     };
 

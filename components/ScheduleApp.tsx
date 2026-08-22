@@ -16,6 +16,9 @@ import DesktopSidebar from "@/components/desktop/DesktopSidebar";
 import { WeekGrid } from "@/components/desktop/WeekGrid";
 import type { AIActionResult, AIMilestone } from "@/lib/ai";
 import { AI_ENABLED } from "@/lib/featureFlags";
+import { useAIActions } from "@/lib/ai/useAIActions";
+import { useCoachTour } from "@/lib/onboarding/useCoachTour";
+import { TOUR_STEPS, type TourId } from "@/lib/onboarding/tours";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
 import type { CategoryDraft } from "@/components/category/CategorySheet";
 import { useAuth } from "@/contexts/AuthProvider";
@@ -33,6 +36,7 @@ const SettingsSheet = dynamic(() => import("@/components/auth/SettingsSheet").th
 const SettingsView = dynamic(() => import("@/components/SettingsView").then(m => ({ default: m.SettingsView })), { ssr: false });
 const AIOnboarding = dynamic(() => import("@/components/ai/AIOnboarding"), { ssr: false });
 const AIView = dynamic(() => import("@/components/AIView").then(m => ({ default: m.AIView })), { ssr: false });
+const CoachMarks = dynamic(() => import("@/components/onboarding/CoachMarks"), { ssr: false });
 const NotesView = dynamic(() => import("@/components/notes/NotesView"), { ssr: false });
 const TemplatesSheet = dynamic(() => import("@/components/TemplatesSheet").then(m => ({ default: m.TemplatesSheet })), { ssr: false });
 const SessionSheet = dynamic(() => import("@/components/activity/SessionSheet"), { ssr: false });
@@ -79,6 +83,7 @@ import {
 } from "@/lib/colorSystem";
 import { taskIdentity, categoriesById } from "@/lib/taskIdentity";
 import { canDeleteCategory, categoryForIcon, categoryUsageCounts, ensureCategoryIn } from "@/lib/taskCategories";
+import { constrainTaskToPlanWindow } from "@/lib/planTaskWindow";
 import { SECTION_ICONS } from "@/components/SectionIcons";
 import {
   IconChevronLeft,
@@ -99,6 +104,7 @@ import {
   IconX,
   IconClipboardData,
   IconStack2,
+  IconTargetArrow,
 } from "@tabler/icons-react";
 import { DndContext, DragEndEvent, PointerSensor, useSensor, useSensors } from "@dnd-kit/core";
 import { arrayMove, SortableContext, useSortable, verticalListSortingStrategy } from "@dnd-kit/sortable";
@@ -147,6 +153,7 @@ import {
   createSubtask,
   getSlots,
   retimeSlot,
+  moveTaskSlot,
   type TaskDeleteScope,
 } from "@/lib/taskMutations";
 import { findPlanByTitle, findTasksByTitle } from "@/lib/planLookup";
@@ -157,7 +164,7 @@ import { resolveTimes as resolveParsedTimes } from "@/lib/scheduleParser";
 import { applyTemplate } from "@/lib/templates";
 import type { Template } from "@/lib/templates";
 import { toggleRitualCompletion } from "@/lib/ritualCompletions";
-import { parseTimeToMinutes, formatDuration } from "@/lib/timeUtils";
+import { formatDisplayTime, parseTimeToMinutes, formatDuration } from "@/lib/timeUtils";
 import {
   pointerToMinutes,
   snapMinutes,
@@ -184,8 +191,11 @@ import ProgressBar from "@/components/ui/ProgressBar";
 import { normalizeMilestoneTimeline, cascadeMilestoneDates } from "@/lib/roadmapDates";
 import AddPlanSheet from "@/components/plan/AddPlanSheet";
 import EditPlanSheet from "@/components/plan/EditPlanSheet";
+import GoalListSheet from "@/components/goal/GoalListSheet";
+import { deleteGoal } from "@/lib/goalMutations";
 import { haptic } from "@/lib/haptics";
 import { buildDeleteConfirmationCopy } from "@/lib/deleteConfirm";
+import { resolveCustomVisibleDates } from "@/lib/customView";
 
 // ─── Constants ───────────────────────────────────────────────────────────────
 
@@ -728,6 +738,7 @@ export default function ScheduleApp() {
   }
   const { user, isGuest, authLoading } = useAuth();
   const { schedule, setSchedule, ready, clearData, clearProgress, restoreData, isFirstLaunch, undo } = useScheduleDB();
+  const { available: aiAvailable } = useAIActions();
   useReminders(schedule, ready);
   const [todayKey, setTodayKey] = useState<DayKey>(() => JS_DAYS[new Date().getDay()]);
   const [activeDay, setActiveDay] = useState<DayKey>(() => JS_DAYS[new Date().getDay()]);
@@ -747,6 +758,17 @@ export default function ScheduleApp() {
   // stored data), once the DB has actually reported back.
   const activeTab = tabSelection ?? (iosSafeMode || (ready && isFirstLaunch) ? 4 : 0);
   const setActiveTab = useCallback((tab: number) => setTabSelection(tab), []);
+
+  // A short, skippable coach-mark tour per tab — re-evaluated whenever the
+  // active tab changes, so switching to a not-yet-seen tab picks its tour up
+  // automatically (useCoachTour's own effect keys off `id`). Overview and
+  // Settings intentionally have no entry in TOUR_STEPS — see lib/onboarding/tours.ts.
+  const activeTourId: TourId | null =
+    activeTab === 0 ? "today" : activeTab === 1 ? "plans" : activeTab === 2 ? "routine" : null;
+  const tour = useCoachTour(activeTourId ?? "none", {
+    enabled: activeTourId !== null && !iosSafeMode && ready,
+    delayMs: 1200,
+  });
   const [whatNextDismissed, setWhatNextDismissed] = useState(false);
 
   const [toastState, setToastState] = useState<ToastState | null>(null);
@@ -786,6 +808,7 @@ export default function ScheduleApp() {
   } | null>(null);
 
   const [addingPlan, setAddingPlan] = useState(false);
+  const [goalsSheetOpen, setGoalsSheetOpen] = useState(false);
   const [aiPlanCreating, setAiPlanCreating] = useState(false);
   const [aiOpen, setAiOpen] = useState(false);
   const [aiInitialMessage, setAiInitialMessage] = useState("");
@@ -1276,6 +1299,9 @@ export default function ScheduleApp() {
     // underlying weekday template so "All days" starts from template values.
     const template =
       DAYS.flatMap((d) => scheduleRef.current.activities[d] ?? []).find((t) => t.id === task.id) ?? task;
+    if (dateISO) {
+      setActiveDay(JS_DAYS[new Date(`${dateISO}T00:00:00`).getDay()] as DayKey);
+    }
     setTaskSheetTask(template);
     setTaskSheetPlanId(template.planId);
     setTaskSheetDateISO(dateISO ?? activeDateISORef.current);
@@ -1298,14 +1324,20 @@ export default function ScheduleApp() {
   // ── Unified create + edit save handler ────────────────────────────────────
 
   function handleTaskSheetSave(data: TaskSaveData) {
+    const linkedPlan = schedule.plans.find((plan) => plan.id === data.taskDraft.planId);
+    const taskDraft =
+      linkedPlan?.startDate && (!data.taskDraft.activeFrom || data.taskDraft.activeFrom < linkedPlan.startDate)
+        ? { ...data.taskDraft, activeFrom: linkedPlan.startDate }
+        : data.taskDraft;
+
     // "This day only" — write a minimal per-date override instead of editing the
     // recurring template across every weekday copy.
     if (data.taskId && data.scope === "occurrence" && taskSheetDateISO && taskSheetTask) {
       const diff = diffException(taskSheetTask, {
-        title: data.taskDraft.title,
-        startTime: data.taskDraft.startTime,
-        endTime: data.taskDraft.endTime,
-        description: data.taskDraft.description,
+        title: taskDraft.title,
+        startTime: taskDraft.startTime,
+        endTime: taskDraft.endTime,
+        description: taskDraft.description,
       });
       if (Object.keys(diff).length > 0) {
         setSchedule(setTaskException(data.taskId, taskSheetDateISO, diff));
@@ -1318,13 +1350,13 @@ export default function ScheduleApp() {
     if (data.taskId) {
       // Edit mode — custom-per-day writes each weekday its own slots.
       if (data.perDaySlots) {
-        setSchedule(updateTaskPerDay(data.taskId, data.taskDraft, data.perDaySlots, data.repeatDays, data.planItems));
+        setSchedule(updateTaskPerDay(data.taskId, taskDraft, data.perDaySlots, data.repeatDays, data.planItems));
       } else {
-        setSchedule(updateTaskDays(data.taskId, data.taskDraft, data.repeatDays, data.planItems));
+        setSchedule(updateTaskDays(data.taskId, taskDraft, data.repeatDays, data.planItems));
       }
     } else {
       // Create mode
-      setSchedule(createTask(data.taskDraft, data.repeatDays, data.planItems));
+      setSchedule(createTask(taskDraft, data.repeatDays, data.planItems));
     }
     closeTaskSheet();
   }
@@ -1396,7 +1428,7 @@ export default function ScheduleApp() {
           ),
         },
       }));
-      setToastMessage(`Moved to ${patch.startTime}`);
+      setToastMessage(`Moved to ${formatDisplayTime(patch.startTime)}`);
     },
     [activeDay, schedule, setSchedule]
   );
@@ -1487,20 +1519,26 @@ export default function ScheduleApp() {
     []
   );
 
-  /** Cmd/Ctrl-drag reschedule from WeekGrid — today's column only (WeekGrid
-   *  itself gates the drag to today; this mirrors the single-day timeline's
-   *  own drag-move commit, retimeSlot-safe for multi-slot tasks). */
-  const handleRetimeTask = useCallback(
-    (taskId: string, day: DayKey, slotIndex: number, startTime: string, endTime: string) => {
-      setSchedule((prev) => ({
-        ...prev,
-        activities: {
-          ...prev.activities,
-          [day]: (prev.activities[day] ?? []).map((t) =>
-            t.id !== taskId ? t : retimeSlot(t, slotIndex, startTime, endTime),
-          ),
-        },
-      }));
+  /** Cmd/Ctrl-drag reschedule/relocate from WeekGrid — any column, any day
+   *  (only a continuation block is excluded; WeekGrid enforces that). Same-day
+   *  drags and cross-day moves both edit the recurring template; a cross-day
+   *  drop also clears any stale per-date exception on the target date so it
+   *  can't silently override the just-dropped time on next render. Composed
+   *  into one setSchedule call so the whole gesture is a single undo step. */
+  const handleMoveTask = useCallback(
+    (
+      taskId: string,
+      sourceDay: DayKey,
+      slotIndex: number,
+      targetDay: DayKey,
+      targetDateISO: string,
+      startTime: string,
+      endTime: string,
+    ) => {
+      setSchedule((prev) => {
+        const afterMove = moveTaskSlot(taskId, sourceDay, slotIndex, targetDay, targetDateISO, startTime, endTime)(prev);
+        return clearTaskException(taskId, targetDateISO)(afterMove);
+      });
     },
     [setSchedule]
   );
@@ -1565,6 +1603,15 @@ export default function ScheduleApp() {
       ...prev,
       rituals: [...(prev.rituals ?? []), { ...data, id: uid() }],
     }));
+  }
+
+  function openCreateRitual() {
+    setActiveTab(2);
+    if (canAddRitual) {
+      setRitualAddOpen(true);
+    } else {
+      setToastMessage("You can have up to 8 routines");
+    }
   }
 
   function handleDeleteRitual(id: string) {
@@ -1713,6 +1760,7 @@ export default function ScheduleApp() {
           endTime: t.endTime,
           categoryId: ensureCategoryIn(categoryDraft, t.icon || plan.emoji),
           planId,
+          ...constrainTaskToPlanWindow({}, plan),
           taskType: t.taskType,
           subtasks: t.subtasks.map((s) => ({ id: uid(), task: s })),
         };
@@ -1760,6 +1808,17 @@ export default function ScheduleApp() {
         }));
         setSelectedPlanId((cur) => (cur === planId ? null : cur));
       }
+    );
+  }
+
+  function handleDeleteGoal(goalId: string) {
+    const goal = schedule.goals?.find((g) => g.id === goalId);
+    openConfirm(
+      buildDeleteConfirmationCopy("goal", {
+        name: goal?.title,
+        description: "Linked plans are kept — they'll just no longer be tied to this goal.",
+      }),
+      () => setSchedule((prev) => deleteGoal(prev, goalId))
     );
   }
 
@@ -1819,11 +1878,12 @@ export default function ScheduleApp() {
 
   function createPlanFromAIAction(data: import("@/components/plan/AIPlanCreatorSheet").AIPlanCreatorData) {
     const planId = uid();
+    const planStartDate = data.startDate || schedule.preferences?.startDate;
     const plan: Plan = {
       id: planId,
       title: data.title,
       description: data.description || undefined,
-      startDate: data.startDate || undefined,
+      startDate: planStartDate,
       endDate: data.endDate || undefined,
       category: categoryFromIcon(data.emoji),
       emoji: data.emoji,
@@ -1832,10 +1892,17 @@ export default function ScheduleApp() {
       metaFields: [],
       summary: [],
     };
+    // AI-created plans use the same validation, de-duplication, and overlap
+    // resolution path as tasks generated for an existing plan.
+    const { valid: scheduledTasks, conflicts } = applyScheduleRules(data.tasks, schedule.activities);
+    if (conflicts.length > 0) {
+      const adjusted = conflicts.map((c) => `"${c.taskTitle}" moved to ${c.adjustedStart}`).join(", ");
+      setToastMessage(`Adjusted ${conflicts.length} task${conflicts.length > 1 ? "s" : ""} to avoid overlaps: ${adjusted}`);
+    }
     setSchedule((prev) => {
       const updatedActivities = { ...prev.activities };
       const categoryDraft = [...prev.categories];
-      for (const t of data.tasks) {
+      for (const t of scheduledTasks) {
         const task: Task = {
           id: uid(),
           title: t.title,
@@ -1843,6 +1910,7 @@ export default function ScheduleApp() {
           endTime: t.endTime,
           categoryId: ensureCategoryIn(categoryDraft, t.icon || plan.emoji),
           planId,
+          activeFrom: plan.startDate,
           taskType: t.taskType,
           subtasks: (t.subtasks ?? []).map((s) => ({ id: uid(), task: s })),
         };
@@ -2505,7 +2573,7 @@ export default function ScheduleApp() {
       const startIndex = Math.max(0, Math.min(4, activeIndex - 1));
       return weekDates.slice(startIndex, startIndex + 3);
     }
-    return weekDates.filter(({ day }) => customDays.includes(day));
+    return resolveCustomVisibleDates(weekDates, customDays);
   }, [activeDay, calendarView, customDays, weekDates]);
 
 
@@ -2777,6 +2845,7 @@ export default function ScheduleApp() {
     slotIndex?: number,
     edgeCut?: "top" | "bottom",
     gridMenuAction?: { label: string; icon: React.ReactNode; onClick: () => void },
+    dateISO?: string,
   ) {
     const { linkedPlan, category: taskCategory } = getTaskPresentation(task);
     // Grid blocks are per-slot: show this slot's own duration.
@@ -2812,7 +2881,7 @@ export default function ScheduleApp() {
         // Opening a continuation opens its source task: openEditSheet resolves
         // the template by id across every weekday bucket, so it lands on the
         // real task rather than on the day the tail happens to be drawn.
-        onClick={() => openEditSheet(task)}
+        onClick={() => openEditSheet(task, dateISO)}
         onDelete={!readOnly ? onDelete : undefined}
         className="h-full w-full"
       />
@@ -2855,11 +2924,18 @@ export default function ScheduleApp() {
             label="Stay on track"
             title="My Plans"
             actions={
-              <CtaActionButton
-                label="Add New Plan"
-                icon={<IconPlus size={14} strokeWidth={2.5} />}
-                onClick={() => setAddingPlan(true)}
-              />
+              <div className="flex items-center gap-2">
+                <CtaActionButton
+                  label="Goals"
+                  icon={<IconTargetArrow size={14} strokeWidth={2.5} />}
+                  onClick={() => setGoalsSheetOpen(true)}
+                />
+                <CtaActionButton
+                  label="Add New Plan"
+                  icon={<IconPlus size={14} strokeWidth={2.5} />}
+                  onClick={() => setAddingPlan(true)}
+                />
+              </div>
             }
             className="mb-6"
           />
@@ -2986,7 +3062,7 @@ export default function ScheduleApp() {
           onToggleCollapse={() => setSidebarCollapsed((v) => !v)}
           onCreateTask={() => openCreateSheet()}
           onCreatePlan={openAddPlan}
-          onCreateRitual={() => { setActiveTab(2); if (canAddRitual) setRitualAddOpen(true); }}
+          onCreateRitual={openCreateRitual}
           onBulkImport={() => setBulkImportOpen(true)}
           onOpenSettings={() => setSettingsOpen(true)}
           onOpenSettingsTab={() => setActiveTab(5)}
@@ -3138,6 +3214,7 @@ export default function ScheduleApp() {
         {ready && activeTab === 0 && (
           <m.div
             key="tab-tasks"
+            data-tour="today-timeline"
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
@@ -3161,7 +3238,7 @@ export default function ScheduleApp() {
                 onDaySelect={setActiveDay}
                 onDayActions={(day) => { setActiveDay(day); setDayActionsOpen(true); }}
                 onCreateTaskAtTime={(day, startMin, endMin) => openCreateSheetWithTime(startMin, endMin, day)}
-                onRetimeTask={handleRetimeTask}
+                onMoveTask={handleMoveTask}
                 onMarkMissed={handleMarkTaskMissed}
                 onOpenMissedRecovery={handleOpenMissedRecovery}
                 onWeekPrev={() => {
@@ -3694,6 +3771,7 @@ export default function ScheduleApp() {
         {ready && activeTab === 1 && (
           <m.div
             key="tab-plans"
+            data-tour={selectedPlan ? undefined : "plans-list"}
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
@@ -3760,6 +3838,7 @@ export default function ScheduleApp() {
         {ready && activeTab === 2 && (
           <m.div
             key="tab-routine"
+            data-tour="routine-view"
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
@@ -3810,6 +3889,7 @@ export default function ScheduleApp() {
                 todayKey={todayKey}
                 onNavigate={(tab) => { setActiveTab(tab); setSelectedPlanId(null); }}
                 onMarkTaskDone={(id, subtaskIds) => handleToggleTaskComplete(id, subtaskIds, todayKey)}
+                onToggleSlot={(id, slotIndex) => handleToggleSlot(id, slotIndex, todayKey, todayISO())}
                 onMissedTask={(id, subtaskIds) => handleMarkTaskMissed(id, subtaskIds, todayKey)}
                 onOpenSubtasks={(id) => setSubtasksRef({ id, day: todayKey, dateISO: todayISO() })}
                 completedRitualIds={completedRitualIds}
@@ -3879,25 +3959,41 @@ export default function ScheduleApp() {
           plan={plansById.get(editingPlanId) ?? null}
           setSchedule={setSchedule}
           onClose={() => setEditingPlanId(null)}
+          goals={schedule.goals ?? []}
         />
       )}
+      {/* ── Goals Sheet (list + detail + create/edit) ───────────────────────── */}
+      <GoalListSheet
+        open={goalsSheetOpen}
+        onClose={() => setGoalsSheetOpen(false)}
+        schedule={schedule}
+        setSchedule={setSchedule}
+        onDeleteGoal={handleDeleteGoal}
+      />
       {/* ── Add Plan Bottom Sheet ───────────────────────────────────────────── */}
       {addingPlan && (
         <AddPlanSheet
           open={addingPlan}
           onClose={() => setAddingPlan(false)}
           setSchedule={setSchedule}
-          onUseAI={() => { setAddingPlan(false); setAiPlanCreating(true); }}
+          onUseAI={
+            aiAvailable
+              ? () => { setAddingPlan(false); setAiPlanCreating(true); }
+              : undefined
+          }
+          goals={schedule.goals ?? []}
         />
       )}
 
       {/* ── AI Plan Creator Sheet (hidden while AI is disabled) ────────────── */}
-      {AI_ENABLED && !iosSafeMode && (
+      {AI_ENABLED && aiAvailable && !iosSafeMode && (
         <AIPlanCreatorSheet
           open={aiPlanCreating}
           onClose={() => setAiPlanCreating(false)}
           onCreatePlan={handleCreateAIPlan}
           existingPlans={schedule.plans.map((p) => ({ title: p.title, category: p.category, description: p.description }))}
+          schedule={schedule}
+          todayKey={todayKey}
         />
       )}
 
@@ -3909,7 +4005,7 @@ export default function ScheduleApp() {
             onTabChange={(tab) => { setActiveTab(tab); setSelectedPlanId(null); }}
             onCreateTask={() => openCreateSheet()}
             onCreatePlan={openAddPlan}
-            onCreateRitual={() => { setActiveTab(2); if (canAddRitual) setRitualAddOpen(true); }}
+            onCreateRitual={openCreateRitual}
             onBulkImport={() => setBulkImportOpen(true)}
           />
         </div>
@@ -4138,7 +4234,7 @@ export default function ScheduleApp() {
       </div>{/* end main scrollable column */}
 
       {/* ── AI Assistant — available on all tabs (hidden while AI is disabled) ── */}
-      {AI_ENABLED && !iosSafeMode && (
+      {AI_ENABLED && aiAvailable && !iosSafeMode && (
         <ErrorBoundary section name="AI">
           <AIAssistant
             open={aiOpen}
@@ -4155,7 +4251,7 @@ export default function ScheduleApp() {
       )}
 
       {/* ── AI chat (desktop-only free chat: Plan/Task/Subtasks/Milestone/Tracker/Ritual) ── */}
-      {AI_ENABLED && !iosSafeMode && (
+      {AI_ENABLED && aiAvailable && !iosSafeMode && (
         <ErrorBoundary section name="AI Chat">
           <AIFab
             context="plans"
@@ -4169,7 +4265,7 @@ export default function ScheduleApp() {
       )}
 
       {/* ── AI trigger button (floating, mobile only — desktop uses AIFab's own button) ── */}
-      {AI_ENABLED && !iosSafeMode && (
+      {AI_ENABLED && aiAvailable && !iosSafeMode && (
         <AnimatePresence>
           {!aiOpen && (
             <m.button
@@ -4192,6 +4288,11 @@ export default function ScheduleApp() {
 
       {/* ── AI onboarding — shown once when app opens ─────────────────────── */}
       {AI_ENABLED && !iosSafeMode && <AIOnboarding onOpenAISettings={() => setActiveTab(7)} />}
+
+      {/* ── Per-tab guided tour — short, skippable, once per device ───────── */}
+      {activeTourId && (
+        <CoachMarks open={tour.open} steps={TOUR_STEPS[activeTourId]} onFinish={tour.finish} />
+      )}
 
     </main>
   );

@@ -8,6 +8,7 @@ import type { TaskState } from "@/lib/taskCompletion";
 import { getTaskSubtaskSummary, isTrackedTask, taskStatusLabel } from "@/lib/taskCompletion";
 import { useLongPress } from "@/lib/useLongPress";
 import { getSlots } from "@/lib/taskMutations";
+import { formatDisplayTime } from "@/lib/timeUtils";
 import { timelineCardStyles, TIMELINE_NEUTRAL_CARD } from "@/lib/colorSystem";
 
 /**
@@ -319,7 +320,7 @@ export function TaskBlockCard({
                 slotDone ? "line-through decoration-neutral-400 opacity-70" : ""
               }`}
             >
-              {slot.startTime}{slot.endTime ? ` – ${slot.endTime}` : ""}
+              {formatDisplayTime(slot.startTime)}{slot.endTime ? ` – ${formatDisplayTime(slot.endTime)}` : ""}
             </span>
           </div>
         );
@@ -333,7 +334,7 @@ export function TaskBlockCard({
         className={`whitespace-nowrap font-extrabold tabular-nums ${isList ? styles.time : "text-neutral-500 dark:text-neutral-400"} ${isList ? "text-[14px]" : compact ? "text-[10px]" : "text-[11px]"}`}
       >
         {displaySlots
-          .map((s) => `${s.startTime}${s.endTime ? ` – ${s.endTime}` : ""}`)
+          .map((s) => `${formatDisplayTime(s.startTime)}${s.endTime ? ` – ${formatDisplayTime(s.endTime)}` : ""}`)
           .join("  ·  ")}
       </span>
       {duration && !narrow && (

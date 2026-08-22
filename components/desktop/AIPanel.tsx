@@ -12,6 +12,7 @@ import { findPlanByTitle, findTasksByTitle } from "@/lib/planLookup";
 import type { Plan, Ritual, Schedule } from "@/lib/useScheduleDB";
 import { SECTION_ICONS, getIconPickerStyle } from "@/components/SectionIcons";
 import type { AITask } from "@/lib/ai";
+import { formatDisplayTime } from "@/lib/timeUtils";
 
 interface Message {
   role: "user" | "assistant";
@@ -226,7 +227,7 @@ function PlanDraftCard({ action, onApply }: { action: Extract<AIActionResult, { 
                           `truncate` and lets long titles push the row wider
                           than the card. */}
                       <span className="min-w-0 truncate text-[11px] font-semibold text-neutral-800 dark:text-neutral-200">{t.title}</span>
-                      <span className="ml-auto shrink-0 text-[10px] text-neutral-400">{t.startTime}–{t.endTime}</span>
+                      <span className="ml-auto shrink-0 text-[10px] text-neutral-400">{formatDisplayTime(t.startTime)}–{formatDisplayTime(t.endTime)}</span>
                     </div>
                     {t.subtasks && t.subtasks.length > 0 && (
                       <p className="mt-0.5 text-[10px] text-neutral-400 dark:text-neutral-500 truncate">
@@ -537,7 +538,7 @@ export function AIPanel({ context, plans, rituals, schedule, activePlan, initial
     <div className="flex h-full w-full flex-col overflow-hidden rounded-2xl border border-neutral-200 bg-white text-neutral-900 dark:border-white/10 dark:bg-neutral-950 dark:text-white">
       <div className="flex h-[76px] shrink-0 items-center justify-between gap-3 border-b border-neutral-100 bg-white px-4 dark:border-white/10 dark:bg-neutral-950">
         <div className="flex items-center gap-3">
-          <div className="flex h-10 w-10 items-center justify-center rounded-2xl border border-blue-500/15 bg-blue-500/10 dark:bg-blue-500/10">
+          <div className="flex h-10 w-10 items-center justify-center rounded-2xl border border-blue-200 bg-blue-50 dark:border-blue-500/15 dark:bg-blue-500/10">
             <IconSparkles size={18} strokeWidth={2} className="text-blue-600 dark:text-blue-300" />
           </div>
           <div className="min-w-0">
@@ -709,10 +710,10 @@ export function AIPanel({ context, plans, rituals, schedule, activePlan, initial
       </div>
 
       {/* Input */}
-      <div className="shrink-0 border-t border-neutral-100 px-3 py-3 dark:border-white/10">
+      <div className="shrink-0 border-t border-neutral-200 px-3 py-3 dark:border-white/10">
         <m.div
           transition={{ duration: 0.15 }}
-          className={`flex items-center gap-2 rounded-full border bg-neutral-50 px-3 py-2 transition-colors dark:bg-white/5 ${focused ? "border-blue-400 dark:border-blue-500/30" : "border-neutral-200 dark:border-white/10"}`}
+          className={`flex items-end gap-2 rounded-2xl border bg-neutral-50 px-3 py-2 transition-colors dark:bg-white/5 ${focused ? "border-blue-500/50 dark:border-blue-500/30" : "border-neutral-200 dark:border-white/10"}`}
         >
           <textarea
             ref={inputRef}
@@ -727,10 +728,10 @@ export function AIPanel({ context, plans, rituals, schedule, activePlan, initial
               }
             }}
             placeholder={`Ask about ${contextLabel.toLowerCase()}…`}
-            rows={1}
+            rows={3}
             disabled={streaming}
             className="flex-1 resize-none bg-transparent text-[13px] text-neutral-900 outline-none placeholder:text-neutral-400 disabled:opacity-50 dark:text-white dark:placeholder:text-white/50"
-            style={{ minHeight: "22px", maxHeight: "80px" }}
+            style={{ minHeight: "72px", maxHeight: "160px" }}
           />
           <m.button
             type="button"

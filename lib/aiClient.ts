@@ -3,11 +3,13 @@
  * (multi-turn) and `streamAIAction` (one-shot). Neither caller nor consumer
  * needs to know which provider is behind them; this file is the router.
  *
- * Three providers exist (Settings → AI): MLX and Ollama (lib/ai/providers/
- * mlx.ts, ollama.ts — local, talking directly to a server on this machine)
- * and a generic OpenAI-compatible remote provider (lib/ai/providers/
+ * Four providers exist (Settings → AI): MLX and Ollama (lib/ai/providers/
+ * mlx.ts, ollama.ts — local, talking directly to a server on this machine),
+ * a generic OpenAI-compatible remote provider (lib/ai/providers/
  * openai-compatible.ts — OpenAI, OpenRouter, or any custom endpoint, with
- * the user's own API key). All three are called directly from the browser,
+ * the user's own API key), and an in-browser provider (lib/ai/providers/
+ * browser.ts — runs a small model entirely on-device via Transformers.js/
+ * WebGPU, no server of any kind). All are called directly from the browser,
  * not through a server: this app is a static export (`next.config`'s
  * `output: "export"` — no Next.js server anywhere, dev or prod), and even a
  * real server tier couldn't reach `localhost` on a user's own machine for
@@ -26,6 +28,7 @@ import { getAIProviderState } from "./ai/config";
 import { MLXProvider } from "./ai/providers/mlx";
 import { OllamaProvider } from "./ai/providers/ollama";
 import { OpenAICompatibleProvider } from "./ai/providers/openai-compatible";
+import { BrowserProvider } from "./ai/providers/browser";
 import type { AIMessage, AIProvider } from "./ai/types";
 
 export type { AIMessage };
@@ -57,6 +60,8 @@ export function activeProvider(): AIProvider {
       return new OllamaProvider(state.ollama);
     case "openai-compatible":
       return new OpenAICompatibleProvider(state.remote);
+    case "browser":
+      return new BrowserProvider(state.browser);
     case "mlx":
     default:
       return new MLXProvider(state.mlx);

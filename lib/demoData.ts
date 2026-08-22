@@ -929,6 +929,7 @@ export function buildDemoSchedule(now: Date = new Date()): Schedule {
   const outcomes = buildOutcomes(now, plansById);
 
   return {
+    goals: [],
     plans,
     categories: CATEGORIES,
     activities: buildTasks(now, outcomes),
@@ -939,6 +940,7 @@ export function buildDemoSchedule(now: Date = new Date()): Schedule {
     strategies: [],
     ritualCompletions: buildRitualCompletions(now),
     notes: buildNotes(now),
+    events: [],
     preferences: {
       dayStartTime: "06:00",
       // Analytics measure from here. Set to the first day of this history so the

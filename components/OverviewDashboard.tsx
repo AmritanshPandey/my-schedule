@@ -31,6 +31,7 @@ import { computeExecutionTrend } from "@/lib/executionAnalytics";
 
 import { computeTrend, type TrendResult } from "@/lib/trendUtils";
 import { addDaysToISO, localISODate } from "@/lib/dateUtils";
+import { formatDisplayTime } from "@/lib/timeUtils";
 import { calculateExecutionStreak, type ExecutionStreak } from "@/lib/consistency/calculateExecutionStreak";
 import { calculateRitualStats, ritualScheduledOn } from "@/lib/consistency/calculateRitualStreak";
 import { haptic } from "@/lib/haptics";
@@ -45,6 +46,7 @@ interface OverviewDashboardProps {
   todayKey: DayKey;
   onNavigate: (tab: number) => void;
   onMarkTaskDone: (taskId: string, subtaskIds: string[]) => void;
+  onToggleSlot: (taskId: string, slotIndex: number) => void;
   onMissedTask: (taskId: string, subtaskIds: string[]) => void;
   onOpenSubtasks?: (taskId: string) => void;
   completedRitualIds: Set<string>;
@@ -433,7 +435,7 @@ function RoutineConsistencyCard({
             <div className="min-w-0">
               <p className="truncate text-[14px] font-bold text-neutral-950 dark:text-white">
                 {ritual.title}
-                {ritual.time && <span className="ml-1.5 font-semibold text-neutral-400 dark:text-neutral-500">{ritual.time}</span>}
+                {ritual.time && <span className="ml-1.5 font-semibold text-neutral-400 dark:text-neutral-500">{formatDisplayTime(ritual.time)}</span>}
               </p>
               <div className="mt-1 flex items-center gap-2.5">
                 {streak > 0 && (
@@ -687,6 +689,7 @@ export default function OverviewDashboard({
   todayKey,
   onNavigate,
   onMarkTaskDone,
+  onToggleSlot,
   onMissedTask,
   onOpenSubtasks,
   completedRitualIds,
@@ -913,6 +916,7 @@ export default function OverviewDashboard({
                   taskSummary={taskSummary}
                   taskCheckableIds={taskCheckableIds}
                   onMarkDone={onMarkTaskDone}
+                  onToggleSlot={onToggleSlot}
                   onMissed={onMissedTask}
                   onOpenSubtasks={onOpenSubtasks}
                 />

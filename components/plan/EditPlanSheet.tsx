@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { categoryFromIcon, type Plan, type Schedule } from "@/lib/useScheduleDB";
+import { categoryFromIcon, type Plan, type Schedule, type Goal } from "@/lib/useScheduleDB";
 import { type AccentColor } from "@/lib/colorSystem";
 import { SECTION_ICONS } from "@/components/SectionIcons";
 import BottomSheet from "@/components/ui/BottomSheet";
@@ -10,6 +10,7 @@ import Button from "@/components/ui/Button";
 import Input from "@/components/ui/Input";
 import { daysBetween as daysBetweenUtil } from "@/lib/dateUtils";
 import { recalculateRoadmapTimeline } from "@/lib/roadmapDates";
+import { constrainTaskToPlanWindow } from "@/lib/planTaskWindow";
 import {
   PLAN_TITLE_MAX,
   DurationPresets,
@@ -23,9 +24,12 @@ interface EditPlanSheetProps {
   plan: Plan | null;
   setSchedule: SetScheduleFn;
   onClose: () => void;
+  /** First-class Goals available to optionally link this Plan to. Omitted /
+   * empty simply hides the picker — the relationship is always optional. */
+  goals?: Goal[];
 }
 
-export default function EditPlanSheet({ planId, plan, setSchedule, onClose }: EditPlanSheetProps) {
+export default function EditPlanSheet({ planId, plan, setSchedule, onClose, goals = [] }: EditPlanSheetProps) {
   const [draft, setDraft] = useState({
     title: "",
     description: "",
@@ -33,6 +37,7 @@ export default function EditPlanSheet({ planId, plan, setSchedule, onClose }: Ed
     endDate: "",
     icon: "brain",
     color: "cyan" as AccentColor,
+    goalId: "",
   });
 
   // Sync draft when the plan being edited changes
@@ -45,6 +50,7 @@ export default function EditPlanSheet({ planId, plan, setSchedule, onClose }: Ed
         endDate: plan.endDate ?? "",
         icon: plan.emoji,
         color: plan.color,
+        goalId: plan.goalId ?? "",
       });
     }
   }, [planId, plan]);
@@ -56,6 +62,13 @@ export default function EditPlanSheet({ planId, plan, setSchedule, onClose }: Ed
     // task (derived from its icon, overridable), so a plan-level edit must not
     // stomp choices the user made per task.
     setSchedule((prev) => {
+      const existingPlan = prev.plans.find((item) => item.id === planId);
+      if (!existingPlan) return prev;
+      const updatedPlan = {
+        ...existingPlan,
+        startDate: draft.startDate || undefined,
+        endDate: draft.endDate || undefined,
+      };
       return {
         ...prev,
         plans: prev.plans.map((p) =>
@@ -69,9 +82,18 @@ export default function EditPlanSheet({ planId, plan, setSchedule, onClose }: Ed
                 emoji: draft.icon,
                 color: nextColor,
                 category: categoryFromIcon(draft.icon),
+                goalId: draft.goalId || undefined,
               }
             : p
         ),
+        activities: Object.fromEntries(
+          Object.entries(prev.activities).map(([day, tasks]) => [
+            day,
+            tasks.map((task) =>
+              task.planId === planId ? constrainTaskToPlanWindow(task, updatedPlan) : task
+            ),
+          ])
+        ) as Schedule["activities"],
         milestones: [
           ...(prev.milestones ?? []).filter((m) => m.planId !== planId),
           ...recalculateRoadmapTimeline(
@@ -136,6 +158,24 @@ export default function EditPlanSheet({ planId, plan, setSchedule, onClose }: Ed
             endDate={draft.endDate}
             onSelect={(s, e) => setDraft((d) => ({ ...d, startDate: s, endDate: e }))}
           />
+
+          {goals.length > 0 && (
+            <div>
+              <p className="mb-1 text-[11px] font-semibold uppercase tracking-[0.08em] text-neutral-400 dark:text-neutral-500">
+                Goal <span className="normal-case font-normal text-neutral-400">(optional)</span>
+              </p>
+              <select
+                value={draft.goalId}
+                onChange={(e) => setDraft((d) => ({ ...d, goalId: e.target.value }))}
+                className="h-11 w-full min-w-0 rounded-xl border border-neutral-200 bg-neutral-50 px-3 text-[14px] text-neutral-900 outline-none transition-colors focus:border-neutral-300 focus:bg-neutral-100 dark:border-white/10 dark:bg-white/[0.04] dark:text-white dark:focus:border-white/20 dark:focus:bg-white/[0.07] dark:[color-scheme:dark]"
+              >
+                <option value="">No Goal</option>
+                {goals.map((g) => (
+                  <option key={g.id} value={g.id}>{g.title}</option>
+                ))}
+              </select>
+            </div>
+          )}
 
           <div>
             <p className="mb-2 text-[11px] font-semibold uppercase tracking-[0.08em] text-neutral-400 dark:text-neutral-500">Icon</p>

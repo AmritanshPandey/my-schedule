@@ -4,7 +4,7 @@
  * one place that picks a concrete `AIProvider` and hands it to callers.
  */
 
-export type ProviderKind = "mlx" | "ollama" | "openai-compatible";
+export type ProviderKind = "mlx" | "ollama" | "openai-compatible" | "browser";
 
 export interface AIMessage {
   role: "user" | "assistant";

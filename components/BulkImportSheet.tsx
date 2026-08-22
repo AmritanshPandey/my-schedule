@@ -15,6 +15,7 @@ import { streamAIScheduleParse, parseAIScheduleResult } from "@/lib/aiSchedulePa
 import { isAiConfigured } from "@/lib/aiClient";
 import { SECTION_ICONS } from "@/components/SectionIcons";
 import { haptic } from "@/lib/haptics";
+import { formatDisplayTime } from "@/lib/timeUtils";
 
 const PLAN_ICONS: Record<string, (typeof SECTION_ICONS)[number]["icon"]> = Object.fromEntries(
   SECTION_ICONS.map((s) => [s.name, s.icon])
@@ -420,7 +421,7 @@ export function BulkImportFlow({ plans, fallbackDay = "monday", onCommit, onDone
                                   <IconClock size={13} strokeWidth={2} />Time?
                                 </span>
                               ) : (
-                                <span className="shrink-0 text-[12px] font-semibold text-emerald-600 dark:text-emerald-400">{t.startTime}</span>
+                                <span className="shrink-0 text-[12px] font-semibold text-emerald-600 dark:text-emerald-400">{formatDisplayTime(t.startTime)}</span>
                               )}
                             </div>
                             {t.subtasks && t.subtasks.length > 0 && (

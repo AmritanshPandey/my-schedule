@@ -1,14 +1,15 @@
 "use client";
 
 /**
- * useAIActions — unified AI action hook. Every action runs through the local
- * MLX provider (lib/aiClient.ts) — there's no auth or sign-in gating here:
- * a local model has no per-call cost, so there's nothing to protect the way
- * the old shared, sign-in-gated Gemini key needed. `available` just means
- * "a provider is configured" (always true given MLX's built-in defaults,
- * false only if the user clears the server URL in AI Settings) — actual
- * reachability is what AI Settings' "Test connection" and the try/catch
- * around every real generate() call are for.
+ * useAIActions — unified AI action hook. Every action runs through the
+ * active provider (lib/aiClient.ts's activeProvider(), configured in AI
+ * Settings) — there's no auth or sign-in gating here: none of MLX, Ollama,
+ * or a user's own remote API key has a per-call cost the way the old
+ * shared, sign-in-gated Gemini key needed. `available` just means "a
+ * provider is configured" (always true for MLX/Ollama given their built-in
+ * defaults; for a remote provider it means a base URL + model are set) —
+ * actual reachability is what AI Settings' "Test connection" and the
+ * try/catch around every real generate() call are for.
  *
  * All methods return AsyncGenerator<string> so they plug directly into
  * AIActionSheet's onGenerate prop unchanged from before this rewrite.
@@ -22,6 +23,7 @@ import {
   streamGenerateMilestones,
   streamGenerateMilestoneTasks,
   streamWeeklyInsight,
+  type AIFollowUp,
 } from "@/lib/aiActions";
 
 export interface AIActionsHandle {
@@ -32,6 +34,7 @@ export interface AIActionsHandle {
     planTitle: string,
     description?: string,
     signal?: AbortSignal,
+    followUp?: AIFollowUp,
   ) => AsyncGenerator<string>;
 
   streamSubtasks: (
@@ -42,12 +45,14 @@ export interface AIActionsHandle {
   streamMilestones: (
     plan: { title: string; description?: string; startDate?: string; endDate?: string },
     signal?: AbortSignal,
+    followUp?: AIFollowUp,
   ) => AsyncGenerator<string>;
 
   streamMilestoneTasks: (
     milestone: { title: string; description?: string },
     plan: { title: string; description?: string },
     signal?: AbortSignal,
+    followUp?: AIFollowUp,
   ) => AsyncGenerator<string>;
 
   /** Returns null when AI isn't available — callers already skip rendering
@@ -62,8 +67,8 @@ export function useAIActions(): AIActionsHandle {
   const available = isAiConfigured();
 
   const streamTasks = useCallback(
-    (planTitle: string, description?: string, signal?: AbortSignal): AsyncGenerator<string> =>
-      streamGenerateTasks({ title: planTitle, description }, signal),
+    (planTitle: string, description?: string, signal?: AbortSignal, followUp?: AIFollowUp): AsyncGenerator<string> =>
+      streamGenerateTasks({ title: planTitle, description }, signal, followUp),
     [],
   );
 
@@ -77,7 +82,8 @@ export function useAIActions(): AIActionsHandle {
     (
       plan: { title: string; description?: string; startDate?: string; endDate?: string },
       signal?: AbortSignal,
-    ): AsyncGenerator<string> => streamGenerateMilestones(plan, signal),
+      followUp?: AIFollowUp,
+    ): AsyncGenerator<string> => streamGenerateMilestones(plan, signal, followUp),
     [],
   );
 
@@ -86,7 +92,8 @@ export function useAIActions(): AIActionsHandle {
       milestone: { title: string; description?: string },
       plan: { title: string; description?: string },
       signal?: AbortSignal,
-    ): AsyncGenerator<string> => streamGenerateMilestoneTasks(milestone, plan, signal),
+      followUp?: AIFollowUp,
+    ): AsyncGenerator<string> => streamGenerateMilestoneTasks(milestone, plan, signal, followUp),
     [],
   );
 

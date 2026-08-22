@@ -13,7 +13,7 @@ import ProgressBar from "@/components/ui/ProgressBar";
 import { todayISO } from "@/lib/dateUtils";
 import { compareDeadline } from "@/lib/subtaskDeadline";
 import { calculateTaskProgress, isTrackedTask, resolveTaskState } from "@/lib/taskCompletion";
-import { formatDuration } from "@/lib/timeUtils";
+import { formatDisplayTime, formatDuration } from "@/lib/timeUtils";
 import type { Plan, Task } from "@/lib/useScheduleDB";
 
 export interface TaskDetailViewProps {
@@ -114,7 +114,7 @@ export default function TaskDetailView({
       <div className="flex items-center gap-3">
         {(task.startTime || task.endTime) && (
           <span className="text-[16px] font-bold text-neutral-900 dark:text-white">
-            {task.startTime}{task.endTime ? ` - ${task.endTime}` : ""}
+            {formatDisplayTime(task.startTime)}{task.endTime ? ` – ${formatDisplayTime(task.endTime)}` : ""}
           </span>
         )}
         {duration && (

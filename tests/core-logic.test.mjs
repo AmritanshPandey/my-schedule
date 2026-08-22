@@ -53,6 +53,7 @@ const {
   getSlots,
   withSlots,
   retimeSlot,
+  moveTaskSlot,
 } = await import("../lib/taskMutations.ts");
 const {
   normalizeTasks,
@@ -60,6 +61,7 @@ const {
   NORMALIZED_OPTIONAL_TASK_FIELDS,
 } = await import("../lib/scheduleNormalize.ts");
 const { isTaskScheduledOn, resolveOccurrence, diffException, weeksBetween } = await import("../lib/taskOccurrence.ts");
+const { constrainTaskToPlanWindow } = await import("../lib/planTaskWindow.ts");
 const { normalizeMilestoneTimeline, cascadeMilestoneDates } = await import("../lib/roadmapDates.ts");
 const { computeRoadmapStats } = await import("../lib/roadmapEngine.ts");
 const { calculateLinkedTaskProgress, calculateMilestoneProgress, calculatePlanProgress } = await import("../lib/planProgress.ts");
@@ -88,7 +90,7 @@ const { CategoryRegistry, categoryUsageCounts, canDeleteCategory } = await impor
 const { taskIdentity, categoriesById } = await import("../lib/taskIdentity.ts");
 const { calculateExecutionStreak } = await import("../lib/consistency/calculateExecutionStreak.ts");
 const { localISODate, addDaysToISO } = await import("../lib/dateUtils.ts");
-const { parseTimeToMinutes, toScheduleDayMinutes } = await import("../lib/timeUtils.ts");
+const { parseTimeToMinutes, toScheduleDayMinutes, displayToInputTime, inputToDisplayTime, formatDisplayTime } = await import("../lib/timeUtils.ts");
 const { DAYS } = await import("../lib/scheduleConstants.ts");
 const { toggleRitualCompletion } = await import("../lib/ritualCompletions.ts");
 const { pushHistory, popHistory, HISTORY_LIMIT } = await import("../lib/scheduleHistory.ts");
@@ -107,6 +109,9 @@ const {
 } = await import("../lib/notes/dailyCapture.ts");
 const { describeSyncStatus, relativeTime } = await import("../lib/syncStatus.ts");
 const { isPhoneViewportDimensions } = await import("../lib/iosSafeMode.ts");
+const { normalizeCustomDays, resolveCustomVisibleDates } = await import("../lib/customView.ts");
+const { ScheduleSchema, validateSchedule, schedulePayloadBytes } = await import("../lib/scheduleSchema.ts");
+const { parseBackup } = await import("../lib/backup.ts");
 
 function event(taskId, completionType, completedAt, subtaskId) {
   return { id: `${completionType}-${subtaskId ?? "task"}`, taskId, completionType, completedAt, subtaskId };
@@ -140,6 +145,106 @@ function baseTask(id = "delete-me") {
     subtasks: [{ id: "sub-1", task: "Subtask" }],
   };
 }
+
+function validSchedule() {
+  return {
+    goals: [],
+    plans: [{
+      id: "plan-1",
+      title: "Plan",
+      category: "work",
+      emoji: "briefcase",
+      color: "blue",
+      items: [],
+    }],
+    categories: [],
+    activities: Object.fromEntries(DAYS.map((day) => [day, []])),
+    progressTrackers: [],
+    metricEntries: [],
+    milestones: [],
+    rituals: [],
+    strategies: [],
+    ritualCompletions: [],
+    notes: [],
+    events: [],
+    preferences: {},
+  };
+}
+
+test("time formatting keeps storage compatible while presenting one 12-hour format", () => {
+  assert.equal(parseTimeToMinutes("14:30"), parseTimeToMinutes("02:30 PM"));
+  assert.equal(displayToInputTime("2:30 PM"), "14:30");
+  assert.equal(inputToDisplayTime("14:30"), "02:30 PM");
+  assert.equal(formatDisplayTime("00:05"), "12:05 AM");
+  assert.equal(formatDisplayTime("12:00"), "12:00 PM");
+  assert.equal(formatDisplayTime("23:45"), "11:45 PM");
+});
+
+test("runtime schedule validation accepts the current minimal schedule shape", () => {
+  const result = validateSchedule(validSchedule());
+  assert.equal(result.success, true);
+  assert.equal(schedulePayloadBytes(validSchedule()) > 0, true);
+});
+
+test("runtime schedule validation rejects missing required structure", () => {
+  const invalid = validSchedule();
+  delete invalid.activities;
+  assert.equal(ScheduleSchema.safeParse(invalid).success, false);
+});
+
+test("runtime schedule validation rejects invalid task, recurrence, and metric data", () => {
+  const invalid = validSchedule();
+  invalid.activities.monday = [{
+    id: "",
+    title: "Broken",
+    startTime: "09:00",
+    endTime: "10:00",
+    planId: "plan-1",
+    recurrence: { type: "weekly", interval: 0, anchorISO: "not-a-date" },
+  }];
+  invalid.metricEntries = [{ id: "entry-1", planId: "plan-1", trackerId: "tracker-1", value: NaN, date: "2026-99-99" }];
+  assert.equal(validateSchedule(invalid).success, false);
+});
+
+test("runtime schedule validation rejects malformed milestone, tracker, note, and strategy data", () => {
+  const invalid = validSchedule();
+  invalid.progressTrackers = [{ id: "tracker-1", planId: "missing-plan", title: "Weight", type: "text" }];
+  invalid.milestones = [{
+    id: "milestone-1", planId: "plan-1", title: "Phase", startDate: "2026-08-20",
+    plannedDurationDays: 0, plannedEndDate: "2026-08-20", status: "upcoming",
+    linkedActivities: [], linkedTrackers: [], createdAt: new Date().toISOString(), updatedAt: new Date().toISOString(), sortOrder: 0,
+  }];
+  invalid.notes = [{ id: "note-1", title: "Note", body: 42, createdAt: "bad", updatedAt: "bad" }];
+  invalid.strategies = [{ id: "strategy-1", type: "doc", title: "Strategy", createdAt: "bad", updatedAt: "bad" }];
+  assert.equal(validateSchedule(invalid).success, false);
+});
+
+test("backup parsing accepts a PlanR envelope and rejects malformed JSON safely", () => {
+  const schedule = validSchedule();
+  assert.deepEqual(parseBackup(JSON.stringify({ app: "PlanR", format: 1, schedule })).plans, schedule.plans);
+  assert.throws(() => parseBackup("{not json"), /valid JSON/);
+  assert.throws(() => parseBackup(JSON.stringify({ app: "PlanR", format: 1, schedule: { activities: [] } })), /schedule data/);
+});
+
+test("custom range falls back cleanly when the selected day list is empty", () => {
+  const weekDates = DAYS.map((day, i) => ({ day, date: new Date(2026, 7, 15 + i) }));
+  assert.deepEqual(normalizeCustomDays([]), [...DAYS]);
+  assert.deepEqual(resolveCustomVisibleDates(weekDates, []), weekDates);
+  assert.deepEqual(resolveCustomVisibleDates(weekDates, ["monday", "wednesday"]), [
+    weekDates[0],
+    weekDates[2],
+  ]);
+});
+
+test("custom range falls back cleanly when the selected day list is empty", () => {
+  const weekDates = DAYS.map((day, i) => ({ day, date: new Date(2026, 7, 15 + i) }));
+  assert.deepEqual(normalizeCustomDays([]), [...DAYS]);
+  assert.deepEqual(resolveCustomVisibleDates(weekDates, []), weekDates);
+  assert.deepEqual(resolveCustomVisibleDates(weekDates, ["monday", "wednesday"]), [
+    weekDates[0],
+    weekDates[2],
+  ]);
+});
 
 test("a checkbox tap on a missed task clears the mark instead of completing it", () => {
   // Regression: the desktop shell had this branch inline and the iOS shell did
@@ -535,6 +640,28 @@ test("recurrence: weekly intervals and one-off scheduling", () => {
   // no recurrence (or interval 1) = every matching weekday
   assert.equal(isTaskScheduledOn(base(undefined), "2026-06-17", true), true);
   assert.equal(isTaskScheduledOn(base({ type: "weekly", interval: 1, anchorISO: "2026-06-10" }), "2026-06-17", true), true);
+});
+
+test("plan date range constrains linked task windows", () => {
+  const plan = { startDate: "2026-06-10", endDate: "2026-06-20" };
+  assert.deepEqual(
+    constrainTaskToPlanWindow({}, plan),
+    { activeFrom: "2026-06-10", activeUntil: "2026-06-20" }
+  );
+  assert.deepEqual(
+    constrainTaskToPlanWindow(
+      { activeFrom: "2026-06-12", activeUntil: "2026-06-18" },
+      plan
+    ),
+    { activeFrom: "2026-06-12", activeUntil: "2026-06-18" }
+  );
+  assert.deepEqual(
+    constrainTaskToPlanWindow(
+      { activeFrom: "2026-06-01", activeUntil: "2026-06-30" },
+      plan
+    ),
+    { activeFrom: "2026-06-10", activeUntil: "2026-06-20" }
+  );
 });
 
 test("per-date exceptions: scheduling, resolution, and mutations", () => {
@@ -1221,6 +1348,203 @@ test("retimeSlot moves one phase without disturbing its siblings", () => {
   assert.equal(single.startTime, "11:00 AM");
   assert.equal(single.endTime, "12:00 PM");
   assert.equal("slots" in single, false);
+});
+
+test("moveTaskSlot: same-day drag behaves identically to retimeSlot", () => {
+  const sched = emptySchedule();
+  const task = {
+    id: "m1", title: "Gym", startTime: "9:00 AM", endTime: "10:00 AM",
+    icon: "run", color: "cyan", planId: "p",
+  };
+  sched.activities.monday = [task];
+
+  const next = moveTaskSlot("m1", "monday", 0, "monday", "2026-08-17", "11:00 AM", "12:00 PM")(sched);
+  assert.equal(next.activities.monday.length, 1);
+  assert.equal(next.activities.monday[0].startTime, "11:00 AM");
+  assert.equal(next.activities.monday[0].endTime, "12:00 PM");
+  // No other day touched.
+  assert.deepEqual(next.activities.tuesday, []);
+});
+
+test("moveTaskSlot: cross-day, single-slot, no existing target copy — full relocation", () => {
+  const sched = emptySchedule();
+  const task = {
+    id: "m2", title: "Read", startTime: "9:00 AM", endTime: "9:30 AM",
+    icon: "book", color: "amber", planId: "p",
+    subtasks: [{ id: "sub-1", task: "Chapter 1" }],
+    completionHistory: [event("m2", "task", "2026-08-10T09:00:00.000Z")],
+  };
+  sched.activities.monday = [task];
+  sched.activities.tuesday = [];
+
+  const next = moveTaskSlot("m2", "monday", 0, "tuesday", "2026-08-18", "6:00 PM", "6:30 PM")(sched);
+  assert.deepEqual(next.activities.monday, [], "removed from the source day entirely");
+  assert.equal(next.activities.tuesday.length, 1);
+  const moved = next.activities.tuesday[0];
+  assert.equal(moved.id, "m2");
+  assert.equal(moved.startTime, "6:00 PM");
+  assert.equal(moved.endTime, "6:30 PM");
+  assert.equal("slots" in moved, false, "single-slot task stays free of a slots field");
+  assert.deepEqual(moved.subtasks, task.subtasks, "subtasks carry over — a relocation, not a fresh copy");
+  assert.deepEqual(moved.completionHistory, task.completionHistory, "history is preserved, not stripped");
+});
+
+test("moveTaskSlot: cross-day, multi-slot — dragging one phase leaves the siblings on sourceDay", () => {
+  const sched = emptySchedule();
+  const task = {
+    id: "m3", title: "Study", startTime: "9:00 AM", endTime: "12:00 PM",
+    slots: [
+      { startTime: "9:00 AM", endTime: "10:00 AM" },
+      { startTime: "12:00 PM", endTime: "1:00 PM" },
+      { startTime: "3:00 PM", endTime: "4:00 PM" },
+    ],
+    icon: "book", color: "amber", planId: "p",
+    completedSlotIndices: [0, 1, 2], // all three phases already done
+  };
+  sched.activities.monday = [task];
+
+  // Drag the morning phase (index 0) away — two siblings remain, forcing
+  // their completedSlotIndices entries to shift down by one.
+  const next = moveTaskSlot("m3", "monday", 0, "tuesday", "2026-08-18", "8:00 AM", "9:00 AM")(sched);
+
+  assert.equal(next.activities.monday.length, 1, "two remaining phases keep the entry alive on Monday");
+  assert.deepEqual(getSlots(next.activities.monday[0]).map((s) => s.startTime), ["12:00 PM", "3:00 PM"]);
+  assert.deepEqual(
+    next.activities.monday[0].completedSlotIndices,
+    [0, 1],
+    "indices 1 and 2's completion shift down to 0 and 1 after index 0 is removed"
+  );
+
+  assert.equal(next.activities.tuesday.length, 1);
+  const moved = next.activities.tuesday[0];
+  assert.equal(moved.startTime, "8:00 AM");
+  assert.equal(moved.endTime, "9:00 AM");
+  assert.equal("slots" in moved, false, "a single relocated slot collapses to a plain startTime/endTime task");
+  assert.deepEqual(moved.completedSlotIndices, [0], "the moved phase's own completion travels with it");
+});
+
+test("moveTaskSlot: splitting a task does not duplicate its completion history", () => {
+  const sched = emptySchedule();
+  const history = [event("split", "task", "2026-08-10T09:00:00.000Z")];
+  sched.activities.monday = [{
+    id: "split", title: "Study", startTime: "9:00 AM", endTime: "12:00 PM",
+    slots: [
+      { startTime: "9:00 AM", endTime: "10:00 AM" },
+      { startTime: "11:00 AM", endTime: "12:00 PM" },
+    ],
+    icon: "book", color: "amber", planId: "p", completionHistory: history,
+  }];
+
+  const next = moveTaskSlot("split", "monday", 0, "tuesday", "2026-08-18", "8:00 AM", "9:00 AM")(sched);
+  assert.deepEqual(next.activities.monday[0].completionHistory, history);
+  assert.equal(next.activities.tuesday[0].completionHistory, undefined);
+});
+
+test("moveTaskSlot: cross-day, multi-slot, dragging the last slot removes the whole source entry", () => {
+  const sched = emptySchedule();
+  sched.activities.monday = [
+    { id: "m4", title: "Stretch", startTime: "7:00 AM", endTime: "7:15 AM", icon: "run", color: "cyan", planId: "p" },
+  ];
+  const next = moveTaskSlot("m4", "monday", 0, "wednesday", "2026-08-19", "7:00 AM", "7:15 AM")(sched);
+  assert.deepEqual(next.activities.monday, []);
+  assert.equal(next.activities.wednesday.length, 1);
+});
+
+test("moveTaskSlot: cross-day merge into an existing target copy — before and after re-sort", () => {
+  const sched = emptySchedule();
+  sched.activities.monday = [
+    {
+      id: "m5", title: "Read", startTime: "9:00 PM", endTime: "9:30 PM",
+      icon: "book", color: "amber", planId: "p",
+      completedSlotIndices: [0],
+      completionHistory: [event("m5", "task", "2026-08-10T21:00:00.000Z")],
+    },
+  ];
+  sched.activities.wednesday = [
+    {
+      id: "m5", title: "Read", startTime: "8:00 AM", endTime: "8:30 AM",
+      icon: "book", color: "amber", planId: "p",
+      completedSlotIndices: [],
+      completionHistory: [event("m5", "task", "2026-08-12T08:00:00.000Z")],
+    },
+  ];
+
+  // New slot (from Monday 9:00 PM, completed) lands *after* Wednesday's
+  // existing 8:00 AM slot once sorted.
+  const next = moveTaskSlot("m5", "monday", 0, "wednesday", "2026-08-19", "10:00 AM", "10:30 AM")(sched);
+  assert.deepEqual(next.activities.monday, []);
+  assert.equal(next.activities.wednesday.length, 1, "merged into the existing copy, not duplicated");
+  const merged = next.activities.wednesday[0];
+  assert.deepEqual(getSlots(merged).map((s) => s.startTime), ["8:00 AM", "10:00 AM"]);
+  assert.deepEqual(merged.completedSlotIndices, [1], "the moved (completed) slot is now at index 1 after sorting");
+  assert.equal(merged.completionHistory.length, 2, "both sides' history is concatenated, not overwritten");
+
+  // Same merge, but the new slot sorts *before* the existing one.
+  const sched2 = emptySchedule();
+  sched2.activities.monday = [
+    { id: "m6", title: "Read", startTime: "9:00 PM", endTime: "9:30 PM", icon: "book", color: "amber", planId: "p" },
+  ];
+  sched2.activities.wednesday = [
+    { id: "m6", title: "Read", startTime: "8:00 AM", endTime: "8:30 AM", icon: "book", color: "amber", planId: "p", completedSlotIndices: [0] },
+  ];
+  const next2 = moveTaskSlot("m6", "monday", 0, "wednesday", "2026-08-19", "6:00 AM", "6:30 AM")(sched2);
+  const merged2 = next2.activities.wednesday[0];
+  assert.deepEqual(getSlots(merged2).map((s) => s.startTime), ["6:00 AM", "8:00 AM"]);
+  assert.deepEqual(merged2.completedSlotIndices, [1], "the pre-existing completed slot shifts to index 1");
+});
+
+test("moveTaskSlot: merging an incomplete slot clears stale whole-task completion", () => {
+  const sched = emptySchedule();
+  sched.activities.monday = [
+    { id: "complete-merge", title: "Read", startTime: "9:00 PM", endTime: "9:30 PM", icon: "book", color: "amber", planId: "p" },
+  ];
+  sched.activities.wednesday = [
+    {
+      id: "complete-merge", title: "Read", startTime: "8:00 AM", endTime: "8:30 AM",
+      icon: "book", color: "amber", planId: "p", completed: true, completedAt: "2026-08-10T08:30:00.000Z",
+    },
+  ];
+
+  const next = moveTaskSlot("complete-merge", "monday", 0, "wednesday", "2026-08-19", "10:00 AM", "10:30 AM")(sched);
+  const merged = next.activities.wednesday[0];
+  assert.equal(merged.completed, false);
+  assert.equal(merged.completedAt, undefined);
+  assert.deepEqual(merged.completedSlotIndices, [0]);
+});
+
+test("moveTaskSlot: task not found on sourceDay is a no-op", () => {
+  const sched = emptySchedule();
+  sched.activities.monday = [
+    { id: "real", title: "Real", startTime: "9:00 AM", endTime: "10:00 AM", icon: "star", color: "amber", planId: "p" },
+  ];
+  const next = moveTaskSlot("ghost", "monday", 0, "tuesday", "2026-08-18", "9:00 AM", "10:00 AM")(sched);
+  assert.equal(next, sched, "returns the same schedule reference, untouched");
+});
+
+test("moveTaskSlot: a once-recurrence task is repinned to the drop date, not left stale", () => {
+  // Regression: a task scheduled for a single specific calendar date (not a
+  // weekly repeat) that keeps its old recurrence.dateISO after a cross-day
+  // move becomes permanently invisible — isTaskScheduledOn compares that
+  // date against the *new* weekday bucket's dates, which it can never match.
+  const sched = emptySchedule();
+  sched.activities.thursday = [
+    {
+      id: "once-1", title: "One-off review", startTime: "9:00 AM", endTime: "10:00 AM",
+      icon: "book", color: "amber", planId: "p",
+      recurrence: { type: "once", dateISO: "2026-08-20" }, // Thursday's date
+    },
+  ];
+
+  const next = moveTaskSlot("once-1", "thursday", 0, "friday", "2026-08-21", "2:00 PM", "3:00 PM")(sched);
+  assert.deepEqual(next.activities.thursday, []);
+  assert.equal(next.activities.friday.length, 1);
+  assert.deepEqual(
+    next.activities.friday[0].recurrence,
+    { type: "once", dateISO: "2026-08-21" },
+    "recurrence.dateISO follows the task to its new date"
+  );
+  assert.equal(isTaskScheduledOn(next.activities.friday[0], "2026-08-21", true), true, "renders on its new date");
+  assert.equal(isTaskScheduledOn(next.activities.friday[0], "2026-08-20", true), false, "no longer pinned to the old date");
 });
 
 test("resetStaleCompletions clears yesterday's slot completions but keeps history", () => {

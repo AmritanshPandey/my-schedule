@@ -1,12 +1,13 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { IconCalendar, IconClock, IconArrowUp, IconTrash } from "@tabler/icons-react";
+import { IconCalendar, IconArrowUp, IconTrash } from "@tabler/icons-react";
 import BottomSheet from "@/components/ui/BottomSheet";
 import SheetHeader from "@/components/ui/SheetHeader";
 import Button from "@/components/ui/Button";
 import { getSlots } from "@/lib/taskMutations";
 import { parseTimeToMinutes, minutesToInputTime, formatDisplayTime } from "@/lib/timeUtils";
+import TimeInput from "@/components/ui/TimeInput";
 import { localISODate } from "@/lib/dateUtils";
 import { haptic } from "@/lib/haptics";
 import { formatDaysAgo, type MissedTask } from "@/lib/needsAttention";
@@ -102,17 +103,7 @@ export default function MissedTaskSheet({ missed, onClose, onReschedule, onDismi
             </div>
 
             <div>
-              <p className={`mb-2 ${LABEL}`}>At</p>
-              <div className="relative">
-                <IconClock size={15} strokeWidth={2} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-neutral-400" />
-                <input
-                  type="time"
-                  aria-label="Start time"
-                  value={timeStr}
-                  onChange={(e) => setTimeStr(e.target.value)}
-                  className={`${CONTROL} pl-9`}
-                />
-              </div>
+              <TimeInput label="At" value={timeStr} onChange={setTimeStr} ariaLabel="Start time" />
               {originalStart != null && (
                 <p className="mt-1.5 text-[11px] font-medium text-neutral-400 dark:text-neutral-500">
                   {keepsOriginalTime ? "Keeping the original time" : `Original: ${formatDisplayTime(minutesToInputTime(originalStart))}`}

@@ -4,6 +4,7 @@ import { m } from "framer-motion";
 import { IconCheck, IconRepeat } from "@tabler/icons-react";
 import type { Ritual, RitualColor, DayKey } from "@/lib/useScheduleDB";
 import { haptic } from "@/lib/haptics";
+import { formatDisplayTime } from "@/lib/timeUtils";
 
 const COLOR_DOT: Record<RitualColor, string> = {
   rose:    "bg-rose-400",
@@ -83,7 +84,7 @@ export default function TodayRitualsBar({
                 {ritual.title}
               </span>
               <span className="text-[11px] font-medium text-neutral-400 dark:text-neutral-500">
-                {ritual.time}
+                {formatDisplayTime(ritual.time)}
               </span>
             </m.button>
           );

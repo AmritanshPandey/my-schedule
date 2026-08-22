@@ -5,6 +5,7 @@ import CheckDraw from "@/components/ui/CheckDraw";
 import type { Plan, Task, TaskCategory } from "@/lib/useScheduleDB";
 import { accentStyles, PLAN_NEUTRAL } from "@/lib/colorSystem";
 import { getTaskCheckableItems, getTaskSubtaskSummary, resolveTaskState } from "@/lib/taskCompletion";
+import { formatDisplayTime } from "@/lib/timeUtils";
 
 interface CompactTaskCardProps {
   task: Task;
@@ -51,7 +52,7 @@ export function CompactTaskCard({ task, plan, category, readOnly = false, onTogg
         </p>
         {(task.startTime || task.endTime) && (
           <p className="mt-0.5 text-[10px] font-medium text-neutral-400 dark:text-neutral-500">
-            {task.startTime}{task.endTime ? `–${task.endTime}` : ""}
+            {formatDisplayTime(task.startTime)}{task.endTime ? `–${formatDisplayTime(task.endTime)}` : ""}
           </p>
         )}
       </div>

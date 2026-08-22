@@ -53,6 +53,8 @@ function applyTheme(theme: ThemeMode) {
 }
 
 function detectInitialTheme(): ThemeMode {
+  if (typeof window === "undefined") return "light";
+
   const stored = window.localStorage.getItem("theme");
   if (stored === "light" || stored === "dark") return stored;
   return window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
@@ -84,7 +86,7 @@ export default function DesktopSidebar({
   onOpenNotes,
   onOpenWallpaper,
 }: DesktopSidebarProps) {
-  const [theme, setTheme] = useState<ThemeMode>("light");
+  const [theme, setTheme] = useState<ThemeMode>(() => detectInitialTheme());
   const [themeReady, setThemeReady] = useState(false);
   const { isGuest } = useAuth();
   const sync = useSyncStatus();
@@ -125,7 +127,7 @@ export default function DesktopSidebar({
   const statusColor = aiReady ? "text-emerald-600 dark:text-emerald-400" : "text-neutral-400 dark:text-neutral-500";
 
   return (
-    <aside className={`hidden lg:flex h-full shrink-0 flex-col overflow-hidden rounded-2xl border border-neutral-200 bg-white transition-[width] duration-200 dark:border-white/[0.08] dark:bg-neutral-950 ${collapsed ? "w-[76px]" : "w-[236px]"}`}>
+    <aside className={`hidden lg:flex h-full shrink-0 flex-col overflow-hidden rounded-2xl border border-neutral-200/80 bg-[#FBFCFA] transition-[width] duration-200 dark:border-white/[0.09] dark:bg-[#111312] ${collapsed ? "w-[76px]" : "w-[236px]"}`}>
 
       {/* ── Header: brand + collapse toggle ──────────────────────────────────── */}
       <div className={`flex h-[68px] shrink-0 items-center border-b border-neutral-200/70 dark:border-white/[0.06] ${collapsed ? "justify-center px-0" : "justify-between px-[18px]"}`}>
@@ -166,7 +168,7 @@ export default function DesktopSidebar({
                 collapsed ? "justify-center px-0 py-3" : "gap-3 px-3.5 py-2.5 text-left"
               } ${
                 active
-                  ? "bg-emerald-50 text-emerald-800 dark:bg-emerald-500/[0.12] dark:text-emerald-300"
+                  ? "bg-emerald-50 text-emerald-800 ring-1 ring-inset ring-emerald-200/70 dark:bg-emerald-500/[0.14] dark:text-emerald-300 dark:ring-emerald-400/20"
                   : "text-neutral-500 hover:bg-neutral-100 hover:text-neutral-700 dark:text-neutral-500 dark:hover:bg-white/[0.05] dark:hover:text-neutral-300"
               }`}
             >
@@ -187,14 +189,15 @@ export default function DesktopSidebar({
         <div className={`shrink-0 pb-2 ${collapsed ? "px-2" : "px-2.5"}`}>
           <button
             type="button"
+            data-tour="new-item-button"
             onClick={handleCreate}
-            title={collapsed ? (activeTab === 1 ? "New Plan" : activeTab === 2 ? "New Habit" : "New Task") : undefined}
+            title={collapsed ? (activeTab === 1 ? "New Plan" : activeTab === 2 ? "New Routine" : "New Task") : undefined}
             className={`flex w-full items-center rounded-full bg-[#00A63E] py-2.5 text-white transition-colors hover:bg-[#008236] active:scale-[0.98] dark:bg-[#2FD46E] dark:text-neutral-950 dark:hover:bg-[#2FD46E]/90 ${collapsed ? "justify-center px-0" : "gap-2 px-3.5"}`}
           >
             <IconPlus size={15} strokeWidth={2.5} />
             {!collapsed && (
               <span className="text-[13px] font-semibold">
-                {activeTab === 1 ? "New Plan" : activeTab === 2 ? "New Habit" : "New Task"}
+                {activeTab === 1 ? "New Plan" : activeTab === 2 ? "New Routine" : "New Task"}
               </span>
             )}
           </button>

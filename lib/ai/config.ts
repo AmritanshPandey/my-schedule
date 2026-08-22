@@ -41,11 +41,21 @@ export const REMOTE_PRESETS: { label: string; baseUrl: string }[] = [
   { label: "Custom", baseUrl: "" },
 ];
 
+/** Browser AI has no server to reach — `baseUrl`/`apiKey` are unused; `model`
+ *  is a HuggingFace ONNX repo id, downloaded and cached in-browser on first
+ *  use (see lib/ai/providers/browser.ts). Small and instruction-tuned enough
+ *  to run acceptably on-device without WebGPU. */
+export const DEFAULT_BROWSER_CONFIG: AIProviderConfig = {
+  baseUrl: "",
+  model: "onnx-community/SmolLM2-360M-Instruct",
+};
+
 export interface AIProviderState {
   active: ProviderKind;
   mlx: AIProviderConfig;
   ollama: AIProviderConfig;
   remote: AIProviderConfig;
+  browser: AIProviderConfig;
 }
 
 const DEFAULT_STATE: AIProviderState = {
@@ -53,6 +63,7 @@ const DEFAULT_STATE: AIProviderState = {
   mlx: DEFAULT_MLX_CONFIG,
   ollama: DEFAULT_OLLAMA_CONFIG,
   remote: DEFAULT_REMOTE_CONFIG,
+  browser: DEFAULT_BROWSER_CONFIG,
 };
 
 function normalizeConfig(raw: unknown, fallback: AIProviderConfig): AIProviderConfig {
@@ -71,7 +82,7 @@ export function getAIProviderState(): AIProviderState {
   try {
     const parsed = JSON.parse(raw) as Partial<AIProviderState>;
     const active: ProviderKind =
-      parsed.active === "mlx" || parsed.active === "ollama" || parsed.active === "openai-compatible"
+      parsed.active === "mlx" || parsed.active === "ollama" || parsed.active === "openai-compatible" || parsed.active === "browser"
         ? parsed.active
         : DEFAULT_STATE.active;
     return {
@@ -79,14 +90,21 @@ export function getAIProviderState(): AIProviderState {
       mlx: normalizeConfig(parsed.mlx, DEFAULT_MLX_CONFIG),
       ollama: normalizeConfig(parsed.ollama, DEFAULT_OLLAMA_CONFIG),
       remote: normalizeConfig(parsed.remote, DEFAULT_REMOTE_CONFIG),
+      browser: normalizeConfig(parsed.browser, DEFAULT_BROWSER_CONFIG),
     };
   } catch {
     return DEFAULT_STATE;
   }
 }
 
+/** Fired whenever provider state changes (active provider or any provider's
+ *  config) — components that derive UI from it (e.g. a nav subtitle, or a
+ *  sheet open elsewhere) can listen instead of polling. */
+export const AI_SETTINGS_CHANGED_EVENT = "planr:ai:settings-changed";
+
 export function setAIProviderState(state: AIProviderState): void {
   safeSetItem(STORAGE_KEY, JSON.stringify(state));
+  if (typeof window !== "undefined") window.dispatchEvent(new Event(AI_SETTINGS_CHANGED_EVENT));
 }
 
 /** Convenience for a single provider's config, without touching the others —
@@ -94,7 +112,7 @@ export function setAIProviderState(state: AIProviderState): void {
  *  clobbers a different provider's saved config. */
 export function setProviderConfig(kind: ProviderKind, config: AIProviderConfig): AIProviderState {
   const state = getAIProviderState();
-  const key = kind === "mlx" ? "mlx" : kind === "ollama" ? "ollama" : "remote";
+  const key = kind === "mlx" ? "mlx" : kind === "ollama" ? "ollama" : kind === "browser" ? "browser" : "remote";
   const next: AIProviderState = { ...state, [key]: config };
   setAIProviderState(next);
   return next;
