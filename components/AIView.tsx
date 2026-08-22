@@ -30,11 +30,15 @@ import {
   DEFAULT_MLX_CONFIG,
   DEFAULT_OLLAMA_CONFIG,
   DEFAULT_REMOTE_CONFIG,
+  DEFAULT_BROWSER_CONFIG,
   REMOTE_PRESETS,
+  type AIProviderState,
 } from "@/lib/ai/config";
 import { MLXProvider } from "@/lib/ai/providers/mlx";
 import { OllamaProvider } from "@/lib/ai/providers/ollama";
 import { OpenAICompatibleProvider } from "@/lib/ai/providers/openai-compatible";
+import { BrowserProvider } from "@/lib/ai/providers/browser";
+import { BrowserAIStatusBar } from "@/components/ai/BrowserAIStatusBar";
 import type { AIConnectionTestResult, AIInstructions, AIProvider, AIProviderConfig, ProviderKind } from "@/lib/ai/types";
 import { getAIInstructions, setAIInstructions } from "@/lib/ai/instructions";
 import { haptic } from "@/lib/haptics";
@@ -44,13 +48,32 @@ import { SETTINGS_CONTROL_CLASS } from "@/components/ui/Input";
 function providerFor(kind: ProviderKind, config: AIProviderConfig): AIProvider {
   if (kind === "ollama") return new OllamaProvider(config);
   if (kind === "openai-compatible") return new OpenAICompatibleProvider(config);
+  if (kind === "browser") return new BrowserProvider(config);
   return new MLXProvider(config);
+}
+
+/** Every kind's config lives under its own key in AIProviderState — this is
+ *  the one place that maps between them, so ProviderForm doesn't repeat a
+ *  four-way ternary at every call site. */
+function configForKind(state: AIProviderState, kind: ProviderKind): AIProviderConfig {
+  if (kind === "ollama") return state.ollama;
+  if (kind === "openai-compatible") return state.remote;
+  if (kind === "browser") return state.browser;
+  return state.mlx;
+}
+
+function defaultsForKind(kind: ProviderKind): AIProviderConfig {
+  if (kind === "ollama") return DEFAULT_OLLAMA_CONFIG;
+  if (kind === "openai-compatible") return DEFAULT_REMOTE_CONFIG;
+  if (kind === "browser") return DEFAULT_BROWSER_CONFIG;
+  return DEFAULT_MLX_CONFIG;
 }
 
 const PROVIDER_LABEL: Record<ProviderKind, string> = {
   mlx: "MLX",
   ollama: "Ollama",
   "openai-compatible": "API Provider",
+  browser: "Browser AI",
 };
 
 // ── Primitives (matching SettingsView.tsx's vocabulary) ────────────────────
@@ -113,21 +136,15 @@ function ProviderForm({
   isActive: boolean;
   onActivate: () => void;
 }) {
-  const defaults = kind === "mlx" ? DEFAULT_MLX_CONFIG : kind === "ollama" ? DEFAULT_OLLAMA_CONFIG : DEFAULT_REMOTE_CONFIG;
-  const [config, setConfig] = useState<AIProviderConfig>(() => {
-    const state = getAIProviderState();
-    return kind === "mlx" ? state.mlx : kind === "ollama" ? state.ollama : state.remote;
-  });
+  const defaults = defaultsForKind(kind);
+  const [config, setConfig] = useState<AIProviderConfig>(() => configForKind(getAIProviderState(), kind));
   const [phase, setPhase] = useState<"idle" | "testing" | "done">("idle");
   const [result, setResult] = useState<AIConnectionTestResult | null>(null);
   const [detecting, setDetecting] = useState(false);
   const [detected, setDetected] = useState<string[] | null>(null);
   const [preset, setPreset] = useState(REMOTE_PRESETS[REMOTE_PRESETS.length - 1].label);
 
-  const saved = (() => {
-    const state = getAIProviderState();
-    return kind === "mlx" ? state.mlx : kind === "ollama" ? state.ollama : state.remote;
-  })();
+  const saved = configForKind(getAIProviderState(), kind);
   const dirty = config.baseUrl !== saved.baseUrl || config.model !== saved.model || (config.apiKey ?? "") !== (saved.apiKey ?? "");
 
   async function runTest(cfg: AIProviderConfig) {
@@ -141,7 +158,7 @@ function ProviderForm({
 
   function handleSave() {
     const next = setProviderConfig(kind, config);
-    setConfig(kind === "mlx" ? next.mlx : kind === "ollama" ? next.ollama : next.remote);
+    setConfig(configForKind(next, kind));
     void runTest(config);
   }
 
@@ -165,6 +182,7 @@ function ProviderForm({
   }
 
   const isRemote = kind === "openai-compatible";
+  const isBrowser = kind === "browser";
 
   return (
     <div className={`overflow-hidden ${CARD} ${isActive ? "ring-1 ring-emerald-500/40" : ""}`}>
@@ -237,16 +255,19 @@ function ProviderForm({
                 </div>
               </Field>
             )}
-            <Field label={isRemote ? "Base URL" : "Server"}>
-              <input
-                type="text"
-                value={config.baseUrl}
-                onChange={(e) => setConfig((c) => ({ ...c, baseUrl: e.target.value }))}
-                placeholder={defaults.baseUrl || "https://example.com/v1"}
-                spellCheck={false}
-                className={`w-full rounded-xl border border-neutral-200 bg-neutral-50 px-3 py-2 text-[13px] text-neutral-900 outline-none placeholder:text-neutral-400 focus:border-neutral-300 focus:bg-white dark:border-white/[0.08] dark:bg-white/[0.04] dark:text-white dark:placeholder:text-neutral-600 dark:focus:border-white/20 dark:focus:bg-white/[0.07]`}
-              />
-            </Field>
+            {!isBrowser && (
+              <Field label={isRemote ? "Base URL" : "Server"}>
+                <input
+                  type="text"
+                  value={config.baseUrl}
+                  onChange={(e) => setConfig((c) => ({ ...c, baseUrl: e.target.value }))}
+                  placeholder={defaults.baseUrl || "https://example.com/v1"}
+                  spellCheck={false}
+                  className={`w-full rounded-xl border border-neutral-200 bg-neutral-50 px-3 py-2 text-[13px] text-neutral-900 outline-none placeholder:text-neutral-400 focus:border-neutral-300 focus:bg-white dark:border-white/[0.08] dark:bg-white/[0.04] dark:text-white dark:placeholder:text-neutral-600 dark:focus:border-white/20 dark:focus:bg-white/[0.07]`}
+                />
+              </Field>
+            )}
+            {isBrowser && <BrowserAIStatusBar variant="bar" />}
             {isRemote && (
               <Field label="API Key">
                 <input
@@ -308,7 +329,9 @@ function ProviderForm({
                 disabled={phase === "testing"}
                 className="flex-1 rounded-xl bg-neutral-900 px-3 py-2 text-[12px] font-bold text-white disabled:opacity-60 dark:bg-white dark:text-neutral-900"
               >
-                {dirty ? "Save & test connection" : "Test connection"}
+                {isBrowser
+                  ? (dirty ? "Save & load model" : "Load model")
+                  : (dirty ? "Save & test connection" : "Test connection")}
               </button>
             </div>
           </div>
@@ -321,6 +344,9 @@ function ProviderForm({
               )}
               {kind === "ollama" && (
                 <>Start it with <code className="rounded bg-neutral-100 px-1 py-0.5 font-mono text-[10px] dark:bg-white/[0.08]">ollama serve</code>, then pull a model with <code className="rounded bg-neutral-100 px-1 py-0.5 font-mono text-[10px] dark:bg-white/[0.08]">ollama pull {config.model || defaults.model}</code></>
+              )}
+              {isBrowser && (
+                <>Downloads once (~100–140 MB) and runs entirely in this browser tab — no server, no account, nothing leaves your device. Uses WebGPU where available, falling back to CPU.</>
               )}
               {isRemote && (
                 <>Your key is stored on this device only, sent directly to the provider — never through PlanR&apos;s servers (there are none). Some providers block direct browser requests (CORS); OpenRouter explicitly allows it.</>
@@ -433,6 +459,7 @@ export function AIView({ onClose }: AIViewProps) {
             <div className="space-y-3">
               <ProviderForm kind="mlx" isActive={active === "mlx"} onActivate={() => activate("mlx")} />
               <ProviderForm kind="ollama" isActive={active === "ollama"} onActivate={() => activate("ollama")} />
+              <ProviderForm kind="browser" isActive={active === "browser"} onActivate={() => activate("browser")} />
             </div>
           </div>
 
