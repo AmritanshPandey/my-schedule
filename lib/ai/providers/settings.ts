@@ -21,7 +21,10 @@ const API_BASE_URL_KEY = "planr-ai-api-base-url";
 const API_MODEL_KEY = "planr-ai-api-model";
 const API_KEY_KEY = "planr-ai-api-key";
 const CONNECTIONS_KEY = "planr-ai-connections";
+const BROWSER_MODEL_KEY = "planr-browser-ai-model";
 export const AI_SETTINGS_CHANGED_EVENT = "planr-ai-settings-changed";
+/** Fired when the in-browser model load progresses or completes. */
+export const BROWSER_AI_STATUS_EVENT = "planr-browser-ai-status";
 
 export const DEFAULT_MLX_BASE_URL = "http://localhost:8080";
 export const DEFAULT_MLX_MODEL = "mlx-community/Qwen3-4B-4bit";
@@ -30,12 +33,20 @@ export const DEFAULT_OLLAMA_MODEL = "llama3.2";
 export const DEFAULT_API_BASE_URL = "https://api.openai.com/v1";
 export const DEFAULT_API_MODEL = "gpt-4o-mini";
 export const DEFAULT_AI_PROVIDER: AIProviderType = "mlx";
+/**
+ * Default in-browser model. Must be an ONNX-format model hosted on HuggingFace
+ * (onnx-community or any model with an /onnx subfolder). The browser provider
+ * downloads and caches it via the browser's built-in Cache API on first use.
+ */
+export const DEFAULT_BROWSER_MODEL = "onnx-community/Qwen2.5-0.5B-Instruct";
 
 export function getActiveProviderType(): AIProviderType {
   if (typeof window === "undefined") return DEFAULT_AI_PROVIDER;
   try {
     const stored = localStorage.getItem(PROVIDER_KEY);
-    return stored === "mlx" || stored === "ollama" || stored === "api" ? stored : DEFAULT_AI_PROVIDER;
+    return stored === "mlx" || stored === "ollama" || stored === "api" || stored === "browser"
+      ? stored
+      : DEFAULT_AI_PROVIDER;
   } catch {
     return DEFAULT_AI_PROVIDER;
   }
@@ -127,3 +138,5 @@ export const getApiModel = () => getStored(API_MODEL_KEY, DEFAULT_API_MODEL);
 export const setApiModel = (value: string) => setStored(API_MODEL_KEY, value);
 export const getApiKey = () => getStored(API_KEY_KEY, "");
 export const setApiKey = (value: string) => setStored(API_KEY_KEY, value);
+export const getBrowserModel = () => getStored(BROWSER_MODEL_KEY, DEFAULT_BROWSER_MODEL);
+export const setBrowserModel = (value: string) => setStored(BROWSER_MODEL_KEY, value);

@@ -10,6 +10,7 @@
 import { mlxProvider } from "./mlx";
 import { ollamaProvider } from "./ollama";
 import { apiProvider } from "./openaiCompatible";
+import { browserProvider } from "./browser";
 import { getActiveProviderType, getAiConnectionStatus } from "./settings";
 import type { AIMessage, AIProvider } from "./types";
 
@@ -17,9 +18,10 @@ export type { AIProviderType, AIMessage, AIChatRequest, AIRequest, AIResponse, A
 
 function resolveProvider(): AIProvider {
   switch (getActiveProviderType()) {
-    case "ollama": return ollamaProvider;
-    case "api": return apiProvider;
-    default: return mlxProvider;
+    case "ollama":  return ollamaProvider;
+    case "api":     return apiProvider;
+    case "browser": return browserProvider;
+    default:        return mlxProvider;
   }
 }
 
@@ -48,7 +50,14 @@ export function generateAI(
  * A provider must pass its connection test before AI surfaces become visible.
  * This avoids presenting controls that can only fail when the local server or
  * remote API is not connected.
+ *
+ * The "browser" provider is treated as always-available: it never needs an
+ * external server and the on-device model downloads on first use. Connection
+ * status for browser AI is surfaced through the BROWSER_AI_STATUS_EVENT
+ * instead of the localStorage-backed connection flag.
  */
 export function isAiAvailable(_isGuest: boolean): boolean {
-  return getAiConnectionStatus(getActiveProviderType());
+  const type = getActiveProviderType();
+  if (type === "browser") return true;
+  return getAiConnectionStatus(type);
 }

@@ -7,7 +7,7 @@
  * future providers can be added without changing feature call sites.
  */
 
-export type AIProviderType = "mlx" | "ollama" | "api";
+export type AIProviderType = "mlx" | "ollama" | "api" | "browser";
 
 export interface AIMessage {
   role: "user" | "assistant";
