@@ -1,4 +1,4 @@
-import type { DayKey, Plan, RitualColor, TaskTypeValue } from "./useScheduleDB";
+import type { DayKey, Plan, RitualColor, RitualTrackingType, TaskTypeValue } from "./useScheduleDB";
 import { todayISO } from "./dateUtils";
 import { getAIInstructions } from "./ai/instructions";
 
@@ -20,8 +20,7 @@ export interface AIMilestone {
 
 export type AIActionResult =
   | { type: "create_plan"; payload: { title: string; description: string; emoji: string; color: string; startDate?: string; endDate?: string; tasks?: AITask[]; milestones?: AIMilestone[] } }
-  | { type: "create_ritual"; payload: { title: string; time: string; duration: number; repeatDays: DayKey[]; color: RitualColor } }
-  | { type: "create_strategy"; payload: { title: string; description: string; htmlContent: string } }
+  | { type: "create_ritual"; payload: { title: string; time: string; duration: number; repeatDays: DayKey[]; color: RitualColor; trackingType?: RitualTrackingType; target?: number; unit?: string; steps?: string[] } }
   | { type: "suggest_milestones"; payload: { milestones: AIMilestone[]; planTitle?: string } }
   | { type: "add_tracker"; payload: { planTitle?: string; title: string; unit?: string; goalDirection: "increase_good" | "decrease_good"; goalValue?: number } }
   | { type: "add_task"; payload: { title: string; taskType: TaskTypeValue; day: DayKey; days?: DayKey[]; startTime: string; endTime: string; icon: string; subtasks?: string[]; planTitle?: string } }
@@ -36,6 +35,10 @@ export type AIActionResult =
 
 const VALID_COLORS = ["blue", "emerald", "violet", "pink", "amber", "cyan"] as const;
 const VALID_RITUAL_COLORS = ["rose", "sky", "violet", "amber", "emerald", "fuchsia", "orange", "cyan", "indigo", "teal"] as const;
+// Mirrored from RITUAL_TRACKING_TYPES rather than imported: useScheduleDB pulls
+// in the React auth context at runtime, and this module must stay importable as
+// a pure parser (it is unit-tested directly, and runs outside any provider).
+const VALID_TRACKING_TYPES: readonly RitualTrackingType[] = ["checkbox", "quantity", "duration", "count", "checklist"];
 const VALID_DAYS: DayKey[] = ["monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday"];
 const VALID_TASK_TYPES: TaskTypeValue[] = ["task", "session", "commitment"];
 const VALID_GOAL_DIRECTIONS = ["increase_good", "decrease_good"] as const;
@@ -55,7 +58,6 @@ Decide which action fits what the user asked for:
 - Adding steps/subtasks to a task the user already has → "add_subtasks"
 - A numeric goal/metric to track under an existing plan → "add_tracker"
 - Milestones for a plan the user ALREADY HAS (check "User's existing plans" below) → "suggest_milestones"
-- A long-form written guide or program → "create_strategy"
 Prefer attaching to something the user already has (their existing plans/rituals, listed below) over creating a duplicate.
 
 ASK BEFORE YOU GUESS. If the request needs a plan or a task and does not say which one, and the user has more than one it could mean, reply with "ask_clarification" instead of choosing. Never invent a plan or task name that is not in the lists below, and never silently attach to the first one. Asking a short question is always better than editing the wrong thing.
@@ -73,6 +75,13 @@ create_ritual — a recurring habit/routine, not tied to one plan's task list:
 {"type":"create_ritual","payload":{"title":"Habit Title","time":"07:00","duration":30,"repeatDays":["monday","tuesday","wednesday","thursday","friday"],"color":"emerald"}}
 \`\`\`
 Ritual "color": rose, sky, violet, amber, emerald, fuchsia, orange, cyan, indigo, or teal. time is HH:MM, duration is minutes.
+
+Routines can measure themselves in different ways. Add "trackingType" when the habit is obviously not a plain yes/no:
+- "quantity" — an amount per day. Add "target" (number) and "unit". e.g. water: {"trackingType":"quantity","target":3000,"unit":"ml"}
+- "duration" — minutes spent. Add "target" and "unit":"min". e.g. meditation: {"trackingType":"duration","target":15,"unit":"min"}
+- "count" — a number of repetitions. Add "target" and "unit". e.g. {"trackingType":"count","target":50,"unit":"reps"}
+- "checklist" — a fixed sequence of steps. Add "steps": ["Cleanser","Vitamin C","Moisturiser","Sunscreen"]
+Omit "trackingType" entirely for a simple did-it-or-not habit; that is still the right default for most routines.
 
 add_task — one task/commitment/session, optionally attached to an existing plan:
 \`\`\`json
@@ -104,32 +113,15 @@ suggest_milestones — milestones for a plan the user already has:
 \`\`\`
 3-5 milestones, titles 3-6 words, dates spread across the plan's remaining timeframe. Only use this for a plan that already exists — for a brand-new plan, bundle milestones into "create_plan" instead.
 
-create_strategy — a long-form written guide the user can save and reference:
-\`\`\`json
-{"type":"create_strategy","payload":{"title":"...","description":"one-sentence summary","htmlContent":"<!DOCTYPE html>..."}}
-\`\`\`
-htmlContent must be a COMPLETE, self-contained HTML document: <!DOCTYPE html>, <head> with <meta charset="UTF-8"> and a <style> block (no Tailwind/Bootstrap/CDN links), <body>. Base typography:
-   body { font-family: system-ui, -apple-system, sans-serif; line-height: 1.7; max-width: 680px; margin: 0 auto; padding: 2rem; color: #1a1a1a; }
-   h1 { font-size: 1.8rem; color: #6366f1; margin-bottom: 0.5rem; }
-   h2 { font-size: 1.15rem; font-weight: 700; color: #374151; margin: 1.75rem 0 0.5rem; border-bottom: 2px solid #e5e7eb; padding-bottom: 0.25rem; }
-   p, li { font-size: 0.95rem; color: #374151; }
-   ul, ol { padding-left: 1.5rem; margin: 0.5rem 0; }
-   table { width: 100%; border-collapse: collapse; margin: 1rem 0; font-size: 0.9rem; }
-   th { background: #f3f4f6; text-align: left; padding: 0.5rem 0.75rem; font-weight: 600; }
-   td { padding: 0.5rem 0.75rem; border-bottom: 1px solid #e5e7eb; }
-   .callout { border-left: 4px solid #6366f1; padding: 0.75rem 1rem; background: #f5f3ff; border-radius: 0 8px 8px 0; margin: 1rem 0; font-size: 0.9rem; }
-Structure every guide with <h2> sections: Overview, Key Principles (3-5 bullets), Schedule/Structure (table), Daily Habits, Tips & Troubleshooting (3-5 tips), optional Resources. Use <div class="callout"> for 1-2 highlights. Aim for 600-900 words of visible body text. Escape double-quotes inside htmlContent as \\".
-
 Shared rules:
 - "emoji"/task "icon": pick from: run, school, book, sleep, star, briefcase, car, brain, barbell, code, heart, music, palette, plane, chefhat, coin, camera, users, leaf, pencil, yoga, bike, mountain, droplet, moodsmile, flame, language, pill, bolt, dna
 - Plan "color": blue, emerald, violet, pink, amber, or cyan
 - "day"/"days": monday tuesday wednesday thursday friday saturday sunday (recurs weekly, no calendar date)
 - Times are HH:MM 24-hour.`;
 
-const FRAMING: Record<"plans" | "routine" | "strategy", string> = {
+const FRAMING: Record<"plans" | "routine", string> = {
   plans: "The user opened this from the Plans view — lean toward plan/task/milestone/tracker actions if the ask is ambiguous, but still handle any other request.",
   routine: "The user opened this from the Routines view — lean toward suggesting a ritual (create_ritual) if the ask is ambiguous, but still handle any other request.",
-  strategy: "The user opened this from the Strategy view — lean toward a written guide (create_strategy) if the ask is ambiguous, but still handle any other request.",
 };
 
 export const PLAN_COACH_PROMPT = `You are a coaching AI inside PlanR, dedicated exclusively to the user's plan.
@@ -213,7 +205,7 @@ export function buildCoachContext(
 }
 
 export function buildSystemPrompt(
-  context: "plans" | "routine" | "strategy",
+  context: "plans" | "routine",
   planContext?: string,
   existingPlans?: Pick<Plan, "title" | "category" | "description">[],
   existingRituals?: Pick<{ title: string; time: string; duration?: number }, "title" | "time" | "duration">[],
@@ -352,6 +344,22 @@ export function parseAIAction(text: string): AIActionResult | null {
       if (typeof p?.title !== "string") return null;
       const rawDays = Array.isArray(p.repeatDays) ? p.repeatDays : [];
       const repeatDays = rawDays.filter((d) => VALID_DAYS.includes(d as DayKey)) as DayKey[];
+
+      // Tracking config is optional and each piece is validated independently:
+      // an unrecognised trackingType, or a checklist with no usable steps,
+      // falls back to a plain checkbox routine rather than producing a routine
+      // the user can never complete.
+      const rawType = p.trackingType;
+      let trackingType = VALID_TRACKING_TYPES.includes(rawType as RitualTrackingType)
+        ? (rawType as RitualTrackingType)
+        : undefined;
+      const steps = Array.isArray(p.steps)
+        ? p.steps.filter((s): s is string => typeof s === "string" && s.trim().length > 0).map((s) => s.trim())
+        : undefined;
+      const target = typeof p.target === "number" && Number.isFinite(p.target) && p.target > 0 ? p.target : undefined;
+      const unit = typeof p.unit === "string" && p.unit.trim() ? p.unit.trim() : undefined;
+      if (trackingType === "checklist" && !steps?.length) trackingType = undefined;
+
       return {
         type: "create_ritual",
         payload: {
@@ -360,18 +368,10 @@ export function parseAIAction(text: string): AIActionResult | null {
           duration: typeof p.duration === "number" ? p.duration : 30,
           repeatDays: repeatDays.length > 0 ? repeatDays : VALID_DAYS,
           color: VALID_RITUAL_COLORS.includes(p.color as RitualColor) ? (p.color as RitualColor) : "emerald",
-        },
-      };
-    }
-    if (parsed.type === "create_strategy") {
-      const p = parsed.payload as Record<string, unknown>;
-      if (typeof p?.title !== "string") return null;
-      return {
-        type: "create_strategy",
-        payload: {
-          title: String(p.title),
-          description: String(p.description ?? ""),
-          htmlContent: String(p.htmlContent ?? ""),
+          ...(trackingType ? { trackingType } : {}),
+          ...(trackingType === "checklist" ? { steps } : {}),
+          ...(trackingType && trackingType !== "checklist" && target !== undefined ? { target } : {}),
+          ...(trackingType && trackingType !== "checklist" && unit ? { unit } : {}),
         },
       };
     }

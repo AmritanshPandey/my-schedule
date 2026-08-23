@@ -125,7 +125,6 @@ function emptySchedule() {
     metricEntries: [],
     milestones: [],
     rituals: [],
-    strategies: [],
     ritualCompletions: [],
     notes: [],
   };
@@ -163,7 +162,6 @@ function validSchedule() {
     metricEntries: [],
     milestones: [],
     rituals: [],
-    strategies: [],
     ritualCompletions: [],
     notes: [],
     events: [],
@@ -215,7 +213,6 @@ test("runtime schedule validation rejects malformed milestone, tracker, note, an
     linkedActivities: [], linkedTrackers: [], createdAt: new Date().toISOString(), updatedAt: new Date().toISOString(), sortOrder: 0,
   }];
   invalid.notes = [{ id: "note-1", title: "Note", body: 42, createdAt: "bad", updatedAt: "bad" }];
-  invalid.strategies = [{ id: "strategy-1", type: "doc", title: "Strategy", createdAt: "bad", updatedAt: "bad" }];
   assert.equal(validateSchedule(invalid).success, false);
 });
 
@@ -1945,7 +1942,7 @@ test("a commitment keeps its empty planId through normalization", () => {
 function scheduleWith(dayKey, tasks, plans = []) {
   const activities = Object.fromEntries(DAYS.map((d) => [d, []]));
   activities[dayKey] = tasks;
-  return { plans, activities, progressTrackers: [], metricEntries: [], milestones: [], rituals: [], strategies: [], ritualCompletions: [], notes: [], preferences: {} };
+  return { plans, activities, progressTrackers: [], metricEntries: [], milestones: [], rituals: [], ritualCompletions: [], notes: [], preferences: {} };
 }
 
 const todayKeyFor = (iso) => DAYS[(new Date(`${iso}T00:00:00`).getDay() + 6) % 7];
@@ -2111,7 +2108,7 @@ test("taskIdentity resolves colour from the category, neutral otherwise", () => 
 function attentionSchedule({ tasks = [], plans = [], milestones = [], rituals = [], ritualCompletions = [], dayKey } = {}) {
   const activities = Object.fromEntries(DAYS.map((d) => [d, []]));
   if (dayKey) activities[dayKey] = tasks;
-  return { plans, categories: [], activities, progressTrackers: [], metricEntries: [], milestones, rituals, strategies: [], ritualCompletions, notes: [], preferences: {} };
+  return { plans, categories: [], activities, progressTrackers: [], metricEntries: [], milestones, rituals, ritualCompletions, notes: [], preferences: {} };
 }
 
 const isoShift = (iso, days) => addDaysToISO(iso, days);
@@ -2171,7 +2168,7 @@ test("selectNeedsAttention counts a recurring task's miss once, not once per wee
   // A recurring task is the SAME object in several weekday buckets.
   const task = { id: "recurring", title: "Lift", planId: "p1", startTime: "6:00 AM", endTime: "7:00 AM", completionHistory: [missedEvent("recurring", missedISO)] };
   const activities = Object.fromEntries(DAYS.map((d) => [d, [task]]));
-  const schedule = { plans: [], categories: [], activities, progressTrackers: [], metricEntries: [], milestones: [], rituals: [], strategies: [], ritualCompletions: [], notes: [], preferences: {} };
+  const schedule = { plans: [], categories: [], activities, progressTrackers: [], metricEntries: [], milestones: [], rituals: [], ritualCompletions: [], notes: [], preferences: {} };
 
   const { missedTasks, total } = selectNeedsAttention(schedule, today);
   assert.equal(missedTasks.length, 1, "deduped by task id + date");

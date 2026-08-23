@@ -62,3 +62,45 @@ export function ritualDayProgress(ritual: Ritual, entries: RitualCompletion[]): 
 export function isRitualDayComplete(ritual: Ritual, entries: RitualCompletion[]): boolean {
   return ritualDayProgress(ritual, entries).complete;
 }
+
+/**
+ * Group a day's completion rows by ritual id. Exported because callers that
+ * need per-ritual entries (progress readouts, quick-add controls) would
+ * otherwise re-filter the whole completion array once per routine.
+ */
+export function groupRitualEntriesForDate(
+  completions: RitualCompletion[],
+  dateISO: string,
+): Map<string, RitualCompletion[]> {
+  const byRitual = new Map<string, RitualCompletion[]>();
+  for (const c of completions) {
+    if (c.date !== dateISO) continue;
+    const bucket = byRitual.get(c.ritualId);
+    if (bucket) bucket.push(c);
+    else byRitual.set(c.ritualId, [c]);
+  }
+  return byRitual;
+}
+
+/**
+ * The ids of routines whose day is genuinely complete on `dateISO`.
+ *
+ * Both shells derive "what's done today" from this rather than from raw row
+ * presence. The presence shortcut (`any row dated today`) is wrong for every
+ * non-checkbox type: one 250ml log against a 3000ml target creates a row, so
+ * the routine would read complete on the Today bar and in Needs Attention
+ * while the Routine tab — which asks isRitualDayComplete — correctly showed it
+ * unfinished. Same question, one answer.
+ */
+export function completedRitualIdsOn(
+  rituals: Ritual[],
+  completions: RitualCompletion[],
+  dateISO: string,
+): Set<string> {
+  const byRitual = groupRitualEntriesForDate(completions, dateISO);
+  const done = new Set<string>();
+  for (const ritual of rituals) {
+    if (isRitualDayComplete(ritual, byRitual.get(ritual.id) ?? [])) done.add(ritual.id);
+  }
+  return done;
+}

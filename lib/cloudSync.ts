@@ -364,9 +364,6 @@ function scheduleSync(schedule: Schedule, delayMs: number) {
 
 // Trim payload before writing to Firestore (1 MB document limit).
 // - completionHistory: drop events older than 90 days
-// - strategies.pdfData: strip binary blobs entirely (base64 PDF = multi-MB,
-//   would blow the limit on its own). HTML content is text and stays.
-//   PDF files remain local-only until Firebase Storage is wired up.
 function trimForSync(schedule: Schedule): Schedule {
   const cutoff = new Date();
   cutoff.setDate(cutoff.getDate() - 90);
@@ -385,12 +382,11 @@ function trimForSync(schedule: Schedule): Schedule {
         })),
       ])
     ) as Schedule["activities"],
-    strategies: (schedule.strategies ?? []).map(({ pdfData: _dropped, ...rest }) => rest),
   };
 }
 
 // Firestore caps a document at 1 MB. Stay comfortably under it; if a payload is
-// still too big after trimForSync (e.g. a giant note or strategy HTML), drop the
+// still too big after trimForSync (e.g. a giant note), drop the
 // largest offenders from the CLOUD copy only — they remain intact locally in
 // IndexedDB — so the rest of the data still backs up instead of failing wholesale.
 const MAX_DOC_BYTES = 900_000;
@@ -410,22 +406,7 @@ function capPayloadSize(schedule: Schedule): { payload: Schedule; oversizedField
   let oversizedFields = 0;
   let payload: Schedule = schedule;
 
-  // 1. Strategy HTML can be multi-MB on its own — drop it first.
-  if (Array.isArray(payload.strategies) && payload.strategies.some((s) => s.htmlContent)) {
-    payload = {
-      ...payload,
-      strategies: payload.strategies.map((s) => {
-        if (s.htmlContent) {
-          oversizedFields++;
-          return { ...s, htmlContent: undefined };
-        }
-        return s;
-      }),
-    };
-    if (encodedBytes(payload) <= MAX_DOC_BYTES) return { payload, oversizedFields };
-  }
-
-  // 2. Blank the largest note bodies until we fit (keep the note + title).
+  // 1. Blank the largest note bodies until we fit (keep the note + title).
   if (Array.isArray(payload.notes) && payload.notes.length > 0) {
     const order = payload.notes
       .map((n, i) => ({ i, size: n.body?.length ?? 0 }))
@@ -473,7 +454,7 @@ async function performSync(schedule: Schedule): Promise<void> {
     const payloadBytes = serializedScheduleSize(payload);
     if (payloadBytes >= LARGE_PAYLOAD_WARNING_BYTES && process.env.NODE_ENV !== "production") {
       console.warn(
-        `[CloudSync] Schedule payload is unusually large: ${(payloadBytes / 1_000_000).toFixed(2)} MB. Large content may come from notes, strategy assets, completion history, or embedded document data.`
+        `[CloudSync] Schedule payload is unusually large: ${(payloadBytes / 1_000_000).toFixed(2)} MB. Large content may come from notes, completion history, or embedded document data.`
       );
     }
     await setDoc(firestoreRef(_uid), {

@@ -91,7 +91,7 @@ test("activities is a per-day map and plans is an array", () => {
   // Every top-level key the Schedule contract requires.
   for (const key of [
     "plans", "categories", "activities", "progressTrackers", "metricEntries",
-    "milestones", "rituals", "strategies", "ritualCompletions", "notes", "preferences",
+    "milestones", "rituals", "ritualCompletions", "notes", "preferences",
   ]) {
     assert.ok(key in s, `Schedule.${key} is missing`);
   }

@@ -53,7 +53,6 @@ export interface ActionReview {
 const NOUNS: Record<AIActionResult["type"], string> = {
   create_plan: "plan",
   create_ritual: "routine",
-  create_strategy: "guide",
   suggest_milestones: "milestones",
   add_tracker: "tracker",
   add_task: "task",
@@ -151,20 +150,20 @@ export function describeAction(action: AIActionResult, schedule: Schedule): Acti
     case "create_ritual": {
       const p = action.payload;
       summary = `Create the routine "${p.title}"`;
+      // How a routine measures itself changes what completing it means, so it
+      // belongs on the review card rather than being a silent default.
+      const tracking = p.trackingType
+        ? p.trackingType === "checklist"
+          ? `Checklist · ${p.steps?.length ?? 0} steps`
+          : `${p.trackingType}${p.target ? ` · target ${p.target}${p.unit ? ` ${p.unit}` : ""}` : ""}`
+        : "Simple check-off";
       fields = [
         field("title", "Routine name", p.title, true),
         field("time", "Time", p.time, true),
         field("repeatDays", "Days", p.repeatDays, true),
+        field("trackingType", "Tracking", tracking, false),
+        field("steps", "Steps", p.steps?.length ? p.steps : null, false),
         field("duration", "Duration", p.duration ? `${p.duration} min` : null, false),
-      ];
-      break;
-    }
-    case "create_strategy": {
-      const p = action.payload;
-      summary = `Save the guide "${p.title}"`;
-      fields = [
-        field("title", "Title", p.title, true),
-        field("description", "Description", p.description, false),
       ];
       break;
     }

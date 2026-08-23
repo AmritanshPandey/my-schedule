@@ -11,7 +11,7 @@ import type { Plan, Ritual, Schedule } from "@/lib/useScheduleDB";
 import { useAIActions } from "@/lib/ai/useAIActions";
 
 interface AIFabProps {
-  context: "plans" | "routine" | "strategy";
+  context: "plans" | "routine";
   plans: Plan[];
   rituals: Ritual[];
   schedule: Schedule;

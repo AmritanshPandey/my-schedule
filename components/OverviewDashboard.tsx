@@ -34,7 +34,8 @@ import { computeTrend, type TrendResult } from "@/lib/trendUtils";
 import { addDaysToISO, localISODate } from "@/lib/dateUtils";
 import { formatDisplayTime } from "@/lib/timeUtils";
 import { calculateExecutionStreak, type ExecutionStreak } from "@/lib/consistency/calculateExecutionStreak";
-import { calculateRitualStats, ritualScheduledOn } from "@/lib/consistency/calculateRitualStreak";
+import { calculateRitualStats, ritualScheduledOn, ritualScheduledOnDate } from "@/lib/consistency/calculateRitualStreak";
+import { completedRitualIdsOn } from "@/lib/consistency/ritualDayStatus";
 import { haptic } from "@/lib/haptics";
 import { CARD, CARD_INTERACTIVE, SOFT_PANEL } from "@/components/ui/surfaces";
 import ProgressBar from "@/components/ui/ProgressBar";
@@ -761,18 +762,19 @@ export default function OverviewDashboard({
     const totalTasks = days.reduce((sum, day) => sum + day.total, 0);
     const totalDone = days.reduce((sum, day) => sum + day.done, 0);
     const tasksPct = ratioPct(totalDone, totalTasks);
-    const doneSet = new Set((schedule.ritualCompletions ?? []).map((completion) => `${completion.ritualId}|${completion.date}`));
     let habitTotal = 0;
     let habitDone = 0;
 
     DAYS_ORDER.forEach((day, i) => {
       const date = addDaysToISO(monday, i);
       if (date > todayISO) return;
-      const scheduled = (schedule.rituals ?? []).filter(
-        (ritual) => !ritual.repeatDays || ritual.repeatDays.length === 0 || ritual.repeatDays.includes(day)
-      );
+      const scheduled = (schedule.rituals ?? []).filter((ritual) => ritualScheduledOnDate(ritual, date));
       habitTotal += scheduled.length;
-      habitDone += scheduled.filter((ritual) => doneSet.has(`${ritual.id}|${date}`)).length;
+      // trackingType-aware, and per-date rather than a flat id|date presence
+      // set — a partially logged quantity routine must not count as done here
+      // or this bar disagrees with every other consistency figure in the app.
+      const doneToday = completedRitualIdsOn(schedule.rituals ?? [], schedule.ritualCompletions ?? [], date);
+      habitDone += scheduled.filter((ritual) => doneToday.has(ritual.id)).length;
     });
 
     if (totalTasks === 0 && habitTotal === 0) return null;

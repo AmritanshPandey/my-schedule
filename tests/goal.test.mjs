@@ -58,7 +58,6 @@ function emptySchedule() {
     metricEntries: [],
     milestones: [],
     rituals: [],
-    strategies: [],
     ritualCompletions: [],
     notes: [],
     events: [],

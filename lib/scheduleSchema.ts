@@ -207,10 +207,7 @@ export const RitualSchema = z.object({
   recurrence: ritualRecurrence.optional(),
   anyTime: z.boolean().optional(),
   icon: z.string().optional(),
-  category: z.string().optional(),
   description: z.string().optional(),
-  active: z.boolean().optional(),
-  templateKey: z.string().optional(),
 }).passthrough();
 
 export const RitualCompletionSchema = z.object({
@@ -234,21 +231,6 @@ export const NoteSchema = z.object({
   linkedTaskIds: z.array(nonEmptyId).optional(),
 }).passthrough();
 
-export const StrategySchema = z.object({
-  id: nonEmptyId,
-  type: z.enum(["html", "pdf"]),
-  title: z.string(),
-  description: z.string().optional(),
-  htmlContent: z.string().optional(),
-  pdfData: z.string().optional(),
-  pdfUrl: z.string().optional(),
-  thumbnail: z.string().optional(),
-  createdAt: isoDateTime,
-  updatedAt: isoDateTime,
-  tags: z.array(z.string()).optional(),
-  planId: nonEmptyId.optional(),
-}).passthrough();
-
 const preferences = z.object({
   dayStartTime: z.string().optional(),
   dayEndMinutes: z.number().int().finite().optional(),
@@ -267,7 +249,6 @@ export const ScheduleSchema = z.object({
   metricEntries: z.array(MetricEntrySchema),
   milestones: z.array(MilestoneSchema),
   rituals: z.array(RitualSchema),
-  strategies: z.array(StrategySchema),
   ritualCompletions: z.array(RitualCompletionSchema),
   notes: z.array(NoteSchema),
   events: z.array(ScheduleEventSchema),

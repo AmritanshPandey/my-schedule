@@ -6,6 +6,7 @@ import dynamic from "next/dynamic";
 import AddEntryModal from "@/components/AddEntryModal";
 import { quickAmountsForUnit } from "@/lib/quickAmounts";
 import { sumEntriesForDate } from "@/lib/metricEntries";
+import { completedRitualIdsOn } from "@/lib/consistency/ritualDayStatus";
 import { TaskBlockCard } from "@/components/TaskBlockCard";
 import Skeleton from "@/components/ui/Skeleton";
 import type { TaskSaveData } from "@/components/task/TaskSheet";
@@ -72,7 +73,6 @@ import {
   ProgressTracker,
   Ritual,
   Schedule,
-  StrategyAsset,
   SummaryConfig,
   Task,
   TaskCategory,
@@ -838,14 +838,13 @@ export default function ScheduleApp() {
   const [subtasksRef, setSubtasksRef] = useState<{ id: string; day: DayKey; dateISO: string } | null>(null);
   const [bulkImportOpen, setBulkImportOpen] = useState(false);
   const [pendingAIAction, setPendingAIAction] = useState<AIActionResult | null>(null);
-  const completedRitualIds = useMemo(() => {
-    const today = todayISO();
-    return new Set(
-      (schedule.ritualCompletions ?? [])
-        .filter((c) => c.date === today)
-        .map((c) => c.ritualId)
-    );
-  }, [schedule.ritualCompletions, todayKey]);
+  // trackingType-aware: a quantity routine is "done" only once its logs reach
+  // the target, not on the first partial log. Shared with the Routine tab so
+  // the two screens can never disagree about the same routine.
+  const completedRitualIds = useMemo(
+    () => completedRitualIdsOn(schedule.rituals ?? [], schedule.ritualCompletions ?? [], todayISO()),
+    [schedule.rituals, schedule.ritualCompletions, todayKey]
+  );
   const [ritualAddOpen, setRitualAddOpen] = useState(false);
   const [detailRitualId, setDetailRitualId] = useState<string | null>(null);
   const [editRitualId, setEditRitualId] = useState<string | null>(null);
@@ -2047,6 +2046,7 @@ export default function ScheduleApp() {
     }
 
     if (action.type === "create_ritual") {
+      const { trackingType, target, unit, steps } = action.payload;
       const ritual: Ritual = {
         id: uid(),
         title: action.payload.title,
@@ -2055,6 +2055,12 @@ export default function ScheduleApp() {
         repeatDays: action.payload.repeatDays,
         color: action.payload.color,
         sortOrder: (schedule.rituals ?? []).length,
+        // Only set when the model asked for a measured routine — an absent
+        // trackingType is a plain checkbox habit, which stays the default.
+        ...(trackingType ? { trackingType } : {}),
+        ...(target !== undefined ? { target } : {}),
+        ...(unit ? { unit } : {}),
+        ...(steps?.length ? { steps: steps.map((label) => ({ id: uid(), label })) } : {}),
       };
       setSchedule((prev) => ({
         ...prev,
@@ -2062,24 +2068,6 @@ export default function ScheduleApp() {
       }));
       setActiveTab(2);
       setToastMessage(`Added ritual "${action.payload.title}"`);
-      return;
-    }
-
-    if (action.type === "create_strategy") {
-      const strategy: StrategyAsset = {
-        id: uid(),
-        type: "html",
-        title: action.payload.title,
-        description: action.payload.description || undefined,
-        htmlContent: action.payload.htmlContent,
-        createdAt: new Date().toISOString(),
-        updatedAt: new Date().toISOString(),
-      };
-      setSchedule((prev) => ({
-        ...prev,
-        strategies: [...prev.strategies, strategy],
-      }));
-      setToastMessage(`Saved strategy "${action.payload.title}"`);
       return;
     }
 
@@ -3171,7 +3159,6 @@ export default function ScheduleApp() {
   }
 
   // ─── JSX ──────────────────────────────────────────────────────────────────
-  const TabPresence = iosSafeMode ? NoopPresence : AnimatePresence;
   const DayPresence = iosSafeMode ? NoopPresence : AnimatePresence;
   const ViewPresence = iosSafeMode ? NoopPresence : AnimatePresence;
   const authLabel = authLoading
@@ -3339,16 +3326,23 @@ export default function ScheduleApp() {
          applied once by the body's padding-top, so we must NOT add it again
          here or it double-counts and leaves a gap under the header. */
       <div className="max-w-full pb-40 pt-16 lg:pt-0 lg:flex-1 lg:max-w-none lg:overflow-y-auto lg:pb-0">
-        {/* Tab content waits for `ready`.
-            Not cosmetic: `TabPresence` is AnimatePresence with mode="wait", so
-            the incoming tab only mounts once the outgoing one finishes exiting.
-            Mounting tab 0 before the DB reports first-launch meant the routing
-            effect below flipped to Overview mid-enter-animation, the exit never
-            completed, and the new tab never mounted — leaving a first-launch
-            user staring at an empty planner instead of the getting-started
-            guide. Deciding the tab before the first mount removes the
-            transition entirely, and with it the flash of the wrong screen. */}
-        <TabPresence mode="wait" initial={false}>
+        {/* Tab content waits for `ready` so a first-launch user never sees the
+            planner flash before the routing effect settles on the right tab.
+
+            Deliberately NOT wrapped in AnimatePresence. Tab switching is the
+            app's primary navigation, and AnimatePresence — especially with
+            mode="wait", which holds the incoming tab until the outgoing one
+            finishes exiting — makes that navigation depend on an animation
+            completing. Whenever frames stop (a backgrounded tab, a throttled
+            PWA, an interrupted transition) the exit never finishes and the
+            switcher deadlocks: nav state updates but the screen never changes.
+            That failure has been hit here before, which is what the previous
+            comment on this block described.
+
+            Each tab keeps its own initial/animate fade, so switching still
+            fades in — it just can no longer be blocked by an exit that never
+            resolves. Outgoing tabs unmount immediately via plain React. */}
+        <>
           {!ready && <div key="tab-booting" />}
 
         {/* ── Tasks Tab ────────────────────────────────────────────────────── */}
@@ -3358,7 +3352,6 @@ export default function ScheduleApp() {
             data-tour="today-timeline"
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
             transition={{ duration: 0.12, ease: "easeOut" }}
             className="lg:flex lg:h-full lg:overflow-hidden"
           >
@@ -3577,9 +3570,11 @@ export default function ScheduleApp() {
               {/* Rituals strip */}
               <TodayRitualsBar
                 rituals={schedule.rituals ?? []}
-                activeDay={activeDay}
-                completedIds={completedRitualIds}
+                dateISO={todayISO()}
+                ritualCompletions={schedule.ritualCompletions ?? []}
                 onToggle={handleToggleRitualComplete}
+                onLogAmount={(id, amount) => handleLogRitualAmount(id, amount, todayISO())}
+                onOpenDetail={(ritual) => setDetailRitualId(ritual.id)}
               />
               <TrackerQuickBar
                 trackers={schedule.progressTrackers}
@@ -3922,7 +3917,6 @@ export default function ScheduleApp() {
             data-tour={selectedPlan ? undefined : "plans-list"}
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
             transition={{ duration: 0.12, ease: "easeOut" }}
           >
           {/* The lg:max-w-4xl that used to wrap this is gone: PlanDetailView
@@ -3989,7 +3983,6 @@ export default function ScheduleApp() {
             data-tour="routine-view"
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
             transition={{ duration: 0.12, ease: "easeOut" }}
           >
             <ErrorBoundary section name="Routine">
@@ -4016,7 +4009,6 @@ export default function ScheduleApp() {
             key="tab-overview"
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
             transition={{ duration: 0.12, ease: "easeOut" }}
           >
             <ErrorBoundary section name="Dashboard">
@@ -4056,7 +4048,6 @@ export default function ScheduleApp() {
             key="tab-settings"
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
             transition={{ duration: 0.12, ease: "easeOut" }}
           >
             <ErrorBoundary section name="AI">
@@ -4088,7 +4079,6 @@ export default function ScheduleApp() {
             key="tab-ai"
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
             transition={{ duration: 0.12, ease: "easeOut" }}
           >
             <ErrorBoundary section name="AI">
@@ -4097,7 +4087,7 @@ export default function ScheduleApp() {
           </m.div>
         )}
 
-        </TabPresence>
+        </>
       </div>
       )}
 

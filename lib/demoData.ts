@@ -962,7 +962,6 @@ export function buildDemoSchedule(now: Date = new Date()): Schedule {
     metricEntries: buildMetricEntries(now),
     milestones: buildMilestones(now),
     rituals: RITUALS,
-    strategies: [],
     ritualCompletions: buildRitualCompletions(now),
     notes: buildNotes(now),
     events: [],

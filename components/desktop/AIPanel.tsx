@@ -24,7 +24,7 @@ interface Message {
 }
 
 interface AIPanelProps {
-  context: "plans" | "routine" | "strategy";
+  context: "plans" | "routine";
   plans: Plan[];
   rituals: Ritual[];
   schedule: Schedule;
@@ -44,7 +44,6 @@ interface AIPanelProps {
 const ACTION_LABELS: Record<AIActionResult["type"], string> = {
   create_plan: "New Plan",
   create_ritual: "New Ritual",
-  create_strategy: "New Strategy",
   suggest_milestones: "Milestones",
   add_tracker: "New Tracker",
   add_task: "New Task",
@@ -302,7 +301,6 @@ function resolvePreview(
 ): { title: string; detail: string | null; warn: boolean } {
   switch (action.type) {
     case "create_ritual":
-    case "create_strategy":
       return { title: action.payload.title, detail: null, warn: false };
 
     // Every branch below resolves exactly as the apply path does. They used to
@@ -426,15 +424,6 @@ function ActionCard({
   }
 
   const { title, detail, warn } = resolvePreview(action, plans, schedule, activePlan);
-  const htmlExcerpt =
-    action.type === "create_strategy" && action.payload.htmlContent
-      ? action.payload.htmlContent
-          .replace(/<style[\s\S]*?<\/style>/gi, "")
-          .replace(/<[^>]+>/g, " ")
-          .replace(/\s+/g, " ")
-          .trim()
-          .slice(0, 130)
-      : null;
 
   return (
     <m.div
@@ -452,11 +441,6 @@ function ActionCard({
           {detail && (
             <p className={`mt-0.5 truncate text-[11px] leading-relaxed ${warn ? "text-amber-600 dark:text-amber-400" : "text-neutral-400 dark:text-neutral-500"}`}>
               {warn ? "⚠ " : ""}{detail}
-            </p>
-          )}
-          {htmlExcerpt && (
-            <p className="mt-0.5 line-clamp-2 text-[11px] leading-relaxed text-neutral-400 dark:text-neutral-500">
-              {htmlExcerpt}…
             </p>
           )}
         </div>
@@ -493,7 +477,7 @@ const mdComponents = {
   ),
 };
 
-const STARTER_PROMPTS: Record<"plans" | "routine" | "strategy", string[]> = {
+const STARTER_PROMPTS: Record<"plans" | "routine", string[]> = {
   plans: [
     "Create a 30-day fitness plan",
     "Add a commitment for an appointment",
@@ -504,11 +488,6 @@ const STARTER_PROMPTS: Record<"plans" | "routine" | "strategy", string[]> = {
     "Design a productive morning routine",
     "Create an evening wind-down ritual",
     "Add subtasks to an existing task",
-  ],
-  strategy: [
-    "Write a progressive overload program",
-    "Create a language learning strategy",
-    "Design a habit stacking system",
   ],
 };
 
@@ -573,8 +552,8 @@ export function AIPanel({ context, plans, rituals, schedule, activePlan, initial
     let fullText = "";
     try {
       // Always request the larger token budget: with the unified prompt, any
-      // context can now emit a long create_strategy doc or a create_plan with
-      // several bundled tasks — it's a ceiling, not a forced length.
+      // context can emit a create_plan with several bundled tasks — it's a
+      // ceiling, not a forced length.
       for await (const chunk of streamAIChat(history, systemPrompt, 4096, controller.signal)) {
         fullText += chunk;
         setMessages((prev) => {
@@ -644,7 +623,7 @@ export function AIPanel({ context, plans, rituals, schedule, activePlan, initial
     setProposalStatus(proposal.id, "rejected");
   }
 
-  const contextLabel = context === "plans" ? "Plans" : context === "strategy" ? "Strategy" : "Routine";
+  const contextLabel = context === "plans" ? "Plans" : "Routine";
 
   return (
     <div className="flex h-full w-full flex-col overflow-hidden rounded-2xl border border-neutral-200 bg-white text-neutral-900 dark:border-white/10 dark:bg-neutral-950 dark:text-white">

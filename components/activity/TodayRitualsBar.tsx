@@ -1,45 +1,44 @@
 "use client";
 
 import { m } from "framer-motion";
-import { IconCheck, IconRepeat } from "@tabler/icons-react";
-import type { Ritual, RitualColor, DayKey } from "@/lib/useScheduleDB";
+import { IconCheck, IconRepeat, IconPlus } from "@tabler/icons-react";
+import type { Ritual, RitualCompletion } from "@/lib/useScheduleDB";
 import { haptic } from "@/lib/haptics";
 import { formatDisplayTime } from "@/lib/timeUtils";
-
-const COLOR_DOT: Record<RitualColor, string> = {
-  rose:    "bg-rose-400",
-  sky:     "bg-sky-400",
-  violet:  "bg-violet-400",
-  amber:   "bg-amber-400",
-  emerald: "bg-emerald-400",
-  fuchsia: "bg-fuchsia-400",
-  orange:  "bg-orange-400",
-  cyan:    "bg-cyan-400",
-  indigo:  "bg-indigo-400",
-  teal:    "bg-teal-400",
-};
+import { RITUAL_COLOR_DOT as COLOR_DOT } from "@/lib/ritualColors";
+import { groupRitualEntriesForDate, ritualDayProgress } from "@/lib/consistency/ritualDayStatus";
+import { quickAmountsForRitual } from "@/lib/quickAmounts";
+import { ritualScheduledOnDate } from "@/lib/consistency/calculateRitualStreak";
 
 interface TodayRitualsBarProps {
   rituals: Ritual[];
-  activeDay: DayKey;
-  completedIds: Set<string>;
+  /** The date this bar represents — decides what's due and dates quick-adds.
+   *  Supersedes the old weekday-only filter, so interval routines
+   *  ("every 3 days") now appear on the right days here too. */
+  dateISO: string;
+  ritualCompletions: RitualCompletion[];
+  /** Checkbox routines only. */
   onToggle: (id: string) => void;
+  /** Quantity / duration / count — logs one quick-add increment. */
+  onLogAmount: (id: string, amount: number) => void;
+  /** Checklist routines open their detail view; a pill can't express 4 steps. */
+  onOpenDetail?: (ritual: Ritual) => void;
 }
 
 export default function TodayRitualsBar({
   rituals,
-  activeDay,
-  completedIds,
+  dateISO,
+  ritualCompletions,
   onToggle,
+  onLogAmount,
+  onOpenDetail,
 }: TodayRitualsBarProps) {
-  const todayRituals = rituals.filter((r) => {
-    if (r.repeatDays && r.repeatDays.length > 0 && !r.repeatDays.includes(activeDay)) return false;
-    return true;
-  });
-
+  const todayRituals = rituals.filter((r) => ritualScheduledOnDate(r, dateISO));
   if (todayRituals.length === 0) return null;
 
-  const doneCount = todayRituals.filter((r) => completedIds.has(r.id)).length;
+  const entriesByRitual = groupRitualEntriesForDate(ritualCompletions, dateISO);
+  const progressFor = (r: Ritual) => ritualDayProgress(r, entriesByRitual.get(r.id) ?? []);
+  const doneCount = todayRituals.filter((r) => progressFor(r).complete).length;
 
   return (
     <div className="mb-3">
@@ -56,15 +55,53 @@ export default function TodayRitualsBar({
       </div>
       <div className="flex gap-2 overflow-x-auto pb-0.5 [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden" style={{ touchAction: "pan-x" }}>
         {todayRituals.map((ritual) => {
-          const done = completedIds.has(ritual.id);
+          const trackingType = ritual.trackingType ?? "checkbox";
+          const progress = progressFor(ritual);
+          const done = progress.complete;
           const dot = ritual.color ? COLOR_DOT[ritual.color] : "bg-neutral-300 dark:bg-neutral-600";
+
+          const isMeasured = trackingType === "quantity" || trackingType === "duration" || trackingType === "count";
+          const isChecklist = trackingType === "checklist";
+          // The first quick-add preset is this pill's increment. Without one
+          // there is no unambiguous amount to log, so the pill opens the
+          // routine instead of guessing a number.
+          const increment = isMeasured ? quickAmountsForRitual(ritual)[0] : undefined;
+
+          // A tap must never complete more than it is entitled to. Only a
+          // checkbox routine is completable in one tap; measured routines log
+          // one increment, and anything else opens its detail view.
+          const handleTap = () => {
+            haptic("light");
+            if (trackingType === "checkbox") return onToggle(ritual.id);
+            if (isMeasured && increment !== undefined && !done) return onLogAmount(ritual.id, increment);
+            return onOpenDetail?.(ritual);
+          };
+
+          // Trailing text carries the real state: progress for measured
+          // routines, steps for a checklist, the scheduled time otherwise.
+          const meta = isMeasured
+            ? `${progress.value}${ritual.target ? `/${ritual.target}` : ""}${ritual.unit ? ` ${ritual.unit}` : ""}`
+            : isChecklist && progress.stepsTotal > 0
+              ? `${progress.stepsDone}/${progress.stepsTotal}`
+              : ritual.anyTime
+                ? "Anytime"
+                : formatDisplayTime(ritual.time);
+
+          const canQuickAdd = isMeasured && increment !== undefined && !done;
 
           return (
             <m.button
               key={ritual.id}
               type="button"
               whileTap={{ scale: 0.93 }}
-              onClick={() => { haptic("light"); onToggle(ritual.id); }}
+              onClick={handleTap}
+              aria-label={
+                canQuickAdd
+                  ? `Log ${increment}${ritual.unit ? ` ${ritual.unit}` : ""} of ${ritual.title}, ${meta} so far`
+                  : trackingType === "checkbox"
+                    ? `${done ? "Mark not done" : "Mark done"}: ${ritual.title}`
+                    : `Open ${ritual.title}, ${meta}`
+              }
               className={`inline-flex shrink-0 items-center gap-1.5 rounded-full border px-3 py-1.5 transition-all duration-200 ${
                 done
                   ? "border-neutral-100 bg-neutral-50 opacity-55 dark:border-white/[0.04] dark:bg-white/[0.03]"
@@ -72,9 +109,13 @@ export default function TodayRitualsBar({
               }`}
             >
               <span className={`flex h-6 w-6 shrink-0 items-center justify-center rounded-full transition-colors ${
-                done ? "bg-green-500" : `${dot}`
+                done ? "bg-green-500" : dot
               }`}>
-                {done && <IconCheck size={9} strokeWidth={3} className="text-white" />}
+                {done ? (
+                  <IconCheck size={9} strokeWidth={3} className="text-white" />
+                ) : canQuickAdd ? (
+                  <IconPlus size={10} strokeWidth={3} className="text-white" />
+                ) : null}
               </span>
               <span className={`whitespace-nowrap text-[12px] font-semibold leading-none ${
                 done
@@ -83,8 +124,8 @@ export default function TodayRitualsBar({
               }`}>
                 {ritual.title}
               </span>
-              <span className="text-[11px] font-medium text-neutral-400 dark:text-neutral-500">
-                {formatDisplayTime(ritual.time)}
+              <span className="whitespace-nowrap text-[11px] font-medium tabular-nums text-neutral-400 dark:text-neutral-500">
+                {meta}
               </span>
             </m.button>
           );

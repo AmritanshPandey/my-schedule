@@ -99,9 +99,6 @@ export function countCreations(action: AIActionResult): CreationCounts {
     case "create_ritual":
       c.rituals = 1;
       break;
-    case "create_strategy":
-      // A written document, not schedule rows — nothing to count.
-      break;
     default:
       break;
   }

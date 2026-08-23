@@ -162,19 +162,71 @@ test("create_plan's per-task taskType round-trips and defaults missing/invalid o
   assert.equal(invalid.taskType, "task");
 });
 
-test("create_ritual and create_strategy are unaffected by the unified-prompt refactor", () => {
+test("create_ritual is unaffected by the unified-prompt refactor", () => {
   const ritual = parseAIAction(fenced({
     type: "create_ritual",
     payload: { title: "Morning pages", time: "06:30", duration: 20, repeatDays: ["monday", "tuesday"], color: "sky" },
   }));
   assert.equal(ritual.type, "create_ritual");
   assert.equal(ritual.payload.title, "Morning pages");
+});
 
-  const strategy = parseAIAction(fenced({
-    type: "create_strategy",
-    payload: { title: "Deep Work Program", description: "A guide", htmlContent: "<!DOCTYPE html><html><body>Hi</body></html>" },
+test("create_ritual accepts a quantity routine with target and unit", () => {
+  const action = parseAIAction(fenced({
+    type: "create_ritual",
+    payload: { title: "Water", time: "09:00", duration: 5, repeatDays: ["monday"], color: "cyan", trackingType: "quantity", target: 3000, unit: "ml" },
   }));
-  assert.equal(strategy.type, "create_strategy");
+  assert.equal(action.payload.trackingType, "quantity");
+  assert.equal(action.payload.target, 3000);
+  assert.equal(action.payload.unit, "ml");
+});
+
+test("create_ritual accepts a checklist routine with steps", () => {
+  const action = parseAIAction(fenced({
+    type: "create_ritual",
+    payload: { title: "Skincare", time: "22:00", duration: 10, repeatDays: ["monday"], color: "rose", trackingType: "checklist", steps: ["Cleanser", "Moisturiser"] },
+  }));
+  assert.equal(action.payload.trackingType, "checklist");
+  assert.deepEqual(action.payload.steps, ["Cleanser", "Moisturiser"]);
+});
+
+test("create_ritual with no trackingType stays a plain checkbox routine", () => {
+  const action = parseAIAction(fenced({
+    type: "create_ritual",
+    payload: { title: "Journal", time: "07:00", duration: 15, repeatDays: ["monday"], color: "amber" },
+  }));
+  assert.equal(action.payload.trackingType, undefined);
+});
+
+test("create_ritual rejects an unknown trackingType rather than storing it", () => {
+  const action = parseAIAction(fenced({
+    type: "create_ritual",
+    payload: { title: "Odd", time: "07:00", duration: 15, repeatDays: ["monday"], color: "amber", trackingType: "vibes", target: 5 },
+  }));
+  assert.equal(action.payload.trackingType, undefined);
+  assert.equal(action.payload.target, undefined);
+});
+
+test("create_ritual downgrades a stepless checklist to a checkbox — never uncompletable", () => {
+  const action = parseAIAction(fenced({
+    type: "create_ritual",
+    payload: { title: "Empty", time: "07:00", duration: 15, repeatDays: ["monday"], color: "amber", trackingType: "checklist", steps: [] },
+  }));
+  assert.equal(action.payload.trackingType, undefined);
+  assert.equal(action.payload.steps, undefined);
+});
+
+test("create_strategy is no longer a valid action — the Strategy feature was removed", () => {
+  // It used to parse and write a StrategyAsset that no screen could ever
+  // display. Rejecting it outright is what stops the assistant claiming it
+  // saved something the user cannot open.
+  assert.equal(
+    parseAIAction(fenced({
+      type: "create_strategy",
+      payload: { title: "Deep Work Program", description: "A guide", htmlContent: "<!DOCTYPE html><html><body>Hi</body></html>" },
+    })),
+    null,
+  );
 });
 
 test("parseAIAction returns null for text with no JSON block", () => {

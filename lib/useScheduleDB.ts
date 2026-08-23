@@ -297,21 +297,6 @@ export interface Milestone {
   sortOrder: number;
 }
 
-export interface StrategyAsset {
-  id: string;
-  type: "html" | "pdf";
-  title: string;
-  description?: string;
-  htmlContent?: string;
-  pdfData?: string;       // base64 local fallback (guest users)
-  pdfUrl?: string;        // Firebase Storage download URL (authenticated users)
-  thumbnail?: string;
-  createdAt: string;
-  updatedAt: string;
-  tags?: string[];
-  planId?: string;
-}
-
 export const RITUAL_COLORS = ["rose", "sky", "violet", "amber", "emerald", "fuchsia", "orange", "cyan", "indigo", "teal"] as const;
 export type RitualColor = typeof RITUAL_COLORS[number];
 
@@ -323,7 +308,9 @@ export type RitualColor = typeof RITUAL_COLORS[number];
 export const RITUAL_TRACKING_TYPES = ["checkbox", "quantity", "duration", "count", "checklist"] as const;
 export type RitualTrackingType = typeof RITUAL_TRACKING_TYPES[number];
 
-/** One named step of a "checklist" routine (e.g. a skincare routine's steps). */
+/** One named item in a Ritual's `steps` list — see that field's own comment
+ *  for how its meaning (individually completable vs. descriptive-only)
+ *  depends on the ritual's trackingType. */
 export interface RitualStep {
   id: string;
   label: string;
@@ -364,15 +351,17 @@ export interface Ritual {
   unit?: string;           // "ml" | "kcal" | "g" | "min" | "pages" | "reps" | custom
   quickAmounts?: number[]; // explicit quick-log presets (e.g. Water's [250,500,750]);
                            // falls back to a unit-based guess when unset — see lib/quickAmounts.ts
-  steps?: RitualStep[];    // checklist only
+  // "checklist": each step is its own checkbox (RitualCompletion.stepId),
+  // and the day counts done once every step is. "checkbox": steps are a
+  // purely descriptive sub-item list (e.g. "Hair" -> coconut oil, shampoo,
+  // conditioner) — never individually completed; one tap on the routine's
+  // own checkbox covers all of them. Unused by every other trackingType.
+  steps?: RitualStep[];
 
   recurrence?: RitualRecurrence;
   anyTime?: boolean;       // true ⇒ `time` is ignored by grouping/timeline/reminders
   icon?: string;           // key into components/SectionIcons.tsx's registry (iconGlyph/getIconPickerStyle)
-  category?: string;       // template key / grouping label — display only
   description?: string;
-  active?: boolean;        // undefined ≡ true; archive without deleting
-  templateKey?: string;    // which template (if any) this routine was created from
 }
 
 export type Activity = Task;
@@ -496,7 +485,6 @@ export interface Schedule {
   metricEntries: MetricEntry[];
   milestones: Milestone[];
   rituals: Ritual[];
-  strategies: StrategyAsset[];
   ritualCompletions: RitualCompletion[];
   notes: Note[];
   events: ScheduleEvent[];
@@ -950,10 +938,6 @@ function migrate(raw: unknown): Schedule {
       ? (r.rituals as Ritual[]).filter((ri) => ri && typeof ri.id === "string" && typeof ri.title === "string" && typeof ri.time === "string")
       : [];
 
-    const strategies: StrategyAsset[] = Array.isArray(r.strategies)
-      ? (r.strategies as StrategyAsset[]).filter((s) => s && typeof s.id === "string" && typeof s.type === "string" && typeof s.title === "string")
-      : [];
-
     const notes = normalizeNotes(r.notes);
 
     const cutoff = (() => {
@@ -988,7 +972,6 @@ function migrate(raw: unknown): Schedule {
       metricEntries,
       milestones: normalizedMilestones,
       rituals,
-      strategies,
       ritualCompletions,
       notes,
       events: normalizeScheduleEvents(r.events),
@@ -1019,7 +1002,6 @@ function migrate(raw: unknown): Schedule {
       metricEntries,
       milestones: [],
       rituals: [],
-      strategies: [],
       ritualCompletions: [],
       notes: normalizeNotes(r.notes),
       events: normalizeScheduleEvents(r.events),
@@ -1058,7 +1040,6 @@ function migrate(raw: unknown): Schedule {
     metricEntries,
     milestones: [],
     rituals: [],
-    strategies: [],
     ritualCompletions: [],
     notes: normalizeNotes(r.notes),
     events: normalizeScheduleEvents(r.events),
@@ -1156,7 +1137,6 @@ function emptyEmpty(): Schedule {
     metricEntries: [],
     milestones: [],
     rituals: [],
-    strategies: [],
     ritualCompletions: [],
     notes: [],
     events: [],

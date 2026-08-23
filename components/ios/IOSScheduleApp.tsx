@@ -88,6 +88,7 @@ import { computeTrend } from "@/lib/trendUtils";
 import { getPlanCardStats } from "@/lib/planInsights";
 import { calculateExecutionStreak } from "@/lib/consistency/calculateExecutionStreak";
 import { calculateRitualStats, ritualScheduledOn } from "@/lib/consistency/calculateRitualStreak";
+import { completedRitualIdsOn } from "@/lib/consistency/ritualDayStatus";
 import { computeExecutionTrend } from "@/lib/executionAnalytics";
 import { selectNeedsAttention, type MissedTask } from "@/lib/needsAttention";
 import NeedsAttentionCard from "@/components/NeedsAttentionCard";
@@ -583,8 +584,12 @@ export default function IOSScheduleApp() {
   const executionStreak = useMemo(() => calculateExecutionStreak(schedule, todayISO()), [schedule]);
   const missedThisWeek = useMemo(() => computeExecutionTrend(schedule).currentMissed, [schedule]);
   const needsAttention = useMemo(() => {
-    const doneRitualIds = new Set(
-      (schedule.ritualCompletions ?? []).filter((c) => c.date === todayISO()).map((c) => c.ritualId),
+    // trackingType-aware — a half-logged quantity routine must still count as
+    // unfinished here, or its at-risk warning is silently suppressed.
+    const doneRitualIds = completedRitualIdsOn(
+      schedule.rituals ?? [],
+      schedule.ritualCompletions ?? [],
+      todayISO(),
     );
     return selectNeedsAttention(schedule, todayISO(), todayKey, doneRitualIds);
   }, [schedule, todayKey]);
