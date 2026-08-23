@@ -13,7 +13,7 @@ import { uid } from "@/lib/id";
 import { colorFromIcon, type AccentColor } from "@/lib/colorSystem";
 import { SECTION_ICONS } from "@/components/SectionIcons";
 import { IconPlus, IconSparkles, IconX } from "@tabler/icons-react";
-import { AI_ENABLED } from "@/lib/featureFlags";
+import { useAIEnabled } from "@/lib/ai/useAIEnabled";
 import BottomSheet from "@/components/ui/BottomSheet";
 import SheetHeader from "@/components/ui/SheetHeader";
 import Button from "@/components/ui/Button";
@@ -60,6 +60,7 @@ interface AddPlanSheetProps {
 }
 
 export default function AddPlanSheet({ open, onClose, setSchedule, onUseAI, goals = [] }: AddPlanSheetProps) {
+  const aiEnabled = useAIEnabled();
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
   const [startDate, setStartDate] = useState("");
@@ -135,7 +136,7 @@ export default function AddPlanSheet({ open, onClose, setSchedule, onUseAI, goal
       <div className="space-y-4 p-5 pb-8">
         <SheetHeader eyebrow="New" title="Create Plan" onClose={handleClose} />
 
-        {AI_ENABLED && onUseAI && (
+        {aiEnabled && onUseAI && (
           <button
             type="button"
             onClick={onUseAI}

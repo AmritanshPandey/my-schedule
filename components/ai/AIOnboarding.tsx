@@ -4,36 +4,47 @@ import { useEffect, useState } from "react";
 import { AnimatePresence, m } from "framer-motion";
 import { IconSparkles, IconX } from "@tabler/icons-react";
 import { haptic } from "@/lib/haptics";
+import { useAIEnabled } from "@/lib/ai/useAIEnabled";
 
 /**
- * One-time welcome explainer for AI — shown once, then never again regardless
- * of what's chosen. AI runs on a local MLX model the browser talks to
- * directly (no account, no API key, no cloud usage) — dismissing this
- * doesn't disable anything, it just stops the explainer from reappearing.
+ * One-time notice that AI is on by default and where the off switch is.
+ *
+ * Shown once per device, then never again whichever button is pressed —
+ * dismissing does not disable anything, it only stops the notice reappearing.
+ *
+ * The storage key is versioned. The previous notice said "set up local AI" and
+ * pointed at a provider that needed installing; the default is now the
+ * in-browser model, which needs nothing. Anyone who saw the old notice has not
+ * been told any of that, so they should see this one.
  */
-const AI_ONBOARDED_KEY = "planr_ai_onboarded";
+const AI_NOTICE_KEY = "planr_ai_default_notice_v2";
 
 export default function AIOnboarding({ onOpenAISettings }: { onOpenAISettings: () => void }) {
   const [visible, setVisible] = useState(false);
+  const aiEnabled = useAIEnabled();
 
-  // Show once, after 2s, for anyone who hasn't seen it yet.
   useEffect(() => {
+    // Never announce a feature the user has already switched off.
+    if (!aiEnabled) return;
     const t = setTimeout(() => {
-      const seen = localStorage.getItem(AI_ONBOARDED_KEY);
-      if (seen === null) setVisible(true);
+      if (localStorage.getItem(AI_NOTICE_KEY) === null) setVisible(true);
     }, 2000);
     return () => clearTimeout(t);
-  }, []);
+  }, [aiEnabled]);
+
+  function markSeen() {
+    localStorage.setItem(AI_NOTICE_KEY, "true");
+    setVisible(false);
+  }
 
   function dismiss() {
-    localStorage.setItem(AI_ONBOARDED_KEY, "true");
-    setVisible(false);
+    haptic("light");
+    markSeen();
   }
 
   function handleOpenSettings() {
     haptic("light");
-    localStorage.setItem(AI_ONBOARDED_KEY, "true");
-    setVisible(false);
+    markSeen();
     onOpenAISettings();
   }
 
@@ -41,7 +52,6 @@ export default function AIOnboarding({ onOpenAISettings }: { onOpenAISettings: (
     <AnimatePresence>
       {visible && (
         <>
-          {/* Backdrop */}
           <m.div
             key="backdrop"
             initial={{ opacity: 0 }}
@@ -52,9 +62,11 @@ export default function AIOnboarding({ onOpenAISettings }: { onOpenAISettings: (
             onClick={dismiss}
           />
 
-          {/* Sheet */}
           <m.div
             key="sheet"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="ai-notice-title"
             initial={{ opacity: 0, y: "100%" }}
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0, y: "100%" }}
@@ -63,51 +75,53 @@ export default function AIOnboarding({ onOpenAISettings }: { onOpenAISettings: (
             style={{ paddingBottom: "env(safe-area-inset-bottom)" }}
           >
             <div className="m-3 overflow-hidden rounded-2xl border border-neutral-200 bg-white dark:border-white/[0.08] dark:bg-neutral-900">
-              {/* Dismiss button */}
               <div className="flex justify-end px-5 pt-5">
                 <button
                   type="button"
                   onClick={dismiss}
+                  aria-label="Dismiss"
                   className="flex h-7 w-7 items-center justify-center rounded-full bg-neutral-100 text-neutral-500 hover:bg-neutral-200 dark:bg-white/[0.08] dark:text-neutral-400"
                 >
                   <IconX size={14} strokeWidth={2} />
                 </button>
               </div>
 
-              {/* Icon */}
               <div className="flex justify-center px-5 pt-2 pb-5">
                 <div className="flex h-20 w-20 items-center justify-center rounded-2xl border border-violet-500 bg-[#AD46FF]">
                   <IconSparkles size={36} strokeWidth={1.5} className="text-white" />
                 </div>
               </div>
 
-              {/* Headline */}
               <div className="px-6 pb-5 text-center">
-                <h2 className="text-[22px] font-black leading-tight tracking-[-0.5px] text-neutral-900 dark:text-white">
-                  Meet AI in PlanR
+                <h2 id="ai-notice-title" className="text-[22px] font-black leading-tight tracking-[-0.5px] text-neutral-900 dark:text-white">
+                  AI is on, and it runs here
                 </h2>
                 <p className="mt-2 text-[14px] leading-snug text-neutral-500 dark:text-neutral-400">
-                  Free, local AI — build plans, generate tasks, and get a weekly
-                  coaching read on your consistency. Runs entirely on your device,
-                  no account or API key needed.
+                  Plans, tasks and your weekly read are generated by a small model
+                  running inside this browser. No account, no API key, and nothing
+                  you write leaves your device.
+                </p>
+                <p className="mt-3 text-[13px] leading-snug text-neutral-400 dark:text-neutral-500">
+                  The first time you use it, it downloads once (about 100&nbsp;MB) and is
+                  then cached. Don&apos;t want any of it? Turn AI off in Settings — every
+                  AI button disappears.
                 </p>
               </div>
 
-              {/* CTA */}
               <div className="px-5 pb-6">
                 <button
                   type="button"
-                  onClick={handleOpenSettings}
+                  onClick={dismiss}
                   className="flex w-full items-center justify-center gap-2.5 rounded-full bg-neutral-900 py-4 text-[16px] font-bold text-white transition-colors dark:bg-white dark:text-neutral-900"
                 >
-                  Set up local AI
+                  Got it
                 </button>
                 <button
                   type="button"
-                  onClick={dismiss}
+                  onClick={handleOpenSettings}
                   className="mt-3 w-full py-2 text-[13px] font-medium text-neutral-400 hover:text-neutral-600 dark:text-neutral-500 dark:hover:text-neutral-300"
                 >
-                  Maybe later
+                  Open AI settings
                 </button>
               </div>
             </div>

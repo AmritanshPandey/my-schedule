@@ -16,7 +16,7 @@ import {
   IconSun,
 } from "@tabler/icons-react";
 import { haptic } from "@/lib/haptics";
-import { AI_ENABLED } from "@/lib/featureFlags";
+import { useAIEnabled } from "@/lib/ai/useAIEnabled";
 import { isAiConfigured } from "@/lib/aiClient";
 import { useAuth } from "@/contexts/AuthProvider";
 import { useSyncStatus } from "@/lib/useSyncStatus";
@@ -86,6 +86,7 @@ export default function DesktopSidebar({
   onOpenNotes,
   onOpenWallpaper,
 }: DesktopSidebarProps) {
+  const aiEnabled = useAIEnabled();
   const [theme, setTheme] = useState<ThemeMode>(() => detectInitialTheme());
   const [themeReady, setThemeReady] = useState(false);
   const { isGuest } = useAuth();
@@ -209,7 +210,7 @@ export default function DesktopSidebar({
       <div className={`shrink-0 border-t border-neutral-200/50 dark:border-white/[0.05] py-2 ${collapsed ? "px-2" : "px-2.5"}`}>
 
         {/* AI status row — click opens Settings, where sign-in lives (hidden while AI is disabled) */}
-        {AI_ENABLED && (
+        {aiEnabled && (
           <button
             type="button"
             onClick={() => { haptic("light"); if (onOpenSettingsTab) onOpenSettingsTab(); else onOpenSettings(); }}

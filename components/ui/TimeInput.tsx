@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { IconChevronDown } from "@tabler/icons-react";
 import { displayToInputTime, formatDisplayTime, minutesToInputTime, parseTimeToMinutes } from "@/lib/timeUtils";
 import { stopTextEditKeyPropagation } from "@/lib/keyboardEvents";
 
@@ -89,20 +90,33 @@ export default function TimeInput({
           }}
           className="min-w-0 flex-1 bg-transparent px-3 text-[16px] font-semibold tabular-nums text-neutral-900 outline-none placeholder:text-neutral-400 disabled:cursor-not-allowed disabled:opacity-60 dark:text-white dark:placeholder:text-neutral-600"
         />
-        <select
-          aria-label={`${ariaLabel ?? label ?? "Time"} period`}
-          value={period}
-          disabled={disabled}
-          onChange={(event) => {
-            const next = event.currentTarget.value as "AM" | "PM";
-            setPeriod(next);
-            commit(draft, next);
-          }}
-          className="w-[76px] shrink-0 cursor-pointer border-l border-neutral-200 bg-transparent px-2 text-[15px] font-semibold text-neutral-700 outline-none dark:border-white/10 dark:text-white dark:[color-scheme:dark]"
-        >
-          <option value="AM">AM</option>
-          <option value="PM">PM</option>
-        </select>
+        <div className="relative shrink-0 border-l border-neutral-200 dark:border-white/10">
+          {/* appearance-none strips each browser's own native chrome (Safari in
+              particular renders a <select> as its own rounded, separately-
+              filled pill no matter what background/border classes it's given)
+              so this reads as one seamless control with TimeInput's digits,
+              not two visually disconnected boxes. The chevron below replaces
+              the native arrow that appearance-none removes. */}
+          <select
+            aria-label={`${ariaLabel ?? label ?? "Time"} period`}
+            value={period}
+            disabled={disabled}
+            onChange={(event) => {
+              const next = event.currentTarget.value as "AM" | "PM";
+              setPeriod(next);
+              commit(draft, next);
+            }}
+            className="w-[76px] cursor-pointer appearance-none bg-transparent py-0 pl-2 pr-6 text-[15px] font-semibold text-neutral-700 outline-none disabled:cursor-not-allowed disabled:opacity-60 dark:text-white dark:[color-scheme:dark]"
+          >
+            <option value="AM">AM</option>
+            <option value="PM">PM</option>
+          </select>
+          <IconChevronDown
+            size={12}
+            strokeWidth={2.4}
+            className="pointer-events-none absolute right-2 top-1/2 -translate-y-1/2 text-neutral-400"
+          />
+        </div>
       </div>
       <span className="sr-only">{formatDisplayTime(value)}</span>
     </div>

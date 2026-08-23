@@ -22,6 +22,7 @@ import {
   IconCircleX,
   IconDeviceLaptop,
   IconLoader2,
+  IconSparkles,
 } from "@tabler/icons-react";
 import {
   getAIProviderState,
@@ -39,6 +40,8 @@ import { OllamaProvider } from "@/lib/ai/providers/ollama";
 import { OpenAICompatibleProvider } from "@/lib/ai/providers/openai-compatible";
 import { BrowserProvider } from "@/lib/ai/providers/browser";
 import { BrowserAIStatusBar } from "@/components/ai/BrowserAIStatusBar";
+import { useAIEnabledSetting } from "@/lib/ai/useAIEnabled";
+import Toggle from "@/components/ui/Toggle";
 import type { AIConnectionTestResult, AIInstructions, AIProvider, AIProviderConfig, ProviderKind } from "@/lib/ai/types";
 import { getAIInstructions, setAIInstructions } from "@/lib/ai/instructions";
 import { haptic } from "@/lib/haptics";
@@ -423,6 +426,7 @@ interface AIViewProps {
 
 export function AIView({ onClose }: AIViewProps) {
   const [active, setActive] = useState<ProviderKind>(() => getAIProviderState().active);
+  const { enabled: aiEnabled, setEnabled: setAiEnabled } = useAIEnabledSetting();
 
   function activate(kind: ProviderKind) {
     haptic("light");
@@ -454,6 +458,22 @@ export function AIView({ onClose }: AIViewProps) {
         </div>
 
         <div className="space-y-6">
+          {/* Master switch. Turning it off unmounts this whole screen (the tab
+              is gated on the same value in ScheduleApp), which is why it sits
+              above everything it controls rather than buried at the bottom. */}
+          <div className={`flex items-center gap-3 px-4 py-3.5 ${CARD}`}>
+            <div className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-xl ${aiEnabled ? "bg-[#AD46FF]" : "bg-neutral-200 dark:bg-white/[0.08]"}`}>
+              <IconSparkles size={18} strokeWidth={1.8} className={aiEnabled ? "text-white" : "text-neutral-400 dark:text-neutral-500"} />
+            </div>
+            <div className="min-w-0 flex-1">
+              <p className="text-[14px] font-bold text-neutral-900 dark:text-white">AI features</p>
+              <p className="text-[12px] font-medium leading-snug text-neutral-400 dark:text-neutral-500">
+                Off hides every AI button and screen. You can turn it back on here or in Settings.
+              </p>
+            </div>
+            <Toggle on={aiEnabled} onChange={setAiEnabled} label="AI features" />
+          </div>
+
           <div>
             <SectionLabel>Local AI</SectionLabel>
             <div className="space-y-3">

@@ -89,6 +89,7 @@ import { getPlanCardStats } from "@/lib/planInsights";
 import { calculateExecutionStreak } from "@/lib/consistency/calculateExecutionStreak";
 import { calculateRitualStats, ritualScheduledOn } from "@/lib/consistency/calculateRitualStreak";
 import { completedRitualIdsOn } from "@/lib/consistency/ritualDayStatus";
+import { useAIEnabled } from "@/lib/ai/useAIEnabled";
 import { computeExecutionTrend } from "@/lib/executionAnalytics";
 import { selectNeedsAttention, type MissedTask } from "@/lib/needsAttention";
 import NeedsAttentionCard from "@/components/NeedsAttentionCard";
@@ -388,6 +389,14 @@ export default function IOSScheduleApp() {
   // is small enough to re-render).
   const nowMinutes = useNowMinutes();
   const [activeTab, setActiveTab] = useState(4);
+  const aiEnabled = useAIEnabled();
+
+  // Settings is the only way into the AI tab, and that link is gated on the
+  // same value — but the AI screen carries its own master switch, so turning
+  // AI off from there would otherwise leave the user sitting on it.
+  useEffect(() => {
+    if (!aiEnabled && activeTab === 7) setActiveTab(5);
+  }, [aiEnabled, activeTab]);
 
   // A short, skippable coach-mark tour per tab — mirrors the desktop shell's
   // wiring in ScheduleApp.tsx. This is the mobile shell (see

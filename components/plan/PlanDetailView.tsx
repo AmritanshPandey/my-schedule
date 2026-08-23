@@ -68,7 +68,7 @@ import { parseAIAction, PLAN_COACH_PROMPT, buildCoachContext } from "@/lib/ai";
 import { streamAIChat } from "@/lib/aiClient";
 import { useAIActions } from "@/lib/ai/useAIActions";
 import { getCoachSkillPrompt, detectCoachSkill, SKILL_LABELS } from "@/lib/coachSkills";
-import { AI_ENABLED } from "@/lib/featureFlags";
+import { useAIEnabled } from "@/lib/ai/useAIEnabled";
 import AIActionSheet, { type ResultItem } from "@/components/ai/AIActionSheet";
 import { detectMeasurableGoal, type MeasurableGoal } from "@/lib/milestoneIntelligence";
 import { uid } from "@/lib/taskMutations";
@@ -285,11 +285,12 @@ export default function PlanDetailView({
   onUpdateCoachMessages,
 }: PlanDetailViewProps) {
   // ── Tab state ───────────────────────────────────────────────────────────
+  const aiEnabled = useAIEnabled();
   const [planTab, setPlanTab] = useState<"planning" | "roadmap" | "strategy">("planning");
-  // Tabs exist only below lg, where three columns will not fit. Coach is still
-  // gated on AI_ENABLED (currently false), so it ships to nobody today — but it
-  // keeps its entry point rather than being orphaned by the desktop rework.
-  const mobileTabs = (AI_ENABLED
+  // Tabs exist only below lg, where three columns will not fit. The Coach tab
+  // appears and disappears with the AI switch, so turning AI off leaves two
+  // tabs rather than a dead third one.
+  const mobileTabs = (aiEnabled
     ? ["planning", "roadmap", "strategy"]
     : ["planning", "roadmap"]) as Array<"planning" | "roadmap" | "strategy">;
 
@@ -1973,7 +1974,7 @@ export default function PlanDetailView({
         </div>
       </div>
 
-      {AI_ENABLED && planTab === "strategy" && (
+      {aiEnabled && planTab === "strategy" && (
         <div className="mt-6 lg:hidden">{renderStrategyTab()}</div>
       )}
 

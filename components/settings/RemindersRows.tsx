@@ -14,6 +14,7 @@ import {
 } from "@/lib/reminders";
 import { formatDisplayTime, minutesToInputTime } from "@/lib/timeUtils";
 import { SETTINGS_CONTROL_CLASS } from "@/components/ui/Input";
+import Toggle from "@/components/ui/Toggle";
 import { useAuth } from "@/contexts/AuthProvider";
 import { subscribeToPush, unsubscribeFromPush, isPushSupported, sendTestPush, type TestPushResult } from "@/lib/push/webPush";
 import { savePushConfig, savePushSubscription, removePushSubscription } from "@/lib/push/pushConfig";
@@ -22,27 +23,6 @@ const NUDGE_OPTIONS = Array.from({ length: 12 }, (_, i) => {
   const value = minutesToInputTime((16 * 60) + i * 30); // 16:00 → 21:30
   return { value, label: formatDisplayTime(value) };
 });
-
-function Toggle({ on, onChange, label }: { on: boolean; onChange: (next: boolean) => void; label: string }) {
-  return (
-    <button
-      type="button"
-      role="switch"
-      aria-checked={on}
-      aria-label={label}
-      onClick={() => { haptic("light"); onChange(!on); }}
-      className={`relative h-[26px] w-[44px] shrink-0 rounded-full transition-colors duration-200 ${
-        on ? "bg-[#00A63E]" : "bg-neutral-200 dark:bg-white/[0.12]"
-      }`}
-    >
-      <span
-        className={`absolute top-[3px] h-5 w-5 rounded-full bg-white transition-[left] duration-200 ${
-          on ? "left-[21px]" : "left-[3px]"
-        }`}
-      />
-    </button>
-  );
-}
 
 function SubRow({
   label,

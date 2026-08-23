@@ -20,7 +20,7 @@ import { WeekGrid } from "@/components/desktop/WeekGrid";
 import type { AIActionResult, AIMilestone } from "@/lib/ai";
 import type { AIProposal } from "@/lib/aiProposal";
 import { recordProposalCreated, recordProposalRejected, recordProposalFailed, executeCreateTaskProposal } from "@/lib/proposalMutations";
-import { AI_ENABLED } from "@/lib/featureFlags";
+import { useAIEnabled } from "@/lib/ai/useAIEnabled";
 import { useAIActions } from "@/lib/ai/useAIActions";
 import { useCoachTour } from "@/lib/onboarding/useCoachTour";
 import { TOUR_STEPS, type TourId } from "@/lib/onboarding/tours";
@@ -747,6 +747,7 @@ export default function ScheduleApp() {
   const { user, isGuest, authLoading } = useAuth();
   const { schedule, setSchedule, ready, clearData, clearProgress, restoreData, isFirstLaunch, undo } = useScheduleDB();
   const { available: aiAvailable } = useAIActions();
+  const aiEnabled = useAIEnabled();
   useReminders(schedule, ready);
   const [todayKey, setTodayKey] = useState<DayKey>(() => JS_DAYS[new Date().getDay()]);
   const [activeDay, setActiveDay] = useState<DayKey>(() => JS_DAYS[new Date().getDay()]);
@@ -756,16 +757,22 @@ export default function ScheduleApp() {
    *
    * `activeTab` is derived from it rather than being seeded to 0 and corrected
    * by an effect. An effect runs *after* the first render, so first launch used
-   * to mount the planner and then switch — and because tab content lives in an
-   * AnimatePresence with mode="wait", that switch could strand the app on the
-   * outgoing tab forever, showing an empty planner instead of the getting
-   * started guide. Deriving it means the first tab mounted is already correct.
+   * to mount the planner and then switch, showing a flash of the wrong screen
+   * before the getting-started guide. Deriving it means the first tab mounted
+   * is already the correct one.
    */
   const [tabSelection, setTabSelection] = useState<number | null>(null);
   // iOS safe mode always opens on Overview; so does a true first launch (no
   // stored data), once the DB has actually reported back.
   const activeTab = tabSelection ?? (iosSafeMode || (ready && isFirstLaunch) ? 4 : 0);
   const setActiveTab = useCallback((tab: number) => setTabSelection(tab), []);
+
+  // Turning AI off while the AI tab is open would leave the content area empty,
+  // since every tab-7 branch is gated on `aiEnabled`. Fall back to Settings —
+  // which is where the switch that got us here lives.
+  useEffect(() => {
+    if (!aiEnabled && activeTab === 7) setActiveTab(5);
+  }, [aiEnabled, activeTab, setActiveTab]);
 
   // A short, skippable coach-mark tour per tab — re-evaluated whenever the
   // active tab changes, so switching to a not-yet-seen tab picks its tour up
@@ -4074,7 +4081,7 @@ export default function ScheduleApp() {
         )}
 
         {/* ── AI Tab ───────────────────────────────────────────────────────── */}
-        {ready && AI_ENABLED && !iosSafeMode && activeTab === 7 && (
+        {ready && aiEnabled && !iosSafeMode && activeTab === 7 && (
           <m.div
             key="tab-ai"
             initial={{ opacity: 0 }}
@@ -4125,7 +4132,7 @@ export default function ScheduleApp() {
       )}
 
       {/* ── AI Plan Creator Sheet (hidden while AI is disabled) ────────────── */}
-      {AI_ENABLED && aiAvailable && !iosSafeMode && (
+      {aiEnabled && aiAvailable && !iosSafeMode && (
         <AIPlanCreatorSheet
           open={aiPlanCreating}
           onClose={() => setAiPlanCreating(false)}
@@ -4404,7 +4411,7 @@ export default function ScheduleApp() {
       </div>{/* end main scrollable column */}
 
       {/* ── AI Assistant — available on all tabs (hidden while AI is disabled) ── */}
-      {AI_ENABLED && aiAvailable && !iosSafeMode && (
+      {aiEnabled && aiAvailable && !iosSafeMode && (
         <ErrorBoundary section name="AI">
           <AIAssistant
             open={aiOpen}
@@ -4421,7 +4428,7 @@ export default function ScheduleApp() {
       )}
 
       {/* ── AI chat (desktop-only free chat: Plan/Task/Subtasks/Milestone/Tracker/Ritual) ── */}
-      {AI_ENABLED && aiAvailable && !iosSafeMode && (
+      {aiEnabled && aiAvailable && !iosSafeMode && (
         <ErrorBoundary section name="AI Chat">
           <AIFab
             context="plans"
@@ -4438,7 +4445,7 @@ export default function ScheduleApp() {
       )}
 
       {/* ── AI trigger button (floating, mobile only — desktop uses AIFab's own button) ── */}
-      {AI_ENABLED && aiAvailable && !iosSafeMode && (
+      {aiEnabled && aiAvailable && !iosSafeMode && (
         <AnimatePresence>
           {!aiOpen && (
             <m.button
@@ -4465,7 +4472,7 @@ export default function ScheduleApp() {
       )}
 
       {/* ── AI review — the gate between a parsed action and the schedule ── */}
-      {AI_ENABLED && pendingAIAction && (
+      {aiEnabled && pendingAIAction && (
         <AIReviewSheet
           open={pendingAIAction !== null}
           action={pendingAIAction}
@@ -4476,7 +4483,7 @@ export default function ScheduleApp() {
       )}
 
       {/* ── AI onboarding — shown once when app opens ─────────────────────── */}
-      {AI_ENABLED && !iosSafeMode && <AIOnboarding onOpenAISettings={() => setActiveTab(7)} />}
+      {aiEnabled && !iosSafeMode && <AIOnboarding onOpenAISettings={() => setActiveTab(7)} />}
 
       {/* ── Per-tab guided tour — short, skippable, once per device ───────── */}
       {activeTourId && (

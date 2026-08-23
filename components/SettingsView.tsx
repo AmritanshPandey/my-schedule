@@ -36,7 +36,8 @@ import { collectDiagnostics, formatDiagnostics, type DiagnosticsSnapshot } from 
 import { clearErrorLog } from "@/lib/errorLog";
 import { isErrorTelemetryEnabled, setErrorTelemetryEnabled } from "@/lib/errorTelemetry";
 import { clearBootLog } from "@/lib/iosSafeMode";
-import { AI_ENABLED } from "@/lib/featureFlags";
+import { useAIEnabledSetting } from "@/lib/ai/useAIEnabled";
+import Toggle from "@/components/ui/Toggle";
 import { formatDisplayTime, minutesToInputTime } from "@/lib/timeUtils";
 import type { Schedule, SchedulePreferences } from "@/lib/useScheduleDB";
 import ConfirmSheet from "@/components/ui/ConfirmSheet";
@@ -359,6 +360,7 @@ export function SettingsView({
   const { user, isGuest, authLoading, logout } = useAuth();
   const { signingIn, error: signInError, isAuthAvailable, signIn } = useGoogleSignIn();
   const aiNavLabel = useAINavLabel();
+  const { enabled: aiEnabled, setEnabled: setAiEnabled, lockedOff: aiLockedOff } = useAIEnabledSetting();
   const [busy, setBusy]   = useState(false);
   const [theme, setTheme] = useState<ThemeMode>("light");
   const [themeReady, setThemeReady] = useState(false);
@@ -470,25 +472,45 @@ export function SettingsView({
             </div>
           )}
 
-          {/* ── Intelligence (hidden while AI is disabled) ───────────────────── */}
-          {AI_ENABLED && (
+          {/* ── Intelligence ─────────────────────────────────────────────────
+              The master switch stays visible when AI is off — it is the only
+              way back on. Everything below it is what the switch controls. */}
+          {!aiLockedOff && (
             <div>
               <SectionLabel>Intelligence</SectionLabel>
               <Card>
-                <button
-                  type="button"
-                  onClick={onOpenAI}
-                  className="flex w-full items-center gap-3 px-4 py-3.5 text-left transition-colors hover:bg-neutral-50 dark:hover:bg-white/[0.03]"
-                >
-                  <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-[#AD46FF]">
-                    <IconSparkles size={18} strokeWidth={1.8} className="text-white" />
+                <div className="flex items-center gap-3 px-4 py-3.5">
+                  <div className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-xl ${aiEnabled ? "bg-[#AD46FF]" : "bg-neutral-200 dark:bg-white/[0.08]"}`}>
+                    <IconSparkles size={18} strokeWidth={1.8} className={aiEnabled ? "text-white" : "text-neutral-400 dark:text-neutral-500"} />
                   </div>
                   <div className="min-w-0 flex-1">
-                    <p className="text-[14px] font-bold text-neutral-900 dark:text-white">AI Configuration</p>
-                    <p className="text-[12px] font-medium text-neutral-400 dark:text-neutral-500">{aiNavLabel}</p>
+                    <p className="text-[14px] font-bold text-neutral-900 dark:text-white">AI features</p>
+                    <p className="text-[12px] font-medium leading-snug text-neutral-400 dark:text-neutral-500">
+                      {aiEnabled
+                        ? "The assistant, plan generation, and the weekly read"
+                        : "Every AI button and screen is hidden"}
+                    </p>
                   </div>
-                  <IconChevronDown size={14} strokeWidth={2} className="-rotate-90 text-neutral-400" />
-                </button>
+                  <Toggle on={aiEnabled} onChange={setAiEnabled} label="AI features" />
+                </div>
+
+                {aiEnabled && (
+                  <>
+                    <div className="mx-4 border-t border-neutral-100 dark:border-white/[0.06]" />
+                    <button
+                      type="button"
+                      onClick={onOpenAI}
+                      className="flex w-full items-center gap-3 px-4 py-3.5 text-left transition-colors hover:bg-neutral-50 dark:hover:bg-white/[0.03]"
+                    >
+                      <div className="w-10 shrink-0" />
+                      <div className="min-w-0 flex-1">
+                        <p className="text-[14px] font-bold text-neutral-900 dark:text-white">AI Configuration</p>
+                        <p className="text-[12px] font-medium text-neutral-400 dark:text-neutral-500">{aiNavLabel}</p>
+                      </div>
+                      <IconChevronDown size={14} strokeWidth={2} className="-rotate-90 text-neutral-400" />
+                    </button>
+                  </>
+                )}
               </Card>
             </div>
           )}

@@ -25,7 +25,7 @@ import { parseGeneratedSubtasks } from "@/lib/aiActions";
 import AIActionSheet, { type ResultItem } from "@/components/ai/AIActionSheet";
 import { useAIActions } from "@/lib/ai/useAIActions";
 import { useAuth } from "@/contexts/AuthProvider";
-import { AI_ENABLED } from "@/lib/featureFlags";
+import { useAIEnabled } from "@/lib/ai/useAIEnabled";
 import BottomSheet from "@/components/ui/BottomSheet";
 import SheetHeader from "@/components/ui/SheetHeader";
 import Button from "@/components/ui/Button";
@@ -224,11 +224,12 @@ export function TaskSheet({
   // ── AI ────────────────────────────────────────────────────────────────────
   const ai = useAIActions();
   const { isGuest } = useAuth();
+  const aiEnabled = useAIEnabled();
   const keepBackdropLight = mode === "create" && (!!initialStartTime || !!initialEndTime);
-  // AI is globally hidden for now (AI_ENABLED) and, once on, needs sign-in —
-  // hidden rather than shown-and-blocked, since this is a small inline
-  // affordance with no room for its own gate card.
-  const canExpand = AI_ENABLED && !isGuest;
+  // Needs AI switched on and a signed-in user — hidden rather than
+  // shown-and-blocked, since this is a small inline affordance with no room
+  // for its own gate card.
+  const canExpand = aiEnabled && !isGuest;
 
   // ── Form state ─────────────────────────────────────────────────────────────
   const [planId, setPlanId] = useState("");

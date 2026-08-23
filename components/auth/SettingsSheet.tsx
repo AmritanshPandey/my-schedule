@@ -31,7 +31,8 @@ import { getAIProviderState } from "@/lib/ai/config";
 import { resetTour } from "@/lib/onboarding/useCoachTour";
 import { TOUR_IDS } from "@/lib/onboarding/tours";
 import { haptic } from "@/lib/haptics";
-import { AI_ENABLED } from "@/lib/featureFlags";
+import { useAIEnabledSetting } from "@/lib/ai/useAIEnabled";
+import Toggle from "@/components/ui/Toggle";
 import { normalizeDayStartTime } from "@/lib/timeline/displayWindow";
 
 // ── Theme helpers ─────────────────────────────────────────────────────────────
@@ -589,6 +590,7 @@ export function SettingsSheet({
   const { user, isGuest, authLoading, logout } = useAuth();
   const { signingIn, error: signInError, isAuthAvailable, signIn } = useGoogleSignIn();
   const [busy, setBusy] = useState(false);
+  const { enabled: aiEnabled, setEnabled: setAiEnabled, lockedOff: aiLockedOff } = useAIEnabledSetting();
   const aiProviderLabel = PROVIDER_LABEL[getAIProviderState().active] ?? "MLX";
 
   async function handleLogout() {
@@ -712,25 +714,42 @@ export function SettingsSheet({
           <ReplayToursRow />
         </SettingsCard>
 
-        {/* ── AI (hidden while AI is disabled) ─────────────────────────────── */}
-        {AI_ENABLED && (
+        {/* ── AI ───────────────────────────────────────────────────────────
+            The switch stays visible when AI is off — it is the way back on. */}
+        {!aiLockedOff && (
           <>
             <SectionLabel>AI</SectionLabel>
             <SettingsCard>
-              <button
-                type="button"
-                onClick={onOpenAI}
-                className="flex w-full items-center gap-3 px-4 py-3.5 text-left transition-colors hover:bg-neutral-50 dark:hover:bg-white/[0.03]"
-              >
-                <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl bg-[#AD46FF]">
-                  <IconSparkles size={14} strokeWidth={2} className="text-white" />
+              <div className="flex items-center gap-3 px-4 py-3.5">
+                <div className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-xl ${aiEnabled ? "bg-[#AD46FF]" : "bg-neutral-200 dark:bg-white/[0.08]"}`}>
+                  <IconSparkles size={14} strokeWidth={2} className={aiEnabled ? "text-white" : "text-neutral-400 dark:text-neutral-500"} />
                 </div>
                 <div className="min-w-0 flex-1">
-                  <p className="text-[13px] font-semibold text-neutral-800 dark:text-white">AI Configuration</p>
-                  <p className="text-[11px] text-neutral-400 dark:text-neutral-500">{aiProviderLabel} · Provider, instructions</p>
+                  <p className="text-[13px] font-semibold text-neutral-800 dark:text-white">AI features</p>
+                  <p className="text-[11px] leading-snug text-neutral-400 dark:text-neutral-500">
+                    {aiEnabled ? "Assistant, generation, weekly read" : "Every AI button and screen is hidden"}
+                  </p>
                 </div>
-                <IconChevronDown size={14} strokeWidth={2} className="-rotate-90 text-neutral-400" />
-              </button>
+                <Toggle on={aiEnabled} onChange={setAiEnabled} label="AI features" />
+              </div>
+
+              {aiEnabled && (
+                <>
+                  <div className="mx-4 border-t border-neutral-100 dark:border-white/[0.06]" />
+                  <button
+                    type="button"
+                    onClick={onOpenAI}
+                    className="flex w-full items-center gap-3 px-4 py-3.5 text-left transition-colors hover:bg-neutral-50 dark:hover:bg-white/[0.03]"
+                  >
+                    <div className="w-8 shrink-0" />
+                    <div className="min-w-0 flex-1">
+                      <p className="text-[13px] font-semibold text-neutral-800 dark:text-white">AI Configuration</p>
+                      <p className="text-[11px] text-neutral-400 dark:text-neutral-500">{aiProviderLabel} · Provider, instructions</p>
+                    </div>
+                    <IconChevronDown size={14} strokeWidth={2} className="-rotate-90 text-neutral-400" />
+                  </button>
+                </>
+              )}
             </SettingsCard>
           </>
         )}

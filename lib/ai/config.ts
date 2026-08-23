@@ -58,8 +58,19 @@ export interface AIProviderState {
   browser: AIProviderConfig;
 }
 
+/**
+ * Browser AI is the default because it is the only provider that works with
+ * nothing installed and nothing configured: MLX and Ollama need a server
+ * running on this machine, and the remote provider needs the user's own API
+ * key. A fresh install therefore has working AI out of the box, at the cost of
+ * a one-time model download on first use (see lib/ai/providers/browser.ts).
+ *
+ * Only affects installs that have never saved provider state — anyone who has
+ * already chosen a provider keeps it, since getAIProviderState() reads theirs
+ * from storage before this is consulted.
+ */
 const DEFAULT_STATE: AIProviderState = {
-  active: "mlx",
+  active: "browser",
   mlx: DEFAULT_MLX_CONFIG,
   ollama: DEFAULT_OLLAMA_CONFIG,
   remote: DEFAULT_REMOTE_CONFIG,
@@ -122,6 +133,32 @@ export function setActiveProvider(kind: ProviderKind): AIProviderState {
   const next: AIProviderState = { ...getAIProviderState(), active: kind };
   setAIProviderState(next);
   return next;
+}
+
+// ── Master AI switch ─────────────────────────────────────────────────────────
+
+const AI_FEATURES_KEY = "planr:ai:features-enabled";
+
+/**
+ * One switch for every AI surface — the assistant, the generate buttons, the
+ * plan coach, the AI tab itself. Off means the user never sees an AI entry
+ * point anywhere, without having to decline each one individually.
+ *
+ * Per-device (localStorage) like the rest of the AI config, not a synced
+ * schedule preference: "don't show me AI" is usually about the machine you're
+ * on — a work laptop, a shared device — rather than about the account.
+ *
+ * Defaults to on. Unlike the provider settings this is stored only once the
+ * user actually chooses, so an absent key means "never decided" and reads as
+ * enabled.
+ */
+export function getAIFeaturesEnabled(): boolean {
+  return safeGetItem(AI_FEATURES_KEY) !== "0";
+}
+
+export function setAIFeaturesEnabled(enabled: boolean): void {
+  safeSetItem(AI_FEATURES_KEY, enabled ? "1" : "0");
+  if (typeof window !== "undefined") window.dispatchEvent(new Event(AI_SETTINGS_CHANGED_EVENT));
 }
 
 // Back-compat aliases for the MLX-only version of this module — kept small

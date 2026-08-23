@@ -311,9 +311,14 @@ export function RitualSheet({ open, onClose, initial, onSave, onDelete }: Ritual
                   </div>
                 )}
 
-                <div className="flex items-center justify-between gap-3">
+                <div className="flex items-end gap-3">
+                  {/* Disabled, not unmounted, when "Any time" is on — hiding it
+                      outright left a bare flex-1 gap with no "Time" label at
+                      all once toggled, and re-centering the row every time
+                      it's switched back. Dimming it in place keeps the layout
+                      stable and still shows what time it'll revert to. */}
                   <div className="min-w-0 flex-1">
-                    {!anyTime && <TimeInput label="Time" value={time} onChange={setTime} ariaLabel="Routine time" />}
+                    <TimeInput label="Time" value={time} onChange={setTime} ariaLabel="Routine time" disabled={anyTime} />
                   </div>
                   <button
                     type="button"
