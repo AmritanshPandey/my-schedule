@@ -48,6 +48,7 @@ const SessionSheet = dynamic(() => import("@/components/activity/SessionSheet"),
 const SubtasksSheet = dynamic(() => import("@/components/activity/SubtasksSheet"), { ssr: false });
 const TaskDetailView = dynamic(() => import("@/components/activity/TaskDetailView"), { ssr: false });
 const BulkImportSheet = dynamic(() => import("@/components/BulkImportSheet"), { ssr: false });
+const AIReviewSheet = dynamic(() => import("@/components/ai/AIReviewSheet"), { ssr: false });
 const DayWallpaperSheet = dynamic(() => import("@/components/DayWallpaperSheet"), { ssr: false });
 const DayActionsSheet = dynamic(() => import("@/components/DayActionsSheet"), { ssr: false });
 const RitualView = dynamic(() => import("@/components/activity/RitualView"), { ssr: false });
@@ -161,7 +162,7 @@ import {
   moveTaskSlot,
   type TaskDeleteScope,
 } from "@/lib/taskMutations";
-import { findPlanByTitle, findTasksByTitle } from "@/lib/planLookup";
+import { resolvePlanTarget, resolveTaskTarget, describeTargetProblem } from "@/lib/ai/targets";
 import { isTaskScheduledOn, resolveOccurrence, diffException } from "@/lib/taskOccurrence";
 import type { AIGeneratedTask } from "@/lib/aiActions";
 import { applyScheduleRules, validateDatedTasks } from "@/lib/scheduleRules";
@@ -835,6 +836,7 @@ export default function ScheduleApp() {
   // sheet always reflects the live task (completion updates create new objects).
   const [subtasksRef, setSubtasksRef] = useState<{ id: string; day: DayKey; dateISO: string } | null>(null);
   const [bulkImportOpen, setBulkImportOpen] = useState(false);
+  const [pendingAIAction, setPendingAIAction] = useState<AIActionResult | null>(null);
   const completedRitualIds = useMemo(() => {
     const today = todayISO();
     return new Set(
@@ -1995,7 +1997,22 @@ export default function ScheduleApp() {
     setAiPlanCreating(false);
   }
 
+  /**
+   * The gate every AI write passes through.
+   *
+   * Both chat surfaces call this — AIPanel only previews and delegates here — so
+   * gating at this one point covers them both. Nothing reaches the schedule
+   * until the review sheet confirms the target and the required fields, which is
+   * what stops a confidently wrong response becoming a silent edit.
+   */
   function handleApplyAction(action: AIActionResult) {
+    // A question is not a change; the chat renders it and there is nothing to
+    // review or apply.
+    if (action.type === "ask_clarification") return;
+    setPendingAIAction(action);
+  }
+
+  function applyReviewedAction(action: AIActionResult) {
     if (action.type === "create_plan") {
       createPlanFromAIAction({
         title: action.payload.title,
@@ -2051,15 +2068,15 @@ export default function ScheduleApp() {
     if (action.type === "suggest_milestones") {
       const milestones = action.payload.milestones;
       if (!milestones.length) return;
-      const targetPlan =
-        findPlanByTitle(schedule.plans, action.payload.planTitle) ??
-        (selectedPlanId ? schedule.plans.find((p) => p.id === selectedPlanId) : undefined) ??
-        schedule.plans[0];
-      const planId = targetPlan?.id;
-      if (!planId) {
-        setToastMessage("Create a plan first, then I can suggest milestones for it");
+      // Resolve, or say so. This used to fall through to `schedule.plans[0]`,
+      // so milestones for a plan the model misnamed landed on an unrelated one
+      // with no warning.
+      const planTarget = resolvePlanTarget(schedule.plans, action.payload.planTitle);
+      if (planTarget.status !== "resolved") {
+        setToastMessage(describeTargetProblem(planTarget, "plan") ?? "Which plan should these go to?");
         return;
       }
+      const planId = planTarget.value.id;
       setSchedule((prev) => {
         const plan = prev.plans.find((p) => p.id === planId);
         const otherMilestones = (prev.milestones ?? []).filter((m) => m.planId !== planId);
@@ -2073,17 +2090,19 @@ export default function ScheduleApp() {
           ],
         };
       });
-      setToastMessage(`Added ${milestones.length} milestone${milestones.length > 1 ? "s" : ""} to "${targetPlan?.title}"`);
+      setToastMessage(`Added ${milestones.length} milestone${milestones.length > 1 ? "s" : ""} to "${planTarget.value.title}"`);
       setActiveTab(1);
       setSelectedPlanId(planId);
       return;
     }
 
     if (action.type === "add_tracker") {
-      const targetPlan =
-        findPlanByTitle(schedule.plans, action.payload.planTitle) ??
-        (selectedPlanId ? schedule.plans.find((p) => p.id === selectedPlanId) : undefined) ??
-        schedule.plans[0];
+      const trackerTarget = resolvePlanTarget(schedule.plans, action.payload.planTitle);
+      if (trackerTarget.status !== "resolved") {
+        setToastMessage(describeTargetProblem(trackerTarget, "plan") ?? "Which plan should this tracker go to?");
+        return;
+      }
+      const targetPlan: Plan | undefined = trackerTarget.value;
       if (!targetPlan) {
         setToastMessage("Create a plan first, then I can add a tracker to it");
         return;
@@ -2108,7 +2127,15 @@ export default function ScheduleApp() {
     }
 
     if (action.type === "add_task") {
-      const targetPlan = findPlanByTitle(schedule.plans, action.payload.planTitle);
+      // A plan is optional for a task — held time has none — so "unspecified"
+      // is acceptable here. A name that was given but doesn't resolve is not:
+      // that used to silently create the task with no plan at all.
+      const taskPlanTarget = resolvePlanTarget(schedule.plans, action.payload.planTitle);
+      if (action.payload.planTitle && taskPlanTarget.status !== "resolved") {
+        setToastMessage(describeTargetProblem(taskPlanTarget, "plan") ?? "Which plan should this task go to?");
+        return;
+      }
+      const targetPlan = taskPlanTarget.status === "resolved" ? taskPlanTarget.value : undefined;
       const days = action.payload.days?.length ? action.payload.days : [action.payload.day];
       setSchedule((prev) => {
         const categoryDraft = [...prev.categories];
@@ -2128,11 +2155,15 @@ export default function ScheduleApp() {
     }
 
     if (action.type === "add_subtasks") {
-      const matches = findTasksByTitle(schedule, action.payload.taskTitle);
-      if (matches.length === 0) {
-        setToastMessage(`Couldn't find a task named "${action.payload.taskTitle}"`);
+      // One task, not every loose match. `addSubtaskToTasks` takes an array, and
+      // passing the whole match list is what made "add steps to Run" write to
+      // Run, Long run and Recovery run at once.
+      const taskTarget = resolveTaskTarget(schedule, action.payload.taskTitle);
+      if (taskTarget.status !== "resolved") {
+        setToastMessage(describeTargetProblem(taskTarget, "task") ?? "Which task should these go to?");
         return;
       }
+      const matches = [taskTarget.value.id];
       setSchedule((prev) =>
         action.payload.subtasks.reduce(
           (acc, title) => addSubtaskToTasks(matches, createSubtask(title))(acc),
@@ -2140,6 +2171,11 @@ export default function ScheduleApp() {
         )
       );
       setToastMessage(`Added ${action.payload.subtasks.length} subtask${action.payload.subtasks.length > 1 ? "s" : ""} to "${action.payload.taskTitle}"`);
+      return;
+    }
+
+    if (action.type === "ask_clarification") {
+      // A question, not a change — the chat renders it; there is nothing to apply.
       return;
     }
 
@@ -4397,6 +4433,17 @@ export default function ScheduleApp() {
             </m.button>
           )}
         </AnimatePresence>
+      )}
+
+      {/* ── AI review — the gate between a parsed action and the schedule ── */}
+      {AI_ENABLED && pendingAIAction && (
+        <AIReviewSheet
+          open={pendingAIAction !== null}
+          action={pendingAIAction}
+          schedule={schedule}
+          onCancel={() => setPendingAIAction(null)}
+          onConfirm={(reviewed) => { setPendingAIAction(null); applyReviewedAction(reviewed); }}
+        />
       )}
 
       {/* ── AI onboarding — shown once when app opens ─────────────────────── */}

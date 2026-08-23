@@ -130,7 +130,12 @@ test("buildCreateTaskProposal flags an unmatched plan title without failing", ()
   const proposal = buildCreateTaskProposal(addTaskAction({ planTitle: "Nonexistent Plan" }), []);
   assert.equal(proposal.data.planId, undefined);
   const planRow = proposal.changes.find((c) => c.label === "Plan");
-  assert.ok(planRow?.value.includes("no match"));
+  // Uses lib/ai/targets.ts's resolvePlanTarget/describeTargetProblem now
+  // (the deterministic resolver, not a loose substring match) — assert on
+  // the invariant that matters (no silent false-positive match) rather than
+  // exact wording.
+  assert.ok(planRow?.value.includes("Nonexistent Plan"));
+  assert.ok(planRow?.value.includes("without one"));
 });
 
 // ── Schema validation ────────────────────────────────────────────────────────

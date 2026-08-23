@@ -14,7 +14,7 @@
  */
 import type { AIActionResult } from "./ai";
 import type { Plan, TaskTypeValue } from "./useScheduleDB";
-import { findPlanByTitle } from "./planLookup";
+import { resolvePlanTarget, describeTargetProblem } from "./ai/targets";
 import { uid } from "./id";
 import { formatDisplayTime } from "./timeUtils";
 
@@ -85,7 +85,11 @@ export function buildCreateTaskProposal(
 ): AIProposal {
   const { payload } = action;
   const days = payload.days?.length ? payload.days : [payload.day];
-  const plan = findPlanByTitle(plans, payload.planTitle);
+  // Same deterministic resolver the rest of the AI system uses (lib/ai/targets.ts)
+  // rather than a loose substring match — avoids attaching to the wrong plan
+  // when the AI's free-text planTitle is ambiguous.
+  const planMatch = resolvePlanTarget(plans, payload.planTitle);
+  const plan = planMatch.status === "resolved" ? planMatch.value : undefined;
   const subtasks = payload.subtasks ?? [];
 
   const changes: ProposalChange[] = [
@@ -94,7 +98,8 @@ export function buildCreateTaskProposal(
     { label: "When", value: `${formatDays(days)} · ${formatDisplayTime(payload.startTime)}–${formatDisplayTime(payload.endTime)}` },
   ];
   if (payload.planTitle) {
-    changes.push({ label: "Plan", value: plan ? plan.title : `${payload.planTitle} (no match — will add without one)` });
+    const problem = describeTargetProblem(planMatch, "plan") ?? "No matching plan.";
+    changes.push({ label: "Plan", value: plan ? plan.title : `${problem} Will add without one.` });
   }
   if (subtasks.length > 0) {
     changes.push({ label: "Steps", value: subtasks.join(" · ") });

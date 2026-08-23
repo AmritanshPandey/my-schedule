@@ -29,6 +29,7 @@ import { MLXProvider } from "./ai/providers/mlx";
 import { OllamaProvider } from "./ai/providers/ollama";
 import { OpenAICompatibleProvider } from "./ai/providers/openai-compatible";
 import { BrowserProvider } from "./ai/providers/browser";
+import { REQUEST_TIMEOUT_MS, clampMaxTokens } from "@/lib/ai/limits";
 import type { AIMessage, AIProvider } from "./ai/types";
 
 export type { AIMessage };
@@ -80,7 +81,27 @@ export function streamAIChat(
   maxTokens = 1024,
   signal?: AbortSignal,
 ): AsyncGenerator<string> {
-  return activeProvider().generate(systemPrompt, messages, { maxTokens, signal });
+  return activeProvider().generate(systemPrompt, messages, {
+    // Clamped, not trusted: no caller gets to ask for an unbounded generation.
+    maxTokens: clampMaxTokens(maxTokens),
+    signal: withTimeout(signal),
+  });
+}
+
+/**
+ * The caller's signal, plus a deadline of our own.
+ *
+ * The default provider is a local model on the user's own machine, so there is
+ * no server-side timeout to fall back on: if inference stalls, the stream simply
+ * never ends and the UI waits forever while the laptop works. This guarantees
+ * every request terminates. The caller's own signal (a Stop button, an unmount)
+ * still aborts earlier.
+ */
+function withTimeout(signal?: AbortSignal): AbortSignal {
+  const timeout = AbortSignal.timeout(REQUEST_TIMEOUT_MS);
+  if (!signal) return timeout;
+  // `AbortSignal.any` short-circuits on whichever fires first.
+  return typeof AbortSignal.any === "function" ? AbortSignal.any([signal, timeout]) : signal;
 }
 
 /** One-shot generation from a single user message — backs every structured
