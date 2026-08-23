@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { ScheduleEntry } from "@/components/ScheduleItem";
 import type { AccentColor } from "@/lib/colorSystem";
-import { colorFromIcon, resolveAccentColor } from "@/lib/colorSystem";
+import { categoryFromIcon, colorFromIcon, resolveAccentColor } from "@/lib/colorSystem";
 import type { GoalDirection } from "@/lib/trendUtils";
 export type { GoalDirection };
 import { flushNow, mergeCloudIfNewer, queueSync, noteLatestSchedule } from "@/lib/cloudSync";
@@ -509,13 +509,10 @@ function isPerDay(val: unknown): boolean {
   return !!val && typeof val === "object" && !Array.isArray(val) && "monday" in (val as object);
 }
 
-export function categoryFromIcon(icon: string): PlanCategory {
-  if (icon === "run" || icon === "barbell") return "fitness";
-  if (icon === "school" || icon === "book" || icon === "brain" || icon === "code") return "learning";
-  if (icon === "briefcase" || icon === "car") return "work";
-  if (icon === "sleep") return "health";
-  return "routine";
-}
+// Defined in lib/colorSystem.ts so pure modules can reach it without pulling in
+// this hook (and, through it, contexts/AuthProvider). Re-exported here because
+// a dozen call sites import it from this module.
+export { categoryFromIcon };
 
 function hasAnyTasks(activities: unknown): boolean {
   if (!isPerDay(activities)) return false;

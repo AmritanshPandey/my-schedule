@@ -164,7 +164,7 @@ import {
 import { findPlanByTitle, findTasksByTitle } from "@/lib/planLookup";
 import { isTaskScheduledOn, resolveOccurrence, diffException } from "@/lib/taskOccurrence";
 import type { AIGeneratedTask } from "@/lib/aiActions";
-import { applyScheduleRules } from "@/lib/scheduleRules";
+import { applyScheduleRules, validateDatedTasks } from "@/lib/scheduleRules";
 import { resolveTimes as resolveParsedTimes } from "@/lib/scheduleParser";
 import { applyTemplate } from "@/lib/templates";
 import type { Template } from "@/lib/templates";
@@ -1550,6 +1550,38 @@ export default function ScheduleApp() {
   );
 
   function handleBulkImport(result: import("@/lib/scheduleParser").ParseResult) {
+    // A dated task belongs to one occurrence, not to every matching weekday —
+    // week 1's Thursday and week 2's Thursday are different sessions with
+    // different checklists. Those are validated against the day they actually
+    // land on before anything is written: the weekday-scoped `applyScheduleRules`
+    // would read twelve Thursdays as twelve collisions and stack them.
+    const dated = result.days.flatMap((d) =>
+      d.tasks
+        .filter((t) => t.dateISO)
+        .map((t) => {
+          const { startTime, endTime } = resolveParsedTimes(t);
+          return { title: t.title, dateISO: t.dateISO!, startTime, endTime, taskId: t.id };
+        }),
+    );
+
+    let blocked = new Set<string>();
+    let firstConflict: string | null = null;
+    if (dated.length > 0) {
+      const { conflicts } = validateDatedTasks(dated, (dateISO, weekday) =>
+        (schedule.activities[weekday] ?? [])
+          .filter((task) => isTaskScheduledOn(task, dateISO, true))
+          .flatMap((task) => getSlots(task).map((s) => ({ title: task.title, ...s }))),
+      );
+      blocked = new Set(conflicts.map((c) => c.task.taskId));
+      if (conflicts.length > 0) {
+        const c = conflicts[0].conflict;
+        firstConflict =
+          conflicts.length === 1
+            ? `Skipped "${c.taskTitle}" — it clashes with ${c.conflictsWith} on ${c.dateISO}.`
+            : `Skipped ${conflicts.length} sessions that clash with existing tasks.`;
+      }
+    }
+
     setSchedule((prev) => {
       // Create real plans from inline `# Plan` definitions; map temp ref → real plan.
       const refToPlan = new Map<string, Plan>();
@@ -1574,34 +1606,50 @@ export default function ScheduleApp() {
       const activities = { ...prev.activities };
       const categoryDraft = [...prev.categories];
       for (const d of result.days) {
-        const created: Task[] = d.tasks.map((t) => {
-          const { startTime, endTime } = resolveParsedTimes(t);
-          const plan =
-            (t.planRef ? refToPlan.get(t.planRef) : null) ??
-            prev.plans.find((p) => p.id === t.planId) ??
-            prev.plans[0] ??
-            null;
-          const subtasks = t.subtasks?.map((s) => ({
-            id: uid(),
-            task: s.title,
-            info: s.info,
-            duration: s.duration,
-          }));
-          return {
-            id: uid(),
-            title: t.title,
-            startTime,
-            endTime,
-            categoryId: ensureCategoryIn(categoryDraft, t.icon),
-            planId: plan?.id ?? "",
-            ...(subtasks !== undefined ? { subtasks } : {}),
-          };
-        });
+        const created: Task[] = d.tasks
+          .filter((t) => !blocked.has(t.id))
+          .map((t) => {
+            const { startTime, endTime } = resolveParsedTimes(t);
+            const plan =
+              (t.planRef ? refToPlan.get(t.planRef) : null) ??
+              prev.plans.find((p) => p.id === t.planId) ??
+              prev.plans[0] ??
+              null;
+            const subtasks = t.subtasks?.map((s) => ({
+              id: uid(),
+              task: s.title,
+              info: s.info,
+              duration: s.duration,
+            }));
+            return {
+              id: uid(),
+              title: t.title,
+              startTime,
+              endTime,
+              categoryId: ensureCategoryIn(categoryDraft, t.icon),
+              planId: plan?.id ?? "",
+              ...(subtasks !== undefined ? { subtasks } : {}),
+              // A single dated occurrence rather than a weekly repeat. Required,
+              // not stylistic: `TaskException` carries no subtasks field, so one
+              // recurring task cannot hold a different checklist per week.
+              ...(t.dateISO ? { recurrence: { type: "once" as const, dateISO: t.dateISO } } : {}),
+            };
+          });
         activities[d.day] = sortTasksByTime([...(activities[d.day] ?? []), ...created]);
       }
       return { ...prev, plans: [...prev.plans, ...newPlans], categories: categoryDraft, activities };
     });
-    setToastMessage(result.plans.length > 0 ? "Plan & tasks imported" : "Tasks imported");
+    const imported = result.days.reduce(
+      (n, d) => n + d.tasks.filter((t) => !blocked.has(t.id)).length,
+      0,
+    );
+    setToastMessage(
+      firstConflict
+        ? `Imported ${imported}. ${firstConflict}`
+        : result.plans.length > 0
+        ? "Plan & tasks imported"
+        : "Tasks imported",
+    );
   }
 
   function handleAddRitual(data: Omit<Ritual, "id">) {
@@ -4338,7 +4386,12 @@ export default function ScheduleApp() {
               whileTap={{ scale: 0.92 }}
               onClick={() => setAiOpen(true)}
               aria-label="Open AI Assistant"
-              className="fixed bottom-24 right-4 z-40 flex h-12 w-12 items-center justify-center rounded-full border border-violet-500 bg-[#AD46FF] text-white lg:hidden"
+              // `lg:hidden` keeps this the mobile entry point; the hover pair
+              // still matters for a narrow desktop window, where a pointer can
+              // reach it. Each theme needs its own value: the fill is the same
+              // violet in both, so a lone `hover:` would apply in dark mode too
+              // and drag the button toward its light-mode hover.
+              className="fixed bottom-24 right-4 z-40 flex h-12 w-12 items-center justify-center rounded-full border border-violet-500 bg-[#AD46FF] text-white transition-colors hover:bg-[#9333EA] dark:hover:bg-[#C07CFF] lg:hidden"
             >
               <IconSparkles size={20} strokeWidth={2} />
             </m.button>

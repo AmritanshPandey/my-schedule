@@ -1,0 +1,477 @@
+WEEK 1 — Number Fundamentals
+Thursday — Quantitative Review
+3h 15m
+
+* Read Quantitative Review: Integers & Number Properties
+* Learn natural numbers, integers, positive/negative numbers
+* Learn odd/even numbers
+* Learn prime and composite numbers
+* Learn factors and multiples
+* Learn divisibility rules
+* Solve easy practice questions
+* Review every incorrect question
+* Add mistakes to GMAT Error Log
+
+Saturday — Quant + Official Guide
+3h
+
+* Recall Thursday's concepts without notes
+* Quantitative Review: Factors, multiples & primes practice
+* Solve 10–15 targeted Quant questions
+* Review incorrect questions
+* Official Guide: introductory Quant questions
+* Identify question type for each question
+* Record difficult questions for reattempt
+
+Sunday 7:00 — Verbal + DI
+2h 15m
+
+* Verbal Review: Understand argument structure
+* Learn premise vs conclusion
+* Learn evidence vs conclusion
+* Practice identifying conclusions
+* Solve 8–10 CR questions
+* DI Review: Tables
+* Practice reading rows, columns and units
+* Solve basic table questions
+
+Sunday 9:30 — Weekly Review
+2h 15m
+
+* 30 min Quant revision
+* 30 min Quant mixed practice
+* 30 min Verbal revision
+* 30 min DI practice
+* Review entire week's error log
+* Reattempt 3–5 previously incorrect questions
+
+WEEK 2 — Fractions, Decimals & Percentages
+Thursday
+
+* Quant Review: Fractions
+* Equivalent fractions
+* Adding/subtracting fractions
+* Multiplying/dividing fractions
+* Decimal conversion
+* Percentage conversion
+* Basic percentage calculations
+* Targeted practice
+* Error log
+
+Saturday
+
+* Recall fraction rules
+* Quant Review: Percentage practice
+* Percentage increase/decrease
+* Successive percentage changes
+* Reverse percentages
+* Official Guide percentage questions
+* Review mistakes
+
+Sunday 7:00
+
+* Verbal Review: Assumptions
+* Identify assumptions in arguments
+* Practice basic CR questions
+* DI Review: Graphs
+* Read bar graphs
+* Read line graphs
+* Solve graph interpretation questions
+
+Sunday 9:30
+
+* Mixed fractions questions
+* Mixed percentage questions
+* Mixed CR questions
+* Mixed DI questions
+* Error log review
+* Reattempt mistakes
+
+WEEK 3 — Ratios & Averages
+Thursday
+
+* Quant Review: Ratios
+* Ratio notation
+* Equivalent ratios
+* Ratio scaling
+* Proportions
+* Direct proportion
+* Targeted practice
+* Error log
+
+Saturday
+
+* Review ratios
+* Quant Review: Averages
+* Arithmetic mean
+* Weighted averages
+* Median
+* Mode
+* Range
+* Official Guide questions
+* Review mistakes
+
+Sunday 7:00
+
+* Verbal Review: Strengthen questions
+* Understand what "strengthen" means
+* Identify the argument gap
+* Solve 8–10 CR questions
+* DI: Ratios and comparisons
+* Practice percentage vs absolute difference
+
+Sunday 9:30
+
+* Ratio mixed set
+* Average mixed set
+* CR mixed set
+* DI mixed set
+* Error log
+
+WEEK 4 — Algebra Fundamentals
+Thursday
+
+* Variables and expressions
+* Algebraic simplification
+* Distributive property
+* Factoring
+* Linear equations
+* Solving for variables
+* Inequalities
+* Absolute value basics
+* Quant practice
+* Error log
+
+Saturday
+
+* Algebra recall
+* Quantitative Review algebra questions
+* Equation word problems
+* Inequality questions
+* Official Guide algebra questions
+* Identify inefficient solutions
+* Reattempt mistakes
+
+Sunday 7:00
+
+* Verbal: Weaken questions
+* Identify argument assumptions
+* Find logical gaps
+* Solve 8–10 questions
+* DI: Data Sufficiency introduction
+* Learn Statement 1 vs Statement 2
+* Solve basic DS questions
+
+Sunday 9:30
+
+* Mixed algebra
+* Mixed arithmetic
+* CR strengthen/weaken
+* Basic Data Sufficiency
+* Weekly error analysis
+
+WEEK 5 — Exponents, Roots & Remainders
+Thursday
+
+* Laws of exponents
+* Positive exponents
+* Negative exponents
+* Fractional exponents
+* Square roots
+* Perfect squares
+* Remainders
+* Units digits
+* Practice
+
+Saturday
+
+* Quant Review practice
+* Remainder patterns
+* Units digit patterns
+* Official Guide questions
+* Review solutions
+* Reattempt difficult questions
+
+Sunday 7:00
+
+* Verbal: RC introduction
+* Main idea
+* Primary purpose
+* Paragraph function
+* Practice 1–2 passages
+* DI: Data Sufficiency
+* Solve basic DS questions
+
+Sunday 9:30
+
+* Mixed number properties
+* Mixed algebra
+* RC questions
+* DS questions
+* Error analysis
+
+WEEK 6 — Rates, Speed & Work
+Thursday
+
+* Distance = Speed × Time
+* Unit conversion
+* Average speed
+* Relative speed
+* Work rate
+* Combined work
+* Word-problem translation
+* Practice
+
+Saturday
+
+* Rate problem review
+* Speed/distance questions
+* Work questions
+* Official Guide rate questions
+* Practice translating English → equations
+* Error log
+
+Sunday 7:00
+
+* Verbal: Cause/effect arguments
+* Correlation vs causation
+* Identify causal assumptions
+* CR practice
+* DI: Multi-Source Reasoning
+* Learn extracting relevant information
+* Practice
+
+Sunday 9:30
+
+* Mixed rates
+* Mixed word problems
+* CR mixed
+* Multi-source DI
+* Error analysis
+
+WEEK 7 — Geometry
+Thursday
+
+* Lines and angles
+* Parallel lines
+* Triangles
+* Pythagorean theorem
+* Similar triangles
+* Quadrilaterals
+* Area/perimeter
+* Practice
+
+Saturday
+
+* Circles
+* Circle properties
+* Volume
+* Coordinate geometry
+* Slope
+* Distance
+* Official Guide geometry
+* Error log
+
+Sunday 7:00
+
+* RC structure
+* Inference questions
+* Author's viewpoint
+* Paragraph purpose
+* Practice passages
+* DI graphs + tables
+* Mixed interpretation
+
+Sunday 9:30
+
+* Mixed geometry
+* Mixed Quant
+* RC
+* DI
+* Error analysis
+
+WEEK 8 — Counting, Probability & Sets
+Thursday
+
+* Fundamental counting principle
+* Basic permutations
+* Basic combinations
+* Probability fundamentals
+* Independent events
+* Dependent events
+* Sets
+* Union/intersection
+* Venn diagrams
+
+Saturday
+
+* Counting practice
+* Probability practice
+* Set questions
+* Official Guide questions
+* Review mistakes
+* Reattempt difficult questions
+
+Sunday 7:00
+
+* Verbal: Inference questions
+* Evaluate questions
+* Paradox questions
+* CR practice
+* DI: Two-Part Analysis
+* Practice
+
+Sunday 9:30
+
+* Mixed probability
+* Mixed sets
+* Mixed CR
+* Two-Part Analysis
+* Error analysis
+
+WEEK 9 — Statistics
+Thursday
+
+* Mean
+* Median
+* Mode
+* Range
+* Weighted average
+* Distribution
+* Outliers
+* Standard deviation concept
+* Practice
+
+Saturday
+
+* Statistics mixed questions
+* Official Guide statistics
+* Quant mixed questions
+* Begin light timing
+* Review mistakes
+
+Sunday 7:00
+
+* Mixed CR
+* Mixed RC
+* Analyze wrong answers
+* DI statistics
+* Data interpretation
+* Mixed DI
+
+Sunday 9:30
+
+* Mixed arithmetic
+* Mixed algebra
+* Mixed statistics
+* Mixed Verbal
+* Mixed DI
+* Error analysis
+
+WEEK 10 — Arithmetic Integration
+Now stop learning lots of new concepts.
+Thursday
+
+* Mixed number properties
+* Fractions
+* Percentages
+* Ratios
+* Averages
+* Rates
+* Identify weak areas
+* Target weak area
+
+Saturday
+
+* 15–20 mixed Quant questions
+* Official Guide mixed Quant
+* Start timing selected questions
+* Review every mistake
+
+Sunday 7:00
+
+* Mixed CR
+* Mixed RC
+* DI mixed set
+* Review
+
+Sunday 9:30
+
+* Quant mixed set
+* Verbal mixed set
+* DI mixed set
+* Error log analysis
+* Identify top 5 weaknesses
+
+WEEK 11 — Algebra + Geometry Integration
+Thursday
+
+* Mixed algebra
+* Equations
+* Inequalities
+* Exponents
+* Geometry
+* Coordinate geometry
+* Target weak topics
+
+Saturday
+
+* 20 mixed Quant questions
+* Official Guide mixed questions
+* Introduce stricter timing
+* Review
+
+Sunday 7:00
+
+* Mixed CR
+* Mixed RC
+* Mixed DI
+* Data Sufficiency
+
+Sunday 9:30
+
+* Mixed Quant
+* Mixed Verbal
+* Mixed DI
+* Error analysis
+
+WEEK 12 — Foundation Assessment
+This week is different.
+Thursday
+
+* Quant revision
+* Review all formulas/concepts
+* Review Quant error log
+* Reattempt previously incorrect questions
+
+Saturday
+Foundation Quant Test
+
+* 30 Quant questions
+* Timed conditions
+* Record accuracy
+* Record time/question
+* Don't look at solutions until finished
+
+Sunday 7:00
+Foundation Verbal + DI Test
+
+* 20 Verbal questions
+* 15 DI questions
+* Timed conditions
+* Record accuracy
+* Record timing
+
+Sunday 9:30
+Analysis
+
+* Classify every mistake
+* Concept errors
+* Logic errors
+* Strategy errors
+* Timing errors
+* Careless errors
+* Identify weakest Quant topics
+* Identify weakest Verbal topics
+* Identify weakest DI topics
+* Create Phase 2 priorities

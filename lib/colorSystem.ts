@@ -1,8 +1,25 @@
+import type { PlanCategory } from "./useScheduleDB";
+
 export type AccentColor =
   | "red" | "orange" | "amber" | "yellow" | "lime"
   | "green" | "emerald" | "teal" | "cyan" | "sky"
   | "blue" | "indigo" | "violet" | "purple" | "fuchsia"
   | "pink" | "rose";
+
+/**
+ * Which kind of plan an icon implies. Lives here beside `colorFromIcon` because
+ * it is the same concern — an icon-to-attribute mapping — and because keeping it
+ * in `useScheduleDB` made it unreachable from pure modules: importing it there
+ * pulls in the React hook and, through it, `contexts/AuthProvider`. Re-exported
+ * from `useScheduleDB` so existing call sites are unchanged.
+ */
+export function categoryFromIcon(icon: string): PlanCategory {
+  if (icon === "run" || icon === "barbell") return "fitness";
+  if (icon === "school" || icon === "book" || icon === "brain" || icon === "code") return "learning";
+  if (icon === "briefcase" || icon === "car") return "work";
+  if (icon === "sleep") return "health";
+  return "routine";
+}
 
 export const VALID_COLORS: AccentColor[] = [
   "red", "orange", "amber", "yellow", "lime",

@@ -11,6 +11,14 @@ import BottomSheet from "@/components/ui/BottomSheet";
 import SheetHeader from "@/components/ui/SheetHeader";
 import type { Plan } from "@/lib/useScheduleDB";
 import { parseSchedule, countTasks, type ParsedDay, type ParseResult } from "@/lib/scheduleParser";
+import {
+  looksLikeCurriculum,
+  parseCurriculum,
+  curriculumToParseResult,
+  weekdaysNeedingTime,
+} from "@/lib/curriculumParser";
+import { localISODate } from "@/lib/dateUtils";
+import type { DayKey } from "@/lib/useScheduleDB";
 import { streamAIScheduleParse, parseAIScheduleResult } from "@/lib/aiScheduleParser";
 import { isAiConfigured } from "@/lib/aiClient";
 import { SECTION_ICONS } from "@/components/SectionIcons";
@@ -143,16 +151,40 @@ export function BulkImportFlow({ plans, fallbackDay = "monday", onCommit, onDone
   const aiAbortRef = useRef<AbortController | null>(null);
   const aiAvailable = useMemo(() => isAiConfigured(), []);
 
+  // A multi-week curriculum ("WEEK 1 …") is a different grammar from a flat day
+  // list, and routing it through the day parser is what turned one week into a
+  // stack of ~30 untimed tasks. Detected from the text so the user doesn't have
+  // to pick a mode.
+  const curriculum = useMemo(
+    () => (looksLikeCurriculum(text) ? parseCurriculum(text) : null),
+    [text],
+  );
+  const needTimeFor = useMemo(
+    () => (curriculum ? weekdaysNeedingTime(curriculum) : []),
+    [curriculum],
+  );
+  const [planTitle, setPlanTitle] = useState("");
+  const [startDateISO, setStartDateISO] = useState(() => localISODate(new Date()));
+  const [startTimes, setStartTimes] = useState<Partial<Record<DayKey, string>>>({});
+
   // Re-parse on text change (cheap, synchronous) — this is the instant,
   // offline path. AI parsing (handleAIParse below) is a separate, explicit
   // action: it overwrites `result` directly without touching `text`, so
   // editing the textarea afterward falls back to re-running this effect,
   // same as editing after a manual paste always has.
   useEffect(() => {
-    setResult(parseSchedule(text, plans, fallbackDay));
+    setResult(
+      curriculum
+        ? curriculumToParseResult(curriculum, {
+            planTitle: planTitle.trim() || "Imported plan",
+            startDateISO,
+            startTimeByWeekday: startTimes,
+          })
+        : parseSchedule(text, plans, fallbackDay),
+    );
     setCollapsed(new Set());
     setAiError(null);
-  }, [text, plans, fallbackDay]);
+  }, [text, plans, fallbackDay, curriculum, planTitle, startDateISO, startTimes]);
 
   useEffect(() => () => { aiAbortRef.current?.abort(); }, []);
 
@@ -396,6 +428,79 @@ export function BulkImportFlow({ plans, fallbackDay = "monday", onCommit, onDone
                 })}
               </div>
             )}
+            {curriculum && (
+              // Everything a curriculum can't state for itself. Asked once per
+              // weekday rather than once per session: a 12-week plan needs two
+              // answers here instead of twenty-four.
+              <div className="flex flex-col gap-3 rounded-2xl border border-violet-500/30 bg-violet-500/[0.06] px-4 py-3.5">
+                <div className="flex items-baseline gap-2">
+                  <span className="text-[13px] font-bold text-violet-700 dark:text-violet-300">
+                    {curriculum.weeks.length}-week plan detected
+                  </span>
+                  <span className="text-[11px] font-medium text-neutral-500 dark:text-neutral-400">
+                    {total} sessions
+                    {curriculum.ignoredLines.length > 0
+                      ? ` · ${curriculum.ignoredLines.length} line(s) skipped`
+                      : " · every line used"}
+                  </span>
+                </div>
+
+                <label className="flex flex-col gap-1">
+                  <span className="text-[11px] font-semibold text-neutral-500 dark:text-neutral-400">Plan name</span>
+                  <input
+                    type="text"
+                    value={planTitle}
+                    onChange={(e) => setPlanTitle(e.target.value)}
+                    placeholder="Imported plan"
+                    className="rounded-xl border border-neutral-200 bg-white px-3 py-2 text-[13px] font-semibold text-neutral-900 dark:border-white/[0.1] dark:bg-neutral-900 dark:text-white"
+                  />
+                </label>
+
+                <label className="flex flex-col gap-1">
+                  <span className="text-[11px] font-semibold text-neutral-500 dark:text-neutral-400">Week 1 starts</span>
+                  <input
+                    type="date"
+                    value={startDateISO}
+                    onChange={(e) => e.target.value && setStartDateISO(e.target.value)}
+                    className="rounded-xl border border-neutral-200 bg-white px-3 py-2 text-[13px] font-semibold text-neutral-900 dark:border-white/[0.1] dark:bg-neutral-900 dark:text-white"
+                  />
+                </label>
+
+                {needTimeFor.length > 0 && (
+                  <div className="flex flex-col gap-2">
+                    <span className="text-[11px] font-semibold text-neutral-500 dark:text-neutral-400">
+                      Start time for sessions the text doesn&apos;t time
+                    </span>
+                    {needTimeFor.map((day) => (
+                      <div key={day} className="flex items-center gap-2">
+                        <span className="w-20 shrink-0 text-[12px] font-semibold capitalize text-neutral-700 dark:text-neutral-200">
+                          {day}
+                        </span>
+                        <div className="flex flex-wrap gap-1.5">
+                          {TIME_OPTS.map((o) => {
+                            const active = (startTimes[day] ?? "9:00 AM") === o.time;
+                            return (
+                              <button
+                                key={o.time}
+                                type="button"
+                                onClick={() => { haptic("light"); setStartTimes((p) => ({ ...p, [day]: o.time })); }}
+                                className={`rounded-full border px-2.5 py-1 text-[11px] font-semibold transition-colors ${
+                                  active
+                                    ? "border-violet-500 bg-violet-500 text-white"
+                                    : "border-neutral-200 bg-white text-neutral-600 hover:bg-neutral-50 dark:border-white/[0.1] dark:bg-neutral-900 dark:text-neutral-300 dark:hover:bg-white/[0.04]"
+                                }`}
+                              >
+                                {o.time}
+                              </button>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
             <div className="flex flex-col gap-2.5">
               {days.map((d) => {
                 const isCollapsed = collapsed.has(d.day);
@@ -421,9 +526,22 @@ export function BulkImportFlow({ plans, fallbackDay = "monday", onCommit, onDone
                                   <IconClock size={13} strokeWidth={2} />Time?
                                 </span>
                               ) : (
-                                <span className="shrink-0 text-[12px] font-semibold text-emerald-600 dark:text-emerald-400">{formatDisplayTime(t.startTime)}</span>
+                                <span className="shrink-0 text-[12px] font-semibold text-emerald-600 dark:text-emerald-400">
+                                  {formatDisplayTime(t.startTime)}
+                                  {t.endTime ? `–${formatDisplayTime(t.endTime)}` : ""}
+                                </span>
                               )}
                             </div>
+                            {/* A dated session lands on one specific day, so the
+                                date is the only way to tell week 2's Thursday
+                                from week 3's before committing. */}
+                            {t.dateISO && (
+                              <p className="mt-0.5 text-[11px] font-medium text-neutral-400 dark:text-neutral-500">
+                                {new Date(`${t.dateISO}T12:00:00`).toLocaleDateString(undefined, {
+                                  weekday: "short", day: "numeric", month: "short", year: "numeric",
+                                })}
+                              </p>
+                            )}
                             {t.subtasks && t.subtasks.length > 0 && (
                               <div className="mt-2 flex flex-col gap-1.5 border-l-2 border-emerald-500/18 pl-3">
                                 {t.subtasks.map((s) => (
