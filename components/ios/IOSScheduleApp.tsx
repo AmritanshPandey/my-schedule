@@ -58,6 +58,8 @@ import { SECTION_ICONS } from "@/components/SectionIcons";
 import { useReminders } from "@/lib/useReminders";
 import { bootLog, isIOSSafeMode, isStandalonePWA } from "@/lib/iosSafeMode";
 import { todayISO, localISODate, addDaysToISO, formatDate } from "@/lib/dateUtils";
+import { logMeal, quickAmountsForUnit } from "@/lib/wellness";
+import { sumEntriesForDate } from "@/lib/metricEntries";
 import { createInboxNoteInput } from "@/lib/notes/dailyCapture";
 import {
   applyTaskDelete,
@@ -119,6 +121,7 @@ const DayWallpaperSheet = dynamic(() => import("@/components/DayWallpaperSheet")
 const NotesView = dynamic(() => import("@/components/notes/NotesView"), { ssr: false });
 const TaskDetailView = dynamic(() => import("@/components/activity/TaskDetailView"), { ssr: false });
 const AddEntryModal = dynamic(() => import("@/components/AddEntryModal"), { ssr: false });
+const LogMealSheet = dynamic(() => import("@/components/LogMealSheet"), { ssr: false });
 const CoachMarks = dynamic(() => import("@/components/onboarding/CoachMarks"), { ssr: false });
 
 const JS_DAYS: DayKey[] = ["sunday", "monday", "tuesday", "wednesday", "thursday", "friday", "saturday"];
@@ -423,6 +426,7 @@ export default function IOSScheduleApp() {
   const [ritualAddOpen, setRitualAddOpen] = useState(false);
   const [subtasksRef, setSubtasksRef] = useState<{ id: string; day: DayKey; dateISO: string } | null>(null);
   const [entryTracker, setEntryTracker] = useState<ProgressTracker | null>(null);
+  const [logMealOpen, setLogMealOpen] = useState(false);
   const [confirmState, setConfirmState] = useState<ConfirmState | null>(null);
   const [taskDeleteRequest, setTaskDeleteRequest] = useState<TaskDeleteRequest | null>(null);
   const [toast, setToast] = useState<string | null>(null);
@@ -1635,6 +1639,7 @@ export default function IOSScheduleApp() {
                 }}
                 onOpenAddEntry={(tracker) => setEntryTracker(tracker)}
                 onDeleteEntry={(entryId) => setSchedule((prev) => ({ ...prev, metricEntries: prev.metricEntries.filter((entry) => entry.id !== entryId) }))}
+                onLogMeal={() => setLogMealOpen(true)}
                 onAddMilestone={(data) => handleAddMilestone(selectedPlan.id, data)}
                 onUpdateMilestone={handleUpdateMilestone}
                 onDeleteMilestone={handleDeleteMilestone}
@@ -1862,6 +1867,7 @@ export default function IOSScheduleApp() {
           onCreatePlan={() => { setActiveTab(1); setSelectedPlanId(null); setAddingPlan(true); }}
           onCreateRitual={() => { setActiveTab(2); setRitualAddOpen(true); }}
           onCreateNote={openQuickNote}
+          onLogMeal={() => setLogMealOpen(true)}
         />
       )}
 
@@ -1888,7 +1894,7 @@ export default function IOSScheduleApp() {
         </IOSMotionBoundary>
       )}
 
-      {(taskSheetOpen || addingPlan || editingPlanId || entryTracker || goalsSheetOpen) && (
+      {(taskSheetOpen || addingPlan || editingPlanId || entryTracker || goalsSheetOpen || logMealOpen) && (
         <IOSMotionBoundary>
           <TaskSheet
             mode={taskSheetMode}
@@ -1938,6 +1944,8 @@ export default function IOSScheduleApp() {
             isOpen={!!entryTracker}
             onClose={() => setEntryTracker(null)}
             metric={entryTracker ? { name: entryTracker.title, unit: entryTracker.unit ?? "" } : undefined}
+            quickAmounts={entryTracker ? quickAmountsForUnit(entryTracker.unit) : undefined}
+            todayTotal={entryTracker ? sumEntriesForDate(schedule.metricEntries, entryTracker.id, todayISO()) : undefined}
             onSave={(value, date) => {
               if (!entryTracker) return;
               const entry: MetricEntry = { id: uid(), planId: entryTracker.planId, trackerId: entryTracker.id, value, date };
@@ -1949,6 +1957,11 @@ export default function IOSScheduleApp() {
                 metricEntries: [...prev.metricEntries, entry],
               }));
             }}
+          />
+          <LogMealSheet
+            isOpen={logMealOpen}
+            onClose={() => setLogMealOpen(false)}
+            onSave={(input) => setSchedule((prev) => logMeal(prev, input))}
           />
         </IOSMotionBoundary>
       )}

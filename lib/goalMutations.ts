@@ -8,20 +8,9 @@
  * `goalId` on any Plan that referenced it — it never touches Plans, Tasks,
  * or Milestones otherwise.
  */
-import type { Goal, GoalStatus, Plan, Schedule, ScheduleEvent, GoalEventType } from "./useScheduleDB";
-import { MAX_SCHEDULE_EVENTS } from "./scheduleConstants";
+import type { Goal, GoalStatus, Plan, Schedule } from "./useScheduleDB";
+import { pushEvent } from "./scheduleEvents";
 import { uid } from "./id";
-
-function pushEvent(
-  events: ScheduleEvent[] | undefined,
-  type: GoalEventType,
-  entityId: string,
-  timestamp: string,
-  data?: Record<string, unknown>,
-): ScheduleEvent[] {
-  const next = [...(events ?? []), { id: uid(), type, entityId, timestamp, data }];
-  return next.length > MAX_SCHEDULE_EVENTS ? next.slice(next.length - MAX_SCHEDULE_EVENTS) : next;
-}
 
 export interface CreateGoalInput {
   title: string;

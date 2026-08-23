@@ -23,7 +23,10 @@ import { z } from "zod";
 import { DAYS, type DayKey } from "@/lib/scheduleConstants";
 import type { AITask } from "@/lib/ai";
 
-const TIME_RE = /^([01]\d|2[0-3]):[0-5]\d$/;
+/** HH:MM (24-hour) time format, exported so other AI-output validators
+ *  (e.g. lib/ai/validation/proposalSchema.ts) reuse the same rule rather
+ *  than duplicating the regex. */
+export const TIME_RE = /^([01]\d|2[0-3]):[0-5]\d$/;
 const MIN_DURATION_MINUTES = 5;
 const MAX_DURATION_MINUTES = 16 * 60;
 

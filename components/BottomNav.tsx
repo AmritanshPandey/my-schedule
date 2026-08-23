@@ -5,6 +5,7 @@ import { haptic } from "@/lib/haptics";
 import { AnimatePresence, m } from "framer-motion";
 import { isIOSSafeMode } from "@/lib/iosSafeMode";
 import {
+  IconApple,
   IconCalendarEvent,
   IconChartBar,
   IconClipboardData,
@@ -22,6 +23,7 @@ interface BottomNavProps {
   onCreateTask: () => void;
   onCreatePlan: () => void;
   onCreateRitual: () => void;
+  onLogMeal?: () => void;
   onBulkImport?: () => void;
 }
 
@@ -35,6 +37,7 @@ export default function BottomNav({
   onCreateTask,
   onCreatePlan,
   onCreateRitual,
+  onLogMeal,
   onBulkImport,
 }: BottomNavProps) {
   const iosSafeMode = isIOSSafeMode();
@@ -102,7 +105,7 @@ export default function BottomNav({
                 transition={{ duration: 0.2, ease: [0.22, 1, 0.36, 1] }}
                 className="absolute left-1/2 top-1/2 z-30 flex -translate-x-1/2 -translate-y-[156px] flex-col items-center"
               >
-                <div className="flex items-start gap-6 rounded-[24px] border border-white/[0.10] bg-neutral-950 px-5 py-4">
+                <div className="flex items-start gap-4 rounded-[24px] border border-white/[0.10] bg-neutral-950 px-5 py-4">
                   {/* ADD TASK */}
                   <m.button
                     whileTap={{ scale: 0.95 }}
@@ -141,6 +144,21 @@ export default function BottomNav({
                     </div>
                     <span className="text-[11px] font-semibold text-white/75">Habit</span>
                   </m.button>
+
+                  {/* LOG MEAL */}
+                  {onLogMeal && (
+                    <m.button
+                      whileTap={{ scale: 0.95 }}
+                      onClick={() => { haptic("medium"); setExpanded(false); onLogMeal(); }}
+                      className="flex flex-col items-center gap-1.5"
+                      aria-label="Log meal"
+                    >
+                      <div className="flex h-[52px] w-[60px] items-center justify-center rounded-[18px] bg-white/[0.09]">
+                        <IconApple size={24} strokeWidth={2} className="text-white" />
+                      </div>
+                      <span className="text-[11px] font-semibold text-white/75">Meal</span>
+                    </m.button>
+                  )}
 
                   {/* BULK IMPORT */}
                   {onBulkImport && (

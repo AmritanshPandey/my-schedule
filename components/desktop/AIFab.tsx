@@ -6,6 +6,7 @@ import { IconSparkles, IconX } from "@tabler/icons-react";
 import { AIPanel } from "./AIPanel";
 import BottomSheet from "@/components/ui/BottomSheet";
 import type { AIActionResult } from "@/lib/ai";
+import type { AIProposal } from "@/lib/aiProposal";
 import type { Plan, Ritual, Schedule } from "@/lib/useScheduleDB";
 import { useAIActions } from "@/lib/ai/useAIActions";
 
@@ -19,6 +20,9 @@ interface AIFabProps {
   open?: boolean;
   onOpenChange?: (v: boolean) => void;
   onApplyAction: (result: AIActionResult) => void;
+  onProposalCreated: (proposal: AIProposal) => void;
+  onProposalAccept: (proposal: AIProposal) => boolean;
+  onProposalReject: (proposal: AIProposal) => void;
 }
 
 export function AIFab({
@@ -31,6 +35,9 @@ export function AIFab({
   open: controlledOpen,
   onOpenChange,
   onApplyAction,
+  onProposalCreated,
+  onProposalAccept,
+  onProposalReject,
 }: AIFabProps) {
   const { available } = useAIActions();
   const [internalOpen, setInternalOpen] = useState(false);
@@ -61,6 +68,9 @@ export function AIFab({
       activePlan={activePlan}
       initialMessage={initialMessage}
       onApplyAction={(result) => { onApplyAction(result); setOpen(false); }}
+      onProposalCreated={onProposalCreated}
+      onProposalAccept={onProposalAccept}
+      onProposalReject={onProposalReject}
       onClose={() => setOpen(false)}
     />
   );

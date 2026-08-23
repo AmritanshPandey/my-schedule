@@ -5,6 +5,8 @@ import { m } from "framer-motion";
 import { IconPlus } from "@tabler/icons-react";
 import { haptic } from "@/lib/haptics";
 import { PLAN_NEUTRAL } from "@/lib/colorSystem";
+import { sumEntriesForDate } from "@/lib/metricEntries";
+import { todayISO } from "@/lib/dateUtils";
 import type { Plan, ProgressTracker, MetricEntry } from "@/lib/useScheduleDB";
 
 interface TrackerQuickBarProps {
@@ -32,6 +34,8 @@ export default function TrackerQuickBar({
     return map;
   }, [metricEntries]);
 
+  const today = todayISO();
+
   // Build a map: planId → Plan for quick lookup
   const plansById = useMemo(
     () => new Map(plans.map((p) => [p.id, p])),
@@ -52,9 +56,12 @@ export default function TrackerQuickBar({
         {trackers.map((tracker) => {
           const dotClass = PLAN_NEUTRAL.dot;
           const lastEntry = lastEntryByTracker.get(tracker.id);
-          const lastValueDisplay = lastEntry
-            ? `${lastEntry.value}${tracker.unit ? ` ${tracker.unit}` : ""}`
-            : "—";
+          const todayTotal = sumEntriesForDate(metricEntries, tracker.id, today);
+          const lastValueDisplay = todayTotal > 0
+            ? `${todayTotal}${tracker.unit ? ` ${tracker.unit}` : ""} today`
+            : lastEntry
+              ? `${lastEntry.value}${tracker.unit ? ` ${tracker.unit}` : ""}`
+              : "—";
 
           return (
             <div

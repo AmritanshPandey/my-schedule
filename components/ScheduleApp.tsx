@@ -4,6 +4,9 @@ import { memo, useCallback, useEffect, useMemo, useRef, useState, type ReactNode
 import { AnimatePresence, m } from "framer-motion";
 import dynamic from "next/dynamic";
 import AddEntryModal from "@/components/AddEntryModal";
+import LogMealSheet from "@/components/LogMealSheet";
+import { logMeal, quickAmountsForUnit, type MealInput } from "@/lib/wellness";
+import { sumEntriesForDate } from "@/lib/metricEntries";
 import { TaskBlockCard } from "@/components/TaskBlockCard";
 import Skeleton from "@/components/ui/Skeleton";
 import type { TaskSaveData } from "@/components/task/TaskSheet";
@@ -15,6 +18,8 @@ import BottomNav from "@/components/BottomNav";
 import DesktopSidebar from "@/components/desktop/DesktopSidebar";
 import { WeekGrid } from "@/components/desktop/WeekGrid";
 import type { AIActionResult, AIMilestone } from "@/lib/ai";
+import type { AIProposal } from "@/lib/aiProposal";
+import { recordProposalCreated, recordProposalRejected, recordProposalFailed, executeCreateTaskProposal } from "@/lib/proposalMutations";
 import { AI_ENABLED } from "@/lib/featureFlags";
 import { useAIActions } from "@/lib/ai/useAIActions";
 import { useCoachTour } from "@/lib/onboarding/useCoachTour";
@@ -782,6 +787,7 @@ export default function ScheduleApp() {
 
   const [selectedPlanId, setSelectedPlanId] = useState<string | null>(null);
   const [entryTracker, setEntryTracker] = useState<ProgressTracker | null>(null);
+  const [logMealOpen, setLogMealOpen] = useState(false);
   const [weekOffset, setWeekOffset] = useState(0);
   const [viewMode, setViewMode] = useState<"list" | "timeline">(() => (iosSafeMode ? "list" : "timeline"));
   const [calendarView, setCalendarView] = useState<import("@/components/desktop/WeekGrid").CalendarView>("7day");
@@ -1829,6 +1835,10 @@ export default function ScheduleApp() {
     }));
   }
 
+  function handleLogMeal(input: MealInput) {
+    setSchedule((prev) => logMeal(prev, input));
+  }
+
   function handleApplyTemplate(template: Template) {
     setSchedule(applyTemplate(template));
     setActiveTab(1); // Plans tab
@@ -2087,6 +2097,35 @@ export default function ScheduleApp() {
 
     const _exhaustive: never = action;
     return _exhaustive;
+  }
+
+  // ── AI Proposal boundary (PlanR Improvement 04) ─────────────────────────
+  // The AI never mutates Schedule directly: add_task now goes AI → Proposal
+  // → user review → these handlers → the same createTask() handleApplyAction
+  // already uses above. See lib/aiProposal.ts / lib/proposalMutations.ts.
+
+  function handleProposalCreated(proposal: AIProposal) {
+    setSchedule((prev) => recordProposalCreated(prev, proposal));
+  }
+
+  /** Returns whether execution actually succeeded, so the calling UI can
+   * show the true outcome instead of assuming success. */
+  function handleAcceptProposal(proposal: AIProposal): boolean {
+    let result: ReturnType<typeof executeCreateTaskProposal> | undefined;
+    setSchedule((prev) => {
+      result = executeCreateTaskProposal(prev, proposal);
+      return result.ok ? result.schedule : recordProposalFailed(prev, proposal, result.error ?? "Unknown error");
+    });
+    if (result?.ok) {
+      setToastMessage(`Added "${proposal.data.title}"`);
+    } else {
+      setToastMessage(result?.error ?? "Couldn't add that task");
+    }
+    return result?.ok ?? false;
+  }
+
+  function handleRejectProposal(proposal: AIProposal) {
+    setSchedule((prev) => recordProposalRejected(prev, proposal));
   }
 
   function handleDeleteTracker(trackerId: string) {
@@ -3063,6 +3102,7 @@ export default function ScheduleApp() {
           onCreateTask={() => openCreateSheet()}
           onCreatePlan={openAddPlan}
           onCreateRitual={openCreateRitual}
+          onLogMeal={() => setLogMealOpen(true)}
           onBulkImport={() => setBulkImportOpen(true)}
           onOpenSettings={() => setSettingsOpen(true)}
           onOpenSettingsTab={() => setActiveTab(5)}
@@ -3439,6 +3479,13 @@ export default function ScheduleApp() {
                 activeDay={activeDay}
                 completedIds={completedRitualIds}
                 onToggle={handleToggleRitualComplete}
+              />
+              <TrackerQuickBar
+                trackers={schedule.progressTrackers}
+                plans={schedule.plans}
+                metricEntries={schedule.metricEntries}
+                onLog={setEntryTracker}
+                onNavigate={(planId) => { setActiveTab(1); setSelectedPlanId(planId); }}
               />
               <div className="flex min-h-0 flex-1 flex-col">
               <ViewPresence mode="wait" initial={false}>
@@ -3821,6 +3868,7 @@ export default function ScheduleApp() {
               onDeleteTracker={handleDeleteTracker}
               onOpenAddEntry={(tracker) => setEntryTracker(tracker)}
               onDeleteEntry={handleDeleteEntry}
+              onLogMeal={() => setLogMealOpen(true)}
               onAddMilestone={(data) => handleAddMilestone(selectedPlan.id, data)}
               onUpdateMilestone={handleUpdateMilestone}
               onDeleteMilestone={handleDeleteMilestone}
@@ -4006,6 +4054,7 @@ export default function ScheduleApp() {
             onCreateTask={() => openCreateSheet()}
             onCreatePlan={openAddPlan}
             onCreateRitual={openCreateRitual}
+            onLogMeal={() => setLogMealOpen(true)}
             onBulkImport={() => setBulkImportOpen(true)}
           />
         </div>
@@ -4102,8 +4151,16 @@ export default function ScheduleApp() {
             });
           }}
           metric={{ name: entryTracker.title, unit: entryTracker.unit ?? "" }}
+          quickAmounts={quickAmountsForUnit(entryTracker.unit)}
+          todayTotal={sumEntriesForDate(schedule.metricEntries, entryTracker.id, todayISO())}
         />
       )}
+
+      <LogMealSheet
+        isOpen={logMealOpen}
+        onClose={() => setLogMealOpen(false)}
+        onSave={handleLogMeal}
+      />
 
       {sessionTask && (
         <SessionSheet
@@ -4260,6 +4317,9 @@ export default function ScheduleApp() {
             schedule={schedule}
             activePlan={selectedPlan ?? undefined}
             onApplyAction={handleApplyAction}
+            onProposalCreated={handleProposalCreated}
+            onProposalAccept={handleAcceptProposal}
+            onProposalReject={handleRejectProposal}
           />
         </ErrorBoundary>
       )}

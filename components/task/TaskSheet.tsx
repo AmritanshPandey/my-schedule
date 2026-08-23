@@ -37,7 +37,7 @@ import CategorySheet, { type CategoryDraft } from "@/components/category/Categor
 import { haptic } from "@/lib/haptics";
 import type { DayKey, Plan, Task, TaskCategory, TaskRecurrence, TaskTypeValue } from "@/lib/useScheduleDB";
 import { DAYS, DAY_LABELS } from "@/lib/useScheduleDB";
-import { localISODate } from "@/lib/dateUtils";
+import { localISODate, formatDate } from "@/lib/dateUtils";
 import type { ScheduleEntry } from "@/components/ScheduleItem";
 import {
   uid,
@@ -77,6 +77,15 @@ export interface TaskSaveData {
 const JS_DAYS: DayKey[] = ["sunday", "monday", "tuesday", "wednesday", "thursday", "friday", "saturday"];
 function weekdayOfISO(iso: string): DayKey {
   return JS_DAYS[new Date(iso + "T00:00:00").getDay()];
+}
+
+/** Matches PlanDetailView.tsx's formatPlanRange wording, so a plan's active
+ *  window reads identically wherever it's surfaced. */
+function formatPlanRange(plan: Pick<Plan, "startDate" | "endDate"> | null): string {
+  if (!plan || (!plan.startDate && !plan.endDate)) return "";
+  if (plan.startDate && plan.endDate) return `${formatDate(plan.startDate)} – ${formatDate(plan.endDate)}`;
+  if (plan.startDate) return `Starts ${formatDate(plan.startDate)}`;
+  return `Ends ${formatDate(plan.endDate ?? "")}`;
 }
 
 export interface TaskSheetProps {
@@ -1033,7 +1042,14 @@ export function TaskSheet({
               {/* Active window — optional start/end dates for a recurring task */}
               {showActiveWindow && (
                 <div className="space-y-2">
-                  <p className={`mb-1.5 ${SECTION_LABEL}`}>Active dates (optional)</p>
+                  <div className="mb-1.5 flex items-baseline justify-between gap-2">
+                    <p className={SECTION_LABEL}>Active dates (optional)</p>
+                    {selectedPlan && formatPlanRange(selectedPlan) && (
+                      <p className="text-[11px] font-medium text-neutral-400 dark:text-neutral-500">
+                        Plan: {formatPlanRange(selectedPlan)}
+                      </p>
+                    )}
+                  </div>
                   <div className="grid grid-cols-2 gap-2">
                     <div>
                       <label className={FORM_LABEL} htmlFor="task-active-from">Starts</label>

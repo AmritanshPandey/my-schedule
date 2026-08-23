@@ -13,11 +13,14 @@ import type { Plan, Ritual, Schedule } from "@/lib/useScheduleDB";
 import { SECTION_ICONS, getIconPickerStyle } from "@/components/SectionIcons";
 import type { AITask } from "@/lib/ai";
 import { formatDisplayTime } from "@/lib/timeUtils";
+import { buildCreateTaskProposal, type AIProposal } from "@/lib/aiProposal";
+import { ProposalPreviewCard } from "@/components/ai/ProposalPreviewCard";
 
 interface Message {
   role: "user" | "assistant";
   text: string;
   action?: AIActionResult;
+  proposal?: AIProposal;
 }
 
 interface AIPanelProps {
@@ -28,6 +31,13 @@ interface AIPanelProps {
   activePlan?: Plan;
   initialMessage?: string;
   onApplyAction: (result: AIActionResult) => void;
+  /** AI Proposal boundary — currently only the `add_task` action goes
+   * through this instead of `onApplyAction` (see PlanR Improvement 04).
+   * `onProposalAccept` returns whether execution actually succeeded (it can
+   * fail — e.g. a stale/deleted plan) so the card shows the true outcome. */
+  onProposalCreated: (proposal: AIProposal) => void;
+  onProposalAccept: (proposal: AIProposal) => boolean;
+  onProposalReject: (proposal: AIProposal) => void;
   onClose?: () => void;
 }
 
@@ -443,7 +453,7 @@ function stripJsonBlocks(text: string): string {
   return text.replace(/\{[\s\S]*\}\s*$/, "").trim();
 }
 
-export function AIPanel({ context, plans, rituals, schedule, activePlan, initialMessage, onApplyAction, onClose }: AIPanelProps) {
+export function AIPanel({ context, plans, rituals, schedule, activePlan, initialMessage, onApplyAction, onProposalCreated, onProposalAccept, onProposalReject, onClose }: AIPanelProps) {
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState("");
   const [streaming, setStreaming] = useState(false);
@@ -504,7 +514,19 @@ export function AIPanel({ context, plans, rituals, schedule, activePlan, initial
         });
       }
       const action = parseAIAction(fullText);
-      if (action) {
+      if (action?.type === "add_task") {
+        // AI Proposal boundary (PlanR Improvement 04): add_task never goes
+        // straight to onApplyAction — it's built into a reviewable AIProposal
+        // instead, and AI_PROPOSAL_CREATED is recorded immediately so an
+        // ignored suggestion still leaves a lifecycle trace.
+        const proposal = buildCreateTaskProposal(action, plans);
+        setMessages((prev) => {
+          const updated = [...prev];
+          updated[updated.length - 1] = { ...updated[updated.length - 1], proposal };
+          return updated;
+        });
+        onProposalCreated(proposal);
+      } else if (action) {
         setMessages((prev) => {
           const updated = [...prev];
           updated[updated.length - 1] = { ...updated[updated.length - 1], action };
@@ -531,6 +553,26 @@ export function AIPanel({ context, plans, rituals, schedule, activePlan, initial
       handleSend(initialMessage);
     }
   }, [initialMessage]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Update just the resolved proposal's status in place, so its card shows
+  // "Added"/"Dismissed" without touching any other message. Deliberately
+  // does NOT close the panel (unlike onApplyAction below) — the user should
+  // see that confirmation before the panel goes away.
+  function setProposalStatus(proposalId: string, status: AIProposal["status"]) {
+    setMessages((prev) =>
+      prev.map((m) => (m.proposal?.id === proposalId ? { ...m, proposal: { ...m.proposal, status } } : m))
+    );
+  }
+
+  function handleProposalAccept(proposal: AIProposal) {
+    const ok = onProposalAccept(proposal);
+    setProposalStatus(proposal.id, ok ? "accepted" : "failed");
+  }
+
+  function handleProposalReject(proposal: AIProposal) {
+    onProposalReject(proposal);
+    setProposalStatus(proposal.id, "rejected");
+  }
 
   const contextLabel = context === "plans" ? "Plans" : context === "strategy" ? "Strategy" : "Routine";
 
@@ -693,7 +735,13 @@ export function AIPanel({ context, plans, rituals, schedule, activePlan, initial
                     <ThinkingStatus isLocal={isLocalProvider} />
                   )}
                 </div>
-                {msg.action && (
+                {msg.proposal ? (
+                  <ProposalPreviewCard
+                    proposal={msg.proposal}
+                    onAccept={handleProposalAccept}
+                    onReject={handleProposalReject}
+                  />
+                ) : msg.action ? (
                   <ActionCard
                     action={msg.action}
                     plans={plans}
@@ -701,7 +749,7 @@ export function AIPanel({ context, plans, rituals, schedule, activePlan, initial
                     activePlan={activePlan}
                     onApply={(updated) => onApplyAction(updated ?? msg.action!)}
                   />
-                )}
+                ) : null}
               </div>
             </m.div>
           );

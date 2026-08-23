@@ -131,7 +131,10 @@ export const GoalSchema = z.object({
 
 export const ScheduleEventSchema = z.object({
   id: nonEmptyId,
-  type: z.enum(["GOAL_CREATED", "GOAL_UPDATED", "GOAL_COMPLETED", "GOAL_ARCHIVED", "GOAL_DELETED"]),
+  type: z.enum([
+    "GOAL_CREATED", "GOAL_UPDATED", "GOAL_COMPLETED", "GOAL_ARCHIVED", "GOAL_DELETED",
+    "AI_PROPOSAL_CREATED", "AI_PROPOSAL_ACCEPTED", "AI_PROPOSAL_REJECTED", "AI_PROPOSAL_FAILED",
+  ]),
   entityId: nonEmptyId,
   timestamp: isoDateTime,
   data: z.record(z.string(), z.unknown()).optional(),

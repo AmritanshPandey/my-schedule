@@ -68,24 +68,33 @@ export interface Goal {
   schemaVersion: number;
 }
 
-/** Domain event types recorded for Goal actions (see lib/goalMutations.ts). */
-export type GoalEventType =
+/**
+ * Domain event types recorded across the app (see lib/scheduleEvents.ts for
+ * the shared append helper). Originally Goal-only (lib/goalMutations.ts);
+ * broadened to cover AI Proposal lifecycle events (lib/proposalMutations.ts)
+ * without a redesign — this is exactly the generic reuse the event log's
+ * shape was designed for.
+ */
+export type DomainEventType =
   | "GOAL_CREATED"
   | "GOAL_UPDATED"
   | "GOAL_COMPLETED"
   | "GOAL_ARCHIVED"
-  | "GOAL_DELETED";
+  | "GOAL_DELETED"
+  | "AI_PROPOSAL_CREATED"
+  | "AI_PROPOSAL_ACCEPTED"
+  | "AI_PROPOSAL_REJECTED"
+  | "AI_PROPOSAL_FAILED";
 
 /**
  * A minimal append-only domain event log, persisted on `Schedule.events`.
- * Currently only Goal actions are recorded; the shape is intentionally
- * generic so future domain events (Plan, Milestone, ...) can reuse it
- * without a redesign. Capped (see MAX_SCHEDULE_EVENTS) so it can't grow
- * unbounded.
+ * The shape is intentionally generic so future domain events (Plan,
+ * Milestone, ...) can reuse it without a redesign. Capped (see
+ * MAX_SCHEDULE_EVENTS) so it can't grow unbounded.
  */
 export interface ScheduleEvent {
   id: string;
-  type: GoalEventType;
+  type: DomainEventType;
   entityId: string;
   timestamp: string; // ISO 8601
   data?: Record<string, unknown>;
@@ -620,12 +629,16 @@ function normalizeGoals(raw: unknown): Goal[] {
   return raw.map(normalizeGoal).filter((g): g is Goal => g !== null);
 }
 
-const GOAL_EVENT_TYPES: readonly GoalEventType[] = [
+const KNOWN_EVENT_TYPES: readonly DomainEventType[] = [
   "GOAL_CREATED",
   "GOAL_UPDATED",
   "GOAL_COMPLETED",
   "GOAL_ARCHIVED",
   "GOAL_DELETED",
+  "AI_PROPOSAL_CREATED",
+  "AI_PROPOSAL_ACCEPTED",
+  "AI_PROPOSAL_REJECTED",
+  "AI_PROPOSAL_FAILED",
 ];
 
 function normalizeScheduleEvent(value: unknown): ScheduleEvent | null {
@@ -634,9 +647,9 @@ function normalizeScheduleEvent(value: unknown): ScheduleEvent | null {
   if (typeof e.id !== "string" || !e.id) return null;
   if (typeof e.entityId !== "string" || !e.entityId) return null;
   if (typeof e.timestamp !== "string") return null;
-  if (typeof e.type !== "string" || !GOAL_EVENT_TYPES.includes(e.type as GoalEventType)) return null;
+  if (typeof e.type !== "string" || !KNOWN_EVENT_TYPES.includes(e.type as DomainEventType)) return null;
   const data = e.data && typeof e.data === "object" && !Array.isArray(e.data) ? (e.data as Record<string, unknown>) : undefined;
-  return { id: e.id, type: e.type as GoalEventType, entityId: e.entityId, timestamp: e.timestamp, data };
+  return { id: e.id, type: e.type as DomainEventType, entityId: e.entityId, timestamp: e.timestamp, data };
 }
 
 function normalizeScheduleEvents(raw: unknown): ScheduleEvent[] {

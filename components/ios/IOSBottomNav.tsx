@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import {
+  IconApple,
   IconCalendarEvent,
   IconCalendarPlus,
   IconClipboardData,
@@ -20,6 +21,7 @@ interface IOSBottomNavProps {
   onCreatePlan: () => void;
   onCreateRitual: () => void;
   onCreateNote: () => void;
+  onLogMeal?: () => void;
 }
 
 export default function IOSBottomNav({
@@ -29,6 +31,7 @@ export default function IOSBottomNav({
   onCreatePlan,
   onCreateRitual,
   onCreateNote,
+  onLogMeal,
 }: IOSBottomNavProps) {
   const [expanded, setExpanded] = useState(false);
   const navRef = useRef<HTMLDivElement>(null);
@@ -74,7 +77,7 @@ export default function IOSBottomNav({
         <div ref={navRef} className="relative w-full max-w-md">
           {expanded && (
             <div className="absolute left-1/2 top-1/2 z-30 flex -translate-x-1/2 -translate-y-[156px] flex-col items-center">
-              <div className="flex items-start gap-5 rounded-[24px] border border-white/[0.10] bg-neutral-950 px-5 py-4">
+              <div className="flex items-start gap-3 rounded-[24px] border border-white/[0.10] bg-neutral-950 px-5 py-4">
                 <button
                   type="button"
                   onClick={() => runCreate(onCreateTask)}
@@ -119,6 +122,19 @@ export default function IOSBottomNav({
                   </div>
                   <span className="text-[11px] font-semibold text-white/75">Habit</span>
                 </button>
+                {onLogMeal && (
+                  <button
+                    type="button"
+                    onClick={() => runCreate(onLogMeal)}
+                    className="flex flex-col items-center gap-1.5"
+                    aria-label="Log meal"
+                  >
+                    <div className="flex h-[52px] w-[60px] items-center justify-center rounded-[18px] bg-white/[0.09]">
+                      <IconApple size={24} strokeWidth={2} className="text-white" />
+                    </div>
+                    <span className="text-[11px] font-semibold text-white/75">Meal</span>
+                  </button>
+                )}
               </div>
             </div>
           )}

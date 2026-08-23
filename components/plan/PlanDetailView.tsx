@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { AnimatePresence, m } from "framer-motion";
 import {
+  IconApple,
   IconCheck,
   IconEdit,
   IconPlus,
@@ -34,6 +35,8 @@ import Input from "@/components/ui/Input";
 import MilestoneSheet, { type MilestoneSaveData } from "@/components/plan/MilestoneSheet";
 import { computeRoadmapStats } from "@/lib/roadmapEngine";
 import { calculateMilestoneProgress, type MilestoneProgress } from "@/lib/planProgress";
+import { sumEntriesForDate } from "@/lib/metricEntries";
+import { WELLNESS_PLAN_ID } from "@/lib/wellness";
 import { resolveMilestoneStatus } from "@/lib/roadmapDates";
 import { computeTrend } from "@/lib/trendUtils";
 import { getTaskCheckableItems } from "@/lib/taskCompletion";
@@ -247,6 +250,8 @@ interface PlanDetailViewProps {
   // Entry handlers
   onOpenAddEntry: (tracker: ProgressTracker) => void;
   onDeleteEntry: (entryId: string) => void;
+  /** Opens the combined meal-log form — only ever passed for the Wellness plan. */
+  onLogMeal?: () => void;
   // Milestone handlers
   onAddMilestone: (data: MilestoneSaveData) => void;
   onUpdateMilestone: (id: string, data: Partial<Milestone>) => void;
@@ -275,6 +280,7 @@ export default function PlanDetailView({
   onDeleteTracker,
   onOpenAddEntry,
   onDeleteEntry,
+  onLogMeal,
   onAddMilestone,
   onUpdateMilestone,
   onDeleteMilestone,
@@ -991,9 +997,11 @@ export default function PlanDetailView({
           const avg = entries.reduce((s, e) => s + e.value, 0) / entries.length;
           const unit = tracker.unit ? ` ${tracker.unit}` : "";
           const fmtAvg = Number.isInteger(avg) ? String(avg) : avg.toFixed(1);
+          const todayTotal = sumEntriesForDate(schedule.metricEntries, tracker.id, todayISO());
           return (
             <div className="flex items-stretch divide-x divide-neutral-100 border-t border-neutral-100 dark:divide-white/[0.06] dark:border-white/[0.06]">
               {[
+                ...(todayTotal > 0 ? [{ label: "Today", value: `${todayTotal}${unit}` }] : []),
                 { label: "Last",     value: `${last.value}${unit}` },
                 { label: "Avg (all)", value: `${fmtAvg}${unit}` },
                 { label: "Logged",   value: `${entries.length}` },
@@ -1750,6 +1758,13 @@ export default function PlanDetailView({
                 className="mb-4"
                 actions={
                   <>
+                    {plan.id === WELLNESS_PLAN_ID && onLogMeal && (
+                      <SectionIconButton
+                        icon={<IconApple size={20} strokeWidth={2} />}
+                        onClick={onLogMeal}
+                        label="Log meal"
+                      />
+                    )}
                     <SectionIconButton
                       icon={<IconPlus size={20} strokeWidth={2} />}
                       onClick={() => setAddingTracker(true)}
