@@ -2,7 +2,7 @@
 
 /**
  * browserPrompts.ts — PlanR-specialized compact prompts for small (<500 M param)
- * browser-local models (SmolLM2-360M-Instruct et al).
+ * browser-local models (Qwen2.5-0.5B-Instruct and similar).
  *
  * Problem: the verbose prompts in lib/aiActions.ts are designed for 7 B+ models.
  * Small models fail structurally on them — they drop brackets, emit prose where

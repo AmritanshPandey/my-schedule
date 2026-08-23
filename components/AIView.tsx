@@ -349,7 +349,7 @@ function ProviderForm({
                 <>Start it with <code className="rounded bg-neutral-100 px-1 py-0.5 font-mono text-[10px] dark:bg-white/[0.08]">ollama serve</code>, then pull a model with <code className="rounded bg-neutral-100 px-1 py-0.5 font-mono text-[10px] dark:bg-white/[0.08]">ollama pull {config.model || defaults.model}</code></>
               )}
               {isBrowser && (
-                <>Downloads once (~100–140 MB) and runs entirely in this browser tab — no server, no account, nothing leaves your device. Uses WebGPU where available, falling back to CPU.</>
+                <>Downloads once (~460 MB on WebGPU, ~750 MB on CPU) and runs entirely in this browser tab — no server, no account, nothing leaves your device.</>
               )}
               {isRemote && (
                 <>Your key is stored on this device only, sent directly to the provider — never through PlanR&apos;s servers (there are none). Some providers block direct browser requests (CORS); OpenRouter explicitly allows it.</>

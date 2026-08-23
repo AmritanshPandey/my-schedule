@@ -102,9 +102,10 @@ export default function AIOnboarding({ onOpenAISettings }: { onOpenAISettings: (
                   you write leaves your device.
                 </p>
                 <p className="mt-3 text-[13px] leading-snug text-neutral-400 dark:text-neutral-500">
-                  The first time you use it, it downloads once (about 100&nbsp;MB) and is
-                  then cached. Don&apos;t want any of it? Turn AI off in Settings — every
-                  AI button disappears.
+                  The first time you use it, it downloads a model once (around 460&nbsp;MB) and
+                  then caches it. On a metered connection you may want to wait for Wi-Fi.
+                  Don&apos;t want any of it? Turn AI off in Settings — every AI button
+                  disappears.
                 </p>
               </div>
 

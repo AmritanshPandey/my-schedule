@@ -17,9 +17,10 @@
  * • WebGPU → WASM fallback: attempts GPU-accelerated inference and silently
  *   falls back to the WASM/CPU backend when the browser or hardware doesn't
  *   support WebGPU.
- * • q4 quantization: enforced at pipeline() call time via `dtype: "q4"` so
- *   Transformers.js fetches the model_q4.onnx variant (~100–140 MB for
- *   SmolLM2-360M) rather than the larger fp16 default.
+ * • Quantized weights, chosen per backend at pipeline() call time — q4f16 on
+ *   WebGPU, q4 on the WASM/CPU fallback (see dtypeFor). Both are far smaller
+ *   than the fp32 default, though still larger than "4 bits × N params"
+ *   suggests, since only the weights are quantised.
  * • Real token streaming: TextStreamer callbacks are bridged to an AsyncGenerator
  *   via a queue, giving the UI progressive "Found N tasks…" updates.
  * • PlanR-specialized prompts: all requests are rewritten via rewriteForBrowserModel()
@@ -59,6 +60,19 @@ function emitStatus(status: BrowserAIStatus): void {
  *  if the saved config is somehow blank (e.g. a cleared localStorage field). */
 function resolveModel(config: AIProviderConfig): string {
   return config.model.trim() || DEFAULT_BROWSER_CONFIG.model;
+}
+
+/**
+ * Which quantised weights to fetch, per backend.
+ *
+ * `q4f16` is 4-bit weights with fp16 everywhere else — for Qwen2.5-0.5B that
+ * is ~460 MB versus ~750 MB for plain `q4`, a large saving on a download the
+ * user waits through. It needs real fp16 support, which WebGPU has (via the
+ * shader-f16 feature) and the WASM/CPU backend does not reliably, so the
+ * cheaper weights are only used where they actually run.
+ */
+function dtypeFor(device: "webgpu" | "wasm"): "q4f16" | "q4" {
+  return device === "webgpu" ? "q4f16" : "q4";
 }
 
 // ─── Pipeline singleton ───────────────────────────────────────────────────────
@@ -122,18 +136,18 @@ async function getPipeline(model: string): Promise<TextGenerationPipeline> {
     try {
       pipe = (await pipeline("text-generation", model, {
         device,
-        // q4 forces Transformers.js to fetch model_q4.onnx (~100–140 MB for
-        // SmolLM2-360M) instead of the larger fp16 default.
-        dtype: "q4",
+        dtype: dtypeFor(device),
         progress_callback: onProgress,
       })) as TextGenerationPipeline;
     } catch (gpuErr) {
       if (device === "webgpu") {
         // WebGPU init failed (driver issue, unsupported GPU…) — retry on WASM.
+        // Note this also changes dtype, so the fp16 weights fetched so far are
+        // not reused: a failed GPU init costs a second, larger download.
         emitStatus({ phase: "loading", progress: 0, message: "Falling back to CPU…" });
         pipe = (await pipeline("text-generation", model, {
           device: "wasm",
-          dtype: "q4",
+          dtype: dtypeFor("wasm"),
           progress_callback: onProgress,
         })) as TextGenerationPipeline;
       } else {

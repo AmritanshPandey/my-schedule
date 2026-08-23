@@ -47,6 +47,7 @@ const {
   setAIFeaturesEnabled,
   getAIProviderState,
   setActiveProvider,
+  migrateBrowserModel,
 } = await import("@/lib/ai/config.ts");
 
 // Guard against the stub silently regressing to a no-op.
@@ -83,12 +84,43 @@ test("only an explicit off reads as disabled — a junk value stays enabled", ()
 test("a fresh install defaults to the in-browser provider", () => {
   store.clear();
   assert.equal(getAIProviderState().active, "browser");
+  assert.equal(getAIProviderState().browser.model, "onnx-community/Qwen2.5-0.5B-Instruct");
 });
 
 test("an existing provider choice survives the default change", () => {
   store.clear();
   setActiveProvider("ollama");
   assert.equal(getAIProviderState().active, "ollama");
+});
+
+// ── Withdrawn model ids ─────────────────────────────────────────────────────
+// The browser model id is persisted per device, so when onnx-community
+// re-published its ports under `-ONNX` names the old id kept being read back
+// from storage and every load failed with a 401 from the Hub. Changing the
+// default alone does not reach a device that already saved one.
+
+test("a saved but withdrawn browser model id is rewritten to its replacement", () => {
+  store.clear();
+  store.set("planr:ai:provider-state", JSON.stringify({
+    active: "browser",
+    browser: { baseUrl: "", model: "onnx-community/SmolLM2-360M-Instruct" },
+  }));
+  assert.equal(getAIProviderState().browser.model, "onnx-community/SmolLM2-360M-Instruct-ONNX");
+});
+
+test("a model the user typed themselves is never rewritten", () => {
+  store.clear();
+  store.set("planr:ai:provider-state", JSON.stringify({
+    active: "browser",
+    browser: { baseUrl: "", model: "my-org/my-own-model" },
+  }));
+  assert.equal(getAIProviderState().browser.model, "my-org/my-own-model");
+});
+
+test("the default browser model is not one of the withdrawn ids", () => {
+  store.clear();
+  const { model } = getAIProviderState().browser;
+  assert.equal(migrateBrowserModel(model), model, "the default itself needs migrating");
 });
 
 test("the AI switch and the provider choice are independent", () => {

@@ -47,8 +47,29 @@ export const REMOTE_PRESETS: { label: string; baseUrl: string }[] = [
  *  to run acceptably on-device without WebGPU. */
 export const DEFAULT_BROWSER_CONFIG: AIProviderConfig = {
   baseUrl: "",
-  model: "onnx-community/SmolLM2-360M-Instruct",
+  model: "onnx-community/Qwen2.5-0.5B-Instruct",
 };
+
+/**
+ * Browser model ids that no longer resolve upstream, mapped to their
+ * replacement.
+ *
+ * The id is persisted per device, so a repo disappearing from the Hub breaks
+ * that device permanently — changing the default alone only helps installs
+ * that never saved one. onnx-community re-published its ports with an
+ * explicit `-ONNX` suffix and the old ids now return 401 (not a redirect),
+ * which surfaced as "Unauthorized access to file: …/config.json".
+ *
+ * Only exact matches are rewritten, so a model the user typed themselves is
+ * left alone.
+ */
+const RENAMED_BROWSER_MODELS: Record<string, string> = {
+  "onnx-community/SmolLM2-360M-Instruct": "onnx-community/SmolLM2-360M-Instruct-ONNX",
+};
+
+export function migrateBrowserModel(model: string): string {
+  return RENAMED_BROWSER_MODELS[model] ?? model;
+}
 
 export interface AIProviderState {
   active: ProviderKind;
@@ -101,7 +122,10 @@ export function getAIProviderState(): AIProviderState {
       mlx: normalizeConfig(parsed.mlx, DEFAULT_MLX_CONFIG),
       ollama: normalizeConfig(parsed.ollama, DEFAULT_OLLAMA_CONFIG),
       remote: normalizeConfig(parsed.remote, DEFAULT_REMOTE_CONFIG),
-      browser: normalizeConfig(parsed.browser, DEFAULT_BROWSER_CONFIG),
+      browser: (() => {
+        const browser = normalizeConfig(parsed.browser, DEFAULT_BROWSER_CONFIG);
+        return { ...browser, model: migrateBrowserModel(browser.model) };
+      })(),
     };
   } catch {
     return DEFAULT_STATE;
