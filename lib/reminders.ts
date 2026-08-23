@@ -19,6 +19,8 @@ import { getSlots } from "@/lib/taskMutations";
 import { isTrackedTask } from "@/lib/taskCompletion";
 import { parseTimeToMinutes, formatDisplayTime } from "@/lib/timeUtils";
 import { localISODate } from "@/lib/dateUtils";
+import { isRitualDayComplete } from "@/lib/consistency/ritualDayStatus";
+import { ritualScheduledOnDate } from "@/lib/consistency/calculateRitualStreak";
 
 // ── Settings ──────────────────────────────────────────────────────────────────
 
@@ -142,14 +144,15 @@ export function collectReminders(schedule: Schedule, now = new Date()): PendingR
   }
 
   if (settings.rituals) {
-    const completedToday = new Set(
-      (schedule.ritualCompletions ?? [])
-        .filter((c) => c.date === todayISO)
-        .map((c) => c.ritualId),
-    );
+    const completionsToday = (schedule.ritualCompletions ?? []).filter((c) => c.date === todayISO);
     for (const ritual of schedule.rituals ?? []) {
-      if (completedToday.has(ritual.id)) continue;
-      if (ritual.repeatDays && ritual.repeatDays.length > 0 && !ritual.repeatDays.includes(dayKey)) continue;
+      // "Any time" routines have no meaningful reminder moment — `time` is
+      // just a leftover placeholder for readers that still need one.
+      if (ritual.anyTime) continue;
+      if (!ritualScheduledOnDate(ritual, todayISO)) continue;
+      // trackingType-aware: a quantity/checklist routine only cancels its
+      // reminder once the day is actually complete, not on the first partial log.
+      if (isRitualDayComplete(ritual, completionsToday.filter((c) => c.ritualId === ritual.id))) continue;
       const min = parseTimeToMinutes(ritual.time);
       if (min == null) continue;
       const atMs = msAt(todayISO, min);

@@ -818,7 +818,20 @@ function buildMetricEntries(now: Date): MetricEntry[] {
 
 const RITUALS: Ritual[] = [
   { id: "demo-ritual-pages", title: "Morning pages", time: "06:00", duration: 15, color: "amber", sortOrder: 0 },
-  { id: "demo-ritual-hydrate", title: "Hydrate — 3L", time: "12:00", duration: 5, color: "cyan", sortOrder: 1 },
+  {
+    id: "demo-ritual-hydrate",
+    title: "Hydrate",
+    time: "12:00",
+    duration: 5,
+    color: "cyan",
+    sortOrder: 1,
+    // A real quantity routine (not a hard-coded "water tracker") — shows the
+    // generic tracking system doing its job on a fresh install.
+    trackingType: "quantity",
+    target: 3000,
+    unit: "ml",
+    icon: "droplet",
+  },
   {
     id: "demo-ritual-shutdown",
     title: "Evening shutdown",
@@ -858,7 +871,19 @@ function buildRitualCompletions(now: Date): RitualCompletion[] {
     if (BLANK_DAYS_AGO.has(back)) continue;
 
     if (hash01(`pages-${dateISO}`) < 0.85) out.push({ ritualId: "demo-ritual-pages", date: dateISO });
-    if (hash01(`hydrate-${dateISO}`) < 0.7) out.push({ ritualId: "demo-ritual-hydrate", date: dateISO });
+
+    // Hydrate is a real quantity routine now, so its history is timestamped
+    // log rows (like the app would actually produce), not one sentinel tick —
+    // a full day is 2-3 logs summing to/above the 3000ml target, a partial
+    // day is a single smaller log, and some days have none at all.
+    const hydrateRoll = hash01(`hydrate-${dateISO}`);
+    if (hydrateRoll < 0.7) {
+      out.push({ id: `demo-log-hydrate-${dateISO}-1`, ritualId: "demo-ritual-hydrate", date: dateISO, value: 1250, timestamp: `${dateISO}T08:30:00.000Z` });
+      out.push({ id: `demo-log-hydrate-${dateISO}-2`, ritualId: "demo-ritual-hydrate", date: dateISO, value: 1750, timestamp: `${dateISO}T15:00:00.000Z` });
+    } else if (hydrateRoll < 0.88) {
+      out.push({ id: `demo-log-hydrate-${dateISO}-1`, ritualId: "demo-ritual-hydrate", date: dateISO, value: 1000, timestamp: `${dateISO}T09:00:00.000Z` });
+    }
+
     if (!isToday) out.push({ ritualId: "demo-ritual-shutdown", date: dateISO });
     if (dayKeyOf(date) === "sunday" && hash01(`review-${dateISO}`) < 0.8) {
       out.push({ ritualId: "demo-ritual-review", date: dateISO });

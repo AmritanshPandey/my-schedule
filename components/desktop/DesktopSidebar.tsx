@@ -2,7 +2,6 @@
 
 import { useEffect, useState } from "react";
 import {
-  IconApple,
   IconCalendarEvent,
   IconClipboardData,
   IconFileImport,
@@ -31,7 +30,6 @@ interface DesktopSidebarProps {
   onCreateTask: () => void;
   onCreatePlan: () => void;
   onCreateRitual: () => void;
-  onLogMeal?: () => void;
   onBulkImport?: () => void;
   onOpenSettings: () => void;
   onOpenSettingsTab?: () => void;
@@ -82,7 +80,6 @@ export default function DesktopSidebar({
   onCreateTask,
   onCreatePlan,
   onCreateRitual,
-  onLogMeal,
   onBulkImport,
   onOpenSettings,
   onOpenSettingsTab,
@@ -205,20 +202,6 @@ export default function DesktopSidebar({
             )}
           </button>
 
-          {/* Always-available meal shortcut — not tab-contextual like the
-              button above, since it's the only way a desktop-only user can
-              start logging a meal before the Wellness plan exists yet. */}
-          {onLogMeal && (
-            <button
-              type="button"
-              onClick={() => { haptic("medium"); onLogMeal(); }}
-              title={collapsed ? "Log meal" : undefined}
-              className={`mt-1.5 flex w-full items-center rounded-full border border-neutral-200 py-2 text-neutral-600 transition-colors hover:bg-neutral-100 dark:border-white/[0.08] dark:text-neutral-300 dark:hover:bg-white/[0.05] ${collapsed ? "justify-center px-0" : "gap-2 px-3.5"}`}
-            >
-              <IconApple size={14} strokeWidth={2} />
-              {!collapsed && <span className="text-[12px] font-semibold">Log Meal</span>}
-            </button>
-          )}
         </div>
       )}
 

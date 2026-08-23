@@ -58,7 +58,7 @@ import { SECTION_ICONS } from "@/components/SectionIcons";
 import { useReminders } from "@/lib/useReminders";
 import { bootLog, isIOSSafeMode, isStandalonePWA } from "@/lib/iosSafeMode";
 import { todayISO, localISODate, addDaysToISO, formatDate } from "@/lib/dateUtils";
-import { logMeal, quickAmountsForUnit } from "@/lib/wellness";
+import { quickAmountsForUnit } from "@/lib/quickAmounts";
 import { sumEntriesForDate } from "@/lib/metricEntries";
 import { createInboxNoteInput } from "@/lib/notes/dailyCapture";
 import {
@@ -80,7 +80,8 @@ import {
 import { completionForDate, getTaskCheckableItems, getTaskSubtaskSummary, isTaskCompleted, isTaskResolved, isTrackedTask, markTaskMissed, snoozeTaskLater, toggleSlotComplete, toggleSubtaskComplete, toggleTaskFromCheckbox } from "@/lib/taskCompletion";
 import { diffException, isTaskScheduledOn, resolveOccurrence } from "@/lib/taskOccurrence";
 import { cascadeMilestoneDates, normalizeMilestoneTimeline } from "@/lib/roadmapDates";
-import { toggleRitualCompletion } from "@/lib/ritualCompletions";
+import { toggleRitualCompletion, appendRitualLog, undoLastRitualLog, toggleRitualStep, removeRitualLog } from "@/lib/ritualCompletions";
+import { MAX_RITUALS } from "@/lib/ritualColors";
 import { deleteGoal } from "@/lib/goalMutations";
 import { formatDisplayTime, inputToDisplayTime, minutesToInputTime, parseTimeToMinutes, toScheduleDayMinutes } from "@/lib/timeUtils";
 import { computeTrend } from "@/lib/trendUtils";
@@ -121,7 +122,8 @@ const DayWallpaperSheet = dynamic(() => import("@/components/DayWallpaperSheet")
 const NotesView = dynamic(() => import("@/components/notes/NotesView"), { ssr: false });
 const TaskDetailView = dynamic(() => import("@/components/activity/TaskDetailView"), { ssr: false });
 const AddEntryModal = dynamic(() => import("@/components/AddEntryModal"), { ssr: false });
-const LogMealSheet = dynamic(() => import("@/components/LogMealSheet"), { ssr: false });
+const RoutineDetailView = dynamic(() => import("@/components/activity/RoutineDetailView"), { ssr: false });
+const RitualSheet = dynamic(() => import("@/components/activity/RitualSheet").then((m) => ({ default: m.RitualSheet })), { ssr: false });
 const CoachMarks = dynamic(() => import("@/components/onboarding/CoachMarks"), { ssr: false });
 
 const JS_DAYS: DayKey[] = ["sunday", "monday", "tuesday", "wednesday", "thursday", "friday", "saturday"];
@@ -424,9 +426,12 @@ export default function IOSScheduleApp() {
   const [goalsSheetOpen, setGoalsSheetOpen] = useState(false);
   const [editingPlanId, setEditingPlanId] = useState<string | null>(null);
   const [ritualAddOpen, setRitualAddOpen] = useState(false);
+  const [detailRitualId, setDetailRitualId] = useState<string | null>(null);
+  const [editRitualId, setEditRitualId] = useState<string | null>(null);
+  const detailRitual = detailRitualId ? (schedule.rituals ?? []).find((r) => r.id === detailRitualId) ?? null : null;
+  const editingRitual = editRitualId ? (schedule.rituals ?? []).find((r) => r.id === editRitualId) ?? null : null;
   const [subtasksRef, setSubtasksRef] = useState<{ id: string; day: DayKey; dateISO: string } | null>(null);
   const [entryTracker, setEntryTracker] = useState<ProgressTracker | null>(null);
-  const [logMealOpen, setLogMealOpen] = useState(false);
   const [confirmState, setConfirmState] = useState<ConfirmState | null>(null);
   const [taskDeleteRequest, setTaskDeleteRequest] = useState<TaskDeleteRequest | null>(null);
   const [toast, setToast] = useState<string | null>(null);
@@ -903,6 +908,27 @@ export default function IOSScheduleApp() {
         ritualCompletions: toggleRitualCompletion(completions, id, dateISO),
       };
     });
+  }
+
+  function handleLogRitualAmount(ritualId: string, amount: number, dateISO: string) {
+    setSchedule((prev) => ({
+      ...prev,
+      ritualCompletions: appendRitualLog(prev.ritualCompletions ?? [], ritualId, dateISO, amount),
+    }));
+  }
+
+  function handleUndoRitualLog(ritualId: string, dateISO: string) {
+    setSchedule((prev) => ({
+      ...prev,
+      ritualCompletions: undoLastRitualLog(prev.ritualCompletions ?? [], ritualId, dateISO),
+    }));
+  }
+
+  function handleToggleRitualStep(ritualId: string, stepId: string, dateISO: string = todayISO()) {
+    setSchedule((prev) => ({
+      ...prev,
+      ritualCompletions: toggleRitualStep(prev.ritualCompletions ?? [], ritualId, dateISO, stepId),
+    }));
   }
 
   function handleDeletePlan(planId: string) {
@@ -1639,7 +1665,6 @@ export default function IOSScheduleApp() {
                 }}
                 onOpenAddEntry={(tracker) => setEntryTracker(tracker)}
                 onDeleteEntry={(entryId) => setSchedule((prev) => ({ ...prev, metricEntries: prev.metricEntries.filter((entry) => entry.id !== entryId) }))}
-                onLogMeal={() => setLogMealOpen(true)}
                 onAddMilestone={(data) => handleAddMilestone(selectedPlan.id, data)}
                 onUpdateMilestone={handleUpdateMilestone}
                 onDeleteMilestone={handleDeleteMilestone}
@@ -1712,13 +1737,14 @@ export default function IOSScheduleApp() {
                 rituals={schedule.rituals ?? []}
                 ritualCompletions={schedule.ritualCompletions ?? []}
                 onToggleComplete={handleToggleRitualComplete}
+                onLogAmount={handleLogRitualAmount}
+                onUndoLastLog={handleUndoRitualLog}
+                onOpenDetail={(ritual) => setDetailRitualId(ritual.id)}
                 onAdd={handleAddRitual}
                 onUpdate={handleUpdateRitual}
                 onDelete={handleDeleteRitual}
-                onReorder={(reordered) => setSchedule((prev) => ({ ...prev, rituals: reordered }))}
                 addOpen={ritualAddOpen}
                 onAddOpenChange={setRitualAddOpen}
-                weekHistory={ritualWeekHistory}
               />
             </div>
           </ErrorBoundary>
@@ -1865,9 +1891,12 @@ export default function IOSScheduleApp() {
           onTabChange={(tab) => { setActiveTab(tab); setSelectedPlanId(null); }}
           onCreateTask={() => openCreateSheet()}
           onCreatePlan={() => { setActiveTab(1); setSelectedPlanId(null); setAddingPlan(true); }}
-          onCreateRitual={() => { setActiveTab(2); setRitualAddOpen(true); }}
+          onCreateRitual={() => {
+            setActiveTab(2);
+            if ((schedule.rituals ?? []).length < MAX_RITUALS) setRitualAddOpen(true);
+            else setToast(`You can have up to ${MAX_RITUALS} routines`);
+          }}
           onCreateNote={openQuickNote}
-          onLogMeal={() => setLogMealOpen(true)}
         />
       )}
 
@@ -1894,7 +1923,7 @@ export default function IOSScheduleApp() {
         </IOSMotionBoundary>
       )}
 
-      {(taskSheetOpen || addingPlan || editingPlanId || entryTracker || goalsSheetOpen || logMealOpen) && (
+      {(taskSheetOpen || addingPlan || editingPlanId || entryTracker || goalsSheetOpen) && (
         <IOSMotionBoundary>
           <TaskSheet
             mode={taskSheetMode}
@@ -1958,13 +1987,36 @@ export default function IOSScheduleApp() {
               }));
             }}
           />
-          <LogMealSheet
-            isOpen={logMealOpen}
-            onClose={() => setLogMealOpen(false)}
-            onSave={(input) => setSchedule((prev) => logMeal(prev, input))}
-          />
         </IOSMotionBoundary>
       )}
+
+      {detailRitual && (
+        <div
+          className="fixed inset-0 z-50 bg-[#F5F5F5] dark:bg-[#0E0E0E]"
+          style={{ paddingTop: "env(safe-area-inset-top, 0px)" }}
+        >
+          <RoutineDetailView
+            ritual={detailRitual}
+            ritualCompletions={schedule.ritualCompletions ?? []}
+            onBack={() => setDetailRitualId(null)}
+            onToggleCheckbox={() => handleToggleRitualComplete(detailRitual.id)}
+            onLogAmount={(amount) => handleLogRitualAmount(detailRitual.id, amount, todayISO())}
+            onUndoLastLog={() => handleUndoRitualLog(detailRitual.id, todayISO())}
+            onRemoveLog={(entryId) => setSchedule((prev) => ({ ...prev, ritualCompletions: removeRitualLog(prev.ritualCompletions ?? [], entryId) }))}
+            onToggleStep={(stepId) => handleToggleRitualStep(detailRitual.id, stepId)}
+            onEdit={() => { setEditRitualId(detailRitual.id); setDetailRitualId(null); }}
+            onDelete={() => { setDetailRitualId(null); handleDeleteRitual(detailRitual.id); }}
+          />
+        </div>
+      )}
+
+      <RitualSheet
+        open={!!editingRitual}
+        onClose={() => setEditRitualId(null)}
+        initial={editingRitual ?? undefined}
+        onSave={(data) => { if (editingRitual) handleUpdateRitual(editingRitual.id, data); setEditRitualId(null); }}
+        onDelete={() => { if (editingRitual) handleDeleteRitual(editingRitual.id); setEditRitualId(null); }}
+      />
 
       {taskDeleteDetails && (
         <ConfirmOverlay

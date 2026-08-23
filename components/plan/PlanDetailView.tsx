@@ -3,7 +3,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { AnimatePresence, m } from "framer-motion";
 import {
-  IconApple,
   IconCheck,
   IconEdit,
   IconPlus,
@@ -36,7 +35,6 @@ import MilestoneSheet, { type MilestoneSaveData } from "@/components/plan/Milest
 import { computeRoadmapStats } from "@/lib/roadmapEngine";
 import { calculateMilestoneProgress, type MilestoneProgress } from "@/lib/planProgress";
 import { sumEntriesForDate } from "@/lib/metricEntries";
-import { WELLNESS_PLAN_ID } from "@/lib/wellness";
 import { resolveMilestoneStatus } from "@/lib/roadmapDates";
 import { computeTrend } from "@/lib/trendUtils";
 import { getTaskCheckableItems } from "@/lib/taskCompletion";
@@ -250,8 +248,6 @@ interface PlanDetailViewProps {
   // Entry handlers
   onOpenAddEntry: (tracker: ProgressTracker) => void;
   onDeleteEntry: (entryId: string) => void;
-  /** Opens the combined meal-log form — only ever passed for the Wellness plan. */
-  onLogMeal?: () => void;
   // Milestone handlers
   onAddMilestone: (data: MilestoneSaveData) => void;
   onUpdateMilestone: (id: string, data: Partial<Milestone>) => void;
@@ -280,7 +276,6 @@ export default function PlanDetailView({
   onDeleteTracker,
   onOpenAddEntry,
   onDeleteEntry,
-  onLogMeal,
   onAddMilestone,
   onUpdateMilestone,
   onDeleteMilestone,
@@ -1758,13 +1753,6 @@ export default function PlanDetailView({
                 className="mb-4"
                 actions={
                   <>
-                    {plan.id === WELLNESS_PLAN_ID && onLogMeal && (
-                      <SectionIconButton
-                        icon={<IconApple size={20} strokeWidth={2} />}
-                        onClick={onLogMeal}
-                        label="Log meal"
-                      />
-                    )}
                     <SectionIconButton
                       icon={<IconPlus size={20} strokeWidth={2} />}
                       onClick={() => setAddingTracker(true)}

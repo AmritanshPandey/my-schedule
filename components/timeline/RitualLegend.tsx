@@ -2,12 +2,9 @@
 
 import { useMemo } from "react";
 import { IconCheck } from "@tabler/icons-react";
-import { COLOR_DOTS } from "./RitualStrip";
 import { groupRitualsByTime } from "@/lib/timeline/groupRitualsByTime";
 import type { Ritual, DayKey } from "@/lib/useScheduleDB";
-
-// Keep in sync with RitualOverlayLayer's cap so the legend mirrors the dots.
-const DAY_LIMIT = 8;
+import { RITUAL_COLOR_DOT as COLOR_DOTS, RITUAL_DAY_LIMIT as DAY_LIMIT } from "@/lib/ritualColors";
 
 interface RitualLegendProps {
   rituals: Ritual[];

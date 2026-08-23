@@ -16,7 +16,7 @@ interface AddEntryModalProps {
   /** Preset amounts (e.g. [100, 250, 500] for an "ml" tracker). Tapping a
    *  chip increments the value field rather than saving immediately, so a
    *  misfire doesn't write a bad row. Omit/empty = no chip row, unchanged
-   *  behavior — see lib/wellness.ts's quickAmountsForUnit. */
+   *  behavior — see lib/quickAmounts.ts's quickAmountsForUnit. */
   quickAmounts?: number[];
   /** Today's already-logged total for this tracker, shown as a small line
    *  under the label when > 0. See lib/metricEntries.ts's sumEntriesForDate. */

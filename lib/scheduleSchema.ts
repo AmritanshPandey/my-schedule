@@ -181,6 +181,15 @@ export const MilestoneSchema = z.object({
   sortOrder: z.number().finite(),
 }).passthrough();
 
+const ritualTrackingType = z.enum(["checkbox", "quantity", "duration", "count", "checklist"]);
+const ritualStep = z.object({ id: nonEmptyId, label: z.string() }).passthrough();
+const ritualRecurrence = z.object({
+  kind: z.enum(["daily", "weekdays", "weekends", "custom", "interval"]),
+  days: z.array(dayKey).optional(),
+  intervalDays: z.number().finite().int().min(2).optional(),
+  anchorDate: isoDate.optional(),
+}).passthrough();
+
 export const RitualSchema = z.object({
   id: nonEmptyId,
   title: z.string(),
@@ -190,9 +199,29 @@ export const RitualSchema = z.object({
   color: z.enum(["rose", "sky", "violet", "amber", "emerald", "fuchsia", "orange", "cyan", "indigo", "teal"]).optional(),
   notes: z.string().optional(),
   sortOrder: z.number().finite().optional(),
+  trackingType: ritualTrackingType.optional(),
+  target: z.number().finite().optional(),
+  unit: z.string().optional(),
+  quickAmounts: z.array(z.number().finite()).optional(),
+  steps: z.array(ritualStep).optional(),
+  recurrence: ritualRecurrence.optional(),
+  anyTime: z.boolean().optional(),
+  icon: z.string().optional(),
+  category: z.string().optional(),
+  description: z.string().optional(),
+  active: z.boolean().optional(),
+  templateKey: z.string().optional(),
 }).passthrough();
 
-export const RitualCompletionSchema = z.object({ ritualId: nonEmptyId, date: isoDate }).passthrough();
+export const RitualCompletionSchema = z.object({
+  ritualId: nonEmptyId,
+  date: isoDate,
+  id: nonEmptyId.optional(),
+  timestamp: isoDateTime.optional(),
+  value: z.number().finite().optional(),
+  stepId: nonEmptyId.optional(),
+  note: z.string().optional(),
+}).passthrough();
 
 export const NoteSchema = z.object({
   id: nonEmptyId,

@@ -4,11 +4,7 @@ import { useMemo } from "react";
 import RitualStrip from "./RitualStrip";
 import { groupRitualsByTime } from "@/lib/timeline/groupRitualsByTime";
 import type { Ritual, DayKey } from "@/lib/useScheduleDB";
-
-// How many ritual markers the timeline draws before collapsing the rest into a
-// "+N" chip. Raised from 8 now that routines are uncapped; the overflow chip
-// keeps the lane readable when a day is dense.
-const DAY_LIMIT = 12;
+import { RITUAL_DAY_LIMIT as DAY_LIMIT } from "@/lib/ritualColors";
 
 interface RitualOverlayLayerProps {
   rituals: Ritual[];

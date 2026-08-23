@@ -11,6 +11,7 @@ import {
   IconClipboardList,
   IconAlertTriangle,
   IconFlame,
+  IconTrophy,
   IconPlus,
   IconRepeat,
   IconSparkles,
@@ -423,14 +424,14 @@ function ActiveTrackingCard({
 function RoutineConsistencyCard({
   rows,
 }: {
-  rows: { ritual: { id: string; title: string; time: string }; streak: number; adherencePct: number; dots: boolean[]; dueToday: boolean }[];
+  rows: { ritual: { id: string; title: string; time: string }; streak: number; bestStreak: number; adherencePct: number; dots: boolean[]; dueToday: boolean }[];
 }) {
   if (rows.length === 0) return null;
   return (
     <section data-testid="overview-routine-card" className={`${CARD} px-4 py-4`}>
       <SectionHeader icon={IconRepeat} title="Routine Consistency" meta={`${rows.length}`} />
       <div className="divide-y divide-neutral-100 dark:divide-white/[0.06]">
-        {rows.map(({ ritual, streak, adherencePct, dots, dueToday }) => (
+        {rows.map(({ ritual, streak, bestStreak, adherencePct, dots, dueToday }) => (
           <div key={ritual.id} className={`flex items-center justify-between gap-3 py-3 ${dueToday ? "" : "opacity-70"}`}>
             <div className="min-w-0">
               <p className="truncate text-[14px] font-bold text-neutral-950 dark:text-white">
@@ -442,6 +443,15 @@ function RoutineConsistencyCard({
                   <span className="inline-flex items-center gap-1 text-[11px] font-bold text-rose-500 dark:text-rose-400">
                     <IconFlame size={12} strokeWidth={2} />
                     {streak}d streak
+                  </span>
+                )}
+                {/* Best streak only earns a place here when it's actually a
+                    different (higher) number than the current run — repeating
+                    the same figure twice would read as clutter, not signal. */}
+                {bestStreak > streak && (
+                  <span className="inline-flex items-center gap-1 text-[11px] font-bold text-amber-500 dark:text-amber-400">
+                    <IconTrophy size={12} strokeWidth={2} />
+                    {bestStreak}d best
                   </span>
                 )}
                 <span className="text-[12px] font-semibold tabular-nums text-neutral-400 dark:text-neutral-500">
@@ -808,8 +818,8 @@ export default function OverviewDashboard({
     // shared streak helper so the number matches the Routine tab.
     return (schedule.rituals ?? [])
       .map((ritual) => {
-        const { streak, adherencePct, dots } = calculateRitualStats(ritual, completions, todayISO);
-        return { ritual, streak, adherencePct, dots, dueToday: ritualScheduledOn(ritual, todayDay) };
+        const { streak, bestStreak, adherencePct, dots } = calculateRitualStats(ritual, completions, todayISO);
+        return { ritual, streak, bestStreak, adherencePct, dots, dueToday: ritualScheduledOn(ritual, todayDay) };
       })
       // Due today first, then most-at-risk (lowest adherence) so what's slipping surfaces.
       .sort((a, b) =>

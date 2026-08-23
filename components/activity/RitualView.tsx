@@ -8,37 +8,32 @@ import {
   IconChevronRight,
   IconPlus,
   IconRepeat,
-  IconTrash,
   IconCalendarEvent,
-  IconFlame,
   IconSunrise,
   IconSun,
   IconMoon,
+  IconInfinity,
+  IconCalendarStats,
+  IconListCheck,
 } from "@tabler/icons-react";
-import type { Ritual, RitualColor, RitualCompletion, DayKey } from "@/lib/useScheduleDB";
+import type { Ritual, RitualCompletion, DayKey } from "@/lib/useScheduleDB";
 import { DAYS } from "@/lib/useScheduleDB";
 import { localISODate, todayISO } from "@/lib/dateUtils";
-import { calculateRitualStats, ritualScheduledOn } from "@/lib/consistency/calculateRitualStreak";
-import { formatDisplayTime, parseTimeToMinutes } from "@/lib/timeUtils";
+import { ritualScheduledOn } from "@/lib/consistency/calculateRitualStreak";
 import { haptic } from "@/lib/haptics";
 import EmptyState from "@/components/ui/EmptyState";
 import ConfirmSheet from "@/components/ui/ConfirmSheet";
 import { buildDeleteConfirmationCopy } from "@/lib/deleteConfirm";
 import { MainTitleSection, CtaActionButton } from "@/components/ui/MainTitleSection";
 import ProgressBar from "@/components/ui/ProgressBar";
-import IconButton from "@/components/ui/IconButton";
 import { RitualSheet } from "./RitualSheet";
-
-// ── Color maps ────────────────────────────────────────────────────────────────
-
-// Vivid ring border (left toggle + today dot) — matches the design reference.
-const COLOR_RING: Record<RitualColor, string> = {
-  rose:    "border-rose-500",   sky:     "border-sky-500",
-  violet:  "border-violet-500", amber:   "border-amber-500",
-  emerald: "border-emerald-500",fuchsia: "border-fuchsia-500",
-  orange:  "border-orange-500", cyan:    "border-cyan-500",
-  indigo:  "border-indigo-500", teal:    "border-teal-500",
-};
+import RoutineRow from "./RoutineRow";
+import { groupRitualsIntoBuckets, type RitualTimeBucketKey } from "@/lib/ritualGrouping";
+import { isRitualDayComplete } from "@/lib/consistency/ritualDayStatus";
+import { buildAllRoutinesMonthDays } from "@/lib/consistency/ritualCalendar";
+import { buildRoutineInsights } from "@/lib/consistency/routineInsights";
+import RoutineMonthCalendar from "./RoutineMonthCalendar";
+import RoutineInsightsSection from "./RoutineInsightsSection";
 
 // JS getDay() 0=Sunday → DayKey
 const JS_TO_DAY: DayKey[] = ["sunday","monday","tuesday","wednesday","thursday","friday","saturday"];
@@ -48,36 +43,27 @@ const DAY_SHORT: Record<DayKey, string> = {
   thursday: "Thu", friday: "Fri", saturday: "Sat", sunday: "Sun",
 };
 
+const BUCKET_ICONS: Record<RitualTimeBucketKey, ComponentType<{ size?: number; strokeWidth?: number; className?: string }>> = {
+  morning: IconSunrise,
+  afternoon: IconSun,
+  evening: IconMoon,
+  anytime: IconInfinity,
+};
+
 function appliesToDay(ritual: Ritual, day: DayKey): boolean {
   return ritualScheduledOn(ritual, day);
 }
 
-/** Consecutive completed due-days for a ritual, via the shared helper. */
-function ritualStreak(ritual: Ritual, completions: RitualCompletion[], uptoISO: string): number {
-  return calculateRitualStats(ritual, completions, uptoISO).streak;
-}
-
-// Chronological buckets so a daily practice reads morning → evening.
-const TIME_GROUPS = [
-  { key: "morning", label: "Morning", Icon: IconSunrise, max: 12 * 60 },
-  { key: "afternoon", label: "Afternoon", Icon: IconSun, max: 17 * 60 },
-  { key: "evening", label: "Evening", Icon: IconMoon, max: 24 * 60 },
-] as const;
-
-function timeGroupIndex(time: string): number {
-  const min = parseTimeToMinutes(time) ?? 0;
-  return TIME_GROUPS.findIndex((g) => min < g.max);
-}
-
 function GroupHeader({
-  Icon,
+  bucketKey,
   label,
   count,
 }: {
-  Icon: ComponentType<{ size?: number; strokeWidth?: number; className?: string }>;
+  bucketKey: RitualTimeBucketKey;
   label: string;
   count: number;
 }) {
+  const Icon = BUCKET_ICONS[bucketKey];
   return (
     <div className="flex items-center gap-2 pb-1 pt-4 first:pt-1">
       <Icon size={14} strokeWidth={2} className="text-neutral-400 dark:text-neutral-500" />
@@ -301,24 +287,20 @@ function DateActionButton({
   );
 }
 
-// ── Types ─────────────────────────────────────────────────────────────────────
-
-interface WeekDay {
-  date: string; label: string; isToday: boolean;
-  completedCount: number; dueCount: number;
-}
+// ── Props ─────────────────────────────────────────────────────────────────────
 
 interface RitualViewProps {
   rituals: Ritual[];
   ritualCompletions: RitualCompletion[];
   onToggleComplete: (id: string, dateISO?: string) => void;
+  onLogAmount: (ritualId: string, amount: number, dateISO: string) => void;
+  onUndoLastLog: (ritualId: string, dateISO: string) => void;
+  onOpenDetail: (ritual: Ritual) => void;
   onAdd: (data: Omit<Ritual, "id">) => void;
   onUpdate: (id: string, data: Omit<Ritual, "id">) => void;
   onDelete: (id: string) => void;
-  onReorder: (reordered: Ritual[]) => void;
   addOpen: boolean;
   onAddOpenChange: (open: boolean) => void;
-  weekHistory?: WeekDay[];
 }
 
 // ── Component ─────────────────────────────────────────────────────────────────
@@ -327,16 +309,22 @@ export default function RitualView({
   rituals,
   ritualCompletions,
   onToggleComplete,
+  onLogAmount,
+  onUndoLastLog,
+  onOpenDetail,
   onAdd,
   onUpdate,
   onDelete,
   addOpen,
   onAddOpenChange,
 }: RitualViewProps) {
-  const todayKey = JS_TO_DAY[new Date().getDay()] as DayKey;
   const [editRitual, setEditRitual] = useState<Ritual | null>(null);
   const [deleteRitual, setDeleteRitual] = useState<Ritual | null>(null);
   const [selectedDateISO, setSelectedDateISO] = useState(() => todayISO());
+  const [viewMode, setViewMode] = useState<"day" | "month">("day");
+  const monthNow = new Date(`${todayISO()}T00:00:00`);
+  const [calYear, setCalYear] = useState(monthNow.getFullYear());
+  const [calMonth, setCalMonth] = useState(monthNow.getMonth());
   const selectedDay = JS_TO_DAY[new Date(`${selectedDateISO}T00:00:00`).getDay()] as DayKey;
   const deleteCopy = deleteRitual
     ? buildDeleteConfirmationCopy("routine", {
@@ -354,17 +342,9 @@ export default function RitualView({
     return sorted.filter((r) => appliesToDay(r, selectedDay));
   }, [sorted, selectedDay]);
 
-  const selectedCompletedIds = useMemo(
-    () =>
-      new Set(
-        ritualCompletions
-          .filter((completion) => completion.date === selectedDateISO)
-          .map((completion) => completion.ritualId)
-      ),
-    [ritualCompletions, selectedDateISO]
-  );
-
-  const completedToday = filteredRituals.filter((r) => selectedCompletedIds.has(r.id)).length;
+  const completedToday = filteredRituals.filter((r) =>
+    isRitualDayComplete(r, ritualCompletions.filter((c) => c.ritualId === r.id && c.date === selectedDateISO)),
+  ).length;
   const total = filteredRituals.length;
   const pct = total > 0 ? Math.round((completedToday / total) * 100) : 0;
   const allDone = total > 0 && completedToday === total;
@@ -378,7 +358,7 @@ export default function RitualView({
         const dateISO = dateForCurrentWeekDay(day);
         const dueRituals = sorted.filter((r) => appliesToDay(r, day));
         const done = dueRituals.filter((r) =>
-          ritualCompletions.some((c) => c.ritualId === r.id && c.date === dateISO)
+          isRitualDayComplete(r, ritualCompletions.filter((c) => c.ritualId === r.id && c.date === dateISO)),
         ).length;
         return {
           day,
@@ -392,167 +372,26 @@ export default function RitualView({
     [sorted, ritualCompletions]
   );
 
-  // Group the selected day's routines into morning / afternoon / evening.
-  const grouped = useMemo(() => {
-    const buckets = TIME_GROUPS.map((g) => ({ ...g, items: [] as Ritual[] }));
-    for (const ritual of filteredRituals) {
-      const idx = timeGroupIndex(ritual.time);
-      buckets[idx === -1 ? buckets.length - 1 : idx].items.push(ritual);
-    }
-    for (const b of buckets) {
-      b.items.sort((a, z) => (parseTimeToMinutes(a.time) ?? 0) - (parseTimeToMinutes(z.time) ?? 0));
-    }
-    return buckets.filter((b) => b.items.length > 0);
-  }, [filteredRituals]);
+  // Group the selected day's routines into morning / afternoon / evening / anytime.
+  const grouped = useMemo(() => groupRitualsIntoBuckets(filteredRituals), [filteredRituals]);
 
-  function renderCard(ritual: Ritual) {
-    const ring = ritual.color ? COLOR_RING[ritual.color] : "border-neutral-300 dark:border-neutral-600";
-    const dayLabel = ritual.repeatDays && ritual.repeatDays.length > 0
-      ? ritual.repeatDays.map((d) => DAY_SHORT[d]).join(" · ")
-      : "Everyday";
-    const done = selectedCompletedIds.has(ritual.id);
-    const missed = selectedDateISO < todayISO() && appliesToDay(ritual, selectedDay) && !done;
-    const streak = ritualStreak(ritual, ritualCompletions, selectedDateISO);
+  const monthCalendarDays = useMemo(
+    () => buildAllRoutinesMonthDays(sorted, ritualCompletions, calYear, calMonth, todayISO()),
+    [sorted, ritualCompletions, calYear, calMonth],
+  );
 
-    return (
-      <div className="group flex items-center gap-4 py-3.5">
-        {/* Completion control — the hero action, ≥44px touch target */}
-        <m.button
-          type="button"
-          whileTap={{ scale: 0.86 }}
-          onClick={() => { haptic("light"); onToggleComplete(ritual.id, selectedDateISO); }}
-          aria-label={done ? "Mark incomplete" : missed ? "Mark complete for missed day" : "Mark complete"}
-          aria-pressed={done}
-          className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-full border-[2.5px] transition-colors ${
-            done ? "border-transparent bg-green-500" : missed ? "border-neutral-300 bg-neutral-200 dark:border-white/15 dark:bg-white/10" : `${ring} bg-transparent`
-          }`}
-        >
-          <AnimatePresence initial={false}>
-            {done && (
-              <m.span
-                key="check"
-                initial={{ scale: 0.4, opacity: 0 }}
-                animate={{ scale: 1, opacity: 1 }}
-                exit={{ scale: 0.4, opacity: 0 }}
-                transition={{ type: "spring", stiffness: 500, damping: 22 }}
-              >
-                <IconCheck size={24} strokeWidth={3} className="text-white" />
-              </m.span>
-            )}
-          </AnimatePresence>
-        </m.button>
+  const routineInsights = useMemo(
+    () => buildRoutineInsights(sorted, ritualCompletions, todayISO()),
+    [sorted, ritualCompletions],
+  );
 
-        {/* Title + meta */}
-        <button
-          type="button"
-          onClick={() => { haptic("light"); setEditRitual(ritual); }}
-          className="min-w-0 flex-1 text-left"
-        >
-          <p className={`truncate text-[17px] font-bold leading-tight ${
-            done ? "text-neutral-400 line-through decoration-neutral-300 dark:text-neutral-500" : missed ? "text-neutral-500 dark:text-neutral-400" : "text-neutral-900 dark:text-white"
-          }`}>
-            {ritual.title}
-          </p>
-          <p className="mt-1 flex items-center gap-1.5 truncate text-[13px] font-medium text-neutral-500 dark:text-neutral-400">
-            <span className="tabular-nums">{formatDisplayTime(ritual.time)}</span>
-            <span aria-hidden="true">·</span>
-            <span className="truncate">{missed ? "Missed · " : ""}{dayLabel}</span>
-            {streak >= 2 && (
-              <span className="inline-flex shrink-0 items-center gap-0.5 font-bold text-emerald-600 dark:text-emerald-400">
-                <IconFlame size={12} strokeWidth={2.4} />
-                {streak}
-              </span>
-            )}
-          </p>
-        </button>
-
-        {/* Desktop-only delete */}
-        <IconButton
-          label="Delete routine"
-          variant="dangerGhost"
-          size="xs"
-          radius="lg"
-          onClick={() => setDeleteRitual(ritual)}
-          className="hidden opacity-0 transition-opacity group-hover:opacity-100 lg:flex"
-        >
-          <IconTrash size={14} strokeWidth={2} />
-        </IconButton>
-      </div>
-    );
+  function prevCalMonth() {
+    if (calMonth === 0) { setCalYear((y) => y - 1); setCalMonth(11); }
+    else setCalMonth((m) => m - 1);
   }
-
-  // Desktop card — one self-contained card per routine, laid out in a grid.
-  function renderDesktopCard(ritual: Ritual) {
-    const ring = ritual.color ? COLOR_RING[ritual.color] : "border-neutral-300 dark:border-neutral-600";
-    const dayLabel = ritual.repeatDays && ritual.repeatDays.length > 0
-      ? ritual.repeatDays.map((d) => DAY_SHORT[d]).join(" · ")
-      : "Everyday";
-    const done = selectedCompletedIds.has(ritual.id);
-    const missed = selectedDateISO < todayISO() && appliesToDay(ritual, selectedDay) && !done;
-    const streak = ritualStreak(ritual, ritualCompletions, selectedDateISO);
-
-    return (
-      <div className="group relative flex h-full flex-col justify-between gap-4 rounded-2xl border border-neutral-200 bg-white p-4 transition-colors hover:border-neutral-300 dark:border-white/[0.08] dark:bg-neutral-900 dark:hover:border-white/[0.16]">
-        <div className="flex items-start gap-3">
-          {/* Completion ring */}
-          <m.button
-            type="button"
-            whileTap={{ scale: 0.88 }}
-            onClick={() => { haptic("light"); onToggleComplete(ritual.id, selectedDateISO); }}
-            aria-label={done ? "Mark incomplete" : missed ? "Mark complete for missed day" : "Mark complete"}
-            aria-pressed={done}
-            className={`mt-0.5 flex h-10 w-10 shrink-0 items-center justify-center rounded-full border-[2.5px] transition-colors ${
-              done ? "border-transparent bg-green-500" : missed ? "border-neutral-300 bg-neutral-200 dark:border-white/15 dark:bg-white/10" : `${ring} bg-transparent`
-            }`}
-          >
-            {done && <IconCheck size={22} strokeWidth={3} className="text-white" />}
-          </m.button>
-
-          {/* Title + meta */}
-          <button
-            type="button"
-            onClick={() => { haptic("light"); setEditRitual(ritual); }}
-            className="min-w-0 flex-1 text-left"
-          >
-            <p className={`truncate text-[16px] font-bold leading-tight ${
-              done ? "text-neutral-400 line-through decoration-neutral-300 dark:text-neutral-500" : missed ? "text-neutral-500 dark:text-neutral-400" : "text-neutral-900 dark:text-white"
-            }`}>
-              {ritual.title}
-            </p>
-            <p className="mt-1 truncate text-[13px] font-medium text-neutral-500 dark:text-neutral-400">
-              <span className="tabular-nums">{formatDisplayTime(ritual.time)}</span> · {missed ? "Missed · " : ""}{dayLabel}
-            </p>
-          </button>
-
-          {/* Delete on hover */}
-          <IconButton
-            label="Delete routine"
-            variant="dangerGhost"
-            size="xs"
-            radius="lg"
-            onClick={() => setDeleteRitual(ritual)}
-            className="opacity-0 transition-opacity group-hover:opacity-100"
-          >
-            <IconTrash size={14} strokeWidth={2} />
-          </IconButton>
-        </div>
-
-        {/* Streak — earned, consistent with mobile */}
-        <div className="flex items-center justify-between">
-          <span className="text-[10px] font-semibold uppercase tracking-wider text-neutral-400 dark:text-neutral-500">
-            Streak
-          </span>
-          {streak >= 1 ? (
-            <span className="inline-flex items-center gap-1 text-[13px] font-black tabular-nums text-emerald-600 dark:text-emerald-400">
-              <IconFlame size={14} strokeWidth={2.4} />
-              {streak} {streak === 1 ? "day" : "days"}
-            </span>
-          ) : (
-            <span className="text-[13px] font-bold text-neutral-300 dark:text-neutral-600">—</span>
-          )}
-        </div>
-      </div>
-    );
+  function nextCalMonth() {
+    if (calMonth === 11) { setCalYear((y) => y + 1); setCalMonth(0); }
+    else setCalMonth((m) => m + 1);
   }
 
   return (
@@ -567,6 +406,25 @@ export default function RitualView({
           actions={
             <>
               {rituals.length > 0 && (
+                <button
+                  type="button"
+                  aria-label={viewMode === "day" ? "Show month view" : "Show day view"}
+                  aria-pressed={viewMode === "month"}
+                  onClick={() => { haptic("light"); setViewMode((m) => (m === "day" ? "month" : "day")); }}
+                  className={`inline-flex h-11 w-11 items-center justify-center rounded-full border-[1.5px] transition-colors active:scale-[0.97] ${
+                    viewMode === "month"
+                      ? "border-neutral-300 bg-neutral-100 text-neutral-900 dark:border-white/20 dark:bg-neutral-800 dark:text-white"
+                      : "border-neutral-200 bg-white text-neutral-500 hover:bg-neutral-100 dark:border-white/15 dark:bg-neutral-900 dark:text-neutral-400 dark:hover:bg-neutral-800"
+                  }`}
+                >
+                  {viewMode === "day" ? (
+                    <IconCalendarStats size={16} strokeWidth={2.2} />
+                  ) : (
+                    <IconListCheck size={16} strokeWidth={2.2} />
+                  )}
+                </button>
+              )}
+              {rituals.length > 0 && viewMode === "day" && (
                 <DateActionButton value={selectedDateISO} onChange={setSelectedDateISO} />
               )}
               <CtaActionButton
@@ -579,8 +437,24 @@ export default function RitualView({
           className="mb-4"
         />
 
+        {/* ── Month view — aggregate consistency calendar ──────────────────── */}
+        {rituals.length > 0 && viewMode === "month" && (
+          <div className="space-y-5">
+            <RoutineMonthCalendar
+              year={calYear}
+              month={calMonth}
+              days={monthCalendarDays}
+              onPrevMonth={prevCalMonth}
+              onNextMonth={nextCalMonth}
+              title="Routine consistency"
+              onSelectDay={(iso) => { haptic("light"); setSelectedDateISO(iso); setViewMode("day"); }}
+            />
+            <RoutineInsightsSection insights={routineInsights} />
+          </div>
+        )}
+
         {/* ── Earned "all done" moment ─────────────────────────────────────── */}
-        {allDone && (
+        {viewMode === "day" && allDone && (
           <m.div
             initial={{ opacity: 0, y: 4 }}
             animate={{ opacity: 1, y: 0 }}
@@ -600,7 +474,7 @@ export default function RitualView({
         )}
 
         {/* ── Progress bar (in-progress, mobile) ───────────────────────────── */}
-        {total > 0 && !allDone && (
+        {viewMode === "day" && total > 0 && !allDone && (
           <div className="mb-5 lg:hidden">
             <div className="mb-2 flex items-center justify-between">
               <span className="text-[14px] font-semibold text-neutral-500 dark:text-neutral-400">
@@ -613,7 +487,7 @@ export default function RitualView({
         )}
 
         {/* ── Week strip — completion per day (the reward loop) ────────────── */}
-        {rituals.length > 0 && (
+        {viewMode === "day" && rituals.length > 0 && (
           <div className="mb-6">
             <div className="grid grid-cols-7 gap-1.5">
               {weekStrip.map(({ day, due, done, dayNum, isToday }) => {
@@ -660,13 +534,13 @@ export default function RitualView({
           <EmptyState
             icon={IconRepeat}
             title="No routines yet"
-            description="Add small daily practices — skincare, vitamins, stretching — and track them each day."
+            description="Add anything you want to do regularly — skincare, water, exercise, reading — and track it your own way."
             action={{ label: "Add First Routine", onClick: () => onAddOpenChange(true) }}
           />
         )}
 
         {/* ── Empty filter state ───────────────────────────────────────────── */}
-        {rituals.length > 0 && filteredRituals.length === 0 && (
+        {viewMode === "day" && rituals.length > 0 && filteredRituals.length === 0 && (
           <m.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="flex flex-col items-center gap-2 py-12 text-center">
             <p className="text-[14px] font-semibold text-neutral-500 dark:text-neutral-400">
               No routines for {DAY_SHORT[selectedDay]}
@@ -679,41 +553,37 @@ export default function RitualView({
           </m.div>
         )}
 
-        {/* ── Mobile: grouped by time of day ────────────────────────────────── */}
-        <div className="lg:hidden">
-          {grouped.map((group) => (
-            <div key={group.key}>
-              <GroupHeader Icon={group.Icon} label={group.label} count={group.items.length} />
-              <div className="divide-y divide-neutral-100 dark:divide-white/[0.06]">
-                <AnimatePresence initial={false}>
-                  {group.items.map((ritual) => (
-                    <m.div
-                      key={ritual.id}
-                      initial={{ opacity: 0, y: 4 }}
-                      animate={{ opacity: 1, y: 0 }}
-                      exit={{ opacity: 0, y: -4 }}
-                      transition={{ duration: 0.18 }}
-                    >
-                      {renderCard(ritual)}
-                    </m.div>
-                  ))}
-                </AnimatePresence>
-              </div>
-            </div>
-          ))}
-        </div>
-
-        {/* ── Desktop: routine card grid + signal rail ──────────────────────── */}
-        {filteredRituals.length > 0 && (
-          <div className="hidden gap-5 lg:grid xl:grid-cols-[minmax(0,1fr)_320px]">
-            <section className="min-w-0 space-y-4">
+        {/* ── Routine rows, grouped by time of day — same list at every width ── */}
+        {viewMode === "day" && filteredRituals.length > 0 && (
+          <div className="grid gap-5 lg:grid-cols-1 xl:grid-cols-[minmax(0,1fr)_320px]">
+            <section className="min-w-0 divide-y divide-neutral-100 dark:divide-white/[0.06] lg:divide-y-0 lg:space-y-4">
               {grouped.map((group) => (
-                <div key={group.key}>
-                  <GroupHeader Icon={group.Icon} label={group.label} count={group.items.length} />
-                  <div className="mt-2 grid gap-3 lg:grid-cols-2">
-                    {group.items.map((ritual) => (
-                      <div key={ritual.id}>{renderDesktopCard(ritual)}</div>
-                    ))}
+                <div key={group.key} className="lg:rounded-2xl lg:border lg:border-neutral-200 lg:bg-white lg:px-4 lg:dark:border-white/[0.08] lg:dark:bg-neutral-900">
+                  <GroupHeader bucketKey={group.key} label={group.label} count={group.items.length} />
+                  <div className="divide-y divide-neutral-100 dark:divide-white/[0.06]">
+                    <AnimatePresence initial={false}>
+                      {group.items.map((ritual) => (
+                        <m.div
+                          key={ritual.id}
+                          initial={{ opacity: 0, y: 4 }}
+                          animate={{ opacity: 1, y: 0 }}
+                          exit={{ opacity: 0, y: -4 }}
+                          transition={{ duration: 0.18 }}
+                        >
+                          <RoutineRow
+                            ritual={ritual}
+                            ritualCompletions={ritualCompletions}
+                            selectedDateISO={selectedDateISO}
+                            selectedDay={selectedDay}
+                            onToggleComplete={onToggleComplete}
+                            onLogAmount={onLogAmount}
+                            onUndoLastLog={onUndoLastLog}
+                            onOpenDetail={onOpenDetail}
+                            onDelete={setDeleteRitual}
+                          />
+                        </m.div>
+                      ))}
+                    </AnimatePresence>
                   </div>
                 </div>
               ))}

@@ -315,15 +315,64 @@ export interface StrategyAsset {
 export const RITUAL_COLORS = ["rose", "sky", "violet", "amber", "emerald", "fuchsia", "orange", "cyan", "indigo", "teal"] as const;
 export type RitualColor = typeof RITUAL_COLORS[number];
 
+/**
+ * How a Routine's completion is measured. Absent/undefined ≡ "checkbox" —
+ * every ritual created before this field existed keeps behaving exactly as
+ * a plain done/not-done habit, with zero migration.
+ */
+export const RITUAL_TRACKING_TYPES = ["checkbox", "quantity", "duration", "count", "checklist"] as const;
+export type RitualTrackingType = typeof RITUAL_TRACKING_TYPES[number];
+
+/** One named step of a "checklist" routine (e.g. a skincare routine's steps). */
+export interface RitualStep {
+  id: string;
+  label: string;
+}
+
+/**
+ * Richer recurrence than a plain weekday set. `repeatDays` on `Ritual` stays
+ * the canonical, derived weekday projection that every existing reader
+ * (streak calc, timeline grouping, reminders) already understands — this is
+ * layered on top for `interval` scheduling (every N days) and to remember
+ * which preset ("Weekdays", "Weekends"...) produced the current `repeatDays`,
+ * so re-opening the edit form doesn't collapse back to "Custom".
+ */
+export type RitualRecurrenceKind = "daily" | "weekdays" | "weekends" | "custom" | "interval";
+export interface RitualRecurrence {
+  kind: RitualRecurrenceKind;
+  days?: DayKey[];        // custom only
+  intervalDays?: number;  // interval only, >= 2
+  anchorDate?: string;    // ISO "YYYY-MM-DD" — day 0 of the interval cycle
+}
+
 export interface Ritual {
   id: string;
   title: string;
-  time: string;           // "HH:MM" 24-hour
+  time: string;           // "HH:MM" 24-hour — stays required even for anyTime
+                           // routines (see `anyTime`), so existing normalization
+                           // (which validates `typeof time === "string"`) never
+                           // has to change to accept a routine with no time.
   duration?: number;      // minutes (display only)
   repeatDays?: DayKey[];  // undefined / empty = every day
   color?: RitualColor;
   notes?: string;
   sortOrder?: number;     // drag-reorder position
+
+  // ── Generic tracking (all optional; undefined ⇒ today's plain checkbox habit) ──
+  trackingType?: RitualTrackingType;
+  target?: number;         // per-scheduled-day goal — quantity/duration/count only
+  unit?: string;           // "ml" | "kcal" | "g" | "min" | "pages" | "reps" | custom
+  quickAmounts?: number[]; // explicit quick-log presets (e.g. Water's [250,500,750]);
+                           // falls back to a unit-based guess when unset — see lib/quickAmounts.ts
+  steps?: RitualStep[];    // checklist only
+
+  recurrence?: RitualRecurrence;
+  anyTime?: boolean;       // true ⇒ `time` is ignored by grouping/timeline/reminders
+  icon?: string;           // key into components/SectionIcons.tsx's registry (iconGlyph/getIconPickerStyle)
+  category?: string;       // template key / grouping label — display only
+  description?: string;
+  active?: boolean;        // undefined ≡ true; archive without deleting
+  templateKey?: string;    // which template (if any) this routine was created from
 }
 
 export type Activity = Task;
@@ -352,9 +401,29 @@ function emptyDayActivities(): DayActivities {
   return Object.fromEntries(DAYS.map((d) => [d, []])) as unknown as DayActivities;
 }
 
+/**
+ * One completion/log row for a Ritual. For a plain checkbox routine this is
+ * unchanged from before — exactly `{ritualId, date}`, one row per day,
+ * toggled in place (see `toggleRitualCompletion` in lib/ritualCompletions.ts).
+ *
+ * For quantity/duration/count/checklist routines, multiple rows can exist
+ * for the same (ritualId, date) — each one an individually-timestamped log
+ * event (`appendRitualLog`/`toggleRitualStep`), never toggled/deduped.
+ *
+ * A row with neither `value` nor `stepId` is a "day marked done" sentinel —
+ * this is what every legacy row already looks like, so `isRitualDayComplete`
+ * (lib/consistency/ritualDayStatus.ts) treats it as complete regardless of
+ * the ritual's trackingType. This is the backward-compat guarantee: no
+ * existing completion is ever reinterpreted as incomplete.
+ */
 export interface RitualCompletion {
   ritualId: string;
-  date: string; // ISO "YYYY-MM-DD"
+  date: string;        // ISO "YYYY-MM-DD"
+  id?: string;         // uid(); absent on every legacy row
+  timestamp?: string;  // ISO datetime of this specific log event
+  value?: number;      // amount logged — quantity/duration/count
+  stepId?: string;     // which checklist step this row completes
+  note?: string;
 }
 
 export interface Note {

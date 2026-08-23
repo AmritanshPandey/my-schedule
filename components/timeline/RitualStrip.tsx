@@ -2,21 +2,9 @@
 
 import { m } from "framer-motion";
 import { IconCheck } from "@tabler/icons-react";
-import type { Ritual, RitualColor } from "@/lib/useScheduleDB";
+import type { Ritual } from "@/lib/useScheduleDB";
 import { formatDisplayTime } from "@/lib/timeUtils";
-
-export const COLOR_DOTS: Record<RitualColor, string> = {
-  rose:    "bg-rose-400",
-  sky:     "bg-sky-400",
-  violet:  "bg-violet-400",
-  amber:   "bg-amber-400",
-  emerald: "bg-emerald-400",
-  fuchsia: "bg-fuchsia-400",
-  orange:  "bg-orange-400",
-  cyan:    "bg-cyan-400",
-  indigo:  "bg-indigo-400",
-  teal:    "bg-teal-400",
-};
+import { RITUAL_COLOR_DOT as COLOR_DOTS } from "@/lib/ritualColors";
 
 interface RitualStripProps {
   ritual: Ritual;

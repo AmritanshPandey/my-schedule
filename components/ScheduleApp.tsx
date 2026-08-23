@@ -4,8 +4,7 @@ import { memo, useCallback, useEffect, useMemo, useRef, useState, type ReactNode
 import { AnimatePresence, m } from "framer-motion";
 import dynamic from "next/dynamic";
 import AddEntryModal from "@/components/AddEntryModal";
-import LogMealSheet from "@/components/LogMealSheet";
-import { logMeal, quickAmountsForUnit, type MealInput } from "@/lib/wellness";
+import { quickAmountsForUnit } from "@/lib/quickAmounts";
 import { sumEntriesForDate } from "@/lib/metricEntries";
 import { TaskBlockCard } from "@/components/TaskBlockCard";
 import Skeleton from "@/components/ui/Skeleton";
@@ -40,6 +39,8 @@ const AIPlanCreatorSheet = dynamic(() => import("@/components/plan/AIPlanCreator
 const SettingsSheet = dynamic(() => import("@/components/auth/SettingsSheet").then(m => ({ default: m.SettingsSheet })), { ssr: false });
 const SettingsView = dynamic(() => import("@/components/SettingsView").then(m => ({ default: m.SettingsView })), { ssr: false });
 const AIOnboarding = dynamic(() => import("@/components/ai/AIOnboarding"), { ssr: false });
+const RoutineDetailView = dynamic(() => import("@/components/activity/RoutineDetailView"), { ssr: false });
+const RitualSheet = dynamic(() => import("@/components/activity/RitualSheet").then((m) => ({ default: m.RitualSheet })), { ssr: false });
 const AIView = dynamic(() => import("@/components/AIView").then(m => ({ default: m.AIView })), { ssr: false });
 const CoachMarks = dynamic(() => import("@/components/onboarding/CoachMarks"), { ssr: false });
 const NotesView = dynamic(() => import("@/components/notes/NotesView"), { ssr: false });
@@ -169,7 +170,8 @@ import { applyScheduleRules, validateDatedTasks } from "@/lib/scheduleRules";
 import { resolveTimes as resolveParsedTimes } from "@/lib/scheduleParser";
 import { applyTemplate } from "@/lib/templates";
 import type { Template } from "@/lib/templates";
-import { toggleRitualCompletion } from "@/lib/ritualCompletions";
+import { toggleRitualCompletion, appendRitualLog, undoLastRitualLog, toggleRitualStep, removeRitualLog } from "@/lib/ritualCompletions";
+import { MAX_RITUALS } from "@/lib/ritualColors";
 import { formatDisplayTime, parseTimeToMinutes, formatDuration } from "@/lib/timeUtils";
 import {
   pointerToMinutes,
@@ -788,7 +790,6 @@ export default function ScheduleApp() {
 
   const [selectedPlanId, setSelectedPlanId] = useState<string | null>(null);
   const [entryTracker, setEntryTracker] = useState<ProgressTracker | null>(null);
-  const [logMealOpen, setLogMealOpen] = useState(false);
   const [weekOffset, setWeekOffset] = useState(0);
   const [viewMode, setViewMode] = useState<"list" | "timeline">(() => (iosSafeMode ? "list" : "timeline"));
   const [calendarView, setCalendarView] = useState<import("@/components/desktop/WeekGrid").CalendarView>("7day");
@@ -846,7 +847,11 @@ export default function ScheduleApp() {
     );
   }, [schedule.ritualCompletions, todayKey]);
   const [ritualAddOpen, setRitualAddOpen] = useState(false);
-  const canAddRitual = (schedule.rituals ?? []).length < 8;
+  const [detailRitualId, setDetailRitualId] = useState<string | null>(null);
+  const [editRitualId, setEditRitualId] = useState<string | null>(null);
+  const detailRitual = detailRitualId ? (schedule.rituals ?? []).find((r) => r.id === detailRitualId) ?? null : null;
+  const editingRitual = editRitualId ? (schedule.rituals ?? []).find((r) => r.id === editRitualId) ?? null : null;
+  const canAddRitual = (schedule.rituals ?? []).length < MAX_RITUALS;
   const [confirmState, setConfirmState] = useState<{
     title: string;
     description: string;
@@ -1666,7 +1671,7 @@ export default function ScheduleApp() {
     if (canAddRitual) {
       setRitualAddOpen(true);
     } else {
-      setToastMessage("You can have up to 8 routines");
+      setToastMessage(`You can have up to ${MAX_RITUALS} routines`);
     }
   }
 
@@ -1692,10 +1697,6 @@ export default function ScheduleApp() {
     }));
   }
 
-  function handleReorderRituals(reordered: Ritual[]) {
-    setSchedule((prev) => ({ ...prev, rituals: reordered }));
-  }
-
   function handleToggleRitualComplete(id: string, dateISO: string = todayISO()) {
     setSchedule((prev) => {
       const completions = prev.ritualCompletions ?? [];
@@ -1704,6 +1705,27 @@ export default function ScheduleApp() {
         ritualCompletions: toggleRitualCompletion(completions, id, dateISO),
       };
     });
+  }
+
+  function handleLogRitualAmount(ritualId: string, amount: number, dateISO: string) {
+    setSchedule((prev) => ({
+      ...prev,
+      ritualCompletions: appendRitualLog(prev.ritualCompletions ?? [], ritualId, dateISO, amount),
+    }));
+  }
+
+  function handleUndoRitualLog(ritualId: string, dateISO: string) {
+    setSchedule((prev) => ({
+      ...prev,
+      ritualCompletions: undoLastRitualLog(prev.ritualCompletions ?? [], ritualId, dateISO),
+    }));
+  }
+
+  function handleToggleRitualStep(ritualId: string, stepId: string, dateISO: string = todayISO()) {
+    setSchedule((prev) => ({
+      ...prev,
+      ritualCompletions: toggleRitualStep(prev.ritualCompletions ?? [], ritualId, dateISO, stepId),
+    }));
   }
 
   // ── Notes ───────────────────────────────────────────────────────────────────
@@ -1883,10 +1905,6 @@ export default function ScheduleApp() {
       ...prev,
       metricEntries: [...prev.metricEntries, { ...entry, id: uid() }],
     }));
-  }
-
-  function handleLogMeal(input: MealInput) {
-    setSchedule((prev) => logMeal(prev, input));
   }
 
   function handleApplyTemplate(template: Template) {
@@ -3186,7 +3204,6 @@ export default function ScheduleApp() {
           onCreateTask={() => openCreateSheet()}
           onCreatePlan={openAddPlan}
           onCreateRitual={openCreateRitual}
-          onLogMeal={() => setLogMealOpen(true)}
           onBulkImport={() => setBulkImportOpen(true)}
           onOpenSettings={() => setSettingsOpen(true)}
           onOpenSettingsTab={() => setActiveTab(5)}
@@ -3952,7 +3969,6 @@ export default function ScheduleApp() {
               onDeleteTracker={handleDeleteTracker}
               onOpenAddEntry={(tracker) => setEntryTracker(tracker)}
               onDeleteEntry={handleDeleteEntry}
-              onLogMeal={() => setLogMealOpen(true)}
               onAddMilestone={(data) => handleAddMilestone(selectedPlan.id, data)}
               onUpdateMilestone={handleUpdateMilestone}
               onDeleteMilestone={handleDeleteMilestone}
@@ -3981,13 +3997,14 @@ export default function ScheduleApp() {
               rituals={schedule.rituals ?? []}
               ritualCompletions={schedule.ritualCompletions ?? []}
               onToggleComplete={handleToggleRitualComplete}
+              onLogAmount={handleLogRitualAmount}
+              onUndoLastLog={handleUndoRitualLog}
+              onOpenDetail={(ritual) => setDetailRitualId(ritual.id)}
               onAdd={handleAddRitual}
               onUpdate={handleUpdateRitual}
               onDelete={handleDeleteRitual}
-              onReorder={handleReorderRituals}
               addOpen={ritualAddOpen}
               onAddOpenChange={setRitualAddOpen}
-              weekHistory={ritualWeekHistory}
             />
             </ErrorBoundary>
           </m.div>
@@ -4138,7 +4155,6 @@ export default function ScheduleApp() {
             onCreateTask={() => openCreateSheet()}
             onCreatePlan={openAddPlan}
             onCreateRitual={openCreateRitual}
-            onLogMeal={() => setLogMealOpen(true)}
             onBulkImport={() => setBulkImportOpen(true)}
           />
         </div>
@@ -4240,10 +4256,33 @@ export default function ScheduleApp() {
         />
       )}
 
-      <LogMealSheet
-        isOpen={logMealOpen}
-        onClose={() => setLogMealOpen(false)}
-        onSave={handleLogMeal}
+
+      {detailRitual && (
+        <div
+          className="fixed inset-0 z-50 bg-[#F5F5F5] dark:bg-[#0E0E0E]"
+          style={{ paddingTop: "env(safe-area-inset-top, 0px)" }}
+        >
+          <RoutineDetailView
+            ritual={detailRitual}
+            ritualCompletions={schedule.ritualCompletions ?? []}
+            onBack={() => setDetailRitualId(null)}
+            onToggleCheckbox={() => handleToggleRitualComplete(detailRitual.id)}
+            onLogAmount={(amount) => handleLogRitualAmount(detailRitual.id, amount, todayISO())}
+            onUndoLastLog={() => handleUndoRitualLog(detailRitual.id, todayISO())}
+            onRemoveLog={(entryId) => setSchedule((prev) => ({ ...prev, ritualCompletions: removeRitualLog(prev.ritualCompletions ?? [], entryId) }))}
+            onToggleStep={(stepId) => handleToggleRitualStep(detailRitual.id, stepId)}
+            onEdit={() => { setEditRitualId(detailRitual.id); setDetailRitualId(null); }}
+            onDelete={() => { setDetailRitualId(null); handleDeleteRitual(detailRitual.id); }}
+          />
+        </div>
+      )}
+
+      <RitualSheet
+        open={!!editingRitual}
+        onClose={() => setEditRitualId(null)}
+        initial={editingRitual ?? undefined}
+        onSave={(data) => { if (editingRitual) handleUpdateRitual(editingRitual.id, data); setEditRitualId(null); }}
+        onDelete={() => { if (editingRitual) handleDeleteRitual(editingRitual.id); setEditRitualId(null); }}
       />
 
       {sessionTask && (

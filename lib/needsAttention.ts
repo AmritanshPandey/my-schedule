@@ -17,6 +17,7 @@ import type { Milestone, Plan, Ritual, Schedule, Task, DayKey } from "./useSched
 import { DAYS } from "./scheduleConstants";
 import { localISODate } from "./dateUtils";
 import { resolveMilestoneStatus } from "./roadmapDates";
+import { calculateRitualStats } from "./consistency/calculateRitualStreak";
 
 /** How far back a missed task still counts as worth catching up on. */
 export const MISSED_LOOKBACK_DAYS = 7;
@@ -55,19 +56,6 @@ export interface NeedsAttention {
 /** Minimum run before losing it is worth interrupting someone over. */
 export const MIN_STREAK_TO_WARN = 2;
 
-/** Consecutive completions ending yesterday. Today is deliberately excluded —
- *  a streak is only "at risk" because today has not happened yet. */
-function ritualStreak(ritualId: string, completions: readonly { ritualId: string; date: string }[], yesterdayISO: string): number {
-  const done = new Set(completions.filter((c) => c.ritualId === ritualId).map((c) => c.date));
-  let streak = 0;
-  let cursor = yesterdayISO;
-  while (done.has(cursor)) {
-    streak++;
-    cursor = shiftISO(cursor, -1);
-  }
-  return streak;
-}
-
 /** Whole days between two ISO dates (b - a), via UTC noon to dodge DST. */
 function daysBetweenISO(a: string, b: string): number {
   const toUTC = (iso: string) => Date.UTC(+iso.slice(0, 4), +iso.slice(5, 7) - 1, +iso.slice(8, 10), 12);
@@ -95,7 +83,11 @@ export function selectNeedsAttention(
       const dueToday = !r.repeatDays || r.repeatDays.length === 0 || (todayKey ? r.repeatDays.includes(todayKey) : true);
       return dueToday && !completedRitualIds.has(r.id);
     })
-    .map((ritual) => ({ ritual, streak: ritualStreak(ritual.id, schedule.ritualCompletions ?? [], yesterdayISO) }))
+    // The shared, trackingType/recurrence-aware helper — the old inline walk
+    // here only ever checked `repeatDays` via exact-date lookups, so a
+    // Mon/Wed/Fri routine's "next scheduled day" always broke on the
+    // in-between non-scheduled days and read as streak 0.
+    .map((ritual) => ({ ritual, streak: calculateRitualStats(ritual, schedule.ritualCompletions ?? [], yesterdayISO).streak }))
     .filter(({ streak }) => streak >= MIN_STREAK_TO_WARN)
     .sort((a, b) => b.streak - a.streak);
 

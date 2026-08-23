@@ -12,14 +12,17 @@ import {
   IconChartBar,
   IconSparkles,
   IconRefresh,
+  IconTrophy,
 } from "@tabler/icons-react";
 import type { Schedule, DayKey, Task } from "@/lib/useScheduleDB";
 import { DAYS, DAY_LABELS } from "@/lib/useScheduleDB";
 import { getTaskSubtaskSummary, isTaskCompleted, isTrackedTask } from "@/lib/taskCompletion";
 import { calculateConsistency } from "@/lib/planInsights";
+import { calculateRitualStats } from "@/lib/consistency/calculateRitualStreak";
+import { isRitualDayComplete } from "@/lib/consistency/ritualDayStatus";
 import ProgressBar from "@/components/ui/ProgressBar";
 import { computeTrend } from "@/lib/trendUtils";
-import { todayISO, addDaysToISO, localISODate } from "@/lib/dateUtils";
+import { todayISO, localISODate } from "@/lib/dateUtils";
 import { isTaskScheduledOn } from "@/lib/taskOccurrence";
 import { useAIActions } from "@/lib/ai/useAIActions";
 import MilestoneTimeline from "@/components/MilestoneTimeline";
@@ -422,33 +425,24 @@ function HabitConsistencySection({
     const completions = schedule.ritualCompletions ?? [];
 
     return (schedule.rituals ?? []).map((ritual) => {
-      // 7-day dot history
+      // 7-day dot history — trackingType-aware via the shared day-completion
+      // rule, so a partial quantity/checklist day reads as not-done here too.
       const dots = ritualWeekHistory.map((d) => ({
         date: d.date,
         label: d.label,
         isToday: d.isToday,
-        done: completions.some((c) => c.ritualId === ritual.id && c.date === d.date),
+        done: isRitualDayComplete(ritual, completions.filter((c) => c.ritualId === ritual.id && c.date === d.date)),
         due: !ritual.repeatDays || ritual.repeatDays.length === 0 || ritual.repeatDays.includes(
           JS_DAYS[new Date(d.date + "T00:00:00").getDay()]
         ),
       }));
 
-      // Streak: walk backwards from today
-      let streak = 0;
-      for (let i = 0; i < 365; i++) {
-        const date = addDaysToISO(today, -i);
-        const jsDay = JS_DAYS[new Date(date + "T00:00:00").getDay()];
-        const isDue = !ritual.repeatDays || ritual.repeatDays.length === 0 || ritual.repeatDays.includes(jsDay);
-        if (!isDue) continue; // skip non-scheduled days
-        const isDone = completions.some((c) => c.ritualId === ritual.id && c.date === date);
-        if (isDone) {
-          streak++;
-        } else {
-          break;
-        }
-      }
+      // Streak/best streak from the one shared helper, so this card never
+      // disagrees with the Routine tab or Overview (and correctly handles
+      // interval recurrence + non-checkbox tracking types).
+      const { streak, bestStreak } = calculateRitualStats(ritual, completions, today);
 
-      return { ritual, dots, streak };
+      return { ritual, dots, streak, bestStreak };
     });
   }, [schedule.rituals, schedule.ritualCompletions, ritualWeekHistory]);
 
@@ -465,17 +459,25 @@ function HabitConsistencySection({
     <div className="rounded-2xl border border-neutral-200/70 bg-white dark:border-white/[0.07] dark:bg-neutral-900 px-5 py-5">
       <SectionLabel icon={IconRepeat}>Habit Consistency</SectionLabel>
       <div className="space-y-3">
-        {ritualsWithStats.map(({ ritual, dots, streak }) => (
+        {ritualsWithStats.map(({ ritual, dots, streak, bestStreak }) => (
           <div key={ritual.id} className="flex items-center gap-3">
             {/* Name + streak */}
             <div className="min-w-0 flex-1">
               <p className="truncate text-[13px] font-semibold text-neutral-900 dark:text-white">{ritual.title}</p>
-              {streak > 0 && (
-                <p className="flex items-center gap-0.5 text-[11px] font-medium text-amber-500 dark:text-amber-400">
-                  <IconFlame size={11} strokeWidth={2} />
-                  {streak}d streak
-                </p>
-              )}
+              <div className="flex items-center gap-2">
+                {streak > 0 && (
+                  <p className="flex items-center gap-0.5 text-[11px] font-medium text-amber-500 dark:text-amber-400">
+                    <IconFlame size={11} strokeWidth={2} />
+                    {streak}d streak
+                  </p>
+                )}
+                {bestStreak > streak && (
+                  <p className="flex items-center gap-0.5 text-[11px] font-medium text-neutral-400 dark:text-neutral-500">
+                    <IconTrophy size={11} strokeWidth={2} />
+                    {bestStreak}d best
+                  </p>
+                )}
+              </div>
             </div>
             {/* 7-day dots */}
             <div className="flex items-center gap-1 shrink-0">
