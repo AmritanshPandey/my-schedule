@@ -555,8 +555,14 @@ export default function RitualView({
 
         {/* ── Routine rows, grouped by time of day — same list at every width ── */}
         {viewMode === "day" && filteredRituals.length > 0 && (
-          <div className="grid gap-5 lg:grid-cols-1 xl:grid-cols-[minmax(0,1fr)_320px]">
-            <section className="min-w-0 divide-y divide-neutral-100 dark:divide-white/[0.06] lg:divide-y-0 lg:space-y-4">
+          <div className="grid gap-5 lg:grid-cols-1 lg:justify-items-center xl:grid-cols-[minmax(0,1fr)_320px] xl:justify-items-stretch">
+            {/* Capped + centered between lg and xl: below xl the sidebar
+                (aside, below) isn't shown yet, so an uncapped single column
+                stretches this list edge-to-edge on a laptop-width screen —
+                a title on the far left and a checkbox stranded far to its
+                right, with a long dead gap between. xl:max-w-none releases
+                the cap once the sidebar returns to balance the width. */}
+            <section className="w-full min-w-0 divide-y divide-neutral-100 dark:divide-white/[0.06] lg:max-w-2xl lg:divide-y-0 lg:space-y-4 xl:max-w-none">
               {grouped.map((group) => (
                 <div key={group.key} className="lg:rounded-2xl lg:border lg:border-neutral-200 lg:bg-white lg:px-4 lg:dark:border-white/[0.08] lg:dark:bg-neutral-900">
                   <GroupHeader bucketKey={group.key} label={group.label} count={group.items.length} />

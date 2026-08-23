@@ -60,6 +60,10 @@ export default function RoutineRow({
 
   const trackingType = ritual.trackingType ?? "checkbox";
   const showProgressText = trackingType === "quantity" || trackingType === "duration" || trackingType === "count";
+  // Checkbox routines can bundle a purely descriptive item list (e.g. "Hair"
+  // ⇒ coconut oil, shampoo, conditioner) — one tap above covers all of them,
+  // so this is a caption, never its own row of checkboxes.
+  const items = trackingType === "checkbox" ? ritual.steps : undefined;
 
   return (
     <div className="group flex items-center gap-3 py-3">
@@ -108,6 +112,11 @@ export default function RoutineRow({
             </span>
           )}
         </p>
+        {items && items.length > 0 && (
+          <p className="mt-0.5 truncate text-[11px] text-neutral-400 dark:text-neutral-500">
+            {items.map((step) => step.label).join(" · ")}
+          </p>
+        )}
       </button>
 
       <RoutineCompletionControl

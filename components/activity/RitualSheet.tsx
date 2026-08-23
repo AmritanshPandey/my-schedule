@@ -150,7 +150,13 @@ export function RitualSheet({ open, onClose, initial, onSave, onDelete }: Ritual
         ? parsedTarget
         : undefined,
       unit: unit.trim() || undefined,
-      steps: trackingType === "checklist" ? steps : undefined,
+      // checklist: steps drive per-item completion. checkbox: steps are an
+      // optional, purely descriptive list (undefined when empty, same as
+      // every other optional field, rather than saving `[]`).
+      steps:
+        trackingType === "checklist" ? steps
+        : trackingType === "checkbox" && steps.length > 0 ? steps
+        : undefined,
     });
     onClose();
   }
@@ -363,12 +369,23 @@ export function RitualSheet({ open, onClose, initial, onSave, onDelete }: Ritual
                   </div>
                 )}
 
-                {trackingType === "checklist" && (
+                {/* Checklist: each item is its own checkbox, and the routine
+                    counts done once every item is. Checkbox: items are a
+                    reference list only — completing the routine is still one
+                    tap, the list just shows what it bundles (e.g. "Hair" ⇒
+                    coconut oil, shampoo, conditioner) without asking you to
+                    check off each one separately. */}
+                {(trackingType === "checklist" || trackingType === "checkbox") && (
                   <div className="space-y-1.5">
+                    {trackingType === "checkbox" && (
+                      <p className="text-[11px] leading-snug text-neutral-400 dark:text-neutral-500">
+                        Optional — list what this routine covers. These aren&apos;t checked off individually; one tap on the routine covers all of them.
+                      </p>
+                    )}
                     {steps.map((step) => (
                       <div key={step.id} className="flex items-center gap-2 rounded-xl border border-neutral-200 bg-neutral-50 px-3 py-2 dark:border-white/10 dark:bg-white/[0.04]">
                         <span className="flex-1 truncate text-[13px] font-medium text-neutral-800 dark:text-neutral-100">{step.label}</span>
-                        <button type="button" onClick={() => setSteps((prev) => prev.filter((s) => s.id !== step.id))} aria-label="Remove step" className="text-neutral-400 hover:text-rose-500">
+                        <button type="button" onClick={() => setSteps((prev) => prev.filter((s) => s.id !== step.id))} aria-label="Remove item" className="text-neutral-400 hover:text-rose-500">
                           <IconX size={14} strokeWidth={2.2} />
                         </button>
                       </div>
@@ -378,14 +395,14 @@ export function RitualSheet({ open, onClose, initial, onSave, onDelete }: Ritual
                         value={newStepLabel}
                         onChange={(e) => setNewStepLabel(e.target.value)}
                         onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); addStep(); } }}
-                        placeholder="Add a step…"
+                        placeholder={trackingType === "checklist" ? "Add a step…" : "Add an item…"}
                         className="h-9 flex-1 rounded-xl border border-neutral-200 bg-neutral-50 px-3 text-[13px] text-neutral-900 outline-none placeholder:text-neutral-400 dark:border-white/10 dark:bg-white/[0.04] dark:text-white dark:placeholder:text-neutral-600"
                       />
                       <button
                         type="button"
                         onClick={addStep}
                         className="flex h-9 w-9 items-center justify-center rounded-xl border border-neutral-200 text-neutral-500 hover:bg-neutral-50 dark:border-white/10 dark:text-neutral-400"
-                        aria-label="Add step"
+                        aria-label="Add item"
                       >
                         <IconPlus size={14} strokeWidth={2.4} />
                       </button>

@@ -246,26 +246,44 @@ export default function RoutineDetailView({
             )}
 
             {trackingType === "checkbox" && (
-              <div className="flex items-center justify-between px-4 pb-4 pt-2">
-                <p className={`text-[16px] font-bold ${progress.complete ? "text-emerald-600 dark:text-emerald-400" : "text-neutral-400 dark:text-neutral-500"}`}>
-                  {progress.complete ? "Completed" : "Not yet"}
-                </p>
-                <m.button
-                  type="button"
-                  whileTap={{ scale: 0.9 }}
-                  onClick={() => { haptic("light"); onToggleCheckbox(); }}
-                  className={`flex h-11 w-11 items-center justify-center rounded-full border-[2.5px] transition-colors ${
-                    progress.complete ? "border-transparent bg-green-500" : "border-neutral-300 dark:border-neutral-600"
-                  }`}
-                >
-                  <AnimatePresence initial={false}>
-                    {progress.complete && (
-                      <m.span key="c" initial={{ scale: 0.4, opacity: 0 }} animate={{ scale: 1, opacity: 1 }}>
-                        <IconCheck size={22} strokeWidth={3} className="text-white" />
-                      </m.span>
-                    )}
-                  </AnimatePresence>
-                </m.button>
+              <div className="px-4 pb-4 pt-2">
+                <div className="flex items-center justify-between">
+                  <p className={`text-[16px] font-bold ${progress.complete ? "text-emerald-600 dark:text-emerald-400" : "text-neutral-400 dark:text-neutral-500"}`}>
+                    {progress.complete ? "Completed" : "Not yet"}
+                  </p>
+                  <m.button
+                    type="button"
+                    whileTap={{ scale: 0.9 }}
+                    onClick={() => { haptic("light"); onToggleCheckbox(); }}
+                    className={`flex h-11 w-11 items-center justify-center rounded-full border-[2.5px] transition-colors ${
+                      progress.complete ? "border-transparent bg-green-500" : "border-neutral-300 dark:border-neutral-600"
+                    }`}
+                  >
+                    <AnimatePresence initial={false}>
+                      {progress.complete && (
+                        <m.span key="c" initial={{ scale: 0.4, opacity: 0 }} animate={{ scale: 1, opacity: 1 }}>
+                          <IconCheck size={22} strokeWidth={3} className="text-white" />
+                        </m.span>
+                      )}
+                    </AnimatePresence>
+                  </m.button>
+                </div>
+
+                {/* Purely descriptive — one tap above covers all of these;
+                    they're never checked off individually (that's what
+                    trackingType "checklist" is for). */}
+                {(ritual.steps ?? []).length > 0 && (
+                  <div className="mt-3 flex flex-wrap gap-1.5">
+                    {ritual.steps!.map((step) => (
+                      <span
+                        key={step.id}
+                        className="rounded-full border border-neutral-200 bg-neutral-50 px-2.5 py-1 text-[12px] font-semibold text-neutral-600 dark:border-white/10 dark:bg-white/[0.04] dark:text-neutral-300"
+                      >
+                        {step.label}
+                      </span>
+                    ))}
+                  </div>
+                )}
               </div>
             )}
           </div>
