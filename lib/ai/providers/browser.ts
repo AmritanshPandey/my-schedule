@@ -63,16 +63,68 @@ function resolveModel(config: AIProviderConfig): string {
 }
 
 /**
- * Which quantised weights to fetch, per backend.
+ * Models whose fp16 weights are known-good on WebGPU, verified by actually
+ * generating with them rather than by assuming.
  *
- * `q4f16` is 4-bit weights with fp16 everywhere else — for Qwen2.5-0.5B that
- * is ~460 MB versus ~750 MB for plain `q4`, a large saving on a download the
- * user waits through. It needs real fp16 support, which WebGPU has (via the
- * shader-f16 feature) and the WASM/CPU backend does not reliably, so the
- * cheaper weights are only used where they actually run.
+ * `q4f16` is meaningfully smaller — ~460 MB versus ~750 MB for Qwen2.5-0.5B —
+ * but it is NOT universally safe. SmolLM2-360M-Instruct-ONNX loads happily
+ * under q4f16 and then generates an empty string every time, which surfaced to
+ * the user as "Model loaded but returned no output". Plain q4 is the
+ * conservative choice, so anything not on this list gets it: an unfamiliar or
+ * user-typed model should download more rather than silently produce nothing.
  */
-function dtypeFor(device: "webgpu" | "wasm"): "q4f16" | "q4" {
-  return device === "webgpu" ? "q4f16" : "q4";
+const FP16_SAFE_MODELS = new Set<string>([
+  "onnx-community/Qwen2.5-0.5B-Instruct",
+]);
+
+/**
+ * Which quantised weights to fetch.
+ *
+ * fp16 needs real hardware support, which WebGPU has (via shader-f16) and the
+ * WASM/CPU backend does not reliably — so the smaller weights require both a
+ * WebGPU backend and a model verified to produce output under them.
+ */
+function dtypeFor(device: "webgpu" | "wasm", model: string): "q4f16" | "q4" {
+  return device === "webgpu" && FP16_SAFE_MODELS.has(model) ? "q4f16" : "q4";
+}
+
+/** True once a pipeline is live in this tab — no cache round-trip needed. */
+export function isBrowserModelLoaded(model: string): boolean {
+  return _pipeline !== null && _loadedModel === model;
+}
+
+/**
+ * Whether this model's weights are already in the browser cache, i.e. whether
+ * using AI right now would start a several-hundred-megabyte download.
+ *
+ * Transformers.js caches under `env.cacheKey` ('transformers-cache') keyed by
+ * the full remote URL. Rather than rebuilding that URL here — which would
+ * silently drift if the host or path template ever changed — this scans the
+ * cache keys for one that mentions both this model and an .onnx weights file.
+ *
+ * Returns false rather than throwing wherever the Cache API is unavailable
+ * (private browsing, an iframe with a strict policy), so the caller degrades
+ * to "not downloaded" instead of breaking.
+ */
+export async function isBrowserModelCached(model: string): Promise<boolean> {
+  if (isBrowserModelLoaded(model)) return true;
+  try {
+    if (typeof caches === "undefined") return false;
+    const cache = await caches.open("transformers-cache");
+    const keys = await cache.keys();
+    return keys.some((req) => req.url.includes(model) && req.url.endsWith(".onnx"));
+  } catch {
+    return false;
+  }
+}
+
+/** Roughly what the first download costs, for UI that warns before starting
+ *  it. Only the fp16-verified models get the smaller weights, so the estimate
+ *  has to know which model is actually selected. */
+export function browserModelDownloadLabel(model?: string): string {
+  const webgpu = typeof navigator !== "undefined" && "gpu" in navigator;
+  const fp16 = webgpu && !!model && FP16_SAFE_MODELS.has(model);
+  return fp16 ? "~460 MB" : "~400-750 MB";
 }
 
 // ─── Pipeline singleton ───────────────────────────────────────────────────────
@@ -136,7 +188,7 @@ async function getPipeline(model: string): Promise<TextGenerationPipeline> {
     try {
       pipe = (await pipeline("text-generation", model, {
         device,
-        dtype: dtypeFor(device),
+        dtype: dtypeFor(device, model),
         progress_callback: onProgress,
       })) as TextGenerationPipeline;
     } catch (gpuErr) {
@@ -147,7 +199,7 @@ async function getPipeline(model: string): Promise<TextGenerationPipeline> {
         emitStatus({ phase: "loading", progress: 0, message: "Falling back to CPU…" });
         pipe = (await pipeline("text-generation", model, {
           device: "wasm",
-          dtype: dtypeFor("wasm"),
+          dtype: dtypeFor("wasm", model),
           progress_callback: onProgress,
         })) as TextGenerationPipeline;
       } else {

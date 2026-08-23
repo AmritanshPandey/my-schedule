@@ -38,7 +38,7 @@ import {
 import { MLXProvider } from "@/lib/ai/providers/mlx";
 import { OllamaProvider } from "@/lib/ai/providers/ollama";
 import { OpenAICompatibleProvider } from "@/lib/ai/providers/openai-compatible";
-import { BrowserProvider } from "@/lib/ai/providers/browser";
+import { BrowserProvider, isBrowserModelCached, browserModelDownloadLabel, BROWSER_AI_STATUS_EVENT } from "@/lib/ai/providers/browser";
 import { BrowserAIStatusBar } from "@/components/ai/BrowserAIStatusBar";
 import { useAIEnabledSetting } from "@/lib/ai/useAIEnabled";
 import Toggle from "@/components/ui/Toggle";
@@ -150,6 +150,23 @@ function ProviderForm({
   const saved = configForKind(getAIProviderState(), kind);
   const dirty = config.baseUrl !== saved.baseUrl || config.model !== saved.model || (config.apiKey ?? "") !== (saved.apiKey ?? "");
 
+  // Browser AI only: whether these weights are already cached. null while the
+  // (async) cache lookup runs, so the card never flashes a wrong claim.
+  const [downloaded, setDownloaded] = useState<boolean | null>(kind === "browser" ? null : true);
+  useEffect(() => {
+    if (kind !== "browser") return;
+    let cancelled = false;
+    void isBrowserModelCached(saved.model).then((v) => { if (!cancelled) setDownloaded(v); });
+    function onStatus(e: Event) {
+      const detail = (e as CustomEvent<{ phase: string }>).detail;
+      if (detail?.phase === "ready" && !cancelled) setDownloaded(true);
+    }
+    window.addEventListener(BROWSER_AI_STATUS_EVENT, onStatus);
+    return () => { cancelled = true; window.removeEventListener(BROWSER_AI_STATUS_EVENT, onStatus); };
+  }, [kind, saved.model]);
+
+  const needsDownload = kind === "browser" && downloaded === false;
+
   async function runTest(cfg: AIProviderConfig) {
     haptic("light");
     setPhase("testing");
@@ -203,7 +220,11 @@ function ProviderForm({
             {isRemote ? "Bring your own API key" : "Runs on your device"}
           </p>
         </div>
-        {isActive ? (
+        {isActive && needsDownload ? (
+          <span className="rounded-full bg-amber-100 px-2 py-1 text-[10px] font-bold uppercase tracking-wide text-amber-700 dark:bg-amber-500/20 dark:text-amber-400">
+            Not downloaded
+          </span>
+        ) : isActive ? (
           <span className="rounded-full bg-emerald-100 px-2 py-1 text-[10px] font-bold uppercase tracking-wide text-emerald-700 dark:bg-emerald-500/20 dark:text-emerald-400">
             Active
           </span>
@@ -294,6 +315,19 @@ function ProviderForm({
               />
             </Field>
 
+            {/* Not every ONNX repo works: some load fine and then generate an
+                empty string. Without a way back, a user who lands on one is
+                stuck editing a repo id by hand to escape it. */}
+            {isBrowser && config.model !== DEFAULT_BROWSER_CONFIG.model && (
+              <button
+                type="button"
+                onClick={() => setConfig((c) => ({ ...c, model: DEFAULT_BROWSER_CONFIG.model }))}
+                className="text-[11px] font-semibold text-neutral-500 underline decoration-neutral-300 underline-offset-2 hover:text-neutral-700 dark:text-neutral-400 dark:decoration-neutral-600 dark:hover:text-neutral-200"
+              >
+                Use the recommended model
+              </button>
+            )}
+
             {(kind === "ollama" || isRemote) && (
               <div>
                 <button
@@ -333,7 +367,9 @@ function ProviderForm({
                 className="flex-1 rounded-xl bg-neutral-900 px-3 py-2 text-[12px] font-bold text-white disabled:opacity-60 dark:bg-white dark:text-neutral-900"
               >
                 {isBrowser
-                  ? (dirty ? "Save & load model" : "Load model")
+                  ? (dirty ? `Save & download model (${browserModelDownloadLabel(config.model)})`
+                     : needsDownload ? `Download model (${browserModelDownloadLabel(config.model)})`
+                     : "Reload model")
                   : (dirty ? "Save & test connection" : "Test connection")}
               </button>
             </div>

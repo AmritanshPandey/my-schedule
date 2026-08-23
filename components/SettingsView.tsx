@@ -22,6 +22,7 @@ import {
 import { useAuth } from "@/contexts/AuthProvider";
 import { getAIProviderState } from "@/lib/ai/config";
 import { useBrowserAI } from "@/lib/ai/useBrowserAI";
+import { useAIReady } from "@/lib/ai/useAIReady";
 import { resetTour } from "@/lib/onboarding/useCoachTour";
 import { TOUR_IDS } from "@/lib/onboarding/tours";
 import CategoryManager from "@/components/category/CategoryManager";
@@ -61,10 +62,15 @@ const PROVIDER_LABEL: Record<string, string> = {
 function useAINavLabel(): string {
   const type = getAIProviderState().active;
   const { status } = useBrowserAI();
+  const ready = useAIReady();
   if (type === "browser") {
-    if (status?.phase === "loading") return "Browser · Loading model…";
-    if (status?.phase === "error")   return "Browser · Error";
-    return "Browser · On-device";
+    if (status?.phase === "error") return "Browser · Error";
+    // Distinguish "on-device and ready" from "on-device but nothing downloaded
+    // yet" — the second used to read identically to the first.
+    if (ready.state === "downloading") return `Browser · Downloading ${ready.progress ?? 0}%`;
+    if (ready.state === "needs-download") return `Browser · Tap to download (${ready.downloadLabel})`;
+    if (ready.state === "checking") return "Browser · On-device";
+    return "Browser · Ready";
   }
   return `${PROVIDER_LABEL[type] ?? "MLX"} · Provider, instructions`;
 }

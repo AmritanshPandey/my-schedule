@@ -17,7 +17,7 @@ import {
 } from "@tabler/icons-react";
 import { haptic } from "@/lib/haptics";
 import { useAIEnabled } from "@/lib/ai/useAIEnabled";
-import { isAiConfigured } from "@/lib/aiClient";
+import { useAIReady } from "@/lib/ai/useAIReady";
 import { useAuth } from "@/contexts/AuthProvider";
 import { useSyncStatus } from "@/lib/useSyncStatus";
 import SyncDot from "@/components/sync/SyncDot";
@@ -120,12 +120,26 @@ export default function DesktopSidebar({
     setMode(theme === "dark" ? "light" : "dark");
   }
 
-  // AI runs on a local MLX model — no sign-in needed. "Ready" means a
-  // provider is configured (always true given MLX's built-in defaults);
-  // actual live reachability is what AI Settings' "Test connection" is for.
-  const aiReady = isAiConfigured();
-  const statusLabel = aiReady ? "AI ready" : "AI not configured";
-  const statusColor = aiReady ? "text-emerald-600 dark:text-emerald-400" : "text-neutral-400 dark:text-neutral-500";
+  // "Ready" has to mean usable, not merely configured. The in-browser
+  // provider needs its weights downloaded first, and claiming ready before
+  // that just moved the surprise to the user's first request.
+  const ai = useAIReady();
+  const aiReady = ai.state === "ready";
+  const statusLabel =
+    ai.state === "ready" ? "AI ready"
+    : ai.state === "downloading" ? `Downloading model… ${ai.progress ?? 0}%`
+    : ai.state === "needs-download" ? `Download AI model (${ai.downloadLabel})`
+    : ai.state === "checking" ? "Checking AI…"
+    : "AI not configured";
+  const statusColor =
+    ai.state === "ready" ? "text-emerald-600 dark:text-emerald-400"
+    : ai.state === "needs-download" || ai.state === "downloading" ? "text-amber-600 dark:text-amber-400"
+    : "text-neutral-400 dark:text-neutral-500";
+  const statusTitle =
+    ai.state === "ready" ? "AI ready"
+    : ai.state === "needs-download" ? `The in-browser model hasn't been downloaded yet (${ai.downloadLabel}) — click to set it up`
+    : ai.state === "downloading" ? "Downloading the in-browser model…"
+    : "AI not configured — click to open Settings";
 
   return (
     <aside className={`hidden lg:flex h-full shrink-0 flex-col overflow-hidden rounded-2xl border border-neutral-200/80 bg-[#FBFCFA] transition-[width] duration-200 dark:border-white/[0.09] dark:bg-[#111312] ${collapsed ? "w-[76px]" : "w-[236px]"}`}>
@@ -214,7 +228,7 @@ export default function DesktopSidebar({
           <button
             type="button"
             onClick={() => { haptic("light"); if (onOpenSettingsTab) onOpenSettingsTab(); else onOpenSettings(); }}
-            title={collapsed ? statusLabel : (aiReady ? "AI ready" : "AI not configured — click to open Settings")}
+            title={statusTitle}
             className={`flex w-full items-center rounded-xl py-2 transition-colors hover:bg-neutral-100 dark:hover:bg-white/[0.04] ${collapsed ? "justify-center px-0" : "gap-2.5 px-3.5"}`}
           >
             <StatusDot ready={aiReady} />
