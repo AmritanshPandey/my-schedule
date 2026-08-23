@@ -166,7 +166,7 @@ export default function AIActionSheet({
     });
   }
 
-  async function runGeneration(followUp?: { question: string; answer: string }) {
+  async function runGeneration(followUp?: { question: string; answer: string }, attempt = 0) {
     setLoading(true);
     setError(null);
     setResults([]);
@@ -203,6 +203,13 @@ export default function AIActionSheet({
           setTimeout(() => answerRef.current?.focus(), 120);
           return;
         }
+        // One silent retry before surfacing an error — small local models
+        // occasionally drop a bracket or get cut off by their own token
+        // ceiling, and a second pass recovers most of those without the
+        // user needing to notice or re-type anything.
+        if (attempt === 0) {
+          return await runGeneration(followUp, attempt + 1);
+        }
         setError("Couldn't parse results — try rephrasing your goal.");
         setPhase("prompt");
         return;
@@ -213,6 +220,9 @@ export default function AIActionSheet({
       setPhase("result");
     } catch (err) {
       if (!abortRef.current) {
+        if (attempt === 0) {
+          return await runGeneration(followUp, attempt + 1);
+        }
         setError(err instanceof Error ? err.message : "Generation failed");
         setPhase(followUp ? "question" : "prompt");
       }

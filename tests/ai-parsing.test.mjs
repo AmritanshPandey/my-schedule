@@ -34,7 +34,7 @@ registerHooks({
 });
 
 const { parseAIAction } = await import("@/lib/ai.ts");
-const { parseGeneratedTasks } = await import("@/lib/aiActions.ts");
+const { parseGeneratedTasks, parseGeneratedSubtasks, parseGeneratedMilestones } = await import("@/lib/aiActions.ts");
 
 function fenced(obj) {
   return "Sure, here you go:\n```json\n" + JSON.stringify(obj) + "\n```";
@@ -248,4 +248,40 @@ test("parseGeneratedTasks defaults an invalid/missing taskType to \"task\" and r
   assert.equal(tasks[1].taskType, "commitment");
   assert.equal(tasks[2].taskType, "task");
   assert.equal(tasks[3].taskType, "task");
+});
+
+// ── Truncated-generation repair — the model's own token ceiling cutting it
+// off mid-array is a real, common failure mode for small local models, not
+// a contrived one. These lock down that a cut-off batch salvages every
+// complete item instead of the whole response failing. ─────────────────────
+
+test("parseGeneratedTasks recovers the complete items from an array cut off mid-object", () => {
+  // No closing `}` or `]` at all — exactly what a token-ceiling cutoff looks like.
+  const raw = '[{"title":"Morning Run","day":"monday","startTime":"06:30","endTime":"07:15","icon":"run","taskType":"session","subtasks":["Warm up"]},{"title":"Strength Training","day":"wednesday","startTime":"07:00","endTime":"08:00","icon":"barbell","taskType":"session","subtasks":["Squats"]},{"title":"Long Run","day":"saturday","startTime":"07:00"';
+  const tasks = parseGeneratedTasks(raw);
+  assert.equal(tasks.length, 2);
+  assert.equal(tasks[0].title, "Morning Run");
+  assert.equal(tasks[1].title, "Strength Training");
+});
+
+test("parseGeneratedSubtasks recovers complete strings from a flat array cut off mid-string", () => {
+  // A flat array of primitives never emits an intermediate closing bracket —
+  // the repair has to key off the last complete-element comma instead.
+  const raw = '["Review previous quarter metrics","Draft executive summary","Add charts and supp';
+  const subtasks = parseGeneratedSubtasks(raw);
+  assert.deepEqual(subtasks, ["Review previous quarter metrics", "Draft executive summary"]);
+});
+
+test("parseGeneratedMilestones returns nothing when even the first element is truncated", () => {
+  const raw = '[{"title":"Alphabet & Pronunciation","description":"Learn phonics';
+  assert.deepEqual(parseGeneratedMilestones(raw), []);
+});
+
+test("parseGeneratedTasks still parses a normal, complete array untouched by the repair path", () => {
+  const raw = JSON.stringify([
+    { title: "Deep Work", day: "monday", startTime: "09:00", endTime: "11:00", icon: "brain", taskType: "task", subtasks: ["Close Slack"] },
+  ]);
+  const tasks = parseGeneratedTasks(raw);
+  assert.equal(tasks.length, 1);
+  assert.equal(tasks[0].title, "Deep Work");
 });

@@ -88,8 +88,12 @@ const ICONS =
 // Task generation
 // ─────────────────────────────────────────────────────────────────────────────
 
+// All four items used to be taskType "session" — a small model copies the
+// example's *pattern* more readily than the prose rule above it, so it kept
+// over-using "session" for everything. This mix actually demonstrates all
+// three values so the model has something to pattern-match onto for each.
 const TASK_FEW_SHOT = `Example output for plan "Morning Fitness":
-[{"title":"Morning Run","day":"monday","startTime":"06:30","endTime":"07:15","icon":"run","taskType":"session","subtasks":["5 min warm-up walk","Run 3 km at easy pace","5 min cool-down stretch"]},{"title":"Strength Training","day":"wednesday","startTime":"07:00","endTime":"08:00","icon":"barbell","taskType":"session","subtasks":["Squats 3×12","Push-ups 3×15","Plank 60 s"]},{"title":"Yoga & Recovery","day":"friday","startTime":"07:30","endTime":"08:15","icon":"yoga","taskType":"session","subtasks":["Sun salutation","Hip opener holds","5 min meditation"]},{"title":"Long Run","day":"saturday","startTime":"07:00","endTime":"08:30","icon":"run","taskType":"session","subtasks":["Easy pace 8 km","Hydrate every 2 km","Post-run stretch"]}]`;
+[{"title":"Morning Run","day":"monday","startTime":"06:30","endTime":"07:15","icon":"run","taskType":"session","subtasks":["5 min warm-up walk","Run 3 km at easy pace","5 min cool-down stretch"]},{"title":"Strength Training","day":"wednesday","startTime":"07:00","endTime":"08:00","icon":"barbell","taskType":"session","subtasks":["Squats 3×12","Push-ups 3×15","Plank 60 s"]},{"title":"Meal Prep Sunday","day":"sunday","startTime":"11:00","endTime":"12:00","icon":"chefhat","taskType":"task","subtasks":["Cook 3 protein portions","Portion into containers","Fridge for the week"]},{"title":"Physio Check-in","day":"friday","startTime":"09:00","endTime":"09:30","icon":"heart","taskType":"commitment","subtasks":["Bring last week's log","Ask about knee soreness"]}]`;
 
 const TASK_SYSTEM = `Output 4-7 weekly tasks as a JSON array. No explanation, no markdown fences, no preamble.
 Schema: [{"title":"...","day":"monday","startTime":"HH:MM","endTime":"HH:MM","icon":"...","taskType":"task","subtasks":["step",...]}]
