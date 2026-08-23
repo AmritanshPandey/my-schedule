@@ -477,17 +477,26 @@ const mdComponents = {
   ),
 };
 
-const STARTER_PROMPTS: Record<"plans" | "routine", string[]> = {
+/**
+ * Starter chips carry the action they mean. The label used to be sent as a
+ * bare string, throwing that away and leaving the model to re-derive the
+ * action from a prompt describing every type — the hardest part of the job,
+ * and where a small model burns its budget and degenerates.
+ *
+ * `action` omitted means genuinely ambiguous; those still go through the full
+ * decide-then-act prompt.
+ */
+const STARTER_PROMPTS: Record<"plans" | "routine", { label: string; action?: string }[]> = {
   plans: [
-    "Create a 30-day fitness plan",
-    "Add a commitment for an appointment",
-    "Add a tracker to an existing plan",
-    "Suggest milestones for an existing plan",
+    { label: "Create a 30-day fitness plan", action: "create_plan" },
+    { label: "Add a commitment for an appointment", action: "add_task" },
+    { label: "Add a tracker to an existing plan", action: "add_tracker" },
+    { label: "Suggest milestones for an existing plan", action: "suggest_milestones" },
   ],
   routine: [
-    "Design a productive morning routine",
-    "Create an evening wind-down ritual",
-    "Add subtasks to an existing task",
+    { label: "Design a productive morning routine", action: "create_ritual" },
+    { label: "Create an evening wind-down ritual", action: "create_ritual" },
+    { label: "Add subtasks to an existing task", action: "add_subtasks" },
   ],
 };
 
@@ -529,7 +538,7 @@ export function AIPanel({ context, plans, rituals, schedule, activePlan, initial
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages]);
 
-  async function handleSend(overrideText?: string) {
+  async function handleSend(overrideText?: string, actionHint?: string) {
     const text = (overrideText ?? input).trim();
     if (!text || streaming) return;
     setInput("");
@@ -554,7 +563,7 @@ export function AIPanel({ context, plans, rituals, schedule, activePlan, initial
       // Always request the larger token budget: with the unified prompt, any
       // context can emit a create_plan with several bundled tasks — it's a
       // ceiling, not a forced length.
-      for await (const chunk of streamAIChat(history, systemPrompt, 4096, controller.signal)) {
+      for await (const chunk of streamAIChat(history, systemPrompt, 4096, controller.signal, actionHint)) {
         fullText += chunk;
         setMessages((prev) => {
           const updated = [...prev];
@@ -724,14 +733,14 @@ export function AIPanel({ context, plans, rituals, schedule, activePlan, initial
               </m.p>
 
               <div className="flex w-full flex-col gap-1.5 px-2">
-                {STARTER_PROMPTS[context].map((prompt, i) => (
+                {STARTER_PROMPTS[context].map((starter, i) => (
                   <m.button
-                    key={prompt}
+                    key={starter.label}
                     initial={{ opacity: 0, x: -8 }}
                     animate={{ opacity: 1, x: 0 }}
                     transition={{ delay: 0.15 + i * 0.06, ease: "easeOut" }}
                     type="button"
-                    onClick={() => void handleSend(prompt)}
+                    onClick={() => void handleSend(starter.label, starter.action)}
                     disabled={streaming}
                     whileHover={streaming ? {} : { x: 2 }}
                     whileTap={{ scale: 0.98 }}
@@ -741,7 +750,7 @@ export function AIPanel({ context, plans, rituals, schedule, activePlan, initial
                       <span className="inline-flex h-9 w-9 items-center justify-center rounded-full bg-neutral-100 text-neutral-700 dark:bg-white/10 dark:text-white">
                         <IconSparkles size={14} strokeWidth={2} />
                       </span>
-                      {prompt}
+                      {starter.label}
                     </span>
                     <IconArrowRight size={14} strokeWidth={2} className="ml-2 shrink-0 text-neutral-400 dark:text-white/70" />
                   </m.button>

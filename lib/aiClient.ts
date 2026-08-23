@@ -80,11 +80,15 @@ export function streamAIChat(
   systemPrompt: string,
   maxTokens = 1024,
   signal?: AbortSignal,
+  /** The action the user already picked, when the UI knows it — see
+   *  AIGenerateOptions.actionHint. Omitted for free-text asks. */
+  actionHint?: string,
 ): AsyncGenerator<string> {
   return activeProvider().generate(systemPrompt, messages, {
     // Clamped, not trusted: no caller gets to ask for an unbounded generation.
     maxTokens: clampMaxTokens(maxTokens),
     signal: withTimeout(signal),
+    actionHint,
   });
 }
 

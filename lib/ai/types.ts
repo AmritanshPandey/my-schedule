@@ -39,6 +39,17 @@ export interface AIGenerateOptions {
   maxTokens?: number;
   temperature?: number;
   signal?: AbortSignal;
+  /**
+   * The action the user already chose, when the UI knows it — e.g. tapping
+   * "Create a 30-day fitness plan" is unambiguously a create_plan.
+   *
+   * Passing it lets a provider skip the hardest part of the job. Without it a
+   * model has to infer, from a prompt describing every action type, which one
+   * a sentence means; small models spend their whole budget on that and
+   * degenerate before producing content. Optional: free-text asks have no
+   * hint and still go through the full decide-then-act prompt.
+   */
+  actionHint?: string;
 }
 
 /**

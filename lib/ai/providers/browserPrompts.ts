@@ -35,6 +35,9 @@ export interface AIChatRequest {
    *  specifically recognize (see the `default` branch of rewriteForBrowserModel
    *  below) — mirrors the same flag other providers key off of. */
   isStrategy?: boolean;
+  /** The action the user already selected, when known — see
+   *  AIGenerateOptions.actionHint. */
+  actionHint?: string;
   signal?: AbortSignal;
 }
 
@@ -58,6 +61,7 @@ type ActionType =
   | "milestones"
   | "milestone_tasks"
   | "insight"
+  | "chat"
   | "unknown";
 
 function detectActionType(systemPrompt: string): ActionType {
@@ -66,6 +70,11 @@ function detectActionType(systemPrompt: string): ActionType {
   if (systemPrompt.includes("performance coach"))             return "insight";
   if (systemPrompt.includes("directly help achieve a specific milestone")) return "milestone_tasks";
   if (systemPrompt.includes("task planner"))                  return "tasks";
+  // The AI Assistant chat. Its prompt (lib/ai.ts's GENERAL_PROMPT) is ~1,850
+  // tokens of decision rules and JSON schemas written for 7B+ models; handing
+  // that to a sub-1B model made it echo the request back in a loop instead of
+  // answering. Matched last, since the action prompts above are more specific.
+  if (systemPrompt.includes("You are PlanR AI"))              return "chat";
   return "unknown";
 }
 
@@ -247,6 +256,112 @@ function buildInsightRequest(req: AIChatRequest): BrowserAIChatRequest {
 
 // ── Main export ───────────────────────────────────────────────────────────────
 
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Known-intent chat — the user already told us which action they want
+// ─────────────────────────────────────────────────────────────────────────────
+//
+// Tapping "Create a 30-day fitness plan" is unambiguously a create_plan. The
+// generic chat prompt still makes the model choose between four schemas before
+// writing anything, which is most of the work and where a small model fails.
+// With the intent known we hand it one schema and one example, so the whole
+// budget goes on content.
+
+const FOCUSED_SCHEMAS: Record<string, { schema: string; example: string; rules: string }> = {
+  create_plan: {
+    schema: `{"type":"create_plan","payload":{"title":"...","description":"...","emoji":"...","color":"...","tasks":[{"title":"...","day":"monday","startTime":"HH:MM","endTime":"HH:MM","icon":"...","taskType":"session","subtasks":["...","..."]}]}}`,
+    example: `User: Create a 30-day fitness plan
+You: {"type":"create_plan","payload":{"title":"30-Day Fitness","description":"Build a consistent training habit over 30 days.","emoji":"barbell","color":"emerald","tasks":[{"title":"Morning Run","day":"monday","startTime":"07:00","endTime":"07:45","icon":"run","taskType":"session","subtasks":["Warm-up walk","Run 3 km","Cool-down stretch"]},{"title":"Strength Training","day":"wednesday","startTime":"07:00","endTime":"08:00","icon":"barbell","taskType":"session","subtasks":["Squats 3x12","Push-ups 3x15","Plank 60s"]},{"title":"Long Run","day":"saturday","startTime":"08:00","endTime":"09:30","icon":"run","taskType":"session","subtasks":["Easy pace 8 km","Hydrate","Stretch"]}]}}`,
+    rules: `3-5 tasks spread across the week, each with 2-3 subtasks. Colors: blue, emerald, violet, pink, amber, cyan.`,
+  },
+  add_task: {
+    schema: `{"type":"add_task","payload":{"title":"...","taskType":"commitment","day":"monday","startTime":"HH:MM","endTime":"HH:MM","icon":"..."}}`,
+    example: `User: Add a commitment for a dentist appointment on Thursday at 2pm
+You: {"type":"add_task","payload":{"title":"Dentist Appointment","taskType":"commitment","day":"thursday","startTime":"14:00","endTime":"15:00","icon":"star"}}`,
+    rules: `taskType: "task" (checked off), "session" (a practice block), "commitment" (fixed time, never checked off).`,
+  },
+  add_tracker: {
+    schema: `{"type":"add_tracker","payload":{"title":"...","unit":"...","goalDirection":"increase_good"}}`,
+    example: `User: Add a tracker for water intake
+You: {"type":"add_tracker","payload":{"title":"Water","unit":"ml","goalDirection":"increase_good"}}`,
+    rules: `goalDirection is "increase_good" (more is better) or "decrease_good" (less is better).`,
+  },
+  suggest_milestones: {
+    schema: `{"type":"suggest_milestones","payload":{"milestones":[{"title":"...","description":"...","targetDate":"YYYY-MM-DD"}]}}`,
+    example: `User: Suggest milestones for my marathon plan
+You: {"type":"suggest_milestones","payload":{"milestones":[{"title":"Run 10 km non-stop","description":"Build the aerobic base.","targetDate":"2026-03-15"},{"title":"Half marathon distance","description":"Prove the endurance is there.","targetDate":"2026-04-20"},{"title":"Race pace 20 km","description":"Dial in target pace.","targetDate":"2026-05-18"}]}}`,
+    rules: `3-5 milestones, titles 3-6 words, dates spread across the plan's timeframe.`,
+  },
+  create_ritual: {
+    schema: `{"type":"create_ritual","payload":{"title":"...","time":"HH:MM","duration":30,"repeatDays":["monday"],"color":"emerald"}}`,
+    example: `User: Create a morning meditation routine
+You: {"type":"create_ritual","payload":{"title":"Morning Meditation","time":"07:00","duration":15,"repeatDays":["monday","tuesday","wednesday","thursday","friday"],"color":"violet"}}`,
+    rules: `Ritual colors: rose, sky, violet, amber, emerald, fuchsia, orange, cyan, indigo, teal.`,
+  },
+};
+
+function buildFocusedRequest(req: AIChatRequest, action: string): BrowserAIChatRequest | null {
+  const spec = FOCUSED_SCHEMAS[action];
+  if (!spec) return null;
+
+  const lastUser = [...req.messages].reverse().find((m) => m.role === "user");
+  const ask = (lastUser?.content as string) ?? "";
+
+  return {
+    ...req,
+    systemPrompt: `Output ONE JSON object of type "${action}" and nothing else — no explanation, no markdown fences, no repetition.
+Schema: ${spec.schema}
+${spec.rules}
+Icons: ${ICONS}
+Times are 24-hour HH:MM. Days are lowercase weekdays.`,
+    messages: [{ role: "user", content: `${spec.example}\n\nNow do the same for:\n${ask}` }],
+    _maxNewTokens: 700,
+    _temperature: 0,
+  };
+}
+
+
+// ─────────────────────────────────────────────────────────────────────────────
+// AI Assistant chat
+// ─────────────────────────────────────────────────────────────────────────────
+//
+// The full GENERAL_PROMPT covers seven action types, a clarification protocol,
+// icon and colour vocabularies and several worked examples. A small model given
+// all of that does not choose an action — it degenerates, most visibly by
+// restating the user's request over and over. This keeps one schema, one
+// example, and nothing else.
+
+const CHAT_FEW_SHOT = `Example.
+User: Create a 30-day fitness plan
+You:
+{"type":"create_plan","payload":{"title":"30-Day Fitness","description":"Build a consistent training habit over 30 days.","emoji":"barbell","color":"emerald","tasks":[{"title":"Morning Run","day":"monday","startTime":"07:00","endTime":"07:45","icon":"run","taskType":"session","subtasks":["Warm-up walk","Run 3 km","Cool-down stretch"]},{"title":"Strength Training","day":"wednesday","startTime":"07:00","endTime":"08:00","icon":"barbell","taskType":"session","subtasks":["Squats 3x12","Push-ups 3x15","Plank 60s"]},{"title":"Long Run","day":"saturday","startTime":"08:00","endTime":"09:30","icon":"run","taskType":"session","subtasks":["Easy pace 8 km","Hydrate","Stretch"]}]}}`;
+
+const CHAT_SYSTEM = `You create PlanR items. Reply with ONE JSON object and nothing else — no explanation, no markdown fences, no repetition.
+
+Pick one "type":
+- "create_plan" — a new plan. payload: title, description, emoji, color, tasks[]
+- "add_task" — one task. payload: title, taskType, day, startTime, endTime, icon
+- "create_ritual" — a repeating habit. payload: title, time, duration, repeatDays[], color
+- "add_tracker" — a number to track. payload: title, unit, goalDirection
+
+Task fields: day is a lowercase weekday. Times are 24-hour HH:MM. taskType is "task", "session" or "commitment". Each task gets 2-3 subtasks.
+Icons: ${ICONS}
+Colors: blue, emerald, violet, pink, amber, cyan.`;
+
+function buildChatRequest(req: AIChatRequest): BrowserAIChatRequest {
+  // Only the latest user turn is kept. Small models lose the thread across a
+  // long history and start replaying earlier turns.
+  const lastUser = [...req.messages].reverse().find((m) => m.role === "user");
+  const ask = (lastUser?.content as string) ?? "";
+  return {
+    ...req,
+    systemPrompt: CHAT_SYSTEM,
+    messages: [{ role: "user", content: `${CHAT_FEW_SHOT}\n\nNow do the same for:\n${ask}` }],
+    _maxNewTokens: 700,
+    _temperature: 0,
+  };
+}
+
 /**
  * Rewrites a generic AIChatRequest from aiActions.ts into a compact,
  * few-shot-guided prompt optimised for <500 M instruction-tuned models.
@@ -255,12 +370,18 @@ function buildInsightRequest(req: AIChatRequest): BrowserAIChatRequest {
  * future additions to aiActions.ts degrade gracefully rather than failing.
  */
 export function rewriteForBrowserModel(req: AIChatRequest): BrowserAIChatRequest {
+  // A known intent beats any prompt-sniffing: the UI told us outright.
+  if (req.actionHint) {
+    const focused = buildFocusedRequest(req, req.actionHint);
+    if (focused) return focused;
+  }
   switch (detectActionType(req.systemPrompt)) {
     case "tasks":           return buildTaskRequest(req);
     case "subtasks":        return buildSubtaskRequest(req);
     case "milestones":      return buildMilestoneRequest(req);
     case "milestone_tasks": return buildMilestoneTaskRequest(req);
     case "insight":         return buildInsightRequest(req);
+    case "chat":            return buildChatRequest(req);
     default:                return req;
   }
 }

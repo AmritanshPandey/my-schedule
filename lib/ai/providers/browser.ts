@@ -239,10 +239,16 @@ async function* streamGenerate(
   opts: AIGenerateOptions,
 ): AsyncGenerator<string> {
   const pipe = await getPipeline(model);
-  const rewritten = rewriteForBrowserModel({ messages, systemPrompt, signal: opts.signal });
+  const rewritten = rewriteForBrowserModel({ messages, systemPrompt, signal: opts.signal, actionHint: opts.actionHint });
 
   const maxNewTokens = opts.maxTokens ?? rewritten._maxNewTokens ?? 512;
   const temperature  = opts.temperature ?? rewritten._temperature ?? 0.1;
+  // Small models decoding greedily fall into repetition loops — the visible
+  // symptom was the assistant restating the user's request forever instead of
+  // answering. A mild penalty breaks the cycle. Deliberately mild, and without
+  // no_repeat_ngram_size, because valid JSON legitimately repeats short
+  // sequences (`","title":`) and a hard n-gram ban would corrupt it.
+  const REPETITION_PENALTY = 1.12;
   // The system prompt is a real turn, not metadata — rewriteForBrowserModel
   // only rewrites systemPrompt/messages text, it doesn't fold one into the
   // other. AIMessage's role type is deliberately just "user"|"assistant"
@@ -257,6 +263,7 @@ async function* streamGenerate(
       max_new_tokens: maxNewTokens,
       temperature,
       do_sample: temperature > 0,
+      repetition_penalty: REPETITION_PENALTY,
       return_full_text: false,
       ...(opts.signal ? { signal: opts.signal } : {}),
     });
@@ -284,6 +291,7 @@ async function* streamGenerate(
     max_new_tokens: maxNewTokens,
     temperature,
     do_sample: temperature > 0,
+    repetition_penalty: REPETITION_PENALTY,
     return_full_text: false,
     streamer,
     ...(opts.signal ? { signal: opts.signal } : {}),
