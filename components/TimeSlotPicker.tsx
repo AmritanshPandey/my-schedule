@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { IconPlus, IconX } from "@tabler/icons-react";
 import type { DayKey } from "@/lib/useScheduleDB";
-import { parseTimeToMinutes, minutesToInputTime, currentMinutes } from "@/lib/timeUtils";
+import { parseTimeToMinutes, minutesToInputTime, currentMinutes, formatDisplayTime } from "@/lib/timeUtils";
 import TimeInput from "@/components/ui/TimeInput";
 
 const REPEAT_DAYS: DayKey[] = ["sunday", "monday", "tuesday", "wednesday", "thursday", "friday", "saturday"];
@@ -46,6 +46,9 @@ interface TimeSlotPickerProps {
   activeDay?: DayKey;
   repeatDays?: DayKey[];
   onRepeatDaysChange?: (days: DayKey[]) => void;
+  /** Open windows for the day being edited, in schedule-day minutes (see
+   *  lib/availableSlots.ts). Omitted/empty hides the section entirely. */
+  suggestedSlots?: { startMinutes: number; endMinutes: number }[];
 }
 
 // inputToMinutes: parse "HH:MM" input format
@@ -90,6 +93,7 @@ export default function TimeSlotPicker({
   activeDay = "monday",
   repeatDays,
   onRepeatDaysChange,
+  suggestedSlots,
 }: TimeSlotPickerProps) {
   // Presets/duration act on the focused (most recently touched) slot.
   const [focusedIndex, setFocusedIndex] = useState(0);
@@ -216,6 +220,33 @@ export default function TimeSlotPicker({
           Add time slot
         </button>
       </div>
+
+      {/* Suggested (currently-open) times */}
+      {suggestedSlots && suggestedSlots.length > 0 && (
+        <div className="space-y-2">
+          <p className={LABEL}>Suggested times</p>
+          <div className="flex flex-wrap gap-2">
+            {suggestedSlots.map((suggestion) => {
+              const startInput = minutesToInput(suggestion.startMinutes);
+              const endInput = minutesToInput(suggestion.endMinutes);
+              const isActive = active.startTime === startInput && active.endTime === endInput;
+              return (
+                <button
+                  key={`${suggestion.startMinutes}-${suggestion.endMinutes}`}
+                  type="button"
+                  onClick={() => {
+                    setSelectedDuration(suggestion.endMinutes - suggestion.startMinutes);
+                    patchSlot(activeIndex, { startTime: startInput, endTime: endInput });
+                  }}
+                  className={`h-8 rounded-full border px-3 text-[12px] font-semibold transition-colors ${chipClass(isActive)}`}
+                >
+                  {formatDisplayTime(startInput)}–{formatDisplayTime(endInput)}
+                </button>
+              );
+            })}
+          </div>
+        </div>
+      )}
 
       {/* Start presets */}
       <div className="space-y-2">

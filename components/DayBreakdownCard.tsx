@@ -90,8 +90,8 @@ export default function DayBreakdownCard({ activities, categories, todayKey, tod
     [activities, day, categories, dateISO, carryIn],
   );
   const active = useMemo(
-    () => buildActiveHours(totalMinutes, preferences?.dayStartTime),
-    [totalMinutes, preferences?.dayStartTime],
+    () => buildActiveHours(totalMinutes, preferences?.dayStartTime, preferences?.sleepHours),
+    [totalMinutes, preferences?.dayStartTime, preferences?.sleepHours],
   );
   // The day's real end: a fixed "End of day" caps an abnormally late task;
   // otherwise it's the end of the last timed task on this weekday (never the

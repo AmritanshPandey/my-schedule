@@ -10,7 +10,11 @@ import { getSlots } from "./taskMutations";
 import { isTrackedTask } from "./taskCompletion";
 import { isTaskScheduledOn, resolveOccurrence } from "./taskOccurrence";
 import { parseTimeToMinutes, toScheduleDayMinutes } from "./timeUtils";
-import { getConfiguredDayStartMinutes, TIMELINE_END_MINUTES } from "./timeline/displayWindow";
+import { TIMELINE_END_MINUTES } from "./timeline/displayWindow";
+import { resolveWakingWindow } from "./timeline/sleepWindow";
+
+// Re-exported for back-compat with existing importers of this constant.
+export { DEFAULT_WAKING_START_MINUTES } from "./timeline/sleepWindow";
 
 /** Bucket id used for commitments, which belong to no plan. */
 export const HELD_TIME_ID = "__held__";
@@ -139,20 +143,6 @@ export function buildDayBreakdown(
   return { slices, totalMinutes };
 }
 
-/** How long a waking day is assumed to run. */
-export const WAKING_WINDOW_MINUTES = 24 * 60;
-
-/**
- * Where a waking day starts when the user has not configured one.
- *
- * Deliberately *not* `DEFAULT_TIMELINE_START_MINUTES` (4:00). That constant is
- * the schedule-day boundary — the point where one day's grid hands over to the
- * next — not a wake time. Reusing it would tell an unconfigured user their day
- * runs 4:00 AM to 8:00 PM and make every evening block read as falling outside
- * their waking hours.
- */
-export const DEFAULT_WAKING_START_MINUTES = 7 * 60;
-
 export interface ActiveHours {
   startMinutes: number;
   endMinutes: number;
@@ -173,18 +163,23 @@ export interface ActiveHours {
  * compute a derived scalar, couple category grouping to user settings, and have
  * to survive that function's `totalMinutes === 0` early return. Keeping it apart
  * also keeps free time *out* of `slices`, so the donut still tiles a full circle.
+ *
+ * The waking window itself (start + length) comes from
+ * lib/timeline/sleepWindow.ts's `resolveWakingWindow`, shared with
+ * lib/availableSlots.ts's gap-finder so both respect the same configured
+ * sleep need instead of each assuming their own.
  */
-export function buildActiveHours(scheduledMinutes: number, dayStartTime?: string): ActiveHours {
-  const startMinutes = getConfiguredDayStartMinutes(dayStartTime) ?? DEFAULT_WAKING_START_MINUTES;
+export function buildActiveHours(scheduledMinutes: number, dayStartTime?: string, sleepHours?: number): ActiveHours {
+  const { startMinutes, endMinutes, wakingMinutes } = resolveWakingWindow(dayStartTime, sleepHours);
   const scheduled = Math.max(0, scheduledMinutes);
   return {
     startMinutes,
-    endMinutes: startMinutes + WAKING_WINDOW_MINUTES,
-    wakingMinutes: WAKING_WINDOW_MINUTES,
+    endMinutes,
+    wakingMinutes,
     scheduledMinutes: scheduled,
-    freeMinutes: Math.max(0, WAKING_WINDOW_MINUTES - scheduled),
-    overbookedMinutes: Math.max(0, scheduled - WAKING_WINDOW_MINUTES),
-    pct: Math.min(100, (scheduled / WAKING_WINDOW_MINUTES) * 100),
+    freeMinutes: Math.max(0, wakingMinutes - scheduled),
+    overbookedMinutes: Math.max(0, scheduled - wakingMinutes),
+    pct: Math.min(100, (scheduled / wakingMinutes) * 100),
   };
 }
 

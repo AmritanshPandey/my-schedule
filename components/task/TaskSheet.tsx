@@ -35,7 +35,8 @@ import TimeSlotPicker, { type EditableSlot } from "@/components/TimeSlotPicker";
 import { CategorySelector } from "./CategorySelector";
 import CategorySheet, { type CategoryDraft } from "@/components/category/CategorySheet";
 import { haptic } from "@/lib/haptics";
-import type { DayKey, Plan, Task, TaskCategory, TaskRecurrence, TaskTypeValue } from "@/lib/useScheduleDB";
+import type { DayKey, Plan, Schedule, Task, TaskCategory, TaskRecurrence, TaskTypeValue } from "@/lib/useScheduleDB";
+import { findAvailableSlots, suggestSlots } from "@/lib/availableSlots";
 import { DAYS, DAY_LABELS } from "@/lib/useScheduleDB";
 import { localISODate, formatDate } from "@/lib/dateUtils";
 import type { ScheduleEntry } from "@/components/ScheduleItem";
@@ -113,6 +114,9 @@ export interface TaskSheetProps {
   activeDays?: DayKey[];
   /** All weekday task lists — lets edit mode load each day's own slots (per-day times). */
   activities?: Partial<Record<DayKey, Task[]>>;
+  /** Enables the "Suggested times" chip row (see lib/availableSlots.ts).
+   *  Omitted → the row is hidden, existing callers unaffected. */
+  preferences?: Schedule["preferences"];
   isOpen: boolean;
   initialPlanId?: string | null;
   initialTaskType?: TaskTypeValue;
@@ -206,6 +210,7 @@ export function TaskSheet({
   activeDay,
   activeDays,
   activities,
+  preferences,
   isOpen,
   initialPlanId,
   initialTaskType,
@@ -479,6 +484,21 @@ export function TaskSheet({
     if (perDayActive) setPerDaySlots((prev) => ({ ...prev, [resolvedEditDay]: next }));
     else setSlots(next);
   }
+
+  // "Suggested times" — open gaps in the day being edited, sized to whatever
+  // duration the first slot already has (or 30min for a not-yet-sized task).
+  // Targets only the first slot on a multi-slot task; see PlanR's
+  // slot-recommendation plan notes for why that's an accepted v1 limitation.
+  const suggestedSlots = useMemo(() => {
+    if (!preferences) return undefined;
+    const dayTasks = activities?.[resolvedEditDay] ?? activities?.[activeDay] ?? [];
+    const gaps = findAvailableSlots(dayTasks, baseDateISO, preferences);
+    const firstSlot = editorSlots[0];
+    const start = firstSlot ? parseTimeToMinutes(firstSlot.startTime) : null;
+    const end = firstSlot ? parseTimeToMinutes(firstSlot.endTime) : null;
+    const activeDuration = start !== null && end !== null && end > start ? end - start : 30;
+    return suggestSlots(gaps, activeDuration);
+  }, [activities, resolvedEditDay, activeDay, baseDateISO, preferences, editorSlots]);
 
   // Validate every day that will be written (each day's own slots in custom mode).
   const daysToValidate: EditableSlot[][] = isOccurrenceScope || !perDayActive
@@ -985,6 +1005,7 @@ export function TaskSheet({
                 activeDay={activeDay}
                 repeatDays={isOccurrenceScope || repeatMode === "once" || perDayActive ? undefined : repeatDays}
                 onRepeatDaysChange={isOccurrenceScope || repeatMode === "once" || perDayActive ? undefined : setRepeatDays}
+                suggestedSlots={suggestedSlots}
               />
               {timeError && (
                 <p className="-mt-3 text-[12px] font-semibold text-rose-500 dark:text-rose-400">

@@ -4182,6 +4182,7 @@ export default function ScheduleApp() {
           activeDay={activeDay}
           activeDays={taskSheetActiveDays}
           activities={schedule.activities}
+          preferences={schedule.preferences}
           isOpen={taskSheetOpen}
           initialPlanId={taskSheetPlanId}
           initialTaskType={taskSheetInitialType}

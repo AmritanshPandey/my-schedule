@@ -238,6 +238,7 @@ const preferences = z.object({
   startDate: isoDate.optional(),
   lastRolloverISO: isoDate.optional(),
   acknowledgedMisses: z.array(z.string()).optional(),
+  sleepHours: z.number().finite().optional(),
 }).passthrough();
 
 export const ScheduleSchema = z.object({

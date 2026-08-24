@@ -14,6 +14,7 @@ import { calculateMilestoneEndDate, normalizeMilestoneTimeline } from "@/lib/roa
 import { localISODate } from "@/lib/dateUtils";
 import { DAYS, DAY_LABELS, type DayKey, MAX_SCHEDULE_EVENTS } from "@/lib/scheduleConstants";
 import { normalizeDayStartTime } from "@/lib/timeline/displayWindow";
+import { MIN_SLEEP_HOURS, MAX_SLEEP_HOURS } from "@/lib/timeline/sleepWindow";
 import { bootLog } from "@/lib/iosSafeMode";
 
 export { DAYS, DAY_LABELS } from "@/lib/scheduleConstants";
@@ -457,6 +458,13 @@ export interface SchedulePreferences {
    * `"missed"` history event is kept so analytics stay accurate.
    */
   acknowledgedMisses?: string[];
+  /**
+   * Hours of sleep the user needs, used to size the "waking window" the
+   * Overview's "Where the day goes" active-hours bar measures free/overbooked
+   * time against (see lib/timeline/sleepWindow.ts). Half-hour granularity,
+   * clamped to [MIN_SLEEP_HOURS, MAX_SLEEP_HOURS]. Unset = DEFAULT_SLEEP_HOURS.
+   */
+  sleepHours?: number;
 }
 
 /**
@@ -1090,7 +1098,7 @@ function normalizeNotes(raw: unknown): Note[] {
 
 function normalizeSchedulePreferences(raw: unknown): SchedulePreferences {
   if (!raw || typeof raw !== "object") return {};
-  const source = raw as { dayStartTime?: unknown; dayEndMinutes?: unknown; dayEndAuto?: unknown; startDate?: unknown; lastRolloverISO?: unknown; acknowledgedMisses?: unknown };
+  const source = raw as { dayStartTime?: unknown; dayEndMinutes?: unknown; dayEndAuto?: unknown; startDate?: unknown; lastRolloverISO?: unknown; acknowledgedMisses?: unknown; sleepHours?: unknown };
   const dayStartTime = normalizeDayStartTime(source.dayStartTime);
   // Accept a numeric dayEndMinutes in minutes (may be > 1440 to represent next-day hours)
   let dayEndMinutes: number | undefined = undefined;
@@ -1117,6 +1125,15 @@ function normalizeSchedulePreferences(raw: unknown): SchedulePreferences {
         (k): k is string => typeof k === "string" && /\|\d{4}-\d{2}-\d{2}$/.test(k),
       ).slice(-200))
     : undefined;
+  // Half-hour granularity, bounds-checked like dayEndMinutes above; invalid
+  // input (non-numeric, NaN, out of range) is dropped rather than clamped, so
+  // a bad value never silently enters persistence as something the user never
+  // chose.
+  let sleepHours: number | undefined = undefined;
+  if (typeof source.sleepHours === "number" && Number.isFinite(source.sleepHours)) {
+    const rounded = Math.round(source.sleepHours * 2) / 2;
+    if (rounded >= MIN_SLEEP_HOURS && rounded <= MAX_SLEEP_HOURS) sleepHours = rounded;
+  }
   return {
     ...(dayStartTime ? { dayStartTime } : {}),
     ...(typeof dayEndMinutes === "number" ? { dayEndMinutes } : {}),
@@ -1124,6 +1141,7 @@ function normalizeSchedulePreferences(raw: unknown): SchedulePreferences {
     ...(startDate ? { startDate } : {}),
     ...(lastRolloverISO ? { lastRolloverISO } : {}),
     ...(acknowledgedMisses && acknowledgedMisses.length ? { acknowledgedMisses } : {}),
+    ...(typeof sleepHours === "number" ? { sleepHours } : {}),
   };
 }
 

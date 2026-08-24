@@ -75,9 +75,10 @@ const {
   buildActiveHours,
   donutSegments,
   HELD_TIME_ID,
-  WAKING_WINDOW_MINUTES,
   DEFAULT_WAKING_START_MINUTES,
 } = await import("../lib/dayBreakdown.ts");
+const { getWakingWindowMinutes, DEFAULT_SLEEP_HOURS, MIN_SLEEP_HOURS, MAX_SLEEP_HOURS } =
+  await import("../lib/timeline/sleepWindow.ts");
 const { continuationInterval, SCHEDULE_DAY_HANDOVER_MINUTES } =
   await import("../lib/timeline/overnight.ts");
 const { buildWeeklyHeatmap, levelForMinutes, BAND_COUNT } =
@@ -182,6 +183,16 @@ test("runtime schedule validation accepts the current minimal schedule shape", (
   const result = validateSchedule(validSchedule());
   assert.equal(result.success, true);
   assert.equal(schedulePayloadBytes(validSchedule()) > 0, true);
+});
+
+test("runtime schedule validation accepts preferences.sleepHours", () => {
+  const withSleep = validSchedule();
+  withSleep.preferences = { sleepHours: 7.5 };
+  assert.equal(validateSchedule(withSleep).success, true);
+
+  const withoutSleep = validSchedule();
+  withoutSleep.preferences = {};
+  assert.equal(validateSchedule(withoutSleep).success, true, "sleepHours stays optional");
 });
 
 test("runtime schedule validation rejects missing required structure", () => {
@@ -1865,23 +1876,25 @@ test("buildDayBreakdown counts the previous day's overnight tail on this day", (
 });
 
 test("buildActiveHours measures scheduled time against the waking day", () => {
-  assert.equal(WAKING_WINDOW_MINUTES, 24 * 60);
   assert.equal(DEFAULT_WAKING_START_MINUTES, 7 * 60, "4 AM is the day boundary, not a wake time");
+  assert.equal(DEFAULT_SLEEP_HOURS, 8);
+  // Default (no sleepHours passed) assumes DEFAULT_SLEEP_HOURS of sleep.
+  const defaultWaking = 24 * 60 - DEFAULT_SLEEP_HOURS * 60; // 960
+  assert.equal(getWakingWindowMinutes(undefined), defaultWaking);
 
   const typical = buildActiveHours(390);
   assert.equal(typical.startMinutes, 7 * 60, "falls back to the waking default, not the timeline's");
-  // With a 24h waking window the end is the start + 1440 minutes.
-  assert.equal(typical.endMinutes, 1860);
-  assert.equal(typical.freeMinutes, 1440 - 390);
+  assert.equal(typical.wakingMinutes, defaultWaking);
+  assert.equal(typical.endMinutes, 7 * 60 + defaultWaking);
+  assert.equal(typical.freeMinutes, defaultWaking - 390);
   assert.equal(typical.overbookedMinutes, 0);
-  assert.equal(Math.round(typical.pct), 27);
+  assert.equal(Math.round(typical.pct), Math.round((390 / defaultWaking) * 100));
 
   // A configured day start moves the window.
   assert.equal(buildActiveHours(0, "05:30").startMinutes, 330);
 
   // Overbooked: pct is clamped so the fill can never leave its track.
-  // Use a value larger than 24h (1440) to exercise overbooked behavior.
-  const over = buildActiveHours(1440 + 75);
+  const over = buildActiveHours(defaultWaking + 75);
   assert.equal(over.pct, 100);
   assert.equal(over.freeMinutes, 0);
   assert.equal(over.overbookedMinutes, 75);
@@ -1889,7 +1902,25 @@ test("buildActiveHours measures scheduled time against the waking day", () => {
   // An empty day still reports a full window of free time.
   const empty = buildActiveHours(0);
   assert.equal(empty.pct, 0);
-  assert.equal(empty.freeMinutes, 1440);
+  assert.equal(empty.freeMinutes, defaultWaking);
+});
+
+test("buildActiveHours' waking window shrinks/grows with configured sleepHours", () => {
+  const scheduled = 300;
+  const withDefault = buildActiveHours(scheduled, undefined, undefined);
+  const withSix = buildActiveHours(scheduled, undefined, 6);
+  const withTen = buildActiveHours(scheduled, undefined, 10);
+
+  assert.equal(withDefault.wakingMinutes, 24 * 60 - DEFAULT_SLEEP_HOURS * 60);
+  assert.equal(withSix.wakingMinutes, 24 * 60 - 6 * 60, "less sleep -> a longer waking window");
+  assert.equal(withTen.wakingMinutes, 24 * 60 - 10 * 60, "more sleep -> a shorter waking window");
+  assert.ok(withSix.wakingMinutes > withDefault.wakingMinutes);
+  assert.ok(withTen.wakingMinutes < withDefault.wakingMinutes);
+
+  // getWakingWindowMinutes clamps/falls back the same way normalizeSchedulePreferences does.
+  assert.equal(getWakingWindowMinutes(MIN_SLEEP_HOURS - 5), 24 * 60 - MIN_SLEEP_HOURS * 60, "below range clamps to the minimum");
+  assert.equal(getWakingWindowMinutes(MAX_SLEEP_HOURS + 5), 24 * 60 - MAX_SLEEP_HOURS * 60, "above range clamps to the maximum");
+  assert.equal(getWakingWindowMinutes(Number.NaN), 24 * 60 - DEFAULT_SLEEP_HOURS * 60, "non-finite falls back to the default");
 });
 
 test("buildDayBreakdown is empty when nothing is scheduled", () => {

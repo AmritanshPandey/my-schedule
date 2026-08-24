@@ -48,6 +48,7 @@ import { CARD as CARD_SURFACE } from "@/components/ui/surfaces";
 import { SETTINGS_CONTROL_CLASS, SETTINGS_ICON_BUTTON_CLASS } from "@/components/ui/Input";
 import { buildDeleteConfirmationCopy } from "@/lib/deleteConfirm";
 import { normalizeDayStartTime } from "@/lib/timeline/displayWindow";
+import { MIN_SLEEP_HOURS, MAX_SLEEP_HOURS } from "@/lib/timeline/sleepWindow";
 import { localISODate } from "@/lib/dateUtils";
 
 const PROVIDER_LABEL: Record<string, string> = {
@@ -150,6 +151,11 @@ const DAY_END_OPTIONS = Array.from({ length: 9 }, (_, i) => {
   const baseLabel = formatDisplayTime(minutesToInputTime(minutes % 1440));
   const label = minutes >= 1440 ? `${baseLabel} (next day)` : baseLabel;
   return { value: String(minutes), label };
+});
+
+const SLEEP_HOURS_OPTIONS = Array.from({ length: (MAX_SLEEP_HOURS - MIN_SLEEP_HOURS) * 2 + 1 }, (_, i) => {
+  const hours = MIN_SLEEP_HOURS + i * 0.5;
+  return { value: String(hours), label: `${hours % 1 === 0 ? hours : hours.toFixed(1)}h` };
 });
 
 // ── Theme ─────────────────────────────────────────────────────────────────────
@@ -646,6 +652,33 @@ export function SettingsView({
                     ))}
                   </select>
                   <IconClock size={14} strokeWidth={2} className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-neutral-400" />
+                </div>
+              </Row>
+
+              <Divider />
+
+              <Row className="items-start max-sm:flex-col sm:items-center">
+                <div className="min-w-0 flex-1">
+                  <p className="text-[13px] font-semibold text-neutral-800 dark:text-white">Sleep needed</p>
+                  <p className="mt-0.5 text-[11px] leading-snug text-neutral-400 dark:text-neutral-500">
+                    How many hours of sleep you need — shortens the &quot;Active hours&quot; waking window accordingly.
+                  </p>
+                </div>
+                <div className="relative w-full sm:w-64 sm:shrink-0">
+                  <select
+                    aria-label="Sleep needed"
+                    value={schedule.preferences?.sleepHours != null ? String(schedule.preferences.sleepHours) : ""}
+                    onChange={(e) => onUpdatePreferences?.({ sleepHours: e.target.value ? Number(e.target.value) : undefined })}
+                    className={`${SETTINGS_CONTROL_CLASS} w-full pr-9 appearance-none`}
+                  >
+                    <option value="">Default (8h)</option>
+                    {SLEEP_HOURS_OPTIONS.map((option) => (
+                      <option key={option.value} value={option.value}>
+                        {option.label}
+                      </option>
+                    ))}
+                  </select>
+                  <IconMoon size={14} strokeWidth={2} className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-neutral-400" />
                 </div>
               </Row>
             </Card>
