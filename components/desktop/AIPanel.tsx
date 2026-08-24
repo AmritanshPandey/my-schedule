@@ -8,6 +8,8 @@ import { parseAIAction, buildSystemPrompt, buildPlanContext } from "@/lib/ai";
 import type { AIActionResult } from "@/lib/ai";
 import { streamAIChat } from "@/lib/aiClient";
 import { getAIProviderState } from "@/lib/ai/config";
+import { useAIReady } from "@/lib/ai/useAIReady";
+import { preloadBrowserModel } from "@/lib/ai/providers/browser";
 import { resolvePlanTarget, resolveTaskTarget, describeTargetProblem } from "@/lib/ai/targets";
 import type { Plan, Ritual, Schedule } from "@/lib/useScheduleDB";
 import { SECTION_ICONS, getIconPickerStyle } from "@/components/SectionIcons";
@@ -538,6 +540,14 @@ export function AIPanel({ context, plans, rituals, schedule, activePlan, initial
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages]);
 
+  const ready = useAIReady();
+
+  function handleDownloadModel() {
+    void preloadBrowserModel(getAIProviderState().browser.model).catch(() => {
+      // The status bar reports the error phase; nothing to add here.
+    });
+  }
+
   async function handleSend(overrideText?: string, actionHint?: string) {
     const text = (overrideText ?? input).trim();
     if (!text || streaming) return;
@@ -705,7 +715,15 @@ export function AIPanel({ context, plans, rituals, schedule, activePlan, initial
 
       {/* Messages */}
       <div className="flex-1 overflow-x-hidden overflow-y-auto overscroll-contain px-3 py-3">
-        <AnimatePresence mode="wait">
+        {/* No mode="wait": there is a single stable child key below, so there is
+            nothing to sequence, and mode="wait" would only reintroduce the
+            "incoming child waits on an exit that may never finish" hazard. */}
+        <AnimatePresence>
+          {/* One child, one key. The model has to exist before any of this
+              works, but deriving the *content* rather than swapping keys means
+              AnimatePresence never has to run an exit here — so there is no
+              flash of the starters while the cache check resolves, and no
+              dependence on a transition completing. */}
           {messages.length === 0 && (
             <m.div
               key="empty"
@@ -723,6 +741,48 @@ export function AIPanel({ context, plans, rituals, schedule, activePlan, initial
                 <IconBrain size={20} strokeWidth={1.5} className="text-neutral-700 dark:text-white" />
               </m.div>
 
+              {/* Nothing decisive while the cache check is still running. */}
+              {ready.state === "checking" && <span className="sr-only">Checking AI</span>}
+
+              {ready.state === "needs-download" && (
+                <div className="flex flex-col items-center gap-4 px-6">
+                  <div>
+                    <p className="text-[13px] font-semibold text-neutral-800 dark:text-white/90">
+                      One-time download to use AI here
+                    </p>
+                    <p className="mt-1.5 text-[12px] leading-relaxed text-neutral-500 dark:text-neutral-400">
+                      PlanR runs its model inside this tab, so nothing you write leaves your
+                      device. It needs {ready.downloadLabel} once, then it&apos;s cached.
+                    </p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={handleDownloadModel}
+                    className="rounded-full bg-neutral-900 px-5 py-2.5 text-[13px] font-bold text-white dark:bg-white dark:text-neutral-900"
+                  >
+                    Download model ({ready.downloadLabel})
+                  </button>
+                </div>
+              )}
+
+              {ready.state === "downloading" && (
+                <div className="flex flex-col items-center gap-3 px-6">
+                  <p className="text-[13px] font-semibold text-neutral-800 dark:text-white/90">
+                    Downloading the model… {ready.progress ?? 0}%
+                  </p>
+                  <div className="h-1.5 w-48 overflow-hidden rounded-full bg-neutral-200 dark:bg-neutral-700">
+                    <div
+                      className="h-full rounded-full bg-emerald-500 transition-[width] duration-300"
+                      style={{ width: `${ready.progress ?? 0}%` }}
+                    />
+                  </div>
+                  <p className="text-[12px] text-neutral-500 dark:text-neutral-400">
+                    You can close this — it keeps going in the background.
+                  </p>
+                </div>
+              )}
+
+              {(ready.state === "ready" || ready.state === "not-configured") && (
               <m.p
                 initial={{ opacity: 0, y: 6 }}
                 animate={{ opacity: 1, y: 0 }}
@@ -731,7 +791,9 @@ export function AIPanel({ context, plans, rituals, schedule, activePlan, initial
               >
                 What would you like to build?
               </m.p>
+              )}
 
+              {(ready.state === "ready" || ready.state === "not-configured") && (
               <div className="flex w-full flex-col gap-1.5 px-2">
                 {STARTER_PROMPTS[context].map((starter, i) => (
                   <m.button
@@ -756,6 +818,7 @@ export function AIPanel({ context, plans, rituals, schedule, activePlan, initial
                   </m.button>
                 ))}
               </div>
+              )}
             </m.div>
           )}
         </AnimatePresence>

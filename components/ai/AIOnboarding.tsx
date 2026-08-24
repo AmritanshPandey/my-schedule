@@ -5,6 +5,9 @@ import { AnimatePresence, m } from "framer-motion";
 import { IconSparkles, IconX } from "@tabler/icons-react";
 import { haptic } from "@/lib/haptics";
 import { useAIEnabled } from "@/lib/ai/useAIEnabled";
+import { useAIReady } from "@/lib/ai/useAIReady";
+import { getAIProviderState } from "@/lib/ai/config";
+import { preloadBrowserModel } from "@/lib/ai/providers/browser";
 
 /**
  * One-time notice that AI is on by default and where the off switch is.
@@ -22,6 +25,7 @@ const AI_NOTICE_KEY = "planr_ai_default_notice_v2";
 export default function AIOnboarding({ onOpenAISettings }: { onOpenAISettings: () => void }) {
   const [visible, setVisible] = useState(false);
   const aiEnabled = useAIEnabled();
+  const ready = useAIReady();
 
   useEffect(() => {
     // Never announce a feature the user has already switched off.
@@ -40,6 +44,17 @@ export default function AIOnboarding({ onOpenAISettings }: { onOpenAISettings: (
   function dismiss() {
     haptic("light");
     markSeen();
+  }
+
+  function handleDownload() {
+    haptic("light");
+    markSeen();
+    // Deliberately not awaited: the sheet closes immediately and progress is
+    // reported by the sidebar and Settings rows, so the user is not held on a
+    // modal for the length of a several-hundred-megabyte download.
+    void preloadBrowserModel(getAIProviderState().browser.model).catch(() => {
+      // Surfaced by the status bar's error phase; nothing useful to do here.
+    });
   }
 
   function handleOpenSettings() {
@@ -102,21 +117,33 @@ export default function AIOnboarding({ onOpenAISettings }: { onOpenAISettings: (
                   you write leaves your device.
                 </p>
                 <p className="mt-3 text-[13px] leading-snug text-neutral-400 dark:text-neutral-500">
-                  The first time you use it, it downloads a model once (around 460&nbsp;MB) and
-                  then caches it. On a metered connection you may want to wait for Wi-Fi.
-                  Don&apos;t want any of it? Turn AI off in Settings — every AI button
-                  disappears.
+                  {/* Read from the provider rather than written in prose: this said
+                      "460 MB" while the default model actually cost ~820 MB, because
+                      the copy and the model were changed at different times. */}
+                  It downloads a model once ({ready.downloadLabel}), then caches it. On a
+                  metered connection you may want to wait for Wi&#8209;Fi. Don&apos;t want any
+                  of it? Turn AI off in Settings — every AI button disappears.
                 </p>
               </div>
 
               <div className="px-5 pb-6">
-                <button
-                  type="button"
-                  onClick={dismiss}
-                  className="flex w-full items-center justify-center gap-2.5 rounded-full bg-neutral-900 py-4 text-[16px] font-bold text-white transition-colors dark:bg-white dark:text-neutral-900"
-                >
-                  Got it
-                </button>
+                {ready.state === "needs-download" ? (
+                  <button
+                    type="button"
+                    onClick={handleDownload}
+                    className="flex w-full items-center justify-center gap-2.5 rounded-full bg-neutral-900 py-4 text-[16px] font-bold text-white transition-colors dark:bg-white dark:text-neutral-900"
+                  >
+                    Download now ({ready.downloadLabel})
+                  </button>
+                ) : (
+                  <button
+                    type="button"
+                    onClick={dismiss}
+                    className="flex w-full items-center justify-center gap-2.5 rounded-full bg-neutral-900 py-4 text-[16px] font-bold text-white transition-colors dark:bg-white dark:text-neutral-900"
+                  >
+                    {ready.state === "downloading" ? `Downloading… ${ready.progress ?? 0}%` : "Got it"}
+                  </button>
+                )}
                 <button
                   type="button"
                   onClick={handleOpenSettings}

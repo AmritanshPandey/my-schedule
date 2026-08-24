@@ -18,12 +18,14 @@ import { useEffect, useState } from "react";
 import {
   IconAlertTriangle,
   IconChevronLeft,
+  IconChevronRight,
   IconCircleCheck,
   IconCircleX,
   IconDeviceLaptop,
   IconLoader2,
   IconSparkles,
 } from "@tabler/icons-react";
+import { AnimatePresence, m } from "framer-motion";
 import {
   getAIProviderState,
   setActiveProvider,
@@ -385,7 +387,7 @@ function ProviderForm({
                 <>Start it with <code className="rounded bg-neutral-100 px-1 py-0.5 font-mono text-[10px] dark:bg-white/[0.08]">ollama serve</code>, then pull a model with <code className="rounded bg-neutral-100 px-1 py-0.5 font-mono text-[10px] dark:bg-white/[0.08]">ollama pull {config.model || defaults.model}</code></>
               )}
               {isBrowser && (
-                <>Downloads once (~460 MB on WebGPU, ~750 MB on CPU) and runs entirely in this browser tab — no server, no account, nothing leaves your device.</>
+                <>Downloads once ({browserModelDownloadLabel(config.model || defaults.model)}) and runs entirely in this browser tab — no server, no account, nothing leaves your device.</>
               )}
               {isRemote && (
                 <>Your key is stored on this device only, sent directly to the provider — never through PlanR&apos;s servers (there are none). Some providers block direct browser requests (CORS); OpenRouter explicitly allows it.</>
@@ -394,6 +396,56 @@ function ProviderForm({
           </div>
         </>
       )}
+    </div>
+  );
+}
+
+// ── Collapsible wrapper — Instructions is power-user customization, so it
+// starts closed rather than adding four textareas' worth of scroll to every
+// visit for something most people never touch. ─────────────────────────────
+
+function Collapsible({
+  title,
+  subtitle,
+  defaultOpen = false,
+  children,
+}: {
+  title: string;
+  subtitle: string;
+  defaultOpen?: boolean;
+  children: React.ReactNode;
+}) {
+  const [open, setOpen] = useState(defaultOpen);
+  return (
+    <div className={`overflow-hidden ${CARD}`}>
+      <button
+        type="button"
+        onClick={() => { haptic("light"); setOpen((o) => !o); }}
+        className="flex w-full items-center gap-3 px-4 py-3.5 text-left"
+      >
+        <div className="min-w-0 flex-1">
+          <p className="text-[13px] font-bold text-neutral-900 dark:text-white">{title}</p>
+          <p className="mt-0.5 truncate text-[11px] leading-relaxed text-neutral-400 dark:text-neutral-500">{subtitle}</p>
+        </div>
+        <m.div animate={{ rotate: open ? 90 : 0 }} transition={{ duration: 0.18, ease: "easeOut" }} className="shrink-0">
+          <IconChevronRight size={14} strokeWidth={2.2} className="text-neutral-300 dark:text-neutral-600" />
+        </m.div>
+      </button>
+      <AnimatePresence initial={false}>
+        {open && (
+          <m.div
+            key="content"
+            initial={{ height: 0 }}
+            animate={{ height: "auto" }}
+            exit={{ height: 0 }}
+            transition={{ duration: 0.22, ease: [0.4, 0, 0.2, 1] }}
+            style={{ overflow: "hidden" }}
+          >
+            <div className="mx-4 border-t border-neutral-100 dark:border-white/[0.06]" />
+            {children}
+          </m.div>
+        )}
+      </AnimatePresence>
     </div>
   );
 }
@@ -407,8 +459,27 @@ const INSTRUCTION_FIELDS: { key: "plan" | "task" | "subtask" | "milestone"; labe
   { key: "milestone", label: "Milestones", placeholder: "e.g. Space milestones every 2 weeks, not evenly by default." },
 ];
 
+/** A reasonable starting point for each category, shown as real editable
+ *  text (not gray placeholder) the first time this page opens — empty
+ *  textareas make people think there's nothing worth writing here. These
+ *  aren't saved, and don't affect generation, until "Save instructions" is
+ *  actually pressed; a category with a real saved value (including a
+ *  deliberately-cleared one) always wins over its default. */
+const DEFAULT_INSTRUCTIONS: AIInstructions = {
+  plan: "Use a realistic timeframe based on the goal's actual scope, and give the plan a clear, specific title.",
+  task: "Match taskType to what each item really is — recurring practice is a session, a one-off fixed appointment is a commitment, everything else is a task.",
+  subtask: "Each subtask should be one concrete, checkable action, not a vague goal.",
+  milestone: "Space milestones evenly across the plan's full timeframe, not bunched near the start.",
+};
+
 function InstructionsSection() {
-  const [values, setValues] = useState<AIInstructions>(() => getAIInstructions());
+  const initialSaved = getAIInstructions();
+  const [values, setValues] = useState<AIInstructions>(() => ({
+    plan: initialSaved.plan ?? DEFAULT_INSTRUCTIONS.plan,
+    task: initialSaved.task ?? DEFAULT_INSTRUCTIONS.task,
+    subtask: initialSaved.subtask ?? DEFAULT_INSTRUCTIONS.subtask,
+    milestone: initialSaved.milestone ?? DEFAULT_INSTRUCTIONS.milestone,
+  }));
   const [saved, setSaved] = useState(false);
 
   function handleSave() {
@@ -421,16 +492,14 @@ function InstructionsSection() {
   const dirty = JSON.stringify(values) !== JSON.stringify(getAIInstructions());
 
   return (
-    <div className={`overflow-hidden ${CARD}`}>
-      <div className="px-4 py-3.5">
-        <p className="text-[13px] font-bold text-neutral-900 dark:text-white">Instructions</p>
-        <p className="mt-0.5 text-[11px] leading-relaxed text-neutral-400 dark:text-neutral-500">
-          Added to the built-in prompt for each category — leave blank to use the default behavior as-is.
-        </p>
-      </div>
-      <div className="mx-4 border-t border-neutral-100 dark:border-white/[0.06]" />
-      <div className="space-y-4 px-4 py-3.5">
-        {INSTRUCTION_FIELDS.map((f) => (
+    <div className="space-y-4 px-4 py-3.5">
+      {INSTRUCTION_FIELDS.map((f) => {
+        // Only true before the very first save of this category — once a
+        // real value (even "") is on record, that's what "unsaved default"
+        // compares against, so the tag can never come back after a
+        // deliberate clear.
+        const isUnsavedDefault = initialSaved[f.key] === undefined && values[f.key] === DEFAULT_INSTRUCTIONS[f.key];
+        return (
           <Field key={f.key} label={f.label}>
             <textarea
               value={values[f.key] ?? ""}
@@ -439,17 +508,22 @@ function InstructionsSection() {
               rows={2}
               className="w-full resize-none rounded-xl border border-neutral-200 bg-neutral-50 px-3 py-2 text-[13px] text-neutral-900 outline-none placeholder:text-neutral-400 focus:border-neutral-300 focus:bg-white dark:border-white/[0.08] dark:bg-white/[0.04] dark:text-white dark:placeholder:text-neutral-600 dark:focus:border-white/20 dark:focus:bg-white/[0.07]"
             />
+            {isUnsavedDefault && (
+              <p className="mt-1 text-[10px] font-medium text-neutral-400 dark:text-neutral-500">
+                Suggested default — not active until you save. Edit or clear it first if you'd rather start blank.
+              </p>
+            )}
           </Field>
-        ))}
-        <button
-          type="button"
-          onClick={handleSave}
-          disabled={!dirty && !saved}
-          className="w-full rounded-xl bg-neutral-900 px-3 py-2 text-[12px] font-bold text-white disabled:opacity-40 dark:bg-white dark:text-neutral-900"
-        >
-          {saved ? "Saved" : "Save instructions"}
-        </button>
-      </div>
+        );
+      })}
+      <button
+        type="button"
+        onClick={handleSave}
+        disabled={!dirty && !saved}
+        className="w-full rounded-xl bg-neutral-900 px-3 py-2 text-[12px] font-bold text-white disabled:opacity-40 dark:bg-white dark:text-neutral-900"
+      >
+        {saved ? "Saved" : "Save instructions"}
+      </button>
     </div>
   );
 }
@@ -463,6 +537,10 @@ interface AIViewProps {
 export function AIView({ onClose }: AIViewProps) {
   const [active, setActive] = useState<ProviderKind>(() => getAIProviderState().active);
   const { enabled: aiEnabled, setEnabled: setAiEnabled } = useAIEnabledSetting();
+  // Starts open if any category already has one saved, so returning to this
+  // page never hides configuration you already set — only a first-time,
+  // all-blank visit gets the collapsed, out-of-the-way default.
+  const [hasSavedInstructions] = useState(() => Object.values(getAIInstructions()).some(Boolean));
 
   function activate(kind: ProviderKind) {
     haptic("light");
@@ -511,23 +589,26 @@ export function AIView({ onClose }: AIViewProps) {
           </div>
 
           <div>
-            <SectionLabel>Local AI</SectionLabel>
+            <SectionLabel>Provider</SectionLabel>
+            {/* Browser AI first — it's the actual zero-setup default (see
+                DEFAULT_BROWSER_CONFIG / a fresh install's active provider),
+                so it leads rather than following two options that both
+                require running separate server software on your machine. */}
             <div className="space-y-3">
+              <ProviderForm kind="browser" isActive={active === "browser"} onActivate={() => activate("browser")} />
               <ProviderForm kind="mlx" isActive={active === "mlx"} onActivate={() => activate("mlx")} />
               <ProviderForm kind="ollama" isActive={active === "ollama"} onActivate={() => activate("ollama")} />
-              <ProviderForm kind="browser" isActive={active === "browser"} onActivate={() => activate("browser")} />
+              <ProviderForm kind="openai-compatible" isActive={active === "openai-compatible"} onActivate={() => activate("openai-compatible")} />
             </div>
           </div>
 
-          <div>
-            <SectionLabel>API Provider</SectionLabel>
-            <ProviderForm kind="openai-compatible" isActive={active === "openai-compatible"} onActivate={() => activate("openai-compatible")} />
-          </div>
-
-          <div>
-            <SectionLabel>Instructions</SectionLabel>
+          <Collapsible
+            title="Instructions"
+            subtitle="Optional — added to the built-in prompt for each category"
+            defaultOpen={hasSavedInstructions}
+          >
             <InstructionsSection />
-          </div>
+          </Collapsible>
         </div>
       </div>
     </div>

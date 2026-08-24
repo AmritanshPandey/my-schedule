@@ -1,8 +1,8 @@
 "use client";
 
 /**
- * browserPrompts.ts — PlanR-specialized compact prompts for small (<500 M param)
- * browser-local models (Qwen2.5-0.5B-Instruct and similar).
+ * browserPrompts.ts — PlanR-specialized compact prompts for small (≲1B param)
+ * browser-local models (Gemma 3 1B, Qwen2.5-0.5B-Instruct, and similar).
  *
  * Problem: the verbose prompts in lib/aiActions.ts are designed for 7 B+ models.
  * Small models fail structurally on them — they drop brackets, emit prose where
@@ -23,6 +23,18 @@
  */
 
 import type { AIMessage } from "../types";
+import { getAIInstructions } from "../instructions";
+
+/** Appends the user's custom instruction for one category, in the same
+ *  compact, unlabeled style as everything else this module builds — small
+ *  models attend better to a short plain addition than a verbose labeled
+ *  block (contrast lib/ai/instructions.ts's withInstructions(), written for
+ *  the bigger MLX/Ollama/API models). Returns `prompt` unchanged when
+ *  nothing's saved for that category, same as every rewrite in this file
+ *  degrading gracefully rather than adding empty noise. */
+function withUserInstruction(prompt: string, instruction?: string): string {
+  return instruction?.trim() ? `${prompt}\nUser preference: ${instruction.trim()}` : prompt;
+}
 
 /** Request shape this module rewrites — a trimmed mirror of what
  *  lib/ai/providers/browser.ts's `generate()` receives (systemPrompt +
@@ -110,11 +122,12 @@ taskType: "task","session", or "commitment". Times: 24-hour HH:MM.`;
 function buildTaskRequest(req: AIChatRequest): BrowserAIChatRequest {
   const isFollowUp = req.messages.length > 1;
   const originalMsg = (req.messages[0]?.content as string) ?? "";
+  const instruction = getAIInstructions().task;
 
   if (isFollowUp) {
     return {
       ...req,
-      systemPrompt: TASK_SYSTEM_FOLLOWUP,
+      systemPrompt: withUserInstruction(TASK_SYSTEM_FOLLOWUP, instruction),
       messages: [
         { role: "user",      content: `${TASK_FEW_SHOT}\n\nNow generate tasks for:\n${originalMsg}` },
         req.messages[1] as AIMessage,  // AI clarifying question
@@ -127,7 +140,7 @@ function buildTaskRequest(req: AIChatRequest): BrowserAIChatRequest {
 
   return {
     ...req,
-    systemPrompt: TASK_SYSTEM,
+    systemPrompt: withUserInstruction(TASK_SYSTEM, instruction),
     messages: [
       { role: "user", content: `${TASK_FEW_SHOT}\n\nNow generate tasks for:\n${originalMsg}` },
     ],
@@ -149,7 +162,7 @@ function buildSubtaskRequest(req: AIChatRequest): BrowserAIChatRequest {
   const originalMsg = (req.messages[0]?.content as string) ?? "";
   return {
     ...req,
-    systemPrompt: SUBTASK_SYSTEM,
+    systemPrompt: withUserInstruction(SUBTASK_SYSTEM, getAIInstructions().subtask),
     messages: [
       { role: "user", content: `${SUBTASK_FEW_SHOT}\n\n${originalMsg}\nOutput:` },
     ],
@@ -176,11 +189,12 @@ Schema: [{"title":"3-6 word title","description":"one sentence","targetDate":"YY
 function buildMilestoneRequest(req: AIChatRequest): BrowserAIChatRequest {
   const isFollowUp = req.messages.length > 1;
   const originalMsg = (req.messages[0]?.content as string) ?? "";
+  const instruction = getAIInstructions().milestone;
 
   if (isFollowUp) {
     return {
       ...req,
-      systemPrompt: MILESTONE_SYSTEM_FOLLOWUP,
+      systemPrompt: withUserInstruction(MILESTONE_SYSTEM_FOLLOWUP, instruction),
       messages: [
         { role: "user",      content: `${MILESTONE_FEW_SHOT}\n\nGenerate milestones for:\n${originalMsg}` },
         req.messages[1] as AIMessage,
@@ -193,7 +207,7 @@ function buildMilestoneRequest(req: AIChatRequest): BrowserAIChatRequest {
 
   return {
     ...req,
-    systemPrompt: MILESTONE_SYSTEM,
+    systemPrompt: withUserInstruction(MILESTONE_SYSTEM, instruction),
     messages: [
       { role: "user", content: `${MILESTONE_FEW_SHOT}\n\nGenerate milestones for:\n${originalMsg}` },
     ],
@@ -220,10 +234,14 @@ taskType: "task","session", or "commitment". Times: 24-hour HH:MM.`;
 function buildMilestoneTaskRequest(req: AIChatRequest): BrowserAIChatRequest {
   const isFollowUp = req.messages.length > 1;
   const originalMsg = (req.messages[0]?.content as string) ?? "";
+  // "Tasks", not "Milestones" — matches aiActions.ts's own choice for this
+  // generator (withInstructions(MILESTONE_TASK_GEN_PROMPT, "Tasks", ...task)),
+  // since what's actually being generated here is a task batch.
+  const instruction = getAIInstructions().task;
 
   return {
     ...req,
-    systemPrompt: isFollowUp ? MILESTONE_TASK_SYSTEM_FOLLOWUP : MILESTONE_TASK_SYSTEM,
+    systemPrompt: withUserInstruction(isFollowUp ? MILESTONE_TASK_SYSTEM_FOLLOWUP : MILESTONE_TASK_SYSTEM, instruction),
     messages: isFollowUp
       ? [
           { role: "user",  content: `${TASK_FEW_SHOT}\n\nGenerate tasks for:\n${originalMsg}` },
@@ -304,20 +322,31 @@ You: {"type":"create_ritual","payload":{"title":"Morning Meditation","time":"07:
   },
 };
 
+// Which saved instruction category applies to each focused action — only
+// the three with a real category match; add_tracker/create_ritual have no
+// corresponding field in Settings → AI → Instructions, so they get none.
+const FOCUSED_INSTRUCTION_CATEGORY: Partial<Record<string, "plan" | "task" | "milestone">> = {
+  create_plan: "plan",
+  add_task: "task",
+  suggest_milestones: "milestone",
+};
+
 function buildFocusedRequest(req: AIChatRequest, action: string): BrowserAIChatRequest | null {
   const spec = FOCUSED_SCHEMAS[action];
   if (!spec) return null;
 
   const lastUser = [...req.messages].reverse().find((m) => m.role === "user");
   const ask = (lastUser?.content as string) ?? "";
+  const category = FOCUSED_INSTRUCTION_CATEGORY[action];
+  const instruction = category ? getAIInstructions()[category] : undefined;
 
   return {
     ...req,
-    systemPrompt: `Output ONE JSON object of type "${action}" and nothing else — no explanation, no markdown fences, no repetition.
+    systemPrompt: withUserInstruction(`Output ONE JSON object of type "${action}" and nothing else — no explanation, no markdown fences, no repetition.
 Schema: ${spec.schema}
 ${spec.rules}
 Icons: ${ICONS}
-Times are 24-hour HH:MM. Days are lowercase weekdays.`,
+Times are 24-hour HH:MM. Days are lowercase weekdays.`, instruction),
     messages: [{ role: "user", content: `${spec.example}\n\nNow do the same for:\n${ask}` }],
     _maxNewTokens: 700,
     _temperature: 0,
@@ -357,9 +386,20 @@ function buildChatRequest(req: AIChatRequest): BrowserAIChatRequest {
   // long history and start replaying earlier turns.
   const lastUser = [...req.messages].reverse().find((m) => m.role === "user");
   const ask = (lastUser?.content as string) ?? "";
+  // The reply's type isn't known yet here (that's the whole point of this
+  // generic path — buildFocusedRequest handles the known-intent case), so
+  // fold in every saved category rather than guessing which one applies.
+  const all = getAIInstructions();
+  const lines = [
+    all.plan && `Plans: ${all.plan}`,
+    all.task && `Tasks: ${all.task}`,
+    all.subtask && `Subtasks: ${all.subtask}`,
+    all.milestone && `Milestones: ${all.milestone}`,
+  ].filter(Boolean);
+  const systemPrompt = lines.length > 0 ? `${CHAT_SYSTEM}\nUser preferences — ${lines.join(" | ")}` : CHAT_SYSTEM;
   return {
     ...req,
-    systemPrompt: CHAT_SYSTEM,
+    systemPrompt,
     messages: [{ role: "user", content: `${CHAT_FEW_SHOT}\n\nNow do the same for:\n${ask}` }],
     _maxNewTokens: 700,
     _temperature: 0,

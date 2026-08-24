@@ -43,11 +43,16 @@ export const REMOTE_PRESETS: { label: string; baseUrl: string }[] = [
 
 /** Browser AI has no server to reach — `baseUrl`/`apiKey` are unused; `model`
  *  is a HuggingFace ONNX repo id, downloaded and cached in-browser on first
- *  use (see lib/ai/providers/browser.ts). Small and instruction-tuned enough
- *  to run acceptably on-device without WebGPU. */
+ *  use (see lib/ai/providers/browser.ts). Gemma 3 1B (dense, text-only —
+ *  not the multimodal "3n" line, which needs a different pipeline class
+ *  entirely) is noticeably more capable at following PlanR's JSON-schema
+ *  prompts than the previous 0.5B default, at the cost of a bigger
+ *  download (~850 MB vs ~400-750 MB) and no WebGPU fp16 fast path yet — see
+ *  FP16_SAFE_MODELS in browser.ts, which only ever grows once a model's
+ *  been verified to actually generate real output under it, not just load. */
 export const DEFAULT_BROWSER_CONFIG: AIProviderConfig = {
   baseUrl: "",
-  model: "onnx-community/Qwen2.5-0.5B-Instruct",
+  model: "onnx-community/gemma-3-1b-it-ONNX-GQA",
 };
 
 /**

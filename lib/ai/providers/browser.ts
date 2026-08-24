@@ -25,7 +25,7 @@
  *   via a queue, giving the UI progressive "Found N tasks…" updates.
  * • PlanR-specialized prompts: all requests are rewritten via rewriteForBrowserModel()
  *   from browserPrompts.ts before inference — compact, few-shot-guided prompts
- *   tuned for <500M instruction models. aiActions.ts is not modified.
+ *   tuned for ≲1B-param instruction models. aiActions.ts is not modified.
  * • Progress events: planr-browser-ai-status CustomEvents on window so any UI
  *   component can render a live download indicator without coupling.
  *
@@ -106,16 +106,51 @@ export function isBrowserModelLoaded(model: string): boolean {
  * (private browsing, an iframe with a strict policy), so the caller degrades
  * to "not downloaded" instead of breaking.
  */
+/** Below this, a cached weights file is a stub rather than real weights. */
+const REAL_WEIGHTS_MIN_BYTES = 50 * 1024 * 1024;
+
 export async function isBrowserModelCached(model: string): Promise<boolean> {
   if (isBrowserModelLoaded(model)) return true;
   try {
     if (typeof caches === "undefined") return false;
     const cache = await caches.open("transformers-cache");
     const keys = await cache.keys();
-    return keys.some((req) => req.url.includes(model) && req.url.endsWith(".onnx"));
+    const weights = keys.filter((req) => req.url.includes(model) && /\.onnx(_data)?$/.test(req.url));
+    if (weights.length === 0) return false;
+
+    // Larger ONNX exports keep the graph in `.onnx` and the actual tensors in a
+    // sibling `.onnx_data` — gemma-3-1b is 339 KB of graph next to 819 MB of
+    // weights. Matching on `.onnx` alone therefore reported "downloaded" for a
+    // download that had barely started, which is exactly what this check
+    // exists to prevent. The data file is fetched after the graph, so its
+    // presence is the honest signal.
+    if (weights.some((req) => req.url.endsWith(".onnx_data"))) return true;
+
+    // Single-file model: the `.onnx` must itself be substantial. A cached
+    // response keeps its headers, so this costs nothing — no body is read.
+    for (const req of weights) {
+      const res = await cache.match(req);
+      const len = Number(res?.headers.get("content-length") ?? NaN);
+      // Unknown length: trust it rather than claim "not downloaded" forever,
+      // which would loop the user through a download they already completed.
+      if (!Number.isFinite(len) || len >= REAL_WEIGHTS_MIN_BYTES) return true;
+    }
+    return false;
   } catch {
     return false;
   }
+}
+
+/**
+ * Fetch and initialise the model without generating anything.
+ *
+ * For UI that offers the download ahead of first use, instead of letting it
+ * start invisibly inside someone's first real request. Safe to call more than
+ * once — getPipeline dedupes an in-flight load rather than starting a second
+ * download — and progress reaches the UI through the usual status events.
+ */
+export async function preloadBrowserModel(model?: string): Promise<void> {
+  await getPipeline(model?.trim() || DEFAULT_BROWSER_CONFIG.model);
 }
 
 /** Roughly what the first download costs, for UI that warns before starting
@@ -124,7 +159,10 @@ export async function isBrowserModelCached(model: string): Promise<boolean> {
 export function browserModelDownloadLabel(model?: string): string {
   const webgpu = typeof navigator !== "undefined" && "gpu" in navigator;
   const fp16 = webgpu && !!model && FP16_SAFE_MODELS.has(model);
-  return fp16 ? "~460 MB" : "~400-750 MB";
+  // The unverified-model range covers plain q4 across the models this app
+  // actually offers (roughly 400 MB at 0.5B params up to ~900 MB at 1B) —
+  // widen it here rather than per-model if a bigger default is ever added.
+  return fp16 ? "~460 MB" : "~400-900 MB";
 }
 
 // ─── Pipeline singleton ───────────────────────────────────────────────────────
@@ -222,6 +260,17 @@ async function getPipeline(model: string): Promise<TextGenerationPipeline> {
   return _initPromise;
 }
 
+/** Prepends `systemPrompt` onto the first user turn instead of sending it as
+ *  its own "system" role message — see the Gemma comment at this function's
+ *  one call site for why. Falls back to a lone user turn carrying just the
+ *  system prompt in the (never expected in practice) case of an empty
+ *  message list, rather than dropping it silently. */
+function foldSystemIntoFirstUserTurn(systemPrompt: string, messages: AIMessage[]): AIMessage[] {
+  if (messages.length === 0) return [{ role: "user", content: systemPrompt }];
+  const [first, ...rest] = messages;
+  return [{ role: "user", content: `${systemPrompt}\n\n${first.content}` }, ...rest];
+}
+
 // ─── Real token streaming ─────────────────────────────────────────────────────
 //
 // TextStreamer.put() fires synchronously inside each generation step of pipe().
@@ -254,7 +303,17 @@ async function* streamGenerate(
   // other. AIMessage's role type is deliberately just "user"|"assistant"
   // (every other provider's wire format), so the "system" turn is added here,
   // on the looser shape Transformers.js's pipe() actually accepts.
-  const chatInput = [{ role: "system", content: rewritten.systemPrompt }, ...rewritten.messages];
+  //
+  // Gemma is the one documented exception: Google's own chat-template docs
+  // say Gemma recognizes only user/model turns, and an unsupported system
+  // turn gets silently DROPPED by the template rather than erroring — which
+  // would quietly strip every JSON-schema instruction this app depends on
+  // with no visible failure. Fold it into the first user turn instead for
+  // any Gemma model; every other model here already accepts a real system
+  // turn, so they're untouched.
+  const chatInput = /gemma/i.test(model)
+    ? foldSystemIntoFirstUserTurn(rewritten.systemPrompt, rewritten.messages)
+    : [{ role: "system", content: rewritten.systemPrompt }, ...rewritten.messages];
 
   // Fallback to batch completion if TextStreamer wasn't stored yet (shouldn't
   // happen since getPipeline() above sets it, but guard defensively).

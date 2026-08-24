@@ -84,7 +84,7 @@ test("only an explicit off reads as disabled — a junk value stays enabled", ()
 test("a fresh install defaults to the in-browser provider", () => {
   store.clear();
   assert.equal(getAIProviderState().active, "browser");
-  assert.equal(getAIProviderState().browser.model, "onnx-community/Qwen2.5-0.5B-Instruct");
+  assert.equal(getAIProviderState().browser.model, "onnx-community/gemma-3-1b-it-ONNX-GQA");
 });
 
 test("an existing provider choice survives the default change", () => {
