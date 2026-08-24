@@ -1,6 +1,21 @@
 import type { DayKey, Plan, RitualColor, RitualTrackingType, TaskTypeValue } from "./useScheduleDB";
 import { todayISO } from "./dateUtils";
 import { getAIInstructions } from "./ai/instructions";
+import { CATEGORY_LABELS } from "./taskCategories";
+import {
+  VALID_PLAN_COLORS as VALID_COLORS,
+  VALID_RITUAL_COLORS,
+  VALID_TRACKING_TYPES,
+  VALID_TASK_TYPES,
+  VALID_GOAL_DIRECTIONS,
+} from "./ai/domainFacts";
+
+// The icon list is duplicated three times across this file and
+// lib/aiActions.ts as prose — CATEGORY_LABELS (lib/taskCategories.ts, shared
+// with the actual icon picker in components/SectionIcons.tsx) is the real
+// source of truth, so every prompt copy is generated from it here instead of
+// hand-typed, and can't drift from what the app's icon picker actually offers.
+const ICON_LIST = Object.keys(CATEGORY_LABELS).join(", ");
 
 export interface AITask {
   title: string;
@@ -33,15 +48,11 @@ export type AIActionResult =
    */
   | { type: "ask_clarification"; payload: { question: string; options?: string[]; field?: string } };
 
-const VALID_COLORS = ["blue", "emerald", "violet", "pink", "amber", "cyan"] as const;
-const VALID_RITUAL_COLORS = ["rose", "sky", "violet", "amber", "emerald", "fuchsia", "orange", "cyan", "indigo", "teal"] as const;
-// Mirrored from RITUAL_TRACKING_TYPES rather than imported: useScheduleDB pulls
-// in the React auth context at runtime, and this module must stay importable as
-// a pure parser (it is unit-tested directly, and runs outside any provider).
-const VALID_TRACKING_TYPES: readonly RitualTrackingType[] = ["checkbox", "quantity", "duration", "count", "checklist"];
+// task type / tracking type / color / goal-direction vocab now comes from
+// ./ai/domainFacts (backed by domainFacts.json) — see that file's header for
+// why. VALID_DAYS stays local: it's a fixed calendar concept, not AI-tunable
+// domain vocab, and importing DAYS from scheduleConstants buys nothing here.
 const VALID_DAYS: DayKey[] = ["monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday"];
-const VALID_TASK_TYPES: TaskTypeValue[] = ["task", "session", "commitment"];
-const VALID_GOAL_DIRECTIONS = ["increase_good", "decrease_good"] as const;
 
 const GENERAL_PROMPT = `You are PlanR AI, the execution planning intelligence inside PlanR, a personal execution system. You help turn goals into realistic plans and plans into actionable execution. You are not a generic chatbot and you are not the source of truth: you recommend, while PlanR validates and the user decides.
 
@@ -74,7 +85,7 @@ create_ritual — a recurring habit/routine, not tied to one plan's task list:
 \`\`\`json
 {"type":"create_ritual","payload":{"title":"Habit Title","time":"07:00","duration":30,"repeatDays":["monday","tuesday","wednesday","thursday","friday"],"color":"emerald"}}
 \`\`\`
-Ritual "color": rose, sky, violet, amber, emerald, fuchsia, orange, cyan, indigo, or teal. time is HH:MM, duration is minutes.
+Ritual "color": ${VALID_RITUAL_COLORS.join(", ")}. time is HH:MM, duration is minutes.
 
 Routines can measure themselves in different ways. Add "trackingType" when the habit is obviously not a plain yes/no:
 - "quantity" — an amount per day. Add "target" (number) and "unit". e.g. water: {"trackingType":"quantity","target":3000,"unit":"ml"}
@@ -114,8 +125,8 @@ suggest_milestones — milestones for a plan the user already has:
 3-5 milestones, titles 3-6 words, dates spread across the plan's remaining timeframe. Only use this for a plan that already exists — for a brand-new plan, bundle milestones into "create_plan" instead.
 
 Shared rules:
-- "emoji"/task "icon": pick from: run, school, book, sleep, star, briefcase, car, brain, barbell, code, heart, music, palette, plane, chefhat, coin, camera, users, leaf, pencil, yoga, bike, mountain, droplet, moodsmile, flame, language, pill, bolt, dna
-- Plan "color": blue, emerald, violet, pink, amber, or cyan
+- "emoji"/task "icon": pick from: ${ICON_LIST}
+- Plan "color": ${VALID_COLORS.join(", ")}
 - "day"/"days": monday tuesday wednesday thursday friday saturday sunday (recurs weekly, no calendar date)
 - Times are HH:MM 24-hour.`;
 

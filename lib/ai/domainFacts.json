@@ -1,0 +1,29 @@
+{
+  "taskTypes": [
+    { "value": "task", "description": "Default — checked off, tracked." },
+    { "value": "session", "description": "A tracked workout/practice block." },
+    { "value": "commitment", "description": "Fixed held time that's never checked off, e.g. commute, an appointment, work hours." }
+  ],
+  "trackingTypes": [
+    { "value": "checkbox", "description": "Simple did-it-or-not habit — the default when trackingType is omitted." },
+    { "value": "quantity", "description": "An amount per day. Needs target (number) and unit.", "example": { "trackingType": "quantity", "target": 3000, "unit": "ml" } },
+    { "value": "duration", "description": "Minutes spent. Needs target and unit \"min\".", "example": { "trackingType": "duration", "target": 15, "unit": "min" } },
+    { "value": "count", "description": "A number of repetitions. Needs target and unit.", "example": { "trackingType": "count", "target": 50, "unit": "reps" } },
+    { "value": "checklist", "description": "A fixed sequence of steps. Needs steps: string[].", "example": { "trackingType": "checklist", "steps": ["Cleanser", "Vitamin C", "Moisturiser", "Sunscreen"] } }
+  ],
+  "planColors": ["blue", "emerald", "violet", "pink", "amber", "cyan"],
+  "ritualColors": ["rose", "sky", "violet", "amber", "emerald", "fuchsia", "orange", "cyan", "indigo", "teal"],
+  "goalDirections": [
+    { "value": "increase_good", "description": "Higher is better." },
+    { "value": "decrease_good", "description": "Lower is better." }
+  ],
+  "actionTypes": [
+    { "value": "create_plan", "description": "A brand-new plan (with or without recurring tasks/milestones)." },
+    { "value": "create_ritual", "description": "A recurring daily/weekly habit not tied to a specific plan's task list." },
+    { "value": "add_task", "description": "A single task, commitment, or session — one-off or recurring, optionally attached to an existing plan by name." },
+    { "value": "add_subtasks", "description": "Adding steps/subtasks to a task the user already has." },
+    { "value": "add_tracker", "description": "A numeric goal/metric to track under an existing plan." },
+    { "value": "suggest_milestones", "description": "Milestones for a plan the user already has." },
+    { "value": "ask_clarification", "description": "Not a write — a question back to the user when the target plan/task is ambiguous or unnamed." }
+  ]
+}

@@ -6,6 +6,11 @@
 import type { DayKey, TaskTypeValue } from "./useScheduleDB";
 import { streamAIAction, streamAIChat, type AIMessage } from "./aiClient";
 import { getAIInstructions, withInstructions } from "./ai/instructions";
+import { CATEGORY_LABELS } from "./taskCategories";
+import { VALID_TASK_TYPES } from "./ai/domainFacts";
+
+// Same single source of truth as lib/ai.ts — see that file's ICON_LIST comment.
+const ICON_LIST = Object.keys(CATEGORY_LABELS).join(", ");
 
 /**
  * A single bounded clarifying round: the question the AI asked in its first
@@ -45,13 +50,13 @@ export interface AIGeneratedTask {
 const VALID_DAYS: DayKey[] = [
   "monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday",
 ];
-
-const VALID_TASK_TYPES: TaskTypeValue[] = ["task", "session", "commitment"];
+// VALID_TASK_TYPES now comes from ./ai/domainFacts (see lib/ai.ts's header
+// comment on that module) instead of a second hand-typed copy here.
 
 const TASK_GEN_PROMPT = `You are a task planner. Generate 4-7 concrete weekly tasks for a plan.
 Output ONLY a raw JSON array — no explanation, no markdown fences, no preamble.
 [{"title":"...","day":"monday","startTime":"07:00","endTime":"08:00","icon":"barbell","taskType":"task","subtasks":["Step 1","Step 2"]},...]
-Icons (pick most relevant): run, school, book, sleep, star, briefcase, car, brain, barbell, code, heart, music, palette, plane, chefhat, coin, camera, users, leaf, pencil, yoga, bike, mountain, droplet, moodsmile, flame, language, pill, bolt, dna
+Icons (pick most relevant): ${ICON_LIST}
 Days: monday tuesday wednesday thursday friday saturday sunday
 "taskType": "task" (default, checked off and tracked), "session" (a tracked workout/practice block), or "commitment" (fixed held time, never checked off).
 Times: HH:MM 24-hour. Spread tasks across the week. Each task needs 2-3 subtasks.
@@ -282,7 +287,7 @@ export function parseGeneratedMilestones(text: string): AIGeneratedMilestone[] {
 const MILESTONE_TASK_GEN_PROMPT = `You are a task planner. Generate 4-6 concrete weekly tasks that directly help achieve a specific milestone.
 Output ONLY a raw JSON array — no explanation, no markdown fences, no preamble.
 [{"title":"...","day":"monday","startTime":"07:00","endTime":"08:00","icon":"barbell","taskType":"task","subtasks":["Step 1","Step 2"]},...]
-Icons (pick most relevant): run, school, book, sleep, star, briefcase, car, brain, barbell, code, heart, music, palette, plane, chefhat, coin, camera, users, leaf, pencil, yoga, bike, mountain, droplet, moodsmile, flame, language, pill, bolt, dna
+Icons (pick most relevant): ${ICON_LIST}
 Days: monday tuesday wednesday thursday friday saturday sunday
 "taskType": "task" (default, checked off and tracked), "session" (a tracked workout/practice block), or "commitment" (fixed held time, never checked off).
 Times: HH:MM 24-hour. Spread tasks across the week. Each task needs 2-3 subtasks.
