@@ -257,17 +257,22 @@ function PlanDraftCard({ action, onApply }: { action: Extract<AIActionResult, { 
         </div>
       )}
 
-      {/* Dates */}
+      {/* Dates — dark:[color-scheme:dark] matches every other date input in
+          the app (AddPlanSheet/EditPlanSheet/TaskSheet): without it, the
+          browser renders its native calendar icon assuming a light page,
+          so it goes near-invisible (or the wrong color) against a dark
+          card. Missing here was the one thing actually broken; the rest is
+          this card's own compact sizing, kept as-is. */}
       <div className="mb-3 flex gap-2">
         <div className="flex-1">
           <p className="mb-0.5 text-[10px] font-medium text-neutral-400">Start date</p>
           <input type="date" value={startDate} onChange={(e) => setStart(e.target.value)}
-            className="w-full rounded-xl border border-neutral-200 bg-neutral-50 px-2.5 py-1.5 text-[11px] text-neutral-700 outline-none dark:border-white/[0.08] dark:bg-white/[0.04] dark:text-neutral-300" />
+            className="w-full rounded-xl border border-neutral-200 bg-neutral-50 px-2.5 py-1.5 text-[11px] text-neutral-700 outline-none transition-colors focus:border-neutral-300 focus:bg-white dark:border-white/[0.08] dark:bg-white/[0.04] dark:text-neutral-300 dark:focus:border-white/20 dark:focus:bg-white/[0.07] dark:[color-scheme:dark]" />
         </div>
         <div className="flex-1">
           <p className="mb-0.5 text-[10px] font-medium text-neutral-400">End date</p>
           <input type="date" value={endDate} onChange={(e) => setEnd(e.target.value)}
-            className="w-full rounded-xl border border-neutral-200 bg-neutral-50 px-2.5 py-1.5 text-[11px] text-neutral-700 outline-none dark:border-white/[0.08] dark:bg-white/[0.04] dark:text-neutral-300" />
+            className="w-full rounded-xl border border-neutral-200 bg-neutral-50 px-2.5 py-1.5 text-[11px] text-neutral-700 outline-none transition-colors focus:border-neutral-300 focus:bg-white dark:border-white/[0.08] dark:bg-white/[0.04] dark:text-neutral-300 dark:focus:border-white/20 dark:focus:bg-white/[0.07] dark:[color-scheme:dark]" />
         </div>
       </div>
 
