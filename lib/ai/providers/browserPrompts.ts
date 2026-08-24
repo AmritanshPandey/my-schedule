@@ -24,6 +24,13 @@
 
 import type { AIMessage } from "../types";
 import { getAIInstructions } from "../instructions";
+import {
+  formatTaskBatchExample,
+  formatSubtaskBatchExample,
+  formatMilestoneBatchExample,
+  formatActionExample,
+  formatChatExample,
+} from "../examples";
 
 /** Appends the user's custom instruction for one category, in the same
  *  compact, unlabeled style as everything else this module builds — small
@@ -104,8 +111,9 @@ const ICONS =
 // example's *pattern* more readily than the prose rule above it, so it kept
 // over-using "session" for everything. This mix actually demonstrates all
 // three values so the model has something to pattern-match onto for each.
-const TASK_FEW_SHOT = `Example output for plan "Morning Fitness":
-[{"title":"Morning Run","day":"monday","startTime":"06:30","endTime":"07:15","icon":"run","taskType":"session","subtasks":["5 min warm-up walk","Run 3 km at easy pace","5 min cool-down stretch"]},{"title":"Strength Training","day":"wednesday","startTime":"07:00","endTime":"08:00","icon":"barbell","taskType":"session","subtasks":["Squats 3×12","Push-ups 3×15","Plank 60 s"]},{"title":"Meal Prep Sunday","day":"sunday","startTime":"11:00","endTime":"12:00","icon":"chefhat","taskType":"task","subtasks":["Cook 3 protein portions","Portion into containers","Fridge for the week"]},{"title":"Physio Check-in","day":"friday","startTime":"09:00","endTime":"09:30","icon":"heart","taskType":"commitment","subtasks":["Bring last week's log","Ask about knee soreness"]}]`;
+// Sourced from lib/ai/examples.json (taskBatch[0]) — see examples.ts's
+// header for why only ONE example is used here despite that file holding more.
+const TASK_FEW_SHOT = formatTaskBatchExample();
 
 const TASK_SYSTEM = `Output 4-7 weekly tasks as a JSON array. No explanation, no markdown fences, no preamble.
 Schema: [{"title":"...","day":"monday","startTime":"HH:MM","endTime":"HH:MM","icon":"...","taskType":"task","subtasks":["step",...]}]
@@ -153,8 +161,7 @@ function buildTaskRequest(req: AIChatRequest): BrowserAIChatRequest {
 // Subtask generation
 // ─────────────────────────────────────────────────────────────────────────────
 
-const SUBTASK_FEW_SHOT = `Example for "Write quarterly report":
-["Review previous quarter metrics","Identify top 3 highlights and gaps","Draft executive summary","Add charts and supporting data","Proofread and send to manager"]`;
+const SUBTASK_FEW_SHOT = formatSubtaskBatchExample();
 
 const SUBTASK_SYSTEM = `Output 3-5 concrete actionable steps as a JSON array of strings. No explanation, no markdown fences.`;
 
@@ -175,8 +182,7 @@ function buildSubtaskRequest(req: AIChatRequest): BrowserAIChatRequest {
 // Milestone generation
 // ─────────────────────────────────────────────────────────────────────────────
 
-const MILESTONE_FEW_SHOT = `Example for "Learn Spanish" (2025-01-01 → 2025-06-30):
-[{"title":"Alphabet & Pronunciation","description":"Learn phonics and 200 core vocabulary words","targetDate":"2025-01-31"},{"title":"Daily Conversations","description":"Hold a 5-minute chat on everyday topics","targetDate":"2025-03-15"},{"title":"Grammar Fluency","description":"Master present, past, and future tenses","targetDate":"2025-05-01"},{"title":"Full Comprehension","description":"Watch a Spanish film without subtitles","targetDate":"2025-06-30"}]`;
+const MILESTONE_FEW_SHOT = formatMilestoneBatchExample();
 
 const MILESTONE_SYSTEM = `Output 4-6 milestones as a JSON array. No explanation, no markdown fences.
 Schema: [{"title":"3-6 word title","description":"one sentence","targetDate":"YYYY-MM-DD"}]
@@ -289,35 +295,32 @@ function buildInsightRequest(req: AIChatRequest): BrowserAIChatRequest {
 // With the intent known we hand it one schema and one example, so the whole
 // budget goes on content.
 
+// Every `example` below comes from lib/ai/examples.json via formatActionExample
+// — see that file's header comment for why only one example each is used.
 const FOCUSED_SCHEMAS: Record<string, { schema: string; example: string; rules: string }> = {
   create_plan: {
     schema: `{"type":"create_plan","payload":{"title":"...","description":"...","emoji":"...","color":"...","tasks":[{"title":"...","day":"monday","startTime":"HH:MM","endTime":"HH:MM","icon":"...","taskType":"session","subtasks":["...","..."]}]}}`,
-    example: `User: Create a 30-day fitness plan
-You: {"type":"create_plan","payload":{"title":"30-Day Fitness","description":"Build a consistent training habit over 30 days.","emoji":"barbell","color":"emerald","tasks":[{"title":"Morning Run","day":"monday","startTime":"07:00","endTime":"07:45","icon":"run","taskType":"session","subtasks":["Warm-up walk","Run 3 km","Cool-down stretch"]},{"title":"Strength Training","day":"wednesday","startTime":"07:00","endTime":"08:00","icon":"barbell","taskType":"session","subtasks":["Squats 3x12","Push-ups 3x15","Plank 60s"]},{"title":"Long Run","day":"saturday","startTime":"08:00","endTime":"09:30","icon":"run","taskType":"session","subtasks":["Easy pace 8 km","Hydrate","Stretch"]}]}}`,
+    example: formatActionExample("create_plan"),
     rules: `3-5 tasks spread across the week, each with 2-3 subtasks. Colors: blue, emerald, violet, pink, amber, cyan.`,
   },
   add_task: {
     schema: `{"type":"add_task","payload":{"title":"...","taskType":"commitment","day":"monday","startTime":"HH:MM","endTime":"HH:MM","icon":"..."}}`,
-    example: `User: Add a commitment for a dentist appointment on Thursday at 2pm
-You: {"type":"add_task","payload":{"title":"Dentist Appointment","taskType":"commitment","day":"thursday","startTime":"14:00","endTime":"15:00","icon":"star"}}`,
+    example: formatActionExample("add_task"),
     rules: `taskType: "task" (checked off), "session" (a practice block), "commitment" (fixed time, never checked off).`,
   },
   add_tracker: {
     schema: `{"type":"add_tracker","payload":{"title":"...","unit":"...","goalDirection":"increase_good"}}`,
-    example: `User: Add a tracker for water intake
-You: {"type":"add_tracker","payload":{"title":"Water","unit":"ml","goalDirection":"increase_good"}}`,
+    example: formatActionExample("add_tracker"),
     rules: `goalDirection is "increase_good" (more is better) or "decrease_good" (less is better).`,
   },
   suggest_milestones: {
     schema: `{"type":"suggest_milestones","payload":{"milestones":[{"title":"...","description":"...","targetDate":"YYYY-MM-DD"}]}}`,
-    example: `User: Suggest milestones for my marathon plan
-You: {"type":"suggest_milestones","payload":{"milestones":[{"title":"Run 10 km non-stop","description":"Build the aerobic base.","targetDate":"2026-03-15"},{"title":"Half marathon distance","description":"Prove the endurance is there.","targetDate":"2026-04-20"},{"title":"Race pace 20 km","description":"Dial in target pace.","targetDate":"2026-05-18"}]}}`,
+    example: formatActionExample("suggest_milestones"),
     rules: `3-5 milestones, titles 3-6 words, dates spread across the plan's timeframe.`,
   },
   create_ritual: {
     schema: `{"type":"create_ritual","payload":{"title":"...","time":"HH:MM","duration":30,"repeatDays":["monday"],"color":"emerald"}}`,
-    example: `User: Create a morning meditation routine
-You: {"type":"create_ritual","payload":{"title":"Morning Meditation","time":"07:00","duration":15,"repeatDays":["monday","tuesday","wednesday","thursday","friday"],"color":"violet"}}`,
+    example: formatActionExample("create_ritual"),
     rules: `Ritual colors: rose, sky, violet, amber, emerald, fuchsia, orange, cyan, indigo, teal.`,
   },
 };
@@ -364,10 +367,8 @@ Times are 24-hour HH:MM. Days are lowercase weekdays.`, instruction),
 // restating the user's request over and over. This keeps one schema, one
 // example, and nothing else.
 
-const CHAT_FEW_SHOT = `Example.
-User: Create a 30-day fitness plan
-You:
-{"type":"create_plan","payload":{"title":"30-Day Fitness","description":"Build a consistent training habit over 30 days.","emoji":"barbell","color":"emerald","tasks":[{"title":"Morning Run","day":"monday","startTime":"07:00","endTime":"07:45","icon":"run","taskType":"session","subtasks":["Warm-up walk","Run 3 km","Cool-down stretch"]},{"title":"Strength Training","day":"wednesday","startTime":"07:00","endTime":"08:00","icon":"barbell","taskType":"session","subtasks":["Squats 3x12","Push-ups 3x15","Plank 60s"]},{"title":"Long Run","day":"saturday","startTime":"08:00","endTime":"09:30","icon":"run","taskType":"session","subtasks":["Easy pace 8 km","Hydrate","Stretch"]}]}}`;
+// Reuses the create_plan example from lib/ai/examples.json via formatChatExample.
+const CHAT_FEW_SHOT = formatChatExample();
 
 const CHAT_SYSTEM = `You create PlanR items. Reply with ONE JSON object and nothing else — no explanation, no markdown fences, no repetition.
 

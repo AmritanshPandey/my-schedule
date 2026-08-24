@@ -1,0 +1,84 @@
+{
+  "taskBatch": [
+    {
+      "context": "Morning Fitness",
+      "tasks": [
+        { "title": "Morning Run", "day": "monday", "startTime": "06:30", "endTime": "07:15", "icon": "run", "taskType": "session", "subtasks": ["5 min warm-up walk", "Run 3 km at easy pace", "5 min cool-down stretch"] },
+        { "title": "Strength Training", "day": "wednesday", "startTime": "07:00", "endTime": "08:00", "icon": "barbell", "taskType": "session", "subtasks": ["Squats 3×12", "Push-ups 3×15", "Plank 60 s"] },
+        { "title": "Meal Prep Sunday", "day": "sunday", "startTime": "11:00", "endTime": "12:00", "icon": "chefhat", "taskType": "task", "subtasks": ["Cook 3 protein portions", "Portion into containers", "Fridge for the week"] },
+        { "title": "Physio Check-in", "day": "friday", "startTime": "09:00", "endTime": "09:30", "icon": "heart", "taskType": "commitment", "subtasks": ["Bring last week's log", "Ask about knee soreness"] }
+      ]
+    },
+    {
+      "context": "GMAT Prep",
+      "tasks": [
+        { "title": "Quant Drills", "day": "tuesday", "startTime": "19:00", "endTime": "20:00", "icon": "brain", "taskType": "session", "subtasks": ["30 problem sets", "Review wrong answers", "Log accuracy rate"] },
+        { "title": "Verbal Practice", "day": "thursday", "startTime": "19:00", "endTime": "20:00", "icon": "book", "taskType": "session", "subtasks": ["Reading comprehension set", "Sentence correction drills"] },
+        { "title": "Timed Practice Test", "day": "saturday", "startTime": "09:00", "endTime": "12:00", "icon": "school", "taskType": "session", "subtasks": ["Full-length CAT under timed conditions", "Score and log results"] },
+        { "title": "Tutoring Session", "day": "monday", "startTime": "18:00", "endTime": "19:00", "icon": "users", "taskType": "commitment", "subtasks": ["Bring this week's weak areas"] }
+      ]
+    }
+  ],
+  "subtaskBatch": [
+    {
+      "context": "Write quarterly report",
+      "subtasks": ["Review previous quarter metrics", "Identify top 3 highlights and gaps", "Draft executive summary", "Add charts and supporting data", "Proofread and send to manager"]
+    },
+    {
+      "context": "Plan a birthday party",
+      "subtasks": ["Set guest list and headcount", "Book venue or confirm home setup", "Order cake and decorations", "Send invitations", "Confirm final headcount 3 days before"]
+    }
+  ],
+  "milestoneBatch": [
+    {
+      "planTitle": "Learn Spanish",
+      "dateRange": "2025-01-01 → 2025-06-30",
+      "milestones": [
+        { "title": "Alphabet & Pronunciation", "description": "Learn phonics and 200 core vocabulary words", "targetDate": "2025-01-31" },
+        { "title": "Daily Conversations", "description": "Hold a 5-minute chat on everyday topics", "targetDate": "2025-03-15" },
+        { "title": "Grammar Fluency", "description": "Master present, past, and future tenses", "targetDate": "2025-05-01" },
+        { "title": "Full Comprehension", "description": "Watch a Spanish film without subtitles", "targetDate": "2025-06-30" }
+      ]
+    },
+    {
+      "planTitle": "Launch a side project",
+      "dateRange": "2026-01-01 → 2026-04-30",
+      "milestones": [
+        { "title": "Validate the Idea", "description": "Talk to 10 potential users about the problem", "targetDate": "2026-01-20" },
+        { "title": "Working Prototype", "description": "Ship a bare-bones version to 3 test users", "targetDate": "2026-02-28" },
+        { "title": "Public Beta", "description": "Open sign-ups and gather feedback", "targetDate": "2026-03-31" },
+        { "title": "First Paying Customer", "description": "Convert one beta user to a paid plan", "targetDate": "2026-04-30" }
+      ]
+    }
+  ],
+  "actions": {
+    "create_plan": {
+      "request": "Create a 30-day fitness plan",
+      "response": { "type": "create_plan", "payload": { "title": "30-Day Fitness", "description": "Build a consistent training habit over 30 days.", "emoji": "barbell", "color": "emerald", "tasks": [
+        { "title": "Morning Run", "day": "monday", "startTime": "07:00", "endTime": "07:45", "icon": "run", "taskType": "session", "subtasks": ["Warm-up walk", "Run 3 km", "Cool-down stretch"] },
+        { "title": "Strength Training", "day": "wednesday", "startTime": "07:00", "endTime": "08:00", "icon": "barbell", "taskType": "session", "subtasks": ["Squats 3x12", "Push-ups 3x15", "Plank 60s"] },
+        { "title": "Long Run", "day": "saturday", "startTime": "08:00", "endTime": "09:30", "icon": "run", "taskType": "session", "subtasks": ["Easy pace 8 km", "Hydrate", "Stretch"] }
+      ] } }
+    },
+    "add_task": {
+      "request": "Add a commitment for a dentist appointment on Thursday at 2pm",
+      "response": { "type": "add_task", "payload": { "title": "Dentist Appointment", "taskType": "commitment", "day": "thursday", "startTime": "14:00", "endTime": "15:00", "icon": "star" } }
+    },
+    "add_tracker": {
+      "request": "Add a tracker for water intake",
+      "response": { "type": "add_tracker", "payload": { "title": "Water", "unit": "ml", "goalDirection": "increase_good" } }
+    },
+    "suggest_milestones": {
+      "request": "Suggest milestones for my marathon plan",
+      "response": { "type": "suggest_milestones", "payload": { "milestones": [
+        { "title": "Run 10 km non-stop", "description": "Build the aerobic base.", "targetDate": "2026-03-15" },
+        { "title": "Half marathon distance", "description": "Prove the endurance is there.", "targetDate": "2026-04-20" },
+        { "title": "Race pace 20 km", "description": "Dial in target pace.", "targetDate": "2026-05-18" }
+      ] } }
+    },
+    "create_ritual": {
+      "request": "Create a morning meditation routine",
+      "response": { "type": "create_ritual", "payload": { "title": "Morning Meditation", "time": "07:00", "duration": 15, "repeatDays": ["monday", "tuesday", "wednesday", "thursday", "friday"], "color": "violet" } }
+    }
+  }
+}
