@@ -7,6 +7,8 @@
     "predev": "node scripts/copy-pdf-worker.mjs",
     "dev": "next dev",
     "test": "node --experimental-strip-types --test tests/*.test.mjs",
+    "build-finetune-dataset": "node --experimental-strip-types scripts/build-finetune-dataset.mjs",
+    "eval-finetune": "node --experimental-strip-types scripts/eval-finetune.mjs",
     "test:e2e": "playwright test",
     "test:e2e:headed": "playwright test --headed",
     "test:e2e:ui": "playwright test --ui",

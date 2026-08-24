@@ -25,6 +25,14 @@ import {
   IconLoader2,
   IconSparkles,
 } from "@tabler/icons-react";
+import {
+  isCaptureEnabled,
+  setCaptureEnabled,
+  getCapturedInteractions,
+  clearCapturedInteractions,
+  onCaptureLogChange,
+  exportCapturedJSONL,
+} from "@/lib/ai/capture";
 import { AnimatePresence, m } from "framer-motion";
 import {
   getAIProviderState,
@@ -528,6 +536,94 @@ function InstructionsSection() {
   );
 }
 
+// ── Training data section ───────────────────────────────────────────────────
+// Feeds docs/fine-tuning.md's external pipeline: capture real Browser AI
+// interactions on-device, export as JSONL, run scripts/build-finetune-dataset.mjs
+// against them. Opt-in and off by default — see lib/ai/capture.ts.
+
+function TrainingDataSection() {
+  const [enabled, setEnabled] = useState(() => isCaptureEnabled());
+  const [count, setCount] = useState(() => getCapturedInteractions().length);
+  const [copyState, setCopyState] = useState<"idle" | "copied" | "failed">("idle");
+
+  useEffect(() => onCaptureLogChange((log) => setCount(log.length)), []);
+
+  function toggle(on: boolean) {
+    haptic("light");
+    setCaptureEnabled(on);
+    setEnabled(on);
+  }
+
+  async function copyJSONL() {
+    const text = exportCapturedJSONL();
+    try {
+      await navigator.clipboard.writeText(text);
+      setCopyState("copied");
+    } catch {
+      setCopyState("failed");
+    } finally {
+      window.setTimeout(() => setCopyState("idle"), 1800);
+    }
+  }
+
+  function downloadJSONL() {
+    const blob = new Blob([exportCapturedJSONL()], { type: "application/jsonl" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `planr-training-data-${Date.now()}.jsonl`;
+    a.click();
+    URL.revokeObjectURL(url);
+  }
+
+  function clear() {
+    haptic("light");
+    clearCapturedInteractions();
+  }
+
+  return (
+    <div className="space-y-3 px-4 py-3.5">
+      <div className="flex items-center gap-3">
+        <div className="min-w-0 flex-1">
+          <p className="text-[12.5px] font-medium leading-relaxed text-neutral-500 dark:text-neutral-400">
+            Saves the exact prompt and response for every Browser AI generation, on this device only. Nothing is sent anywhere unless you export it.
+          </p>
+        </div>
+        <Toggle on={enabled} onChange={toggle} label="Capture training data" />
+      </div>
+      <p className="text-[11px] font-semibold text-neutral-400 dark:text-neutral-500">
+        {count} interaction{count === 1 ? "" : "s"} captured
+      </p>
+      <div className="grid grid-cols-3 gap-2">
+        <button
+          type="button"
+          onClick={copyJSONL}
+          disabled={count === 0}
+          className="rounded-xl border border-neutral-200 bg-neutral-50 px-3 py-2 text-[11px] font-semibold text-neutral-700 disabled:opacity-40 dark:border-white/[0.08] dark:bg-white/[0.04] dark:text-neutral-200"
+        >
+          {copyState === "copied" ? "Copied" : copyState === "failed" ? "Copy failed" : "Copy"}
+        </button>
+        <button
+          type="button"
+          onClick={downloadJSONL}
+          disabled={count === 0}
+          className="rounded-xl border border-neutral-200 bg-neutral-50 px-3 py-2 text-[11px] font-semibold text-neutral-700 disabled:opacity-40 dark:border-white/[0.08] dark:bg-white/[0.04] dark:text-neutral-200"
+        >
+          Download
+        </button>
+        <button
+          type="button"
+          onClick={clear}
+          disabled={count === 0}
+          className="rounded-xl border border-neutral-200 bg-neutral-50 px-3 py-2 text-[11px] font-semibold text-neutral-500 disabled:opacity-40 dark:border-white/[0.08] dark:bg-white/[0.04] dark:text-neutral-300"
+        >
+          Clear
+        </button>
+      </div>
+    </div>
+  );
+}
+
 // ── Page ─────────────────────────────────────────────────────────────────────
 
 interface AIViewProps {
@@ -608,6 +704,14 @@ export function AIView({ onClose }: AIViewProps) {
             defaultOpen={hasSavedInstructions}
           >
             <InstructionsSection />
+          </Collapsible>
+
+          <Collapsible
+            title="Training data"
+            subtitle="Optional — capture Browser AI interactions to fine-tune a custom model"
+            defaultOpen={false}
+          >
+            <TrainingDataSection />
           </Collapsible>
         </div>
       </div>

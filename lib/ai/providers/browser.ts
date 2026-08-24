@@ -36,6 +36,7 @@
 import { DEFAULT_BROWSER_CONFIG } from "../config";
 import type { AIConnectionTestResult, AIGenerateOptions, AIMessage, AIProvider, AIProviderConfig } from "../types";
 import { rewriteForBrowserModel } from "./browserPrompts";
+import { captureInteraction, isCaptureEnabled } from "../capture";
 import type { TextGenerationPipeline, PreTrainedTokenizer } from "@huggingface/transformers";
 
 // ─── Status event ────────────────────────────────────────────────────────────
@@ -315,6 +316,25 @@ async function* streamGenerate(
     ? foldSystemIntoFirstUserTurn(rewritten.systemPrompt, rewritten.messages)
     : [{ role: "system", content: rewritten.systemPrompt }, ...rewritten.messages];
 
+  // Read once per request — negligible cost, and keeps the hot streaming
+  // path a single skipped branch when capture is off (the default). See
+  // lib/ai/capture.ts for what this feeds into.
+  const capturing = isCaptureEnabled();
+  const recordCapture = (response: string) => {
+    if (!capturing) return;
+    try {
+      captureInteraction({
+        action: rewritten._actionType ?? "unknown",
+        model,
+        systemPrompt: rewritten.systemPrompt,
+        messages: rewritten.messages,
+        response,
+      });
+    } catch {
+      /* best effort — never let capture break a real generation */
+    }
+  };
+
   // Fallback to batch completion if TextStreamer wasn't stored yet (shouldn't
   // happen since getPipeline() above sets it, but guard defensively).
   if (!_TextStreamer) {
@@ -326,13 +346,16 @@ async function* streamGenerate(
       return_full_text: false,
       ...(opts.signal ? { signal: opts.signal } : {}),
     });
-    yield extractText(result);
+    const text = extractText(result);
+    recordCapture(text);
+    yield text;
     return;
   }
 
   const chunks: string[] = [];
   let isDone = false;
   let notify: () => void = () => {};
+  let fullResponse = "";
 
   // The Transformers.js type omits .tokenizer but it exists on the runtime object.
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -342,6 +365,7 @@ async function* streamGenerate(
     skip_special_tokens: true,
     callback_function: (text: string) => {
       chunks.push(text);
+      if (capturing) fullResponse += text;
       notify(); // wake the generator if it's waiting
     },
   });
@@ -368,7 +392,9 @@ async function* streamGenerate(
   }
 
   // Re-throw any inference error so aiActions.ts error handling still fires.
+  // Capture only fires here, past the await — never on abort/error.
   await inferencePromise;
+  recordCapture(fullResponse);
 }
 
 // Extracts text from the various generated_text shapes Transformers.js may return.

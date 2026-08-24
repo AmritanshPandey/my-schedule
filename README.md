@@ -24,7 +24,7 @@ background.
 - **IndexedDB** as the local source of truth; **Firebase** (Auth + Firestore)
   for optional cross-device sync
 - **PWA** — custom service worker with per-deploy cache versioning
-- **Transformers.js** on-device AI (currently gated off; see below)
+- **Transformers.js** on-device AI (see below)
 - Tests: Node's built-in test runner (unit) + **Playwright** (e2e)
 
 ## Architecture
@@ -42,7 +42,7 @@ lib/
   backup.ts              JSON export/import
   reminders.ts           Local timer-based notifications
   consistency/ strategy/ timeline/ ai/ …
-workers/aiWorker.ts      Transformers.js inference (off the main thread)
+  ai/providers/browser.ts Transformers.js inference (main thread, WebGPU/WASM)
 ```
 
 **Data model.** One `Schedule` document holds Plans, Tasks (on weekday
@@ -98,12 +98,17 @@ times, and an evening "tasks still open" nudge. These fire while PlanR is open
 (there is no push backend yet), so on iPhone they require the app installed to
 the Home Screen. Tapping a reminder focuses the app.
 
-## AI (currently gated off)
+## AI
 
-The on-device AI stack (subtask/task generation, plan coach) is fully built but
-disabled behind `AI_ENABLED` in `lib/featureFlags.ts`. While gated, the worker
-never spawns, so Transformers.js and its models are never loaded at runtime.
-Flip the flag to restore every AI surface.
+The on-device AI stack (plan/task/subtask/milestone generation, weekly
+coaching insight, the AI Assistant chat) runs by default — `AI_ENABLED` in
+`lib/featureFlags.ts` is `true`. Users can also turn it off entirely in
+Settings → AI. The default provider, "Browser AI"
+(`lib/ai/providers/browser.ts`), runs a small model fully on-device via
+Transformers.js (WebGPU, falling back to WASM) — no server, no API key.
+MLX, Ollama, and OpenAI-compatible providers are also supported for anyone
+running their own local/hosted model. See `docs/fine-tuning.md` for how to
+fine-tune the Browser AI model on real usage data.
 
 ## Design
 

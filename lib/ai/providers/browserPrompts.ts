@@ -67,6 +67,13 @@ export interface BrowserAIChatRequest extends AIChatRequest {
   _maxNewTokens?: number;
   /** Overrides the default temperature for this action type. */
   _temperature?: number;
+  /** Which build*Request produced this — "tasks" | "subtasks" | "milestones" |
+   *  "milestone_tasks" | "insight" | "chat" | a FOCUSED_SCHEMAS key (e.g.
+   *  "create_plan"), or undefined for the unrewritten default: return req
+   *  fallback. Read by lib/ai/providers/browser.ts to tag a captured
+   *  interaction (lib/ai/capture.ts) with what was actually generated —
+   *  purely provenance, doesn't affect the prompt or generation itself. */
+  _actionType?: string;
 }
 
 // ── Action-type detection ─────────────────────────────────────────────────────
@@ -115,19 +122,23 @@ const ICONS =
 // header for why only ONE example is used here despite that file holding more.
 const TASK_FEW_SHOT = formatTaskBatchExample();
 
-const TASK_SYSTEM = `Output 4-7 weekly tasks as a JSON array. No explanation, no markdown fences, no preamble.
+export const TASK_SYSTEM = `Output 4-7 weekly tasks as a JSON array. No explanation, no markdown fences, no preamble.
 Schema: [{"title":"...","day":"monday","startTime":"HH:MM","endTime":"HH:MM","icon":"...","taskType":"task","subtasks":["step",...]}]
 Icons: ${ICONS}
 taskType: "task" (default, checked off), "session" (workout/practice block), "commitment" (fixed time, never checked off).
 Times: 24-hour HH:MM. Spread across the week. Each task needs 2-3 subtasks.
 If the plan has no description or focus, output ONE short question instead of JSON. If a question was already asked, output JSON.`;
 
-const TASK_SYSTEM_FOLLOWUP = `Output 4-7 weekly tasks as a JSON array using your best judgment. No explanation, no markdown fences.
+export const TASK_SYSTEM_FOLLOWUP = `Output 4-7 weekly tasks as a JSON array using your best judgment. No explanation, no markdown fences.
 Schema: [{"title":"...","day":"monday","startTime":"HH:MM","endTime":"HH:MM","icon":"...","taskType":"task","subtasks":["step",...]}]
 Icons: ${ICONS}
 taskType: "task","session", or "commitment". Times: 24-hour HH:MM.`;
 
-function buildTaskRequest(req: AIChatRequest): BrowserAIChatRequest {
+// Exported (alongside the other build*Request functions below) so
+// scripts/build-finetune-dataset.mjs can call the exact live prompt-building
+// logic rather than duplicating it — guarantees the fine-tune dataset can
+// never drift from what the app actually serves at inference time.
+export function buildTaskRequest(req: AIChatRequest): BrowserAIChatRequest {
   const isFollowUp = req.messages.length > 1;
   const originalMsg = (req.messages[0]?.content as string) ?? "";
   const instruction = getAIInstructions().task;
@@ -143,6 +154,7 @@ function buildTaskRequest(req: AIChatRequest): BrowserAIChatRequest {
       ].filter(Boolean) as AIMessage[],
       _maxNewTokens: 650,
       _temperature: 0,
+      _actionType: "tasks",
     };
   }
 
@@ -154,6 +166,7 @@ function buildTaskRequest(req: AIChatRequest): BrowserAIChatRequest {
     ],
     _maxNewTokens: 650,
     _temperature: 0,
+    _actionType: "tasks",
   };
 }
 
@@ -163,9 +176,9 @@ function buildTaskRequest(req: AIChatRequest): BrowserAIChatRequest {
 
 const SUBTASK_FEW_SHOT = formatSubtaskBatchExample();
 
-const SUBTASK_SYSTEM = `Output 3-5 concrete actionable steps as a JSON array of strings. No explanation, no markdown fences.`;
+export const SUBTASK_SYSTEM = `Output 3-5 concrete actionable steps as a JSON array of strings. No explanation, no markdown fences.`;
 
-function buildSubtaskRequest(req: AIChatRequest): BrowserAIChatRequest {
+export function buildSubtaskRequest(req: AIChatRequest): BrowserAIChatRequest {
   const originalMsg = (req.messages[0]?.content as string) ?? "";
   return {
     ...req,
@@ -175,6 +188,7 @@ function buildSubtaskRequest(req: AIChatRequest): BrowserAIChatRequest {
     ],
     _maxNewTokens: 130,
     _temperature: 0,
+    _actionType: "subtasks",
   };
 }
 
@@ -184,15 +198,15 @@ function buildSubtaskRequest(req: AIChatRequest): BrowserAIChatRequest {
 
 const MILESTONE_FEW_SHOT = formatMilestoneBatchExample();
 
-const MILESTONE_SYSTEM = `Output 4-6 milestones as a JSON array. No explanation, no markdown fences.
+export const MILESTONE_SYSTEM = `Output 4-6 milestones as a JSON array. No explanation, no markdown fences.
 Schema: [{"title":"3-6 word title","description":"one sentence","targetDate":"YYYY-MM-DD"}]
 Space milestones evenly across the plan duration.
 If no timeframe is given, ask ONE short question about duration instead of JSON. If already asked, output JSON.`;
 
-const MILESTONE_SYSTEM_FOLLOWUP = `Output 4-6 milestones as a JSON array using your best judgment. No explanation, no markdown fences.
+export const MILESTONE_SYSTEM_FOLLOWUP = `Output 4-6 milestones as a JSON array using your best judgment. No explanation, no markdown fences.
 Schema: [{"title":"3-6 word title","description":"one sentence","targetDate":"YYYY-MM-DD"}]`;
 
-function buildMilestoneRequest(req: AIChatRequest): BrowserAIChatRequest {
+export function buildMilestoneRequest(req: AIChatRequest): BrowserAIChatRequest {
   const isFollowUp = req.messages.length > 1;
   const originalMsg = (req.messages[0]?.content as string) ?? "";
   const instruction = getAIInstructions().milestone;
@@ -208,6 +222,7 @@ function buildMilestoneRequest(req: AIChatRequest): BrowserAIChatRequest {
       ].filter(Boolean) as AIMessage[],
       _maxNewTokens: 450,
       _temperature: 0,
+      _actionType: "milestones",
     };
   }
 
@@ -219,6 +234,7 @@ function buildMilestoneRequest(req: AIChatRequest): BrowserAIChatRequest {
     ],
     _maxNewTokens: 450,
     _temperature: 0,
+    _actionType: "milestones",
   };
 }
 
@@ -226,18 +242,18 @@ function buildMilestoneRequest(req: AIChatRequest): BrowserAIChatRequest {
 // Milestone-scoped task generation
 // ─────────────────────────────────────────────────────────────────────────────
 
-const MILESTONE_TASK_SYSTEM = `Output 4-6 weekly tasks as a JSON array that directly help achieve the given milestone. No explanation, no markdown fences.
+export const MILESTONE_TASK_SYSTEM = `Output 4-6 weekly tasks as a JSON array that directly help achieve the given milestone. No explanation, no markdown fences.
 Schema: [{"title":"...","day":"monday","startTime":"HH:MM","endTime":"HH:MM","icon":"...","taskType":"task","subtasks":["step",...]}]
 Icons: ${ICONS}
 taskType: "task","session", or "commitment". Times: 24-hour HH:MM.
 If the milestone has no real description, ask ONE short question instead of JSON. If already asked, output JSON.`;
 
-const MILESTONE_TASK_SYSTEM_FOLLOWUP = `Output 4-6 weekly tasks as a JSON array using your best judgment. No explanation, no markdown fences.
+export const MILESTONE_TASK_SYSTEM_FOLLOWUP = `Output 4-6 weekly tasks as a JSON array using your best judgment. No explanation, no markdown fences.
 Schema: [{"title":"...","day":"monday","startTime":"HH:MM","endTime":"HH:MM","icon":"...","taskType":"task","subtasks":["step",...]}]
 Icons: ${ICONS}
 taskType: "task","session", or "commitment". Times: 24-hour HH:MM.`;
 
-function buildMilestoneTaskRequest(req: AIChatRequest): BrowserAIChatRequest {
+export function buildMilestoneTaskRequest(req: AIChatRequest): BrowserAIChatRequest {
   const isFollowUp = req.messages.length > 1;
   const originalMsg = (req.messages[0]?.content as string) ?? "";
   // "Tasks", not "Milestones" — matches aiActions.ts's own choice for this
@@ -259,6 +275,7 @@ function buildMilestoneTaskRequest(req: AIChatRequest): BrowserAIChatRequest {
         ],
     _maxNewTokens: 550,
     _temperature: 0,
+    _actionType: "milestone_tasks",
   };
 }
 
@@ -266,12 +283,12 @@ function buildMilestoneTaskRequest(req: AIChatRequest): BrowserAIChatRequest {
 // Weekly coaching insight
 // ─────────────────────────────────────────────────────────────────────────────
 
-const INSIGHT_SYSTEM =
+export const INSIGHT_SYSTEM =
   "Write exactly 2 sentences of direct coaching feedback. Use the exact plan names from the data. " +
   "Call out the strongest or weakest area. Give one concrete next action. " +
   "No bullet points, no greeting, do not start with 'I'.";
 
-function buildInsightRequest(req: AIChatRequest): BrowserAIChatRequest {
+export function buildInsightRequest(req: AIChatRequest): BrowserAIChatRequest {
   // The week-stats user message from aiActions.ts is already compact — keep it.
   return {
     ...req,
@@ -279,6 +296,7 @@ function buildInsightRequest(req: AIChatRequest): BrowserAIChatRequest {
     messages: req.messages,
     _maxNewTokens: 110,
     _temperature: 0.4,
+    _actionType: "insight",
   };
 }
 
@@ -297,7 +315,7 @@ function buildInsightRequest(req: AIChatRequest): BrowserAIChatRequest {
 
 // Every `example` below comes from lib/ai/examples.json via formatActionExample
 // — see that file's header comment for why only one example each is used.
-const FOCUSED_SCHEMAS: Record<string, { schema: string; example: string; rules: string }> = {
+export const FOCUSED_SCHEMAS: Record<string, { schema: string; example: string; rules: string }> = {
   create_plan: {
     schema: `{"type":"create_plan","payload":{"title":"...","description":"...","emoji":"...","color":"...","tasks":[{"title":"...","day":"monday","startTime":"HH:MM","endTime":"HH:MM","icon":"...","taskType":"session","subtasks":["...","..."]}]}}`,
     example: formatActionExample("create_plan"),
@@ -334,7 +352,7 @@ const FOCUSED_INSTRUCTION_CATEGORY: Partial<Record<string, "plan" | "task" | "mi
   suggest_milestones: "milestone",
 };
 
-function buildFocusedRequest(req: AIChatRequest, action: string): BrowserAIChatRequest | null {
+export function buildFocusedRequest(req: AIChatRequest, action: string): BrowserAIChatRequest | null {
   const spec = FOCUSED_SCHEMAS[action];
   if (!spec) return null;
 
@@ -353,6 +371,7 @@ Times are 24-hour HH:MM. Days are lowercase weekdays.`, instruction),
     messages: [{ role: "user", content: `${spec.example}\n\nNow do the same for:\n${ask}` }],
     _maxNewTokens: 700,
     _temperature: 0,
+    _actionType: action,
   };
 }
 
@@ -370,7 +389,7 @@ Times are 24-hour HH:MM. Days are lowercase weekdays.`, instruction),
 // Reuses the create_plan example from lib/ai/examples.json via formatChatExample.
 const CHAT_FEW_SHOT = formatChatExample();
 
-const CHAT_SYSTEM = `You create PlanR items. Reply with ONE JSON object and nothing else — no explanation, no markdown fences, no repetition.
+export const CHAT_SYSTEM = `You create PlanR items. Reply with ONE JSON object and nothing else — no explanation, no markdown fences, no repetition.
 
 Pick one "type":
 - "create_plan" — a new plan. payload: title, description, emoji, color, tasks[]
@@ -382,7 +401,7 @@ Task fields: day is a lowercase weekday. Times are 24-hour HH:MM. taskType is "t
 Icons: ${ICONS}
 Colors: blue, emerald, violet, pink, amber, cyan.`;
 
-function buildChatRequest(req: AIChatRequest): BrowserAIChatRequest {
+export function buildChatRequest(req: AIChatRequest): BrowserAIChatRequest {
   // Only the latest user turn is kept. Small models lose the thread across a
   // long history and start replaying earlier turns.
   const lastUser = [...req.messages].reverse().find((m) => m.role === "user");
@@ -404,6 +423,7 @@ function buildChatRequest(req: AIChatRequest): BrowserAIChatRequest {
     messages: [{ role: "user", content: `${CHAT_FEW_SHOT}\n\nNow do the same for:\n${ask}` }],
     _maxNewTokens: 700,
     _temperature: 0,
+    _actionType: "chat",
   };
 }
 
