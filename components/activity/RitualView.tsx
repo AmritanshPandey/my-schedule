@@ -555,7 +555,7 @@ export default function RitualView({
                 the cap once the sidebar returns to balance the width. */}
             <section className="w-full min-w-0 divide-y divide-neutral-100 dark:divide-white/[0.06] lg:max-w-2xl lg:divide-y-0 lg:space-y-4 xl:max-w-none">
               {grouped.map((group) => (
-                <div key={group.key} className="lg:rounded-2xl lg:border lg:border-neutral-200 lg:bg-white lg:px-4 lg:dark:border-white/[0.08] lg:dark:bg-neutral-900">
+                <div key={group.key} className="lg:rounded-2xl lg:border lg:border-neutral-200 lg:bg-white lg:px-4 lg:py-4 lg:dark:border-white/[0.08] lg:dark:bg-neutral-900">
                   <GroupHeader bucketKey={group.key} label={group.label} count={group.items.length} />
                   <div className="divide-y divide-neutral-100 dark:divide-white/[0.06]">
                     <AnimatePresence initial={false}>
