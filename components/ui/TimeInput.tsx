@@ -66,6 +66,14 @@ export default function TimeInput({
     }
   }
 
+  // No digits yet means no real time is set — the period select still has to
+  // show *something* (a native <select> can't render blank), but "AM" in
+  // full-strength text right next to a grayed-out "08:00" placeholder read as
+  // a real, already-set 08:00 AM. Muting the period too, and swapping the
+  // placeholder for a non-time "--:--", makes the whole control read as one
+  // unset field instead of a plausible (and wrong) default.
+  const isEmpty = draft === "";
+
   return (
     <div>
       {label && <p className="mb-1.5 text-[11px] font-semibold uppercase tracking-[0.08em] text-neutral-400 dark:text-neutral-500">{label}</p>}
@@ -75,7 +83,7 @@ export default function TimeInput({
           inputMode="numeric"
           value={draft}
           aria-label={ariaLabel ?? label ?? "Time"}
-          placeholder="08:00"
+          placeholder="--:--"
           disabled={disabled}
           onFocus={onFocus}
           onChange={(event) => {
@@ -106,7 +114,7 @@ export default function TimeInput({
               setPeriod(next);
               commit(draft, next);
             }}
-            className="w-[76px] cursor-pointer appearance-none bg-transparent py-0 pl-2 pr-6 text-[15px] font-semibold text-neutral-700 outline-none disabled:cursor-not-allowed disabled:opacity-60 dark:text-white dark:[color-scheme:dark]"
+            className={`w-[76px] cursor-pointer appearance-none bg-transparent py-0 pl-2 pr-6 text-[15px] font-semibold outline-none disabled:cursor-not-allowed disabled:opacity-60 dark:[color-scheme:dark] ${isEmpty ? "text-neutral-400 dark:text-neutral-600" : "text-neutral-700 dark:text-white"}`}
           >
             <option value="AM">AM</option>
             <option value="PM">PM</option>

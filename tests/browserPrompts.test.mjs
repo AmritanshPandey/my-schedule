@@ -30,7 +30,7 @@ registerHooks({
   },
 });
 
-const { rewriteForBrowserModel } = await import("@/lib/ai/providers/browserPrompts.ts");
+const { rewriteForBrowserModel, FOCUSED_SCHEMAS } = await import("@/lib/ai/providers/browserPrompts.ts");
 const { buildSystemPrompt } = await import("@/lib/ai.ts");
 
 // The exact prompt the AI Assistant sends — built the same way the chat does,
@@ -125,6 +125,16 @@ test("each starter intent has a focused schema", () => {
     assert.ok(out.systemPrompt.includes(action), `${action} did not get a focused prompt`);
     assert.equal(out._temperature, 0, `${action} should decode greedily`);
   }
+});
+
+// components/plan/AIPlanCreatorSheet.tsx relies on this schema NOT asking for
+// milestones — that's exactly why it's smaller and more reliable than the
+// generic chat path (see that file's runGenerate for the full rationale). If
+// this schema ever grows a milestones field, the sheet's separate, follow-up
+// streamGenerateMilestones() call would start duplicating work silently.
+test("the create_plan focused schema has no milestones field — that's staged separately", () => {
+  assert.ok(!FOCUSED_SCHEMAS.create_plan.schema.includes("milestones"), "focused create_plan schema should stay tasks-only");
+  assert.ok(!FOCUSED_SCHEMAS.create_plan.example.includes("milestones"), "focused create_plan example should stay tasks-only");
 });
 
 test("the intent wins over prompt-sniffing", () => {

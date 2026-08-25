@@ -15,6 +15,8 @@ import { SECTION_ICONS, getIconPickerStyle } from "@/components/SectionIcons";
 import { buildSystemPrompt, parseAIAction, type AITask, type AIMilestone } from "@/lib/ai";
 import { streamAIChat } from "@/lib/aiClient";
 import { useAIActions } from "@/lib/ai/useAIActions";
+import { getAIProviderState } from "@/lib/ai/config";
+import { streamGenerateMilestones, parseGeneratedMilestones } from "@/lib/aiActions";
 import { resolveAccentColor, type AccentColor } from "@/lib/colorSystem";
 import { localISODate, todayISO } from "@/lib/dateUtils";
 import { validateTaskShapes, type TaskShapeIssue } from "@/lib/ai/validation/taskSchema";
@@ -47,6 +49,15 @@ interface AIPlanCreatorSheetProps {
    *  schedule before the plan is ever created. */
   schedule: Schedule;
   todayKey: DayKey;
+  /** Pre-fills the goal box, e.g. a note's own title+body (see
+   *  lib/notes/noteToGoal.ts). Only takes effect via `autoGenerate` below —
+   *  on its own it just seeds the input step like a typed draft. */
+  initialGoal?: string;
+  /** Skips the manual "input" step and calls runGenerate() once, the moment
+   *  the sheet opens with `initialGoal` set — the note-editor entry point
+   *  goes straight to streaming/review, exactly like a submitted goal would,
+   *  without the user retyping what's already in the note. */
+  autoGenerate?: boolean;
 }
 
 // ── Streaming status ──────────────────────────────────────────────────────────
@@ -126,6 +137,8 @@ export default function AIPlanCreatorSheet({
   existingPlans = [],
   schedule,
   todayKey,
+  initialGoal,
+  autoGenerate,
 }: AIPlanCreatorSheetProps) {
   const [step, setStep] = useState<"input" | "question" | "review">("input");
   const [goal, setGoal] = useState("");
@@ -152,10 +165,15 @@ export default function AIPlanCreatorSheet({
   const abortRef = useRef<AbortController | null>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const answerRef = useRef<HTMLTextAreaElement>(null);
+  // Guards runGenerate() to fire at most once per open — without it, a
+  // re-render while streaming (e.g. goal state settling) would restart
+  // generation instead of just reflecting progress.
+  const autoStarted = useRef(false);
 
   // Reset when sheet closes
   useEffect(() => {
     if (!open) {
+      autoStarted.current = false;
       const t = setTimeout(() => {
         setStep("input");
         setGoal("");
@@ -170,31 +188,67 @@ export default function AIPlanCreatorSheet({
     }
   }, [open]);
 
+  // Skips the manual "input" step for a note-derived goal (see
+  // `autoGenerate`'s doc comment above) — opens straight into streaming.
+  useEffect(() => {
+    if (open && autoGenerate && initialGoal?.trim() && !autoStarted.current) {
+      autoStarted.current = true;
+      setGoal(initialGoal);
+      void runGenerate(undefined, initialGoal);
+    }
+  }, [open, autoGenerate, initialGoal]); // eslint-disable-line react-hooks/exhaustive-deps
+
   // Cleanup abort on unmount
   useEffect(() => () => { abortRef.current?.abort(); }, []);
 
-  async function runGenerate(followUp?: { question: string; answer: string }) {
-    if (!ai.available || !goal.trim() || streaming) return;
+  async function runGenerate(followUp?: { question: string; answer: string }, goalOverride?: string) {
+    // `goalOverride` lets the auto-generate effect below fire in the same
+    // tick it sets the goal, instead of racing setGoal()'s next render.
+    const effectiveGoal = goalOverride ?? goal;
+    if (!ai.available || !effectiveGoal.trim() || streaming) return;
     setStreaming(true);
     setErrorMsg(null);
     abortRef.current?.abort();
     const controller = new AbortController();
     abortRef.current = controller;
 
-    const messages: { role: "user" | "assistant"; content: string }[] = [{ role: "user", content: goal }];
+    const messages: { role: "user" | "assistant"; content: string }[] = [{ role: "user", content: effectiveGoal }];
     if (followUp) {
       messages.push({ role: "assistant", content: followUp.question });
       messages.push({ role: "user", content: followUp.answer || "(no answer given — use your best judgment)" });
     }
 
+    // The in-browser small model is unreliable on one combined title+tasks+
+    // milestones call — lib/ai/providers/browserPrompts.ts's
+    // detectActionType() only recognizes lib/ai.ts's full conversational
+    // GENERAL_PROMPT as generic "chat" (there's nothing more specific for it
+    // to match), so it gets the same one-generic-example path as open-ended
+    // AI Assistant chat instead of a schema tuned for this. Passing
+    // `actionHint` skips that guesswork and routes straight to the narrow
+    // FOCUSED_SCHEMAS.create_plan path (title+tasks only, no milestones —
+    // that's why it's smaller and more reliable); milestones are then
+    // fetched in a second, separate call below via the exact same
+    // streamGenerateMilestones() every other milestone generator in the app
+    // already uses reliably. Non-browser providers (MLX/Ollama/OpenAI-
+    // compatible) don't read actionHint at all — this only changes
+    // behavior for the browser provider; everyone else keeps today's single
+    // combined call.
+    const isBrowserProvider = getAIProviderState().active === "browser";
+
     let accumulated = "";
     try {
-      // Full plan creation with tasks in one shot. planContext carries
-      // today's real load (existing tasks/rituals/deadlines) so generated
-      // tasks don't ignore what's already on the calendar.
+      // planContext carries today's real load (existing tasks/rituals/
+      // deadlines) so generated tasks don't ignore what's already on the
+      // calendar.
       const planContext = buildTaskGenerationContext(schedule, todayKey);
       const systemPrompt = buildSystemPrompt("plans", planContext, existingPlans);
-      for await (const chunk of streamAIChat(messages, systemPrompt, 1024, controller.signal)) {
+      for await (const chunk of streamAIChat(
+        messages,
+        systemPrompt,
+        1024,
+        controller.signal,
+        isBrowserProvider ? "create_plan" : undefined,
+      )) {
         accumulated += chunk;
       }
       const action = parseAIAction(accumulated);
@@ -224,6 +278,26 @@ export default function AIPlanCreatorSheet({
           })),
         ]);
         setStep("review");
+
+        // Browser provider: the focused schema above never includes
+        // milestones, so fetch them separately now. Best-effort — a failure
+        // here leaves milestones empty and editable rather than discarding
+        // the plan that already succeeded and is already on screen.
+        if (isBrowserProvider && !p.milestones?.length) {
+          try {
+            let milestoneText = "";
+            for await (const chunk of streamGenerateMilestones(
+              { title: p.title, description: p.description, startDate: p.startDate, endDate: p.endDate },
+              controller.signal,
+            )) {
+              milestoneText += chunk;
+            }
+            const generatedMilestones = parseGeneratedMilestones(milestoneText);
+            if (generatedMilestones.length > 0) setMilestones(generatedMilestones);
+          } catch {
+            // Swallow — see comment above.
+          }
+        }
         return;
       }
 

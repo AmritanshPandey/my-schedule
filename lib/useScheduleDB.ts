@@ -425,6 +425,7 @@ export interface Note {
   pinned?: boolean;
   tags?: string[];       // free-text labels for grouping/filtering
   linkedTaskIds?: string[]; // ids of tasks this note references
+  linkedPlanIds?: string[]; // ids of plans this note was used to generate (AI "turn into plan")
 }
 
 export interface SchedulePreferences {
@@ -1092,6 +1093,9 @@ function normalizeNotes(raw: unknown): Note[] {
       tags: normalizeNoteTags(n.tags),
       linkedTaskIds: Array.isArray(n.linkedTaskIds)
         ? (n.linkedTaskIds as unknown[]).filter((x): x is string => typeof x === "string")
+        : undefined,
+      linkedPlanIds: Array.isArray(n.linkedPlanIds)
+        ? (n.linkedPlanIds as unknown[]).filter((x): x is string => typeof x === "string")
         : undefined,
     }));
 }

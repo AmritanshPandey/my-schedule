@@ -20,6 +20,7 @@ import { WeekGrid } from "@/components/desktop/WeekGrid";
 import type { AIActionResult, AIMilestone } from "@/lib/ai";
 import type { AIProposal } from "@/lib/aiProposal";
 import { recordProposalCreated, recordProposalRejected, recordProposalFailed, executeCreateTaskProposal } from "@/lib/proposalMutations";
+import { buildPlanGoalFromNote } from "@/lib/notes/noteToGoal";
 import { useAIEnabled } from "@/lib/ai/useAIEnabled";
 import { useAIActions } from "@/lib/ai/useAIActions";
 import { useCoachTour } from "@/lib/onboarding/useCoachTour";
@@ -825,6 +826,10 @@ export default function ScheduleApp() {
   const [addingPlan, setAddingPlan] = useState(false);
   const [goalsSheetOpen, setGoalsSheetOpen] = useState(false);
   const [aiPlanCreating, setAiPlanCreating] = useState(false);
+  // Set when AIPlanCreatorSheet was opened from a note's "Turn into plan"
+  // button (see handleTurnNoteIntoPlan) rather than the manual "Generate
+  // Plan" entry point — carries which note to link once the plan is created.
+  const [notePlanSeed, setNotePlanSeed] = useState<{ noteId: string; goal: string } | null>(null);
   const [aiOpen, setAiOpen] = useState(false);
   const [aiInitialMessage, setAiInitialMessage] = useState("");
 
@@ -2017,8 +2022,28 @@ export default function ScheduleApp() {
   }
 
   function handleCreateAIPlan(data: import("@/components/plan/AIPlanCreatorSheet").AIPlanCreatorData) {
-    createPlanFromAIAction(data);
+    const planId = createPlanFromAIAction(data);
+    // Note → Plan (AI): link the originating note to what it generated, the
+    // same way "Create task from note" already links a note to a task —
+    // Note.linkedPlanIds, resolved directly, no task lookup needed.
+    if (notePlanSeed) {
+      const { noteId } = notePlanSeed;
+      setSchedule((prev) => ({
+        ...prev,
+        notes: prev.notes.map((n) =>
+          n.id === noteId
+            ? { ...n, linkedPlanIds: Array.from(new Set([...(n.linkedPlanIds ?? []), planId])), updatedAt: new Date().toISOString() }
+            : n
+        ),
+      }));
+      setNotePlanSeed(null);
+    }
     setAiPlanCreating(false);
+  }
+
+  function handleTurnNoteIntoPlan(note: Note) {
+    setNotePlanSeed({ noteId: note.id, goal: buildPlanGoalFromNote(note) });
+    setAiPlanCreating(true);
   }
 
   /**
@@ -3323,6 +3348,8 @@ export default function ScheduleApp() {
               plans={schedule.plans}
               onOpenTask={handleOpenLinkedTask}
               onCreateTaskFromNote={handleCreateTaskFromNote}
+              onOpenPlan={(planId) => { setActiveTab(1); setSelectedPlanId(planId); }}
+              onTurnIntoPlan={aiEnabled && aiAvailable && !iosSafeMode ? handleTurnNoteIntoPlan : undefined}
               todayDateISO={todayISO()}
               disableMotion={iosSafeMode}
             />
@@ -4135,11 +4162,13 @@ export default function ScheduleApp() {
       {aiEnabled && aiAvailable && !iosSafeMode && (
         <AIPlanCreatorSheet
           open={aiPlanCreating}
-          onClose={() => setAiPlanCreating(false)}
+          onClose={() => { setAiPlanCreating(false); setNotePlanSeed(null); }}
           onCreatePlan={handleCreateAIPlan}
           existingPlans={schedule.plans.map((p) => ({ title: p.title, category: p.category, description: p.description }))}
           schedule={schedule}
           todayKey={todayKey}
+          initialGoal={notePlanSeed?.goal}
+          autoGenerate={!!notePlanSeed}
         />
       )}
 

@@ -5,6 +5,7 @@ import { IconPlus, IconX } from "@tabler/icons-react";
 import type { DayKey } from "@/lib/useScheduleDB";
 import { parseTimeToMinutes, minutesToInputTime, currentMinutes, formatDisplayTime } from "@/lib/timeUtils";
 import TimeInput from "@/components/ui/TimeInput";
+import type { UsualTimeSlot } from "@/lib/usualTimeSlot";
 
 const REPEAT_DAYS: DayKey[] = ["sunday", "monday", "tuesday", "wednesday", "thursday", "friday", "saturday"];
 
@@ -49,6 +50,11 @@ interface TimeSlotPickerProps {
   /** Open windows for the day being edited, in schedule-day minutes (see
    *  lib/availableSlots.ts). Omitted/empty hides the section entirely. */
   suggestedSlots?: { startMinutes: number; endMinutes: number }[];
+  /** The user's typical time for tasks like this one (see lib/usualTimeSlot.ts).
+   *  Omitted/null hides the section — including when there isn't enough
+   *  history yet, or the usual slot would conflict with something already
+   *  scheduled that day. */
+  usualTimeSlot?: UsualTimeSlot | null;
 }
 
 // inputToMinutes: parse "HH:MM" input format
@@ -94,6 +100,7 @@ export default function TimeSlotPicker({
   repeatDays,
   onRepeatDaysChange,
   suggestedSlots,
+  usualTimeSlot,
 }: TimeSlotPickerProps) {
   // Presets/duration act on the focused (most recently touched) slot.
   const [focusedIndex, setFocusedIndex] = useState(0);
@@ -220,6 +227,34 @@ export default function TimeSlotPicker({
           Add time slot
         </button>
       </div>
+
+      {/* Your usual time — personalized, from the user's own scheduling
+          history (lib/usualTimeSlot.ts). Distinct from the open-gap
+          suggestions below: this is "what you actually do," not "what
+          happens to be free." Styled like AddPlanSheet's "Build this with AI
+          instead" entry point — this app's established visual language for
+          "personalized to you." */}
+      {usualTimeSlot && (
+        <div className="space-y-2">
+          <p className={LABEL}>Your usual time</p>
+          <button
+            type="button"
+            onClick={() => {
+              setSelectedDuration(usualTimeSlot.endMinutes - usualTimeSlot.startMinutes);
+              patchSlot(activeIndex, {
+                startTime: minutesToInput(usualTimeSlot.startMinutes),
+                endTime: minutesToInput(usualTimeSlot.endMinutes),
+              });
+            }}
+            className="flex h-10 w-full items-center justify-center gap-1.5 rounded-full border border-violet-200 bg-violet-50 px-3 text-[13px] font-semibold text-violet-700 transition-colors hover:border-violet-300 dark:border-violet-500/20 dark:bg-violet-500/[0.08] dark:text-violet-300 dark:hover:border-violet-500/30"
+          >
+            {formatDisplayTime(minutesToInput(usualTimeSlot.startMinutes))}–{formatDisplayTime(minutesToInput(usualTimeSlot.endMinutes))}
+            <span className="font-normal text-violet-500 dark:text-violet-400">
+              · based on {usualTimeSlot.sampleSize} similar {usualTimeSlot.sampleSize === 1 ? "task" : "tasks"}
+            </span>
+          </button>
+        </div>
+      )}
 
       {/* Suggested (currently-open) times */}
       {suggestedSlots && suggestedSlots.length > 0 && (

@@ -23,6 +23,7 @@ import {
   IconPinnedFilled,
   IconRowInsertBottom,
   IconRowRemove,
+  IconSparkles,
   IconStrikethrough,
   IconTag,
   IconTable,
@@ -54,7 +55,7 @@ import {
 import { buildNoteEditorExtensions } from "./richTextExtensions";
 import { deriveTaskTitleFromNoteText } from "@/lib/notes/dailyCapture";
 
-type NotePatch = Partial<Pick<Note, "title" | "body" | "pinned" | "tags" | "linkedTaskIds">>;
+type NotePatch = Partial<Pick<Note, "title" | "body" | "pinned" | "tags" | "linkedTaskIds" | "linkedPlanIds">>;
 type CreateTaskFromNoteInput = { title: string; noteId: string; day: DayKey; planId?: string };
 
 interface NoteEditorProps {
@@ -68,6 +69,11 @@ interface NoteEditorProps {
   /** Open a task referenced by the note. */
   onOpenTask: (taskId: string) => void;
   onCreateTaskFromNote?: (input: CreateTaskFromNoteInput) => string | undefined;
+  /** Open a plan this note was used to generate (see linkedPlanIds). */
+  onOpenPlan?: (planId: string) => void;
+  /** AI: generate a full plan from this note's own title+body. Absent when
+   *  AI features are disabled — the header button only renders when set. */
+  onTurnIntoPlan?: (note: Note) => void;
   todayDay: DayKey;
 }
 
@@ -141,10 +147,11 @@ function readSelectionColor(editor: Editor): string | null {
   return normalizeEditorColor(editor.getAttributes("textStyle").color as string | undefined);
 }
 
-export default function NoteEditor({ note, onUpdate, onDelete, onBack, tasks, plans, onOpenTask, onCreateTaskFromNote, todayDay }: NoteEditorProps) {
+export default function NoteEditor({ note, onUpdate, onDelete, onBack, tasks, plans, onOpenTask, onCreateTaskFromNote, onOpenPlan, onTurnIntoPlan, todayDay }: NoteEditorProps) {
   const [title, setTitle] = useState(note.title);
   const [linkPickerOpen, setLinkPickerOpen] = useState(false);
   const tasksById = useMemo(() => new Map(tasks.map((t) => [t.id, t])), [tasks]);
+  const plansById = useMemo(() => new Map(plans.map((p) => [p.id, p])), [plans]);
   // plan.emoji is a Tabler icon NAME — resolve it to a component.
   const planIcon = useMemo(() => {
     const byName = new Map(SECTION_ICONS.map((s) => [s.name, s.icon]));
@@ -154,6 +161,10 @@ export default function NoteEditor({ note, onUpdate, onDelete, onBack, tasks, pl
     () => resolveLinkedTasks(note.linkedTaskIds, tasksById),
     [note.linkedTaskIds, tasksById]
   );
+  const linkedPlans = useMemo(
+    () => (note.linkedPlanIds ?? []).map((id) => plansById.get(id)).filter((p): p is Plan => !!p),
+    [note.linkedPlanIds, plansById]
+  );
 
   function addLinkedTask(taskId: string) {
     const next = Array.from(new Set([...(note.linkedTaskIds ?? []), taskId]));
@@ -161,6 +172,9 @@ export default function NoteEditor({ note, onUpdate, onDelete, onBack, tasks, pl
   }
   function removeLinkedTask(taskId: string) {
     onUpdate(note.id, { linkedTaskIds: (note.linkedTaskIds ?? []).filter((id) => id !== taskId) });
+  }
+  function removeLinkedPlan(planId: string) {
+    onUpdate(note.id, { linkedPlanIds: (note.linkedPlanIds ?? []).filter((id) => id !== planId) });
   }
   const [headerTags, setHeaderTags] = useState<string[]>(note.tags ?? []);
   const [bodyTags, setBodyTags] = useState<string[]>(extractTagsFromBody(note.body));
@@ -528,6 +542,18 @@ export default function NoteEditor({ note, onUpdate, onDelete, onBack, tasks, pl
               <span className="hidden lg:inline-flex">
                 <SaveBadge state={saveState} />
               </span>
+              {onTurnIntoPlan && (
+                <IconButton
+                  label="Turn into plan"
+                  variant="ghost"
+                  size="md"
+                  radius="xl"
+                  onClick={() => { haptic("light"); onTurnIntoPlan(note); }}
+                  className="text-violet-600 dark:text-violet-400"
+                >
+                  <IconSparkles size={16} strokeWidth={2} />
+                </IconButton>
+              )}
               <IconButton
                 label={copied ? "Copied!" : "Copy note"}
                 variant="ghost"
@@ -672,6 +698,45 @@ export default function NoteEditor({ note, onUpdate, onDelete, onBack, tasks, pl
             )}
           </div>
         </div>
+
+        {/* Linked plans — populated only by "Turn into plan" above; no manual
+            picker in v1, so this row is absent until that's been used once. */}
+        {linkedPlans.length > 0 && (
+          <div className="border-b border-neutral-100 bg-neutral-50/60 dark:border-white/[0.06] dark:bg-white/[0.02]">
+            <div className="mx-auto flex w-full max-w-4xl items-center gap-2 overflow-x-auto px-4 py-3 sm:px-5 lg:max-w-5xl xl:max-w-6xl">
+              <span className="inline-flex shrink-0 items-center gap-1 text-[11px] font-bold uppercase tracking-[0.08em] text-neutral-400 dark:text-neutral-500">
+                <IconSparkles size={12} strokeWidth={2.2} />
+                Linked plans
+              </span>
+              {linkedPlans.map((plan) => {
+                const Icon = planIcon.get(plan.id) ?? SECTION_ICONS[0].icon;
+                return (
+                  <span
+                    key={plan.id}
+                    className="inline-flex min-h-9 shrink-0 items-center gap-1 rounded-full border border-neutral-200 bg-white py-1 pl-2.5 pr-1 text-[13px] font-semibold text-neutral-700 dark:border-white/[0.12] dark:bg-white/[0.04] dark:text-neutral-200"
+                  >
+                    <button
+                      type="button"
+                      onClick={() => onOpenPlan?.(plan.id)}
+                      className="inline-flex max-w-[180px] items-center gap-1.5 truncate"
+                    >
+                      <Icon size={13} strokeWidth={2} className="shrink-0 text-neutral-500 dark:text-neutral-400" />
+                      <span className="truncate">{plan.title}</span>
+                    </button>
+                    <button
+                      type="button"
+                      aria-label={`Unlink ${plan.title}`}
+                      onClick={() => removeLinkedPlan(plan.id)}
+                      className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-neutral-400 transition-colors hover:bg-neutral-100 hover:text-neutral-600 dark:hover:bg-white/[0.08]"
+                    >
+                      <IconX size={12} strokeWidth={2.4} />
+                    </button>
+                  </span>
+                );
+              })}
+            </div>
+          </div>
+        )}
 
         <div className="mx-auto w-full max-w-4xl px-4 pt-4 pb-8 sm:px-5 lg:max-w-5xl xl:max-w-6xl">
           <div className="note-editor-shell">

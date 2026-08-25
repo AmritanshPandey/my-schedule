@@ -229,6 +229,7 @@ export const NoteSchema = z.object({
   pinned: z.boolean().optional(),
   tags: z.array(z.string()).optional(),
   linkedTaskIds: z.array(nonEmptyId).optional(),
+  linkedPlanIds: z.array(nonEmptyId).optional(),
 }).passthrough();
 
 const preferences = z.object({

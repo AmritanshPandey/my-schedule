@@ -43,6 +43,8 @@ interface NotesViewProps {
   plans: Plan[];
   onOpenTask: (taskId: string) => void;
   onCreateTaskFromNote?: (input: CreateTaskFromNoteInput) => string | undefined;
+  onOpenPlan?: (planId: string) => void;
+  onTurnIntoPlan?: (note: Note) => void;
   initialEditingId?: string | null;
   onInitialEditingHandled?: () => void;
   todayDateISO?: string;
@@ -208,6 +210,8 @@ export default function NotesView({
   plans,
   onOpenTask,
   onCreateTaskFromNote,
+  onOpenPlan,
+  onTurnIntoPlan,
   initialEditingId,
   onInitialEditingHandled,
   todayDateISO = todayISO(),
@@ -492,6 +496,8 @@ export default function NotesView({
               plans={plans}
               onOpenTask={onOpenTask}
               onCreateTaskFromNote={onCreateTaskFromNote}
+              onOpenPlan={onOpenPlan}
+              onTurnIntoPlan={onTurnIntoPlan}
               todayDay={todayDay}
             />
           ) : (
@@ -518,6 +524,8 @@ export default function NotesView({
               plans={plans}
               onOpenTask={onOpenTask}
               onCreateTaskFromNote={onCreateTaskFromNote}
+              onOpenPlan={onOpenPlan}
+              onTurnIntoPlan={onTurnIntoPlan}
               todayDay={todayDay}
             />
           </div>
@@ -552,6 +560,8 @@ export default function NotesView({
               plans={plans}
               onOpenTask={onOpenTask}
               onCreateTaskFromNote={onCreateTaskFromNote}
+              onOpenPlan={onOpenPlan}
+              onTurnIntoPlan={onTurnIntoPlan}
               todayDay={todayDay}
             />
           </m.div>

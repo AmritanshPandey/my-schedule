@@ -37,6 +37,7 @@ import CategorySheet, { type CategoryDraft } from "@/components/category/Categor
 import { haptic } from "@/lib/haptics";
 import type { DayKey, Plan, Schedule, Task, TaskCategory, TaskRecurrence, TaskTypeValue } from "@/lib/useScheduleDB";
 import { findAvailableSlots, suggestSlots } from "@/lib/availableSlots";
+import { computeUsualTimeSlot } from "@/lib/usualTimeSlot";
 import { DAYS, DAY_LABELS } from "@/lib/useScheduleDB";
 import { localISODate, formatDate } from "@/lib/dateUtils";
 import type { ScheduleEntry } from "@/components/ScheduleItem";
@@ -499,6 +500,24 @@ export function TaskSheet({
     const activeDuration = start !== null && end !== null && end > start ? end - start : 30;
     return suggestSlots(gaps, activeDuration);
   }, [activities, resolvedEditDay, activeDay, baseDateISO, preferences, editorSlots]);
+
+  // "Your usual time" — the median start/duration of the user's other tasks
+  // in the same category (or plan, when no category is set yet). Only
+  // surfaced when it actually fits a free gap on the day being edited, so it
+  // never suggests a slot that would double-book. See lib/usualTimeSlot.ts.
+  const usualTimeSlot = useMemo(() => {
+    if (!activities || !planId) return null;
+    const candidate = computeUsualTimeSlot(
+      activities,
+      { categoryId: categoryId || undefined, planId },
+      task?.id,
+    );
+    if (!candidate) return null;
+    const dayTasks = activities[resolvedEditDay] ?? activities[activeDay] ?? [];
+    const gaps = findAvailableSlots(dayTasks, baseDateISO, preferences);
+    const fits = gaps.some((g) => candidate.startMinutes >= g.startMinutes && candidate.endMinutes <= g.endMinutes);
+    return fits ? candidate : null;
+  }, [activities, categoryId, planId, task?.id, resolvedEditDay, activeDay, baseDateISO, preferences]);
 
   // Validate every day that will be written (each day's own slots in custom mode).
   const daysToValidate: EditableSlot[][] = isOccurrenceScope || !perDayActive
@@ -1006,6 +1025,7 @@ export function TaskSheet({
                 repeatDays={isOccurrenceScope || repeatMode === "once" || perDayActive ? undefined : repeatDays}
                 onRepeatDaysChange={isOccurrenceScope || repeatMode === "once" || perDayActive ? undefined : setRepeatDays}
                 suggestedSlots={suggestedSlots}
+                usualTimeSlot={usualTimeSlot}
               />
               {timeError && (
                 <p className="-mt-3 text-[12px] font-semibold text-rose-500 dark:text-rose-400">
