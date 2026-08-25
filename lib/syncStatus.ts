@@ -28,6 +28,10 @@ export function describeSyncStatus(status: SyncStatus, lastAt: number): { label:
   if (status === "syncing") return { label: "Syncing…", tone: "syncing" };
   if (status === "offline") return { label: "Offline", tone: "warn" };
   if (status === "error") return { label: "Sync failed", tone: "error" };
+  // A conflict is not a failure: the remote data was newer and has been loaded,
+  // and this device's copy is safe in the cloud conflict archive. Warn tone, not
+  // error, because there is nothing for the user to fix.
+  if (status === "conflict") return { label: "Merged newer data from another device", tone: "warn" };
   if (lastAt === 0) return { label: "Not synced yet", tone: "neutral" };
   return { label: `Synced ${relativeTime(lastAt)}`, tone: "ok" };
 }

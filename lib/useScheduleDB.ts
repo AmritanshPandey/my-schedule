@@ -6,7 +6,7 @@ import type { AccentColor } from "@/lib/colorSystem";
 import { categoryFromIcon, colorFromIcon, resolveAccentColor } from "@/lib/colorSystem";
 import type { GoalDirection } from "@/lib/trendUtils";
 export type { GoalDirection };
-import { flushNow, mergeCloudIfNewer, queueSync, noteLatestSchedule } from "@/lib/cloudSync";
+import { mergeCloudIfNewer, queueSync, noteLatestSchedule } from "@/lib/cloudSync";
 import { getLocalLastUpdated, writeLocalLastUpdated } from "@/lib/localMeta";
 import { logError } from "@/lib/errorLog";
 import { useAuth } from "@/contexts/AuthProvider";
@@ -1334,13 +1334,14 @@ export function useScheduleDB() {
           const cloudResult = await mergeCloudIfNewer(activeUid, getLocalLastUpdated(activeUid));
           if (cancelled) return;
           const merged = cloudResult === "merged";
-          if ((cloudResult === "local-newer" || cloudResult === "missing") && localSchedule) {
-            // Recover a local write from a previous session that may have closed
-            // before the debounced cloud sync completed.
-            await flushNow(localSchedule);
-          } else if (cloudResult === "error" && localSchedule) {
-            queueSync(localSchedule);
-          }
+          // Deliberately no push here. Boot used to flush the local snapshot on
+          // "local-newer"/"missing" and queue it even on "error" — a failed
+          // pull. On a second device holding older data that is precisely how
+          // the first device's work got overwritten before the user touched
+          // anything. Unsynced work from a previous session is not lost: the
+          // normal debounced write path still pushes it on the first edit, and
+          // that push is now a compare-and-swap that cannot clobber a revision
+          // this device never absorbed (lib/cloudSync.ts).
           if (!merged && !hasLocalData) {
             // Fresh account: no newer cloud snapshot and no local user record.
             // Adopt any meaningful guest data so trial work isn't orphaned.

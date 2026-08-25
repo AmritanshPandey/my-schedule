@@ -7,6 +7,14 @@
  * - All Firestore writes are batched into one document.
  * - Visibility/online events trigger smart syncs.
  * - Everything cleans up on destroySync().
+ *
+ * Concurrency: the snapshot document carries a monotonic `rev`, and every push
+ * is a compare-and-swap inside a transaction against the rev this device has
+ * actually incorporated (see getLocalBaseRev). A device can therefore never
+ * overwrite a revision it has not absorbed — which is what used to let a second
+ * device silently replace the first device's work. When the CAS fails, the
+ * local snapshot is archived to users/{uid}/conflicts/{ISO} and the remote is
+ * adopted: visible and recoverable rather than silent and lost.
  */
 
 import {
@@ -16,18 +24,25 @@ import {
   deleteDoc,
   collection,
   getDocs,
+  runTransaction,
   serverTimestamp,
 } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import type { Schedule } from "@/lib/useScheduleDB";
 import { logError } from "@/lib/errorLog";
-import { getLocalLastUpdated } from "@/lib/localMeta";
+import {
+  clearLocalBaseRev,
+  getLocalBaseRev,
+  getLocalLastUpdated,
+  writeLocalBaseRev,
+} from "@/lib/localMeta";
 import { localISODate } from "@/lib/dateUtils";
 import { schedulePayloadBytes, validateSchedule } from "@/lib/scheduleSchema";
+import { pushIsSafe, type SnapshotDoc } from "@/lib/syncRevision";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
-export type SyncStatus = "idle" | "syncing" | "offline" | "error";
+export type SyncStatus = "idle" | "syncing" | "offline" | "error" | "conflict";
 
 export interface CloudSnapshot {
   uid: string;
@@ -53,6 +68,11 @@ let _lastSchedule: Schedule | null = null; // latest snapshot seen by queueSync
 let _lastSyncedAt = 0;
 let _lastPullAt = 0; // throttle resume/reconnect pulls (rapid visibility toggles)
 let _status: SyncStatus = "idle";
+// Have we successfully READ the remote document at least once this session?
+// Pushing before a read is how a device with stale local data used to clobber
+// the cloud after a failed pull. This is a session flag; the durable half of the
+// guard is the persisted base rev, which survives reloads.
+let _remoteReadOk = false;
 
 const PULL_THROTTLE_MS = 10_000; // at most one resume-pull per 10 s
 const LARGE_PAYLOAD_WARNING_BYTES = 750_000;
@@ -97,6 +117,39 @@ async function writeDailyBackup(uid: string, payload: Schedule, lastUpdated: num
   const ids = snaps.docs.map((d) => d.id).sort();
   const excess = ids.slice(0, Math.max(0, ids.length - BACKUP_KEEP));
   await Promise.all(excess.map((id) => deleteDoc(backupDocRef(uid, id))));
+}
+
+// ── Conflict archive ──────────────────────────────────────────────────────────
+// When a push loses the compare-and-swap, the local snapshot is parked here
+// before the remote is adopted, so a diverged device never simply loses its
+// work. Deliberately a SEPARATE collection from `backups`: that one prunes by
+// lexicographic id sort assuming YYYY-MM-DD ids, and a full-ISO id mixed in
+// would break its ordering.
+
+const CONFLICT_KEEP = 10;
+
+function conflictsCollection(uid: string) {
+  if (!db) throw new Error("[CloudSync] Firestore not initialized");
+  return collection(db, "users", uid, "conflicts");
+}
+
+async function archiveConflict(uid: string, local: Schedule, localRev: number | null): Promise<void> {
+  const id = new Date().toISOString();
+  // Same transport limits as the live snapshot: an oversized archive write
+  // would fail, and a failed archive leaves the device permanently unable to
+  // resolve the conflict.
+  const { payload } = capPayloadSize(trimForSync(local));
+  await setDoc(doc(conflictsCollection(uid), id), {
+    schedule: payload,
+    lastUpdated: getLocalLastUpdated(uid),
+    baseRev: localRev,
+    savedAt: serverTimestamp(),
+  });
+  // Full ISO ids sort chronologically too, so the same prune shape works here.
+  const snaps = await getDocs(conflictsCollection(uid));
+  const ids = snaps.docs.map((d) => d.id).sort();
+  const excess = ids.slice(0, Math.max(0, ids.length - CONFLICT_KEEP));
+  await Promise.all(excess.map((old) => deleteDoc(doc(conflictsCollection(uid), old))));
 }
 
 export interface CloudBackupMeta {
@@ -191,6 +244,7 @@ export function initSync(uid: string) {
     _lastSyncedAt = 0;
     _lastPullAt = 0;
     _lastBackupDate = null;
+    _remoteReadOk = false;
     setStatus("idle");
   }
   _uid = uid;
@@ -211,6 +265,7 @@ export function destroySync() {
   _lastSyncedAt = 0;
   _lastPullAt = 0;
   _lastBackupDate = null;
+  _remoteReadOk = false;
   _syncing = false;
   detachListeners();
   setStatus("idle");
@@ -254,6 +309,10 @@ export async function deleteCloudData(): Promise<void> {
     _lastSyncedAt = 0;
     _lastBackupDate = null;
     _pending = null;
+    // The document is gone, so the revision counter restarts from zero; a
+    // leftover base rev would make the next push look like a conflict.
+    clearLocalBaseRev(_uid);
+    _remoteReadOk = true; // we just read/wrote the remote: it is definitively empty
     setStatus("idle");
   } catch (err) {
     console.warn("[CloudSync] deleteCloudData failed:", err);
@@ -268,6 +327,10 @@ export function queueSync(schedule: Schedule): void {
   _lastSchedule = schedule; // always track latest so flushNow / Sync Now always has data
   if (!_uid) return;
   _pending = schedule;
+  // A fresh edit deserves a fresh backoff budget: without this, three failures
+  // exhaust RETRY_DELAYS for the rest of the session and nothing auto-retries
+  // again however much the user goes on to change.
+  _retryCount = 0;
   scheduleSync(schedule, DEBOUNCE_MS);
 }
 
@@ -299,19 +362,44 @@ export async function flushNow(schedule: Schedule): Promise<void> {
  *
  * Reports which side is newer so callers can immediately recover unsynced
  * local data without overwriting a newer cloud snapshot.
+ *
+ * Base-rev bookkeeping is the subtle part. The rev is recorded only when this
+ * device ends up holding the remote *content*: on "merged" (absorbed), on
+ * "equal" (identical by construction) and on "missing" (nothing to lose).
+ * It is deliberately NOT recorded on "local-newer" — that verdict rests on two
+ * unsynchronised wall clocks, and advancing the base there would hand a device
+ * with a fast clock a licence to overwrite work it never saw, which is the
+ * exact failure this whole mechanism exists to prevent.
+ *
+ * `force` skips the freshness comparison and adopts the remote outright; used
+ * by the conflict path, where the remote has already won the CAS.
  */
 export async function mergeCloudIfNewer(
   uid: string,
-  localLastUpdated: number
+  localLastUpdated: number,
+  force = false,
 ): Promise<CloudMergeResult> {
   try {
     const snap = await getDoc(firestoreRef(uid));
-    if (!snap.exists()) return "missing";
+    _remoteReadOk = true;
+    if (!snap.exists()) {
+      writeLocalBaseRev(0, uid);
+      return "missing";
+    }
 
-    const data = snap.data() as { schedule?: Schedule; lastUpdated?: number };
-    if (!data.schedule || !data.lastUpdated) return "missing";
-    if (data.lastUpdated < localLastUpdated) return "local-newer";
-    if (data.lastUpdated === localLastUpdated) return "equal";
+    const data = snap.data() as SnapshotDoc;
+    const remoteRev = data.rev ?? 0;
+    if (!data.schedule || !data.lastUpdated) {
+      writeLocalBaseRev(remoteRev, uid);
+      return "missing";
+    }
+    if (!force) {
+      if (data.lastUpdated < localLastUpdated) return "local-newer";
+      if (data.lastUpdated === localLastUpdated) {
+        writeLocalBaseRev(remoteRev, uid);
+        return "equal";
+      }
+    }
 
     // Cloud is newer → notify useScheduleDB to absorb the data.
     // Cancel any pending local sync first — the local data is stale and must
@@ -323,6 +411,7 @@ export async function mergeCloudIfNewer(
     });
     window.dispatchEvent(event);
 
+    writeLocalBaseRev(remoteRev, uid);
     _lastSyncedAt = data.lastUpdated;
     return "merged";
   } catch (err) {
@@ -425,6 +514,72 @@ function capPayloadSize(schedule: Schedule): { payload: Schedule; oversizedField
   return { payload, oversizedFields };
 }
 
+// ── Compare-and-swap push ─────────────────────────────────────────────────────
+
+type PushOutcome = { ok: true; rev: number } | { ok: false };
+
+async function pushWithCas(
+  uid: string,
+  payload: Schedule,
+  now: number,
+  baseRev: number | null,
+): Promise<PushOutcome> {
+  if (!db) throw new Error("[CloudSync] Firestore not initialized");
+  const ref = firestoreRef(uid);
+  const localLastUpdated = getLocalLastUpdated(uid);
+  let outcome: PushOutcome = { ok: false };
+
+  await runTransaction(db, async (tx) => {
+    // Firestore re-runs this callback on contention, so every path must assign
+    // the outcome rather than assume the previous attempt's value.
+    outcome = { ok: false };
+    const snap = await tx.get(ref);
+    const data = snap.exists() ? (snap.data() as SnapshotDoc) : null;
+    if (!pushIsSafe(data, baseRev, localLastUpdated)) return; // read-only txn: nothing written
+
+    const nextRev = (data?.rev ?? 0) + 1;
+    tx.set(ref, {
+      schedule: payload,
+      lastUpdated: now,
+      rev: nextRev,
+      syncedAt: serverTimestamp(),
+    });
+    outcome = { ok: true, rev: nextRev };
+  });
+
+  return outcome;
+}
+
+/**
+ * The push lost the CAS: another device owns a revision this one never absorbed.
+ * Park the local snapshot in the cloud first, then adopt the remote so this
+ * device rejoins the shared lineage and the user's next edit pushes cleanly.
+ *
+ * If the archive write itself fails we deliberately do NOT adopt — leaving the
+ * device stuck-but-visible is recoverable; discarding local data to a failed
+ * upload is not.
+ */
+async function handleConflict(uid: string, local: Schedule): Promise<void> {
+  if (_retryTimer) { clearTimeout(_retryTimer); _retryTimer = null; }
+  if (_timer) { clearTimeout(_timer); _timer = null; }
+  _retryCount = 0;
+  _pending = null; // retrying can only lose the same CAS again
+
+  try {
+    await archiveConflict(uid, local, getLocalBaseRev(uid));
+  } catch (err) {
+    logError("cloudsync:conflict-archive", err);
+    setStatus("conflict");
+    return;
+  }
+  logError(
+    "cloudsync:conflict",
+    "Another device had newer cloud data. This device's copy was saved to the cloud conflict archive and the newer data was loaded.",
+  );
+  await mergeCloudIfNewer(uid, 0, true);
+  setStatus("conflict");
+}
+
 async function performSync(schedule: Schedule): Promise<void> {
   if (!_uid) return;
   if (!navigator.onLine) {
@@ -439,15 +594,37 @@ async function performSync(schedule: Schedule): Promise<void> {
 
   _syncing = true;
   setStatus("syncing");
+  const uid = _uid;
   const pendingSnapshot = _pending; // capture so we can detect new edits during await
 
   const now = Date.now();
   try {
+    // Never push before reading the remote at least once this session. A failed
+    // boot pull used to fall straight through to a full-document overwrite.
+    if (!_remoteReadOk) {
+      const bootstrap = await mergeCloudIfNewer(uid, getLocalLastUpdated(uid));
+      if (bootstrap === "error") {
+        _pending = schedule;
+        setStatus("error");
+        scheduleRetry(schedule);
+        return;
+      }
+      if (bootstrap === "merged") {
+        // Remote was ahead and has just replaced local state; the snapshot we
+        // were about to push is now orphaned, so archive rather than drop it.
+        await handleConflict(uid, schedule);
+        return;
+      }
+    }
+
     const { payload, oversizedFields } = capPayloadSize(trimForSync(schedule));
     const validation = validateSchedule(payload);
     if (!validation.success) {
       const issue = validation.error.issues[0];
       logError("cloudsync:validation", `Schedule validation failed at ${issue?.path.join(".") || "root"}: ${issue?.message || "invalid data"}`);
+      // Drop it from the queue: retrying is pointless, and a stuck _pending
+      // blocks every subsequent pull for the rest of the session.
+      if (_pending === pendingSnapshot) _pending = null;
       setStatus("error");
       return;
     }
@@ -457,20 +634,23 @@ async function performSync(schedule: Schedule): Promise<void> {
         `[CloudSync] Schedule payload is unusually large: ${(payloadBytes / 1_000_000).toFixed(2)} MB. Large content may come from notes, completion history, or embedded document data.`
       );
     }
-    await setDoc(firestoreRef(_uid), {
-      schedule: validation.data,
-      lastUpdated: now,
-      syncedAt: serverTimestamp(),
-    });
+
+    const outcome = await pushWithCas(uid, validation.data, now, getLocalBaseRev(uid));
+    if (!outcome.ok) {
+      await handleConflict(uid, schedule);
+      return;
+    }
+
+    writeLocalBaseRev(outcome.rev, uid);
     _lastSyncedAt = now;
     _retryCount = 0;
     if (_retryTimer) { clearTimeout(_retryTimer); _retryTimer = null; }
-    // Only clear _pending if no new edit arrived while we were awaiting setDoc
+    // Only clear _pending if no new edit arrived while we were awaiting the push
     if (_pending === pendingSnapshot) _pending = null;
     setStatus("idle");
     // Fire-and-forget: the daily safety-net snapshot must never block or fail
     // the main sync. First successful push of the day wins; pruning rides along.
-    void writeDailyBackup(_uid, validation.data, now).catch((err) => {
+    void writeDailyBackup(uid, validation.data, now).catch((err) => {
       console.warn("[CloudSync] daily backup failed:", err);
     });
     if (oversizedFields > 0) {
@@ -484,16 +664,19 @@ async function performSync(schedule: Schedule): Promise<void> {
     setStatus("error");
     // Keep _pending and auto-retry with backoff (transient network/Firestore
     // hiccups shouldn't strand the user on "Sync failed" until a manual retry).
-    if (_retryTimer) clearTimeout(_retryTimer);
-    if (_retryCount < RETRY_DELAYS.length) {
-      const delay = RETRY_DELAYS[_retryCount];
-      _retryCount++;
-      _retryTimer = setTimeout(() => {
-        _retryTimer = null;
-        void performSync(_pending ?? schedule);
-      }, delay);
-    }
+    scheduleRetry(schedule);
   } finally {
     _syncing = false;
   }
+}
+
+function scheduleRetry(schedule: Schedule) {
+  if (_retryTimer) clearTimeout(_retryTimer);
+  if (_retryCount >= RETRY_DELAYS.length) return;
+  const delay = RETRY_DELAYS[_retryCount];
+  _retryCount++;
+  _retryTimer = setTimeout(() => {
+    _retryTimer = null;
+    void performSync(_pending ?? schedule);
+  }, delay);
 }
