@@ -32,6 +32,8 @@ import { SECTION_ICONS } from "@/components/SectionIcons";
 import { useAIActions } from "@/lib/ai/useAIActions";
 import type { AIActionType } from "@/lib/ai/runtime";
 import { IconLock } from "@tabler/icons-react";
+import { AIThinkingDots, AIStreamingCursor } from "@/components/ai/AIThinkingStatus";
+import { AIErrorBanner } from "@/components/ai/AIErrorBanner";
 
 interface AIAssistantProps {
   open: boolean;
@@ -69,16 +71,6 @@ interface Suggestion {
   lockedReason?: string;
 }
 
-function StreamingCursor() {
-  return (
-    <m.span
-      className="inline-block ml-0.5 h-[12px] w-[2px] rounded-full bg-neutral-500 align-middle"
-      animate={{ opacity: [1, 0, 1] }}
-      transition={{ duration: 0.85, repeat: Infinity, ease: "easeInOut" }}
-    />
-  );
-}
-
 function PlanIconEl({ plan }: { plan: Plan }) {
   const entry = SECTION_ICONS.find((s) => s.name === plan.emoji);
   if (!entry) return null;
@@ -103,6 +95,10 @@ export default function AIAssistant({
   const [planPickerOpen, setPlanPickerOpen] = useState(false);
   const [sheetConfig, setSheetConfig] = useState<SheetConfig | null>(null);
   const [insightState, setInsightState] = useState<null | "loading" | string>(null);
+  // Separate from insightState so a real failure is distinguishable from
+  // "never asked" — previously a failed generation just cleared insightState
+  // to null, making the whole card silently vanish with no explanation.
+  const [insightError, setInsightError] = useState<string | null>(null);
   const abortRef = useRef<AbortController | null>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
@@ -119,6 +115,7 @@ export default function AIAssistant({
     if (!open) {
       abortRef.current?.abort();
       setInsightState(null);
+      setInsightError(null);
       setPlanPickerOpen(false);
     }
   }, [open]);
@@ -283,6 +280,7 @@ export default function AIAssistant({
     const insightStream = ai.streamWeeklyInsight(weekContext);
     if (!insightStream) return;
     setInsightState("loading");
+    setInsightError(null);
     abortRef.current?.abort();
     const controller = new AbortController();
     abortRef.current = controller;
@@ -293,8 +291,11 @@ export default function AIAssistant({
         text += chunk;
         setInsightState(text);
       }
-    } catch {
-      if (!controller.signal.aborted) setInsightState(null);
+    } catch (err) {
+      if (!controller.signal.aborted) {
+        setInsightState(null);
+        setInsightError(err instanceof Error ? err.message : "Couldn't generate this analysis. Try again.");
+      }
     }
   }
 
@@ -526,7 +527,7 @@ export default function AIAssistant({
                           <button
                             key={plan.id}
                             type="button"
-                            onClick={() => { setSelectedPlanId(plan.id); setPlanPickerOpen(false); setInsightState(null); }}
+                            onClick={() => { setSelectedPlanId(plan.id); setPlanPickerOpen(false); setInsightState(null); setInsightError(null); }}
                             className={`flex w-full items-center gap-2.5 px-3 py-2.5 text-left text-[13px] font-medium transition-colors hover:bg-neutral-50 dark:hover:bg-white/[0.04] ${
                               plan.id === selectedPlanId
                                 ? "text-neutral-900 dark:text-white"
@@ -587,7 +588,7 @@ export default function AIAssistant({
 
         {/* Inline insight block */}
         <AnimatePresence>
-          {insightState && (
+          {(insightState || insightError) && (
             <m.div
               key="insight"
               initial={{ opacity: 0, height: 0 }}
@@ -603,27 +604,20 @@ export default function AIAssistant({
                 </p>
                 <button
                   type="button"
-                  onClick={() => { abortRef.current?.abort(); setInsightState(null); }}
+                  onClick={() => { abortRef.current?.abort(); setInsightState(null); setInsightError(null); }}
                   className="ml-auto text-emerald-400 hover:text-emerald-600"
                 >
                   <IconX size={12} strokeWidth={2} />
                 </button>
               </div>
-              {insightState === "loading" ? (
-                <div className="flex items-center gap-2">
-                  {[0, 1, 2].map((i) => (
-                    <m.span
-                      key={i}
-                      className="block h-1.5 w-1.5 rounded-full bg-emerald-500"
-                      animate={{ opacity: [0.3, 1, 0.3], scale: [0.7, 1, 0.7] }}
-                      transition={{ duration: 1.1, repeat: Infinity, delay: i * 0.18 }}
-                    />
-                  ))}
-                </div>
+              {insightError ? (
+                <AIErrorBanner message={insightError} onDismiss={() => setInsightError(null)} />
+              ) : insightState === "loading" ? (
+                <AIThinkingDots tone="emerald" />
               ) : (
                 <p className="text-[13px] leading-relaxed text-emerald-900 dark:text-emerald-100">
                   {insightState}
-                  <StreamingCursor />
+                  <AIStreamingCursor tone="emerald" />
                 </p>
               )}
             </m.div>

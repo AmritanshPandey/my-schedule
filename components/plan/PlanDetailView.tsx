@@ -68,6 +68,7 @@ import { parseAIAction, PLAN_COACH_PROMPT, buildCoachContext } from "@/lib/ai";
 import { streamAIChat } from "@/lib/aiClient";
 import { useAIActions } from "@/lib/ai/useAIActions";
 import { getCoachSkillPrompt, detectCoachSkill, SKILL_LABELS } from "@/lib/coachSkills";
+import { AICyclingStatus } from "@/components/ai/AIThinkingStatus";
 import { useAIEnabled } from "@/lib/ai/useAIEnabled";
 import AIActionSheet, { type ResultItem } from "@/components/ai/AIActionSheet";
 import { detectMeasurableGoal, type MeasurableGoal } from "@/lib/milestoneIntelligence";
@@ -181,6 +182,8 @@ function GoalDirectionPicker({
 }
 
 // ── AI Coach streaming status ─────────────────────────────────────────────────
+// Rendered via the shared AICyclingStatus (components/ai/AIThinkingStatus.tsx)
+// — this file just keeps its own phrase list.
 
 const COACH_STATUS_PHRASES = [
   "Thinking…",
@@ -189,28 +192,6 @@ const COACH_STATUS_PHRASES = [
   "Crafting response…",
   "Finalizing…",
 ];
-
-function CoachStreamingStatus() {
-  const [idx, setIdx] = useState(0);
-  useEffect(() => {
-    const id = setInterval(() => setIdx((p) => (p + 1) % COACH_STATUS_PHRASES.length), 1400);
-    return () => clearInterval(id);
-  }, []);
-  return (
-    <AnimatePresence mode="wait">
-      <m.span
-        key={COACH_STATUS_PHRASES[idx]}
-        initial={{ opacity: 0, y: 3 }}
-        animate={{ opacity: 1, y: 0 }}
-        exit={{ opacity: 0, y: -3 }}
-        transition={{ duration: 0.22 }}
-        className="animate-status-pulse text-[13px] font-medium text-neutral-500 dark:text-neutral-400"
-      >
-        {COACH_STATUS_PHRASES[idx]}
-      </m.span>
-    </AnimatePresence>
-  );
-}
 
 // ── Props ─────────────────────────────────────────────────────────────────────
 
@@ -1426,7 +1407,7 @@ export default function PlanDetailView({
                               {cleanText}
                             </ReactMarkdown>
                           ) : (
-                            isStreamingThis && <CoachStreamingStatus />
+                            isStreamingThis && <AICyclingStatus phrases={COACH_STATUS_PHRASES} />
                           )}
                           {isStreamingThis && cleanText && (
                             <span className="ml-0.5 inline-block h-[1em] w-[2px] translate-y-[2px] animate-pulse rounded-sm bg-neutral-500 dark:bg-neutral-400" />

@@ -21,9 +21,12 @@ import {
   IconChevronRight,
   IconCircleCheck,
   IconCircleX,
+  IconCloud,
   IconDeviceLaptop,
   IconLoader2,
+  IconServer,
   IconSparkles,
+  IconWorld,
 } from "@tabler/icons-react";
 import {
   isCaptureEnabled,
@@ -87,6 +90,27 @@ const PROVIDER_LABEL: Record<ProviderKind, string> = {
   ollama: "Ollama",
   "openai-compatible": "API Provider",
   browser: "Browser AI",
+};
+
+// One icon per kind, distinct enough to tell them apart at a glance — all
+// four used to share IconDeviceLaptop regardless of whether the provider was
+// local or remote.
+const PROVIDER_ICON: Record<ProviderKind, typeof IconDeviceLaptop> = {
+  mlx: IconDeviceLaptop, // genuinely "your own machine"
+  ollama: IconServer,    // a local server process
+  "openai-compatible": IconCloud, // remote/hosted
+  browser: IconWorld,    // runs in the browser tab itself
+};
+
+// A plain-language trade-off, shown in the collapsed summary row so it can
+// inform which card to open rather than only explaining a choice already
+// made — the technical setup instructions (below, once active) stay where
+// they are for that.
+const PROVIDER_BLURB: Record<ProviderKind, string> = {
+  browser: "Free and private — runs in this browser tab, no setup. Slower and less capable than the options below.",
+  mlx: "Fast and private — needs a Mac with Apple Silicon running MLX locally.",
+  ollama: "Fast and private — needs Ollama installed and running on this machine.",
+  "openai-compatible": "Most capable — uses your own API key with a paid provider (OpenAI, OpenRouter, etc.).",
 };
 
 // ── Primitives (matching SettingsView.tsx's vocabulary) ────────────────────
@@ -222,12 +246,15 @@ function ProviderForm({
         className="flex w-full items-center gap-3 px-4 py-3.5 text-left"
       >
         <div className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-xl ${isActive ? "bg-neutral-900 dark:bg-white" : "bg-neutral-100 dark:bg-white/[0.06]"}`}>
-          <IconDeviceLaptop size={16} strokeWidth={2} className={isActive ? "text-white dark:text-neutral-900" : "text-neutral-400 dark:text-neutral-500"} />
+          {(() => {
+            const Icon = PROVIDER_ICON[kind];
+            return <Icon size={16} strokeWidth={2} className={isActive ? "text-white dark:text-neutral-900" : "text-neutral-400 dark:text-neutral-500"} />;
+          })()}
         </div>
         <div className="min-w-0 flex-1">
           <p className="text-[13px] font-bold text-neutral-900 dark:text-white">{PROVIDER_LABEL[kind]}</p>
-          <p className="truncate text-[11px] font-medium text-neutral-400 dark:text-neutral-500">
-            {isRemote ? "Bring your own API key" : "Runs on your device"}
+          <p className="text-[11px] font-medium leading-snug text-neutral-400 dark:text-neutral-500">
+            {PROVIDER_BLURB[kind]}
           </p>
         </div>
         {isActive && needsDownload ? (

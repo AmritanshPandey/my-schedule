@@ -22,6 +22,7 @@ import { localISODate, todayISO } from "@/lib/dateUtils";
 import { validateTaskShapes, type TaskShapeIssue } from "@/lib/ai/validation/taskSchema";
 import { runBusinessRules, resolveDayWindowMinutes, type RuleIssue } from "@/lib/ai/validation/businessRules";
 import { buildTaskGenerationContext } from "@/lib/ai/context/planGenerationContext";
+import { AICyclingStatus } from "@/components/ai/AIThinkingStatus";
 import { isTrackedTask } from "@/lib/taskCompletion";
 import { formatDisplayTime } from "@/lib/timeUtils";
 import { DAYS, type DayKey, type Plan, type Schedule } from "@/lib/useScheduleDB";
@@ -61,6 +62,8 @@ interface AIPlanCreatorSheetProps {
 }
 
 // ── Streaming status ──────────────────────────────────────────────────────────
+// Rendered via the shared AICyclingStatus (components/ai/AIThinkingStatus.tsx)
+// — this file just keeps its own phrase list.
 
 const GEN_PHRASES = [
   "Thinking…",
@@ -69,28 +72,6 @@ const GEN_PHRASES = [
   "Adding details…",
   "Finalizing…",
 ];
-
-function GenStreamingStatus() {
-  const [idx, setIdx] = useState(0);
-  useEffect(() => {
-    const id = setInterval(() => setIdx((p) => (p + 1) % GEN_PHRASES.length), 1400);
-    return () => clearInterval(id);
-  }, []);
-  return (
-    <AnimatePresence mode="wait">
-      <m.span
-        key={GEN_PHRASES[idx]}
-        initial={{ opacity: 0, y: 3 }}
-        animate={{ opacity: 1, y: 0 }}
-        exit={{ opacity: 0, y: -3 }}
-        transition={{ duration: 0.22 }}
-        className="animate-status-pulse text-[13px] font-medium text-neutral-500 dark:text-neutral-400"
-      >
-        {GEN_PHRASES[idx]}
-      </m.span>
-    </AnimatePresence>
-  );
-}
 
 // ── Color swatch config ───────────────────────────────────────────────────────
 
@@ -428,7 +409,7 @@ export default function AIPlanCreatorSheet({
                     exit={{ opacity: 0, y: -4 }}
                     className="flex items-center gap-2 px-1"
                   >
-                    <GenStreamingStatus />
+                    <AICyclingStatus phrases={GEN_PHRASES} />
                   </m.div>
                 )}
               </AnimatePresence>
@@ -485,7 +466,7 @@ export default function AIPlanCreatorSheet({
 
         {streaming && (
           <div className="flex items-center gap-2 px-1">
-            <GenStreamingStatus />
+            <AICyclingStatus phrases={GEN_PHRASES} />
           </div>
         )}
 

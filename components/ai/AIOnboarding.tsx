@@ -116,6 +116,14 @@ export default function AIOnboarding({ onOpenAISettings }: { onOpenAISettings: (
                   running inside this browser. No account, no API key, and nothing
                   you write leaves your device.
                 </p>
+                {/* Desktop already has the full free-form chat — nothing to
+                    explain there. Mobile only gets a fixed one-tap suggestion
+                    sheet (no free-text chat), which otherwise reads as a
+                    missing feature rather than an intentional, smaller
+                    surface for a smaller screen. */}
+                <p className="mt-2 text-[13px] leading-snug text-neutral-400 dark:text-neutral-500 lg:hidden">
+                  On this screen size you get quick one-tap suggestions; open PlanR on a larger screen for free-form AI chat.
+                </p>
                 <p className="mt-3 text-[13px] leading-snug text-neutral-400 dark:text-neutral-500">
                   {/* Read from the provider rather than written in prose: this said
                       "460 MB" while the default model actually cost ~820 MB, because

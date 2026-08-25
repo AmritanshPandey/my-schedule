@@ -17,6 +17,8 @@ import type { AITask } from "@/lib/ai";
 import { formatDisplayTime } from "@/lib/timeUtils";
 import { buildCreateTaskProposal, type AIProposal } from "@/lib/aiProposal";
 import { ProposalPreviewCard } from "@/components/ai/ProposalPreviewCard";
+import { AIThinkingStatus, AIStreamingCursor } from "@/components/ai/AIThinkingStatus";
+import { AIErrorBanner } from "@/components/ai/AIErrorBanner";
 
 interface Message {
   role: "user" | "assistant";
@@ -53,71 +55,12 @@ const ACTION_LABELS: Record<AIActionResult["type"], string> = {
   ask_clarification: "Question",
 };
 
-/**
- * Shown only while waiting for the FIRST token — once real text starts
- * streaming in, that token-by-token appearance already is the honest
- * progress signal, so this steps aside (see the `msg.text ? … : …` branch
- * below). The copy here is deliberately elapsed-time-based rather than a
- * fabricated checklist ("Analyzing…", "Drafting…") that would play out
- * identically no matter what's actually happening — a local model can
- * genuinely take several seconds before its first token, so the label
- * escalates honestly instead of pretending nothing changed, and it plateaus
- * (doesn't loop) so a long wait doesn't start to feel like it's lying.
- */
-const THINKING_PHASES: { atMs: number; local: string; remote: string }[] = [
-  { atMs: 0, local: "Thinking on your device…", remote: "Thinking…" },
-  { atMs: 3500, local: "Still working…", remote: "Still working…" },
-  { atMs: 9000, local: "Local models can take a moment — hang tight", remote: "Taking longer than usual…" },
-];
-
-function ThinkingStatus({ isLocal }: { isLocal: boolean }) {
-  const [phaseIdx, setPhaseIdx] = useState(0);
-
-  useEffect(() => {
-    setPhaseIdx(0);
-    const timers = THINKING_PHASES.slice(1).map((phase, i) => setTimeout(() => setPhaseIdx(i + 1), phase.atMs));
-    return () => timers.forEach(clearTimeout);
-  }, []);
-
-  const label = isLocal ? THINKING_PHASES[phaseIdx].local : THINKING_PHASES[phaseIdx].remote;
-
-  return (
-    <span className="inline-flex items-center gap-2 py-0.5">
-      <span className="inline-flex items-center gap-1">
-        {[0, 1, 2].map((i) => (
-          <m.span
-            key={i}
-            className="block h-1.5 w-1.5 rounded-full bg-neutral-400 dark:bg-neutral-500"
-            animate={{ scale: [0.6, 1.2, 0.6], opacity: [0.4, 1, 0.4] }}
-            transition={{ duration: 1.2, repeat: Infinity, delay: i * 0.2, ease: "easeInOut" }}
-          />
-        ))}
-      </span>
-      <AnimatePresence mode="wait">
-        <m.span
-          key={label}
-          initial={{ opacity: 0, y: 3 }}
-          animate={{ opacity: 1, y: 0 }}
-          exit={{ opacity: 0, y: -3 }}
-          transition={{ duration: 0.2 }}
-          className="text-[12px] font-medium text-neutral-500 dark:text-neutral-400"
-        >
-          {label}
-        </m.span>
-      </AnimatePresence>
-    </span>
-  );
-}
-
-function StreamingCursor() {
-  return (
-    <m.span
-      className="inline-block ml-0.5 h-[13px] w-[2px] rounded-full bg-neutral-400 align-middle dark:bg-neutral-500"
-      animate={{ opacity: [1, 0, 1] }}
-      transition={{ duration: 0.9, repeat: Infinity, ease: "easeInOut" }}
-    />
-  );
-}
+// Shown only while waiting for the FIRST token — once real text starts
+// streaming in, that token-by-token appearance already is the honest
+// progress signal (see the `msg.text ? … : …` branch below). AIThinkingStatus
+// (components/ai/AIThinkingStatus.tsx) carries the elapsed-time-escalating
+// label copy and the dot-pulse/cursor animations this file used to define
+// locally.
 
 const DAY_SHORT: Record<string, string> = { monday:"Mo", tuesday:"Tu", wednesday:"We", thursday:"Th", friday:"Fr", saturday:"Sa", sunday:"Su" };
 
@@ -267,12 +210,12 @@ function PlanDraftCard({ action, onApply }: { action: Extract<AIActionResult, { 
         <div className="flex-1">
           <p className="mb-0.5 text-[10px] font-medium text-neutral-400">Start date</p>
           <input type="date" value={startDate} onChange={(e) => setStart(e.target.value)}
-            className="w-full rounded-xl border border-neutral-200 bg-neutral-50 px-2.5 py-1.5 text-[11px] text-neutral-700 outline-none transition-colors focus:border-neutral-300 focus:bg-white dark:border-white/[0.08] dark:bg-white/[0.04] dark:text-neutral-300 dark:focus:border-white/20 dark:focus:bg-white/[0.07] dark:[color-scheme:dark]" />
+            className="w-[144px] rounded-xl border border-neutral-200 bg-neutral-50 px-2.5 py-1.5 text-[11px] text-neutral-700 outline-none transition-colors focus:border-neutral-300 focus:bg-white dark:border-white/[0.08] dark:bg-white/[0.04] dark:text-neutral-300 dark:focus:border-white/20 dark:focus:bg-white/[0.07] dark:[color-scheme:dark]" />
         </div>
         <div className="flex-1">
           <p className="mb-0.5 text-[10px] font-medium text-neutral-400">End date</p>
           <input type="date" value={endDate} onChange={(e) => setEnd(e.target.value)}
-            className="w-full rounded-xl border border-neutral-200 bg-neutral-50 px-2.5 py-1.5 text-[11px] text-neutral-700 outline-none transition-colors focus:border-neutral-300 focus:bg-white dark:border-white/[0.08] dark:bg-white/[0.04] dark:text-neutral-300 dark:focus:border-white/20 dark:focus:bg-white/[0.07] dark:[color-scheme:dark]" />
+            className="w-[144px] rounded-xl border border-neutral-200 bg-neutral-50 px-2.5 py-1.5 text-[11px] text-neutral-700 outline-none transition-colors focus:border-neutral-300 focus:bg-white dark:border-white/[0.08] dark:bg-white/[0.04] dark:text-neutral-300 dark:focus:border-white/20 dark:focus:bg-white/[0.07] dark:[color-scheme:dark]" />
         </div>
       </div>
 
@@ -529,7 +472,7 @@ export function AIPanel({ context, plans, rituals, schedule, activePlan, initial
   const didAutoSend = useRef(false);
   const abortRef = useRef<AbortController | null>(null);
   // Local (mlx/ollama) vs remote changes the honest thing to say while
-  // waiting on a first token — see ThinkingStatus above.
+  // waiting on a first token — see AIThinkingStatus's isLocal prop.
   const isLocalProvider = useMemo(() => getAIProviderState().active !== "openai-compatible", []);
 
   useEffect(() => {
@@ -696,27 +639,11 @@ export function AIPanel({ context, plans, rituals, schedule, activePlan, initial
       </div>
 
       {/* Error banner */}
-      <AnimatePresence>
-        {error && (
-          <m.div
-            initial={{ opacity: 0, height: 0 }}
-            animate={{ opacity: 1, height: "auto" }}
-            exit={{ opacity: 0, height: 0 }}
-            className="mx-3 mt-3 flex items-start gap-2 overflow-hidden rounded-xl border border-rose-200 bg-rose-50 p-3 dark:border-rose-500/20 dark:bg-rose-500/10"
-          >
-            <p className="flex-1 text-[12px] font-medium text-rose-700 dark:text-rose-400">
-              {error}
-            </p>
-            <button
-              type="button"
-              onClick={() => setError(null)}
-              className="shrink-0 text-rose-400 hover:text-rose-600"
-            >
-              <IconX size={14} strokeWidth={2} />
-            </button>
-          </m.div>
-        )}
-      </AnimatePresence>
+      {error && (
+        <div className="mx-3 mt-3">
+          <AIErrorBanner message={error} onDismiss={() => setError(null)} />
+        </div>
+      )}
 
       {/* Messages */}
       <div className="flex-1 overflow-x-hidden overflow-y-auto overscroll-contain px-3 py-3">
@@ -855,10 +782,10 @@ export function AIPanel({ context, plans, rituals, schedule, activePlan, initial
                       <ReactMarkdown components={mdComponents}>
                         {stripJsonBlocks(msg.text)}
                       </ReactMarkdown>
-                      {isStreamingThis && <StreamingCursor />}
+                      {isStreamingThis && <AIStreamingCursor />}
                     </>
                   ) : (
-                    <ThinkingStatus isLocal={isLocalProvider} />
+                    <AIThinkingStatus isLocal={isLocalProvider} />
                   )}
                 </div>
                 {msg.proposal ? (

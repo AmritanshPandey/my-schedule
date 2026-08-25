@@ -13,6 +13,8 @@ import BottomSheet from "@/components/ui/BottomSheet";
 import { useBrowserAI } from "@/lib/ai/useBrowserAI";
 import { getAIProviderState, AI_SETTINGS_CHANGED_EVENT } from "@/lib/ai/config";
 import { BrowserAIStatusBar } from "@/components/ai/BrowserAIStatusBar";
+import { AIThinkingDots } from "@/components/ai/AIThinkingStatus";
+import { AIErrorBanner } from "@/components/ai/AIErrorBanner";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -50,23 +52,6 @@ interface AIActionSheetProps {
 
   // Commit
   onAdd: (items: ResultItem[]) => void;
-}
-
-// ── Thinking dots ─────────────────────────────────────────────────────────────
-
-function ThinkingDots() {
-  return (
-    <span className="inline-flex items-center gap-1">
-      {[0, 1, 2].map((i) => (
-        <m.span
-          key={i}
-          className="block h-1.5 w-1.5 rounded-full bg-emerald-500"
-          animate={{ opacity: [0.25, 1, 0.25], scale: [0.7, 1, 0.7] }}
-          transition={{ duration: 1.1, repeat: Infinity, delay: i * 0.18, ease: "easeInOut" }}
-        />
-      ))}
-    </span>
-  );
 }
 
 // ── Component ─────────────────────────────────────────────────────────────────
@@ -341,8 +326,8 @@ export default function AIActionSheet({
 
               {/* Error */}
               {error && (
-                <div className="mb-4 rounded-xl border border-red-100 bg-red-50 px-3.5 py-2.5 text-[13px] text-red-600 dark:border-red-500/10 dark:bg-red-500/5 dark:text-red-400">
-                  {error}
+                <div className="mb-4">
+                  <AIErrorBanner message={error} />
                 </div>
               )}
 
@@ -363,12 +348,12 @@ export default function AIActionSheet({
               >
                 {modelIsLoading ? (
                   <>
-                    <ThinkingDots />
+                    <AIThinkingDots tone="emerald" />
                     <span>Waiting for model…</span>
                   </>
                 ) : loading ? (
                   <>
-                    <ThinkingDots />
+                    <AIThinkingDots tone="emerald" />
                     <span>
                       {streamCount > 0
                         ? `Found ${streamCount} ${streamCount === 1 ? resultSingular : resultPlural}…`
@@ -444,7 +429,7 @@ export default function AIActionSheet({
                 >
                   {loading ? (
                     <>
-                      <ThinkingDots />
+                      <AIThinkingDots tone="emerald" />
                       <span>Thinking…</span>
                     </>
                   ) : (
