@@ -22,8 +22,6 @@ import { localISODate, todayISO } from "@/lib/dateUtils";
 import { ritualScheduledOn } from "@/lib/consistency/calculateRitualStreak";
 import { haptic } from "@/lib/haptics";
 import EmptyState from "@/components/ui/EmptyState";
-import ConfirmSheet from "@/components/ui/ConfirmSheet";
-import { buildDeleteConfirmationCopy } from "@/lib/deleteConfirm";
 import { MainTitleSection, CtaActionButton } from "@/components/ui/MainTitleSection";
 import ProgressBar from "@/components/ui/ProgressBar";
 import { RitualSheet } from "./RitualSheet";
@@ -319,19 +317,12 @@ export default function RitualView({
   onAddOpenChange,
 }: RitualViewProps) {
   const [editRitual, setEditRitual] = useState<Ritual | null>(null);
-  const [deleteRitual, setDeleteRitual] = useState<Ritual | null>(null);
   const [selectedDateISO, setSelectedDateISO] = useState(() => todayISO());
   const [viewMode, setViewMode] = useState<"day" | "month">("day");
   const monthNow = new Date(`${todayISO()}T00:00:00`);
   const [calYear, setCalYear] = useState(monthNow.getFullYear());
   const [calMonth, setCalMonth] = useState(monthNow.getMonth());
   const selectedDay = JS_TO_DAY[new Date(`${selectedDateISO}T00:00:00`).getDay()] as DayKey;
-  const deleteCopy = deleteRitual
-    ? buildDeleteConfirmationCopy("routine", {
-        name: deleteRitual.title,
-        description: "This routine will be removed from your daily practice.",
-      })
-    : null;
 
   const sorted = useMemo(() => [...rituals].sort((a, b) => {
     const ao = a.sortOrder ?? Infinity, bo = b.sortOrder ?? Infinity;
@@ -585,7 +576,7 @@ export default function RitualView({
                             onLogAmount={onLogAmount}
                             onUndoLastLog={onUndoLastLog}
                             onOpenDetail={onOpenDetail}
-                            onDelete={setDeleteRitual}
+                            onDelete={(ritual) => onDelete(ritual.id)}
                           />
                         </m.div>
                       ))}
@@ -643,21 +634,7 @@ export default function RitualView({
         onClose={() => setEditRitual(null)}
         initial={editRitual ?? undefined}
         onSave={(data) => { if (editRitual) onUpdate(editRitual.id, data); }}
-        onDelete={() => { if (editRitual) { haptic("light"); setDeleteRitual(editRitual); } setEditRitual(null); }}
-      />
-
-      <ConfirmSheet
-        open={!!deleteRitual}
-        onClose={() => setDeleteRitual(null)}
-        onConfirm={() => {
-          if (!deleteRitual) return;
-          haptic("medium");
-          onDelete(deleteRitual.id);
-          setDeleteRitual(null);
-        }}
-        title={deleteCopy?.title ?? ""}
-        description={deleteCopy?.description}
-        confirmLabel={deleteCopy?.confirmLabel}
+        onDelete={() => { if (editRitual) onDelete(editRitual.id); setEditRitual(null); }}
       />
     </>
   );
