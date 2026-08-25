@@ -255,6 +255,58 @@ export function isTaskResolved(task: Task, totalSubtasks: number): boolean {
  * "Partial" has no per-slot meaning (a slot's subtasks aren't split by
  * phase), so a slot is only ever completed, missed, or incomplete.
  */
+/**
+ * How far through a split task you are, and which phase a single tap should act
+ * on.
+ *
+ * A task split across the day ("Study" at 09:00 and again at 16:00) is worked
+ * through one phase at a time — at 11:00 the afternoon block has not happened
+ * yet. So the default action on a whole-task control completes the NEXT
+ * unfinished phase rather than all of them, and once everything is done the
+ * same control undoes the most recent one. "Complete both at once" is almost
+ * never what someone means, so it is deliberately not the easy gesture.
+ *
+ * Exported as one helper because five surfaces render these tasks and had five
+ * different ideas about what completion meant — including two that did not know
+ * phases existed at all.
+ */
+export interface PhaseProgress {
+  total: number;
+  done: number;
+  isMultiPhase: boolean;
+  /** Phase a tap should toggle: the next unfinished one, or the last finished
+   *  one when everything is done (so the control stays reversible). */
+  nextIndex: number;
+  allDone: boolean;
+}
+
+export function phaseProgress(task: Task): PhaseProgress {
+  const total = getSlots(task).length;
+  const completed = new Set(task.completedSlotIndices ?? []);
+  // Count only indices that still exist — editing a task down from 3 phases to
+  // 2 would otherwise leave a stale index inflating the count forever.
+  let done = 0;
+  for (let i = 0; i < total; i++) if (completed.has(i)) done++;
+
+  const firstUnfinished = (() => {
+    for (let i = 0; i < total; i++) if (!completed.has(i)) return i;
+    return -1;
+  })();
+  const lastFinished = (() => {
+    for (let i = total - 1; i >= 0; i--) if (completed.has(i)) return i;
+    return 0;
+  })();
+
+  const allDone = total > 0 && done >= total;
+  return {
+    total,
+    done,
+    isMultiPhase: total > 1,
+    nextIndex: allDone ? lastFinished : Math.max(firstUnfinished, 0),
+    allDone,
+  };
+}
+
 export function resolveSlotState(task: Task, slotIndex: number): TaskState {
   if (!isTrackedTask(task)) return "incomplete";
   if ((task.completedSlotIndices ?? []).includes(slotIndex)) return "completed";

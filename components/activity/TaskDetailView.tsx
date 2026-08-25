@@ -12,7 +12,8 @@ import Pill from "@/components/ui/Pill";
 import ProgressBar from "@/components/ui/ProgressBar";
 import { todayISO } from "@/lib/dateUtils";
 import { compareDeadline } from "@/lib/subtaskDeadline";
-import { calculateTaskProgress, isTrackedTask, resolveTaskState } from "@/lib/taskCompletion";
+import { calculateTaskProgress, isTrackedTask, phaseProgress, resolveSlotState, resolveTaskState } from "@/lib/taskCompletion";
+import { getSlots } from "@/lib/taskMutations";
 import { formatDisplayTime, formatDuration } from "@/lib/timeUtils";
 import type { Plan, Task } from "@/lib/useScheduleDB";
 
@@ -23,6 +24,8 @@ export interface TaskDetailViewProps {
   onClose: () => void;
   onToggleSubtask: (taskId: string, subtaskId: string) => void;
   onToggleComplete: (taskId: string, allSubtaskIds: string[]) => void;
+  /** Per-phase toggle for a task split across several blocks in one day. */
+  onToggleSlot?: (taskId: string, slotIndex: number) => void;
   onMissed?: (taskId: string, allSubtaskIds: string[]) => void;
   onSnooze?: (taskId: string) => void;
   onSkip?: (taskId: string) => void;
@@ -39,6 +42,7 @@ export default function TaskDetailView({
   onClose,
   onToggleSubtask,
   onToggleComplete,
+  onToggleSlot,
   onMissed,
   onSnooze,
   onSkip,
@@ -66,6 +70,20 @@ export default function TaskDetailView({
     [task, items.length],
   );
   const state = task ? resolveTaskState(task, items.length) : "incomplete";
+  const phases = task ? phaseProgress(task) : { total: 1, done: 0, isMultiPhase: false, nextIndex: 0, allDone: false };
+  const slots = task ? getSlots(task) : [];
+
+  /**
+   * What "Done" means here. For a split task it advances ONE block — the next
+   * unfinished one — rather than closing out blocks that have not happened.
+   * Three separate Done affordances in this view each called the whole-task
+   * toggle, so any of them finished every block at once.
+   */
+  const completePrimary = () => {
+    if (!task) return;
+    if (phases.isMultiPhase && onToggleSlot) onToggleSlot(task.id, phases.nextIndex);
+    else onToggleComplete(task.id, allIds);
+  };
   const done = state === "completed";
   const duration = task ? formatDuration(task.startTime, task.endTime) : "";
   const barPct = done && items.length === 0 ? 100 : pct;
@@ -95,7 +113,7 @@ export default function TaskDetailView({
               state={state}
               readOnly={readOnly}
               label={done ? "Mark task not done" : "Mark task done"}
-              onClick={() => { onToggleComplete(task.id, allIds); onClose(); }}
+              onClick={() => { completePrimary(); onClose(); }}
             />
           )}
           <div className="min-w-0 pt-0.5">
@@ -112,9 +130,18 @@ export default function TaskDetailView({
       )}
 
       <div className="flex items-center gap-3">
-        {(task.startTime || task.endTime) && (
+        {/* A split task showed only `startTime – endTime`, which mirrors the
+            EARLIEST block — so the later blocks were invisible here, and the
+            Done buttons below completed all of them at once. Phases now get
+            their own row and their own checkbox (rendered under this header). */}
+        {(task.startTime || task.endTime) && !phases.isMultiPhase && (
           <span className="text-[16px] font-bold text-neutral-900 dark:text-white">
             {formatDisplayTime(task.startTime)}{task.endTime ? ` – ${formatDisplayTime(task.endTime)}` : ""}
+          </span>
+        )}
+        {phases.isMultiPhase && (
+          <span className="text-[16px] font-bold text-neutral-900 dark:text-white">
+            {phases.done}/{phases.total} blocks done
           </span>
         )}
         {duration && (
@@ -129,6 +156,42 @@ export default function TaskDetailView({
           </span>
         )}
       </div>
+
+      {/* Each block gets its own row and its own checkbox. Finishing the
+          morning block must not tick an afternoon one that has not happened. */}
+      {phases.isMultiPhase && (
+        <div className="mt-3 space-y-1.5">
+          {slots.map((slot, i) => {
+            const slotDone = resolveSlotState(task, i) === "completed";
+            return (
+              <button
+                key={`${slot.startTime}-${i}`}
+                type="button"
+                disabled={readOnly || !onToggleSlot}
+                onClick={() => onToggleSlot?.(task.id, i)}
+                aria-label={`${slotDone ? "Mark not done" : "Mark done"}: block ${i + 1} of ${phases.total}, ${formatDisplayTime(slot.startTime)} to ${formatDisplayTime(slot.endTime)}`}
+                className={`flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-left transition-colors disabled:opacity-60 ${
+                  slotDone ? "bg-neutral-50 dark:bg-white/[0.02]" : "bg-neutral-100/70 dark:bg-white/[0.03]"
+                }`}
+              >
+                <span
+                  className={`flex h-5 w-5 shrink-0 items-center justify-center rounded-full border-2 ${
+                    slotDone ? "border-transparent bg-green-500" : "border-neutral-300 dark:border-neutral-600"
+                  }`}
+                >
+                  {slotDone && <IconCheck size={12} strokeWidth={3} className="text-white" />}
+                </span>
+                <span className={`text-[14px] font-semibold ${slotDone ? "text-neutral-400 line-through dark:text-neutral-500" : "text-neutral-800 dark:text-neutral-100"}`}>
+                  {formatDisplayTime(slot.startTime)} – {formatDisplayTime(slot.endTime)}
+                </span>
+                <span className="ml-auto text-[12px] font-medium text-neutral-400 dark:text-neutral-500">
+                  Block {i + 1}
+                </span>
+              </button>
+            );
+          })}
+        </div>
+      )}
     </>
   );
 
@@ -210,7 +273,7 @@ export default function TaskDetailView({
         <m.button
           type="button"
           whileTap={{ scale: 0.97 }}
-          onClick={() => { if (!done) onToggleComplete(task.id, allIds); onClose(); }}
+          onClick={() => { if (!done) completePrimary(); onClose(); }}
           className={`flex min-h-[48px] w-full items-center justify-center gap-1.5 rounded-full px-4 text-[14px] font-bold transition-colors ${
             done
               ? "bg-green-600/10 text-green-700 dark:bg-emerald-400/[0.12] dark:text-emerald-300"
@@ -286,7 +349,7 @@ export default function TaskDetailView({
                 state={state}
                 readOnly={readOnly}
                 label={done ? "Mark task not done" : "Mark task done"}
-                onClick={() => { onToggleComplete(task.id, allIds); onClose(); }}
+                onClick={() => { completePrimary(); onClose(); }}
               />
             </div>
           )}

@@ -5,7 +5,7 @@ import { m, AnimatePresence, useMotionValue, useTransform, animate } from "frame
 import { IconArrowUpRight, IconCheck, IconChevronDown, IconEdit, IconListCheck, IconMinus, IconTrash, IconX } from "@tabler/icons-react";
 import type { Task, Plan, TaskCategory } from "@/lib/useScheduleDB";
 import type { ScheduleEntry, MetaField } from "@/components/ScheduleItem";
-import { calculateTaskProgress, isTrackedTask, resolveTaskState, taskStatusLabel } from "@/lib/taskCompletion";
+import { calculateTaskProgress, isTrackedTask, phaseProgress, resolveTaskState, taskStatusLabel } from "@/lib/taskCompletion";
 import type { TaskState } from "@/lib/taskCompletion";
 import { formatSlotsDuration, formatMinutes } from "@/lib/timeUtils";
 import { getSlots } from "@/lib/taskMutations";
@@ -179,6 +179,21 @@ function ListTaskCardInner({
     [tracked, isMultiSlot, onToggleSlot, slots, task.completedSlotIndices, task.id]
   );
 
+  const phases = useMemo(() => phaseProgress(task), [task]);
+
+  /**
+   * What the card's primary gesture (checkbox, swipe) does.
+   *
+   * For a split task that is ONE phase — the next unfinished one — not the
+   * whole task. Finishing the 09:00 block should not also tick the 16:00 block
+   * that has not happened yet, which is exactly what the whole-task call used
+   * to do from here.
+   */
+  const completePrimary = () => {
+    if (phases.isMultiPhase && onToggleSlot) onToggleSlot(task.id, phases.nextIndex);
+    else onToggleComplete(task.id, allSubtaskIds);
+  };
+
   // ── Swipe-to-complete ───────────────────────────────────────────────────────
   // Not offered for multi-slot tasks — there's no single "done" state a swipe
   // could sensibly set; each phase has its own checkbox instead.
@@ -189,7 +204,7 @@ function ListTaskCardInner({
   function handleDragEnd() {
     if (dragX.get() >= SWIPE_THRESHOLD) {
       haptic("medium");
-      onToggleComplete(task.id, allSubtaskIds);
+      completePrimary();
     }
     animate(dragX, 0, { type: "spring", stiffness: 400, damping: 30 });
   }
@@ -414,7 +429,7 @@ function ListTaskCardInner({
           duration={duration}
           readOnly={readOnly}
           slotCompletions={slotCompletions}
-          onToggle={() => onToggleComplete(task.id, allSubtaskIds)}
+          onToggle={completePrimary}
           // Inert in edit mode so the gesture can never race the dnd-kit drag.
           onLongPressMissed={
             onMissed && !editMode && !readOnly ? () => onMissed(task.id, allSubtaskIds) : undefined

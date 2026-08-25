@@ -3321,6 +3321,7 @@ export default function ScheduleApp() {
             onClose={() => setSubtasksRef(null)}
             onToggleSubtask={(taskId, subId) => handleToggleSubtask(taskId, subId, subtasksRef?.day, subtasksRef?.dateISO)}
             onToggleComplete={(taskId, ids) => handleToggleTaskComplete(taskId, ids, subtasksRef?.day, subtasksRef?.dateISO)}
+            onToggleSlot={(taskId, slotIndex) => handleToggleSlot(taskId, slotIndex, subtasksRef?.day, subtasksRef?.dateISO)}
             onMissed={(taskId, ids) => handleMarkTaskMissed(taskId, ids, subtasksRef?.day, subtasksRef?.dateISO)}
             onSnooze={(taskId) => handleSnoozeTaskLater(taskId, subtasksRef?.day, subtasksRef?.dateISO)}
             onSkip={(taskId) => handleSkipOccurrence(taskId, subtasksRef?.dateISO)}
