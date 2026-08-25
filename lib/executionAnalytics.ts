@@ -54,8 +54,17 @@ function mondayOf(d: Date): Date {
   return m;
 }
 
-export function computeExecutionTrend(schedule: Schedule, weeksCount = 8): ExecutionTrend {
-  const today = new Date();
+/**
+ * `now` is injectable so callers that build a schedule around a fixed date can
+ * measure against that same date. Reading the real clock unconditionally made
+ * this untestable against any fixture: the demo dataset is generated relative
+ * to a pinned date, so as real time moved past it the trend window drifted off
+ * the end of the data and the test started failing on a calendar boundary
+ * rather than on a code change. Production callers pass nothing and get the
+ * real clock, exactly as before.
+ */
+export function computeExecutionTrend(schedule: Schedule, weeksCount = 8, now: Date = new Date()): ExecutionTrend {
+  const today = new Date(now);
   today.setHours(0, 0, 0, 0);
   const currentMonday = mondayOf(today);
 

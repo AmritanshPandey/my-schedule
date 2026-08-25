@@ -286,9 +286,29 @@ test("Needs attention has something in all three sections", () => {
   );
 });
 
+test("the execution trend measures against the date it is given, not the wall clock", () => {
+  // The guard for the time bomb above: if `now` is ever ignored again, the two
+  // windows below collapse to the same thing and this fails immediately
+  // instead of rotting into a failure months later.
+  const s = buildDemoSchedule(NOW);
+  const atNow = computeExecutionTrend(s, 8, NOW);
+  const fourWeeksLater = new Date(NOW);
+  fourWeeksLater.setDate(fourWeeksLater.getDate() + 28);
+  const later = computeExecutionTrend(s, 8, fourWeeksLater);
+  assert.notEqual(
+    atNow.weeks[atNow.weeks.length - 1].monStr,
+    later.weeks[later.weeks.length - 1].monStr,
+    "the window should follow the date passed in",
+  );
+});
+
 test("the execution trend is populated across its whole window", () => {
   const s = buildDemoSchedule(NOW);
-  const trend = computeExecutionTrend(s, 8);
+  // Measured against the same date the fixture was built around. Letting this
+  // read the real clock made it a time bomb: it passed when written and began
+  // failing once real time drifted past NOW, on a calendar boundary rather
+  // than on any code change.
+  const trend = computeExecutionTrend(s, 8, NOW);
   assert.equal(trend.weeks.length, 8, "every week should survive the tracking-start filter");
   for (const week of trend.weeks) {
     assert.ok(week.scheduled > 0, `week of ${week.monStr} has nothing scheduled`);
