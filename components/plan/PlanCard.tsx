@@ -12,101 +12,39 @@ import {
 } from "@tabler/icons-react";
 import type { Plan } from "@/lib/useScheduleDB";
 import { haptic } from "@/lib/haptics";
-import type { PlanDayState } from "@/lib/planInsights";
+import { derivePlanStatus, type PlanDayState, type PlanStatus } from "@/lib/planInsights";
 import { PLAN_NEUTRAL } from "@/lib/colorSystem";
 import IconButton from "@/components/ui/IconButton";
 import { CARD_INTERACTIVE } from "@/components/ui/surfaces";
-import { TRANSITION_DATA } from "@/lib/motion";
 import AnimatedNumber from "@/components/ui/AnimatedNumber";
 
 // ── Status derivation ─────────────────────────────────────────────────────────
 
-type PlanStatus = "on_track" | "at_risk" | "delayed";
-
-const STATUS_CONFIG: Record<PlanStatus, {
+const STATUS_CONFIG: Record<Exclude<PlanStatus, "unproven">, {
   label: string;
   text: string;
   dot: string;
-  /** Progress-ring stroke — the ring reports execution, so it follows the
-      status ramp rather than any plan identity colour. */
-  stroke: string;
   pulse: boolean;
 }> = {
   on_track: {
-    label: "ON TRACK",
+    label: "On track",
     text: "text-emerald-600 dark:text-emerald-400",
     dot: "bg-emerald-500",
-    stroke: "stroke-emerald-500 dark:stroke-emerald-400",
     pulse: true,
   },
   at_risk: {
-    label: "AT RISK",
+    label: "At risk",
     text: "text-amber-600 dark:text-amber-400",
     dot: "bg-amber-500",
-    stroke: "stroke-amber-500 dark:stroke-amber-400",
     pulse: false,
   },
   delayed: {
-    label: "NEEDS FOCUS",
+    label: "Needs focus",
     text: "text-rose-600 dark:text-rose-400",
     dot: "bg-rose-500",
-    stroke: "stroke-rose-500 dark:stroke-rose-400",
     pulse: false,
   },
 };
-
-function derivePlanStatus(dayState: PlanDayState, consistency: number): PlanStatus {
-  if (dayState === "complete" || consistency >= 70) return "on_track";
-  if (consistency >= 35) return "at_risk";
-  return "delayed";
-}
-
-// ── Progress ring (SVG) ───────────────────────────────────────────────────────
-
-const RING_R = 22;
-const RING_C = 2 * Math.PI * RING_R;
-
-interface ProgressRingProps {
-  value: number;
-  Icon: React.ElementType;
-  iconClass: string;
-  tintClass: string;
-  strokeClass: string;
-}
-
-function ProgressRing({ value, Icon, iconClass, tintClass, strokeClass }: ProgressRingProps) {
-  const filled = (Math.max(0, Math.min(100, value)) / 100) * RING_C;
-
-  return (
-    <div className="relative shrink-0 w-[52px] h-[52px]">
-      {/* SVG ring */}
-      <svg className="absolute inset-0 w-full h-full -rotate-90" viewBox="0 0 52 52">
-        {/* Track */}
-        <circle
-          cx="26" cy="26" r={RING_R}
-          fill="none"
-          strokeWidth="3.5"
-          className="stroke-neutral-100 dark:stroke-white/[0.07]"
-        />
-        {/* Progress arc */}
-        <m.circle
-          cx="26" cy="26" r={RING_R}
-          fill="none"
-          strokeWidth="3.5"
-          strokeLinecap="round"
-          className={strokeClass}
-          initial={{ strokeDasharray: `0 ${RING_C}` }}
-          animate={{ strokeDasharray: `${filled} ${RING_C - filled}` }}
-          transition={{ ...TRANSITION_DATA, delay: 0.15 }}
-        />
-      </svg>
-      {/* Icon in center */}
-      <div className={`absolute inset-[7px] rounded-full flex items-center justify-center ${tintClass}`}>
-        <Icon size={17} strokeWidth={1.7} className={iconClass} />
-      </div>
-    </div>
-  );
-}
 
 // ── Props ─────────────────────────────────────────────────────────────────────
 
@@ -137,11 +75,8 @@ function PlanCardInner({
   onQuickLog,
   onDelete,
 }: PlanCardProps) {
-  const status = derivePlanStatus(dayState, consistency);
-  const statusCfg = STATUS_CONFIG[status];
-  // Plan identity is neutral — the icon names the plan, colour belongs to tasks.
-  const accent = PLAN_NEUTRAL;
-  const stroke = statusCfg.stroke;
+  const status = derivePlanStatus(dayState, consistency, plan);
+  const statusCfg = status === "unproven" ? null : STATUS_CONFIG[status];
 
   return (
     <m.div
@@ -173,56 +108,77 @@ function PlanCardInner({
         </div>
       )}
 
-      {/* ── Row 1: status chip ───────────────────────────────────────────── */}
-      <m.div
-        className={`flex items-center gap-2 text-[10.5px] font-bold uppercase tracking-[0.07em] ${statusCfg.text}`}
-        initial={{ opacity: 0, y: -4 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.22, ease: "easeOut" }}
-      >
-        <span
-          className={`h-1.5 w-1.5 rounded-full shrink-0 ${statusCfg.dot} ${
-            statusCfg.pulse ? "animate-pulse" : ""
-          }`}
-        />
-        {statusCfg.label} · <AnimatedNumber value={consistency} />%
-      </m.div>
+      {/* ── Row 1: status ─────────────────────────────────────────────────────
+          Deliberately absent while the plan is unproven. The instrument turns
+          on when there is something to measure; an empty gauge reading zero on
+          day one is noise wearing the costume of a signal. "Not started today"
+          at the foot of the card already states the honest fact. */}
+      {statusCfg && (
+        <m.div
+          className={`flex items-center gap-1.5 text-[10.5px] font-bold ${statusCfg.text}`}
+          initial={{ opacity: 0, y: -4 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.22, ease: "easeOut" }}
+        >
+          <span
+            className={`h-1.5 w-1.5 shrink-0 rounded-full ${statusCfg.dot} ${
+              statusCfg.pulse ? "animate-pulse" : ""
+            }`}
+          />
+          {/* Tracking is scoped to the words. Applied to the whole row it also
+              spaced the digit away from its own percent sign, which read as
+              "0 %" — a stray space, not a number. */}
+          <span className="uppercase tracking-[0.07em]">{statusCfg.label}</span>
+          <span aria-hidden className="opacity-60">·</span>
+          <span className="tabular-nums">
+            <AnimatedNumber value={consistency} />%
+          </span>
+        </m.div>
+      )}
 
-      {/* ── Row 2: progress ring + title / description / date ────────────── */}
-      <div className="flex items-start gap-3.5 mt-3">
-        <ProgressRing
-          value={consistency}
-          Icon={PlanIcon}
-          iconClass={accent.icon}
-          tintClass={accent.tint}
-          strokeClass={stroke}
-        />
+      {/* ── Row 2: identity + title / description / date ─────────────────────
+          The icon is identity and nothing else. It used to wear a progress ring
+          reporting the same consistency figure printed above it — two encodings
+          of one number, and the ring was the unreadable one: a hairline at low
+          values, and at exactly zero a *dot*, because a round line cap paints a
+          full round end even on a zero-length dash. That dot sat in the status
+          colour at twelve o'clock on every card and looked like a badge that
+          meant something. It meant the value was nothing. */}
+      <div className={`flex items-start gap-3.5 ${statusCfg ? "mt-3" : ""}`}>
+        <div
+          className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-full border ${PLAN_NEUTRAL.tint} ${PLAN_NEUTRAL.iconBorder}`}
+        >
+          <PlanIcon size={19} strokeWidth={1.7} className={PLAN_NEUTRAL.icon} />
+        </div>
 
         <div className="min-w-0 flex-1 pt-0.5">
-          <h2 className="text-[16px] font-bold leading-snug text-neutral-950 dark:text-white line-clamp-2">
+          <h2 className="line-clamp-2 text-[16px] font-bold leading-snug text-neutral-950 dark:text-white">
             {plan.title}
           </h2>
           {plan.description && (
-            <p className="mt-0.5 text-[12px] leading-relaxed text-neutral-500 dark:text-neutral-400 line-clamp-2">
+            <p className="mt-0.5 line-clamp-2 text-[12px] leading-relaxed text-neutral-500 dark:text-neutral-400">
               {plan.description}
             </p>
           )}
           {dateRange && (
             <div className="mt-1.5 flex items-center gap-1.5">
+              {/* neutral-500/400, not 400/500: the lighter pair measured
+                  3.79:1 in dark and 2.53:1 in light, both under the 4.5:1 AA
+                  floor for 12px text. Muted has to stay readable. */}
               <IconCalendar
                 size={11}
                 strokeWidth={1.8}
-                className="shrink-0 text-neutral-400 dark:text-neutral-500"
+                className="shrink-0 text-neutral-500 dark:text-neutral-400"
               />
-              <p className="text-[12px] text-neutral-400 dark:text-neutral-500">{dateRange}</p>
+              <p className="text-[12px] text-neutral-500 dark:text-neutral-400">{dateRange}</p>
             </div>
           )}
         </div>
       </div>
 
-      {/* ── Row 3: insight chip ──────────────────────────────────────────── */}
+      {/* ── Row 3: what's in the plan ────────────────────────────────────── */}
       <div className="mt-3.5 flex items-center gap-2 lg:mt-auto lg:pt-4">
-        <div className="flex flex-1 items-center gap-1.5 rounded-xl border border-transparent bg-neutral-50 px-3 py-2 text-[12px] font-semibold text-neutral-500 transition-colors group-hover:border-neutral-200 group-hover:bg-white dark:bg-white/[0.04] dark:group-hover:border-white/[0.10] dark:group-hover:bg-white/[0.06] dark:text-neutral-400">
+        <div className="flex flex-1 items-center gap-1.5 rounded-xl border border-transparent bg-neutral-50 px-3 py-2 text-[12px] font-semibold text-neutral-600 transition-colors group-hover:border-neutral-200 group-hover:bg-white dark:bg-white/[0.04] dark:text-neutral-300 dark:group-hover:border-white/[0.10] dark:group-hover:bg-white/[0.06]">
           <IconChecklist size={12} strokeWidth={2.2} className="shrink-0" />
           {taskCount} task{taskCount !== 1 ? "s" : ""}
           {/* "trackers", not "tracked": this counts ProgressTracker rows — the
@@ -230,8 +186,11 @@ function PlanCardInner({
               has nothing to do with isTrackedTask, which is what "tracked"
               means everywhere else. "5 tasks · 0 tracked" would have implied
               those tasks don't count toward anything, which is false. */}
+          {/* Was neutral-400/600 — 2.30:1 in dark, which is not "secondary",
+              it is unreadable. One step down from the pill's own colour keeps
+              the hierarchy while clearing AA. */}
           {trackerCount > 0 && (
-              <span className="text-neutral-400 transition-colors group-hover:text-neutral-500 dark:text-neutral-600 dark:group-hover:text-neutral-400">
+            <span className="text-neutral-500 transition-colors group-hover:text-neutral-600 dark:text-neutral-400 dark:group-hover:text-neutral-300">
               {" "}· {trackerCount} tracker{trackerCount !== 1 ? "s" : ""}
             </span>
           )}
@@ -249,32 +208,29 @@ function PlanCardInner({
       </div>
 
       {/* ── Divider ──────────────────────────────────────────────────────── */}
-      <div className="mt-4 mb-3 border-t border-neutral-100 dark:border-white/[0.05]" />
+      <div className="mb-3 mt-4 border-t border-neutral-100 dark:border-white/[0.05]" />
 
-      {/* ── Row 4: today's execution state ───────────────────────────────── */}
-      <div className="flex items-center justify-between gap-3">
+      {/* ── Row 4: today ──────────────────────────────────────────────────
+          The one line about *today*, which is a different fact from the status
+          chip's standing over time — so both earn their place. "No end date"
+          used to sit at the right of this row; it described the plan's dates,
+          not its execution, and next to "Completed Today" it read as a state.
+          The date line above already says "Starts <date>" for an open-ended
+          plan, so it was saying it twice as well. */}
+      <div className="flex items-center gap-3">
         {dayState === "complete" ? (
           <span className="inline-flex items-center gap-1.5 text-[12px] font-semibold text-emerald-600 dark:text-emerald-400">
             <IconCheck size={13} strokeWidth={2.5} className="shrink-0" />
-            Completed Today
+            Completed today
           </span>
         ) : dayState === "partial" ? (
           <span className="inline-flex items-center gap-1.5 text-[12px] font-semibold text-amber-600 dark:text-amber-400">
             <IconFlame size={13} strokeWidth={2} className="shrink-0" />
-            In Progress Today
+            In progress today
           </span>
         ) : (
-          <span className="text-[12px] text-neutral-400 dark:text-neutral-500">
+          <span className="text-[12px] text-neutral-500 dark:text-neutral-400">
             {taskCount > 0 ? "Not started today" : "No tasks today"}
-          </span>
-        )}
-
-        {/* This says something about the plan's *dates*, not its execution —
-            it renders purely on "has a start but no end". Sitting on the same
-            row as "Completed Today", "Ongoing" read as a progress state. */}
-        {plan.startDate && !plan.endDate && (
-          <span className="shrink-0 text-[12px] font-semibold text-neutral-400 dark:text-neutral-500">
-            No end date
           </span>
         )}
       </div>

@@ -3,7 +3,12 @@
  * Pure functions — no React, no side-effects.
  */
 
-import { DAYS } from "./useScheduleDB";
+// DAYS comes from scheduleConstants, not from useScheduleDB's re-export: that
+// re-export is a *runtime* import, and it drags React and AuthProvider in behind
+// it — which breaks the "no React, no side-effects" promise above and makes this
+// file unloadable under the node test runner. The type imports are erased, so
+// they can stay.
+import { DAYS } from "./scheduleConstants";
 import type { Task, Plan } from "./useScheduleDB";
 import type { DayKey } from "./useScheduleDB";
 import { isTaskCompleted, isTrackedTask } from "./taskCompletion";
@@ -143,4 +148,59 @@ export function getPlanCardStats(
   const dayState = resolvePlanDayState(todayTasks, plan.items.length);
   const consistency = calculateConsistency(plan.id, activities, plan, trackingStartISO);
   return { dayState, consistency };
+}
+
+// ── Standing ──────────────────────────────────────────────────────────────────
+
+/** `unproven` is not a grade: the plan has nothing to report yet. */
+export type PlanStatus = "on_track" | "at_risk" | "delayed" | "unproven";
+
+/**
+ * How long a plan gets before its consistency counts as a verdict.
+ *
+ * `calculateConsistency` returns a flat 0 whenever there are no completions yet,
+ * so without this window every plan created today read as "needs focus" — in
+ * alarm red on its card, and counted in the Plans sidebar tally. A screen where
+ * every plan shouts is a screen where the colour means nothing, and PlanR is not
+ * supposed to nag.
+ *
+ * A week is the rhythm the rest of the app measures in (week bars, weekly
+ * progress), so it's the first point at which a run of zeroes is a signal rather
+ * than an absence of one.
+ */
+export const PROVING_DAYS = 7;
+
+/** Whole days since the plan began; negative before it starts, null if undated. */
+export function planDaysRunning(plan: Plan, now: Date = new Date()): number | null {
+  if (!plan.startDate) return null;
+  const start = new Date(`${plan.startDate}T00:00:00`).getTime();
+  if (Number.isNaN(start)) return null;
+  const today = new Date(now);
+  today.setHours(0, 0, 0, 0);
+  return Math.floor((today.getTime() - start) / 86_400_000);
+}
+
+/**
+ * The plan's standing, used by both the plan card and the Plans sidebar tally
+ * so the two can never disagree about what "needs focus" means.
+ */
+export function derivePlanStatus(
+  dayState: PlanDayState,
+  consistency: number,
+  plan: Plan,
+  now: Date = new Date(),
+): PlanStatus {
+  if (dayState === "complete" || consistency >= 70) return "on_track";
+  // No completions AND no fair run at it yet: report nothing rather than a grade
+  // the user had no chance to earn. An undated plan counts as unproven too,
+  // because nothing on it says when it was meant to start.
+  const elapsed = planDaysRunning(plan, now);
+  if (consistency === 0 && (elapsed === null || elapsed < PROVING_DAYS)) return "unproven";
+  if (consistency >= 35) return "at_risk";
+  return "delayed";
+}
+
+/** Plans actually asking for attention — excludes the ones with no signal yet. */
+export function needsAttention(status: PlanStatus): boolean {
+  return status === "at_risk" || status === "delayed";
 }

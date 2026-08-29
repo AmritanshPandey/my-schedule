@@ -194,7 +194,7 @@ import {
 } from "@/lib/timeline/displayWindow";
 import { SCHEDULE_DAY_HANDOVER_MINUTES, taskContinuations } from "@/lib/timeline/overnight";
 import { todayISO, daysBetween as daysBetweenUtil, formatDate, addDaysToISO, localISODate } from "@/lib/dateUtils";
-import { getPlanCardStats } from "@/lib/planInsights";
+import { derivePlanStatus, getPlanCardStats, needsAttention } from "@/lib/planInsights";
 import { MainTitleSection, IconActionButton, CtaActionButton } from "@/components/ui/MainTitleSection";
 import ProgressBar from "@/components/ui/ProgressBar";
 import { normalizeMilestoneTimeline, cascadeMilestoneDates } from "@/lib/roadmapDates";
@@ -3064,11 +3064,13 @@ export default function ScheduleApp() {
       const firstTracker = schedule.progressTrackers.find((t) => t.planId === plan.id);
       return { plan, uniqueTasks, trackerCount, planIconEntry, stats, dateRange, firstTracker };
     });
-    const atRiskCount = planRows.filter(
-      ({ stats }) => stats.consistency >= 35 && stats.consistency < 70
+    // Shares derivePlanStatus with the cards, so this tally can never claim a
+    // plan needs focus while its own card stays silent. It used to count every
+    // plan under 70% consistency, which meant a plan created this morning —
+    // with no completions possible yet — was already in the "need focus" number.
+    const needsFocusCount = planRows.filter(({ plan, stats }) =>
+      needsAttention(derivePlanStatus(stats.dayState, stats.consistency, plan)),
     ).length;
-    const needsWorkCount = planRows.filter(({ stats }) => stats.consistency < 35).length;
-    const needsFocusCount = atRiskCount + needsWorkCount;
     // Headline count of tracked work across plans — commitments aren't work.
     // row.uniqueTasks itself keeps them so they still list under their plan.
     const totalPlanTasks = planRows.reduce(
