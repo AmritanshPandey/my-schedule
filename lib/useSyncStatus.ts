@@ -65,8 +65,8 @@ export function useSyncStatus() {
           ? "Sync failed; retry is queued"
           : nextStatus === "offline"
           ? "Offline; sync is queued"
-          : nextStatus === "conflict"
-          ? "Another device had newer data — it's loaded, and your copy was archived"
+          : nextStatus === "merged"
+          ? "Merged changes from another device"
           : nextLastAt > 0
           ? "Synced just now"
           : "Sync checked"

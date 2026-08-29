@@ -255,6 +255,14 @@ export const ScheduleSchema = z.object({
   notes: z.array(NoteSchema),
   events: z.array(ScheduleEventSchema),
   preferences,
+  // Per-entity change/deletion bookkeeping for the cloud merge (see
+  // lib/stampSchedule.ts). Values are epoch seconds. Declared rather than left
+  // to passthrough so a malformed map is rejected here instead of confusing
+  // the merge.
+  syncMeta: z.object({
+    updated: z.record(z.string(), z.number().finite()).optional(),
+    deleted: z.record(z.string(), z.number().finite()).optional(),
+  }).passthrough().optional(),
 }).passthrough();
 
 export function validateSchedule(value: unknown): { success: true; data: Schedule } | { success: false; error: z.ZodError } {

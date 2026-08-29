@@ -30,9 +30,10 @@ export function writeLocalLastUpdated(ts: number, uid?: string | null): void {
 // localStorage (not module state) so it survives a reload: a single device that
 // edited offline still knows the rev it owns and can push without a conflict.
 //
-// Only advanced when the remote content is genuinely absorbed (or provably
-// equal / absent). Notably NOT advanced when a pull reports "local-newer" —
-// having *seen* a rev is not the same as having incorporated it, and treating
+// Advanced only when this device ends up holding the remote content: after a
+// snapshot has been read and merged into local state, or when the remote is
+// provably identical or absent. Never advanced on a failed read — having tried
+// to see a revision is not the same as having incorporated it, and treating
 // the two as equivalent is exactly how a stale device overwrites a newer one.
 
 const BASE_REV_PREFIX = "planr_baseRev";

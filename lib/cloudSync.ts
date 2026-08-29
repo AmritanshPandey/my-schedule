@@ -12,9 +12,11 @@
  * is a compare-and-swap inside a transaction against the rev this device has
  * actually incorporated (see getLocalBaseRev). A device can therefore never
  * overwrite a revision it has not absorbed — which is what used to let a second
- * device silently replace the first device's work. When the CAS fails, the
- * local snapshot is archived to users/{uid}/conflicts/{ISO} and the remote is
- * adopted: visible and recoverable rather than silent and lost.
+ * device silently replace the first device's work. When the CAS fails, the two
+ * schedules are merged per entity (lib/mergeSchedule.ts) and the merge is
+ * written in the same transaction, so divergence resolves without either side
+ * losing anything. The pre-merge local copy is archived to
+ * users/{uid}/conflicts/{ISO} as a checkable safety net.
  */
 
 import {
@@ -39,18 +41,33 @@ import {
 import { localISODate } from "@/lib/dateUtils";
 import { schedulePayloadBytes, validateSchedule } from "@/lib/scheduleSchema";
 import { pushIsSafe, type SnapshotDoc } from "@/lib/syncRevision";
+import { mergeSchedules } from "@/lib/mergeSchedule";
+import { NS } from "@/lib/stampSchedule";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
-export type SyncStatus = "idle" | "syncing" | "offline" | "error" | "conflict";
+export type SyncStatus = "idle" | "syncing" | "offline" | "error" | "merged";
 
 export interface CloudSnapshot {
   uid: string;
   schedule: Schedule;
   lastUpdated: number;
+  /**
+   * True when this schedule is already what the cloud holds, because this
+   * device just wrote it as the result of a merge. The app absorbs it without
+   * echoing it straight back up.
+   */
+  pushed?: boolean;
 }
 
-export type CloudMergeResult = "merged" | "local-newer" | "equal" | "missing" | "error";
+/**
+ * "merged" means a remote snapshot was handed to the app to combine with local
+ * state — not that the remote was newer. There is no "local-newer" outcome any
+ * more: a remote whose wall clock is behind can still hold entities this device
+ * has never seen, and skipping it there is how a device stayed permanently
+ * unaware of the other one's work.
+ */
+export type CloudMergeResult = "merged" | "equal" | "missing" | "error";
 
 // ── Module state ──────────────────────────────────────────────────────────────
 
@@ -120,9 +137,10 @@ async function writeDailyBackup(uid: string, payload: Schedule, lastUpdated: num
 }
 
 // ── Conflict archive ──────────────────────────────────────────────────────────
-// When a push loses the compare-and-swap, the local snapshot is parked here
-// before the remote is adopted, so a diverged device never simply loses its
-// work. Deliberately a SEPARATE collection from `backups`: that one prunes by
+// Whenever a push loses the compare-and-swap and is resolved by merging, the
+// pre-merge LOCAL copy is parked here — written inside the same transaction as
+// the merge, so the record can't go missing if the tab dies mid-write.
+// Deliberately a SEPARATE collection from `backups`: that one prunes by
 // lexicographic id sort assuming YYYY-MM-DD ids, and a full-ISO id mixed in
 // would break its ordering.
 
@@ -133,19 +151,8 @@ function conflictsCollection(uid: string) {
   return collection(db, "users", uid, "conflicts");
 }
 
-async function archiveConflict(uid: string, local: Schedule, localRev: number | null): Promise<void> {
-  const id = new Date().toISOString();
-  // Same transport limits as the live snapshot: an oversized archive write
-  // would fail, and a failed archive leaves the device permanently unable to
-  // resolve the conflict.
-  const { payload } = capPayloadSize(trimForSync(local));
-  await setDoc(doc(conflictsCollection(uid), id), {
-    schedule: payload,
-    lastUpdated: getLocalLastUpdated(uid),
-    baseRev: localRev,
-    savedAt: serverTimestamp(),
-  });
-  // Full ISO ids sort chronologically too, so the same prune shape works here.
+/** Keep the archive bounded. Full ISO ids sort chronologically. */
+async function pruneConflicts(uid: string): Promise<void> {
   const snaps = await getDocs(conflictsCollection(uid));
   const ids = snaps.docs.map((d) => d.id).sort();
   const excess = ids.slice(0, Math.max(0, ids.length - CONFLICT_KEEP));
@@ -356,28 +363,21 @@ export async function flushNow(schedule: Schedule): Promise<void> {
 }
 
 /**
- * On login: fetch cloud snapshot and merge if it's newer than local.
- * Dispatches a "cloud-sync-merge" CustomEvent so useScheduleDB can
- * update its state without coupling to Firebase directly.
+ * Fetch the cloud snapshot and hand it to the app to merge with local state.
  *
- * Reports which side is newer so callers can immediately recover unsynced
- * local data without overwriting a newer cloud snapshot.
+ * Dispatches a "cloud-sync-merge" CustomEvent rather than resolving anything
+ * itself: useScheduleDB owns the authoritative local schedule, so it is the
+ * only place the two can be combined without plumbing app state in here.
  *
- * Base-rev bookkeeping is the subtle part. The rev is recorded only when this
- * device ends up holding the remote *content*: on "merged" (absorbed), on
- * "equal" (identical by construction) and on "missing" (nothing to lose).
- * It is deliberately NOT recorded on "local-newer" — that verdict rests on two
- * unsynchronised wall clocks, and advancing the base there would hand a device
- * with a fast clock a licence to overwrite work it never saw, which is the
- * exact failure this whole mechanism exists to prevent.
- *
- * `force` skips the freshness comparison and adopts the remote outright; used
- * by the conflict path, where the remote has already won the CAS.
+ * Base-rev bookkeeping: the rev is recorded whenever this device ends up
+ * holding the remote content — after a dispatch (the merge is a superset of
+ * both sides), when the snapshot is provably identical, or when there is
+ * nothing remote at all. It is never recorded on a failed read, which is what
+ * stops a device pushing over a revision it could not even fetch.
  */
 export async function mergeCloudIfNewer(
   uid: string,
   localLastUpdated: number,
-  force = false,
 ): Promise<CloudMergeResult> {
   try {
     const snap = await getDoc(firestoreRef(uid));
@@ -393,26 +393,19 @@ export async function mergeCloudIfNewer(
       writeLocalBaseRev(remoteRev, uid);
       return "missing";
     }
-    if (!force) {
-      if (data.lastUpdated < localLastUpdated) return "local-newer";
-      if (data.lastUpdated === localLastUpdated) {
-        writeLocalBaseRev(remoteRev, uid);
-        return "equal";
-      }
+    // Identical document stamp: this device wrote it, so there is nothing to
+    // absorb and no reason to churn React with a structurally new tree.
+    if (data.lastUpdated === localLastUpdated) {
+      writeLocalBaseRev(remoteRev, uid);
+      return "equal";
     }
 
-    // Cloud is newer → notify useScheduleDB to absorb the data.
-    // Cancel any pending local sync first — the local data is stale and must
-    // not overwrite the cloud data we're about to absorb.
-    if (_timer) { clearTimeout(_timer); _timer = null; }
-    _pending = null;
-    const event = new CustomEvent<CloudSnapshot>("cloud-sync-merge", {
+    window.dispatchEvent(new CustomEvent<CloudSnapshot>("cloud-sync-merge", {
       detail: { uid, schedule: data.schedule, lastUpdated: data.lastUpdated },
-    });
-    window.dispatchEvent(event);
+    }));
 
     writeLocalBaseRev(remoteRev, uid);
-    _lastSyncedAt = data.lastUpdated;
+    if (data.lastUpdated > _lastSyncedAt) _lastSyncedAt = data.lastUpdated;
     return "merged";
   } catch (err) {
     console.warn("[CloudSync] mergeCloudIfNewer failed:", err);
@@ -426,9 +419,9 @@ export async function mergeCloudIfNewer(
  * Pull a newer cloud snapshot on resume/reconnect. Only runs when this device is
  * "caught up" (no _pending local edits) so a passive resume never clobbers
  * unsynced local work — those edits are pushed instead and the pull happens on a
- * later resume. Throttled and skipped while a push is in flight. mergeCloudIfNewer
- * is a no-op unless the cloud is strictly newer, and the merge listener's
- * equality guard suppresses any redundant re-render.
+ * later resume. Throttled and skipped while a push is in flight. The merge
+ * listener's equality guard suppresses any redundant re-render when the
+ * snapshot turns out to hold nothing new.
  */
 async function maybePull(): Promise<void> {
   if (!_uid || _pending || _syncing) return;
@@ -489,8 +482,15 @@ export function serializedScheduleSize(schedule: Schedule): number {
   return schedulePayloadBytes(schedule);
 }
 
-function capPayloadSize(schedule: Schedule): { payload: Schedule; oversizedFields: number } {
-  if (encodedBytes(schedule) <= MAX_DOC_BYTES) return { payload: schedule, oversizedFields: 0 };
+function capPayloadSize(schedule: Schedule): {
+  payload: Schedule;
+  oversizedFields: number;
+  /** True when even the fully-blanked payload is still over the limit. */
+  overflow: boolean;
+} {
+  if (encodedBytes(schedule) <= MAX_DOC_BYTES) {
+    return { payload: schedule, oversizedFields: 0, overflow: false };
+  }
 
   let oversizedFields = 0;
   let payload: Schedule = schedule;
@@ -501,83 +501,148 @@ function capPayloadSize(schedule: Schedule): { payload: Schedule; oversizedField
       .map((n, i) => ({ i, size: n.body?.length ?? 0 }))
       .sort((a, b) => b.size - a.size);
     const notes = [...payload.notes];
+    const blanked: string[] = [];
     for (const { i } of order) {
       if (encodedBytes(payload) <= MAX_DOC_BYTES) break;
       if (notes[i]?.body) {
         notes[i] = { ...notes[i], body: "" };
+        blanked.push(notes[i].id);
         oversizedFields++;
         payload = { ...payload, notes };
       }
     }
+    if (blanked.length > 0) payload = demoteBlankedNotes(payload, blanked);
   }
 
-  return { payload, oversizedFields };
+  // Blanking every note may still not be enough (a huge completion history, a
+  // very large plan). Say so rather than handing an oversized document to
+  // Firestore: that write fails, the failure looks transient, and the retry
+  // loop strands the queue — which in turn blocks every pull for the session.
+  return { payload, oversizedFields, overflow: encodedBytes(payload) > MAX_DOC_BYTES };
 }
 
-// ── Compare-and-swap push ─────────────────────────────────────────────────────
+/**
+ * A body blanked to fit the document limit is a transport artefact, not an
+ * edit — but it rides along with the note's real change stamp, so on the next
+ * device it would win the merge and erase a body that is still perfectly
+ * intact here. Backdate those notes to the epoch so they always LOSE to any
+ * real copy. A device that has never seen the note still receives it (title
+ * and all), exactly as before; a device that already has the body keeps it.
+ */
+function demoteBlankedNotes(payload: Schedule, blankedIds: string[]): Schedule {
+  const updated = { ...(payload.syncMeta?.updated ?? {}) };
+  for (const id of blankedIds) updated[`${NS.note}|${id}`] = 0;
+  return { ...payload, syncMeta: { ...payload.syncMeta, updated } };
+}
 
-type PushOutcome = { ok: true; rev: number } | { ok: false };
+// -- Compare-and-swap push ---------------------------------------------------
 
+interface PushOutcome {
+  /** Written revision, or null when nothing was written. */
+  rev: number | null;
+  /** Set when the CAS lost and the write was a merge of both devices' data. */
+  merged: Schedule | null;
+  /** Set when the payload could not be validated — never worth retrying. */
+  invalid: string | null;
+}
+
+const NO_PUSH: PushOutcome = { rev: null, merged: null, invalid: null };
+
+/**
+ * Push, resolving divergence rather than refusing it.
+ *
+ * Read the document inside the transaction. If this device holds the current
+ * revision, its schedule is written as-is. If it does not, the two schedules
+ * are merged per entity and the MERGE is written, so neither device's work is
+ * dropped and the loser doesn't have to push again to catch up. Both the read
+ * and the write live in one transaction, so a third writer landing in between
+ * makes Firestore replay the callback instead of silently interleaving.
+ *
+ * Note the pipeline order: merge on the FULL local schedule, then trim for
+ * transport. Merging a trimmed payload would let a 90-day-trimmed history or a
+ * blanked note body win against the remote's complete copy.
+ */
 async function pushWithCas(
   uid: string,
-  payload: Schedule,
+  local: Schedule,
   now: number,
   baseRev: number | null,
 ): Promise<PushOutcome> {
   if (!db) throw new Error("[CloudSync] Firestore not initialized");
   const ref = firestoreRef(uid);
   const localLastUpdated = getLocalLastUpdated(uid);
-  let outcome: PushOutcome = { ok: false };
+  let outcome: PushOutcome = NO_PUSH;
+  let oversizedFields = 0;
 
   await runTransaction(db, async (tx) => {
     // Firestore re-runs this callback on contention, so every path must assign
-    // the outcome rather than assume the previous attempt's value.
-    outcome = { ok: false };
+    // the outcome rather than inherit the previous attempt's value.
+    outcome = NO_PUSH;
+    oversizedFields = 0;
     const snap = await tx.get(ref);
     const data = snap.exists() ? (snap.data() as SnapshotDoc) : null;
-    if (!pushIsSafe(data, baseRev, localLastUpdated)) return; // read-only txn: nothing written
+
+    let merged: Schedule | null = null;
+    let source: Schedule = local;
+    if (!pushIsSafe(data, baseRev, localLastUpdated) && data?.schedule) {
+      merged = mergeSchedules(
+        { schedule: local, lastUpdated: localLastUpdated },
+        { schedule: data.schedule, lastUpdated: data.lastUpdated ?? 0 },
+      );
+      source = merged;
+    }
+
+    const capped = capPayloadSize(trimForSync(source));
+    oversizedFields = capped.oversizedFields;
+    if (capped.overflow) {
+      outcome = {
+        rev: null,
+        merged: null,
+        invalid: `payload is ${Math.round(encodedBytes(capped.payload) / 1000)} KB after trimming, over Firestore's document limit`,
+      };
+      return;
+    }
+    const validation = validateSchedule(capped.payload);
+    if (!validation.success) {
+      const issue = validation.error.issues[0];
+      outcome = {
+        rev: null,
+        merged: null,
+        invalid: `${issue?.path.join(".") || "root"}: ${issue?.message || "invalid data"}`,
+      };
+      return; // read-only transaction: nothing is written
+    }
 
     const nextRev = (data?.rev ?? 0) + 1;
     tx.set(ref, {
-      schedule: payload,
+      schedule: validation.data,
       lastUpdated: now,
       rev: nextRev,
       syncedAt: serverTimestamp(),
     });
-    outcome = { ok: true, rev: nextRev };
+    if (merged) {
+      // Park the pre-merge local copy in the same transaction. The merge is
+      // designed to be lossless, but it operates on the user's only copy — this
+      // is what makes "nothing was lost" checkable rather than merely asserted.
+      const localCopy = capPayloadSize(trimForSync(local)).payload;
+      tx.set(doc(conflictsCollection(uid), new Date(now).toISOString()), {
+        schedule: localCopy,
+        lastUpdated: localLastUpdated,
+        baseRev,
+        remoteRev: data?.rev ?? 0,
+        savedAt: serverTimestamp(),
+      });
+    }
+    outcome = { rev: nextRev, merged, invalid: null };
   });
 
-  return outcome;
-}
-
-/**
- * The push lost the CAS: another device owns a revision this one never absorbed.
- * Park the local snapshot in the cloud first, then adopt the remote so this
- * device rejoins the shared lineage and the user's next edit pushes cleanly.
- *
- * If the archive write itself fails we deliberately do NOT adopt — leaving the
- * device stuck-but-visible is recoverable; discarding local data to a failed
- * upload is not.
- */
-async function handleConflict(uid: string, local: Schedule): Promise<void> {
-  if (_retryTimer) { clearTimeout(_retryTimer); _retryTimer = null; }
-  if (_timer) { clearTimeout(_timer); _timer = null; }
-  _retryCount = 0;
-  _pending = null; // retrying can only lose the same CAS again
-
-  try {
-    await archiveConflict(uid, local, getLocalBaseRev(uid));
-  } catch (err) {
-    logError("cloudsync:conflict-archive", err);
-    setStatus("conflict");
-    return;
+  if (oversizedFields > 0) {
+    logError(
+      "cloudsync:oversize",
+      `Cloud backup skipped ${oversizedFields} oversized field(s) to fit Firestore's 1MB limit. They remain saved on this device.`
+    );
   }
-  logError(
-    "cloudsync:conflict",
-    "Another device had newer cloud data. This device's copy was saved to the cloud conflict archive and the newer data was loaded.",
-  );
-  await mergeCloudIfNewer(uid, 0, true);
-  setStatus("conflict");
+  return outcome;
 }
 
 async function performSync(schedule: Schedule): Promise<void> {
@@ -610,34 +675,30 @@ async function performSync(schedule: Schedule): Promise<void> {
         return;
       }
       if (bootstrap === "merged") {
-        // Remote was ahead and has just replaced local state; the snapshot we
-        // were about to push is now orphaned, so archive rather than drop it.
-        await handleConflict(uid, schedule);
+        // The app is combining the remote with local state right now, and
+        // `schedule` is the pre-merge copy — pushing it would drop whatever we
+        // just pulled. The merged result re-enters through the normal write
+        // path and is pushed then.
+        setStatus("idle");
         return;
       }
     }
 
-    const { payload, oversizedFields } = capPayloadSize(trimForSync(schedule));
-    const validation = validateSchedule(payload);
-    if (!validation.success) {
-      const issue = validation.error.issues[0];
-      logError("cloudsync:validation", `Schedule validation failed at ${issue?.path.join(".") || "root"}: ${issue?.message || "invalid data"}`);
+    const outcome = await pushWithCas(uid, schedule, now, getLocalBaseRev(uid));
+
+    if (outcome.invalid !== null) {
+      logError("cloudsync:validation", `Cloud sync skipped — ${outcome.invalid}`);
       // Drop it from the queue: retrying is pointless, and a stuck _pending
       // blocks every subsequent pull for the rest of the session.
       if (_pending === pendingSnapshot) _pending = null;
       setStatus("error");
       return;
     }
-    const payloadBytes = serializedScheduleSize(payload);
-    if (payloadBytes >= LARGE_PAYLOAD_WARNING_BYTES && process.env.NODE_ENV !== "production") {
-      console.warn(
-        `[CloudSync] Schedule payload is unusually large: ${(payloadBytes / 1_000_000).toFixed(2)} MB. Large content may come from notes, completion history, or embedded document data.`
-      );
-    }
-
-    const outcome = await pushWithCas(uid, validation.data, now, getLocalBaseRev(uid));
-    if (!outcome.ok) {
-      await handleConflict(uid, schedule);
+    if (outcome.rev === null) {
+      // Only reachable if the transaction never ran its body — treat as a
+      // transient failure rather than silently reporting success.
+      setStatus("error");
+      scheduleRetry(schedule);
       return;
     }
 
@@ -647,17 +708,28 @@ async function performSync(schedule: Schedule): Promise<void> {
     if (_retryTimer) { clearTimeout(_retryTimer); _retryTimer = null; }
     // Only clear _pending if no new edit arrived while we were awaiting the push
     if (_pending === pendingSnapshot) _pending = null;
-    setStatus("idle");
+
+    if (outcome.merged) {
+      // The cloud now holds both devices' work; this one is still showing only
+      // its own half. `pushed` tells the app to absorb the merge without
+      // echoing it straight back up.
+      window.dispatchEvent(new CustomEvent<CloudSnapshot>("cloud-sync-merge", {
+        detail: { uid, schedule: outcome.merged, lastUpdated: now, pushed: true },
+      }));
+      setStatus("merged");
+    } else {
+      setStatus("idle");
+    }
+
     // Fire-and-forget: the daily safety-net snapshot must never block or fail
     // the main sync. First successful push of the day wins; pruning rides along.
-    void writeDailyBackup(uid, validation.data, now).catch((err) => {
+    void writeDailyBackup(uid, outcome.merged ?? schedule, now).catch((err) => {
       console.warn("[CloudSync] daily backup failed:", err);
     });
-    if (oversizedFields > 0) {
-      logError(
-        "cloudsync:oversize",
-        `Cloud backup skipped ${oversizedFields} oversized field(s) to fit Firestore's 1MB limit. They remain saved on this device.`
-      );
+    if (outcome.merged) {
+      void pruneConflicts(uid).catch(() => {
+        // Housekeeping only — a full archive never blocks a sync.
+      });
     }
   } catch (err) {
     logError("cloudsync", err);

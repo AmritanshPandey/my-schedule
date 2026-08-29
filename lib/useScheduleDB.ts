@@ -29,6 +29,14 @@ import { CategoryRegistry } from "@/lib/taskCategories";
 import { isEditableTarget } from "@/lib/keyboardEvents";
 import { pushHistory, popHistory, HISTORY_LIMIT } from "@/lib/scheduleHistory";
 import { validateSchedule } from "@/lib/scheduleSchema";
+import { mergeSchedules } from "@/lib/mergeSchedule";
+import {
+  entityMap,
+  normalizeSyncMeta,
+  stampSchedule,
+  type ScheduleSyncMeta,
+} from "@/lib/stampSchedule";
+export type { ScheduleSyncMeta } from "@/lib/stampSchedule";
 
 export type PlanCategory = "fitness" | "learning" | "work" | "health" | "routine";
 
@@ -498,6 +506,13 @@ export interface Schedule {
   notes: Note[];
   events: ScheduleEvent[];
   preferences: SchedulePreferences;
+  /**
+   * Which entities changed or were deleted, and when — the bookkeeping the
+   * cloud merge needs to combine two devices' edits without losing either.
+   * Written only by `stampSchedule` at the `setSchedule` boundary and read
+   * only by `mergeSchedules`; no feature code should ever touch it.
+   */
+  syncMeta?: ScheduleSyncMeta;
 }
 
 const DB_NAME = "daily-planner";
@@ -985,6 +1000,10 @@ function migrate(raw: unknown): Schedule {
       notes,
       events: normalizeScheduleEvents(r.events),
       preferences,
+      // Carried raw here and pruned once in safeMigrate, where the final live
+      // entity set is known. Dropping it in these literals is exactly how a new
+      // top-level Schedule field goes missing on every reload.
+      syncMeta: r.syncMeta as ScheduleSyncMeta | undefined,
     };
   }
 
@@ -1015,6 +1034,10 @@ function migrate(raw: unknown): Schedule {
       notes: normalizeNotes(r.notes),
       events: normalizeScheduleEvents(r.events),
       preferences,
+      // Carried raw here and pruned once in safeMigrate, where the final live
+      // entity set is known. Dropping it in these literals is exactly how a new
+      // top-level Schedule field goes missing on every reload.
+      syncMeta: r.syncMeta as ScheduleSyncMeta | undefined,
     };
   }
 
@@ -1053,6 +1076,7 @@ function migrate(raw: unknown): Schedule {
     notes: normalizeNotes(r.notes),
     events: normalizeScheduleEvents(r.events),
     preferences,
+    syncMeta: r.syncMeta as ScheduleSyncMeta | undefined,
   };
 }
 
@@ -1204,7 +1228,14 @@ function safeMigrate(raw: unknown): Schedule | null {
     // Auto-miss past rolled-over occurrences (dated history events) before the
     // reset clears today-relative live flags — the two touch disjoint fields.
     const migrated = resetStaleCompletions(applyAutoMissed(migrate(raw), new Date()), localISODate(new Date()));
-    const validation = validateSchedule(migrated);
+    // Prune the sync bookkeeping against what actually survived migration:
+    // stamps for entities that are gone, and tombstones past the 90-day horizon
+    // the cloud payload already trims to, can only grow the payload.
+    const pruned: Schedule = {
+      ...migrated,
+      syncMeta: normalizeSyncMeta(migrated.syncMeta, new Set(entityMap(migrated).keys())),
+    };
+    const validation = validateSchedule(pruned);
     if (!validation.success) {
       const issue = validation.error.issues[0];
       logError("indexeddb:validation", `Schedule validation failed at ${issue?.path.join(".") || "root"}: ${issue?.message || "invalid data"}`);
@@ -1334,14 +1365,14 @@ export function useScheduleDB() {
           const cloudResult = await mergeCloudIfNewer(activeUid, getLocalLastUpdated(activeUid));
           if (cancelled) return;
           const merged = cloudResult === "merged";
-          // Deliberately no push here. Boot used to flush the local snapshot on
-          // "local-newer"/"missing" and queue it even on "error" — a failed
+          // Deliberately no push here. Boot used to flush the local snapshot
+          // whenever its clock looked ahead, and queue it even after a FAILED
           // pull. On a second device holding older data that is precisely how
           // the first device's work got overwritten before the user touched
           // anything. Unsynced work from a previous session is not lost: the
           // normal debounced write path still pushes it on the first edit, and
-          // that push is now a compare-and-swap that cannot clobber a revision
-          // this device never absorbed (lib/cloudSync.ts).
+          // that push is now a compare-and-swap that merges rather than
+          // replaces when the two devices have diverged (lib/cloudSync.ts).
           if (!merged && !hasLocalData) {
             // Fresh account: no newer cloud snapshot and no local user record.
             // Adopt any meaningful guest data so trial work isn't orphaned.
@@ -1385,41 +1416,58 @@ export function useScheduleDB() {
   }, [storageKey, storageUid]);
 
   // ── Cloud-merge listener ─────────────────────────────────────────────────
-  // When a cloud snapshot is newer than local data, cloudSync dispatches this
-  // event. We absorb the new state and persist it to IndexedDB.
+  // cloudSync dispatches this whenever it has read a remote snapshot. The
+  // remote is MERGED with local state rather than replacing it: this hook
+  // holds the authoritative local schedule, so it is the only place that can
+  // combine the two without plumbing app state into the sync engine.
   useEffect(() => {
     if (!storageKey) return;
     const activeStorageKey = storageKey;
 
     function handleCloudMerge(e: Event) {
-      const { uid, schedule: cloudSchedule, lastUpdated } = (e as CustomEvent<{ uid: string; schedule: Schedule; lastUpdated: number }>).detail;
+      const { uid, schedule: cloudSchedule, lastUpdated, pushed } =
+        (e as CustomEvent<{ uid: string; schedule: Schedule; lastUpdated: number; pushed?: boolean }>).detail;
       if (uid !== storageUid) return;
 
       const migrated = safeMigrate(cloudSchedule);
       if (!migrated) return; // corrupt cloud snapshot — keep current local state
 
-      // If the cloud snapshot is content-identical to what we already render
-      // (common right after login when this device wrote the snapshot last),
-      // skip the state swap entirely. Replacing the schedule with a structurally
-      // new-but-equal tree forces every memo/component to re-render for nothing —
-      // a visible "flash" while the app syncs. Still reconcile the local
-      // timestamp so we don't keep re-merging the same snapshot.
       loadedKeyRef.current = activeStorageKey;
+      const localLastUpdated = getLocalLastUpdated(storageUid);
+      let merged: Schedule = migrated;
       let changed = false;
       setScheduleState((prev) => {
-        if (schedulesEqual(prev, migrated)) return prev;
+        merged = mergeSchedules(
+          { schedule: prev, lastUpdated: localLastUpdated },
+          { schedule: migrated, lastUpdated },
+        );
+        // Content-identical to what we already render (common right after login
+        // when this device wrote the snapshot last) → keep the existing tree.
+        // Swapping in a structurally new-but-equal one forces every memo and
+        // component to re-render for nothing: a visible flash while syncing.
+        if (schedulesEqual(prev, merged)) return prev;
         changed = true;
-        return migrated;
+        return merged;
       });
       setIsFirstLaunch(false);
       writeLocalLastUpdated(lastUpdated, storageUid);
-      if (!changed) return;
-      // Real change absorbed from cloud: skip the echo-write so the write effect
-      // doesn't overwrite the cloud `lastUpdated` with a fresh now, and persist.
-      skipNextWriteRef.current = true;
-      if (dbRef.current) {
-        writeDB(dbRef.current, activeStorageKey, migrated).catch(logWriteError);
+      if (changed) {
+        if (pushed) {
+          // The engine merged and wrote this to the cloud already. Persist it
+          // locally, but suppress the write effect's echo push — otherwise
+          // every merge costs a second, entirely redundant revision.
+          skipNextWriteRef.current = true;
+          if (dbRef.current) writeDB(dbRef.current, activeStorageKey, merged).catch(logWriteError);
+        }
+        // Otherwise the debounced write effect persists this and queues the
+        // push: the merge may contain local entities the cloud has never seen,
+        // so that push is wanted, not an echo to be suppressed.
+        return;
       }
+      // Local already covered everything in the merge, so no state change and
+      // therefore no write effect — but if the cloud copy is behind, nobody
+      // else will publish the difference.
+      if (storageUid && !pushed && !schedulesEqual(migrated, merged)) queueSync(merged);
     }
     window.addEventListener("cloud-sync-merge", handleCloudMerge);
     return () => window.removeEventListener("cloud-sync-merge", handleCloudMerge);
@@ -1475,9 +1523,18 @@ export function useScheduleDB() {
   // that push *inside* a functional setScheduleState(updater) instead would
   // risk double-recording if React ever replays the updater (StrictMode's
   // dev double-invoke, concurrent-mode interruption).
-  const setSchedule = useCallback((updater: (prev: Schedule) => Schedule) => {
+  const setSchedule = useCallback((
+    updater: (prev: Schedule) => Schedule,
+    options?: { stamp?: boolean },
+  ) => {
     const prev = scheduleRef.current;
-    const next = updater(prev);
+    const raw = updater(prev);
+    // Record which entities changed, so a merge with another device resolves
+    // per item instead of per document. `stamp: false` is for deterministic
+    // housekeeping (the day-rollover reset) that both devices compute
+    // identically — stamping it would let an idle device fabricate a newer
+    // revision and beat a device that did real work.
+    const next = options?.stamp === false ? raw : stampSchedule(prev, raw);
     if (next !== prev) {
       historyRef.current = pushHistory(historyRef.current, prev, HISTORY_LIMIT);
       scheduleRef.current = next;
@@ -1492,9 +1549,13 @@ export function useScheduleDB() {
     const [restored, rest] = popHistory(historyRef.current);
     if (restored === undefined) return;
     historyRef.current = rest;
-    scheduleRef.current = restored;
+    // Stamp the step backwards too. Undoing a delete re-creates an entity that
+    // already has a tombstone, and without a fresh stamp the next cloud merge
+    // would dutifully delete it again.
+    const next = stampSchedule(scheduleRef.current, restored);
+    scheduleRef.current = next;
     setCanUndo(rest.length > 0);
-    setScheduleState(restored);
+    setScheduleState(next);
   }, []);
 
   // Global Cmd+Z (Mac) / Ctrl+Z (Windows/Linux) — one listener covers
@@ -1539,13 +1600,21 @@ export function useScheduleDB() {
   const restoreData = useCallback((raw: unknown): boolean => {
     const migrated = safeMigrate(raw);
     if (!migrated) return false;
-    setScheduleState(migrated);
+    // Whole-schedule replacement still has to say what it REMOVED. Without
+    // tombstones a merge reads "restore" as "add these back" and every entity
+    // the backup doesn't contain returns from the other device.
+    const next = stampSchedule(scheduleRef.current, migrated);
+    scheduleRef.current = next;
+    setScheduleState(next);
     setIsFirstLaunch(false);
     return true;
   }, []);
 
   async function clearData(): Promise<void> {
-    const empty = emptyEmpty();
+    // Same reasoning as restoreData: the wipe has to be expressed as deletions,
+    // or the other device simply refills everything on the next merge.
+    const empty = stampSchedule(scheduleRef.current, emptyEmpty());
+    scheduleRef.current = empty;
     setScheduleState(empty);
     if (dbRef.current && storageKey) {
       // Surface a failed wipe (don't pretend it succeeded). Cloud deletion is
@@ -1581,9 +1650,13 @@ export function useScheduleDB() {
       );
       return { ...schedule, activities, milestones, ritualCompletions: [], metricEntries: [] };
     })();
-    setScheduleState(next);
+    // Cleared ritual check-ins and metric rows are deletions; the reset tasks
+    // and milestones are edits. Both need recording or the merge undoes them.
+    const stamped = stampSchedule(scheduleRef.current, next);
+    scheduleRef.current = stamped;
+    setScheduleState(stamped);
     if (dbRef.current && storageKey) {
-      await writeDB(dbRef.current, storageKey, next).catch((err) => logError("indexeddb:clear-progress", err));
+      await writeDB(dbRef.current, storageKey, stamped).catch((err) => logError("indexeddb:clear-progress", err));
     }
   }
 

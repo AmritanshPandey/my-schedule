@@ -461,7 +461,10 @@ export default function IOSScheduleApp() {
 
   useEffect(() => {
     if (!ready) return;
-    setSchedule((prev) => resetStaleCompletions(prev, todayISO()));
+    // stamp: false — this is deterministic housekeeping both devices compute
+    // identically from the date. Recording it as an edit would let a device
+    // that was merely left open outrank one that actually did work.
+    setSchedule((prev) => resetStaleCompletions(prev, todayISO()), { stamp: false });
   }, [todayKey, ready, setSchedule]);
 
   useEffect(() => {
