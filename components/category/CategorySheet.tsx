@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import type { TaskCategory } from "@/lib/useScheduleDB";
+import type { CategoryKind, TaskCategory } from "@/lib/useScheduleDB";
 import { colorFromIcon, type AccentColor } from "@/lib/colorSystem";
 import { defaultCategoryTitle } from "@/lib/taskCategories";
 import { SECTION_ICONS } from "@/components/SectionIcons";
@@ -17,7 +17,22 @@ export interface CategoryDraft {
   title: string;
   icon: string;
   color: AccentColor;
+  kind: CategoryKind;
 }
+
+/**
+ * What this category's hours *are*, for the Overview's day accounting.
+ *
+ * Sleep defines the waking day rather than being spent inside it, and rest is
+ * recovery you scheduled on purpose — neither is work. Without this the app had
+ * to guess, and guessed "work" for everything, which is how a night's sleep
+ * ended up charged against the same budget as a workout.
+ */
+const KIND_OPTIONS: Array<{ value: CategoryKind; label: string; hint: string }> = [
+  { value: "active", label: "Active", hint: "Work, training, errands — effort that fills your day." },
+  { value: "rest", label: "Rest", hint: "Deliberate recovery. Counts as time spent, never as work." },
+  { value: "sleep", label: "Sleep", hint: "Sets the waking day. Kept out of the active budget entirely." },
+];
 
 interface CategorySheetProps {
   open: boolean;
@@ -42,6 +57,7 @@ export default function CategorySheet({ open, category, onClose, onSave }: Categ
   // same rule TaskSheet used, moved here with the rest of identity.
   const [colorTouched, setColorTouched] = useState(false);
   const [titleTouched, setTitleTouched] = useState(false);
+  const [kind, setKind] = useState<CategoryKind>("active");
 
   useEffect(() => {
     if (!open) return;
@@ -49,12 +65,14 @@ export default function CategorySheet({ open, category, onClose, onSave }: Categ
       setTitle(category.title);
       setIcon(category.icon);
       setColor(category.color);
+      setKind(category.kind ?? "active");
       setColorTouched(true);
       setTitleTouched(true);
     } else {
       setTitle("");
       setIcon("star");
       setColor(colorFromIcon("star"));
+      setKind("active");
       setColorTouched(false);
       setTitleTouched(false);
     }
@@ -62,6 +80,9 @@ export default function CategorySheet({ open, category, onClose, onSave }: Categ
 
   function handleSelectIcon(name: string) {
     setIcon(name);
+    // Matches what `normalizeCategories` infers for an unclassified sleep-icon
+    // category, so the picker and the stored default never disagree.
+    if (name === "sleep" && kind === "active") setKind("sleep");
     if (!colorTouched) setColor(colorFromIcon(name));
     // An untouched title follows the icon too, so picking "Workout" and hitting
     // save just works — but anything the user typed is never overwritten.
@@ -121,11 +142,38 @@ export default function CategorySheet({ open, category, onClose, onSave }: Categ
 
           <PlanColorPicker value={color} onChange={(next) => { setColor(next); setColorTouched(true); }} />
 
+          <div>
+            <p className="mb-2 text-[11px] font-semibold uppercase tracking-[0.08em] text-neutral-400 dark:text-neutral-500">
+              Counts as
+            </p>
+            <div role="radiogroup" aria-label="Counts as" className="flex gap-2">
+              {KIND_OPTIONS.map((option) => (
+                <button
+                  key={option.value}
+                  type="button"
+                  role="radio"
+                  aria-checked={kind === option.value}
+                  onClick={() => setKind(option.value)}
+                  className={`flex-1 rounded-xl border px-3 py-2 text-[13px] font-bold transition-colors ${
+                    kind === option.value
+                      ? "border-neutral-900 bg-neutral-900 text-white dark:border-white dark:bg-white dark:text-neutral-900"
+                      : "border-neutral-200 text-neutral-600 hover:bg-neutral-50 dark:border-white/[0.12] dark:text-neutral-300 dark:hover:bg-white/[0.05]"
+                  }`}
+                >
+                  {option.label}
+                </button>
+              ))}
+            </div>
+            <p className="mt-2 text-[12px] text-neutral-500 dark:text-neutral-400">
+              {KIND_OPTIONS.find((o) => o.value === kind)?.hint}
+            </p>
+          </div>
+
           <Button
             variant="primary"
             className="w-full"
             disabled={!canSave}
-            onClick={() => { if (canSave) onSave({ title: trimmed, icon, color }); }}
+            onClick={() => { if (canSave) onSave({ title: trimmed, icon, color, kind }); }}
           >
             {category ? "Save category" : "Create category"}
           </Button>

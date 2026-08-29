@@ -27,6 +27,7 @@ import { getSyncStatus, getLastSyncedAt, getLastSchedule, onSyncStatusChange, fl
 import { formatDisplayTime, minutesToInputTime } from "@/lib/timeUtils";
 import { versionLabel, BUILD_ID } from "@/lib/buildInfo";
 import type { Schedule, SchedulePreferences } from "@/lib/useScheduleDB";
+import { MAX_SLEEP_HOURS, MIN_SLEEP_HOURS } from "@/lib/timeline/sleepWindow";
 import { getAIProviderState } from "@/lib/ai/config";
 import { resetTour } from "@/lib/onboarding/useCoachTour";
 import { TOUR_IDS } from "@/lib/onboarding/tours";
@@ -150,6 +151,11 @@ const DAY_END_OPTIONS = Array.from({ length: 9 }, (_, i) => {
   const baseLabel = formatDisplayTime(minutesToInputTime(minutes % 1440));
   const label = minutes >= 1440 ? `${baseLabel} (next day)` : baseLabel;
   return { value: String(minutes), label };
+});
+
+const SLEEP_HOURS_OPTIONS = Array.from({ length: (MAX_SLEEP_HOURS - MIN_SLEEP_HOURS) * 2 + 1 }, (_, i) => {
+  const hours = MIN_SLEEP_HOURS + i * 0.5;
+  return { value: String(hours), label: `${hours % 1 === 0 ? hours : hours.toFixed(1)}h` };
 });
 
 // ── Appearance toggle ─────────────────────────────────────────────────────────
@@ -310,6 +316,48 @@ function EndOfDayRow({
         >
           <IconX size={15} strokeWidth={2.2} />
         </button>
+      </div>
+    </div>
+  );
+}
+
+/**
+ * Sleep is the one bucket the Overview's day accounting can't infer. When no
+ * sleep block is scheduled this is what it reserves out of the open day, and
+ * either way it is the target the card measures a night against. This surface
+ * had no way to set it at all, so a user who only ever opened this sheet was
+ * stuck on the 8h default.
+ */
+function SleepNeededRow({
+  value,
+  onChange,
+}: {
+  value?: number;
+  onChange?: (patch: Partial<SchedulePreferences>) => void;
+}) {
+  return (
+    <div className="flex items-start gap-3 px-4 py-3.5 max-sm:flex-col sm:items-center">
+      <div className="min-w-0 flex-1">
+        <p className="text-[13px] font-semibold text-neutral-800 dark:text-white">Sleep needed</p>
+        <p className="mt-0.5 text-[11px] leading-snug text-neutral-400 dark:text-neutral-500">
+          The night you're aiming for. Sets your waking day and warns when the schedule eats into it.
+        </p>
+      </div>
+      <div className="relative w-full sm:w-44 sm:shrink-0">
+        <select
+          aria-label="Sleep needed"
+          value={value != null ? String(value) : ""}
+          onChange={(e) => onChange?.({ sleepHours: e.target.value ? Number(e.target.value) : undefined })}
+          className="h-10 w-full rounded-xl border border-neutral-200 bg-neutral-50 px-3 pr-9 text-[12px] font-semibold text-neutral-700 outline-none transition-colors focus:border-neutral-300 dark:border-white/[0.08] dark:bg-white/[0.04] dark:text-white appearance-none"
+        >
+          <option value="">Default (8h)</option>
+          {SLEEP_HOURS_OPTIONS.map((option) => (
+            <option key={option.value} value={option.value}>
+              {option.label}
+            </option>
+          ))}
+        </select>
+        <IconMoon size={14} strokeWidth={2} className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-neutral-400" />
       </div>
     </div>
   );
@@ -705,6 +753,15 @@ export function SettingsSheet({
         <SettingsCard>
           <StartOfDayRow
             value={schedule.preferences?.dayStartTime}
+            onChange={onUpdatePreferences}
+          />
+          <EndOfDayRow
+            value={schedule.preferences?.dayEndMinutes}
+            auto={schedule.preferences?.dayEndAuto}
+            onChange={onUpdatePreferences}
+          />
+          <SleepNeededRow
+            value={schedule.preferences?.sleepHours}
             onChange={onUpdatePreferences}
           />
         </SettingsCard>

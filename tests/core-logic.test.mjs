@@ -75,6 +75,8 @@ const {
   buildActiveHours,
   donutSegments,
   HELD_TIME_ID,
+  UNSCHEDULED_ID,
+  SCHEDULE_DAY_MINUTES,
   DEFAULT_WAKING_START_MINUTES,
 } = await import("../lib/dayBreakdown.ts");
 const { getWakingWindowMinutes, DEFAULT_SLEEP_HOURS, MIN_SLEEP_HOURS, MAX_SLEEP_HOURS } =
@@ -1751,11 +1753,13 @@ test("buildDayBreakdown groups by category and pools commitments into held time"
     t({ id: "f", startTime: "7:00 PM", endTime: "8:00 PM" }),                            // no category -> skipped
   ];
 
-  const { slices, totalMinutes } = buildDayBreakdown(tasks, categories, today);
-  assert.equal(totalMinutes, 300, "dangling and uncategorised tasks are excluded");
+  const { slices, totalMinutes, committedMinutes } = buildDayBreakdown(tasks, categories, today);
+  assert.equal(committedMinutes, 300, "dangling and uncategorised tasks are excluded");
+  assert.equal(totalMinutes, 1440, "the ring is the whole day, not just what is booked");
   assert.deepEqual(
     slices.map((s) => [s.id, s.minutes, s.pct]),
-    [["cat-code", 180, 60], [HELD_TIME_ID, 60, 20], ["cat-barbell", 60, 20]],
+    // pct is a share of the 24h day now, so 180 minutes reads as 13%, not 60%.
+    [["cat-code", 180, 13], [HELD_TIME_ID, 60, 4], ["cat-barbell", 60, 4], [UNSCHEDULED_ID, 1140, 79]],
     "largest first; equal slices break the tie on label (Held time < Workout)",
   );
   assert.equal(slices[0].label, "Coding");
@@ -1860,57 +1864,96 @@ test("buildDayBreakdown counts the previous day's overnight tail on this day", (
     categoryId: "cat-rest", startTime: "11:00 PM", endTime: "7:00 AM",
   };
 
+  const booked = (b) => b.slices.filter((s) => s.id !== UNSCHEDULED_ID);
+
   // Yesterday's sleep keeps only the five hours that fell before the handover.
   const own = buildDayBreakdown([sleep], categories, yesterday);
-  assert.equal(own.totalMinutes, 300, "the tail is no longer counted on the start day");
+  assert.equal(own.committedMinutes, 300, "the tail is no longer counted on the start day");
 
   // Today receives the remaining three, matching the continuation block drawn there.
   const carried = buildDayBreakdown([], categories, today, { tasks: [sleep], dateISO: yesterday });
-  assert.equal(carried.totalMinutes, 180);
-  assert.deepEqual(carried.slices.map((s) => [s.id, s.minutes]), [["cat-rest", 180]]);
+  assert.equal(carried.committedMinutes, 180);
+  assert.deepEqual(booked(carried).map((s) => [s.id, s.minutes]), [["cat-rest", 180]]);
 
   // Nothing is invented when the previous occurrence was skipped.
   const skipped = { ...sleep, exceptions: { [yesterday]: { skipped: true } } };
   const none = buildDayBreakdown([], categories, today, { tasks: [skipped], dateISO: yesterday });
-  assert.equal(none.totalMinutes, 0, "a skipped occurrence carries nothing over");
+  assert.equal(none.committedMinutes, 0, "a skipped occurrence carries nothing over");
 });
 
-test("buildActiveHours measures scheduled time against the waking day", () => {
+// A DayBreakdown literal, so the waking-day derivation can be exercised
+// without routing every case through task fixtures.
+function breakdownOf({ sleep = 0, rest = 0, active = 0 }) {
+  const committed = sleep + rest + active;
+  return {
+    slices: [],
+    totalMinutes: SCHEDULE_DAY_MINUTES,
+    committedMinutes: committed,
+    sleepMinutes: sleep,
+    restMinutes: rest,
+    activeMinutes: active,
+    unscheduledMinutes: SCHEDULE_DAY_MINUTES - committed,
+    overlapMinutes: 0,
+    sleepIsScheduled: sleep > 0,
+  };
+}
+
+test("buildActiveHours keeps sleep out of the active budget in both directions", () => {
   assert.equal(DEFAULT_WAKING_START_MINUTES, 7 * 60, "4 AM is the day boundary, not a wake time");
   assert.equal(DEFAULT_SLEEP_HOURS, 8);
-  // Default (no sleepHours passed) assumes DEFAULT_SLEEP_HOURS of sleep.
-  const defaultWaking = 24 * 60 - DEFAULT_SLEEP_HOURS * 60; // 960
-  assert.equal(getWakingWindowMinutes(undefined), defaultWaking);
+  assert.equal(SCHEDULE_DAY_MINUTES, 24 * 60, "4:00 -> 28:00 is a full day");
 
-  const typical = buildActiveHours(390);
-  assert.equal(typical.startMinutes, 7 * 60, "falls back to the waking default, not the timeline's");
-  assert.equal(typical.wakingMinutes, defaultWaking);
-  assert.equal(typical.endMinutes, 7 * 60 + defaultWaking);
-  assert.equal(typical.freeMinutes, defaultWaking - 390);
-  assert.equal(typical.overbookedMinutes, 0);
-  assert.equal(Math.round(typical.pct), Math.round((390 / defaultWaking) * 100));
+  // The regression this whole model exists for: 7h45m of scheduled sleep used
+  // to be charged against a window that had already had 7h taken out for it,
+  // which is how a normal day reported "25h 30m / 17h".
+  const withSleep = buildActiveHours(breakdownOf({ sleep: 465, active: 480 }), 7);
+  assert.equal(withSleep.wakingMinutes, 24 * 60 - 465, "scheduled sleep defines the waking day");
+  assert.equal(withSleep.activeMinutes, 480, "and is never counted inside it");
+  assert.equal(withSleep.sleepSurplusMinutes, 45, "45m more than the 7h target");
+  assert.equal(withSleep.sleepShortfallMinutes, 0);
+  assert.ok(withSleep.activeMinutes + withSleep.restMinutes <= withSleep.wakingMinutes,
+    "active + rest can never exceed the waking window — the old overbooked state is unreachable");
 
-  // A configured day start moves the window.
-  assert.equal(buildActiveHours(0, "05:30").startMinutes, 330);
-
-  // Overbooked: pct is clamped so the fill can never leave its track.
-  const over = buildActiveHours(defaultWaking + 75);
-  assert.equal(over.pct, 100);
-  assert.equal(over.freeMinutes, 0);
-  assert.equal(over.overbookedMinutes, 75);
+  // Rest is time spent, but not work: it fills the window without being active.
+  const withRest = buildActiveHours(breakdownOf({ sleep: 480, rest: 120, active: 300 }), 8);
+  assert.equal(withRest.restMinutes, 120);
+  assert.equal(withRest.activeMinutes, 300);
+  assert.equal(withRest.freeMinutes, 24 * 60 - 480 - 120 - 300);
+  assert.ok(withRest.activePct + withRest.restPct <= 100, "the two fills never overrun the track");
 
   // An empty day still reports a full window of free time.
-  const empty = buildActiveHours(0);
-  assert.equal(empty.pct, 0);
-  assert.equal(empty.freeMinutes, defaultWaking);
+  const empty = buildActiveHours(breakdownOf({}), 8);
+  assert.equal(empty.activePct, 0);
+  assert.equal(empty.sleepMinutes, 480, "with nothing booked, the target is simply reserved");
+  assert.equal(empty.freeMinutes, 24 * 60 - 480);
+});
+
+test("buildActiveHours reports a sleep shortfall instead of an impossible overbooking", () => {
+  // Nothing scheduled as sleep, and the day booked so full that only 4h remain:
+  // the honest complaint is about sleep, not about exceeding a 17-hour day.
+  const packed = buildActiveHours(breakdownOf({ active: 20 * 60 }), 7);
+  assert.equal(packed.sleepMinutes, 4 * 60, "only what is left can be slept in");
+  assert.equal(packed.sleepShortfallMinutes, 3 * 60, "3h short of the 7h target");
+  assert.equal(packed.sleepSurplusMinutes, 0);
+
+  // Sleep actually scheduled, but short of the target.
+  const shortNight = buildActiveHours(breakdownOf({ sleep: 5 * 60, active: 480 }), 8);
+  assert.equal(shortNight.sleepShortfallMinutes, 3 * 60);
+  assert.equal(shortNight.sleepTargetMinutes, 8 * 60);
+
+  // A day that leaves room for the whole target raises nothing.
+  const roomy = buildActiveHours(breakdownOf({ active: 8 * 60 }), 8);
+  assert.equal(roomy.sleepShortfallMinutes, 0);
 });
 
 test("buildActiveHours' waking window shrinks/grows with configured sleepHours", () => {
-  const scheduled = 300;
-  const withDefault = buildActiveHours(scheduled, undefined, undefined);
-  const withSix = buildActiveHours(scheduled, undefined, 6);
-  const withTen = buildActiveHours(scheduled, undefined, 10);
+  const b = breakdownOf({ active: 300 });
+  const withDefault = buildActiveHours(b, undefined);
+  const withSix = buildActiveHours(b, 6);
+  const withTen = buildActiveHours(b, 10);
 
+  // With no sleep block, the target is what gets reserved — so the waking
+  // window still tracks the setting exactly as it used to.
   assert.equal(withDefault.wakingMinutes, 24 * 60 - DEFAULT_SLEEP_HOURS * 60);
   assert.equal(withSix.wakingMinutes, 24 * 60 - 6 * 60, "less sleep -> a longer waking window");
   assert.equal(withTen.wakingMinutes, 24 * 60 - 10 * 60, "more sleep -> a shorter waking window");
@@ -1923,10 +1966,93 @@ test("buildActiveHours' waking window shrinks/grows with configured sleepHours",
   assert.equal(getWakingWindowMinutes(Number.NaN), 24 * 60 - DEFAULT_SLEEP_HOURS * 60, "non-finite falls back to the default");
 });
 
+// `normalizeCategories` is private and rebuilds each category from an explicit
+// field whitelist, so a field missing from it is silently dropped on every
+// load — the category would look right until you refreshed. Nothing else
+// catches that, hence this source check, in the same spirit as the syncMeta
+// guard in mergeSchedule.test.mjs.
+test("normalizeCategories carries `kind` through the whitelist", async () => {
+  const { readFile } = await import("node:fs/promises");
+  const source = await readFile(new URL("../lib/useScheduleDB.ts", import.meta.url), "utf8");
+
+  const start = source.indexOf("function normalizeCategories(value: unknown): TaskCategory[] {");
+  assert.ok(start > -1, "normalizeCategories() was renamed — update this guard");
+  const rest = source.slice(start);
+  const nextTopLevel = rest.slice(10).search(/\n(?:function|const|export) /);
+  const body = rest.slice(0, nextTopLevel === -1 ? undefined : nextTopLevel + 10);
+
+  assert.ok(
+    body.includes("kind:"),
+    "the rebuilt category literal drops `kind`, so every category resets to active on reload",
+  );
+});
+
+test("buildDayBreakdown counts an overlap once and reports the double-booking", () => {
+  const today = localISODate(new Date());
+  const categories = [
+    { id: "cat-code", title: "Coding", icon: "code", color: "indigo" },
+    { id: "cat-barbell", title: "Workout", icon: "barbell", color: "orange" },
+  ];
+  const t = (over) => ({ title: over.id, planId: "p", ...over });
+
+  // 9-11 and 10-12: three hours of clock, four hours of blocks.
+  const tasks = [
+    t({ id: "a", categoryId: "cat-code", startTime: "9:00 AM", endTime: "11:00 AM" }),
+    t({ id: "b", categoryId: "cat-barbell", startTime: "10:00 AM", endTime: "12:00 PM" }),
+  ];
+
+  const b = buildDayBreakdown(tasks, categories, today);
+  assert.equal(b.committedMinutes, 180, "summing these would have said 240");
+  assert.equal(b.overlapMinutes, 60, "the hour they share is reported, not silently absorbed");
+  // Earliest start owns the contested hour, so Coding keeps its full 9-11.
+  assert.deepEqual(
+    b.slices.filter((s) => s.id !== UNSCHEDULED_ID).map((s) => [s.id, s.minutes]),
+    [["cat-code", 120], ["cat-barbell", 60]],
+  );
+
+  // No overlap, no signal.
+  const clean = buildDayBreakdown([tasks[0]], categories, today);
+  assert.equal(clean.overlapMinutes, 0);
+});
+
+test("buildDayBreakdown buckets by category kind and always partitions the day", () => {
+  const today = localISODate(new Date());
+  const categories = [
+    { id: "cat-sleep", title: "Sleep", icon: "sleep", color: "indigo", kind: "sleep" },
+    { id: "cat-chill", title: "Chill", icon: "coffee", color: "orange", kind: "rest" },
+    { id: "cat-code", title: "Coding", icon: "code", color: "cyan" }, // no kind -> active
+  ];
+  const t = (over) => ({ title: over.id, planId: "p", ...over });
+
+  const b = buildDayBreakdown([
+    t({ id: "kip", categoryId: "cat-sleep", startTime: "11:00 PM", endTime: "12:00 AM" }),   // 60 sleep
+    t({ id: "chill", categoryId: "cat-chill", startTime: "8:00 PM", endTime: "9:30 PM" }),   // 90 rest
+    t({ id: "work", categoryId: "cat-code", startTime: "9:00 AM", endTime: "12:00 PM" }),    // 180 active
+  ], categories, today);
+
+  assert.equal(b.sleepMinutes, 60);
+  assert.equal(b.restMinutes, 90, "a rest category is recovery, not work");
+  assert.equal(b.activeMinutes, 180, "an unclassified category counts as active");
+  assert.equal(b.sleepIsScheduled, true);
+  assert.equal(
+    b.sleepMinutes + b.restMinutes + b.activeMinutes + b.unscheduledMinutes,
+    SCHEDULE_DAY_MINUTES,
+    "the four buckets always tile exactly 24 hours",
+  );
+  assert.equal(
+    b.slices.reduce((sum, s) => sum + s.minutes, 0),
+    SCHEDULE_DAY_MINUTES,
+    "and so do the wedges, so the donut can never over- or under-fill",
+  );
+});
+
 test("buildDayBreakdown is empty when nothing is scheduled", () => {
-  const { slices, totalMinutes } = buildDayBreakdown([], [], localISODate(new Date()));
-  assert.deepEqual(slices, []);
-  assert.equal(totalMinutes, 0);
+  const { slices, totalMinutes, committedMinutes } = buildDayBreakdown([], [], localISODate(new Date()));
+  assert.equal(committedMinutes, 0);
+  assert.equal(totalMinutes, 1440);
+  // An empty day is still a day: the ring is one full unscheduled wedge rather
+  // than nothing at all, which is what lets the donut render at any fill level.
+  assert.deepEqual(slices.map((s) => [s.id, s.minutes, s.pct]), [[UNSCHEDULED_ID, 1440, 100]]);
 });
 
 test("donutSegments tile the full circle without gaps or overflow", () => {
@@ -2284,10 +2410,10 @@ test("buildDayBreakdown gives a categorised commitment its own wedge", () => {
     t({ id: "bare", startTime: "3:00 PM", endTime: "4:00 PM" }),                                    // uncategorised tracked -> skipped
   ];
 
-  const { slices, totalMinutes } = buildDayBreakdown(tasks, categories, today);
-  assert.equal(totalMinutes, 210, "dangling and uncategorised tracked tasks stay excluded");
+  const { slices, committedMinutes } = buildDayBreakdown(tasks, categories, today);
+  assert.equal(committedMinutes, 210, "dangling and uncategorised tracked tasks stay excluded");
   assert.deepEqual(
-    slices.map((s) => [s.id, s.minutes]),
+    slices.filter((s) => s.id !== UNSCHEDULED_ID).map((s) => [s.id, s.minutes]),
     [["cat-code", 120], ["cat-car", 60], [HELD_TIME_ID, 30]],
   );
   const commute = slices.find((s) => s.id === "cat-car");

@@ -245,7 +245,7 @@ const preferences = z.object({
 export const ScheduleSchema = z.object({
   goals: z.array(GoalSchema),
   plans: z.array(PlanSchema),
-  categories: z.array(z.object({ id: nonEmptyId, title: z.string(), icon: z.string(), color: accentColor, sortOrder: z.number().finite().optional() }).passthrough()),
+  categories: z.array(z.object({ id: nonEmptyId, title: z.string(), icon: z.string(), color: accentColor, sortOrder: z.number().finite().optional(), kind: z.enum(["active", "rest", "sleep"]).optional() }).passthrough()),
   activities: z.object(Object.fromEntries(DAYS.map((day) => [day, z.array(TaskSchema)])) as Record<string, z.ZodType>).passthrough(),
   progressTrackers: z.array(ProgressTrackerSchema),
   metricEntries: z.array(MetricEntrySchema),

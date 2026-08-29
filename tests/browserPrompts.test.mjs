@@ -158,3 +158,34 @@ test("the focused rewrite keeps the user's request", () => {
   });
   assert.ok(out.messages.map((m) => m.content).join("\n").includes("Add a tracker for daily steps"));
 });
+
+// ── recentRejections — has to survive the rewrite to reach the model that
+// actually needs it (the browser model discards most of the original
+// systemPrompt text, so this can't be smuggled in there; see
+// lib/ai/rejectionContext.ts and AIGenerateOptions.recentRejections). ───────
+
+test("the chat rewrite folds in recentRejections when present", () => {
+  const out = rewriteForBrowserModel({
+    ...req(GENERAL_PROMPT_FOR_TEST),
+    recentRejections: ["Create task: Morning Run", "Create task: Evening Walk"],
+  });
+  assert.ok(out.systemPrompt.includes("Recently declined by the user"));
+  assert.ok(out.systemPrompt.includes("Create task: Morning Run"));
+  assert.ok(out.systemPrompt.includes("Create task: Evening Walk"));
+});
+
+test("the focused rewrite folds in recentRejections too", () => {
+  const out = rewriteForBrowserModel({
+    ...req(GENERAL_PROMPT_FOR_TEST),
+    actionHint: "add_task",
+    recentRejections: ["Create task: Morning Run"],
+  });
+  assert.ok(out.systemPrompt.includes("Recently declined by the user: Create task: Morning Run"));
+});
+
+test("no recentRejections means no mention of it at all — nothing smuggled in as empty noise", () => {
+  const chat = rewriteForBrowserModel(req(GENERAL_PROMPT_FOR_TEST));
+  assert.ok(!chat.systemPrompt.includes("Recently declined"));
+  const focused = rewriteForBrowserModel({ ...req(GENERAL_PROMPT_FOR_TEST), actionHint: "add_task" });
+  assert.ok(!focused.systemPrompt.includes("Recently declined"));
+});

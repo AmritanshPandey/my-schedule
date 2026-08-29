@@ -84,26 +84,27 @@ export interface TaskBlockCardProps {
    */
   onLongPressMissed?: () => void;
   /**
-   * grid only: a hover/focus-revealed icon button in the block's top-right
-   * corner — the grid variant's equivalent of the list variant's long-press-
-   * to-miss (which is inert here; see onLongPressMissed above). Used for
-   * "mark missed" / "handle missed → reschedule" so a WeekGrid block can
-   * reach that flow without a gesture that would collide with drag-to-retime
-   * (WeekGrid's pointerdown handler already excludes button targets).
+   * grid only: THE hover/focus-revealed icon button in the block's top-right
+   * corner — one slot, never two. Normally it is the grid variant's equivalent
+   * of the list variant's long-press-to-miss (which is inert here; see
+   * onLongPressMissed above): "mark missed" / "handle missed → reschedule", so
+   * a WeekGrid block can reach that flow without a gesture that would collide
+   * with drag-to-retime (WeekGrid's pointerdown handler already excludes
+   * button targets). While Cmd/Ctrl is held the caller swaps in "delete task"
+   * (`danger`) instead — a trash that showed on every plain hover was too easy
+   * to hit while sweeping the mouse across a dense week, and the modifier is
+   * one this surface already asks the user to hold for drag-to-move.
+   *
+   * `danger` only tints the hover state; the corner stays a single button
+   * either way, so the two actions can never be mistaken for one another.
    */
-  gridMenuAction?: { label: string; icon: ReactNode; onClick: () => void };
+  gridMenuAction?: { label: string; icon: ReactNode; onClick: () => void; danger?: boolean };
   onClick?: () => void;
   /**
    * Timeline (grid) only: when set and the task has subtasks/steps, a tappable
    * "N/M" pill appears under the title to open the subtasks sheet.
    */
   onOpenSubtasks?: () => void;
-  /**
-   * Accepted for compatibility but intentionally not rendered on the card —
-   * an on-card trash sat next to the checkbox and was easy to mis-tap (on iOS
-   * the hover state sticks after a tap). Delete lives in the task edit sheet.
-   */
-  onDelete?: () => void;
   /** Right-of-checkbox content (list: subtask chip / chevron / edit-delete). */
   trailing?: ReactNode;
   /** Full-width content below the time row (list: progress bar). */
@@ -373,12 +374,20 @@ export function TaskBlockCard({
           type="button"
           aria-label={gridMenuAction.label}
           onClick={(e) => { e.stopPropagation(); gridMenuAction.onClick(); }}
+          // cursor-pointer, not inherited: while Cmd/Ctrl is held the block
+          // wrapper sets cursor-grab for drag-to-retime, which would otherwise
+          // bleed through and make this button look like part of the drag.
+          //
           // No backdrop-blur: `data-glass` is for floating chrome (nav, header,
           // sheets), not a button sitting on a card, so this tripped the e2e
           // banned-effects guard. The 90% fill carries the affordance on its
           // own — the blur was doing nothing a slightly more opaque background
           // doesn't do, behind a 24px icon.
-          className="absolute right-1 top-1 z-10 flex h-6 w-6 items-center justify-center rounded-full bg-white/90 text-neutral-500 opacity-0 transition-opacity hover:bg-white hover:text-neutral-800 focus-visible:opacity-100 group-hover:opacity-100 group-focus-within:opacity-100 dark:bg-neutral-900/90 dark:text-neutral-400 dark:hover:bg-neutral-900 dark:hover:text-white"
+          className={`absolute right-1 top-1 z-10 flex h-6 w-6 cursor-pointer items-center justify-center rounded-full bg-white/90 text-neutral-500 opacity-0 transition-opacity hover:bg-white focus-visible:opacity-100 group-hover:opacity-100 group-focus-within:opacity-100 dark:bg-neutral-900/90 dark:text-neutral-400 dark:hover:bg-neutral-900 ${
+            gridMenuAction.danger
+              ? "hover:text-rose-600 dark:hover:text-rose-400"
+              : "hover:text-neutral-800 dark:hover:text-white"
+          }`}
         >
           {gridMenuAction.icon}
         </button>

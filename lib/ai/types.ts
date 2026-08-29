@@ -50,6 +50,14 @@ export interface AIGenerateOptions {
    * hint and still go through the full decide-then-act prompt.
    */
   actionHint?: string;
+  /**
+   * Titles of recently-rejected AI proposals (see lib/ai/rejectionContext.ts),
+   * most recent first. Threaded as its own field rather than smuggled into
+   * `systemPrompt`'s text because the browser provider's rewriteForBrowserModel
+   * mostly discards that text and rebuilds its own compact prompt — this has
+   * to survive that rewrite to reach the model that actually needs it most.
+   */
+  recentRejections?: string[];
 }
 
 /**

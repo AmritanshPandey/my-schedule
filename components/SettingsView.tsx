@@ -661,7 +661,7 @@ export function SettingsView({
                 <div className="min-w-0 flex-1">
                   <p className="text-[13px] font-semibold text-neutral-800 dark:text-white">Sleep needed</p>
                   <p className="mt-0.5 text-[11px] leading-snug text-neutral-400 dark:text-neutral-500">
-                    How many hours of sleep you need — shortens the &quot;Active hours&quot; waking window accordingly.
+                    The night you&apos;re aiming for. Sets your waking day and warns when the schedule eats into it.
                   </p>
                 </div>
                 <div className="relative w-full sm:w-64 sm:shrink-0">

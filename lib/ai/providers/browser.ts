@@ -289,7 +289,7 @@ async function* streamGenerate(
   opts: AIGenerateOptions,
 ): AsyncGenerator<string> {
   const pipe = await getPipeline(model);
-  const rewritten = rewriteForBrowserModel({ messages, systemPrompt, signal: opts.signal, actionHint: opts.actionHint });
+  const rewritten = rewriteForBrowserModel({ messages, systemPrompt, signal: opts.signal, actionHint: opts.actionHint, recentRejections: opts.recentRejections });
 
   const maxNewTokens = opts.maxTokens ?? rewritten._maxNewTokens ?? 512;
   const temperature  = opts.temperature ?? rewritten._temperature ?? 0.1;

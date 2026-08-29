@@ -11,6 +11,7 @@ import { getAIProviderState } from "@/lib/ai/config";
 import { useAIReady } from "@/lib/ai/useAIReady";
 import { preloadBrowserModel } from "@/lib/ai/providers/browser";
 import { resolvePlanTarget, resolveTaskTarget, describeTargetProblem } from "@/lib/ai/targets";
+import { getRecentRejectionTitles, recordRejectedProposal } from "@/lib/ai/rejectionContext";
 import type { Plan, Ritual, Schedule } from "@/lib/useScheduleDB";
 import { SECTION_ICONS, getIconPickerStyle } from "@/components/SectionIcons";
 import type { AITask } from "@/lib/ai";
@@ -435,13 +436,19 @@ const mdComponents = {
  *
  * `action` omitted means genuinely ambiguous; those still go through the full
  * decide-then-act prompt.
+ *
+ * `needsPlan`: this starter's own label never names a plan, but the action
+ * requires one (FOCUSED_SCHEMAS' payload.planTitle, resolved via
+ * resolvePlanTarget). Firing it as-is means the model has literally nothing
+ * to put in planTitle — see the click handler below for how this is resolved
+ * before sending, rather than sending a request that can only fail.
  */
-const STARTER_PROMPTS: Record<"plans" | "routine", { label: string; action?: string }[]> = {
+const STARTER_PROMPTS: Record<"plans" | "routine", { label: string; action?: string; needsPlan?: boolean }[]> = {
   plans: [
     { label: "Create a 30-day fitness plan", action: "create_plan" },
     { label: "Add a commitment for an appointment", action: "add_task" },
     { label: "Add a tracker to an existing plan", action: "add_tracker" },
-    { label: "Suggest milestones for an existing plan", action: "suggest_milestones" },
+    { label: "Suggest milestones for an existing plan", action: "suggest_milestones", needsPlan: true },
   ],
   routine: [
     { label: "Design a productive morning routine", action: "create_ritual" },
@@ -464,6 +471,14 @@ function stripJsonBlocks(text: string): string {
 export function AIPanel({ context, plans, rituals, schedule, activePlan, initialMessage, onApplyAction, onProposalCreated, onProposalAccept, onProposalReject, onClose }: AIPanelProps) {
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState("");
+  // Set alongside a `needsPlan` starter's input-prefill (see
+  // handleStarterClick) so the intent survives the user finishing the
+  // sentence themselves. Without this, the plain-text follow-up loses
+  // actionHint and falls through to the generic decide-then-act prompt —
+  // on the browser model that prompt's compact CHAT_SYSTEM schema doesn't
+  // even list "suggest_milestones" as an option, so it was picking the
+  // nearest thing it knew (create_plan) and hallucinating unrelated tasks.
+  const [pendingActionHint, setPendingActionHint] = useState<string | undefined>(undefined);
   const [streaming, setStreaming] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [focused, setFocused] = useState(false);
@@ -479,9 +494,16 @@ export function AIPanel({ context, plans, rituals, schedule, activePlan, initial
     return () => { abortRef.current?.abort(); };
   }, []);
 
+  // Closes the loop on rejected proposals — previously nothing read that
+  // signal back. This is the only real proposal-producing surface today
+  // (add_task, via this chat), so it's the one place this needs wiring.
+  // Re-reads on every message rather than memoizing on a stable dependency,
+  // since lib/ai/rejectionContext.ts's store lives outside React state.
+  const recentRejections = useMemo(() => getRecentRejectionTitles(), [messages]);
+
   const systemPrompt = useMemo(
-    () => buildSystemPrompt(context, activePlan ? buildPlanContext(activePlan) : undefined, plans, rituals),
-    [context, activePlan, plans, rituals],
+    () => buildSystemPrompt(context, activePlan ? buildPlanContext(activePlan) : undefined, plans, rituals, recentRejections),
+    [context, activePlan, plans, rituals, recentRejections],
   );
 
   useEffect(() => {
@@ -496,18 +518,31 @@ export function AIPanel({ context, plans, rituals, schedule, activePlan, initial
     });
   }
 
-  async function handleSend(overrideText?: string, actionHint?: string) {
+  async function handleSend(overrideText?: string, actionHint?: string, attempt = 0) {
     const text = (overrideText ?? input).trim();
-    if (!text || streaming) return;
-    setInput("");
-    setError(null);
+    if (!text || (attempt === 0 && streaming)) return;
+    // A caller-supplied hint always wins; otherwise fall back to whatever a
+    // prior needsPlan prefill staged, then clear it — it's one-shot, good
+    // for exactly the message it was queued for. Only on the first attempt:
+    // a retry reuses the same hint rather than re-consulting (and clearing
+    // again, harmlessly, but pointlessly) a value already gone.
+    const effectiveActionHint = attempt === 0 ? (actionHint ?? pendingActionHint) : actionHint;
+    if (attempt === 0 && pendingActionHint) setPendingActionHint(undefined);
+    if (attempt === 0) {
+      setInput("");
+      setError(null);
+    }
 
     const userMessage: Message = { role: "user", text };
     const assistantMessage: Message = { role: "assistant", text: "" };
-    setMessages((prev) => [...prev, userMessage, assistantMessage]);
+    // A retry regenerates the same assistant turn in place — the user's
+    // message (and the prior, discarded attempt) is already in `messages`,
+    // so re-adding it would duplicate the turn in the visible transcript.
+    if (attempt === 0) setMessages((prev) => [...prev, userMessage, assistantMessage]);
+    else setMessages((prev) => { const updated = [...prev]; updated[updated.length - 1] = assistantMessage; return updated; });
     setStreaming(true);
 
-    const history = [...messages, userMessage].map((m) => ({
+    const history = [...(attempt === 0 ? messages : messages.slice(0, -1)), userMessage].map((m) => ({
       role: m.role as "user" | "assistant",
       content: m.role === "assistant" ? stripJsonBlocks(m.text) : m.text,
     }));
@@ -521,7 +556,7 @@ export function AIPanel({ context, plans, rituals, schedule, activePlan, initial
       // Always request the larger token budget: with the unified prompt, any
       // context can emit a create_plan with several bundled tasks — it's a
       // ceiling, not a forced length.
-      for await (const chunk of streamAIChat(history, systemPrompt, 4096, controller.signal, actionHint)) {
+      for await (const chunk of streamAIChat(history, systemPrompt, 4096, controller.signal, effectiveActionHint, recentRejections)) {
         fullText += chunk;
         setMessages((prev) => {
           const updated = [...prev];
@@ -530,6 +565,19 @@ export function AIPanel({ context, plans, rituals, schedule, activePlan, initial
         });
       }
       const action = parseAIAction(fullText);
+      if (!action && attempt === 0 && /^[[{]/.test(fullText.trim())) {
+        // One silent retry before showing whatever broke — mirrors
+        // AIActionSheet.tsx's runGeneration: a small local model occasionally
+        // drops a bracket or gets cut off mid-array, and a second pass
+        // recovers most of those without the user needing to notice. Only
+        // for output that was actually attempting JSON (leading [ or {) —
+        // a genuine clarifying question in plain prose should stand as-is,
+        // not be silently discarded and re-asked. Awaited, not returned bare
+        // — a bare `return` here would run this call's `finally` (setStreaming
+        // (false), refocusing the input) before the retry actually settles.
+        await handleSend(text, effectiveActionHint, attempt + 1);
+        return;
+      }
       if (action?.type === "add_task") {
         // AI Proposal boundary (PlanR Improvement 04): add_task never goes
         // straight to onApplyAction — it's built into a reviewable AIProposal
@@ -563,6 +611,31 @@ export function AIPanel({ context, plans, rituals, schedule, activePlan, initial
     }
   }
 
+  // The one plan a `needsPlan` starter can safely assume without asking —
+  // already scoped to one (activePlan), or nothing to choose between anyway.
+  // 2+ plans with no active one is genuinely ambiguous; handleStarterClick
+  // below asks rather than guessing.
+  const defaultPlan = activePlan ?? (plans.length === 1 ? plans[0] : undefined);
+
+  function handleStarterClick(starter: { label: string; action?: string; needsPlan?: boolean }) {
+    // "Suggest milestones for an existing plan" -> "Suggest milestones" —
+    // the stem both branches below build on top of.
+    const stem = starter.label.replace(/ for an existing plan$/, "");
+    if (!starter.needsPlan || defaultPlan) {
+      void handleSend(starter.needsPlan ? `${stem} for "${defaultPlan!.title}"` : starter.label, starter.action);
+      return;
+    }
+    // No plan to assume and none named — sending now would hand the model an
+    // action it structurally cannot complete (see FOCUSED_SCHEMAS.suggest_milestones's
+    // comment). Prefill instead of failing silently: the user finishes the
+    // one detail actually missing. Stage the action too, so finishing the
+    // sentence and hitting send still takes the focused path instead of
+    // losing the intent to the generic one (see pendingActionHint above).
+    setInput(`${stem} for "`);
+    setPendingActionHint(starter.action);
+    setTimeout(() => inputRef.current?.focus(), 0);
+  }
+
   useEffect(() => {
     if (initialMessage && !didAutoSend.current) {
       didAutoSend.current = true;
@@ -587,6 +660,7 @@ export function AIPanel({ context, plans, rituals, schedule, activePlan, initial
 
   function handleProposalReject(proposal: AIProposal) {
     onProposalReject(proposal);
+    recordRejectedProposal(proposal.title);
     setProposalStatus(proposal.id, "rejected");
   }
 
@@ -734,7 +808,7 @@ export function AIPanel({ context, plans, rituals, schedule, activePlan, initial
                     animate={{ opacity: 1, x: 0 }}
                     transition={{ delay: 0.15 + i * 0.06, ease: "easeOut" }}
                     type="button"
-                    onClick={() => void handleSend(starter.label, starter.action)}
+                    onClick={() => handleStarterClick(starter)}
                     disabled={streaming}
                     whileHover={streaming ? {} : { x: 2 }}
                     whileTap={{ scale: 0.98 }}

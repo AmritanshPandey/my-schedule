@@ -101,8 +101,8 @@ You: {"type":"create_plan","payload":{"title":"30-Day Fitness","description":"Bu
 You: {"type":"add_task","payload":{"title":"Dentist Appointment","taskType":"commitment","day":"thursday","startTime":"14:00","endTime":"15:00","icon":"star"}}`,
     add_tracker: `User: Add a tracker for water intake
 You: {"type":"add_tracker","payload":{"title":"Water","unit":"ml","goalDirection":"increase_good"}}`,
-    suggest_milestones: `User: Suggest milestones for my marathon plan
-You: {"type":"suggest_milestones","payload":{"milestones":[{"title":"Run 10 km non-stop","description":"Build the aerobic base.","targetDate":"2026-03-15"},{"title":"Half marathon distance","description":"Prove the endurance is there.","targetDate":"2026-04-20"},{"title":"Race pace 20 km","description":"Dial in target pace.","targetDate":"2026-05-18"}]}}`,
+    suggest_milestones: `User: Suggest milestones for my Marathon Training plan
+You: {"type":"suggest_milestones","payload":{"planTitle":"Marathon Training","milestones":[{"title":"Run 10 km non-stop","description":"Build the aerobic base.","targetDate":"2026-03-15"},{"title":"Half marathon distance","description":"Prove the endurance is there.","targetDate":"2026-04-20"},{"title":"Race pace 20 km","description":"Dial in target pace.","targetDate":"2026-05-18"}]}}`,
     create_ritual: `User: Create a morning meditation routine
 You: {"type":"create_ritual","payload":{"title":"Morning Meditation","time":"07:00","duration":15,"repeatDays":["monday","tuesday","wednesday","thursday","friday"],"color":"violet"}}`,
   };

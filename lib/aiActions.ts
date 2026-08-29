@@ -8,6 +8,7 @@ import { streamAIAction, streamAIChat, type AIMessage } from "./aiClient";
 import { getAIInstructions, withInstructions } from "./ai/instructions";
 import { CATEGORY_LABELS } from "./taskCategories";
 import { VALID_TASK_TYPES } from "./ai/domainFacts";
+import { repairTruncatedJSON } from "./ai/jsonRepair";
 
 // Same single source of truth as lib/ai.ts — see that file's ICON_LIST comment.
 const ICON_LIST = Object.keys(CATEGORY_LABELS).join(", ");
@@ -79,53 +80,9 @@ export interface AIGeneratedMilestone {
   targetDate?: string;
 }
 
-/**
- * Best-effort repair for JSON cut off mid-generation — a real risk under the
- * tight max_new_tokens ceilings small local models run under (see
- * lib/ai/providers/browserPrompts.ts, e.g. 130 tokens for subtasks). Walks
- * the text tracking bracket depth and string state, remembering the end of
- * the last COMPLETE top-level element (closing `}`/`]`, or a `,` at depth 1
- * for a flat array of strings, which never emits a closing bracket of its
- * own between elements). If the text ends mid-element, this drops the
- * dangling partial one and closes whatever's still open, so one truncated
- * item costs you that item instead of the whole batch. Returns null when
- * there isn't even one complete element to recover, or when the text was
- * already balanced (nothing to repair — the earlier parse attempts would
- * have succeeded).
- */
-function repairTruncatedJSON(text: string): string | null {
-  const stack: string[] = [];
-  let inString = false;
-  let escaped = false;
-  let lastSafeCut = -1;
-
-  for (let i = 0; i < text.length; i++) {
-    const ch = text[i];
-    if (inString) {
-      if (escaped) escaped = false;
-      else if (ch === "\\") escaped = true;
-      else if (ch === '"') inString = false;
-      continue;
-    }
-    if (ch === '"') { inString = true; continue; }
-    if (ch === "{" || ch === "[") { stack.push(ch); continue; }
-    if (ch === "}" || ch === "]") {
-      stack.pop();
-      if (stack.length === 1) lastSafeCut = i + 1;
-      continue;
-    }
-    if (ch === "," && stack.length === 1) lastSafeCut = i;
-  }
-
-  if (stack.length === 0 && !inString) return null; // already balanced
-  if (lastSafeCut === -1) return null; // not even one complete element
-
-  const closers: Record<string, string> = { "{": "}", "[": "]" };
-  // `stack[0]` is the outermost bracket — unaffected by how deep the
-  // now-discarded trailing partial element went, since we only ever cut at
-  // depth 1 (just inside it).
-  return text.slice(0, lastSafeCut) + closers[stack[0]];
-}
+// repairTruncatedJSON now lives in ./ai/jsonRepair — shared with
+// lib/ai.ts's parseAIAction, which needs the same recovery for its nested
+// (non-flat-array) JSON shape. See that file's header for the full story.
 
 function tryParseJSON<T>(raw: string): T | null {
   const trimmed = raw.trim().replace(/,\s*([}\]])/g, "$1");

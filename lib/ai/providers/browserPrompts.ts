@@ -43,6 +43,15 @@ function withUserInstruction(prompt: string, instruction?: string): string {
   return instruction?.trim() ? `${prompt}\nUser preference: ${instruction.trim()}` : prompt;
 }
 
+/** Same degrade-gracefully shape as withUserInstruction above — omitted
+ *  entirely when there's nothing to say (no rejections yet, or none recent
+ *  enough to have made the capped list from lib/ai/rejectionContext.ts). */
+function withRecentRejections(prompt: string, recentRejections?: string[]): string {
+  return recentRejections?.length
+    ? `${prompt}\nRecently declined by the user: ${recentRejections.join("; ")}. Don't suggest these again unless asked.`
+    : prompt;
+}
+
 /** Request shape this module rewrites — a trimmed mirror of what
  *  lib/ai/providers/browser.ts's `generate()` receives (systemPrompt +
  *  message history), local to the browser-prompt-rewriting concern rather
@@ -57,6 +66,8 @@ export interface AIChatRequest {
   /** The action the user already selected, when known — see
    *  AIGenerateOptions.actionHint. */
   actionHint?: string;
+  /** See AIGenerateOptions.recentRejections. */
+  recentRejections?: string[];
   signal?: AbortSignal;
 }
 
@@ -332,9 +343,16 @@ export const FOCUSED_SCHEMAS: Record<string, { schema: string; example: string; 
     rules: `goalDirection is "increase_good" (more is better) or "decrease_good" (less is better).`,
   },
   suggest_milestones: {
-    schema: `{"type":"suggest_milestones","payload":{"milestones":[{"title":"...","description":"...","targetDate":"YYYY-MM-DD"}]}}`,
+    // "planTitle" is load-bearing, not decorative: ScheduleApp.tsx's apply
+    // handler calls resolvePlanTarget(schedule.plans, payload.planTitle), and
+    // with 2+ plans an absent/unmatched title resolves to "unspecified" —
+    // Apply just re-shows "Which plan should these go to?" with no way to
+    // answer from this card. Omitting it here (as this schema used to) meant
+    // the action could only ever work by accident, for a user with exactly
+    // one plan total.
+    schema: `{"type":"suggest_milestones","payload":{"planTitle":"...","milestones":[{"title":"...","description":"...","targetDate":"YYYY-MM-DD"}]}}`,
     example: formatActionExample("suggest_milestones"),
-    rules: `3-5 milestones, titles 3-6 words, dates spread across the plan's timeframe.`,
+    rules: `"planTitle" must match one of the user's real plan names from the request. 3-5 milestones, titles 3-6 words, dates spread across the plan's timeframe.`,
   },
   create_ritual: {
     schema: `{"type":"create_ritual","payload":{"title":"...","time":"HH:MM","duration":30,"repeatDays":["monday"],"color":"emerald"}}`,
@@ -363,11 +381,11 @@ export function buildFocusedRequest(req: AIChatRequest, action: string): Browser
 
   return {
     ...req,
-    systemPrompt: withUserInstruction(`Output ONE JSON object of type "${action}" and nothing else — no explanation, no markdown fences, no repetition.
+    systemPrompt: withRecentRejections(withUserInstruction(`Output ONE JSON object of type "${action}" and nothing else — no explanation, no markdown fences, no repetition.
 Schema: ${spec.schema}
 ${spec.rules}
 Icons: ${ICONS}
-Times are 24-hour HH:MM. Days are lowercase weekdays.`, instruction),
+Times are 24-hour HH:MM. Days are lowercase weekdays.`, instruction), req.recentRejections),
     messages: [{ role: "user", content: `${spec.example}\n\nNow do the same for:\n${ask}` }],
     _maxNewTokens: 700,
     _temperature: 0,
@@ -416,7 +434,8 @@ export function buildChatRequest(req: AIChatRequest): BrowserAIChatRequest {
     all.subtask && `Subtasks: ${all.subtask}`,
     all.milestone && `Milestones: ${all.milestone}`,
   ].filter(Boolean);
-  const systemPrompt = lines.length > 0 ? `${CHAT_SYSTEM}\nUser preferences — ${lines.join(" | ")}` : CHAT_SYSTEM;
+  const base = lines.length > 0 ? `${CHAT_SYSTEM}\nUser preferences — ${lines.join(" | ")}` : CHAT_SYSTEM;
+  const systemPrompt = withRecentRejections(base, req.recentRejections);
   return {
     ...req,
     systemPrompt,

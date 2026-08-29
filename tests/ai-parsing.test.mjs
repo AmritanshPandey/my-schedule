@@ -285,3 +285,65 @@ test("parseGeneratedTasks still parses a normal, complete array untouched by the
   assert.equal(tasks.length, 1);
   assert.equal(tasks[0].title, "Deep Work");
 });
+
+// ── parseAIAction's own truncation repair — a nested shape, not a flat
+// top-level array. The old lib/ai.ts parser had no repair at all; these lock
+// in the shared lib/ai/jsonRepair.ts fix, which has to recover a safe cut
+// point at ANY depth (payload.tasks is nested two levels deep), not just at
+// the outermost one the old flat-array-only implementation assumed. ─────────
+
+test("parseAIAction recovers the complete tasks from a create_plan payload cut off mid-3rd-task", () => {
+  const full = JSON.stringify({
+    type: "create_plan",
+    payload: {
+      title: "30-Day Fitness",
+      description: "Build a consistent training habit.",
+      emoji: "barbell",
+      color: "emerald",
+      tasks: [
+        { title: "Morning Run", day: "monday", startTime: "07:00", endTime: "07:45", icon: "run", taskType: "session", subtasks: ["Warm-up"] },
+        { title: "Strength Training", day: "wednesday", startTime: "07:00", endTime: "08:00", icon: "barbell", taskType: "session", subtasks: ["Squats"] },
+        { title: "Long Run", day: "saturday", startTime: "08:00", endTime: "09:30", icon: "run", taskType: "session", subtasks: ["Easy pace"] },
+      ],
+    },
+  });
+  // Cut mid-way through the 3rd task's object — after its title, before it closes.
+  const cutIndex = full.indexOf('"Long Run"') + '"Long Run"'.length + 20;
+  const raw = full.slice(0, cutIndex);
+  const action = parseAIAction(raw);
+  assert.equal(action.type, "create_plan");
+  assert.equal(action.payload.title, "30-Day Fitness");
+  assert.equal(action.payload.tasks.length, 2, "the 3rd, incomplete task should be dropped, not the whole plan");
+  assert.equal(action.payload.tasks[0].title, "Morning Run");
+  assert.equal(action.payload.tasks[1].title, "Strength Training");
+});
+
+test("parseAIAction recovers milestones cut off mid-array the same way", () => {
+  const full = JSON.stringify({
+    type: "create_plan",
+    payload: {
+      title: "Learn Spanish",
+      description: "Conversational fluency.",
+      emoji: "book",
+      color: "cyan",
+      tasks: [],
+      milestones: [
+        { title: "Alphabet & Pronunciation", description: "Learn phonics", targetDate: "2025-01-31" },
+        { title: "Daily Conversations", description: "Hold a 5-minute chat", targetDate: "2025-03-15" },
+        { title: "Grammar Fluency", description: "Master tenses", targetDate: "2025-05-01" },
+      ],
+    },
+  });
+  const cutIndex = full.indexOf('"Grammar Fluency"') + '"Grammar Fluency"'.length + 15;
+  const raw = full.slice(0, cutIndex);
+  const action = parseAIAction(raw);
+  assert.equal(action.type, "create_plan");
+  assert.equal(action.payload.milestones.length, 2);
+  assert.equal(action.payload.milestones[0].title, "Alphabet & Pronunciation");
+  assert.equal(action.payload.milestones[1].title, "Daily Conversations");
+});
+
+test("parseAIAction returns null when the cut happens before the title itself completes", () => {
+  const raw = '{"type":"create_plan","payload":{"tit';
+  assert.equal(parseAIAction(raw), null);
+});

@@ -484,6 +484,17 @@ export interface SchedulePreferences {
  * to be looking at. Categories are user-managed (Settings → Categories) and are
  * back-filled from each task's old per-task icon on first load after upgrade.
  */
+/**
+ * What a category's time *is*, for the day's accounting.
+ *
+ * Not every hour on the timeline is work. Sleep is recovery the day is built
+ * around, and rest ("Chill", a walk, reading) is recovery you schedule on
+ * purpose — counting either as committed effort is what made the Overview
+ * report a 25-hour day. Absent means "active": the safe default, since a
+ * category nobody has classified is far more likely to be work than rest.
+ */
+export type CategoryKind = "active" | "rest" | "sleep";
+
 export interface TaskCategory {
   id: string;
   title: string;
@@ -491,6 +502,8 @@ export interface TaskCategory {
   icon: string;
   color: AccentColor;
   sortOrder?: number;
+  /** See CategoryKind. Unset = "active". */
+  kind?: CategoryKind;
 }
 
 export interface Schedule {
@@ -895,6 +908,18 @@ function defaultPlans(): Plan[] {
   ];
 }
 
+/**
+ * A stored `kind` always wins; only an *unset* one is inferred, and only from
+ * the sleep icon (the same signal lib/colorSystem.ts already reads). Inferring
+ * on every pass instead would silently overrule a user who deliberately marked
+ * their sleep-icon category as active — and since this runs on every load, it
+ * would do so forever.
+ */
+function resolveCategoryKind(stored: unknown, icon: string): CategoryKind {
+  if (stored === "active" || stored === "rest" || stored === "sleep") return stored;
+  return icon === "sleep" ? "sleep" : "active";
+}
+
 /** Keep only well-formed stored categories; anything malformed is dropped. */
 function normalizeCategories(value: unknown): TaskCategory[] {
   if (!Array.isArray(value)) return [];
@@ -912,6 +937,7 @@ function normalizeCategories(value: unknown): TaskCategory[] {
       icon,
       color: resolveAccentColor(typeof c.color === "string" ? c.color : undefined, icon),
       ...(typeof c.sortOrder === "number" ? { sortOrder: c.sortOrder } : {}),
+      kind: resolveCategoryKind(c.kind, icon),
     }];
   });
 }

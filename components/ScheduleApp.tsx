@@ -3004,11 +3004,10 @@ export default function ScheduleApp() {
     widthPct: number,
     readOnly: boolean,
     onToggle: () => void,
-    onDelete: () => void,
     slot?: TaskSlot,
     slotIndex?: number,
     edgeCut?: "top" | "bottom",
-    gridMenuAction?: { label: string; icon: React.ReactNode; onClick: () => void },
+    gridMenuAction?: { label: string; icon: React.ReactNode; onClick: () => void; danger?: boolean },
     dateISO?: string,
   ) {
     const { linkedPlan, category: taskCategory } = getTaskPresentation(task);
@@ -3046,7 +3045,6 @@ export default function ScheduleApp() {
         // the template by id across every weekday bucket, so it lands on the
         // real task rather than on the day the tail happens to be drawn.
         onClick={() => openEditSheet(task, dateISO)}
-        onDelete={!readOnly ? onDelete : undefined}
         className="h-full w-full"
       />
     );

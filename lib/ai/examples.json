@@ -69,8 +69,8 @@
       "response": { "type": "add_tracker", "payload": { "title": "Water", "unit": "ml", "goalDirection": "increase_good" } }
     },
     "suggest_milestones": {
-      "request": "Suggest milestones for my marathon plan",
-      "response": { "type": "suggest_milestones", "payload": { "milestones": [
+      "request": "Suggest milestones for my Marathon Training plan",
+      "response": { "type": "suggest_milestones", "payload": { "planTitle": "Marathon Training", "milestones": [
         { "title": "Run 10 km non-stop", "description": "Build the aerobic base.", "targetDate": "2026-03-15" },
         { "title": "Half marathon distance", "description": "Prove the endurance is there.", "targetDate": "2026-04-20" },
         { "title": "Race pace 20 km", "description": "Dial in target pace.", "targetDate": "2026-05-18" }

@@ -48,7 +48,14 @@ export function recordProposalCreated(schedule: Schedule, proposal: AIProposal):
   };
 }
 
-/** Appends AI_PROPOSAL_REJECTED only — no domain array is touched. */
+/** Appends AI_PROPOSAL_REJECTED only — no domain array is touched.
+ *  Deliberately no `title`/free-text content here (see
+ *  tests/proposal.test.mjs's "only ever carry whitelisted metadata" test —
+ *  schedule.events is shared/synced and never carries raw AI-generated
+ *  text). lib/ai/rejectionContext.ts's own separate, on-device-only store is
+ *  where "what was rejected" lives for feeding back into future prompts;
+ *  callers record into it alongside calling this function, not inside it —
+ *  this stays a pure `(schedule, proposal) => schedule` function. */
 export function recordProposalRejected(schedule: Schedule, proposal: AIProposal): Schedule {
   const now = new Date().toISOString();
   return {

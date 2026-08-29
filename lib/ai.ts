@@ -9,6 +9,7 @@ import {
   VALID_TASK_TYPES,
   VALID_GOAL_DIRECTIONS,
 } from "./ai/domainFacts";
+import { repairTruncatedJSON } from "./ai/jsonRepair";
 
 // The icon list is duplicated three times across this file and
 // lib/aiActions.ts as prose — CATEGORY_LABELS (lib/taskCategories.ts, shared
@@ -35,10 +36,10 @@ export interface AIMilestone {
 
 export type AIActionResult =
   | { type: "create_plan"; payload: { title: string; description: string; emoji: string; color: string; startDate?: string; endDate?: string; tasks?: AITask[]; milestones?: AIMilestone[] } }
-  | { type: "create_ritual"; payload: { title: string; time: string; duration: number; repeatDays: DayKey[]; color: RitualColor; trackingType?: RitualTrackingType; target?: number; unit?: string; steps?: string[] } }
+  | { type: "create_ritual"; payload: { title: string; time: string; duration: number; repeatDays: DayKey[]; color: RitualColor; trackingType?: RitualTrackingType; target?: number; unit?: string; steps?: string[]; _unspecified?: ("time" | "repeatDays")[] } }
   | { type: "suggest_milestones"; payload: { milestones: AIMilestone[]; planTitle?: string } }
   | { type: "add_tracker"; payload: { planTitle?: string; title: string; unit?: string; goalDirection: "increase_good" | "decrease_good"; goalValue?: number } }
-  | { type: "add_task"; payload: { title: string; taskType: TaskTypeValue; day: DayKey; days?: DayKey[]; startTime: string; endTime: string; icon: string; subtasks?: string[]; planTitle?: string } }
+  | { type: "add_task"; payload: { title: string; taskType: TaskTypeValue; day: DayKey; days?: DayKey[]; startTime: string; endTime: string; icon: string; subtasks?: string[]; planTitle?: string; _unspecified?: ("day" | "startTime" | "endTime")[] } }
   | { type: "add_subtasks"; payload: { taskTitle: string; subtasks: string[] } }
   /**
    * Not a write — a question back to the user. Emitted when the request doesn't
@@ -220,6 +221,11 @@ export function buildSystemPrompt(
   planContext?: string,
   existingPlans?: Pick<Plan, "title" | "category" | "description">[],
   existingRituals?: Pick<{ title: string; time: string; duration?: number }, "title" | "time" | "duration">[],
+  /** Titles of recently-rejected proposals — see lib/ai/rejectionContext.ts.
+   *  Covers the non-browser providers, which read this text directly rather
+   *  than through the structured side-channel lib/aiClient.ts's
+   *  streamAIChat also threads this through for the browser provider. */
+  recentRejections?: string[],
 ): string {
   const parts: string[] = [GENERAL_PROMPT, FRAMING[context], `Today's date: ${todayISO()}`];
   if (planContext) parts.push(`Current plan context: ${planContext}`);
@@ -230,6 +236,9 @@ export function buildSystemPrompt(
   if (existingRituals && existingRituals.length > 0) {
     const list = existingRituals.map((r) => `- "${r.title}" at ${r.time}${r.duration ? `, ${r.duration}min` : ""}`).join("\n");
     parts.push(`User's existing rituals:\n${list}`);
+  }
+  if (recentRejections && recentRejections.length > 0) {
+    parts.push(`Recently declined by the user: ${recentRejections.join("; ")}. Don't suggest these again unless asked.`);
   }
   // Custom instructions (Settings → AI → Instructions) — this prompt can
   // produce any category's action, so include every non-empty one rather
@@ -268,7 +277,19 @@ export function tryParseJSONLoose<T = Record<string, unknown>>(raw: string): T |
   try {
     return JSON.parse(cleaned) as T;
   } catch {
-    return null;
+    // A response cut off mid-generation (the model's own token ceiling) is a
+    // real, common failure — not a contrived one. Recover whatever complete
+    // top-level fields/array elements came before the cut instead of losing
+    // the whole response (see ./ai/jsonRepair.ts's header for why this needs
+    // the general, any-depth version rather than lib/aiActions.ts's old
+    // flat-array-only one).
+    const repaired = repairTruncatedJSON(cleaned);
+    if (!repaired) return null;
+    try {
+      return JSON.parse(repaired) as T;
+    } catch {
+      return null;
+    }
   }
 }
 
@@ -371,6 +392,15 @@ export function parseAIAction(text: string): AIActionResult | null {
       const unit = typeof p.unit === "string" && p.unit.trim() ? p.unit.trim() : undefined;
       if (trackingType === "checklist" && !steps?.length) trackingType = undefined;
 
+      // Which of these the model actually supplied, vs. what got silently
+      // backfilled just above — the fallbacks exist so this always type-checks
+      // as a usable ritual, but AIReviewSheet.tsx / lib/ai/checklist.ts need
+      // to tell "genuinely unspecified" from "present" to ask instead of
+      // silently keeping a fake 8am-every-day default.
+      const unspecified: ("time" | "repeatDays")[] = [];
+      if (typeof p.time !== "string") unspecified.push("time");
+      if (repeatDays.length === 0) unspecified.push("repeatDays");
+
       return {
         type: "create_ritual",
         payload: {
@@ -383,6 +413,7 @@ export function parseAIAction(text: string): AIActionResult | null {
           ...(trackingType === "checklist" ? { steps } : {}),
           ...(trackingType && trackingType !== "checklist" && target !== undefined ? { target } : {}),
           ...(trackingType && trackingType !== "checklist" && unit ? { unit } : {}),
+          ...(unspecified.length > 0 ? { _unspecified: unspecified } : {}),
         },
       };
     }
@@ -435,6 +466,15 @@ export function parseAIAction(text: string): AIActionResult | null {
       const task = parseAITaskFields(p);
       const rawDays = Array.isArray(p.days) ? p.days : [];
       const days = rawDays.filter((d) => VALID_DAYS.includes(d as DayKey)) as DayKey[];
+      // Which of day/startTime/endTime the model actually supplied, vs. what
+      // parseAITaskFields backfilled just above so this always type-checks as
+      // a placeable task — see the create_ritual branch above for why this
+      // needs to be tracked separately (AIReviewSheet.tsx / checklist.ts ask
+      // for these instead of silently keeping a fake 9am-Monday default).
+      const unspecified: ("day" | "startTime" | "endTime")[] = [];
+      if (!VALID_DAYS.includes(p.day as DayKey) && days.length === 0) unspecified.push("day");
+      if (typeof p.startTime !== "string") unspecified.push("startTime");
+      if (typeof p.endTime !== "string") unspecified.push("endTime");
       return {
         type: "add_task",
         payload: {
@@ -447,6 +487,7 @@ export function parseAIAction(text: string): AIActionResult | null {
           icon: task.icon,
           subtasks: task.subtasks,
           planTitle: typeof p.planTitle === "string" ? p.planTitle : undefined,
+          ...(unspecified.length > 0 ? { _unspecified: unspecified } : {}),
         },
       };
     }

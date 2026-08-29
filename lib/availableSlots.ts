@@ -18,6 +18,7 @@ import { isTaskScheduledOn, resolveOccurrence } from "./taskOccurrence";
 import { parseTimeToMinutes, toScheduleDayMinutes } from "./timeUtils";
 import { getConfiguredDayStartMinutes, DEFAULT_TIMELINE_START_MINUTES } from "./timeline/displayWindow";
 import { resolveWakingWindow } from "./timeline/sleepWindow";
+import { mergeIntervals } from "./timeline/intervals";
 
 export interface AvailableSlot {
   /** Schedule-day minutes (may exceed 1440 for a window past midnight). */
@@ -72,13 +73,7 @@ export function findAvailableSlots(
     }
   }
 
-  busy.sort((a, b) => a.start - b.start);
-  const merged: Array<{ start: number; end: number }> = [];
-  for (const interval of busy) {
-    const last = merged[merged.length - 1];
-    if (last && interval.start <= last.end) last.end = Math.max(last.end, interval.end);
-    else merged.push({ ...interval });
-  }
+  const merged = mergeIntervals(busy);
 
   const gaps: AvailableSlot[] = [];
   let cursor = dayStart;

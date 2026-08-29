@@ -83,12 +83,15 @@ export function streamAIChat(
   /** The action the user already picked, when the UI knows it — see
    *  AIGenerateOptions.actionHint. Omitted for free-text asks. */
   actionHint?: string,
+  /** See AIGenerateOptions.recentRejections. */
+  recentRejections?: string[],
 ): AsyncGenerator<string> {
   return activeProvider().generate(systemPrompt, messages, {
     // Clamped, not trusted: no caller gets to ask for an unbounded generation.
     maxTokens: clampMaxTokens(maxTokens),
     signal: withTimeout(signal),
     actionHint,
+    recentRejections,
   });
 }
 

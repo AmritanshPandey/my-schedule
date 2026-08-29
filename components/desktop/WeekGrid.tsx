@@ -3,7 +3,7 @@
 import type { PointerEvent as ReactPointerEvent, ReactNode } from "react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { AnimatePresence, m } from "framer-motion";
-import { IconChevronLeft, IconChevronRight, IconDotsVertical, IconX, IconAlertTriangle } from "@tabler/icons-react";
+import { IconChevronLeft, IconChevronRight, IconDotsVertical, IconClockX, IconAlertTriangle, IconTrash } from "@tabler/icons-react";
 import type { DayKey, Plan, Ritual, RitualCompletion, Schedule, Task, TaskSlot } from "@/lib/useScheduleDB";
 import { DAYS } from "@/lib/useScheduleDB";
 import { getSlots, sortTasksByTime } from "@/lib/taskMutations";
@@ -231,13 +231,13 @@ interface WeekGridProps {
     widthPct: number,
     readOnly: boolean,
     onToggle: () => void,
-    onDelete: () => void,
     slot?: TaskSlot,
     slotIndex?: number,
     /** Squares off the edge an overnight block is cut on. */
     edgeCut?: "top" | "bottom",
-    /** Hover-revealed "mark/handle missed" icon — see TaskBlockCard.gridMenuAction. */
-    gridMenuAction?: { label: string; icon: ReactNode; onClick: () => void },
+    /** Hover-revealed corner icon — "mark/handle missed", or delete while
+     *  Cmd/Ctrl is held. See TaskBlockCard.gridMenuAction. */
+    gridMenuAction?: { label: string; icon: ReactNode; onClick: () => void; danger?: boolean },
     /** The concrete calendar date represented by this task block. */
     dateISO?: string,
   ) => ReactNode;
@@ -1055,12 +1055,36 @@ export function WeekGrid({
                     nowPx !== null &&
                     nowPx >= layout.top &&
                     nowPx < layout.top + layout.height;
+                  // Passed unresolved today, but nobody's flagged it either
+                  // way yet — a passive "this is already late" signal.
+                  // Deliberately distinct from `missed` (a manual, resolved
+                  // state): amber, not rose, and purely informational — it
+                  // doesn't change behavior or get written anywhere.
+                  // Commitments are held time, not work to be late on.
+                  const isOverdue =
+                    dayIsToday &&
+                    !slotDone &&
+                    !slotMissed &&
+                    isTrackedTask(layout.task) &&
+                    nowPx !== null &&
+                    nowPx >= layout.top + layout.height;
                   // Dims the *origin* block for the whole drag, regardless of
                   // which column the ghost is currently hovering over.
                   const isBeingMoved =
                     dragMove?.taskId === layout.task.id && dragMove?.slotIndex === layout.slotIndex && dragMove?.sourceDay === day;
                   const canDragToMove = !!onMoveTask && !isContinuation;
-                  // Hover-icon: "mark missed" (today, not yet missed/done) or
+                  // The block's single hover-revealed corner icon.
+                  //
+                  // Cmd/Ctrl held wins the slot outright and turns it into
+                  // delete: a trash that showed on every plain hover was too
+                  // easy to clip while sweeping the mouse across a dense week,
+                  // and this surface already asks for the same modifier to
+                  // drag-to-retime, so it is a key the user is holding anyway.
+                  // Gated on the same `!readOnly && !isContinuation` as the
+                  // delete callback used to be — a past column or an overnight
+                  // tail writes to the wrong day's bucket.
+                  //
+                  // Otherwise: "mark missed" (today, not yet missed/done) or
                   // "handle missed" (any column showing an already-missed
                   // occurrence — completionForDate above already resolved the
                   // right historical flag for past days). Never on a continuation.
@@ -1068,12 +1092,19 @@ export function WeekGrid({
                   // (onMarkSlotMissed) instead of whole-task (onMarkMissed).
                   const gridMenuAction = isContinuation
                     ? undefined
+                    : modifierHeld && !readOnly
+                    ? {
+                        label: "Delete task",
+                        icon: <IconTrash size={13} strokeWidth={2} />,
+                        onClick: () => onDeleteTask(layout.task.id, day),
+                        danger: true,
+                      }
                     : slotMissed && onOpenMissedRecovery
                     ? { label: "Handle missed", icon: <IconAlertTriangle size={13} strokeWidth={2} />, onClick: () => onOpenMissedRecovery({ task: layout.task, plan: linkedPlan, dateISO }) }
                     : dayIsToday && !slotMissed && !slotDone && isTrackedTask(layout.task) && (totalSlots > 1 ? onMarkSlotMissed : onMarkMissed)
                     ? {
                         label: "Mark missed",
-                        icon: <IconX size={13} strokeWidth={2.5} />,
+                        icon: <IconClockX size={13} strokeWidth={2.5} />,
                         onClick: () =>
                           totalSlots > 1
                             ? onMarkSlotMissed!(layout.task.id, layout.slotIndex, day, dateISO)
@@ -1089,8 +1120,8 @@ export function WeekGrid({
                       data-task-block
                       data-glass={isCurrent ? "" : undefined}
                       className={`absolute ${isCurrent ? "rounded-[10px] shadow-now" : ""} ${
-                        isBeingMoved ? "opacity-30" : ""
-                      } ${canDragToMove && modifierHeld ? "cursor-grab" : ""}`}
+                        isOverdue ? "rounded-[10px] ring-1 ring-amber-400/70 dark:ring-amber-500/50" : ""
+                      } ${isBeingMoved ? "opacity-30" : ""} ${canDragToMove && modifierHeld ? "cursor-grab" : ""}`}
                       style={{
                         top: layout.top + TASK_VERTICAL_INSET,
                         height: visualHeight,
@@ -1146,7 +1177,6 @@ export function WeekGrid({
                           if (totalSlots > 1) onToggleSlot(layout.task.id, layout.slotIndex, day, dateISO);
                           else onToggleTaskComplete(layout.task.id, allSubtaskIds, day, dateISO);
                         },
-                        () => { if (!isContinuation) onDeleteTask(layout.task.id, day); },
                         layout.slot,
                         layout.slotIndex,
                         isContinuation ? "top" : cutAtBottom ? "bottom" : undefined,
@@ -1216,7 +1246,7 @@ export function WeekGrid({
                   };
                   return (
                     <div className="pointer-events-none absolute left-0.5 right-0.5 z-[16] opacity-90" style={{ top, height }}>
-                      {renderCard(dragMove.task, height, 100, true, () => {}, () => {}, previewSlot, dragMove.slotIndex, undefined)}
+                      {renderCard(dragMove.task, height, 100, true, () => {}, previewSlot, dragMove.slotIndex, undefined)}
                     </div>
                   );
                 })()}
