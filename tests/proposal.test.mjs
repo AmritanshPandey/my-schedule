@@ -125,6 +125,23 @@ test("buildCreateTaskProposal never touches Schedule — it only takes plans, no
   assert.equal(buildCreateTaskProposal.length, 2); // (action, plans)
 });
 
+test("buildCreateTaskProposal carries _unspecified through and shows \"Needs a day & time\" instead of the fake placeholder", () => {
+  const proposal = buildCreateTaskProposal(
+    addTaskAction({ _unspecified: ["day", "startTime", "endTime"] }),
+    withPlan(emptySchedule()).plans,
+  );
+  assert.deepEqual(proposal.data._unspecified, ["day", "startTime", "endTime"]);
+  const whenRow = proposal.changes.find((c) => c.label === "When");
+  assert.equal(whenRow?.value, "Needs a day & time");
+});
+
+test("buildCreateTaskProposal shows the real day/time, and no _unspecified, when they were genuinely given", () => {
+  const proposal = buildCreateTaskProposal(addTaskAction(), withPlan(emptySchedule()).plans);
+  assert.equal(proposal.data._unspecified, undefined);
+  const whenRow = proposal.changes.find((c) => c.label === "When");
+  assert.ok(whenRow?.value.includes("7:00"));
+});
+
 test("buildCreateTaskProposal flags an unmatched plan title without failing", () => {
   const proposal = buildCreateTaskProposal(addTaskAction({ planTitle: "Nonexistent Plan" }), []);
   assert.equal(proposal.data.planId, undefined);

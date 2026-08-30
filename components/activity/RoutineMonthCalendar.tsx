@@ -130,7 +130,7 @@ export default function RoutineMonthCalendar({
                 key={dateISO}
                 onClick={onSelectDay ? () => onSelectDay(dateISO) : undefined}
                 disabled={!onSelectDay}
-                className={`aspect-square rounded-[8px] flex items-center justify-center text-[13px] font-semibold select-none ${cellStyles(status)} ${onSelectDay ? "cursor-pointer active:scale-95 transition-transform" : ""}`}
+                className={`aspect-square rounded-[10px] flex items-center justify-center text-[13px] font-semibold select-none ${cellStyles(status)} ${onSelectDay ? "cursor-pointer active:scale-95 transition-transform" : ""}`}
               >
                 {day}
               </button>

@@ -416,6 +416,13 @@ export function SettingsView({
   const handleDayStartChange = useCallback((value: string) => {
     onUpdatePreferences?.({ dayStartTime: normalizeDayStartTime(value) });
   }, [onUpdatePreferences]);
+  // "" = the fixed 4:00 AM default; "auto" = follow the last task (a real,
+  // deliberate choice, so it's not treated as unset the way "" is below).
+  const dayEndSelectValue = schedule.preferences?.dayEndAuto
+    ? "auto"
+    : typeof schedule.preferences?.dayEndMinutes === "number"
+    ? String(schedule.preferences.dayEndMinutes)
+    : "";
   const trackingStart = schedule.preferences?.startDate ?? "";
   const handleTrackingStartChange = useCallback((value: string) => {
     onUpdatePreferences?.({ startDate: value || undefined });
@@ -591,7 +598,7 @@ export function SettingsView({
                 <div className="min-w-0 flex-1">
                   <p className="text-[13px] font-semibold text-neutral-800 dark:text-white">Start of day</p>
                   <p className="mt-0.5 text-[11px] leading-snug text-neutral-400 dark:text-neutral-500">
-                    When your day begins on the timeline.
+                    Where the timeline scrolls to, and the day boundary for missed-task and free-time checks. The Overview breakdown always runs a fixed 4 AM–4 AM day.
                   </p>
                 </div>
                 <div className="relative w-full sm:w-64 sm:shrink-0">
@@ -599,7 +606,7 @@ export function SettingsView({
                     aria-label="Start of day"
                     value={dayStartTime}
                     onChange={(e) => handleDayStartChange(e.target.value)}
-                    className={`${SETTINGS_CONTROL_CLASS} w-full pr-9 appearance-none`}
+                    className={`${SETTINGS_CONTROL_CLASS} w-full pr-9 appearance-none ${!dayStartTime ? "!text-neutral-400 dark:!text-neutral-500" : ""}`}
                   >
                     <option value="">Auto (first task)</option>
                     {DAY_START_OPTIONS.map((option) => (
@@ -618,19 +625,13 @@ export function SettingsView({
                 <div className="min-w-0 flex-1">
                   <p className="text-[13px] font-semibold text-neutral-800 dark:text-white">End of day</p>
                   <p className="mt-0.5 text-[11px] leading-snug text-neutral-400 dark:text-neutral-500">
-                    When the timeline ends. Times past midnight show as &quot;(next day)&quot;.
+                    How far past midnight your day can run (12–4 AM), or follow your last task. Times show as &quot;(next day)&quot;.
                   </p>
                 </div>
                 <div className="relative w-full sm:w-64 sm:shrink-0">
                   <select
                     aria-label="End of day"
-                    value={
-                      schedule.preferences?.dayEndAuto
-                        ? "auto"
-                        : typeof schedule.preferences?.dayEndMinutes === "number"
-                        ? String(schedule.preferences?.dayEndMinutes)
-                        : ""
-                    }
+                    value={dayEndSelectValue}
                     onChange={(e) => {
                       const v = e.target.value;
                       if (v === "auto") {
@@ -641,7 +642,7 @@ export function SettingsView({
                         onUpdatePreferences?.({ dayEndAuto: undefined, dayEndMinutes: Number(v) });
                       }
                     }}
-                    className={`${SETTINGS_CONTROL_CLASS} w-full pr-9 appearance-none`}
+                    className={`${SETTINGS_CONTROL_CLASS} w-full pr-9 appearance-none ${dayEndSelectValue === "" ? "!text-neutral-400 dark:!text-neutral-500" : ""}`}
                   >
                     <option value="">Default (4:00 AM)</option>
                     <option value="auto">Follow last task</option>
@@ -669,7 +670,7 @@ export function SettingsView({
                     aria-label="Sleep needed"
                     value={schedule.preferences?.sleepHours != null ? String(schedule.preferences.sleepHours) : ""}
                     onChange={(e) => onUpdatePreferences?.({ sleepHours: e.target.value ? Number(e.target.value) : undefined })}
-                    className={`${SETTINGS_CONTROL_CLASS} w-full pr-9 appearance-none`}
+                    className={`${SETTINGS_CONTROL_CLASS} w-full pr-9 appearance-none ${schedule.preferences?.sleepHours == null ? "!text-neutral-400 dark:!text-neutral-500" : ""}`}
                   >
                     <option value="">Default (8h)</option>
                     {SLEEP_HOURS_OPTIONS.map((option) => (

@@ -22,7 +22,7 @@ export default function TimelineDraftCard({
 }: TimelineDraftCardProps) {
   return (
     <div
-      className={`pointer-events-none relative flex h-full w-full overflow-hidden rounded-[8px] border border-neutral-200/80 bg-white/95 dark:border-white/[0.08] dark:bg-neutral-900/90 ${className}`}
+      className={`pointer-events-none relative flex h-full w-full overflow-hidden rounded-[10px] border border-neutral-200/80 bg-white/95 dark:border-white/[0.08] dark:bg-neutral-900/90 ${className}`}
       style={style}
     >
       <div className="absolute inset-y-0 left-0 w-[3px] bg-emerald-500/75 dark:bg-emerald-400/75" />

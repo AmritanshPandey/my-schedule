@@ -4,12 +4,15 @@ import { useMemo, useState } from "react";
 import { IconAlertTriangle, IconCheck } from "@tabler/icons-react";
 import BottomSheet from "@/components/ui/BottomSheet";
 import SheetHeader from "@/components/ui/SheetHeader";
+import Input from "@/components/ui/Input";
+import TimeInput from "@/components/ui/TimeInput";
 import { haptic } from "@/lib/haptics";
 import type { AIActionResult } from "@/lib/ai";
 import type { Plan, Schedule } from "@/lib/useScheduleDB";
-import { describeAction, canConfirm, actionNoun } from "@/lib/ai/checklist";
+import { describeAction, canConfirm, actionNoun, type ReviewField } from "@/lib/ai/checklist";
 import { describeBreaches, type CreationCounts } from "@/lib/ai/limits";
 import type { TaskCandidate } from "@/lib/ai/targets";
+import { DAYS, DAY_LABELS, type DayKey } from "@/lib/scheduleConstants";
 
 /**
  * The last thing between an AI response and the schedule.
@@ -39,23 +42,77 @@ export default function AIReviewSheet({
 }) {
   const [targetOverride, setTargetOverride] = useState<string | null>(null);
   const [acknowledged, setAcknowledged] = useState(false);
+  // Answers to the missing-field editors below, keyed by ReviewField.key.
+  // Only ever set for a field that started out null (see the render block),
+  // so folding these in is always a pure fill-in, never an overwrite of
+  // something the model actually said.
+  const [fieldOverrides, setFieldOverrides] = useState<Record<string, string | string[]>>({});
 
-  // Re-describe with the override folded in, so choosing a plan clears the
-  // blocker immediately rather than only at confirm time.
+  // Re-describe with the overrides folded in, so answering a question clears
+  // its blocker immediately rather than only at confirm time.
   const effective = useMemo<AIActionResult | null>(() => {
     if (!action) return null;
-    if (!targetOverride) return action;
-    switch (action.type) {
-      case "add_task":
-      case "add_tracker":
-      case "suggest_milestones":
-        return { ...action, payload: { ...action.payload, planTitle: targetOverride } } as AIActionResult;
-      case "add_subtasks":
-        return { ...action, payload: { ...action.payload, taskTitle: targetOverride } };
-      default:
-        return action;
+    let next = action;
+    if (targetOverride) {
+      switch (next.type) {
+        case "add_task":
+        case "add_tracker":
+        case "suggest_milestones":
+          next = { ...next, payload: { ...next.payload, planTitle: targetOverride } } as AIActionResult;
+          break;
+        case "add_subtasks":
+          next = { ...next, payload: { ...next.payload, taskTitle: targetOverride } };
+          break;
+      }
     }
-  }, [action, targetOverride]);
+    if (Object.keys(fieldOverrides).length === 0) return next;
+    const str = (key: string) => fieldOverrides[key] as string | undefined;
+    const arr = (key: string) => fieldOverrides[key] as string[] | undefined;
+    switch (next.type) {
+      case "add_task": {
+        const stillUnspecified = (next.payload._unspecified ?? []).filter((k) => !(k in fieldOverrides));
+        next = {
+          ...next,
+          payload: {
+            ...next.payload,
+            day: (str("day") as DayKey) ?? next.payload.day,
+            startTime: str("startTime") ?? next.payload.startTime,
+            endTime: str("endTime") ?? next.payload.endTime,
+            _unspecified: stillUnspecified.length > 0 ? (stillUnspecified as ("day" | "startTime" | "endTime")[]) : undefined,
+          },
+        };
+        break;
+      }
+      case "create_ritual": {
+        const stillUnspecified = (next.payload._unspecified ?? []).filter((k) => !(k in fieldOverrides));
+        next = {
+          ...next,
+          payload: {
+            ...next.payload,
+            time: str("time") ?? next.payload.time,
+            repeatDays: (arr("repeatDays") as DayKey[]) ?? next.payload.repeatDays,
+            _unspecified: stillUnspecified.length > 0 ? (stillUnspecified as ("time" | "repeatDays")[]) : undefined,
+          },
+        };
+        break;
+      }
+      case "create_plan": {
+        next = {
+          ...next,
+          payload: {
+            ...next.payload,
+            title: str("title") ?? next.payload.title,
+            startDate: str("startDate") ?? next.payload.startDate,
+            endDate: str("endDate") ?? next.payload.endDate,
+          },
+        };
+        break;
+      }
+      default:
+        break;
+    }
+    return next;
+  }, [action, targetOverride, fieldOverrides]);
 
   const review = useMemo(
     () => (effective ? describeAction(effective, schedule) : null),
@@ -78,6 +135,7 @@ export default function AIReviewSheet({
   function close() {
     setTargetOverride(null);
     setAcknowledged(false);
+    setFieldOverrides({});
     onCancel();
   }
 
@@ -133,31 +191,54 @@ export default function AIReviewSheet({
           </div>
         )}
 
-        {/* Required first, then optional — each optional one is fine to leave. */}
+        {/* Required first, then optional — each optional one is fine to leave.
+            A required field the model genuinely left blank gets an inline
+            editor instead of just a red "missing" label — this is the ask
+            this sheet exists to add: fill it in here rather than the action
+            silently keeping whatever lib/ai.ts's parser backfilled. */}
         <div className="flex flex-col gap-1.5">
-          {review.fields.map((f) => (
-            <div
-              key={f.key}
-              className="flex items-center gap-2 rounded-xl border border-neutral-100 px-3 py-2 dark:border-white/[0.05]"
-            >
-              <span className="w-24 shrink-0 text-[11px] font-semibold text-neutral-500 dark:text-neutral-400">
-                {f.label}
-              </span>
-              {f.value !== null ? (
-                <span className="min-w-0 flex-1 truncate text-[13px] font-semibold text-neutral-800 dark:text-neutral-100">
-                  {f.value}
-                </span>
-              ) : (
-                <span
-                  className={`min-w-0 flex-1 text-[12px] font-semibold ${
-                    f.required ? "text-rose-600 dark:text-rose-400" : "text-neutral-400 dark:text-neutral-500"
-                  }`}
+          {review.fields.map((f) => {
+            if (f.required && f.value === null && f.kind) {
+              return (
+                <div
+                  key={f.key}
+                  className="flex flex-col gap-1.5 rounded-xl border border-rose-200 bg-rose-50/50 px-3 py-2.5 dark:border-rose-500/20 dark:bg-rose-500/[0.06]"
                 >
-                  {f.required ? "Required — missing" : "Not set · optional"}
+                  <span className="text-[11px] font-semibold text-rose-600 dark:text-rose-400">
+                    {f.label} — needs an answer
+                  </span>
+                  <FieldEditor
+                    field={f}
+                    value={fieldOverrides[f.key]}
+                    onChange={(v) => setFieldOverrides((o) => ({ ...o, [f.key]: v }))}
+                  />
+                </div>
+              );
+            }
+            return (
+              <div
+                key={f.key}
+                className="flex items-center gap-2 rounded-xl border border-neutral-100 px-3 py-2 dark:border-white/[0.05]"
+              >
+                <span className="w-24 shrink-0 text-[11px] font-semibold text-neutral-500 dark:text-neutral-400">
+                  {f.label}
                 </span>
-              )}
-            </div>
-          ))}
+                {f.value !== null ? (
+                  <span className="min-w-0 flex-1 truncate text-[13px] font-semibold text-neutral-800 dark:text-neutral-100">
+                    {f.value}
+                  </span>
+                ) : (
+                  <span
+                    className={`min-w-0 flex-1 text-[12px] font-semibold ${
+                      f.required ? "text-rose-600 dark:text-rose-400" : "text-neutral-400 dark:text-neutral-500"
+                    }`}
+                  >
+                    {f.required ? "Required — missing" : "Not set · optional"}
+                  </span>
+                )}
+              </div>
+            );
+          })}
         </div>
 
         {/* A large change is allowed, but not silently. */}
@@ -243,4 +324,101 @@ function taskCandidateOptions(
   match: { status: string; candidates?: TaskCandidate[] },
 ): Array<{ key: string; label: string }> {
   return (match.candidates ?? []).map((t) => ({ key: t.id, label: t.title }));
+}
+
+function pillClass(active: boolean): string {
+  return `rounded-full border px-2.5 py-1 text-[11px] font-semibold transition-colors ${
+    active
+      ? "border-neutral-900 bg-neutral-900 text-white dark:border-white dark:bg-white dark:text-neutral-900"
+      : "border-neutral-200 bg-white text-neutral-600 hover:border-neutral-300 dark:border-white/10 dark:bg-neutral-900 dark:text-neutral-300 dark:hover:border-white/20"
+  }`;
+}
+
+/**
+ * The inline editor for one missing required field, chosen by `field.kind`
+ * (set alongside the field's declaration in lib/ai/checklist.ts). Radio-like
+ * single-select for an enumerable choice (day/enum), checkbox-like
+ * multi-select for days, and the app's own existing time/text controls for
+ * everything else — no new form primitives, all reused.
+ */
+function FieldEditor({
+  field,
+  value,
+  onChange,
+}: {
+  field: ReviewField;
+  value: string | string[] | undefined;
+  onChange: (value: string | string[]) => void;
+}) {
+  switch (field.kind) {
+    case "text":
+      return (
+        <Input
+          value={(value as string) ?? ""}
+          onChange={(e) => onChange(e.target.value)}
+          placeholder={field.label}
+        />
+      );
+    case "date":
+      return (
+        <input
+          type="date"
+          value={(value as string) ?? ""}
+          onChange={(e) => onChange(e.target.value)}
+          className="h-11 w-full min-w-0 rounded-xl border border-neutral-200 bg-neutral-50 px-3 text-[14px] text-neutral-900 outline-none transition-colors focus:border-neutral-300 focus:bg-white dark:border-white/10 dark:bg-white/[0.04] dark:text-white dark:focus:border-white/20 dark:focus:bg-white/[0.07] dark:[color-scheme:dark]"
+        />
+      );
+    case "time":
+      return <TimeInput value={(value as string) ?? ""} onChange={onChange} ariaLabel={field.label} />;
+    case "day":
+      return (
+        <div className="flex flex-wrap gap-1.5">
+          {DAYS.map((d) => (
+            <button key={d} type="button" onClick={() => onChange(d)} className={pillClass(value === d)}>
+              {DAY_LABELS[d]}
+            </button>
+          ))}
+        </div>
+      );
+    case "days": {
+      const selected = (value as string[] | undefined) ?? [];
+      const allSelected = selected.length === DAYS.length;
+      return (
+        <div className="flex flex-wrap gap-1.5">
+          <button
+            type="button"
+            onClick={() => onChange(allSelected ? [] : [...DAYS])}
+            className={pillClass(allSelected)}
+          >
+            All days
+          </button>
+          {DAYS.map((d) => {
+            const active = selected.includes(d);
+            return (
+              <button
+                key={d}
+                type="button"
+                onClick={() => onChange(active ? selected.filter((x) => x !== d) : [...selected, d])}
+                className={pillClass(active)}
+              >
+                {DAY_LABELS[d]}
+              </button>
+            );
+          })}
+        </div>
+      );
+    }
+    case "enum":
+      return (
+        <div className="flex flex-wrap gap-1.5">
+          {(field.enumOptions ?? []).map((opt) => (
+            <button key={opt} type="button" onClick={() => onChange(opt)} className={pillClass(value === opt)}>
+              {opt}
+            </button>
+          ))}
+        </div>
+      );
+    default:
+      return null;
+  }
 }

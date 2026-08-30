@@ -16,6 +16,7 @@
 
 import type { AIActionResult } from "@/lib/ai";
 import type { Plan, Schedule } from "@/lib/useScheduleDB";
+import { VALID_TASK_TYPES, VALID_GOAL_DIRECTIONS } from "./domainFacts";
 import {
   resolvePlanTarget,
   resolveTaskTarget,
@@ -25,6 +26,15 @@ import {
 } from "./targets";
 import { checkLimits, type LimitCheck } from "./limits";
 
+/**
+ * Which inline editor AIReviewSheet.tsx should render for a field that's
+ * missing or being changed — omitted for fields with no sensible inline
+ * editor (an array the model should have generated content for, like
+ * `tasks`/`milestones`/`subtasks` — hand-authoring those via checkboxes
+ * isn't reasonable, so those stay read-only there regardless of `required`).
+ */
+export type FieldKind = "text" | "date" | "time" | "day" | "days" | "enum";
+
 export interface ReviewField {
   key: string;
   label: string;
@@ -32,6 +42,9 @@ export interface ReviewField {
   value: string | null;
   /** Missing required fields block the confirm; missing optional ones don't. */
   required: boolean;
+  kind?: FieldKind;
+  /** Only meaningful for `kind: "enum"`. */
+  enumOptions?: string[];
 }
 
 export type ReviewTarget =
@@ -60,12 +73,19 @@ const NOUNS: Record<AIActionResult["type"], string> = {
   ask_clarification: "question",
 };
 
-function field(key: string, label: string, value: unknown, required: boolean): ReviewField {
+function field(
+  key: string,
+  label: string,
+  value: unknown,
+  required: boolean,
+  kind?: FieldKind,
+  enumOptions?: string[],
+): ReviewField {
   const str =
     value === undefined || value === null || value === "" ? null :
     Array.isArray(value) ? (value.length ? `${value.length}` : null) :
     String(value);
-  return { key, label, value: str, required };
+  return { key, label, value: str, required, kind, enumOptions };
 }
 
 /**
@@ -86,10 +106,10 @@ export function describeAction(action: AIActionResult, schedule: Schedule): Acti
       const p = action.payload;
       summary = `Create the plan "${p.title}"`;
       fields = [
-        field("title", "Plan name", p.title, true),
-        field("description", "Description", p.description, false),
-        field("startDate", "Start date", p.startDate, false),
-        field("endDate", "End date", p.endDate, false),
+        field("title", "Plan name", p.title, true, "text"),
+        field("description", "Description", p.description, false, "text"),
+        field("startDate", "Start date", p.startDate, false, "date"),
+        field("endDate", "End date", p.endDate, false, "date"),
         field("tasks", "Tasks", p.tasks, false),
         field("milestones", "Milestones", p.milestones, false),
       ];
@@ -108,12 +128,20 @@ export function describeAction(action: AIActionResult, schedule: Schedule): Acti
         problem: optionalPlan ? null : describeTargetProblem(match, "plan"),
       };
       summary = `Add the task "${p.title}"`;
+      // p.day/startTime/endTime are never actually absent by the time they
+      // get here — lib/ai.ts's parser backfills a placeholder (day:"monday",
+      // 9:00-10:00) so the value always type-checks. _unspecified is the
+      // parser's separate record of which of those were real vs. backfilled;
+      // treating an unspecified one as missing here is what lets a genuinely
+      // guessed time actually block confirm and get asked about, instead of
+      // silently passing through as if the model had said 9am Monday.
+      const unspecified = new Set(p._unspecified ?? []);
       fields = [
-        field("title", "Task name", p.title, true),
-        field("day", "Day", p.days?.length ? p.days.join(", ") : p.day, true),
-        field("startTime", "Start time", p.startTime, true),
-        field("endTime", "End time", p.endTime, true),
-        field("taskType", "Type", p.taskType, false),
+        field("title", "Task name", p.title, true, "text"),
+        field("day", "Day", unspecified.has("day") ? null : (p.days?.length ? p.days.join(", ") : p.day), true, "day"),
+        field("startTime", "Start time", unspecified.has("startTime") ? null : p.startTime, true, "time"),
+        field("endTime", "End time", unspecified.has("endTime") ? null : p.endTime, true, "time"),
+        field("taskType", "Type", p.taskType, false, "enum", VALID_TASK_TYPES),
         field("subtasks", "Steps", p.subtasks, false),
       ];
       break;
@@ -140,9 +168,9 @@ export function describeAction(action: AIActionResult, schedule: Schedule): Acti
       target = { kind: "plan", match, problem: describeTargetProblem(match, "plan") };
       summary = `Add the tracker "${p.title}"`;
       fields = [
-        field("title", "Tracker name", p.title, true),
-        field("goalDirection", "Direction", p.goalDirection, true),
-        field("unit", "Unit", p.unit, false),
+        field("title", "Tracker name", p.title, true, "text"),
+        field("goalDirection", "Direction", p.goalDirection, true, "enum", VALID_GOAL_DIRECTIONS),
+        field("unit", "Unit", p.unit, false, "text"),
         field("goalValue", "Goal", p.goalValue, false),
       ];
       break;
@@ -157,10 +185,13 @@ export function describeAction(action: AIActionResult, schedule: Schedule): Acti
           ? `Checklist · ${p.steps?.length ?? 0} steps`
           : `${p.trackingType}${p.target ? ` · target ${p.target}${p.unit ? ` ${p.unit}` : ""}` : ""}`
         : "Simple check-off";
+      // See the add_task case above — same "backfilled vs. genuinely
+      // supplied" distinction, here for a ritual's time/repeatDays.
+      const ritualUnspecified = new Set(p._unspecified ?? []);
       fields = [
-        field("title", "Routine name", p.title, true),
-        field("time", "Time", p.time, true),
-        field("repeatDays", "Days", p.repeatDays, true),
+        field("title", "Routine name", p.title, true, "text"),
+        field("time", "Time", ritualUnspecified.has("time") ? null : p.time, true, "time"),
+        field("repeatDays", "Days", ritualUnspecified.has("repeatDays") ? null : p.repeatDays, true, "days"),
         field("trackingType", "Tracking", tracking, false),
         field("steps", "Steps", p.steps?.length ? p.steps : null, false),
         field("duration", "Duration", p.duration ? `${p.duration} min` : null, false),

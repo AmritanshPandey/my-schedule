@@ -1121,8 +1121,13 @@ export function WeekGrid({
                       key={`${layout.kind}-${layout.task.id}-${layout.slotIndex}`}
                       data-task-block
                       data-glass={isCurrent ? "" : undefined}
-                      className={`absolute ${isCurrent ? "rounded-[10px] shadow-now" : ""} ${
-                        isOverdue ? "rounded-[10px] ring-1 ring-amber-400/70 dark:ring-amber-500/50" : ""
+                      // rounded-[8px] here, not [10px]: this ring/glow wraps
+                      // TaskBlockCard's own grid rendering, whose corners are
+                      // gridRadius's 8px (components/TaskBlockCard.tsx) — a
+                      // mismatched outer radius left a visible gap between
+                      // the status highlight and the card it's meant to trace.
+                      className={`absolute ${isCurrent ? "rounded-[8px] shadow-now" : ""} ${
+                        isOverdue ? "rounded-[8px] ring-1 ring-amber-400/70 dark:ring-amber-500/50" : ""
                       } ${isBeingMoved ? "opacity-30" : ""} ${canDragToMove && modifierHeld ? "cursor-grab" : ""}`}
                       style={{
                         top: layout.top + TASK_VERTICAL_INSET,

@@ -1,9 +1,12 @@
 "use client";
 
+import { useState } from "react";
 import { m } from "framer-motion";
 import { IconCheck, IconX } from "@tabler/icons-react";
 import type { AIProposal } from "@/lib/aiProposal";
 import Button from "@/components/ui/Button";
+import TimeInput from "@/components/ui/TimeInput";
+import { DAYS, DAY_LABELS, type DayKey } from "@/lib/scheduleConstants";
 
 interface ProposalPreviewCardProps {
   proposal: AIProposal;
@@ -19,6 +22,39 @@ interface ProposalPreviewCardProps {
  * can't be replayed.
  */
 export function ProposalPreviewCard({ proposal, onAccept, onReject }: ProposalPreviewCardProps) {
+  // A day/startTime/endTime the model genuinely left unsaid (as opposed to
+  // present-but-wrong) — see lib/ai.ts's parseAITaskFields and
+  // lib/aiProposal.ts's buildCreateTaskProposal for where this is set.
+  // Answered here rather than by re-typing into chat: the same "ask instead
+  // of silently keeping a fake 9am Monday" fix AIReviewSheet.tsx has for
+  // every other action type, for the one type (add_task) that skips that
+  // sheet entirely via its own reviewed-proposal path.
+  const [day, setDay] = useState<DayKey | null>(null);
+  const [startTime, setStartTime] = useState("");
+  const [endTime, setEndTime] = useState("");
+  const unspecified = new Set(proposal.data._unspecified ?? []);
+  const needsDay = unspecified.has("day");
+  const needsStart = unspecified.has("startTime");
+  const needsEnd = unspecified.has("endTime");
+  const ready = (!needsDay || day) && (!needsStart || startTime) && (!needsEnd || endTime);
+
+  function handleAccept() {
+    if (unspecified.size === 0) {
+      onAccept(proposal);
+      return;
+    }
+    onAccept({
+      ...proposal,
+      data: {
+        ...proposal.data,
+        ...(needsDay && day ? { days: [day] } : {}),
+        ...(needsStart && startTime ? { startTime } : {}),
+        ...(needsEnd && endTime ? { endTime } : {}),
+        _unspecified: undefined,
+      },
+    });
+  }
+
   if (proposal.status !== "pending") {
     const resolved = proposal.status === "accepted"
       ? { icon: IconCheck, label: "Added", tone: "text-emerald-600 dark:text-emerald-400" }
@@ -63,11 +99,43 @@ export function ProposalPreviewCard({ proposal, onAccept, onReject }: ProposalPr
         ))}
       </div>
 
+      {unspecified.size > 0 && (
+        <div className="mb-3 flex flex-col gap-2 rounded-xl border border-rose-200 bg-rose-50/50 p-2.5 dark:border-rose-500/20 dark:bg-rose-500/[0.06]">
+          <span className="text-[11px] font-semibold text-rose-600 dark:text-rose-400">
+            No real day or time was given — needs an answer
+          </span>
+          {needsDay && (
+            <div className="flex flex-wrap gap-1.5">
+              {DAYS.map((d) => (
+                <button
+                  key={d}
+                  type="button"
+                  onClick={() => setDay(d)}
+                  className={`rounded-full border px-2.5 py-1 text-[11px] font-semibold transition-colors ${
+                    day === d
+                      ? "border-neutral-900 bg-neutral-900 text-white dark:border-white dark:bg-white dark:text-neutral-900"
+                      : "border-neutral-200 bg-white text-neutral-600 hover:border-neutral-300 dark:border-white/10 dark:bg-neutral-900 dark:text-neutral-300 dark:hover:border-white/20"
+                  }`}
+                >
+                  {DAY_LABELS[d]}
+                </button>
+              ))}
+            </div>
+          )}
+          {(needsStart || needsEnd) && (
+            <div className="flex gap-2">
+              {needsStart && <TimeInput value={startTime} onChange={setStartTime} ariaLabel="Start time" className="flex-1" />}
+              {needsEnd && <TimeInput value={endTime} onChange={setEndTime} ariaLabel="End time" className="flex-1" />}
+            </div>
+          )}
+        </div>
+      )}
+
       <div className="flex gap-2">
         <Button size="sm" variant="dangerSecondary" onClick={() => onReject(proposal)}>
           Reject
         </Button>
-        <Button size="sm" variant="cta" fullWidth onClick={() => onAccept(proposal)}>
+        <Button size="sm" variant="cta" fullWidth disabled={!ready} onClick={handleAccept}>
           Accept
         </Button>
       </div>

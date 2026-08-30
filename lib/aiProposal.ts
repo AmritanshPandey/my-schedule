@@ -47,6 +47,13 @@ export interface CreateTaskProposalData {
   planId?: string;
   /** Display only — never re-resolved or used for execution. */
   planTitleAtProposalTime?: string;
+  /** Carried over from AIActionResult's add_task payload (lib/ai.ts) — which
+   *  of day/startTime/endTime the model genuinely left unsaid, vs. the safe
+   *  placeholder parseAITaskFields backfilled so this always type-checks.
+   *  ProposalPreviewCard.tsx reads this to ask instead of silently keeping
+   *  a fake 9am-Monday default; execution (lib/proposalMutations.ts) doesn't
+   *  need it — Accept is disabled until this is empty. */
+  _unspecified?: ("day" | "startTime" | "endTime")[];
 }
 
 export interface AIProposal {
@@ -92,10 +99,21 @@ export function buildCreateTaskProposal(
   const plan = planMatch.status === "resolved" ? planMatch.value : undefined;
   const subtasks = payload.subtasks ?? [];
 
+  // A genuinely-unspecified day/time still has a placeholder value at this
+  // point (parseAITaskFields backfills one so the payload always type-
+  // checks) — showing it here as if it were real would misrepresent what
+  // the model actually said. ProposalPreviewCard.tsx's own "needs an answer"
+  // editor is where this actually gets resolved.
+  const whenUnspecified = payload._unspecified?.includes("day") || payload._unspecified?.includes("startTime") || payload._unspecified?.includes("endTime");
   const changes: ProposalChange[] = [
     { label: "Title", value: payload.title },
     { label: "Type", value: payload.taskType === "session" ? "Session" : payload.taskType === "commitment" ? "Commitment" : "Task" },
-    { label: "When", value: `${formatDays(days)} · ${formatDisplayTime(payload.startTime)}–${formatDisplayTime(payload.endTime)}` },
+    {
+      label: "When",
+      value: whenUnspecified
+        ? "Needs a day & time"
+        : `${formatDays(days)} · ${formatDisplayTime(payload.startTime)}–${formatDisplayTime(payload.endTime)}`,
+    },
   ];
   if (payload.planTitle) {
     const problem = describeTargetProblem(planMatch, "plan") ?? "No matching plan.";
@@ -122,6 +140,7 @@ export function buildCreateTaskProposal(
       subtasks,
       planId: plan?.id,
       planTitleAtProposalTime: plan?.title,
+      _unspecified: payload._unspecified,
     },
     createdAt: new Date().toISOString(),
     source: "ai_chat",

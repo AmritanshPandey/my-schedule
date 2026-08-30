@@ -3952,7 +3952,7 @@ export default function ScheduleApp() {
                                     minutesToDisplayTime(dragMove.previewStartMin),
                                     minutesToDisplayTime(dragMove.previewStartMin + dragMove.durationMin),
                                   ),
-                                  "h-full rounded-[8px] px-2 py-1.5 w-full min-w-0 overflow-hidden border border-neutral-300 dark:border-white/20",
+                                  "h-full rounded-[10px] px-2 py-1.5 w-full min-w-0 overflow-hidden border border-neutral-300 dark:border-white/20",
                                   cardSize,
                                   false,
                                   false,

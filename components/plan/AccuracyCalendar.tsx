@@ -259,7 +259,7 @@ export default function AccuracyCalendar({
               {calDays.map(({ day, dateISO, status }) => (
                 <div
                   key={dateISO}
-                  className={`aspect-square rounded-[8px] flex items-center justify-center text-[13px] font-semibold select-none ${cellStyles(status)}`}
+                  className={`aspect-square rounded-[10px] flex items-center justify-center text-[13px] font-semibold select-none ${cellStyles(status)}`}
                 >
                   {day}
                 </div>

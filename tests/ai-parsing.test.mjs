@@ -92,6 +92,38 @@ test("add_task rejects a payload with no title", () => {
   assert.equal(action, null);
 });
 
+// _unspecified is what lets AIReviewSheet.tsx / lib/ai/checklist.ts tell
+// "the model genuinely didn't say" from "present" — day/startTime/endTime
+// still get a safe placeholder value below (09:00-10:00 Monday) so the
+// payload always type-checks, but the review sheet needs to know that
+// placeholder is fake so it can ask instead of silently keeping it.
+test("add_task marks day/startTime/endTime as _unspecified when genuinely absent", () => {
+  const action = parseAIAction(fenced({ type: "add_task", payload: { title: "Dentist" } }));
+  assert.equal(action.type, "add_task");
+  assert.deepEqual(new Set(action.payload._unspecified), new Set(["day", "startTime", "endTime"]));
+  // The placeholder values are still there for anything that renders before
+  // the fields get filled in.
+  assert.equal(action.payload.day, "monday");
+  assert.equal(action.payload.startTime, "09:00");
+  assert.equal(action.payload.endTime, "10:00");
+});
+
+test("add_task does not mark a field _unspecified once it's genuinely present", () => {
+  const action = parseAIAction(fenced({
+    type: "add_task",
+    payload: { title: "Dentist", day: "thursday", startTime: "14:00", endTime: "15:00" },
+  }));
+  assert.equal(action.payload._unspecified, undefined);
+});
+
+test("add_task's multi-day \"days\" counts as the day being specified", () => {
+  const action = parseAIAction(fenced({
+    type: "add_task",
+    payload: { title: "Commute", days: ["monday", "wednesday"], startTime: "08:00", endTime: "08:45" },
+  }));
+  assert.ok(!action.payload._unspecified?.includes("day"));
+});
+
 test("add_tracker defaults an invalid goalDirection to \"increase_good\"", () => {
   const action = parseAIAction(fenced({
     type: "add_tracker",
@@ -169,6 +201,17 @@ test("create_ritual is unaffected by the unified-prompt refactor", () => {
   }));
   assert.equal(ritual.type, "create_ritual");
   assert.equal(ritual.payload.title, "Morning pages");
+  assert.equal(ritual.payload._unspecified, undefined);
+});
+
+test("create_ritual marks time/repeatDays as _unspecified when genuinely absent", () => {
+  const action = parseAIAction(fenced({ type: "create_ritual", payload: { title: "Stretch" } }));
+  assert.equal(action.type, "create_ritual");
+  assert.deepEqual(new Set(action.payload._unspecified), new Set(["time", "repeatDays"]));
+  // Placeholder values (8am, every day) are still there for anything that
+  // renders before the fields get filled in.
+  assert.equal(action.payload.time, "08:00");
+  assert.deepEqual(action.payload.repeatDays.length, 7);
 });
 
 test("create_ritual accepts a quantity routine with target and unit", () => {
