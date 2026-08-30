@@ -41,7 +41,7 @@ import {
 import { localISODate } from "@/lib/dateUtils";
 import { schedulePayloadBytes, validateSchedule } from "@/lib/scheduleSchema";
 import { pushIsSafe, type SnapshotDoc } from "@/lib/syncRevision";
-import { mergeSchedules } from "@/lib/mergeSchedule";
+import { mergeSchedules, PLACEHOLDER_STAMP } from "@/lib/mergeSchedule";
 import { NS } from "@/lib/stampSchedule";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
@@ -525,13 +525,14 @@ function capPayloadSize(schedule: Schedule): {
  * A body blanked to fit the document limit is a transport artefact, not an
  * edit — but it rides along with the note's real change stamp, so on the next
  * device it would win the merge and erase a body that is still perfectly
- * intact here. Backdate those notes to the epoch so they always LOSE to any
- * real copy. A device that has never seen the note still receives it (title
- * and all), exactly as before; a device that already has the body keeps it.
+ * intact here. Marking those notes with PLACEHOLDER_STAMP makes the merge
+ * always prefer a real copy — including an unstamped one, which an ordinary
+ * old stamp would not. A device that has never seen the note still receives it
+ * (title and all), exactly as before; one that already has the body keeps it.
  */
 function demoteBlankedNotes(payload: Schedule, blankedIds: string[]): Schedule {
   const updated = { ...(payload.syncMeta?.updated ?? {}) };
-  for (const id of blankedIds) updated[`${NS.note}|${id}`] = 0;
+  for (const id of blankedIds) updated[`${NS.note}|${id}`] = PLACEHOLDER_STAMP;
   return { ...payload, syncMeta: { ...payload.syncMeta, updated } };
 }
 

@@ -29,7 +29,8 @@ import { CategoryRegistry } from "@/lib/taskCategories";
 import { isEditableTarget } from "@/lib/keyboardEvents";
 import { pushHistory, popHistory, HISTORY_LIMIT } from "@/lib/scheduleHistory";
 import { validateSchedule } from "@/lib/scheduleSchema";
-import { mergeSchedules } from "@/lib/mergeSchedule";
+import { mergeSchedules, resolveLocalWrite } from "@/lib/mergeSchedule";
+import { onLocalWrite, publishLocalWrite } from "@/lib/tabSync";
 import {
   entityMap,
   normalizeSyncMeta,
@@ -551,25 +552,102 @@ function openDB(): Promise<IDBDatabase> {
   });
 }
 
+/**
+ * Per-tab memory of the record revision this tab last read or wrote.
+ *
+ * Module scope is exactly the semantics wanted: two tabs of one browser share
+ * the IndexedDB record but each gets its own copy of this map, so a mismatch
+ * against the stored revision means *the other tab wrote*.
+ */
+const _seenLocalRev = new Map<string, number>();
+
+/** Companion record holding a monotonic revision for `key`. */
+function localRevKey(key: string): string {
+  return `${key}:localRev`;
+}
+
 function readDB(db: IDBDatabase, key: string): Promise<Schedule | null> {
   return new Promise((resolve, reject) => {
     const tx = db.transaction(STORE, "readonly");
-    const req = tx.objectStore(STORE).get(key);
+    const store = tx.objectStore(STORE);
+    const req = store.get(key);
+    // Seed the revision this tab is now up to date with, in the same
+    // transaction, so the first write after boot doesn't look like a conflict.
+    const revReq = store.get(localRevKey(key));
+    revReq.onsuccess = () => {
+      _seenLocalRev.set(key, typeof revReq.result === "number" ? revReq.result : 0);
+    };
     req.onsuccess = () => resolve(req.result ?? null);
     req.onerror = () => reject(req.error);
   });
 }
 
-function writeDB(db: IDBDatabase, key: string, data: Schedule): Promise<void> {
+/**
+ * Persist the schedule, merging first if another tab wrote since this one last
+ * touched the record.
+ *
+ * This is the local analogue of the cloud compare-and-swap, and it is where
+ * two-tab correctness actually lives: a plain `put()` here was erasing the
+ * other tab's work on disk, with no network involved. The read, the merge and
+ * the write all happen inside ONE IndexedDB transaction, which the engine
+ * serializes, so no lock is needed.
+ *
+ * A whole-schedule replacement (clear data, clear progress, restore backup)
+ * survives this merge because those paths stamp tombstones through
+ * `stampSchedule` first, and a tombstone newer than the other side's edit wins.
+ */
+function writeDB(db: IDBDatabase, key: string, data: Schedule, uid?: string | null): Promise<void> {
   const validation = validateSchedule(data);
   if (!validation.success) {
     const issue = validation.error.issues[0];
     return Promise.reject(new Error(`Schedule validation failed at ${issue?.path.join(".") || "root"}: ${issue?.message || "invalid data"}`));
   }
+  const mine = validation.data;
+
   return new Promise((resolve, reject) => {
     const tx = db.transaction(STORE, "readwrite");
-    tx.objectStore(STORE).put(data, key);
-    tx.oncomplete = () => resolve();
+    const store = tx.objectStore(STORE);
+    let nextRev = 1;
+
+    const commit = (payload: Schedule, storedRev: number) => {
+      nextRev = storedRev + 1;
+      store.put(payload, key);
+      store.put(nextRev, localRevKey(key));
+    };
+
+    const revReq = store.get(localRevKey(key));
+    revReq.onsuccess = () => {
+      const storedRev = typeof revReq.result === "number" ? revReq.result : 0;
+      const expected = _seenLocalRev.get(key);
+      // `undefined` means this tab has never read the record; treat that as a
+      // conflict too, since writing blind is the very thing being fixed.
+      if (expected !== undefined && storedRev === expected) {
+        commit(mine, storedRev);
+        return;
+      }
+      const currentReq = store.get(key);
+      currentReq.onsuccess = () => {
+        commit(
+          resolveLocalWrite({
+            mine,
+            stored: (currentReq.result as Schedule | null) ?? null,
+            storedRev,
+            expectedRev: expected,
+            otherLastUpdated: getLocalLastUpdated(uid),
+            now: Date.now(),
+          }),
+          storedRev,
+        );
+      };
+    };
+
+    tx.oncomplete = () => {
+      _seenLocalRev.set(key, nextRev);
+      // Announce after the transaction commits, so a tab that re-reads on the
+      // message is guaranteed to see this write.
+      publishLocalWrite({ recordKey: key, rev: nextRev });
+      resolve();
+    };
     tx.onerror = () => reject(tx.error);
   });
 }
@@ -1373,7 +1451,7 @@ export function useScheduleDB() {
           if (migrated) {
             const now = Date.now();
             setScheduleState(migrated);
-            writeDB(db, activeStorageKey, migrated).catch(logWriteError);
+            writeDB(db, activeStorageKey, migrated, activeUid).catch(logWriteError);
             writeLocalLastUpdated(now, activeUid); // keep sync clock in step with the migrated record
             deleteDBKey(db, LEGACY_RECORD_KEY).catch(() => {}); // adopted → drop the legacy copy
           } else {
@@ -1416,7 +1494,7 @@ export function useScheduleDB() {
               skipNextWriteRef.current = true; // persisted + synced manually below
               setScheduleState(migrated);
               setIsFirstLaunch(false);
-              await writeDB(db, activeStorageKey, migrated).catch(() => {});
+              await writeDB(db, activeStorageKey, migrated, activeUid).catch(() => {});
               writeLocalLastUpdated(now, activeUid);
               queueSync(migrated); // back the adopted data up to this user's cloud
               await deleteDBKey(db, GUEST_RECORD_KEY).catch(() => {}); // moved into the account
@@ -1483,7 +1561,7 @@ export function useScheduleDB() {
           // locally, but suppress the write effect's echo push — otherwise
           // every merge costs a second, entirely redundant revision.
           skipNextWriteRef.current = true;
-          if (dbRef.current) writeDB(dbRef.current, activeStorageKey, merged).catch(logWriteError);
+          if (dbRef.current) writeDB(dbRef.current, activeStorageKey, merged, storageUid).catch(logWriteError);
         }
         // Otherwise the debounced write effect persists this and queues the
         // push: the merge may contain local entities the cloud has never seen,
@@ -1498,6 +1576,59 @@ export function useScheduleDB() {
     window.addEventListener("cloud-sync-merge", handleCloudMerge);
     return () => window.removeEventListener("cloud-sync-merge", handleCloudMerge);
   }, [storageKey, storageUid]);
+
+  // ── Other-tab listener ────────────────────────────────────────────────────
+  // Two tabs of one browser share the IndexedDB record but not a line of state.
+  // `writeDB`'s compare-and-merge already stops them corrupting each other on
+  // disk; this is what stops the idle tab *showing* data that is already stale,
+  // and it is why the shared planr_baseRev/planr_lastUpdated keys become
+  // truthful again — both tabs converge, so "this browser" really is one
+  // replica, which is what the cloud compare-and-swap always assumed.
+  useEffect(() => {
+    if (!storageKey || !ready) return;
+    const activeStorageKey = storageKey;
+
+    async function absorbLocalRecord() {
+      const db = dbRef.current;
+      if (!db || loadedKeyRef.current !== activeStorageKey) return;
+      // readDB re-seeds this tab's revision marker, so the next local write
+      // won't see a phantom conflict.
+      const stored = await readDB(db, activeStorageKey).catch(() => null);
+      if (!stored) return;
+      const migrated = safeMigrate(stored);
+      if (!migrated) return; // corrupt record — keep what we have
+
+      const otherLastUpdated = getLocalLastUpdated(storageUid);
+      setScheduleState((prev) => {
+        const merged = mergeSchedules(
+          { schedule: prev, lastUpdated: otherLastUpdated },
+          { schedule: migrated, lastUpdated: otherLastUpdated },
+        );
+        if (schedulesEqual(prev, merged)) return prev;
+        // Suppress the echo write ONLY when the record on disk already contains
+        // everything in the merge. If this tab had an edit still inside its own
+        // 500ms debounce, the merge is a superset of the record and skipping
+        // here would strand that edit in memory for good — so let the write
+        // effect run, and let writeDB's compare-and-merge fold it in.
+        if (schedulesEqual(migrated, merged)) skipNextWriteRef.current = true;
+        return merged;
+      });
+    }
+
+    const unsubscribe = onLocalWrite((msg) => {
+      if (msg.recordKey !== activeStorageKey) return;
+      void absorbLocalRecord();
+    });
+    // Catch-up for anything a throttled background tab never received.
+    const onVisible = () => {
+      if (document.visibilityState === "visible") void absorbLocalRecord();
+    };
+    document.addEventListener("visibilitychange", onVisible);
+    return () => {
+      unsubscribe();
+      document.removeEventListener("visibilitychange", onVisible);
+    };
+  }, [storageKey, storageUid, ready]);
 
   // ── Debounced IndexedDB write + cloud sync trigger ────────────────────────
   useEffect(() => {
@@ -1519,7 +1650,7 @@ export function useScheduleDB() {
     if (storageUid) noteLatestSchedule(snap);
     writeTimer.current = setTimeout(() => {
       const now = Date.now();
-      writeDB(db, storageKey, snap)
+      writeDB(db, storageKey, snap, storageUid)
         .then(() => {
           writeLocalLastUpdated(now, storageUid); // update local timestamp for cloud comparison
           queueSync(snap);            // queue cloud backup (no-op for guests)
@@ -1645,7 +1776,7 @@ export function useScheduleDB() {
     if (dbRef.current && storageKey) {
       // Surface a failed wipe (don't pretend it succeeded). Cloud deletion is
       // paired by the caller (SettingsView → deleteCloudData).
-      await writeDB(dbRef.current, storageKey, empty).catch((err) => logError("indexeddb:clear", err));
+      await writeDB(dbRef.current, storageKey, empty, storageUid).catch((err) => logError("indexeddb:clear", err));
     }
   }
 
@@ -1682,7 +1813,7 @@ export function useScheduleDB() {
     scheduleRef.current = stamped;
     setScheduleState(stamped);
     if (dbRef.current && storageKey) {
-      await writeDB(dbRef.current, storageKey, stamped).catch((err) => logError("indexeddb:clear-progress", err));
+      await writeDB(dbRef.current, storageKey, stamped, storageUid).catch((err) => logError("indexeddb:clear-progress", err));
     }
   }
 

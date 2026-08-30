@@ -580,3 +580,49 @@ test("a blanked note still reaches a device that has never seen it", () => {
   const merged = mergeSchedules(side(sched(), T0), side(blanked, T0 + MIN));
   assert.equal(merged.notes.length, 1, "the note itself must still sync, body or not");
 });
+
+// ── A real stamp outranks the absence of one ────────────────────────────────
+// The comparator used to pit one side's per-entity stamp against the OTHER
+// side's document clock, so an untouched copy sitting in a newer document could
+// overwrite a deliberate edit. Two tabs editing different tasks lost whichever
+// edit landed first. syncMeta travels with the data and is itself merged, so a
+// missing stamp means "I have not seen that edit", never "I made a rival one".
+
+test("a stamped edit beats an unstamped copy in a newer document", () => {
+  const key = taskKey("monday", "t1");
+  const edited = withDay("monday", [task("t1", { title: "edited" })], {
+    syncMeta: { updated: { [key]: sec(T0) } },
+  });
+  const untouched = withDay("monday", [task("t1", { title: "stale" })]);
+  // The untouched side's document is an hour newer, and still loses.
+  const merged = mergeSchedules(side(edited, T0), side(untouched, T0 + 60 * MIN));
+  assert.equal(merged.activities.monday[0].title, "edited");
+  // Same answer whichever way round the arguments go.
+  assert.equal(
+    mergeSchedules(side(untouched, T0 + 60 * MIN), side(edited, T0)).activities.monday[0].title,
+    "edited",
+  );
+});
+
+test("two stamps still compare against each other, newest wins", () => {
+  const key = taskKey("monday", "t1");
+  const older = withDay("monday", [task("t1", { title: "older" })], {
+    syncMeta: { updated: { [key]: sec(T0) } },
+  });
+  const newer = withDay("monday", [task("t1", { title: "newer" })], {
+    syncMeta: { updated: { [key]: sec(T0 + MIN) } },
+  });
+  assert.equal(mergeSchedules(side(older, T0 + 60 * MIN), side(newer, T0)).activities.monday[0].title, "newer");
+});
+
+test("a transport placeholder loses even to an unstamped copy", () => {
+  // PLACEHOLDER_STAMP has to mean "never prefer me", which is a stronger claim
+  // than "I am old" now that any stamp outranks no stamp.
+  const real = sched({ notes: [note("n1", { body: "the whole thing" })] });
+  const placeholder = sched({
+    notes: [note("n1", { body: "" })],
+    syncMeta: { updated: { "n|n1": 0 } },
+  });
+  assert.equal(mergeSchedules(side(real, T0), side(placeholder, T0 + 60 * MIN)).notes[0].body, "the whole thing");
+  assert.equal(mergeSchedules(side(placeholder, T0 + 60 * MIN), side(real, T0)).notes[0].body, "the whole thing");
+});

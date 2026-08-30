@@ -63,6 +63,53 @@ function editedAt(t: Times, key: string): number {
   return t.updated[key] ?? t.fallback;
 }
 
+/**
+ * Stamp meaning "this copy is a transport artefact, prefer any other".
+ *
+ * cloudSync blanks large note bodies to fit Firestore's document limit and
+ * marks them with this (see demoteBlankedNotes). It needs to lose to a real
+ * copy, but "no stamp at all" is not the same statement — an unstamped entity
+ * is merely unknown, and now legitimately loses to a stamped one.
+ */
+export const PLACEHOLDER_STAMP = 0;
+
+/**
+ * Choose between two copies of one entity.
+ *
+ * A real per-entity stamp always beats the *absence* of one, and only falls
+ * back to the document clock when neither side knows anything. Comparing a
+ * stamp against the other side's document clock — which is what this used to do
+ * — let an untouched copy in a newer document overwrite a deliberate edit: two
+ * tabs editing different tasks would keep losing whichever edit landed first.
+ *
+ * The asymmetry is sound because `syncMeta` travels with the data and is itself
+ * merged, so once an entity is stamped every replica that has seen that version
+ * carries the stamp. One side having no stamp therefore means it has not seen
+ * the edit, not that it made a competing one.
+ *
+ * Deterministic tiebreak: on an exact tie side "a" wins — and because pickBase
+ * already made the sides' roles content-derived rather than positional, both
+ * devices reach the same answer.
+ */
+function pickWinner<T>(
+  inA: T,
+  inB: T,
+  aStamp: number | undefined,
+  bStamp: number | undefined,
+  aFallback: number,
+  bFallback: number,
+): T {
+  // A placeholder loses to anything real, including an unstamped copy.
+  const aPlaceholder = aStamp === PLACEHOLDER_STAMP;
+  const bPlaceholder = bStamp === PLACEHOLDER_STAMP;
+  if (aPlaceholder !== bPlaceholder) return aPlaceholder ? inB : inA;
+
+  if (aStamp !== undefined && bStamp !== undefined) return bStamp > aStamp ? inB : inA;
+  if (aStamp !== undefined) return inA;
+  if (bStamp !== undefined) return inB;
+  return bFallback > aFallback ? inB : inA;
+}
+
 // -- Ordering ----------------------------------------------------------------
 // Both devices must compute the same array order or they will keep pushing
 // cosmetically different documents at each other. The base side supplies the
@@ -120,12 +167,7 @@ function mergeKeyed<T>(
     const inB = bMap.get(key);
 
     if (inA !== undefined && inB !== undefined) {
-      const aAt = editedAt(at, key);
-      const bAt = editedAt(bt, key);
-      // Deterministic tiebreak: on an exact tie side "a" wins — and because
-      // pickBase already made the sides' roles content-derived rather than
-      // positional, both devices reach the same answer.
-      const winner = bAt > aAt ? inB : inA;
+      const winner = pickWinner(inA, inB, at.updated[key], bt.updated[key], at.fallback, bt.fallback);
       const loser = winner === inA ? inB : inA;
       items.push(combine ? combine(winner, loser) : winner);
       survivors.add(key);
@@ -314,4 +356,39 @@ function mergeSyncMeta(at: Times, bt: Times, survivors: Set<string>): Schedule["
     ...(hasUpdated ? { updated } : {}),
     ...(hasDeleted ? { deleted } : {}),
   };
+}
+
+// -- Local record (two tabs of one browser) ----------------------------------
+
+/**
+ * What a tab should actually persist to its shared IndexedDB record.
+ *
+ * Two tabs share the record but not a line of state, so a plain `put()` erased
+ * whichever tab wrote second — on disk, offline, with no network involved. The
+ * revision comparison is the local analogue of the cloud compare-and-swap:
+ *
+ * - `expectedRev` is what THIS tab last read or wrote (per-tab module memory).
+ * - `storedRev` is what is on disk right now.
+ *
+ * Equal means nothing happened in between and this tab's tree is authoritative.
+ * Anything else — including `undefined`, meaning this tab has never read the
+ * record and would otherwise be writing blind — means another tab wrote, and
+ * the two are merged per entity instead.
+ */
+export function resolveLocalWrite(args: {
+  mine: Schedule;
+  stored: Schedule | null;
+  storedRev: number;
+  expectedRev: number | undefined;
+  /** The shared local clock, last set by whichever tab wrote the record. */
+  otherLastUpdated: number;
+  now: number;
+}): Schedule {
+  const { mine, stored, storedRev, expectedRev, otherLastUpdated, now } = args;
+  if (!stored) return mine;
+  if (expectedRev !== undefined && storedRev === expectedRev) return mine;
+  return mergeSchedules(
+    { schedule: mine, lastUpdated: now },
+    { schedule: stored, lastUpdated: otherLastUpdated },
+  );
 }
