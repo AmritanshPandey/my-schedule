@@ -241,3 +241,22 @@ export function currentMinutes(): number {
   const now = new Date();
   return now.getHours() * 60 + now.getMinutes();
 }
+
+/**
+ * Punctuate raw digits as a time is typed, so a colon never has to be typed.
+ *
+ * Minutes fill from the right, which is how people actually enter a time:
+ * "945" is quarter to ten, not hour ninety-four. TimeInput used to accept only
+ * `H` or `H:MM`, so typing "0945" committed nothing at all — the field simply
+ * refused an entirely ordinary keystroke sequence until you noticed the colon
+ * was missing.
+ *
+ * Fewer than three digits are returned untouched: "9" and "09" are both still
+ * being typed, and inserting a colon there would fight the typist.
+ */
+export function punctuateTimeDigits(digits: string): string {
+  const d = digits.replace(/\D/g, "").slice(0, 4);
+  if (d.length <= 2) return d;
+  if (d.length === 3) return `${d.slice(0, 1)}:${d.slice(1)}`;
+  return `${d.slice(0, 2)}:${d.slice(2)}`;
+}

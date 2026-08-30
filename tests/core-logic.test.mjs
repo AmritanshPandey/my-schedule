@@ -93,7 +93,7 @@ const { CategoryRegistry, categoryUsageCounts, canDeleteCategory } = await impor
 const { taskIdentity, categoriesById } = await import("../lib/taskIdentity.ts");
 const { calculateExecutionStreak } = await import("../lib/consistency/calculateExecutionStreak.ts");
 const { localISODate, addDaysToISO } = await import("../lib/dateUtils.ts");
-const { parseTimeToMinutes, toScheduleDayMinutes, displayToInputTime, inputToDisplayTime, formatDisplayTime } = await import("../lib/timeUtils.ts");
+const { parseTimeToMinutes, toScheduleDayMinutes, displayToInputTime, inputToDisplayTime, formatDisplayTime, punctuateTimeDigits } = await import("../lib/timeUtils.ts");
 const { DAYS } = await import("../lib/scheduleConstants.ts");
 const { toggleRitualCompletion } = await import("../lib/ritualCompletions.ts");
 const { pushHistory, popHistory, HISTORY_LIMIT } = await import("../lib/scheduleHistory.ts");
@@ -2759,4 +2759,38 @@ test("computeRoadmapStats overallPct rolls up linked-task progress, falling back
   const withLinks = computeRoadmapStats("p1", sched.activities, [linkedMilestone], plan);
   assert.equal(withLinks.overallPctFromLinkedTasks, true);
   assert.equal(withLinks.overallPct, 100);
+});
+
+// ── Typing a time without reaching for the colon ────────────────────────────
+// TimeInput accepted only `H` or `H:MM`, so the ordinary keystroke sequence
+// "0945" committed nothing at all — the field silently refused it until you
+// noticed the colon was missing.
+
+test("punctuateTimeDigits fills minutes from the right", () => {
+  // The case that was broken: four digits, no colon.
+  assert.equal(punctuateTimeDigits("0945"), "09:45");
+  assert.equal(punctuateTimeDigits("1230"), "12:30");
+  // Three digits is a single-digit hour — "945" is quarter to ten, not hour 94.
+  assert.equal(punctuateTimeDigits("945"), "9:45");
+  assert.equal(punctuateTimeDigits("700"), "7:00");
+});
+
+test("punctuateTimeDigits leaves a half-typed hour alone", () => {
+  // Inserting a colon at one or two digits would fight the typist mid-entry.
+  assert.equal(punctuateTimeDigits(""), "");
+  assert.equal(punctuateTimeDigits("9"), "9");
+  assert.equal(punctuateTimeDigits("09"), "09");
+  assert.equal(punctuateTimeDigits("12"), "12");
+});
+
+test("punctuateTimeDigits ignores everything that isn't a digit", () => {
+  // Covers a pasted "10:15 PM" as well as a re-typed colon.
+  assert.equal(punctuateTimeDigits("10:15"), "10:15");
+  assert.equal(punctuateTimeDigits("10:15 PM"), "10:15");
+  assert.equal(punctuateTimeDigits("9:45am"), "9:45");
+});
+
+test("punctuateTimeDigits stops at four digits", () => {
+  // A fifth keystroke must not silently reshuffle the time already entered.
+  assert.equal(punctuateTimeDigits("094512"), "09:45");
 });
