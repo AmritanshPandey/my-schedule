@@ -9,11 +9,12 @@
 // file unloadable under the node test runner. The type imports are erased, so
 // they can stay.
 import { DAYS } from "./scheduleConstants";
-import type { Task, Plan } from "./useScheduleDB";
+import type { Task, Plan, Milestone } from "./useScheduleDB";
 import type { DayKey } from "./useScheduleDB";
 import { isTaskCompleted, isTrackedTask } from "./taskCompletion";
 import { isTaskScheduledOn } from "./taskOccurrence";
 import { localISODate } from "./dateUtils";
+import { planEffectiveEndDate } from "./roadmapDates";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -84,6 +85,8 @@ export function calculateConsistency(
   plan: Plan,
   /** Schedule-wide tracking start — the window never reaches before it. */
   trackingStartISO?: string,
+  /** This plan's milestones, so the window can follow the roadmap's real end. */
+  milestones?: Milestone[],
 ): number {
   const completedDates = buildCompletionDateSet(planId, activities);
   if (completedDates.size === 0) return 0;
@@ -101,8 +104,13 @@ export function calculateConsistency(
     windowStart.setDate(today.getDate() - 29);
   }
 
-  if (plan.endDate) {
-    const planEnd = new Date(plan.endDate + "T00:00:00");
+  // The roadmap's end, not the typed one. A plan whose milestones run past its
+  // stored endDate is still running, and truncating the window there would
+  // score it as finished — reporting a consistency figure for a period the user
+  // is still in the middle of.
+  const effectiveEnd = planEffectiveEndDate(plan, milestones ?? []);
+  if (effectiveEnd) {
+    const planEnd = new Date(effectiveEnd + "T00:00:00");
     if (planEnd < today) windowEnd = planEnd;
   }
 
@@ -140,13 +148,21 @@ export function getPlanCardStats(
   todayKey: DayKey,
   /** Schedule-wide tracking start — analytics ignore anything before it. */
   trackingStartISO?: string,
+  /** Every milestone in the schedule; filtered to this plan's here. */
+  milestones?: Milestone[],
 ): PlanCardStats {
   const todayISO = localISODate(new Date());
   const todayTasks = (activities[todayKey] ?? []).filter(
     (t) => t.planId === plan.id && isTaskScheduledOn(t, todayISO, true) && isTrackedTask(t)
   );
   const dayState = resolvePlanDayState(todayTasks, plan.items.length);
-  const consistency = calculateConsistency(plan.id, activities, plan, trackingStartISO);
+  const consistency = calculateConsistency(
+    plan.id,
+    activities,
+    plan,
+    trackingStartISO,
+    milestones?.filter((m) => m.planId === plan.id),
+  );
   return { dayState, consistency };
 }
 

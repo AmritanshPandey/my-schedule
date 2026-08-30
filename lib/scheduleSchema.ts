@@ -39,6 +39,9 @@ const taskException = z.object({
   endTime: z.string().optional(),
   title: z.string().optional(),
   description: z.string().optional(),
+  // Additive per-date note; see TaskException.note in lib/useScheduleDB.ts for
+  // why it is not the same field as `description`.
+  note: z.string().optional(),
 }).passthrough();
 const recurrence = z.discriminatedUnion("type", [
   z.object({ type: z.literal("weekly"), interval: z.number().int().positive(), anchorISO: isoDate }).passthrough(),

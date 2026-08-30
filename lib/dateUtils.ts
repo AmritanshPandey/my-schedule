@@ -79,3 +79,15 @@ export function addDaysToISO(iso: string, days: number): string {
   d.setDate(d.getDate() + days);
   return localISODate(d);
 }
+
+/**
+ * Short, unambiguous label for the day a task occurrence belongs to — "Today",
+ * otherwise "Sun 30 Aug". Used to title a per-date note so it is obvious the
+ * note belongs to that date and not to the task in general.
+ */
+export function formatDayNoteLabel(dateISO: string, now: Date = new Date()): string {
+  if (dateISO === localISODate(now)) return "today";
+  const d = new Date(`${dateISO}T00:00:00`);
+  if (Number.isNaN(d.getTime())) return dateISO;
+  return d.toLocaleDateString(undefined, { weekday: "short", day: "numeric", month: "short" });
+}

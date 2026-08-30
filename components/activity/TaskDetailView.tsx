@@ -1,8 +1,8 @@
 "use client";
 
-import { useMemo } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { m } from "framer-motion";
-import { IconArrowBackUp, IconBan, IconCheck, IconClockHour4, IconEdit, IconListCheck, IconX } from "@tabler/icons-react";
+import { IconArrowBackUp, IconBan, IconCheck, IconClockHour4, IconEdit, IconListCheck, IconNotes, IconX } from "@tabler/icons-react";
 import type { ScheduleEntry } from "@/components/ScheduleItem";
 import TaskChecklistItem from "@/components/activity/TaskChecklistItem";
 import TaskStatusCheckbox from "@/components/task/TaskStatusCheckbox";
@@ -31,6 +31,12 @@ export interface TaskDetailViewProps {
   onSkip?: (taskId: string) => void;
   skipped?: boolean;
   canSkip?: boolean;
+  /** This date's note — additive, shown alongside the task's own description. */
+  dayNote?: string;
+  /** Persist (or clear, with "") the note for this date. */
+  onSaveDayNote?: (taskId: string, note: string) => void;
+  /** Human label for the date this occurrence belongs to, e.g. "Sun 30 Aug". */
+  dayLabel?: string;
   onEdit?: () => void;
   presentation?: "sheet" | "page";
 }
@@ -48,10 +54,27 @@ export default function TaskDetailView({
   onSkip,
   skipped = false,
   canSkip = false,
+  dayNote,
+  onSaveDayNote,
+  dayLabel,
   onEdit,
   presentation = "sheet",
 }: TaskDetailViewProps) {
   const isSession = task?.taskType === "session";
+
+  // `null` means "not editing"; "" is a legitimate draft (clearing the note).
+  const [noteDraft, setNoteDraft] = useState<string | null>(null);
+  const taskId = task?.id;
+  // Opening a different task, or a different date's occurrence, must not carry
+  // the previous one's half-typed note across.
+  useEffect(() => { setNoteDraft(null); }, [taskId, dayLabel]);
+
+  function commitNote() {
+    if (noteDraft === null || !taskId || !onSaveDayNote) return;
+    const next = noteDraft.trim();
+    setNoteDraft(null);
+    if (next !== (dayNote ?? "")) onSaveDayNote(taskId, next);
+  }
 
   const items: ScheduleEntry[] = useMemo(() => {
     if (!task) return [];
@@ -195,11 +218,69 @@ export default function TaskDetailView({
     </>
   );
 
+  /**
+   * A note about THIS date, sitting under the task's own description rather
+   * than replacing it. The edit sheet's "This day only" scope already writes a
+   * per-date `description`, but that is an override — set it and the standing
+   * description vanishes for the day, which is the wrong shape for "felt tired,
+   * cut it short" under a permanent "Run 5k".
+   *
+   * Follows the view's read-only rule: a past day shows its note but doesn't
+   * offer to change it, exactly like every other action here.
+   */
+  const dayNoteBlock =
+    !onSaveDayNote || (readOnly && !dayNote) ? null : (
+      <div className="rounded-xl bg-neutral-50 px-3.5 py-3 dark:bg-white/[0.04]">
+        <div className="flex items-center gap-1.5 text-[11px] font-bold uppercase tracking-[0.07em] text-neutral-500 dark:text-neutral-400">
+          <IconNotes size={12} strokeWidth={2.2} className="shrink-0" />
+          {dayLabel ? `Note for ${dayLabel}` : "Note for this day"}
+        </div>
+
+        {noteDraft !== null ? (
+          <textarea
+            autoFocus
+            value={noteDraft}
+            onChange={(e) => setNoteDraft(e.target.value)}
+            onBlur={commitNote}
+            onKeyDown={(e) => {
+              if (e.key === "Escape") { e.preventDefault(); setNoteDraft(null); }
+              // Cmd/Ctrl+Enter commits without hunting for somewhere to click.
+              if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) { e.preventDefault(); e.currentTarget.blur(); }
+            }}
+            rows={3}
+            placeholder="What happened today?"
+            aria-label={dayLabel ? `Note for ${dayLabel}` : "Note for this day"}
+            /* 16px on mobile keeps iOS from zooming the whole page on focus. */
+            className="mt-2 w-full resize-none rounded-lg border border-neutral-200 bg-white px-2.5 py-2 text-[16px] leading-relaxed text-neutral-900 outline-none placeholder:text-neutral-400 focus:border-emerald-500/70 dark:border-white/[0.10] dark:bg-neutral-900 dark:text-white lg:text-[14px]"
+          />
+        ) : dayNote ? (
+          <button
+            type="button"
+            disabled={readOnly}
+            onClick={() => setNoteDraft(dayNote)}
+            className="mt-1.5 block w-full whitespace-pre-wrap text-left text-[14px] leading-relaxed text-neutral-700 disabled:cursor-default dark:text-neutral-200"
+          >
+            {dayNote}
+          </button>
+        ) : (
+          <button
+            type="button"
+            onClick={() => setNoteDraft("")}
+            className="mt-1.5 text-left text-[14px] text-neutral-400 transition-colors hover:text-neutral-600 dark:text-neutral-500 dark:hover:text-neutral-300"
+          >
+            Add a note for this day
+          </button>
+        )}
+      </div>
+    );
+
   const checklist = (
     <>
       {task.description && (
         <p className="text-[14px] leading-relaxed text-neutral-500 dark:text-neutral-400">{task.description}</p>
       )}
+
+      {dayNoteBlock}
 
       {/* No empty state when there are no subtasks. The panel that used to sit
           here read "No subtasks — mark the whole task done below", which only

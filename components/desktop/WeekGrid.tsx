@@ -187,7 +187,9 @@ interface WeekGridProps {
   onCalendarViewChange: (v: CalendarView) => void;
   onCustomDaysChange: (days: DayKey[]) => void;
   onEditTask: (task: Task, dateISO?: string) => void;
-  onDeleteTask: (taskId: string, day: DayKey) => void;
+  /** `dateISO` lets the confirm dialog offer "remove this date only" — the grid
+   *  is the one surface that always knows which dated occurrence was clicked. */
+  onDeleteTask: (taskId: string, day: DayKey, dateISO?: string) => void;
   onToggleTaskComplete: (taskId: string, allSubtaskIds: string[], day: DayKey, dateISO: string) => void;
   /** Independent completion for one phase of a multi-slot task. */
   onToggleSlot: (taskId: string, slotIndex: number, day: DayKey, dateISO: string) => void;
@@ -1096,7 +1098,7 @@ export function WeekGrid({
                     ? {
                         label: "Delete task",
                         icon: <IconTrash size={13} strokeWidth={2} />,
-                        onClick: () => onDeleteTask(layout.task.id, day),
+                        onClick: () => onDeleteTask(layout.task.id, day, dateISO),
                         danger: true,
                       }
                     : slotMissed && onOpenMissedRecovery

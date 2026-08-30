@@ -131,6 +131,18 @@ export interface TaskException {
   endTime?: string;
   title?: string;         // edit just this occurrence
   description?: string;
+  /**
+   * A note about *this date's* occurrence, shown alongside the task's own
+   * description rather than replacing it — "felt tired, cut it short" under a
+   * standing "Run 5k".
+   *
+   * Deliberately separate from `description` above, which is an OVERRIDE: set
+   * that and the task's permanent description disappears for the day, which is
+   * the wrong shape for a diary entry. For the same reason this is not part of
+   * `OccurrenceFields` and `resolveOccurrence` never folds it into the task —
+   * readers ask for it by date (see `occurrenceNote` in lib/taskOccurrence.ts).
+   */
+  note?: string;
 }
 
 /**

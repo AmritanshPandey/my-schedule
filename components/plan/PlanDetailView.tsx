@@ -35,7 +35,7 @@ import MilestoneSheet, { type MilestoneSaveData } from "@/components/plan/Milest
 import { computeRoadmapStats } from "@/lib/roadmapEngine";
 import { calculateMilestoneProgress, type MilestoneProgress } from "@/lib/planProgress";
 import { sumEntriesForDate } from "@/lib/metricEntries";
-import { resolveMilestoneStatus } from "@/lib/roadmapDates";
+import { planEffectiveEndDate, resolveMilestoneStatus } from "@/lib/roadmapDates";
 import { computeTrend } from "@/lib/trendUtils";
 import { getTaskCheckableItems } from "@/lib/taskCompletion";
 import type { TrendResult } from "@/lib/trendUtils";
@@ -512,7 +512,7 @@ export default function PlanDetailView({
     };
   }, [coachMessages, plan.id]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  const roadmapEndDate = planMilestones[planMilestones.length - 1]?.plannedEndDate ?? plan.endDate;
+  const roadmapEndDate = planEffectiveEndDate(plan, planMilestones);
   const dateRange = plan.startDate && roadmapEndDate
     ? `${formatPlanDate(plan.startDate)} – ${formatPlanDate(roadmapEndDate)}`
     : formatPlanRange(plan);
@@ -1788,11 +1788,14 @@ export default function PlanDetailView({
   function accuracySection() {
     return (
             <section>
+              {/* planEndDate is the ROADMAP's end, not the typed one: days past
+                  the stored endDate but inside a milestone are real plan days
+                  and must be scored, not greyed out. */}
               <AccuracyCalendar
                 planId={plan.id}
                 activities={schedule.activities}
                 planStartDate={plan.startDate}
-                planEndDate={plan.endDate}
+                planEndDate={roadmapEndDate}
                 onAddTask={() => onAddTask(plan.id)}
               />
             </section>

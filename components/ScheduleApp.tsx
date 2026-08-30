@@ -165,7 +165,7 @@ import {
   type TaskDeleteScope,
 } from "@/lib/taskMutations";
 import { resolvePlanTarget, resolveTaskTarget, describeTargetProblem } from "@/lib/ai/targets";
-import { isTaskScheduledOn, resolveOccurrence, diffException } from "@/lib/taskOccurrence";
+import { isTaskScheduledOn, occurrenceNote, resolveOccurrence, diffException } from "@/lib/taskOccurrence";
 import type { AIGeneratedTask } from "@/lib/aiActions";
 import { applyScheduleRules, validateDatedTasks } from "@/lib/scheduleRules";
 import { resolveTimes as resolveParsedTimes } from "@/lib/scheduleParser";
@@ -193,7 +193,7 @@ import {
   TIMELINE_END_MINUTES,
 } from "@/lib/timeline/displayWindow";
 import { SCHEDULE_DAY_HANDOVER_MINUTES, taskContinuations } from "@/lib/timeline/overnight";
-import { todayISO, daysBetween as daysBetweenUtil, formatDate, addDaysToISO, localISODate } from "@/lib/dateUtils";
+import { todayISO, daysBetween as daysBetweenUtil, formatDate, formatDayNoteLabel, addDaysToISO, localISODate } from "@/lib/dateUtils";
 import { derivePlanStatus, getPlanCardStats, needsAttention } from "@/lib/planInsights";
 import { MainTitleSection, IconActionButton, CtaActionButton } from "@/components/ui/MainTitleSection";
 import ProgressBar from "@/components/ui/ProgressBar";
@@ -700,6 +700,9 @@ type ToastState = {
 type TaskDeleteRequest = {
   taskId: string;
   sourceDay: DayKey;
+  /** The dated occurrence the user deleted from, when the surface knows one.
+   *  Absent means the "this date only" option isn't offered. */
+  dateISO?: string;
 };
 
 /**
@@ -1388,9 +1391,9 @@ export default function ScheduleApp() {
     closeTaskSheet();
   }
 
-  function requestDeleteTask(taskId: string, sourceDay: DayKey = activeDay) {
+  function requestDeleteTask(taskId: string, sourceDay: DayKey = activeDay, dateISO?: string) {
     haptic("light");
-    setTaskDeleteRequest({ taskId, sourceDay });
+    setTaskDeleteRequest({ taskId, sourceDay, dateISO });
   }
 
   const handleToggleTaskComplete = useCallback(
@@ -1472,6 +1475,22 @@ export default function ScheduleApp() {
       setToastMessage(isSkipped ? "Restored this day" : "Skipped this day");
     },
     [schedule, setSchedule]
+  );
+
+  /**
+   * Write (or clear) a note about one date's occurrence.
+   *
+   * Goes to `TaskException.note`, deliberately not `.description` — that one is
+   * an override and would hide the task's standing description for the day.
+   * `setTaskException` prunes empty strings, so clearing removes the key and,
+   * if nothing else is set for that date, the whole exception.
+   */
+  const handleSaveDayNote = useCallback(
+    (taskId: string, note: string, dateISO?: string) => {
+      haptic("light");
+      setSchedule(setTaskException(taskId, dateISO ?? todayISO(), { note }));
+    },
+    [setSchedule]
   );
 
   const handleToggleSubtask = useCallback(
@@ -2633,22 +2652,50 @@ export default function ScheduleApp() {
     return { task, activeDays, sourceDay };
   }, [schedule.activities, taskDeleteRequest]);
 
+  /** A dated occurrence can only be removed from today onwards; see the
+   *  matching `canSkip` gate on the task detail view. */
+  const canDeleteThisDate =
+    !!taskDeleteRequest?.dateISO && taskDeleteRequest.dateISO >= todayISO();
+
   const taskDeleteCopy = useMemo(() => {
     if (!taskDeleteDetails) return null;
     return buildDeleteConfirmationCopy("task", {
       name: taskDeleteDetails.task.title,
+      // Whenever more than one scope is offered the copy has to stop asserting
+      // what will happen — with "Remove today only" on screen, "This removes it
+      // from Sunday" describes only one of three buttons.
       description: taskDeleteDetails.activeDays.length > 1
         ? `This task appears on ${taskDeleteDetails.activeDays.length} days. Choose what you want to delete.`
+        : canDeleteThisDate
+        ? "Choose what you want to delete."
         : `This removes it from ${deleteDayLabel(taskDeleteDetails.sourceDay)}.`,
     });
-  }, [taskDeleteDetails]);
+  }, [taskDeleteDetails, canDeleteThisDate]);
 
   function deleteDayLabel(day: DayKey): string {
     return day.charAt(0).toUpperCase() + day.slice(1);
   }
 
+
   function performTaskDelete(scope: TaskDeleteScope) {
     if (!taskDeleteDetails) return;
+
+    // "This date only" is a skip, not a removal: the occurrence stops appearing
+    // but the task and its history survive, which is what streaks depend on.
+    if (scope === "date") {
+      const date = taskDeleteRequest?.dateISO;
+      if (!date) return;
+      setSchedule(setTaskException(taskDeleteDetails.task.id, date, { skipped: true }));
+      setTaskDeleteRequest(null);
+      haptic("medium");
+      setToastMessage({
+        message: `Removed from ${formatDayNoteLabel(date)}`,
+        actionLabel: "Undo",
+        onAction: () => { undo(); setToastMessage(null); haptic("light"); },
+      });
+      return;
+    }
+
     const snapshot = createTaskDeleteSnapshot(
       schedule,
       taskDeleteDetails.task.id,
@@ -3057,7 +3104,7 @@ export default function ScheduleApp() {
       const uniqueTasks = getUniquePlanTasks(plan.id);
       const trackerCount = schedule.progressTrackers.filter((t) => t.planId === plan.id).length;
       const planIconEntry = SECTION_ICONS.find((e) => e.name === plan.emoji) ?? SECTION_ICONS[0];
-      const stats = getPlanCardStats(plan, schedule.activities, todayKey, schedule.preferences?.startDate);
+      const stats = getPlanCardStats(plan, schedule.activities, todayKey, schedule.preferences?.startDate, schedule.milestones);
       const dateRange = plan.startDate || plan.endDate ? formatPlanRange(plan) : null;
       const firstTracker = schedule.progressTrackers.find((t) => t.planId === plan.id);
       return { plan, uniqueTasks, trackerCount, planIconEntry, stats, dateRange, firstTracker };
@@ -3330,6 +3377,9 @@ export default function ScheduleApp() {
             onSkip={(taskId) => handleSkipOccurrence(taskId, subtasksRef?.dateISO)}
             skipped={!!(subtasksRef && subtasksRawTask?.exceptions?.[subtasksRef.dateISO]?.skipped)}
             canSkip={!!subtasksRef && subtasksRef.dateISO >= todayISO()}
+            dayNote={subtasksRef && subtasksRawTask ? occurrenceNote(subtasksRawTask, subtasksRef.dateISO) : undefined}
+            onSaveDayNote={(taskId, note) => handleSaveDayNote(taskId, note, subtasksRef?.dateISO)}
+            dayLabel={subtasksRef ? formatDayNoteLabel(subtasksRef.dateISO) : undefined}
             onEdit={subtasksRawTask ? () => { openEditSheet(subtasksRawTask, subtasksRef?.dateISO); setSubtasksRef(null); } : undefined}
             presentation="page"
           />
@@ -3668,7 +3718,7 @@ export default function ScheduleApp() {
                                       onToggleSubtask={handleToggleSubtask}
                                       onToggleSlot={handleToggleSlot}
                                       onEdit={() => openEditSheet(task)}
-                                      onDelete={() => requestDeleteTask(task.id, activeDay)}
+                                      onDelete={() => requestDeleteTask(task.id, activeDay, activeDateISO)}
                                     />
                                   </div>
                                 )}
@@ -3694,7 +3744,7 @@ export default function ScheduleApp() {
                                 onToggleSubtask={(id, sub) => handleToggleSubtask(id, sub, activeDay, activeDateISO)}
                                 onToggleSlot={(id, slotIndex) => handleToggleSlot(id, slotIndex, activeDay, activeDateISO)}
                                 onEdit={() => openEditSheet(task)}
-                                onDelete={() => requestDeleteTask(task.id, activeDay)}
+                                onDelete={() => requestDeleteTask(task.id, activeDay, activeDateISO)}
                                 onOpenSubtasks={() => setSubtasksRef({ id: task.id, day: activeDay, dateISO: activeDateISO })}
                               />
                               {linkedMilestone && (
@@ -4262,8 +4312,9 @@ export default function ScheduleApp() {
               ? activeDay
               : taskSheetActiveDays[0] ?? activeDay;
             const taskId = taskSheetTask.id;
+            const dateISO = taskSheetDateISO;
             closeTaskSheet();
-            requestDeleteTask(taskId, sourceDay);
+            requestDeleteTask(taskId, sourceDay, dateISO);
           } : undefined}
         />
       )}
@@ -4347,6 +4398,9 @@ export default function ScheduleApp() {
           onSkip={(taskId) => handleSkipOccurrence(taskId, subtasksRef?.dateISO)}
           skipped={!!(subtasksRef && subtasksRawTask?.exceptions?.[subtasksRef.dateISO]?.skipped)}
           canSkip={!!subtasksRef && subtasksRef.dateISO >= todayISO()}
+          dayNote={subtasksRef && subtasksRawTask ? occurrenceNote(subtasksRawTask, subtasksRef.dateISO) : undefined}
+          onSaveDayNote={(taskId, note) => handleSaveDayNote(taskId, note, subtasksRef?.dateISO)}
+          dayLabel={subtasksRef ? formatDayNoteLabel(subtasksRef.dateISO) : undefined}
           onEdit={subtasksRawTask ? () => { openEditSheet(subtasksRawTask, subtasksRef?.dateISO); setSubtasksRef(null); } : undefined}
         />
       )}
@@ -4368,15 +4422,29 @@ export default function ScheduleApp() {
         description={taskDeleteCopy?.description}
         confirmLabel={taskDeleteCopy?.confirmLabel}
         actions={taskDeleteDetails ? (
-          taskDeleteDetails.activeDays.length > 1 ? (
+          taskDeleteDetails.activeDays.length > 1 || canDeleteThisDate ? (
             <div className="space-y-2.5">
+              {/* Least destructive first. "This date only" is a skip: the task
+                  and its history stay, only this occurrence goes. Offered just
+                  for today and later — a past occurrence already happened, and
+                  hiding it would quietly rewrite the record. */}
+              {canDeleteThisDate && taskDeleteRequest?.dateISO && (
+                <Button
+                  type="button"
+                  variant="dangerSecondary"
+                  fullWidth
+                  onClick={() => performTaskDelete("date")}
+                >
+                  Remove {formatDayNoteLabel(taskDeleteRequest.dateISO)} only
+                </Button>
+              )}
               <Button
                 type="button"
                 variant="dangerSecondary"
                 fullWidth
                 onClick={() => performTaskDelete("day")}
               >
-                Delete {deleteDayLabel(taskDeleteDetails.sourceDay)} only
+                Delete every {deleteDayLabel(taskDeleteDetails.sourceDay)}
               </Button>
               <Button
                 type="button"

@@ -223,11 +223,28 @@ interface PlanItemsUpdate {
   items: ScheduleEntry[];
 }
 
-export type TaskDeleteScope = "day" | "all";
+/**
+ * What "delete" means for a task that recurs.
+ *
+ * - `"date"` removes ONE dated occurrence, implemented as a per-date skip
+ *   (`setTaskException(..., { skipped: true })`) rather than a second removal
+ *   mechanism. Skip already keeps the task's completion history intact, which
+ *   is what streaks and analytics need — genuinely deleting the occurrence
+ *   would silently rewrite the past.
+ * - `"day"` removes the whole weekday bucket (every future Monday).
+ * - `"all"` removes the task from every weekday it appears on.
+ *
+ * Only `"day"` and `"all"` reach createTaskDeleteSnapshot; `"date"` is handled
+ * by the caller because it edits the task rather than removing it.
+ */
+export type TaskDeleteScope = "date" | "day" | "all";
+
+/** The scopes that actually remove rows. `"date"` edits the task instead. */
+export type TaskRemovalScope = Exclude<TaskDeleteScope, "date">;
 
 export interface TaskDeleteSnapshot {
   taskId: string;
-  scope: TaskDeleteScope;
+  scope: TaskRemovalScope;
   sourceDay: DayKey;
   affectedDays: Array<{
     day: DayKey;
@@ -575,7 +592,9 @@ export function createTaskDeleteSnapshot(
   schedule: Schedule,
   taskId: string,
   sourceDay: DayKey,
-  scope: TaskDeleteScope
+  // Narrower than TaskDeleteScope on purpose: "date" must never reach here. It
+  // would fall through to the "day" branch below and wipe the whole weekday.
+  scope: TaskRemovalScope
 ): TaskDeleteSnapshot {
   const activeDays = getTaskActiveDays(schedule, taskId);
   const daysToDelete =

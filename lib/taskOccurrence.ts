@@ -94,3 +94,16 @@ export function diffException(original: Task, draft: OccurrenceFields): Occurren
   if (draft.description !== undefined && draft.description !== original.description) out.description = draft.description;
   return out;
 }
+
+/**
+ * This date's note, if the user wrote one.
+ *
+ * Read separately rather than merged into the task by `resolveOccurrence`,
+ * because it is additive: the occurrence keeps the task's own description AND
+ * carries its own note for the day. Merging it in would mean choosing one, and
+ * `TaskException.description` already exists for callers that want the override.
+ */
+export function occurrenceNote(task: Task, dateISO: string): string | undefined {
+  const note = task.exceptions?.[dateISO]?.note;
+  return note && note.trim() ? note : undefined;
+}

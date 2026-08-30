@@ -7,6 +7,7 @@ import type { Task, Milestone, Plan } from "./useScheduleDB";
 import { DAYS } from "./scheduleConstants";
 import type { DayKey } from "./useScheduleDB";
 import { localISODate } from "./dateUtils";
+import { planEffectiveEndDate } from "./roadmapDates";
 import { calculatePlanProgress } from "./planProgress";
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -208,7 +209,7 @@ export function computeRoadmapStats(
   const planMilestones = milestones
     .filter((m) => m.planId === planId)
     .sort((a, b) => a.sortOrder - b.sortOrder);
-  const roadmapEnd = planMilestones[planMilestones.length - 1]?.plannedEndDate ?? plan.endDate ?? null;
+  const roadmapEnd = planEffectiveEndDate(plan, planMilestones) ?? null;
   const planStart = plan.startDate ?? null;
   const planEnd = roadmapEnd;
 

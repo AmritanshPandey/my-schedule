@@ -203,3 +203,37 @@ export function cascadeMilestoneDates(
   }
   return result;
 }
+
+/**
+ * When a plan really ends, given its roadmap.
+ *
+ * A plan's stored `endDate` is what the user typed when they created it;
+ * milestones are what they have actually laid out since, and those routinely
+ * run past it. Nothing reconciled the two in either direction, yet the plan
+ * header and the roadmap heatmap had each grown their own inline version of
+ * this — so a plan could show one end date and score its consistency against
+ * another.
+ *
+ * Returns the LATEST milestone end, not the last one by `sortOrder`.
+ * `normalizeMilestoneTimeline` preserves user-set start dates and the gaps
+ * between them, so the final milestone in order is not reliably the
+ * latest-ending one — which is exactly what both inline versions assumed.
+ *
+ * `plan.endDate` is never written from this. Task windows deliberately keep
+ * using the stored value (see constrainTaskToPlanWindow): it only ever takes
+ * the *earlier* of the two, so it cannot re-widen a task that an earlier,
+ * shorter end already clamped, and `activeUntil` records only the result —
+ * there is no way to tell "the plan clamped this" from "the user chose this".
+ */
+export function planEffectiveEndDate(
+  plan: { endDate?: string },
+  milestones: Milestone[],
+): string | undefined {
+  let latest: string | undefined;
+  for (const milestone of milestones) {
+    const end = milestone.plannedEndDate;
+    if (typeof end !== "string" || !end) continue;
+    if (latest === undefined || end > latest) latest = end;
+  }
+  return latest ?? plan.endDate;
+}

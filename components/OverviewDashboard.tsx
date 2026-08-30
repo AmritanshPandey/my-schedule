@@ -838,7 +838,7 @@ export default function OverviewDashboard({
   const planConsistency = useMemo(() =>
     schedule.plans.map((plan) => {
       const milestones = (schedule.milestones ?? []).filter((milestone) => milestone.planId === plan.id);
-      const { consistency } = getPlanCardStats(plan, schedule.activities, todayKey, schedule.preferences?.startDate);
+      const { consistency } = getPlanCardStats(plan, schedule.activities, todayKey, schedule.preferences?.startDate, schedule.milestones);
       const milestonesDone = milestones.filter((milestone) => milestone.status === "completed").length;
       return { plan, consistency, milestonesTotal: milestones.length, milestonesDone };
     }),

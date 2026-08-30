@@ -57,7 +57,7 @@ import { constrainTaskToPlanWindow } from "@/lib/planTaskWindow";
 import { SECTION_ICONS } from "@/components/SectionIcons";
 import { useReminders } from "@/lib/useReminders";
 import { bootLog, isIOSSafeMode, isStandalonePWA } from "@/lib/iosSafeMode";
-import { todayISO, localISODate, addDaysToISO, formatDate } from "@/lib/dateUtils";
+import { todayISO, localISODate, addDaysToISO, formatDate, formatDayNoteLabel } from "@/lib/dateUtils";
 import { quickAmountsForUnit } from "@/lib/quickAmounts";
 import { sumEntriesForDate } from "@/lib/metricEntries";
 import { createInboxNoteInput } from "@/lib/notes/dailyCapture";
@@ -75,10 +75,10 @@ import {
   setTaskException,
   clearTaskException,
   addSubtaskToTasks,
-  type TaskDeleteScope,
+  type TaskRemovalScope,
 } from "@/lib/taskMutations";
 import { completionForDate, getTaskCheckableItems, getTaskSubtaskSummary, isTaskCompleted, isTaskResolved, isTrackedTask, markTaskMissed, snoozeTaskLater, toggleSlotComplete, toggleSubtaskComplete, toggleTaskFromCheckbox } from "@/lib/taskCompletion";
-import { diffException, isTaskScheduledOn, resolveOccurrence } from "@/lib/taskOccurrence";
+import { diffException, isTaskScheduledOn, occurrenceNote, resolveOccurrence } from "@/lib/taskOccurrence";
 import { cascadeMilestoneDates, normalizeMilestoneTimeline } from "@/lib/roadmapDates";
 import { toggleRitualCompletion, appendRitualLog, undoLastRitualLog, toggleRitualStep, removeRitualLog } from "@/lib/ritualCompletions";
 import { MAX_RITUALS } from "@/lib/ritualColors";
@@ -696,7 +696,7 @@ export default function IOSScheduleApp() {
   const overviewPlanConsistency = useMemo(() =>
     schedule.plans.map((plan) => {
       const milestones = (schedule.milestones ?? []).filter((milestone) => milestone.planId === plan.id);
-      const { consistency } = getPlanCardStats(plan, schedule.activities, todayKey, schedule.preferences?.startDate);
+      const { consistency } = getPlanCardStats(plan, schedule.activities, todayKey, schedule.preferences?.startDate, schedule.milestones);
       const milestonesDone = milestones.filter((milestone) => milestone.status === "completed").length;
       return { plan, consistency, milestonesTotal: milestones.length, milestonesDone };
     }),
@@ -875,11 +875,25 @@ export default function IOSScheduleApp() {
     setToast(isSkipped ? "Restored this day" : "Skipped this day");
   }
 
+  /** See handleSaveDayNote in components/ScheduleApp.tsx for why this writes
+   *  `note` rather than the per-date `description` override. */
+  function handleSaveDayNote(taskId: string, note: string, dateISO?: string) {
+    haptic("light");
+    setSchedule(setTaskException(taskId, dateISO ?? todayISO(), { note }));
+  }
+
   function requestDeleteTask(taskId: string, sourceDay: DayKey = activeDay) {
     setTaskDeleteRequest({ taskId, sourceDay });
   }
 
-  function performTaskDelete(scope: TaskDeleteScope) {
+  /**
+   * Removal scopes only. Mobile's confirm overlay is a single-choice dialog, so
+   * it never produces "date" — and it doesn't need to: the dated skip lives on
+   * the task detail view here ("Skip this day"), which is where mobile actually
+   * resolves a day's work. Typing it narrowly keeps that an explicit decision
+   * rather than a silent fall-through to deleting the whole weekday.
+   */
+  function performTaskDelete(scope: TaskRemovalScope) {
     if (!taskDeleteDetails) return;
     const snapshot = createTaskDeleteSnapshot(schedule, taskDeleteDetails.task.id, taskDeleteDetails.sourceDay, scope);
     setSchedule(applyTaskDelete(snapshot));
@@ -1242,6 +1256,9 @@ export default function IOSScheduleApp() {
               onSkip={(taskId) => handleSkipOccurrence(taskId, subtasksRef.dateISO)}
               skipped={!!subtasksTask?.exceptions?.[subtasksRef.dateISO]?.skipped}
               canSkip={subtasksRef.dateISO >= todayISO()}
+              dayNote={subtasksTask ? occurrenceNote(subtasksTask, subtasksRef.dateISO) : undefined}
+              onSaveDayNote={(taskId, note) => handleSaveDayNote(taskId, note, subtasksRef.dateISO)}
+              dayLabel={formatDayNoteLabel(subtasksRef.dateISO)}
               onEdit={subtasksTask ? () => { openEditSheet(subtasksTask, subtasksRef.dateISO); setSubtasksRef(null); } : undefined}
               presentation="page"
             />
