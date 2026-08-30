@@ -3,37 +3,40 @@
 import { useMemo } from "react";
 import { IconCheck } from "@tabler/icons-react";
 import { groupRitualsByTime } from "@/lib/timeline/groupRitualsByTime";
-import type { Ritual, DayKey } from "@/lib/useScheduleDB";
+import type { Ritual } from "@/lib/useScheduleDB";
 import { RITUAL_COLOR_DOT as COLOR_DOTS, RITUAL_DAY_LIMIT as DAY_LIMIT } from "@/lib/ritualColors";
 
 interface RitualLegendProps {
   rituals: Ritual[];
-  activeDay: DayKey;
+  dateISO: string;
   timelineStartMinutes: number;
   timelineEndMinutes: number;
   timelineTopPadding: number;
   hourHeight: number;
   completedIds: Set<string>;
+  trackingStart?: string;
 }
 
 export default function RitualLegend({
   rituals,
-  activeDay,
+  dateISO,
   timelineStartMinutes,
   timelineEndMinutes,
   timelineTopPadding,
   hourHeight,
   completedIds,
+  trackingStart,
 }: RitualLegendProps) {
   const visible = useMemo(() => {
     const groups = groupRitualsByTime(
-      rituals, activeDay,
+      rituals, dateISO,
       timelineStartMinutes, timelineEndMinutes,
       timelineTopPadding, hourHeight,
+      trackingStart,
     );
     // Flatten in timeline order, then cap to match the overlay dots.
     return groups.flatMap((g) => g.rituals).slice(0, DAY_LIMIT);
-  }, [rituals, activeDay, timelineStartMinutes, timelineEndMinutes, timelineTopPadding, hourHeight]);
+  }, [rituals, dateISO, timelineStartMinutes, timelineEndMinutes, timelineTopPadding, hourHeight, trackingStart]);
 
   if (visible.length === 0) return null;
 

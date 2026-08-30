@@ -8,6 +8,7 @@ import Button from "@/components/ui/Button";
 import { SECTION_ICONS } from "@/components/SectionIcons";
 import type { DayKey, Schedule } from "@/lib/useScheduleDB";
 import { isTaskScheduledOn, resolveOccurrence } from "@/lib/taskOccurrence";
+import { ritualScheduledOnDate } from "@/lib/ritualRecurrence";
 import { taskIdentity, categoriesById } from "@/lib/taskIdentity";
 import { parseTimeToMinutes, formatDisplayTime } from "@/lib/timeUtils";
 import { localISODate } from "@/lib/dateUtils";
@@ -58,7 +59,7 @@ export default function DayWallpaperSheet({ open, onClose, schedule, todayKey }:
     const categoryMap = categoriesById(schedule.categories);
 
     for (const task of schedule.activities[todayKey] ?? []) {
-      if (!isTaskScheduledOn(task, todayISO, true)) continue;
+      if (!isTaskScheduledOn(task, todayISO, true, schedule.preferences?.startDate)) continue;
       const occ = resolveOccurrence(task, todayISO);
       const minutes = parseTimeToMinutes(occ.startTime);
       if (minutes == null) continue;
@@ -74,7 +75,7 @@ export default function DayWallpaperSheet({ open, onClose, schedule, todayKey }:
     }
 
     for (const ritual of schedule.rituals ?? []) {
-      if (ritual.repeatDays && ritual.repeatDays.length > 0 && !ritual.repeatDays.includes(todayKey)) continue;
+      if (!ritualScheduledOnDate(ritual, todayISO, schedule.preferences?.startDate)) continue;
       const minutes = parseTimeToMinutes(ritual.time);
       if (minutes == null) continue;
       rows.push({

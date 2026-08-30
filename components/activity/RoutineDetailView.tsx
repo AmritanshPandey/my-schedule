@@ -31,6 +31,8 @@ import { formatDisplayTime } from "@/lib/timeUtils";
 interface RoutineDetailViewProps {
   ritual: Ritual;
   ritualCompletions: RitualCompletion[];
+  /** Settings → Tracking → "Tracking starts" (schedule.preferences?.startDate). */
+  trackingStart?: string;
   onBack: () => void;
   onToggleCheckbox: () => void;
   onLogAmount: (amount: number) => void;
@@ -51,6 +53,7 @@ function timeOfDay(timestamp: string | undefined): string {
 export default function RoutineDetailView({
   ritual,
   ritualCompletions,
+  trackingStart,
   onBack,
   onToggleCheckbox,
   onLogAmount,
@@ -68,13 +71,13 @@ export default function RoutineDetailView({
   const trackingType = ritual.trackingType ?? "checkbox";
   const todaysEntries = entriesForRitualDate(ritualCompletions, ritual.id, today);
   const progress = ritualDayProgress(ritual, todaysEntries);
-  const stats = calculateRitualStats(ritual, ritualCompletions, today);
+  const stats = calculateRitualStats(ritual, ritualCompletions, today, trackingStart);
   const quickAmounts = quickAmountsForRitual(ritual);
   const iconStyle = getIconPickerStyle(ritual.icon ?? "");
   const Glyph = iconGlyph(ritual.icon ?? "");
   const calendarDays = useMemo(
-    () => buildRitualMonthDays(ritual, ritualCompletions, calYear, calMonth, today),
-    [ritual, ritualCompletions, calYear, calMonth, today],
+    () => buildRitualMonthDays(ritual, ritualCompletions, calYear, calMonth, today, trackingStart),
+    [ritual, ritualCompletions, calYear, calMonth, today, trackingStart],
   );
 
   function prevCalMonth() {

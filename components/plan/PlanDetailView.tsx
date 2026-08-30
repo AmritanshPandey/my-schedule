@@ -1281,7 +1281,7 @@ export default function PlanDetailView({
               key={label}
               className="rounded-[14px] border border-neutral-200 bg-neutral-50 px-[14px] py-3 dark:border-white/[0.08] dark:bg-white/[0.03]"
             >
-              <p className="mb-1.5 text-[10px] font-bold uppercase tracking-[0.7px] text-neutral-400 dark:text-neutral-500">
+              <p className="mb-1.5 text-[10px] font-medium uppercase tracking-[0.7px] text-neutral-400 dark:text-neutral-500">
                 {label}
               </p>
               <p className="text-[19px] font-extrabold leading-[1.1] tracking-[-0.5px] text-neutral-950 dark:text-white">
@@ -1796,6 +1796,7 @@ export default function PlanDetailView({
                 activities={schedule.activities}
                 planStartDate={plan.startDate}
                 planEndDate={roadmapEndDate}
+                trackingStart={schedule.preferences?.startDate}
                 onAddTask={() => onAddTask(plan.id)}
               />
             </section>

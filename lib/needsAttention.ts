@@ -17,7 +17,7 @@ import type { Milestone, Plan, Ritual, Schedule, Task, DayKey } from "./useSched
 import { DAYS } from "./scheduleConstants";
 import { localISODate } from "./dateUtils";
 import { resolveMilestoneStatus } from "./roadmapDates";
-import { calculateRitualStats } from "./consistency/calculateRitualStreak";
+import { calculateRitualStats, ritualScheduledOnDate } from "./consistency/calculateRitualStreak";
 
 /** How far back a missed task still counts as worth catching up on. */
 export const MISSED_LOOKBACK_DAYS = 7;
@@ -78,16 +78,17 @@ export function selectNeedsAttention(
 
   // ── Rituals whose run ends tonight unless acted on ───────────────────────
   const yesterdayISO = shiftISO(todayISO, -1);
+  const trackingStart = schedule.preferences?.startDate;
   const atRiskRituals: AtRiskRitual[] = (schedule.rituals ?? [])
     .filter((r) => {
-      const dueToday = !r.repeatDays || r.repeatDays.length === 0 || (todayKey ? r.repeatDays.includes(todayKey) : true);
+      const dueToday = ritualScheduledOnDate(r, todayISO, trackingStart);
       return dueToday && !completedRitualIds.has(r.id);
     })
     // The shared, trackingType/recurrence-aware helper — the old inline walk
     // here only ever checked `repeatDays` via exact-date lookups, so a
     // Mon/Wed/Fri routine's "next scheduled day" always broke on the
     // in-between non-scheduled days and read as streak 0.
-    .map((ritual) => ({ ritual, streak: calculateRitualStats(ritual, schedule.ritualCompletions ?? [], yesterdayISO).streak }))
+    .map((ritual) => ({ ritual, streak: calculateRitualStats(ritual, schedule.ritualCompletions ?? [], yesterdayISO, trackingStart).streak }))
     .filter(({ streak }) => streak >= MIN_STREAK_TO_WARN)
     .sort((a, b) => b.streak - a.streak);
 
@@ -123,6 +124,7 @@ export function selectNeedsAttention(
         if (event.completionType !== "missed" || event.subtaskId) continue;
         const dateISO = localISODate(new Date(event.completedAt));
         if (dateISO >= todayISO || dateISO < cutoff) continue;
+        if (trackingStart && dateISO < trackingStart) continue;
         // A recurring task shares one id across weekday buckets, so the same
         // event would otherwise be counted once per bucket it appears in.
         const key = `${task.id}|${dateISO}`;

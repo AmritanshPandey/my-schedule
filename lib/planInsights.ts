@@ -153,7 +153,7 @@ export function getPlanCardStats(
 ): PlanCardStats {
   const todayISO = localISODate(new Date());
   const todayTasks = (activities[todayKey] ?? []).filter(
-    (t) => t.planId === plan.id && isTaskScheduledOn(t, todayISO, true) && isTrackedTask(t)
+    (t) => t.planId === plan.id && isTaskScheduledOn(t, todayISO, true, trackingStartISO) && isTrackedTask(t)
   );
   const dayState = resolvePlanDayState(todayTasks, plan.items.length);
   const consistency = calculateConsistency(

@@ -8,11 +8,11 @@
  */
 import { m } from "framer-motion";
 import { IconChevronRight, IconFlame, IconTrash } from "@tabler/icons-react";
-import type { DayKey, Ritual, RitualCompletion } from "@/lib/useScheduleDB";
+import type { Ritual, RitualCompletion } from "@/lib/useScheduleDB";
 import { formatDisplayTime } from "@/lib/timeUtils";
 import { todayISO } from "@/lib/dateUtils";
 import { haptic } from "@/lib/haptics";
-import { calculateRitualStats, ritualScheduledOn } from "@/lib/consistency/calculateRitualStreak";
+import { calculateRitualStats, ritualScheduledOnDate } from "@/lib/consistency/calculateRitualStreak";
 import { entriesForRitualDate } from "@/lib/ritualCompletions";
 import { ritualDayProgress } from "@/lib/consistency/ritualDayStatus";
 import { describeRecurrence } from "@/lib/ritualRecurrence";
@@ -24,7 +24,8 @@ interface RoutineRowProps {
   ritual: Ritual;
   ritualCompletions: RitualCompletion[];
   selectedDateISO: string;
-  selectedDay: DayKey;
+  /** Settings → Tracking → "Tracking starts" (schedule.preferences?.startDate). */
+  trackingStart?: string;
   onToggleComplete: (ritualId: string, dateISO: string) => void;
   onLogAmount: (ritualId: string, amount: number, dateISO: string) => void;
   onUndoLastLog: (ritualId: string, dateISO: string) => void;
@@ -36,7 +37,7 @@ export default function RoutineRow({
   ritual,
   ritualCompletions,
   selectedDateISO,
-  selectedDay,
+  trackingStart,
   onToggleComplete,
   onLogAmount,
   onUndoLastLog,
@@ -45,9 +46,9 @@ export default function RoutineRow({
 }: RoutineRowProps) {
   const entries = entriesForRitualDate(ritualCompletions, ritual.id, selectedDateISO);
   const progress = ritualDayProgress(ritual, entries);
-  const scheduled = ritualScheduledOn(ritual, selectedDay);
+  const scheduled = ritualScheduledOnDate(ritual, selectedDateISO, trackingStart);
   const missed = selectedDateISO < todayISO() && scheduled && !progress.complete;
-  const { streak } = calculateRitualStats(ritual, ritualCompletions, selectedDateISO);
+  const { streak } = calculateRitualStats(ritual, ritualCompletions, selectedDateISO, trackingStart);
 
   const iconStyle = getIconPickerStyle(ritual.icon ?? "");
   const Glyph = iconGlyph(ritual.icon ?? "");

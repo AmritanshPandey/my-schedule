@@ -49,7 +49,15 @@ function dayDiff(anchorISO: string, dateISO: string): number {
  * `ritualScheduledOn`. Lives here (rather than lib/ritualRecurrence.ts, which
  * re-exports it) so the streak/adherence/dots/best-streak walks below can use
  * it directly without an import cycle. */
-export function ritualScheduledOnDate(ritual: Pick<Ritual, "repeatDays" | "recurrence">, dateISO: string): boolean {
+export function ritualScheduledOnDate(
+  ritual: Pick<Ritual, "repeatDays" | "recurrence">,
+  dateISO: string,
+  /** Settings → Tracking → "Tracking starts" (schedule.preferences?.startDate)
+   *  — a schedule-wide floor. Optional and checked first so every existing
+   *  call site keeps compiling and behaving identically until updated. */
+  trackingStart?: string,
+): boolean {
+  if (trackingStart && dateISO < trackingStart) return false;
   const recurrence = ritual.recurrence;
   if (recurrence?.kind === "interval" && recurrence.intervalDays && recurrence.intervalDays >= 2 && recurrence.anchorDate) {
     const diff = dayDiff(recurrence.anchorDate, dateISO);
@@ -91,6 +99,10 @@ export function calculateRitualStats(
   ritual: Ritual,
   completions: RitualCompletion[],
   uptoISO: string = todayISO(),
+  /** Settings → Tracking → "Tracking starts" (schedule.preferences?.startDate)
+   *  — days before this were never "scheduled", so they can't start or break
+   *  a streak, and don't count toward adherence. */
+  trackingStart?: string,
 ): RitualStats {
   const byDate = groupByDate(ritual, completions);
   const completeOn = (iso: string) => isRitualDayComplete(ritual, byDate.get(iso) ?? []);
@@ -101,7 +113,7 @@ export function calculateRitualStats(
   const cursor = new Date(`${uptoISO}T00:00:00`);
   for (let i = 0; i < STREAK_LOOKBACK_DAYS; i++) {
     const iso = localISODate(cursor);
-    if (ritualScheduledOnDate(ritual, iso)) {
+    if (ritualScheduledOnDate(ritual, iso, trackingStart)) {
       if (completeOn(iso)) streak++;
       else if (iso !== today) break; // unchecked today is in-progress, not a miss
     }
@@ -114,7 +126,7 @@ export function calculateRitualStats(
   const adCursor = new Date(`${uptoISO}T00:00:00`);
   for (let i = 0; i < ADHERENCE_WINDOW_DAYS; i++) {
     const iso = localISODate(adCursor);
-    if (ritualScheduledOnDate(ritual, iso)) {
+    if (ritualScheduledOnDate(ritual, iso, trackingStart)) {
       // Skip today's still-open slot so an in-progress day isn't a "miss".
       if (!(iso === today && !completeOn(iso))) {
         scheduled++;
@@ -133,7 +145,7 @@ export function calculateRitualStats(
     dots.push(completeOn(localISODate(d)));
   }
 
-  const bestStreak = Math.max(streak, calculateBestStreak(ritual, completions, uptoISO));
+  const bestStreak = Math.max(streak, calculateBestStreak(ritual, completions, uptoISO, trackingStart));
 
   return { streak, bestStreak, adherencePct, dots };
 }
@@ -149,6 +161,7 @@ export function calculateBestStreak(
   ritual: Ritual,
   completions: RitualCompletion[],
   uptoISO: string = todayISO(),
+  trackingStart?: string,
 ): number {
   const byDate = groupByDate(ritual, completions);
   const completeOn = (iso: string) => isRitualDayComplete(ritual, byDate.get(iso) ?? []);
@@ -162,7 +175,7 @@ export function calculateBestStreak(
   const cursor = new Date(start);
   while (cursor <= new Date(`${uptoISO}T00:00:00`)) {
     const iso = localISODate(cursor);
-    if (ritualScheduledOnDate(ritual, iso)) {
+    if (ritualScheduledOnDate(ritual, iso, trackingStart)) {
       if (completeOn(iso)) {
         run++;
         best = Math.max(best, run);

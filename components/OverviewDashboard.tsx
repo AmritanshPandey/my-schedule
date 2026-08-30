@@ -34,7 +34,7 @@ import { computeTrend, type TrendResult } from "@/lib/trendUtils";
 import { addDaysToISO, localISODate } from "@/lib/dateUtils";
 import { formatDisplayTime } from "@/lib/timeUtils";
 import { calculateExecutionStreak, type ExecutionStreak } from "@/lib/consistency/calculateExecutionStreak";
-import { calculateRitualStats, ritualScheduledOn, ritualScheduledOnDate } from "@/lib/consistency/calculateRitualStreak";
+import { calculateRitualStats, ritualScheduledOnDate } from "@/lib/consistency/calculateRitualStreak";
 import { completedRitualIdsOn } from "@/lib/consistency/ritualDayStatus";
 import { haptic } from "@/lib/haptics";
 import { CARD, CARD_INTERACTIVE, SOFT_PANEL } from "@/components/ui/surfaces";
@@ -59,7 +59,6 @@ interface OverviewDashboardProps {
 
 const DAYS_ORDER: DayKey[] = ["monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday"];
 const DAY_LABELS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
-const JS_DAY_KEYS: DayKey[] = ["sunday", "monday", "tuesday", "wednesday", "thursday", "friday", "saturday"];
 
 type TaskSummary = ReturnType<typeof getTaskSubtaskSummary>;
 type TrackerRow = {
@@ -768,7 +767,7 @@ export default function OverviewDashboard({
     DAYS_ORDER.forEach((day, i) => {
       const date = addDaysToISO(monday, i);
       if (date > todayISO) return;
-      const scheduled = (schedule.rituals ?? []).filter((ritual) => ritualScheduledOnDate(ritual, date));
+      const scheduled = (schedule.rituals ?? []).filter((ritual) => ritualScheduledOnDate(ritual, date, schedule.preferences?.startDate));
       habitTotal += scheduled.length;
       // trackingType-aware, and per-date rather than a flat id|date presence
       // set — a partially logged quantity routine must not count as done here
@@ -779,7 +778,7 @@ export default function OverviewDashboard({
 
     if (totalTasks === 0 && habitTotal === 0) return null;
     return { days, tasksPct, habitsPct: ratioPct(habitDone, habitTotal) };
-  }, [schedule.activities, schedule.ritualCompletions, schedule.rituals, taskSummary, todayISO]);
+  }, [schedule.activities, schedule.ritualCompletions, schedule.rituals, schedule.preferences?.startDate, taskSummary, todayISO]);
 
   const hasScheduledTasks = useMemo(
     () => Object.values(schedule.activities).some((activities) => (activities?.length ?? 0) > 0),
@@ -814,20 +813,20 @@ export default function OverviewDashboard({
 
   const ritualConsistency = useMemo(() => {
     const completions = schedule.ritualCompletions ?? [];
-    const todayDay = JS_DAY_KEYS[new Date(todayISO + "T00:00:00").getDay()];
+    const trackingStart = schedule.preferences?.startDate;
     // All routines, not just today's — an off-day routine still shows its
     // streak/adherence so the card reviews overall follow-through. Uses the one
     // shared streak helper so the number matches the Routine tab.
     return (schedule.rituals ?? [])
       .map((ritual) => {
-        const { streak, bestStreak, adherencePct, dots } = calculateRitualStats(ritual, completions, todayISO);
-        return { ritual, streak, bestStreak, adherencePct, dots, dueToday: ritualScheduledOn(ritual, todayDay) };
+        const { streak, bestStreak, adherencePct, dots } = calculateRitualStats(ritual, completions, todayISO, trackingStart);
+        return { ritual, streak, bestStreak, adherencePct, dots, dueToday: ritualScheduledOnDate(ritual, todayISO, trackingStart) };
       })
       // Due today first, then most-at-risk (lowest adherence) so what's slipping surfaces.
       .sort((a, b) =>
         a.dueToday !== b.dueToday ? (a.dueToday ? -1 : 1) : a.adherencePct - b.adherencePct,
       );
-  }, [schedule.ritualCompletions, schedule.rituals, todayISO]);
+  }, [schedule.ritualCompletions, schedule.rituals, schedule.preferences?.startDate, todayISO]);
 
   // Every plan, because consistency is the point of this card and every plan has
   // a consistency score whether or not it has milestones. Milestone-less plans

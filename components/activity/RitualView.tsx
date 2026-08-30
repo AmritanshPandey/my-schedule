@@ -19,7 +19,7 @@ import {
 import type { Ritual, RitualCompletion, DayKey } from "@/lib/useScheduleDB";
 import { DAYS } from "@/lib/useScheduleDB";
 import { localISODate, todayISO } from "@/lib/dateUtils";
-import { ritualScheduledOn } from "@/lib/consistency/calculateRitualStreak";
+import { ritualScheduledOnDate } from "@/lib/ritualRecurrence";
 import { haptic } from "@/lib/haptics";
 import EmptyState from "@/components/ui/EmptyState";
 import { MainTitleSection, CtaActionButton } from "@/components/ui/MainTitleSection";
@@ -48,8 +48,8 @@ const BUCKET_ICONS: Record<RitualTimeBucketKey, ComponentType<{ size?: number; s
   anytime: IconInfinity,
 };
 
-function appliesToDay(ritual: Ritual, day: DayKey): boolean {
-  return ritualScheduledOn(ritual, day);
+function appliesToDay(ritual: Ritual, dateISO: string, trackingStart?: string): boolean {
+  return ritualScheduledOnDate(ritual, dateISO, trackingStart);
 }
 
 function GroupHeader({
@@ -290,6 +290,8 @@ function DateActionButton({
 interface RitualViewProps {
   rituals: Ritual[];
   ritualCompletions: RitualCompletion[];
+  /** Settings → Tracking → "Tracking starts" (schedule.preferences?.startDate). */
+  trackingStart?: string;
   onToggleComplete: (id: string, dateISO?: string) => void;
   onLogAmount: (ritualId: string, amount: number, dateISO: string) => void;
   onUndoLastLog: (ritualId: string, dateISO: string) => void;
@@ -306,6 +308,7 @@ interface RitualViewProps {
 export default function RitualView({
   rituals,
   ritualCompletions,
+  trackingStart,
   onToggleComplete,
   onLogAmount,
   onUndoLastLog,
@@ -330,8 +333,8 @@ export default function RitualView({
   }), [rituals]);
 
   const filteredRituals = useMemo(() => {
-    return sorted.filter((r) => appliesToDay(r, selectedDay));
-  }, [sorted, selectedDay]);
+    return sorted.filter((r) => appliesToDay(r, selectedDateISO, trackingStart));
+  }, [sorted, selectedDateISO, trackingStart]);
 
   const completedToday = filteredRituals.filter((r) =>
     isRitualDayComplete(r, ritualCompletions.filter((c) => c.ritualId === r.id && c.date === selectedDateISO)),
@@ -347,7 +350,7 @@ export default function RitualView({
     () =>
       DAYS.map((day) => {
         const dateISO = dateForCurrentWeekDay(day);
-        const dueRituals = sorted.filter((r) => appliesToDay(r, day));
+        const dueRituals = sorted.filter((r) => appliesToDay(r, dateISO, trackingStart));
         const done = dueRituals.filter((r) =>
           isRitualDayComplete(r, ritualCompletions.filter((c) => c.ritualId === r.id && c.date === dateISO)),
         ).length;
@@ -360,20 +363,20 @@ export default function RitualView({
           isToday: dateISO === todayISO(),
         };
       }),
-    [sorted, ritualCompletions]
+    [sorted, ritualCompletions, trackingStart]
   );
 
   // Group the selected day's routines into morning / afternoon / evening / anytime.
   const grouped = useMemo(() => groupRitualsIntoBuckets(filteredRituals), [filteredRituals]);
 
   const monthCalendarDays = useMemo(
-    () => buildAllRoutinesMonthDays(sorted, ritualCompletions, calYear, calMonth, todayISO()),
-    [sorted, ritualCompletions, calYear, calMonth],
+    () => buildAllRoutinesMonthDays(sorted, ritualCompletions, calYear, calMonth, todayISO(), trackingStart),
+    [sorted, ritualCompletions, calYear, calMonth, trackingStart],
   );
 
   const routineInsights = useMemo(
-    () => buildRoutineInsights(sorted, ritualCompletions, todayISO()),
-    [sorted, ritualCompletions],
+    () => buildRoutineInsights(sorted, ritualCompletions, todayISO(), trackingStart),
+    [sorted, ritualCompletions, trackingStart],
   );
 
   function prevCalMonth() {
@@ -571,7 +574,7 @@ export default function RitualView({
                             ritual={ritual}
                             ritualCompletions={ritualCompletions}
                             selectedDateISO={selectedDateISO}
-                            selectedDay={selectedDay}
+                            trackingStart={trackingStart}
                             onToggleComplete={onToggleComplete}
                             onLogAmount={onLogAmount}
                             onUndoLastLog={onUndoLastLog}

@@ -692,7 +692,7 @@ export function SettingsView({
                 <div className="min-w-0 flex-1">
                   <p className="text-[13px] font-semibold text-neutral-800 dark:text-white">Tracking starts</p>
                   <p className="mt-0.5 text-[11px] leading-snug text-neutral-400 dark:text-neutral-500">
-                    Streaks and trends ignore days before this. Off = count all history.
+                    Tasks, routines, streaks and trends are all ignored before this date. Off = show and count all history.
                   </p>
                 </div>
                 <div className="flex w-full min-w-0 items-center gap-2 sm:w-auto sm:shrink-0">

@@ -167,6 +167,9 @@ export function buildDayBreakdown(
    * are counted here rather than there — matching where the timeline draws them.
    */
   carryIn?: { tasks: readonly Task[]; dateISO: string },
+  /** Settings → Tracking → "Tracking starts" (schedule.preferences?.startDate)
+   *  — a task before this contributes nothing to the breakdown. */
+  trackingStart?: string,
 ): DayBreakdown {
   const categoriesById = new Map(categories.map((c) => [c.id, c]));
   const owned: OwnedInterval<string>[] = [];
@@ -181,7 +184,7 @@ export function buildDayBreakdown(
   }
 
   for (const task of tasks) {
-    if (!isTaskScheduledOn(task, dateISO, true)) continue;
+    if (!isTaskScheduledOn(task, dateISO, true, trackingStart)) continue;
     collect(resolveOccurrence(task, dateISO), "sameDay");
   }
 
@@ -189,7 +192,7 @@ export function buildDayBreakdown(
   // exactly what it actually ran, not what the template says.
   if (carryIn) {
     for (const task of carryIn.tasks) {
-      if (!isTaskScheduledOn(task, carryIn.dateISO, true)) continue;
+      if (!isTaskScheduledOn(task, carryIn.dateISO, true, trackingStart)) continue;
       collect(resolveOccurrence(task, carryIn.dateISO), "overflow");
     }
   }

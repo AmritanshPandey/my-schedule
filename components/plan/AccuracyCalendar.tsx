@@ -40,6 +40,8 @@ function buildCalendarDays(
   today: string,
   planStart?: string,
   planEnd?: string,
+  /** Settings → Tracking → "Tracking starts" (schedule.preferences?.startDate). */
+  trackingStart?: string,
 ): CalDay[] {
   const daysInMonth = new Date(year, month + 1, 0).getDate();
   const result: CalDay[] = [];
@@ -49,13 +51,13 @@ function buildCalendarDays(
     const iso = localISODate(date);
     const dayKey = JS_DOW_KEY[date.getDay()];
 
-    if ((planStart && iso < planStart) || (planEnd && iso > planEnd)) {
+    if ((planStart && iso < planStart) || (planEnd && iso > planEnd) || (trackingStart && iso < trackingStart)) {
       result.push({ day: d, dateISO: iso, status: "none" });
       continue;
     }
 
     const tasks = (activities[dayKey] ?? []).filter(
-      (t) => t.planId === planId && isTrackedTask(t) && isTaskScheduledOn(t, iso, true),
+      (t) => t.planId === planId && isTrackedTask(t) && isTaskScheduledOn(t, iso, true, trackingStart),
     );
 
     if (!tasks.length) {
@@ -99,6 +101,8 @@ interface AccuracyCalendarProps {
   activities: Record<DayKey, Task[]>;
   planStartDate?: string;
   planEndDate?: string;
+  /** Settings → Tracking → "Tracking starts" (schedule.preferences?.startDate). */
+  trackingStart?: string;
   onAddTask: () => void;
 }
 
@@ -109,6 +113,7 @@ export default function AccuracyCalendar({
   activities,
   planStartDate,
   planEndDate,
+  trackingStart,
   onAddTask,
 }: AccuracyCalendarProps) {
   const today = useMemo(() => todayISO(), []);
@@ -118,8 +123,8 @@ export default function AccuracyCalendar({
   const [month, setMonth] = useState(now.getMonth());
 
   const calDays = useMemo(
-    () => buildCalendarDays(year, month, planId, activities, today, planStartDate, planEndDate),
-    [year, month, planId, activities, today, planStartDate, planEndDate],
+    () => buildCalendarDays(year, month, planId, activities, today, planStartDate, planEndDate, trackingStart),
+    [year, month, planId, activities, today, planStartDate, planEndDate, trackingStart],
   );
 
   const stats = useMemo(() => {

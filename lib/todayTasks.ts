@@ -42,7 +42,7 @@ export function selectTodayTasks(
   // sorting the template's time would place the row in the wrong slot.
   const tasks = sortTasksByTime(
     (schedule.activities[todayKey] ?? [])
-      .filter((task) => isTaskScheduledOn(task, todayISO, true) && isTrackedTask(task))
+      .filter((task) => isTaskScheduledOn(task, todayISO, true, schedule.preferences?.startDate) && isTrackedTask(task))
       .map((task) => resolveOccurrence(task, todayISO)),
   );
 

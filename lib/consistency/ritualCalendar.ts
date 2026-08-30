@@ -25,6 +25,7 @@ export function buildRitualMonthDays(
   year: number,
   month: number,
   today: string,
+  trackingStart?: string,
 ): RitualCalendarDay[] {
   const daysInMonth = new Date(year, month + 1, 0).getDate();
   const byDate = new Map<string, RitualCompletion[]>();
@@ -39,7 +40,7 @@ export function buildRitualMonthDays(
   for (let d = 1; d <= daysInMonth; d++) {
     const iso = localISODate(new Date(year, month, d));
     const isFuture = iso > today;
-    const scheduled = ritualScheduledOnDate(ritual, iso);
+    const scheduled = ritualScheduledOnDate(ritual, iso, trackingStart);
     const complete = isRitualDayComplete(ritual, byDate.get(iso) ?? []);
 
     let status: RitualCalendarStatus;
@@ -62,6 +63,7 @@ export function buildAllRoutinesMonthDays(
   year: number,
   month: number,
   today: string,
+  trackingStart?: string,
 ): RitualCalendarDay[] {
   const daysInMonth = new Date(year, month + 1, 0).getDate();
   const byRitualDate = new Map<string, RitualCompletion[]>();
@@ -76,7 +78,7 @@ export function buildAllRoutinesMonthDays(
   for (let d = 1; d <= daysInMonth; d++) {
     const iso = localISODate(new Date(year, month, d));
     const isFuture = iso > today;
-    const due = rituals.filter((r) => ritualScheduledOnDate(r, iso));
+    const due = rituals.filter((r) => ritualScheduledOnDate(r, iso, trackingStart));
 
     let status: RitualCalendarStatus;
     if (isFuture) status = "future";

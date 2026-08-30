@@ -9,6 +9,7 @@ import { DAYS } from "@/lib/useScheduleDB";
 import { getSlots, sortTasksByTime } from "@/lib/taskMutations";
 import { completionForDate, getTaskCheckableItems, getTaskSubtaskSummary, isTrackedTask, resolveSlotState, resolveTaskState } from "@/lib/taskCompletion";
 import { isTaskScheduledOn, resolveOccurrence } from "@/lib/taskOccurrence";
+import { ritualScheduledOnDate } from "@/lib/ritualRecurrence";
 import { addDaysToISO, localISODate, todayISO } from "@/lib/dateUtils";
 import { currentMinutes, parseTimeToMinutes } from "@/lib/timeUtils";
 import { categoryHex } from "@/lib/colorSystem";
@@ -147,10 +148,10 @@ function buildDayLayout(
 interface RitualMark { top: number; rituals: Ritual[] }
 
 /** Rituals due on `day`, grouped by mapped time, positioned to the timeline. */
-function buildRitualMarks(rituals: Ritual[], day: DayKey, startMin: number, endMin: number): RitualMark[] {
+function buildRitualMarks(rituals: Ritual[], dateISO: string, startMin: number, endMin: number, trackingStart?: string): RitualMark[] {
   const byTime = new Map<number, Ritual[]>();
   for (const r of rituals) {
-    if (r.repeatDays && r.repeatDays.length > 0 && !r.repeatDays.includes(day)) continue;
+    if (!ritualScheduledOnDate(r, dateISO, trackingStart)) continue;
     const mins = parseTimeToMinutes(r.time);
     if (mins == null) continue;
     const mapped = mapMinutesToTimeline(mins, startMin, endMin);
@@ -351,7 +352,7 @@ export function WeekGrid({
   const days = weekDates.map(({ day, date }) => {
     const dateISO = localISODate(date);
     const dayIsToday = dateISO === todayISO();
-    const raw = sortTasksByTime(schedule.activities[day] ?? []).filter((t) => isTaskScheduledOn(t, dateISO, true));
+    const raw = sortTasksByTime(schedule.activities[day] ?? []).filter((t) => isTaskScheduledOn(t, dateISO, true, schedule.preferences?.startDate));
     const tasks = raw.map((t) => {
       const r = resolveOccurrence(t, dateISO);
       return dayIsToday ? r : { ...r, ...completionForDate(t, dateISO) };
@@ -364,7 +365,7 @@ export function WeekGrid({
     const prevDay = DAYS[(DAYS.indexOf(day) + 6) % 7];
     const prevISO = addDaysToISO(dateISO, -1);
     const carryIn = (schedule.activities[prevDay] ?? [])
-      .filter((t) => isTaskScheduledOn(t, prevISO, true))
+      .filter((t) => isTaskScheduledOn(t, prevISO, true, schedule.preferences?.startDate))
       .map((t) => resolveOccurrence(t, prevISO));
     return { day, date, dateISO, dayIsToday, tasks, carryIn };
   });
@@ -984,7 +985,7 @@ export function WeekGrid({
           {/* Day columns */}
           {days.map(({ day, dayIsToday, dateISO, tasks, carryIn }) => {
             const { timed } = buildDayLayout(tasks, startMin, endMin, carryIn);
-            const ritualMarks = buildRitualMarks(rituals, day, startMin, endMin);
+            const ritualMarks = buildRitualMarks(rituals, dateISO, startMin, endMin, schedule.preferences?.startDate);
             const completedRituals = new Set(
               ritualCompletions.filter((c) => c.date === dateISO).map((c) => c.ritualId),
             );

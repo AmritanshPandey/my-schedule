@@ -3,37 +3,40 @@
 import { useMemo } from "react";
 import RitualStrip from "./RitualStrip";
 import { groupRitualsByTime } from "@/lib/timeline/groupRitualsByTime";
-import type { Ritual, DayKey } from "@/lib/useScheduleDB";
+import type { Ritual } from "@/lib/useScheduleDB";
 import { RITUAL_DAY_LIMIT as DAY_LIMIT } from "@/lib/ritualColors";
 
 interface RitualOverlayLayerProps {
   rituals: Ritual[];
-  activeDay: DayKey;
+  dateISO: string;
   timelineStartMinutes: number;
   timelineEndMinutes: number;
   timelineTopPadding: number;
   hourHeight: number;
   completedIds: Set<string>;
   onToggleComplete: (id: string) => void;
+  trackingStart?: string;
 }
 
 export default function RitualOverlayLayer({
   rituals,
-  activeDay,
+  dateISO,
   timelineStartMinutes,
   timelineEndMinutes,
   timelineTopPadding,
   hourHeight,
   completedIds,
   onToggleComplete,
+  trackingStart,
 }: RitualOverlayLayerProps) {
   const { groups, dropped } = useMemo(() => {
     const raw = groupRitualsByTime(
-      rituals, activeDay,
+      rituals, dateISO,
       timelineStartMinutes, timelineEndMinutes,
       timelineTopPadding, hourHeight,
+      trackingStart,
     );
-    // Cap to DAY_LIMIT total rituals across all groups (already filtered to activeDay)
+    // Cap to DAY_LIMIT total rituals across all groups (already filtered to dateISO)
     const total = raw.reduce((sum, g) => sum + g.rituals.length, 0);
     let remaining = DAY_LIMIT;
     const capped = raw
@@ -44,7 +47,7 @@ export default function RitualOverlayLayer({
       })
       .filter((g) => g.rituals.length > 0);
     return { groups: capped, dropped: Math.max(0, total - DAY_LIMIT) };
-  }, [rituals, activeDay, timelineStartMinutes, timelineEndMinutes, timelineTopPadding, hourHeight]);
+  }, [rituals, dateISO, timelineStartMinutes, timelineEndMinutes, timelineTopPadding, hourHeight, trackingStart]);
 
   if (groups.length === 0) return null;
 

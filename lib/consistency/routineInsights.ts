@@ -34,6 +34,7 @@ function windowPct(
   completions: RitualCompletion[],
   startISO: string,
   endISO: string,
+  trackingStart?: string,
 ): number | null {
   let scheduled = 0;
   let done = 0;
@@ -42,7 +43,7 @@ function windowPct(
   while (cursor <= end) {
     const iso = localISODate(cursor);
     for (const ritual of rituals) {
-      if (!ritualScheduledOnDate(ritual, iso)) continue;
+      if (!ritualScheduledOnDate(ritual, iso, trackingStart)) continue;
       scheduled++;
       const dayRows = completions.filter((c) => c.ritualId === ritual.id && c.date === iso);
       if (isRitualDayComplete(ritual, dayRows)) done++;
@@ -56,6 +57,8 @@ export function buildRoutineInsights(
   rituals: Ritual[],
   completions: RitualCompletion[],
   todayISO: string,
+  /** Schedule-wide tracking start — insights ignore anything before it. */
+  trackingStart?: string,
 ): RoutineInsights {
   const today = new Date(`${todayISO}T00:00:00`);
   const iso = (offsetDays: number) => {
@@ -64,8 +67,8 @@ export function buildRoutineInsights(
     return localISODate(d);
   };
 
-  const overallPct = rituals.length > 0 ? windowPct(rituals, completions, iso(-6), iso(0)) : null;
-  const lastWeekPct = rituals.length > 0 ? windowPct(rituals, completions, iso(-13), iso(-7)) : null;
+  const overallPct = rituals.length > 0 ? windowPct(rituals, completions, iso(-6), iso(0), trackingStart) : null;
+  const lastWeekPct = rituals.length > 0 ? windowPct(rituals, completions, iso(-13), iso(-7), trackingStart) : null;
   const deltaVsLastWeek =
     overallPct !== null && lastWeekPct !== null ? overallPct - lastWeekPct : null;
 
@@ -73,7 +76,7 @@ export function buildRoutineInsights(
   let needsAttention: RoutineInsights["needsAttention"] = null;
 
   for (const ritual of rituals) {
-    const { streak, adherencePct } = calculateRitualStats(ritual, completions, todayISO);
+    const { streak, adherencePct } = calculateRitualStats(ritual, completions, todayISO, trackingStart);
     if (streak >= MIN_STREAK_TO_HIGHLIGHT && (!mostConsistent || streak > mostConsistent.streak)) {
       mostConsistent = { ritual, streak };
     }
@@ -85,13 +88,13 @@ export function buildRoutineInsights(
   // "struggling" (e.g. an interval routine whose cycle hasn't started yet).
   const hasRecentSchedule = (ritual: Ritual) => {
     for (let i = 0; i < 30; i++) {
-      if (ritualScheduledOnDate(ritual, iso(-i))) return true;
+      if (ritualScheduledOnDate(ritual, iso(-i), trackingStart)) return true;
     }
     return false;
   };
   const candidates = rituals
     .filter(hasRecentSchedule)
-    .map((ritual) => ({ ritual, ...calculateRitualStats(ritual, completions, todayISO) }))
+    .map((ritual) => ({ ritual, ...calculateRitualStats(ritual, completions, todayISO, trackingStart) }))
     .filter((r) => r.adherencePct < LOW_ADHERENCE_THRESHOLD);
   if (candidates.length > 0) {
     const worst = candidates.reduce((a, b) => (b.adherencePct < a.adherencePct ? b : a));

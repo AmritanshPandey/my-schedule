@@ -7,6 +7,7 @@ import AddEntryModal from "@/components/AddEntryModal";
 import { quickAmountsForUnit } from "@/lib/quickAmounts";
 import { sumEntriesForDate } from "@/lib/metricEntries";
 import { completedRitualIdsOn } from "@/lib/consistency/ritualDayStatus";
+import { ritualScheduledOnDate } from "@/lib/ritualRecurrence";
 import { TaskBlockCard } from "@/components/TaskBlockCard";
 import Skeleton from "@/components/ui/Skeleton";
 import type { TaskSaveData } from "@/components/task/TaskSheet";
@@ -1609,7 +1610,7 @@ export default function ScheduleApp() {
     if (dated.length > 0) {
       const { conflicts } = validateDatedTasks(dated, (dateISO, weekday) =>
         (schedule.activities[weekday] ?? [])
-          .filter((task) => isTaskScheduledOn(task, dateISO, true))
+          .filter((task) => isTaskScheduledOn(task, dateISO, true, schedule.preferences?.startDate))
           .flatMap((task) => getSlots(task).map((s) => ({ title: task.title, ...s }))),
       );
       blocked = new Set(conflicts.map((c) => c.task.taskId));
@@ -2404,14 +2405,11 @@ export default function ScheduleApp() {
     return Array.from({ length: 7 }, (_, i) => {
       const date = addDaysToISO(today, i - 6);
       const jsDay = new Date(date + "T00:00:00").getDay();
-      const dayKey = JS_DAYS[jsDay];
-      const due = rituals.filter(
-        (r) => !r.repeatDays || r.repeatDays.length === 0 || r.repeatDays.includes(dayKey)
-      ).length;
+      const due = rituals.filter((r) => ritualScheduledOnDate(r, date, schedule.preferences?.startDate)).length;
       const done = completions.filter((c) => c.date === date).length;
       return { date, label: SHORT[jsDay], isToday: date === today, completedCount: done, dueCount: due };
     });
-  }, [schedule.rituals, schedule.ritualCompletions, todayKey]);
+  }, [schedule.rituals, schedule.ritualCompletions, todayKey, schedule.preferences?.startDate]);
 
   // ─── Derived data ──────────────────────────────────────────────────────────
 
@@ -2435,12 +2433,12 @@ export default function ScheduleApp() {
   const dayTasksView = useMemo(
     () =>
       dayTasks
-        .filter((t) => isTaskScheduledOn(t, activeDateISO, true))
+        .filter((t) => isTaskScheduledOn(t, activeDateISO, true, schedule.preferences?.startDate))
         .map((t) => {
           const resolved = resolveOccurrence(t, activeDateISO);
           return isViewingToday ? resolved : { ...resolved, ...completionForDate(t, activeDateISO) };
         }),
-    [dayTasks, isViewingToday, activeDateISO]
+    [dayTasks, isViewingToday, activeDateISO, schedule.preferences?.startDate]
   );
 
   // Yesterday's overnight tails, which finish inside the day being viewed.
@@ -2450,10 +2448,10 @@ export default function ScheduleApp() {
     const prevDay = DAYS[(DAYS.indexOf(activeDay) + 6) % 7];
     const prevISO = addDaysToISO(activeDateISO, -1);
     return (schedule.activities[prevDay] ?? [])
-      .filter((t) => isTaskScheduledOn(t, prevISO, true))
+      .filter((t) => isTaskScheduledOn(t, prevISO, true, schedule.preferences?.startDate))
       .map((t) => resolveOccurrence(t, prevISO))
       .filter((t) => taskContinuations(t).length > 0);
-  }, [schedule.activities, activeDay, activeDateISO]);
+  }, [schedule.activities, activeDay, activeDateISO, schedule.preferences?.startDate]);
 
   const timelineStartMinutes = useMemo(
     () =>
@@ -2732,12 +2730,8 @@ export default function ScheduleApp() {
 
   /** Rituals due on the active day (for summary line) */
   const todayDueRituals = useMemo(
-    () =>
-      (schedule.rituals ?? []).filter(
-        (r) =>
-          !r.repeatDays || r.repeatDays.length === 0 || r.repeatDays.includes(activeDay as DayKey)
-      ),
-    [schedule.rituals, activeDay]
+    () => (schedule.rituals ?? []).filter((r) => ritualScheduledOnDate(r, activeDateISO, schedule.preferences?.startDate)),
+    [schedule.rituals, activeDateISO, schedule.preferences?.startDate]
   );
   const todayRitualsTotal = todayDueRituals.length;
   const todayRitualsDone = useMemo(
@@ -3782,12 +3776,13 @@ export default function ScheduleApp() {
                     {/* Routine dot legend — maps timeline dot colors to routines */}
                     <RitualLegend
                       rituals={schedule.rituals ?? []}
-                      activeDay={activeDay}
+                      dateISO={activeDateISO}
                       timelineStartMinutes={timelineStartMinutes}
                       timelineEndMinutes={timelineEndMinutes}
                       timelineTopPadding={TIMELINE_TOP_PADDING}
                       hourHeight={HOUR_HEIGHT}
                       completedIds={completedRitualIds}
+                      trackingStart={schedule.preferences?.startDate}
                     />
                     {/* Premium execution timeline */}
                     <ErrorBoundary section name="Timeline">
@@ -3847,13 +3842,14 @@ export default function ScheduleApp() {
                       >
                         <RitualOverlayLayer
                           rituals={schedule.rituals ?? []}
-                          activeDay={activeDay}
+                          dateISO={activeDateISO}
                           timelineStartMinutes={timelineStartMinutes}
                           timelineEndMinutes={timelineEndMinutes}
                           timelineTopPadding={TIMELINE_TOP_PADDING}
                           hourHeight={HOUR_HEIGHT}
                           completedIds={completedRitualIds}
                           onToggleComplete={handleToggleRitualComplete}
+                          trackingStart={schedule.preferences?.startDate}
                         />
                       </div>
 
@@ -4077,6 +4073,7 @@ export default function ScheduleApp() {
             <RitualView
               rituals={schedule.rituals ?? []}
               ritualCompletions={schedule.ritualCompletions ?? []}
+              trackingStart={schedule.preferences?.startDate}
               onToggleComplete={handleToggleRitualComplete}
               onLogAmount={handleLogRitualAmount}
               onUndoLastLog={handleUndoRitualLog}
@@ -4347,6 +4344,7 @@ export default function ScheduleApp() {
           <RoutineDetailView
             ritual={detailRitual}
             ritualCompletions={schedule.ritualCompletions ?? []}
+            trackingStart={schedule.preferences?.startDate}
             onBack={() => setDetailRitualId(null)}
             onToggleCheckbox={() => handleToggleRitualComplete(detailRitual.id)}
             onLogAmount={(amount) => handleLogRitualAmount(detailRitual.id, amount, todayISO())}

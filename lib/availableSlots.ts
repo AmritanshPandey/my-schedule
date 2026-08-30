@@ -58,7 +58,7 @@ export function findAvailableSlots(
 
   const busy: Array<{ start: number; end: number }> = [];
   for (const task of tasks) {
-    if (!isTaskScheduledOn(task, dateISO, true)) continue;
+    if (!isTaskScheduledOn(task, dateISO, true, preferences?.startDate)) continue;
     const occurrence = resolveOccurrence(task, dateISO);
     for (const slot of getSlots(occurrence)) {
       const rawStart = parseTimeToMinutes(slot.startTime);

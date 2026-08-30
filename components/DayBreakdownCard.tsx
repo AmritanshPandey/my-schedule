@@ -99,8 +99,8 @@ export default function DayBreakdownCard({ activities, categories, todayKey, tod
     return { tasks: activities[prev] ?? [], dateISO: addDaysToISO(dateISO, -1) };
   }, [activities, day, dateISO]);
   const breakdown = useMemo(
-    () => buildDayBreakdown(activities[day] ?? [], categories, dateISO, carryIn),
-    [activities, day, categories, dateISO, carryIn],
+    () => buildDayBreakdown(activities[day] ?? [], categories, dateISO, carryIn, preferences?.startDate),
+    [activities, day, categories, dateISO, carryIn, preferences?.startDate],
   );
   const { slices, totalMinutes, committedMinutes, overlapMinutes } = breakdown;
   const active = useMemo(
@@ -122,7 +122,7 @@ export default function DayBreakdownCard({ activities, categories, todayKey, tod
     }
     let lastEnd: number | null = null;
     for (const t of activities[day] ?? []) {
-      if (!isTaskScheduledOn(t, dateISO, true)) continue;
+      if (!isTaskScheduledOn(t, dateISO, true, preferences?.startDate)) continue;
       const occ = resolveOccurrence(t, dateISO);
       for (const s of getSlots(occ)) {
         const rawEnd = parseTimeToMinutes(s.endTime);
@@ -135,7 +135,7 @@ export default function DayBreakdownCard({ activities, categories, todayKey, tod
       }
     }
     return lastEnd;
-  }, [activities, day, dateISO, preferences?.dayEndAuto, preferences?.dayEndMinutes]);
+  }, [activities, day, dateISO, preferences?.dayEndAuto, preferences?.dayEndMinutes, preferences?.startDate]);
   // One fallback for the whole card. The footer used to default to 4:00 (the
   // schedule-day boundary) while the bar defaulted to 7:00 (a wake time), so an
   // unconfigured user was shown two different day starts on the same card.

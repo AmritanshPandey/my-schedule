@@ -87,7 +87,7 @@ import { formatDisplayTime, inputToDisplayTime, minutesToInputTime, parseTimeToM
 import { computeTrend } from "@/lib/trendUtils";
 import { getPlanCardStats } from "@/lib/planInsights";
 import { calculateExecutionStreak } from "@/lib/consistency/calculateExecutionStreak";
-import { calculateRitualStats, ritualScheduledOn } from "@/lib/consistency/calculateRitualStreak";
+import { calculateRitualStats, ritualScheduledOnDate } from "@/lib/consistency/calculateRitualStreak";
 import { completedRitualIdsOn } from "@/lib/consistency/ritualDayStatus";
 import { useAIEnabled } from "@/lib/ai/useAIEnabled";
 import { computeExecutionTrend } from "@/lib/executionAnalytics";
@@ -531,12 +531,12 @@ export default function IOSScheduleApp() {
   const dayTasksView = useMemo(
     () =>
       dayTasks
-        .filter((task) => isTaskScheduledOn(task, activeDateISO, true))
+        .filter((task) => isTaskScheduledOn(task, activeDateISO, true, schedule.preferences?.startDate))
         .map((task) => {
           const resolved = resolveOccurrence(task, activeDateISO);
           return isViewingToday ? resolved : { ...resolved, ...completionForDate(task, activeDateISO) };
         }),
-    [activeDateISO, dayTasks, isViewingToday]
+    [activeDateISO, dayTasks, isViewingToday, schedule.preferences?.startDate]
   );
   // Shared with the desktop dashboard so the two cards can't drift again.
   const { tasks: todayTasks, done: todayDone } = useMemo(
@@ -572,12 +572,11 @@ export default function IOSScheduleApp() {
     return Array.from({ length: 7 }, (_, i) => {
       const date = addDaysToISO(today, i - 6);
       const jsDay = new Date(`${date}T00:00:00`).getDay();
-      const dayKey = JS_DAYS[jsDay];
-      const dueCount = rituals.filter((ritual) => !ritual.repeatDays || ritual.repeatDays.length === 0 || ritual.repeatDays.includes(dayKey)).length;
+      const dueCount = rituals.filter((ritual) => ritualScheduledOnDate(ritual, date, schedule.preferences?.startDate)).length;
       const completedCount = completions.filter((item) => item.date === date).length;
       return { date, label: labels[jsDay], isToday: date === today, completedCount, dueCount };
     });
-  }, [schedule.rituals, schedule.ritualCompletions, todayKey]);
+  }, [schedule.rituals, schedule.ritualCompletions, todayKey, schedule.preferences?.startDate]);
 
   // Counts cover tracked work only. dayTasksView keeps commitments — it drives
   // the rendered day list, which does show them. todayTasks is already
@@ -611,13 +610,13 @@ export default function IOSScheduleApp() {
     const completions = schedule.ritualCompletions ?? [];
     return (schedule.rituals ?? [])
       .map((ritual) => {
-        const { streak, adherencePct, dots } = calculateRitualStats(ritual, completions, todayISO());
-        return { ritual, streak, adherencePct, dots, dueToday: ritualScheduledOn(ritual, todayKey) };
+        const { streak, adherencePct, dots } = calculateRitualStats(ritual, completions, todayISO(), schedule.preferences?.startDate);
+        return { ritual, streak, adherencePct, dots, dueToday: ritualScheduledOnDate(ritual, todayISO(), schedule.preferences?.startDate) };
       })
       .sort((a, b) =>
         a.dueToday !== b.dueToday ? (a.dueToday ? -1 : 1) : a.adherencePct - b.adherencePct,
       );
-  }, [schedule.rituals, schedule.ritualCompletions, todayKey]);
+  }, [schedule.rituals, schedule.ritualCompletions, todayKey, schedule.preferences?.startDate]);
 	  const overviewTrackers = useMemo(() => {
 	    const storedTrackers = schedule.progressTrackers ?? [];
     const fallbackTrackers: ProgressTracker[] = storedTrackers.length > 0
@@ -1771,6 +1770,7 @@ export default function IOSScheduleApp() {
               <RitualView
                 rituals={schedule.rituals ?? []}
                 ritualCompletions={schedule.ritualCompletions ?? []}
+                trackingStart={schedule.preferences?.startDate}
                 onToggleComplete={handleToggleRitualComplete}
                 onLogAmount={handleLogRitualAmount}
                 onUndoLastLog={handleUndoRitualLog}
@@ -2034,6 +2034,7 @@ export default function IOSScheduleApp() {
           <RoutineDetailView
             ritual={detailRitual}
             ritualCompletions={schedule.ritualCompletions ?? []}
+            trackingStart={schedule.preferences?.startDate}
             onBack={() => setDetailRitualId(null)}
             onToggleCheckbox={() => handleToggleRitualComplete(detailRitual.id)}
             onLogAmount={(amount) => handleLogRitualAmount(detailRitual.id, amount, todayISO())}

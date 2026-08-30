@@ -39,8 +39,14 @@ export function weeksBetween(anchorISO: string, dateISO: string): number {
  * and the recurrence rule: a `once` task is due only on its date; a `weekly`
  * task with interval > 1 is due only on weeks that are a multiple of the
  * interval from its anchor. Absent recurrence = every matching weekday.
+ *
+ * `trackingStart` is Settings → Tracking → "Tracking starts"
+ * (`schedule.preferences?.startDate`) — a schedule-wide floor, distinct from
+ * `activeFrom`'s per-task window. Optional and checked last so every existing
+ * call site keeps compiling and behaving identically until it's updated to
+ * pass it through.
  */
-export function isTaskScheduledOn(task: Task, dateISO: string, weekdayHasTask: boolean): boolean {
+export function isTaskScheduledOn(task: Task, dateISO: string, weekdayHasTask: boolean, trackingStart?: string): boolean {
   if (!weekdayHasTask) return false;
   if (task.exceptions?.[dateISO]?.skipped) return false;
 
@@ -48,6 +54,7 @@ export function isTaskScheduledOn(task: Task, dateISO: string, weekdayHasTask: b
   // lexicographically, so no Date parsing is needed.
   if (task.activeFrom && dateISO < task.activeFrom) return false;
   if (task.activeUntil && dateISO > task.activeUntil) return false;
+  if (trackingStart && dateISO < trackingStart) return false;
 
   const r = task.recurrence;
   if (r) {

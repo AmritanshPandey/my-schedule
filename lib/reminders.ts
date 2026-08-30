@@ -125,7 +125,7 @@ export function collectReminders(schedule: Schedule, now = new Date()): PendingR
   if (settings.tasks) {
     for (const task of schedule.activities[dayKey] ?? []) {
       if (taskIsDone(task)) continue;
-      if (!isTaskScheduledOn(task, todayISO, true)) continue;
+      if (!isTaskScheduledOn(task, todayISO, true, schedule.preferences?.startDate)) continue;
       const occ = resolveOccurrence(task, todayISO);
       // One reminder per phase — a multi-slot task fires at each start time.
       getSlots(occ).forEach((slot, index) => {
@@ -149,7 +149,7 @@ export function collectReminders(schedule: Schedule, now = new Date()): PendingR
       // "Any time" routines have no meaningful reminder moment — `time` is
       // just a leftover placeholder for readers that still need one.
       if (ritual.anyTime) continue;
-      if (!ritualScheduledOnDate(ritual, todayISO)) continue;
+      if (!ritualScheduledOnDate(ritual, todayISO, schedule.preferences?.startDate)) continue;
       // trackingType-aware: a quantity/checklist routine only cancels its
       // reminder once the day is actually complete, not on the first partial log.
       if (isRitualDayComplete(ritual, completionsToday.filter((c) => c.ritualId === ritual.id))) continue;
@@ -174,7 +174,7 @@ export function collectReminders(schedule: Schedule, now = new Date()): PendingR
       // you can't close is exactly the kind of noise this nudge must avoid.
       // Their start-time reminders above still fire — that part is useful.
       const openCount = (schedule.activities[dayKey] ?? []).filter(
-        (t) => !taskIsDone(t) && isTaskScheduledOn(t, todayISO, true) && isTrackedTask(t),
+        (t) => !taskIsDone(t) && isTaskScheduledOn(t, todayISO, true, schedule.preferences?.startDate) && isTrackedTask(t),
       ).length;
       if (atMs > nowMs && openCount > 0) {
         out.push({

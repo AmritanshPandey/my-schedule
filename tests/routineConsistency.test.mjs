@@ -270,3 +270,47 @@ test("calculateRitualStats: a genuinely missed due day on an interval routine st
   const stats = calculateRitualStats(r, completions, "2026-01-07");
   assert.equal(stats.streak, 1);
 });
+
+// ── trackingStart: schedule-wide "tracking starts" cutoff ──────────────────
+
+test("ritualScheduledOnDate: a date before trackingStart is never scheduled, regardless of recurrence", () => {
+  const everyDay = ritual();
+  assert.equal(ritualScheduledOnDate(everyDay, "2026-01-05", "2026-01-06"), false, "before cutoff -> hidden");
+  assert.equal(ritualScheduledOnDate(everyDay, "2026-01-06", "2026-01-06"), true, "on cutoff -> visible");
+  assert.equal(ritualScheduledOnDate(everyDay, "2026-01-07", "2026-01-06"), true, "after cutoff -> visible");
+  assert.equal(ritualScheduledOnDate(everyDay, "2026-01-05"), true, "omitted trackingStart -> unaffected (regression)");
+
+  const interval = ritual({ recurrence: { kind: "interval", intervalDays: 3, anchorDate: "2026-01-01" } });
+  assert.equal(ritualScheduledOnDate(interval, "2026-01-04", "2026-01-05"), false, "due day before cutoff -> hidden");
+  assert.equal(ritualScheduledOnDate(interval, "2026-01-07", "2026-01-05"), true, "due day after cutoff -> visible");
+});
+
+test("calculateRitualStats: trackingStart clips the streak/adherence window, same as tasks", () => {
+  const r = ritual();
+  const completions = [
+    { ritualId: "r1", date: "2026-01-09" },
+    { ritualId: "r1", date: "2026-01-08" },
+    { ritualId: "r1", date: "2026-01-07" },
+  ];
+  // Without a cutoff, all 3 days count toward the streak.
+  const noCutoff = calculateRitualStats(r, completions, "2026-01-09");
+  assert.equal(noCutoff.streak, 3);
+  // With trackingStart landing mid-run, only days on/after it count.
+  const clipped = calculateRitualStats(r, completions, "2026-01-09", "2026-01-08");
+  assert.equal(clipped.streak, 2);
+});
+
+test("calculateBestStreak: trackingStart hides a best-streak run that predates it", () => {
+  const r = ritual();
+  const completions = [
+    { ritualId: "r1", date: "2025-12-01" },
+    { ritualId: "r1", date: "2025-12-02" },
+    { ritualId: "r1", date: "2025-12-03" },
+    { ritualId: "r1", date: "2025-12-04" },
+    { ritualId: "r1", date: "2025-12-05" },
+    { ritualId: "r1", date: "2026-01-09" },
+    { ritualId: "r1", date: "2026-01-08" },
+  ];
+  const withCutoff = calculateRitualStats(r, completions, "2026-01-09", "2026-01-01");
+  assert.equal(withCutoff.bestStreak, 2, "the older 5-day run predates trackingStart and no longer counts");
+});

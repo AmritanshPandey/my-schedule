@@ -688,6 +688,13 @@ test("per-date exceptions: scheduling, resolution, and mutations", () => {
   assert.equal(isTaskScheduledOn(skipped, D, true), false, "skipped date is not scheduled");
   assert.equal(isTaskScheduledOn(skipped, "2026-06-29", true), true, "other dates unaffected");
 
+  // trackingStart: schedule-wide cutoff hides everything before it, regardless of recurrence
+  assert.equal(isTaskScheduledOn(base(), D, true, "2026-06-23"), false, "before trackingStart -> hidden");
+  assert.equal(isTaskScheduledOn(base(), D, true, D), true, "on trackingStart -> still visible");
+  assert.equal(isTaskScheduledOn(base(), D, true, "2026-06-01"), true, "after trackingStart -> unaffected");
+  assert.equal(isTaskScheduledOn(base(), D, true), true, "omitted trackingStart -> unaffected (regression)");
+  assert.equal(isTaskScheduledOn(base(), D, true, undefined), true, "explicit undefined trackingStart -> unaffected");
+
   // resolveOccurrence applies overrides but preserves identity/history
   const edited = { ...base(), exceptions: { [D]: { title: "Long run", startTime: "7:00 AM" } } };
   const occ = resolveOccurrence(edited, D);
@@ -1766,6 +1773,22 @@ test("buildDayBreakdown groups by category and pools commitments into held time"
   assert.equal(slices[0].color, "indigo", "wedge colour is the category's, so it matches the timeline");
   assert.equal(slices.find((s) => s.id === HELD_TIME_ID).label, "Held time");
   assert.equal(slices.find((s) => s.id === HELD_TIME_ID).color, null, "held time has no accent");
+});
+
+test("buildDayBreakdown: a task before trackingStart contributes nothing", () => {
+  const categories = [{ id: "cat-code", title: "Coding", icon: "code", color: "indigo" }];
+  const t = (over) => ({ id: over.id, title: over.id, planId: "p", startTime: over.startTime, endTime: over.endTime, ...over });
+  const tasks = [t({ id: "a", categoryId: "cat-code", startTime: "9:00 AM", endTime: "11:00 AM" })]; // 120
+
+  const noCutoff = buildDayBreakdown(tasks, categories, "2026-01-10");
+  assert.equal(noCutoff.committedMinutes, 120, "no trackingStart -> counts normally (regression)");
+
+  const beforeCutoff = buildDayBreakdown(tasks, categories, "2026-01-10", undefined, "2026-01-11");
+  assert.equal(beforeCutoff.committedMinutes, 0, "day before trackingStart -> nothing counted");
+  assert.equal(beforeCutoff.totalMinutes, 1440, "the ring is still the whole day");
+
+  const onCutoff = buildDayBreakdown(tasks, categories, "2026-01-10", undefined, "2026-01-10");
+  assert.equal(onCutoff.committedMinutes, 120, "on trackingStart -> still counted");
 });
 
 test("buildWeeklyHeatmap buckets scheduled minutes into weekday × time bands", () => {

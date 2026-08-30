@@ -1,5 +1,6 @@
-import type { Ritual, DayKey } from "@/lib/useScheduleDB";
+import type { Ritual } from "@/lib/useScheduleDB";
 import { parseTimeToMinutes } from "@/lib/timeUtils";
+import { ritualScheduledOnDate } from "@/lib/ritualRecurrence";
 
 export interface RitualGroup {
   key: string;
@@ -10,14 +11,15 @@ export interface RitualGroup {
 
 export function groupRitualsByTime(
   rituals: Ritual[],
-  activeDay: DayKey,
+  dateISO: string,
   timelineStartMinutes: number,
   timelineEndMinutes: number,
   timelineTopPadding: number,
   hourHeight: number,
+  trackingStart?: string,
 ): RitualGroup[] {
   const visible = rituals.filter((r) => {
-    if (r.repeatDays && r.repeatDays.length > 0 && !r.repeatDays.includes(activeDay)) return false;
+    if (!ritualScheduledOnDate(r, dateISO, trackingStart)) return false;
     const mins = parseTimeToMinutes(r.time);
     if (mins === null) return false;
     return mins >= timelineStartMinutes && mins <= timelineEndMinutes;
