@@ -53,13 +53,18 @@ export default function RoutineRow({
   const iconStyle = getIconPickerStyle(ritual.icon ?? "");
   const Glyph = iconGlyph(ritual.icon ?? "");
 
+  const trackingType = ritual.trackingType ?? "checkbox";
+
   const secondary: string[] = [];
-  if (ritual.anyTime) secondary.push("Anytime");
+  if (trackingType === "times" && ritual.steps && ritual.steps.length > 0) {
+    // Every occurrence, not just the earliest one `ritual.time` mirrors —
+    // "8:00 AM · 1:00 PM · 6:00 PM" is the whole schedule at a glance.
+    secondary.push(ritual.steps.map((step) => formatDisplayTime(step.label)).join(" · "));
+  } else if (ritual.anyTime) secondary.push("Anytime");
   else secondary.push(formatDisplayTime(ritual.time));
   if (missed) secondary.push("Missed");
   else secondary.push(describeRecurrence(ritual));
 
-  const trackingType = ritual.trackingType ?? "checkbox";
   const showProgressText = trackingType === "quantity" || trackingType === "duration" || trackingType === "count";
   // Checkbox routines can bundle a purely descriptive item list (e.g. "Hair"
   // ⇒ coconut oil, shampoo, conditioner) — one tap above covers all of them,

@@ -184,7 +184,7 @@ export const MilestoneSchema = z.object({
   sortOrder: z.number().finite(),
 }).passthrough();
 
-const ritualTrackingType = z.enum(["checkbox", "quantity", "duration", "count", "checklist"]);
+const ritualTrackingType = z.enum(["checkbox", "quantity", "duration", "count", "checklist", "times"]);
 const ritualStep = z.object({ id: nonEmptyId, label: z.string() }).passthrough();
 const ritualRecurrence = z.object({
   kind: z.enum(["daily", "weekdays", "weekends", "custom", "interval"]),

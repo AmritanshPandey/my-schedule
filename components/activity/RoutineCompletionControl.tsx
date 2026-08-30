@@ -15,10 +15,11 @@
  *              fix already made in AddEntryModal.tsx for a real stale-closure
  *              bug — must itself be backed by a functional `setSchedule`
  *              updater so rapid taps can never lose an increment.
- * checklist  → a compact "done/total" pill. Tapping it does not expand steps
+ * checklist/
+ * times      → a compact "done/total" pill. Tapping it does not expand steps
  *              inline (kept out of the row to avoid a second layout mode) —
- *              opening the routine's detail view is where steps are checked
- *              off individually.
+ *              opening the routine's detail view is where steps (checklist)
+ *              or occurrences (times) are checked off individually.
  */
 import { m, AnimatePresence } from "framer-motion";
 import { IconCheck, IconMinus, IconPlus } from "@tabler/icons-react";
@@ -78,7 +79,7 @@ export default function RoutineCompletionControl({
     );
   }
 
-  if (trackingType === "checklist") {
+  if (trackingType === "checklist" || trackingType === "times") {
     return (
       <span
         className={`flex h-8 shrink-0 items-center rounded-full px-3 text-[12px] font-bold tabular-nums ${

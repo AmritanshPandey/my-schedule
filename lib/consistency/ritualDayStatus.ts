@@ -12,7 +12,7 @@ export interface RitualDayProgress {
   target: number | undefined;
   /** Whether the day counts as done, per the rules below. */
   complete: boolean;
-  /** Checklist only. */
+  /** Checklist/times only. */
   stepsDone: number;
   stepsTotal: number;
   /** Every row for this ritual on this day, in original order. */
@@ -44,7 +44,8 @@ export function ritualDayProgress(ritual: Ritual, entries: RitualCompletion[]): 
       const complete = typeof target === "number" && target > 0 ? value >= target : value > 0;
       return { value, target, complete, stepsDone: 0, stepsTotal: 0, entries };
     }
-    case "checklist": {
+    case "checklist":
+    case "times": {
       const stepsTotal = ritual.steps?.length ?? 0;
       const doneIds = new Set(entries.map((e) => e.stepId).filter((id): id is string => !!id));
       const stepsDone = doneIds.size;

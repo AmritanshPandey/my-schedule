@@ -221,10 +221,12 @@ export default function RoutineDetailView({
               </div>
             )}
 
-            {trackingType === "checklist" && (
+            {(trackingType === "checklist" || trackingType === "times") && (
               <div className="space-y-1.5 px-4 pb-4 pt-2">
                 {(ritual.steps ?? []).length === 0 ? (
-                  <p className="py-2 text-[13px] text-neutral-400 dark:text-neutral-500">No steps yet — edit this routine to add some.</p>
+                  <p className="py-2 text-[13px] text-neutral-400 dark:text-neutral-500">
+                    {trackingType === "times" ? "No times yet — edit this routine to add some." : "No steps yet — edit this routine to add some."}
+                  </p>
                 ) : (
                   ritual.steps!.map((step) => {
                     const done = todaysEntries.some((e) => e.stepId === step.id);
@@ -238,8 +240,8 @@ export default function RoutineDetailView({
                         <span className={`flex h-6 w-6 shrink-0 items-center justify-center rounded-full border-2 ${done ? "border-transparent bg-green-500" : "border-neutral-300 dark:border-neutral-600"}`}>
                           {done && <IconCheck size={14} strokeWidth={3} className="text-white" />}
                         </span>
-                        <span className={`text-[14px] font-semibold ${done ? "text-neutral-400 line-through dark:text-neutral-500" : "text-neutral-800 dark:text-neutral-100"}`}>
-                          {step.label}
+                        <span className={`text-[14px] font-semibold tabular-nums ${done ? "text-neutral-400 line-through dark:text-neutral-500" : "text-neutral-800 dark:text-neutral-100"}`}>
+                          {trackingType === "times" ? formatDisplayTime(step.label) : step.label}
                         </span>
                       </button>
                     );

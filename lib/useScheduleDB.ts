@@ -326,13 +326,26 @@ export type RitualColor = typeof RITUAL_COLORS[number];
  * How a Routine's completion is measured. Absent/undefined ≡ "checkbox" —
  * every ritual created before this field existed keeps behaving exactly as
  * a plain done/not-done habit, with zero migration.
+ *
+ * "times" is a sibling of "checklist" for a routine that happens several
+ * times a day (e.g. water at 8am/1pm/6pm) rather than once — same storage,
+ * same per-item completion, same day-complete-only-when-every-item-is-done
+ * rule; see `RitualStep`'s own comment for what `label` holds under each type.
  */
-export const RITUAL_TRACKING_TYPES = ["checkbox", "quantity", "duration", "count", "checklist"] as const;
+export const RITUAL_TRACKING_TYPES = ["checkbox", "quantity", "duration", "count", "checklist", "times"] as const;
 export type RitualTrackingType = typeof RITUAL_TRACKING_TYPES[number];
 
-/** One named item in a Ritual's `steps` list — see that field's own comment
- *  for how its meaning (individually completable vs. descriptive-only)
- *  depends on the ritual's trackingType. */
+/**
+ * One named item in a Ritual's `steps` list — see that field's own comment
+ * for how its meaning (individually completable vs. descriptive-only)
+ * depends on the ritual's trackingType.
+ *
+ * For trackingType "times", `label` is not free text — it's a raw 24-hour
+ * "HH:MM" string (the same representation `Ritual.time` uses everywhere
+ * else), one per daily occurrence, kept sorted ascending. Every renderer
+ * formats it through `formatDisplayTime` before showing it, exactly like
+ * `ritual.time` itself.
+ */
 export interface RitualStep {
   id: string;
   label: string;
@@ -374,10 +387,13 @@ export interface Ritual {
   quickAmounts?: number[]; // explicit quick-log presets (e.g. Water's [250,500,750]);
                            // falls back to a unit-based guess when unset — see lib/quickAmounts.ts
   // "checklist": each step is its own checkbox (RitualCompletion.stepId),
-  // and the day counts done once every step is. "checkbox": steps are a
-  // purely descriptive sub-item list (e.g. "Hair" -> coconut oil, shampoo,
+  // and the day counts done once every step is. "times": same as checklist,
+  // but each step's label is a raw "HH:MM" occurrence time rather than a
+  // free-text label — a routine that happens several times a day (e.g. water
+  // at 8am/1pm/6pm) instead of once. "checkbox": steps are a purely
+  // descriptive sub-item list (e.g. "Hair" -> coconut oil, shampoo,
   // conditioner) — never individually completed; one tap on the routine's
-  // own checkbox covers all of them. Unused by every other trackingType.
+  // own checkbox covers all of them. Unused by "quantity"/"duration"/"count".
   steps?: RitualStep[];
 
   recurrence?: RitualRecurrence;

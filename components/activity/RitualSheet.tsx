@@ -11,6 +11,7 @@ import { DAYS, DAY_LABELS, RITUAL_COLORS } from "@/lib/useScheduleDB";
 import { haptic } from "@/lib/haptics";
 import { uid } from "@/lib/id";
 import TimeInput from "@/components/ui/TimeInput";
+import { formatDisplayTime } from "@/lib/timeUtils";
 import { RITUAL_COLOR_DOT, RITUAL_COLOR_SELECT_RING } from "@/lib/ritualColors";
 import { ROUTINE_TEMPLATES, type RoutineTemplateKey } from "@/lib/routineTemplates";
 import { recurrenceToRepeatDays, repeatDaysToRecurrence } from "@/lib/ritualRecurrence";
@@ -24,6 +25,7 @@ const TRACKING_TYPES: { key: RitualTrackingType; label: string }[] = [
   { key: "duration", label: "Duration" },
   { key: "count", label: "Count" },
   { key: "checklist", label: "Checklist" },
+  { key: "times", label: "Multiple times" },
 ];
 
 const RECURRENCE_KINDS: { key: RitualRecurrenceKind; label: string }[] = [
@@ -65,6 +67,7 @@ export function RitualSheet({ open, onClose, initial, onSave, onDelete }: Ritual
   const [unit, setUnit]         = useState("");
   const [steps, setSteps]       = useState<RitualStep[]>([]);
   const [newStepLabel, setNewStepLabel] = useState("");
+  const [newStepTime, setNewStepTime] = useState("12:00");
 
   const [showAdvanced, setShowAdvanced] = useState(false);
 
@@ -114,6 +117,7 @@ export function RitualSheet({ open, onClose, initial, onSave, onDelete }: Ritual
     !!title.trim() &&
     !!time &&
     (trackingType !== "checklist" || steps.length > 0) &&
+    (trackingType !== "times" || steps.length > 0) &&
     (recurrenceKind !== "custom" || customDays.length > 0);
 
   function addStep() {
@@ -121,6 +125,17 @@ export function RitualSheet({ open, onClose, initial, onSave, onDelete }: Ritual
     if (!label) return;
     setSteps((prev) => [...prev, { id: uid(), label }]);
     setNewStepLabel("");
+  }
+
+  /** The "times" analogue of addStep — pushes the current newStepTime as a
+   *  new occurrence, skips an exact duplicate, and keeps the list sorted
+   *  ascending (zero-padded "HH:MM" strings sort lexicographically =
+   *  chronologically) so `steps[0]` is always the earliest occurrence. */
+  function addStepTime() {
+    setSteps((prev) => {
+      if (prev.some((s) => s.label === newStepTime)) return prev;
+      return [...prev, { id: uid(), label: newStepTime }].sort((a, b) => a.label.localeCompare(b.label));
+    });
   }
 
   function handleSave() {
@@ -132,12 +147,18 @@ export function RitualSheet({ open, onClose, initial, onSave, onDelete }: Ritual
       : { kind: recurrenceKind };
     const repeatDays = recurrenceToRepeatDays(recurrence);
     const parsedTarget = parseFloat(target);
+    // "times" derives its schedule-wide `time` from the earliest occurrence
+    // (steps are kept sorted ascending) — every reader that only knows about
+    // a single `ritual.time` (reminders, sort order, the non-"times" secondary
+    // line) still sees a sensible value, the same "first slot mirrors the
+    // whole-thing field" convention Task.slots/startTime already uses.
+    const effectiveTime = trackingType === "times" && steps.length > 0 ? steps[0].label : time;
 
     onSave({
       title: title.trim(),
       description: description.trim() || undefined,
-      time,
-      anyTime,
+      time: effectiveTime,
+      anyTime: trackingType === "times" ? false : anyTime,
       duration: duration ?? undefined,
       color: color || undefined,
       icon: icon || undefined,
@@ -150,11 +171,11 @@ export function RitualSheet({ open, onClose, initial, onSave, onDelete }: Ritual
         ? parsedTarget
         : undefined,
       unit: unit.trim() || undefined,
-      // checklist: steps drive per-item completion. checkbox: steps are an
-      // optional, purely descriptive list (undefined when empty, same as
+      // checklist/times: steps drive per-item completion. checkbox: steps are
+      // an optional, purely descriptive list (undefined when empty, same as
       // every other optional field, rather than saving `[]`).
       steps:
-        trackingType === "checklist" ? steps
+        trackingType === "checklist" || trackingType === "times" ? steps
         : trackingType === "checkbox" && steps.length > 0 ? steps
         : undefined,
     });
@@ -311,28 +332,33 @@ export function RitualSheet({ open, onClose, initial, onSave, onDelete }: Ritual
                   </div>
                 )}
 
-                <div className="flex items-end gap-3">
-                  {/* Disabled, not unmounted, when "Any time" is on — hiding it
-                      outright left a bare flex-1 gap with no "Time" label at
-                      all once toggled, and re-centering the row every time
-                      it's switched back. Dimming it in place keeps the layout
-                      stable and still shows what time it'll revert to. */}
-                  <div className="min-w-0 flex-1">
-                    <TimeInput label="Time" value={time} onChange={setTime} ariaLabel="Routine time" disabled={anyTime} />
+                {/* "times" manages its occurrence times entirely via the step
+                    list below — a second, independent time control here would
+                    just be a confusing extra field nothing reads. */}
+                {trackingType !== "times" && (
+                  <div className="flex items-end gap-3">
+                    {/* Disabled, not unmounted, when "Any time" is on — hiding it
+                        outright left a bare flex-1 gap with no "Time" label at
+                        all once toggled, and re-centering the row every time
+                        it's switched back. Dimming it in place keeps the layout
+                        stable and still shows what time it'll revert to. */}
+                    <div className="min-w-0 flex-1">
+                      <TimeInput label="Time" value={time} onChange={setTime} ariaLabel="Routine time" disabled={anyTime} />
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => setAnyTime((v) => !v)}
+                      className={`flex h-11 shrink-0 items-center gap-1.5 rounded-xl border px-3 text-[12px] font-semibold transition-colors ${
+                        anyTime
+                          ? "border-neutral-900 bg-neutral-900 text-white dark:border-white dark:bg-white dark:text-neutral-900"
+                          : "border-neutral-200 text-neutral-500 hover:border-neutral-300 dark:border-white/10 dark:text-neutral-400"
+                      }`}
+                    >
+                      <IconClock size={13} strokeWidth={2.2} />
+                      Any time
+                    </button>
                   </div>
-                  <button
-                    type="button"
-                    onClick={() => setAnyTime((v) => !v)}
-                    className={`flex h-11 shrink-0 items-center gap-1.5 rounded-xl border px-3 text-[12px] font-semibold transition-colors ${
-                      anyTime
-                        ? "border-neutral-900 bg-neutral-900 text-white dark:border-white dark:bg-white dark:text-neutral-900"
-                        : "border-neutral-200 text-neutral-500 hover:border-neutral-300 dark:border-white/10 dark:text-neutral-400"
-                    }`}
-                  >
-                    <IconClock size={13} strokeWidth={2.2} />
-                    Any time
-                  </button>
-                </div>
+                )}
               </div>
 
               {/* ── Tracking ───────────────────────────────────────────────── */}
@@ -375,26 +401,50 @@ export function RitualSheet({ open, onClose, initial, onSave, onDelete }: Ritual
                 )}
 
                 {/* Checklist: each item is its own checkbox, and the routine
-                    counts done once every item is. Checkbox: items are a
-                    reference list only — completing the routine is still one
-                    tap, the list just shows what it bundles (e.g. "Hair" ⇒
-                    coconut oil, shampoo, conditioner) without asking you to
-                    check off each one separately. */}
-                {(trackingType === "checklist" || trackingType === "checkbox") && (
+                    counts done once every item is. Times: same as checklist,
+                    but each item is an occurrence time rather than a label —
+                    a routine that happens several times a day instead of once.
+                    Checkbox: items are a reference list only — completing the
+                    routine is still one tap, the list just shows what it
+                    bundles (e.g. "Hair" ⇒ coconut oil, shampoo, conditioner)
+                    without asking you to check off each one separately. */}
+                {(trackingType === "checklist" || trackingType === "times" || trackingType === "checkbox") && (
                   <div className="space-y-1.5">
                     {trackingType === "checkbox" && (
                       <p className="text-[11px] leading-snug text-neutral-400 dark:text-neutral-500">
                         Optional — list what this routine covers. These aren&apos;t checked off individually; one tap on the routine covers all of them.
                       </p>
                     )}
+                    {trackingType === "times" && (
+                      <p className="text-[11px] leading-snug text-neutral-400 dark:text-neutral-500">
+                        Add each time this happens during the day. Every occurrence gets its own checkbox — the day counts done once all of them are.
+                      </p>
+                    )}
                     {steps.map((step) => (
                       <div key={step.id} className="flex items-center gap-2 rounded-xl border border-neutral-200 bg-neutral-50 px-3 py-2 dark:border-white/10 dark:bg-white/[0.04]">
-                        <span className="flex-1 truncate text-[13px] font-medium text-neutral-800 dark:text-neutral-100">{step.label}</span>
+                        <span className="flex-1 truncate text-[13px] font-medium tabular-nums text-neutral-800 dark:text-neutral-100">
+                          {trackingType === "times" ? formatDisplayTime(step.label) : step.label}
+                        </span>
                         <button type="button" onClick={() => setSteps((prev) => prev.filter((s) => s.id !== step.id))} aria-label="Remove item" className="text-neutral-400 hover:text-rose-500">
                           <IconX size={14} strokeWidth={2.2} />
                         </button>
                       </div>
                     ))}
+                    {trackingType === "times" ? (
+                      <div className="flex items-end gap-2">
+                        <div className="min-w-0 flex-1">
+                          <TimeInput value={newStepTime} onChange={setNewStepTime} ariaLabel="New occurrence time" />
+                        </div>
+                        <button
+                          type="button"
+                          onClick={addStepTime}
+                          className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl border border-neutral-200 text-neutral-500 hover:bg-neutral-50 dark:border-white/10 dark:text-neutral-400"
+                          aria-label="Add time"
+                        >
+                          <IconPlus size={14} strokeWidth={2.4} />
+                        </button>
+                      </div>
+                    ) : (
                     <div className="flex gap-2">
                       <input
                         value={newStepLabel}
@@ -412,6 +462,7 @@ export function RitualSheet({ open, onClose, initial, onSave, onDelete }: Ritual
                         <IconPlus size={14} strokeWidth={2.4} />
                       </button>
                     </div>
+                    )}
                   </div>
                 )}
               </div>

@@ -190,6 +190,49 @@ test("checklist with no steps defined falls back to checkbox semantics", () => {
   assert.equal(isRitualDayComplete(r, [{ ritualId: "r1", date: "2026-01-01", id: "x", timestamp: "t", stepId: undefined }].map((e) => ({ ...e, value: undefined }))), true);
 });
 
+// ── "times" (multiple occurrences a day) — reuses checklist's steps/stepId machinery ──
+
+test('times: 1 of 3 occurrences reads as partial, not complete', () => {
+  const steps = [{ id: "a", label: "08:00" }, { id: "b", label: "13:00" }, { id: "c", label: "18:00" }];
+  const r = ritual({ trackingType: "times", steps });
+  const completions = toggleRitualStep([], "r1", "2026-01-01", "a");
+  const progress = ritualDayProgress(r, completions.filter((c) => c.date === "2026-01-01"));
+  assert.equal(progress.stepsDone, 1);
+  assert.equal(progress.stepsTotal, 3);
+  assert.equal(progress.complete, false);
+});
+
+test("times: complete only once every occurrence has a completion row", () => {
+  const steps = [{ id: "a", label: "08:00" }, { id: "b", label: "13:00" }, { id: "c", label: "18:00" }];
+  const r = ritual({ trackingType: "times", steps });
+  let completions = [];
+  for (const s of steps) completions = toggleRitualStep(completions, "r1", "2026-01-01", s.id);
+  assert.equal(isRitualDayComplete(r, completions.filter((c) => c.date === "2026-01-01")), true);
+});
+
+test("times: completing one occurrence never affects the others, or flips the day done on its own", () => {
+  const steps = [{ id: "a", label: "08:00" }, { id: "b", label: "13:00" }, { id: "c", label: "18:00" }];
+  const r = ritual({ trackingType: "times", steps });
+  const completions = toggleRitualStep([], "r1", "2026-01-01", "b");
+  const dayRows = completions.filter((c) => c.date === "2026-01-01");
+  assert.equal(dayRows.length, 1, "only the toggled occurrence gets a row");
+  assert.equal(dayRows[0].stepId, "b");
+  assert.equal(isRitualDayComplete(r, dayRows), false, "one of three done is not the whole day done");
+});
+
+test("times: calculateRitualStats' streak walk only counts a day once every occurrence is done", () => {
+  const steps = [{ id: "a", label: "08:00" }, { id: "b", label: "13:00" }];
+  const r = ritual({ trackingType: "times", steps });
+  let completions = [];
+  // 01-08 and 01-09: both occurrences done. 01-07: only one done (not a streak day).
+  for (const day of ["2026-01-08", "2026-01-09"]) {
+    for (const s of steps) completions = toggleRitualStep(completions, "r1", day, s.id);
+  }
+  completions = toggleRitualStep(completions, "r1", "2026-01-07", "a");
+  const stats = calculateRitualStats(r, completions, "2026-01-09");
+  assert.equal(stats.streak, 2, "only the two fully-completed days count toward the streak");
+});
+
 // ── Best streak ──────────────────────────────────────────────────────────────
 
 test("calculateBestStreak finds a longer historical run than the current streak", () => {
