@@ -16,7 +16,7 @@ import {
   HELD_TIME_ID,
   UNSCHEDULED_ID,
 } from "@/lib/dayBreakdown";
-import { DEFAULT_TIMELINE_START_MINUTES, TIMELINE_END_MINUTES, getConfiguredDayStartMinutes } from "@/lib/timeline/displayWindow";
+import { DEFAULT_TIMELINE_START_MINUTES, getConfiguredDayStartMinutes } from "@/lib/timeline/displayWindow";
 import { isTaskScheduledOn, resolveOccurrence } from "@/lib/taskOccurrence";
 import { getSlots } from "@/lib/taskMutations";
 import { parseTimeToMinutes, toScheduleDayMinutes } from "@/lib/timeUtils";
@@ -98,9 +98,23 @@ export default function DayBreakdownCard({ activities, categories, todayKey, tod
     const prev = DAYS[(DAYS.indexOf(day) + 6) % 7];
     return { tasks: activities[prev] ?? [], dateISO: addDaysToISO(dateISO, -1) };
   }, [activities, day, dateISO]);
+  // One anchor for the whole card — the donut math, the active-hours window,
+  // and the footer all read the same number, so they can't disagree the way
+  // a fixed 4 AM boundary used to (a gap between 4:00 and a later configured
+  // start showed up as phantom "Unscheduled" time).
+  const dayStartMinutes =
+    getConfiguredDayStartMinutes(preferences?.dayStartTime) ?? DEFAULT_TIMELINE_START_MINUTES;
   const breakdown = useMemo(
-    () => buildDayBreakdown(activities[day] ?? [], categories, dateISO, carryIn, preferences?.startDate),
-    [activities, day, categories, dateISO, carryIn, preferences?.startDate],
+    () =>
+      buildDayBreakdown(
+        activities[day] ?? [],
+        categories,
+        dateISO,
+        carryIn,
+        preferences?.startDate,
+        dayStartMinutes,
+      ),
+    [activities, day, categories, dateISO, carryIn, preferences?.startDate, dayStartMinutes],
   );
   const { slices, totalMinutes, committedMinutes, overlapMinutes } = breakdown;
   const active = useMemo(
@@ -136,11 +150,6 @@ export default function DayBreakdownCard({ activities, categories, todayKey, tod
     }
     return lastEnd;
   }, [activities, day, dateISO, preferences?.dayEndAuto, preferences?.dayEndMinutes, preferences?.startDate]);
-  // One fallback for the whole card. The footer used to default to 4:00 (the
-  // schedule-day boundary) while the bar defaulted to 7:00 (a wake time), so an
-  // unconfigured user was shown two different day starts on the same card.
-  const dayStartMinutes =
-    getConfiguredDayStartMinutes(preferences?.dayStartTime) ?? DEFAULT_TIMELINE_START_MINUTES;
   const segments = useMemo(
     () => donutSegments(slices, totalMinutes, CIRCUMFERENCE),
     [slices, totalMinutes],
@@ -391,17 +400,17 @@ export default function DayBreakdownCard({ activities, categories, todayKey, tod
         )}
       </div>
 
-      {/* Schedule day bounds (timeline window) */}
-      <div className="mt-2 flex items-center justify-between text-[11px] text-neutral-500 dark:text-neutral-400">
-        <div className="flex items-center gap-2">
-          <span className="font-semibold text-neutral-700 dark:text-neutral-300">Day start</span>
-          <span className="tabular-nums">{fmtClock(dayStartMinutes)}</span>
-        </div>
-        <div className="flex items-center gap-2">
-          <span className="font-semibold text-neutral-700 dark:text-neutral-300">Day end</span>
-          <span className="tabular-nums">{fmtClock(resolvedDayEndMinutes ?? TIMELINE_END_MINUTES)}</span>
-        </div>
-      </div>
+      {/* Names, in one breath, exactly the window the ring above measures —
+          so a gap that reads as "Unscheduled" can be checked against these two
+          numbers instead of taken on faith. Merged into one line rather than a
+          split justify-between row: two facts read as disconnected metadata,
+          one sentence reads as an explanation. */}
+      <p className="mt-2 text-[11px] text-neutral-500 dark:text-neutral-400">
+        <span className="font-semibold text-neutral-700 dark:text-neutral-300">Ring covers</span>{" "}
+        <span className="tabular-nums">{fmtClock(dayStartMinutes)}</span>
+        {" – "}
+        <span className="tabular-nums">{fmtClock(resolvedDayEndMinutes ?? dayStartMinutes + 24 * 60)}</span>
+      </p>
     </section>
   );
 }

@@ -1,9 +1,13 @@
 /**
  * "Where the day goes" — today's 24 hours, partitioned.
  *
- * The schedule day is exactly 1440 minutes: [4:00, 28:00), i.e. 4 AM to 4 AM.
- * Every one of those minutes lands in exactly one bucket — sleep, rest, active,
- * or unscheduled — so the donut tiles a real day and the numbers can't lie.
+ * The schedule day is exactly 1440 minutes, anchored at the user's configured
+ * "Start of day" (falling back to 4:00 AM when unconfigured) and running to the
+ * same time the next day. Every one of those minutes lands in exactly one
+ * bucket — sleep, rest, active, or unscheduled — so the donut tiles a real day
+ * and the numbers can't lie. The anchor matters: a fixed 4:00 AM boundary used
+ * to count the gap between 4:00 AM and a later configured day start as
+ * "Unscheduled", even when nothing was ever meant to be booked there.
  *
  * This module used to *sum* per-category durations, which double-counted every
  * overlap and reported totals like "25h 30m" on a 24-hour day. It also charged
@@ -74,29 +78,36 @@ export interface DayBreakdown {
 }
 
 export interface TaskDayMinutes {
-  /** Minutes landing inside this schedule day's 4:00 → 28:00 window. */
+  /** Minutes landing inside this schedule day's window. */
   sameDay: number;
   /**
-   * Minutes past 28:00. They belong to the *next* schedule day, which is where
-   * the timeline draws them as a continuation block — so this is where the
-   * donut counts them too, and the two finally agree.
+   * Minutes past the window's end. They belong to the *next* schedule day,
+   * which is where the timeline draws them as a continuation block — so this
+   * is where the donut counts them too, and the two finally agree.
    */
   overflow: number;
 }
 
-/** Minutes a task occupies, split at the day boundary, summed across slots. */
-export function taskDayMinutes(task: Task): TaskDayMinutes {
+/**
+ * Minutes a task occupies, split at the day boundary, summed across slots.
+ *
+ * `dayStartMinutes` anchors the window — the same value used everywhere else
+ * in the app (`getConfiguredDayStartMinutes(...) ?? DEFAULT_TIMELINE_START_MINUTES`),
+ * defaulting here to 4:00 AM for callers that don't have a configured start.
+ */
+export function taskDayMinutes(task: Task, dayStartMinutes = DEFAULT_TIMELINE_START_MINUTES): TaskDayMinutes {
+  const windowEnd = dayStartMinutes + 24 * 60;
   let sameDay = 0;
   let overflow = 0;
   for (const slot of getSlots(task)) {
     const rawStart = parseTimeToMinutes(slot.startTime);
     const rawEnd = parseTimeToMinutes(slot.endTime);
     if (rawStart === null || rawEnd === null) continue;
-    const start = toScheduleDayMinutes(rawStart);
-    let end = toScheduleDayMinutes(rawEnd);
+    const start = toScheduleDayMinutes(rawStart, dayStartMinutes);
+    let end = toScheduleDayMinutes(rawEnd, dayStartMinutes);
     if (end <= start) end += 24 * 60; // runs past midnight
-    sameDay += Math.min(end, TIMELINE_END_MINUTES) - start;
-    overflow += Math.max(0, end - TIMELINE_END_MINUTES);
+    sameDay += Math.min(end, windowEnd) - start;
+    overflow += Math.max(0, end - windowEnd);
   }
   return { sameDay, overflow };
 }
@@ -105,37 +116,43 @@ export function taskDayMinutes(task: Task): TaskDayMinutes {
  * The task's whole duration, both sides of the boundary. Kept for callers that
  * want "how long is this task" rather than "how much of it lands on this day".
  */
-export function taskScheduledMinutes(task: Task): number {
-  const { sameDay, overflow } = taskDayMinutes(task);
+export function taskScheduledMinutes(task: Task, dayStartMinutes = DEFAULT_TIMELINE_START_MINUTES): number {
+  const { sameDay, overflow } = taskDayMinutes(task, dayStartMinutes);
   return sameDay + overflow;
 }
 
 /**
  * This day's slice of a task's blocks, in schedule-day minutes.
  *
- * `window: "sameDay"` takes the part inside [4:00, 28:00); `"overflow"` takes
- * the tail past 28:00 and rebases it onto the *next* day's coordinates, which
- * is where the timeline draws it as a continuation. Same split as
- * `taskDayMinutes`, but keeping the intervals so they can be unioned.
+ * `window: "sameDay"` takes the part inside the day's window; `"overflow"`
+ * takes the tail past the window's end and rebases it onto the *next* day's
+ * coordinates, which is where the timeline draws it as a continuation. Same
+ * split as `taskDayMinutes`, but keeping the intervals so they can be unioned.
  */
-function taskIntervals(task: Task, window: "sameDay" | "overflow"): Array<{ start: number; end: number }> {
+function taskIntervals(
+  task: Task,
+  window: "sameDay" | "overflow",
+  dayStartMinutes = DEFAULT_TIMELINE_START_MINUTES,
+): Array<{ start: number; end: number }> {
+  const windowEnd = dayStartMinutes + 24 * 60;
   const out: Array<{ start: number; end: number }> = [];
   for (const slot of getSlots(task)) {
     const rawStart = parseTimeToMinutes(slot.startTime);
     const rawEnd = parseTimeToMinutes(slot.endTime);
     if (rawStart === null || rawEnd === null) continue;
-    const start = toScheduleDayMinutes(rawStart);
-    let end = toScheduleDayMinutes(rawEnd);
+    const start = toScheduleDayMinutes(rawStart, dayStartMinutes);
+    let end = toScheduleDayMinutes(rawEnd, dayStartMinutes);
     if (end <= start) end += 24 * 60; // runs past midnight
 
     if (window === "sameDay") {
-      const clipped = Math.min(end, TIMELINE_END_MINUTES);
+      const clipped = Math.min(end, windowEnd);
       if (clipped > start) out.push({ start, end: clipped });
     } else {
-      // The tail lands at the top of the following day, which begins at 4:00 —
-      // so 29:00 on this day is 5:00 on the next, i.e. minus 24h.
-      if (end > TIMELINE_END_MINUTES) {
-        out.push({ start: DEFAULT_TIMELINE_START_MINUTES, end: end - 24 * 60 });
+      // The tail lands at the top of the following day, which begins at the
+      // same configured anchor every day — so a minute past `windowEnd` on
+      // this day is that same minute past `dayStartMinutes` on the next.
+      if (end > windowEnd) {
+        out.push({ start: dayStartMinutes, end: end - 24 * 60 });
       }
     }
   }
@@ -170,6 +187,12 @@ export function buildDayBreakdown(
   /** Settings → Tracking → "Tracking starts" (schedule.preferences?.startDate)
    *  — a task before this contributes nothing to the breakdown. */
   trackingStart?: string,
+  /**
+   * Settings → Timeline → "Start of day" (already resolved to minutes) —
+   * anchors the 24-hour window. Defaults to 4:00 AM so callers without a
+   * configured preference keep today's behavior unchanged.
+   */
+  dayStartMinutes = DEFAULT_TIMELINE_START_MINUTES,
 ): DayBreakdown {
   const categoriesById = new Map(categories.map((c) => [c.id, c]));
   const owned: OwnedInterval<string>[] = [];
@@ -178,7 +201,7 @@ export function buildDayBreakdown(
     const categorised = task.categoryId && categoriesById.has(task.categoryId);
     if (!categorised && isTrackedTask(task)) return;
     const key = categorised ? task.categoryId! : HELD_TIME_ID;
-    for (const interval of taskIntervals(task, window)) {
+    for (const interval of taskIntervals(task, window, dayStartMinutes)) {
       owned.push({ ...interval, owner: key });
     }
   }

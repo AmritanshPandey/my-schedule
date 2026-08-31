@@ -1864,6 +1864,19 @@ test("taskDayMinutes splits an overnight task at the day boundary", () => {
   assert.deepEqual(taskDayMinutes(t("9:00 AM", "11:00 AM")), { sameDay: 120, overflow: 0 });
 });
 
+test("taskDayMinutes splits at a configured day start, not just the 4 AM default", () => {
+  const t = (startTime, endTime) => ({ id: "x", title: "x", startTime, endTime });
+  const sixAM = 6 * 60;
+
+  // With the anchor moved to 6 AM, a 5-7 AM task now straddles the handover
+  // instead of sitting wholly inside the window the way it does at 4 AM.
+  assert.deepEqual(taskDayMinutes(t("5:00 AM", "7:00 AM"), sixAM), { sameDay: 60, overflow: 60 });
+  // A task that starts exactly at the configured anchor is untouched.
+  assert.deepEqual(taskDayMinutes(t("6:00 AM", "8:00 AM"), sixAM), { sameDay: 120, overflow: 0 });
+  // The default (no anchor passed) is unchanged: a 5-7 AM task is still whole.
+  assert.deepEqual(taskDayMinutes(t("5:00 AM", "7:00 AM")), { sameDay: 120, overflow: 0 });
+});
+
 test("continuationInterval expresses the spill in the next day's coordinates", () => {
   assert.equal(SCHEDULE_DAY_HANDOVER_MINUTES, 240, "28:00 on day D is 4:00 on day D+1");
 
@@ -1902,6 +1915,29 @@ test("buildDayBreakdown counts the previous day's overnight tail on this day", (
   const skipped = { ...sleep, exceptions: { [yesterday]: { skipped: true } } };
   const none = buildDayBreakdown([], categories, today, { tasks: [skipped], dateISO: yesterday });
   assert.equal(none.committedMinutes, 0, "a skipped occurrence carries nothing over");
+});
+
+test("buildDayBreakdown anchors the window at a configured day start, closing the phantom-gap bug", () => {
+  const today = "2026-08-05";
+  const categories = [{ id: "cat-work", title: "Work", icon: "code", color: "indigo" }];
+  const sixAM = 6 * 60;
+  // A day booked solid from 6 AM to 6 AM the next day, with nothing before it —
+  // exactly the "my whole day is planned" case the bug report described.
+  const tasks = [
+    { id: "w", title: "Work", planId: "p", categoryId: "cat-work", startTime: "6:00 AM", endTime: "11:00 PM" },
+    { id: "s", title: "Sleep", planId: "", taskType: "commitment", startTime: "11:00 PM", endTime: "6:00 AM" },
+  ];
+
+  // At the fixed 4 AM default, the 4:00-6:00 gap before the first task reads
+  // as two hours of phantom "Unscheduled" time.
+  const atDefault = buildDayBreakdown(tasks, categories, today);
+  assert.equal(atDefault.unscheduledMinutes, 120, "the old fixed-4AM behaviour: a real gap before a 6 AM start");
+
+  // Anchored at the user's actual 6 AM day start, that gap is gone — the ring
+  // finally agrees with a day the user considers fully booked.
+  const atConfigured = buildDayBreakdown(tasks, categories, today, undefined, undefined, sixAM);
+  assert.equal(atConfigured.unscheduledMinutes, 0, "no gap once the window starts where the user's day does");
+  assert.equal(atConfigured.totalMinutes, 1440, "the ring is still exactly one day");
 });
 
 // A DayBreakdown literal, so the waking-day derivation can be exercised
