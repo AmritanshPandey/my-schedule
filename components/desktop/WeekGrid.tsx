@@ -11,7 +11,7 @@ import { completionForDate, getTaskCheckableItems, getTaskSubtaskSummary, isTrac
 import { isTaskScheduledOn, resolveOccurrence } from "@/lib/taskOccurrence";
 import { ritualScheduledOnDate } from "@/lib/ritualRecurrence";
 import { addDaysToISO, localISODate, todayISO } from "@/lib/dateUtils";
-import { currentMinutes, parseTimeToMinutes } from "@/lib/timeUtils";
+import { currentMinutes, minutesToInputTime, parseTimeToMinutes } from "@/lib/timeUtils";
 import { categoryHex } from "@/lib/colorSystem";
 import { taskIdentity, categoriesById } from "@/lib/taskIdentity";
 import { haptic } from "@/lib/haptics";
@@ -237,6 +237,20 @@ interface WeekGridProps {
     startTime: string,
     endTime: string,
   ) => void;
+  /**
+   * Move a routine to a new time of day, by the same Cmd/Ctrl-drag gesture
+   * tasks use.
+   *
+   * Vertical only, and deliberately so: a routine has no per-date position —
+   * `repeatDays`/`recurrence` decide which days it shows on — so the time it
+   * lands on applies to every one of those days. Dragging it into another
+   * column would mean rewriting its recurrence, which is a different and much
+   * more destructive edit than "move this".
+   *
+   * `stepId` addresses one occurrence of a "times" routine; undefined for the
+   * single-occurrence kinds. `nextTime` is a raw "HH:MM", what the model stores.
+   */
+  onMoveRitual?: (ritualId: string, stepId: string | undefined, nextTime: string) => void;
   /** Grid block hover-icon, today only, not-yet-missed: mark it missed. */
   onMarkMissed?: (taskId: string, allSubtaskIds: string[], day: DayKey, dateISO: string) => void;
   /**
@@ -298,6 +312,7 @@ export function WeekGrid({
   onToggleSlot,
   onCreateTaskAtTime,
   onMoveTask,
+  onMoveRitual,
   onMarkMissed,
   onMarkSlotMissed,
   onOpenMissedRecovery,
@@ -348,6 +363,20 @@ export function WeekGrid({
   // block's onClickCapture so the native click that otherwise follows
   // pointerup doesn't also open the edit sheet after a real drag.
   const suppressClickRef = useRef(false);
+
+  // ── Routine drag (Cmd/Ctrl held) ──────────────────────────────────────────
+  // Far smaller than the task drag above: no resize, no cross-day drop, no
+  // duration to preserve — a routine mark is a point in the day, so the whole
+  // gesture is "which minute is the pointer on now".
+  const [ritualDrag, setRitualDrag] = useState<{ key: string; day: DayKey; previewMin: number } | null>(null);
+  const ritualDragRef = useRef<{
+    key: string; ritualId: string; stepId?: string; day: DayKey;
+    pointerId: number; columnEl: HTMLDivElement;
+    startClientY: number; dragging: boolean; previewMin: number;
+  } | null>(null);
+  // Consumed by the routine's own toggle handler so the click that follows
+  // pointerup after a real drag doesn't also tick the routine off.
+  const suppressRitualClickRef = useRef(false);
   // Cmd/Ctrl-held affordance (cursor-grab) so the gesture is discoverable
   // before a user ever drags. `blur` resets it so alt-tabbing away while
   // holding the key can't leave it stuck on.
@@ -635,6 +664,100 @@ export function WeekGrid({
       currentPreviewDurationMin: durationMin,
     };
   }
+
+  function handleRitualPointerDown(
+    e: ReactPointerEvent<HTMLElement>,
+    day: DayKey,
+    key: string,
+    ritualId: string,
+    stepId: string | undefined,
+    markTopPx: number,
+  ) {
+    // Any fresh press starts from a clean slate. Clearing this only when a
+    // click arrives leaves it stuck whenever a drag ends without one — pointer
+    // released off the dot, or over a different one — and the next ordinary tap
+    // on ANY routine is then silently swallowed.
+    suppressRitualClickRef.current = false;
+    if (!onMoveRitual) return;
+    if (!(e.metaKey || e.ctrlKey)) return; // no modifier — leave the tap-to-complete alone
+    if (e.pointerType === "mouse" && e.button !== 0) return;
+    const columnEl = (e.currentTarget as HTMLElement).closest<HTMLDivElement>("[data-day-col]");
+    if (!columnEl) return;
+    e.stopPropagation(); // don't also start the column's create-drag
+    e.preventDefault();  // and don't let the browser start a native drag of the dot
+
+    ritualDragRef.current = {
+      key, ritualId, stepId, day,
+      pointerId: e.pointerId,
+      columnEl,
+      startClientY: e.clientY,
+      dragging: false,
+      previewMin: startMin + markTopPx / PX_MIN,
+    };
+  }
+
+  useEffect(() => {
+    if (!onMoveRitual) return;
+    const moveRitual = onMoveRitual;
+
+    // Deliberately no requestAnimationFrame batching here, unlike the task
+    // drag. Pointer moves are already coalesced to about one per frame, so the
+    // rAF bought nothing — and it costs: rAF is throttled in a background tab
+    // and frozen outright in a hidden one, which leaves the preview stuck
+    // wherever the last frame landed while the pointer moves on.
+    function onPointerMove(e: PointerEvent) {
+      const drag = ritualDragRef.current;
+      if (!drag || e.pointerId !== drag.pointerId) return;
+      // Same threshold discipline as the task drag: a few pixels of jitter
+      // while clicking must not register as a move.
+      if (!drag.dragging) {
+        if (Math.abs(e.clientY - drag.startClientY) < DRAG_THRESHOLD_PX) return;
+        drag.dragging = true;
+        suppressRitualClickRef.current = true;
+      }
+      const raw = pointerToMinutes(e.clientY, drag.columnEl, 0, PX_MIN * 60, startMin);
+      const next = clampMinutes(snapMinutes(raw), startMin, endMin);
+      if (next === drag.previewMin) return; // same snapped minute — nothing to redraw
+      drag.previewMin = next;
+      setRitualDrag({ key: drag.key, day: drag.day, previewMin: next });
+    }
+
+    function onPointerUp(e: PointerEvent) {
+      const drag = ritualDragRef.current;
+      if (!drag || e.pointerId !== drag.pointerId) return;
+      ritualDragRef.current = null;
+      setRitualDrag(null);
+      if (!drag.dragging) return; // a modifier-click that never moved
+      // Recomputed from the release position rather than reused from the last
+      // rendered frame: the preview is rAF-driven, and rAF is throttled in a
+      // background tab and frozen outright in a hidden one — trusting it would
+      // commit wherever the last frame happened to land, or the origin if none
+      // ever ran. Where the pointer actually let go is the answer either way.
+      // Belt and braces on the suppression flag. Clearing it at the next
+      // pointerdown covers a mouse or touch tap, but keyboard activation fires
+      // a click with no pointer event at all — so also drop it on the next
+      // macrotask, which runs after the click this pointerup is about to
+      // produce and before anything the user does next.
+      setTimeout(() => { suppressRitualClickRef.current = false; }, 0);
+      const releaseMin = clampMinutes(
+        snapMinutes(pointerToMinutes(e.clientY, drag.columnEl, 0, PX_MIN * 60, startMin)),
+        startMin,
+        endMin,
+      );
+      // Mapped-domain minutes read an overnight time as its hour plus 24h;
+      // minutesToInputTime's own modulo brings it back.
+      moveRitual(drag.ritualId, drag.stepId, minutesToInputTime(releaseMin));
+    }
+
+    window.addEventListener("pointermove", onPointerMove);
+    window.addEventListener("pointerup", onPointerUp);
+    window.addEventListener("pointercancel", onPointerUp);
+    return () => {
+      window.removeEventListener("pointermove", onPointerMove);
+      window.removeEventListener("pointerup", onPointerUp);
+      window.removeEventListener("pointercancel", onPointerUp);
+    };
+  }, [onMoveRitual, startMin, endMin]);
 
   useEffect(() => {
     if (!onMoveTask) return;
@@ -1245,22 +1368,55 @@ export function WeekGrid({
                       const completed = occ.stepId
                         ? completedRitualSteps.has(key)
                         : completedRituals.has(occ.ritual.id);
+                      const isBeingDragged = ritualDrag?.key === key && ritualDrag.day === day;
                       return (
                         <RitualStrip
                           key={key}
                           ritual={occ.ritual}
                           time={occ.time}
                           completed={completed}
-                          onToggle={() =>
+                          grabbable={!!onMoveRitual && modifierHeld}
+                          dragging={isBeingDragged}
+                          onPointerDown={
+                            onMoveRitual
+                              ? (e) => handleRitualPointerDown(e, day, key, occ.ritual.id, occ.stepId, mark.top)
+                              : undefined
+                          }
+                          onToggle={() => {
+                            // A drag ends in a click; that click must not also
+                            // tick the routine off.
+                            if (suppressRitualClickRef.current) {
+                              suppressRitualClickRef.current = false;
+                              return;
+                            }
                             occ.stepId
                               ? onToggleRitualStep(occ.ritual.id, occ.stepId, dateISO)
-                              : onToggleRitual(occ.ritual.id, dateISO)
-                          }
+                              : onToggleRitual(occ.ritual.id, dateISO);
+                          }}
                         />
                       );
                     })}
                   </div>
                 ))}
+
+                {/* Where the routine will land. A routine is a point on the
+                    day rather than a block, so the preview is a rule with the
+                    time on it — the same information a ghost block would carry,
+                    without pretending it has a duration. */}
+                {ritualDrag?.day === day && (
+                  <div
+                    className="pointer-events-none absolute inset-x-0 z-20 -translate-y-1/2"
+                    style={{ top: (ritualDrag.previewMin - startMin) * PX_MIN }}
+                  >
+                    <div className="flex items-center gap-1.5">
+                      <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-emerald-500" />
+                      <span className="h-px flex-1 bg-emerald-500/70" />
+                      <span className="rounded-full bg-emerald-500 px-1.5 py-0.5 text-[10px] font-bold tabular-nums leading-none text-white">
+                        {fmtRail(((ritualDrag.previewMin % 1440) + 1440) % 1440)}
+                      </span>
+                    </div>
+                  </div>
+                )}
 
                 {dragCreate?.day === day && (() => {
                   const top = (dragCreate.startMin - startMin) * PX_MIN;

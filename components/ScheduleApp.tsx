@@ -175,6 +175,7 @@ import type { Template } from "@/lib/templates";
 import { toggleRitualCompletion, appendRitualLog, undoLastRitualLog, toggleRitualStep, removeRitualLog } from "@/lib/ritualCompletions";
 import { MAX_RITUALS } from "@/lib/ritualColors";
 import { formatDisplayTime, parseTimeToMinutes, formatDuration } from "@/lib/timeUtils";
+import { setRitualTime } from "@/lib/ritualMutations";
 import {
   pointerToMinutes,
   snapMinutes,
@@ -1492,6 +1493,28 @@ export default function ScheduleApp() {
       setSchedule(setTaskException(taskId, dateISO ?? todayISO(), { note }));
     },
     [setSchedule]
+  );
+
+  /**
+   * Drop a routine at a new time.
+   *
+   * A routine has no per-date position, so this moves it on every day it
+   * recurs — the toast says so, because the gesture happens in one column and
+   * the consequence is not confined to it.
+   */
+  const handleMoveRitual = useCallback(
+    (ritualId: string, stepId: string | undefined, nextTime: string) => {
+      const ritual = (schedule.rituals ?? []).find((r) => r.id === ritualId);
+      if (!ritual) return;
+      haptic("medium");
+      setSchedule(setRitualTime(ritualId, stepId, nextTime));
+      setToastMessage({
+        message: `${ritual.title} moved to ${formatDisplayTime(nextTime)} on every day it repeats`,
+        actionLabel: "Undo",
+        onAction: () => { undo(); setToastMessage(null); haptic("light"); },
+      });
+    },
+    [schedule.rituals, setSchedule, undo],
   );
 
   const handleToggleSubtask = useCallback(
@@ -3456,6 +3479,7 @@ export default function ScheduleApp() {
                 onDayActions={(day) => { setActiveDay(day); setDayActionsOpen(true); }}
                 onCreateTaskAtTime={(day, startMin, endMin) => openCreateSheetWithTime(startMin, endMin, day)}
                 onMoveTask={handleMoveTask}
+                onMoveRitual={handleMoveRitual}
                 onMarkMissed={handleMarkTaskMissed}
                 onOpenMissedRecovery={handleOpenMissedRecovery}
                 onWeekPrev={() => {

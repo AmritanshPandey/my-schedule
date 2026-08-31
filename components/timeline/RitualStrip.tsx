@@ -1,5 +1,6 @@
 "use client";
 
+import type { PointerEvent as ReactPointerEvent } from "react";
 import { m } from "framer-motion";
 import { IconCheck } from "@tabler/icons-react";
 import type { Ritual } from "@/lib/useScheduleDB";
@@ -14,6 +15,12 @@ interface RitualStripProps {
    *  "times" ritual, whose ritual.time only mirrors the earliest one.
    *  Defaults to ritual.time so every other caller is unaffected. */
   time?: string;
+  /** Show the drag affordance (the caller decides when — e.g. Cmd/Ctrl held). */
+  grabbable?: boolean;
+  /** This dot is the one currently being dragged; fade it like a moved task. */
+  dragging?: boolean;
+  /** Start a drag. The caller owns the gesture; this only forwards the event. */
+  onPointerDown?: (e: ReactPointerEvent<HTMLButtonElement>) => void;
 }
 
 /**
@@ -32,7 +39,15 @@ interface RitualStripProps {
  * The label uses dark ink, not white — every dot colour is a 400-level fill, on
  * which white text lands around 2:1 and fails WCAG AA.
  */
-export default function RitualStrip({ ritual, completed, onToggle, time }: RitualStripProps) {
+export default function RitualStrip({
+  ritual,
+  completed,
+  onToggle,
+  time,
+  grabbable = false,
+  dragging = false,
+  onPointerDown,
+}: RitualStripProps) {
   const dot = ritual.color ? COLOR_DOTS[ritual.color] : "bg-neutral-400";
   const displayTime = time ?? ritual.time;
 
@@ -42,10 +57,13 @@ export default function RitualStrip({ ritual, completed, onToggle, time }: Ritua
       whileTap={{ scale: 0.9 }}
       transition={{ type: "spring", stiffness: 500, damping: 28 }}
       onClick={onToggle}
+      onPointerDown={onPointerDown}
       aria-pressed={completed}
       aria-label={`${ritual.title}${displayTime ? ` at ${formatDisplayTime(displayTime)}` : ""} — ${completed ? "done, tap to undo" : "tap to mark done"}`}
       title={ritual.title}
-      className="group/ritual pointer-events-auto relative h-4 w-4 shrink-0 cursor-pointer select-none rounded-full hover:z-20 focus-visible:z-20"
+      className={`group/ritual pointer-events-auto relative h-4 w-4 shrink-0 select-none rounded-full hover:z-20 focus-visible:z-20 ${
+        grabbable ? "cursor-grab active:cursor-grabbing" : "cursor-pointer"
+      } ${dragging ? "opacity-30" : ""}`}
     >
       <span
         className={`
