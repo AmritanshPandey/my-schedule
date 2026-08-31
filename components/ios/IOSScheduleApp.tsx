@@ -1678,10 +1678,10 @@ export default function IOSScheduleApp() {
                 onAddTask={(planId) => openCreateSheet(planId)}
                 onEditTask={(task) => openEditSheet(task)}
                 onDeleteLinkedTask={handleDeleteLinkedTask}
-                onAddTracker={(planId, title, unit, goalDirection, id, goalValue) => {
+                onAddTracker={(planId, title, unit, goalDirection, id, goalValue, startingValue) => {
                   setSchedule((prev) => ({
                     ...prev,
-                    progressTrackers: [...prev.progressTrackers, { id: id ?? uid(), planId, title, type: "number", unit: unit || undefined, goalDirection, goalValue }],
+                    progressTrackers: [...prev.progressTrackers, { id: id ?? uid(), planId, title, type: "number", unit: unit || undefined, goalDirection, goalValue, startingValue }],
                   }));
                 }}
                 onUpdateTracker={(trackerId, data) => {

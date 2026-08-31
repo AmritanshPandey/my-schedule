@@ -34,6 +34,7 @@ import Input from "@/components/ui/Input";
 import MilestoneSheet, { type MilestoneSaveData } from "@/components/plan/MilestoneSheet";
 import { computeRoadmapStats } from "@/lib/roadmapEngine";
 import { calculateMilestoneProgress, type MilestoneProgress } from "@/lib/planProgress";
+import { calculateMilestoneState, type MilestoneState } from "@/lib/milestoneHealth";
 import { sumEntriesForDate } from "@/lib/metricEntries";
 import { planEffectiveEndDate, resolveMilestoneStatus } from "@/lib/roadmapDates";
 import { computeTrend } from "@/lib/trendUtils";
@@ -133,6 +134,34 @@ function TrendBadge({ trend }: { trend: TrendResult }) {
   );
 }
 
+// ── Milestone health badge ──────────────────────────────────────────────────
+// The live trajectory signal (calculateMilestoneState), distinct from the
+// date-derived lifecycle status (resolveMilestoneStatus) shown next to it —
+// a milestone can be "active" and "at_risk" at the same time; they answer
+// different questions and neither replaces the other.
+
+const HEALTH_BADGE: Record<MilestoneState["health"], { emoji: string; label: string; className: string }> = {
+  completed:       { emoji: "✅", label: "Completed",       className: "bg-neutral-100 text-neutral-500 dark:bg-white/[0.06] dark:text-neutral-400" },
+  not_started:     { emoji: "⚪", label: "Not started",     className: "bg-neutral-100 text-neutral-500 dark:bg-white/[0.06] dark:text-neutral-400" },
+  getting_started: { emoji: "🔵", label: "Getting started", className: "bg-sky-50 text-sky-700 dark:bg-sky-500/10 dark:text-sky-400" },
+  ahead:           { emoji: "🟢", label: "Ahead",           className: "bg-green-50 text-green-700 dark:bg-green-500/10 dark:text-green-400" },
+  on_track:        { emoji: "🟢", label: "On track",        className: "bg-green-50 text-green-700 dark:bg-green-500/10 dark:text-green-400" },
+  at_risk:         { emoji: "🟡", label: "At risk",         className: "bg-amber-50 text-amber-700 dark:bg-amber-500/10 dark:text-amber-400" },
+  delayed:         { emoji: "🔴", label: "Delayed",         className: "bg-rose-50 text-rose-700 dark:bg-rose-500/10 dark:text-rose-400" },
+};
+
+function MilestoneHealthBadge({ health, size = "sm" }: { health: MilestoneState["health"]; size?: "sm" | "md" }) {
+  const cfg = HEALTH_BADGE[health];
+  return (
+    <span className={`inline-flex shrink-0 items-center gap-1 rounded-full font-bold ${cfg.className} ${
+      size === "md" ? "px-2.5 py-1 text-[12px]" : "px-2 py-0.5 text-[10.5px]"
+    }`}>
+      <span aria-hidden="true">{cfg.emoji}</span>
+      {cfg.label}
+    </span>
+  );
+}
+
 // ── Goal direction picker ─────────────────────────────────────────────────────
 
 function GoalDirectionPicker({
@@ -219,11 +248,12 @@ interface PlanDetailViewProps {
     unit: string,
     goalDirection: GoalDirection,
     id?: string,
-    goalValue?: number
+    goalValue?: number,
+    startingValue?: number
   ) => void;
   onUpdateTracker: (
     trackerId: string,
-    data: { title: string; unit: string; goalDirection: GoalDirection; goalValue?: number }
+    data: { title: string; unit: string; goalDirection: GoalDirection; goalValue?: number; startingValue?: number }
   ) => void;
   onDeleteTracker: (trackerId: string) => void;
   // Entry handlers
@@ -353,6 +383,7 @@ export default function PlanDetailView({
     unit: string;
     goalDirection: GoalDirection;
     goalValue?: number;
+    startingValue?: number;
   }>({
     title: "",
     unit: "",
@@ -364,6 +395,7 @@ export default function PlanDetailView({
   const [newTrackerTitle, setNewTrackerTitle] = useState("");
   const [newTrackerUnit, setNewTrackerUnit] = useState("");
   const [newTrackerGoalValue, setNewTrackerGoalValue] = useState("");
+  const [newTrackerStartingValue, setNewTrackerStartingValue] = useState("");
   const [newTrackerGoalDirection, setNewTrackerGoalDirection] =
     useState<GoalDirection>("increase_good");
 
@@ -476,6 +508,25 @@ export default function PlanDetailView({
     return map;
   }, [planMilestones, schedule.activities, plan]);
 
+  // Live health/forecast layer — task progress, recurring-task consistency,
+  // and (when a tracker is linked) metric progress, combined into one health
+  // state + forecasted completion date. Same cost class/recompute trigger as
+  // milestoneProgressById above: a pure function over the raw schedule, no
+  // separate event system needed for it to stay current.
+  const milestoneStateById = useMemo(() => {
+    const map = new Map<string, MilestoneState>();
+    for (const m of planMilestones) {
+      map.set(m.id, calculateMilestoneState({
+        milestone: m,
+        plan,
+        activities: schedule.activities as unknown as Record<string, Task[]>,
+        trackers: schedule.progressTrackers,
+        metricEntries: schedule.metricEntries,
+      }));
+    }
+    return map;
+  }, [planMilestones, schedule.activities, schedule.progressTrackers, schedule.metricEntries, plan]);
+
   const roadmapStats = useMemo(
     () =>
       computeRoadmapStats(
@@ -523,10 +574,16 @@ export default function PlanDetailView({
     const title = newTrackerTitle.trim();
     if (!title) return;
     const goalValue = newTrackerGoalValue.trim() ? Number(newTrackerGoalValue) : undefined;
-    onAddTracker(plan.id, title, newTrackerUnit.trim(), newTrackerGoalDirection, undefined, Number.isFinite(goalValue) ? goalValue : undefined);
+    const startingValue = newTrackerStartingValue.trim() ? Number(newTrackerStartingValue) : undefined;
+    onAddTracker(
+      plan.id, title, newTrackerUnit.trim(), newTrackerGoalDirection, undefined,
+      Number.isFinite(goalValue) ? goalValue : undefined,
+      Number.isFinite(startingValue) ? startingValue : undefined,
+    );
     setNewTrackerTitle("");
     setNewTrackerUnit("");
     setNewTrackerGoalValue("");
+    setNewTrackerStartingValue("");
     setNewTrackerGoalDirection("increase_good");
     setAddingTracker(false);
   }
@@ -539,6 +596,7 @@ export default function PlanDetailView({
       unit: editTrackerDraft.unit.trim(),
       goalDirection: editTrackerDraft.goalDirection,
       goalValue: editTrackerDraft.goalValue,
+      startingValue: editTrackerDraft.startingValue,
     });
     setEditingTrackerId(null);
   }
@@ -873,6 +931,19 @@ export default function PlanDetailView({
                 placeholder={`Goal value${editTrackerDraft.unit ? ` (${editTrackerDraft.unit})` : ""} — optional`}
                 className="h-10 w-full rounded-xl border border-neutral-200 bg-neutral-50 px-3 text-[14px] text-neutral-700 outline-none focus:border-neutral-400 focus:bg-neutral-100 dark:border-white/10 dark:bg-white/[0.04] dark:text-neutral-300 dark:focus:border-white/20 dark:focus:bg-white/[0.07] transition-colors"
               />
+              <input
+                type="number"
+                inputMode="decimal"
+                value={editTrackerDraft.startingValue ?? ""}
+                onChange={(e) =>
+                  setEditTrackerDraft((d) => ({
+                    ...d,
+                    startingValue: e.target.value ? Number(e.target.value) : undefined,
+                  }))
+                }
+                placeholder={`Starting value${editTrackerDraft.unit ? ` (${editTrackerDraft.unit})` : ""} — optional, defaults to your first log`}
+                className="h-10 w-full rounded-xl border border-neutral-200 bg-neutral-50 px-3 text-[14px] text-neutral-700 outline-none focus:border-neutral-400 focus:bg-neutral-100 dark:border-white/10 dark:bg-white/[0.04] dark:text-neutral-300 dark:focus:border-white/20 dark:focus:bg-white/[0.07] transition-colors"
+              />
               <GoalDirectionPicker
                 value={editTrackerDraft.goalDirection}
                 onChange={(gd) =>
@@ -922,6 +993,7 @@ export default function PlanDetailView({
                         unit: tracker.unit ?? "",
                         goalDirection: tracker.goalDirection ?? "increase_good",
                         goalValue: tracker.goalValue,
+                        startingValue: tracker.startingValue,
                       });
                     }}
                     className="h-8 w-8 flex items-center justify-center rounded-lg text-neutral-400 hover:text-neutral-700 dark:text-neutral-500 dark:hover:text-neutral-300 transition-colors"
@@ -1085,10 +1157,15 @@ export default function PlanDetailView({
     const status = resolveMilestoneStatus(m);
     const isCompleted = status === "completed";
     const progress = milestoneProgressById.get(m.id);
+    const health = milestoneStateById.get(m.id);
     const isActive   = status === "active";
     const isDelayed  = status === "delayed";
     const daysLabel = `${m.plannedDurationDays} Day${m.plannedDurationDays === 1 ? "" : "s"}`;
     const rangeLabel = `${formatDate(m.startDate)} – ${formatDate(m.plannedEndDate)}`;
+    // Only worth a second badge once it says something the lifecycle status
+    // pill doesn't already — a brand-new/completed/not-yet-started milestone
+    // has nothing extra to add here (the detail sheet still shows it).
+    const showHealthBadge = health && !["not_started", "completed", "getting_started"].includes(health.health);
 
     return (
       <button
@@ -1153,13 +1230,16 @@ export default function PlanDetailView({
               Overdue
             </p>
           )}
-          <p className={`mb-1 text-[16px] leading-snug tracking-[-0.3px] ${
-            isCompleted
-              ? "font-semibold line-through text-neutral-400 dark:text-neutral-500"
-              : "font-bold text-neutral-950 dark:text-white"
-          }`}>
-            {m.title}
-          </p>
+          <div className="mb-1 flex items-center gap-2">
+            <p className={`text-[16px] leading-snug tracking-[-0.3px] ${
+              isCompleted
+                ? "font-semibold line-through text-neutral-400 dark:text-neutral-500"
+                : "font-bold text-neutral-950 dark:text-white"
+            }`}>
+              {m.title}
+            </p>
+            {showHealthBadge && <MilestoneHealthBadge health={health.health} />}
+          </div>
           <div className="flex flex-wrap items-center gap-2">
             <span className={`text-[12.5px] font-medium ${
               isCompleted ? "text-neutral-400 dark:text-neutral-500" : "text-neutral-500 dark:text-neutral-400"
@@ -1197,13 +1277,20 @@ export default function PlanDetailView({
               )}
             </div>
           )}
-          {progress?.hasLinkedTasks && (
+          {health?.overallProgress !== null && health?.overallProgress !== undefined && (
             <ProgressBar
-              pct={progress.pct!}
+              pct={health.overallProgress}
               height={4}
               fillClassName={isCompleted ? "bg-neutral-300 dark:bg-white/20" : "bg-emerald-500"}
               className="mt-1.5 max-w-[160px]"
             />
+          )}
+          {/* Forecast vs target — only once there's an actual projection and
+              the milestone isn't already resolved/not-yet-underway. */}
+          {health?.forecastDate && showHealthBadge && (
+            <p className="mt-1 text-[11px] font-medium text-neutral-400 dark:text-neutral-500">
+              Projected {formatDateShort(health.forecastDate)} · Target {formatDateShort(m.plannedEndDate)}
+            </p>
           )}
         </div>
 
@@ -2024,6 +2111,13 @@ export default function PlanDetailView({
               onChange={(e) => setNewTrackerGoalValue(e.target.value)}
               placeholder={`Goal value${newTrackerUnit.trim() ? ` (${newTrackerUnit.trim()})` : ""} — optional`}
             />
+            <Input
+              type="number"
+              inputMode="decimal"
+              value={newTrackerStartingValue}
+              onChange={(e) => setNewTrackerStartingValue(e.target.value)}
+              placeholder={`Starting value${newTrackerUnit.trim() ? ` (${newTrackerUnit.trim()})` : ""} — optional, defaults to your first log`}
+            />
           </div>
           <GoalDirectionPicker
             value={newTrackerGoalDirection}
@@ -2073,24 +2167,30 @@ export default function PlanDetailView({
           const isDelayed   = status === "delayed";
           const isActive    = status === "active";
           const progress = milestoneProgressById.get(m.id);
+          const health = milestoneStateById.get(m.id);
           const readyToComplete = !!progress?.hasLinkedTasks && progress.pct === 100 && !isCompleted;
+          const showHealthBadge = health && !["not_started", "completed", "getting_started"].includes(health.health);
 
           return (
             <div className="px-5 pb-8 pt-4">
-              {/* Status badge */}
-              {(isCompleted || isDelayed || isActive) && (
-                <div className="mb-3">
-                  <span className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[12px] font-bold ${
-                    isDelayed
-                      ? "bg-amber-50 text-amber-700 dark:bg-amber-900/20 dark:text-amber-400"
-                      : "bg-green-50 text-green-700 dark:bg-green-900/20 dark:text-green-400"
-                  }`}>
-                    {isDelayed
-                      ? <IconAlertTriangle size={12} strokeWidth={2.5} />
-                      : <IconCheck size={12} strokeWidth={2.5} />
-                    }
-                    {isCompleted ? "Completed" : isDelayed ? "Overdue" : "In Progress"}
-                  </span>
+              {/* Status badge(s) — lifecycle status (date-derived) and, when
+                  it says something new, the live health badge alongside it. */}
+              {(isCompleted || isDelayed || isActive || showHealthBadge) && (
+                <div className="mb-3 flex flex-wrap items-center gap-2">
+                  {(isCompleted || isDelayed || isActive) && (
+                    <span className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[12px] font-bold ${
+                      isDelayed
+                        ? "bg-amber-50 text-amber-700 dark:bg-amber-900/20 dark:text-amber-400"
+                        : "bg-green-50 text-green-700 dark:bg-green-900/20 dark:text-green-400"
+                    }`}>
+                      {isDelayed
+                        ? <IconAlertTriangle size={12} strokeWidth={2.5} />
+                        : <IconCheck size={12} strokeWidth={2.5} />
+                      }
+                      {isCompleted ? "Completed" : isDelayed ? "Overdue" : "In Progress"}
+                    </span>
+                  )}
+                  {showHealthBadge && <MilestoneHealthBadge health={health.health} size="md" />}
                 </div>
               )}
 
@@ -2123,6 +2223,61 @@ export default function PlanDetailView({
                   </div>
                 )}
               </div>
+
+              {/* Live health breakdown — current/target metric values, the
+                  headline progress bar, forecast vs target, and the
+                  Activity/Consistency secondary signals. Nothing here is
+                  stored; it's calculateMilestoneState recomputed live. */}
+              {health && health.hasData && (
+                <div className="mb-5 space-y-3">
+                  {health.metricCurrentValue !== null && health.metricTargetValue !== null && (
+                    <div className="flex items-baseline justify-between">
+                      <span className="text-[22px] font-bold tracking-[-0.3px] text-neutral-900 dark:text-white">
+                        {health.metricCurrentValue}{health.metricUnit ? ` ${health.metricUnit}` : ""}
+                      </span>
+                      <span className="text-[13px] font-medium text-neutral-400 dark:text-neutral-500">
+                        Target: {health.metricTargetValue}{health.metricUnit ? ` ${health.metricUnit}` : ""}
+                      </span>
+                    </div>
+                  )}
+                  {health.overallProgress !== null && (
+                    <ProgressBar
+                      pct={health.overallProgress}
+                      height={6}
+                      fillClassName={isCompleted ? "bg-neutral-300 dark:bg-white/20" : "bg-emerald-500"}
+                    />
+                  )}
+                  {health.metricMovedWrongDirection && (
+                    <p className="text-[12.5px] font-medium text-rose-600 dark:text-rose-400">
+                      This has moved away from your target since you started.
+                    </p>
+                  )}
+                  {health.forecastDate && !["not_started", "completed", "getting_started"].includes(health.health) && (
+                    <p className="text-[13px] font-medium text-neutral-500 dark:text-neutral-400">
+                      Projected {formatDateShort(health.forecastDate)} · Target {formatDateShort(m.plannedEndDate)}
+                    </p>
+                  )}
+                  {(health.taskProgress !== null || health.consistency !== null) && (
+                    <div className="flex items-center gap-4 pt-1">
+                      {health.taskProgress !== null && (
+                        <div>
+                          <p className="text-[11px] font-bold uppercase tracking-[0.08em] text-neutral-400 dark:text-neutral-500">Activity</p>
+                          <p className="text-[14px] font-semibold text-neutral-800 dark:text-neutral-100">{health.taskProgress}% task progress</p>
+                        </div>
+                      )}
+                      {health.consistency !== null && (
+                        <div>
+                          <p className="text-[11px] font-bold uppercase tracking-[0.08em] text-neutral-400 dark:text-neutral-500">Consistency</p>
+                          <p className="text-[14px] font-semibold text-neutral-800 dark:text-neutral-100">{health.consistency}%</p>
+                        </div>
+                      )}
+                    </div>
+                  )}
+                  <p className="text-[13px] leading-relaxed text-neutral-500 dark:text-neutral-400">
+                    {health.statusMessage}
+                  </p>
+                </div>
+              )}
 
               {/* Description */}
               {m.description && (

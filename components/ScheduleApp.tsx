@@ -4020,7 +4020,7 @@ export default function ScheduleApp() {
               onAddTask={(planId) => openCreateSheet(planId)}
               onEditTask={(task) => openEditSheet(task)}
               onDeleteLinkedTask={handleDeleteLinkedTask}
-              onAddTracker={(planId, title, unit, goalDirection, id, goalValue) => {
+              onAddTracker={(planId, title, unit, goalDirection, id, goalValue, startingValue) => {
                 setSchedule((prev) => ({
                   ...prev,
                   progressTrackers: [
@@ -4033,6 +4033,7 @@ export default function ScheduleApp() {
                       unit: unit || undefined,
                       goalDirection,
                       goalValue,
+                      startingValue,
                     },
                   ],
                 }));

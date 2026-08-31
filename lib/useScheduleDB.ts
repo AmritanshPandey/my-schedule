@@ -285,6 +285,13 @@ export interface ProgressTracker {
   unit?: string;
   goalDirection?: GoalDirection;
   goalValue?: number;
+  /**
+   * The value this tracker started from — needed to compute a % of the way
+   * to `goalValue` (see lib/milestoneHealth.ts). Optional: a tracker with no
+   * explicit starting value falls back to its earliest MetricEntry, so
+   * existing trackers need no migration.
+   */
+  startingValue?: number;
 }
 
 export interface MetricEntry {
@@ -872,6 +879,7 @@ function normalizeTracker(value: unknown): ProgressTracker | null {
     unit: t.unit,
     goalDirection: gd === "increase_good" || gd === "decrease_good" ? gd : undefined,
     goalValue: typeof t.goalValue === "number" && Number.isFinite(t.goalValue) ? t.goalValue : undefined,
+    startingValue: typeof t.startingValue === "number" && Number.isFinite(t.startingValue) ? t.startingValue : undefined,
   };
 }
 
