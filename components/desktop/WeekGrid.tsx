@@ -145,23 +145,46 @@ function buildDayLayout(
   return { timed, untimed };
 }
 
-interface RitualMark { top: number; rituals: Ritual[] }
+/** One drawable occurrence of a ritual — most trackingTypes have exactly one
+ *  a day (the ritual itself, at ritual.time); a "times" ritual has one per
+ *  entry in ritual.steps, each at its own time. stepId scopes a completion
+ *  row to that one occurrence (RitualCompletion.stepId, toggleRitualStep). */
+interface RitualOccurrence { ritual: Ritual; stepId?: string; time: string }
+interface RitualMark { top: number; occurrences: RitualOccurrence[] }
+
+/** The one or more occurrences a single ritual contributes, each with its own
+ *  raw "HH:MM" time. Every trackingType but "times" is a single occurrence
+ *  at the ritual's own time. Mirrors lib/timeline/groupRitualsByTime.ts's
+ *  occurrencesFor, which the single-day timeline lane uses for the same
+ *  purpose — kept separate here only because this grid positions marks per
+ *  weekday column rather than per absolute time-of-day. */
+function occurrencesFor(ritual: Ritual): Array<{ stepId?: string; time: string }> {
+  if (ritual.trackingType === "times" && ritual.steps && ritual.steps.length > 0) {
+    return ritual.steps.map((step) => ({ stepId: step.id, time: step.label }));
+  }
+  return [{ time: ritual.time }];
+}
 
 /** Rituals due on `day`, grouped by mapped time, positioned to the timeline. */
 function buildRitualMarks(rituals: Ritual[], dateISO: string, startMin: number, endMin: number, trackingStart?: string): RitualMark[] {
-  const byTime = new Map<number, Ritual[]>();
+  const byTime = new Map<number, RitualOccurrence[]>();
   for (const r of rituals) {
     if (!ritualScheduledOnDate(r, dateISO, trackingStart)) continue;
-    const mins = parseTimeToMinutes(r.time);
-    if (mins == null) continue;
-    const mapped = mapMinutesToTimeline(mins, startMin, endMin);
-    if (mapped < startMin || mapped > endMin) continue;
-    if (!byTime.has(mapped)) byTime.set(mapped, []);
-    byTime.get(mapped)!.push(r);
+    for (const occ of occurrencesFor(r)) {
+      const mins = parseTimeToMinutes(occ.time);
+      if (mins == null) continue;
+      const mapped = mapMinutesToTimeline(mins, startMin, endMin);
+      // Filtered per-occurrence, not per-ritual: a "times" ritual's later
+      // occurrences must not be hidden (or wrongly shown) just because its
+      // earliest one does or doesn't fall inside the visible window.
+      if (mapped < startMin || mapped > endMin) continue;
+      if (!byTime.has(mapped)) byTime.set(mapped, []);
+      byTime.get(mapped)!.push({ ritual: r, stepId: occ.stepId, time: occ.time });
+    }
   }
   return Array.from(byTime.entries())
     .sort(([a], [b]) => a - b)
-    .map(([mapped, rs]) => ({ top: (mapped - startMin) * PX_MIN, rituals: rs }));
+    .map(([mapped, occurrences]) => ({ top: (mapped - startMin) * PX_MIN, occurrences }));
 }
 
 /** Held time / uncategorised blocks in the all-day band. */
@@ -173,6 +196,9 @@ interface WeekGridProps {
   rituals: Ritual[];
   ritualCompletions: RitualCompletion[];
   onToggleRitual: (id: string, dateISO: string) => void;
+  /** One occurrence of a "times" ritual (several times a day) — toggles just
+   *  that occurrence's row, independent of the ritual's other occurrences. */
+  onToggleRitualStep: (id: string, stepId: string, dateISO: string) => void;
   weekDates: Array<{ day: DayKey; date: Date }>;
   todayKey: DayKey;
   weekLabel: string;
@@ -252,6 +278,7 @@ export function WeekGrid({
   rituals,
   ritualCompletions,
   onToggleRitual,
+  onToggleRitualStep,
   weekDates,
   todayKey,
   weekLabel,
@@ -989,6 +1016,15 @@ export function WeekGrid({
             const completedRituals = new Set(
               ritualCompletions.filter((c) => c.date === dateISO).map((c) => c.ritualId),
             );
+            // The per-occurrence analogue of completedRituals, for a "times"
+            // ritual's individual occurrences — completedRituals only knows
+            // "some row exists for this ritual today," which can't tell one
+            // occurrence's checkbox from another's.
+            const completedRitualSteps = new Set(
+              ritualCompletions
+                .filter((c) => c.date === dateISO && c.stepId)
+                .map((c) => `${c.ritualId}:${c.stepId}`),
+            );
             const showNow = dayIsToday && now !== null;
             const readOnly = !dayIsToday;
             // Only the column currently under the pointer during a genuine
@@ -1204,14 +1240,25 @@ export function WeekGrid({
                   >
                     {/* The name is revealed by the dot itself expanding into a
                         capsule (see RitualStrip) — no floating tooltip layer. */}
-                    {mark.rituals.map((ritual) => (
-                      <RitualStrip
-                        key={ritual.id}
-                        ritual={ritual}
-                        completed={completedRituals.has(ritual.id)}
-                        onToggle={() => onToggleRitual(ritual.id, dateISO)}
-                      />
-                    ))}
+                    {mark.occurrences.map((occ) => {
+                      const key = occ.stepId ? `${occ.ritual.id}:${occ.stepId}` : occ.ritual.id;
+                      const completed = occ.stepId
+                        ? completedRitualSteps.has(key)
+                        : completedRituals.has(occ.ritual.id);
+                      return (
+                        <RitualStrip
+                          key={key}
+                          ritual={occ.ritual}
+                          time={occ.time}
+                          completed={completed}
+                          onToggle={() =>
+                            occ.stepId
+                              ? onToggleRitualStep(occ.ritual.id, occ.stepId, dateISO)
+                              : onToggleRitual(occ.ritual.id, dateISO)
+                          }
+                        />
+                      );
+                    })}
                   </div>
                 ))}
 

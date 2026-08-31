@@ -61,7 +61,10 @@ export default function TodayRitualsBar({
           const dot = ritual.color ? COLOR_DOT[ritual.color] : "bg-neutral-300 dark:bg-neutral-600";
 
           const isMeasured = trackingType === "quantity" || trackingType === "duration" || trackingType === "count";
-          const isChecklist = trackingType === "checklist";
+          // "times" (several occurrences a day) shares checklist's step
+          // machinery and its "N/M so far" framing — a single static time
+          // would misrepresent a routine that isn't a single occurrence.
+          const isChecklist = trackingType === "checklist" || trackingType === "times";
           // The first quick-add preset is this pill's increment. Without one
           // there is no unambiguous amount to log, so the pill opens the
           // routine instead of guessing a number.

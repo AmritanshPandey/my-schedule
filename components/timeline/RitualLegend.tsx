@@ -34,8 +34,15 @@ export default function RitualLegend({
       timelineTopPadding, hourHeight,
       trackingStart,
     );
-    // Flatten in timeline order, then cap to match the overlay dots.
-    return groups.flatMap((g) => g.rituals).slice(0, DAY_LIMIT);
+    // The legend is a colour key ("this dot = this routine"), not a
+    // per-occurrence list — a "times" routine with 3 occurrences on the
+    // overlay still gets exactly one bullet here, at its earliest occurrence's
+    // position in timeline order (Map preserves first-insertion order).
+    const byRitual = new Map<string, Ritual>();
+    for (const occ of groups.flatMap((g) => g.occurrences)) {
+      if (!byRitual.has(occ.ritual.id)) byRitual.set(occ.ritual.id, occ.ritual);
+    }
+    return Array.from(byRitual.values()).slice(0, DAY_LIMIT);
   }, [rituals, dateISO, timelineStartMinutes, timelineEndMinutes, timelineTopPadding, hourHeight, trackingStart]);
 
   if (visible.length === 0) return null;

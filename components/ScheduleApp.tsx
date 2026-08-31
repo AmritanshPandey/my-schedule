@@ -3445,6 +3445,7 @@ export default function ScheduleApp() {
                 rituals={schedule.rituals ?? []}
                 ritualCompletions={schedule.ritualCompletions ?? []}
                 onToggleRitual={handleToggleRitualComplete}
+                onToggleRitualStep={(ritualId, stepId, dateISO) => handleToggleRitualStep(ritualId, stepId, dateISO)}
                 weekDates={visibleDates}
                 todayKey={todayKey}
                 weekLabel={weekLabel}
@@ -3842,6 +3843,7 @@ export default function ScheduleApp() {
                       >
                         <RitualOverlayLayer
                           rituals={schedule.rituals ?? []}
+                          ritualCompletions={schedule.ritualCompletions ?? []}
                           dateISO={activeDateISO}
                           timelineStartMinutes={timelineStartMinutes}
                           timelineEndMinutes={timelineEndMinutes}
@@ -3849,6 +3851,7 @@ export default function ScheduleApp() {
                           hourHeight={HOUR_HEIGHT}
                           completedIds={completedRitualIds}
                           onToggleComplete={handleToggleRitualComplete}
+                          onToggleStep={(ritualId, stepId) => handleToggleRitualStep(ritualId, stepId)}
                           trackingStart={schedule.preferences?.startDate}
                         />
                       </div>

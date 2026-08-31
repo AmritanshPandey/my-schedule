@@ -10,6 +10,10 @@ interface RitualStripProps {
   ritual: Ritual;
   completed: boolean;
   onToggle: () => void;
+  /** Overrides ritual.time for display — used for one occurrence of a
+   *  "times" ritual, whose ritual.time only mirrors the earliest one.
+   *  Defaults to ritual.time so every other caller is unaffected. */
+  time?: string;
 }
 
 /**
@@ -28,8 +32,9 @@ interface RitualStripProps {
  * The label uses dark ink, not white — every dot colour is a 400-level fill, on
  * which white text lands around 2:1 and fails WCAG AA.
  */
-export default function RitualStrip({ ritual, completed, onToggle }: RitualStripProps) {
+export default function RitualStrip({ ritual, completed, onToggle, time }: RitualStripProps) {
   const dot = ritual.color ? COLOR_DOTS[ritual.color] : "bg-neutral-400";
+  const displayTime = time ?? ritual.time;
 
   return (
     <m.button
@@ -38,7 +43,7 @@ export default function RitualStrip({ ritual, completed, onToggle }: RitualStrip
       transition={{ type: "spring", stiffness: 500, damping: 28 }}
       onClick={onToggle}
       aria-pressed={completed}
-      aria-label={`${ritual.title}${ritual.time ? ` at ${formatDisplayTime(ritual.time)}` : ""} — ${completed ? "done, tap to undo" : "tap to mark done"}`}
+      aria-label={`${ritual.title}${displayTime ? ` at ${formatDisplayTime(displayTime)}` : ""} — ${completed ? "done, tap to undo" : "tap to mark done"}`}
       title={ritual.title}
       className="group/ritual pointer-events-auto relative h-4 w-4 shrink-0 cursor-pointer select-none rounded-full hover:z-20 focus-visible:z-20"
     >
@@ -64,8 +69,8 @@ export default function RitualStrip({ ritual, completed, onToggle }: RitualStrip
             <span className={completed ? "line-through decoration-neutral-950/60" : ""}>
               {ritual.title}
             </span>
-            {ritual.time && (
-              <span className="font-semibold tabular-nums text-neutral-950/60">{formatDisplayTime(ritual.time)}</span>
+            {displayTime && (
+              <span className="font-semibold tabular-nums text-neutral-950/60">{formatDisplayTime(displayTime)}</span>
             )}
           </span>
         </span>
