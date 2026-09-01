@@ -45,6 +45,8 @@ const {
 } = await import("../lib/taskCompletion.ts");
 const {
   applyTaskDelete,
+  clearDay,
+  summarizeDayClear,
   createTaskDeleteSnapshot,
   updateTaskDays,
   updateTaskPerDay,
@@ -489,6 +491,108 @@ test("single-day task delete removes only that occurrence", () => {
   assert.equal(result.activities.monday.some((item) => item.id === "delete-me"), false);
   assert.equal(result.activities.tuesday.some((item) => item.id === "keep-me"), true);
   assert.deepEqual(result.milestones[0].linkedActivities, ["keep-me"]);
+});
+
+// ── Clear day (whole-weekday wipe) ──────────────────────────────────────────
+// A template operation, like swapDays: it clears the weekday for good, not the
+// one date the user was looking at. These are the first tests any whole-day op
+// has had — swapDays and duplicateDay still have none.
+
+function milestoneWith(linkedActivities) {
+  return {
+    id: "milestone-1",
+    planId: "plan-1",
+    title: "Milestone",
+    startDate: "2026-06-01",
+    plannedDurationDays: 7,
+    plannedEndDate: "2026-06-08",
+    status: "active",
+    linkedActivities,
+    linkedTrackers: [],
+    createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString(),
+    sortOrder: 0,
+  };
+}
+
+test("clearDay empties one weekday and leaves the others alone", () => {
+  const schedule = emptySchedule();
+  schedule.activities.monday = [baseTask("a"), baseTask("b")];
+  schedule.activities.tuesday = [baseTask("c")];
+
+  const result = clearDay("monday")(schedule);
+
+  assert.deepEqual(result.activities.monday, []);
+  assert.equal(result.activities.tuesday.length, 1, "Tuesday is untouched");
+  assert.equal(schedule.activities.monday.length, 2, "the input is not mutated");
+});
+
+test("clearDay keeps a repeated task's other weekdays", () => {
+  // The same id lives in several buckets — that is what "repeats" means here.
+  const schedule = emptySchedule();
+  schedule.activities.monday = [{ ...baseTask("repeat-me"), title: "Monday copy" }];
+  schedule.activities.wednesday = [{ ...baseTask("repeat-me"), title: "Wednesday copy" }];
+
+  const result = clearDay("monday")(schedule);
+
+  assert.deepEqual(result.activities.monday, []);
+  assert.equal(result.activities.wednesday[0].title, "Wednesday copy", "Wednesday survives");
+});
+
+test("clearDay prunes a milestone link only when no weekday is left", () => {
+  // Exactly the split createTaskDeleteSnapshot encodes. Truncating the bucket
+  // without this leaves linkedActivities pointing at tasks that no longer exist.
+  const schedule = emptySchedule();
+  schedule.activities.monday = [baseTask("gone"), { ...baseTask("survivor") }];
+  schedule.activities.friday = [{ ...baseTask("survivor") }];
+  schedule.milestones = [milestoneWith(["gone", "survivor"])];
+
+  const result = clearDay("monday")(schedule);
+
+  assert.deepEqual(
+    result.milestones[0].linkedActivities,
+    ["survivor"],
+    "the task with a Friday row keeps its link; the one with nowhere left loses it",
+  );
+});
+
+test("clearDay leaves milestones untouched when nothing was linked", () => {
+  const schedule = emptySchedule();
+  schedule.activities.monday = [baseTask("a")];
+  schedule.milestones = [milestoneWith(["unrelated"])];
+
+  const result = clearDay("monday")(schedule);
+  assert.equal(result.milestones, schedule.milestones, "same reference — no needless rewrite");
+});
+
+test("clearDay on an empty day is inert", () => {
+  // Identity matters: setSchedule pushes an undo entry for every call, so a
+  // no-op clear would otherwise cost the user their real undo step.
+  const schedule = emptySchedule();
+  const result = clearDay("monday")(schedule);
+  assert.equal(result, schedule, "the identical object, not a copy");
+});
+
+test("summarizeDayClear counts what the confirmation has to name", () => {
+  const schedule = emptySchedule();
+  schedule.activities.monday = [
+    { ...baseTask("done"), completed: true },
+    { ...baseTask("skipped"), missed: true },
+    { ...baseTask("repeat") },
+    { ...baseTask("one-off"), recurrence: { type: "once", dateISO: "2026-06-01" } },
+  ];
+  schedule.activities.thursday = [{ ...baseTask("repeat") }];
+
+  const summary = summarizeDayClear(schedule, "monday");
+
+  assert.equal(summary.total, 4);
+  assert.equal(summary.completed, 1);
+  assert.equal(summary.missed, 1);
+  assert.equal(summary.alsoOnOtherDays, 1, "only the task with a Thursday row");
+  assert.equal(summary.onceOnly, 1, "a dated task has no other weekday to return on");
+
+  const empty = summarizeDayClear(schedule, "sunday");
+  assert.equal(empty.total, 0);
 });
 
 test("day-scoped repeated task delete preserves other days and milestone links", () => {

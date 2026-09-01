@@ -507,6 +507,93 @@ export function duplicateDay(
   };
 }
 
+/**
+ * Counts behind the "Clear day" confirmation.
+ *
+ * The copy has to name what is actually about to be destroyed — a day holding
+ * three completed tasks is a very different thing to lose than an empty plan —
+ * and the caller would otherwise repeat this weekday scan in the component.
+ */
+export interface DayClearSummary {
+  total: number;
+  completed: number;
+  missed: number;
+  /** Tasks that also run on another weekday, so they survive the clear there. */
+  alsoOnOtherDays: number;
+  /** Single-dated tasks, which have no other weekday to come back on. */
+  onceOnly: number;
+}
+
+export function summarizeDayClear(schedule: Schedule, day: DayKey): DayClearSummary {
+  const tasks = schedule.activities[day] ?? [];
+  let completed = 0;
+  let missed = 0;
+  let alsoOnOtherDays = 0;
+  let onceOnly = 0;
+  for (const task of tasks) {
+    if (task.completed) completed++;
+    if (task.missed) missed++;
+    if (task.recurrence?.type === "once") onceOnly++;
+    if (DAYS.some((d) => d !== day && (schedule.activities[d] ?? []).some((t) => t.id === task.id))) {
+      alsoOnOtherDays++;
+    }
+  }
+  return { total: tasks.length, completed, missed, alsoOnOtherDays, onceOnly };
+}
+
+/**
+ * Empty one weekday's task list.
+ *
+ * A *template* operation, like swapDays: this weekday is cleared for good, not
+ * just for the date the user happened to be looking at. A task that also runs
+ * on another weekday keeps those rows — only its row on `day` goes.
+ *
+ * Milestone links are pruned on exactly the rule `createTaskDeleteSnapshot`
+ * uses: a link is dropped only when the task has no weekday left anywhere.
+ * Assigning `activities[day] = []` directly would skip that and leave
+ * `milestone.linkedActivities` pointing at tasks that no longer exist.
+ *
+ * One updater on purpose. A loop of single-task deletes would push one undo
+ * entry each, so the toast's "Undo" would restore only the last task rather
+ * than the day.
+ */
+export function clearDay(day: DayKey): (prev: Schedule) => Schedule {
+  return (prev) => {
+    const cleared = prev.activities[day] ?? [];
+    // Identity, not a copy: an inert clear must not push an undo entry.
+    if (cleared.length === 0) return prev;
+
+    const activities = { ...prev.activities, [day]: [] } as Schedule["activities"];
+    const orphaned = new Set(
+      cleared
+        .map((task) => task.id)
+        .filter((id) => !DAYS.some((d) => activities[d].some((t) => t.id === id))),
+    );
+
+    // Checked before mapping, not inside it: a day of tasks that no milestone
+    // references is the common case, and rebuilding the array anyway would
+    // hand every milestone consumer a new identity for no change.
+    const touchesMilestones =
+      orphaned.size > 0
+      && prev.milestones.some((m) => m.linkedActivities.some((id) => orphaned.has(id)));
+
+    return {
+      ...prev,
+      activities,
+      milestones: touchesMilestones
+        ? prev.milestones.map((milestone) =>
+            milestone.linkedActivities.some((id) => orphaned.has(id))
+              ? {
+                  ...milestone,
+                  linkedActivities: milestone.linkedActivities.filter((id) => !orphaned.has(id)),
+                }
+              : milestone,
+          )
+        : prev.milestones,
+    };
+  };
+}
+
 // ── Per-date exceptions (single-occurrence skip / edit) ──────────────────────
 
 /**

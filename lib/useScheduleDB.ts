@@ -17,7 +17,7 @@ import { normalizeDayStartTime } from "@/lib/timeline/displayWindow";
 import { MIN_SLEEP_HOURS, MAX_SLEEP_HOURS } from "@/lib/timeline/sleepWindow";
 import { bootLog } from "@/lib/iosSafeMode";
 
-export { DAYS, DAY_LABELS } from "@/lib/scheduleConstants";
+export { DAYS, DAY_LABELS, DAY_FULL_LABELS } from "@/lib/scheduleConstants";
 export type { DayKey } from "@/lib/scheduleConstants";
 
 // Pure normalization lives in scheduleNormalize.ts (no React/auth deps, so it's

@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import dynamic from "next/dynamic";
 import {
+  IconDotsVertical,
   IconAlertCircle,
   IconAlertTriangle,
   IconCalendar,
@@ -36,6 +37,7 @@ import DayActionsSheet from "@/components/DayActionsSheet";
 import {
   DAYS,
   DAY_LABELS,
+  DAY_FULL_LABELS,
   type DayKey,
   type MetricEntry,
   type Milestone,
@@ -72,6 +74,8 @@ import {
   updateTaskPerDay,
   swapDays,
   duplicateDay,
+  clearDay,
+  summarizeDayClear,
   setTaskException,
   clearTaskException,
   addSubtaskToTasks,
@@ -376,11 +380,13 @@ export default function IOSScheduleApp() {
   bootLog(isIOSSafeMode() ? "IOS_SAFE_MODE_ENABLED" : "PHONE_SHELL_ENABLED");
   void isStandalonePWA();
 
-  const { schedule, setSchedule, ready, clearData, clearProgress, restoreData } = useScheduleDB();
+  const { schedule, setSchedule, ready, clearData, clearProgress, restoreData, undo } = useScheduleDB();
   useReminders(schedule, ready);
   const [todayKey, setTodayKey] = useState<DayKey>(() => JS_DAYS[new Date().getDay()]);
   const [activeDay, setActiveDay] = useState<DayKey>(() => JS_DAYS[new Date().getDay()]);
   const [dayActionsOpen, setDayActionsOpen] = useState(false);
+  /** The weekday awaiting a "clear day" confirmation, or null. */
+  const [dayClearRequest, setDayClearRequest] = useState<DayKey | null>(null);
   const [missedSheet, setMissedSheet] = useState<MissedTask | null>(null);
   // Today tab starts as a clean execution surface; editing affordances (per-card
   // pencil, day actions, wallpaper, add-task) are revealed only in edit mode.
@@ -445,7 +451,16 @@ export default function IOSScheduleApp() {
   const [entryTracker, setEntryTracker] = useState<ProgressTracker | null>(null);
   const [confirmState, setConfirmState] = useState<ConfirmState | null>(null);
   const [taskDeleteRequest, setTaskDeleteRequest] = useState<TaskDeleteRequest | null>(null);
-  const [toast, setToast] = useState<string | null>(null);
+  const [toastState, setToastState] = useState<{ message: string; actionLabel?: string; onAction?: () => void } | null>(null);
+  const toast = toastState?.message ?? null;
+  /**
+   * Accepts a bare string so every existing caller keeps working, or a shape
+   * with an action so a destructive change can offer "Undo" — which this
+   * surface previously had no way to express.
+   */
+  const setToast = useCallback((next: string | { message: string; actionLabel?: string; onAction?: () => void } | null) => {
+    setToastState(next === null ? null : typeof next === "string" ? { message: next } : next);
+  }, []);
   const [initialNoteId, setInitialNoteId] = useState<string | null>(null);
   const scheduleRef = useRef(schedule);
   scheduleRef.current = schedule;
@@ -484,9 +499,25 @@ export default function IOSScheduleApp() {
     if (!toast) return;
     const id = window.setTimeout(() => setToast(null), 2200);
     return () => window.clearTimeout(id);
-  }, [toast]);
+  }, [toast, setToast]);
 
   const plansById = useMemo(() => new Map(schedule.plans.map((plan) => [plan.id, plan])), [schedule.plans]);
+
+  function performDayClear() {
+    if (!dayClearRequest) return;
+    const label = DAY_FULL_LABELS[dayClearRequest];
+    const { total } = summarizeDayClear(schedule, dayClearRequest);
+    setSchedule(clearDay(dayClearRequest));
+    setDayClearRequest(null);
+    haptic("medium");
+    // One undo entry, because clearDay is a single updater — so "Undo"
+    // restores the whole day rather than the last task of it.
+    setToast({
+      message: `Cleared ${total} ${total === 1 ? "task" : "tasks"} from ${label}`,
+      actionLabel: "Undo",
+      onAction: () => { undo(); setToast(null); haptic("light"); },
+    });
+  }
 
   /**
    * One-tap increment from the Tracking page. An increment is just another
@@ -1656,6 +1687,17 @@ export default function IOSScheduleApp() {
                     >
                       <IconPlus size={24} strokeWidth={2} />
                     </button>
+                    {/* DayActionsSheet was mounted on this shell but nothing
+                        ever opened it, so swap/duplicate were unreachable on
+                        mobile. This is that opener, and the home for clear. */}
+                    <button
+                      type="button"
+                      aria-label={`${DAY_FULL_LABELS[activeDay]} actions — swap, duplicate or clear day`}
+                      onClick={() => { haptic("light"); setDayActionsOpen(true); }}
+                      className="flex h-12 w-12 items-center justify-center rounded-full bg-neutral-100 text-neutral-600 dark:bg-white/[0.08] dark:text-neutral-300"
+                    >
+                      <IconDotsVertical size={24} strokeWidth={2} />
+                    </button>
                   </>
                 )}
                 <button
@@ -1970,6 +2012,8 @@ export default function IOSScheduleApp() {
         onClose={() => setDayActionsOpen(false)}
         onSwap={(target) => setSchedule(swapDays(activeDay, target))}
         onDuplicate={(targets) => setSchedule(duplicateDay(activeDay, targets))}
+        onClear={() => setDayClearRequest(activeDay)}
+        taskCount={(schedule.activities[activeDay] ?? []).length}
       />
 
       {missedSheet && (
@@ -2134,10 +2178,37 @@ export default function IOSScheduleApp() {
           onClose={() => setTaskDeleteRequest(null)}
         />
       )}
+      {dayClearRequest && (() => {
+        const label = DAY_FULL_LABELS[dayClearRequest];
+        const summary = summarizeDayClear(schedule, dayClearRequest);
+        const resolved = summary.completed + summary.missed;
+        // Names the weekday, not the date: this empties every Monday, not the
+        // day being looked at. And it names what is actually being lost.
+        const description = [
+          `This deletes ${summary.total} ${summary.total === 1 ? "task" : "tasks"} from every ${label}, for good.`,
+          resolved > 0 ? `${resolved} of them ${resolved === 1 ? "has" : "have"} a completion record that goes too.` : "",
+          summary.alsoOnOtherDays > 0 ? `${summary.alsoOnOtherDays} also ${summary.alsoOnOtherDays === 1 ? "runs" : "run"} on other days and will stay there.` : "",
+        ].filter(Boolean).join(" ");
+        return (
+          <ConfirmOverlay
+            state={{ title: `Clear every ${label}?`, description, confirmLabel: "Clear day", destructive: true, onConfirm: performDayClear }}
+            onClose={() => setDayClearRequest(null)}
+          />
+        );
+      })()}
       {confirmState && <ConfirmOverlay state={confirmState} onClose={() => setConfirmState(null)} />}
-      {toast && (
-        <div className="fixed bottom-28 left-1/2 z-50 -translate-x-1/2 rounded-full border border-neutral-800 bg-neutral-900 px-5 py-2.5 text-[14px] font-semibold text-white dark:border-white/[0.10] dark:bg-white dark:text-neutral-900">
-          {toast}
+      {toastState && (
+        <div className="fixed bottom-28 left-1/2 z-50 flex -translate-x-1/2 items-center gap-4 rounded-full border border-neutral-800 bg-neutral-900 px-5 py-2.5 text-[14px] font-semibold text-white dark:border-white/[0.10] dark:bg-white dark:text-neutral-900">
+          <span>{toastState.message}</span>
+          {toastState.actionLabel && toastState.onAction && (
+            <button
+              type="button"
+              onClick={toastState.onAction}
+              className="-mr-1 rounded-full bg-white/10 px-2.5 py-1 text-[13px] font-bold text-white transition-colors active:bg-white/20 dark:bg-neutral-900/10 dark:text-neutral-900 dark:active:bg-neutral-900/20"
+            >
+              {toastState.actionLabel}
+            </button>
+          )}
         </div>
       )}
     </main>

@@ -2,12 +2,12 @@
 
 import { useEffect, useState } from "react";
 import { m, AnimatePresence } from "framer-motion";
-import { IconArrowLeft, IconArrowsExchange, IconCopy } from "@tabler/icons-react";
+import { IconArrowLeft, IconArrowsExchange, IconCopy, IconTrash } from "@tabler/icons-react";
 import BottomSheet from "@/components/ui/BottomSheet";
 import SheetHeader from "@/components/ui/SheetHeader";
 import Button from "@/components/ui/Button";
 import IconButton from "@/components/ui/IconButton";
-import { DAYS, DAY_LABELS, type DayKey } from "@/lib/scheduleConstants";
+import { DAYS, DAY_LABELS, DAY_FULL_LABELS, type DayKey } from "@/lib/scheduleConstants";
 import { haptic } from "@/lib/haptics";
 
 interface DayActionsSheetProps {
@@ -18,14 +18,23 @@ interface DayActionsSheetProps {
   onSwap: (target: DayKey) => void;
   /** Copy the source day's tasks onto the chosen day(s). */
   onDuplicate: (targets: DayKey[]) => void;
+  /**
+   * Empty the source weekday. The sheet only asks; the shell owns the
+   * confirmation and the undo toast, because it is the one holding
+   * `setSchedule` and the undo stack.
+   */
+  onClear: () => void;
+  /** Hides the clear action when the day is already empty. */
+  taskCount: number;
 }
 
 const SECTION_LABEL =
   "text-[11px] font-bold uppercase tracking-[0.08em] text-neutral-500 dark:text-neutral-400";
 
 /**
- * Day-level actions: swap two whole weekdays or duplicate a day onto others.
- * Shared by the mobile (IOSScheduleApp) and desktop (ScheduleApp) surfaces.
+ * Day-level actions: swap two whole weekdays, duplicate a day onto others, or
+ * clear one out. Shared by the mobile (IOSScheduleApp) and desktop
+ * (ScheduleApp) surfaces.
  */
 export default function DayActionsSheet({
   open,
@@ -33,6 +42,8 @@ export default function DayActionsSheet({
   onClose,
   onSwap,
   onDuplicate,
+  onClear,
+  taskCount,
 }: DayActionsSheetProps) {
   const [step, setStep] = useState<"menu" | "swap" | "duplicate">("menu");
   const [dupDays, setDupDays] = useState<DayKey[]>([]);
@@ -49,6 +60,12 @@ export default function DayActionsSheet({
   function handleSwap(target: DayKey) {
     haptic("light");
     onSwap(target);
+    onClose();
+  }
+
+  function handleClear() {
+    haptic("medium");
+    onClear();
     onClose();
   }
 
@@ -71,7 +88,7 @@ export default function DayActionsSheet({
               exit={{ opacity: 0, x: -24 }}
               transition={{ duration: 0.18, ease: [0.22, 1, 0.36, 1] }}
             >
-              <SheetHeader eyebrow="Day" title={`${DAY_LABELS[sourceDay]} actions`} onClose={onClose} />
+              <SheetHeader eyebrow="Day" title={`${DAY_FULL_LABELS[sourceDay]} actions`} onClose={onClose} />
               <div className="mt-4 space-y-2">
                 <button
                   type="button"
@@ -99,6 +116,28 @@ export default function DayActionsSheet({
                     <span className="block text-[12px] font-medium text-neutral-500 dark:text-neutral-400">Copy these tasks onto other days</span>
                   </span>
                 </button>
+                {/* Destructive, and last — the two reversible actions read
+                    first. Hidden on an empty day: an action that cannot do
+                    anything shouldn't offer itself. The wording says "every
+                    Monday" rather than naming a date on purpose: this empties
+                    the weekday, not the one column that was clicked. */}
+                {taskCount > 0 && (
+                  <button
+                    type="button"
+                    onClick={handleClear}
+                    className="flex w-full items-center gap-3 rounded-2xl border border-rose-200 bg-white px-4 py-3.5 text-left transition-colors hover:border-rose-300 hover:bg-rose-50/60 dark:border-rose-500/25 dark:bg-white/[0.03] dark:hover:border-rose-500/40 dark:hover:bg-rose-500/[0.08]"
+                  >
+                    <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-rose-50 text-rose-600 dark:bg-rose-500/15 dark:text-rose-400">
+                      <IconTrash size={18} strokeWidth={2} />
+                    </span>
+                    <span className="min-w-0">
+                      <span className="block text-[16px] font-bold text-rose-700 dark:text-rose-400">Clear every {DAY_FULL_LABELS[sourceDay]}</span>
+                      <span className="block text-[12px] font-medium text-neutral-500 dark:text-neutral-400">
+                        Delete all {taskCount} {taskCount === 1 ? "task" : "tasks"} from this weekday
+                      </span>
+                    </span>
+                  </button>
+                )}
               </div>
             </m.div>
           )}
@@ -115,7 +154,7 @@ export default function DayActionsSheet({
                 <IconButton label="Back" variant="soft" size="md" radius="full" onClick={() => setStep("menu")}>
                   <IconArrowLeft size={18} strokeWidth={2} />
                 </IconButton>
-                <p className="text-[18px] font-bold text-neutral-900 dark:text-white">Swap {DAY_LABELS[sourceDay]} with</p>
+                <p className="text-[18px] font-bold text-neutral-900 dark:text-white">Swap {DAY_FULL_LABELS[sourceDay]} with</p>
               </div>
               <div className="flex flex-wrap gap-2">
                 {otherDays.map((day) => (
@@ -144,7 +183,7 @@ export default function DayActionsSheet({
                 <IconButton label="Back" variant="soft" size="md" radius="full" onClick={() => setStep("menu")}>
                   <IconArrowLeft size={18} strokeWidth={2} />
                 </IconButton>
-                <p className="text-[18px] font-bold text-neutral-900 dark:text-white">Copy {DAY_LABELS[sourceDay]} to</p>
+                <p className="text-[18px] font-bold text-neutral-900 dark:text-white">Copy {DAY_FULL_LABELS[sourceDay]} to</p>
               </div>
               <p className={`mb-2.5 ${SECTION_LABEL}`}>Target days</p>
               <div className="mb-6 flex flex-wrap gap-2">

@@ -347,6 +347,10 @@ export function WeekGrid({
   const [dragMove, setDragMove] = useState<{
     taskId: string; slotIndex: number; task: Task;
     sourceDay: DayKey; targetDay: DayKey; previewStartMin: number; previewDurationMin: number;
+    // Set only for a tail resize (see below) — the ghost's true bedtime,
+    // shown on its label instead of the visual anchor (the day handover)
+    // previewStartMin renders it from.
+    previewLabelStartMin?: number;
   } | null>(null);
   const moveDragRef = useRef<{
     taskId: string; slotIndex: number; task: Task; slot: TaskSlot;
@@ -358,6 +362,17 @@ export function WeekGrid({
     durationMin: number; grabOffsetMin: number; pointerId: number;
     dragging: boolean; startClientX: number; startClientY: number; columnEl: HTMLDivElement;
     currentPreviewStartMin: number; currentPreviewDurationMin: number;
+    // True (unmapped) start-of-day minute of the slot being resized, always
+    // equal to fixedStartMin except for a tail resize (below), where
+    // fixedStartMin is pinned to the day handover for the ghost's geometry
+    // and this is the only place the real bedtime survives to commit-time.
+    trueStartMin: number;
+    // A resize-end grabbed off the *continuation* of an overnight task (its
+    // tail, drawn at the top of the next day) — see handleTaskBlockPointerDown.
+    // Everything else about the drag (sourceDay/targetDay, ghost rendering)
+    // stays anchored to that next day's column; only the final commit
+    // redirects to the previous day's bucket, where the task actually lives.
+    fromContinuationTail: boolean;
   } | null>(null);
   // Set true the instant a drag crosses the threshold; consumed by the
   // block's onClickCapture so the native click that otherwise follows
@@ -598,11 +613,16 @@ export function WeekGrid({
   }
 
   // ── Cmd/Ctrl-drag to reschedule, relocate, or resize a task block ───────────
-  // Available on every column, any day (past, present, future) — only a
-  // continuation block (the tail of an overnight task) stays excluded, since
-  // it belongs to the *previous* day's bucket and dragging it here would be
-  // ambiguous. See moveTaskSlot (lib/taskMutations.ts) for what a commit
-  // writes for cross-day drops; resizes always commit same-day.
+  // Available on every column, any day (past, present, future). A
+  // continuation block (the tail of an overnight task) is excluded from
+  // "move" and "resize-start" — it belongs to the *previous* day's bucket, so
+  // relocating it or dragging its start here would be ambiguous. Its bottom
+  // edge is the one exception: it's the only on-screen handle for an
+  // overnight task's actual end time (the top-of-window handle on the
+  // *source* block can't reach past the day boundary), so "resize-end" is let
+  // through and redirected to the previous day's bucket at commit time — see
+  // fromContinuationTail below. See moveTaskSlot (lib/taskMutations.ts) for
+  // what a commit writes for cross-day drops; resizes always commit same-day.
   function handleTaskBlockPointerDown(
     e: ReactPointerEvent<HTMLDivElement>,
     day: DayKey,
@@ -610,12 +630,11 @@ export function WeekGrid({
     layout: BlockLayout,
     mode: "move" | "resize-start" | "resize-end" = "move",
   ) {
-    if (!onMoveTask || isContinuation) return;
+    if (!onMoveTask) return;
+    if (isContinuation && mode !== "resize-end") return;
     if (!(e.metaKey || e.ctrlKey)) return; // no modifier — let the click/checkbox behave normally
     if (e.pointerType === "mouse" && e.button !== 0) return;
     if ((e.target as HTMLElement).closest("button")) return; // checkbox / grid-menu icon
-    // eslint-disable-next-line no-console
-    console.log("[weekgrid] pointerdown", { mode, clientY: e.clientY, target: (e.target as HTMLElement).className });
     e.stopPropagation(); // don't also let the day column's create-drag (or, for
     // the edge strips, the card's own "move" pointerdown) also fire
     const columnEl = (e.currentTarget as HTMLElement).closest<HTMLDivElement>("[data-day-col]");
@@ -631,6 +650,14 @@ export function WeekGrid({
     // encodes (mapMinutesToTimeline), the same domain pointerToMinutes
     // resolves the pointer into — so grabOffset/newStart stay in that domain
     // right up until the final minutesToDisplayTime conversion on release.
+    //
+    // For a continuation this lands on the day handover (SCHEDULE_DAY_
+    // HANDOVER_MINUTES) rather than the slot's true start: layout.top is
+    // clamped to the window's own top by buildDayLayout, same as the block
+    // is drawn. That's exactly the anchor the tail-resize ghost wants — it
+    // should grow from the handover, not from a start that isn't even in
+    // this column — so it's used as-is; only the commit needs the real
+    // start, which trueStartMin (below) preserves separately.
     const blockStartMappedMin = startMin + layout.top / PX_MIN;
     const blockEndMappedMin = blockStartMappedMin + durationMin;
 
@@ -662,6 +689,8 @@ export function WeekGrid({
       columnEl,
       currentPreviewStartMin: blockStartMappedMin,
       currentPreviewDurationMin: durationMin,
+      trueStartMin: slotStart,
+      fromContinuationTail: isContinuation,
     };
   }
 
@@ -804,6 +833,7 @@ export function WeekGrid({
           taskId: drag.taskId, slotIndex: drag.slotIndex, task: drag.task,
           sourceDay: drag.sourceDay, targetDay: drag.targetDay,
           previewStartMin: drag.currentPreviewStartMin, previewDurationMin: drag.currentPreviewDurationMin,
+          previewLabelStartMin: drag.fromContinuationTail ? drag.trueStartMin : undefined,
         });
       }
       e.preventDefault();
@@ -874,10 +904,23 @@ export function WeekGrid({
         weekDates.find((w) => w.day === drag.targetDay)?.date
           ?? weekDates.find((w) => w.day === drag.sourceDay)!.date
       );
-      moveTask(
-        drag.taskId, drag.sourceDay, drag.slotIndex, drag.targetDay, targetDateISO,
-        minutesToDisplayTime(newStartMin), minutesToDisplayTime(newEndMin),
-      );
+      if (drag.fromContinuationTail) {
+        // The ghost lived in the *next* day's column (targetDateISO above),
+        // but the slot itself is still filed under the previous day — commit
+        // there instead, with the real bedtime (trueStartMin) rather than the
+        // handover the ghost was anchored to.
+        const commitDay = DAYS[(DAYS.indexOf(drag.sourceDay) + 6) % 7];
+        const commitDateISO = addDaysToISO(targetDateISO, -1);
+        moveTask(
+          drag.taskId, commitDay, drag.slotIndex, commitDay, commitDateISO,
+          minutesToDisplayTime(drag.trueStartMin), minutesToDisplayTime(newEndMin),
+        );
+      } else {
+        moveTask(
+          drag.taskId, drag.sourceDay, drag.slotIndex, drag.targetDay, targetDateISO,
+          minutesToDisplayTime(newStartMin), minutesToDisplayTime(newEndMin),
+        );
+      }
       haptic("light");
       setDragMove(null);
     }
@@ -1052,7 +1095,7 @@ export function WeekGrid({
                   {onDayActions && (
                     <button
                       type="button"
-                      aria-label={`${DAY_SHORT[day]} actions — swap or duplicate day`}
+                      aria-label={`${DAY_SHORT[day]} actions — swap, duplicate or clear day`}
                       onClick={(e) => { e.stopPropagation(); haptic("light"); onDayActions(day); }}
                       className={`absolute right-1 top-1 flex h-6 w-6 items-center justify-center rounded-full opacity-70 transition-opacity hover:opacity-100 focus-visible:opacity-100 ${
                         isActive
@@ -1235,6 +1278,9 @@ export function WeekGrid({
                   const isBeingMoved =
                     dragMove?.taskId === layout.task.id && dragMove?.slotIndex === layout.slotIndex && dragMove?.sourceDay === day;
                   const canDragToMove = !!onMoveTask && !isContinuation;
+                  // The tail's bottom edge is the one continuation handle
+                  // that *is* meaningful — see handleTaskBlockPointerDown.
+                  const canResizeEnd = !!onMoveTask;
                   // The block's single hover-revealed corner icon.
                   //
                   // Cmd/Ctrl held wins the slot outright and turns it into
@@ -1298,7 +1344,13 @@ export function WeekGrid({
                       }}
                       onPointerDown={canDragToMove ? (e) => handleTaskBlockPointerDown(e, day, isContinuation, layout) : undefined}
                       onClickCapture={
-                        canDragToMove
+                        // Also gated on canResizeEnd: a continuation can't
+                        // start a "move" (no onPointerDown above), but its
+                        // resize-end handle can still start a drag, and the
+                        // native click that follows release must be consumed
+                        // here too or it leaks through to suppress some
+                        // unrelated block's next click instead.
+                        canDragToMove || canResizeEnd
                           ? (e) => {
                               if (suppressClickRef.current) {
                                 e.preventDefault();
@@ -1313,21 +1365,27 @@ export function WeekGrid({
                           edge to extend/shrink just that side, independent of
                           the "move" gesture that covers the rest of the card.
                           Inert (no pointer-events) until the modifier is held,
-                          so a plain hover never intercepts normal clicks. */}
-                      {canDragToMove && modifierHeld && (
+                          so a plain hover never intercepts normal clicks. A
+                          continuation only gets the bottom one: its top isn't
+                          the task's real start (see canResizeEnd above). */}
+                      {(canDragToMove || canResizeEnd) && modifierHeld && (
                         <>
-                          <div
-                            className="absolute inset-x-0 top-0 z-[1] flex h-2 cursor-ns-resize items-start justify-center pt-0.5"
-                            onPointerDown={(e) => handleTaskBlockPointerDown(e, day, isContinuation, layout, "resize-start")}
-                          >
-                            <div className="h-[3px] w-6 rounded-full bg-neutral-500/70 dark:bg-white/40" />
-                          </div>
-                          <div
-                            className="absolute inset-x-0 bottom-0 z-[1] flex h-2 cursor-ns-resize items-end justify-center pb-0.5"
-                            onPointerDown={(e) => handleTaskBlockPointerDown(e, day, isContinuation, layout, "resize-end")}
-                          >
-                            <div className="h-[3px] w-6 rounded-full bg-neutral-500/70 dark:bg-white/40" />
-                          </div>
+                          {canDragToMove && (
+                            <div
+                              className="absolute inset-x-0 top-0 z-[1] flex h-2 cursor-ns-resize items-start justify-center pt-0.5"
+                              onPointerDown={(e) => handleTaskBlockPointerDown(e, day, isContinuation, layout, "resize-start")}
+                            >
+                              <div className="h-[3px] w-6 rounded-full bg-neutral-500/70 dark:bg-white/40" />
+                            </div>
+                          )}
+                          {canResizeEnd && (
+                            <div
+                              className="absolute inset-x-0 bottom-0 z-[1] flex h-2 cursor-ns-resize items-end justify-center pb-0.5"
+                              onPointerDown={(e) => handleTaskBlockPointerDown(e, day, isContinuation, layout, "resize-end")}
+                            >
+                              <div className="h-[3px] w-6 rounded-full bg-neutral-500/70 dark:bg-white/40" />
+                            </div>
+                          )}
                         </>
                       )}
                       {renderCard(
@@ -1452,7 +1510,10 @@ export function WeekGrid({
                   const top = (dragMove.previewStartMin - startMin) * PX_MIN;
                   const height = Math.max(dragMove.previewDurationMin * PX_MIN, 24);
                   const previewSlot: TaskSlot = {
-                    startTime: minutesToDisplayTime(dragMove.previewStartMin),
+                    // A tail resize anchors the ghost's geometry at the day
+                    // handover (previewStartMin), but its label should still
+                    // read the real bedtime, not 4:00 AM.
+                    startTime: minutesToDisplayTime(dragMove.previewLabelStartMin ?? dragMove.previewStartMin),
                     endTime: minutesToDisplayTime(dragMove.previewStartMin + dragMove.previewDurationMin),
                   };
                   return (

@@ -67,6 +67,7 @@ import {
   useScheduleDB,
   DAYS,
   DAY_LABELS,
+  DAY_FULL_LABELS,
   DayKey,
   MetricEntry,
   Milestone,
@@ -96,6 +97,7 @@ import { canDeleteCategory, categoryForIcon, categoryUsageCounts, ensureCategory
 import { constrainTaskToPlanWindow } from "@/lib/planTaskWindow";
 import { SECTION_ICONS } from "@/components/SectionIcons";
 import {
+  IconDotsVertical,
   IconChevronLeft,
   IconCalendar,
   IconCheck,
@@ -157,6 +159,8 @@ import {
   updateTaskPerDay,
   swapDays,
   duplicateDay,
+  clearDay,
+  summarizeDayClear,
   setTaskException,
   clearTaskException,
   addSubtaskToTasks,
@@ -845,6 +849,8 @@ export default function ScheduleApp() {
   const [templatesOpen, setTemplatesOpen] = useState(false);
   const [wallpaperOpen, setWallpaperOpen] = useState(false);
   const [dayActionsOpen, setDayActionsOpen] = useState(false);
+  /** The weekday awaiting a "clear day" confirmation, or null. */
+  const [dayClearRequest, setDayClearRequest] = useState<DayKey | null>(null);
   const [missedSheet, setMissedSheet] = useState<MissedTask | null>(null);
   // Today (narrow) header: reveal editing chrome (day actions, wallpaper) only
   // in edit mode, matching the iOS shell's clean-by-default execution surface.
@@ -1992,6 +1998,54 @@ export default function ScheduleApp() {
       }),
       () => setSchedule((prev) => deleteGoal(prev, goalId))
     );
+  }
+
+  /**
+   * Copy for the clear-day confirmation.
+   *
+   * Names the weekday, never the date, because this empties every Monday
+   * rather than the column that was clicked — and names what is actually being
+   * destroyed, since a day holding completed work is a different loss from an
+   * empty plan. Same rule the multi-scope task delete follows: once more than
+   * one outcome is possible, the copy stops asserting a single one.
+   */
+  const dayClearCopy = useMemo(() => {
+    if (!dayClearRequest) return null;
+    const label = DAY_FULL_LABELS[dayClearRequest];
+    const s = summarizeDayClear(schedule, dayClearRequest);
+    const parts: string[] = [
+      `This deletes ${s.total} ${s.total === 1 ? "task" : "tasks"} from every ${label}, for good.`,
+    ];
+    const resolved = s.completed + s.missed;
+    if (resolved > 0) {
+      parts.push(
+        `${resolved} of them ${resolved === 1 ? "has" : "have"} a completion record that goes too.`,
+      );
+    }
+    if (s.alsoOnOtherDays > 0) {
+      parts.push(`${s.alsoOnOtherDays} also ${s.alsoOnOtherDays === 1 ? "runs" : "run"} on other days and will stay there.`);
+    }
+    return {
+      title: `Clear every ${label}?`,
+      description: parts.join(" "),
+      confirmLabel: "Clear day",
+    };
+  }, [dayClearRequest, schedule]);
+
+  function performDayClear() {
+    if (!dayClearRequest) return;
+    const label = DAY_FULL_LABELS[dayClearRequest];
+    const { total } = summarizeDayClear(schedule, dayClearRequest);
+    setSchedule(clearDay(dayClearRequest));
+    setDayClearRequest(null);
+    haptic("medium");
+    // Routes through the general undo stack, which the setSchedule above has
+    // already pushed to — one entry, because clearDay is a single updater.
+    setToastMessage({
+      message: `Cleared ${total} ${total === 1 ? "task" : "tasks"} from ${label}`,
+      actionLabel: "Undo",
+      onAction: () => { undo(); setToastMessage(null); haptic("light"); },
+    });
   }
 
   function handleAddEntry(entry: Omit<MetricEntry, "id">) {
@@ -3411,6 +3465,8 @@ export default function ScheduleApp() {
         onClose={() => setDayActionsOpen(false)}
         onSwap={(target) => setSchedule(swapDays(activeDay, target))}
         onDuplicate={(targets) => setSchedule(duplicateDay(activeDay, targets))}
+        onClear={() => setDayClearRequest(activeDay)}
+        taskCount={(schedule.activities[activeDay] ?? []).length}
       />
 
       <MissedTaskSheet
@@ -3678,6 +3734,19 @@ export default function ScheduleApp() {
                       onClick={() => { haptic("light"); setWallpaperOpen(true); }}
                     >
                       <IconPhoto size={15} strokeWidth={2} />
+                    </IconButton>
+                  )}
+                  {/* The comment above this cluster already claimed it held
+                      "day actions"; until now it didn't. */}
+                  {todayEditMode && (
+                    <IconButton
+                      label={`${DAY_FULL_LABELS[activeDay]} actions — swap, duplicate or clear day`}
+                      variant="soft"
+                      size="sm"
+                      radius="full"
+                      onClick={() => { haptic("light"); setDayActionsOpen(true); }}
+                    >
+                      <IconDotsVertical size={15} strokeWidth={2} />
                     </IconButton>
                   )}
                   {viewMode === "timeline" && (
@@ -4589,6 +4658,16 @@ export default function ScheduleApp() {
             </div>
           )
         ) : undefined}
+      />
+
+      {/* ── Clear-day confirmation ──────────────────────────────────────────── */}
+      <ConfirmSheet
+        open={!!dayClearRequest}
+        onClose={() => setDayClearRequest(null)}
+        onConfirm={performDayClear}
+        title={dayClearCopy?.title ?? ""}
+        description={dayClearCopy?.description}
+        confirmLabel={dayClearCopy?.confirmLabel}
       />
 
       {/* ── Toast ───────────────────────────────────────────────────────────── */}
