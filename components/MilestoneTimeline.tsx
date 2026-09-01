@@ -5,6 +5,7 @@ import { IconMap2 } from "@tabler/icons-react";
 import type { Schedule, Milestone, Plan, Task } from "@/lib/useScheduleDB";
 import { addDaysToISO, localISODate, todayISO as getTodayISO } from "@/lib/dateUtils";
 import { calculateMilestoneProgress, type MilestoneProgress } from "@/lib/planProgress";
+import { calculateMilestoneState, type MilestoneHealth } from "@/lib/milestoneHealth";
 
 interface MilestoneTimelineProps {
   schedule: Schedule;
@@ -37,41 +38,68 @@ function clamp(val: number, lo: number, hi: number): number {
 
 type MilestoneStatus = Milestone["status"];
 
-function dotClasses(status: MilestoneStatus, selected: boolean): string {
+/**
+ * The same 5-way visual read the milestone card/detail sheet already use
+ * (lib/milestoneHealth.ts). completed/delayed(by date)/upcoming stay exactly
+ * as `status` already says — nothing about those is in question. "active" is
+ * the one status that used to always read as calm blue right up until the
+ * actual deadline passed; splitting it by health means a milestone trending
+ * to miss its target shows that *before* the deadline, not just after.
+ */
+type DotTone = "completed" | "delayed" | "at_risk" | "active" | "upcoming";
+
+function resolveDotTone(status: MilestoneStatus, health: MilestoneHealth | undefined): DotTone {
+  if (status !== "active") return status === "upcoming" ? "upcoming" : status;
+  if (health === "at_risk") return "at_risk";
+  if (health === "delayed") return "delayed";
+  return "active";
+}
+
+function dotClasses(tone: DotTone, selected: boolean): string {
   const base =
     "absolute top-1/2 -translate-y-1/2 -translate-x-1/2 flex h-[22px] w-[22px] items-center justify-center rounded-full border-2 transition-transform";
   const scale = selected ? "scale-[1.3]" : "hover:scale-110";
   const color =
-    status === "completed"
+    tone === "completed"
       ? "bg-emerald-500 border-emerald-500"
-      : status === "delayed"
+      : tone === "delayed"
       ? "bg-rose-400 border-rose-400"
-      : status === "active"
+      : tone === "at_risk"
+      ? "bg-amber-400 border-amber-400"
+      : tone === "active"
       ? "bg-blue-500 border-blue-500"
       : "border-neutral-300 bg-white dark:border-neutral-600 dark:bg-neutral-800";
   return `${base} ${scale} ${color}`;
 }
 
-function statusBadgeClasses(status: MilestoneStatus): string {
-  if (status === "completed")
+function statusBadgeClasses(tone: DotTone): string {
+  if (tone === "completed")
     return "bg-emerald-50 text-emerald-700 dark:bg-emerald-500/10 dark:text-emerald-400";
-  if (status === "delayed")
+  if (tone === "delayed")
     return "bg-rose-50 text-rose-600 dark:bg-rose-500/10 dark:text-rose-400";
-  if (status === "active")
+  if (tone === "at_risk")
+    return "bg-amber-50 text-amber-700 dark:bg-amber-500/10 dark:text-amber-400";
+  if (tone === "active")
     return "bg-blue-50 text-blue-700 dark:bg-blue-500/10 dark:text-blue-400";
   return "bg-neutral-100 text-neutral-600 dark:bg-white/[0.05] dark:text-neutral-400";
 }
 
-function dotInner(m: Milestone): React.ReactNode {
-  if (m.status === "completed")
+/** "Active"/"Upcoming" etc — same label a bare `status` would have shown,
+ *  except "at_risk" (which isn't a `Milestone["status"]` value at all). */
+function toneLabel(tone: DotTone): string {
+  return tone === "at_risk" ? "At risk" : tone.charAt(0).toUpperCase() + tone.slice(1);
+}
+
+function dotInner(m: Milestone, tone: DotTone): React.ReactNode {
+  if (tone === "completed")
     return <span className="text-[8px] font-black text-white">✓</span>;
-  if (m.status === "delayed")
+  if (tone === "delayed" || tone === "at_risk")
     return <span className="text-[8px] font-black text-white">!</span>;
   if (m.linkedActivities.length > 0)
     return (
       <span
         className={`text-[8px] font-bold leading-none ${
-          m.status === "active" ? "text-white" : "text-neutral-500 dark:text-neutral-300"
+          tone === "active" ? "text-white" : "text-neutral-500 dark:text-neutral-300"
         }`}
       >
         {m.linkedActivities.length}
@@ -85,10 +113,12 @@ function dotInner(m: Milestone): React.ReactNode {
 function MilestoneDetail({
   milestone,
   plan,
+  tone,
   onClose,
 }: {
   milestone: Milestone;
   plan: Plan;
+  tone: DotTone;
   onClose: () => void;
 }) {
   const dateLabel = new Date(
@@ -110,9 +140,9 @@ function MilestoneDetail({
               {milestone.title}
             </p>
             <span
-              className={`rounded-full px-1.5 py-0.5 text-[10px] font-semibold capitalize ${statusBadgeClasses(milestone.status)}`}
+              className={`rounded-full px-1.5 py-0.5 text-[10px] font-semibold ${statusBadgeClasses(tone)}`}
             >
-              {milestone.status}
+              {toneLabel(tone)}
             </span>
           </div>
           {/* Description */}
@@ -228,6 +258,24 @@ export default function MilestoneTimeline({ schedule }: MilestoneTimelineProps) 
     return map;
   }, [planRows, schedule.activities]);
 
+  // Live health per milestone — same engine and memoization pattern as
+  // progressById above, feeding resolveDotTone so an "active" milestone's dot
+  // reflects whether it's actually on pace, not just that it hasn't finished.
+  const healthById = useMemo(() => {
+    const map = new Map<string, MilestoneHealth>();
+    for (const { plan, milestones } of planRows) {
+      for (const m of milestones) {
+        map.set(m.id, calculateMilestoneState({
+          milestone: m, plan,
+          activities: schedule.activities as unknown as Record<string, Task[]>,
+          trackers: schedule.progressTrackers, metricEntries: schedule.metricEntries,
+          trackingStart: schedule.preferences?.startDate,
+        }).health);
+      }
+    }
+    return map;
+  }, [planRows, schedule.activities, schedule.progressTrackers, schedule.metricEntries, schedule.preferences?.startDate]);
+
   // Scroll so today is roughly 1/3 from the left on mount
   useEffect(() => {
     if (scrollRef.current) {
@@ -340,15 +388,14 @@ export default function MilestoneTimeline({ schedule }: MilestoneTimelineProps) 
                   const cx = endOffset * PX_PER_DAY;
                   const isSelected = selectedId === m.id;
                   const progress = progressById.get(m.id);
-                  // Only the plain "upcoming" dot gets a progress ring —
-                  // completed/delayed/active already have a strong, sufficient
-                  // solid-color read of their own; a ring on top of those
-                  // would be noise, not signal. Static fill (not an
-                  // animation), so no reduced-motion guard is needed.
+                  const tone = resolveDotTone(m.status, healthById.get(m.id));
+                  // Only the plain "upcoming" dot gets a progress ring — every
+                  // other tone (completed/delayed/at_risk/active) already has
+                  // a strong, sufficient solid-color read of its own; a ring
+                  // on top of those would be noise, not signal. Static fill
+                  // (not an animation), so no reduced-motion guard is needed.
                   const showProgressRing =
-                    m.status !== "completed" &&
-                    m.status !== "delayed" &&
-                    m.status !== "active" &&
+                    tone === "upcoming" &&
                     !!progress?.hasLinkedTasks &&
                     (progress.pct ?? 0) > 0;
 
@@ -366,12 +413,12 @@ export default function MilestoneTimeline({ schedule }: MilestoneTimelineProps) 
                       )}
                       <button
                         type="button"
-                        className={dotClasses(m.status, isSelected)}
+                        className={dotClasses(tone, isSelected)}
                         style={{ left: cx }}
                         onClick={() => setSelectedId(isSelected ? null : m.id)}
-                        title={m.title}
+                        title={tone === "at_risk" ? `${m.title} — at risk` : m.title}
                       >
-                        {dotInner(m)}
+                        {dotInner(m, tone)}
                       </button>
                     </Fragment>
                   );
@@ -398,6 +445,7 @@ export default function MilestoneTimeline({ schedule }: MilestoneTimelineProps) 
           [
             { cls: "bg-emerald-500", label: "Completed" },
             { cls: "bg-blue-500", label: "Active" },
+            { cls: "bg-amber-400", label: "At risk" },
             { cls: "bg-rose-400", label: "Delayed" },
             {
               cls: "border border-neutral-300 bg-white dark:border-neutral-600 dark:bg-neutral-800",
@@ -423,6 +471,7 @@ export default function MilestoneTimeline({ schedule }: MilestoneTimelineProps) 
         <MilestoneDetail
           milestone={selectedMilestone}
           plan={selectedPlan}
+          tone={resolveDotTone(selectedMilestone.status, healthById.get(selectedMilestone.id))}
           onClose={() => setSelectedId(null)}
         />
       )}

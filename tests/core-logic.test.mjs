@@ -2030,6 +2030,24 @@ test("buildActiveHours' waking window shrinks/grows with configured sleepHours",
 // load — the category would look right until you refreshed. Nothing else
 // catches that, hence this source check, in the same spirit as the syncMeta
 // guard in mergeSchedule.test.mjs.
+// Same whitelist trap as normalizeCategories below: normalizeTracker rebuilds
+// each tracker field-by-field, so a field missing from the returned literal is
+// dropped on every load — the daily target would look saved until you reloaded.
+test("normalizeTracker carries `dailyTarget` through the whitelist", async () => {
+  const { readFile } = await import("node:fs/promises");
+  const source = await readFile(new URL("../lib/useScheduleDB.ts", import.meta.url), "utf8");
+
+  const start = source.indexOf("function normalizeTracker(value: unknown): ProgressTracker | null {");
+  assert.ok(start > -1, "normalizeTracker() was renamed — update this guard");
+  const body = source.slice(start, source.indexOf("\nfunction ", start + 10));
+
+  assert.ok(body.includes("dailyTarget:"), "the rebuilt tracker literal drops `dailyTarget`");
+  assert.ok(
+    body.includes("Number.isFinite(t.dailyTarget)"),
+    "a non-finite dailyTarget must be dropped, not stored — it would divide the progress ring by NaN",
+  );
+});
+
 test("normalizeCategories carries `kind` through the whitelist", async () => {
   const { readFile } = await import("node:fs/promises");
   const source = await readFile(new URL("../lib/useScheduleDB.ts", import.meta.url), "utf8");
@@ -2448,6 +2466,62 @@ test("selectNeedsAttention orders rows by how recoverable they are", () => {
   assert.equal(r.atRiskRituals.length, 1);
   assert.equal(r.overdueMilestones.length, 1);
   assert.equal(r.missedTasks.length, 1);
+});
+
+// ── selectNeedsAttention.atRiskMilestones — the forecast reaching Overview ──
+
+test("selectNeedsAttention flags an active milestone whose current pace projects missing its own target", () => {
+  const today = "2026-08-02";
+  // A daily task, mostly missed since the milestone started 32 days ago.
+  const dailyTask = (over) => ({
+    id: "t2", title: "Run", planId: "p1", startTime: "7:00 AM", endTime: "8:00 AM", completionHistory: [], ...over,
+  });
+  const activities = Object.fromEntries(DAYS.map((d) => [d, [dailyTask()]]));
+  const schedule = {
+    plans: [{ id: "p1", title: "10K", category: "learning", emoji: "run", color: "emerald", items: [] }],
+    categories: [], activities, progressTrackers: [], metricEntries: [],
+    milestones: [{
+      id: "m2", planId: "p1", title: "Run a 10K", startDate: "2026-07-01", plannedDurationDays: 50,
+      plannedEndDate: "2026-08-20", status: "active", linkedActivities: ["t2"], linkedTrackers: [],
+      createdAt: "", updatedAt: "", sortOrder: 0,
+    }],
+    rituals: [], ritualCompletions: [], notes: [], preferences: {},
+  };
+
+  const { atRiskMilestones, overdueMilestones } = selectNeedsAttention(schedule, today);
+  assert.equal(overdueMilestones.length, 0, "not past its own deadline yet");
+  assert.equal(atRiskMilestones.length, 1, "but the pace so far already projects missing it");
+  assert.equal(atRiskMilestones[0].milestone.id, "m2");
+  assert.equal(atRiskMilestones[0].plan.title, "10K");
+});
+
+test("selectNeedsAttention never double-counts a milestone that's already past its deadline", () => {
+  const today = "2026-08-02";
+  const schedule = attentionSchedule({
+    plans: [{ id: "p1", title: "GMAT", category: "learning", emoji: "school", color: "emerald", items: [] }],
+    milestones: [{
+      id: "m3", planId: "p1", title: "Quant", startDate: "2026-07-01", plannedDurationDays: 7,
+      plannedEndDate: "2026-07-20", status: "active", linkedActivities: [], linkedTrackers: [],
+      createdAt: "", updatedAt: "", sortOrder: 0,
+    }],
+  });
+  const { atRiskMilestones, overdueMilestones } = selectNeedsAttention(schedule, today);
+  assert.equal(overdueMilestones.length, 1, "already past plannedEndDate -> overdue, not at-risk");
+  assert.equal(atRiskMilestones.length, 0, "never listed in both buckets at once");
+});
+
+test("selectNeedsAttention doesn't flag a milestone with nothing linked yet as at-risk", () => {
+  const today = "2026-08-02";
+  const schedule = attentionSchedule({
+    plans: [{ id: "p1", title: "GMAT", category: "learning", emoji: "school", color: "emerald", items: [] }],
+    milestones: [{
+      id: "m4", planId: "p1", title: "New milestone", startDate: "2026-07-01", plannedDurationDays: 50,
+      plannedEndDate: "2026-08-20", status: "active", linkedActivities: [], linkedTrackers: [],
+      createdAt: "", updatedAt: "", sortOrder: 0,
+    }],
+  });
+  const { atRiskMilestones } = selectNeedsAttention(schedule, today);
+  assert.equal(atRiskMilestones.length, 0, "no linked task/tracker -> 'getting started', not a fake warning");
 });
 
 test("buildDayBreakdown gives a categorised commitment its own wedge", () => {

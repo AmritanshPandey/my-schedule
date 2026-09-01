@@ -152,6 +152,7 @@ export const ProgressTrackerSchema = z.object({
   goalDirection: z.enum(["increase_good", "decrease_good"]).optional(),
   goalValue: z.number().finite().optional(),
   startingValue: z.number().finite().optional(),
+  dailyTarget: z.number().finite().optional(),
 }).passthrough();
 
 export const MetricEntrySchema = z.object({

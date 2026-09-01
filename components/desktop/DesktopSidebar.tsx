@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import {
   IconCalendarEvent,
+  IconChartLine,
   IconClipboardData,
   IconFileImport,
   IconLayoutDashboard,
@@ -42,6 +43,7 @@ const NAV_ITEMS = [
   { tab: 0, label: "Today",    Icon: IconCalendarEvent },
   { tab: 1, label: "Plans",    Icon: IconClipboardData },
   { tab: 2, label: "Routine",  Icon: IconRepeat },
+  { tab: 8, label: "Tracking", Icon: IconChartLine },
 ] as const;
 
 type ThemeMode = "light" | "dark";
@@ -106,7 +108,8 @@ export default function DesktopSidebar({
     if (activeTab === 0) onCreateTask();
     else if (activeTab === 1) onCreatePlan();
     else if (activeTab === 2) onCreateRitual();
-    // tab 3 (Review) has no create action
+    // tab 3 (Review) has no create action; nor does 8 (Tracking), which logs
+    // against trackers created on a plan rather than creating anything itself
   }
 
   function setMode(next: ThemeMode) {
@@ -200,7 +203,7 @@ export default function DesktopSidebar({
       </nav>
 
       {/* ── Create button (hidden where the current view owns creation) ───────── */}
-      {activeTab !== 3 && activeTab !== 4 && activeTab !== 6 && (
+      {activeTab !== 3 && activeTab !== 4 && activeTab !== 6 && activeTab !== 8 && (
         <div className={`shrink-0 pb-2 ${collapsed ? "px-2" : "px-2.5"}`}>
           <button
             type="button"

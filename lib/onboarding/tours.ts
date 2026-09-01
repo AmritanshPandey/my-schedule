@@ -11,7 +11,7 @@ import type { CoachMarkStep } from "@/components/onboarding/CoachMarks";
  * ceremony, not help. Settings isn't here either — its rows are already
  * labeled plainly; a tour would explain the obvious.
  */
-export const TOUR_IDS = ["today", "plans", "routine"] as const;
+export const TOUR_IDS = ["today", "plans", "routine", "tracking"] as const;
 
 export type TourId = (typeof TOUR_IDS)[number];
 
@@ -50,6 +50,15 @@ export const TOUR_STEPS: Record<TourId, CoachMarkStep[]> = {
       target: "new-item-button",
       title: "Add a habit",
       body: "Set how often it repeats, and it'll show up right where it belongs.",
+    },
+  ],
+  // Only one step: Tracking has no create action of its own — a tracker is made
+  // on its plan — so there is no "new-item-button" to point at here.
+  tracking: [
+    {
+      target: "tracking-view",
+      title: "Log it the moment it happens",
+      body: "Every metric you track, grouped by plan. Tap an amount to log it — the ring fills toward today's target.",
     },
   ],
 };

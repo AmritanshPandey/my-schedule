@@ -38,7 +38,7 @@ import { calculateMilestoneState, type MilestoneState } from "@/lib/milestoneHea
 import { sumEntriesForDate } from "@/lib/metricEntries";
 import { planEffectiveEndDate, resolveMilestoneStatus } from "@/lib/roadmapDates";
 import { computeTrend } from "@/lib/trendUtils";
-import { getTaskCheckableItems } from "@/lib/taskCompletion";
+import { getTaskCheckableItems, isTrackedTask } from "@/lib/taskCompletion";
 import type { TrendResult } from "@/lib/trendUtils";
 import type {
   Plan,
@@ -249,11 +249,12 @@ interface PlanDetailViewProps {
     goalDirection: GoalDirection,
     id?: string,
     goalValue?: number,
-    startingValue?: number
+    startingValue?: number,
+    dailyTarget?: number
   ) => void;
   onUpdateTracker: (
     trackerId: string,
-    data: { title: string; unit: string; goalDirection: GoalDirection; goalValue?: number; startingValue?: number }
+    data: { title: string; unit: string; goalDirection: GoalDirection; goalValue?: number; startingValue?: number; dailyTarget?: number }
   ) => void;
   onDeleteTracker: (trackerId: string) => void;
   // Entry handlers
@@ -264,9 +265,20 @@ interface PlanDetailViewProps {
   onUpdateMilestone: (id: string, data: Partial<Milestone>) => void;
   onDeleteMilestone: (id: string) => void;
   onCompleteMilestone: (id: string) => void;
+  // Milestone <-> tracker linking — the "success metric" a milestone's
+  // metric progress is computed from (lib/milestoneHealth.ts). Also used by
+  // the AI post-milestone CTA below, which creates+links a suggested tracker
+  // in one step.
+  onLinkTrackerToMilestone?: (milestoneId: string, trackerId: string) => void;
+  onUnlinkTrackerFromMilestone?: (milestoneId: string, trackerId: string) => void;
+  // Milestone <-> task linking — the activity signal calculateMilestoneState
+  // reads for task progress/consistency. The AI-generated-tasks flow already
+  // links at creation time (onAddGeneratedTasks' milestoneId); these cover
+  // linking/unlinking an already-existing task by hand.
+  onLinkTaskToMilestone?: (milestoneId: string, taskId: string) => void;
+  onUnlinkTaskFromMilestone?: (milestoneId: string, taskId: string) => void;
   // AI
   onAddGeneratedTasks?: (tasks: AIGeneratedTask[], planId: string, milestoneId?: string) => void;
-  onLinkTrackerToMilestone?: (milestoneId: string, trackerId: string) => void;
   onUpdateCoachMessages?: (planId: string, messages: PlanCoachMessage[]) => void;
 }
 
@@ -293,6 +305,9 @@ export default function PlanDetailView({
   onCompleteMilestone,
   onAddGeneratedTasks,
   onLinkTrackerToMilestone,
+  onUnlinkTrackerFromMilestone,
+  onLinkTaskToMilestone,
+  onUnlinkTaskFromMilestone,
   onUpdateCoachMessages,
 }: PlanDetailViewProps) {
   // ── Tab state ───────────────────────────────────────────────────────────
@@ -384,6 +399,7 @@ export default function PlanDetailView({
     goalDirection: GoalDirection;
     goalValue?: number;
     startingValue?: number;
+    dailyTarget?: number;
   }>({
     title: "",
     unit: "",
@@ -396,6 +412,7 @@ export default function PlanDetailView({
   const [newTrackerUnit, setNewTrackerUnit] = useState("");
   const [newTrackerGoalValue, setNewTrackerGoalValue] = useState("");
   const [newTrackerStartingValue, setNewTrackerStartingValue] = useState("");
+  const [newTrackerDailyTarget, setNewTrackerDailyTarget] = useState("");
   const [newTrackerGoalDirection, setNewTrackerGoalDirection] =
     useState<GoalDirection>("increase_good");
 
@@ -522,10 +539,11 @@ export default function PlanDetailView({
         activities: schedule.activities as unknown as Record<string, Task[]>,
         trackers: schedule.progressTrackers,
         metricEntries: schedule.metricEntries,
+        trackingStart: schedule.preferences?.startDate,
       }));
     }
     return map;
-  }, [planMilestones, schedule.activities, schedule.progressTrackers, schedule.metricEntries, plan]);
+  }, [planMilestones, schedule.activities, schedule.progressTrackers, schedule.metricEntries, schedule.preferences?.startDate, plan]);
 
   const roadmapStats = useMemo(
     () =>
@@ -575,15 +593,18 @@ export default function PlanDetailView({
     if (!title) return;
     const goalValue = newTrackerGoalValue.trim() ? Number(newTrackerGoalValue) : undefined;
     const startingValue = newTrackerStartingValue.trim() ? Number(newTrackerStartingValue) : undefined;
+    const dailyTarget = newTrackerDailyTarget.trim() ? Number(newTrackerDailyTarget) : undefined;
     onAddTracker(
       plan.id, title, newTrackerUnit.trim(), newTrackerGoalDirection, undefined,
       Number.isFinite(goalValue) ? goalValue : undefined,
       Number.isFinite(startingValue) ? startingValue : undefined,
+      Number.isFinite(dailyTarget) ? dailyTarget : undefined,
     );
     setNewTrackerTitle("");
     setNewTrackerUnit("");
     setNewTrackerGoalValue("");
     setNewTrackerStartingValue("");
+    setNewTrackerDailyTarget("");
     setNewTrackerGoalDirection("increase_good");
     setAddingTracker(false);
   }
@@ -597,6 +618,7 @@ export default function PlanDetailView({
       goalDirection: editTrackerDraft.goalDirection,
       goalValue: editTrackerDraft.goalValue,
       startingValue: editTrackerDraft.startingValue,
+      dailyTarget: editTrackerDraft.dailyTarget,
     });
     setEditingTrackerId(null);
   }
@@ -944,6 +966,22 @@ export default function PlanDetailView({
                 placeholder={`Starting value${editTrackerDraft.unit ? ` (${editTrackerDraft.unit})` : ""} — optional, defaults to your first log`}
                 className="h-10 w-full rounded-xl border border-neutral-200 bg-neutral-50 px-3 text-[14px] text-neutral-700 outline-none focus:border-neutral-400 focus:bg-neutral-100 dark:border-white/10 dark:bg-white/[0.04] dark:text-neutral-300 dark:focus:border-white/20 dark:focus:bg-white/[0.07] transition-colors"
               />
+              {/* A per-day amount, distinct from the goal value above: this one
+                  resets every night. Setting it is what turns the tracker into a
+                  daily ring on the Tracking page instead of a running value. */}
+              <input
+                type="number"
+                inputMode="decimal"
+                value={editTrackerDraft.dailyTarget ?? ""}
+                onChange={(e) =>
+                  setEditTrackerDraft((d) => ({
+                    ...d,
+                    dailyTarget: e.target.value ? Number(e.target.value) : undefined,
+                  }))
+                }
+                placeholder={`Daily target${editTrackerDraft.unit ? ` (${editTrackerDraft.unit})` : ""} — optional, resets each day`}
+                className="h-10 w-full rounded-xl border border-neutral-200 bg-neutral-50 px-3 text-[14px] text-neutral-700 outline-none focus:border-neutral-400 focus:bg-neutral-100 dark:border-white/10 dark:bg-white/[0.04] dark:text-neutral-300 dark:focus:border-white/20 dark:focus:bg-white/[0.07] transition-colors"
+              />
               <GoalDirectionPicker
                 value={editTrackerDraft.goalDirection}
                 onChange={(gd) =>
@@ -994,6 +1032,7 @@ export default function PlanDetailView({
                         goalDirection: tracker.goalDirection ?? "increase_good",
                         goalValue: tracker.goalValue,
                         startingValue: tracker.startingValue,
+                        dailyTarget: tracker.dailyTarget,
                       });
                     }}
                     className="h-8 w-8 flex items-center justify-center rounded-lg text-neutral-400 hover:text-neutral-700 dark:text-neutral-500 dark:hover:text-neutral-300 transition-colors"
@@ -2118,6 +2157,16 @@ export default function PlanDetailView({
               onChange={(e) => setNewTrackerStartingValue(e.target.value)}
               placeholder={`Starting value${newTrackerUnit.trim() ? ` (${newTrackerUnit.trim()})` : ""} — optional, defaults to your first log`}
             />
+            {/* Distinct from the goal value above: this one resets every night,
+                and setting it is what gives the tracker a daily ring on the
+                Tracking page rather than a running value. */}
+            <Input
+              type="number"
+              inputMode="decimal"
+              value={newTrackerDailyTarget}
+              onChange={(e) => setNewTrackerDailyTarget(e.target.value)}
+              placeholder={`Daily target${newTrackerUnit.trim() ? ` (${newTrackerUnit.trim()})` : ""} — optional, resets each day`}
+            />
           </div>
           <GoalDirectionPicker
             value={newTrackerGoalDirection}
@@ -2161,7 +2210,12 @@ export default function PlanDetailView({
       {/* Milestone detail sheet */}
       <BottomSheet open={!!viewingMilestone} onClose={() => setViewingMilestone(null)} maxHeight="85vh">
         {viewingMilestone && (() => {
-          const m = viewingMilestone;
+          // `viewingMilestone` is only the id-bearing snapshot that opened the
+          // sheet — link/unlink actions mutate `schedule`, not this frozen
+          // object, so re-resolve the live milestone each render (falling back
+          // to the snapshot during the close animation after delete/complete,
+          // when it's no longer in `planMilestones` at all).
+          const m = planMilestones.find((pm) => pm.id === viewingMilestone.id) ?? viewingMilestone;
           const status = resolveMilestoneStatus(m);
           const isCompleted = status === "completed";
           const isDelayed   = status === "delayed";
@@ -2170,6 +2224,19 @@ export default function PlanDetailView({
           const health = milestoneStateById.get(m.id);
           const readyToComplete = !!progress?.hasLinkedTasks && progress.pct === 100 && !isCompleted;
           const showHealthBadge = health && !["not_started", "completed", "getting_started"].includes(health.health);
+          // The "success metric" a milestone's outcome-driven progress is
+          // computed from (lib/milestoneHealth.ts) — the first linked tracker
+          // is the one that counts, matching calculateMilestoneState.
+          const linkedTrackerId = m.linkedTrackers?.[0];
+          const linkedTracker = linkedTrackerId ? trackers.find((t) => t.id === linkedTrackerId) ?? null : null;
+          // `trackers` is already scoped to this plan (see its own definition above).
+          const linkableTrackers = trackers.filter((t) => !(m.linkedTrackers ?? []).includes(t.id));
+          // Tasks this milestone could still link — excludes commitments
+          // (never tracked, see isTrackedTask) since linking one would
+          // silently contribute nothing to progress.
+          const linkableTasks = uniqueTasks.filter(
+            ({ task }) => isTrackedTask(task) && !(m.linkedActivities ?? []).includes(task.id)
+          );
 
           return (
             <div className="px-5 pb-8 pt-4">
@@ -2303,26 +2370,115 @@ export default function PlanDetailView({
                 </div>
               )}
 
-              {/* Linked tasks — read-only breakdown of what this milestone's
-                  progress is actually made of. Not tappable this pass (no
-                  navigation to the task) — an obvious, easy fast-follow. */}
-              {progress?.hasLinkedTasks && (
+              {/* Linked tasks — the activity signal calculateMilestoneState
+                  reads for task progress/consistency. Each row can be
+                  unlinked (the task itself is untouched — only the
+                  relationship is removed); unlinked plan tasks can be added
+                  from the picker below. */}
+              {(progress?.hasLinkedTasks || onLinkTaskToMilestone) && (
                 <div className="mb-5">
                   <p className="mb-2 text-[11px] font-bold uppercase tracking-[0.08em] text-neutral-400 dark:text-neutral-500">
                     Linked Tasks
                   </p>
-                  <div className="space-y-2">
-                    {progress.taskBreakdown.map((t) => (
-                      <div key={t.taskId} className="flex items-center justify-between gap-3">
-                        <span className="min-w-0 flex-1 truncate text-[14px] font-medium text-neutral-700 dark:text-neutral-300">
-                          {taskTitleById.get(t.taskId) ?? "Deleted task"}
-                        </span>
-                        <span className="shrink-0 text-[12px] font-semibold text-neutral-400 dark:text-neutral-500">
-                          {t.completedCount}/{t.totalCount}
-                        </span>
+                  {progress?.hasLinkedTasks && (
+                    <div className="mb-2 space-y-2">
+                      {progress.taskBreakdown.map((t) => (
+                        <div key={t.taskId} className="flex items-center justify-between gap-3">
+                          <span className="min-w-0 flex-1 truncate text-[14px] font-medium text-neutral-700 dark:text-neutral-300">
+                            {taskTitleById.get(t.taskId) ?? "Deleted task"}
+                          </span>
+                          <div className="flex shrink-0 items-center gap-2">
+                            <span className="text-[12px] font-semibold text-neutral-400 dark:text-neutral-500">
+                              {t.completedCount}/{t.totalCount}
+                            </span>
+                            {onUnlinkTaskFromMilestone && (
+                              <button
+                                type="button"
+                                onClick={() => onUnlinkTaskFromMilestone(m.id, t.taskId)}
+                                className="text-[11px] font-semibold text-neutral-400 hover:text-rose-500 dark:text-neutral-500 dark:hover:text-rose-400"
+                              >
+                                Unlink
+                              </button>
+                            )}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                  {onLinkTaskToMilestone && (
+                    linkableTasks.length > 0 ? (
+                      <div className="flex flex-wrap gap-1.5">
+                        {linkableTasks.map(({ task }) => (
+                          <button
+                            key={task.id}
+                            type="button"
+                            onClick={() => onLinkTaskToMilestone(m.id, task.id)}
+                            className="rounded-full border border-neutral-200 px-3 py-1.5 text-[12.5px] font-semibold text-neutral-600 hover:border-neutral-300 hover:bg-neutral-50 dark:border-white/10 dark:text-neutral-300 dark:hover:border-white/20 dark:hover:bg-white/[0.04]"
+                          >
+                            + {task.title}
+                          </button>
+                        ))}
                       </div>
-                    ))}
-                  </div>
+                    ) : !progress?.hasLinkedTasks ? (
+                      <p className="text-[13px] leading-relaxed text-neutral-400 dark:text-neutral-500">
+                        No tasks on this plan yet — add one to track activity toward this milestone.
+                      </p>
+                    ) : null
+                  )}
+                </div>
+              )}
+
+              {/* Success metric — links this milestone to the tracker its
+                  metric progress/forecast is computed from
+                  (lib/milestoneHealth.ts). A linked tracker can be unlinked
+                  (the tracker itself, and its logged entries, are untouched —
+                  only the relationship is removed); an unlinked milestone can
+                  pick any of the plan's existing trackers. */}
+              {(onLinkTrackerToMilestone || onUnlinkTrackerFromMilestone) && (
+                <div className="mb-5">
+                  <p className="mb-2 text-[11px] font-bold uppercase tracking-[0.08em] text-neutral-400 dark:text-neutral-500">
+                    Success Metric
+                  </p>
+                  {linkedTracker ? (
+                    <div className="flex items-center justify-between gap-3 rounded-xl border border-neutral-200 bg-neutral-50 px-3 py-2.5 dark:border-white/10 dark:bg-white/[0.04]">
+                      <div className="min-w-0">
+                        <p className="truncate text-[14px] font-semibold text-neutral-800 dark:text-neutral-100">
+                          {linkedTracker.title}
+                        </p>
+                        <p className="text-[12px] text-neutral-400 dark:text-neutral-500">
+                          {linkedTracker.startingValue ?? "–"} → {linkedTracker.goalValue ?? "–"}
+                          {linkedTracker.unit ? ` ${linkedTracker.unit}` : ""}
+                          {linkedTracker.goalDirection === "decrease_good" ? " ↓" : " ↑"}
+                        </p>
+                      </div>
+                      {onUnlinkTrackerFromMilestone && (
+                        <button
+                          type="button"
+                          onClick={() => onUnlinkTrackerFromMilestone(m.id, linkedTracker.id)}
+                          className="shrink-0 text-[12px] font-semibold text-neutral-400 hover:text-rose-500 dark:text-neutral-500 dark:hover:text-rose-400"
+                        >
+                          Unlink
+                        </button>
+                      )}
+                    </div>
+                  ) : linkableTrackers.length > 0 && onLinkTrackerToMilestone ? (
+                    <div className="flex flex-wrap gap-1.5">
+                      {linkableTrackers.map((t) => (
+                        <button
+                          key={t.id}
+                          type="button"
+                          onClick={() => onLinkTrackerToMilestone(m.id, t.id)}
+                          className="rounded-full border border-neutral-200 px-3 py-1.5 text-[12.5px] font-semibold text-neutral-600 hover:border-neutral-300 hover:bg-neutral-50 dark:border-white/10 dark:text-neutral-300 dark:hover:border-white/20 dark:hover:bg-white/[0.04]"
+                        >
+                          + {t.title}{t.unit ? ` (${t.unit})` : ""}
+                        </button>
+                      ))}
+                    </div>
+                  ) : (
+                    <p className="text-[13px] leading-relaxed text-neutral-400 dark:text-neutral-500">
+                      No trackers yet on this plan — create one under Progress Tracking to measure this milestone's outcome (e.g. weight, savings).
+                    </p>
+                  )}
                 </div>
               )}
 

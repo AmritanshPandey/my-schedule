@@ -18,6 +18,7 @@ import { DAYS } from "./scheduleConstants";
 import { localISODate } from "./dateUtils";
 import { resolveMilestoneStatus } from "./roadmapDates";
 import { calculateRitualStats, ritualScheduledOnDate } from "./consistency/calculateRitualStreak";
+import { calculateMilestoneState } from "./milestoneHealth";
 
 /** How far back a missed task still counts as worth catching up on. */
 export const MISSED_LOOKBACK_DAYS = 7;
@@ -44,9 +45,23 @@ export interface AtRiskRitual {
   streak: number;
 }
 
+export interface AtRiskMilestone {
+  milestone: Milestone;
+  plan: Plan | null;
+  /** From calculateMilestoneState (lib/milestoneHealth.ts) — where the current
+   *  pace actually projects finishing, not the target date itself. */
+  forecastDate: string | null;
+  /** Whole days the forecast lands past the target, always >= 0. Null when
+   *  there isn't yet enough data to project a date at all. */
+  daysBehind: number | null;
+}
+
 export interface NeedsAttention {
   /** Still savable today — listed first for exactly that reason. */
   atRiskRituals: AtRiskRitual[];
+  /** Not yet overdue, but the current pace projects missing the target —
+   *  the whole point of forecasting is catching this *before* overdueMilestones. */
+  atRiskMilestones: AtRiskMilestone[];
   overdueMilestones: OverdueMilestone[];
   missedTasks: MissedTask[];
   /** Combined count — the card renders only when this is > 0. */
@@ -107,6 +122,37 @@ export function selectNeedsAttention(
     // most worth naming.
     .sort((a, b) => b.daysOverdue - a.daysOverdue);
 
+  // ── Milestones trending to miss their target, before it's too late ───────
+  // Scoped to "active" (by date) milestones only: "upcoming" hasn't started
+  // (nothing to forecast yet), "delayed" already means the deadline passed —
+  // that's overdueMilestones above, not duplicated here — and "completed"
+  // needs nothing. This is the one case those two miss: the deadline hasn't
+  // hit yet, but the current pace already projects missing it.
+  const atRiskMilestones: AtRiskMilestone[] = (schedule.milestones ?? [])
+    .flatMap((milestone) => {
+      if (resolveMilestoneStatus(milestone, todayISO) !== "active") return [];
+      const plan = plansById.get(milestone.planId);
+      if (!plan) return [];
+      const state = calculateMilestoneState({
+        milestone,
+        plan,
+        activities: schedule.activities,
+        trackers: schedule.progressTrackers,
+        metricEntries: schedule.metricEntries,
+        trackingStart: schedule.preferences?.startDate,
+      });
+      if (state.health !== "at_risk" && state.health !== "delayed") return [];
+      return [{
+        milestone,
+        plan,
+        forecastDate: state.forecastDate,
+        daysBehind: state.daysAheadBehind !== null ? Math.max(0, -state.daysAheadBehind) : null,
+      }];
+    })
+    // Worst-projected first, same "most worth naming" ordering as overdueMilestones.
+    // Unknowable-forecast rows (daysBehind null) sort last rather than first.
+    .sort((a, b) => (b.daysBehind ?? -1) - (a.daysBehind ?? -1));
+
   // ── Recently missed tasks ────────────────────────────────────────────────
   // "Missed" lives in completionHistory as a dated event, so this reads real
   // occurrences rather than the task template's live `missed` flag (which only
@@ -145,9 +191,10 @@ export function selectNeedsAttention(
 
   return {
     atRiskRituals,
+    atRiskMilestones,
     overdueMilestones,
     missedTasks,
-    total: atRiskRituals.length + overdueMilestones.length + missedTasks.length,
+    total: atRiskRituals.length + atRiskMilestones.length + overdueMilestones.length + missedTasks.length,
   };
 }
 
@@ -159,4 +206,12 @@ export function formatDaysAgo(days: number): string {
 /** "1 day over" / "5 days over" — compact enough for a trailing pill. */
 export function formatDaysOverdue(days: number): string {
   return days === 1 ? "1 day over" : `${days} days over`;
+}
+
+/** "Off pace" / "1 day behind" / "5 days behind" — the not-yet-overdue
+ *  analogue of formatDaysOverdue, for an AtRiskMilestone's trailing pill.
+ *  Null (no forecast yet) reads as "Off pace" rather than a fake number. */
+export function formatDaysBehind(days: number | null): string {
+  if (days === null || days === 0) return "Off pace";
+  return days === 1 ? "1 day behind" : `${days} days behind`;
 }

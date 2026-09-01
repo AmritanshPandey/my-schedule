@@ -111,6 +111,7 @@ const EditPlanSheet = dynamic(() => import("@/components/plan/EditPlanSheet"), {
 const PlanDetailView = dynamic(() => import("@/components/plan/PlanDetailView"), { ssr: false });
 const GoalListSheet = dynamic(() => import("@/components/goal/GoalListSheet"), { ssr: false });
 const RitualView = dynamic(() => import("@/components/activity/RitualView"), { ssr: false });
+const TrackingView = dynamic(() => import("@/components/tracking/TrackingView"), { ssr: false });
 // Small hand-rolled SVG donut with no chart dependency — safe to load eagerly
 // in the iOS shell (see the first-load guard in tests/core-logic.test.mjs).
 const DayBreakdownCard = dynamic(() => import("@/components/DayBreakdownCard"), { ssr: false });
@@ -405,7 +406,7 @@ export default function IOSScheduleApp() {
   // inheriting the desktop one. Overview (4) and Settings (5) intentionally
   // have no entry in TOUR_STEPS — see lib/onboarding/tours.ts.
   const activeTourId: TourId | null =
-    activeTab === 0 ? "today" : activeTab === 1 ? "plans" : activeTab === 2 ? "routine" : null;
+    activeTab === 0 ? "today" : activeTab === 1 ? "plans" : activeTab === 2 ? "routine" : activeTab === 8 ? "tracking" : null;
   const tour = useCoachTour(activeTourId ?? "none", { enabled: activeTourId !== null, delayMs: 1200 });
 
   const [iosSetupDismissed, setIosSetupDismissed] = useState(() => {
@@ -486,6 +487,25 @@ export default function IOSScheduleApp() {
   }, [toast]);
 
   const plansById = useMemo(() => new Map(schedule.plans.map((plan) => [plan.id, plan])), [schedule.plans]);
+
+  /**
+   * One-tap increment from the Tracking page. An increment is just another
+   * entry on today's date — multiple entries per (tracker, date) are already
+   * legal, which is why `sumEntriesForDate` exists — so no new storage shape.
+   */
+  const handleLogTrackerAmount = useCallback((trackerId: string, planId: string, value: number) => {
+    setSchedule((prev) => ({
+      ...prev,
+      metricEntries: [...prev.metricEntries, { id: uid(), planId, trackerId, value, date: todayISO() }],
+    }));
+  }, [setSchedule]);
+
+  const handleDeleteEntry = useCallback((entryId: string) => {
+    setSchedule((prev) => ({
+      ...prev,
+      metricEntries: prev.metricEntries.filter((entry) => entry.id !== entryId),
+    }));
+  }, [setSchedule]);
   /** Persist a category created from inside the task sheet; returns its id. */
   const handleCreateCategory = useCallback((draft: CategoryDraft) => {
     const id = `cat-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 7)}`;
@@ -723,7 +743,7 @@ export default function IOSScheduleApp() {
       setActiveTab(0);
       openCreateSheet();
     } else if (action === "log-tracker") {
-      setActiveTab(4); // Overview — trackers with inline log buttons
+      setActiveTab(8); // Tracking — the page built for exactly this
     }
     params.delete("action");
     const qs = params.toString();
@@ -1678,10 +1698,10 @@ export default function IOSScheduleApp() {
                 onAddTask={(planId) => openCreateSheet(planId)}
                 onEditTask={(task) => openEditSheet(task)}
                 onDeleteLinkedTask={handleDeleteLinkedTask}
-                onAddTracker={(planId, title, unit, goalDirection, id, goalValue, startingValue) => {
+                onAddTracker={(planId, title, unit, goalDirection, id, goalValue, startingValue, dailyTarget) => {
                   setSchedule((prev) => ({
                     ...prev,
-                    progressTrackers: [...prev.progressTrackers, { id: id ?? uid(), planId, title, type: "number", unit: unit || undefined, goalDirection, goalValue, startingValue }],
+                    progressTrackers: [...prev.progressTrackers, { id: id ?? uid(), planId, title, type: "number", unit: unit || undefined, goalDirection, goalValue, startingValue, dailyTarget }],
                   }));
                 }}
                 onUpdateTracker={(trackerId, data) => {
@@ -1698,7 +1718,7 @@ export default function IOSScheduleApp() {
                   }));
                 }}
                 onOpenAddEntry={(tracker) => setEntryTracker(tracker)}
-                onDeleteEntry={(entryId) => setSchedule((prev) => ({ ...prev, metricEntries: prev.metricEntries.filter((entry) => entry.id !== entryId) }))}
+                onDeleteEntry={handleDeleteEntry}
                 onAddMilestone={(data) => handleAddMilestone(selectedPlan.id, data)}
                 onUpdateMilestone={handleUpdateMilestone}
                 onDeleteMilestone={handleDeleteMilestone}
@@ -1708,6 +1728,30 @@ export default function IOSScheduleApp() {
                     ...prev,
                     milestones: (prev.milestones ?? []).map((milestone) =>
                       milestone.id === milestoneId ? { ...milestone, linkedTrackers: [...new Set([...(milestone.linkedTrackers ?? []), trackerId])] } : milestone
+                    ),
+                  }));
+                }}
+                onUnlinkTrackerFromMilestone={(milestoneId, trackerId) => {
+                  setSchedule((prev) => ({
+                    ...prev,
+                    milestones: (prev.milestones ?? []).map((milestone) =>
+                      milestone.id === milestoneId ? { ...milestone, linkedTrackers: (milestone.linkedTrackers ?? []).filter((id) => id !== trackerId) } : milestone
+                    ),
+                  }));
+                }}
+                onLinkTaskToMilestone={(milestoneId, taskId) => {
+                  setSchedule((prev) => ({
+                    ...prev,
+                    milestones: (prev.milestones ?? []).map((milestone) =>
+                      milestone.id === milestoneId ? { ...milestone, linkedActivities: [...new Set([...(milestone.linkedActivities ?? []), taskId])] } : milestone
+                    ),
+                  }));
+                }}
+                onUnlinkTaskFromMilestone={(milestoneId, taskId) => {
+                  setSchedule((prev) => ({
+                    ...prev,
+                    milestones: (prev.milestones ?? []).map((milestone) =>
+                      milestone.id === milestoneId ? { ...milestone, linkedActivities: (milestone.linkedActivities ?? []).filter((id) => id !== taskId) } : milestone
                     ),
                   }));
                 }}
@@ -1845,6 +1889,27 @@ export default function IOSScheduleApp() {
       );
     }
 
+    if (activeTab === 8) {
+      return (
+        <IOSMotionBoundary>
+          <ErrorBoundary section name="Tracking">
+            <div data-tour="tracking-view">
+              <TrackingView
+                trackers={schedule.progressTrackers}
+                metricEntries={schedule.metricEntries}
+                plans={schedule.plans}
+                trackingStart={schedule.preferences?.startDate}
+                onLog={handleLogTrackerAmount}
+                onOpenAddEntry={(tracker) => setEntryTracker(tracker)}
+                onDeleteEntry={handleDeleteEntry}
+                onNavigateToPlans={() => setActiveTab(1)}
+              />
+            </div>
+          </ErrorBoundary>
+        </IOSMotionBoundary>
+      );
+    }
+
     return null;
   })();
 
@@ -1857,7 +1922,7 @@ export default function IOSScheduleApp() {
     <main className="min-h-dvh shrink-0 bg-[#F3F4F1] text-neutral-900 dark:bg-[#0E0E0E] dark:text-white">
       {!subtasksRef && activeTab !== 6 && (
         <IOSHeader
-          title={selectedPlan ? selectedPlan.title : activeTab === 0 ? "Today" : activeTab === 1 ? "Plans" : activeTab === 2 ? "Routine" : activeTab === 5 ? "Settings" : activeTab === 6 ? "Notes" : "Dashboard"}
+          title={selectedPlan ? selectedPlan.title : activeTab === 0 ? "Today" : activeTab === 1 ? "Plans" : activeTab === 2 ? "Routine" : activeTab === 8 ? "Tracking" : activeTab === 5 ? "Settings" : activeTab === 6 ? "Notes" : "Dashboard"}
           onBack={selectedPlan ? () => setSelectedPlanId(null) : undefined}
           actions={
             selectedPlan

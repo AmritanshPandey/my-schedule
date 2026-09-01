@@ -38,6 +38,7 @@ const AIAssistant = dynamic(() => import("@/components/ai/AIAssistant"), { ssr: 
 const AIFab = dynamic(() => import("@/components/desktop/AIFab").then(m => ({ default: m.AIFab })), { ssr: false });
 const TaskSheet = dynamic(() => import("@/components/task/TaskSheet").then(m => ({ default: m.TaskSheet })), { ssr: false });
 const PlanDetailView = dynamic(() => import("@/components/plan/PlanDetailView"), { ssr: false });
+const TrackingView = dynamic(() => import("@/components/tracking/TrackingView"), { ssr: false });
 const AIPlanCreatorSheet = dynamic(() => import("@/components/plan/AIPlanCreatorSheet"), { ssr: false });
 const SettingsSheet = dynamic(() => import("@/components/auth/SettingsSheet").then(m => ({ default: m.SettingsSheet })), { ssr: false });
 const SettingsView = dynamic(() => import("@/components/SettingsView").then(m => ({ default: m.SettingsView })), { ssr: false });
@@ -785,7 +786,7 @@ export default function ScheduleApp() {
   // automatically (useCoachTour's own effect keys off `id`). Overview and
   // Settings intentionally have no entry in TOUR_STEPS — see lib/onboarding/tours.ts.
   const activeTourId: TourId | null =
-    activeTab === 0 ? "today" : activeTab === 1 ? "plans" : activeTab === 2 ? "routine" : null;
+    activeTab === 0 ? "today" : activeTab === 1 ? "plans" : activeTab === 2 ? "routine" : activeTab === 8 ? "tracking" : null;
   const tour = useCoachTour(activeTourId ?? "none", {
     enabled: activeTourId !== null && !iosSafeMode && ready,
     delayMs: 1200,
@@ -1033,7 +1034,7 @@ export default function ScheduleApp() {
       setActiveTab(0);
       openCreateSheet();
     } else if (action === "log-tracker") {
-      setActiveTab(4); // Overview — trackers with inline log buttons
+      setActiveTab(8); // Tracking — the page built for exactly this
     }
     // Clear the param so a refresh doesn't re-trigger the action.
     params.delete("action");
@@ -1923,6 +1924,42 @@ export default function ScheduleApp() {
     }));
   }
 
+  // The inverse of handleLinkTrackerToMilestone — removes the relationship
+  // only. The tracker itself, and every entry logged against it, are untouched.
+  function handleUnlinkTrackerFromMilestone(milestoneId: string, trackerId: string) {
+    setSchedule((prev) => ({
+      ...prev,
+      milestones: (prev.milestones ?? []).map((m) =>
+        m.id === milestoneId
+          ? { ...m, linkedTrackers: (m.linkedTrackers ?? []).filter((id) => id !== trackerId) }
+          : m
+      ),
+    }));
+  }
+
+  // The task-linking analogue of the two tracker handlers above.
+  function handleLinkTaskToMilestone(milestoneId: string, taskId: string) {
+    setSchedule((prev) => ({
+      ...prev,
+      milestones: (prev.milestones ?? []).map((m) =>
+        m.id === milestoneId
+          ? { ...m, linkedActivities: [...new Set([...(m.linkedActivities ?? []), taskId])] }
+          : m
+      ),
+    }));
+  }
+
+  function handleUnlinkTaskFromMilestone(milestoneId: string, taskId: string) {
+    setSchedule((prev) => ({
+      ...prev,
+      milestones: (prev.milestones ?? []).map((m) =>
+        m.id === milestoneId
+          ? { ...m, linkedActivities: (m.linkedActivities ?? []).filter((id) => id !== taskId) }
+          : m
+      ),
+    }));
+  }
+
   function handleDeletePlan(planId: string) {
     const plan = schedule.plans.find((p) => p.id === planId);
     openConfirm(
@@ -1963,6 +2000,19 @@ export default function ScheduleApp() {
       metricEntries: [...prev.metricEntries, { ...entry, id: uid() }],
     }));
   }
+
+  /**
+   * One-tap increment from the Tracking page. An increment is just another
+   * entry on today's date — multiple entries per (tracker, date) are already
+   * legal, which is exactly why `sumEntriesForDate` exists — so this needs no
+   * new storage shape, only the today's-date convenience over handleAddEntry.
+   */
+  const handleLogTrackerAmount = useCallback((trackerId: string, planId: string, value: number) => {
+    setSchedule((prev) => ({
+      ...prev,
+      metricEntries: [...prev.metricEntries, { id: uid(), planId, trackerId, value, date: todayISO() }],
+    }));
+  }, [setSchedule]);
 
   function handleApplyTemplate(template: Template) {
     setSchedule(applyTemplate(template));
@@ -4044,7 +4094,7 @@ export default function ScheduleApp() {
               onAddTask={(planId) => openCreateSheet(planId)}
               onEditTask={(task) => openEditSheet(task)}
               onDeleteLinkedTask={handleDeleteLinkedTask}
-              onAddTracker={(planId, title, unit, goalDirection, id, goalValue, startingValue) => {
+              onAddTracker={(planId, title, unit, goalDirection, id, goalValue, startingValue, dailyTarget) => {
                 setSchedule((prev) => ({
                   ...prev,
                   progressTrackers: [
@@ -4058,6 +4108,7 @@ export default function ScheduleApp() {
                       goalDirection,
                       goalValue,
                       startingValue,
+                      dailyTarget,
                     },
                   ],
                 }));
@@ -4081,6 +4132,9 @@ export default function ScheduleApp() {
               onCompleteMilestone={handleCompleteMilestone}
               onAddGeneratedTasks={handleAddGeneratedTasks}
               onLinkTrackerToMilestone={handleLinkTrackerToMilestone}
+              onUnlinkTrackerFromMilestone={handleUnlinkTrackerFromMilestone}
+              onLinkTaskToMilestone={handleLinkTaskToMilestone}
+              onUnlinkTaskFromMilestone={handleUnlinkTaskFromMilestone}
               onUpdateCoachMessages={handleUpdateCoachMessages}
             />
             </ErrorBoundary>
@@ -4111,6 +4165,30 @@ export default function ScheduleApp() {
               onDelete={handleDeleteRitual}
               addOpen={ritualAddOpen}
               onAddOpenChange={setRitualAddOpen}
+            />
+            </ErrorBoundary>
+          </m.div>
+        )}
+
+        {/* ── Tracking Tab ───────────────────────────────────────────────── */}
+        {ready && activeTab === 8 && (
+          <m.div
+            key="tab-tracking"
+            data-tour="tracking-view"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            transition={{ duration: 0.12, ease: "easeOut" }}
+          >
+            <ErrorBoundary section name="Tracking">
+            <TrackingView
+              trackers={schedule.progressTrackers}
+              metricEntries={schedule.metricEntries}
+              plans={schedule.plans}
+              trackingStart={schedule.preferences?.startDate}
+              onLog={handleLogTrackerAmount}
+              onOpenAddEntry={(tracker) => setEntryTracker(tracker)}
+              onDeleteEntry={handleDeleteEntry}
+              onNavigateToPlans={() => setActiveTab(1)}
             />
             </ErrorBoundary>
           </m.div>

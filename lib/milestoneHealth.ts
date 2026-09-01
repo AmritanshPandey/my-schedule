@@ -215,8 +215,17 @@ function resolvePrimaryTracker(milestone: Milestone, trackers: ProgressTracker[]
   return trackers.find((t) => t.id === id) ?? null;
 }
 
-function entriesForTracker(trackerId: string, metricEntries: MetricEntry[]): MetricEntry[] {
-  return metricEntries.filter((e) => e.trackerId === trackerId).sort((a, b) => a.date.localeCompare(b.date));
+/**
+ * `trackingStart` is honoured here for the same reason the Tracking page
+ * honours it: the setting promises streaks, trends and consistency ignore
+ * everything before it, and metric entries were the one thing it never
+ * actually filtered. Milestone health and the Tracking page must agree about
+ * the same tracker, so the filter lives at both readers' single entry point.
+ */
+function entriesForTracker(trackerId: string, metricEntries: MetricEntry[], trackingStart?: string): MetricEntry[] {
+  return metricEntries
+    .filter((e) => e.trackerId === trackerId && (!trackingStart || e.date >= trackingStart))
+    .sort((a, b) => a.date.localeCompare(b.date));
 }
 
 export interface MetricProgressResult {
@@ -239,13 +248,14 @@ export function calculateMetricProgress(
   trackers: ProgressTracker[],
   metricEntries: MetricEntry[],
   now: Date = new Date(),
+  trackingStart?: string,
 ): MetricProgressResult {
   const empty: MetricProgressResult = { progress: null, raw: null, wrongDirection: false, current: null, startingValue: null };
   const tracker = resolvePrimaryTracker(milestone, trackers);
   if (!tracker || tracker.goalValue === undefined) return empty;
 
   const nowStr = localISODate(now);
-  const entries = entriesForTracker(tracker.id, metricEntries).filter((e) => e.date <= nowStr);
+  const entries = entriesForTracker(tracker.id, metricEntries, trackingStart).filter((e) => e.date <= nowStr);
   if (entries.length === 0) return empty;
 
   const current = entries[entries.length - 1].value;
@@ -273,11 +283,11 @@ export function calculateMetricProgress(
 
 // ── Forecast ──────────────────────────────────────────────────────────────────
 
-function forecastMetricDate(milestone: Milestone, trackers: ProgressTracker[], metricEntries: MetricEntry[], now: Date): string | null {
+function forecastMetricDate(milestone: Milestone, trackers: ProgressTracker[], metricEntries: MetricEntry[], now: Date, trackingStart?: string): string | null {
   const tracker = resolvePrimaryTracker(milestone, trackers);
   if (!tracker || tracker.goalValue === undefined) return null;
   const nowStr = localISODate(now);
-  const entries = entriesForTracker(tracker.id, metricEntries).filter((e) => e.date <= nowStr);
+  const entries = entriesForTracker(tracker.id, metricEntries, trackingStart).filter((e) => e.date <= nowStr);
   if (entries.length === 0) return null;
 
   const direction = tracker.goalDirection ?? "increase_good";
@@ -343,9 +353,10 @@ export function calculateForecastDate(
   trackers: ProgressTracker[],
   metricEntries: MetricEntry[],
   now: Date = new Date(),
+  trackingStart?: string,
 ): string | null {
   if ((milestone.linkedTrackers?.length ?? 0) > 0) {
-    return forecastMetricDate(milestone, trackers, metricEntries, now);
+    return forecastMetricDate(milestone, trackers, metricEntries, now, trackingStart);
   }
   if ((milestone.linkedActivities?.length ?? 0) > 0) {
     return forecastTaskDate(milestone, activities, now);
@@ -440,8 +451,10 @@ export function calculateMilestoneState(params: {
   trackers: ProgressTracker[];
   metricEntries: MetricEntry[];
   now?: Date;
+  /** `preferences.startDate` — entries before it are not counted. */
+  trackingStart?: string;
 }): MilestoneState {
-  const { milestone, plan, activities, trackers, metricEntries } = params;
+  const { milestone, plan, activities, trackers, metricEntries, trackingStart } = params;
   const now = params.now ?? new Date();
 
   const hasTasks = (milestone.linkedActivities?.length ?? 0) > 0;
@@ -453,9 +466,9 @@ export function calculateMilestoneState(params: {
 
   const consistency = calculateConsistency(milestone, activities, now);
   const expectedProgress = calculateExpectedProgress(milestone, activities, now);
-  const metric = calculateMetricProgress(milestone, trackers, metricEntries, now);
+  const metric = calculateMetricProgress(milestone, trackers, metricEntries, now, trackingStart);
   const primaryTracker = resolvePrimaryTracker(milestone, trackers);
-  const forecastDate = calculateForecastDate(milestone, activities, trackers, metricEntries, now);
+  const forecastDate = calculateForecastDate(milestone, activities, trackers, metricEntries, now, trackingStart);
   const daysAheadBehind = forecastDate !== null ? daysBetweenSigned(forecastDate, milestone.plannedEndDate) : null;
 
   // Outcome-driven (a tracker is linked) uses the metric as the headline

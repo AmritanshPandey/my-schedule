@@ -292,6 +292,18 @@ export interface ProgressTracker {
    * existing trackers need no migration.
    */
   startingValue?: number;
+  /**
+   * A per-day amount to hit, for metrics you accumulate through the day
+   * (water, protein, minutes read). Its presence is what makes a tracker
+   * *cumulative daily* rather than *point-in-time*: the page fills a ring from
+   * that day's summed entries and resets at midnight.
+   *
+   * Deliberately separate from `goalValue`, which is an *overall* target the
+   * tracker moves toward once (weight to 70kg, a test score to 700). The two
+   * answer different questions and a tracker can carry either, both, or
+   * neither — so this could not be folded into the existing field.
+   */
+  dailyTarget?: number;
 }
 
 export interface MetricEntry {
@@ -880,6 +892,7 @@ function normalizeTracker(value: unknown): ProgressTracker | null {
     goalDirection: gd === "increase_good" || gd === "decrease_good" ? gd : undefined,
     goalValue: typeof t.goalValue === "number" && Number.isFinite(t.goalValue) ? t.goalValue : undefined,
     startingValue: typeof t.startingValue === "number" && Number.isFinite(t.startingValue) ? t.startingValue : undefined,
+    dailyTarget: typeof t.dailyTarget === "number" && Number.isFinite(t.dailyTarget) ? t.dailyTarget : undefined,
   };
 }
 

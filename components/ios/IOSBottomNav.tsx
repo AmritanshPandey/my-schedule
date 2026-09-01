@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import {
+  IconChartLine,
   IconCalendarEvent,
   IconCalendarPlus,
   IconClipboardData,
@@ -58,7 +59,7 @@ export default function IOSBottomNav({
   }
 
   const tabClass = (active: boolean) =>
-    `flex h-[56px] w-[64px] flex-col items-center justify-center gap-[2px] rounded-full transition-colors duration-150 ${
+    `flex h-[56px] min-w-[44px] max-w-[64px] flex-1 flex-col items-center justify-center gap-[2px] rounded-full transition-colors duration-150 ${
       active
         ? "bg-black/[0.05] text-neutral-950 dark:bg-white/[0.10] dark:text-white"
         : "text-neutral-500 dark:text-neutral-400"
@@ -145,8 +146,9 @@ export default function IOSBottomNav({
             role="navigation"
             aria-label="Main navigation"
             data-glass
-            className="relative flex h-[68px] w-full items-center justify-evenly rounded-full border border-neutral-200/70 bg-white/80 px-2 shadow-nav backdrop-blur-xl backdrop-saturate-150 supports-[backdrop-filter]:bg-white/70 dark:border-white/[0.09] dark:bg-neutral-900/75 dark:supports-[backdrop-filter]:bg-neutral-900/65"
+            className="relative flex h-[68px] w-full items-center rounded-full border border-neutral-200/70 bg-white/80 px-2 shadow-nav backdrop-blur-xl backdrop-saturate-150 supports-[backdrop-filter]:bg-white/70 dark:border-white/[0.09] dark:bg-neutral-900/75 dark:supports-[backdrop-filter]:bg-neutral-900/65"
           >
+            <div className="flex flex-1 items-center justify-evenly">
             <button
               type="button"
               onClick={() => changeTab(4)}
@@ -167,7 +169,14 @@ export default function IOSBottomNav({
               <IconCalendarEvent size={20} strokeWidth={2} />
               <span className="text-[10.5px] font-medium leading-none">Today</span>
             </button>
+            </div>
+            {/* The FAB's slot. Two flex-1 halves rather than justify-evenly on
+                the whole row: with an odd number of tabs, evenly spacing six
+                items puts this gap left of centre while the FAB stays pinned to
+                the container's middle — which parked it on top of a real
+                button. Equal halves keep the gap and the FAB together. */}
             <div className="w-[52px] shrink-0" aria-hidden="true" />
+            <div className="flex flex-1 items-center justify-evenly">
             <button
               type="button"
               onClick={() => changeTab(1)}
@@ -188,6 +197,17 @@ export default function IOSBottomNav({
               <IconRepeat size={20} strokeWidth={2} />
               <span className="text-[10.5px] font-medium leading-none">Routine</span>
             </button>
+            <button
+              type="button"
+              onClick={() => changeTab(8)}
+              className={tabClass(activeTab === 8)}
+              aria-label="Tracking"
+              aria-current={activeTab === 8 ? "page" : undefined}
+            >
+              <IconChartLine size={20} strokeWidth={2} />
+              <span className="text-[10.5px] font-medium leading-none">Track</span>
+            </button>
+            </div>
           </nav>
         </div>
       </div>

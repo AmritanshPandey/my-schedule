@@ -1,10 +1,12 @@
 "use client";
 
-import { IconAlertTriangle, IconArrowUpRight, IconFlag, IconFlame, IconX } from "@tabler/icons-react";
+import { IconAlertTriangle, IconArrowUpRight, IconFlag, IconFlame, IconTrendingDown, IconX } from "@tabler/icons-react";
 import { CARD } from "@/components/ui/surfaces";
 import { haptic } from "@/lib/haptics";
+import { formatDateShort } from "@/lib/dateUtils";
 import {
   formatDaysAgo,
+  formatDaysBehind,
   formatDaysOverdue,
   type MissedTask,
   type NeedsAttention,
@@ -85,8 +87,9 @@ function Row({
 export default function NeedsAttentionCard({ data, onNavigate, onHandleMissed }: NeedsAttentionCardProps) {
   if (data.total === 0) return null;
 
-  // Ordered by how recoverable each item is. A ritual streak can still be saved
-  // today, so it leads; an overdue milestone compounds; a past miss is history.
+  // Ordered by how recoverable each item is. A ritual streak can still be
+  // saved today, so it leads; an at-risk milestone still has time before its
+  // deadline; an overdue milestone compounds; a past miss is history.
   const rows = [
     ...data.atRiskRituals.map((row) => ({
       key: `r:${row.ritual.id}`,
@@ -96,6 +99,19 @@ export default function NeedsAttentionCard({ data, onNavigate, onHandleMissed }:
       detail: `${row.streak}-day run ends tonight`,
       pill: "Not done",
       onClick: () => onNavigate(2),
+    })),
+    ...data.atRiskMilestones.map((row) => ({
+      key: `am:${row.milestone.id}`,
+      icon: IconTrendingDown,
+      tone: "warn" as const,
+      title: row.milestone.title,
+      detail: row.plan
+        ? row.forecastDate
+          ? `${row.plan.title} · projects ${formatDateShort(row.forecastDate)}`
+          : row.plan.title
+        : "Milestone",
+      pill: formatDaysBehind(row.daysBehind),
+      onClick: () => onNavigate(1),
     })),
     ...data.overdueMilestones.map((row) => ({
       key: `m:${row.milestone.id}`,

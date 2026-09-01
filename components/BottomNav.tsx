@@ -5,6 +5,7 @@ import { haptic } from "@/lib/haptics";
 import { AnimatePresence, m } from "framer-motion";
 import { isIOSSafeMode } from "@/lib/iosSafeMode";
 import {
+  IconChartLine,
   IconCalendarEvent,
   IconChartBar,
   IconClipboardData,
@@ -63,7 +64,7 @@ export default function BottomNav({
   }
 
   const tabClass = (active: boolean) => `
-    flex h-[56px] w-[64px] flex-col items-center justify-center gap-[2px]
+    flex h-[56px] min-w-[44px] max-w-[64px] flex-1 flex-col items-center justify-center gap-[2px]
     rounded-full transition-all duration-200
     ${active
     ? "bg-emerald-50 text-emerald-700 ring-1 ring-inset ring-emerald-200/70 dark:bg-emerald-500/[0.14] dark:text-emerald-300 dark:ring-emerald-400/20"
@@ -192,13 +193,14 @@ export default function BottomNav({
             aria-label="Main navigation"
             data-glass
             className="
-              relative flex h-[68px] w-full items-center justify-evenly rounded-full px-2
+              relative flex h-[68px] w-full items-center rounded-full px-2
               border border-neutral-200/70 bg-white/80 backdrop-blur-xl backdrop-saturate-150
               shadow-nav
               dark:border-white/[0.09] dark:bg-neutral-900/75
               supports-[backdrop-filter]:bg-white/70 dark:supports-[backdrop-filter]:bg-neutral-900/65
             "
           >
+            <div className="flex flex-1 items-center justify-evenly">
             <button
               type="button"
               onClick={() => handleTabChange(4)}
@@ -221,8 +223,14 @@ export default function BottomNav({
               <span className="text-[10.5px] font-medium leading-none">Today</span>
             </button>
 
-            {/* CENTER SPACER (plus button lives here absolutely) */}
+            </div>
+            {/* CENTER SPACER (plus button lives here absolutely). Two flex-1
+                halves, not justify-evenly: with an odd number of tabs, evenly
+                spacing six items puts this gap left of centre while the FAB
+                stays pinned to the middle — parking it on top of a real
+                button. Equal halves keep the gap and the FAB together. */}
             <div className="w-[52px] shrink-0" aria-hidden="true" />
+            <div className="flex flex-1 items-center justify-evenly">
 
             <button
               type="button"
@@ -245,6 +253,18 @@ export default function BottomNav({
               <IconRepeat size={20} strokeWidth={2} />
               <span className="text-[10.5px] font-medium leading-none">Routine</span>
             </button>
+
+            <button
+              type="button"
+              onClick={() => handleTabChange(8)}
+              className={tabClass(activeTab === 8)}
+              aria-label="Tracking"
+              aria-current={activeTab === 8 ? "page" : undefined}
+            >
+              <IconChartLine size={20} strokeWidth={2} />
+              <span className="text-[10.5px] font-medium leading-none">Track</span>
+            </button>
+            </div>
           </nav>
 
         </div>
