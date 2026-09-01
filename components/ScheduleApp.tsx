@@ -2788,9 +2788,17 @@ export default function ScheduleApp() {
       name: taskDeleteDetails.task.title,
       // Whenever more than one scope is offered the copy has to stop asserting
       // what will happen — with "Remove today only" on screen, "This removes it
-      // from Sunday" describes only one of three buttons.
+      // from Sunday" describes only one of three buttons. Naming the *other*
+      // days up front is what actually resolves the ambiguity: without it,
+      // "Delete every Monday" reads as "delete this task" and the still-live
+      // Wednesday/Friday copies look like the delete silently failed — the
+      // week grid shows the whole week at once, so they're back on screen
+      // instantly, and staying there after a reload only confirms the wrong
+      // read of what "Delete every Monday" scoped to.
       description: taskDeleteDetails.activeDays.length > 1
-        ? `This task appears on ${taskDeleteDetails.activeDays.length} days. Choose what you want to delete.`
+        ? `This task also runs on ${formatDayListLabel(
+            taskDeleteDetails.activeDays.filter((d) => d !== taskDeleteDetails.sourceDay),
+          )}. Choose what you want to delete.`
         : canDeleteThisDate
         ? "Choose what you want to delete."
         : `This removes it from ${deleteDayLabel(taskDeleteDetails.sourceDay)}.`,
@@ -2801,6 +2809,13 @@ export default function ScheduleApp() {
     return day.charAt(0).toUpperCase() + day.slice(1);
   }
 
+  /** "Wednesday" / "Wednesday and Friday" / "Monday, Wednesday and Friday" */
+  function formatDayListLabel(days: DayKey[]): string {
+    const labels = days.map(deleteDayLabel);
+    if (labels.length <= 1) return labels.join("");
+    if (labels.length === 2) return labels.join(" and ");
+    return `${labels.slice(0, -1).join(", ")} and ${labels[labels.length - 1]}`;
+  }
 
   function performTaskDelete(scope: TaskDeleteScope) {
     if (!taskDeleteDetails) return;
@@ -4617,7 +4632,7 @@ export default function ScheduleApp() {
                 fullWidth
                 onClick={() => performTaskDelete("day")}
               >
-                Delete every {deleteDayLabel(taskDeleteDetails.sourceDay)}
+                Delete {deleteDayLabel(taskDeleteDetails.sourceDay)}s only
               </Button>
               <Button
                 type="button"
