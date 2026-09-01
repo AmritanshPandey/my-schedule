@@ -96,6 +96,45 @@ export function shiftFutureMilestones(
   return recalculateRoadmapTimeline(updated, roadmapStartDate);
 }
 
+/**
+ * Swap a milestone with its neighbor one position earlier/later, then re-lay
+ * the whole timeline back-to-back in the new order from `roadmapStartDate`.
+ * Unlike `normalizeMilestoneTimeline` (used by add/delete/edit to preserve
+ * each milestone's own date and any gaps), a reorder is a deliberate "the
+ * sequence changed" edit — `recalculateRoadmapTimeline` is the same
+ * full-relay the plan's own start-date edit and template generation already
+ * use.
+ *
+ * A no-op move (already at that end, or an id that isn't found) still runs
+ * the re-lay rather than short-circuiting, so `sortOrder`/dates stay
+ * normalized either way — matching `recalculateRoadmapTimeline`'s own
+ * behavior for unchanged input.
+ */
+export function moveMilestone(
+  milestones: Milestone[],
+  milestoneId: string,
+  direction: "up" | "down",
+  roadmapStartDate?: string
+): Milestone[] {
+  const sorted = [...milestones].sort((a, b) => a.sortOrder - b.sortOrder);
+  const index = sorted.findIndex((m) => m.id === milestoneId);
+  const swapWith = index === -1 ? -1 : direction === "up" ? index - 1 : index + 1;
+  // Swap the `sortOrder` *values*, not just array position — recalculateRoadmapTimeline
+  // re-sorts its input by that field, so a position-only swap would be silently
+  // undone the moment it re-derives its own order from the (unchanged) field.
+  const withSwap =
+    index !== -1 && swapWith >= 0 && swapWith < sorted.length
+      ? sorted.map((m, i) =>
+          i === index
+            ? { ...m, sortOrder: sorted[swapWith].sortOrder }
+            : i === swapWith
+              ? { ...m, sortOrder: sorted[index].sortOrder }
+              : m
+        )
+      : sorted;
+  return recalculateRoadmapTimeline(withSwap, roadmapStartDate);
+}
+
 function isValidISODate(value: unknown): value is string {
   return typeof value === "string" && /^\d{4}-\d{2}-\d{2}$/.test(value);
 }

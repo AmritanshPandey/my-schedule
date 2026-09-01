@@ -264,6 +264,7 @@ interface PlanDetailViewProps {
   onAddMilestone: (data: MilestoneSaveData) => void;
   onUpdateMilestone: (id: string, data: Partial<Milestone>) => void;
   onDeleteMilestone: (id: string) => void;
+  onMoveMilestone: (id: string, direction: "up" | "down") => void;
   onCompleteMilestone: (id: string) => void;
   // Milestone <-> tracker linking — the "success metric" a milestone's
   // metric progress is computed from (lib/milestoneHealth.ts). Also used by
@@ -302,6 +303,7 @@ export default function PlanDetailView({
   onAddMilestone,
   onUpdateMilestone,
   onDeleteMilestone,
+  onMoveMilestone,
   onCompleteMilestone,
   onAddGeneratedTasks,
   onLinkTrackerToMilestone,
@@ -1192,7 +1194,7 @@ export default function PlanDetailView({
     );
   }
 
-  function renderMilestoneCard(m: Milestone, isLast: boolean) {
+  function renderMilestoneCard(m: Milestone, isFirst: boolean, isLast: boolean) {
     const status = resolveMilestoneStatus(m);
     const isCompleted = status === "completed";
     const progress = milestoneProgressById.get(m.id);
@@ -1207,12 +1209,15 @@ export default function PlanDetailView({
     const showHealthBadge = health && !["not_started", "completed", "getting_started"].includes(health.health);
 
     return (
+      <div className="group relative flex items-center gap-1">
       <button
         type="button"
         onClick={() => { haptic("light"); setViewingMilestone(m); }}
         // No px-1: it put this row 4px inside the card above it, which reads as
-        // a misalignment against that card's border.
-        className="group relative w-full flex gap-[14px] rounded-xl px-3 pt-[14px] pb-[18px] text-left transition-colors hover:bg-white/60 dark:hover:bg-white/[0.03]"
+        // a misalignment against that card's border. flex-1/min-w-0 rather than
+        // w-full: this is now one item in a row alongside the move column, not
+        // the whole row.
+        className="group relative flex flex-1 min-w-0 gap-[14px] rounded-xl px-3 pt-[14px] pb-[18px] text-left transition-colors hover:bg-white/60 dark:hover:bg-white/[0.03]"
       >
         {/* Connector line to next item. Runs past this row's bottom edge by the
             next row's top padding, so it actually reaches the following marker
@@ -1335,6 +1340,29 @@ export default function PlanDetailView({
 
         <IconChevronRight size={16} strokeWidth={2} className="shrink-0 self-center text-neutral-300 transition-transform group-hover:translate-x-0.5 group-hover:text-neutral-500 dark:text-neutral-600 dark:group-hover:text-neutral-300" />
       </button>
+      {/* Sequence controls — a sibling of the button above, not nested inside
+          it, so tapping "move" never also opens the detail sheet. */}
+      <div className="flex shrink-0 flex-col gap-0.5">
+        <IconButton
+          label={`Move "${m.title}" earlier`}
+          size="xxs"
+          variant="ghost"
+          disabled={isFirst}
+          onClick={() => { haptic("light"); onMoveMilestone(m.id, "up"); }}
+        >
+          <IconArrowUp size={13} strokeWidth={2} />
+        </IconButton>
+        <IconButton
+          label={`Move "${m.title}" later`}
+          size="xxs"
+          variant="ghost"
+          disabled={isLast}
+          onClick={() => { haptic("light"); onMoveMilestone(m.id, "down"); }}
+        >
+          <IconArrowDown size={13} strokeWidth={2} />
+        </IconButton>
+      </div>
+      </div>
     );
   }
 
@@ -1965,7 +1993,7 @@ export default function PlanDetailView({
             <div role="list">
               {planMilestones.map((m, idx) => (
                 <div key={m.id} role="listitem">
-                  {renderMilestoneCard(m, idx === planMilestones.length - 1)}
+                  {renderMilestoneCard(m, idx === 0, idx === planMilestones.length - 1)}
                 </div>
               ))}
             </div>

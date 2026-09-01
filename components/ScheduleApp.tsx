@@ -204,7 +204,7 @@ import { todayISO, daysBetween as daysBetweenUtil, formatDate, formatDayNoteLabe
 import { derivePlanStatus, getPlanCardStats, needsAttention } from "@/lib/planInsights";
 import { MainTitleSection, IconActionButton, CtaActionButton } from "@/components/ui/MainTitleSection";
 import ProgressBar from "@/components/ui/ProgressBar";
-import { normalizeMilestoneTimeline, cascadeMilestoneDates } from "@/lib/roadmapDates";
+import { normalizeMilestoneTimeline, cascadeMilestoneDates, moveMilestone } from "@/lib/roadmapDates";
 import AddPlanSheet from "@/components/plan/AddPlanSheet";
 import EditPlanSheet from "@/components/plan/EditPlanSheet";
 import GoalListSheet from "@/components/goal/GoalListSheet";
@@ -2491,6 +2491,20 @@ export default function ScheduleApp() {
     );
   }
 
+  function handleMoveMilestone(id: string, direction: "up" | "down") {
+    setSchedule((prev) => {
+      const existing = (prev.milestones ?? []).find((m) => m.id === id);
+      if (!existing) return prev;
+      const plan = prev.plans.find((p) => p.id === existing.planId);
+      const otherMilestones = (prev.milestones ?? []).filter((m) => m.planId !== existing.planId);
+      const planMilestones = (prev.milestones ?? []).filter((m) => m.planId === existing.planId);
+      return {
+        ...prev,
+        milestones: [...otherMilestones, ...moveMilestone(planMilestones, id, direction, plan?.startDate)],
+      };
+    });
+  }
+
   function handleCompleteMilestone(id: string) {
     setSchedule((prev) => {
       const existing = (prev.milestones ?? []).find((m) => m.id === id);
@@ -4213,6 +4227,7 @@ export default function ScheduleApp() {
               onAddMilestone={(data) => handleAddMilestone(selectedPlan.id, data)}
               onUpdateMilestone={handleUpdateMilestone}
               onDeleteMilestone={handleDeleteMilestone}
+              onMoveMilestone={handleMoveMilestone}
               onCompleteMilestone={handleCompleteMilestone}
               onAddGeneratedTasks={handleAddGeneratedTasks}
               onLinkTrackerToMilestone={handleLinkTrackerToMilestone}

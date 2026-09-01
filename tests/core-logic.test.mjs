@@ -64,7 +64,7 @@ const {
 } = await import("../lib/scheduleNormalize.ts");
 const { isTaskScheduledOn, resolveOccurrence, diffException, weeksBetween } = await import("../lib/taskOccurrence.ts");
 const { constrainTaskToPlanWindow } = await import("../lib/planTaskWindow.ts");
-const { normalizeMilestoneTimeline, cascadeMilestoneDates } = await import("../lib/roadmapDates.ts");
+const { normalizeMilestoneTimeline, cascadeMilestoneDates, moveMilestone } = await import("../lib/roadmapDates.ts");
 const { computeRoadmapStats } = await import("../lib/roadmapEngine.ts");
 const { calculateLinkedTaskProgress, calculateMilestoneProgress, calculatePlanProgress } = await import("../lib/planProgress.ts");
 const { resolveLinkedTasks } = await import("../lib/notes/linkedTasks.ts");
@@ -1016,6 +1016,41 @@ test("milestone date edits cascade to the remaining and persist", () => {
   assert.equal(earlier[0].startDate, "2026-06-01");
   assert.equal(earlier[1].startDate, "2026-06-05");
   assert.equal(earlier[2].startDate, "2026-06-12");
+});
+
+test("moveMilestone reorders the sequence and re-lays dates back-to-back", () => {
+  const mk = (id, start, dur, sortOrder) => ({
+    id, planId: "p", title: id, startDate: start, plannedDurationDays: dur,
+    plannedEndDate: "", status: "upcoming", linkedActivities: [], linkedTrackers: [],
+    createdAt: "", updatedAt: "2020-01-01T00:00:00Z", sortOrder,
+  });
+  const ms = [mk("m0", "2026-06-01", 7, 0), mk("m1", "2026-06-08", 7, 1), mk("m2", "2026-06-15", 7, 2)];
+
+  // Move the middle milestone up: order becomes m1, m0, m2, and the whole set
+  // re-lays sequentially from the anchor rather than keeping each milestone's
+  // own stored date (which would leave the list visually out of chronological
+  // order — the whole point of a reorder is that the dates follow it).
+  const up = moveMilestone(ms, "m1", "up", "2026-06-01");
+  assert.deepEqual(up.map((m) => m.id), ["m1", "m0", "m2"], "m1 swaps ahead of m0");
+  assert.deepEqual(up.map((m) => m.sortOrder), [0, 1, 2], "re-indexed 0..n-1");
+  assert.equal(up[0].startDate, "2026-06-01");
+  assert.equal(up[0].plannedEndDate, "2026-06-07");
+  assert.equal(up[1].startDate, "2026-06-08");
+  assert.equal(up[2].startDate, "2026-06-15", "m2's slot is unaffected by a swap ahead of it");
+
+  // Move the middle milestone down: order becomes m0, m2, m1.
+  const down = moveMilestone(ms, "m1", "down", "2026-06-01");
+  assert.deepEqual(down.map((m) => m.id), ["m0", "m2", "m1"]);
+
+  // Moving the first one up, or the last one down, is a no-op on order.
+  const pastTop = moveMilestone(ms, "m0", "up", "2026-06-01");
+  assert.deepEqual(pastTop.map((m) => m.id), ["m0", "m1", "m2"]);
+  const pastBottom = moveMilestone(ms, "m2", "down", "2026-06-01");
+  assert.deepEqual(pastBottom.map((m) => m.id), ["m0", "m1", "m2"]);
+
+  // An id that doesn't exist leaves the order untouched but still normalizes.
+  const missing = moveMilestone(ms, "nope", "up", "2026-06-01");
+  assert.deepEqual(missing.map((m) => m.id), ["m0", "m1", "m2"]);
 });
 
 test("trendNarrative picks an honest momentum line (or null)", () => {

@@ -83,7 +83,7 @@ import {
 } from "@/lib/taskMutations";
 import { completionForDate, getTaskCheckableItems, getTaskSubtaskSummary, isTaskCompleted, isTaskResolved, isTrackedTask, markTaskMissed, snoozeTaskLater, toggleSlotComplete, toggleSubtaskComplete, toggleTaskFromCheckbox } from "@/lib/taskCompletion";
 import { diffException, isTaskScheduledOn, occurrenceNote, resolveOccurrence } from "@/lib/taskOccurrence";
-import { cascadeMilestoneDates, normalizeMilestoneTimeline } from "@/lib/roadmapDates";
+import { cascadeMilestoneDates, moveMilestone, normalizeMilestoneTimeline } from "@/lib/roadmapDates";
 import { toggleRitualCompletion, appendRitualLog, undoLastRitualLog, toggleRitualStep, removeRitualLog } from "@/lib/ritualCompletions";
 import { MAX_RITUALS } from "@/lib/ritualColors";
 import { deleteGoal } from "@/lib/goalMutations";
@@ -1101,6 +1101,17 @@ export default function IOSScheduleApp() {
     });
   }
 
+  function handleMoveMilestone(id: string, direction: "up" | "down") {
+    setSchedule((prev) => {
+      const existing = (prev.milestones ?? []).find((item) => item.id === id);
+      if (!existing) return prev;
+      const plan = prev.plans.find((item) => item.id === existing.planId);
+      const other = (prev.milestones ?? []).filter((item) => item.planId !== existing.planId);
+      const own = (prev.milestones ?? []).filter((item) => item.planId === existing.planId);
+      return { ...prev, milestones: [...other, ...moveMilestone(own, id, direction, plan?.startDate)] };
+    });
+  }
+
   function handleCompleteMilestone(id: string) {
     setSchedule((prev) => {
       const existing = (prev.milestones ?? []).find((item) => item.id === id);
@@ -1764,6 +1775,7 @@ export default function IOSScheduleApp() {
                 onAddMilestone={(data) => handleAddMilestone(selectedPlan.id, data)}
                 onUpdateMilestone={handleUpdateMilestone}
                 onDeleteMilestone={handleDeleteMilestone}
+                onMoveMilestone={handleMoveMilestone}
                 onCompleteMilestone={handleCompleteMilestone}
                 onLinkTrackerToMilestone={(milestoneId, trackerId) => {
                   setSchedule((prev) => ({
