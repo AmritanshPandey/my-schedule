@@ -211,6 +211,55 @@ test("trackingStart is inclusive of its own day", () => {
   assert.equal(stat.series.length, 1, "the start date itself counts");
 });
 
+// ── Chart inputs ────────────────────────────────────────────────────────────
+
+test("points are daily totals with their dates, oldest first", () => {
+  const stat = buildTrackerStat(
+    tracker({ dailyTarget: 2000 }),
+    [entry("2026-08-31", 400), entry("2026-08-31", 600), entry(TODAY, 250)],
+    TODAY,
+  );
+  assert.deepEqual(stat.points, [
+    { date: "2026-08-31", value: 1000 },
+    { date: TODAY, value: 250 },
+  ], "two logs on one day are one point, not a spike");
+});
+
+test("startingValue falls back to the first entry, and is null with neither", () => {
+  const explicit = buildTrackerStat(tracker({ startingValue: 110 }), [entry(TODAY, 107)], TODAY);
+  assert.equal(explicit.startingValue, 110, "the configured value wins");
+
+  const inferred = buildTrackerStat(tracker(), [entry("2026-08-20", 99), entry(TODAY, 90)], TODAY);
+  assert.equal(inferred.startingValue, 99, "otherwise the earliest log");
+
+  const neither = buildTrackerStat(tracker(), [], TODAY);
+  assert.equal(neither.startingValue, null, "nothing to anchor a reference line to");
+});
+
+test("todayEntries honours trackingStart, like every other stat", () => {
+  // The regression: the card used to filter the raw list itself, so it showed
+  // "TODAY 107 kg" directly beneath "Nothing logged yet" whenever the tracking
+  // start date excluded that very entry.
+  const entries = [entry(TODAY, 107)];
+
+  const visible = buildTrackerStat(tracker(), entries, TODAY, "2026-08-01");
+  assert.equal(visible.todayEntries.length, 1);
+  assert.equal(visible.latestValue, 107);
+
+  const excluded = buildTrackerStat(tracker(), entries, TODAY, "2026-09-15");
+  assert.equal(excluded.latestValue, null, "the stat says nothing is logged…");
+  assert.deepEqual(excluded.todayEntries, [], "…so the today list must agree");
+});
+
+test("todayEntries excludes other days and other trackers", () => {
+  const stat = buildTrackerStat(
+    tracker(),
+    [entry(TODAY, 1), entry("2026-08-30", 2), entry(TODAY, 3, "other")],
+    TODAY,
+  );
+  assert.deepEqual(stat.todayEntries.map((e) => e.value), [1]);
+});
+
 // ── Grouping and the status ramp ────────────────────────────────────────────
 
 test("trackers group under their plan, in first-seen order", () => {

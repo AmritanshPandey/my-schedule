@@ -52,6 +52,23 @@ export interface TrackerStat {
   metToday: boolean;
   /** Per-day totals, oldest first — the sparkline's data. */
   series: number[];
+  /**
+   * Per-day totals with their dates, oldest first — what the chart plots.
+   * One point per day even for a metric logged several times, so a busy
+   * afternoon reads as one day rather than a spike.
+   */
+  points: Array<{ date: string; value: number }>;
+  /**
+   * Today's entries, already filtered by `trackingStart`.
+   *
+   * Carried on the stat rather than re-derived by the card: filtering the raw
+   * list there let a card show "TODAY 107 kg" directly under "Nothing logged
+   * yet", because the stats honoured the tracking-start date and the list
+   * didn't. One source, one answer.
+   */
+  todayEntries: MetricEntry[];
+  /** The value the tracker started from — the chart's reference line begins here. */
+  startingValue: number | null;
 }
 
 /**
@@ -154,6 +171,11 @@ export function buildTrackerStat(
     targetValue,
     metToday: isDaily && todayTotal >= tracker.dailyTarget!,
     series: totals.slice(-TRACKER_SERIES_LENGTH).map((t) => t.value),
+    points: totals,
+    todayEntries: mine.filter((e) => e.date === todayISO),
+    // Same fallback calculateMetricProgress uses, surfaced so the chart can
+    // anchor its reference line without re-deriving it.
+    startingValue: tracker.startingValue ?? (sorted.length > 0 ? sorted[0].value : null),
   };
 }
 

@@ -49,6 +49,23 @@ interface ProgressChartProps {
   color: AccentColor;
   metric: { name: string; unit: string };
   goalValue?: number;
+  /**
+   * Where the tracker started. Given alongside `goalValue`, the flat goal rule
+   * becomes a sloped **target line** from start to goal, so the chart answers
+   * "am I ahead or behind?" rather than only "how far is the goal?".
+   *
+   * Also lets the chart render before anything is logged: a start and a goal
+   * describe the whole journey on their own, which is exactly the state a new
+   * tracker is in. Omit it and this component behaves exactly as it always has.
+   */
+  startingValue?: number;
+  /**
+   * Drop the chart's own border and background so it can sit inside a card
+   * that already provides the surface. DESIGN.md forbids nested cards — and in
+   * dark mode this container's neutral-900 is the card's own colour, so the
+   * chart simply disappeared into it.
+   */
+  bare?: boolean;
 }
 
 const W = 400;
@@ -63,15 +80,24 @@ function fmtVal(v: number): string {
   return Number.isInteger(v) ? String(v) : v.toFixed(1);
 }
 
-export default function ProgressChart({ entries, color, metric, goalValue }: ProgressChartProps) {
+export default function ProgressChart({ entries, color, metric, goalValue, startingValue, bare = false }: ProgressChartProps) {
   const stroke = STROKE[color] ?? STROKE.cyan;
   const area = AREA[color] ?? AREA.cyan;
 
-  if (entries.length === 0) return null;
+  // A start and a goal describe the journey with nothing logged yet, so the
+  // chart still has something true to say. Without either, an empty tracker
+  // has no axis worth drawing.
+  const hasTargetLine = startingValue !== undefined && goalValue !== undefined;
+  if (entries.length === 0 && !hasTargetLine) return null;
 
   const values = entries.map((e) => e.value);
-  const rawMin = Math.min(...values, ...(goalValue !== undefined ? [goalValue] : []));
-  const rawMax = Math.max(...values, ...(goalValue !== undefined ? [goalValue] : []));
+  const bounds = [
+    ...values,
+    ...(goalValue !== undefined ? [goalValue] : []),
+    ...(startingValue !== undefined ? [startingValue] : []),
+  ];
+  const rawMin = Math.min(...bounds);
+  const rawMax = Math.max(...bounds);
   const padding = rawMax === rawMin ? Math.max(rawMax * 0.1, 1) : 0;
   const minVal = rawMin - padding;
   const maxVal = rawMax + padding;
@@ -86,8 +112,10 @@ export default function ProgressChart({ entries, color, metric, goalValue }: Pro
   const linePath = pts.map((p, i) => `${i === 0 ? "M" : "L"} ${p.x.toFixed(1)} ${p.y.toFixed(1)}`).join(" ");
   const baseY = PAD.top + chartH;
   const areaPath =
-    linePath +
-    ` L ${pts[pts.length - 1].x.toFixed(1)} ${baseY} L ${pts[0].x.toFixed(1)} ${baseY} Z`;
+    pts.length > 0
+      ? linePath + ` L ${pts[pts.length - 1].x.toFixed(1)} ${baseY} L ${pts[0].x.toFixed(1)} ${baseY} Z`
+      : "";
+  const toY = (v: number) => PAD.top + chartH - ((v - minVal) / valRange) * chartH;
 
   // Y-axis: 3 labels (min, mid, max)
   const yLabels = [rawMin, (rawMin + rawMax) / 2, rawMax];
@@ -98,7 +126,13 @@ export default function ProgressChart({ entries, color, metric, goalValue }: Pro
   for (let i = xStep; i < entries.length - 1; i += xStep) xLabelIndices.add(i);
 
   return (
-    <div className="overflow-hidden rounded-xl border border-neutral-200/80 bg-white dark:border-white/[0.08] dark:bg-neutral-900">
+    <div
+      className={
+        bare
+          ? "overflow-hidden"
+          : "overflow-hidden rounded-xl border border-neutral-200/80 bg-white dark:border-white/[0.08] dark:bg-neutral-900"
+      }
+    >
       <svg
         viewBox={`0 0 ${W} ${H}`}
         className="w-full"
@@ -143,20 +177,48 @@ export default function ProgressChart({ entries, color, metric, goalValue }: Pro
         })}
 
         {/* Area fill */}
-        <path d={areaPath} fill={area} />
+        {pts.length > 0 && <path d={areaPath} fill={area} />}
 
         {/* Line */}
-        <path
-          d={linePath}
-          fill="none"
-          stroke={stroke}
-          strokeWidth={2}
-          strokeLinecap="round"
-          strokeLinejoin="round"
-        />
+        {pts.length > 0 && (
+          <path
+            d={linePath}
+            fill="none"
+            stroke={stroke}
+            strokeWidth={2}
+            strokeLinecap="round"
+            strokeLinejoin="round"
+          />
+        )}
 
-        {/* Goal line */}
-        {goalValue !== undefined && (() => {
+        {/* Target line: start → goal, so the gap to the line is the answer. */}
+        {hasTargetLine && (() => {
+          const y0 = toY(startingValue!);
+          const y1 = toY(goalValue!);
+          return (
+            <g>
+              <line
+                x1={PAD.left} y1={y0.toFixed(1)}
+                x2={W - PAD.right} y2={y1.toFixed(1)}
+                stroke={stroke} strokeWidth={1.5}
+                strokeDasharray="4 3" strokeOpacity={0.55}
+              />
+              <text
+                x={PAD.left + 2} y={y0 - 4}
+                textAnchor="start" fontSize={8}
+                fill={stroke} fillOpacity={0.65}
+              >Start</text>
+              <text
+                x={W - PAD.right - 2} y={y1 - 4}
+                textAnchor="end" fontSize={8}
+                fill={stroke} fillOpacity={0.65}
+              >Goal</text>
+            </g>
+          );
+        })()}
+
+        {/* Flat goal rule — only when there is no start to slope from. */}
+        {!hasTargetLine && goalValue !== undefined && (() => {
           const gy = PAD.top + chartH - ((goalValue - minVal) / valRange) * chartH;
           return (
             <g>

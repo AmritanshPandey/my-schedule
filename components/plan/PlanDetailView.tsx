@@ -73,7 +73,7 @@ import { AICyclingStatus } from "@/components/ai/AIThinkingStatus";
 import { useAIEnabled } from "@/lib/ai/useAIEnabled";
 import AIActionSheet, { type ResultItem } from "@/components/ai/AIActionSheet";
 import { detectMeasurableGoal, type MeasurableGoal } from "@/lib/milestoneIntelligence";
-import { uid } from "@/lib/taskMutations";
+import { getSlots, uid } from "@/lib/taskMutations";
 
 
 
@@ -241,6 +241,7 @@ interface PlanDetailViewProps {
   onAddTask: (planId: string) => void;
   onEditTask: (task: Task) => void;
   onDeleteLinkedTask: (task: Task, activeDays: DayKey[]) => void;
+  onDeleteTaskSlot: (task: Task, day: DayKey, slotIndex: number) => void;
   // Tracker handlers
   onAddTracker: (
     planId: string,
@@ -295,6 +296,7 @@ export default function PlanDetailView({
   onAddTask,
   onEditTask,
   onDeleteLinkedTask,
+  onDeleteTaskSlot,
   onAddTracker,
   onUpdateTracker,
   onDeleteTracker,
@@ -470,7 +472,7 @@ export default function PlanDetailView({
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
   // ── Task detail sheet ────────────────────────────────────────────────────
-  const [viewingTask, setViewingTask] = useState<{ task: Task; activeDays: DayKey[] } | null>(null);
+  const [viewingTask, setViewingTask] = useState<{ task: Task; activeDays: DayKey[]; sourceDay: DayKey } | null>(null);
 
   // ── Milestone detail sheet ───────────────────────────────────────────────
   const [viewingMilestone, setViewingMilestone] = useState<Milestone | null>(null);
@@ -856,7 +858,7 @@ export default function PlanDetailView({
       <button
         key={`${task.id}-${activeDays.join("")}`}
         type="button"
-        onClick={() => setViewingTask({ task, activeDays })}
+        onClick={() => setViewingTask({ task, activeDays, sourceDay: activeDays[0] })}
         className="group w-full flex items-center gap-3 rounded-xl border-b border-neutral-100 px-3 py-3.5 text-left transition-colors last:border-b-0 hover:bg-neutral-50 active:bg-neutral-100 dark:border-white/[0.05] dark:hover:bg-white/[0.04] dark:active:bg-white/[0.06]"
       >
         <div className="flex-1 min-w-0">
@@ -2563,8 +2565,9 @@ export default function PlanDetailView({
       {/* Task detail sheet */}
       <BottomSheet open={!!viewingTask} onClose={() => setViewingTask(null)} maxHeight="85vh">
         {viewingTask && (() => {
-          const { task, activeDays: taskDays } = viewingTask;
+          const { task, activeDays: taskDays, sourceDay } = viewingTask;
           const duration = formatDuration(task.startTime, task.endTime);
+          const slots = getSlots(task);
           const taskItems = getTaskCheckableItems(task, plan);
           const subtaskCount = taskItems.length;
           const isRoutine = task.taskType === "session";
@@ -2608,6 +2611,38 @@ export default function PlanDetailView({
                   </div>
                 </div>
               </div>
+
+              {slots.length > 1 && (
+                <div className="mb-6">
+                  <p className="mb-2.5 text-[11px] font-bold uppercase tracking-[0.08em] text-neutral-400 dark:text-neutral-500">
+                    Time blocks
+                  </p>
+                  <div className="space-y-1.5">
+                    {slots.map((slot, slotIndex) => (
+                      <div
+                        key={`${slot.startTime}-${slot.endTime}-${slotIndex}`}
+                        className="flex items-center justify-between gap-3 rounded-xl bg-neutral-50 px-3.5 py-2 dark:bg-white/[0.04]"
+                      >
+                        <span className="text-[14px] font-medium text-neutral-700 dark:text-neutral-300">
+                          {formatDisplayTime(slot.startTime)}{slot.endTime && ` - ${formatDisplayTime(slot.endTime)}`}
+                        </span>
+                        <IconButton
+                          label={`Delete ${formatDisplayTime(slot.startTime)} time block`}
+                          variant="dangerGhost"
+                          size="xs"
+                          radius="xl"
+                          onClick={() => {
+                            onDeleteTaskSlot(task, sourceDay, slotIndex);
+                            setViewingTask(null);
+                          }}
+                        >
+                          <IconTrash size={15} strokeWidth={1.8} />
+                        </IconButton>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
 
               {/* Subtasks */}
               {subtaskCount > 0 && (

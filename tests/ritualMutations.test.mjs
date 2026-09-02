@@ -144,3 +144,53 @@ test("a no-op occurrence move returns the same reference", () => {
   const before = sched([times(["08:00", "13:00"])]);
   assert.equal(setRitualTime("r1", "s0", "08:00")(before), before);
 });
+
+// ── Duplicating (Alt held with the drag modifier) ───────────────────────────
+
+const { duplicateRitualAt } = await import("../lib/ritualMutations.ts");
+let idN = 0;
+const nextId = () => `new${++idN}`;
+
+test("duplicating a plain routine adds a second one at the new time", () => {
+  idN = 0;
+  const out = duplicateRitualAt("r1", undefined, "17:00", nextId)(sched([plain()]));
+  assert.equal(out.rituals.length, 2);
+  assert.equal(out.rituals[0].time, "08:00", "the original must not move");
+  assert.deepEqual(
+    { id: out.rituals[1].id, title: out.rituals[1].title, time: out.rituals[1].time },
+    { id: "new1", title: "Stretch", time: "17:00" },
+  );
+});
+
+test("duplicating one occurrence of a times routine adds an occurrence, not a routine", () => {
+  // A second Ritual would split one habit's completion across two rows and
+  // break its day-complete rule.
+  idN = 0;
+  const out = duplicateRitualAt("r1", "s1", "16:00", nextId)(sched([times(["08:00", "13:00"])]));
+  assert.equal(out.rituals.length, 1);
+  assert.deepEqual(labelsOf(out.rituals[0]), ["08:00", "13:00", "16:00"]);
+});
+
+test("a duplicated occurrence lands sorted and can become the earliest", () => {
+  idN = 0;
+  const out = duplicateRitualAt("r1", "s1", "06:30", nextId)(sched([times(["08:00", "13:00"])]));
+  assert.deepEqual(labelsOf(out.rituals[0]), ["06:30", "08:00", "13:00"]);
+  assert.equal(out.rituals[0].time, "06:30", "ritual.time mirrors the earliest occurrence");
+});
+
+test("duplicating respects the routine ceiling", () => {
+  idN = 0;
+  const before = sched([plain(), plain({ id: "r2" })]);
+  assert.equal(duplicateRitualAt("r1", undefined, "17:00", nextId, 2)(before), before);
+  // The ceiling applies to whole routines, not to occurrences of one.
+  const timesBefore = sched([times(["08:00"]), plain({ id: "r2" })]);
+  const out = duplicateRitualAt("r1", "s0", "12:00", nextId, 2)(timesBefore);
+  assert.deepEqual(labelsOf(out.rituals[0]), ["08:00", "12:00"]);
+});
+
+test("duplicating an unknown routine, or to an invalid time, changes nothing", () => {
+  idN = 0;
+  const before = sched([plain()]);
+  assert.equal(duplicateRitualAt("missing", undefined, "17:00", nextId)(before), before);
+  assert.equal(duplicateRitualAt("r1", undefined, "nope", nextId)(before), before);
+});

@@ -80,6 +80,52 @@ export function retimeSlot<T extends Task | Omit<Task, "id">>(
 }
 
 /**
+ * Remove one phase from a multi-slot task while preserving its sibling phases
+ * and remapping their completion indices. A single-slot task is left intact so
+ * callers can route its removal through the normal task-delete flow.
+ */
+export function removeTaskSlot(
+  taskId: string,
+  day: DayKey,
+  slotIndex: number
+): (prev: Schedule) => Schedule {
+  return (prev) => {
+    const tasks = prev.activities[day] ?? [];
+    const task = tasks.find((item) => item.id === taskId);
+    if (!task) return prev;
+
+    const slots = getSlots(task);
+    if (slots.length <= 1 || slotIndex < 0 || slotIndex >= slots.length) return prev;
+
+    const completedIndices = task.completed
+      ? slots.map((_, index) => index)
+      : task.completedSlotIndices ?? [];
+    const nextCompletedIndices = completedIndices
+      .filter((index) => index !== slotIndex)
+      .map((index) => (index > slotIndex ? index - 1 : index));
+    const remainingSlots = slots.filter((_, index) => index !== slotIndex);
+    const completed = nextCompletedIndices.length === remainingSlots.length;
+
+    return {
+      ...prev,
+      activities: {
+        ...prev.activities,
+        [day]: tasks.map((item) =>
+          item.id !== taskId
+            ? item
+            : {
+                ...withSlots({ ...item, slots: remainingSlots }),
+                completedSlotIndices: nextCompletedIndices,
+                completed,
+                completedAt: completed ? item.completedAt : undefined,
+              }
+        ),
+      },
+    };
+  };
+}
+
+/**
  * Relocate one slot of a task between weekday buckets (Cmd/Ctrl-drag a block
  * to a different day column). Same-day is a plain retimeSlot; cross-day
  * removes the slot from sourceDay (dropping the whole entry if it was the
@@ -480,6 +526,54 @@ function freshCopy(task: Task): Task {
     ...rest
   } = task;
   return { ...rest, id: uid() };
+}
+
+/**
+ * Drop an independent copy of one slot at a new time, leaving the original
+ * exactly where it was.
+ *
+ * The Alt-variant of `moveTaskSlot`, and deliberately not a special case of it:
+ * a move merges into an existing copy on the target day and remaps that day's
+ * completed-slot indices, whereas a duplicate is always a NEW task. Sharing the
+ * code would mean the copy inheriting the target's completion state.
+ *
+ * The copy starts fresh — no completion, no history, no per-date exceptions —
+ * for the same reason `duplicateDay` clears them: they describe occurrences of
+ * the original, not of the thing just created. Recurrence is kept so "another
+ * one of these" really is another one of these, except a `once` rule, which is
+ * repinned to the drop date (leaving it on the source's date would file the
+ * copy on a day it isn't drawn on).
+ */
+export function duplicateTaskSlot(
+  taskId: string,
+  sourceDay: DayKey,
+  slotIndex: number,
+  targetDay: DayKey,
+  targetDateISO: string,
+  startTime: string,
+  endTime: string
+): (prev: Schedule) => Schedule {
+  return (prev) => {
+    const sourceTask = (prev.activities[sourceDay] ?? []).find((t) => t.id === taskId);
+    if (!sourceTask) return prev; // dragged task vanished mid-drag — no-op
+    void slotIndex; // the copy is single-slot; which slot was grabbed only set the time
+
+    const copy = withSlots<Task>({
+      ...freshCopy(sourceTask),
+      ...(sourceTask.recurrence?.type === "once"
+        ? { recurrence: { ...sourceTask.recurrence, dateISO: targetDateISO } }
+        : null),
+      slots: [{ startTime, endTime }],
+    });
+
+    return {
+      ...prev,
+      activities: {
+        ...prev.activities,
+        [targetDay]: [...(prev.activities[targetDay] ?? []), copy],
+      },
+    };
+  };
 }
 
 /**

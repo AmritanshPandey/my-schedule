@@ -81,6 +81,7 @@ export const TaskSchema = z.object({
   recurrence: recurrence.optional(),
   activeFrom: isoDate.optional(),
   activeUntil: isoDate.optional(),
+  mergeGroupId: z.string().optional(),
 }).passthrough();
 
 const planMetricGoal = z.object({

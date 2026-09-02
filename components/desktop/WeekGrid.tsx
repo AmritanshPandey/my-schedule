@@ -3,7 +3,7 @@
 import type { PointerEvent as ReactPointerEvent, ReactNode } from "react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { AnimatePresence, m } from "framer-motion";
-import { IconChevronLeft, IconChevronRight, IconDotsVertical, IconClockX, IconAlertTriangle, IconTrash } from "@tabler/icons-react";
+import { IconChevronLeft, IconChevronRight, IconDotsVertical, IconClockX, IconAlertTriangle, IconTrash, IconEdit, IconCheck } from "@tabler/icons-react";
 import type { DayKey, Plan, Ritual, RitualCompletion, Schedule, Task, TaskSlot } from "@/lib/useScheduleDB";
 import { DAYS } from "@/lib/useScheduleDB";
 import { getSlots, sortTasksByTime } from "@/lib/taskMutations";
@@ -32,6 +32,7 @@ import {
   TIMELINE_END_MINUTES,
 } from "@/lib/timeline/displayWindow";
 import { SCHEDULE_DAY_HANDOVER_MINUTES, taskContinuations } from "@/lib/timeline/overnight";
+import { findMergePairs } from "@/lib/taskMerge";
 import TimelineDraftCard from "@/components/timeline/TimelineDraftCard";
 import RitualStrip from "@/components/timeline/RitualStrip";
 
@@ -59,18 +60,42 @@ function fmtRail(m: number): string {
   return `${h}:${String(mm).padStart(2, "0")} ${ap}`;
 }
 
+/** The second half of a "merged" block — see BlockLayout.kind. */
+interface MergedPartner {
+  task: Task;
+  slot: TaskSlot;
+  slotIndex: number;
+}
+
+/** One side of a merged block, as handed to `renderMergedCard` — the task
+ *  plus an already-bound toggle so the render prop doesn't need day/dateISO
+ *  context of its own. */
+export interface MergedCardHalf {
+  task: Task;
+  slot: TaskSlot;
+  slotIndex: number;
+  onToggle: () => void;
+}
+
 interface BlockLayout {
   /**
    * "continuation" = the tail of *yesterday's* task, finishing in this column.
    * Derived and read-only: it has no identity of its own, and every mutation
    * path is gated on this rather than on the column's day, because completing
    * or deleting through it would write the source task into the wrong bucket.
+   *
+   * "merged" = two tasks sharing a `mergeGroupId` (see lib/taskMerge.ts),
+   * rendered as one block spanning both instead of splitting into lanes.
+   * `task`/`slot`/`slotIndex` describe whichever of the pair sorts first;
+   * `partner` carries the other. Each half still completes/deletes/misses
+   * independently — merging only changes layout.
    */
-  kind: "task" | "continuation";
+  kind: "task" | "continuation" | "merged";
   task: Task;
   /** The specific slot this block renders (a multi-slot task yields one block per slot). */
   slot: TaskSlot;
   slotIndex: number;
+  partner?: MergedPartner;
   top: number;
   height: number;
   leftPct: number;
@@ -84,7 +109,8 @@ function buildDayLayout(
   carryIn: Task[] = [],
 ): { timed: BlockLayout[]; untimed: Task[] } {
   const untimed: Task[] = [];
-  const parsed: { kind: BlockLayout["kind"]; task: Task; slot: TaskSlot; slotIndex: number; s: number; e: number }[] = [];
+  type ParsedEntry = { kind: BlockLayout["kind"]; task: Task; slot: TaskSlot; slotIndex: number; s: number; e: number; partner?: MergedPartner };
+  let parsed: ParsedEntry[] = [];
   for (const t of tasks) {
     const slots = getSlots(t);
     let anyTimed = false;
@@ -100,6 +126,32 @@ function buildDayLayout(
       parsed.push({ kind: "task", task: t, slot, slotIndex, s, e });
     });
     if (!anyTimed) untimed.push(t);
+  }
+  // Collapse merge pairs before lane packing runs at all, so a merged pair
+  // never gets split into side-by-side lanes in the first place. Only plain
+  // "task" entries participate — a continuation merging with something would
+  // be a confusing edge case (whose day does the combined block even belong
+  // to?), so it's left out on purpose; it renders on its own as before.
+  if (parsed.some((p) => p.task.mergeGroupId)) {
+    const pairs = findMergePairs(parsed.filter((p) => p.kind === "task"));
+    if (pairs.size > 0) {
+      const consumed = new Set<ParsedEntry>();
+      const mergedEntries: ParsedEntry[] = [];
+      for (const [a, b] of pairs.values()) {
+        consumed.add(a);
+        consumed.add(b);
+        mergedEntries.push({
+          kind: "merged",
+          task: a.task,
+          slot: a.slot,
+          slotIndex: a.slotIndex,
+          partner: { task: b.task, slot: b.slot, slotIndex: b.slotIndex },
+          s: Math.min(a.s, b.s),
+          e: Math.max(a.e, b.e),
+        });
+      }
+      parsed = [...parsed.filter((p) => !consumed.has(p)), ...mergedEntries];
+    }
   }
   // Carried-in tails share the lane packing below rather than being drawn on a
   // separate layer, so a 4-7 AM continuation and a 6 AM workout split the
@@ -134,6 +186,7 @@ function buildDayLayout(
         task: c.task,
         slot: c.slot,
         slotIndex: c.slotIndex,
+        partner: c.partner,
         top,
         height: Math.max(22, bottom - top),
         widthPct: 100 / lanes,
@@ -216,7 +269,7 @@ interface WeekGridProps {
   onEditTask: (task: Task, dateISO?: string) => void;
   /** `dateISO` lets the confirm dialog offer "remove this date only" — the grid
    *  is the one surface that always knows which dated occurrence was clicked. */
-  onDeleteTask: (taskId: string, day: DayKey, dateISO?: string) => void;
+  onDeleteTask: (taskId: string, day: DayKey, dateISO?: string, slotIndex?: number) => void;
   onToggleTaskComplete: (taskId: string, allSubtaskIds: string[], day: DayKey, dateISO: string) => void;
   /** Independent completion for one phase of a multi-slot task. */
   onToggleSlot: (taskId: string, slotIndex: number, day: DayKey, dateISO: string) => void;
@@ -251,6 +304,24 @@ interface WeekGridProps {
    * single-occurrence kinds. `nextTime` is a raw "HH:MM", what the model stores.
    */
   onMoveRitual?: (ritualId: string, stepId: string | undefined, nextTime: string) => void;
+  /**
+   * The Alt-held variant of the two drags: leave the original alone and drop a
+   * copy at the release point. Same arguments as the move callbacks, because
+   * the gesture is identical up to the moment of release — only the verb
+   * differs. Separate callbacks rather than a `copy` flag so a caller that
+   * hasn't implemented duplication simply doesn't pass one, and the grid then
+   * falls back to moving instead of silently doing nothing.
+   */
+  onDuplicateTask?: (
+    taskId: string,
+    sourceDay: DayKey,
+    slotIndex: number,
+    targetDay: DayKey,
+    targetDateISO: string,
+    startTime: string,
+    endTime: string,
+  ) => void;
+  onDuplicateRitual?: (ritualId: string, stepId: string | undefined, nextTime: string) => void;
   /** Grid block hover-icon, today only, not-yet-missed: mark it missed. */
   onMarkMissed?: (taskId: string, allSubtaskIds: string[], day: DayKey, dateISO: string) => void;
   /**
@@ -284,6 +355,20 @@ interface WeekGridProps {
     /** The concrete calendar date represented by this task block. */
     dateISO?: string,
   ) => ReactNode;
+  /**
+   * Render prop for a merged block (two tasks sharing a `mergeGroupId` — see
+   * lib/taskMerge.ts). Kept separate from `renderCard` rather than overloading
+   * it with a second optional task: each half needs its own onToggle, and a
+   * merged block has no single-task drag/resize/gridMenuAction to thread
+   * through (see BlockLayout.kind's "merged" doc — those are v1 scope cuts).
+   */
+  renderMergedCard: (
+    primary: MergedCardHalf,
+    partner: MergedCardHalf,
+    height: number,
+    widthPct: number,
+    dateISO?: string,
+  ) => ReactNode;
 }
 
 export function WeekGrid({
@@ -313,10 +398,13 @@ export function WeekGrid({
   onCreateTaskAtTime,
   onMoveTask,
   onMoveRitual,
+  onDuplicateTask,
+  onDuplicateRitual,
   onMarkMissed,
   onMarkSlotMissed,
   onOpenMissedRecovery,
   renderCard,
+  renderMergedCard,
 }: WeekGridProps) {
   const [showCustomPicker, setShowCustomPicker] = useState(false);
   const [dragCreate, setDragCreate] = useState<{ day: DayKey; startMin: number; endMin: number } | null>(null);
@@ -356,6 +444,7 @@ export function WeekGrid({
     taskId: string; slotIndex: number; task: Task; slot: TaskSlot;
     sourceDay: DayKey; targetDay: DayKey;
     mode: "move" | "resize-start" | "resize-end";
+    duplicate: boolean;
     // Original block bounds (mapped-minute domain), captured once at
     // pointerdown — the anchor a resize holds fixed on one side.
     fixedStartMin: number; fixedEndMin: number;
@@ -392,19 +481,29 @@ export function WeekGrid({
   // Consumed by the routine's own toggle handler so the click that follows
   // pointerup after a real drag doesn't also tick the routine off.
   const suppressRitualClickRef = useRef(false);
-  // Cmd/Ctrl-held affordance (cursor-grab) so the gesture is discoverable
-  // before a user ever drags. `blur` resets it so alt-tabbing away while
-  // holding the key can't leave it stuck on.
-  const [modifierHeld, setModifierHeld] = useState(false);
+  const [isEditingSchedule, setIsEditingSchedule] = useState(false);
+  // Alt advertises copy while schedule editing is active. The drag itself
+  // captures this intent at pointer-down, so a keyup cannot turn a deliberate
+  // duplicate into a move before the pointer is released.
+  const [altHeld, setAltHeld] = useState(false);
   useEffect(() => {
     function onKeyDown(e: KeyboardEvent) {
-      if (e.key === "Meta" || e.key === "Control") setModifierHeld(true);
+      if (e.key === "Alt") setAltHeld(true);
+      if (e.key === "Escape") {
+        createDragRef.current = null;
+        moveDragRef.current = null;
+        ritualDragRef.current = null;
+        setDragCreate(null);
+        setDragMove(null);
+        setRitualDrag(null);
+        setIsEditingSchedule(false);
+      }
     }
     function onKeyUp(e: KeyboardEvent) {
-      if (e.key === "Meta" || e.key === "Control") setModifierHeld(false);
+      if (e.key === "Alt") setAltHeld(false);
     }
     function onBlur() {
-      setModifierHeld(false);
+      setAltHeld(false);
     }
     window.addEventListener("keydown", onKeyDown);
     window.addEventListener("keyup", onKeyUp);
@@ -587,6 +686,7 @@ export function WeekGrid({
   const hasUntimed = days.some((d) => d.tasks.some((t) => parseTimeToMinutes(t.startTime) == null));
 
   function handleDayPointerDown(day: DayKey, e: ReactPointerEvent<HTMLDivElement>) {
+    if (!isEditingSchedule) return;
     if (e.pointerType === "mouse" && e.button !== 0) return;
     if ((e.target as HTMLElement).closest("[data-task-block],[data-ritual-mark]")) return;
     if (clearDragCreateTimerRef.current) {
@@ -612,7 +712,7 @@ export function WeekGrid({
     columnEl.setPointerCapture(e.pointerId);
   }
 
-  // ── Cmd/Ctrl-drag to reschedule, relocate, or resize a task block ───────────
+  // ── Edit-mode drag to reschedule, relocate, or resize a task block ──────────
   // Available on every column, any day (past, present, future). A
   // continuation block (the tail of an overnight task) is excluded from
   // "move" and "resize-start" — it belongs to the *previous* day's bucket, so
@@ -631,8 +731,8 @@ export function WeekGrid({
     mode: "move" | "resize-start" | "resize-end" = "move",
   ) {
     if (!onMoveTask) return;
+    if (!isEditingSchedule) return;
     if (isContinuation && mode !== "resize-end") return;
-    if (!(e.metaKey || e.ctrlKey)) return; // no modifier — let the click/checkbox behave normally
     if (e.pointerType === "mouse" && e.button !== 0) return;
     if ((e.target as HTMLElement).closest("button")) return; // checkbox / grid-menu icon
     e.stopPropagation(); // don't also let the day column's create-drag (or, for
@@ -678,6 +778,7 @@ export function WeekGrid({
       sourceDay: day,
       targetDay: day,
       mode,
+      duplicate: mode === "move" && e.altKey && !!onDuplicateTask,
       fixedStartMin: blockStartMappedMin,
       fixedEndMin: blockEndMappedMin,
       durationMin,
@@ -708,7 +809,7 @@ export function WeekGrid({
     // on ANY routine is then silently swallowed.
     suppressRitualClickRef.current = false;
     if (!onMoveRitual) return;
-    if (!(e.metaKey || e.ctrlKey)) return; // no modifier — leave the tap-to-complete alone
+    if (!isEditingSchedule) return;
     if (e.pointerType === "mouse" && e.button !== 0) return;
     const columnEl = (e.currentTarget as HTMLElement).closest<HTMLDivElement>("[data-day-col]");
     if (!columnEl) return;
@@ -728,6 +829,7 @@ export function WeekGrid({
   useEffect(() => {
     if (!onMoveRitual) return;
     const moveRitual = onMoveRitual;
+    const duplicateRitual = onDuplicateRitual;
 
     // Deliberately no requestAnimationFrame batching here, unlike the task
     // drag. Pointer moves are already coalesced to about one per frame, so the
@@ -775,7 +877,12 @@ export function WeekGrid({
       );
       // Mapped-domain minutes read an overnight time as its hour plus 24h;
       // minutesToInputTime's own modulo brings it back.
-      moveRitual(drag.ritualId, drag.stepId, minutesToInputTime(releaseMin));
+      const nextTime = minutesToInputTime(releaseMin);
+      // Read from the release event, not from React state: the keyup that
+      // would clear `altHeld` can land during the drag, and what the user was
+      // holding when they let go is what they meant.
+      const commit = e.altKey && duplicateRitual ? duplicateRitual : moveRitual;
+      commit(drag.ritualId, drag.stepId, nextTime);
     }
 
     window.addEventListener("pointermove", onPointerMove);
@@ -786,11 +893,12 @@ export function WeekGrid({
       window.removeEventListener("pointerup", onPointerUp);
       window.removeEventListener("pointercancel", onPointerUp);
     };
-  }, [onMoveRitual, startMin, endMin]);
+  }, [onMoveRitual, onDuplicateRitual, startMin, endMin]);
 
   useEffect(() => {
     if (!onMoveTask) return;
     const moveTask = onMoveTask; // narrowed once — closures below can't retain the guard's narrowing
+    const duplicateTask = onDuplicateTask;
     let rafId: number | null = null;
     let pendingPreviewMin: number | null = null;
     let pendingPreviewDuration: number | null = null;
@@ -904,6 +1012,7 @@ export function WeekGrid({
         weekDates.find((w) => w.day === drag.targetDay)?.date
           ?? weekDates.find((w) => w.day === drag.sourceDay)!.date
       );
+      const commitTask = drag.duplicate && duplicateTask ? duplicateTask : moveTask;
       if (drag.fromContinuationTail) {
         // The ghost lived in the *next* day's column (targetDateISO above),
         // but the slot itself is still filed under the previous day — commit
@@ -911,12 +1020,12 @@ export function WeekGrid({
         // handover the ghost was anchored to.
         const commitDay = DAYS[(DAYS.indexOf(drag.sourceDay) + 6) % 7];
         const commitDateISO = addDaysToISO(targetDateISO, -1);
-        moveTask(
+        commitTask(
           drag.taskId, commitDay, drag.slotIndex, commitDay, commitDateISO,
           minutesToDisplayTime(drag.trueStartMin), minutesToDisplayTime(newEndMin),
         );
       } else {
-        moveTask(
+        commitTask(
           drag.taskId, drag.sourceDay, drag.slotIndex, drag.targetDay, targetDateISO,
           minutesToDisplayTime(newStartMin), minutesToDisplayTime(newEndMin),
         );
@@ -1025,6 +1134,19 @@ export function WeekGrid({
         </div>
 
           <div className="flex shrink-0 items-center gap-2 pt-7">
+            <button
+              type="button"
+              aria-pressed={isEditingSchedule}
+              onClick={() => { haptic("light"); setIsEditingSchedule((editing) => !editing); }}
+              className={`flex h-10 items-center gap-2 rounded-full px-3.5 text-[13px] font-bold transition-colors ${
+                isEditingSchedule
+                  ? "bg-neutral-950 text-white dark:bg-white dark:text-neutral-950"
+                  : "border border-neutral-200 text-neutral-600 hover:bg-neutral-100 hover:text-neutral-950 dark:border-white/[0.10] dark:text-neutral-300 dark:hover:bg-white/[0.07] dark:hover:text-white"
+              }`}
+            >
+              {isEditingSchedule ? <IconCheck size={16} strokeWidth={2.4} /> : <IconEdit size={16} strokeWidth={2.2} />}
+              {isEditingSchedule ? "Done editing" : "Edit schedule"}
+            </button>
             <button
               type="button"
               onClick={() => { haptic("light"); onWeekToday(); }}
@@ -1229,6 +1351,7 @@ export function WeekGrid({
 
                 {timed.map((layout) => {
                   const isContinuation = layout.kind === "continuation";
+                  const isMerged = layout.kind === "merged";
                   // The source block is cut at the bottom by the day's end; the
                   // continuation is cut at the top by the same instant.
                   const cutAtBottom =
@@ -1277,10 +1400,14 @@ export function WeekGrid({
                   // which column the ghost is currently hovering over.
                   const isBeingMoved =
                     dragMove?.taskId === layout.task.id && dragMove?.slotIndex === layout.slotIndex && dragMove?.sourceDay === day;
-                  const canDragToMove = !!onMoveTask && !isContinuation;
+                  // Merged blocks don't drag or resize in v1 — whose edges
+                  // would move is genuinely ambiguous with two tasks in one
+                  // block; each half's time still edits independently via
+                  // its own TaskSheet. See BlockLayout.kind's "merged" doc.
+                  const canDragToMove = !!onMoveTask && !isContinuation && !isMerged;
                   // The tail's bottom edge is the one continuation handle
                   // that *is* meaningful — see handleTaskBlockPointerDown.
-                  const canResizeEnd = !!onMoveTask;
+                  const canResizeEnd = !!onMoveTask && !isMerged;
                   // The block's single hover-revealed corner icon.
                   //
                   // Cmd/Ctrl held wins the slot outright and turns it into
@@ -1298,13 +1425,21 @@ export function WeekGrid({
                   // right historical flag for past days). Never on a continuation.
                   // A multi-slot task's mark-missed dispatches per-phase
                   // (onMarkSlotMissed) instead of whole-task (onMarkMissed).
-                  const gridMenuAction = isContinuation
+                  // No corner menu on a merged block in v1 either — with two
+                  // tasks in one card there's no single "this block" to
+                  // delete/mark-missed; use each half's own TaskSheet.
+                  const gridMenuAction = isContinuation || isMerged
                     ? undefined
-                    : modifierHeld && !readOnly
+                    : isEditingSchedule && !readOnly
                     ? {
-                        label: "Delete task",
+                        label: totalSlots > 1 ? "Delete time block" : "Delete task",
                         icon: <IconTrash size={13} strokeWidth={2} />,
-                        onClick: () => onDeleteTask(layout.task.id, day, dateISO),
+                        onClick: () => onDeleteTask(
+                          layout.task.id,
+                          day,
+                          dateISO,
+                          totalSlots > 1 ? layout.slotIndex : undefined,
+                        ),
                         danger: true,
                       }
                     : slotMissed && onOpenMissedRecovery
@@ -1334,7 +1469,18 @@ export function WeekGrid({
                       // the status highlight and the card it's meant to trace.
                       className={`absolute ${isCurrent ? "rounded-[8px] shadow-now" : ""} ${
                         isOverdue ? "rounded-[8px] ring-1 ring-amber-400/70 dark:ring-amber-500/50" : ""
-                      } ${isBeingMoved ? "opacity-30" : ""} ${canDragToMove && modifierHeld ? "cursor-grab" : ""}`}
+                      } ${isBeingMoved && !altHeld ? "opacity-30" : ""} ${
+                        // `[&_*]:` reaches the card inside. TaskBlockCard sets
+                        // its own cursor-pointer on the element that actually
+                        // sits under the mouse, so a bare cursor-* here never
+                        // showed — the grab affordance has been invisible on
+                        // task blocks since it was added.
+                        canDragToMove && isEditingSchedule
+                          ? altHeld
+                            ? "cursor-copy [&_*]:cursor-copy"
+                            : "cursor-grab [&_*]:cursor-grab"
+                          : ""
+                      }`}
                       style={{
                         top: layout.top + TASK_VERTICAL_INSET,
                         height: visualHeight,
@@ -1361,14 +1507,12 @@ export function WeekGrid({
                           : undefined
                       }
                     >
-                      {/* Cmd/Ctrl-held resize handles — grab the top or bottom
-                          edge to extend/shrink just that side, independent of
-                          the "move" gesture that covers the rest of the card.
-                          Inert (no pointer-events) until the modifier is held,
-                          so a plain hover never intercepts normal clicks. A
+                        {/* Edit-mode resize handles — grab the top or bottom edge
+                          to extend/shrink just that side, independent of the
+                          "move" gesture that covers the rest of the card. A
                           continuation only gets the bottom one: its top isn't
                           the task's real start (see canResizeEnd above). */}
-                      {(canDragToMove || canResizeEnd) && modifierHeld && (
+                        {isEditingSchedule && (canDragToMove || canResizeEnd) && (
                         <>
                           {canDragToMove && (
                             <div
@@ -1388,7 +1532,37 @@ export function WeekGrid({
                           )}
                         </>
                       )}
-                      {renderCard(
+                      {isMerged && layout.partner ? (() => {
+                        const partner = layout.partner;
+                        const partnerTotalSlots = getSlots(partner.task).length;
+                        const partnerSubtaskIds = getTaskCheckableItems(
+                          partner.task,
+                          partner.task.planId ? plansById.get(partner.task.planId) ?? null : null
+                        ).map((item) => item.id);
+                        return renderMergedCard(
+                          {
+                            task: layout.task,
+                            slot: layout.slot,
+                            slotIndex: layout.slotIndex,
+                            onToggle: () => {
+                              if (totalSlots > 1) onToggleSlot(layout.task.id, layout.slotIndex, day, dateISO);
+                              else onToggleTaskComplete(layout.task.id, allSubtaskIds, day, dateISO);
+                            },
+                          },
+                          {
+                            task: partner.task,
+                            slot: partner.slot,
+                            slotIndex: partner.slotIndex,
+                            onToggle: () => {
+                              if (partnerTotalSlots > 1) onToggleSlot(partner.task.id, partner.slotIndex, day, dateISO);
+                              else onToggleTaskComplete(partner.task.id, partnerSubtaskIds, day, dateISO);
+                            },
+                          },
+                          layout.height,
+                          layout.widthPct,
+                          dateISO,
+                        );
+                      })() : renderCard(
                         layout.task,
                         layout.height,
                         layout.widthPct,
@@ -1396,7 +1570,7 @@ export function WeekGrid({
                         // `day`/`dateISO` here are *this* column's, but the task
                         // lives in the previous day's bucket, so completing or
                         // deleting through it would write to the wrong day.
-                        readOnly || isContinuation,
+                        readOnly || isContinuation || isEditingSchedule,
                         () => {
                           if (isContinuation) return;
                           if (totalSlots > 1) onToggleSlot(layout.task.id, layout.slotIndex, day, dateISO);
@@ -1433,8 +1607,11 @@ export function WeekGrid({
                           ritual={occ.ritual}
                           time={occ.time}
                           completed={completed}
-                          grabbable={!!onMoveRitual && modifierHeld}
-                          dragging={isBeingDragged}
+                          grabbable={!!onMoveRitual && isEditingSchedule}
+                          copying={altHeld && !!onDuplicateRitual}
+                          // Fading the source says "this is leaving". With Alt
+                          // held it isn't — the original stays and a copy lands.
+                          dragging={isBeingDragged && !altHeld}
                           onPointerDown={
                             onMoveRitual
                               ? (e) => handleRitualPointerDown(e, day, key, occ.ritual.id, occ.stepId, mark.top)
@@ -1469,8 +1646,11 @@ export function WeekGrid({
                     <div className="flex items-center gap-1.5">
                       <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-emerald-500" />
                       <span className="h-px flex-1 bg-emerald-500/70" />
-                      <span className="rounded-full bg-emerald-500 px-1.5 py-0.5 text-[10px] font-bold tabular-nums leading-none text-white">
-                        {fmtRail(((ritualDrag.previewMin % 1440) + 1440) % 1440)}
+                      <span className="flex items-center gap-1 rounded-full bg-emerald-500 px-1.5 py-0.5 text-[10px] font-bold leading-none text-white">
+                        {altHeld && onDuplicateRitual && <span aria-hidden>+</span>}
+                        <span className="tabular-nums">
+                          {fmtRail(((ritualDrag.previewMin % 1440) + 1440) % 1440)}
+                        </span>
                       </span>
                     </div>
                   </div>

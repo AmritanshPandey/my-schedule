@@ -55,7 +55,9 @@ const {
   getSlots,
   withSlots,
   retimeSlot,
+  removeTaskSlot,
   moveTaskSlot,
+  duplicateTaskSlot,
 } = await import("../lib/taskMutations.ts");
 const {
   normalizeTasks,
@@ -1504,6 +1506,33 @@ test("retimeSlot moves one phase without disturbing its siblings", () => {
   assert.equal(single.startTime, "11:00 AM");
   assert.equal(single.endTime, "12:00 PM");
   assert.equal("slots" in single, false);
+});
+
+test("removeTaskSlot removes one phase and preserves sibling completion state", () => {
+  const schedule = emptySchedule();
+  schedule.activities.monday = [{
+    id: "multi-remove",
+    title: "Study",
+    startTime: "9:00 AM",
+    endTime: "10:00 AM",
+    slots: [
+      { startTime: "9:00 AM", endTime: "10:00 AM" },
+      { startTime: "3:00 PM", endTime: "4:00 PM" },
+      { startTime: "7:00 PM", endTime: "8:00 PM" },
+    ],
+    completedSlotIndices: [0, 2],
+    completed: false,
+    icon: "book",
+    color: "amber",
+    planId: "plan-1",
+  }];
+
+  const result = removeTaskSlot("multi-remove", "monday", 1)(schedule);
+  const task = result.activities.monday[0];
+  assert.deepEqual(getSlots(task).map((slot) => slot.startTime), ["9:00 AM", "7:00 PM"]);
+  assert.deepEqual(task.completedSlotIndices, [0, 1]);
+  assert.equal(task.completed, true);
+  assert.equal(result.activities.monday.length, 1);
 });
 
 test("moveTaskSlot: same-day drag behaves identically to retimeSlot", () => {
@@ -3065,4 +3094,86 @@ test("punctuateTimeDigits ignores everything that isn't a digit", () => {
 test("punctuateTimeDigits stops at four digits", () => {
   // A fifth keystroke must not silently reshuffle the time already entered.
   assert.equal(punctuateTimeDigits("094512"), "09:45");
+});
+
+// ── Alt-drag: duplicate instead of move ─────────────────────────────────────
+// The original must survive untouched, and the copy must not inherit anything
+// that describes an occurrence of the original.
+
+test("duplicateTaskSlot leaves the original in place and adds a copy", () => {
+  const sched = emptySchedule();
+  sched.activities.monday = [{
+    id: "d1", title: "Gym", startTime: "9:00 AM", endTime: "10:00 AM", planId: "p",
+  }];
+
+  const next = duplicateTaskSlot("d1", "monday", 0, "monday", "2026-08-17", "2:00 PM", "3:00 PM")(sched);
+  assert.equal(next.activities.monday.length, 2);
+  const [original, copy] = next.activities.monday;
+  assert.equal(original.startTime, "9:00 AM", "a duplicate must not move the original");
+  assert.equal(copy.startTime, "2:00 PM");
+  assert.equal(copy.title, "Gym");
+  assert.notEqual(copy.id, "d1", "the copy needs its own id");
+});
+
+test("a duplicate starts fresh — no completion, history or per-date edits", () => {
+  const sched = emptySchedule();
+  sched.activities.monday = [{
+    id: "d1", title: "Gym", startTime: "9:00 AM", endTime: "10:00 AM", planId: "p",
+    completed: true, completedAt: "2026-08-17T09:30:00.000Z",
+    completionHistory: [{ id: "e1", taskId: "d1", completedAt: "2026-08-17T09:30:00.000Z", completionType: "task" }],
+    exceptions: { "2026-08-17": { skipped: true } },
+  }];
+
+  const copy = duplicateTaskSlot("d1", "monday", 0, "monday", "2026-08-17", "2:00 PM", "3:00 PM")(sched)
+    .activities.monday[1];
+  assert.equal(copy.completed, undefined);
+  assert.equal(copy.completedAt, undefined);
+  assert.equal(copy.completionHistory, undefined);
+  assert.equal(copy.exceptions, undefined);
+});
+
+test("duplicating across days copies rather than relocating", () => {
+  const sched = emptySchedule();
+  sched.activities.monday = [{
+    id: "d1", title: "Gym", startTime: "9:00 AM", endTime: "10:00 AM", planId: "p",
+  }];
+
+  const next = duplicateTaskSlot("d1", "monday", 0, "wednesday", "2026-08-19", "7:00 AM", "8:00 AM")(sched);
+  assert.equal(next.activities.monday.length, 1, "the source day keeps its task");
+  assert.equal(next.activities.wednesday.length, 1);
+  assert.equal(next.activities.wednesday[0].startTime, "7:00 AM");
+});
+
+test("duplicating one slot of a multi-slot task yields a single-slot copy", () => {
+  const sched = emptySchedule();
+  sched.activities.monday = [{
+    id: "d1", title: "Gym", startTime: "9:00 AM", endTime: "10:00 AM", planId: "p",
+    slots: [{ startTime: "9:00 AM", endTime: "10:00 AM" }, { startTime: "5:00 PM", endTime: "6:00 PM" }],
+  }];
+
+  const next = duplicateTaskSlot("d1", "monday", 1, "monday", "2026-08-17", "8:00 PM", "9:00 PM")(sched);
+  assert.equal(next.activities.monday[0].slots.length, 2, "the original keeps both blocks");
+  assert.equal("slots" in next.activities.monday[1], false, "a single-block copy carries no slots array");
+  assert.equal(next.activities.monday[1].startTime, "8:00 PM");
+});
+
+test("a once-recurrence copy is repinned to the drop date", () => {
+  // Left on the source's date the copy would be filed on a day it is not drawn.
+  const sched = emptySchedule();
+  sched.activities.monday = [{
+    id: "d1", title: "Gym", startTime: "9:00 AM", endTime: "10:00 AM", planId: "p",
+    recurrence: { type: "once", dateISO: "2026-08-17" },
+  }];
+
+  const copy = duplicateTaskSlot("d1", "monday", 0, "wednesday", "2026-08-19", "7:00 AM", "8:00 AM")(sched)
+    .activities.wednesday[0];
+  assert.deepEqual(copy.recurrence, { type: "once", dateISO: "2026-08-19" });
+});
+
+test("duplicating a task that vanished mid-drag is a no-op", () => {
+  const sched = emptySchedule();
+  assert.equal(
+    duplicateTaskSlot("gone", "monday", 0, "monday", "2026-08-17", "2:00 PM", "3:00 PM")(sched),
+    sched,
+  );
 });

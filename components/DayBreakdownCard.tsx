@@ -14,6 +14,7 @@ import {
   donutSegments,
   formatMinutesCompact,
   HELD_TIME_ID,
+  SCHEDULE_DAY_MINUTES,
   UNSCHEDULED_ID,
 } from "@/lib/dayBreakdown";
 import { DEFAULT_TIMELINE_START_MINUTES, getConfiguredDayStartMinutes } from "@/lib/timeline/displayWindow";
@@ -159,6 +160,21 @@ export default function DayBreakdownCard({ activities, categories, todayKey, tod
   // seven selections.
   const dayLabel = day === todayKey ? "today" : `on ${day[0].toUpperCase()}${day.slice(1)}`;
   const hoveredSlice = hoveredId ? slices.find((s) => s.id === hoveredId) ?? null : null;
+  // The four buckets partition the full 24h day exactly, so their widths sum
+  // to 100 by construction — unlike `activePct`/`restPct` on `active`, which
+  // are shares of the waking window only and would leave sleep/free unrepresented.
+  const dayStates = useMemo(
+    () =>
+      [
+        { id: "sleep", label: "Sleep", minutes: active.sleepMinutes, fill: "bg-violet-500 dark:bg-violet-400" },
+        { id: "active", label: "Active", minutes: active.activeMinutes, fill: "bg-emerald-600 dark:bg-emerald-400" },
+        { id: "rest", label: "Rest", minutes: active.restMinutes, fill: "bg-indigo-400 dark:bg-indigo-500" },
+        { id: "free", label: "Free", minutes: active.freeMinutes, fill: "bg-neutral-200 dark:bg-white/[0.14]" },
+      ]
+        .map((s) => ({ ...s, pct: Math.max(0, Math.min(100, (s.minutes / SCHEDULE_DAY_MINUTES) * 100)) }))
+        .filter((s) => s.minutes > 0),
+    [active.sleepMinutes, active.activeMinutes, active.restMinutes, active.freeMinutes],
+  );
 
   return (
     <section data-testid="overview-day-breakdown" className={`${CARD} px-5 py-4`}>
@@ -239,6 +255,10 @@ export default function DayBreakdownCard({ activities, categories, todayKey, tod
                 const slice = slices.find((s) => s.id === seg.id)!;
                 const isHeld = slice.id === HELD_TIME_ID;
                 const isFree = slice.id === UNSCHEDULED_ID;
+                // Recovery keeps its hue but sits back, matching how the
+                // timeline draws the same block — otherwise one screen shows
+                // the same category two different ways.
+                const isRecovery = slice.kind === "sleep" || slice.kind === "rest";
                 return (
                   <circle
                     key={seg.id}
@@ -254,7 +274,7 @@ export default function DayBreakdownCard({ activities, categories, todayKey, tod
                     stroke={isHeld || isFree ? undefined : categoryHex(slice.color ?? "cyan")}
                     // Dim the other wedges when a legend row is active, so the
                     // hovered slice reads as the figure and the rest as ground.
-                    style={{ opacity: hoveredId && hoveredId !== seg.id ? 0.22 : 1 }}
+                    style={{ opacity: hoveredId && hoveredId !== seg.id ? 0.22 : isRecovery ? 0.5 : 1 }}
                     className={`transition-opacity duration-200 motion-reduce:transition-none ${
                       isFree
                         // Fainter than held time: unbooked hours are the one
@@ -303,7 +323,10 @@ export default function DayBreakdownCard({ activities, categories, todayKey, tod
                   style={
                     slice.id === HELD_TIME_ID || slice.id === UNSCHEDULED_ID
                       ? undefined
-                      : { backgroundColor: categoryHex(slice.color ?? "cyan") }
+                      : {
+                          backgroundColor: categoryHex(slice.color ?? "cyan"),
+                          opacity: slice.kind === "sleep" || slice.kind === "rest" ? 0.5 : 1,
+                        }
                   }
                 />
                 <span className="min-w-0 flex-1 truncate text-[13px] font-semibold text-neutral-700 dark:text-neutral-300">
@@ -329,10 +352,9 @@ export default function DayBreakdownCard({ activities, categories, todayKey, tod
       {/* Active hours. Sits outside the empty-state branch on purpose: a day
           with nothing on it is exactly when "24h free" is worth saying.
 
-          Sleep is not in this budget in either direction — it defines the
-          waking window rather than being charged against it. Counting it both
-          ways is what used to report "25h 30m / 17h": 7h 45m of sleep measured
-          against a window that had already had 7h taken out for it. */}
+          The bar covers the whole day, sleep included, so all four states are
+          visible in one glance instead of two competing next to it and a
+          third named only in a footnote below. */}
       <div className="mt-4 border-t border-neutral-200/70 pt-3 dark:border-white/[0.07]">
         <div className="flex items-baseline justify-between gap-3">
           <p className="text-[11px] font-bold uppercase tracking-[0.08em] text-neutral-500 dark:text-neutral-400">
@@ -345,48 +367,39 @@ export default function DayBreakdownCard({ activities, categories, todayKey, tod
 
         {/* Plain divs rather than <ProgressBar>: that component animates width
             through framer's `m`, and the iOS Dashboard tab has no LazyMotion
-            ancestor, so the fill would sit at 0 forever there. Two fills over a
-            neutral track — active work, then deliberate rest — so recovery
-            reads as time spent on purpose rather than as leftover slack. */}
+            ancestor, so the fill would sit at 0 forever there. */}
         <div
           role="img"
-          aria-label={`${formatMinutesCompact(active.activeMinutes)} active and ${formatMinutesCompact(active.restMinutes)} rest, of ${formatMinutesCompact(active.wakingMinutes)} awake`}
+          aria-label={`${formatMinutesCompact(active.sleepMinutes)} sleep, ${formatMinutesCompact(active.activeMinutes)} active, ${formatMinutesCompact(active.restMinutes)} rest, ${formatMinutesCompact(active.freeMinutes)} free, of a 24 hour day`}
           className="mt-2 flex h-3 w-full overflow-hidden rounded-full bg-neutral-100 dark:bg-white/[0.08]"
         >
-          <div
-            className="h-full bg-emerald-600 transition-[width] duration-500 motion-reduce:transition-none dark:bg-emerald-400"
-            style={{ width: `${active.activePct}%` }}
-          />
-          <div
-            className="h-full bg-indigo-400 transition-[width] duration-500 motion-reduce:transition-none dark:bg-indigo-500"
-            style={{ width: `${active.restPct}%` }}
-          />
+          {dayStates.map((s) => (
+            <div
+              key={s.id}
+              className={`h-full transition-[width] duration-500 motion-reduce:transition-none ${s.fill}`}
+              style={{ width: `${s.pct}%` }}
+            />
+          ))}
         </div>
 
-        {/* The four buckets partition 24h by construction, so active+rest can
-            never exceed the waking window — the old "overbooked" state is
-            unreachable. What can still go wrong is booking the day so full that
-            sleep no longer fits, which is the warning worth showing. */}
-        {active.sleepShortfallMinutes > 0 ? (
-          <p className="mt-2 text-[11px] font-semibold text-amber-700 dark:text-amber-400">
+        {/* One legend, always on — the old version swapped this row for a
+            shortfall warning instead of showing it alongside, so a packed day
+            never actually told you what filled it. */}
+        <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-[11px] font-semibold text-neutral-700 dark:text-neutral-300">
+          {dayStates.map((s) => (
+            <span key={s.id} className="flex items-center gap-1.5">
+              <span aria-hidden className={`h-2.5 w-2.5 shrink-0 rounded-full ${s.fill}`} />
+              {formatMinutesCompact(s.minutes)} {s.label.toLowerCase()}
+            </span>
+          ))}
+        </div>
+
+        {active.sleepShortfallMinutes > 0 && (
+          <p className="mt-1.5 text-[11px] font-semibold text-amber-700 dark:text-amber-400">
             {breakdown.sleepIsScheduled
               ? `${formatMinutesCompact(active.sleepShortfallMinutes)} less sleep than your ${formatMinutesCompact(active.sleepTargetMinutes)}`
               : `Only ${formatMinutesCompact(active.sleepMinutes)} left for sleep — ${formatMinutesCompact(active.sleepShortfallMinutes)} short of your ${formatMinutesCompact(active.sleepTargetMinutes)}`}
           </p>
-        ) : (
-          <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-[11px] font-semibold text-neutral-700 dark:text-neutral-300">
-            <span className="flex items-center gap-1.5">
-              <span aria-hidden className="h-2.5 w-2.5 shrink-0 rounded-full bg-indigo-400 dark:bg-indigo-500" />
-              {formatMinutesCompact(active.restMinutes)} rest
-            </span>
-            <span className="flex items-center gap-1.5">
-              <span aria-hidden className="h-2.5 w-2.5 shrink-0 rounded-full bg-neutral-200 dark:bg-white/[0.14]" />
-              {formatMinutesCompact(active.freeMinutes)} free
-            </span>
-            <span className="text-neutral-500 dark:text-neutral-400">
-              {formatMinutesCompact(active.sleepMinutes)} sleep
-            </span>
-          </div>
         )}
 
         {/* Union math counts a double-booked minute once, which is what makes
@@ -398,19 +411,20 @@ export default function DayBreakdownCard({ activities, categories, todayKey, tod
             {formatMinutesCompact(committedMinutes)} of clock — {formatMinutesCompact(overlapMinutes)} double-booked
           </p>
         )}
-      </div>
 
-      {/* Names, in one breath, exactly the window the ring above measures —
-          so a gap that reads as "Unscheduled" can be checked against these two
-          numbers instead of taken on faith. Merged into one line rather than a
-          split justify-between row: two facts read as disconnected metadata,
-          one sentence reads as an explanation. */}
-      <p className="mt-2 text-[11px] text-neutral-500 dark:text-neutral-400">
-        <span className="font-semibold text-neutral-700 dark:text-neutral-300">Ring covers</span>{" "}
-        <span className="tabular-nums">{fmtClock(dayStartMinutes)}</span>
-        {" – "}
-        <span className="tabular-nums">{fmtClock(resolvedDayEndMinutes ?? dayStartMinutes + 24 * 60)}</span>
-      </p>
+        {/* Flanking labels rather than a "Ring covers X – Y" sentence: the
+            same two clock times, read at a glance instead of parsed. */}
+        <div className="mt-2 flex items-center justify-between text-[11px] text-neutral-500 dark:text-neutral-400">
+          <span>
+            <span className="font-semibold text-neutral-700 dark:text-neutral-300">Day start</span>{" "}
+            <span className="tabular-nums">{fmtClock(dayStartMinutes)}</span>
+          </span>
+          <span>
+            <span className="font-semibold text-neutral-700 dark:text-neutral-300">Day end</span>{" "}
+            <span className="tabular-nums">{fmtClock(resolvedDayEndMinutes ?? dayStartMinutes + 24 * 60)}</span>
+          </span>
+        </div>
+      </div>
     </section>
   );
 }

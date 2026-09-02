@@ -9,6 +9,7 @@ import { sumEntriesForDate } from "@/lib/metricEntries";
 import { completedRitualIdsOn } from "@/lib/consistency/ritualDayStatus";
 import { ritualScheduledOnDate } from "@/lib/ritualRecurrence";
 import { TaskBlockCard } from "@/components/TaskBlockCard";
+import MergedTaskBlockCard from "@/components/MergedTaskBlockCard";
 import Skeleton from "@/components/ui/Skeleton";
 import type { TaskSaveData } from "@/components/task/TaskSheet";
 import type { MilestoneSaveData } from "@/components/plan/MilestoneSheet";
@@ -17,7 +18,7 @@ import { PlanCard } from "@/components/plan/PlanCard";
 import AppHeader from "@/components/AppHeader";
 import BottomNav from "@/components/BottomNav";
 import DesktopSidebar from "@/components/desktop/DesktopSidebar";
-import { WeekGrid } from "@/components/desktop/WeekGrid";
+import { WeekGrid, type MergedCardHalf } from "@/components/desktop/WeekGrid";
 import type { AIActionResult, AIMilestone } from "@/lib/ai";
 import type { AIProposal } from "@/lib/aiProposal";
 import { recordProposalCreated, recordProposalRejected, recordProposalFailed, executeCreateTaskProposal } from "@/lib/proposalMutations";
@@ -148,6 +149,7 @@ import {
   resolveSlotState,
   getTaskCheckableItems,
   getTaskSubtaskSummary,
+  type TaskState,
 } from "@/lib/taskCompletion";
 import {
   applyTaskDelete,
@@ -166,8 +168,10 @@ import {
   addSubtaskToTasks,
   createSubtask,
   getSlots,
+  removeTaskSlot,
   retimeSlot,
   moveTaskSlot,
+  duplicateTaskSlot,
   type TaskDeleteScope,
 } from "@/lib/taskMutations";
 import { resolvePlanTarget, resolveTaskTarget, describeTargetProblem } from "@/lib/ai/targets";
@@ -180,7 +184,7 @@ import type { Template } from "@/lib/templates";
 import { toggleRitualCompletion, appendRitualLog, undoLastRitualLog, toggleRitualStep, removeRitualLog } from "@/lib/ritualCompletions";
 import { MAX_RITUALS } from "@/lib/ritualColors";
 import { formatDisplayTime, parseTimeToMinutes, formatDuration } from "@/lib/timeUtils";
-import { setRitualTime } from "@/lib/ritualMutations";
+import { duplicateRitualAt, setRitualTime } from "@/lib/ritualMutations";
 import {
   pointerToMinutes,
   snapMinutes,
@@ -200,6 +204,7 @@ import {
   TIMELINE_END_MINUTES,
 } from "@/lib/timeline/displayWindow";
 import { SCHEDULE_DAY_HANDOVER_MINUTES, taskContinuations } from "@/lib/timeline/overnight";
+import { findMergePairs, mergeTasks, unmergeTask, mergeCandidates } from "@/lib/taskMerge";
 import { todayISO, daysBetween as daysBetweenUtil, formatDate, formatDayNoteLabel, addDaysToISO, localISODate } from "@/lib/dateUtils";
 import { derivePlanStatus, getPlanCardStats, needsAttention } from "@/lib/planInsights";
 import { MainTitleSection, IconActionButton, CtaActionButton } from "@/components/ui/MainTitleSection";
@@ -401,14 +406,23 @@ interface TimelineTaskLayout {
    * "continuation" = the tail of *yesterday's* task, finishing on this day.
    * Derived and read-only: the task lives in the previous day's bucket, so
    * every mutation path is gated on this rather than on `isViewingToday`.
+   *
+   * "merged" = two tasks sharing a `mergeGroupId` (lib/taskMerge.ts), one
+   * block instead of splitting into lanes. `task`/`slot`/`slotIndex` are
+   * whichever of the pair sorts first; `partner` carries the other. Each
+   * half still completes/retimes independently — merging only changes
+   * layout. Mirrors WeekGrid's BlockLayout.kind.
    */
-  kind: "task" | "continuation";
+  kind: "task" | "continuation" | "merged";
   task: Task;
   /** The specific time block this layout renders. */
   slot: TaskSlot;
   slotIndex: number;
+  /** Null for held time and uncategorised tasks, which have no accent. */
+  color: string | null;
   /** True when the parent task has >1 slot (drives per-slot completion + retiming). */
   isMultiSlot: boolean;
+  partner?: { task: Task; slot: TaskSlot; slotIndex: number; isMultiSlot: boolean };
   start: number;
   end: number;
   /** Squared-off edge where the day boundary cuts an overnight block. */
@@ -430,36 +444,46 @@ const TimelineTaskBlock = memo(function TimelineTaskBlock({
   layout,
   plan,
   category,
+  partnerPlan,
+  partnerCategory,
   isBeingMoved,
   isViewingToday,
   onPointerDown,
   onToggle,
   onOpenSubtasks,
+  onDeleteSlot,
 }: {
   layout: TimelineTaskLayout;
   plan: Plan | null;
   category: TaskCategory | null;
+  /** Only meaningful when layout.kind === "merged" — see lib/taskMerge.ts. */
+  partnerPlan?: Plan | null;
+  partnerCategory?: TaskCategory | null;
   isBeingMoved: boolean;
   isViewingToday: boolean;
   onPointerDown: (e: React.PointerEvent<HTMLDivElement>, task: Task, start: number, end: number, slotIndex: number) => void;
   onToggle: (task: Task, slotIndex: number, isMultiSlot: boolean) => void;
   onOpenSubtasks: (task: Task) => void;
+  onDeleteSlot: (task: Task, slotIndex: number) => void;
 }) {
   const cardSize = computeCardSize(layout.height, layout.laneCount);
   // A continuation belongs to the previous day's bucket, so it is inert even
   // when the day on screen is today: dragging it would retime yesterday, and
   // completing it would write today's date onto yesterday's task.
   const isContinuation = layout.kind === "continuation";
+  const isMerged = layout.kind === "merged";
   const interactive = isViewingToday && !isContinuation;
   // A phase of a multi-slot task completes on its own; a single-slot task keeps
   // the whole-task state (which folds in subtask progress).
-  const state = layout.isMultiSlot
-    ? layout.task.missed
-      ? "missed"
-      : (layout.task.completedSlotIndices ?? []).includes(layout.slotIndex)
-      ? "completed"
-      : "incomplete"
-    : resolveTaskState(layout.task, getTaskSubtaskSummary(layout.task, plan).totalCount);
+  const stateFor = (task: Task, slotIndex: number, isMultiSlot: boolean, forPlan: Plan | null) =>
+    isMultiSlot
+      ? task.missed
+        ? "missed"
+        : (task.completedSlotIndices ?? []).includes(slotIndex)
+        ? "completed"
+        : "incomplete"
+      : resolveTaskState(task, getTaskSubtaskSummary(task, forPlan).totalCount);
+  const state = stateFor(layout.task, layout.slotIndex, layout.isMultiSlot, plan);
   return (
     <div
       data-task-block
@@ -467,26 +491,66 @@ const TimelineTaskBlock = memo(function TimelineTaskBlock({
         isBeingMoved ? "opacity-25 pointer-events-none" : ""
       }`}
       style={{ ...taskLaneStyle(layout), willChange: isBeingMoved ? "opacity" : undefined }}
-      onPointerDown={interactive ? (e) => onPointerDown(e, layout.task, layout.start, layout.end, layout.slotIndex) : undefined}
+      // No move-drag entry point for a merged block — whose edges would move
+      // is ambiguous with two tasks in one block; each half still retimes
+      // independently via its own edit sheet. Mirrors WeekGrid's v1 scope cut.
+      onPointerDown={interactive && !isMerged ? (e) => onPointerDown(e, layout.task, layout.start, layout.end, layout.slotIndex) : undefined}
     >
       <div className="relative h-full min-h-[20px]">
-        <TaskBlockCard
-          variant="grid"
-          task={layout.task}
-          plan={plan}
-          category={category}
-          state={state}
-          duration={formatTaskDuration(layout.slot.startTime, layout.slot.endTime)}
-          slotOverride={layout.isMultiSlot ? layout.slot : undefined}
-          readOnly={!interactive}
-          edgeCut={layout.edgeCut}
-          minimal={cardSize === "xsmall"}
-          compact={cardSize === "small" || cardSize === "medium"}
-          narrow={cardSize === "small"}
-          onToggle={() => { if (interactive) onToggle(layout.task, layout.slotIndex, layout.isMultiSlot); }}
-          onOpenSubtasks={() => onOpenSubtasks(layout.task)}
-          className="h-full w-full"
-        />
+        {isMerged && layout.partner ? (
+          <MergedTaskBlockCard
+            primary={{
+              task: layout.task,
+              plan,
+              category,
+              state: state as TaskState,
+              slot: layout.slot,
+              duration: formatTaskDuration(layout.slot.startTime, layout.slot.endTime),
+              readOnly: !interactive,
+              onToggle: () => { if (interactive) onToggle(layout.task, layout.slotIndex, layout.isMultiSlot); },
+              onClick: () => { if (interactive) onToggle(layout.task, layout.slotIndex, layout.isMultiSlot); },
+            }}
+            partner={{
+              task: layout.partner.task,
+              plan: partnerPlan ?? null,
+              category: partnerCategory ?? null,
+              state: stateFor(layout.partner.task, layout.partner.slotIndex, layout.partner.isMultiSlot, partnerPlan ?? null) as TaskState,
+              slot: layout.partner.slot,
+              duration: formatTaskDuration(layout.partner.slot.startTime, layout.partner.slot.endTime),
+              readOnly: !interactive,
+              onToggle: () => { if (interactive) onToggle(layout.partner!.task, layout.partner!.slotIndex, layout.partner!.isMultiSlot); },
+              onClick: () => { if (interactive) onToggle(layout.partner!.task, layout.partner!.slotIndex, layout.partner!.isMultiSlot); },
+            }}
+            height={layout.height}
+            className="h-full w-full"
+          />
+        ) : (
+          <TaskBlockCard
+            variant="grid"
+            task={layout.task}
+            plan={plan}
+            category={category}
+            state={state}
+            duration={formatTaskDuration(layout.slot.startTime, layout.slot.endTime)}
+            slotOverride={layout.isMultiSlot ? layout.slot : undefined}
+            readOnly={!interactive}
+            edgeCut={layout.edgeCut}
+            minimal={cardSize === "xsmall"}
+            compact={cardSize === "small" || cardSize === "medium"}
+            narrow={cardSize === "small"}
+            onToggle={() => { if (interactive) onToggle(layout.task, layout.slotIndex, layout.isMultiSlot); }}
+            onOpenSubtasks={() => onOpenSubtasks(layout.task)}
+            gridMenuAction={interactive && layout.isMultiSlot
+              ? {
+                  label: "Delete time block",
+                  icon: <IconTrash size={13} strokeWidth={2} />,
+                  onClick: () => onDeleteSlot(layout.task, layout.slotIndex),
+                  danger: true,
+                }
+              : undefined}
+            className="h-full w-full"
+          />
+        )}
       </div>
     </div>
   );
@@ -1400,7 +1464,12 @@ export default function ScheduleApp() {
     closeTaskSheet();
   }
 
-  function requestDeleteTask(taskId: string, sourceDay: DayKey = activeDay, dateISO?: string) {
+  function requestDeleteTask(taskId: string, sourceDay: DayKey = activeDay, dateISO?: string, slotIndex?: number) {
+    if (slotIndex !== undefined) {
+      setSchedule(removeTaskSlot(taskId, sourceDay, slotIndex));
+      haptic("medium");
+      return;
+    }
     haptic("light");
     setTaskDeleteRequest({ taskId, sourceDay, dateISO });
   }
@@ -1602,6 +1671,59 @@ export default function ScheduleApp() {
    *  drop also clears any stale per-date exception on the target date so it
    *  can't silently override the just-dropped time on next render. Composed
    *  into one setSchedule call so the whole gesture is a single undo step. */
+  /**
+   * Alt-drop: leave the original where it is and drop an independent copy.
+   *
+   * No clearTaskException here, unlike handleMoveTask — that call exists so a
+   * moved task doesn't inherit a stale per-date override on its new date, but
+   * a copy has a new id and no exceptions to inherit in the first place.
+   */
+  const handleDuplicateTask = useCallback(
+    (
+      taskId: string,
+      sourceDay: DayKey,
+      slotIndex: number,
+      targetDay: DayKey,
+      targetDateISO: string,
+      startTime: string,
+      endTime: string,
+    ) => {
+      haptic("medium");
+      setSchedule(duplicateTaskSlot(taskId, sourceDay, slotIndex, targetDay, targetDateISO, startTime, endTime));
+      setToastMessage({
+        message: `Copied to ${formatDisplayTime(startTime)}`,
+        actionLabel: "Undo",
+        onAction: () => { undo(); setToastMessage(null); haptic("light"); },
+      });
+    },
+    [setSchedule, undo],
+  );
+
+  const handleDuplicateRitual = useCallback(
+    (ritualId: string, stepId: string | undefined, nextTime: string) => {
+      const rituals = schedule.rituals ?? [];
+      const ritual = rituals.find((r) => r.id === ritualId);
+      if (!ritual) return;
+      // A "times" routine gains an occurrence rather than a sibling routine, so
+      // the ceiling doesn't apply to it — mirror that when reporting a refusal.
+      const addsWholeRitual = !(stepId && ritual.trackingType === "times" && ritual.steps?.length);
+      if (addsWholeRitual && rituals.length >= MAX_RITUALS) {
+        setToastMessage(`You can have up to ${MAX_RITUALS} routines`);
+        return;
+      }
+      haptic("medium");
+      setSchedule(duplicateRitualAt(ritualId, stepId, nextTime, uid, MAX_RITUALS));
+      setToastMessage({
+        message: addsWholeRitual
+          ? `Copied "${ritual.title}" to ${formatDisplayTime(nextTime)}`
+          : `${ritual.title} added at ${formatDisplayTime(nextTime)}`,
+        actionLabel: "Undo",
+        onAction: () => { undo(); setToastMessage(null); haptic("light"); },
+      });
+    },
+    [schedule.rituals, setSchedule, undo],
+  );
+
   const handleMoveTask = useCallback(
     (
       taskId: string,
@@ -2419,6 +2541,11 @@ export default function ScheduleApp() {
     requestDeleteTask(task.id, activeDays[0] ?? activeDay);
   }
 
+  function handleDeleteTaskSlot(task: Task, day: DayKey, slotIndex: number) {
+    setSchedule(removeTaskSlot(task.id, day, slotIndex));
+    haptic("medium");
+  }
+
   // ─── Milestone handlers ──────────────────────────────────────────────────
 
   function handleAddMilestone(planId: string, data: MilestoneSaveData) {
@@ -3020,7 +3147,7 @@ export default function ScheduleApp() {
     [handleToggleTaskComplete, handleToggleSlot, taskEffectiveItemIds, activeDay, activeDateISO]
   );
 
-  const timelineTaskLayouts = useMemo(() => {
+  const timelineTaskLayouts = useMemo<TimelineTaskLayout[]>(() => {
     // One interval per SLOT, not per task — a multi-slot task occupies several
     // separate blocks on the day (mirrors WeekGrid.buildDayLayout on desktop).
     const position = (cs: number, ce: number) => ({
@@ -3062,6 +3189,47 @@ export default function ScheduleApp() {
       });
     });
 
+    // Collapse merge pairs before lane packing runs, mirroring WeekGrid's
+    // buildDayLayout — a merged pair overlaps in time by definition, so it
+    // would otherwise always land in the same cluster and get split into
+    // lanes right back apart.
+    const ownAfterMerge = own.some((o) => o.task.mergeGroupId)
+      ? (() => {
+          const pairs = findMergePairs(own);
+          if (pairs.size === 0) return own;
+          const consumed = new Set<(typeof own)[number]>();
+          const mergedEntries: Array<{
+            kind: "merged";
+            task: Task;
+            slot: TaskSlot;
+            slotIndex: number;
+            isMultiSlot: boolean;
+            partner: { task: Task; slot: TaskSlot; slotIndex: number; isMultiSlot: boolean };
+            color: string | null;
+            edgeCut: undefined;
+            start: number; end: number; top: number; height: number; lane: number; laneCount: number;
+          }> = [];
+          for (const [a, b] of pairs.values()) {
+            consumed.add(a);
+            consumed.add(b);
+            const cs = Math.min(a.start, b.start);
+            const ce = Math.max(a.end, b.end);
+            mergedEntries.push({
+              kind: "merged" as const,
+              task: a.task,
+              slot: a.slot,
+              slotIndex: a.slotIndex,
+              isMultiSlot: a.isMultiSlot,
+              partner: { task: b.task, slot: b.slot, slotIndex: b.slotIndex, isMultiSlot: b.isMultiSlot },
+              color: a.color,
+              edgeCut: undefined,
+              ...position(cs, ce),
+            });
+          }
+          return [...own.filter((o) => !consumed.has(o)), ...mergedEntries];
+        })()
+      : own;
+
     // Carried-in tails join the same lane packing below rather than sitting on
     // their own layer, so an early-morning continuation and a 6 AM task split
     // the column like any other overlap.
@@ -3081,7 +3249,7 @@ export default function ScheduleApp() {
       })),
     );
 
-    const intervals = [...own, ...carried]
+    const intervals = [...ownAfterMerge, ...carried]
       .sort((a, b) => a.start - b.start || a.end - b.end || a.task.title.localeCompare(b.task.title));
 
     const layouts: typeof intervals = [];
@@ -3242,6 +3410,44 @@ export default function ScheduleApp() {
         // the template by id across every weekday bucket, so it lands on the
         // real task rather than on the day the tail happens to be drawn.
         onClick={() => openEditSheet(task, dateISO)}
+        className="h-full w-full"
+      />
+    );
+  }
+
+  /** WeekGrid's `renderMergedCard` — resolves each half's category/state/
+   *  duration the same way renderWeekCard does for a single task, then hands
+   *  both off to MergedTaskBlockCard. See lib/taskMerge.ts. */
+  function renderMergedWeekCard(
+    primary: MergedCardHalf,
+    partner: MergedCardHalf,
+    height: number,
+    _widthPct: number,
+    dateISO?: string,
+  ) {
+    const resolveHalf = (half: MergedCardHalf) => {
+      const { linkedPlan, category } = getTaskPresentation(half.task);
+      const totalSlots = getSlots(half.task).length;
+      const state =
+        totalSlots > 1
+          ? resolveSlotState(half.task, half.slotIndex)
+          : resolveTaskState(half.task, getTaskSubtaskSummary(half.task, linkedPlan).totalCount);
+      return {
+        task: half.task,
+        plan: linkedPlan,
+        category,
+        state,
+        slot: half.slot,
+        duration: formatTaskDuration(half.slot.startTime, half.slot.endTime),
+        onToggle: half.onToggle,
+        onClick: () => openEditSheet(half.task, dateISO),
+      };
+    };
+    return (
+      <MergedTaskBlockCard
+        primary={resolveHalf(primary)}
+        partner={resolveHalf(partner)}
+        height={height}
         className="h-full w-full"
       />
     );
@@ -3615,6 +3821,8 @@ export default function ScheduleApp() {
                 onCreateTaskAtTime={(day, startMin, endMin) => openCreateSheetWithTime(startMin, endMin, day)}
                 onMoveTask={handleMoveTask}
                 onMoveRitual={handleMoveRitual}
+                onDuplicateTask={handleDuplicateTask}
+                onDuplicateRitual={handleDuplicateRitual}
                 onMarkMissed={handleMarkTaskMissed}
                 onOpenMissedRecovery={handleOpenMissedRecovery}
                 onWeekPrev={() => {
@@ -3636,6 +3844,7 @@ export default function ScheduleApp() {
                 onToggleSlot={handleToggleSlot}
                 onMarkSlotMissed={handleMarkSlotMissed}
                 renderCard={renderWeekCard}
+                renderMergedCard={renderMergedWeekCard}
               />
             </div>
 
@@ -4073,11 +4282,14 @@ export default function ScheduleApp() {
                               layout={layout}
                               plan={layout.task.planId ? plansById.get(layout.task.planId) ?? null : null}
                               category={taskIdentity(layout.task, categoryMap).category}
+                              partnerPlan={layout.partner?.task.planId ? plansById.get(layout.partner.task.planId) ?? null : null}
+                              partnerCategory={layout.partner ? taskIdentity(layout.partner.task, categoryMap).category : null}
                               isBeingMoved={dragMove?.taskId === layout.task.id && dragMove?.slotIndex === layout.slotIndex}
                               isViewingToday={isViewingToday}
                               onPointerDown={handleTaskPointerDown}
                               onToggle={handleTimelineToggle}
                               onOpenSubtasks={(task) => setSubtasksRef({ id: task.id, day: activeDay, dateISO: activeDateISO })}
+                              onDeleteSlot={(task, slotIndex) => requestDeleteTask(task.id, activeDay, activeDateISO, slotIndex)}
                             />
                           ))}
 
@@ -4192,6 +4404,7 @@ export default function ScheduleApp() {
               onAddTask={(planId) => openCreateSheet(planId)}
               onEditTask={(task) => openEditSheet(task)}
               onDeleteLinkedTask={handleDeleteLinkedTask}
+              onDeleteTaskSlot={handleDeleteTaskSlot}
               onAddTracker={(planId, title, unit, goalDirection, id, goalValue, startingValue, dailyTarget) => {
                 setSchedule((prev) => ({
                   ...prev,

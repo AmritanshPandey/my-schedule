@@ -316,22 +316,27 @@ async function exerciseTaskSheetInputs(page: Page, isMobile: boolean) {
 async function expectOverviewDashboard(page: Page, isMobile: boolean) {
   const dashboard = page.getByTestId("overview-dashboard");
   await expect(dashboard).toBeVisible();
-  await expect(page.getByTestId("overview-today-card")).toContainText("Morning Run");
-  await expect(page.getByTestId("overview-week-card")).toContainText("This Week");
-  await expect(page.getByTestId("overview-progress-card")).toContainText(
-    isMobile ? "Weekly Progress" : "Task completion trend",
-  );
-  await expect(page.getByTestId("overview-tracking-card")).toContainText("Run Distance");
-  await expect(page.getByTestId("overview-plan-card")).toContainText("Cardio");
-  await expect(page.getByTestId("overview-routine-card")).toContainText("Hydrate");
 
   if (isMobile) {
     await expect(page.getByText("Current Task")).toHaveCount(0);
-    const todayBox = await page.getByTestId("overview-today-card").boundingBox();
-    const weekBox = await page.getByTestId("overview-week-card").boundingBox();
-    expect(todayBox).not.toBeNull();
-    expect(weekBox).not.toBeNull();
-    expect(todayBox!.y).toBeLessThan(weekBox!.y);
+    await expect(page.getByTestId("overview-streak-card")).toBeVisible();
+    await expect(page.getByTestId("overview-next-task")).toContainText("Morning Run");
+    await expect(page.getByTestId("overview-week-summary")).toContainText("Today's execution");
+    await expect(page.getByTestId("overview-tracking-card")).toHaveCount(0);
+    await expect(page.getByTestId("overview-plan-card")).toHaveCount(0);
+    await expect(page.getByTestId("overview-routine-card")).toHaveCount(0);
+    const nextTaskBox = await page.getByTestId("overview-next-task").boundingBox();
+    const summaryBox = await page.getByTestId("overview-week-summary").boundingBox();
+    expect(nextTaskBox).not.toBeNull();
+    expect(summaryBox).not.toBeNull();
+    expect(nextTaskBox!.y).toBeLessThan(summaryBox!.y);
+  } else {
+    await expect(page.getByTestId("overview-today-card")).toContainText("Morning Run");
+    await expect(page.getByTestId("overview-week-card")).toContainText("This Week");
+    await expect(page.getByTestId("overview-progress-card")).toContainText("Task completion trend");
+    await expect(page.getByTestId("overview-tracking-card")).toContainText("Run Distance");
+    await expect(page.getByTestId("overview-plan-card")).toContainText("Cardio");
+    await expect(page.getByTestId("overview-routine-card")).toContainText("Hydrate");
   }
 
   await expectNoDocumentOverflow(page);

@@ -69,6 +69,7 @@ import {
   createTaskDeleteSnapshot,
   sortTasksByTime,
   getSlots,
+  removeTaskSlot,
   uid,
   updateTaskDays,
   updateTaskPerDay,
@@ -88,10 +89,8 @@ import { toggleRitualCompletion, appendRitualLog, undoLastRitualLog, toggleRitua
 import { MAX_RITUALS } from "@/lib/ritualColors";
 import { deleteGoal } from "@/lib/goalMutations";
 import { formatDisplayTime, inputToDisplayTime, minutesToInputTime, parseTimeToMinutes, toScheduleDayMinutes } from "@/lib/timeUtils";
-import { computeTrend } from "@/lib/trendUtils";
-import { getPlanCardStats } from "@/lib/planInsights";
 import { calculateExecutionStreak } from "@/lib/consistency/calculateExecutionStreak";
-import { calculateRitualStats, ritualScheduledOnDate } from "@/lib/consistency/calculateRitualStreak";
+import { ritualScheduledOnDate } from "@/lib/consistency/calculateRitualStreak";
 import { completedRitualIdsOn } from "@/lib/consistency/ritualDayStatus";
 import { useAIEnabled } from "@/lib/ai/useAIEnabled";
 import { computeExecutionTrend } from "@/lib/executionAnalytics";
@@ -102,8 +101,6 @@ import { rescheduleMissedTaskOnce, acknowledgeMiss } from "@/lib/missedRecovery"
 import { haptic } from "@/lib/haptics";
 import { CARD } from "@/components/ui/surfaces";
 import CheckDraw from "@/components/ui/CheckDraw";
-import Sparkline from "@/components/ui/Sparkline";
-import TrendChange from "@/components/ui/TrendChange";
 import type { CreateTaskFromNoteInput } from "@/components/notes/NotesView";
 import { useCoachTour } from "@/lib/onboarding/useCoachTour";
 import { TOUR_STEPS, type TourId } from "@/lib/onboarding/tours";
@@ -116,13 +113,6 @@ const PlanDetailView = dynamic(() => import("@/components/plan/PlanDetailView"),
 const GoalListSheet = dynamic(() => import("@/components/goal/GoalListSheet"), { ssr: false });
 const RitualView = dynamic(() => import("@/components/activity/RitualView"), { ssr: false });
 const TrackingView = dynamic(() => import("@/components/tracking/TrackingView"), { ssr: false });
-// Small hand-rolled SVG donut with no chart dependency — safe to load eagerly
-// in the iOS shell (see the first-load guard in tests/core-logic.test.mjs).
-const DayBreakdownCard = dynamic(() => import("@/components/DayBreakdownCard"), { ssr: false });
-// Companion analytics — same hand-rolled, framer-free SVG/CSS as the donut, so
-// they render on the Dashboard tab which has no LazyMotion ancestor.
-
-const CompletionTrendCard = dynamic(() => import("@/components/analytics/CompletionTrendCard"), { ssr: false });
 const SettingsView = dynamic(() => import("@/components/SettingsView").then((m) => ({ default: m.SettingsView })), { ssr: false });
 const AIView = dynamic(() => import("@/components/AIView").then((m) => ({ default: m.AIView })), { ssr: false });
 const DayWallpaperSheet = dynamic(() => import("@/components/DayWallpaperSheet"), { ssr: false });
@@ -189,12 +179,6 @@ function quickTaskTimeRange(now = new Date()): { startTime: string; endTime: str
     startTime: inputToDisplayTime(minutesToInputTime(start)),
     endTime: inputToDisplayTime(minutesToInputTime(start + 15)),
   };
-}
-
-function formatTrackerValue(entry: MetricEntry | null, tracker: ProgressTracker): string {
-  if (!entry) return "No entries yet";
-  const value = Number.isInteger(entry.value) ? String(entry.value) : entry.value.toLocaleString(undefined, { maximumFractionDigits: 1 });
-  return `${value}${tracker.unit ?? ""}`;
 }
 
 function IOSHeader({
@@ -279,31 +263,6 @@ function IOSHeader({
         </div>
       </div>
     </header>
-  );
-}
-
-function StatTile({
-  icon: Icon,
-  value,
-  label,
-  detail,
-  iconClass,
-}: {
-  icon: React.ComponentType<{ size?: number; strokeWidth?: number; className?: string }>;
-  value: number | string;
-  label: string;
-  detail: string;
-  iconClass?: string;
-}) {
-  return (
-    <div className={`${CARD} p-3`}>
-      <div className="mb-2 flex items-center gap-1.5">
-        <Icon size={13} strokeWidth={2} className={iconClass ?? "text-neutral-400 dark:text-neutral-500"} />
-        <p className="truncate text-[10px] font-bold uppercase tracking-[0.12em] text-neutral-400 dark:text-neutral-500">{label}</p>
-      </div>
-      <p className="truncate text-[24px] font-bold leading-none text-neutral-900 dark:text-white">{value}</p>
-      <p className="mt-1 truncate text-[11px] font-semibold text-neutral-500 dark:text-neutral-400">{detail}</p>
-    </div>
   );
 }
 
@@ -655,104 +614,6 @@ export default function IOSScheduleApp() {
     );
     return selectNeedsAttention(schedule, todayISO(), todayKey, doneRitualIds);
   }, [schedule, todayKey]);
-  // All routines with streak/adherence/dots (shared helper), due-today first then
-  // most-at-risk — matches the desktop Routine Consistency card.
-  const ritualConsistency = useMemo(() => {
-    const completions = schedule.ritualCompletions ?? [];
-    return (schedule.rituals ?? [])
-      .map((ritual) => {
-        const { streak, adherencePct, dots } = calculateRitualStats(ritual, completions, todayISO(), schedule.preferences?.startDate);
-        return { ritual, streak, adherencePct, dots, dueToday: ritualScheduledOnDate(ritual, todayISO(), schedule.preferences?.startDate) };
-      })
-      .sort((a, b) =>
-        a.dueToday !== b.dueToday ? (a.dueToday ? -1 : 1) : a.adherencePct - b.adherencePct,
-      );
-  }, [schedule.rituals, schedule.ritualCompletions, todayKey, schedule.preferences?.startDate]);
-	  const overviewTrackers = useMemo(() => {
-	    const storedTrackers = schedule.progressTrackers ?? [];
-    const fallbackTrackers: ProgressTracker[] = storedTrackers.length > 0
-      ? []
-      : schedule.plans.flatMap((plan) => {
-        if (plan.metric) {
-          return [{
-            id: `${plan.id}-tracker-main`,
-            planId: plan.id,
-            title: plan.metric.name,
-            type: "number" as const,
-            unit: plan.metric.unit,
-          }];
-        }
-        const fields = plan.metaFields?.length
-          ? plan.metaFields.map((field) => ({ title: field, unit: "" }))
-          : (plan.summary ?? []).map((field) => ({ title: field.label, unit: field.unit }));
-        return fields.map((field) => ({
-          id: `${plan.id}-tracker-${field.title.toLowerCase().replace(/[^a-z0-9]+/g, "-")}`,
-          planId: plan.id,
-          title: field.title,
-          type: "number" as const,
-          unit: field.unit,
-        }));
-      });
-
-    return [...storedTrackers, ...fallbackTrackers]
-      .map((tracker) => {
-        const entries = (schedule.metricEntries ?? [])
-          .filter((entry) => entry.trackerId === tracker.id)
-          .map((entry, entryIndex) => ({ entry, entryIndex }))
-          .sort((a, b) => a.entry.date.localeCompare(b.entry.date) || a.entryIndex - b.entryIndex)
-          .map((item) => item.entry);
-        const latest = entries.at(-1) ?? null;
-        const previous = entries.at(-2) ?? null;
-        const trend = latest && previous
-          ? computeTrend({
-            previous: previous.value,
-            current: latest.value,
-            goalDirection: tracker.goalDirection ?? "increase_good",
-          })
-          : null;
-
-        return {
-          tracker,
-          latest,
-          plan: schedule.plans.find((plan) => plan.id === tracker.planId),
-          // Chronological (oldest first) so the sparkline reads left-to-right.
-          series: entries.slice(-8).map((entry) => entry.value),
-          trend,
-          hasEntries: entries.length > 0,
-        };
-      })
-	      .sort((a, b) => Number(b.hasEntries) - Number(a.hasEntries) || (b.latest?.date ?? "").localeCompare(a.latest?.date ?? "") || a.tracker.title.localeCompare(b.tracker.title));
-	  }, [schedule.metricEntries, schedule.plans, schedule.progressTrackers]);
-
-  const overviewTrackerGroups = useMemo(() => {
-    const groups: Array<{ key: string; plan?: Plan; trackers: typeof overviewTrackers }> = [];
-    const byPlan = new Map<string, number>();
-    for (const row of overviewTrackers) {
-      const key = row.plan?.id ?? "__other__";
-      let index = byPlan.get(key);
-      if (index === undefined) {
-        index = groups.length;
-        byPlan.set(key, index);
-        groups.push({ key, plan: row.plan, trackers: [] });
-      }
-      groups[index].trackers.push(row);
-    }
-    return groups;
-  }, [overviewTrackers]);
-
-  // Every plan: consistency is what this card reports, and every plan has a
-  // consistency score with or without milestones. A milestone-less plan just
-  // omits its milestone line rather than being dropped from the list.
-  const overviewPlanConsistency = useMemo(() =>
-    schedule.plans.map((plan) => {
-      const milestones = (schedule.milestones ?? []).filter((milestone) => milestone.planId === plan.id);
-      const { consistency } = getPlanCardStats(plan, schedule.activities, todayKey, schedule.preferences?.startDate, schedule.milestones);
-      const milestonesDone = milestones.filter((milestone) => milestone.status === "completed").length;
-      return { plan, consistency, milestonesTotal: milestones.length, milestonesDone };
-    }),
-    [schedule.activities, schedule.milestones, schedule.plans, todayKey]
-  );
-
 	  const openConfirm = useCallback((state: ConfirmState) => setConfirmState(state), []);
 
   function openCreateSheet(initialPlanId?: string | null, initialType: TaskTypeValue = "task") {
@@ -1048,6 +909,12 @@ export default function IOSScheduleApp() {
 
   function handleDeleteLinkedTask(task: Task, activeDays: DayKey[]) {
     requestDeleteTask(task.id, activeDays[0] ?? activeDay);
+  }
+
+  function handleDeleteTaskSlot(task: Task, day: DayKey, slotIndex: number) {
+    setSchedule(removeTaskSlot(task.id, day, slotIndex));
+    haptic("medium");
+    setToast("Time block removed");
   }
 
   function handleAddMilestone(planId: string, data: MilestoneSaveData) {
@@ -1425,212 +1292,52 @@ export default function IOSScheduleApp() {
             {/* Recently missed / overdue — renders nothing when all clear. */}
             <NeedsAttentionCard data={needsAttention} onNavigate={setActiveTab} onHandleMissed={setMissedSheet} />
 
-            <TodayTaskList
-              tasks={todayTasks}
-              done={todayDone}
-              total={todayTasks.length}
-              plans={schedule.plans}
-              taskSummary={(task) => getTaskSubtaskSummary(task, task.planId ? plansById.get(task.planId) ?? null : null)}
-              taskCheckableIds={(task) => getTaskCheckableItems(task, task.planId ? plansById.get(task.planId) ?? null : null).map((item) => item.id)}
-              onMarkDone={(taskId, subtaskIds) => handleToggleTaskComplete(taskId, subtaskIds, todayKey, todayISO())}
-              onToggleSlot={(taskId, slotIndex) => handleToggleSlot(taskId, slotIndex, todayKey, todayISO())}
-              onMissed={(taskId, subtaskIds) => handleMarkTaskMissed(taskId, subtaskIds, todayKey, todayISO())}
-              onOpenSubtasks={(taskId) => setSubtasksRef({ id: taskId, day: todayKey, dateISO: todayISO() })}
-            />
-
-            <section data-testid="overview-tracking-card" className={`${CARD} p-4`}>
-              <div className="mb-2 flex items-center justify-between gap-3">
-                <div className="flex min-w-0 items-center gap-1.5 text-neutral-500 dark:text-neutral-400">
-                  <IconTargetArrow size={16} strokeWidth={2.2} />
-                  <h2 className="text-[13px] font-extrabold">Active Tracking</h2>
-                </div>
-                <button type="button" onClick={() => setActiveTab(1)} className="text-[12px] font-bold text-neutral-400 dark:text-neutral-500">
-                  Plans
-                </button>
-              </div>
-              {overviewTrackers.length === 0 ? (
-                <div className="rounded-2xl bg-neutral-50 p-3 dark:bg-white/[0.04]">
-                  <p className="text-[14px] font-extrabold text-neutral-950 dark:text-white">No trackers yet</p>
-                  <p className="mt-0.5 text-[12px] font-semibold leading-snug text-neutral-500 dark:text-neutral-400">
-                    Add a progress tracker in any plan and it will appear here.
-                  </p>
-                </div>
-              ) : (
-                <div className="space-y-3">
-                  {overviewTrackerGroups.map((group) => (
-                    <div key={group.key} className="rounded-2xl border border-neutral-200/80 bg-neutral-50/70 px-3 dark:border-white/[0.07] dark:bg-white/[0.025]">
-                      <div className="flex items-center justify-between gap-3 border-b border-neutral-200/70 py-2.5 dark:border-white/[0.06]">
-                        <div className="flex min-w-0 items-center gap-2">
-                          <span className={`h-2 w-2 shrink-0 rounded-full ${group.plan ? accentStyles(group.plan.color).dot : "bg-neutral-400 dark:bg-neutral-500"}`} />
-                          <p className="truncate text-[11px] font-extrabold uppercase tracking-[0.08em] text-neutral-500 dark:text-neutral-400">
-                            {group.plan?.title ?? "Other"}
-                          </p>
-                        </div>
-                        <span className="shrink-0 text-[11px] font-bold tabular-nums text-neutral-400 dark:text-neutral-500">
-                          {group.trackers.length}
-                        </span>
-                      </div>
-                      <div className="divide-y divide-neutral-200/70 dark:divide-white/[0.06]">
-                        {group.trackers.map(({ tracker, latest, series, trend }) => {
-                          const trendColorClass = trend?.state === "positive"
-                            ? "text-emerald-500 dark:text-emerald-400"
-                            : trend?.state === "negative"
-                              ? "text-rose-500 dark:text-rose-400"
-                              : "text-neutral-300 dark:text-neutral-600";
-                          return (
-                            <div key={tracker.id} className="flex items-center gap-3 py-3 first:pt-3 last:pb-3">
-                              <div className="min-w-0 flex-1">
-                                <p className="truncate text-[16px] font-semibold text-neutral-950 dark:text-white">{tracker.title}</p>
-                                <div className="flex min-w-0 items-center gap-1.5">
-                                  <p className="truncate text-[14px] font-semibold text-neutral-500 dark:text-neutral-400">
-                                    {formatTrackerValue(latest, tracker)}
-                                  </p>
-                                  {trend && <TrendChange direction={trend.direction} state={trend.state} pct={trend.pct} />}
-                                </div>
-                              </div>
-                              <Sparkline values={series} className={trendColorClass} />
-                              <button
-                                type="button"
-                                onClick={() => {
-                                  haptic("light");
-                                  setEntryTracker(tracker);
-                                }}
-                                aria-label={`Log ${tracker.title}`}
-                                className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-neutral-950 text-white transition-transform active:scale-95 dark:bg-white dark:text-neutral-950"
-                              >
-                                <IconPlus size={21} strokeWidth={2.2} />
-                              </button>
-                            </div>
-                          );
-                        })}
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              )}
+            <section data-testid="overview-next-task" className={`${CARD} p-0`}>
+              <button
+                type="button"
+                onClick={() => { haptic("light"); setActiveTab(0); }}
+                className="flex min-h-[72px] w-full items-center gap-3 px-4 py-3 text-left active:bg-neutral-50 dark:active:bg-white/[0.04]"
+              >
+                <span className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-emerald-500/12 text-emerald-600 dark:bg-emerald-400/12 dark:text-emerald-400">
+                  <IconCalendar size={19} strokeWidth={2.2} />
+                </span>
+                <span className="min-w-0 flex-1">
+                  <span className="block text-[11px] font-bold uppercase tracking-[0.08em] text-neutral-400 dark:text-neutral-500">Next up</span>
+                  <span className="mt-0.5 block truncate text-[16px] font-bold text-neutral-950 dark:text-white">
+                    {todayOpenTasks[0]?.title ?? "Plan your day"}
+                  </span>
+                  <span className="mt-0.5 block truncate text-[12px] font-medium text-neutral-500 dark:text-neutral-400">
+                    {todayOpenTasks[0]
+                      ? [todayOpenTasks[0].startTime && formatDisplayTime(todayOpenTasks[0].startTime), schedule.plans.find((plan) => plan.id === todayOpenTasks[0].planId)?.title].filter(Boolean).join(" · ") || "Open Today to continue"
+                      : todayTasks.length > 0
+                        ? "Everything scheduled is complete"
+                        : "Open Today to add your first task"}
+                  </span>
+                </span>
+                <IconChevronRight size={18} strokeWidth={2.2} className="shrink-0 text-neutral-400 dark:text-neutral-500" />
+              </button>
             </section>
 
-            <div className="grid grid-cols-3 gap-2.5">
-              <div data-testid="overview-week-card">
-                <StatTile
-                  icon={IconClockHour3}
-                  value={`${dashboardProgressPct}%`}
-                  label="This Week"
-                  detail={`${todayDone}/${todayTasks.length} done`}
-                />
-              </div>
-              <div data-testid="overview-progress-card">
-                <StatTile
-                  icon={IconClipboardData}
-                  value={formatMinutesBrief(remainingPlannedMinutes)}
-                  label="Weekly Progress"
-                  detail={todayOpenTasks.length > 0 ? `${todayOpenTasks.length} open` : "Clear"}
-                />
-              </div>
-              <div data-testid="overview-missed-card">
-                <StatTile
-                  icon={IconAlertTriangle}
-                  iconClass="text-rose-500 dark:text-rose-400"
-                  value={missedThisWeek}
-                  label="Missed"
-                  detail={missedThisWeek === 0 ? "none this week" : "this week"}
-                />
-              </div>
-            </div>
-
-            <DayBreakdownCard
-              activities={schedule.activities}
-              categories={schedule.categories}
-              todayKey={todayKey}
-              todayISO={todayISO()}
-              preferences={schedule.preferences}
-            />
-
-            {DAYS.some((d) => (schedule.activities[d] ?? []).length > 0) && (
-              <CompletionTrendCard schedule={schedule} />
-            )}
-
-            {overviewPlanConsistency.length > 0 && (
-              <section data-testid="overview-plan-card" className={`${CARD} p-4`}>
-                <div className="mb-2 flex items-center gap-1.5 text-neutral-500 dark:text-neutral-400">
-                  <IconClipboardList size={16} strokeWidth={2.2} />
-                  <h2 className="text-[13px] font-extrabold">Plan Consistency</h2>
+            <section data-testid="overview-week-summary" className={`${CARD} p-4`}>
+              <div className="flex items-start justify-between gap-4">
+                <div>
+                  <p className="text-[13px] font-bold text-neutral-950 dark:text-white">Today&apos;s execution</p>
+                  <p className="mt-1 text-[28px] font-semibold leading-none tabular-nums text-neutral-950 dark:text-white">
+                    {dashboardProgressPct}%
+                  </p>
                 </div>
-                {/* Mirrors the desktop card: the percentage counts days, the
-                    milestone line counts milestones. Naming the unit once is
-                    what stops "0/5 milestones" beside "50%" reading as a bug. */}
-                <p className="mb-3 text-[12px] text-neutral-500 dark:text-neutral-400">
-                  % of days you&rsquo;ve completed at least one task
+                <span className={`rounded-full px-2.5 py-1 text-[12px] font-bold tabular-nums ${missedThisWeek > 0 ? "bg-rose-500/10 text-rose-600 dark:bg-rose-400/10 dark:text-rose-400" : "bg-emerald-500/10 text-emerald-700 dark:bg-emerald-400/10 dark:text-emerald-400"}`}>
+                  {missedThisWeek > 0 ? `${missedThisWeek} missed` : "On track"}
+                </span>
+              </div>
+              <div className="mt-4 grid grid-cols-2 gap-3 border-t border-neutral-200/70 pt-3 dark:border-white/[0.07]">
+                <p className="text-[12px] font-medium text-neutral-500 dark:text-neutral-400">
+                  <span className="font-bold tabular-nums text-neutral-950 dark:text-white">{todayDone}/{todayTasks.length}</span> done
                 </p>
-                <div className="divide-y divide-neutral-100 dark:divide-white/[0.06]">
-                  {overviewPlanConsistency.slice(0, 5).map(({ plan, consistency, milestonesTotal, milestonesDone }) => (
-                    <button
-                      key={plan.id}
-                      type="button"
-                      onClick={() => {
-                        haptic("light");
-                        setSelectedPlanId(plan.id);
-                        setActiveTab(1);
-                      }}
-                      className="grid w-full grid-cols-[minmax(0,1fr)_72px] items-center gap-3 py-3 first:pt-1 last:pb-0 text-left"
-                    >
-                      <div className="min-w-0">
-                        <p className="truncate text-[16px] font-semibold text-neutral-950 dark:text-white">{plan.title}</p>
-                        {/* Omitted entirely when the plan has no milestones —
-                            "0/0 milestones" reports nothing. */}
-                        {milestonesTotal > 0 && (
-                          <p className="mt-0.5 text-[11px] font-semibold text-neutral-500 dark:text-neutral-400">
-                            {milestonesDone} of {milestonesTotal} milestones
-                          </p>
-                        )}
-                      </div>
-                      <div className="min-w-0">
-                        <p className="mb-1 text-right text-[12px] font-black tabular-nums text-neutral-700 dark:text-neutral-300">{consistency}%</p>
-                        <span className="block h-1.5 overflow-hidden rounded-full bg-neutral-200 dark:bg-white/[0.10]">
-                          <span className="block h-full rounded-full bg-emerald-500" style={{ width: `${Math.max(0, Math.min(100, consistency))}%` }} />
-                        </span>
-                      </div>
-                    </button>
-                  ))}
-                </div>
-              </section>
-            )}
-
-            <section data-testid="overview-routine-card" className={`${CARD} p-4`}>
-              <div className="mb-2 flex items-center gap-1.5 text-neutral-500 dark:text-neutral-400">
-                <IconRepeat size={16} strokeWidth={2.2} />
-                <h2 className="text-[13px] font-extrabold">Routine Consistency</h2>
+                <p className="text-right text-[12px] font-medium text-neutral-500 dark:text-neutral-400">
+                  <span className="font-bold tabular-nums text-neutral-950 dark:text-white">{formatMinutesBrief(remainingPlannedMinutes)}</span> remaining
+                </p>
               </div>
-              {ritualConsistency.length === 0 ? (
-                <p className="py-2 text-[12px] font-semibold text-neutral-500 dark:text-neutral-400">No routines yet.</p>
-              ) : (
-                <div className="divide-y divide-neutral-100 dark:divide-white/[0.06]">
-                  {ritualConsistency.map(({ ritual, streak, adherencePct, dots, dueToday }) => (
-                    <div key={ritual.id} className={`flex items-center justify-between gap-3 py-3 first:pt-1 last:pb-0 ${dueToday ? "" : "opacity-70"}`}>
-                      <div className="min-w-0">
-                        <p className="truncate text-[16px] font-semibold text-neutral-950 dark:text-white">
-                          {ritual.title}
-                          {ritual.time && <span className="ml-1.5 text-[12px] font-semibold text-neutral-400 dark:text-neutral-500">{formatDisplayTime(ritual.time)}</span>}
-                        </p>
-                        <div className="mt-0.5 flex items-center gap-2.5">
-                          {streak > 0 && (
-                            <span className="inline-flex items-center gap-1 text-[11px] font-bold text-rose-500 dark:text-rose-400">
-                              <IconFlame size={12} strokeWidth={2} />
-                              {streak}d
-                            </span>
-                          )}
-                          <span className="text-[12px] font-semibold tabular-nums text-neutral-400 dark:text-neutral-500">{adherencePct}% · 30d</span>
-                        </div>
-                      </div>
-                      <div className="flex shrink-0 gap-1">
-                        {dots.map((on, i) => (
-                          <span key={i} className={`h-2 w-2 rounded-full ${on ? "bg-emerald-500" : "bg-neutral-200 dark:bg-white/[0.10]"}`} />
-                        ))}
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              )}
             </section>
           </div>
         </ErrorBoundary>
@@ -1751,6 +1458,7 @@ export default function IOSScheduleApp() {
                 onAddTask={(planId) => openCreateSheet(planId)}
                 onEditTask={(task) => openEditSheet(task)}
                 onDeleteLinkedTask={handleDeleteLinkedTask}
+                onDeleteTaskSlot={handleDeleteTaskSlot}
                 onAddTracker={(planId, title, unit, goalDirection, id, goalValue, startingValue, dailyTarget) => {
                   setSchedule((prev) => ({
                     ...prev,

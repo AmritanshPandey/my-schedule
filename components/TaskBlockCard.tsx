@@ -9,7 +9,7 @@ import { getTaskSubtaskSummary, isTrackedTask, taskStatusLabel } from "@/lib/tas
 import { useLongPress } from "@/lib/useLongPress";
 import { getSlots } from "@/lib/taskMutations";
 import { formatDisplayTime } from "@/lib/timeUtils";
-import { timelineCardStyles, TIMELINE_NEUTRAL_CARD } from "@/lib/colorSystem";
+import { timelineCardStyles, quietTimelineCardStyles, TIMELINE_NEUTRAL_CARD } from "@/lib/colorSystem";
 
 /**
  * Shared colored category block used in BOTH surfaces:
@@ -150,7 +150,16 @@ export function TaskBlockCard({
   // block. An uncategorised task is neutral for the same reason (no identity to
   // spend). Tracked + categorised tasks keep their accent.
   const accent = category?.color ?? null;
-  const styles = accent && tracked ? timelineCardStyles(accent) : TIMELINE_NEUTRAL_CARD;
+  // Sleep and rest are recovery, not work: they keep their plan's hue but lose
+  // the saturated fill, so a night's sleep never shouts as loudly as the
+  // session you are trying to hold yourself to. Read straight off the
+  // category — the card already has it, so no caller has to pass a flag.
+  const recovery = category?.kind === "sleep" || category?.kind === "rest";
+  const styles = !accent || !tracked
+    ? TIMELINE_NEUTRAL_CARD
+    : recovery
+    ? quietTimelineCardStyles(accent)
+    : timelineCardStyles(accent);
   const done = state === "completed";
   const partial = state === "partial";
   const missed = state === "missed";

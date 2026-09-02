@@ -236,6 +236,15 @@ export interface Task {
    */
   activeFrom?: string;
   activeUntil?: string;
+  /**
+   * Groups this task with exactly one other task that occupies the same time
+   * slot (e.g. "Cardio" + "Workout" both at the gym at 6pm) so the calendar
+   * renders them as one combined block instead of splitting into lanes.
+   * Purely a rendering hint — each task keeps its own category, completion
+   * state, and stats. Shared by exactly the tasks in the pair; see
+   * lib/taskMerge.ts.
+   */
+  mergeGroupId?: string;
 }
 
 export interface SummaryConfig {

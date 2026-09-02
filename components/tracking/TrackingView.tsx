@@ -4,15 +4,14 @@ import { useMemo } from "react";
 import { IconChartLine, IconPlus, IconTargetArrow, IconTrash } from "@tabler/icons-react";
 import type { MetricEntry, Plan, ProgressTracker } from "@/lib/useScheduleDB";
 import { buildTrackerStat, groupTrackerStatsByPlan, trackerRampTone, type TrackerStat } from "@/lib/trackerStats";
-import { entriesForDate } from "@/lib/metricEntries";
 import { quickAmountsForUnit } from "@/lib/quickAmounts";
 import { todayISO } from "@/lib/dateUtils";
 import { haptic } from "@/lib/haptics";
 import { CARD, SOFT_PANEL } from "@/components/ui/surfaces";
 import { MainTitleSection } from "@/components/ui/MainTitleSection";
 import EmptyState from "@/components/ui/EmptyState";
-import Sparkline from "@/components/ui/Sparkline";
 import TrendChange from "@/components/ui/TrendChange";
+import ProgressChart from "@/components/ProgressChart";
 
 const RING_SIZE = 44;
 const RING_STROKE = 4;
@@ -86,15 +85,14 @@ function TargetRing({ percent, met }: { percent: number; met: boolean }) {
 
 function MetricCard({
   stat,
-  entries,
-  today,
+  plan,
   onLog,
   onOpenAddEntry,
   onDeleteEntry,
 }: {
   stat: TrackerStat;
-  entries: readonly MetricEntry[];
-  today: string;
+  /** Supplies the chart's accent, so a metric matches the plan it serves. */
+  plan: Plan | null;
   onLog: TrackingViewProps["onLog"];
   onOpenAddEntry: TrackingViewProps["onOpenAddEntry"];
   onDeleteEntry: TrackingViewProps["onDeleteEntry"];
@@ -102,7 +100,35 @@ function MetricCard({
   const { tracker } = stat;
   const unit = tracker.unit?.trim() ?? "";
   const presets = quickAmountsForUnit(tracker.unit);
-  const todaysEntries = entriesForDate(entries as MetricEntry[], tracker.id, today);
+  const todaysEntries = stat.todayEntries;
+  const chartColor = plan?.color ?? "cyan";
+
+  /**
+   * ProgressChart plots MetricEntry-shaped rows, so the daily totals are
+   * adapted rather than the chart being taught a second input shape.
+   *
+   * A daily metric's reference is a flat line at its target: "hit 2000ml"
+   * repeats every day and has no start to slope from. A point-in-time metric
+   * slopes from where it began to where it is going. Null when there is
+   * neither data nor a target — an empty axis reports nothing.
+   */
+  const chart = useMemo(() => {
+    const entries = stat.points.map((pt, i) => ({
+      id: `${tracker.id}-${pt.date}-${i}`,
+      planId: tracker.planId,
+      trackerId: tracker.id,
+      value: pt.value,
+      date: pt.date,
+    }));
+    if (stat.isDaily) {
+      return { entries, goalValue: tracker.dailyTarget, startingValue: undefined };
+    }
+    const startingValue = tracker.goalValue !== undefined && stat.startingValue !== null
+      ? stat.startingValue
+      : undefined;
+    if (entries.length === 0 && startingValue === undefined) return null;
+    return { entries, goalValue: tracker.goalValue, startingValue };
+  }, [stat, tracker]);
 
   return (
     <div className={`${CARD} px-5 py-4`}>
@@ -141,13 +167,29 @@ function MetricCard({
           </p>
         </div>
 
-        {/* Point-in-time metrics carry their history inline; a daily one already
-            has the ring, and a sparkline of daily totals beside it would report
-            the same thing twice. */}
-        {!stat.isDaily && stat.series.length >= 2 && (
-          <Sparkline values={stat.series} className="shrink-0 self-center text-neutral-400 dark:text-neutral-500" />
-        )}
       </div>
+
+      {/* The chart, shown by default rather than behind a tap: a tracker's whole
+          point is the shape of the line, and a card that hides it is a list
+          entry pretending to be a chart.
+
+          Points are daily totals, so a metric logged five times in an afternoon
+          reads as one day rather than a spike. The reference line runs from the
+          starting value to the goal for a point-in-time metric, or sits flat at
+          the daily target for a cumulative one — either way the gap between the
+          line and the data is the answer. */}
+      {chart && (
+        <div className={`${SOFT_PANEL} mt-3 px-2 py-2`}>
+          <ProgressChart
+            bare
+            entries={chart.entries}
+            color={chartColor}
+            metric={{ name: tracker.title, unit }}
+            goalValue={chart.goalValue}
+            startingValue={chart.startingValue}
+          />
+        </div>
+      )}
 
       {/* One-tap logging. Green is correct here and nowhere else on this card:
           DESIGN.md reserves it for the affirmative action and names Log by name. */}
@@ -265,8 +307,7 @@ export default function TrackingView({
                     <MetricCard
                       key={stat.tracker.id}
                       stat={stat}
-                      entries={metricEntries}
-                      today={today}
+                      plan={group.plan}
                       onLog={onLog}
                       onOpenAddEntry={onOpenAddEntry}
                       onDeleteEntry={onDeleteEntry}

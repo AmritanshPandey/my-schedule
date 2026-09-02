@@ -337,6 +337,29 @@ export function timelineCardStyles(color: string) {
  * reports nothing. Neutral keeps them legible as blocked time while letting the
  * coloured blocks around them stay the signal.
  */
+/**
+ * The recovery treatment for sleep- and rest-kind categories.
+ *
+ * The category's hue survives in the border, the left rail, the time text and
+ * the duration pill, so the day still sorts by plan — only the saturated fill
+ * drops to a neutral wash. That is the loudest part of a block, and muting it
+ * is what makes recovery recede behind the work you are actually judging
+ * yourself on. Same idea as TIMELINE_NEUTRAL_CARD below, one step softer:
+ * held time has no identity to keep, whereas a rest block still belongs to a
+ * plan.
+ *
+ * Derived from `timelineCardStyles` rather than a second seventeen-colour
+ * table — those strings are hardcoded for Tailwind's JIT, and duplicating them
+ * would double the surface for a two-field change.
+ */
+export function quietTimelineCardStyles(color: string) {
+  return {
+    ...timelineCardStyles(color),
+    cardBg: "bg-neutral-50 dark:bg-white/[0.04]",
+    title: "text-neutral-700 dark:text-neutral-200",
+  };
+}
+
 export const TIMELINE_NEUTRAL_CARD = {
   cardBg:        "bg-neutral-100 dark:bg-white/[0.05]",
   blockBorder:   "border border-neutral-200/80 dark:border-white/[0.10]",

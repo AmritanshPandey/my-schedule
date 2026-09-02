@@ -71,3 +71,50 @@ function moveOccurrence(ritual: Ritual, stepId: string | undefined, time: string
 
   return same ? ritual : { ...ritual, steps: moved, time: earliest };
 }
+
+/**
+ * Drop a copy of a routine occurrence at a new time, leaving the original be.
+ *
+ * The Alt-variant of `setRitualTime`. What "a copy" means depends on the kind:
+ *
+ * - A "times" routine already models several occurrences a day, so duplicating
+ *   one adds another `RitualStep` at the new time. That is the honest reading
+ *   of "another one of these" — a second Ritual would split one habit's
+ *   completion across two rows and break its day-complete rule.
+ * - Everything else gets a genuinely new Ritual, same settings, new time and a
+ *   new id. Completions are per-ritual, so the copy correctly starts unticked.
+ *
+ * `limit` guards the same routine ceiling the add button enforces; the caller
+ * decides what to tell the user when it returns unchanged.
+ */
+export function duplicateRitualAt(
+  ritualId: string,
+  stepId: string | undefined,
+  time: string,
+  makeId: () => string,
+  limit = Number.POSITIVE_INFINITY,
+) {
+  return (prev: Schedule): Schedule => {
+    const stored = toStoredTime(time);
+    if (!stored) return prev;
+
+    const rituals = prev.rituals ?? [];
+    const source = rituals.find((r) => r.id === ritualId);
+    if (!source) return prev;
+
+    const isTimes = source.trackingType === "times" && !!source.steps?.length;
+    if (stepId && isTimes) {
+      const steps = [...(source.steps ?? []), { id: makeId(), label: stored }];
+      steps.sort((a, b) => (parseTimeToMinutes(a.label) ?? 0) - (parseTimeToMinutes(b.label) ?? 0));
+      return {
+        ...prev,
+        rituals: rituals.map((r) =>
+          r.id === ritualId ? { ...r, steps, time: steps[0]?.label ?? r.time } : r,
+        ),
+      };
+    }
+
+    if (rituals.length >= limit) return prev;
+    return { ...prev, rituals: [...rituals, { ...source, id: makeId(), time: stored }] };
+  };
+}

@@ -17,6 +17,8 @@ interface RitualStripProps {
   time?: string;
   /** Show the drag affordance (the caller decides when — e.g. Cmd/Ctrl held). */
   grabbable?: boolean;
+  /** Alt is also held: the drag will copy rather than move. Cursor only. */
+  copying?: boolean;
   /** This dot is the one currently being dragged; fade it like a moved task. */
   dragging?: boolean;
   /** Start a drag. The caller owns the gesture; this only forwards the event. */
@@ -45,6 +47,7 @@ export default function RitualStrip({
   onToggle,
   time,
   grabbable = false,
+  copying = false,
   dragging = false,
   onPointerDown,
 }: RitualStripProps) {
@@ -62,7 +65,7 @@ export default function RitualStrip({
       aria-label={`${ritual.title}${displayTime ? ` at ${formatDisplayTime(displayTime)}` : ""} — ${completed ? "done, tap to undo" : "tap to mark done"}`}
       title={ritual.title}
       className={`group/ritual pointer-events-auto relative h-4 w-4 shrink-0 select-none rounded-full hover:z-20 focus-visible:z-20 ${
-        grabbable ? "cursor-grab active:cursor-grabbing" : "cursor-pointer"
+        grabbable ? (copying ? "cursor-copy" : "cursor-grab active:cursor-grabbing") : "cursor-pointer"
       } ${dragging ? "opacity-30" : ""}`}
     >
       <span
