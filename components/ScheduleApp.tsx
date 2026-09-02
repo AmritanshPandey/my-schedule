@@ -448,6 +448,7 @@ const TimelineTaskBlock = memo(function TimelineTaskBlock({
   partnerCategory,
   isBeingMoved,
   isViewingToday,
+  isSelected,
   onPointerDown,
   onToggle,
   onOpenSubtasks,
@@ -461,6 +462,8 @@ const TimelineTaskBlock = memo(function TimelineTaskBlock({
   partnerCategory?: TaskCategory | null;
   isBeingMoved: boolean;
   isViewingToday: boolean;
+  /** Cmd/Ctrl+click multi-select, edit mode only — see `selectedTaskIds`. */
+  isSelected: boolean;
   onPointerDown: (e: React.PointerEvent<HTMLDivElement>, task: Task, start: number, end: number, slotIndex: number) => void;
   onToggle: (task: Task, slotIndex: number, isMultiSlot: boolean) => void;
   onOpenSubtasks: (task: Task) => void;
@@ -489,7 +492,7 @@ const TimelineTaskBlock = memo(function TimelineTaskBlock({
       data-task-block
       className={`absolute min-w-0 px-0.5 py-[2px] animate-panel-in touch-pan-y transition-opacity ${
         isBeingMoved ? "opacity-25 pointer-events-none" : ""
-      }`}
+      } ${isSelected ? "rounded-[10px] ring-2 ring-emerald-500 ring-offset-1 ring-offset-neutral-50 dark:ring-emerald-400 dark:ring-offset-neutral-950" : ""}`}
       style={{ ...taskLaneStyle(layout), willChange: isBeingMoved ? "opacity" : undefined }}
       // No move-drag entry point for a merged block — whose edges would move
       // is ambiguous with two tasks in one block; each half still retimes
@@ -919,6 +922,10 @@ export default function ScheduleApp() {
   // Today (narrow) header: reveal editing chrome (day actions, wallpaper) only
   // in edit mode, matching the iOS shell's clean-by-default execution surface.
   const [todayEditMode, setTodayEditMode] = useState(false);
+  // Cmd/Ctrl+click on a timeline block toggles membership here; only reachable
+  // in edit mode, so it can't be triggered accidentally while completing tasks.
+  const [selectedTaskIds, setSelectedTaskIds] = useState<Set<string>>(() => new Set());
+  const [bulkDeleteConfirmOpen, setBulkDeleteConfirmOpen] = useState(false);
   const [savingTimeline, setSavingTimeline] = useState(false);
   const [sessionTask, setSessionTask] = useState<Task | null>(null);
   // Task whose subtasks are shown in the bottom sheet — stored by id+day so the
@@ -1160,6 +1167,8 @@ export default function ScheduleApp() {
     isViewingToday: boolean;
     timelineStartMinutes: number;
     timelineEndMinutes: number;
+    todayEditMode: boolean;
+    toggleTaskSelection: (taskId: string) => void;
   }>(null as never);
 
   // ── Drag-create: pointerdown on empty grid ────────────────────────────────
@@ -1196,6 +1205,14 @@ export default function ScheduleApp() {
     e.stopPropagation(); // prevent grid drag-create from firing
     if (!dragHelpersRef.current.isViewingToday) return;
     if (e.pointerType === "mouse" && e.button !== 0) return;
+
+    // Cmd/Ctrl+click in edit mode toggles multi-select instead of starting a
+    // drag or completing the task — the two gestures would otherwise race on
+    // the same pointerdown.
+    if (dragHelpersRef.current.todayEditMode && (e.metaKey || e.ctrlKey)) {
+      dragHelpersRef.current.toggleTaskSelection(task.id);
+      return;
+    }
 
     const grabMin = dragHelpersRef.current.gridClientYToMinutes(e.clientY);
     const durationMin = layoutEnd - layoutStart;
@@ -1473,6 +1490,42 @@ export default function ScheduleApp() {
     haptic("light");
     setTaskDeleteRequest({ taskId, sourceDay, dateISO });
   }
+
+  const toggleTaskSelection = useCallback((taskId: string) => {
+    haptic("light");
+    setSelectedTaskIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(taskId)) next.delete(taskId);
+      else next.add(taskId);
+      return next;
+    });
+  }, []);
+
+  // Selection is scoped to one edit session on one day — leaving either stops
+  // a stale set from silently carrying into a bulk delete on the wrong day.
+  useEffect(() => {
+    if (!todayEditMode) setSelectedTaskIds(new Set());
+  }, [todayEditMode]);
+  useEffect(() => {
+    setSelectedTaskIds(new Set());
+  }, [activeDay]);
+
+  function performBulkDelete() {
+    const ids = [...selectedTaskIds];
+    if (ids.length === 0) return;
+    setSchedule((prev) => {
+      let next = prev;
+      for (const taskId of ids) {
+        next = applyTaskDelete(createTaskDeleteSnapshot(next, taskId, activeDay, "day"))(next);
+      }
+      return next;
+    });
+    haptic("medium");
+    setToastMessage(`Deleted ${ids.length} task${ids.length === 1 ? "" : "s"}`);
+    setSelectedTaskIds(new Set());
+    setBulkDeleteConfirmOpen(false);
+  }
+
 
   const handleToggleTaskComplete = useCallback(
     (taskId: string, allSubtaskIds: string[], day: DayKey = activeDay, dateISO?: string) => {
@@ -2767,6 +2820,8 @@ export default function ScheduleApp() {
     isViewingToday,
     timelineStartMinutes,
     timelineEndMinutes,
+    todayEditMode,
+    toggleTaskSelection,
   };
 
   useEffect(() => {
@@ -4027,6 +4082,32 @@ export default function ScheduleApp() {
                 <ProgressBar pct={dayProgress.pct} height={6} className="mt-3" />
               )}
               <SignInPrompt className="mt-3" />
+
+              {/* Bulk-select bar — Cmd/Ctrl+click a timeline block in edit mode to
+                  build this up, then act on all of them in one step. */}
+              {todayEditMode && viewMode === "timeline" && selectedTaskIds.size > 0 && (
+                <div className="mt-3 flex items-center justify-between gap-3 rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-2 dark:border-emerald-500/30 dark:bg-emerald-500/10">
+                  <span className="text-[13px] font-bold text-emerald-800 dark:text-emerald-300">
+                    {selectedTaskIds.size} selected
+                  </span>
+                  <div className="flex items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={() => { haptic("light"); setSelectedTaskIds(new Set()); }}
+                      className="rounded-full px-2.5 py-1 text-[12px] font-semibold text-emerald-800 hover:bg-emerald-100 dark:text-emerald-300 dark:hover:bg-emerald-500/15"
+                    >
+                      Clear
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => { haptic("light"); setBulkDeleteConfirmOpen(true); }}
+                      className="rounded-full bg-red-600 px-3 py-1 text-[12px] font-bold text-white hover:bg-red-700 dark:bg-red-500 dark:hover:bg-red-400"
+                    >
+                      Delete
+                    </button>
+                  </div>
+                </div>
+              )}
             </div>
 
             {/* Task content */}
@@ -4286,6 +4367,7 @@ export default function ScheduleApp() {
                               partnerCategory={layout.partner ? taskIdentity(layout.partner.task, categoryMap).category : null}
                               isBeingMoved={dragMove?.taskId === layout.task.id && dragMove?.slotIndex === layout.slotIndex}
                               isViewingToday={isViewingToday}
+                              isSelected={todayEditMode && selectedTaskIds.has(layout.task.id)}
                               onPointerDown={handleTaskPointerDown}
                               onToggle={handleTimelineToggle}
                               onOpenSubtasks={(task) => setSubtasksRef({ id: task.id, day: activeDay, dateISO: activeDateISO })}
@@ -4911,6 +4993,16 @@ export default function ScheduleApp() {
         title={dayClearCopy?.title ?? ""}
         description={dayClearCopy?.description}
         confirmLabel={dayClearCopy?.confirmLabel}
+      />
+
+      {/* ── Bulk delete (timeline multi-select) confirmation ─────────────────── */}
+      <ConfirmSheet
+        open={bulkDeleteConfirmOpen}
+        onClose={() => setBulkDeleteConfirmOpen(false)}
+        onConfirm={performBulkDelete}
+        title={`Delete ${selectedTaskIds.size} task${selectedTaskIds.size === 1 ? "" : "s"}?`}
+        description={`Removes ${selectedTaskIds.size === 1 ? "it" : "them"} from ${DAY_FULL_LABELS[activeDay]} only. This cannot be undone.`}
+        confirmLabel="Delete"
       />
 
       {/* ── Toast ───────────────────────────────────────────────────────────── */}

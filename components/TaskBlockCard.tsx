@@ -1,7 +1,7 @@
 "use client";
 
 import type { CSSProperties, ReactNode } from "react";
-import { IconMinus, IconX, IconListCheck, IconArrowUpRight } from "@tabler/icons-react";
+import { IconMinus, IconX, IconListCheck, IconArrowUpRight, IconCornerDownRight } from "@tabler/icons-react";
 import CheckDraw from "@/components/ui/CheckDraw";
 import type { Plan, Task, TaskCategory, TaskSlot } from "@/lib/useScheduleDB";
 import type { TaskState } from "@/lib/taskCompletion";
@@ -182,6 +182,7 @@ export function TaskBlockCard({
   const showPhaseBadge = slotIndex !== undefined && totalTaskSlots > 1 && !narrow && !minimal;
   const gridRadius =
     edgeCut === "bottom" ? "rounded-t-[8px]" : edgeCut === "top" ? "rounded-b-[8px]" : "rounded-[8px]";
+  const continuation = edgeCut === "top";
   // Timeline (grid) subtask/session pill — only when wired and the task has items.
   const subtaskPill = onOpenSubtasks && !isList && !minimal ? getTaskSubtaskSummary(task, plan) : null;
   const statusLabel = taskStatusLabel(state, readOnly);
@@ -364,15 +365,24 @@ export function TaskBlockCard({
       // lands on the card body after the finger drifted off the checkbox, which
       // would otherwise open the task right after marking it missed.
       {...longPress.clickGuard}
+      aria-label={continuation ? `${task.title}, continued from the previous day` : undefined}
       className={`group relative flex flex-col overflow-hidden transition-all ${styles.cardBg} ${styles.blockBorder} ${
         resolved ? "opacity-60" : ""
       } ${
         isList
           ? (slim ? "rounded-2xl gap-1.5 px-4 py-2.5 active:scale-[0.995]" : "rounded-2xl gap-3 px-5 py-4 active:scale-[0.995]")
           : `${gridRadius} justify-between ` + (slim ? "gap-1 pl-3 pr-2 py-1" : compact ? "gap-1 px-2.5 py-1.5" : "gap-1.5 pl-3 pr-2 py-2")
-      } ${onClick ? "cursor-pointer" : ""} ${className}`}
+      } ${continuation ? "opacity-80 !cursor-not-allowed" : onClick ? "cursor-pointer" : ""} ${className}`}
       style={style}
     >
+      {continuation && (
+        <span
+          aria-hidden="true"
+          className={`pointer-events-none absolute left-1 top-1 ${compact ? "" : "top-1.5"} ${styles.planLabel}`}
+        >
+          <IconCornerDownRight size={compact ? 10 : 12} strokeWidth={2.4} />
+        </span>
+      )}
       {isList && (
         <>
           <div className={`pointer-events-none absolute ${slim ? "inset-y-2" : "inset-y-4"} left-0 w-1 rounded-r-full ${styles.dot}`} />
@@ -392,7 +402,7 @@ export function TaskBlockCard({
           // banned-effects guard. The 90% fill carries the affordance on its
           // own — the blur was doing nothing a slightly more opaque background
           // doesn't do, behind a 24px icon.
-          className={`absolute right-1 top-1 z-10 flex h-6 w-6 cursor-pointer items-center justify-center rounded-full bg-white/90 text-neutral-500 opacity-0 transition-opacity hover:bg-white focus-visible:opacity-100 group-hover:opacity-100 group-focus-within:opacity-100 dark:bg-neutral-900/90 dark:text-neutral-400 dark:hover:bg-neutral-900 ${
+          className={`absolute right-1 ${subtaskPill?.hasItems ? "bottom-1" : "top-1"} z-10 flex h-6 w-6 cursor-pointer items-center justify-center rounded-full bg-white/90 text-neutral-500 opacity-0 transition-opacity hover:bg-white focus-visible:opacity-100 group-hover:opacity-100 group-focus-within:opacity-100 dark:bg-neutral-900/90 dark:text-neutral-400 dark:hover:bg-neutral-900 ${
             gridMenuAction.danger
               ? "hover:text-rose-600 dark:hover:text-rose-400"
               : "hover:text-neutral-800 dark:hover:text-white"
@@ -403,6 +413,11 @@ export function TaskBlockCard({
       )}
       {header}
       {timeRow}
+      {duration && narrow && !minimal && (
+        <span className={`relative w-fit rounded-full px-1.5 text-[8px] font-extrabold leading-[13px] tabular-nums ${styles.durationBadge}`}>
+          {duration}
+        </span>
+      )}
       {slotRows}
       {footer && <div className="relative">{footer}</div>}
       {children && <div className="relative">{children}</div>}
