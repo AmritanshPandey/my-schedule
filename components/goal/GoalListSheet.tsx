@@ -1,13 +1,16 @@
 "use client";
 
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import type { Goal, Schedule } from "@/lib/useScheduleDB";
 import { archiveGoal, completeGoal, plansForGoal } from "@/lib/goalMutations";
+import { calculateGoalProgress, type GoalProgressState } from "@/lib/goalProgress";
 import BottomSheet from "@/components/ui/BottomSheet";
 import SheetHeader from "@/components/ui/SheetHeader";
 import Button from "@/components/ui/Button";
 import EmptyState from "@/components/ui/EmptyState";
 import IconButton from "@/components/ui/IconButton";
+import ProgressBar from "@/components/ui/ProgressBar";
+import HealthBadge, { HEALTH_FILL } from "@/components/ui/HealthBadge";
 import {
   IconTargetArrow,
   IconPlus,
@@ -60,9 +63,48 @@ function StatusPill({ status }: { status: Goal["status"] }) {
 }
 
 /**
+ * The progress block — the same shape in the list row and the detail pane, so
+ * a goal reads identically wherever it appears.
+ *
+ * A goal with nothing linked shows setup guidance instead of a 0% bar: zero
+ * measured progress and nothing to measure are different states, and rendering
+ * them the same way tells the user they are failing at something they have not
+ * started.
+ */
+function GoalProgressBlock({ state, compact = false }: { state: GoalProgressState; compact?: boolean }) {
+  if (!state.hasData) return null;
+  return (
+    <div className={compact ? "mt-2" : "mt-3"}>
+      {/* These two numbers answer different questions and must not read as
+          the same one: the left is how many milestones are *finished*, the
+          right is how far along the goal is *across* them. Unlabelled, "2/5"
+          beside "93%" reads as an arithmetic error. */}
+      <div className="mb-1 flex items-baseline justify-between gap-2">
+        <span className="text-[11px] font-semibold text-neutral-400 dark:text-neutral-500">
+          {state.milestonesCompleted} of {state.milestoneTotal} done
+        </span>
+        {state.progress !== null && (
+          <span className="text-[11px] font-bold tabular-nums text-neutral-600 dark:text-neutral-300">
+            {state.progress}% progress
+          </span>
+        )}
+      </div>
+      <ProgressBar
+        pct={state.progress ?? 0}
+        height={compact ? 4 : 6}
+        fillClassName={HEALTH_FILL[state.health]}
+      />
+    </div>
+  );
+}
+
+/**
  * The entire Goal UI lives here: a list (with create entry point) and a
- * per-Goal detail pane, both inside one sheet. Deliberately small — no
- * dashboard, no health/score/insights (see PlanR Improvement 03 §19-23).
+ * per-Goal detail pane, both inside one sheet.
+ *
+ * Progress is derived, never stored — see lib/goalProgress.ts. The rollup
+ * reuses the milestone health engine rather than inventing a second score, so
+ * a goal can never disagree with the milestone rows it is summarizing.
  */
 export default function GoalListSheet({ open, onClose, schedule, setSchedule, onDeleteGoal }: GoalListSheetProps) {
   const [selectedGoalId, setSelectedGoalId] = useState<string | null>(null);
@@ -71,6 +113,15 @@ export default function GoalListSheet({ open, onClose, schedule, setSchedule, on
 
   const goals = schedule.goals ?? [];
   const selectedGoal = selectedGoalId ? goals.find((g) => g.id === selectedGoalId) ?? null : null;
+
+  // Computed once per render for every goal: the rollup walks each goal's
+  // plans, their milestones and the linked tasks/trackers behind them, so
+  // recomputing it per row (list, then detail) would repeat that walk.
+  const progressByGoal = useMemo(() => {
+    const map = new Map<string, GoalProgressState>();
+    for (const g of goals) map.set(g.id, calculateGoalProgress(schedule, g));
+    return map;
+  }, [goals, schedule]);
 
   function handleClose() {
     setSelectedGoalId(null);
@@ -108,8 +159,11 @@ export default function GoalListSheet({ open, onClose, schedule, setSchedule, on
               </div>
 
               <div>
-                <div className="mb-1 flex items-center gap-2">
+                <div className="mb-1 flex flex-wrap items-center gap-2">
                   <StatusPill status={selectedGoal.status} />
+                  {selectedGoal.status === "active" && (
+                    <HealthBadge health={progressByGoal.get(selectedGoal.id)!.health} />
+                  )}
                   {formatDate(selectedGoal.targetDate) && (
                     <span className="text-[12px] text-neutral-400 dark:text-neutral-500">
                       Target {formatDate(selectedGoal.targetDate)}
@@ -121,6 +175,41 @@ export default function GoalListSheet({ open, onClose, schedule, setSchedule, on
                   <p className="mt-1.5 text-[13px] leading-relaxed text-neutral-500 dark:text-neutral-400">{selectedGoal.description}</p>
                 )}
               </div>
+
+              {/* ── Derived progress ─────────────────────────────────────── */}
+              {(() => {
+                const progress = progressByGoal.get(selectedGoal.id)!;
+                return (
+                  <div className="rounded-2xl border border-neutral-200 bg-neutral-50 p-4 dark:border-white/[0.08] dark:bg-white/[0.03]">
+                    {/* The status message is the headline, not the number: it
+                        already says what happened, why it matters and what's
+                        next, which a bare percentage never can. */}
+                    <p className="text-[13px] leading-relaxed text-neutral-700 dark:text-neutral-300">
+                      {progress.statusMessage}
+                    </p>
+                    <GoalProgressBlock state={progress} />
+                    {progress.nextMilestone && (
+                      <div className="mt-3 border-t border-neutral-200 pt-3 dark:border-white/[0.08]">
+                        <p className="text-[11px] font-semibold uppercase tracking-[0.08em] text-neutral-400 dark:text-neutral-500">
+                          Next milestone
+                        </p>
+                        <p className="mt-1 truncate text-[13px] font-semibold text-neutral-900 dark:text-white">
+                          {progress.nextMilestone.milestone.title}
+                        </p>
+                        <p className="text-[11.5px] text-neutral-500 dark:text-neutral-400">
+                          {progress.nextMilestone.plan.title}
+                          {" · "}
+                          {progress.nextMilestone.daysUntil < 0
+                            ? `${Math.abs(progress.nextMilestone.daysUntil)} day${Math.abs(progress.nextMilestone.daysUntil) === 1 ? "" : "s"} overdue`
+                            : progress.nextMilestone.daysUntil === 0
+                              ? "due today"
+                              : `in ${progress.nextMilestone.daysUntil} day${progress.nextMilestone.daysUntil === 1 ? "" : "s"}`}
+                        </p>
+                      </div>
+                    )}
+                  </div>
+                );
+              })()}
 
               <div className="flex gap-2">
                 <Button size="sm" variant="secondary" onClick={() => openEdit(selectedGoal)}>
@@ -189,7 +278,7 @@ export default function GoalListSheet({ open, onClose, schedule, setSchedule, on
                 <>
                   <div className="space-y-2">
                     {goals.map((goal) => {
-                      const planCount = plansForGoal(schedule, goal.id).length;
+                      const progress = progressByGoal.get(goal.id)!;
                       return (
                         <button
                           key={goal.id}
@@ -197,9 +286,14 @@ export default function GoalListSheet({ open, onClose, schedule, setSchedule, on
                           onClick={() => setSelectedGoalId(goal.id)}
                           className="flex w-full items-center justify-between gap-3 rounded-2xl border border-neutral-200 bg-white p-4 text-left transition-colors hover:border-neutral-300 dark:border-white/[0.08] dark:bg-neutral-900 dark:hover:border-white/20"
                         >
-                          <div className="min-w-0">
-                            <p className="truncate text-[14px] font-bold text-neutral-950 dark:text-white">{goal.title}</p>
-                            <div className="mt-1 flex items-center gap-2">
+                          <div className="min-w-0 flex-1">
+                            <div className="flex items-start justify-between gap-2">
+                              <p className="truncate text-[14px] font-bold text-neutral-950 dark:text-white">{goal.title}</p>
+                              {/* Only graded goals carry a health badge — an
+                                  archived or paused goal isn't being measured. */}
+                              {goal.status === "active" && <HealthBadge health={progress.health} />}
+                            </div>
+                            <div className="mt-1 flex flex-wrap items-center gap-2">
                               <StatusPill status={goal.status} />
                               {formatDate(goal.targetDate) && (
                                 <span className="text-[11px] text-neutral-400 dark:text-neutral-500">
@@ -207,9 +301,10 @@ export default function GoalListSheet({ open, onClose, schedule, setSchedule, on
                                 </span>
                               )}
                               <span className="text-[11px] text-neutral-400 dark:text-neutral-500">
-                                {planCount} {planCount === 1 ? "plan" : "plans"}
+                                {progress.planCount} {progress.planCount === 1 ? "plan" : "plans"}
                               </span>
                             </div>
+                            <GoalProgressBlock state={progress} compact />
                           </div>
                           <IconChevronRight size={16} className="shrink-0 text-neutral-300 dark:text-neutral-600" />
                         </button>

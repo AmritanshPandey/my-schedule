@@ -27,6 +27,7 @@ import { haptic } from "@/lib/haptics";
 import ProgressChart from "@/components/ProgressChart";
 import BottomSheet from "@/components/ui/BottomSheet";
 import ProgressBar from "@/components/ui/ProgressBar";
+import HealthBadge from "@/components/ui/HealthBadge";
 import SheetHeader from "@/components/ui/SheetHeader";
 import Button from "@/components/ui/Button";
 import IconButton from "@/components/ui/IconButton";
@@ -140,26 +141,11 @@ function TrendBadge({ trend }: { trend: TrendResult }) {
 // a milestone can be "active" and "at_risk" at the same time; they answer
 // different questions and neither replaces the other.
 
-const HEALTH_BADGE: Record<MilestoneState["health"], { emoji: string; label: string; className: string }> = {
-  completed:       { emoji: "✅", label: "Completed",       className: "bg-neutral-100 text-neutral-500 dark:bg-white/[0.06] dark:text-neutral-400" },
-  not_started:     { emoji: "⚪", label: "Not started",     className: "bg-neutral-100 text-neutral-500 dark:bg-white/[0.06] dark:text-neutral-400" },
-  getting_started: { emoji: "🔵", label: "Getting started", className: "bg-sky-50 text-sky-700 dark:bg-sky-500/10 dark:text-sky-400" },
-  ahead:           { emoji: "🟢", label: "Ahead",           className: "bg-green-50 text-green-700 dark:bg-green-500/10 dark:text-green-400" },
-  on_track:        { emoji: "🟢", label: "On track",        className: "bg-green-50 text-green-700 dark:bg-green-500/10 dark:text-green-400" },
-  at_risk:         { emoji: "🟡", label: "At risk",         className: "bg-amber-50 text-amber-700 dark:bg-amber-500/10 dark:text-amber-400" },
-  delayed:         { emoji: "🔴", label: "Delayed",         className: "bg-rose-50 text-rose-700 dark:bg-rose-500/10 dark:text-rose-400" },
-};
-
+// The map and the badge itself now live in components/ui/HealthBadge.tsx, so
+// the Goals surface renders the same vocabulary from the same source rather
+// than a second copy that can drift.
 function MilestoneHealthBadge({ health, size = "sm" }: { health: MilestoneState["health"]; size?: "sm" | "md" }) {
-  const cfg = HEALTH_BADGE[health];
-  return (
-    <span className={`inline-flex shrink-0 items-center gap-1 rounded-full font-bold ${cfg.className} ${
-      size === "md" ? "px-2.5 py-1 text-[12px]" : "px-2 py-0.5 text-[10.5px]"
-    }`}>
-      <span aria-hidden="true">{cfg.emoji}</span>
-      {cfg.label}
-    </span>
-  );
+  return <HealthBadge health={health} size={size} />;
 }
 
 // ── Goal direction picker ─────────────────────────────────────────────────────
