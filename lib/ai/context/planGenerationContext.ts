@@ -19,7 +19,24 @@ import { isTrackedTask } from "@/lib/taskCompletion";
 export function buildTaskGenerationContext(schedule: Schedule, todayKey: DayKey): string {
   const parts: string[] = [];
 
-  const todayTasks = (schedule.activities[todayKey] ?? [])
+  const todayActivities = schedule.activities[todayKey] ?? [];
+
+  // Commitments lead, in their own headed section. They are held time the user
+  // cannot move (commute, office hours, an appointment), so they are the single
+  // most important thing the model needs in order to plan around a real life
+  // rather than an empty calendar. They were previously dropped entirely by an
+  // `isTrackedTask` filter — that predicate answers "does this count toward a
+  // completion statistic", which is a different question from "is this time
+  // already spoken for".
+  const commitments = todayActivities
+    .filter((t) => t.taskType === "commitment")
+    .slice(0, 6)
+    .map((t) => `- ${t.title} (${t.startTime}–${t.endTime})`);
+  if (commitments.length > 0) {
+    parts.push(`Fixed commitments today (immovable — never schedule over these):\n${commitments.join("\n")}`);
+  }
+
+  const todayTasks = todayActivities
     .filter(isTrackedTask)
     .slice(0, 10)
     .map((t) => `- ${t.title} (${t.startTime}–${t.endTime})`);

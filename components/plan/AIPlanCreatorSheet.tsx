@@ -23,7 +23,6 @@ import { validateTaskShapes, type TaskShapeIssue } from "@/lib/ai/validation/tas
 import { runBusinessRules, resolveDayWindowMinutes, type RuleIssue } from "@/lib/ai/validation/businessRules";
 import { buildTaskGenerationContext } from "@/lib/ai/context/planGenerationContext";
 import { AICyclingStatus } from "@/components/ai/AIThinkingStatus";
-import { isTrackedTask } from "@/lib/taskCompletion";
 import { formatDisplayTime } from "@/lib/timeUtils";
 import { DAYS, type DayKey, type Plan, type Schedule } from "@/lib/useScheduleDB";
 
@@ -320,9 +319,15 @@ export default function AIPlanCreatorSheet({
   // generated task or milestone would still block creation after its removal.
   const businessRuleIssues = useMemo(() => {
     const { dayStartMinutes, dayEndMinutes } = resolveDayWindowMinutes(schedule.preferences ?? {});
+    // Every task counts here, commitments included. `isTrackedTask` marks what
+    // belongs in a completion DENOMINATOR (see its comment in
+    // lib/taskCompletion.ts) — this is a question about occupied TIME, and a
+    // commute or a 9–6 block occupies the day exactly as much as a tracked
+    // task does. Filtering them out told checkTimeBudget the work day was
+    // free, which is the opposite of planning around real life.
     const existingTasksByDay = DAYS.reduce<Partial<Record<DayKey, { title: string; startTime: string; endTime: string }[]>>>(
       (acc, day) => {
-        acc[day] = (schedule.activities[day] ?? []).filter(isTrackedTask);
+        acc[day] = schedule.activities[day] ?? [];
         return acc;
       },
       {},
