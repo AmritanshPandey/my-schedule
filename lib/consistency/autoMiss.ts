@@ -15,6 +15,7 @@
  */
 
 import type { Schedule, Task } from "../useScheduleDB";
+import { isPlanRunning } from "../planLifecycle";
 import { DAYS } from "../scheduleConstants";
 import { localISODate, addDaysToISO } from "../dateUtils";
 import { getConfiguredDayStartMinutes, DEFAULT_TIMELINE_START_MINUTES } from "../timeline/displayWindow";
@@ -66,6 +67,14 @@ export function applyAutoMissed(schedule: Schedule, now: Date): Schedule {
   const activities = { ...schedule.activities };
   let changed = false;
 
+  // Paused plans accrue no misses. This is the rule that makes pausing a real
+  // recovery option rather than a cosmetic one: a user who steps away from a
+  // plan for two weeks must not come back to fourteen days of manufactured
+  // failure. Resolved once here rather than per task per day.
+  const pausedPlanIds = new Set(
+    schedule.plans.filter((plan) => !isPlanRunning(plan)).map((plan) => plan.id),
+  );
+
   for (let d = startISO; d <= endISO; d = addDaysToISO(d, 1)) {
     const weekday = weekdayKeyOf(d);
     const bucket = activities[weekday];
@@ -73,6 +82,7 @@ export function applyAutoMissed(schedule: Schedule, now: Date): Schedule {
     let bucketChanged = false;
     const next: Task[] = bucket.map((task) => {
       if (!isTrackedTask(task)) return task; // commitments/held time never miss
+      if (task.planId && pausedPlanIds.has(task.planId)) return task; // held plan — nothing was expected
       if (!isTaskScheduledOn(task, d, true)) return task; // honors recurrence/skips/active window
       const state = completionForDate(task, d);
       if (state.completed || state.missed) return task; // already resolved for that date

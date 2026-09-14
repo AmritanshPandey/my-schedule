@@ -5,6 +5,8 @@ import { AnimatePresence, m } from "framer-motion";
 import {
   IconCheck,
   IconEdit,
+  IconPlayerPause,
+  IconPlayerPlay,
   IconPlus,
   IconTrash,
   IconArrowUpRight,
@@ -36,6 +38,7 @@ import MilestoneSheet, { type MilestoneSaveData } from "@/components/plan/Milest
 import { computeRoadmapStats } from "@/lib/roadmapEngine";
 import { calculateMilestoneProgress, type MilestoneProgress } from "@/lib/planProgress";
 import { calculateMilestoneState, type MilestoneState } from "@/lib/milestoneHealth";
+import { isPlanRunning, planLifecycleLabel } from "@/lib/planLifecycle";
 import { sumEntriesForDate } from "@/lib/metricEntries";
 import { planEffectiveEndDate, resolveMilestoneStatus } from "@/lib/roadmapDates";
 import { computeTrend } from "@/lib/trendUtils";
@@ -223,6 +226,8 @@ interface PlanDetailViewProps {
   hideHeader?: boolean;
   onDeletePlan?: (planId: string) => void;
   onEditPlan?: (planId: string) => void;
+  /** Absent = the pause affordance is not offered on this surface. */
+  onTogglePlanPaused?: (planId: string) => void;
   // Task handlers
   onAddTask: (planId: string) => void;
   onEditTask: (task: Task) => void;
@@ -279,6 +284,7 @@ export default function PlanDetailView({
   hideHeader = false,
   onDeletePlan,
   onEditPlan,
+  onTogglePlanPaused,
   onAddTask,
   onEditTask,
   onDeleteLinkedTask,
@@ -300,6 +306,11 @@ export default function PlanDetailView({
   onUnlinkTaskFromMilestone,
   onUpdateCoachMessages,
 }: PlanDetailViewProps) {
+  // Whether this plan is still expected to run. Drives the pause affordance
+  // and the held-state banner; the counting rules behind it live in the lib
+  // layer (see lib/planLifecycle.ts).
+  const running = isPlanRunning(plan);
+
   // ── Tab state ───────────────────────────────────────────────────────────
   const aiEnabled = useAIEnabled();
   const [planTab, setPlanTab] = useState<"planning" | "roadmap" | "strategy">("planning");
@@ -2011,6 +2022,23 @@ export default function PlanDetailView({
             {plan.title}
           </h1>
           <div className="hidden shrink-0 items-center gap-2 lg:flex">
+            {onTogglePlanPaused && (
+              <IconButton
+                label={running ? "Pause plan" : "Resume plan"}
+                variant="ghost"
+                size="md"
+                radius="xl"
+                onClick={() => { haptic("light"); onTogglePlanPaused(plan.id); }}
+                title={running
+                  ? "Pause — its tasks stop being expected, and nothing is marked missed"
+                  : "Resume — put this plan back into normal execution"}
+                className="h-10 w-10 border border-neutral-200 dark:border-white/10"
+              >
+                {running
+                  ? <IconPlayerPause size={18} strokeWidth={1.9} />
+                  : <IconPlayerPlay size={18} strokeWidth={1.9} />}
+              </IconButton>
+            )}
             {onEditPlan && (
               <IconButton
                 label="Edit plan"
@@ -2039,6 +2067,25 @@ export default function PlanDetailView({
             )}
           </div>
         </div>
+        {/* Held state, stated plainly. Neutral, never alarm-coloured: this is
+            the user's own decision being reflected back, not a problem. The
+            second sentence is the part that matters — it says what pausing
+            actually bought them, which is why it is safe to use. */}
+        {!running && (
+          <div className="flex items-start gap-2.5 rounded-2xl border border-neutral-200 bg-neutral-50 px-4 py-3 dark:border-white/10 dark:bg-white/[0.04]">
+            <IconPlayerPause size={16} strokeWidth={2} className="mt-0.5 shrink-0 text-neutral-500 dark:text-neutral-400" />
+            <div className="min-w-0">
+              <p className="text-[13px] font-bold text-neutral-800 dark:text-neutral-200">
+                {planLifecycleLabel(plan)}
+              </p>
+              <p className="text-[12.5px] leading-relaxed text-neutral-500 dark:text-neutral-400">
+                Its tasks aren&apos;t expected while it&apos;s {planLifecycleLabel(plan).toLowerCase()} — nothing is
+                marked missed and no streak counts against you. Everything is kept, and resuming
+                puts it back exactly as it was.
+              </p>
+            </div>
+          </div>
+        )}
         {plan.description && (
           <p className="text-[16px] leading-relaxed text-neutral-600 dark:text-neutral-400">
             {plan.description}

@@ -226,21 +226,30 @@ test("a completed milestone counts as 100 even with nothing linked to it", () =>
 // ── Health aggregation ───────────────────────────────────────────────────────
 
 test("one delayed milestone makes the whole goal delayed", () => {
+  // m1 is unambiguously fine (completed); m2 is unambiguously delayed (a
+  // linked task, nothing done, planned end already past). Both states are
+  // pinned explicitly so this can't pass because the *other* milestone
+  // happened to be unhealthy.
   const state = calculateGoalProgress(
     schedule({
       plans: [plan({ goalId: "g1" })],
-      activities: activitiesFor([{ id: "t1", events: [taskEvent("t1", "2026-09-02")] }]),
+      activities: activitiesFor([{ id: "t2", events: [] }]),
       milestones: [
-        milestone({ id: "m1", linkedActivities: ["t1"] }),
-        // Its planned end is in the past with nothing linked and nothing done.
-        milestone({ id: "m2", startDate: "2026-08-01", plannedEndDate: "2026-08-20" }),
+        milestone({ id: "m1", status: "completed", actualCompletedDate: "2026-09-01" }),
+        milestone({
+          id: "m2",
+          startDate: "2026-08-01",
+          plannedEndDate: "2026-08-20",
+          linkedActivities: ["t2"],
+        }),
       ],
     }),
     goal(),
     NOW("2026-09-10"),
   );
   assert.equal(state.health, "delayed");
-  assert.ok(state.milestonesOffTrack >= 1);
+  assert.equal(state.milestonesCompleted, 1);
+  assert.equal(state.milestonesOffTrack, 1);
   assert.equal(goalNeedsAttention(state), true);
 });
 

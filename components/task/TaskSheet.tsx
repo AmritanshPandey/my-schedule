@@ -31,6 +31,10 @@ import SheetHeader from "@/components/ui/SheetHeader";
 import Button from "@/components/ui/Button";
 import IconButton from "@/components/ui/IconButton";
 import Input, { FORM_INPUT_CLASS, FORM_LABEL, Textarea } from "@/components/ui/Input";
+import AddRowButton from "@/components/ui/AddRowButton";
+import SegmentedControl from "@/components/ui/SegmentedControl";
+import WeekdayPicker from "@/components/ui/WeekdayPicker";
+import { typography } from "@/components/ui/Typography";
 import TimeSlotPicker, { type EditableSlot } from "@/components/TimeSlotPicker";
 import { CategorySelector } from "./CategorySelector";
 import CategorySheet, { type CategoryDraft } from "@/components/category/CategorySheet";
@@ -39,6 +43,7 @@ import type { DayKey, Plan, Schedule, Task, TaskCategory, TaskRecurrence, TaskTy
 import { findAvailableSlots, suggestSlots } from "@/lib/availableSlots";
 import { computeUsualTimeSlot } from "@/lib/usualTimeSlot";
 import { DAYS, DAY_LABELS } from "@/lib/useScheduleDB";
+import { DAY_FULL_LABELS } from "@/lib/scheduleConstants";
 import { localISODate, formatDate } from "@/lib/dateUtils";
 import type { ScheduleEntry } from "@/components/ScheduleItem";
 import {
@@ -168,10 +173,35 @@ function subtaskDraftToEntry(d: SubtaskDraft): ScheduleEntry {
   };
 }
 
-// ── Label style (shared with TimeSlotPicker) ─────────────────────────────────
+// ── Segmented option tables ──────────────────────────────────────────────────
+// Hoisted so the arrays keep a stable identity across renders, and so the copy
+// for every mode switch in this sheet reads in one place.
 
-const SECTION_LABEL =
-  "text-[11px] font-semibold uppercase tracking-[0.08em] text-neutral-400 dark:text-neutral-500";
+const SCOPE_OPTIONS = [
+  { value: "all", label: "All days" },
+  { value: "occurrence", label: "This day only" },
+] as const satisfies readonly { value: "all" | "occurrence"; label: string }[];
+
+const TYPE_OPTIONS = [
+  { value: "task", label: "Task" },
+  { value: "session", label: "Session" },
+  { value: "commitment", label: "Commitment" },
+] as const satisfies readonly { value: TaskTypeValue; label: string }[];
+
+const PER_DAY_OPTIONS = [
+  { value: "same", label: "Same every day" },
+  { value: "custom", label: "Custom per day" },
+] as const;
+
+// "Every N wks" carried a placeholder letter and an abbreviation. "Every few
+// weeks" fixed the words but overflowed a third of a 375px sheet and truncated
+// to "Every few w…". "Multi-week" says the same thing in the space available,
+// and the stepper directly below names the actual interval.
+const REPEAT_OPTIONS = [
+  { value: "weekly", label: "Weekly" },
+  { value: "interval", label: "Multi-week" },
+  { value: "once", label: "One-off" },
+] as const;
 
 function isValidInputTime(value: string): boolean {
   return /^([01]\d|2[0-3]):[0-5]\d$/.test(value);
@@ -477,6 +507,7 @@ export function TaskSheet({
   // Custom-per-day is only meaningful when the task spans >1 weekday.
   const canCustomizePerDay = !isOccurrenceScope && repeatMode !== "once" && repeatDays.length > 1;
   const perDayActive = canCustomizePerDay && !sameEveryDay;
+  const showRepeatDays = !isOccurrenceScope && repeatMode !== "once" && !perDayActive;
   const resolvedEditDay = repeatDays.includes(editDay) ? editDay : repeatDays[0] ?? activeDay;
 
   // Which slots the picker edits, and where edits are written.
@@ -776,36 +807,14 @@ export function TaskSheet({
 
             {/* Title preview */}
             <div className="mb-5 rounded-2xl border border-neutral-200 bg-neutral-50 px-4 py-3 dark:border-white/[0.08] dark:bg-white/[0.03]">
-              <p className="mb-0.5 text-[11px] font-bold uppercase tracking-[0.08em] text-neutral-400">New title</p>
+              <p className={`mb-0.5 ${typography.eyebrow}`}>New title</p>
               <p className="text-[16px] font-semibold text-neutral-900 dark:text-white">Copy of {title}</p>
             </div>
 
             {/* Day selector */}
             <div className="mb-6">
-              <p className="mb-2.5 text-[11px] font-bold uppercase tracking-[0.08em] text-neutral-500 dark:text-neutral-400">Copy to days</p>
-              <div className="flex flex-wrap gap-2">
-                {DAYS.map((day) => {
-                  const sel = duplicateDays.includes(day);
-                  return (
-                    <button
-                      key={day}
-                      type="button"
-                      onClick={() =>
-                        setDuplicateDays((prev) =>
-                          sel ? prev.filter((d) => d !== day) : [...prev, day]
-                        )
-                      }
-                      className={`h-9 rounded-full px-4 text-[13px] font-semibold transition-colors ${
-                        sel
-                          ? "bg-neutral-900 text-white dark:bg-white dark:text-neutral-950"
-                          : "border border-neutral-200 bg-white text-neutral-500 dark:border-white/10 dark:bg-white/[0.04] dark:text-neutral-400"
-                      }`}
-                    >
-                      {DAY_LABELS[day]}
-                    </button>
-                  );
-                })}
-              </div>
+              <p className={`mb-2.5 ${typography.eyebrow}`}>Copy to days</p>
+              <WeekdayPicker selected={duplicateDays} onChange={setDuplicateDays} allowEmpty />
             </div>
 
             <Button fullWidth onClick={confirmDuplicate} disabled={duplicateDays.length === 0}>
@@ -840,25 +849,15 @@ export function TaskSheet({
               {/* Edit scope — all occurrences vs just this date */}
               {canScopeToOccurrence && (
                 <div>
-                  <p className={`mb-1.5 ${SECTION_LABEL}`}>Apply changes to</p>
-                  <div className="grid grid-cols-2 gap-2">
-                    {([["all", "All days"], ["occurrence", "This day only"]] as const).map(([value, label]) => (
-                      <button
-                        key={value}
-                        type="button"
-                        onClick={() => applyScope(value)}
-                        className={`h-10 rounded-full text-[14px] font-semibold transition-colors ${
-                          editScope === value
-                            ? "bg-neutral-900 text-white dark:bg-white dark:text-neutral-950"
-                            : "border border-neutral-200 bg-white text-neutral-500 dark:border-white/10 dark:bg-white/[0.04] dark:text-neutral-400"
-                        }`}
-                      >
-                        {label}
-                      </button>
-                    ))}
-                  </div>
+                  <p className={FORM_LABEL}>Apply changes to</p>
+                  <SegmentedControl
+                    ariaLabel="Apply changes to"
+                    options={SCOPE_OPTIONS}
+                    value={editScope}
+                    onChange={applyScope}
+                  />
                   {isOccurrenceScope && (
-                    <p className="mt-2 text-[12px] leading-snug text-neutral-400 dark:text-neutral-500">
+                    <p className="mt-2 text-[12px] leading-snug text-neutral-500 dark:text-neutral-400">
                       Changes apply only to {occurrenceDateLabel} — title, time &amp; note.
                       {hasOccurrenceOverride && onResetOccurrence && (
                         <>
@@ -880,29 +879,15 @@ export function TaskSheet({
               {/* Task type toggle */}
               {!isOccurrenceScope && (
               <div>
-                <p className={`mb-1.5 ${SECTION_LABEL}`}>Type</p>
-                <div className="grid grid-cols-3 gap-2">
-                  {([
-                    ["task", "Task"],
-                    ["session", "Session"],
-                    ["commitment", "Commitment"],
-                  ] as const).map(([type, label]) => (
-                    <button
-                      key={type}
-                      type="button"
-                      onClick={() => setTaskType(type)}
-                      className={`h-10 rounded-full px-1 text-[12px] font-semibold transition-colors ${
-                        taskType === type
-                          ? "bg-neutral-900 text-white dark:bg-white dark:text-neutral-950"
-                          : "border border-neutral-200 bg-white text-neutral-500 dark:border-white/10 dark:bg-white/[0.04] dark:text-neutral-400"
-                      }`}
-                    >
-                      {label}
-                    </button>
-                  ))}
-                </div>
+                <p className={FORM_LABEL}>Type</p>
+                <SegmentedControl
+                  ariaLabel="Task type"
+                  options={TYPE_OPTIONS}
+                  value={taskType}
+                  onChange={setTaskType}
+                />
                 {taskType === "commitment" && (
-                  <p className="mt-2 text-[12px] leading-snug text-neutral-400 dark:text-neutral-500">
+                  <p className="mt-2 text-[12px] leading-snug text-neutral-500 dark:text-neutral-400">
                     Blocks your calendar but is never tracked — no checkbox, and
                     it stays out of your streak, consistency and completion stats.
                   </p>
@@ -979,51 +964,47 @@ export function TaskSheet({
               {/* Same-vs-custom schedule per day (only when spanning >1 weekday) */}
               {canCustomizePerDay && (
                 <div>
-                  <p className={`mb-1.5 ${SECTION_LABEL}`}>Schedule</p>
-                  <div className="grid grid-cols-2 gap-2">
-                    {([[true, "Same every day"], [false, "Custom per day"]] as const).map(([value, label]) => (
-                      <button
-                        key={label}
-                        type="button"
-                        onClick={() => setSameEveryDay(value)}
-                        className={`h-10 rounded-full text-[14px] font-semibold transition-colors ${
-                          sameEveryDay === value
-                            ? "bg-neutral-900 text-white dark:bg-white dark:text-neutral-950"
-                            : "border border-neutral-200 bg-white text-neutral-500 dark:border-white/10 dark:bg-white/[0.04] dark:text-neutral-400"
-                        }`}
-                      >
-                        {label}
-                      </button>
-                    ))}
-                  </div>
+                  <p className={FORM_LABEL}>Schedule</p>
+                  <SegmentedControl
+                    ariaLabel="Schedule"
+                    options={PER_DAY_OPTIONS}
+                    value={sameEveryDay ? "same" : "custom"}
+                    onChange={(value) => setSameEveryDay(value === "same")}
+                  />
+                  {/* Which day's times are being edited — a single choice, so
+                      a radiogroup rather than the toggles WeekdayPicker draws. */}
                   {perDayActive && (
-                    <div className="mt-2.5 flex flex-wrap gap-2">
-                      {DAYS.filter((d) => repeatDays.includes(d)).map((day) => (
-                        <button
-                          key={day}
-                          type="button"
-                          onClick={() => setEditDay(day)}
-                          className={`h-8 rounded-full border px-3 text-[12px] font-semibold transition-colors ${
-                            resolvedEditDay === day
-                              ? "border-neutral-900 bg-neutral-900 text-white dark:border-white dark:bg-white dark:text-neutral-900"
-                              : "border-neutral-200 bg-white text-neutral-500 dark:border-white/10 dark:bg-white/[0.04] dark:text-neutral-400"
-                          }`}
-                        >
-                          {DAY_LABELS[day]}
-                        </button>
-                      ))}
+                    <div role="radiogroup" aria-label="Day to edit" className="mt-2.5 flex flex-wrap gap-2">
+                      {DAYS.filter((d) => repeatDays.includes(d)).map((day) => {
+                        const active = resolvedEditDay === day;
+                        return (
+                          <button
+                            key={day}
+                            type="button"
+                            role="radio"
+                            aria-checked={active}
+                            aria-label={DAY_FULL_LABELS[day]}
+                            tabIndex={active ? 0 : -1}
+                            onClick={() => setEditDay(day)}
+                            className={`h-8 w-10 rounded-full border text-[12px] font-semibold transition-colors ${
+                              active
+                                ? "border-neutral-900 bg-neutral-900 text-white dark:border-white dark:bg-white dark:text-neutral-900"
+                                : "border-neutral-200 bg-white text-neutral-500 hover:border-neutral-300 hover:text-neutral-800 dark:border-white/10 dark:bg-white/[0.04] dark:text-neutral-400 dark:hover:border-white/20 dark:hover:text-neutral-200"
+                            }`}
+                          >
+                            {DAY_LABELS[day]}
+                          </button>
+                        );
+                      })}
                     </div>
                   )}
                 </div>
               )}
 
-              {/* Time slot + repeat days (weekday chips hidden for one-off) */}
+              {/* Time slot */}
               <TimeSlotPicker
                 slots={editorSlots}
                 onSlotsChange={setEditorSlots}
-                activeDay={activeDay}
-                repeatDays={isOccurrenceScope || repeatMode === "once" || perDayActive ? undefined : repeatDays}
-                onRepeatDaysChange={isOccurrenceScope || repeatMode === "once" || perDayActive ? undefined : setRepeatDays}
                 suggestedSlots={suggestedSlots}
                 usualTimeSlot={usualTimeSlot}
               />
@@ -1036,23 +1017,30 @@ export function TaskSheet({
               {/* Recurrence mode */}
               {!isOccurrenceScope && (
                 <div className="space-y-2">
-                  <p className={`mb-1.5 ${SECTION_LABEL}`}>Repeat</p>
-                  <div className="grid grid-cols-3 gap-2">
-                    {([["weekly", "Weekly"], ["interval", "Every N wks"], ["once", "One-off"]] as const).map(([val, label]) => (
-                      <button
-                        key={val}
-                        type="button"
-                        onClick={() => setRepeatMode(val)}
-                        className={`h-10 rounded-full text-[12px] font-semibold transition-colors ${
-                          repeatMode === val
-                            ? "bg-neutral-900 text-white dark:bg-white dark:text-neutral-950"
-                            : "border border-neutral-200 bg-white text-neutral-500 dark:border-white/10 dark:bg-white/[0.04] dark:text-neutral-400"
-                        }`}
-                      >
-                        {label}
-                      </button>
-                    ))}
-                  </div>
+                  <p className={FORM_LABEL}>Repeat</p>
+                  <SegmentedControl
+                    ariaLabel="Repeat"
+                    options={REPEAT_OPTIONS}
+                    value={repeatMode}
+                    onChange={setRepeatMode}
+                  />
+                  {/* Which weekdays it recurs on. Meaningless for a one-off
+                      (the date below decides), and overridden by the per-day
+                      editor, which has its own day row. */}
+                  {showRepeatDays && (
+                    <div className="flex items-baseline gap-3 pt-1">
+                      <span className="w-[52px] shrink-0 pt-[7px] text-[12px] font-semibold text-neutral-500 dark:text-neutral-400">
+                        On
+                      </span>
+                      <WeekdayPicker
+                        className="min-w-0 flex-1"
+                        selected={repeatDays}
+                        onChange={setRepeatDays}
+                        allDaysOption
+                        fallbackDay={activeDay}
+                      />
+                    </div>
+                  )}
                   {repeatMode === "interval" && (
                     <div className="flex items-center gap-2 pt-1">
                       <span className="text-[13px] text-neutral-500 dark:text-neutral-400">Every</span>
@@ -1085,9 +1073,9 @@ export function TaskSheet({
               {showActiveWindow && (
                 <div className="space-y-2">
                   <div className="mb-1.5 flex items-baseline justify-between gap-2">
-                    <p className={SECTION_LABEL}>Active dates (optional)</p>
+                    <p className={typography.eyebrow}>Active dates (optional)</p>
                     {selectedPlan && formatPlanRange(selectedPlan) && (
-                      <p className="text-[11px] font-medium text-neutral-400 dark:text-neutral-500">
+                      <p className="text-[11px] font-medium text-neutral-500 dark:text-neutral-400">
                         Plan: {formatPlanRange(selectedPlan)}
                       </p>
                     )}
@@ -1120,7 +1108,7 @@ export function TaskSheet({
                   </div>
                   {(activeFrom || activeUntil) && (
                     <div className="flex items-center justify-between">
-                      <p className="text-[12px] leading-snug text-neutral-400 dark:text-neutral-500">
+                      <p className="text-[12px] leading-snug text-neutral-500 dark:text-neutral-400">
                         Only shows on the schedule within this range.
                       </p>
                       <button
@@ -1145,7 +1133,7 @@ export function TaskSheet({
               {selectedPlan && !isOccurrenceScope && taskType !== "commitment" && (
                 <section className="space-y-3">
                   <div className="flex items-center justify-between">
-                    <p className={SECTION_LABEL}>
+                    <p className={typography.eyebrow}>
                       {taskType === "session" ? "Session Steps" : "Subtasks"}
                     </p>
                     {canExpand && title.trim().length > 0 && (
@@ -1187,20 +1175,16 @@ export function TaskSheet({
                     </SortableContext>
                   </DndContext>
 
-                  <button
-                    type="button"
+                  <AddRowButton
+                    label={taskType === "session" ? "Add Step" : "Add Subtask"}
                     onClick={addSubtask}
-                    className="flex h-10 w-full items-center gap-2 rounded-full border border-dashed border-neutral-200 px-3 text-[13px] font-semibold text-neutral-400 transition-colors hover:border-neutral-300 hover:text-neutral-600 dark:border-white/10 dark:text-neutral-500 dark:hover:border-white/20 dark:hover:text-neutral-300"
-                  >
-                    <IconPlus size={14} strokeWidth={2.5} />
-                    {taskType === "session" ? "Add Step" : "Add Subtask"}
-                  </button>
+                  />
 
                   {/* Standard rest between steps — session-only, and purely additive:
                       it feeds the total below but never nudges the task's own time. */}
                   {taskType === "session" && stepCount > 0 && (
                     <div className="flex flex-wrap items-center gap-2">
-                      <span className="text-[12px] font-semibold text-neutral-400 dark:text-neutral-500">
+                      <span className="text-[12px] font-semibold text-neutral-500 dark:text-neutral-400">
                         Buffer between steps
                       </span>
                       <div className="flex gap-1">
@@ -1215,7 +1199,7 @@ export function TaskSheet({
                               className={`h-8 min-w-[36px] rounded-full px-2.5 text-[12px] font-bold tabular-nums transition-colors ${
                                 active
                                   ? "bg-blue-600 text-white dark:bg-blue-500"
-                                  : "border border-neutral-200 text-neutral-400 hover:text-neutral-600 dark:border-white/10 dark:text-neutral-500 dark:hover:text-neutral-300"
+                                  : "border border-neutral-200 text-neutral-500 hover:text-neutral-600 dark:border-white/10 dark:text-neutral-500 dark:hover:text-neutral-300"
                               }`}
                             >
                               {m === 0 ? "None" : `${m}m`}
@@ -1250,7 +1234,7 @@ export function TaskSheet({
                       >
                         {combinedStepMinutes != null ? formatMinutes(combinedStepMinutes) : "—"}
                         {allottedMinutes != null && (
-                          <span className="text-neutral-400 dark:text-neutral-500"> / {formatMinutes(allottedMinutes)}</span>
+                          <span className="text-neutral-500 dark:text-neutral-400"> / {formatMinutes(allottedMinutes)}</span>
                         )}
                       </span>
                     </div>
@@ -1367,7 +1351,7 @@ export function TaskSheet({
         </p>
         <div className="mb-5 max-h-[46vh] space-y-2 overflow-y-auto">
           {copyCandidates.length === 0 ? (
-            <p className="py-6 text-center text-[13px] text-neutral-400 dark:text-neutral-500">
+            <p className="py-6 text-center text-[13px] text-neutral-500 dark:text-neutral-400">
               No other tasks to copy into yet.
             </p>
           ) : (
@@ -1399,7 +1383,7 @@ export function TaskSheet({
                   <span className="min-w-0 flex-1">
                     <span className="block truncate text-[14px] font-semibold">{c.title}</span>
                     {planTitle && (
-                      <span className={`block truncate text-[12px] ${sel ? "opacity-70" : "text-neutral-400 dark:text-neutral-500"}`}>
+                      <span className={`block truncate text-[12px] ${sel ? "opacity-70" : "text-neutral-500 dark:text-neutral-400"}`}>
                         {planTitle}
                       </span>
                     )}

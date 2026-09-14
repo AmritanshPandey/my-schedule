@@ -13,6 +13,7 @@ import {
 import type { Plan } from "@/lib/useScheduleDB";
 import { haptic } from "@/lib/haptics";
 import { derivePlanStatus, type PlanDayState, type PlanStatus } from "@/lib/planInsights";
+import { isPlanRunning, planLifecycleLabel } from "@/lib/planLifecycle";
 import { PLAN_NEUTRAL } from "@/lib/colorSystem";
 import IconButton from "@/components/ui/IconButton";
 import { CARD_INTERACTIVE } from "@/components/ui/surfaces";
@@ -75,8 +76,12 @@ function PlanCardInner({
   onQuickLog,
   onDelete,
 }: PlanCardProps) {
+  // A held plan is not graded. Showing "Needs focus · 0%" on work the user
+  // deliberately stopped would be the card arguing with their own decision —
+  // and the consistency figure behind it counts days nothing was expected.
+  const running = isPlanRunning(plan);
   const status = derivePlanStatus(dayState, consistency, plan);
-  const statusCfg = status === "unproven" ? null : STATUS_CONFIG[status];
+  const statusCfg = !running || status === "unproven" ? null : STATUS_CONFIG[status];
 
   return (
     <m.div
@@ -108,11 +113,20 @@ function PlanCardInner({
         </div>
       )}
 
-      {/* ── Row 1: status ─────────────────────────────────────────────────────
-          Deliberately absent while the plan is unproven. The instrument turns
-          on when there is something to measure; an empty gauge reading zero on
-          day one is noise wearing the costume of a signal. "Not started today"
-          at the foot of the card already states the honest fact. */}
+      {/* ── Row 1: lifecycle, or status ───────────────────────────────────────
+          A held plan shows its lifecycle instead of a grade, in neutral — it
+          is not doing badly, it is not running. Health is deliberately absent
+          while the plan is unproven, too: the instrument turns on when there
+          is something to measure; an empty gauge reading zero on day one is
+          noise wearing the costume of a signal. "Not started today" at the
+          foot of the card already states the honest fact. */}
+      {!running && (
+        <div className="flex items-center gap-1.5 text-[10.5px] font-bold text-neutral-500 dark:text-neutral-400">
+          <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-neutral-400 dark:bg-neutral-500" />
+          <span className="uppercase tracking-[0.07em]">{planLifecycleLabel(plan)}</span>
+        </div>
+      )}
+
       {statusCfg && (
         <m.div
           className={`flex items-center gap-1.5 text-[10.5px] font-bold ${statusCfg.text}`}
@@ -144,7 +158,7 @@ function PlanCardInner({
           full round end even on a zero-length dash. That dot sat in the status
           colour at twelve o'clock on every card and looked like a badge that
           meant something. It meant the value was nothing. */}
-      <div className={`flex items-start gap-3.5 ${statusCfg ? "mt-3" : ""}`}>
+      <div className={`flex items-start gap-3.5 ${statusCfg || !running ? "mt-3" : ""}`}>
         <div
           className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-full border ${PLAN_NEUTRAL.tint} ${PLAN_NEUTRAL.iconBorder}`}
         >
@@ -218,7 +232,14 @@ function PlanCardInner({
           The date line above already says "Starts <date>" for an open-ended
           plan, so it was saying it twice as well. */}
       <div className="flex items-center gap-3">
-        {dayState === "complete" ? (
+        {!running ? (
+          // Every variant of this line reports on work that was expected
+          // today. On a held plan none was, so all three would be answering a
+          // question nobody asked.
+          <span className="text-[12px] text-neutral-500 dark:text-neutral-400">
+            Nothing expected while {planLifecycleLabel(plan).toLowerCase()}
+          </span>
+        ) : dayState === "complete" ? (
           <span className="inline-flex items-center gap-1.5 text-[12px] font-semibold text-emerald-600 dark:text-emerald-400">
             <IconCheck size={13} strokeWidth={2.5} className="shrink-0" />
             Completed today

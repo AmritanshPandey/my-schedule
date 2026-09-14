@@ -18,14 +18,21 @@ interface TextProps {
 // (40/22/15/13/11), so the app carried two competing scales plus 22 raw
 // `text-[Npx]` values. There is now one ladder and this is a view onto it.
 
+// The muted ramp runs neutral-500 in light and neutral-400 in dark, never the
+// other way round. It used to be inverted here — the lighter grey on white, the
+// darker one on #171717 — which is the worst pick available in both themes:
+// measured 2.58:1 and 3.78:1 against their real backgrounds, where AA wants 4.5.
+// The corrected pair reads 4.74:1 and 6.96:1. DESIGN.md §Neutral names #737373
+// (neutral-500) as Muted "secondary text, labels", so this is what the system
+// always said; only the implementation disagreed.
 export const typography = {
   pageTitle:       "text-display font-semibold leading-tight tracking-[-0.3px] text-neutral-950 dark:text-white",
   sectionTitle:    "text-headline font-semibold leading-tight tracking-[-0.3px] text-neutral-950 dark:text-white",
   sheetTitle:      "text-lead font-semibold text-neutral-950 dark:text-white",
   subsectionTitle: "text-subtitle font-semibold text-neutral-950 dark:text-white",
-  eyebrow:         "text-label font-semibold uppercase tracking-[0.08em] text-neutral-400 dark:text-neutral-500",
+  eyebrow:         "text-label font-semibold uppercase tracking-[0.08em] text-neutral-500 dark:text-neutral-400",
   body:            "text-bodylg font-medium leading-relaxed text-neutral-600 dark:text-neutral-400",
-  caption:         "text-caption font-medium text-neutral-400 dark:text-neutral-500",
+  caption:         "text-caption font-medium text-neutral-500 dark:text-neutral-400",
 } as const;
 
 // ── Component wrappers ────────────────────────────────────────────────────────

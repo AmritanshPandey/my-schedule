@@ -117,6 +117,9 @@ export const PlanSchema = z.object({
   // Optional link to a first-class Goal (Schedule.goals). Absent on every
   // existing Plan — never required.
   goalId: z.string().optional(),
+  // Explicit lifecycle state, not derived health. Absent = "active", so no
+  // stored Plan needs migrating.
+  status: z.enum(["active", "paused", "completed"]).optional(),
 }).passthrough();
 
 export const GoalStatusSchema = z.enum(["active", "completed", "paused", "archived"]);

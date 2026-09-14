@@ -88,6 +88,7 @@ import { cascadeMilestoneDates, moveMilestone, normalizeMilestoneTimeline } from
 import { toggleRitualCompletion, appendRitualLog, undoLastRitualLog, toggleRitualStep, removeRitualLog } from "@/lib/ritualCompletions";
 import { MAX_RITUALS } from "@/lib/ritualColors";
 import { deleteGoal } from "@/lib/goalMutations";
+import { togglePlanPaused } from "@/lib/planLifecycle";
 import { formatDisplayTime, inputToDisplayTime, minutesToInputTime, parseTimeToMinutes, toScheduleDayMinutes } from "@/lib/timeUtils";
 import { calculateExecutionStreak } from "@/lib/consistency/calculateExecutionStreak";
 import { ritualScheduledOnDate } from "@/lib/consistency/calculateRitualStreak";
@@ -1455,6 +1456,7 @@ export default function IOSScheduleApp() {
                 hideHeader
                 onDeletePlan={handleDeletePlan}
                 onEditPlan={(planId) => setEditingPlanId(planId)}
+                onTogglePlanPaused={(planId) => setSchedule((prev) => togglePlanPaused(prev, planId))}
                 onAddTask={(planId) => openCreateSheet(planId)}
                 onEditTask={(task) => openEditSheet(task)}
                 onDeleteLinkedTask={handleDeleteLinkedTask}

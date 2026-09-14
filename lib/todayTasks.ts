@@ -20,6 +20,7 @@
  */
 
 import type { DayKey, Schedule, Task } from "./useScheduleDB";
+import { isPlanRunning } from "./planLifecycle";
 import { getTaskSubtaskSummary, isTaskCompleted, isTrackedTask } from "./taskCompletion";
 import { isTaskScheduledOn, resolveOccurrence } from "./taskOccurrence";
 import { sortTasksByTime } from "./taskMutations";
@@ -42,7 +43,13 @@ export function selectTodayTasks(
   // sorting the template's time would place the row in the wrong slot.
   const tasks = sortTasksByTime(
     (schedule.activities[todayKey] ?? [])
-      .filter((task) => isTaskScheduledOn(task, todayISO, true, schedule.preferences?.startDate) && isTrackedTask(task))
+      .filter((task) =>
+        isTaskScheduledOn(task, todayISO, true, schedule.preferences?.startDate)
+        && isTrackedTask(task)
+        // A paused plan's work is deliberately not expected today. Leaving it
+        // on the list would make pausing cosmetic — the user would still see
+        // the same undone rows and still feel behind.
+        && isPlanRunning(task.planId ? plansById.get(task.planId) : undefined))
       .map((task) => resolveOccurrence(task, todayISO)),
   );
 

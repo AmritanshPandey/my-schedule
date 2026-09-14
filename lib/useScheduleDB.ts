@@ -5,6 +5,12 @@ import type { ScheduleEntry } from "@/components/ScheduleItem";
 import type { AccentColor } from "@/lib/colorSystem";
 import { categoryFromIcon, colorFromIcon, resolveAccentColor } from "@/lib/colorSystem";
 import type { GoalDirection } from "@/lib/trendUtils";
+// Type-only, so this stays erased at runtime and the cycle with
+// lib/planLifecycle.ts (which imports `Plan` back from here) never exists in
+// the emitted JS. The predicate itself deliberately lives over there: this
+// module pulls in React and contexts/AuthProvider, so anything importing a
+// *value* from it becomes unloadable under the node test runner.
+import type { PlanLifecycle } from "@/lib/planLifecycle";
 export type { GoalDirection };
 import { mergeCloudIfNewer, queueSync, noteLatestSchedule } from "@/lib/cloudSync";
 import { getLocalLastUpdated, writeLocalLastUpdated } from "@/lib/localMeta";
@@ -284,6 +290,19 @@ export interface Plan {
    * stored as a reverse list on Goal.
    */
   goalId?: string;
+  /**
+   * Explicit user-set lifecycle state, distinct from the *derived* health in
+   * lib/planInsights.ts's `derivePlanStatus` — that one answers "how is this
+   * going", this one answers "is this running at all". They are never
+   * interchangeable: a plan can be `active` and `at_risk` at once.
+   *
+   * Absent means `active`, so every existing Plan keeps working untouched.
+   * A `paused` plan is deliberately held: its tasks stop being expected, so
+   * they raise no misses and count toward no consistency figure (see
+   * `isPlanRunning`). That is the whole point — pausing must be a way out of
+   * a failing streak, not a silent way to keep failing.
+   */
+  status?: PlanLifecycle;
 }
 
 export interface ProgressTracker {
@@ -824,6 +843,13 @@ function normalizePlan(value: unknown): Plan | null {
     metric,
     coachMessages,
     goalId: typeof (p as Plan & { goalId?: unknown }).goalId === "string" ? (p as Plan & { goalId: string }).goalId : undefined,
+    // Anything unrecognised (including absent, the case for every Plan that
+    // predates this field) normalizes to "active" — a stored plan must never
+    // come back paused because of a typo in the payload.
+    status: (() => {
+      const raw = (p as Plan & { status?: unknown }).status;
+      return raw === "paused" || raw === "completed" ? raw : "active";
+    })(),
   };
 }
 

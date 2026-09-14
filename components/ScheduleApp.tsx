@@ -214,6 +214,7 @@ import AddPlanSheet from "@/components/plan/AddPlanSheet";
 import EditPlanSheet from "@/components/plan/EditPlanSheet";
 import GoalListSheet from "@/components/goal/GoalListSheet";
 import { deleteGoal } from "@/lib/goalMutations";
+import { togglePlanPaused } from "@/lib/planLifecycle";
 import { haptic } from "@/lib/haptics";
 import { buildDeleteConfirmationCopy } from "@/lib/deleteConfirm";
 import { resolveCustomVisibleDates } from "@/lib/customView";
@@ -4483,6 +4484,7 @@ export default function ScheduleApp() {
               milestones={schedule.milestones ?? []}
               onDeletePlan={handleDeletePlan}
               onEditPlan={(planId) => setEditingPlanId(planId)}
+                onTogglePlanPaused={(planId) => setSchedule((prev) => togglePlanPaused(prev, planId))}
               onAddTask={(planId) => openCreateSheet(planId)}
               onEditTask={(task) => openEditSheet(task)}
               onDeleteLinkedTask={handleDeleteLinkedTask}

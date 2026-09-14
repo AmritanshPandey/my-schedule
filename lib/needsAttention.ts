@@ -14,6 +14,7 @@
  */
 
 import type { Milestone, Plan, Ritual, Schedule, Task, DayKey } from "./useScheduleDB";
+import { isPlanRunning } from "./planLifecycle";
 import { DAYS } from "./scheduleConstants";
 import { localISODate } from "./dateUtils";
 import { resolveMilestoneStatus } from "./roadmapDates";
@@ -91,6 +92,12 @@ export function selectNeedsAttention(
 ): NeedsAttention {
   const plansById = new Map(schedule.plans.map((p) => [p.id, p]));
 
+  // Nothing from a paused plan belongs here. Pausing is the user telling the
+  // app to stop expecting this work; continuing to list its overdue
+  // milestones and missed tasks would be the app arguing with that.
+  const isPaused = (planId: string | undefined) =>
+    !!planId && !isPlanRunning(plansById.get(planId));
+
   // ── Rituals whose run ends tonight unless acted on ───────────────────────
   const yesterdayISO = shiftISO(todayISO, -1);
   const trackingStart = schedule.preferences?.startDate;
@@ -111,7 +118,7 @@ export function selectNeedsAttention(
   // resolveMilestoneStatus is the same helper the roadmap uses, so a milestone
   // can never read "delayed" here and something else on the plan page.
   const overdueMilestones: OverdueMilestone[] = (schedule.milestones ?? [])
-    .filter((m) => resolveMilestoneStatus(m, todayISO) === "delayed")
+    .filter((m) => !isPaused(m.planId) && resolveMilestoneStatus(m, todayISO) === "delayed")
     .map((milestone) => ({
       milestone,
       plan: plansById.get(milestone.planId) ?? null,
@@ -132,7 +139,7 @@ export function selectNeedsAttention(
     .flatMap((milestone) => {
       if (resolveMilestoneStatus(milestone, todayISO) !== "active") return [];
       const plan = plansById.get(milestone.planId);
-      if (!plan) return [];
+      if (!plan || !isPlanRunning(plan)) return [];
       const state = calculateMilestoneState({
         milestone,
         plan,
@@ -173,6 +180,7 @@ export function selectNeedsAttention(
         if (trackingStart && dateISO < trackingStart) continue;
         // A recurring task shares one id across weekday buckets, so the same
         // event would otherwise be counted once per bucket it appears in.
+        if (isPaused(task.planId)) continue;
         const key = `${task.id}|${dateISO}`;
         if (seen.has(key) || acknowledged.has(key)) continue;
         seen.add(key);

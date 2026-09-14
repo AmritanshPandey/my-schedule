@@ -22,7 +22,7 @@ interface TextareaProps extends React.TextareaHTMLAttributes<HTMLTextAreaElement
 // scheme, which shows up as a blue-tinted fill sitting next to correctly-dark
 // siblings. Any control that reuses this chrome gets it automatically.
 const FORM_CONTROL_CHROME =
-  "min-w-0 rounded-xl border border-neutral-200 bg-neutral-50 text-neutral-900 outline-none placeholder:text-neutral-400 transition-colors focus:border-emerald-600/60 focus:bg-neutral-100 dark:border-white/10 dark:bg-white/[0.04] dark:text-white dark:placeholder:text-neutral-500 dark:focus:border-emerald-400/50 dark:focus:bg-white/[0.07] dark:[color-scheme:dark]";
+  "min-w-0 rounded-xl border border-neutral-200 bg-neutral-50 text-neutral-900 outline-none placeholder:text-neutral-500 transition-colors focus:border-emerald-600/60 focus:bg-neutral-100 dark:border-white/10 dark:bg-white/[0.04] dark:text-white dark:placeholder:text-neutral-400 dark:focus:border-emerald-400/50 dark:focus:bg-white/[0.07] dark:[color-scheme:dark]";
 
 export const FORM_CONTROL_BASE = `w-full ${FORM_CONTROL_CHROME} text-[16px] font-medium`;
 

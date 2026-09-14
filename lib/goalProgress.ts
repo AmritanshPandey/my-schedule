@@ -21,6 +21,7 @@
  */
 
 import type { Goal, Milestone, Plan, Schedule } from "./useScheduleDB";
+import { isPlanRunning } from "./planLifecycle";
 import { calculateMilestoneState, type MilestoneHealth } from "./milestoneHealth";
 import { resolveMilestoneStatus } from "./roadmapDates";
 import { localISODate, formatDateShort } from "./dateUtils";
@@ -46,8 +47,15 @@ export interface GoalNextMilestone {
 export interface GoalProgressState {
   goalId: string;
   health: GoalHealth;
-  /** Plans pointing at this goal via `Plan.goalId`. */
+  /** Plans pointing at this goal via `Plan.goalId`, paused ones included. */
   planCount: number;
+  /**
+   * How many of those are paused. Paused plans contribute no milestones to
+   * the rollup — a goal must not read "delayed" because of work the user
+   * explicitly put on hold — so this is reported separately to keep
+   * `planCount` factually honest.
+   */
+  pausedPlanCount: number;
   /** Milestones across all those plans. */
   milestoneTotal: number;
   milestonesCompleted: number;
@@ -116,9 +124,16 @@ function buildStatusMessage(
   if (goal.status === "paused") return "Paused — nothing is being tracked while this is on hold.";
 
   if (health === "no_plans") {
-    return planCount === 0
-      ? "No plans linked yet — link a plan to start tracking this goal."
-      : `${planCount} plan${planCount === 1 ? "" : "s"} linked, but no milestones yet — add milestones to track progress.`;
+    if (planCount === 0) return "No plans linked yet — link a plan to start tracking this goal.";
+    // Every linked plan is on hold. Saying "no milestones yet" here would be a
+    // lie about the cause and would push the user to add milestones they
+    // already have.
+    if (state.pausedPlanCount === planCount) {
+      return planCount === 1
+        ? "Its only plan is paused — nothing is being tracked until you resume it."
+        : `All ${planCount} linked plans are paused — nothing is being tracked until you resume one.`;
+    }
+    return `${planCount} plan${planCount === 1 ? "" : "s"} linked, but no milestones yet — add milestones to track progress.`;
   }
 
   const target = goal.targetDate ? formatDateShort(goal.targetDate) : null;
@@ -174,13 +189,16 @@ export function calculateGoalProgress(
 ): GoalProgressState {
   const todayISO = localISODate(now);
   const plans = schedule.plans.filter((p) => p.goalId === goal.id);
-  const plansById = new Map(plans.map((p) => [p.id, p]));
+  // Only running plans feed the rollup; see `pausedPlanCount`.
+  const runningPlans = plans.filter(isPlanRunning);
+  const plansById = new Map(runningPlans.map((p) => [p.id, p]));
 
   const milestones = (schedule.milestones ?? []).filter((m) => plansById.has(m.planId));
 
   const base = {
     goalId: goal.id,
     planCount: plans.length,
+    pausedPlanCount: plans.length - runningPlans.length,
     milestoneTotal: milestones.length,
     daysToTarget: goal.targetDate ? daysBetweenISO(todayISO, goal.targetDate) : null,
   };
@@ -188,7 +206,7 @@ export function calculateGoalProgress(
   if (milestones.length === 0) {
     const empty: Omit<GoalProgressState, "statusMessage"> = {
       ...base,
-      health: "no_plans",
+      health: "no_plans" as const,
       milestonesCompleted: 0,
       milestonesOffTrack: 0,
       hasData: false,
