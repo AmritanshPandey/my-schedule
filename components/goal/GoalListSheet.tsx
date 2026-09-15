@@ -21,6 +21,7 @@ import {
   IconX,
 } from "@tabler/icons-react";
 import GoalFormSheet from "./GoalFormSheet";
+import GoalConnectionsSection from "./GoalConnectionsSection";
 
 type SetScheduleFn = (updater: (prev: Schedule) => Schedule) => void;
 
@@ -234,6 +235,8 @@ export default function GoalListSheet({ open, onClose, schedule, setSchedule, on
                   <IconTrash size={14} strokeWidth={2} />
                 </Button>
               </div>
+
+              <GoalConnectionsSection goal={selectedGoal} schedule={schedule} setSchedule={setSchedule} />
 
               <div>
                 <p className="mb-2 text-[11px] font-semibold uppercase tracking-[0.08em] text-neutral-400 dark:text-neutral-500">

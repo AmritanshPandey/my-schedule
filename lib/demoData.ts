@@ -955,6 +955,7 @@ export function buildDemoSchedule(now: Date = new Date()): Schedule {
 
   return {
     goals: [],
+    goalConnections: [],
     plans,
     categories: CATEGORIES,
     activities: buildTasks(now, outcomes),

@@ -136,6 +136,15 @@ export const GoalSchema = z.object({
   schemaVersion: z.number().finite().nonnegative(),
 }).passthrough();
 
+export const GoalConnectionSchema = z.object({
+  id: nonEmptyId,
+  fromGoalId: nonEmptyId,
+  toGoalId: nonEmptyId,
+  type: z.enum(["supports", "depends_on", "conflicts_with", "shares_resource"]),
+  note: z.string().optional(),
+  createdAt: isoDateTime,
+}).passthrough();
+
 export const ScheduleEventSchema = z.object({
   id: nonEmptyId,
   type: z.enum([
@@ -253,6 +262,9 @@ const preferences = z.object({
 
 export const ScheduleSchema = z.object({
   goals: z.array(GoalSchema),
+  // Optional at the schema boundary: every schedule written before goal
+  // connections existed has no such key, and must still validate.
+  goalConnections: z.array(GoalConnectionSchema).optional(),
   plans: z.array(PlanSchema),
   categories: z.array(z.object({ id: nonEmptyId, title: z.string(), icon: z.string(), color: accentColor, sortOrder: z.number().finite().optional(), kind: z.enum(["active", "rest", "sleep"]).optional() }).passthrough()),
   activities: z.object(Object.fromEntries(DAYS.map((day) => [day, z.array(TaskSchema)])) as Record<string, z.ZodType>).passthrough(),

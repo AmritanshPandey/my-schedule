@@ -21,6 +21,7 @@
 import type {
   DayKey,
   Goal,
+  GoalConnection,
   MetricEntry,
   Milestone,
   Note,
@@ -291,6 +292,15 @@ export function mergeSchedules(a: MergeSide, b: MergeSide): Schedule {
 
   const merged: Schedule = {
     goals: collect(mergeKeyed<Goal>(a.schedule.goals, b.schedule.goals, byId(NS.goal), at, bt)),
+    goalConnections: collect(
+      mergeKeyed<GoalConnection>(
+        a.schedule.goalConnections,
+        b.schedule.goalConnections,
+        byId(NS.goalConnection),
+        at,
+        bt,
+      ),
+    ),
     plans: collect(mergeKeyed<Plan>(a.schedule.plans, b.schedule.plans, byId(NS.plan), at, bt)),
     categories: collect(
       mergeKeyed<TaskCategory>(a.schedule.categories, b.schedule.categories, byId(NS.category), at, bt),

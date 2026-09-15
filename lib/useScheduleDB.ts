@@ -582,8 +582,39 @@ export interface TaskCategory {
   kind?: CategoryKind;
 }
 
+/**
+ * How one Goal relates to another (§6.4). Two are directional and two are
+ * mutual, which changes how they read and how they are resolved:
+ *
+ *  - `supports` — progress on `from` makes `to` more likely. Directional.
+ *  - `depends_on` — `from` needs progress on `to` first. Directional, and the
+ *    one with real downstream consequences: a blocked goal is blocked whether
+ *    or not it is itself behind.
+ *  - `conflicts_with` — both compete for the same time, energy or money.
+ *    Mutual; stored from whichever side the user created it.
+ *  - `shares_resource` — both draw on one limited thing. Mutual.
+ */
+export type GoalConnectionType = "supports" | "depends_on" | "conflicts_with" | "shares_resource";
+
+export interface GoalConnection {
+  id: string;
+  /** The goal the relationship is stated from. */
+  fromGoalId: string;
+  toGoalId: string;
+  type: GoalConnectionType;
+  /** Optional free text — e.g. which resource is shared. */
+  note?: string;
+  createdAt: string;
+}
+
 export interface Schedule {
   goals: Goal[];
+  /**
+   * Typed relationships between goals. Kept as its own flat list rather than
+   * as arrays on each Goal so a connection has exactly one representation and
+   * deleting either endpoint can be resolved in one pass.
+   */
+  goalConnections: GoalConnection[];
   plans: Plan[];
   categories: TaskCategory[];
   activities: DayActivities;
@@ -878,6 +909,45 @@ function normalizeGoal(value: unknown): Goal | null {
 function normalizeGoals(raw: unknown): Goal[] {
   if (!Array.isArray(raw)) return [];
   return raw.map(normalizeGoal).filter((g): g is Goal => g !== null);
+}
+
+const GOAL_CONNECTION_TYPES: readonly GoalConnectionType[] = [
+  "supports",
+  "depends_on",
+  "conflicts_with",
+  "shares_resource",
+];
+
+function normalizeGoalConnection(value: unknown): GoalConnection | null {
+  if (!value || typeof value !== "object") return null;
+  const c = value as Record<string, unknown>;
+  if (typeof c.id !== "string" || !c.id) return null;
+  if (typeof c.fromGoalId !== "string" || !c.fromGoalId) return null;
+  if (typeof c.toGoalId !== "string" || !c.toGoalId) return null;
+  // A goal related to itself is meaningless in every one of the four types,
+  // and would make the impact walk self-referential.
+  if (c.fromGoalId === c.toGoalId) return null;
+  if (!GOAL_CONNECTION_TYPES.includes(c.type as GoalConnectionType)) return null;
+  return {
+    id: c.id,
+    fromGoalId: c.fromGoalId,
+    toGoalId: c.toGoalId,
+    type: c.type as GoalConnectionType,
+    note: typeof c.note === "string" && c.note.trim() ? c.note : undefined,
+    createdAt: typeof c.createdAt === "string" ? c.createdAt : new Date().toISOString(),
+  };
+}
+
+/**
+ * Drops malformed rows, and any connection whose endpoints no longer both
+ * exist — a dangling connection would render as a relationship to nothing.
+ */
+function normalizeGoalConnections(raw: unknown, goals: Goal[]): GoalConnection[] {
+  if (!Array.isArray(raw)) return [];
+  const ids = new Set(goals.map((g) => g.id));
+  return raw
+    .map(normalizeGoalConnection)
+    .filter((c): c is GoalConnection => c !== null && ids.has(c.fromGoalId) && ids.has(c.toGoalId));
 }
 
 const KNOWN_EVENT_TYPES: readonly DomainEventType[] = [
@@ -1177,6 +1247,7 @@ function migrate(raw: unknown): Schedule {
 
     return {
       goals: normalizeGoals(r.goals),
+      goalConnections: normalizeGoalConnections(r.goalConnections, normalizeGoals(r.goals)),
       plans,
       categories: categories.all(),
       activities: applyPlanStartDates(migratedActivities, plans),
@@ -1211,6 +1282,7 @@ function migrate(raw: unknown): Schedule {
 
     return {
       goals: normalizeGoals(r.goals),
+      goalConnections: normalizeGoalConnections(r.goalConnections, normalizeGoals(r.goals)),
       plans,
       categories: categories.all(),
       activities: migratedActivities,
@@ -1253,6 +1325,7 @@ function migrate(raw: unknown): Schedule {
 
   return {
     goals: normalizeGoals(r.goals),
+    goalConnections: normalizeGoalConnections(r.goalConnections, normalizeGoals(r.goals)),
     plans,
     categories: categories.all(),
     activities,
@@ -1364,6 +1437,7 @@ function normalizeSchedulePreferences(raw: unknown): SchedulePreferences {
 function emptyEmpty(): Schedule {
   return {
     goals: [],
+    goalConnections: [],
     plans: [],
     categories: [],
     activities: emptyDayActivities(),

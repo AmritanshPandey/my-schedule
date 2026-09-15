@@ -103,6 +103,11 @@ export function archiveGoal(schedule: Schedule, goalId: string): Schedule {
 /**
  * Deletes the Goal itself. Any Plan referencing it has `goalId` cleared —
  * the Plan (and its Tasks/Milestones/Trackers) is never touched otherwise.
+ *
+ * Connections touching the Goal go with it. `normalizeSchedule` also prunes
+ * dangling rows on load, but relying on that alone would leave the in-memory
+ * schedule rendering a relationship to a goal that no longer exists until the
+ * next reload.
  */
 export function deleteGoal(schedule: Schedule, goalId: string): Schedule {
   const existing = (schedule.goals ?? []).find((g) => g.id === goalId);
@@ -111,6 +116,9 @@ export function deleteGoal(schedule: Schedule, goalId: string): Schedule {
   return {
     ...schedule,
     goals: (schedule.goals ?? []).filter((g) => g.id !== goalId),
+    goalConnections: (schedule.goalConnections ?? []).filter(
+      (c) => c.fromGoalId !== goalId && c.toGoalId !== goalId,
+    ),
     plans: schedule.plans.map((p) => (p.goalId === goalId ? { ...p, goalId: undefined } : p)),
     events: pushEvent(schedule.events, "GOAL_DELETED", goalId, now),
   };

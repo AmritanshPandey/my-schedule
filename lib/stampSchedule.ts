@@ -42,6 +42,7 @@ export interface ScheduleSyncMeta {
 export const NS = {
   task: "a",
   goal: "g",
+  goalConnection: "gc",
   plan: "p",
   category: "c",
   tracker: "k",
@@ -87,6 +88,7 @@ export function entityMap(schedule: Schedule): Map<string, unknown> {
   }
   const simple: Array<[string, ReadonlyArray<{ id: string }> | undefined]> = [
     [NS.goal, schedule.goals],
+    [NS.goalConnection, schedule.goalConnections],
     [NS.plan, schedule.plans],
     [NS.category, schedule.categories],
     [NS.tracker, schedule.progressTrackers],
