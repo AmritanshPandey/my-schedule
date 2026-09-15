@@ -7,6 +7,7 @@ import {
   IconEdit,
   IconPlayerPause,
   IconPlayerPlay,
+  IconWand,
   IconPlus,
   IconTrash,
   IconArrowUpRight,
@@ -228,6 +229,8 @@ interface PlanDetailViewProps {
   onEditPlan?: (planId: string) => void;
   /** Absent = the pause affordance is not offered on this surface. */
   onTogglePlanPaused?: (planId: string) => void;
+  /** Absent = the adapt affordance is not offered on this surface. */
+  onAdaptMilestone?: (milestoneId: string) => void;
   // Task handlers
   onAddTask: (planId: string) => void;
   onEditTask: (task: Task) => void;
@@ -285,6 +288,7 @@ export default function PlanDetailView({
   onDeletePlan,
   onEditPlan,
   onTogglePlanPaused,
+  onAdaptMilestone,
   onAddTask,
   onEditTask,
   onDeleteLinkedTask,
@@ -2406,6 +2410,22 @@ export default function PlanDetailView({
                   <p className="text-[13px] leading-relaxed text-neutral-500 dark:text-neutral-400">
                     {health.statusMessage}
                   </p>
+                  {/* The diagnosis has to lead somewhere. Offered only when the
+                      milestone is actually off pace — on a healthy one this
+                      button would invite fixing something that isn't broken. */}
+                  {onAdaptMilestone
+                    && !isCompleted
+                    && (health.health === "at_risk" || health.health === "delayed") && (
+                    <Button
+                      size="sm"
+                      variant="secondary"
+                      className="mt-3"
+                      onClick={() => { haptic("light"); onAdaptMilestone(m.id); }}
+                    >
+                      <IconWand size={14} strokeWidth={2} className="mr-1.5" />
+                      Adjust this milestone
+                    </Button>
+                  )}
                 </div>
               )}
 

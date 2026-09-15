@@ -55,6 +55,8 @@ interface OverviewDashboardProps {
   onLogTracker: (tracker: ProgressTracker) => void;
   /** Open the recovery sheet for a missed task in "Needs attention". */
   onHandleMissed?: (missed: MissedTask) => void;
+  /** Open the adaptation sheet for an off-pace milestone. */
+  onAdaptMilestone?: (milestoneId: string) => void;
 }
 
 const DAYS_ORDER: DayKey[] = ["monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday"];
@@ -705,6 +707,7 @@ export default function OverviewDashboard({
   completedRitualIds,
   onLogTracker,
   onHandleMissed,
+  onAdaptMilestone,
 }: OverviewDashboardProps) {
   const todayISO = localISODate(new Date());
   const plansById = useMemo(() => new Map(schedule.plans.map((plan) => [plan.id, plan])), [schedule.plans]);
@@ -918,7 +921,7 @@ export default function OverviewDashboard({
                 {/* Above Today's Task: catching up on what slipped comes before
                     working the current day. Renders nothing when there is
                     nothing to fix, so a clean week costs no space. */}
-                <NeedsAttentionCard data={needsAttention} onNavigate={onNavigate} onHandleMissed={onHandleMissed} />
+                <NeedsAttentionCard data={needsAttention} onNavigate={onNavigate} onHandleMissed={onHandleMissed} onAdaptMilestone={onAdaptMilestone} />
                 <TodayTaskList
                   tasks={todayTasks}
                   done={tasksDone}

@@ -21,6 +21,9 @@ interface NeedsAttentionCardProps {
   onNavigate: (tab: number) => void;
   /** Open the recovery sheet (reschedule / dismiss) for a missed task. */
   onHandleMissed?: (missed: MissedTask) => void;
+  /** Open the adaptation sheet for a milestone that is off pace. Absent =
+   *  the row still navigates to the plan, as it always did. */
+  onAdaptMilestone?: (milestoneId: string) => void;
 }
 
 function Row({
@@ -84,7 +87,7 @@ function Row({
  * nothing at all when there is nothing wrong: a card that is always present
  * stops being a signal and starts being a nag, and PlanR's voice "never nags".
  */
-export default function NeedsAttentionCard({ data, onNavigate, onHandleMissed }: NeedsAttentionCardProps) {
+export default function NeedsAttentionCard({ data, onNavigate, onHandleMissed, onAdaptMilestone }: NeedsAttentionCardProps) {
   if (data.total === 0) return null;
 
   // Ordered by how recoverable each item is. A ritual streak can still be
@@ -111,7 +114,10 @@ export default function NeedsAttentionCard({ data, onNavigate, onHandleMissed }:
           : row.plan.title
         : "Milestone",
       pill: formatDaysBehind(row.daysBehind),
-      onClick: () => onNavigate(1),
+      // Straight into the fix. Catching this before the deadline is the
+      // entire reason the forecast exists; dropping the user on the plan
+      // page to find it themselves wastes that.
+      onClick: () => (onAdaptMilestone ? onAdaptMilestone(row.milestone.id) : onNavigate(1)),
     })),
     ...data.overdueMilestones.map((row) => ({
       key: `m:${row.milestone.id}`,
@@ -120,7 +126,7 @@ export default function NeedsAttentionCard({ data, onNavigate, onHandleMissed }:
       title: row.milestone.title,
       detail: row.plan ? row.plan.title : "Milestone",
       pill: formatDaysOverdue(row.daysOverdue),
-      onClick: () => onNavigate(1),
+      onClick: () => (onAdaptMilestone ? onAdaptMilestone(row.milestone.id) : onNavigate(1)),
     })),
     ...data.missedTasks.map((row) => ({
       key: `t:${row.task.id}:${row.dateISO}`,

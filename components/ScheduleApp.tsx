@@ -215,6 +215,9 @@ import EditPlanSheet from "@/components/plan/EditPlanSheet";
 import GoalListSheet from "@/components/goal/GoalListSheet";
 import { deleteGoal } from "@/lib/goalMutations";
 import { togglePlanPaused } from "@/lib/planLifecycle";
+import { applyAdaptation } from "@/lib/milestoneAdaptation";
+import { calculateMilestoneState } from "@/lib/milestoneHealth";
+import AdaptMilestoneSheet from "@/components/plan/AdaptMilestoneSheet";
 import { haptic } from "@/lib/haptics";
 import { buildDeleteConfirmationCopy } from "@/lib/deleteConfirm";
 import { resolveCustomVisibleDates } from "@/lib/customView";
@@ -903,6 +906,16 @@ export default function ScheduleApp() {
 
   const [addingPlan, setAddingPlan] = useState(false);
   const [goalsSheetOpen, setGoalsSheetOpen] = useState(false);
+  const [adaptingMilestoneId, setAdaptingMilestoneId] = useState<string | null>(null);
+  // Resolved from the live schedule rather than captured at open time, so the
+  // sheet reflects any edit made underneath it.
+  const adaptingMilestone = adaptingMilestoneId
+    ? (schedule.milestones ?? []).find((m) => m.id === adaptingMilestoneId) ?? null
+    : null;
+  const adaptingMilestonePlan = adaptingMilestone
+    ? schedule.plans.find((p) => p.id === adaptingMilestone.planId) ?? null
+    : null;
+
   const [aiPlanCreating, setAiPlanCreating] = useState(false);
   // Set when AIPlanCreatorSheet was opened from a note's "Turn into plan"
   // button (see handleTurnNoteIntoPlan) rather than the manual "Generate
@@ -4484,7 +4497,8 @@ export default function ScheduleApp() {
               milestones={schedule.milestones ?? []}
               onDeletePlan={handleDeletePlan}
               onEditPlan={(planId) => setEditingPlanId(planId)}
-                onTogglePlanPaused={(planId) => setSchedule((prev) => togglePlanPaused(prev, planId))}
+              onTogglePlanPaused={(planId) => setSchedule((prev) => togglePlanPaused(prev, planId))}
+              onAdaptMilestone={(milestoneId) => setAdaptingMilestoneId(milestoneId)}
               onAddTask={(planId) => openCreateSheet(planId)}
               onEditTask={(task) => openEditSheet(task)}
               onDeleteLinkedTask={handleDeleteLinkedTask}
@@ -4623,6 +4637,7 @@ export default function ScheduleApp() {
                 completedRitualIds={completedRitualIds}
                 onLogTracker={(tracker) => setEntryTracker(tracker)}
                 onHandleMissed={setMissedSheet}
+                onAdaptMilestone={setAdaptingMilestoneId}
               />
             )}
             </ErrorBoundary>
@@ -4689,6 +4704,26 @@ export default function ScheduleApp() {
         />
       )}
       {/* ── Goals Sheet (list + detail + create/edit) ───────────────────────── */}
+      {/* ── Adapt a milestone that is off pace ──────────────────────────── */}
+            {adaptingMilestone && adaptingMilestonePlan && (
+              <AdaptMilestoneSheet
+                open
+                onClose={() => setAdaptingMilestoneId(null)}
+                milestone={adaptingMilestone}
+                plan={adaptingMilestonePlan}
+                state={calculateMilestoneState({
+                  milestone: adaptingMilestone,
+                  plan: adaptingMilestonePlan,
+                  activities: schedule.activities,
+                  trackers: schedule.progressTrackers,
+                  metricEntries: schedule.metricEntries,
+                  trackingStart: schedule.preferences?.startDate,
+                })}
+                schedule={schedule}
+                onApply={(adaptation) => setSchedule((prev) => applyAdaptation(prev, adaptation))}
+              />
+            )}
+
       <GoalListSheet
         open={goalsSheetOpen}
         onClose={() => setGoalsSheetOpen(false)}

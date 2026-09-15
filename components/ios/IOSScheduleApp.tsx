@@ -89,6 +89,9 @@ import { toggleRitualCompletion, appendRitualLog, undoLastRitualLog, toggleRitua
 import { MAX_RITUALS } from "@/lib/ritualColors";
 import { deleteGoal } from "@/lib/goalMutations";
 import { togglePlanPaused } from "@/lib/planLifecycle";
+import { applyAdaptation } from "@/lib/milestoneAdaptation";
+import { calculateMilestoneState } from "@/lib/milestoneHealth";
+import AdaptMilestoneSheet from "@/components/plan/AdaptMilestoneSheet";
 import { formatDisplayTime, inputToDisplayTime, minutesToInputTime, parseTimeToMinutes, toScheduleDayMinutes } from "@/lib/timeUtils";
 import { calculateExecutionStreak } from "@/lib/consistency/calculateExecutionStreak";
 import { ritualScheduledOnDate } from "@/lib/consistency/calculateRitualStreak";
@@ -401,6 +404,16 @@ export default function IOSScheduleApp() {
   const [taskSheetInitialType, setTaskSheetInitialType] = useState<TaskTypeValue>("task");
   const [addingPlan, setAddingPlan] = useState(false);
   const [goalsSheetOpen, setGoalsSheetOpen] = useState(false);
+  const [adaptingMilestoneId, setAdaptingMilestoneId] = useState<string | null>(null);
+  // Resolved from the live schedule rather than captured at open time, so the
+  // sheet reflects any edit made underneath it.
+  const adaptingMilestone = adaptingMilestoneId
+    ? (schedule.milestones ?? []).find((m) => m.id === adaptingMilestoneId) ?? null
+    : null;
+  const adaptingMilestonePlan = adaptingMilestone
+    ? schedule.plans.find((p) => p.id === adaptingMilestone.planId) ?? null
+    : null;
+
   const [editingPlanId, setEditingPlanId] = useState<string | null>(null);
   const [ritualAddOpen, setRitualAddOpen] = useState(false);
   const [detailRitualId, setDetailRitualId] = useState<string | null>(null);
@@ -1291,7 +1304,7 @@ export default function IOSScheduleApp() {
             </section>
 
             {/* Recently missed / overdue — renders nothing when all clear. */}
-            <NeedsAttentionCard data={needsAttention} onNavigate={setActiveTab} onHandleMissed={setMissedSheet} />
+            <NeedsAttentionCard data={needsAttention} onNavigate={setActiveTab} onHandleMissed={setMissedSheet} onAdaptMilestone={setAdaptingMilestoneId} />
 
             <section data-testid="overview-next-task" className={`${CARD} p-0`}>
               <button
@@ -1457,6 +1470,7 @@ export default function IOSScheduleApp() {
                 onDeletePlan={handleDeletePlan}
                 onEditPlan={(planId) => setEditingPlanId(planId)}
                 onTogglePlanPaused={(planId) => setSchedule((prev) => togglePlanPaused(prev, planId))}
+                onAdaptMilestone={(milestoneId) => setAdaptingMilestoneId(milestoneId)}
                 onAddTask={(planId) => openCreateSheet(planId)}
                 onEditTask={(task) => openEditSheet(task)}
                 onDeleteLinkedTask={handleDeleteLinkedTask}
@@ -1789,7 +1803,7 @@ export default function IOSScheduleApp() {
         </IOSMotionBoundary>
       )}
 
-      {(taskSheetOpen || addingPlan || editingPlanId || entryTracker || goalsSheetOpen) && (
+      {(taskSheetOpen || addingPlan || editingPlanId || entryTracker || goalsSheetOpen || adaptingMilestoneId) && (
         <IOSMotionBoundary>
           <TaskSheet
             mode={taskSheetMode}
@@ -1829,6 +1843,26 @@ export default function IOSScheduleApp() {
               goals={schedule.goals ?? []}
             />
           )}
+          {/* ── Adapt a milestone that is off pace ──────────────────────────── */}
+          {adaptingMilestone && adaptingMilestonePlan && (
+            <AdaptMilestoneSheet
+              open
+              onClose={() => setAdaptingMilestoneId(null)}
+              milestone={adaptingMilestone}
+              plan={adaptingMilestonePlan}
+              state={calculateMilestoneState({
+                milestone: adaptingMilestone,
+                plan: adaptingMilestonePlan,
+                activities: schedule.activities,
+                trackers: schedule.progressTrackers,
+                metricEntries: schedule.metricEntries,
+                trackingStart: schedule.preferences?.startDate,
+              })}
+              schedule={schedule}
+              onApply={(adaptation) => setSchedule((prev) => applyAdaptation(prev, adaptation))}
+            />
+          )}
+
           <GoalListSheet
             open={goalsSheetOpen}
             onClose={() => setGoalsSheetOpen(false)}
