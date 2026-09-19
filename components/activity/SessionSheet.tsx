@@ -109,7 +109,7 @@ export default function SessionSheet({
             onClick={() => { onEdit(); onClose(); }}
             className="text-[14px] font-semibold text-neutral-500 hover:text-neutral-600 dark:text-neutral-400 dark:hover:text-neutral-300 transition-colors"
           >
-            Edit Session
+            Edit session
           </button>
 
           <m.button
@@ -132,7 +132,7 @@ export default function SessionSheet({
                 Completed
               </>
             ) : (
-              "Complete Session"
+              "Complete session"
             )}
           </m.button>
         </div>

@@ -220,7 +220,7 @@ export default function GoalListSheet({ open, onClose, schedule, setSchedule, on
                 </Button>
                 {selectedGoal.status === "active" && (
                   <Button size="sm" variant="cta" onClick={() => setSchedule((prev) => completeGoal(prev, selectedGoal.id))}>
-                    Mark Complete
+                    Mark complete
                   </Button>
                 )}
                 {selectedGoal.status !== "archived" && (
@@ -276,7 +276,7 @@ export default function GoalListSheet({ open, onClose, schedule, setSchedule, on
                   icon={IconTargetArrow}
                   title="No goals yet"
                   description="A Goal is the outcome behind your plans — e.g. “Get a senior UX job.” Optional, and plans work fine without one."
-                  action={{ label: "New Goal", onClick: openCreate }}
+                  action={{ label: "New goal", onClick: openCreate }}
                 />
               ) : (
                 <>
@@ -317,7 +317,7 @@ export default function GoalListSheet({ open, onClose, schedule, setSchedule, on
                   </div>
                   <Button fullWidth variant="secondary" onClick={openCreate}>
                     <IconPlus size={16} strokeWidth={2.2} className="mr-1.5" />
-                    New Goal
+                    New goal
                   </Button>
                 </>
               )}

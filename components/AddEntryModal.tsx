@@ -55,7 +55,7 @@ export default function AddEntryModal({ isOpen, onClose, onSave, metric, quickAm
   return (
     <BottomSheet open={isOpen} onClose={handleClose} maxHeight="80vh">
       <div className="space-y-4 px-5 pb-8 pt-4">
-        <SheetHeader eyebrow="Log" title="New Entry" onClose={handleClose} />
+        <SheetHeader eyebrow="Log" title="New entry" onClose={handleClose} />
 
         {!!todayTotal && todayTotal > 0 && (
           <p className="text-[12px] font-medium text-neutral-500 dark:text-neutral-400">
@@ -103,7 +103,7 @@ export default function AddEntryModal({ isOpen, onClose, onSave, metric, quickAm
             disabled={!value || isNaN(parseFloat(value))}
           >
             <IconCheck size={16} strokeWidth={2.5} />
-            Save Entry
+            Save entry
           </Button>
          
         </div>

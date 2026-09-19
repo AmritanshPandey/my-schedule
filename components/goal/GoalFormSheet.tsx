@@ -68,7 +68,7 @@ export default function GoalFormSheet({ open, onClose, setSchedule, goal }: Goal
   return (
     <BottomSheet open={open} onClose={onClose}>
       <div className="space-y-4 p-5 pb-8">
-        <SheetHeader eyebrow={goal ? "Edit" : "New"} title={goal ? "Edit Goal" : "Create Goal"} onClose={onClose} />
+        <SheetHeader eyebrow={goal ? "Edit" : "New"} title={goal ? "Edit goal" : "Create goal"} onClose={onClose} />
 
         <div className="space-y-2.5">
           <div>
@@ -112,7 +112,7 @@ export default function GoalFormSheet({ open, onClose, setSchedule, goal }: Goal
         </div>
 
         <Button fullWidth onClick={handleSubmit} disabled={!title.trim()}>
-          {goal ? "Save Changes" : "Create Goal"}
+          {goal ? "Save changes" : "Create goal"}
         </Button>
       </div>
     </BottomSheet>

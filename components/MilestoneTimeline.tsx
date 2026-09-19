@@ -299,7 +299,7 @@ export default function MilestoneTimeline({ schedule }: MilestoneTimelineProps) 
         <div className="mb-3 flex items-center gap-1.5">
           <IconMap2 size={13} strokeWidth={2.2} className="text-neutral-500 dark:text-neutral-400" />
           <p className="text-[11px] font-bold uppercase tracking-[0.08em] text-neutral-600 dark:text-neutral-400">
-            Milestone Roadmap
+            Milestone roadmap
           </p>
         </div>
         <p className="text-[13px] text-neutral-500 dark:text-neutral-400">
@@ -319,7 +319,7 @@ export default function MilestoneTimeline({ schedule }: MilestoneTimelineProps) 
       <div className="mb-3 flex items-center gap-1.5 px-4">
         <IconMap2 size={13} strokeWidth={2.2} className="text-neutral-500 dark:text-neutral-400" />
         <p className="text-[11px] font-bold uppercase tracking-[0.08em] text-neutral-600 dark:text-neutral-400">
-          Milestone Roadmap
+          Milestone roadmap
         </p>
       </div>
 

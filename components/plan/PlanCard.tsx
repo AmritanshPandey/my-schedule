@@ -196,7 +196,7 @@ function PlanCardInner({
           <IconChecklist size={12} strokeWidth={2.2} className="shrink-0" />
           {taskCount} task{taskCount !== 1 ? "s" : ""}
           {/* "trackers", not "tracked": this counts ProgressTracker rows — the
-              numeric metrics behind the plan's "Progress Tracking" section — and
+              numeric metrics behind the plan's "Progress tracking" section — and
               has nothing to do with isTrackedTask, which is what "tracked"
               means everywhere else. "5 tasks · 0 tracked" would have implied
               those tasks don't count toward anything, which is false. */}
@@ -228,7 +228,7 @@ function PlanCardInner({
           The one line about *today*, which is a different fact from the status
           chip's standing over time — so both earn their place. "No end date"
           used to sit at the right of this row; it described the plan's dates,
-          not its execution, and next to "Completed Today" it read as a state.
+          not its execution, and next to "Completed today" it read as a state.
           The date line above already says "Starts <date>" for an open-ended
           plan, so it was saying it twice as well. */}
       <div className="flex items-center gap-3">

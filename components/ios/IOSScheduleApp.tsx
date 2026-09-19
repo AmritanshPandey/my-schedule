@@ -1193,7 +1193,7 @@ export default function IOSScheduleApp() {
             icon={IconCalendar}
             title="Nothing scheduled"
             description="Add your first task for this day to start building your schedule."
-            action={emptyAction ? { label: "Add Task", onClick: emptyAction } : undefined}
+            action={emptyAction ? { label: "Add task", onClick: emptyAction } : undefined}
           />
         ) : (
           groupedRows.map((entry, i) => {
@@ -1303,7 +1303,7 @@ export default function IOSScheduleApp() {
               <section className="overflow-hidden rounded-2xl border border-emerald-600/40 bg-[#00A63E] p-4 text-neutral-950 dark:border-emerald-400/25 dark:bg-[#2FD46E]">
                 <div className="flex items-start justify-between gap-3">
                   <div className="min-w-0">
-                    <p className="text-[11px] font-black uppercase tracking-[0.10em] text-neutral-950/60">Getting started</p>
+                    <p className="text-[11px] font-black uppercase tracking-[0.10em] text-neutral-950/80">Getting started</p>
                     <p className="mt-1 text-[19px] font-black leading-tight">Make your day trackable</p>
                   </div>
                   <span className="text-[12px] font-black tabular-nums text-neutral-950/70">{setupDoneCount}/3</span>
@@ -1611,7 +1611,7 @@ export default function IOSScheduleApp() {
         <ErrorBoundary section name="Plans">
           <div className="space-y-3 px-4 pt-5" data-tour="plans-list">
             {schedule.plans.length === 0 ? (
-              <EmptyPanel icon={IconClipboardData} title="No plans yet" description="Create a plan first, then add tasks to schedule your day." action={{ label: "Create Plan", onClick: () => setAddingPlan(true) }} />
+              <EmptyPanel icon={IconClipboardData} title="No plans yet" description="Create a plan first, then add tasks to schedule your day." action={{ label: "Create plan", onClick: () => setAddingPlan(true) }} />
             ) : (
               schedule.plans.map((plan) => {
                 const taskCount = DAYS.reduce((sum, day) => sum + schedule.activities[day].filter((task) => task.planId === plan.id).length, 0);

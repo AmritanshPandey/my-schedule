@@ -176,7 +176,7 @@ export default function AccuracyCalendar({
           className="inline-flex items-center gap-1.5 rounded-xl border border-neutral-200 px-4 py-2 text-[13px] font-semibold text-neutral-600 hover:bg-neutral-50 dark:border-white/10 dark:text-neutral-400 dark:hover:bg-white/[0.04] transition-colors"
         >
           <IconPlus size={16} strokeWidth={1.5} />
-          Add Activity
+          Add activity
         </button>
       </div>
     );

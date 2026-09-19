@@ -162,7 +162,7 @@ export default function TimeSlotPicker({
     <section className="space-y-4">
       {/* Section header */}
       <div className="flex items-center justify-between gap-3">
-        <p className={LABEL}>{slots.length > 1 ? "Time Slots" : "Time Slot"}</p>
+        <p className={LABEL}>{slots.length > 1 ? "Time slots" : "Time slot"}</p>
         <p className={`text-[12px] font-semibold tabular-nums ${currentDuration === null ? "text-neutral-500 dark:text-neutral-400" : "text-neutral-700 dark:text-neutral-300"}`}>
           {durationText}
         </p>

@@ -277,7 +277,7 @@ async function exerciseTaskSheetInputs(page: Page, isMobile: boolean) {
     await page.getByRole("button", { name: "Create" }).click();
     await page.getByRole("button", { name: "Add task" }).click();
   } else {
-    await page.getByText("New Task").first().click();
+    await page.getByText("New task").first().click();
   }
 
   const title = page.getByLabel("Task title");
@@ -293,7 +293,7 @@ async function exerciseTaskSheetInputs(page: Page, isMobile: boolean) {
   await page.getByRole("button", { name: "One-off" }).click();
   await page.getByLabel("One-off task date").fill("2026-06-26");
 
-  await page.getByRole("button", { name: /Add Subtask|Add Step/ }).click();
+  await page.getByRole("button", { name: /Add subtask|Add step/ }).click();
   await page.getByLabel("Subtask name").first().fill("Prepare input states");
   await page.getByLabel("Subtask time (minutes or hours)").first().fill("10m");
   await page.getByLabel("Subtask detail").first().fill("3x10");
@@ -358,7 +358,7 @@ async function exerciseDesktopHighImpactRoutes(page: Page) {
   await page.getByRole("button", { name: "Edit plan" }).click();
   const editSheet = page.getByRole("dialog").last();
   await expect(editSheet.getByText("Plan Details")).toBeVisible();
-  await expect(editSheet.getByRole("button", { name: "Save Changes" })).toBeVisible();
+  await expect(editSheet.getByRole("button", { name: "Save changes" })).toBeVisible();
   await page.keyboard.press("Escape");
   await expect(editSheet.getByText("Plan Details")).toBeHidden();
 
@@ -421,7 +421,7 @@ async function expectDesktopSchedule(page: Page) {
   await openSeededApp(page);
   await expect(page.getByText("Morning Run").first()).toBeVisible();
   await expect(page.getByText("GMAT").first()).toBeVisible();
-  await expect(page.getByText("New Task").first()).toBeVisible();
+  await expect(page.getByText("New task").first()).toBeVisible();
 
   await exerciseTaskSheetInputs(page, false);
   await exerciseDesktopHighImpactRoutes(page);

@@ -7,7 +7,7 @@ import { IconPlus } from "@tabler/icons-react";
  *
  * The New/Edit Task sheet drew this twice with one class string copied between
  * them, and the copies had drifted apart in the one way you notice: "Add time
- * slot" was centred, "Add Subtask" was left-aligned, three sections below it.
+ * slot" was centred, "Add subtask" was left-aligned, three sections below it.
  * Both also sat at 40px (under the 44px tap floor) and, in dark mode, at
  * neutral-500 on #171717 — 3.78:1, under AA for a control label.
  */

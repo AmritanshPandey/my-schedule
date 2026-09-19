@@ -231,7 +231,7 @@ function StatGrid({
       <DashboardMetricCard
         primary
         icon={IconChecklist}
-        label="Tasks Today"
+        label="Tasks today"
         value={`${tasksDone}/${tasksTotal}`}
         detail={`${taskPct}% complete`}
         pct={taskPct}
@@ -239,7 +239,7 @@ function StatGrid({
       />
       <DashboardMetricCard
         icon={IconCalendarEvent}
-        label="This Week"
+        label="This week"
         value={`${weekPct}%`}
         detail="tasks completed"
         pct={weekPct}
@@ -292,7 +292,7 @@ function ThisWeekCard({
   if (!activity) return null;
   return (
     <section data-testid="overview-week-card" className={`${CARD} px-4 py-4`}>
-      <SectionHeader icon={IconCalendarEvent} title="This Week" meta={`${activity.tasksPct}% tasks`} />
+      <SectionHeader icon={IconCalendarEvent} title="This week" meta={`${activity.tasksPct}% tasks`} />
       <div className="grid grid-cols-7 gap-2">
         {activity.days.map(({ label, total, done, pct, isToday }) => (
           <div key={label} className={`rounded-xl border px-2 py-2 ${isToday ? "border-emerald-300 bg-emerald-50 dark:border-emerald-500/30 dark:bg-emerald-500/[0.08]" : "border-neutral-200/70 bg-neutral-50 dark:border-white/[0.07] dark:bg-white/[0.04]"}`}>
@@ -308,13 +308,13 @@ function ThisWeekCard({
       </div>
       <div className="mt-3 grid grid-cols-2 gap-3">
         <div className={SOFT_PANEL + " px-3 py-3"}>
-          <p className="text-[10px] font-bold uppercase tracking-[0.08em] text-neutral-500 dark:text-neutral-400">Tasks Done</p>
+          <p className="text-[10px] font-bold uppercase tracking-[0.08em] text-neutral-500 dark:text-neutral-400">Tasks done</p>
           <p className="mt-1 text-[24px] font-extrabold leading-none tabular-nums text-neutral-950 dark:text-white">
             <AnimatedNumber value={activity.tasksPct} /><span className="text-[14px]">%</span>
           </p>
         </div>
         <div className={SOFT_PANEL + " px-3 py-3"}>
-          <p className="text-[10px] font-bold uppercase tracking-[0.08em] text-neutral-500 dark:text-neutral-400">Habits Done</p>
+          <p className="text-[10px] font-bold uppercase tracking-[0.08em] text-neutral-500 dark:text-neutral-400">Habits done</p>
           <p className="mt-1 text-[24px] font-extrabold leading-none tabular-nums text-neutral-950 dark:text-white">
             <AnimatedNumber value={activity.habitsPct} /><span className="text-[14px]">%</span>
           </p>
@@ -352,7 +352,7 @@ function ActiveTrackingCard({
 }) {
   return (
     <section data-testid="overview-tracking-card" className={`${CARD} px-4 py-4`}>
-      <SectionHeader icon={IconTarget} title="Active Tracking" meta={rows.length > 0 ? `${rows.length}` : undefined} />
+      <SectionHeader icon={IconTarget} title="Active tracking" meta={rows.length > 0 ? `${rows.length}` : undefined} />
       {rows.length === 0 ? (
         <div className="rounded-xl border border-dashed border-neutral-200 px-4 py-5 text-center dark:border-white/[0.09]">
           <span className="mx-auto grid h-12 w-12 place-items-center rounded-xl bg-emerald-500/10 text-emerald-600 dark:bg-emerald-400/10 dark:text-emerald-400">
@@ -435,7 +435,7 @@ function RoutineConsistencyCard({
   if (rows.length === 0) return null;
   return (
     <section data-testid="overview-routine-card" className={`${CARD} px-4 py-4`}>
-      <SectionHeader icon={IconRepeat} title="Routine Consistency" meta={`${rows.length}`} />
+      <SectionHeader icon={IconRepeat} title="Routine consistency" meta={`${rows.length}`} />
       <div className="divide-y divide-neutral-100 dark:divide-white/[0.06]">
         {rows.map(({ ritual, streak, bestStreak, adherencePct, dots, dueToday }) => (
           <div key={ritual.id} className={`flex items-center justify-between gap-3 py-3 ${dueToday ? "" : "opacity-70"}`}>
@@ -493,7 +493,7 @@ function PlanConsistencyCard({
   // exactly as tall as its rows.
   return (
     <section data-testid="overview-plan-card" className={`${CARD} px-4 py-4`}>
-      <SectionHeader icon={IconClipboardList} title="Plan Consistency" meta={`${rows.length} ${rows.length === 1 ? "plan" : "plans"}`} />
+      <SectionHeader icon={IconClipboardList} title="Plan consistency" meta={`${rows.length} ${rows.length === 1 ? "plan" : "plans"}`} />
       {/* Each row carries two figures that measure different things: the
           percentage counts *days* (calculateConsistency), the line under the
           title counts milestones. Said once here rather than per row —

@@ -396,7 +396,7 @@ export default function RitualView({
 
         {/* ── Header ───────────────────────────────────────────────────────── */}
         <MainTitleSection
-          label="Daily Practice"
+          label="Daily practice"
           title="Routines"
           actions={
             <>
@@ -423,7 +423,7 @@ export default function RitualView({
                 <DateActionButton value={selectedDateISO} onChange={setSelectedDateISO} />
               )}
               <CtaActionButton
-                label="Add Routine"
+                label="Add routine"
                 icon={<IconPlus size={14} strokeWidth={2.5} />}
                 onClick={() => { haptic("medium"); onAddOpenChange(true); }}
               />
@@ -530,7 +530,7 @@ export default function RitualView({
             icon={IconRepeat}
             title="No routines yet"
             description="Add anything you want to do regularly — skincare, water, exercise, reading — and track it your own way."
-            action={{ label: "Add First Routine", onClick: () => onAddOpenChange(true) }}
+            action={{ label: "Add first routine", onClick: () => onAddOpenChange(true) }}
           />
         )}
 

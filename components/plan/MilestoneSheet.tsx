@@ -201,7 +201,7 @@ export default function MilestoneSheet({
   }
 
   const eyebrow = mode === "edit" ? "Edit" : "New";
-  const title = mode === "edit" ? "Edit Milestone" : "Add Milestone";
+  const title = mode === "edit" ? "Edit milestone" : "Add milestone";
   const canSave = !!draft.title.trim() && !!draft.startDate && plannedDurationDays > 0;
 
   return (
@@ -238,7 +238,7 @@ export default function MilestoneSheet({
           {/* Start Date — full width row */}
           <div>
             <p className={`mb-1.5 ${typography.eyebrow}`}>
-              Start Date
+              Start date
             </p>
             <input
               type="date"
@@ -283,7 +283,7 @@ export default function MilestoneSheet({
 
           <div className="rounded-2xl border border-neutral-200 bg-neutral-50 px-4 py-3 dark:border-white/10 dark:bg-white/[0.04]">
             <p className={typography.eyebrow}>
-              Calculated End
+              Calculated end
             </p>
             <p className="mt-1 text-[16px] font-bold text-neutral-900 dark:text-white">
               {draft.startDate && plannedEndDate
@@ -306,7 +306,7 @@ export default function MilestoneSheet({
         </div>
 
         <Button fullWidth onClick={handleSave} disabled={!canSave}>
-          {mode === "edit" ? "Save Changes" : "Add Milestone"}
+          {mode === "edit" ? "Save changes" : "Add milestone"}
         </Button>
       </div>
     </BottomSheet>

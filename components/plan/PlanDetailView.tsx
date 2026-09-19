@@ -1126,7 +1126,7 @@ export default function PlanDetailView({
                 className="inline-flex items-center gap-1.5 text-[12px] font-semibold text-neutral-500 hover:text-neutral-900 dark:text-neutral-400 dark:hover:text-white transition-colors"
               >
                 <IconPlus size={12} strokeWidth={2} />
-                Add Entry
+                Add entry
               </button>
             </div>
             {entries.length === 0 ? (
@@ -1270,7 +1270,7 @@ export default function PlanDetailView({
         <div className="flex-1 min-w-0">
           {isActive && (
             <p className="mb-0.5 text-[12px] font-bold tracking-[-0.1px] text-green-600 dark:text-green-400">
-              Current Milestone
+              Current milestone
             </p>
           )}
           {isDelayed && (
@@ -1404,7 +1404,7 @@ export default function PlanDetailView({
           {/* Header row */}
           <div className="flex items-center justify-between mb-3">
             <p className="text-[16px] font-bold tracking-[-0.4px] text-neutral-950 dark:text-white">
-              Plan Progress
+              Plan progress
             </p>
             <p className="text-[20px] font-extrabold tracking-[-0.5px] text-green-600 dark:text-green-400">
               {overallPct}%
@@ -1430,10 +1430,10 @@ export default function PlanDetailView({
         {/* 2×2 stats grid */}
         <div className="grid grid-cols-2 gap-[10px]">
           {([
-            { label: "Current Focus",  value: currentPhaseName ?? "Starting out", caption: null },
-            { label: "Task Consistency", value: `${consistencyPct}%`, caption: "Since plan start" },
-            { label: "Days Left", value: roadmapStats.targetDate ? String(Math.max(0, Math.ceil((new Date(roadmapStats.targetDate).getTime() - Date.now()) / 86_400_000))) : "—", caption: null },
-            { label: "Target Date",   value: targetLabel, caption: null },
+            { label: "Current focus",  value: currentPhaseName ?? "Starting out", caption: null },
+            { label: "Task consistency", value: `${consistencyPct}%`, caption: "Since plan start" },
+            { label: "Days left", value: roadmapStats.targetDate ? String(Math.max(0, Math.ceil((new Date(roadmapStats.targetDate).getTime() - Date.now()) / 86_400_000))) : "—", caption: null },
+            { label: "Target date",   value: targetLabel, caption: null },
           ] as { label: string; value: string; caption: string | null }[]).map(({ label, value, caption }) => (
             <div
               key={label}
@@ -1802,7 +1802,7 @@ export default function PlanDetailView({
           <AIActionSheet
             open={genSheetOpen}
             onClose={() => setGenSheetOpen(false)}
-            title="Plan Tasks"
+            title="Plan tasks"
             contextLabel={`for ${plan.title}`}
             inputPlaceholder="What's your main goal? e.g. Pass GMAT by June, build a daily habit…"
             quickPicks={[
@@ -1813,7 +1813,7 @@ export default function PlanDetailView({
               "Review sessions",
               "Light start",
             ]}
-            ctaLabel="Build Tasks"
+            ctaLabel="Build tasks"
             resultSingular="task"
             resultPlural="tasks"
             onGenerate={genTasksStream}
@@ -1825,7 +1825,7 @@ export default function PlanDetailView({
           <AIActionSheet
             open={milestoneGenSheetOpen}
             onClose={() => setMilestoneGenSheetOpen(false)}
-            title="Milestone Tasks"
+            title="Milestone tasks"
             contextLabel={`for "${postMilestoneContext.title}"`}
             inputPlaceholder="Any focus area? e.g. mornings only, progressive load, quick wins…"
             quickPicks={[
@@ -1834,7 +1834,7 @@ export default function PlanDetailView({
               "Progressive build-up",
               "Include checkpoints",
             ]}
-            ctaLabel="Build Tasks"
+            ctaLabel="Build tasks"
             resultSingular="task"
             resultPlural="tasks"
             onGenerate={genMilestoneTasksStream}
@@ -1855,7 +1855,7 @@ export default function PlanDetailView({
     return (
             <section>
               <InternalSectionTitle
-                title="Planned Tasks"
+                title="Planned tasks"
                 className="mb-4"
                 actions={
                   <div className="flex items-center gap-1">
@@ -1889,7 +1889,7 @@ export default function PlanDetailView({
     return (
             <section>
               <InternalSectionTitle
-                title="Progress Tracking"
+                title="Progress tracking"
                 className="mb-4"
                 actions={
                   <>
@@ -1922,7 +1922,7 @@ export default function PlanDetailView({
                     className="mt-3 inline-flex items-center gap-1.5 rounded-xl border border-neutral-200 px-4 py-2 text-[13px] font-semibold text-neutral-600 hover:bg-neutral-50 dark:border-white/10 dark:text-neutral-400 dark:hover:bg-white/[0.04] transition-colors"
                   >
                     <IconPlus size={16} strokeWidth={2} />
-                    Create Tracker
+                    Create tracker
                   </button>
                 </div>
               ) : (
@@ -1990,7 +1990,7 @@ export default function PlanDetailView({
                 className="mt-3 inline-flex items-center gap-1.5 rounded-xl border border-neutral-200 px-4 py-2 text-[13px] font-semibold text-neutral-600 transition-colors hover:bg-neutral-50 dark:border-white/10 dark:text-neutral-400 dark:hover:bg-white/[0.04]"
               >
                 <IconPlus size={16} strokeWidth={1.5} />
-                Add First Milestone
+                Add first milestone
               </button>
             </div>
           ) : (
@@ -2187,7 +2187,7 @@ export default function PlanDetailView({
         <div className="space-y-4 p-5 pb-8">
           <SheetHeader
             eyebrow="New"
-            title="Create Tracker"
+            title="Create tracker"
             onClose={() => {
               setAddingTracker(false);
               setNewTrackerTitle("");
@@ -2270,7 +2270,7 @@ export default function PlanDetailView({
             </div>
           </div>
           <Button fullWidth onClick={handleAddTracker} disabled={!newTrackerTitle.trim()}>
-            Create Tracker
+            Create tracker
           </Button>
         </div>
       </BottomSheet>
@@ -2322,7 +2322,7 @@ export default function PlanDetailView({
                         ? <IconAlertTriangle size={12} strokeWidth={2.5} />
                         : <IconCheck size={12} strokeWidth={2.5} />
                       }
-                      {isCompleted ? "Completed" : isDelayed ? "Overdue" : "In Progress"}
+                      {isCompleted ? "Completed" : isDelayed ? "Overdue" : "In progress"}
                     </span>
                   )}
                   {showHealthBadge && <MilestoneHealthBadge health={health.health} size="md" />}
@@ -2462,7 +2462,7 @@ export default function PlanDetailView({
               {(progress?.hasLinkedTasks || onLinkTaskToMilestone) && (
                 <div className="mb-5">
                   <p className="mb-2 text-[11px] font-bold uppercase tracking-[0.08em] text-neutral-600 dark:text-neutral-400">
-                    Linked Tasks
+                    Linked tasks
                   </p>
                   {progress?.hasLinkedTasks && (
                     <div className="mb-2 space-y-2">
@@ -2521,7 +2521,7 @@ export default function PlanDetailView({
               {(onLinkTrackerToMilestone || onUnlinkTrackerFromMilestone) && (
                 <div className="mb-5">
                   <p className="mb-2 text-[11px] font-bold uppercase tracking-[0.08em] text-neutral-600 dark:text-neutral-400">
-                    Success Metric
+                    Success metric
                   </p>
                   {linkedTracker ? (
                     <div className="flex items-center justify-between gap-3 rounded-xl border border-neutral-200 bg-neutral-50 px-3 py-2.5 dark:border-white/10 dark:bg-white/[0.04]">
@@ -2608,7 +2608,7 @@ export default function PlanDetailView({
                   className="flex h-12 flex-1 items-center justify-center gap-2 rounded-2xl bg-neutral-900 text-[16px] font-semibold text-white dark:bg-white dark:text-neutral-900"
                 >
                   <IconEdit size={16} strokeWidth={2} />
-                  Edit Milestone
+                  Edit milestone
                 </button>
               </div>
             </div>
@@ -2744,7 +2744,7 @@ export default function PlanDetailView({
                   className="flex h-12 flex-1 items-center justify-center gap-2 rounded-2xl bg-neutral-900 text-[16px] font-semibold text-white dark:bg-white dark:text-neutral-900"
                 >
                   <IconEdit size={16} strokeWidth={2} />
-                  Edit Task
+                  Edit task
                 </button>
               </div>
             </div>

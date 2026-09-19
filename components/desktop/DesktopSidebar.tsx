@@ -209,13 +209,13 @@ export default function DesktopSidebar({
             type="button"
             data-tour="new-item-button"
             onClick={handleCreate}
-            title={collapsed ? (activeTab === 1 ? "New Plan" : activeTab === 2 ? "New Routine" : "New Task") : undefined}
+            title={collapsed ? (activeTab === 1 ? "New plan" : activeTab === 2 ? "New routine" : "New task") : undefined}
             className={`flex w-full items-center rounded-full bg-[#008236] py-2.5 text-white transition-colors hover:bg-[#006B2C] active:scale-[0.98] dark:bg-[#2FD46E] dark:text-neutral-950 dark:hover:bg-[#2FD46E]/90 ${collapsed ? "justify-center px-0" : "gap-2 px-3.5"}`}
           >
             <IconPlus size={15} strokeWidth={2.5} />
             {!collapsed && (
               <span className="text-[13px] font-semibold">
-                {activeTab === 1 ? "New Plan" : activeTab === 2 ? "New Routine" : "New Task"}
+                {activeTab === 1 ? "New plan" : activeTab === 2 ? "New routine" : "New task"}
               </span>
             )}
           </button>
@@ -248,11 +248,11 @@ export default function DesktopSidebar({
           <button
             type="button"
             onClick={() => { haptic("light"); onBulkImport(); }}
-            title={collapsed ? "Paste Schedule" : undefined}
+            title={collapsed ? "Paste schedule" : undefined}
             className={`flex w-full items-center rounded-xl py-2 text-neutral-600 transition-colors hover:bg-neutral-100 hover:text-neutral-700 dark:text-neutral-400 dark:hover:bg-white/[0.04] dark:hover:text-neutral-300 ${collapsed ? "justify-center px-0" : "gap-3 px-3.5"}`}
           >
             <IconFileImport size={16} strokeWidth={1.8} className="shrink-0" />
-            {!collapsed && <span className="text-[13px] font-medium">Paste Schedule</span>}
+            {!collapsed && <span className="text-[13px] font-medium">Paste schedule</span>}
           </button>
         )}
 

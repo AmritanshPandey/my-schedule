@@ -194,7 +194,7 @@ export function RitualSheet({ open, onClose, initial, onSave, onDelete }: Ritual
       <div className="px-5 pb-6 pt-2">
         {showTemplatePicker ? (
           <div className="space-y-4">
-            <SheetHeader eyebrow="Add Routine" title="What do you want to track?" onClose={handleClose} />
+            <SheetHeader eyebrow="Add routine" title="What do you want to track?" onClose={handleClose} />
             <div className="grid grid-cols-2 gap-2.5">
               {ROUTINE_TEMPLATES.map((tpl) => {
                 const Glyph = iconGlyph(tpl.icon);
@@ -217,8 +217,8 @@ export function RitualSheet({ open, onClose, initial, onSave, onDelete }: Ritual
         ) : (
           <>
             <SheetHeader
-              eyebrow={isEdit ? "Edit Routine" : "New Routine"}
-              title={title || "New Routine"}
+              eyebrow={isEdit ? "Edit routine" : "New routine"}
+              title={title || "New routine"}
               onClose={handleClose}
             />
 
@@ -542,7 +542,7 @@ export function RitualSheet({ open, onClose, initial, onSave, onDelete }: Ritual
                 className="flex w-full items-center justify-center gap-2 rounded-2xl bg-neutral-900 py-3.5 text-[16px] font-bold text-white transition-opacity disabled:opacity-40 dark:bg-white dark:text-neutral-950"
               >
                 {isEdit ? <IconCheck size={16} strokeWidth={2.5} /> : <IconPlus size={16} strokeWidth={2.5} />}
-                {isEdit ? "Save Routine" : "Add Routine"}
+                {isEdit ? "Save routine" : "Add routine"}
               </button>
 
               {isEdit && onDelete && (
@@ -551,7 +551,7 @@ export function RitualSheet({ open, onClose, initial, onSave, onDelete }: Ritual
                   fullWidth
                   onClick={() => { haptic("light"); onDelete(); onClose(); }}
                 >
-                  Delete Routine
+                  Delete routine
                 </Button>
               )}
             </div>

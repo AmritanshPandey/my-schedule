@@ -516,7 +516,7 @@ export default function AIPlanCreatorSheet({
             <IconArrowLeft size={18} strokeWidth={2} />
           </button>
           <div className="flex-1">
-            <p className={typography.eyebrow}>Review Plan</p>
+            <p className={typography.eyebrow}>Review plan</p>
           </div>
           <button
             type="button"
@@ -721,7 +721,7 @@ export default function AIPlanCreatorSheet({
         )}
 
         <Button fullWidth onClick={handleCreate} disabled={!title.trim() || hasBlockingIssues}>
-          {hasBlockingIssues ? "Resolve issues above to continue" : "Create Plan"}
+          {hasBlockingIssues ? "Resolve issues above to continue" : "Create plan"}
         </Button>
       </div>
     );

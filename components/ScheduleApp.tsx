@@ -340,7 +340,7 @@ function IOSSafeDashboard({
             icon={IconCalendar}
             title="No tasks today"
             description="Add tasks from the Today tab when you're ready."
-            action={{ label: "Add Task", onClick: () => onNavigate(0) }}
+            action={{ label: "Add task", onClick: () => onNavigate(0) }}
           />
         ) : (
           <div className="flex flex-col gap-3">
@@ -705,7 +705,7 @@ function WeekSummary({
   return (
     <div className="rounded-2xl border border-neutral-200 bg-white dark:border-white/[0.08] dark:bg-neutral-900 px-4 py-4 mb-6">
       <p className="text-[11px] font-bold uppercase tracking-[0.08em] text-neutral-600 dark:text-neutral-400 mb-3">
-        This Week
+        This week
       </p>
 
       {/* Day completion strip */}
@@ -3582,7 +3582,7 @@ export default function ScheduleApp() {
           {/* Header */}
           <MainTitleSection
             label="Stay on track"
-            title="My Plans"
+            title="My plans"
             actions={
               <div className="flex items-center gap-2">
                 <CtaActionButton
@@ -3591,7 +3591,7 @@ export default function ScheduleApp() {
                   onClick={() => setGoalsSheetOpen(true)}
                 />
                 <CtaActionButton
-                  label="Add New Plan"
+                  label="Add new plan"
                   icon={<IconPlus size={14} strokeWidth={2.5} />}
                   onClick={() => setAddingPlan(true)}
                 />
@@ -3606,7 +3606,7 @@ export default function ScheduleApp() {
               icon={IconClipboardList}
               title="No plans yet"
               description="Start from scratch or pick a template with tasks and milestones ready to go."
-              action={{ label: "New Plan", onClick: () => setAddingPlan(true) }}
+              action={{ label: "New plan", onClick: () => setAddingPlan(true) }}
               secondaryAction={{ label: "Browse templates", onClick: () => setTemplatesOpen(true) }}
             />
           )}
@@ -4189,7 +4189,7 @@ export default function ScheduleApp() {
                           icon={IconCalendar}
                           title="Nothing scheduled"
                           description="Add your first task for this day to start building your schedule."
-                          action={{ label: "Add Task", onClick: () => openCreateSheet() }}
+                          action={{ label: "Add task", onClick: () => openCreateSheet() }}
                         />
                       )
                     ) : editMode && !iosSafeMode ? (

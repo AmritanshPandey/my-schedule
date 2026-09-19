@@ -800,7 +800,7 @@ export function TaskSheet({
   }
 
   const eyebrow = mode === "create" ? "Add" : "Edit";
-  const headingTitle = mode === "create" ? "New Task" : (task?.title ?? "Task");
+  const headingTitle = mode === "create" ? "New task" : (task?.title ?? "Task");
 
   const sheetContent = (
     <>
@@ -828,7 +828,7 @@ export function TaskSheet({
               >
                 <IconArrowLeft size={18} strokeWidth={2} />
               </IconButton>
-              <p className="text-[18px] font-bold text-neutral-900 dark:text-white">Duplicate Task</p>
+              <p className="text-[18px] font-bold text-neutral-900 dark:text-white">Duplicate task</p>
             </div>
 
             {/* Title preview */}
@@ -845,7 +845,7 @@ export function TaskSheet({
 
             <Button fullWidth onClick={confirmDuplicate} disabled={duplicateDays.length === 0}>
               <IconCopy size={15} />
-              Create Copy
+              Create copy
             </Button>
           </m.div>
         )}
@@ -1205,7 +1205,7 @@ export function TaskSheet({
                 <section className="space-y-3">
                   <div className="flex items-center justify-between">
                     <p className={typography.eyebrow}>
-                      {taskType === "session" ? "Session Steps" : "Subtasks"}
+                      {taskType === "session" ? "Session steps" : "Subtasks"}
                     </p>
                     {canExpand && title.trim().length > 0 && (
                       <button
@@ -1247,7 +1247,7 @@ export function TaskSheet({
                   </DndContext>
 
                   <AddRowButton
-                    label={taskType === "session" ? "Add Step" : "Add Subtask"}
+                    label={taskType === "session" ? "Add step" : "Add subtask"}
                     onClick={addSubtask}
                   />
 
@@ -1331,7 +1331,7 @@ export function TaskSheet({
               <Button className="min-w-0 flex-1" onClick={handleSave} disabled={!canSave}>
                 <IconCheck size={18} strokeWidth={2.5} />
                 <span className="truncate">
-                  {mode === "create" ? "Add Task" : isOccurrenceScope ? "Save this day" : "Save Changes"}
+                  {mode === "create" ? "Add task" : isOccurrenceScope ? "Save this day" : "Save changes"}
                 </span>
               </Button>
               {mode === "edit" && !isOccurrenceScope && onDuplicate && (
@@ -1366,7 +1366,7 @@ export function TaskSheet({
         <AIActionSheet
           open={expandSheetOpen}
           onClose={() => setExpandSheetOpen(false)}
-          title="Expand Task"
+          title="Expand task"
           contextLabel={title.trim() || undefined}
           inputPlaceholder="Any specific focus? e.g. beginner-friendly, step-by-step breakdown…"
           quickPicks={[
@@ -1376,7 +1376,7 @@ export function TaskSheet({
             "Keep it simple",
             "Practical steps",
           ]}
-          ctaLabel="Build Steps"
+          ctaLabel="Build steps"
           resultSingular="step"
           resultPlural="steps"
           onGenerate={subtaskStream}

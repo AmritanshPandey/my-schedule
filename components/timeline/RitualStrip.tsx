@@ -91,7 +91,7 @@ export default function RitualStrip({
               {ritual.title}
             </span>
             {displayTime && (
-              <span className="font-semibold tabular-nums text-neutral-950/60">{formatDisplayTime(displayTime)}</span>
+              <span className="font-semibold tabular-nums text-neutral-950/80">{formatDisplayTime(displayTime)}</span>
             )}
           </span>
         </span>

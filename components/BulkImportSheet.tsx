@@ -125,7 +125,7 @@ export default function BulkImportSheet({ open, plans, fallbackDay = "monday", o
           fallbackDay={fallbackDay}
           onCommit={onCommit}
           onDone={onClose}
-          header={<SheetHeader eyebrow="Bulk import" title="Paste Schedule" onClose={onClose} />}
+          header={<SheetHeader eyebrow="Bulk import" title="Paste schedule" onClose={onClose} />}
         />
       </div>
     </BottomSheet>

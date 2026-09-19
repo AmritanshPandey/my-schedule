@@ -165,7 +165,7 @@ export default function AIAssistant({
     return {
       title: label,
       contextLabel: selectedPlan?.title ?? "",
-      ctaLabel: "Build Tasks",
+      ctaLabel: "Build tasks",
       quickPicks: ["Mornings", "Evenings", "Weekdays only", "Short sessions", "High intensity"],
       resultSingular: "task",
       resultPlural: "tasks",
@@ -198,7 +198,7 @@ export default function AIAssistant({
     return {
       title: `Tasks for "${activeMilestone?.title ?? "milestone"}"`,
       contextLabel: selectedPlan?.title ?? "",
-      ctaLabel: "Build Tasks",
+      ctaLabel: "Build tasks",
       quickPicks: ["Step-by-step", "Quick wins", "Deep work", "Weekly check-ins"],
       resultSingular: "task",
       resultPlural: "tasks",
@@ -236,9 +236,9 @@ export default function AIAssistant({
 
   function buildMilestoneSheet(): SheetConfig {
     return {
-      title: "Build Milestone Roadmap",
+      title: "Build milestone roadmap",
       contextLabel: selectedPlan?.title ?? "",
-      ctaLabel: "Build Roadmap",
+      ctaLabel: "Build roadmap",
       quickPicks: ["Quarterly", "Monthly", "Bi-weekly", "Ambitious", "Conservative"],
       resultSingular: "milestone",
       resultPlural: "milestones",
@@ -319,7 +319,7 @@ export default function AIAssistant({
           iconBg: "bg-amber-100 dark:bg-amber-500/15",
           icon: <IconBolt size={14} strokeWidth={2} className="text-amber-600 dark:text-amber-400" />,
           onAction: () => guardAction(() =>
-            setSheetConfig(buildTaskSheet("Morning Routine Tasks", { title: "Morning Routine", description: customGoal || "productive morning routine" }))
+            setSheetConfig(buildTaskSheet("Morning routine tasks", { title: "Morning Routine", description: customGoal || "productive morning routine" }))
           ),
         },
         {
@@ -337,7 +337,7 @@ export default function AIAssistant({
           iconBg: "bg-rose-100 dark:bg-rose-500/15",
           icon: <IconMap2 size={14} strokeWidth={2} className="text-rose-600 dark:text-rose-400" />,
           onAction: () => guardAction(() =>
-            setSheetConfig(buildTaskSheet("Learning Roadmap Tasks", { title: "30-Day Learning Roadmap", description: customGoal || "systematic learning" }))
+            setSheetConfig(buildTaskSheet("Learning roadmap tasks", { title: "30-Day Learning Roadmap", description: customGoal || "systematic learning" }))
           ),
         },
       ];
@@ -367,7 +367,7 @@ export default function AIAssistant({
         actionType: "generate-tasks",
         iconBg: "bg-violet-100 dark:bg-violet-500/15",
         icon: <IconCalendarPlus size={14} strokeWidth={2} className="text-violet-600 dark:text-violet-400" />,
-        onAction: () => guardAction(() => setSheetConfig(buildTaskSheet("Generate Tasks"))),
+        onAction: () => guardAction(() => setSheetConfig(buildTaskSheet("Generate tasks"))),
       });
     }
 
@@ -396,7 +396,7 @@ export default function AIAssistant({
         actionType: "generate-tasks",
         iconBg: "bg-amber-100 dark:bg-amber-500/15",
         icon: <IconBolt size={14} strokeWidth={2} className="text-amber-600 dark:text-amber-400" />,
-        onAction: () => guardAction(() => setSheetConfig(buildTaskSheet("Optimize Task Schedule"))),
+        onAction: () => guardAction(() => setSheetConfig(buildTaskSheet("Optimize task schedule"))),
       });
     } else {
       items.push({
@@ -429,7 +429,7 @@ export default function AIAssistant({
 
   function handleSend() {
     if (!customGoal.trim() || !selectedPlan) return;
-    setSheetConfig(buildTaskSheet("Generate Tasks", { title: selectedPlan.title, description: customGoal }));
+    setSheetConfig(buildTaskSheet("Generate tasks", { title: selectedPlan.title, description: customGoal }));
     setCustomGoal("");
   }
 
@@ -600,7 +600,7 @@ export default function AIAssistant({
               <div className="mb-1.5 flex items-center gap-1.5">
                 <div className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
                 <p className="text-[10px] font-bold uppercase tracking-[0.08em] text-emerald-700 dark:text-emerald-400">
-                  Consistency Analysis
+                  Consistency analysis
                 </p>
                 <button
                   type="button"

@@ -135,7 +135,7 @@ export default function AddPlanSheet({ open, onClose, setSchedule, onUseAI, goal
   return (
     <BottomSheet open={open} onClose={handleClose}>
       <div className="space-y-4 p-5 pb-8">
-        <SheetHeader eyebrow="New" title="Create Plan" onClose={handleClose} />
+        <SheetHeader eyebrow="New" title="Create plan" onClose={handleClose} />
 
         {aiEnabled && onUseAI && (
           <button
@@ -212,7 +212,7 @@ export default function AddPlanSheet({ open, onClose, setSchedule, onUseAI, goal
               onChange={(e) => setGoalId(e.target.value)}
               className="h-11 w-full min-w-0 rounded-xl border border-neutral-200 bg-neutral-50 px-3 text-[14px] text-neutral-900 outline-none transition-colors focus:border-neutral-300 focus:bg-neutral-100 dark:border-white/10 dark:bg-white/[0.04] dark:text-white dark:focus:border-white/20 dark:focus:bg-white/[0.07] dark:[color-scheme:dark]"
             >
-              <option value="">No Goal</option>
+              <option value="">No goal</option>
               {goals.map((g) => (
                 <option key={g.id} value={g.id}>{g.title}</option>
               ))}
@@ -293,7 +293,7 @@ export default function AddPlanSheet({ open, onClose, setSchedule, onUseAI, goal
         </div>
 
         <Button fullWidth onClick={handleSubmit} disabled={!title.trim()}>
-          Create New Plan
+          Create new plan
         </Button>
       </div>
     </BottomSheet>

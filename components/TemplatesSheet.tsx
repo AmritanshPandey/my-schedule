@@ -142,7 +142,7 @@ function TemplatesSheetInner({ open, onClose, onApply }: TemplatesSheetProps) {
               Get started
             </p>
             <h2 className="text-[22px] font-extrabold tracking-tight text-neutral-900 dark:text-white">
-              Example Templates
+              Example templates
             </h2>
             <p className="mt-0.5 text-[13px] text-neutral-500 dark:text-neutral-400">
               Pick a template to create a plan with tasks and milestones already set up.

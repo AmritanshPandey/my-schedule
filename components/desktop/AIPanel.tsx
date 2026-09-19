@@ -47,12 +47,12 @@ interface AIPanelProps {
 }
 
 const ACTION_LABELS: Record<AIActionResult["type"], string> = {
-  create_plan: "New Plan",
-  create_ritual: "New Ritual",
+  create_plan: "New plan",
+  create_ritual: "New ritual",
   suggest_milestones: "Milestones",
-  add_tracker: "New Tracker",
-  add_task: "New Task",
-  add_subtasks: "New Subtasks",
+  add_tracker: "New tracker",
+  add_task: "New task",
+  add_subtasks: "New subtasks",
   ask_clarification: "Question",
 };
 
@@ -96,7 +96,7 @@ function PlanDraftCard({ action, onApply }: { action: Extract<AIActionResult, { 
     >
       <div className="mb-3 flex items-center gap-1.5">
         <span className="rounded-md bg-emerald-100 px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wide text-emerald-700 dark:bg-emerald-500/20 dark:text-emerald-400">
-          New Plan
+          New plan
         </span>
         <span className="text-[10px] text-neutral-500 dark:text-neutral-400">Review and edit before creating</span>
       </div>

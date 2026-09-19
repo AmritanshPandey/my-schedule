@@ -37,7 +37,7 @@ interface AIActionSheetProps {
   // Phase 1 — prompt
   inputPlaceholder?: string;
   quickPicks?: string[];
-  ctaLabel: string;           // e.g. "Build Tasks"
+  ctaLabel: string;           // e.g. "Build tasks"
 
   // Phase 2/3 — results
   resultSingular?: string;    // "task"

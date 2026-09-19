@@ -112,7 +112,7 @@ export default function EditPlanSheet({ planId, plan, setSchedule, onClose, goal
   return (
     <BottomSheet open={!!planId} onClose={onClose} maxHeight="80vh">
       <div className="space-y-4 p-5 pb-8">
-        <SheetHeader eyebrow="Edit" title="Plan Details" onClose={onClose} />
+        <SheetHeader eyebrow="Edit" title="Plan details" onClose={onClose} />
         <div className="space-y-2.5">
           <div>
             <Input
@@ -170,7 +170,7 @@ export default function EditPlanSheet({ planId, plan, setSchedule, onClose, goal
                 onChange={(e) => setDraft((d) => ({ ...d, goalId: e.target.value }))}
                 className="h-11 w-full min-w-0 rounded-xl border border-neutral-200 bg-neutral-50 px-3 text-[14px] text-neutral-900 outline-none transition-colors focus:border-neutral-300 focus:bg-neutral-100 dark:border-white/10 dark:bg-white/[0.04] dark:text-white dark:focus:border-white/20 dark:focus:bg-white/[0.07] dark:[color-scheme:dark]"
               >
-                <option value="">No Goal</option>
+                <option value="">No goal</option>
                 {goals.map((g) => (
                   <option key={g.id} value={g.id}>{g.title}</option>
                 ))}
@@ -208,7 +208,7 @@ export default function EditPlanSheet({ planId, plan, setSchedule, onClose, goal
           onClick={handleSave}
           disabled={!draft.title.trim()}
         >
-          Save Changes
+          Save changes
         </Button>
       </div>
     </BottomSheet>

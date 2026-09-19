@@ -28,7 +28,7 @@ export interface CoachMarkStep {
   /** A `data-tour="<id>"` value on the element to spotlight (looked up fresh
    *  on every step change via document.querySelector) — not a React ref, so
    *  a step can target an element mounted by a totally different part of
-   *  the tree (e.g. the sidebar's "New Task" button from a Today-tab tour)
+   *  the tree (e.g. the sidebar's "New task" button from a Today-tab tour)
    *  without threading refs through the component tree. */
   target: string;
   title: string;

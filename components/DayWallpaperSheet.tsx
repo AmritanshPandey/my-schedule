@@ -191,7 +191,7 @@ export default function DayWallpaperSheet({ open, onClose, schedule, todayKey }:
         className="px-5 pt-2"
         style={{ paddingBottom: "max(28px, calc(env(safe-area-inset-bottom) + 16px))" }}
       >
-        <SheetHeader eyebrow="Today" title="Lock Screen Wallpaper" onClose={onClose} />
+        <SheetHeader eyebrow="Today" title="Lock screen wallpaper" onClose={onClose} />
 
         {/* Hidden icon host — serialized into the canvas render. */}
         <div ref={iconHostRef} aria-hidden="true" className="pointer-events-none absolute h-0 w-0 overflow-hidden">
