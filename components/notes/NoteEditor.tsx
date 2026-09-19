@@ -591,7 +591,7 @@ export default function NoteEditor({ note, onUpdate, onDelete, onBack, tasks, pl
 
         <div className="border-b border-neutral-100 bg-white px-4 py-3 dark:border-white/[0.06] dark:bg-neutral-950">
           <div className="mx-auto w-full max-w-4xl sm:px-1 lg:max-w-5xl xl:max-w-6xl">
-            <p className="flex flex-wrap items-center gap-1.5 text-[12px] leading-none text-neutral-400 dark:text-neutral-600">
+            <p className="flex flex-wrap items-center gap-1.5 text-[12px] leading-none text-neutral-500 dark:text-neutral-400">
               <span>{formatUpdatedAt(note.updatedAt)}</span>
               <span>·</span>
               <span>{wordCount} {wordCount === 1 ? "word" : "words"}</span>
@@ -643,7 +643,7 @@ export default function NoteEditor({ note, onUpdate, onDelete, onBack, tasks, pl
         {/* Linked tasks */}
         <div className="border-b border-neutral-100 bg-neutral-50/60 dark:border-white/[0.06] dark:bg-white/[0.02]">
           <div className="mx-auto flex w-full max-w-4xl items-center gap-2 overflow-x-auto px-4 py-3 sm:px-5 lg:max-w-5xl xl:max-w-6xl">
-            <span className="inline-flex shrink-0 items-center gap-1 text-[11px] font-bold uppercase tracking-[0.08em] text-neutral-400 dark:text-neutral-500">
+            <span className="inline-flex shrink-0 items-center gap-1 text-[11px] font-bold uppercase tracking-[0.08em] text-neutral-600 dark:text-neutral-400">
               <IconLink size={12} strokeWidth={2.2} />
               Linked tasks
             </span>
@@ -666,7 +666,7 @@ export default function NoteEditor({ note, onUpdate, onDelete, onBack, tasks, pl
                     type="button"
                     aria-label={`Unlink ${task.title}`}
                     onClick={() => removeLinkedTask(task.id)}
-                    className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-neutral-400 transition-colors hover:bg-neutral-100 hover:text-neutral-600 dark:hover:bg-white/[0.08]"
+                    className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-neutral-500 dark:text-neutral-400 transition-colors hover:bg-neutral-100 hover:text-neutral-600 dark:hover:bg-white/[0.08]"
                   >
                     <IconX size={12} strokeWidth={2.4} />
                   </button>
@@ -692,7 +692,7 @@ export default function NoteEditor({ note, onUpdate, onDelete, onBack, tasks, pl
               </button>
             )}
             {taskCreateState !== "idle" && (
-              <span className={`shrink-0 text-[12px] font-semibold ${taskCreateState === "added" ? "text-emerald-500" : "text-neutral-400 dark:text-neutral-500"}`}>
+              <span className={`shrink-0 text-[12px] font-semibold ${taskCreateState === "added" ? "text-emerald-500" : "text-neutral-500 dark:text-neutral-400"}`}>
                 {taskCreateState === "added" ? "Added to Today" : "Select text first"}
               </span>
             )}
@@ -704,7 +704,7 @@ export default function NoteEditor({ note, onUpdate, onDelete, onBack, tasks, pl
         {linkedPlans.length > 0 && (
           <div className="border-b border-neutral-100 bg-neutral-50/60 dark:border-white/[0.06] dark:bg-white/[0.02]">
             <div className="mx-auto flex w-full max-w-4xl items-center gap-2 overflow-x-auto px-4 py-3 sm:px-5 lg:max-w-5xl xl:max-w-6xl">
-              <span className="inline-flex shrink-0 items-center gap-1 text-[11px] font-bold uppercase tracking-[0.08em] text-neutral-400 dark:text-neutral-500">
+              <span className="inline-flex shrink-0 items-center gap-1 text-[11px] font-bold uppercase tracking-[0.08em] text-neutral-600 dark:text-neutral-400">
                 <IconSparkles size={12} strokeWidth={2.2} />
                 Linked plans
               </span>
@@ -727,7 +727,7 @@ export default function NoteEditor({ note, onUpdate, onDelete, onBack, tasks, pl
                       type="button"
                       aria-label={`Unlink ${plan.title}`}
                       onClick={() => removeLinkedPlan(plan.id)}
-                      className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-neutral-400 transition-colors hover:bg-neutral-100 hover:text-neutral-600 dark:hover:bg-white/[0.08]"
+                      className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-neutral-500 dark:text-neutral-400 transition-colors hover:bg-neutral-100 hover:text-neutral-600 dark:hover:bg-white/[0.08]"
                     >
                       <IconX size={12} strokeWidth={2.4} />
                     </button>
@@ -895,7 +895,7 @@ export default function NoteEditor({ note, onUpdate, onDelete, onBack, tasks, pl
                   aria-label="Remove color"
                   onMouseDown={(e) => e.preventDefault()}
                   onClick={removeColor}
-                  className="flex h-9 w-9 items-center justify-center rounded-full border-2 border-neutral-200 bg-white text-neutral-400 transition-transform hover:scale-110 active:scale-95 dark:border-white/[0.12] dark:bg-neutral-800 dark:text-neutral-500"
+                  className="flex h-9 w-9 items-center justify-center rounded-full border-2 border-neutral-200 bg-white text-neutral-500 transition-transform hover:scale-110 active:scale-95 dark:border-white/[0.12] dark:bg-neutral-800 dark:text-neutral-400"
                 >
                   <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round">
                     <path d="M18 6 6 18M6 6l12 12" />
@@ -970,7 +970,7 @@ export default function NoteEditor({ note, onUpdate, onDelete, onBack, tasks, pl
 function SaveBadge({ state }: { state: SaveState }) {
   if (state === "idle") return null;
   return (
-    <span className="flex items-center gap-1 text-[11px] font-medium text-neutral-400 dark:text-neutral-500">
+    <span className="flex items-center gap-1 text-[11px] font-medium text-neutral-500 dark:text-neutral-400">
       {state === "saving" ? (
         "Saving…"
       ) : (

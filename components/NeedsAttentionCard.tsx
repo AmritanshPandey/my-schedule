@@ -24,6 +24,8 @@ interface NeedsAttentionCardProps {
   /** Open the adaptation sheet for a milestone that is off pace. Absent =
    *  the row still navigates to the plan, as it always did. */
   onAdaptMilestone?: (milestoneId: string) => void;
+  /** Dismiss every row currently listed. Absent = the control isn't offered. */
+  onClearAll?: () => void;
 }
 
 function Row({
@@ -73,7 +75,7 @@ function Row({
       <IconArrowUpRight
         size={14}
         strokeWidth={2.2}
-        className="shrink-0 text-neutral-300 transition-colors group-hover:text-neutral-500 dark:text-neutral-600 dark:group-hover:text-neutral-400"
+        className="shrink-0 text-neutral-500 transition-colors group-hover:text-neutral-600 dark:text-neutral-400 dark:group-hover:text-neutral-300"
       />
     </button>
   );
@@ -87,7 +89,7 @@ function Row({
  * nothing at all when there is nothing wrong: a card that is always present
  * stops being a signal and starts being a nag, and PlanR's voice "never nags".
  */
-export default function NeedsAttentionCard({ data, onNavigate, onHandleMissed, onAdaptMilestone }: NeedsAttentionCardProps) {
+export default function NeedsAttentionCard({ data, onNavigate, onHandleMissed, onAdaptMilestone, onClearAll }: NeedsAttentionCardProps) {
   if (data.total === 0) return null;
 
   // Ordered by how recoverable each item is. A ritual streak can still be
@@ -151,9 +153,28 @@ export default function NeedsAttentionCard({ data, onNavigate, onHandleMissed, o
             Needs attention
           </h2>
         </div>
-        <span className="shrink-0 rounded-full border border-neutral-200 bg-neutral-50 px-2 py-1 text-[11px] font-black tabular-nums text-neutral-500 dark:border-white/[0.10] dark:bg-white/[0.05] dark:text-neutral-400">
-          {data.total}
-        </span>
+        <div className="flex shrink-0 items-center gap-1.5">
+          {/* Dismissal, not deletion — the misses, dates and streak data all
+              stay, and each row returns if the same problem recurs on a new
+              day or against a new target. Sits next to the count because the
+              count is what makes it necessary: a list this long has stopped
+              being a signal. */}
+          {onClearAll && (
+            <button
+              type="button"
+              onClick={() => { haptic("light"); onClearAll(); }}
+              // `tap-target` keeps the visual chip small while extending the
+              // hit area to the 44px minimum — at 11px text the painted box is
+              // only ~24px tall, which is a miss-prone target on a phone.
+              className="tap-target rounded-full px-2 py-1 text-[11px] font-bold text-neutral-500 transition-colors hover:bg-neutral-100 hover:text-neutral-800 dark:text-neutral-400 dark:hover:bg-white/[0.07] dark:hover:text-neutral-100"
+            >
+              Clear all
+            </button>
+          )}
+          <span className="rounded-full border border-neutral-200 bg-neutral-50 px-2 py-1 text-[11px] font-black tabular-nums text-neutral-500 dark:border-white/[0.10] dark:bg-white/[0.05] dark:text-neutral-400">
+            {data.total}
+          </span>
+        </div>
       </div>
 
       <div className="divide-y divide-neutral-100 dark:divide-white/[0.06]">
@@ -161,7 +182,7 @@ export default function NeedsAttentionCard({ data, onNavigate, onHandleMissed, o
       </div>
 
       {hidden > 0 && (
-        <p className="mt-2 text-[12px] font-semibold text-neutral-400 dark:text-neutral-500">
+        <p className="mt-2 text-[12px] font-semibold text-neutral-500 dark:text-neutral-400">
           +{hidden} more
         </p>
       )}

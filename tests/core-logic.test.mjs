@@ -96,7 +96,7 @@ const { acknowledgeMiss, rescheduleMissedTaskOnce, missKey } = await import("../
 const { CategoryRegistry, categoryUsageCounts, canDeleteCategory } = await import("../lib/taskCategories.ts");
 const { taskIdentity, categoriesById } = await import("../lib/taskIdentity.ts");
 const { calculateExecutionStreak } = await import("../lib/consistency/calculateExecutionStreak.ts");
-const { localISODate, addDaysToISO } = await import("../lib/dateUtils.ts");
+const { localISODate, addDaysToISO, clampTrackingStart } = await import("../lib/dateUtils.ts");
 const { parseTimeToMinutes, toScheduleDayMinutes, displayToInputTime, inputToDisplayTime, formatDisplayTime, punctuateTimeDigits } = await import("../lib/timeUtils.ts");
 const { DAYS } = await import("../lib/scheduleConstants.ts");
 const { toggleRitualCompletion } = await import("../lib/ritualCompletions.ts");
@@ -189,6 +189,38 @@ test("runtime schedule validation accepts the current minimal schedule shape", (
   const result = validateSchedule(validSchedule());
   assert.equal(result.success, true);
   assert.equal(schedulePayloadBytes(validSchedule()) > 0, true);
+});
+
+// ── Tracking start date ─────────────────────────────────────────────────────
+// `isTaskScheduledOn` hides every date before preferences.startDate, so a date
+// in the FUTURE hides everything at once — tasks, routines, streaks, trends and
+// metric entries, app-wide, with nothing on screen to explain it. The date
+// input's `max` is advisory and cannot stop a value arriving from a synced
+// device with a skewed clock or an older build, so the guard lives on the value
+// itself, at the normalize boundary every load passes through.
+
+test("a future tracking-start date is clamped to today, never trusted as stored", () => {
+  const today = "2026-09-19";
+
+  assert.equal(
+    clampTrackingStart("2026-10-03", today),
+    today,
+    "a fortnight ahead would otherwise blank the entire app",
+  );
+  assert.equal(clampTrackingStart(today, today), today, "today itself is valid");
+  assert.equal(
+    clampTrackingStart("2026-08-20", today),
+    "2026-08-20",
+    "a past date is the whole point of the setting and is left alone",
+  );
+});
+
+test("clampTrackingStart treats anything unusable as all-history", () => {
+  const today = "2026-09-19";
+  assert.equal(clampTrackingStart(undefined, today), undefined, "unset means all history");
+  assert.equal(clampTrackingStart("not-a-date", today), undefined);
+  assert.equal(clampTrackingStart("2026-9-1", today), undefined, "a loose format is not a date");
+  assert.equal(clampTrackingStart(20260919, today), undefined, "a number is not a date");
 });
 
 test("runtime schedule validation accepts preferences.sleepHours", () => {

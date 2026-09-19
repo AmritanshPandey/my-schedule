@@ -42,6 +42,7 @@ import { haptic } from "@/lib/haptics";
 import type { DayKey, Plan, Schedule, Task, TaskCategory, TaskRecurrence, TaskTypeValue } from "@/lib/useScheduleDB";
 import { findAvailableSlots, suggestSlots } from "@/lib/availableSlots";
 import { computeUsualTimeSlot } from "@/lib/usualTimeSlot";
+import { mergeCandidates, findMergePartner } from "@/lib/taskMerge";
 import { DAYS, DAY_LABELS } from "@/lib/useScheduleDB";
 import { DAY_FULL_LABELS } from "@/lib/scheduleConstants";
 import { localISODate, formatDate } from "@/lib/dateUtils";
@@ -146,6 +147,14 @@ export interface TaskSheetProps {
   onDelete?: () => void;
   /** Clear this date's per-date override (restore the recurring template). */
   onResetOccurrence?: () => void;
+  /**
+   * Pair this task with another overlapping-time task so the calendar renders
+   * them as one combined block (lib/taskMerge.ts). Persists immediately, same
+   * as onCopySubtaskToTasks. Omitted → the "Occurs with" section is hidden.
+   */
+  onMergeTask?: (taskId: string, partnerId: string) => void;
+  /** Dissolve this task's merge pair (both sides). */
+  onUnmergeTask?: (taskId: string) => void;
   presentation?: "sheet" | "page";
 }
 
@@ -255,6 +264,8 @@ export function TaskSheet({
   onCopySubtaskToTasks,
   onDelete,
   onResetOccurrence,
+  onMergeTask,
+  onUnmergeTask,
   presentation = "sheet",
 }: TaskSheetProps) {
   // ── AI ────────────────────────────────────────────────────────────────────
@@ -549,6 +560,21 @@ export function TaskSheet({
     const fits = gaps.some((g) => candidate.startMinutes >= g.startMinutes && candidate.endMinutes <= g.endMinutes);
     return fits ? candidate : null;
   }, [activities, categoryId, planId, task?.id, resolvedEditDay, activeDay, baseDateISO, preferences]);
+
+  // "Occurs with" — pair this task with another overlapping-time task so the
+  // calendar renders them as one combined block instead of splitting into
+  // lanes (lib/taskMerge.ts). Only meaningful for an already-saved task on its
+  // recurring template (not a per-date occurrence override, same reasoning as
+  // hiding the category picker in that scope — see below).
+  const mergePartner = useMemo(
+    () => (task ? findMergePartner(task, activities ?? {}) : null),
+    [task, activities]
+  );
+  const mergeCandidateTasks = useMemo(() => {
+    if (!task || task.mergeGroupId || !activities) return [];
+    const dayTasks = activities[resolvedEditDay] ?? activities[activeDay] ?? [];
+    return mergeCandidates(task, dayTasks);
+  }, [activities, task, resolvedEditDay, activeDay]);
 
   // Validate every day that will be written (each day's own slots in custom mode).
   const daysToValidate: EditableSlot[][] = isOccurrenceScope || !perDayActive
@@ -949,6 +975,51 @@ export function TaskSheet({
                 />
               )}
 
+              {/* Occurs with — pair this task with another overlapping-time
+                  task so the calendar draws them as one combined block. Each
+                  side keeps its own category/completion/stats; see
+                  lib/taskMerge.ts. Same occurrence-scope gate as the category
+                  picker above: merging is a template concept, not a per-date
+                  override. */}
+              {!isOccurrenceScope && task && (onMergeTask || onUnmergeTask) && (
+                <div>
+                  <p className={FORM_LABEL}>Occurs with</p>
+                  {mergePartner ? (
+                    <div className="flex items-center gap-2 rounded-xl border border-neutral-200 px-3 py-2 dark:border-white/10">
+                      <span className="min-w-0 flex-1 truncate text-[14px] font-semibold text-neutral-800 dark:text-neutral-200">
+                        {mergePartner.title}
+                      </span>
+                      {onUnmergeTask && (
+                        <button
+                          type="button"
+                          onClick={() => onUnmergeTask(task.id)}
+                          className="shrink-0 text-[12.5px] font-bold text-rose-600 dark:text-rose-400"
+                        >
+                          Unmerge
+                        </button>
+                      )}
+                    </div>
+                  ) : onMergeTask && mergeCandidateTasks.length > 0 ? (
+                    <div className="flex flex-wrap gap-1.5">
+                      {mergeCandidateTasks.map((c) => (
+                        <button
+                          key={c.id}
+                          type="button"
+                          onClick={() => onMergeTask(task.id, c.id)}
+                          className="rounded-full border border-neutral-200 px-3 py-1.5 text-[12.5px] font-semibold text-neutral-600 hover:border-neutral-300 hover:bg-neutral-50 dark:border-white/10 dark:text-neutral-300 dark:hover:border-white/20 dark:hover:bg-white/[0.04]"
+                        >
+                          + {c.title}
+                        </button>
+                      ))}
+                    </div>
+                  ) : (
+                    <p className="text-[13px] text-neutral-400 dark:text-neutral-500">
+                      No overlapping tasks scheduled
+                    </p>
+                  )}
+                </div>
+              )}
+
               {/* Description */}
               <Textarea
                 label="Note (optional)"
@@ -1199,7 +1270,7 @@ export function TaskSheet({
                               className={`h-8 min-w-[36px] rounded-full px-2.5 text-[12px] font-bold tabular-nums transition-colors ${
                                 active
                                   ? "bg-blue-600 text-white dark:bg-blue-500"
-                                  : "border border-neutral-200 text-neutral-500 hover:text-neutral-600 dark:border-white/10 dark:text-neutral-500 dark:hover:text-neutral-300"
+                                  : "border border-neutral-200 text-neutral-500 hover:text-neutral-600 dark:border-white/10 dark:text-neutral-400 dark:hover:text-neutral-300"
                               }`}
                             >
                               {m === 0 ? "None" : `${m}m`}

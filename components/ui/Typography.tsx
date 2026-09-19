@@ -25,14 +25,21 @@ interface TextProps {
 // The corrected pair reads 4.74:1 and 6.96:1. DESIGN.md §Neutral names #737373
 // (neutral-500) as Muted "secondary text, labels", so this is what the system
 // always said; only the implementation disagreed.
+//
+// These values are tuned against the page ground. A surface one tonal step in —
+// a category-tinted timeline block, the sidebar shell, a neutral-100 inner panel —
+// pulls neutral-500 down to 3.95-4.35:1, under AA again. Muted text on those takes
+// neutral-600 in light; the dark end is unaffected. eyebrow and caption take that
+// value outright: they are the two styles that appear on every surface in the app,
+// so they are tuned for the worst of them rather than for white.
 export const typography = {
   pageTitle:       "text-display font-semibold leading-tight tracking-[-0.3px] text-neutral-950 dark:text-white",
   sectionTitle:    "text-headline font-semibold leading-tight tracking-[-0.3px] text-neutral-950 dark:text-white",
   sheetTitle:      "text-lead font-semibold text-neutral-950 dark:text-white",
   subsectionTitle: "text-subtitle font-semibold text-neutral-950 dark:text-white",
-  eyebrow:         "text-label font-semibold uppercase tracking-[0.08em] text-neutral-500 dark:text-neutral-400",
+  eyebrow:         "text-label font-bold uppercase tracking-[0.08em] text-neutral-600 dark:text-neutral-400",
   body:            "text-bodylg font-medium leading-relaxed text-neutral-600 dark:text-neutral-400",
-  caption:         "text-caption font-medium text-neutral-500 dark:text-neutral-400",
+  caption:         "text-caption font-medium text-neutral-600 dark:text-neutral-400",
 } as const;
 
 // ── Component wrappers ────────────────────────────────────────────────────────

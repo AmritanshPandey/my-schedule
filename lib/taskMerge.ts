@@ -14,7 +14,7 @@
  * timeline, and unit-tested directly.
  */
 
-import type { Schedule, Task } from "./useScheduleDB";
+import type { DayKey, Schedule, Task } from "./useScheduleDB";
 import { DAYS } from "./scheduleConstants";
 import { uid } from "./id";
 import { getSlots } from "./taskMutations";
@@ -92,6 +92,28 @@ export function mergeCandidates(task: Task, dayTasks: readonly Task[]): Task[] {
   return dayTasks.filter(
     (t) => t.id !== task.id && !t.mergeGroupId && tasksOverlapInTime(task, t)
   );
+}
+
+/**
+ * The other task in `task`'s merge pair, if any — searched across every
+ * weekday bucket the same way `unmergeTask` looks up a group id, since the
+ * partner might not share a bucket with `task` (e.g. one recurs Mon/Wed, the
+ * other only Mon). Null when `task` isn't merged, or its partner no longer
+ * exists (a dangling id — see findMergePairs' doc for why that's handled
+ * quietly rather than as an error).
+ */
+export function findMergePartner(
+  task: Pick<Task, "id" | "mergeGroupId">,
+  activities: Partial<Record<DayKey, readonly Task[]>>
+): Task | null {
+  if (!task.mergeGroupId) return null;
+  for (const day of DAYS) {
+    const found = (activities[day] ?? []).find(
+      (t) => t.id !== task.id && t.mergeGroupId === task.mergeGroupId
+    );
+    if (found) return found;
+  }
+  return null;
 }
 
 // ── Mutations (Schedule updaters, same `(prev) => next` shape as taskMutations.ts) ──

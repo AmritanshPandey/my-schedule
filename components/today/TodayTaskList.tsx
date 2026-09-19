@@ -151,9 +151,9 @@ function TodayTaskRow({
         <p
           className={`truncate text-[16px] font-bold leading-tight ${
             isDone
-              ? "text-neutral-400 line-through dark:text-neutral-600"
+              ? "text-neutral-400 line-through dark:text-neutral-500"
               : isMissed
-              ? "text-neutral-400 line-through decoration-rose-400 dark:text-neutral-600"
+              ? "text-neutral-400 line-through decoration-rose-400 dark:text-neutral-500"
               : "text-neutral-950 dark:text-white"
           }`}
         >

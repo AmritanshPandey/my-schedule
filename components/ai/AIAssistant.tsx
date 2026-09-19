@@ -450,7 +450,7 @@ export default function AIAssistant({
           <button
             type="button"
             onClick={() => onOpenAISettings()}
-            className="flex h-8 w-8 items-center justify-center rounded-xl text-neutral-400 transition-colors hover:bg-neutral-100 hover:text-neutral-600 dark:hover:bg-white/[0.06] dark:hover:text-neutral-300"
+            className="flex h-8 w-8 items-center justify-center rounded-xl text-neutral-500 dark:text-neutral-400 transition-colors hover:bg-neutral-100 hover:text-neutral-600 dark:hover:bg-white/[0.06] dark:hover:text-neutral-300"
             title="AI Settings"
           >
             <IconSettings size={15} strokeWidth={2} />
@@ -458,7 +458,7 @@ export default function AIAssistant({
           <button
             type="button"
             onClick={onClose}
-            className="flex h-8 w-8 items-center justify-center rounded-xl text-neutral-400 transition-colors hover:bg-neutral-100 hover:text-neutral-600 dark:hover:bg-white/[0.06] dark:hover:text-neutral-300"
+            className="flex h-8 w-8 items-center justify-center rounded-xl text-neutral-500 dark:text-neutral-400 transition-colors hover:bg-neutral-100 hover:text-neutral-600 dark:hover:bg-white/[0.06] dark:hover:text-neutral-300"
           >
             <IconX size={16} strokeWidth={2} />
           </button>
@@ -499,12 +499,12 @@ export default function AIAssistant({
                     <span className="max-w-[160px] truncate">{selectedPlan.title}</span>
                   </>
                 ) : (
-                  <span className="text-neutral-400 dark:text-neutral-500">Select plan</span>
+                  <span className="text-neutral-500 dark:text-neutral-400">Select plan</span>
                 )}
                 <IconChevronDown
                   size={12}
                   strokeWidth={2.5}
-                  className={`shrink-0 text-neutral-400 transition-transform duration-150 ${planPickerOpen ? "rotate-180" : ""}`}
+                  className={`shrink-0 text-neutral-500 dark:text-neutral-400 transition-transform duration-150 ${planPickerOpen ? "rotate-180" : ""}`}
                 />
               </button>
 
@@ -518,7 +518,7 @@ export default function AIAssistant({
                     className="absolute left-0 top-full z-20 mt-1.5 w-[220px] overflow-hidden rounded-xl border border-neutral-200 bg-white dark:border-white/[0.08] dark:bg-neutral-900"
                   >
                     {plans.length === 0 ? (
-                      <p className="px-3 py-3 text-[12px] text-neutral-400">No plans yet</p>
+                      <p className="px-3 py-3 text-[12px] text-neutral-500 dark:text-neutral-400">No plans yet</p>
                     ) : (
                       plans.map((plan) => {
                         const entry = SECTION_ICONS.find((s) => s.name === plan.emoji);
@@ -570,7 +570,7 @@ export default function AIAssistant({
           <div className="flex items-center justify-between border-t border-neutral-100 px-3 py-2 dark:border-white/[0.05]">
             <button
               type="button"
-              className="flex h-8 w-8 items-center justify-center rounded-lg text-neutral-400 transition-colors hover:bg-neutral-100 hover:text-neutral-600 dark:hover:bg-white/[0.06]"
+              className="flex h-8 w-8 items-center justify-center rounded-lg text-neutral-500 dark:text-neutral-400 transition-colors hover:bg-neutral-100 hover:text-neutral-600 dark:hover:bg-white/[0.06]"
             >
               <IconPlus size={16} strokeWidth={2} />
             </button>
@@ -626,7 +626,7 @@ export default function AIAssistant({
 
         {/* Action suggestions */}
         <div>
-          <p className="mb-2 text-[10px] font-bold uppercase tracking-[0.08em] text-neutral-400 dark:text-neutral-500">
+          <p className="mb-2 text-[10px] font-bold uppercase tracking-[0.08em] text-neutral-500 dark:text-neutral-400">
             Action suggestions
           </p>
 
@@ -658,7 +658,7 @@ export default function AIAssistant({
                     {s.label}
                   </span>
                   {s.locked && s.lockedReason && (
-                    <span className="mt-0.5 block text-[11px] font-medium text-neutral-400 dark:text-neutral-500">
+                    <span className="mt-0.5 block text-[11px] font-medium text-neutral-500 dark:text-neutral-400">
                       {s.lockedReason}
                     </span>
                   )}
@@ -676,7 +676,7 @@ export default function AIAssistant({
               <span className="flex h-7 w-7 shrink-0 items-center justify-center text-cyan-500">
                 <IconPlus size={15} strokeWidth={2.5} />
               </span>
-              <span className="text-[13px] font-medium text-neutral-400 dark:text-neutral-500">
+              <span className="text-[13px] font-medium text-neutral-500 dark:text-neutral-400">
                 What else can AI help with?
               </span>
             </m.button>

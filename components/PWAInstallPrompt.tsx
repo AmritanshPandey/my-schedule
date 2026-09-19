@@ -106,7 +106,7 @@ function Step({
         </div>
         <div className="min-w-0">
           <p className="text-sm font-semibold text-neutral-800 dark:text-neutral-200">{label}</p>
-          <p className="text-xs text-neutral-400 dark:text-neutral-500">{description}</p>
+          <p className="text-xs text-neutral-500 dark:text-neutral-400">{description}</p>
         </div>
       </div>
     </div>
@@ -209,7 +209,7 @@ export default function PWAInstallPrompt() {
                   <img src="/logo-dark.svg" alt="PlanR" className="hidden h-6 w-auto dark:block" />
                 </div>
                 <div>
-                  <p className="text-[10px] font-semibold uppercase tracking-[0.1em] text-neutral-400 dark:text-neutral-500">Install</p>
+                  <p className="text-[10px] font-semibold uppercase tracking-[0.1em] text-neutral-500 dark:text-neutral-400">Install</p>
                   <h2 className="text-[18px] font-semibold text-neutral-950 dark:text-white mt-0.5">
                     PlanR
                   </h2>
@@ -217,7 +217,7 @@ export default function PWAInstallPrompt() {
               </div>
               <button
                 onClick={dismiss}
-                className="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl border border-neutral-200 text-neutral-400 hover:bg-neutral-100 dark:border-white/10 dark:text-neutral-500 dark:hover:bg-white/[0.07] transition-colors"
+                className="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl border border-neutral-200 text-neutral-500 hover:bg-neutral-100 dark:border-white/10 dark:text-neutral-400 dark:hover:bg-white/[0.07] transition-colors"
                 aria-label="Dismiss"
               >
                 <IconX size={16} />
@@ -227,7 +227,7 @@ export default function PWAInstallPrompt() {
             {/* iOS instructions */}
             {platform === "ios" && (
               <div className="space-y-2.5">
-                <p className="text-[11px] font-semibold uppercase tracking-wider text-neutral-400 dark:text-neutral-500">
+                <p className="text-[11px] font-semibold uppercase tracking-wider text-neutral-500 dark:text-neutral-400">
                   How to install on iPhone / iPad
                 </p>
                 <div className="space-y-2">
@@ -271,7 +271,7 @@ export default function PWAInstallPrompt() {
                   </div>
                 ) : (
                   <div className="space-y-2.5">
-                    <p className="text-[11px] font-semibold uppercase tracking-wider text-neutral-400 dark:text-neutral-500">
+                    <p className="text-[11px] font-semibold uppercase tracking-wider text-neutral-500 dark:text-neutral-400">
                       How to install on Android
                     </p>
                     <div className="space-y-2">
@@ -302,7 +302,7 @@ export default function PWAInstallPrompt() {
             {/* Dismiss link */}
             <button
               onClick={dismiss}
-              className="w-full py-1 text-center text-[12px] font-medium text-neutral-400 transition-colors hover:text-neutral-600 dark:text-neutral-500 dark:hover:text-neutral-300"
+              className="w-full py-1 text-center text-[12px] font-medium text-neutral-500 transition-colors hover:text-neutral-600 dark:text-neutral-400 dark:hover:text-neutral-300"
             >
               Maybe later
             </button>

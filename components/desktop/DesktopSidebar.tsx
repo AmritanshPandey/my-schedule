@@ -137,7 +137,7 @@ export default function DesktopSidebar({
   const statusColor =
     ai.state === "ready" ? "text-emerald-600 dark:text-emerald-400"
     : ai.state === "needs-download" || ai.state === "downloading" ? "text-amber-600 dark:text-amber-400"
-    : "text-neutral-400 dark:text-neutral-500";
+    : "text-neutral-500 dark:text-neutral-400";
   const statusTitle =
     ai.state === "ready" ? "AI ready"
     : ai.state === "needs-download" ? `The in-browser model hasn't been downloaded yet (${ai.downloadLabel}) — click to set it up`
@@ -187,7 +187,7 @@ export default function DesktopSidebar({
               } ${
                 active
                   ? "bg-emerald-50 text-emerald-800 ring-1 ring-inset ring-emerald-200/70 dark:bg-emerald-500/[0.14] dark:text-emerald-300 dark:ring-emerald-400/20"
-                  : "text-neutral-500 hover:bg-neutral-100 hover:text-neutral-700 dark:text-neutral-500 dark:hover:bg-white/[0.05] dark:hover:text-neutral-300"
+                  : "text-neutral-600 hover:bg-neutral-100 hover:text-neutral-800 dark:text-neutral-400 dark:hover:bg-white/[0.05] dark:hover:text-neutral-300"
               }`}
             >
               {active && !collapsed && <span className="absolute left-0 h-5 w-1 rounded-r-full bg-emerald-600 dark:bg-emerald-400" />}
@@ -210,7 +210,7 @@ export default function DesktopSidebar({
             data-tour="new-item-button"
             onClick={handleCreate}
             title={collapsed ? (activeTab === 1 ? "New Plan" : activeTab === 2 ? "New Routine" : "New Task") : undefined}
-            className={`flex w-full items-center rounded-full bg-[#00A63E] py-2.5 text-white transition-colors hover:bg-[#008236] active:scale-[0.98] dark:bg-[#2FD46E] dark:text-neutral-950 dark:hover:bg-[#2FD46E]/90 ${collapsed ? "justify-center px-0" : "gap-2 px-3.5"}`}
+            className={`flex w-full items-center rounded-full bg-[#008236] py-2.5 text-white transition-colors hover:bg-[#006B2C] active:scale-[0.98] dark:bg-[#2FD46E] dark:text-neutral-950 dark:hover:bg-[#2FD46E]/90 ${collapsed ? "justify-center px-0" : "gap-2 px-3.5"}`}
           >
             <IconPlus size={15} strokeWidth={2.5} />
             {!collapsed && (
@@ -249,7 +249,7 @@ export default function DesktopSidebar({
             type="button"
             onClick={() => { haptic("light"); onBulkImport(); }}
             title={collapsed ? "Paste Schedule" : undefined}
-            className={`flex w-full items-center rounded-xl py-2 text-neutral-500 transition-colors hover:bg-neutral-100 hover:text-neutral-700 dark:text-neutral-500 dark:hover:bg-white/[0.04] dark:hover:text-neutral-300 ${collapsed ? "justify-center px-0" : "gap-3 px-3.5"}`}
+            className={`flex w-full items-center rounded-xl py-2 text-neutral-600 transition-colors hover:bg-neutral-100 hover:text-neutral-700 dark:text-neutral-400 dark:hover:bg-white/[0.04] dark:hover:text-neutral-300 ${collapsed ? "justify-center px-0" : "gap-3 px-3.5"}`}
           >
             <IconFileImport size={16} strokeWidth={1.8} className="shrink-0" />
             {!collapsed && <span className="text-[13px] font-medium">Paste Schedule</span>}
@@ -262,7 +262,7 @@ export default function DesktopSidebar({
             type="button"
             onClick={() => { haptic("light"); onOpenNotes(); }}
             title={collapsed ? "Notes" : undefined}
-            className={`flex w-full items-center rounded-xl py-2 transition-colors hover:bg-neutral-100 dark:hover:bg-white/[0.04] ${collapsed ? "justify-center px-0" : "gap-3 px-3.5"} ${activeTab === 6 ? "text-neutral-900 dark:text-white" : "text-neutral-500 hover:text-neutral-700 dark:text-neutral-500 dark:hover:text-neutral-300"}`}
+            className={`flex w-full items-center rounded-xl py-2 transition-colors hover:bg-neutral-100 dark:hover:bg-white/[0.04] ${collapsed ? "justify-center px-0" : "gap-3 px-3.5"} ${activeTab === 6 ? "text-neutral-900 dark:text-white" : "text-neutral-500 hover:text-neutral-700 dark:text-neutral-400 dark:hover:text-neutral-300"}`}
           >
             <IconPencil size={16} strokeWidth={1.8} className="shrink-0" />
             {!collapsed && <span className="text-[13px] font-medium">Notes</span>}
@@ -275,7 +275,7 @@ export default function DesktopSidebar({
             type="button"
             onClick={() => { haptic("light"); onOpenWallpaper(); }}
             title={collapsed ? "Wallpaper" : undefined}
-            className={`flex w-full items-center rounded-xl py-2 text-neutral-500 transition-colors hover:bg-neutral-100 hover:text-neutral-700 dark:text-neutral-500 dark:hover:bg-white/[0.04] dark:hover:text-neutral-300 ${collapsed ? "justify-center px-0" : "gap-3 px-3.5"}`}
+            className={`flex w-full items-center rounded-xl py-2 text-neutral-600 transition-colors hover:bg-neutral-100 hover:text-neutral-700 dark:text-neutral-400 dark:hover:bg-white/[0.04] dark:hover:text-neutral-300 ${collapsed ? "justify-center px-0" : "gap-3 px-3.5"}`}
           >
             <IconPhoto size={16} strokeWidth={1.8} className="shrink-0" />
             {!collapsed && <span className="text-[13px] font-medium">Wallpaper</span>}
@@ -305,7 +305,7 @@ export default function DesktopSidebar({
           type="button"
           onClick={() => { haptic("light"); if (onOpenSettingsTab) onOpenSettingsTab(); else onOpenSettings(); }}
           title={collapsed ? "Settings" : undefined}
-          className={`flex w-full items-center rounded-xl py-2 text-neutral-500 transition-colors hover:bg-neutral-100 hover:text-neutral-700 dark:text-neutral-500 dark:hover:bg-white/[0.04] dark:hover:text-neutral-300 ${collapsed ? "justify-center px-0" : "gap-3 px-3.5"}`}
+          className={`flex w-full items-center rounded-xl py-2 text-neutral-600 transition-colors hover:bg-neutral-100 hover:text-neutral-700 dark:text-neutral-400 dark:hover:bg-white/[0.04] dark:hover:text-neutral-300 ${collapsed ? "justify-center px-0" : "gap-3 px-3.5"}`}
         >
           <IconSettings size={16} strokeWidth={1.8} className="shrink-0" />
           {!collapsed && <span className="text-[13px] font-medium">Settings</span>}
@@ -318,7 +318,7 @@ export default function DesktopSidebar({
             onClick={toggleTheme}
             title={themeReady ? `Switch to ${theme === "dark" ? "light" : "dark"} mode` : "Toggle theme"}
             aria-label={themeReady ? `Switch to ${theme === "dark" ? "light" : "dark"} mode` : "Toggle theme"}
-            className="mt-1 flex w-full items-center justify-center rounded-xl py-2 text-neutral-500 transition-colors hover:bg-neutral-100 hover:text-neutral-700 dark:text-neutral-500 dark:hover:bg-white/[0.04] dark:hover:text-neutral-300"
+            className="mt-1 flex w-full items-center justify-center rounded-xl py-2 text-neutral-600 transition-colors hover:bg-neutral-100 hover:text-neutral-700 dark:text-neutral-400 dark:hover:bg-white/[0.04] dark:hover:text-neutral-300"
           >
             {theme === "dark" ? <IconSun size={16} strokeWidth={1.8} /> : <IconMoon size={16} strokeWidth={1.8} />}
           </button>

@@ -227,9 +227,11 @@ function combineTasks(winner: Task, loser: Task): Task {
 
 /**
  * Preferences are a single small object with no per-field stamps, so the newer
- * snapshot wins wholesale — except for the two fields where that would destroy
- * information. `acknowledgedMisses` is a set the user only ever adds to, and
- * `lastRolloverISO` is a watermark defined to move forward only.
+ * snapshot wins wholesale — except for the fields where that would destroy
+ * information. `acknowledgedMisses` and `acknowledgedAttention` are sets the
+ * user only ever adds to (letting the newer snapshot win would resurrect rows
+ * they dismissed on the other device), and `lastRolloverISO` is a watermark
+ * defined to move forward only.
  */
 function mergePreferences(a: MergeSide, b: MergeSide): SchedulePreferences {
   const ap = a.schedule.preferences ?? {};
@@ -239,6 +241,9 @@ function mergePreferences(a: MergeSide, b: MergeSide): SchedulePreferences {
   const acknowledged = [
     ...new Set([...(ap.acknowledgedMisses ?? []), ...(bp.acknowledgedMisses ?? [])]),
   ].sort();
+  const attention = [
+    ...new Set([...(ap.acknowledgedAttention ?? []), ...(bp.acknowledgedAttention ?? [])]),
+  ].sort();
   const rollovers = [ap.lastRolloverISO, bp.lastRolloverISO]
     .filter((v): v is string => !!v)
     .sort();
@@ -246,6 +251,7 @@ function mergePreferences(a: MergeSide, b: MergeSide): SchedulePreferences {
   return {
     ...base,
     ...(acknowledged.length > 0 ? { acknowledgedMisses: acknowledged } : {}),
+    ...(attention.length > 0 ? { acknowledgedAttention: attention } : {}),
     ...(rollovers.length > 0 ? { lastRolloverISO: rollovers[rollovers.length - 1] } : {}),
   };
 }

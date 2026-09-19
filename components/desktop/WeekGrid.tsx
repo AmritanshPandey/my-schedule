@@ -1079,7 +1079,7 @@ export function WeekGrid({
                 className={`flex h-full flex-1 items-center justify-center rounded-[10px] text-[13px] font-semibold transition-colors ${
                   calendarView === v
                     ? "bg-neutral-950 text-white dark:bg-white dark:text-neutral-950"
-                    : "text-neutral-400 hover:bg-neutral-100/80 hover:text-neutral-700 dark:text-neutral-500 dark:hover:bg-white/[0.06] dark:hover:text-neutral-200"
+                    : "text-neutral-500 hover:bg-neutral-100/80 hover:text-neutral-700 dark:text-neutral-400 dark:hover:bg-white/[0.06] dark:hover:text-neutral-200"
                 }`}
               >
                 {VIEW_LABELS[v]}
@@ -1096,7 +1096,7 @@ export function WeekGrid({
                   transition={{ duration: 0.15, ease: [0.22, 1, 0.36, 1] }}
                   className="absolute left-0 top-full z-50 mt-2 w-72 rounded-2xl border border-neutral-200 bg-white p-3 dark:border-white/[0.08] dark:bg-neutral-900"
                 >
-                  <p className="mb-2 text-[10px] font-semibold uppercase tracking-wider text-neutral-400 dark:text-neutral-500">
+                  <p className="mb-2 text-[10px] font-semibold uppercase tracking-wider text-neutral-500 dark:text-neutral-400">
                     Pick days · {customDays.length} selected
                   </p>
                   <div className="flex flex-wrap gap-1.5">
@@ -1150,7 +1150,7 @@ export function WeekGrid({
             <button
               type="button"
               onClick={() => { haptic("light"); onWeekToday(); }}
-              className="mr-2 rounded-full px-3 py-2 text-[13px] font-bold text-neutral-500 transition-colors hover:bg-neutral-100 hover:text-neutral-950 dark:text-neutral-400 dark:hover:bg-white/[0.07] dark:hover:text-white"
+              className="mr-2 rounded-full px-3 py-2 text-[13px] font-bold text-neutral-600 transition-colors hover:bg-neutral-100 hover:text-neutral-950 dark:text-neutral-400 dark:hover:bg-white/[0.07] dark:hover:text-white"
             >
               Today
             </button>
@@ -1222,7 +1222,7 @@ export function WeekGrid({
                       className={`absolute right-1 top-1 flex h-6 w-6 items-center justify-center rounded-full opacity-70 transition-opacity hover:opacity-100 focus-visible:opacity-100 ${
                         isActive
                           ? "text-white/80 hover:bg-white/15 dark:text-neutral-900/70 dark:hover:bg-black/10"
-                          : "text-neutral-400 hover:bg-neutral-100 dark:text-neutral-500 dark:hover:bg-white/[0.08]"
+                          : "text-neutral-500 hover:bg-neutral-100 dark:text-neutral-400 dark:hover:bg-white/[0.08]"
                       }`}
                     >
                       <IconDotsVertical size={14} strokeWidth={2} />
@@ -1237,7 +1237,7 @@ export function WeekGrid({
         {hasUntimed && (
           <div className="grid border-b border-neutral-200 dark:border-white/[0.07]" style={{ gridTemplateColumns: gridTemplate }}>
             <div className="sticky left-0 z-20 flex items-start justify-end border-r border-neutral-200 bg-white px-2 pt-2 dark:border-white/[0.07] dark:bg-neutral-950">
-              <span className="text-[9px] font-semibold uppercase tracking-wide text-neutral-300 dark:text-neutral-600">All day</span>
+              <span className="text-[9px] font-semibold uppercase tracking-wide text-neutral-500 dark:text-neutral-400">All day</span>
             </div>
             {days.map(({ day, tasks, dayIsToday, dateISO }) => {
               const untimed = tasks.filter((t) => parseTimeToMinutes(t.startTime) == null);
@@ -1257,7 +1257,7 @@ export function WeekGrid({
                         className={`flex items-center gap-1.5 rounded-lg border border-neutral-200/70 bg-white px-2 py-1 text-left dark:border-white/[0.08] dark:bg-neutral-900 ${done ? "opacity-60" : ""}`}
                       >
                         <span className="h-1.5 w-1.5 shrink-0 rounded-full" style={{ background: hex }} />
-                        <span className={`truncate text-[11px] font-semibold ${done ? "text-neutral-400 line-through dark:text-neutral-600" : "text-neutral-800 dark:text-neutral-200"}`}>
+                        <span className={`truncate text-[11px] font-semibold ${done ? "text-neutral-400 line-through dark:text-neutral-500" : "text-neutral-800 dark:text-neutral-200"}`}>
                           {task.title}
                         </span>
                       </button>
@@ -1287,7 +1287,7 @@ export function WeekGrid({
                   className={`absolute right-3 whitespace-nowrap tabular-nums ${isFirst ? "" : "-translate-y-1/2"} ${
                     onHour
                       ? "text-[11px] font-bold text-neutral-500 dark:text-neutral-300"
-                      : "text-[10px] font-semibold text-neutral-300 dark:text-neutral-600"
+                      : "text-[10px] font-semibold text-neutral-500 dark:text-neutral-400"
                   }`}
                   style={{ top: isFirst ? 14 : (m - startMin) * PX_MIN }}
                 >

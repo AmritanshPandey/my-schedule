@@ -15,6 +15,7 @@ import Button from "@/components/ui/Button";
 import Toggle from "@/components/ui/Toggle";
 import EmptyState from "@/components/ui/EmptyState";
 import { IconTargetArrow } from "@tabler/icons-react";
+import { typography } from "@/components/ui/Typography";
 
 interface AdaptMilestoneSheetProps {
   open: boolean;
@@ -118,7 +119,7 @@ export default function AdaptMilestoneSheet({
               {selected ? selected.label : "Choose an adjustment"}
             </Button>
 
-            <p className="text-center text-[11.5px] text-neutral-400 dark:text-neutral-500">
+            <p className="text-center text-[11.5px] text-neutral-500 dark:text-neutral-400">
               Nothing is deleted. You can change any of this again afterwards.
             </p>
           </>
@@ -184,7 +185,7 @@ function OfferRow({
           trying to choose between them. */}
       {selected && (
         <div className="border-t border-neutral-200/70 px-4 py-3 dark:border-white/[0.08]">
-          <p className="mb-1.5 text-[11px] font-semibold uppercase tracking-[0.08em] text-neutral-400 dark:text-neutral-500">
+          <p className={`mb-1.5 ${typography.eyebrow}`}>
             What changes
           </p>
           <ul className="space-y-1">
@@ -196,7 +197,7 @@ function OfferRow({
                 <IconArrowRight
                   size={13}
                   strokeWidth={2}
-                  className="mt-[3px] shrink-0 text-neutral-400 dark:text-neutral-500"
+                  className="mt-[3px] shrink-0 text-neutral-500 dark:text-neutral-400"
                 />
                 <span className="min-w-0">{change}</span>
               </li>

@@ -49,7 +49,7 @@ export default function RitualLegend({
 
   return (
     <div className="mb-2.5 flex flex-wrap items-center gap-x-3 gap-y-1.5">
-      <span className="text-[10px] font-semibold uppercase tracking-wider text-neutral-400 dark:text-neutral-500">
+      <span className="text-[10px] font-semibold uppercase tracking-wider text-neutral-500 dark:text-neutral-400">
         Routines
       </span>
       {visible.map((ritual) => {
@@ -60,7 +60,7 @@ export default function RitualLegend({
             key={ritual.id}
             className={`flex items-center gap-1.5 text-[11px] font-medium ${
               done
-                ? "text-neutral-400 line-through dark:text-neutral-600"
+                ? "text-neutral-400 line-through dark:text-neutral-500"
                 : "text-neutral-600 dark:text-neutral-300"
             }`}
           >

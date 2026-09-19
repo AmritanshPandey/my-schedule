@@ -52,7 +52,7 @@ export default function TaskLinkPicker({
         </div>
 
         <div className="relative">
-          <IconSearch size={15} strokeWidth={2} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-neutral-400" />
+          <IconSearch size={15} strokeWidth={2} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-neutral-500 dark:text-neutral-400" />
           <input
             value={query}
             onChange={(e) => setQuery(e.target.value)}
@@ -63,7 +63,7 @@ export default function TaskLinkPicker({
 
         <div className="-mx-1 flex max-h-[50vh] flex-col gap-1 overflow-y-auto px-1">
           {filtered.length === 0 ? (
-            <p className="py-6 text-center text-[13px] text-neutral-400 dark:text-neutral-500">
+            <p className="py-6 text-center text-[13px] text-neutral-500 dark:text-neutral-400">
               {tasks.length === 0 ? "No tasks yet." : "No tasks match."}
             </p>
           ) : (
@@ -82,14 +82,14 @@ export default function TaskLinkPicker({
                       : "hover:bg-neutral-100 dark:hover:bg-white/[0.05]"
                   }`}
                 >
-                  <Icon size={17} strokeWidth={2} className="shrink-0 text-neutral-400 dark:text-neutral-500" />
+                  <Icon size={17} strokeWidth={2} className="shrink-0 text-neutral-500 dark:text-neutral-400" />
                   <span className="min-w-0 flex-1 truncate text-[14px] font-semibold text-neutral-800 dark:text-neutral-200">
                     {task.title}
                   </span>
                   {isLinked ? (
                     <IconCheck size={16} strokeWidth={2.4} className="shrink-0 text-emerald-500" />
                   ) : (
-                    <IconPlus size={16} strokeWidth={2.4} className="shrink-0 text-neutral-400" />
+                    <IconPlus size={16} strokeWidth={2.4} className="shrink-0 text-neutral-500 dark:text-neutral-400" />
                   )}
                 </button>
               );

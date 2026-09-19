@@ -54,7 +54,7 @@ export default function WeeklyHeatmapCard({ activities, todayKey, todayISO }: We
     <section data-testid="overview-weekly-heatmap" className={`${CARD} px-5 py-4`}>
       <div className="mb-3 flex items-center justify-between gap-3">
         <div className="flex min-w-0 items-center gap-2">
-          <IconCalendarWeek size={15} strokeWidth={2} className="shrink-0 text-neutral-400 dark:text-neutral-500" />
+          <IconCalendarWeek size={15} strokeWidth={2} className="shrink-0 text-neutral-500 dark:text-neutral-400" />
           <p className="truncate text-[13px] font-bold text-neutral-800 dark:text-neutral-200">Busiest hours</p>
         </div>
         {totalMinutes > 0 && (
@@ -88,7 +88,7 @@ export default function WeeklyHeatmapCard({ activities, todayKey, todayISO }: We
                 className={`pb-1 text-center text-[10px] font-bold tabular-nums ${
                   d === todayIdx
                     ? "text-neutral-900 dark:text-white"
-                    : "text-neutral-400 dark:text-neutral-500"
+                    : "text-neutral-500 dark:text-neutral-400"
                 }`}
               >
                 {initial}
@@ -118,11 +118,11 @@ export default function WeeklyHeatmapCard({ activities, todayKey, todayISO }: We
 
           {/* Legend */}
           <div className="mt-3 flex items-center justify-end gap-1.5">
-            <span className="text-[10px] font-semibold text-neutral-400 dark:text-neutral-500">Low</span>
+            <span className="text-[10px] font-semibold text-neutral-500 dark:text-neutral-400">Low</span>
             {HEATMAP_RAMP.map((cls, i) => (
               <span key={i} aria-hidden className={`h-2.5 w-2.5 rounded-[3px] ${cls}`} />
             ))}
-            <span className="text-[10px] font-semibold text-neutral-400 dark:text-neutral-500">High</span>
+            <span className="text-[10px] font-semibold text-neutral-500 dark:text-neutral-400">High</span>
           </div>
         </>
       )}
@@ -138,7 +138,7 @@ export default function WeeklyHeatmapCard({ activities, todayKey, todayISO }: We
 function FragmentRow({ label, children }: { label: string; children: React.ReactNode }) {
   return (
     <>
-      <span className="flex items-center pr-1.5 text-right text-[9px] font-semibold tabular-nums text-neutral-400 dark:text-neutral-500">
+      <span className="flex items-center pr-1.5 text-right text-[9px] font-semibold tabular-nums text-neutral-500 dark:text-neutral-400">
         {label}
       </span>
       {children}

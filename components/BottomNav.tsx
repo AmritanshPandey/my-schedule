@@ -175,7 +175,7 @@ export default function BottomNav({
               flex h-[52px] w-[52px]
               -translate-x-1/2 -translate-y-1/2
               items-center justify-center rounded-full
-              bg-[#00A63E] text-white shadow-[0_8px_20px_-8px_rgba(0,166,62,0.75)]
+              bg-[#008236] text-white shadow-[0_8px_20px_-8px_rgba(0,130,54,0.75)]
               dark:bg-[#2FD46E] dark:text-neutral-950 dark:shadow-[0_8px_20px_-8px_rgba(47,212,110,0.55)]
             "
           >

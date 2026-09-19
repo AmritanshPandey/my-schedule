@@ -79,6 +79,7 @@ import { useAIEnabled } from "@/lib/ai/useAIEnabled";
 import AIActionSheet, { type ResultItem } from "@/components/ai/AIActionSheet";
 import { detectMeasurableGoal, type MeasurableGoal } from "@/lib/milestoneIntelligence";
 import { getSlots, uid } from "@/lib/taskMutations";
+import { typography } from "@/components/ui/Typography";
 
 
 
@@ -167,7 +168,7 @@ function GoalDirectionPicker({
   ];
   return (
     <div>
-      <p className="mb-1.5 text-[11px] font-semibold uppercase tracking-[0.08em] text-neutral-400 dark:text-neutral-500">
+      <p className={`mb-1.5 ${typography.eyebrow}`}>
         Goal direction
       </p>
       <div className="grid grid-cols-2 gap-1.5">
@@ -192,7 +193,7 @@ function GoalDirectionPicker({
       {/* Ties the abstract choice to what it actually changes below — the
           trend badge and entry-list arrows silently flip color on this without
           otherwise explaining themselves anywhere in the UI. */}
-      <p className="mt-1.5 text-[11px] text-neutral-400 dark:text-neutral-500">
+      <p className="mt-1.5 text-[11px] text-neutral-500 dark:text-neutral-400">
         Going {value === "increase_good" ? "up" : "down"} will show{" "}
         <span className="font-semibold text-green-600 dark:text-green-400">green</span>
       </p>
@@ -876,7 +877,7 @@ export default function PlanDetailView({
               </p>
             )}
             {subtaskCount > 0 && (
-              <span className="inline-flex shrink-0 items-center gap-1 text-[12px] font-semibold text-neutral-400 dark:text-neutral-500">
+              <span className="inline-flex shrink-0 items-center gap-1 text-[12px] font-semibold text-neutral-500 dark:text-neutral-400">
                 <IconListCheck size={13} strokeWidth={2} />
                 {subtaskCount}
               </span>
@@ -898,7 +899,7 @@ export default function PlanDetailView({
             ))}
           </div>
         </div>
-        <IconChevronRight size={16} strokeWidth={2} className="shrink-0 text-neutral-300 transition-transform group-hover:translate-x-0.5 group-hover:text-neutral-500 dark:text-neutral-600 dark:group-hover:text-neutral-300" />
+        <IconChevronRight size={16} strokeWidth={2} className="shrink-0 text-neutral-400 transition-transform group-hover:translate-x-0.5 group-hover:text-neutral-600 dark:text-neutral-500 dark:group-hover:text-neutral-300" />
       </button>
     );
   }
@@ -1016,7 +1017,7 @@ export default function PlanDetailView({
                 <h3 className="text-[20px] font-bold text-neutral-950 dark:text-white leading-tight">
                   {tracker.title}
                   {tracker.unit && (
-                    <span className="ml-1.5 text-[16px] font-normal text-neutral-400 dark:text-neutral-500">
+                    <span className="ml-1.5 text-[16px] font-normal text-neutral-500 dark:text-neutral-400">
                       ({tracker.unit})
                     </span>
                   )}
@@ -1040,7 +1041,7 @@ export default function PlanDetailView({
                         dailyTarget: tracker.dailyTarget,
                       });
                     }}
-                    className="h-8 w-8 flex items-center justify-center rounded-lg text-neutral-400 hover:text-neutral-700 dark:text-neutral-500 dark:hover:text-neutral-300 transition-colors"
+                    className="h-8 w-8 flex items-center justify-center rounded-lg text-neutral-500 hover:text-neutral-700 dark:text-neutral-400 dark:hover:text-neutral-300 transition-colors"
                   >
                     <IconEdit size={16} strokeWidth={2} />
                   </button>
@@ -1072,12 +1073,12 @@ export default function PlanDetailView({
                 />
                 {/* The chart/trend-badge color is driven by goalDirection, set
                     once in the tracker form and otherwise invisible here. */}
-                <p className="mt-1.5 text-[10px] text-neutral-400 dark:text-neutral-500">
+                <p className="mt-1.5 text-[10px] text-neutral-500 dark:text-neutral-400">
                   <span className="font-semibold text-green-600 dark:text-green-400">Green</span> = trending toward your goal
                 </p>
               </>
             ) : (
-              <div className="rounded-xl bg-neutral-50 dark:bg-white/[0.03] py-8 text-center text-[13px] text-neutral-400 dark:text-neutral-500">
+              <div className="rounded-xl bg-neutral-50 dark:bg-white/[0.03] py-8 text-center text-[13px] text-neutral-500 dark:text-neutral-400">
                 No entries yet
               </div>
             )}
@@ -1100,7 +1101,7 @@ export default function PlanDetailView({
                 { label: "Logged",   value: `${entries.length}` },
               ].map(({ label, value }) => (
                 <div key={label} className="flex-1 px-4 py-3 text-center">
-                  <p className="text-[10px] font-semibold uppercase tracking-[0.08em] text-neutral-400 dark:text-neutral-500">
+                  <p className="text-[10px] font-bold uppercase tracking-[0.08em] text-neutral-500 dark:text-neutral-400">
                     {label}
                   </p>
                   <p className="mt-0.5 text-[16px] font-bold tabular-nums text-neutral-950 dark:text-white">
@@ -1129,7 +1130,7 @@ export default function PlanDetailView({
               </button>
             </div>
             {entries.length === 0 ? (
-              <p className="text-[12px] text-neutral-400 dark:text-neutral-500 pb-1">
+              <p className="text-[12px] text-neutral-500 dark:text-neutral-400 pb-1">
                 Tap Add Entry to start tracking.
               </p>
             ) : (
@@ -1171,7 +1172,7 @@ export default function PlanDetailView({
                         <span className="text-[14px] font-semibold text-neutral-950 dark:text-white tabular-nums">
                           {entry.value}
                           {tracker.unit && (
-                            <span className="text-[11px] font-medium text-neutral-400 ml-0.5">
+                            <span className="text-[11px] font-medium text-neutral-500 dark:text-neutral-400 ml-0.5">
                               {tracker.unit}
                             </span>
                           )}
@@ -1289,7 +1290,7 @@ export default function PlanDetailView({
           </div>
           <div className="flex flex-wrap items-center gap-2">
             <span className={`text-[12.5px] font-medium ${
-              isCompleted ? "text-neutral-400 dark:text-neutral-500" : "text-neutral-500 dark:text-neutral-400"
+              isCompleted ? "text-neutral-500 dark:text-neutral-400" : "text-neutral-500 dark:text-neutral-400"
             }`}>
               {rangeLabel}
             </span>
@@ -1335,13 +1336,13 @@ export default function PlanDetailView({
           {/* Forecast vs target — only once there's an actual projection and
               the milestone isn't already resolved/not-yet-underway. */}
           {health?.forecastDate && showHealthBadge && (
-            <p className="mt-1 text-[11px] font-medium text-neutral-400 dark:text-neutral-500">
+            <p className="mt-1 text-[11px] font-medium text-neutral-500 dark:text-neutral-400">
               Projected {formatDateShort(health.forecastDate)} · Target {formatDateShort(m.plannedEndDate)}
             </p>
           )}
         </div>
 
-        <IconChevronRight size={16} strokeWidth={2} className="shrink-0 self-center text-neutral-300 transition-transform group-hover:translate-x-0.5 group-hover:text-neutral-500 dark:text-neutral-600 dark:group-hover:text-neutral-300" />
+        <IconChevronRight size={16} strokeWidth={2} className="shrink-0 self-center text-neutral-400 transition-transform group-hover:translate-x-0.5 group-hover:text-neutral-600 dark:text-neutral-500 dark:group-hover:text-neutral-300" />
       </button>
       {/* Sequence controls — a sibling of the button above, not nested inside
           it, so tapping "move" never also opens the detail sheet. */}
@@ -1421,7 +1422,7 @@ export default function PlanDetailView({
           <p className="text-[13px] font-medium text-neutral-500 dark:text-neutral-400">
             {progressSummary}
           </p>
-          <p className="mt-1 text-[11px] text-neutral-400 dark:text-neutral-500">
+          <p className="mt-1 text-[11px] text-neutral-500 dark:text-neutral-400">
             {progressBlendNote}
           </p>
         </div>
@@ -1438,7 +1439,7 @@ export default function PlanDetailView({
               key={label}
               className="rounded-[14px] border border-neutral-200 bg-neutral-50 px-[14px] py-3 dark:border-white/[0.08] dark:bg-white/[0.03]"
             >
-              <p className="mb-1.5 text-[10px] font-medium uppercase tracking-[0.7px] text-neutral-400 dark:text-neutral-500">
+              <p className="mb-1.5 text-[10px] font-medium uppercase tracking-[0.7px] text-neutral-500 dark:text-neutral-400">
                 {label}
               </p>
               <p className="text-[19px] font-extrabold leading-[1.1] tracking-[-0.5px] text-neutral-950 dark:text-white">
@@ -1447,7 +1448,7 @@ export default function PlanDetailView({
               {/* Distinguishes this from Accuracy's month-scoped % on the
                   Planning tab — same-looking numbers, different windows. */}
               {caption && (
-                <p className="mt-0.5 text-[10px] font-medium text-neutral-400 dark:text-neutral-500">{caption}</p>
+                <p className="mt-0.5 text-[10px] font-medium text-neutral-500 dark:text-neutral-400">{caption}</p>
               )}
             </div>
           ))}
@@ -1487,7 +1488,7 @@ export default function PlanDetailView({
               {(() => {
                 const skill = detectCoachSkill(plan);
                 return skill ? (
-                  <span className="text-[11px] font-medium text-neutral-400 dark:text-neutral-500">
+                  <span className="text-[11px] font-medium text-neutral-500 dark:text-neutral-400">
                     {SKILL_LABELS[skill]} Coach
                   </span>
                 ) : null;
@@ -1613,7 +1614,7 @@ export default function PlanDetailView({
                               setCopiedMsgIdx(msgIdx);
                               setTimeout(() => setCopiedMsgIdx(null), 2000);
                             }}
-                            className="mt-1.5 flex items-center gap-1 text-[11px] text-neutral-300 opacity-0 transition-all group-hover:opacity-100 hover:text-neutral-500 dark:text-neutral-600 dark:hover:text-neutral-400"
+                            className="mt-1.5 flex items-center gap-1 text-[11px] text-neutral-500 opacity-0 transition-all group-hover:opacity-100 hover:text-neutral-800 dark:text-neutral-400 dark:hover:text-neutral-100"
                           >
                             {copiedMsgIdx === msgIdx
                               ? <><IconCheck size={11} strokeWidth={2.5} /><span>Copied</span></>
@@ -1627,7 +1628,7 @@ export default function PlanDetailView({
                     {/* Milestone suggestion cards */}
                     {msg.suggestedMilestones && msg.suggestedMilestones.length > 0 && (
                       <div className="mt-3 rounded-2xl border border-neutral-200 bg-neutral-50 p-3 dark:border-white/[0.08] dark:bg-white/[0.03]">
-                        <p className="mb-2 text-[10px] font-bold uppercase tracking-wider text-neutral-400 dark:text-neutral-500">
+                        <p className="mb-2 text-[10px] font-bold uppercase tracking-wider text-neutral-500 dark:text-neutral-400">
                           Suggested milestones
                         </p>
                         {msg.suggestedMilestones.map((m, mIdx) => {
@@ -1638,7 +1639,7 @@ export default function PlanDetailView({
                               <div className="min-w-0 flex-1">
                                 <p className="text-[13px] font-semibold text-neutral-800 dark:text-neutral-200">{m.title}</p>
                                 {m.targetDate && (
-                                  <p className="text-[11px] text-neutral-400 dark:text-neutral-500">{m.targetDate}</p>
+                                  <p className="text-[11px] text-neutral-500 dark:text-neutral-400">{m.targetDate}</p>
                                 )}
                               </div>
                               <button
@@ -1733,7 +1734,7 @@ export default function PlanDetailView({
                     <button
                       type="button"
                       onClick={() => setPostMilestoneContext(null)}
-                      className="w-full rounded-xl py-2 text-[12px] font-medium text-neutral-400 transition-colors hover:text-neutral-600 dark:text-neutral-500 dark:hover:text-neutral-300"
+                      className="w-full rounded-xl py-2 text-[12px] font-medium text-neutral-500 transition-colors hover:text-neutral-600 dark:text-neutral-400 dark:hover:text-neutral-300"
                     >
                       Skip
                     </button>
@@ -1870,7 +1871,7 @@ export default function PlanDetailView({
               <div className="rounded-2xl border border-neutral-200 bg-white px-4 dark:border-white/[0.08] dark:bg-neutral-900">
                 {uniqueTasks.length === 0 ? (
                   <div className="py-10 text-center">
-                    <p className="text-[14px] font-medium text-neutral-400 dark:text-neutral-500 max-w-[220px] mx-auto">
+                    <p className="text-[14px] font-medium text-neutral-500 dark:text-neutral-400 max-w-[220px] mx-auto">
                       Link tasks to this plan to keep everything connected.
                     </p>
                   </div>
@@ -1912,7 +1913,7 @@ export default function PlanDetailView({
 
               {trackers.length === 0 ? (
                 <div className="rounded-2xl border border-neutral-200 bg-white py-10 text-center dark:border-white/[0.08] dark:bg-neutral-900">
-                  <p className="text-[14px] font-medium text-neutral-400 dark:text-neutral-500">
+                  <p className="text-[14px] font-medium text-neutral-500 dark:text-neutral-400">
                     No progress trackers yet.
                   </p>
                   <button
@@ -1980,7 +1981,7 @@ export default function PlanDetailView({
 
           {planMilestones.length === 0 ? (
             <div className="rounded-2xl border border-dashed border-neutral-200 py-12 text-center dark:border-white/[0.08]">
-              <p className="mx-auto max-w-[220px] text-[14px] font-medium text-neutral-400 dark:text-neutral-500">
+              <p className="mx-auto max-w-[220px] text-[14px] font-medium text-neutral-500 dark:text-neutral-400">
                 Add milestones to track your progress journey.
               </p>
               <button
@@ -2240,7 +2241,7 @@ export default function PlanDetailView({
             onChange={setNewTrackerGoalDirection}
           />
           <div className="rounded-2xl bg-neutral-50 dark:bg-white/[0.04] px-4 py-3">
-            <p className="text-[11px] font-semibold text-neutral-400 dark:text-neutral-500 mb-1.5">
+            <p className="text-[11px] font-semibold text-neutral-500 dark:text-neutral-400 mb-1.5">
               Examples
             </p>
             <div className="flex flex-wrap gap-1.5">
@@ -2340,10 +2341,10 @@ export default function PlanDetailView({
               {/* Meta */}
               <div className="space-y-3 mb-5">
                 <div className="flex items-center gap-3">
-                  <IconCalendar size={16} strokeWidth={1.8} className="shrink-0 text-neutral-400" />
+                  <IconCalendar size={16} strokeWidth={1.8} className="shrink-0 text-neutral-500 dark:text-neutral-400" />
                   <span className="text-[16px] font-medium text-neutral-700 dark:text-neutral-300">
                     {formatDate(m.startDate)} – {formatDate(m.plannedEndDate)}
-                    <span className="ml-2 text-[13px] text-neutral-400">
+                    <span className="ml-2 text-[13px] text-neutral-500 dark:text-neutral-400">
                       · {m.plannedDurationDays} day{m.plannedDurationDays === 1 ? "" : "s"}
                     </span>
                   </span>
@@ -2369,7 +2370,7 @@ export default function PlanDetailView({
                       <span className="text-[22px] font-bold tracking-[-0.3px] text-neutral-900 dark:text-white">
                         {health.metricCurrentValue}{health.metricUnit ? ` ${health.metricUnit}` : ""}
                       </span>
-                      <span className="text-[13px] font-medium text-neutral-400 dark:text-neutral-500">
+                      <span className="text-[13px] font-medium text-neutral-500 dark:text-neutral-400">
                         Target: {health.metricTargetValue}{health.metricUnit ? ` ${health.metricUnit}` : ""}
                       </span>
                     </div>
@@ -2395,13 +2396,13 @@ export default function PlanDetailView({
                     <div className="flex items-center gap-4 pt-1">
                       {health.taskProgress !== null && (
                         <div>
-                          <p className="text-[11px] font-bold uppercase tracking-[0.08em] text-neutral-400 dark:text-neutral-500">Activity</p>
+                          <p className="text-[11px] font-bold uppercase tracking-[0.08em] text-neutral-600 dark:text-neutral-400">Activity</p>
                           <p className="text-[14px] font-semibold text-neutral-800 dark:text-neutral-100">{health.taskProgress}% task progress</p>
                         </div>
                       )}
                       {health.consistency !== null && (
                         <div>
-                          <p className="text-[11px] font-bold uppercase tracking-[0.08em] text-neutral-400 dark:text-neutral-500">Consistency</p>
+                          <p className="text-[11px] font-bold uppercase tracking-[0.08em] text-neutral-600 dark:text-neutral-400">Consistency</p>
                           <p className="text-[14px] font-semibold text-neutral-800 dark:text-neutral-100">{health.consistency}%</p>
                         </div>
                       )}
@@ -2432,7 +2433,7 @@ export default function PlanDetailView({
               {/* Description */}
               {m.description && (
                 <div className="mb-5">
-                  <p className="mb-1.5 text-[11px] font-bold uppercase tracking-[0.08em] text-neutral-400 dark:text-neutral-500">
+                  <p className="mb-1.5 text-[11px] font-bold uppercase tracking-[0.08em] text-neutral-600 dark:text-neutral-400">
                     Description
                   </p>
                   <p className="text-[16px] leading-relaxed text-neutral-700 dark:text-neutral-300">
@@ -2444,7 +2445,7 @@ export default function PlanDetailView({
               {/* Notes */}
               {m.notes && (
                 <div className="mb-5">
-                  <p className="mb-1.5 text-[11px] font-bold uppercase tracking-[0.08em] text-neutral-400 dark:text-neutral-500">
+                  <p className="mb-1.5 text-[11px] font-bold uppercase tracking-[0.08em] text-neutral-600 dark:text-neutral-400">
                     Notes
                   </p>
                   <p className="text-[16px] leading-relaxed text-neutral-700 dark:text-neutral-300">
@@ -2460,7 +2461,7 @@ export default function PlanDetailView({
                   from the picker below. */}
               {(progress?.hasLinkedTasks || onLinkTaskToMilestone) && (
                 <div className="mb-5">
-                  <p className="mb-2 text-[11px] font-bold uppercase tracking-[0.08em] text-neutral-400 dark:text-neutral-500">
+                  <p className="mb-2 text-[11px] font-bold uppercase tracking-[0.08em] text-neutral-600 dark:text-neutral-400">
                     Linked Tasks
                   </p>
                   {progress?.hasLinkedTasks && (
@@ -2471,14 +2472,14 @@ export default function PlanDetailView({
                             {taskTitleById.get(t.taskId) ?? "Deleted task"}
                           </span>
                           <div className="flex shrink-0 items-center gap-2">
-                            <span className="text-[12px] font-semibold text-neutral-400 dark:text-neutral-500">
+                            <span className="text-[12px] font-semibold text-neutral-500 dark:text-neutral-400">
                               {t.completedCount}/{t.totalCount}
                             </span>
                             {onUnlinkTaskFromMilestone && (
                               <button
                                 type="button"
                                 onClick={() => onUnlinkTaskFromMilestone(m.id, t.taskId)}
-                                className="text-[11px] font-semibold text-neutral-400 hover:text-rose-500 dark:text-neutral-500 dark:hover:text-rose-400"
+                                className="text-[11px] font-semibold text-neutral-500 hover:text-rose-500 dark:text-neutral-400 dark:hover:text-rose-400"
                               >
                                 Unlink
                               </button>
@@ -2503,7 +2504,7 @@ export default function PlanDetailView({
                         ))}
                       </div>
                     ) : !progress?.hasLinkedTasks ? (
-                      <p className="text-[13px] leading-relaxed text-neutral-400 dark:text-neutral-500">
+                      <p className="text-[13px] leading-relaxed text-neutral-500 dark:text-neutral-400">
                         No tasks on this plan yet — add one to track activity toward this milestone.
                       </p>
                     ) : null
@@ -2519,7 +2520,7 @@ export default function PlanDetailView({
                   pick any of the plan's existing trackers. */}
               {(onLinkTrackerToMilestone || onUnlinkTrackerFromMilestone) && (
                 <div className="mb-5">
-                  <p className="mb-2 text-[11px] font-bold uppercase tracking-[0.08em] text-neutral-400 dark:text-neutral-500">
+                  <p className="mb-2 text-[11px] font-bold uppercase tracking-[0.08em] text-neutral-600 dark:text-neutral-400">
                     Success Metric
                   </p>
                   {linkedTracker ? (
@@ -2528,7 +2529,7 @@ export default function PlanDetailView({
                         <p className="truncate text-[14px] font-semibold text-neutral-800 dark:text-neutral-100">
                           {linkedTracker.title}
                         </p>
-                        <p className="text-[12px] text-neutral-400 dark:text-neutral-500">
+                        <p className="text-[12px] text-neutral-500 dark:text-neutral-400">
                           {linkedTracker.startingValue ?? "–"} → {linkedTracker.goalValue ?? "–"}
                           {linkedTracker.unit ? ` ${linkedTracker.unit}` : ""}
                           {linkedTracker.goalDirection === "decrease_good" ? " ↓" : " ↑"}
@@ -2538,7 +2539,7 @@ export default function PlanDetailView({
                         <button
                           type="button"
                           onClick={() => onUnlinkTrackerFromMilestone(m.id, linkedTracker.id)}
-                          className="shrink-0 text-[12px] font-semibold text-neutral-400 hover:text-rose-500 dark:text-neutral-500 dark:hover:text-rose-400"
+                          className="shrink-0 text-[12px] font-semibold text-neutral-500 hover:text-rose-500 dark:text-neutral-400 dark:hover:text-rose-400"
                         >
                           Unlink
                         </button>
@@ -2558,7 +2559,7 @@ export default function PlanDetailView({
                       ))}
                     </div>
                   ) : (
-                    <p className="text-[13px] leading-relaxed text-neutral-400 dark:text-neutral-500">
+                    <p className="text-[13px] leading-relaxed text-neutral-500 dark:text-neutral-400">
                       No trackers yet on this plan — create one under Progress Tracking to measure this milestone's outcome (e.g. weight, savings).
                     </p>
                   )}
@@ -2646,17 +2647,17 @@ export default function PlanDetailView({
               <div className="space-y-3 mb-6">
                 {(task.startTime || task.endTime) && (
                   <div className="flex items-center gap-3">
-                    <IconClock size={16} strokeWidth={1.8} className="shrink-0 text-neutral-400" />
+                    <IconClock size={16} strokeWidth={1.8} className="shrink-0 text-neutral-500 dark:text-neutral-400" />
                     <span className="text-[16px] font-medium text-neutral-700 dark:text-neutral-300">
                       {formatDisplayTime(task.startTime)}{task.endTime && ` – ${formatDisplayTime(task.endTime)}`}
                       {duration && (
-                        <span className="ml-1.5 text-[13px] text-neutral-400">· {duration}</span>
+                        <span className="ml-1.5 text-[13px] text-neutral-500 dark:text-neutral-400">· {duration}</span>
                       )}
                     </span>
                   </div>
                 )}
                 <div className="flex items-start gap-3">
-                  <IconCalendar size={16} strokeWidth={1.8} className="mt-[3px] shrink-0 text-neutral-400" />
+                  <IconCalendar size={16} strokeWidth={1.8} className="mt-[3px] shrink-0 text-neutral-500 dark:text-neutral-400" />
                   <div className="flex flex-wrap gap-[5px]">
                     {WEEKDAY_ORDER.map((day) => (
                       <DayPill key={day} label={WEEKDAY_SHORT[day]} active={taskDays.includes(day)} />
@@ -2667,7 +2668,7 @@ export default function PlanDetailView({
 
               {slots.length > 1 && (
                 <div className="mb-6">
-                  <p className="mb-2.5 text-[11px] font-bold uppercase tracking-[0.08em] text-neutral-400 dark:text-neutral-500">
+                  <p className="mb-2.5 text-[11px] font-bold uppercase tracking-[0.08em] text-neutral-600 dark:text-neutral-400">
                     Time blocks
                   </p>
                   <div className="space-y-1.5">
@@ -2700,7 +2701,7 @@ export default function PlanDetailView({
               {/* Subtasks */}
               {subtaskCount > 0 && (
                 <div className="mb-6">
-                  <p className="mb-2.5 text-[11px] font-bold uppercase tracking-[0.08em] text-neutral-400 dark:text-neutral-500">
+                  <p className="mb-2.5 text-[11px] font-bold uppercase tracking-[0.08em] text-neutral-600 dark:text-neutral-400">
                     Subtasks · {subtaskCount}
                   </p>
                   <div className="space-y-1.5">

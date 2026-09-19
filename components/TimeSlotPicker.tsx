@@ -205,7 +205,7 @@ export default function TimeSlotPicker({
                 type="button"
                 aria-label={`Remove time slot ${index + 1}`}
                 onClick={() => removeSlot(index)}
-                className="mb-0.5 flex h-11 w-9 shrink-0 items-center justify-center rounded-xl border border-neutral-200 text-neutral-500 transition-colors hover:border-rose-300 hover:text-rose-500 dark:border-white/10 dark:text-neutral-500 dark:hover:border-rose-500/40 dark:hover:text-rose-400"
+                className="mb-0.5 flex h-11 w-9 shrink-0 items-center justify-center rounded-xl border border-neutral-200 text-neutral-500 transition-colors hover:border-rose-300 hover:text-rose-500 dark:border-white/10 dark:text-neutral-400 dark:hover:border-rose-500/40 dark:hover:text-rose-400"
               >
                 <IconX size={16} strokeWidth={2.2} />
               </button>

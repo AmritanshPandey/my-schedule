@@ -103,7 +103,7 @@ export default function CategoryManager({ schedule, setSchedule }: CategoryManag
                       : `Delete ${category.title}`
                   }
                   title={inUse > 0 ? "Move those tasks to another category first" : undefined}
-                  className="grid h-9 w-9 shrink-0 place-items-center rounded-xl text-neutral-400 transition-colors hover:bg-rose-500/10 hover:text-rose-500 disabled:pointer-events-none disabled:opacity-30 dark:text-neutral-500 dark:hover:text-rose-400"
+                  className="grid h-9 w-9 shrink-0 place-items-center rounded-xl text-neutral-500 transition-colors hover:bg-rose-500/10 hover:text-rose-500 disabled:pointer-events-none disabled:opacity-30 dark:text-neutral-400 dark:hover:text-rose-400"
                 >
                   <IconTrash size={16} strokeWidth={2} />
                 </button>

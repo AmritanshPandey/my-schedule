@@ -117,7 +117,7 @@ const PROVIDER_BLURB: Record<ProviderKind, string> = {
 
 function SectionLabel({ children }: { children: React.ReactNode }) {
   return (
-    <p className="mb-2 px-1 text-[11px] font-bold uppercase tracking-[0.10em] text-neutral-400 dark:text-neutral-500">
+    <p className="mb-2 px-1 text-[11px] font-bold uppercase tracking-[0.10em] text-neutral-500 dark:text-neutral-400">
       {children}
     </p>
   );
@@ -137,7 +137,7 @@ function Field({ label, children }: { label: string; children: React.ReactNode }
 function StatusPill({ phase, result }: { phase: "idle" | "testing" | "done"; result: AIConnectionTestResult | null }) {
   if (phase === "testing") {
     return (
-      <span className="flex items-center gap-1.5 text-[11px] font-semibold text-neutral-400 dark:text-neutral-500">
+      <span className="flex items-center gap-1.5 text-[11px] font-semibold text-neutral-500 dark:text-neutral-400">
         <IconLoader2 size={13} strokeWidth={2.5} className="animate-spin" />
         Connecting…
       </span>
@@ -248,12 +248,12 @@ function ProviderForm({
         <div className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-xl ${isActive ? "bg-neutral-900 dark:bg-white" : "bg-neutral-100 dark:bg-white/[0.06]"}`}>
           {(() => {
             const Icon = PROVIDER_ICON[kind];
-            return <Icon size={16} strokeWidth={2} className={isActive ? "text-white dark:text-neutral-900" : "text-neutral-400 dark:text-neutral-500"} />;
+            return <Icon size={16} strokeWidth={2} className={isActive ? "text-white dark:text-neutral-900" : "text-neutral-500 dark:text-neutral-400"} />;
           })()}
         </div>
         <div className="min-w-0 flex-1">
           <p className="text-[13px] font-bold text-neutral-900 dark:text-white">{PROVIDER_LABEL[kind]}</p>
-          <p className="text-[11px] font-medium leading-snug text-neutral-400 dark:text-neutral-500">
+          <p className="text-[11px] font-medium leading-snug text-neutral-500 dark:text-neutral-400">
             {PROVIDER_BLURB[kind]}
           </p>
         </div>
@@ -266,7 +266,7 @@ function ProviderForm({
             Active
           </span>
         ) : (
-          <span className="rounded-full border border-neutral-200 px-2 py-1 text-[10px] font-bold uppercase tracking-wide text-neutral-400 dark:border-white/[0.08] dark:text-neutral-500">
+          <span className="rounded-full border border-neutral-200 px-2 py-1 text-[10px] font-bold uppercase tracking-wide text-neutral-500 dark:border-white/[0.08] dark:text-neutral-400">
             Use this
           </span>
         )}
@@ -378,7 +378,7 @@ function ProviderForm({
                 {detected && (
                   <div className="mt-1.5 flex flex-wrap gap-1.5">
                     {detected.length === 0 ? (
-                      <p className="text-[11px] text-neutral-400 dark:text-neutral-500">No models found — check the server is running.</p>
+                      <p className="text-[11px] text-neutral-500 dark:text-neutral-400">No models found — check the server is running.</p>
                     ) : (
                       detected.map((m) => (
                         <button
@@ -460,10 +460,10 @@ function Collapsible({
       >
         <div className="min-w-0 flex-1">
           <p className="text-[13px] font-bold text-neutral-900 dark:text-white">{title}</p>
-          <p className="mt-0.5 truncate text-[11px] leading-relaxed text-neutral-400 dark:text-neutral-500">{subtitle}</p>
+          <p className="mt-0.5 truncate text-[11px] leading-relaxed text-neutral-500 dark:text-neutral-400">{subtitle}</p>
         </div>
         <m.div animate={{ rotate: open ? 90 : 0 }} transition={{ duration: 0.18, ease: "easeOut" }} className="shrink-0">
-          <IconChevronRight size={14} strokeWidth={2.2} className="text-neutral-300 dark:text-neutral-600" />
+          <IconChevronRight size={14} strokeWidth={2.2} className="text-neutral-400 dark:text-neutral-500" />
         </m.div>
       </button>
       <AnimatePresence initial={false}>
@@ -544,7 +544,7 @@ function InstructionsSection() {
               className="w-full resize-none rounded-xl border border-neutral-200 bg-neutral-50 px-3 py-2 text-[13px] text-neutral-900 outline-none placeholder:text-neutral-400 focus:border-neutral-300 focus:bg-white dark:border-white/[0.08] dark:bg-white/[0.04] dark:text-white dark:placeholder:text-neutral-600 dark:focus:border-white/20 dark:focus:bg-white/[0.07]"
             />
             {isUnsavedDefault && (
-              <p className="mt-1 text-[10px] font-medium text-neutral-400 dark:text-neutral-500">
+              <p className="mt-1 text-[10px] font-medium text-neutral-500 dark:text-neutral-400">
                 Suggested default — not active until you save. Edit or clear it first if you'd rather start blank.
               </p>
             )}
@@ -618,7 +618,7 @@ function TrainingDataSection() {
         </div>
         <Toggle on={enabled} onChange={toggle} label="Capture training data" />
       </div>
-      <p className="text-[11px] font-semibold text-neutral-400 dark:text-neutral-500">
+      <p className="text-[11px] font-semibold text-neutral-500 dark:text-neutral-400">
         {count} interaction{count === 1 ? "" : "s"} captured
       </p>
       <div className="grid grid-cols-3 gap-2">
@@ -681,14 +681,14 @@ export function AIView({ onClose }: AIViewProps) {
           <button
             type="button"
             onClick={onClose}
-            className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl text-neutral-400 hover:bg-neutral-100 dark:hover:bg-white/[0.06] lg:hidden"
+            className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl text-neutral-500 dark:text-neutral-400 hover:bg-neutral-100 dark:hover:bg-white/[0.06] lg:hidden"
             aria-label="Back"
           >
             <IconChevronLeft size={18} strokeWidth={2} />
           </button>
           <div>
             <h1 className="text-[26px] font-black tracking-[-0.5px] text-neutral-900 dark:text-white">AI</h1>
-            <p className="mt-0.5 text-[13px] text-neutral-400 dark:text-neutral-500">
+            <p className="mt-0.5 text-[13px] text-neutral-500 dark:text-neutral-400">
               Provider, instructions, and how PlanR generates for you
             </p>
           </div>
@@ -700,11 +700,11 @@ export function AIView({ onClose }: AIViewProps) {
               above everything it controls rather than buried at the bottom. */}
           <div className={`flex items-center gap-3 px-4 py-3.5 ${CARD}`}>
             <div className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-xl ${aiEnabled ? "bg-[#AD46FF]" : "bg-neutral-200 dark:bg-white/[0.08]"}`}>
-              <IconSparkles size={18} strokeWidth={1.8} className={aiEnabled ? "text-white" : "text-neutral-400 dark:text-neutral-500"} />
+              <IconSparkles size={18} strokeWidth={1.8} className={aiEnabled ? "text-white" : "text-neutral-500 dark:text-neutral-400"} />
             </div>
             <div className="min-w-0 flex-1">
               <p className="text-[14px] font-bold text-neutral-900 dark:text-white">AI features</p>
-              <p className="text-[12px] font-medium leading-snug text-neutral-400 dark:text-neutral-500">
+              <p className="text-[12px] font-medium leading-snug text-neutral-500 dark:text-neutral-400">
                 Off hides every AI button and screen. You can turn it back on here or in Settings.
               </p>
             </div>

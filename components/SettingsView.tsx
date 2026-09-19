@@ -95,7 +95,7 @@ function ReplayToursRow() {
       </div>
       <div className="min-w-0 flex-1">
         <p className="text-[13px] font-semibold text-neutral-800 dark:text-white">Guided tours</p>
-        <p className="mt-0.5 text-[11px] leading-snug text-neutral-400 dark:text-neutral-500">
+        <p className="mt-0.5 text-[11px] leading-snug text-neutral-500 dark:text-neutral-400">
           {justReset ? "Reset — they'll show again as you visit each tab." : "Short intro to Today, Plans, and Routine"}
         </p>
       </div>
@@ -115,7 +115,7 @@ function ReplayToursRow() {
 
 function SectionLabel({ children }: { children: React.ReactNode }) {
   return (
-    <p className="mb-2 px-1 text-[11px] font-bold uppercase tracking-[0.10em] text-neutral-400 dark:text-neutral-500">
+    <p className="mb-2 px-1 text-[11px] font-bold uppercase tracking-[0.10em] text-neutral-500 dark:text-neutral-400">
       {children}
     </p>
   );
@@ -219,7 +219,7 @@ function ErrorTelemetryRow() {
         </div>
         <div className="min-w-0 flex-1">
           <p className="text-[13px] font-semibold text-neutral-800 dark:text-white">Share error reports</p>
-          <p className="mt-0.5 text-[11px] leading-snug text-neutral-400 dark:text-neutral-500">
+          <p className="mt-0.5 text-[11px] leading-snug text-neutral-500 dark:text-neutral-400">
             Sends crash details to your own cloud space to help fix bugs · no schedule content
           </p>
         </div>
@@ -281,13 +281,13 @@ function DiagnosticsCard() {
         </div>
         <div className="min-w-0 flex-1">
           <p className="text-[13px] font-semibold text-neutral-800 dark:text-white">Diagnostics</p>
-          <p className="mt-0.5 text-[11px] leading-snug text-neutral-400 dark:text-neutral-500">
+          <p className="mt-0.5 text-[11px] leading-snug text-neutral-500 dark:text-neutral-400">
             {snapshot
               ? `${platformMode} · Sync ${snapshot.sync.status} · ${snapshot.errors.length} errors`
               : "Collecting app diagnostics…"}
           </p>
           {latestBoot && (
-            <p className="mt-2 truncate font-mono text-[10px] text-neutral-400 dark:text-neutral-500">
+            <p className="mt-2 truncate font-mono text-[10px] text-neutral-500 dark:text-neutral-400">
               Last boot: {latestBoot.event}
             </p>
           )}
@@ -439,7 +439,7 @@ export function SettingsView({
           <h1 className="text-[26px] font-black tracking-[-0.5px] text-neutral-900 dark:text-white">
             Settings
           </h1>
-          <p className="mt-0.5 text-[13px] text-neutral-400 dark:text-neutral-500">
+          <p className="mt-0.5 text-[13px] text-neutral-500 dark:text-neutral-400">
             Account, AI, appearance, and data
           </p>
         </div>
@@ -453,7 +453,7 @@ export function SettingsView({
                 <Card>
                   <div className="px-4 py-4">
                     <p className="mb-0.5 text-[14px] font-bold text-neutral-900 dark:text-white">Sign in to sync</p>
-                    <p className="mb-3.5 text-[12px] text-neutral-400 dark:text-neutral-500">
+                    <p className="mb-3.5 text-[12px] text-neutral-500 dark:text-neutral-400">
                       Back up your data and access it across all your devices.
                     </p>
                     <m.button type="button" onClick={signIn} disabled={signingIn || !isAuthAvailable} whileTap={{ scale: 0.97 }}
@@ -479,7 +479,7 @@ export function SettingsView({
                     )}
                     <div className="min-w-0 flex-1">
                       <p className="truncate text-[14px] font-bold text-neutral-900 dark:text-white">{user?.displayName ?? "User"}</p>
-                      <p className="truncate text-[12px] text-neutral-400 dark:text-neutral-500">{user?.email}</p>
+                      <p className="truncate text-[12px] text-neutral-500 dark:text-neutral-400">{user?.email}</p>
                     </div>
                     <m.button type="button" onClick={handleLogout} disabled={busy} whileTap={{ scale: 0.94 }}
                       className="rounded-lg border border-neutral-200 px-3 py-2 text-[12px] font-semibold text-neutral-500 hover:border-neutral-300 dark:border-white/[0.08] dark:text-neutral-400 disabled:opacity-50">
@@ -500,11 +500,11 @@ export function SettingsView({
               <Card>
                 <div className="flex items-center gap-3 px-4 py-3.5">
                   <div className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-xl ${aiEnabled ? "bg-[#AD46FF]" : "bg-neutral-200 dark:bg-white/[0.08]"}`}>
-                    <IconSparkles size={18} strokeWidth={1.8} className={aiEnabled ? "text-white" : "text-neutral-400 dark:text-neutral-500"} />
+                    <IconSparkles size={18} strokeWidth={1.8} className={aiEnabled ? "text-white" : "text-neutral-500 dark:text-neutral-400"} />
                   </div>
                   <div className="min-w-0 flex-1">
                     <p className="text-[14px] font-bold text-neutral-900 dark:text-white">AI features</p>
-                    <p className="text-[12px] font-medium leading-snug text-neutral-400 dark:text-neutral-500">
+                    <p className="text-[12px] font-medium leading-snug text-neutral-500 dark:text-neutral-400">
                       {aiEnabled
                         ? "The assistant, plan generation, and the weekly read"
                         : "Every AI button and screen is hidden"}
@@ -524,9 +524,9 @@ export function SettingsView({
                       <div className="w-10 shrink-0" />
                       <div className="min-w-0 flex-1">
                         <p className="text-[14px] font-bold text-neutral-900 dark:text-white">AI Configuration</p>
-                        <p className="text-[12px] font-medium text-neutral-400 dark:text-neutral-500">{aiNavLabel}</p>
+                        <p className="text-[12px] font-medium text-neutral-500 dark:text-neutral-400">{aiNavLabel}</p>
                       </div>
-                      <IconChevronDown size={14} strokeWidth={2} className="-rotate-90 text-neutral-400" />
+                      <IconChevronDown size={14} strokeWidth={2} className="-rotate-90 text-neutral-500 dark:text-neutral-400" />
                     </button>
                   </>
                 )}
@@ -572,7 +572,7 @@ export function SettingsView({
                         className={`flex items-center gap-1.5 rounded-[9px] px-3 py-1.5 text-[11px] font-semibold capitalize transition-colors ${
                           theme === t
                             ? "bg-neutral-900 text-white dark:bg-white dark:text-neutral-900"
-                            : "text-neutral-400 hover:text-neutral-700 dark:text-neutral-500 dark:hover:text-neutral-300"
+                            : "text-neutral-500 hover:text-neutral-700 dark:text-neutral-400 dark:hover:text-neutral-300"
                         }`}>
                         {t === "light" ? <IconSun size={11} strokeWidth={2} /> : <IconMoon size={11} strokeWidth={2} />}
                         {t}
@@ -597,7 +597,7 @@ export function SettingsView({
               <Row className="items-start max-sm:flex-col sm:items-center">
                 <div className="min-w-0 flex-1">
                   <p className="text-[13px] font-semibold text-neutral-800 dark:text-white">Start of day</p>
-                  <p className="mt-0.5 text-[11px] leading-snug text-neutral-400 dark:text-neutral-500">
+                  <p className="mt-0.5 text-[11px] leading-snug text-neutral-500 dark:text-neutral-400">
                     Where the timeline scrolls to, and the day boundary for missed-task and free-time checks. The Overview breakdown always runs a fixed 4 AM–4 AM day.
                   </p>
                 </div>
@@ -606,7 +606,7 @@ export function SettingsView({
                     aria-label="Start of day"
                     value={dayStartTime}
                     onChange={(e) => handleDayStartChange(e.target.value)}
-                    className={`${SETTINGS_CONTROL_CLASS} w-full pr-9 appearance-none ${!dayStartTime ? "!text-neutral-400 dark:!text-neutral-500" : ""}`}
+                    className={`${SETTINGS_CONTROL_CLASS} w-full pr-9 appearance-none ${!dayStartTime ? "!text-neutral-500 dark:!text-neutral-400" : ""}`}
                   >
                     <option value="">Auto (first task)</option>
                     {DAY_START_OPTIONS.map((option) => (
@@ -615,7 +615,7 @@ export function SettingsView({
                       </option>
                     ))}
                   </select>
-                  <IconClock size={14} strokeWidth={2} className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-neutral-400" />
+                  <IconClock size={14} strokeWidth={2} className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-neutral-500 dark:text-neutral-400" />
                 </div>
               </Row>
 
@@ -624,7 +624,7 @@ export function SettingsView({
               <Row className="items-start max-sm:flex-col sm:items-center">
                 <div className="min-w-0 flex-1">
                   <p className="text-[13px] font-semibold text-neutral-800 dark:text-white">End of day</p>
-                  <p className="mt-0.5 text-[11px] leading-snug text-neutral-400 dark:text-neutral-500">
+                  <p className="mt-0.5 text-[11px] leading-snug text-neutral-500 dark:text-neutral-400">
                     How far past midnight your day can run (12–4 AM), or follow your last task. Times show as &quot;(next day)&quot;.
                   </p>
                 </div>
@@ -642,7 +642,7 @@ export function SettingsView({
                         onUpdatePreferences?.({ dayEndAuto: undefined, dayEndMinutes: Number(v) });
                       }
                     }}
-                    className={`${SETTINGS_CONTROL_CLASS} w-full pr-9 appearance-none ${dayEndSelectValue === "" ? "!text-neutral-400 dark:!text-neutral-500" : ""}`}
+                    className={`${SETTINGS_CONTROL_CLASS} w-full pr-9 appearance-none ${dayEndSelectValue === "" ? "!text-neutral-500 dark:!text-neutral-400" : ""}`}
                   >
                     <option value="">Default (4:00 AM)</option>
                     <option value="auto">Follow last task</option>
@@ -652,7 +652,7 @@ export function SettingsView({
                       </option>
                     ))}
                   </select>
-                  <IconClock size={14} strokeWidth={2} className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-neutral-400" />
+                  <IconClock size={14} strokeWidth={2} className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-neutral-500 dark:text-neutral-400" />
                 </div>
               </Row>
 
@@ -661,7 +661,7 @@ export function SettingsView({
               <Row className="items-start max-sm:flex-col sm:items-center">
                 <div className="min-w-0 flex-1">
                   <p className="text-[13px] font-semibold text-neutral-800 dark:text-white">Sleep needed</p>
-                  <p className="mt-0.5 text-[11px] leading-snug text-neutral-400 dark:text-neutral-500">
+                  <p className="mt-0.5 text-[11px] leading-snug text-neutral-500 dark:text-neutral-400">
                     The night you&apos;re aiming for. Sets your waking day and warns when the schedule eats into it.
                   </p>
                 </div>
@@ -670,7 +670,7 @@ export function SettingsView({
                     aria-label="Sleep needed"
                     value={schedule.preferences?.sleepHours != null ? String(schedule.preferences.sleepHours) : ""}
                     onChange={(e) => onUpdatePreferences?.({ sleepHours: e.target.value ? Number(e.target.value) : undefined })}
-                    className={`${SETTINGS_CONTROL_CLASS} w-full pr-9 appearance-none ${schedule.preferences?.sleepHours == null ? "!text-neutral-400 dark:!text-neutral-500" : ""}`}
+                    className={`${SETTINGS_CONTROL_CLASS} w-full pr-9 appearance-none ${schedule.preferences?.sleepHours == null ? "!text-neutral-500 dark:!text-neutral-400" : ""}`}
                   >
                     <option value="">Default (8h)</option>
                     {SLEEP_HOURS_OPTIONS.map((option) => (
@@ -679,7 +679,7 @@ export function SettingsView({
                       </option>
                     ))}
                   </select>
-                  <IconMoon size={14} strokeWidth={2} className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-neutral-400" />
+                  <IconMoon size={14} strokeWidth={2} className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-neutral-500 dark:text-neutral-400" />
                 </div>
               </Row>
             </Card>
@@ -691,7 +691,7 @@ export function SettingsView({
               <Row className="items-start max-sm:flex-col sm:items-center">
                 <div className="min-w-0 flex-1">
                   <p className="text-[13px] font-semibold text-neutral-800 dark:text-white">Tracking starts</p>
-                  <p className="mt-0.5 text-[11px] leading-snug text-neutral-400 dark:text-neutral-500">
+                  <p className="mt-0.5 text-[11px] leading-snug text-neutral-500 dark:text-neutral-400">
                     Tasks, routines, streaks and trends are all ignored before this date. Off = show and count all history.
                   </p>
                 </div>
@@ -729,7 +729,7 @@ export function SettingsView({
                 </div>
                 <div className="min-w-0 flex-1">
                   <p className="text-[13px] font-semibold text-neutral-800 dark:text-white">Check for updates</p>
-                  <p className="mt-0.5 text-[11px] leading-snug text-neutral-400 dark:text-neutral-500">
+                  <p className="mt-0.5 text-[11px] leading-snug text-neutral-500 dark:text-neutral-400">
                     Clears the app cache and reloads the latest version · keeps your data
                   </p>
                 </div>
@@ -740,7 +740,7 @@ export function SettingsView({
               </div>
               <Divider />
               <div className="px-4 py-2.5">
-                <p className="text-[10px] text-neutral-300 dark:text-neutral-600">{versionLabel()}</p>
+                <p className="text-[10px] text-neutral-500 dark:text-neutral-400">{versionLabel()}</p>
               </div>
             </Card>
           </div>
@@ -775,7 +775,7 @@ export function SettingsView({
                           </div>
                           <div className="min-w-0 flex-1">
                             <p className="text-[13px] font-semibold text-neutral-800 dark:text-white">Clear progress</p>
-                            <p className="text-[11px] text-neutral-400 dark:text-neutral-500">Resets completions & logged values · keeps your plans and tasks</p>
+                            <p className="text-[11px] text-neutral-500 dark:text-neutral-400">Resets completions & logged values · keeps your plans and tasks</p>
                           </div>
                           <button type="button" onClick={() => setProgressPhase("confirm")}
                             className="shrink-0 rounded-xl border border-amber-200 bg-amber-50 px-3 py-1.5 text-[11px] font-semibold text-amber-700 hover:bg-amber-100 dark:border-amber-500/20 dark:bg-amber-500/10 dark:text-amber-400 dark:hover:bg-amber-500/15">
@@ -839,7 +839,7 @@ export function SettingsView({
             </Card>
           </div>
 
-          <p className="text-center text-[10px] text-neutral-300 dark:text-neutral-700">PlanR · Personal Execution OS</p>
+          <p className="text-center text-[10px] text-neutral-500 dark:text-neutral-400">PlanR · Personal Execution OS</p>
         </div>
       </div>
 

@@ -73,7 +73,7 @@ function syncLabel(status: SyncStatus, lastSyncedAt: number): string {
 }
 
 function syncColor(status: SyncStatus): string {
-  if (status === "syncing") return "text-neutral-400 dark:text-neutral-500";
+  if (status === "syncing") return "text-neutral-500 dark:text-neutral-400";
   if (status === "offline") return "text-amber-500 dark:text-amber-400";
   if (status === "error") return "text-rose-500 dark:text-rose-400";
   return "text-emerald-500 dark:text-emerald-400";
@@ -83,7 +83,7 @@ function syncColor(status: SyncStatus): string {
 
 function SectionLabel({ children }: { children: React.ReactNode }) {
   return (
-    <p className="mb-2 px-1 text-[10px] font-semibold uppercase tracking-widest text-neutral-400 dark:text-neutral-500">
+    <p className="mb-2 px-1 text-[10px] font-semibold uppercase tracking-widest text-neutral-500 dark:text-neutral-400">
       {children}
     </p>
   );
@@ -123,7 +123,7 @@ function ReplayToursRow() {
       </div>
       <div className="min-w-0 flex-1">
         <p className="text-[13px] font-semibold text-neutral-800 dark:text-white">Guided tours</p>
-        <p className="mt-0.5 text-[11px] leading-snug text-neutral-400 dark:text-neutral-500">
+        <p className="mt-0.5 text-[11px] leading-snug text-neutral-500 dark:text-neutral-400">
           {justReset ? "Reset — they'll show again as you visit each tab." : "Short intro to Today, Plans, and Routine"}
         </p>
       </div>
@@ -197,7 +197,7 @@ function AppearanceRow() {
                 className={`flex items-center gap-1.5 rounded-[9px] px-3 py-1.5 text-[11px] font-semibold capitalize transition-colors ${
                   active
                     ? "bg-neutral-900 text-white dark:bg-white dark:text-neutral-900"
-                    : "text-neutral-400 hover:text-neutral-700 dark:text-neutral-500 dark:hover:text-neutral-300"
+                    : "text-neutral-500 hover:text-neutral-700 dark:text-neutral-400 dark:hover:text-neutral-300"
                 }`}
               >
                 {t === "light" ? <IconSun size={11} strokeWidth={2} /> : <IconMoon size={11} strokeWidth={2} />}
@@ -224,7 +224,7 @@ function StartOfDayRow({
     <div className="flex items-start gap-3 px-4 py-3.5 max-sm:flex-col sm:items-center">
       <div className="min-w-0 flex-1">
         <p className="text-[13px] font-semibold text-neutral-800 dark:text-white">Start of day</p>
-        <p className="mt-0.5 text-[11px] leading-snug text-neutral-400 dark:text-neutral-500">
+        <p className="mt-0.5 text-[11px] leading-snug text-neutral-500 dark:text-neutral-400">
           Auto follows the first timed task. A fixed time starts the timeline one hour earlier.
         </p>
       </div>
@@ -243,7 +243,7 @@ function StartOfDayRow({
               </option>
             ))}
           </select>
-          <IconClock size={14} strokeWidth={2} className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-neutral-400" />
+          <IconClock size={14} strokeWidth={2} className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-neutral-500 dark:text-neutral-400" />
         </div>
         <button
           type="button"
@@ -275,7 +275,7 @@ function EndOfDayRow({
     <div className="flex items-start gap-3 px-4 py-3.5 max-sm:flex-col sm:items-center">
       <div className="min-w-0 flex-1">
         <p className="text-[13px] font-semibold text-neutral-800 dark:text-white">End of day</p>
-        <p className="mt-0.5 text-[11px] leading-snug text-neutral-400 dark:text-neutral-500">
+        <p className="mt-0.5 text-[11px] leading-snug text-neutral-500 dark:text-neutral-400">
           The timeline's end. Values after midnight appear as "(next day)".
         </p>
       </div>
@@ -304,7 +304,7 @@ function EndOfDayRow({
               </option>
             ))}
           </select>
-          <IconClock size={14} strokeWidth={2} className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-neutral-400" />
+          <IconClock size={14} strokeWidth={2} className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-neutral-500 dark:text-neutral-400" />
         </div>
         <button
           type="button"
@@ -339,7 +339,7 @@ function SleepNeededRow({
     <div className="flex items-start gap-3 px-4 py-3.5 max-sm:flex-col sm:items-center">
       <div className="min-w-0 flex-1">
         <p className="text-[13px] font-semibold text-neutral-800 dark:text-white">Sleep needed</p>
-        <p className="mt-0.5 text-[11px] leading-snug text-neutral-400 dark:text-neutral-500">
+        <p className="mt-0.5 text-[11px] leading-snug text-neutral-500 dark:text-neutral-400">
           The night you're aiming for. Sets your waking day and warns when the schedule eats into it.
         </p>
       </div>
@@ -357,7 +357,7 @@ function SleepNeededRow({
             </option>
           ))}
         </select>
-        <IconMoon size={14} strokeWidth={2} className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-neutral-400" />
+        <IconMoon size={14} strokeWidth={2} className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-neutral-500 dark:text-neutral-400" />
       </div>
     </div>
   );
@@ -560,7 +560,7 @@ function ClearProgressRow({ onClearProgress }: { onClearProgress: () => Promise<
             </div>
             <div className="min-w-0 flex-1">
               <p className="text-[13px] font-semibold text-neutral-800 dark:text-white">Clear progress</p>
-              <p className="text-[11px] text-neutral-400 dark:text-neutral-500">Resets completions & logs · keeps plans and tasks</p>
+              <p className="text-[11px] text-neutral-500 dark:text-neutral-400">Resets completions & logs · keeps plans and tasks</p>
             </div>
             <button type="button" onClick={() => setPhase("confirm")}
               className="shrink-0 rounded-xl border border-amber-200 bg-amber-50 px-3 py-1.5 text-[11px] font-semibold text-amber-700 transition-colors hover:bg-amber-100 dark:border-amber-500/20 dark:bg-amber-500/10 dark:text-amber-400">
@@ -662,7 +662,7 @@ export function SettingsSheet({
                   <p className="mb-0.5 text-[13px] font-semibold text-neutral-900 dark:text-white">
                     Sign in to sync
                   </p>
-                  <p className="mb-3.5 text-[11px] leading-snug text-neutral-400 dark:text-neutral-500">
+                  <p className="mb-3.5 text-[11px] leading-snug text-neutral-500 dark:text-neutral-400">
                     Back up your data and access it across all your devices.
                   </p>
                   <m.button
@@ -710,7 +710,7 @@ export function SettingsSheet({
                     <p className="truncate text-[14px] font-bold text-neutral-900 dark:text-white">
                       {user?.displayName ?? "User"}
                     </p>
-                    <p className="truncate text-[12px] text-neutral-400 dark:text-neutral-500">
+                    <p className="truncate text-[12px] text-neutral-500 dark:text-neutral-400">
                       {user?.email}
                     </p>
                   </div>
@@ -779,11 +779,11 @@ export function SettingsSheet({
             <SettingsCard>
               <div className="flex items-center gap-3 px-4 py-3.5">
                 <div className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-xl ${aiEnabled ? "bg-[#AD46FF]" : "bg-neutral-200 dark:bg-white/[0.08]"}`}>
-                  <IconSparkles size={14} strokeWidth={2} className={aiEnabled ? "text-white" : "text-neutral-400 dark:text-neutral-500"} />
+                  <IconSparkles size={14} strokeWidth={2} className={aiEnabled ? "text-white" : "text-neutral-500 dark:text-neutral-400"} />
                 </div>
                 <div className="min-w-0 flex-1">
                   <p className="text-[13px] font-semibold text-neutral-800 dark:text-white">AI features</p>
-                  <p className="text-[11px] leading-snug text-neutral-400 dark:text-neutral-500">
+                  <p className="text-[11px] leading-snug text-neutral-500 dark:text-neutral-400">
                     {aiEnabled ? "Assistant, generation, weekly read" : "Every AI button and screen is hidden"}
                   </p>
                 </div>
@@ -801,9 +801,9 @@ export function SettingsSheet({
                     <div className="w-8 shrink-0" />
                     <div className="min-w-0 flex-1">
                       <p className="text-[13px] font-semibold text-neutral-800 dark:text-white">AI Configuration</p>
-                      <p className="text-[11px] text-neutral-400 dark:text-neutral-500">{aiProviderLabel} · Provider, instructions</p>
+                      <p className="text-[11px] text-neutral-500 dark:text-neutral-400">{aiProviderLabel} · Provider, instructions</p>
                     </div>
-                    <IconChevronDown size={14} strokeWidth={2} className="-rotate-90 text-neutral-400" />
+                    <IconChevronDown size={14} strokeWidth={2} className="-rotate-90 text-neutral-500 dark:text-neutral-400" />
                   </button>
                 </>
               )}
@@ -832,10 +832,10 @@ export function SettingsSheet({
         </SettingsCard>
 
         {/* ── Footer ───────────────────────────────────────────────────────── */}
-        <p className="mt-2 text-center text-[11px] font-medium text-neutral-400 dark:text-neutral-500">
+        <p className="mt-2 text-center text-[11px] font-medium text-neutral-500 dark:text-neutral-400">
           {versionLabel()}
         </p>
-        <p className="mt-0.5 text-center text-[10px] text-neutral-300 dark:text-neutral-700">
+        <p className="mt-0.5 text-center text-[10px] text-neutral-500 dark:text-neutral-400">
           PlanR · Goal-oriented planning · <span className="font-mono">{BUILD_ID}</span>
         </p>
       </div>

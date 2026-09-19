@@ -6,9 +6,9 @@ import { IconCheck, IconChevronDown } from "@tabler/icons-react";
 import type { Plan } from "@/lib/useScheduleDB";
 import { PLAN_NEUTRAL } from "@/lib/colorSystem";
 import { SECTION_ICONS } from "@/components/SectionIcons";
+import { typography } from "@/components/ui/Typography";
 
-const SECTION_LABEL =
-  "text-[11px] font-semibold uppercase tracking-[0.08em] text-neutral-400 dark:text-neutral-500";
+const SECTION_LABEL = typography.eyebrow;
 
 export interface PlanSelectorProps {
   plans: Plan[];
@@ -38,7 +38,7 @@ export function PlanSelector({ plans, selectedId, onSelect }: PlanSelectorProps)
     return (
       <div className="rounded-2xl border border-dashed border-neutral-200 p-5 text-center dark:border-white/10">
         <p className="text-[14px] font-semibold text-neutral-700 dark:text-neutral-300">Create a plan first</p>
-        <p className="mt-1 text-[12px] text-neutral-400 dark:text-neutral-500">
+        <p className="mt-1 text-[12px] text-neutral-500 dark:text-neutral-400">
           Tasks need a parent plan.
         </p>
       </div>
@@ -63,14 +63,14 @@ export function PlanSelector({ plans, selectedId, onSelect }: PlanSelectorProps)
             </span>
           </>
         ) : (
-          <span className="flex-1 text-[14px] font-medium text-neutral-400 dark:text-neutral-500">
+          <span className="flex-1 text-[14px] font-medium text-neutral-500 dark:text-neutral-400">
             Select a plan…
           </span>
         )}
         <IconChevronDown
           size={16}
           strokeWidth={2}
-          className={`shrink-0 text-neutral-400 transition-transform duration-150 ${open ? "rotate-180" : ""}`}
+          className={`shrink-0 text-neutral-500 dark:text-neutral-400 transition-transform duration-150 ${open ? "rotate-180" : ""}`}
         />
       </button>
 
@@ -107,7 +107,7 @@ export function PlanSelector({ plans, selectedId, onSelect }: PlanSelectorProps)
                         {plan.title}
                       </p>
                       {plan.description && (
-                        <p className="text-[11px] text-neutral-400 dark:text-neutral-500 truncate">
+                        <p className="text-[11px] text-neutral-500 dark:text-neutral-400 truncate">
                           {plan.description}
                         </p>
                       )}

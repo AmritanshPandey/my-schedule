@@ -144,7 +144,7 @@ function MainTitleSectionInner({
             )}
 
             {counter && (
-              <span className="inline-flex shrink-0 items-center gap-1 tabular-nums text-[13px] font-bold leading-none tracking-[-0.1px] text-neutral-400 dark:text-neutral-500">
+              <span className="inline-flex shrink-0 items-center gap-1 tabular-nums text-[13px] font-bold leading-none tracking-[-0.1px] text-neutral-500 dark:text-neutral-400">
                 <IconChecklist {...ICON.badge} strokeWidth={1.8} />
                 {counter.done}/{counter.total}
               </span>

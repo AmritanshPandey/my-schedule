@@ -219,7 +219,7 @@ export default function DayWallpaperSheet({ open, onClose, schedule, todayKey }:
         {allItems.length > 0 && (
           <div className="mt-4">
             <div className="mb-2 flex items-center justify-between px-0.5">
-              <p className="text-[11px] font-bold uppercase tracking-[0.10em] text-neutral-400 dark:text-neutral-500">
+              <p className="text-[11px] font-bold uppercase tracking-[0.10em] text-neutral-500 dark:text-neutral-400">
                 Include ({items.length}/{allItems.length})
               </p>
               <div className="flex items-center gap-3">
@@ -254,7 +254,7 @@ export default function DayWallpaperSheet({ open, onClose, schedule, todayKey }:
                       i > 0 ? "border-t border-neutral-100 dark:border-white/[0.05]" : ""
                     } ${checked ? "" : "opacity-45"} hover:bg-neutral-50 dark:hover:bg-white/[0.03]`}
                   >
-                    <Icon size={15} strokeWidth={1.8} className="shrink-0 text-neutral-400 dark:text-neutral-500" />
+                    <Icon size={15} strokeWidth={1.8} className="shrink-0 text-neutral-500 dark:text-neutral-400" />
                     <span className="w-[70px] shrink-0 text-[11px] font-bold tabular-nums text-neutral-500 dark:text-neutral-400">
                       {item.time}
                     </span>
@@ -310,7 +310,7 @@ export default function DayWallpaperSheet({ open, onClose, schedule, todayKey }:
           <input ref={fileRef} type="file" accept="image/*" className="hidden" onChange={handlePhotoPick} />
         </div>
 
-        <p className="mt-3 text-center text-[11px] leading-snug text-neutral-400 dark:text-neutral-500">
+        <p className="mt-3 text-center text-[11px] leading-snug text-neutral-500 dark:text-neutral-400">
           The top stays clear for the clock. Save the image, then set it as your
           Lock Screen from Photos.
         </p>

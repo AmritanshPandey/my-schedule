@@ -20,6 +20,7 @@ import {
 import Button from "@/components/ui/Button";
 import IconButton from "@/components/ui/IconButton";
 import { haptic } from "@/lib/haptics";
+import { typography } from "@/components/ui/Typography";
 
 type SetScheduleFn = (updater: (prev: Schedule) => Schedule) => void;
 
@@ -64,7 +65,7 @@ export default function GoalConnectionsSection({ goal, schedule, setSchedule }: 
   return (
     <div>
       <div className="mb-2 flex items-center justify-between gap-2">
-        <p className="text-[11px] font-semibold uppercase tracking-[0.08em] text-neutral-400 dark:text-neutral-500">
+        <p className={typography.eyebrow}>
           Connections
         </p>
         {!adding && linkable.length > 0 && (
@@ -100,7 +101,7 @@ export default function GoalConnectionsSection({ goal, schedule, setSchedule }: 
                   size={14}
                   strokeWidth={2}
                   className={`mt-0.5 shrink-0 ${
-                    warn ? "text-amber-600 dark:text-amber-400" : "text-neutral-400 dark:text-neutral-500"
+                    warn ? "text-amber-600 dark:text-amber-400" : "text-neutral-500 dark:text-neutral-400"
                   }`}
                 />
                 <p
@@ -117,7 +118,7 @@ export default function GoalConnectionsSection({ goal, schedule, setSchedule }: 
       )}
 
       {rows.length === 0 && !adding && (
-        <p className="text-[13px] text-neutral-400 dark:text-neutral-500">
+        <p className="text-[13px] text-neutral-500 dark:text-neutral-400">
           {linkable.length === 0
             ? "Create another goal to connect this one to."
             : "Not connected to anything yet — link a goal this one depends on, supports, or competes with."}
@@ -132,7 +133,7 @@ export default function GoalConnectionsSection({ goal, schedule, setSchedule }: 
               className="flex items-center justify-between gap-2 rounded-xl border border-neutral-200 bg-neutral-50 px-3 py-2 dark:border-white/10 dark:bg-white/[0.04]"
             >
               <div className="flex min-w-0 items-center gap-2">
-                <IconArrowsSplit2 size={13} strokeWidth={2} className="shrink-0 text-neutral-400 dark:text-neutral-500" />
+                <IconArrowsSplit2 size={13} strokeWidth={2} className="shrink-0 text-neutral-500 dark:text-neutral-400" />
                 <p className="min-w-0 truncate text-[13px] text-neutral-700 dark:text-neutral-300">
                   <span className="font-semibold">{perspectiveLabel(perspective)}</span>
                   {" "}

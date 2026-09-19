@@ -342,7 +342,7 @@ export function TaskBlockCard({
   const timeRow = !isMultiSlotList && hasTime ? (
     <div className={`relative flex flex-wrap items-center ${isList ? "gap-2" : "gap-1.5"}`}>
       <span
-        className={`whitespace-nowrap font-extrabold tabular-nums ${isList ? styles.time : "text-neutral-500 dark:text-neutral-400"} ${isList ? "text-[14px]" : compact ? "text-[10px]" : "text-[11px]"}`}
+        className={`whitespace-nowrap font-extrabold tabular-nums ${isList ? styles.time : "text-neutral-600 dark:text-neutral-400"} ${isList ? "text-[14px]" : compact ? "text-[10px]" : "text-[11px]"}`}
       >
         {displaySlots
           .map((s) => `${formatDisplayTime(s.startTime)}${s.endTime ? ` – ${formatDisplayTime(s.endTime)}` : ""}`)

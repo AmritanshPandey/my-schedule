@@ -117,7 +117,7 @@ function Half({
           {task.title}
         </span>
         {!compact && duration && (
-          <span className="truncate text-[9.5px] font-bold tabular-nums text-neutral-500 dark:text-neutral-400">
+          <span className="truncate text-[9.5px] font-bold tabular-nums text-neutral-600 dark:text-neutral-400">
             {formatDisplayTime(slot.startTime)}{slot.endTime ? ` – ${formatDisplayTime(slot.endTime)}` : ""}
           </span>
         )}

@@ -20,6 +20,7 @@ import { localISODate } from "./dateUtils";
 import { resolveMilestoneStatus } from "./roadmapDates";
 import { calculateRitualStats, ritualScheduledOnDate } from "./consistency/calculateRitualStreak";
 import { calculateMilestoneState } from "./milestoneHealth";
+import { milestoneOverdueKey, milestoneRiskKey, ritualAttentionKey } from "./attentionDismissal";
 
 /** How far back a missed task still counts as worth catching up on. */
 export const MISSED_LOOKBACK_DAYS = 7;
@@ -98,13 +99,20 @@ export function selectNeedsAttention(
   const isPaused = (planId: string | undefined) =>
     !!planId && !isPlanRunning(plansById.get(planId));
 
+  // Rows the user has explicitly waved away. Keyed per instance (see
+  // lib/attentionDismissal.ts), so dismissing today's warning never silences
+  // tomorrow's, and dismissing "off pace" never hides the milestone actually
+  // going overdue later.
+  const dismissed = new Set(schedule.preferences?.acknowledgedAttention ?? []);
+
   // ── Rituals whose run ends tonight unless acted on ───────────────────────
   const yesterdayISO = shiftISO(todayISO, -1);
   const trackingStart = schedule.preferences?.startDate;
   const atRiskRituals: AtRiskRitual[] = (schedule.rituals ?? [])
     .filter((r) => {
       const dueToday = ritualScheduledOnDate(r, todayISO, trackingStart);
-      return dueToday && !completedRitualIds.has(r.id);
+      if (!dueToday || completedRitualIds.has(r.id)) return false;
+      return !dismissed.has(ritualAttentionKey(r.id, todayISO));
     })
     // The shared, trackingType/recurrence-aware helper — the old inline walk
     // here only ever checked `repeatDays` via exact-date lookups, so a
@@ -118,7 +126,10 @@ export function selectNeedsAttention(
   // resolveMilestoneStatus is the same helper the roadmap uses, so a milestone
   // can never read "delayed" here and something else on the plan page.
   const overdueMilestones: OverdueMilestone[] = (schedule.milestones ?? [])
-    .filter((m) => !isPaused(m.planId) && resolveMilestoneStatus(m, todayISO) === "delayed")
+    .filter((m) =>
+      !isPaused(m.planId)
+      && !dismissed.has(milestoneOverdueKey(m.id, m.plannedEndDate))
+      && resolveMilestoneStatus(m, todayISO) === "delayed")
     .map((milestone) => ({
       milestone,
       plan: plansById.get(milestone.planId) ?? null,
@@ -138,6 +149,7 @@ export function selectNeedsAttention(
   const atRiskMilestones: AtRiskMilestone[] = (schedule.milestones ?? [])
     .flatMap((milestone) => {
       if (resolveMilestoneStatus(milestone, todayISO) !== "active") return [];
+      if (dismissed.has(milestoneRiskKey(milestone.id, milestone.plannedEndDate))) return [];
       const plan = plansById.get(milestone.planId);
       if (!plan || !isPlanRunning(plan)) return [];
       const state = calculateMilestoneState({

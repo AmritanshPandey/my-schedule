@@ -152,7 +152,7 @@ function MilestoneDetail({
             </p>
           )}
           {/* Meta row */}
-          <div className="mt-1.5 flex flex-wrap items-center gap-3 text-[11px] text-neutral-400 dark:text-neutral-500">
+          <div className="mt-1.5 flex flex-wrap items-center gap-3 text-[11px] text-neutral-500 dark:text-neutral-400">
             <span>📅 Target: {dateLabel}</span>
             {milestone.linkedActivities.length > 0 && (
               <span>
@@ -169,7 +169,7 @@ function MilestoneDetail({
         <button
           type="button"
           onClick={onClose}
-          className="shrink-0 rounded-lg p-1 text-[16px] leading-none text-neutral-400 transition-colors hover:text-neutral-700 dark:hover:text-neutral-200"
+          className="shrink-0 rounded-lg p-1 text-[16px] leading-none text-neutral-500 dark:text-neutral-400 transition-colors hover:text-neutral-700 dark:hover:text-neutral-200"
         >
           ×
         </button>
@@ -297,12 +297,12 @@ export default function MilestoneTimeline({ schedule }: MilestoneTimelineProps) 
     return (
       <div className="rounded-2xl border border-neutral-200/70 bg-white dark:border-white/[0.07] dark:bg-neutral-900 px-5 py-5">
         <div className="mb-3 flex items-center gap-1.5">
-          <IconMap2 size={13} strokeWidth={2.2} className="text-neutral-400 dark:text-neutral-500" />
-          <p className="text-[11px] font-bold uppercase tracking-[0.08em] text-neutral-400 dark:text-neutral-500">
+          <IconMap2 size={13} strokeWidth={2.2} className="text-neutral-500 dark:text-neutral-400" />
+          <p className="text-[11px] font-bold uppercase tracking-[0.08em] text-neutral-600 dark:text-neutral-400">
             Milestone Roadmap
           </p>
         </div>
-        <p className="text-[13px] text-neutral-400 dark:text-neutral-500">
+        <p className="text-[13px] text-neutral-500 dark:text-neutral-400">
           No milestones with target dates yet. Add milestones from a plan.
         </p>
       </div>
@@ -317,8 +317,8 @@ export default function MilestoneTimeline({ schedule }: MilestoneTimelineProps) 
     <div className="rounded-2xl border border-neutral-200/70 bg-white dark:border-white/[0.07] dark:bg-neutral-900 py-4">
       {/* Section header */}
       <div className="mb-3 flex items-center gap-1.5 px-4">
-        <IconMap2 size={13} strokeWidth={2.2} className="text-neutral-400 dark:text-neutral-500" />
-        <p className="text-[11px] font-bold uppercase tracking-[0.08em] text-neutral-400 dark:text-neutral-500">
+        <IconMap2 size={13} strokeWidth={2.2} className="text-neutral-500 dark:text-neutral-400" />
+        <p className="text-[11px] font-bold uppercase tracking-[0.08em] text-neutral-600 dark:text-neutral-400">
           Milestone Roadmap
         </p>
       </div>
@@ -338,7 +338,7 @@ export default function MilestoneTimeline({ schedule }: MilestoneTimelineProps) 
             {monthMarks.map(({ label, offsetDays }) => (
               <span
                 key={label}
-                className="absolute top-0 text-[9.5px] font-semibold text-neutral-400 dark:text-neutral-500"
+                className="absolute top-0 text-[9.5px] font-semibold text-neutral-500 dark:text-neutral-400"
                 style={{ left: LABEL_W + offsetDays * PX_PER_DAY + 4 }}
               >
                 {label}
@@ -455,13 +455,13 @@ export default function MilestoneTimeline({ schedule }: MilestoneTimelineProps) 
         ).map(({ cls, label }) => (
           <div key={label} className="flex items-center gap-1.5">
             <div className={`h-2.5 w-2.5 rounded-full ${cls}`} />
-            <span className="text-[10px] text-neutral-400 dark:text-neutral-500">{label}</span>
+            <span className="text-[10px] text-neutral-500 dark:text-neutral-400">{label}</span>
           </div>
         ))}
-        <span className="text-[10px] text-neutral-400 dark:text-neutral-500">
+        <span className="text-[10px] text-neutral-500 dark:text-neutral-400">
           · number = linked tasks
         </span>
-        <span className="text-[10px] text-neutral-400 dark:text-neutral-500">
+        <span className="text-[10px] text-neutral-500 dark:text-neutral-400">
           · ring = task progress (upcoming milestones)
         </span>
       </div>

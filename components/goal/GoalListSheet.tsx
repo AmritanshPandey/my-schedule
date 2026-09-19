@@ -22,6 +22,7 @@ import {
 } from "@tabler/icons-react";
 import GoalFormSheet from "./GoalFormSheet";
 import GoalConnectionsSection from "./GoalConnectionsSection";
+import { typography } from "@/components/ui/Typography";
 
 type SetScheduleFn = (updater: (prev: Schedule) => Schedule) => void;
 
@@ -81,7 +82,7 @@ function GoalProgressBlock({ state, compact = false }: { state: GoalProgressStat
           right is how far along the goal is *across* them. Unlabelled, "2/5"
           beside "93%" reads as an arithmetic error. */}
       <div className="mb-1 flex items-baseline justify-between gap-2">
-        <span className="text-[11px] font-semibold text-neutral-400 dark:text-neutral-500">
+        <span className="text-[11px] font-semibold text-neutral-500 dark:text-neutral-400">
           {state.milestonesCompleted} of {state.milestoneTotal} done
         </span>
         {state.progress !== null && (
@@ -166,7 +167,7 @@ export default function GoalListSheet({ open, onClose, schedule, setSchedule, on
                     <HealthBadge health={progressByGoal.get(selectedGoal.id)!.health} />
                   )}
                   {formatDate(selectedGoal.targetDate) && (
-                    <span className="text-[12px] text-neutral-400 dark:text-neutral-500">
+                    <span className="text-[12px] text-neutral-500 dark:text-neutral-400">
                       Target {formatDate(selectedGoal.targetDate)}
                     </span>
                   )}
@@ -191,7 +192,7 @@ export default function GoalListSheet({ open, onClose, schedule, setSchedule, on
                     <GoalProgressBlock state={progress} />
                     {progress.nextMilestone && (
                       <div className="mt-3 border-t border-neutral-200 pt-3 dark:border-white/[0.08]">
-                        <p className="text-[11px] font-semibold uppercase tracking-[0.08em] text-neutral-400 dark:text-neutral-500">
+                        <p className={typography.eyebrow}>
                           Next milestone
                         </p>
                         <p className="mt-1 truncate text-[13px] font-semibold text-neutral-900 dark:text-white">
@@ -239,14 +240,14 @@ export default function GoalListSheet({ open, onClose, schedule, setSchedule, on
               <GoalConnectionsSection goal={selectedGoal} schedule={schedule} setSchedule={setSchedule} />
 
               <div>
-                <p className="mb-2 text-[11px] font-semibold uppercase tracking-[0.08em] text-neutral-400 dark:text-neutral-500">
+                <p className={`mb-2 ${typography.eyebrow}`}>
                   Plans
                 </p>
                 {(() => {
                   const linkedPlans = plansForGoal(schedule, selectedGoal.id);
                   if (linkedPlans.length === 0) {
                     return (
-                      <p className="text-[13px] text-neutral-400 dark:text-neutral-500">
+                      <p className="text-[13px] text-neutral-500 dark:text-neutral-400">
                         No plans linked yet — link one from a Plan&apos;s Goal field.
                       </p>
                     );
@@ -299,17 +300,17 @@ export default function GoalListSheet({ open, onClose, schedule, setSchedule, on
                             <div className="mt-1 flex flex-wrap items-center gap-2">
                               <StatusPill status={goal.status} />
                               {formatDate(goal.targetDate) && (
-                                <span className="text-[11px] text-neutral-400 dark:text-neutral-500">
+                                <span className="text-[11px] text-neutral-500 dark:text-neutral-400">
                                   Target {formatDate(goal.targetDate)}
                                 </span>
                               )}
-                              <span className="text-[11px] text-neutral-400 dark:text-neutral-500">
+                              <span className="text-[11px] text-neutral-500 dark:text-neutral-400">
                                 {progress.planCount} {progress.planCount === 1 ? "plan" : "plans"}
                               </span>
                             </div>
                             <GoalProgressBlock state={progress} compact />
                           </div>
-                          <IconChevronRight size={16} className="shrink-0 text-neutral-300 dark:text-neutral-600" />
+                          <IconChevronRight size={16} className="shrink-0 text-neutral-400 dark:text-neutral-500" />
                         </button>
                       );
                     })}

@@ -215,7 +215,7 @@ function CtrlButton({
       aria-label={label}
       className={`flex h-8 min-w-8 items-center justify-center rounded-lg px-2 transition-colors disabled:opacity-30 ${
         danger
-          ? "text-neutral-400 hover:bg-rose-500/10 hover:text-rose-500 focus-visible:bg-rose-500/10 focus-visible:text-rose-500 dark:text-neutral-500 dark:hover:bg-rose-500/10 dark:hover:text-rose-400"
+          ? "text-neutral-500 hover:bg-rose-500/10 hover:text-rose-500 focus-visible:bg-rose-500/10 focus-visible:text-rose-500 dark:text-neutral-400 dark:hover:bg-rose-500/10 dark:hover:text-rose-400"
           : "text-neutral-500 hover:bg-neutral-100 dark:text-neutral-400 dark:hover:bg-white/[0.06]"
       }`}
     >

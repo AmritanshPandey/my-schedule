@@ -192,7 +192,7 @@ export default function BackupRows({
         </div>
         <div className="min-w-0 flex-1">
           <p className="text-[13px] font-semibold text-neutral-800 dark:text-white">Export backup</p>
-          <p className="mt-0.5 text-[11px] leading-snug text-neutral-400 dark:text-neutral-500">
+          <p className="mt-0.5 text-[11px] leading-snug text-neutral-500 dark:text-neutral-400">
             Downloads everything as a JSON file · plans, history, notes
           </p>
         </div>
@@ -211,7 +211,7 @@ export default function BackupRows({
         </div>
         <div className="min-w-0 flex-1">
           <p className="text-[13px] font-semibold text-neutral-800 dark:text-white">Export for AI analysis</p>
-          <p className="mt-0.5 text-[11px] leading-snug text-neutral-400 dark:text-neutral-500">
+          <p className="mt-0.5 text-[11px] leading-snug text-neutral-500 dark:text-neutral-400">
             Readable Markdown · paste into an AI chat to review execution
           </p>
         </div>
@@ -237,7 +237,7 @@ export default function BackupRows({
             </div>
             <div className="min-w-0 flex-1">
               <p className="text-[13px] font-semibold text-neutral-800 dark:text-white">Restore from backup</p>
-              <p className="mt-0.5 text-[11px] leading-snug text-neutral-400 dark:text-neutral-500">
+              <p className="mt-0.5 text-[11px] leading-snug text-neutral-500 dark:text-neutral-400">
                 Replaces current data with the file&apos;s contents
               </p>
             </div>
@@ -263,7 +263,7 @@ export default function BackupRows({
             </div>
             <div className="min-w-0 flex-1">
               <p className="text-[13px] font-semibold text-neutral-800 dark:text-white">Load demo data</p>
-              <p className="mt-0.5 text-[11px] leading-snug text-neutral-400 dark:text-neutral-500">
+              <p className="mt-0.5 text-[11px] leading-snug text-neutral-500 dark:text-neutral-400">
                 Ten weeks of sample history · see every screen with real numbers
               </p>
             </div>
@@ -291,14 +291,14 @@ export default function BackupRows({
             </div>
             <div className="min-w-0 flex-1">
               <p className="text-[13px] font-semibold text-neutral-800 dark:text-white">Version history</p>
-              <p className="mt-0.5 text-[11px] leading-snug text-neutral-400 dark:text-neutral-500">
+              <p className="mt-0.5 text-[11px] leading-snug text-neutral-500 dark:text-neutral-400">
                 Daily cloud snapshots · roll back if something goes wrong
               </p>
             </div>
             <IconChevronDown
               size={14}
               strokeWidth={2}
-              className={`shrink-0 text-neutral-400 transition-transform ${historyOpen ? "rotate-180" : ""}`}
+              className={`shrink-0 text-neutral-500 dark:text-neutral-400 transition-transform ${historyOpen ? "rotate-180" : ""}`}
             />
           </button>
           <AnimatePresence initial={false}>
@@ -313,10 +313,10 @@ export default function BackupRows({
                   {historyLoading ? (
                     <div className="flex items-center gap-2 py-2">
                       <span className="h-3.5 w-3.5 animate-spin rounded-full border-2 border-neutral-200 border-t-neutral-600 dark:border-neutral-700 dark:border-t-neutral-300" />
-                      <span className="text-[11px] font-medium text-neutral-400 dark:text-neutral-500">Loading snapshots…</span>
+                      <span className="text-[11px] font-medium text-neutral-500 dark:text-neutral-400">Loading snapshots…</span>
                     </div>
                   ) : !history || history.length === 0 ? (
-                    <p className="py-2 text-[11px] text-neutral-400 dark:text-neutral-500">
+                    <p className="py-2 text-[11px] text-neutral-500 dark:text-neutral-400">
                       No snapshots yet — one is saved automatically with the first sync of each day.
                     </p>
                   ) : (

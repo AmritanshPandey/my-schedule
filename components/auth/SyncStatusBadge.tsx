@@ -27,7 +27,7 @@ function badge(status: SyncStatus, lastSyncedAt: number) {
       return {
         icon: <IconCloudUpload size={11} strokeWidth={2} className="animate-pulse" />,
         label: "Syncing…",
-        className: "text-neutral-400 dark:text-neutral-500",
+        className: "text-neutral-500 dark:text-neutral-400",
       };
     case "offline":
       return {

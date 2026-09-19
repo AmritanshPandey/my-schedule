@@ -98,7 +98,7 @@ function PlanDraftCard({ action, onApply }: { action: Extract<AIActionResult, { 
         <span className="rounded-md bg-emerald-100 px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wide text-emerald-700 dark:bg-emerald-500/20 dark:text-emerald-400">
           New Plan
         </span>
-        <span className="text-[10px] text-neutral-400 dark:text-neutral-500">Review and edit before creating</span>
+        <span className="text-[10px] text-neutral-500 dark:text-neutral-400">Review and edit before creating</span>
       </div>
 
       {/* Icon preview + Title */}
@@ -130,7 +130,7 @@ function PlanDraftCard({ action, onApply }: { action: Extract<AIActionResult, { 
                 selected ? st.tint + " ring-1 ring-inset ring-current/20" : "hover:bg-neutral-100 dark:hover:bg-white/[0.06]"
               }`}
             >
-              <entry.icon size={14} strokeWidth={1.8} className={selected ? st.text : "text-neutral-400 dark:text-neutral-500"} />
+              <entry.icon size={14} strokeWidth={1.8} className={selected ? st.text : "text-neutral-500 dark:text-neutral-400"} />
             </button>
           );
         })}
@@ -162,7 +162,7 @@ function PlanDraftCard({ action, onApply }: { action: Extract<AIActionResult, { 
         <div className="mb-2.5">
           <div className="mb-1.5 flex items-center justify-between">
             <p className="text-[11px] font-semibold text-neutral-500 dark:text-neutral-400">{tasks.length} task{tasks.length !== 1 ? "s" : ""} generated</p>
-            <button type="button" onClick={() => setTasks([])} className="text-[10px] text-neutral-400 hover:text-rose-500 dark:hover:text-rose-400">Remove all</button>
+            <button type="button" onClick={() => setTasks([])} className="text-[10px] text-neutral-500 dark:text-neutral-400 hover:text-rose-500 dark:hover:text-rose-400">Remove all</button>
           </div>
           <div className="flex flex-col gap-1">
             {tasks.map((t, i) => {
@@ -183,15 +183,15 @@ function PlanDraftCard({ action, onApply }: { action: Extract<AIActionResult, { 
                           `truncate` and lets long titles push the row wider
                           than the card. */}
                       <span className="min-w-0 truncate text-[11px] font-semibold text-neutral-800 dark:text-neutral-200">{t.title}</span>
-                      <span className="ml-auto shrink-0 text-[10px] text-neutral-400">{formatDisplayTime(t.startTime)}–{formatDisplayTime(t.endTime)}</span>
+                      <span className="ml-auto shrink-0 text-[10px] text-neutral-500 dark:text-neutral-400">{formatDisplayTime(t.startTime)}–{formatDisplayTime(t.endTime)}</span>
                     </div>
                     {t.subtasks && t.subtasks.length > 0 && (
-                      <p className="mt-0.5 text-[10px] text-neutral-400 dark:text-neutral-500 truncate">
+                      <p className="mt-0.5 text-[10px] text-neutral-500 dark:text-neutral-400 truncate">
                         {t.subtasks.join(" · ")}
                       </p>
                     )}
                   </div>
-                  <button type="button" onClick={() => setTasks((prev) => prev.filter((_, j) => j !== i))} className="shrink-0 text-neutral-300 hover:text-rose-500 dark:text-neutral-600 dark:hover:text-rose-400">
+                  <button type="button" onClick={() => setTasks((prev) => prev.filter((_, j) => j !== i))} className="shrink-0 text-neutral-500 hover:text-rose-500 dark:text-neutral-400 dark:hover:text-rose-400">
                     <IconX size={12} strokeWidth={2} />
                   </button>
                 </div>
@@ -209,12 +209,12 @@ function PlanDraftCard({ action, onApply }: { action: Extract<AIActionResult, { 
           this card's own compact sizing, kept as-is. */}
       <div className="mb-3 flex gap-2">
         <div className="flex-1">
-          <p className="mb-0.5 text-[10px] font-medium text-neutral-400">Start date</p>
+          <p className="mb-0.5 text-[10px] font-medium text-neutral-500 dark:text-neutral-400">Start date</p>
           <input type="date" value={startDate} onChange={(e) => setStart(e.target.value)}
             className="w-[144px] rounded-xl border border-neutral-200 bg-neutral-50 px-2.5 py-1.5 text-[11px] text-neutral-700 outline-none transition-colors focus:border-neutral-300 focus:bg-white dark:border-white/[0.08] dark:bg-white/[0.04] dark:text-neutral-300 dark:focus:border-white/20 dark:focus:bg-white/[0.07] dark:[color-scheme:dark]" />
         </div>
         <div className="flex-1">
-          <p className="mb-0.5 text-[10px] font-medium text-neutral-400">End date</p>
+          <p className="mb-0.5 text-[10px] font-medium text-neutral-500 dark:text-neutral-400">End date</p>
           <input type="date" value={endDate} onChange={(e) => setEnd(e.target.value)}
             className="w-[144px] rounded-xl border border-neutral-200 bg-neutral-50 px-2.5 py-1.5 text-[11px] text-neutral-700 outline-none transition-colors focus:border-neutral-300 focus:bg-white dark:border-white/[0.08] dark:bg-white/[0.04] dark:text-neutral-300 dark:focus:border-white/20 dark:focus:bg-white/[0.07] dark:[color-scheme:dark]" />
         </div>
@@ -390,7 +390,7 @@ function ActionCard({
           </span>
           <p className="mt-1 truncate text-[13px] font-semibold text-neutral-900 dark:text-white">{title}</p>
           {detail && (
-            <p className={`mt-0.5 truncate text-[11px] leading-relaxed ${warn ? "text-amber-600 dark:text-amber-400" : "text-neutral-400 dark:text-neutral-500"}`}>
+            <p className={`mt-0.5 truncate text-[11px] leading-relaxed ${warn ? "text-amber-600 dark:text-amber-400" : "text-neutral-500 dark:text-neutral-400"}`}>
               {warn ? "⚠ " : ""}{detail}
             </p>
           )}
@@ -820,7 +820,7 @@ export function AIPanel({ context, plans, rituals, schedule, activePlan, initial
                       </span>
                       {starter.label}
                     </span>
-                    <IconArrowRight size={14} strokeWidth={2} className="ml-2 shrink-0 text-neutral-400 dark:text-white/70" />
+                    <IconArrowRight size={14} strokeWidth={2} className="ml-2 shrink-0 text-neutral-500 dark:text-neutral-400 dark:text-white/70" />
                   </m.button>
                 ))}
               </div>
@@ -919,7 +919,7 @@ export function AIPanel({ context, plans, rituals, schedule, activePlan, initial
             <IconSend size={13} strokeWidth={2.5} />
           </m.button>
         </m.div>
-        <p className="mt-1.5 text-[10px] text-neutral-400 dark:text-white/50">
+        <p className="mt-1.5 text-[10px] text-neutral-500 dark:text-neutral-400 dark:text-white/50">
           Shift+Enter for new line · Enter to send
         </p>
       </div>

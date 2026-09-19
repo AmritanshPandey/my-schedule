@@ -47,7 +47,7 @@ export default function TrackerQuickBar({
   return (
     <div className="mb-3">
       {/* Section label */}
-      <p className="mb-1.5 text-[11px] font-semibold uppercase tracking-wide text-neutral-400 dark:text-neutral-500">
+      <p className="mb-1.5 text-[11px] font-semibold uppercase tracking-wide text-neutral-500 dark:text-neutral-400">
         Trackers
       </p>
 
@@ -88,7 +88,7 @@ export default function TrackerQuickBar({
                   <p className="max-w-[100px] truncate text-[12px] font-semibold text-neutral-800 dark:text-neutral-200 leading-tight">
                     {tracker.title}
                   </p>
-                  <p className="text-[11px] text-neutral-400 dark:text-neutral-500 leading-tight tabular-nums">
+                  <p className="text-[11px] text-neutral-500 dark:text-neutral-400 leading-tight tabular-nums">
                     {lastValueDisplay}
                   </p>
                 </div>

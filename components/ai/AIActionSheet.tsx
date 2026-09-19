@@ -15,6 +15,7 @@ import { getAIProviderState, AI_SETTINGS_CHANGED_EVENT } from "@/lib/ai/config";
 import { BrowserAIStatusBar } from "@/components/ai/BrowserAIStatusBar";
 import { AIThinkingDots } from "@/components/ai/AIThinkingStatus";
 import { AIErrorBanner } from "@/components/ai/AIErrorBanner";
+import { typography } from "@/components/ui/Typography";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -255,14 +256,14 @@ export default function AIActionSheet({
             <div>
               <p className="text-[16px] font-bold text-neutral-900 dark:text-white">{title}</p>
               {contextLabel && (
-                <p className="text-[12px] font-medium text-neutral-400 dark:text-neutral-500">{contextLabel}</p>
+                <p className="text-[12px] font-medium text-neutral-500 dark:text-neutral-400">{contextLabel}</p>
               )}
             </div>
           </div>
           <button
             type="button"
             onClick={onClose}
-            className="mt-1.5 flex h-7 w-7 items-center justify-center rounded-full text-neutral-400 transition-colors hover:bg-neutral-100 hover:text-neutral-600 dark:hover:bg-white/[0.06] dark:hover:text-neutral-300"
+            className="mt-1.5 flex h-7 w-7 items-center justify-center rounded-full text-neutral-500 dark:text-neutral-400 transition-colors hover:bg-neutral-100 hover:text-neutral-600 dark:hover:bg-white/[0.06] dark:hover:text-neutral-300"
           >
             <IconX size={15} strokeWidth={2} />
           </button>
@@ -281,7 +282,7 @@ export default function AIActionSheet({
             >
               {/* Goal input */}
               <div className="mb-4">
-                <p className="mb-1.5 text-[11px] font-semibold uppercase tracking-[0.08em] text-neutral-400 dark:text-neutral-500">
+                <p className={`mb-1.5 ${typography.eyebrow}`}>
                   Your goal
                 </p>
                 <textarea
@@ -298,7 +299,7 @@ export default function AIActionSheet({
               {/* Quick picks */}
               {quickPicks.length > 0 && (
                 <div className="mb-5">
-                  <p className="mb-2 text-[11px] font-semibold uppercase tracking-[0.08em] text-neutral-400 dark:text-neutral-500">
+                  <p className={`mb-2 ${typography.eyebrow}`}>
                     Focus areas
                   </p>
                   <div className="flex flex-wrap gap-2">
@@ -380,7 +381,7 @@ export default function AIActionSheet({
               transition={{ duration: 0.18 }}
             >
               <div className="mb-4 rounded-xl border border-emerald-100 bg-emerald-50/60 px-3.5 py-2.5 dark:border-emerald-500/15 dark:bg-emerald-500/5">
-                <p className="mb-1 flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-[0.08em] text-emerald-700 dark:text-emerald-400">
+                <p className="mb-1 flex items-center gap-1.5 text-[11px] font-bold uppercase tracking-[0.08em] text-emerald-700 dark:text-emerald-400">
                   <IconSparkles size={11} strokeWidth={2.2} />
                   One quick thing
                 </p>
@@ -451,7 +452,7 @@ export default function AIActionSheet({
             >
               {/* Result header */}
               <div className="mb-3 flex items-center justify-between">
-                <p className="text-[11px] font-semibold uppercase tracking-[0.08em] text-neutral-400 dark:text-neutral-500">
+                <p className={typography.eyebrow}>
                   {results.length} {results.length === 1 ? resultSingular : resultPlural} ready — select to add
                 </p>
                 <button
@@ -494,7 +495,7 @@ export default function AIActionSheet({
                           {item.label}
                         </p>
                         {item.meta && (
-                          <p className="mt-0.5 text-[11px] font-medium text-neutral-400 dark:text-neutral-500">
+                          <p className="mt-0.5 text-[11px] font-medium text-neutral-500 dark:text-neutral-400">
                             {item.meta}
                           </p>
                         )}

@@ -40,7 +40,7 @@ function SubRow({
       <div className="min-w-0 flex-1">
         <p className="text-[12px] font-semibold text-neutral-700 dark:text-neutral-200">{label}</p>
         {description && (
-          <p className="mt-0.5 text-[11px] leading-snug text-neutral-400 dark:text-neutral-500">{description}</p>
+          <p className="mt-0.5 text-[11px] leading-snug text-neutral-500 dark:text-neutral-400">{description}</p>
         )}
       </div>
       <Toggle on={on} onChange={onChange} label={label} />
@@ -161,12 +161,12 @@ export default function RemindersRows() {
   if (support === "unsupported") {
     return (
       <div className="flex items-center gap-3 px-4 py-3.5">
-        <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl border border-neutral-100 bg-neutral-50 text-neutral-400 dark:border-white/[0.06] dark:bg-white/[0.04] dark:text-neutral-500">
+        <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl border border-neutral-100 bg-neutral-50 text-neutral-500 dark:border-white/[0.06] dark:bg-white/[0.04] dark:text-neutral-400">
           <IconBellOff size={14} strokeWidth={2} />
         </div>
         <div className="min-w-0 flex-1">
           <p className="text-[13px] font-semibold text-neutral-800 dark:text-white">Reminders</p>
-          <p className="mt-0.5 text-[11px] leading-snug text-neutral-400 dark:text-neutral-500">
+          <p className="mt-0.5 text-[11px] leading-snug text-neutral-500 dark:text-neutral-400">
             Notifications aren&apos;t available in this browser. On iPhone, add PlanR to your Home Screen first.
           </p>
         </div>
@@ -184,7 +184,7 @@ export default function RemindersRows() {
         </div>
         <div className="min-w-0 flex-1">
           <p className="text-[13px] font-semibold text-neutral-800 dark:text-white">Reminders</p>
-          <p className="mt-0.5 text-[11px] leading-snug text-neutral-400 dark:text-neutral-500">
+          <p className="mt-0.5 text-[11px] leading-snug text-neutral-500 dark:text-neutral-400">
             {backgroundCapable
               ? "At your task and routine times — even when PlanR is closed"
               : "At your task and routine times, while PlanR is open"}
@@ -240,7 +240,7 @@ export default function RemindersRows() {
                         <option key={o.value} value={o.value}>{o.label}</option>
                       ))}
                     </select>
-                    <IconClock size={14} strokeWidth={2} className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-neutral-400" />
+                    <IconClock size={14} strokeWidth={2} className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-neutral-500 dark:text-neutral-400" />
                    </div>
                  </div>
                )}

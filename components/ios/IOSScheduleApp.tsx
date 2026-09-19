@@ -3,7 +3,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import dynamic from "next/dynamic";
 import {
-  IconDotsVertical,
   IconAlertCircle,
   IconAlertTriangle,
   IconCalendar,
@@ -29,6 +28,7 @@ import { ErrorBoundary } from "@/components/ErrorBoundary";
 import type { CategoryDraft } from "@/components/category/CategorySheet";
 import IOSBottomNav from "@/components/ios/IOSBottomNav";
 import IOSTimelineRow from "@/components/ios/IOSTimelineRow";
+import IOSMergedTimelineRow from "@/components/ios/IOSMergedTimelineRow";
 import { useNowMinutes } from "@/lib/timeline/useNowMinutes";
 import SignInPrompt from "@/components/auth/SignInPrompt";
 import TodayTaskList from "@/components/today/TodayTaskList";
@@ -82,6 +82,7 @@ import {
   addSubtaskToTasks,
   type TaskRemovalScope,
 } from "@/lib/taskMutations";
+import { mergeTasks, unmergeTask, findMergePairs } from "@/lib/taskMerge";
 import { completionForDate, getTaskCheckableItems, getTaskSubtaskSummary, isTaskCompleted, isTaskResolved, isTrackedTask, markTaskMissed, snoozeTaskLater, toggleSlotComplete, toggleSubtaskComplete, toggleTaskFromCheckbox } from "@/lib/taskCompletion";
 import { diffException, isTaskScheduledOn, occurrenceNote, resolveOccurrence } from "@/lib/taskOccurrence";
 import { cascadeMilestoneDates, moveMilestone, normalizeMilestoneTimeline } from "@/lib/roadmapDates";
@@ -89,6 +90,7 @@ import { toggleRitualCompletion, appendRitualLog, undoLastRitualLog, toggleRitua
 import { MAX_RITUALS } from "@/lib/ritualColors";
 import { deleteGoal } from "@/lib/goalMutations";
 import { togglePlanPaused } from "@/lib/planLifecycle";
+import { dismissAllAttention, dismissibleCount } from "@/lib/attentionDismissal";
 import { applyAdaptation } from "@/lib/milestoneAdaptation";
 import { calculateMilestoneState } from "@/lib/milestoneHealth";
 import AdaptMilestoneSheet from "@/components/plan/AdaptMilestoneSheet";
@@ -284,7 +286,7 @@ function EmptyPanel({
   return (
     <div className="rounded-2xl border border-dashed border-neutral-200 bg-white px-5 py-8 text-center dark:border-white/[0.10] dark:bg-neutral-900">
       <div className="mx-auto mb-3 flex h-10 w-10 items-center justify-center rounded-xl bg-neutral-100 dark:bg-white/[0.06]">
-        <Icon size={19} strokeWidth={1.8} className="text-neutral-400 dark:text-neutral-500" />
+        <Icon size={19} strokeWidth={1.8} className="text-neutral-500 dark:text-neutral-400" />
       </div>
       <p className="text-[16px] font-extrabold text-neutral-900 dark:text-white">{title}</p>
       <p className="mx-auto mt-1 max-w-[260px] text-[13px] font-medium leading-snug text-neutral-500 dark:text-neutral-400">{description}</p>
@@ -908,6 +910,27 @@ export default function IOSScheduleApp() {
     });
   }
 
+  /**
+   * Clear every row on "Needs attention".
+   *
+   * Dismissal only — no miss event, milestone date or streak is touched, so
+   * analytics stay honest and each row returns if the same problem recurs on
+   * a new day or against a new target. The undo restores `preferences`
+   * wholesale rather than removing keys, so it cannot strip a dismissal the
+   * user made separately before pressing it.
+   */
+  function handleClearAttention() {
+    const cleared = dismissibleCount(needsAttention);
+    if (cleared === 0) return;
+    const previous = schedule.preferences;
+    setSchedule((prev) => dismissAllAttention(prev, needsAttention, todayISO()));
+    setToast({
+      message: `Cleared ${cleared} item${cleared === 1 ? "" : "s"}`,
+      actionLabel: "Undo",
+      onAction: () => setSchedule((prev) => ({ ...prev, preferences: previous })),
+    });
+  }
+
   function handleDeleteGoal(goalId: string) {
     const goal = schedule.goals?.find((item) => item.id === goalId);
     openConfirm({
@@ -1096,6 +1119,35 @@ export default function IOSScheduleApp() {
         return toScheduleDayMinutes(am ?? 0) - toScheduleDayMinutes(bm ?? 0);
       });
 
+    // Two tasks sharing a `mergeGroupId` (lib/taskMerge.ts) share one row
+    // instead of two separate ones. `rows` already has the `{task, ...}`
+    // shape findMergePairs wants; only single rows keep the progress-spine
+    // isCurrent/isPast treatment below — a merged row's two tasks make
+    // "which one is current" ambiguous, so it's left out (same v1 scope cut
+    // as the desktop grid).
+    const mergePairs = findMergePairs(rows);
+    const partnerOf = new Map<(typeof rows)[number], (typeof rows)[number]>();
+    for (const [a, b] of mergePairs.values()) {
+      partnerOf.set(a, b);
+      partnerOf.set(b, a);
+    }
+    const consumedRows = new Set<(typeof rows)[number]>();
+    const groupedRows: Array<
+      | { kind: "single"; row: (typeof rows)[number] }
+      | { kind: "merged"; primary: (typeof rows)[number]; partner: (typeof rows)[number] }
+    > = [];
+    for (const row of rows) {
+      if (consumedRows.has(row)) continue;
+      const partner = partnerOf.get(row);
+      if (partner) {
+        consumedRows.add(row);
+        consumedRows.add(partner);
+        groupedRows.push({ kind: "merged", primary: row, partner });
+      } else {
+        groupedRows.push({ kind: "single", row });
+      }
+    }
+
     // Progress spine, today only: currentKey = the row whose slot window contains
     // "now" (the green pulsing ring); pastKeys = every row whose slot has already
     // elapsed. The connector fills emerald continuously up to now — including
@@ -1136,7 +1188,7 @@ export default function IOSScheduleApp() {
 
     return (
       <div className="flex flex-col">
-        {rows.length === 0 ? (
+        {groupedRows.length === 0 ? (
           <EmptyPanel
             icon={IconCalendar}
             title="Nothing scheduled"
@@ -1144,7 +1196,32 @@ export default function IOSScheduleApp() {
             action={emptyAction ? { label: "Add Task", onClick: emptyAction } : undefined}
           />
         ) : (
-          rows.map(({ task, slotIndex }, i) => {
+          groupedRows.map((entry, i) => {
+            const isFirst = i === 0;
+            const isLast = i === groupedRows.length - 1;
+            if (entry.kind === "merged") {
+              const toHalf = ({ task, slotIndex }: (typeof rows)[number]) => ({
+                task,
+                slotIndex,
+                linkedPlan: task.planId ? plansById.get(task.planId) ?? null : null,
+                category: taskIdentity(task, categoryMap).category,
+              });
+              return (
+                <IOSMergedTimelineRow
+                  key={`merged-${rowKeyOf(entry.primary.task, entry.primary.slotIndex)}`}
+                  primary={toHalf(entry.primary)}
+                  partner={toHalf(entry.partner)}
+                  isLast={isLast}
+                  isFirst={isFirst}
+                  readOnly={dateISO !== todayISO()}
+                  editMode={editMode}
+                  onToggleComplete={(id, ids) => handleToggleTaskComplete(id, ids, day, dateISO)}
+                  onToggleSlot={(id, si) => handleToggleSlot(id, si, day, dateISO)}
+                  onEdit={(task) => openEditSheet(task, dateISO)}
+                />
+              );
+            }
+            const { task, slotIndex } = entry.row;
             const rowKey = rowKeyOf(task, slotIndex);
             return (
               <IOSTimelineRow
@@ -1153,8 +1230,8 @@ export default function IOSScheduleApp() {
                 slotIndex={slotIndex}
                 isCurrent={rowKey === currentKey}
                 isPast={pastKeys.has(rowKey)}
-                isLast={i === rows.length - 1}
-                isFirst={i === 0}
+                isLast={isLast}
+                isFirst={isFirst}
                 linkedPlan={task.planId ? plansById.get(task.planId) ?? null : null}
                 category={taskIdentity(task, categoryMap).category}
                 readOnly={dateISO !== todayISO()}
@@ -1304,7 +1381,7 @@ export default function IOSScheduleApp() {
             </section>
 
             {/* Recently missed / overdue — renders nothing when all clear. */}
-            <NeedsAttentionCard data={needsAttention} onNavigate={setActiveTab} onHandleMissed={setMissedSheet} onAdaptMilestone={setAdaptingMilestoneId} />
+            <NeedsAttentionCard data={needsAttention} onNavigate={setActiveTab} onHandleMissed={setMissedSheet} onAdaptMilestone={setAdaptingMilestoneId} onClearAll={handleClearAttention} />
 
             <section data-testid="overview-next-task" className={`${CARD} p-0`}>
               <button
@@ -1316,7 +1393,7 @@ export default function IOSScheduleApp() {
                   <IconCalendar size={19} strokeWidth={2.2} />
                 </span>
                 <span className="min-w-0 flex-1">
-                  <span className="block text-[11px] font-bold uppercase tracking-[0.08em] text-neutral-400 dark:text-neutral-500">Next up</span>
+                  <span className="block text-[11px] font-bold uppercase tracking-[0.08em] text-neutral-600 dark:text-neutral-400">Next up</span>
                   <span className="mt-0.5 block truncate text-[16px] font-bold text-neutral-950 dark:text-white">
                     {todayOpenTasks[0]?.title ?? "Plan your day"}
                   </span>
@@ -1328,7 +1405,7 @@ export default function IOSScheduleApp() {
                         : "Open Today to add your first task"}
                   </span>
                 </span>
-                <IconChevronRight size={18} strokeWidth={2.2} className="shrink-0 text-neutral-400 dark:text-neutral-500" />
+                <IconChevronRight size={18} strokeWidth={2.2} className="shrink-0 text-neutral-500 dark:text-neutral-400" />
               </button>
             </section>
 
@@ -1383,7 +1460,7 @@ export default function IOSScheduleApp() {
                   const isToday = localISODate(date) === todayISO();
                   return (
                     <button key={day} type="button" onClick={() => setActiveDay(day)} className={`flex flex-col items-center gap-2 rounded-[14px] py-3 ${isActive ? "bg-neutral-950 text-white dark:bg-white dark:text-neutral-950" : ""}`}>
-                      <span className={`text-[11px] font-semibold leading-none ${isActive ? "opacity-60" : isToday ? "text-rose-500" : "text-neutral-400 dark:text-neutral-500"}`}>{DAY_LABELS[day]}</span>
+                      <span className={`text-[11px] font-semibold leading-none ${isActive ? "opacity-60" : isToday ? "text-rose-500" : "text-neutral-500 dark:text-neutral-400"}`}>{DAY_LABELS[day]}</span>
                       <span className={`text-[18px] font-bold leading-none tabular-nums ${!isActive && isToday ? "text-rose-500" : ""}`}>{date.getDate()}</span>
                     </button>
                   );
@@ -1418,17 +1495,6 @@ export default function IOSScheduleApp() {
                       className="flex h-12 w-12 items-center justify-center rounded-full bg-neutral-100 text-neutral-600 dark:bg-white/[0.08] dark:text-neutral-300"
                     >
                       <IconPlus size={24} strokeWidth={2} />
-                    </button>
-                    {/* DayActionsSheet was mounted on this shell but nothing
-                        ever opened it, so swap/duplicate were unreachable on
-                        mobile. This is that opener, and the home for clear. */}
-                    <button
-                      type="button"
-                      aria-label={`${DAY_FULL_LABELS[activeDay]} actions — swap, duplicate or clear day`}
-                      onClick={() => { haptic("light"); setDayActionsOpen(true); }}
-                      className="flex h-12 w-12 items-center justify-center rounded-full bg-neutral-100 text-neutral-600 dark:bg-white/[0.08] dark:text-neutral-300"
-                    >
-                      <IconDotsVertical size={24} strokeWidth={2} />
                     </button>
                   </>
                 )}
@@ -1831,6 +1897,14 @@ export default function IOSScheduleApp() {
             onCopySubtaskToTasks={(entry, targetTaskIds) => {
               setSchedule(addSubtaskToTasks(targetTaskIds, entry));
               setToast(`Subtask copied to ${targetTaskIds.length} task${targetTaskIds.length === 1 ? "" : "s"}`);
+            }}
+            onMergeTask={(taskId, partnerId) => {
+              setSchedule(mergeTasks(taskId, partnerId));
+              setToast("Tasks merged");
+            }}
+            onUnmergeTask={(taskId) => {
+              setSchedule(unmergeTask(taskId));
+              setToast("Tasks unmerged");
             }}
           />
           <AddPlanSheet open={addingPlan} onClose={() => setAddingPlan(false)} setSchedule={setSchedule} goals={schedule.goals ?? []} />

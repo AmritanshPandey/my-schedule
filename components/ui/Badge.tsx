@@ -83,7 +83,7 @@ export function DayPill({ label, active }: DayPillProps) {
         "flex h-[22px] w-[22px] shrink-0 items-center justify-center rounded-pr-sm text-[11px] font-bold transition-colors",
         active
           ? "bg-neutral-950 text-white dark:bg-white dark:text-neutral-950"
-          : "text-neutral-400 dark:text-neutral-600",
+          : "text-neutral-500 dark:text-neutral-400",
       ].join(" ")}
     >
       {label}

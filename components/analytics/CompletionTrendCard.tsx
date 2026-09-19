@@ -56,12 +56,12 @@ export default function CompletionTrendCard({ schedule }: { schedule: Schedule }
       ? { Icon: IconTrendingUp, text: `${deltaPct}% better than last week`, cls: "text-emerald-600 dark:text-emerald-400" }
       : deltaPct < 0
       ? { Icon: IconTrendingDown, text: `${Math.abs(deltaPct)}% lower than last week`, cls: "text-rose-500 dark:text-rose-400" }
-      : { Icon: IconMinus, text: "Same as last week", cls: "text-neutral-400 dark:text-neutral-500" };
+      : { Icon: IconMinus, text: "Same as last week", cls: "text-neutral-500 dark:text-neutral-400" };
 
   return (
     <div data-testid="completion-trend-card" className={`${CARD} px-5 py-4`}>
       <div className="mb-4 flex items-center gap-2">
-        <IconChartBar size={14} strokeWidth={2} className="shrink-0 text-neutral-400 dark:text-neutral-500" />
+        <IconChartBar size={14} strokeWidth={2} className="shrink-0 text-neutral-500 dark:text-neutral-400" />
         <p className="truncate text-[13px] font-bold text-neutral-800 dark:text-neutral-200">Task completion trend</p>
       </div>
 
@@ -77,7 +77,7 @@ export default function CompletionTrendCard({ schedule }: { schedule: Schedule }
           <p className="mt-1.5 text-[13px] font-semibold text-neutral-600 dark:text-neutral-300">
             of this week&apos;s tasks done
           </p>
-          <p className="text-[12px] text-neutral-400 dark:text-neutral-500">
+          <p className="text-[12px] text-neutral-500 dark:text-neutral-400">
             {current.completed} of {current.scheduled} tasks
           </p>
           {currentMissed > 0 && (
@@ -168,7 +168,7 @@ export default function CompletionTrendCard({ schedule }: { schedule: Schedule }
         ))}
       </div>
 
-      <div className="mt-2 flex items-center justify-between text-[10px] text-neutral-400 dark:text-neutral-500">
+      <div className="mt-2 flex items-center justify-between text-[10px] text-neutral-500 dark:text-neutral-400">
         <span>{n > 1 ? `${n} weeks` : " "}</span>
         <span>Avg {averagePct}% · Best {bestPct}%</span>
         <span className="font-semibold text-neutral-500 dark:text-neutral-400">This week</span>

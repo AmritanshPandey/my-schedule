@@ -90,7 +90,7 @@ function cellStyles(status: DayStatus): string {
     case "upcoming":
       return "bg-neutral-100 text-neutral-500 dark:bg-white/[0.05] dark:text-neutral-400";
     case "none":
-      return "text-neutral-300 dark:text-neutral-700";
+      return "text-neutral-400 dark:text-neutral-500";
   }
 }
 
@@ -162,12 +162,12 @@ export default function AccuracyCalendar({
     return (
       <div className="rounded-[24px] border border-neutral-200 bg-white px-6 py-10 text-center dark:border-white/[0.08] dark:bg-neutral-900">
         <div className="w-10 h-10 rounded-xl bg-neutral-100 dark:bg-white/[0.06] flex items-center justify-center mx-auto mb-3">
-          <IconLayoutGrid size={24} strokeWidth={1.8} className="text-neutral-400 dark:text-neutral-500" />
+          <IconLayoutGrid size={24} strokeWidth={1.8} className="text-neutral-500 dark:text-neutral-400" />
         </div>
         <p className="text-[14px] font-semibold text-neutral-900 dark:text-white mb-1">
           No linked tasks yet
         </p>
-        <p className="text-[13px] text-neutral-400 dark:text-neutral-500 max-w-[200px] mx-auto leading-relaxed mb-4">
+        <p className="text-[13px] text-neutral-500 dark:text-neutral-400 max-w-[200px] mx-auto leading-relaxed mb-4">
           Link activities to this plan to start tracking accuracy.
         </p>
         <button
@@ -194,7 +194,7 @@ export default function AccuracyCalendar({
           </h3>
           {/* Scoped to the visible month, unlike Task Consistency (whole plan
               to date) on the Milestones tab — different numbers, on purpose. */}
-          <p className="mt-0.5 text-[11px] font-medium text-neutral-400 dark:text-neutral-500">
+          <p className="mt-0.5 text-[11px] font-medium text-neutral-500 dark:text-neutral-400">
             {MONTHS[month]} · {stats.completed + stats.missed + stats.partial} scheduled days
           </p>
         </div>
@@ -239,7 +239,7 @@ export default function AccuracyCalendar({
             {DOW_LABELS.map((label) => (
               <div
                 key={label}
-                className="text-center text-[11px] font-medium text-neutral-400 dark:text-neutral-500 py-1"
+                className="text-center text-[11px] font-medium text-neutral-500 dark:text-neutral-400 py-1"
               >
                 {label}
               </div>
@@ -278,7 +278,7 @@ export default function AccuracyCalendar({
     <p className="text-[22px] font-extrabold leading-none tabular-nums text-emerald-600 dark:text-emerald-400">
       {stats.completed}
     </p>
-    <p className="text-[11px] font-medium text-neutral-400 dark:text-neutral-500 mt-1.5">
+    <p className="text-[11px] font-medium text-neutral-500 dark:text-neutral-400 mt-1.5">
       Completed
     </p>
   </div>
@@ -287,16 +287,16 @@ export default function AccuracyCalendar({
     <p className="text-[22px] font-extrabold leading-none tabular-nums text-red-500 dark:text-red-400">
       {stats.missed}
     </p>
-    <p className="text-[11px] font-medium text-neutral-400 dark:text-neutral-500 mt-1.5">
+    <p className="text-[11px] font-medium text-neutral-500 dark:text-neutral-400 mt-1.5">
       Missed
     </p>
   </div>
 
   <div className="text-center">
-    <p className="text-[22px] font-extrabold leading-none tabular-nums text-neutral-400 dark:text-neutral-500">
+    <p className="text-[22px] font-extrabold leading-none tabular-nums text-neutral-500 dark:text-neutral-400">
       {stats.upcoming}
     </p>
-    <p className="text-[11px] font-medium text-neutral-400 dark:text-neutral-500 mt-1.5">
+    <p className="text-[11px] font-medium text-neutral-500 dark:text-neutral-400 mt-1.5">
       Remaining
     </p>
   </div>
@@ -305,7 +305,7 @@ export default function AccuracyCalendar({
     <p className="text-[22px] font-extrabold leading-none tabular-nums text-neutral-950 dark:text-white">
       {stats.accuracy}%
     </p>
-    <p className="text-[11px] font-medium text-neutral-400 dark:text-neutral-500 mt-1.5">
+    <p className="text-[11px] font-medium text-neutral-500 dark:text-neutral-400 mt-1.5">
       Accuracy
     </p>
   </div>

@@ -110,7 +110,7 @@ export default function TaskChecklistItem({
           size="sm"
           className={`font-bold ${
             isDone
-              ? "border-neutral-200 bg-white text-neutral-400 dark:border-white/[0.12] dark:bg-transparent dark:text-neutral-500"
+              ? "border-neutral-200 bg-white text-neutral-500 dark:border-white/[0.12] dark:bg-transparent dark:text-neutral-400"
               : DEADLINE_BADGE[deadline.state]
           }`}
           icon={<IconCalendarDue size={12} strokeWidth={2.2} />}
@@ -122,7 +122,7 @@ export default function TaskChecklistItem({
         <Pill variant="neutral" size="md" className="text-[13px]">
           {detailSegments.map((seg, i) => (
             <span key={i} className={seg.isTime ? "font-extrabold tabular-nums text-blue-600 dark:text-blue-400" : undefined}>
-              {i > 0 && <span className="mx-1 text-neutral-300 dark:text-neutral-600">·</span>}
+              {i > 0 && <span className="mx-1 text-neutral-400 dark:text-neutral-500">·</span>}
               {seg.text}
             </span>
           ))}

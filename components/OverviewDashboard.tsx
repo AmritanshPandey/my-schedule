@@ -26,7 +26,7 @@ import TodayTaskList from "@/components/today/TodayTaskList";
 import { selectTodayTasks } from "@/lib/todayTasks";
 import ExecutionStreakBanner from "@/components/ExecutionStreakBanner";
 import NeedsAttentionCard from "@/components/NeedsAttentionCard";
-import { selectNeedsAttention, type MissedTask } from "@/lib/needsAttention";
+import { selectNeedsAttention, type MissedTask, type NeedsAttention } from "@/lib/needsAttention";
 import CompletionTrendCard from "@/components/analytics/CompletionTrendCard";
 import { computeExecutionTrend } from "@/lib/executionAnalytics";
 
@@ -57,6 +57,10 @@ interface OverviewDashboardProps {
   onHandleMissed?: (missed: MissedTask) => void;
   /** Open the adaptation sheet for an off-pace milestone. */
   onAdaptMilestone?: (milestoneId: string) => void;
+  /** Dismiss every row on the "Needs attention" card. The data is passed up
+   *  because this component is the one that computed it — asking the parent to
+   *  re-derive it would risk the two disagreeing about what was cleared. */
+  onClearAttention?: (data: NeedsAttention) => void;
 }
 
 const DAYS_ORDER: DayKey[] = ["monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday"];
@@ -99,7 +103,7 @@ function SectionHeader({
   return (
     <div className="mb-3 flex items-center justify-between gap-3">
       <div className="flex min-w-0 items-center gap-2">
-        <Icon size={15} strokeWidth={2} className="shrink-0 text-neutral-400 dark:text-neutral-500" />
+        <Icon size={15} strokeWidth={2} className="shrink-0 text-neutral-500 dark:text-neutral-400" />
         <p className="truncate text-[13px] font-bold text-neutral-800 dark:text-neutral-200">{title}</p>
       </div>
       {meta && (
@@ -172,10 +176,10 @@ function DashboardMetricCard({
         </span>
         {/* The arrow only appears when the card actually navigates. */}
         {onClick && (
-          <IconArrowUpRight size={16} strokeWidth={2.2} className={primary ? "text-white/80" : "text-neutral-300 dark:text-neutral-600"} />
+          <IconArrowUpRight size={16} strokeWidth={2.2} className={primary ? "text-white/80" : "text-neutral-400 dark:text-neutral-500"} />
         )}
       </div>
-      <p className={`mt-3 text-[12px] font-bold uppercase tracking-[0.08em] ${primary ? "text-white/80" : "text-neutral-400 dark:text-neutral-500"}`}>
+      <p className={`mt-3 text-[12px] font-bold uppercase tracking-[0.08em] ${primary ? "text-white/80" : "text-neutral-500 dark:text-neutral-400"}`}>
         {label}
       </p>
       <p className="mt-1 text-[34px] font-extrabold leading-none tracking-[-0.03em] tabular-nums"><MetricValue text={value} /></p>
@@ -292,7 +296,7 @@ function ThisWeekCard({
       <div className="grid grid-cols-7 gap-2">
         {activity.days.map(({ label, total, done, pct, isToday }) => (
           <div key={label} className={`rounded-xl border px-2 py-2 ${isToday ? "border-emerald-300 bg-emerald-50 dark:border-emerald-500/30 dark:bg-emerald-500/[0.08]" : "border-neutral-200/70 bg-neutral-50 dark:border-white/[0.07] dark:bg-white/[0.04]"}`}>
-            <p className={`text-center text-[10px] font-bold ${isToday ? "text-emerald-700 dark:text-emerald-300" : "text-neutral-400 dark:text-neutral-500"}`}>{label}</p>
+            <p className={`text-center text-[10px] font-bold ${isToday ? "text-emerald-700 dark:text-emerald-300" : "text-neutral-500 dark:text-neutral-400"}`}>{label}</p>
             <div className="mt-2">
               <ProgressBar pct={pct} height={4} animateOnMount fillClassName={progressFillClass(pct)} />
             </div>
@@ -304,13 +308,13 @@ function ThisWeekCard({
       </div>
       <div className="mt-3 grid grid-cols-2 gap-3">
         <div className={SOFT_PANEL + " px-3 py-3"}>
-          <p className="text-[10px] font-bold uppercase tracking-[0.08em] text-neutral-400 dark:text-neutral-500">Tasks Done</p>
+          <p className="text-[10px] font-bold uppercase tracking-[0.08em] text-neutral-500 dark:text-neutral-400">Tasks Done</p>
           <p className="mt-1 text-[24px] font-extrabold leading-none tabular-nums text-neutral-950 dark:text-white">
             <AnimatedNumber value={activity.tasksPct} /><span className="text-[14px]">%</span>
           </p>
         </div>
         <div className={SOFT_PANEL + " px-3 py-3"}>
-          <p className="text-[10px] font-bold uppercase tracking-[0.08em] text-neutral-400 dark:text-neutral-500">Habits Done</p>
+          <p className="text-[10px] font-bold uppercase tracking-[0.08em] text-neutral-500 dark:text-neutral-400">Habits Done</p>
           <p className="mt-1 text-[24px] font-extrabold leading-none tabular-nums text-neutral-950 dark:text-white">
             <AnimatedNumber value={activity.habitsPct} /><span className="text-[14px]">%</span>
           </p>
@@ -379,7 +383,7 @@ function ActiveTrackingCard({
                     group.plan ? accentStyles(group.plan.color).dot : "bg-neutral-400 dark:bg-neutral-500"
                   }`}
                 />
-                <p className="truncate text-[11px] font-bold uppercase tracking-[0.08em] text-neutral-500 dark:text-neutral-400">
+                <p className="truncate text-[11px] font-bold uppercase tracking-[0.08em] text-neutral-600 dark:text-neutral-400">
                   {group.plan?.title ?? "Other"}
                 </p>
               </div>
@@ -390,7 +394,7 @@ function ActiveTrackingCard({
                       ? "text-emerald-500 dark:text-emerald-400"
                       : trend?.state === "negative"
                       ? "text-rose-500 dark:text-rose-400"
-                      : "text-neutral-300 dark:text-neutral-600";
+                      : "text-neutral-500 dark:text-neutral-400";
                   return (
                     <div key={tracker.id} className="flex items-center gap-3 py-3">
                       <div className="min-w-0 flex-1">
@@ -438,7 +442,7 @@ function RoutineConsistencyCard({
             <div className="min-w-0">
               <p className="truncate text-[14px] font-bold text-neutral-950 dark:text-white">
                 {ritual.title}
-                {ritual.time && <span className="ml-1.5 font-semibold text-neutral-400 dark:text-neutral-500">{formatDisplayTime(ritual.time)}</span>}
+                {ritual.time && <span className="ml-1.5 font-semibold text-neutral-500 dark:text-neutral-400">{formatDisplayTime(ritual.time)}</span>}
               </p>
               <div className="mt-1 flex items-center gap-2.5">
                 {streak > 0 && (
@@ -456,7 +460,7 @@ function RoutineConsistencyCard({
                     {bestStreak}d best
                   </span>
                 )}
-                <span className="text-[12px] font-semibold tabular-nums text-neutral-400 dark:text-neutral-500">
+                <span className="text-[12px] font-semibold tabular-nums text-neutral-500 dark:text-neutral-400">
                   {adherencePct}% · 30d
                 </span>
               </div>
@@ -687,7 +691,7 @@ function GettingStarted({
                 </div>
                 <p className="mt-1 text-[12px] leading-snug text-neutral-500 dark:text-neutral-400">{desc}</p>
               </div>
-              <IconArrowRight size={17} strokeWidth={2.4} className="shrink-0 text-neutral-300 dark:text-neutral-600" />
+              <IconArrowRight size={17} strokeWidth={2.4} className="shrink-0 text-neutral-400 dark:text-neutral-500" />
             </button>
           ))}
         </div>
@@ -708,6 +712,7 @@ export default function OverviewDashboard({
   onLogTracker,
   onHandleMissed,
   onAdaptMilestone,
+  onClearAttention,
 }: OverviewDashboardProps) {
   const todayISO = localISODate(new Date());
   const plansById = useMemo(() => new Map(schedule.plans.map((plan) => [plan.id, plan])), [schedule.plans]);
@@ -890,7 +895,7 @@ export default function OverviewDashboard({
       <div className="mx-auto w-full max-w-[1480px] pt-5 lg:pt-4">
         <div className="mb-4 hidden items-end justify-between gap-4 lg:flex">
           <div>
-            <p className="text-[13px] font-semibold text-neutral-400 dark:text-neutral-500">
+            <p className="text-[13px] font-semibold text-neutral-600 dark:text-neutral-400">
               {new Date().toLocaleDateString("en-US", { weekday: "long", month: "long", day: "numeric" })}
             </p>
             <h1 className="mt-0.5 text-[30px] font-extrabold leading-tight tracking-[-0.04em] text-neutral-950 dark:text-white">
@@ -921,7 +926,7 @@ export default function OverviewDashboard({
                 {/* Above Today's Task: catching up on what slipped comes before
                     working the current day. Renders nothing when there is
                     nothing to fix, so a clean week costs no space. */}
-                <NeedsAttentionCard data={needsAttention} onNavigate={onNavigate} onHandleMissed={onHandleMissed} onAdaptMilestone={onAdaptMilestone} />
+                <NeedsAttentionCard data={needsAttention} onNavigate={onNavigate} onHandleMissed={onHandleMissed} onAdaptMilestone={onAdaptMilestone} onClearAll={onClearAttention ? () => onClearAttention(needsAttention) : undefined} />
                 <TodayTaskList
                   tasks={todayTasks}
                   done={tasksDone}

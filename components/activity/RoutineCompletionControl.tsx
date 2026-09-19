@@ -56,7 +56,7 @@ export default function RoutineCompletionControl({
             type="button"
             aria-label="Undo last log"
             onClick={() => { haptic("light"); onUndoLastLog(); }}
-            className="flex h-8 w-8 items-center justify-center rounded-full border border-neutral-200 text-neutral-400 transition-colors hover:bg-neutral-50 dark:border-white/[0.10] dark:text-neutral-500 dark:hover:bg-white/[0.05]"
+            className="flex h-8 w-8 items-center justify-center rounded-full border border-neutral-200 text-neutral-500 transition-colors hover:bg-neutral-50 dark:border-white/[0.10] dark:text-neutral-400 dark:hover:bg-white/[0.05]"
           >
             <IconMinus size={14} strokeWidth={2.4} />
           </button>

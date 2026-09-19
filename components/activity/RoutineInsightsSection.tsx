@@ -21,7 +21,7 @@ export default function RoutineInsightsSection({ insights }: RoutineInsightsSect
 
   return (
     <div className={`space-y-2.5 p-4 ${CARD}`}>
-      <p className="text-[11px] font-bold uppercase tracking-[0.08em] text-neutral-400 dark:text-neutral-500">
+      <p className="text-[11px] font-bold uppercase tracking-[0.08em] text-neutral-600 dark:text-neutral-400">
         Insights
       </p>
 

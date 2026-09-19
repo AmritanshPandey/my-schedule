@@ -160,7 +160,7 @@ export default function AIReviewSheet({
             catches a wrong plan before it is written. */}
         {review.target.kind !== "none" && (
           <div className="flex flex-col gap-2 rounded-2xl border border-neutral-200 px-4 py-3 dark:border-white/[0.08]">
-            <span className="text-[11px] font-semibold uppercase tracking-wide text-neutral-400 dark:text-neutral-500">
+            <span className="text-[11px] font-semibold uppercase tracking-wide text-neutral-500 dark:text-neutral-400">
               {review.target.kind === "plan" ? "Plan" : "Task"}
             </span>
             {review.target.match.status === "resolved" ? (
@@ -230,7 +230,7 @@ export default function AIReviewSheet({
                 ) : (
                   <span
                     className={`min-w-0 flex-1 text-[12px] font-semibold ${
-                      f.required ? "text-rose-600 dark:text-rose-400" : "text-neutral-400 dark:text-neutral-500"
+                      f.required ? "text-rose-600 dark:text-rose-400" : "text-neutral-500 dark:text-neutral-400"
                     }`}
                   >
                     {f.required ? "Required — missing" : "Not set · optional"}
@@ -287,7 +287,7 @@ export default function AIReviewSheet({
             type="button"
             disabled={!ready}
             onClick={() => { haptic("medium"); onConfirm(effective); close(); }}
-            className="flex-[2] rounded-full bg-[#00A63E] px-4 py-3 text-[14px] font-bold text-white transition-colors hover:bg-[#008236] disabled:opacity-40 dark:bg-[#2FD46E] dark:text-neutral-950 dark:hover:bg-[#2FD46E]/90"
+            className="flex-[2] rounded-full bg-[#008236] px-4 py-3 text-[14px] font-bold text-white transition-colors hover:bg-[#006B2C] disabled:opacity-40 dark:bg-[#2FD46E] dark:text-neutral-950 dark:hover:bg-[#2FD46E]/90"
           >
             {ready ? "Add to my plan" : "Fix the above first"}
           </button>

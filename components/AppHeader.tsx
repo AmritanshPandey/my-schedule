@@ -144,7 +144,7 @@ function RootHeader({ onOpenSettings, onNotes }: Pick<AppHeaderProps, "onOpenSet
               <img src={user.photoURL} alt="Avatar" className="h-full w-full object-cover" />
             ) : (
               <div className="flex h-full w-full items-center justify-center">
-                <IconUser size={17} strokeWidth={1.8} className="text-neutral-400 dark:text-neutral-500" />
+                <IconUser size={17} strokeWidth={1.8} className="text-neutral-500 dark:text-neutral-400" />
               </div>
             )}
           </m.button>

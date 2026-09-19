@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import { displayToInputTime, formatDisplayTime, minutesToInputTime, parseTimeToMinutes, punctuateTimeDigits } from "@/lib/timeUtils";
 import { stopTextEditKeyPropagation } from "@/lib/keyboardEvents";
+import { typography } from "@/components/ui/Typography";
 
 interface TimeInputProps {
   value: string;
@@ -109,7 +110,7 @@ export default function TimeInput({
   return (
     <div>
       {label && (
-        <p className="mb-1.5 text-[11px] font-semibold uppercase tracking-[0.08em] text-neutral-400 dark:text-neutral-500">
+        <p className={`mb-1.5 ${typography.eyebrow}`}>
           {label}
         </p>
       )}

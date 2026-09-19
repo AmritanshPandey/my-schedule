@@ -350,7 +350,7 @@ export function BulkImportFlow({ plans, fallbackDay = "monday", onCommit, onDone
           </button>
         </div>
         <div className="relative overflow-hidden rounded-2xl border border-neutral-200 bg-white dark:border-white/[0.08] dark:bg-neutral-900">
-          <div className="border-b border-neutral-100 px-4 py-2.5 text-[11px] font-semibold uppercase tracking-[0.08em] text-neutral-400 dark:border-white/[0.06] dark:text-neutral-500">
+          <div className="border-b border-neutral-100 px-4 py-2.5 text-[11px] font-bold uppercase tracking-[0.08em] text-neutral-500 dark:border-white/[0.06] dark:text-neutral-400">
             Source
           </div>
           <textarea
@@ -360,7 +360,7 @@ export function BulkImportFlow({ plans, fallbackDay = "monday", onCommit, onDone
             placeholder={SAMPLE}
             className="h-[210px] w-full resize-y bg-transparent px-4 py-3 font-sans text-[16px] leading-7 text-neutral-900 outline-none placeholder:text-neutral-300 dark:text-white dark:placeholder:text-neutral-600"
           />
-          <span className="pointer-events-none absolute bottom-2 right-3 text-[11px] text-neutral-300 dark:text-neutral-600">
+          <span className="pointer-events-none absolute bottom-2 right-3 text-[11px] text-neutral-500 dark:text-neutral-400">
             {text.length}/2000
           </span>
         </div>
@@ -390,7 +390,7 @@ export function BulkImportFlow({ plans, fallbackDay = "monday", onCommit, onDone
               <IconCheck size={12} strokeWidth={3} />
             </span>
             <span className="font-bold text-emerald-600 dark:text-emerald-400">Parsed</span>
-            <span className="text-neutral-400 dark:text-neutral-500">· {total} task{total !== 1 ? "s" : ""} found</span>
+            <span className="text-neutral-500 dark:text-neutral-400">· {total} task{total !== 1 ? "s" : ""} found</span>
           </div>
         )}
 
@@ -409,7 +409,7 @@ export function BulkImportFlow({ plans, fallbackDay = "monday", onCommit, onDone
                       </span>
                       <div className="min-w-0 flex-1">
                         <div className="flex items-center gap-2">
-                          <span className="inline-flex items-center gap-1 rounded-full bg-emerald-500/15 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.08em] text-emerald-600 dark:text-emerald-400">
+                          <span className="inline-flex items-center gap-1 rounded-full bg-emerald-500/15 px-2 py-0.5 text-[10px] font-bold uppercase tracking-[0.08em] text-emerald-600 dark:text-emerald-400">
                             <IconSparkles size={11} strokeWidth={2.5} />New plan
                           </span>
                           <span className="truncate text-[16px] font-bold text-neutral-900 dark:text-white">{p.title}</span>
@@ -418,7 +418,7 @@ export function BulkImportFlow({ plans, fallbackDay = "monday", onCommit, onDone
                           <p className="mt-1 truncate text-[13px] text-neutral-500 dark:text-neutral-400">{p.description}</p>
                         )}
                         {(p.startDate || p.endDate) && (
-                          <p className="mt-1 text-[12px] font-medium text-neutral-400 dark:text-neutral-500">
+                          <p className="mt-1 text-[12px] font-medium text-neutral-500 dark:text-neutral-400">
                             {p.startDate ?? "…"} → {p.endDate ?? "…"}
                           </p>
                         )}
@@ -511,7 +511,7 @@ export function BulkImportFlow({ plans, fallbackDay = "monday", onCommit, onDone
                         <IconCalendarEvent size={16} strokeWidth={2} className="shrink-0 text-emerald-600 dark:text-emerald-400" />
                         <span className="text-[16px] font-bold text-neutral-900 dark:text-white">{d.label}</span>
                         <span className="ml-auto text-[12px] font-semibold text-emerald-600 dark:text-emerald-400">{d.tasks.length} task{d.tasks.length !== 1 ? "s" : ""}</span>
-                        <IconChevronDown size={16} strokeWidth={2} className={`shrink-0 text-neutral-400 transition-transform ${isCollapsed ? "-rotate-90" : ""}`} />
+                        <IconChevronDown size={16} strokeWidth={2} className={`shrink-0 text-neutral-500 dark:text-neutral-400 transition-transform ${isCollapsed ? "-rotate-90" : ""}`} />
                       </div>
                     </button>
                     {!isCollapsed && (
@@ -536,7 +536,7 @@ export function BulkImportFlow({ plans, fallbackDay = "monday", onCommit, onDone
                                 date is the only way to tell week 2's Thursday
                                 from week 3's before committing. */}
                             {t.dateISO && (
-                              <p className="mt-0.5 text-[11px] font-medium text-neutral-400 dark:text-neutral-500">
+                              <p className="mt-0.5 text-[11px] font-medium text-neutral-500 dark:text-neutral-400">
                                 {new Date(`${t.dateISO}T12:00:00`).toLocaleDateString(undefined, {
                                   weekday: "short", day: "numeric", month: "short", year: "numeric",
                                 })}
@@ -548,7 +548,7 @@ export function BulkImportFlow({ plans, fallbackDay = "monday", onCommit, onDone
                                   <div key={s.id} className="flex items-center gap-1.5 text-[12px]">
                                     <span className="h-1 w-1 shrink-0 rounded-full bg-neutral-300 dark:bg-neutral-600" />
                                     <span className="min-w-0 truncate font-medium text-neutral-600 dark:text-neutral-300">{s.title}</span>
-                                    {s.info && <span className="shrink-0 truncate text-neutral-400 dark:text-neutral-500">· {s.info}</span>}
+                                    {s.info && <span className="shrink-0 truncate text-neutral-500 dark:text-neutral-400">· {s.info}</span>}
                                     {s.duration && (
                                       <span className="ml-auto shrink-0 rounded-full bg-neutral-100 px-1.5 py-0.5 text-[10px] font-bold text-neutral-500 dark:bg-white/[0.06] dark:text-neutral-400">{s.duration}</span>
                                     )}
@@ -600,7 +600,7 @@ export function BulkImportFlow({ plans, fallbackDay = "monday", onCommit, onDone
                         className="rounded-2xl border border-amber-500/25 bg-white px-2 py-2.5 text-center transition-colors hover:border-amber-500 dark:bg-neutral-900"
                       >
                         <span className="block text-[12px] font-semibold text-neutral-800 dark:text-neutral-200">{o.label}</span>
-                        <span className="block text-[10px] font-medium text-neutral-400 dark:text-neutral-500">{o.sub}</span>
+                        <span className="block text-[10px] font-medium text-neutral-500 dark:text-neutral-400">{o.sub}</span>
                       </button>
                     ))}
                   </div>

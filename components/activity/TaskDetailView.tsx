@@ -140,7 +140,7 @@ export default function TaskDetailView({
             />
           )}
           <div className="min-w-0 pt-0.5">
-            <p className="truncate text-[16px] font-semibold text-neutral-400 dark:text-neutral-500">{eyebrow}</p>
+            <p className="truncate text-[16px] font-semibold text-neutral-500 dark:text-neutral-400">{eyebrow}</p>
           </div>
         </div>
       )}
@@ -207,7 +207,7 @@ export default function TaskDetailView({
                 <span className={`text-[14px] font-semibold ${slotDone ? "text-neutral-400 line-through dark:text-neutral-500" : "text-neutral-800 dark:text-neutral-100"}`}>
                   {formatDisplayTime(slot.startTime)} – {formatDisplayTime(slot.endTime)}
                 </span>
-                <span className="ml-auto text-[12px] font-medium text-neutral-400 dark:text-neutral-500">
+                <span className="ml-auto text-[12px] font-medium text-neutral-500 dark:text-neutral-400">
                   Block {i + 1}
                 </span>
               </button>
@@ -266,7 +266,7 @@ export default function TaskDetailView({
           <button
             type="button"
             onClick={() => setNoteDraft("")}
-            className="mt-1.5 text-left text-[14px] text-neutral-400 transition-colors hover:text-neutral-600 dark:text-neutral-500 dark:hover:text-neutral-300"
+            className="mt-1.5 text-left text-[14px] text-neutral-500 transition-colors hover:text-neutral-600 dark:text-neutral-400 dark:hover:text-neutral-300"
           >
             Add a note for this day
           </button>
@@ -358,7 +358,7 @@ export default function TaskDetailView({
           className={`flex min-h-[48px] w-full items-center justify-center gap-1.5 rounded-full px-4 text-[14px] font-bold transition-colors ${
             done
               ? "bg-green-600/10 text-green-700 dark:bg-emerald-400/[0.12] dark:text-emerald-300"
-              : "bg-[#00A63E] text-white hover:bg-[#008236] dark:bg-[#2FD46E] dark:text-neutral-950 dark:hover:bg-[#2FD46E]/90"
+              : "bg-[#008236] text-white hover:bg-[#006B2C] dark:bg-[#2FD46E] dark:text-neutral-950 dark:hover:bg-[#2FD46E]/90"
           }`}
         >
           <IconCheck size={18} strokeWidth={2.6} />
@@ -436,7 +436,7 @@ export default function TaskDetailView({
           )}
           <div className="min-w-0">
             <h2 className="truncate text-[20px] font-bold leading-tight text-neutral-900 dark:text-white">{task.title}</h2>
-            <p className="text-[13px] font-semibold text-neutral-400 dark:text-neutral-500">{eyebrow}</p>
+            <p className="text-[13px] font-semibold text-neutral-600 dark:text-neutral-400">{eyebrow}</p>
           </div>
         </div>
       )}

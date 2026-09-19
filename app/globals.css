@@ -109,7 +109,8 @@ option {
   --color-green-400: #2FD46E;  /* dark-mode accent (lighter than 500) */
   --color-green-500: #00C950;  /* bright streak dots */
   --color-green-600: #00A63E;  /* primary brand green — CTAs, success */
-  --color-green-700: #008236;  /* pressed / darker */
+  --color-green-700: #008236;  /* CTA fill under white text (4.95:1); also "pressed" */
+  --color-green-800: #006B2C;  /* CTA hover (6.69:1 on white) */
   --color-green-800: #096B30;
   --color-green-900: #0C4F28;
   --color-green-950: #052E16;

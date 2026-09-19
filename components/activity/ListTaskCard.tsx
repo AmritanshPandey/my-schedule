@@ -270,7 +270,7 @@ function ListTaskCardInner({
       <button
         type="button"
         onClick={(e) => { e.stopPropagation(); onEdit(); }}
-        className="flex h-8 w-8 items-center justify-center rounded-xl text-neutral-400 transition-colors hover:text-neutral-700 dark:hover:text-neutral-200"
+        className="flex h-8 w-8 items-center justify-center rounded-xl text-neutral-500 dark:text-neutral-400 transition-colors hover:text-neutral-700 dark:hover:text-neutral-200"
       >
         <IconEdit size={16} />
       </button>
@@ -331,7 +331,7 @@ function ListTaskCardInner({
   const footerNode = (task.description || ((canExpand || done) && tracked)) ? (
     <div className="flex flex-col gap-2">
       {task.description && (
-        <p className={`text-[13px] leading-relaxed ${done ? "text-neutral-400 dark:text-neutral-500" : "text-neutral-500 dark:text-neutral-400"}`}>
+        <p className={`text-[13px] leading-relaxed ${done ? "text-neutral-500 dark:text-neutral-400" : "text-neutral-500 dark:text-neutral-400"}`}>
           {task.description}
         </p>
       )}

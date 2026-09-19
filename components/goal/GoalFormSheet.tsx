@@ -7,6 +7,7 @@ import BottomSheet from "@/components/ui/BottomSheet";
 import SheetHeader from "@/components/ui/SheetHeader";
 import Button from "@/components/ui/Button";
 import Input from "@/components/ui/Input";
+import { typography } from "@/components/ui/Typography";
 
 type SetScheduleFn = (updater: (prev: Schedule) => Schedule) => void;
 
@@ -79,7 +80,7 @@ export default function GoalFormSheet({ open, onClose, setSchedule, goal }: Goal
               maxLength={GOAL_TITLE_MAX}
               onKeyDown={(e) => { if (e.key === "Enter" && title.trim()) handleSubmit(); }}
             />
-            <p className="mt-1 text-right text-[11px] font-medium tabular-nums text-neutral-400 dark:text-neutral-500">
+            <p className="mt-1 text-right text-[11px] font-medium tabular-nums text-neutral-500 dark:text-neutral-400">
               {title.length}/{GOAL_TITLE_MAX}
             </p>
           </div>
@@ -90,7 +91,7 @@ export default function GoalFormSheet({ open, onClose, setSchedule, goal }: Goal
           />
           <div className="grid grid-cols-2 gap-2">
             <div>
-              <p className="mb-1 text-[11px] font-semibold uppercase tracking-[0.08em] text-neutral-400 dark:text-neutral-500">Start date</p>
+              <p className={`mb-1 ${typography.eyebrow}`}>Start date</p>
               <input
                 type="date"
                 value={startDate}
@@ -99,7 +100,7 @@ export default function GoalFormSheet({ open, onClose, setSchedule, goal }: Goal
               />
             </div>
             <div>
-              <p className="mb-1 text-[11px] font-semibold uppercase tracking-[0.08em] text-neutral-400 dark:text-neutral-500">Target date</p>
+              <p className={`mb-1 ${typography.eyebrow}`}>Target date</p>
               <input
                 type="date"
                 value={targetDate}

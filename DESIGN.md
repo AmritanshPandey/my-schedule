@@ -39,7 +39,7 @@ typography:
   label:
     fontFamily: "Nunito, ui-sans-serif, system-ui, sans-serif"
     fontSize: "11px"
-    fontWeight: 600
+    fontWeight: 700
     lineHeight: 1.2
     letterSpacing: "0.08em"
 rounded:
@@ -232,8 +232,11 @@ fills, instant `active:scale` feedback, restraint over flourish.
   for primary CTAs and pill controls.
 - **Primary (default UI):** Ink fill (#0A0A0A) / white text; in dark mode it inverts to
   white fill / ink text. Hover lightens to Ink Soft. Sizes: sm h-36px, md h-44px, lg h-48px (md meets the 44px touch minimum).
-- **CTA (affirmative):** Momentum Green fill (#00A63E) / white text, usually `rounded-full`.
-  Reserved for Create / Complete / Log. Hover → Green Pressed (#008236).
+- **CTA (affirmative):** Green Pressed fill (#008236) / white text, usually `rounded-full`.
+  Reserved for Create / Complete / Log. Hover → #006B2C. The lighter Momentum Green
+  (#00A63E) cannot carry white text — it measures 3.22:1, under the 4.5 floor — so a
+  white-on-green button uses the deeper value while #00A63E stays the signal colour
+  for toggles, rings, icons and the ink-on-green hero cards (6.15:1).
 - **Secondary / Ghost:** Transparent or hairline-bordered, muted text (#737373), subtle
   `neutral-100` / `white/[0.07]` hover wash.
 - **Press:** `active:scale-[0.98]` on every button; `transition-all`. This tactile press is

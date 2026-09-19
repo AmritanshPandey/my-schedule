@@ -20,7 +20,7 @@ function cellStyles(status: RitualCalendarStatus): string {
     case "future":
       return "bg-neutral-100 text-neutral-500 dark:bg-white/[0.05] dark:text-neutral-400";
     case "not-scheduled":
-      return "text-neutral-300 dark:text-neutral-700";
+      return "text-neutral-400 dark:text-neutral-500";
   }
 }
 
@@ -63,7 +63,7 @@ export default function RoutineMonthCalendar({
           <h3 className="text-[15px] font-bold leading-tight tracking-[-0.2px] text-neutral-950 dark:text-white">
             {title}
           </h3>
-          <p className="mt-0.5 text-[11px] font-medium text-neutral-400 dark:text-neutral-500">
+          <p className="mt-0.5 text-[11px] font-medium text-neutral-500 dark:text-neutral-400">
             {MONTHS[month]} · {stats.scheduled} scheduled days
           </p>
         </div>
@@ -105,7 +105,7 @@ export default function RoutineMonthCalendar({
           {DOW_LABELS.map((label) => (
             <div
               key={label}
-              className="text-center text-[11px] font-medium text-neutral-400 dark:text-neutral-500 py-1"
+              className="text-center text-[11px] font-medium text-neutral-500 dark:text-neutral-400 py-1"
             >
               {label}
             </div>

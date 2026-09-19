@@ -17,7 +17,7 @@ const variantClasses: Record<Variant, string> = {
   // Affirmative action only (Create / Complete / Log / Start) — the One Signal
   // + Ink-First rules: one green action per screen, ink is the default.
   cta:
-    "bg-[#00A63E] text-white hover:bg-[#008236] disabled:opacity-40 dark:bg-[#2FD46E] dark:text-neutral-950 dark:hover:bg-[#2FD46E]/90",
+    "bg-[#008236] text-white hover:bg-[#006B2C] disabled:opacity-40 dark:bg-[#2FD46E] dark:text-neutral-950 dark:hover:bg-[#2FD46E]/90",
   secondary:
     "border border-neutral-200 bg-white text-neutral-600 hover:bg-neutral-50 dark:border-white/10 dark:bg-neutral-900 dark:text-neutral-300 dark:hover:bg-white/[0.05]",
   ghost:

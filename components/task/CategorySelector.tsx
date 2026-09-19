@@ -6,9 +6,9 @@ import type { TaskCategory } from "@/lib/useScheduleDB";
 import { canDeleteCategory } from "@/lib/taskCategories";
 import { accentStyles } from "@/lib/colorSystem";
 import { iconGlyph } from "@/components/SectionIcons";
+import { typography } from "@/components/ui/Typography";
 
-const SECTION_LABEL =
-  "text-[11px] font-semibold uppercase tracking-[0.08em] text-neutral-400 dark:text-neutral-500";
+const SECTION_LABEL = typography.eyebrow;
 
 export interface CategorySelectorProps {
   categories: TaskCategory[];
@@ -83,14 +83,14 @@ export function CategorySelector({ categories, selectedId, onSelect, onClear, on
             </span>
           </>
         ) : (
-          <span className="flex-1 text-[14px] font-medium text-neutral-400 dark:text-neutral-500">
+          <span className="flex-1 text-[14px] font-medium text-neutral-500 dark:text-neutral-400">
             {optional ? "No category — counts as held time" : "Select a category…"}
           </span>
         )}
         <IconChevronDown
           size={16}
           strokeWidth={2}
-          className={`shrink-0 text-neutral-400 transition-transform duration-150 ${open ? "rotate-180" : ""}`}
+          className={`shrink-0 text-neutral-500 dark:text-neutral-400 transition-transform duration-150 ${open ? "rotate-180" : ""}`}
         />
       </button>
 
@@ -108,7 +108,7 @@ export function CategorySelector({ categories, selectedId, onSelect, onClear, on
                 }`}
               >
                 <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg border border-dashed border-neutral-300 dark:border-white/20">
-                  <IconMinus size={14} strokeWidth={2} className="text-neutral-400 dark:text-neutral-500" />
+                  <IconMinus size={14} strokeWidth={2} className="text-neutral-500 dark:text-neutral-400" />
                 </div>
                 <p className="min-w-0 flex-1 truncate text-[14px] font-semibold text-neutral-500 dark:text-neutral-400">
                   No category — counts as held time
@@ -167,7 +167,7 @@ export function CategorySelector({ categories, selectedId, onSelect, onClear, on
                           // and the outside-click handler would close it anyway.
                           onClick={() => { setOpen(false); onEdit(category); }}
                           aria-label={`Edit ${category.title}`}
-                          className="grid h-8 w-8 place-items-center rounded-lg text-neutral-400 transition-colors hover:bg-neutral-200/70 hover:text-neutral-700 dark:text-neutral-500 dark:hover:bg-white/[0.08] dark:hover:text-neutral-200"
+                          className="grid h-8 w-8 place-items-center rounded-lg text-neutral-500 transition-colors hover:bg-neutral-200/70 hover:text-neutral-700 dark:text-neutral-400 dark:hover:bg-white/[0.08] dark:hover:text-neutral-200"
                         >
                           <IconPencil size={14} strokeWidth={2} />
                         </button>
@@ -185,7 +185,7 @@ export function CategorySelector({ categories, selectedId, onSelect, onClear, on
                               : `Can't delete ${category.title} — used by ${inUse} task${inUse === 1 ? "" : "s"}`
                           }
                           title={deletable ? undefined : "Move those tasks to another category first"}
-                          className="grid h-8 w-8 place-items-center rounded-lg text-neutral-400 transition-colors hover:bg-rose-500/10 hover:text-rose-500 disabled:pointer-events-none disabled:opacity-30 dark:text-neutral-500 dark:hover:text-rose-400"
+                          className="grid h-8 w-8 place-items-center rounded-lg text-neutral-500 transition-colors hover:bg-rose-500/10 hover:text-rose-500 disabled:pointer-events-none disabled:opacity-30 dark:text-neutral-400 dark:hover:text-rose-400"
                         >
                           <IconTrash size={14} strokeWidth={2} />
                         </button>

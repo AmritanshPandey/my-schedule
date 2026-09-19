@@ -114,13 +114,13 @@ export default function RoutineDetailView({
           {/* ── Identity ─────────────────────────────────────────────────── */}
           <div className="flex items-center gap-3">
             <span className={`flex h-12 w-12 shrink-0 items-center justify-center rounded-full ${ritual.icon ? iconStyle.tint : "bg-neutral-100 dark:bg-white/[0.06]"}`}>
-              <Glyph size={22} strokeWidth={1.8} className={ritual.icon ? iconStyle.text : "text-neutral-400"} />
+              <Glyph size={22} strokeWidth={1.8} className={ritual.icon ? iconStyle.text : "text-neutral-500 dark:text-neutral-400"} />
             </span>
             <div className="min-w-0">
               {ritual.description && (
                 <p className="truncate text-[13px] text-neutral-500 dark:text-neutral-400">{ritual.description}</p>
               )}
-              <p className="text-[12px] font-medium text-neutral-400 dark:text-neutral-500">
+              <p className="text-[12px] font-medium text-neutral-500 dark:text-neutral-400">
                 {ritual.anyTime ? "Anytime" : formatDisplayTime(ritual.time)} · {describeRecurrence(ritual)}
               </p>
             </div>
@@ -128,7 +128,7 @@ export default function RoutineDetailView({
 
           {/* ── Today's progress — adaptive by trackingType ─────────────────── */}
           <div className={`overflow-hidden ${CARD}`}>
-            <p className="px-4 pt-4 text-[11px] font-bold uppercase tracking-[0.08em] text-neutral-400 dark:text-neutral-500">
+            <p className="px-4 pt-4 text-[11px] font-bold uppercase tracking-[0.08em] text-neutral-600 dark:text-neutral-400">
               Today&apos;s progress
             </p>
 
@@ -137,7 +137,7 @@ export default function RoutineDetailView({
                 <div className="flex items-baseline justify-between">
                   <p className="text-[22px] font-black tabular-nums text-neutral-950 dark:text-white">
                     {progress.value}
-                    <span className="text-[14px] font-semibold text-neutral-400 dark:text-neutral-500"> / {ritual.target ?? "–"}{ritual.unit ? ` ${ritual.unit}` : ""}</span>
+                    <span className="text-[14px] font-semibold text-neutral-500 dark:text-neutral-400"> / {ritual.target ?? "–"}{ritual.unit ? ` ${ritual.unit}` : ""}</span>
                   </p>
                   {progress.complete && (
                     <span className="flex items-center gap-1 text-[12px] font-bold text-emerald-600 dark:text-emerald-400">
@@ -155,7 +155,7 @@ export default function RoutineDetailView({
                     <button
                       type="button"
                       onClick={() => { haptic("light"); onUndoLastLog(); }}
-                      className="flex h-9 w-9 items-center justify-center rounded-full border border-neutral-200 text-neutral-400 dark:border-white/[0.10] dark:text-neutral-500"
+                      className="flex h-9 w-9 items-center justify-center rounded-full border border-neutral-200 text-neutral-500 dark:border-white/[0.10] dark:text-neutral-400"
                       aria-label="Undo last log"
                     >
                       <IconMinus size={15} strokeWidth={2.4} />
@@ -208,7 +208,7 @@ export default function RoutineDetailView({
                               type="button"
                               onClick={() => onRemoveLog(entry.id!)}
                               aria-label="Delete entry"
-                              className="text-neutral-300 hover:text-rose-500 dark:text-neutral-600 dark:hover:text-rose-400"
+                              className="text-neutral-500 hover:text-rose-500 dark:text-neutral-400 dark:hover:text-rose-400"
                             >
                               <IconTrash size={13} strokeWidth={2} />
                             </button>
@@ -224,7 +224,7 @@ export default function RoutineDetailView({
             {(trackingType === "checklist" || trackingType === "times") && (
               <div className="space-y-1.5 px-4 pb-4 pt-2">
                 {(ritual.steps ?? []).length === 0 ? (
-                  <p className="py-2 text-[13px] text-neutral-400 dark:text-neutral-500">
+                  <p className="py-2 text-[13px] text-neutral-500 dark:text-neutral-400">
                     {trackingType === "times" ? "No times yet — edit this routine to add some." : "No steps yet — edit this routine to add some."}
                   </p>
                 ) : (
@@ -253,7 +253,7 @@ export default function RoutineDetailView({
             {trackingType === "checkbox" && (
               <div className="px-4 pb-4 pt-2">
                 <div className="flex items-center justify-between">
-                  <p className={`text-[16px] font-bold ${progress.complete ? "text-emerald-600 dark:text-emerald-400" : "text-neutral-400 dark:text-neutral-500"}`}>
+                  <p className={`text-[16px] font-bold ${progress.complete ? "text-emerald-600 dark:text-emerald-400" : "text-neutral-500 dark:text-neutral-400"}`}>
                     {progress.complete ? "Completed" : "Not yet"}
                   </p>
                   <m.button
@@ -295,23 +295,23 @@ export default function RoutineDetailView({
 
           {/* ── Consistency ──────────────────────────────────────────────────── */}
           <div className={`space-y-3 p-4 ${CARD}`}>
-            <p className="text-[11px] font-bold uppercase tracking-[0.08em] text-neutral-400 dark:text-neutral-500">Consistency</p>
+            <p className="text-[11px] font-bold uppercase tracking-[0.08em] text-neutral-600 dark:text-neutral-400">Consistency</p>
             <div className="grid grid-cols-3 gap-3">
               <div>
                 <p className="flex items-center gap-1 text-[18px] font-black tabular-nums text-neutral-950 dark:text-white">
                   <IconFlame size={15} strokeWidth={2.4} className="text-emerald-500" /> {stats.streak}
                 </p>
-                <p className="text-[11px] font-semibold text-neutral-400 dark:text-neutral-500">Current streak</p>
+                <p className="text-[11px] font-semibold text-neutral-500 dark:text-neutral-400">Current streak</p>
               </div>
               <div>
                 <p className="flex items-center gap-1 text-[18px] font-black tabular-nums text-neutral-950 dark:text-white">
                   <IconTrophy size={15} strokeWidth={2.2} className="text-amber-500" /> {stats.bestStreak}
                 </p>
-                <p className="text-[11px] font-semibold text-neutral-400 dark:text-neutral-500">Best streak</p>
+                <p className="text-[11px] font-semibold text-neutral-500 dark:text-neutral-400">Best streak</p>
               </div>
               <div>
                 <p className="text-[18px] font-black tabular-nums text-neutral-950 dark:text-white">{stats.adherencePct}%</p>
-                <p className="text-[11px] font-semibold text-neutral-400 dark:text-neutral-500">Last 30 days</p>
+                <p className="text-[11px] font-semibold text-neutral-500 dark:text-neutral-400">Last 30 days</p>
               </div>
             </div>
             <div className="flex items-center justify-between gap-1.5 pt-1">
@@ -334,7 +334,7 @@ export default function RoutineDetailView({
 
           {ritual.notes && (
             <div className={`p-4 ${CARD}`}>
-              <p className="mb-1.5 text-[11px] font-bold uppercase tracking-[0.08em] text-neutral-400 dark:text-neutral-500">Notes</p>
+              <p className="mb-1.5 text-[11px] font-bold uppercase tracking-[0.08em] text-neutral-600 dark:text-neutral-400">Notes</p>
               <p className="whitespace-pre-wrap text-[13px] leading-relaxed text-neutral-600 dark:text-neutral-300">{ritual.notes}</p>
             </div>
           )}

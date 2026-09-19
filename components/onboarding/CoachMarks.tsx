@@ -209,14 +209,14 @@ export default function CoachMarks({ open, steps, onFinish }: CoachMarksProps) {
           onClick={(e) => e.stopPropagation()}
         >
           <div className="mb-2 flex items-center justify-between">
-            <p className="text-[11px] font-bold uppercase tracking-[0.08em] text-neutral-400 dark:text-neutral-500">
+            <p className="text-[11px] font-bold uppercase tracking-[0.08em] text-neutral-600 dark:text-neutral-400">
               {index + 1} of {steps.length}
             </p>
             <button
               type="button"
               onClick={finish}
               aria-label="Skip tour"
-              className="flex h-6 w-6 items-center justify-center rounded-full text-neutral-400 hover:bg-neutral-100 dark:hover:bg-white/[0.06]"
+              className="flex h-6 w-6 items-center justify-center rounded-full text-neutral-500 dark:text-neutral-400 hover:bg-neutral-100 dark:hover:bg-white/[0.06]"
             >
               <IconX size={13} strokeWidth={2} />
             </button>
@@ -227,7 +227,7 @@ export default function CoachMarks({ open, steps, onFinish }: CoachMarksProps) {
             <button
               type="button"
               onClick={finish}
-              className="text-[12px] font-semibold text-neutral-400 hover:text-neutral-600 dark:hover:text-neutral-300"
+              className="text-[12px] font-semibold text-neutral-500 dark:text-neutral-400 hover:text-neutral-600 dark:hover:text-neutral-300"
             >
               Skip
             </button>

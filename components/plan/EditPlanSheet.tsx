@@ -11,6 +11,7 @@ import Input from "@/components/ui/Input";
 import { daysBetween as daysBetweenUtil } from "@/lib/dateUtils";
 import { recalculateRoadmapTimeline } from "@/lib/roadmapDates";
 import { constrainTaskToPlanWindow } from "@/lib/planTaskWindow";
+import { typography } from "@/components/ui/Typography";
 import {
   PLAN_TITLE_MAX,
   DurationPresets,
@@ -121,7 +122,7 @@ export default function EditPlanSheet({ planId, plan, setSchedule, onClose, goal
               autoFocus
               maxLength={PLAN_TITLE_MAX}
             />
-            <p className="mt-1 text-right text-[11px] font-medium tabular-nums text-neutral-400 dark:text-neutral-500">
+            <p className="mt-1 text-right text-[11px] font-medium tabular-nums text-neutral-500 dark:text-neutral-400">
               {draft.title.length}/{PLAN_TITLE_MAX}
             </p>
           </div>
@@ -132,7 +133,7 @@ export default function EditPlanSheet({ planId, plan, setSchedule, onClose, goal
           />
           <div className="grid grid-cols-2 gap-2">
             <div>
-              <p className="mb-1 text-[11px] font-semibold uppercase tracking-[0.08em] text-neutral-400 dark:text-neutral-500">Start date</p>
+              <p className={`mb-1 ${typography.eyebrow}`}>Start date</p>
               <input
                 type="date"
                 value={draft.startDate}
@@ -141,7 +142,7 @@ export default function EditPlanSheet({ planId, plan, setSchedule, onClose, goal
               />
             </div>
             <div>
-              <p className="mb-1 text-[11px] font-semibold uppercase tracking-[0.08em] text-neutral-400 dark:text-neutral-500">
+              <p className={`mb-1 ${typography.eyebrow}`}>
                 End date{duration ? <span className="normal-case font-normal ml-1">({duration} days)</span> : null}
               </p>
               <input
@@ -161,8 +162,8 @@ export default function EditPlanSheet({ planId, plan, setSchedule, onClose, goal
 
           {goals.length > 0 && (
             <div>
-              <p className="mb-1 text-[11px] font-semibold uppercase tracking-[0.08em] text-neutral-400 dark:text-neutral-500">
-                Goal <span className="normal-case font-normal text-neutral-400">(optional)</span>
+              <p className={`mb-1 ${typography.eyebrow}`}>
+                Goal <span className="normal-case font-normal text-neutral-500 dark:text-neutral-400">(optional)</span>
               </p>
               <select
                 value={draft.goalId}
@@ -178,7 +179,7 @@ export default function EditPlanSheet({ planId, plan, setSchedule, onClose, goal
           )}
 
           <div>
-            <p className="mb-2 text-[11px] font-semibold uppercase tracking-[0.08em] text-neutral-400 dark:text-neutral-500">Icon</p>
+            <p className={`mb-2 ${typography.eyebrow}`}>Icon</p>
             <div className="grid grid-cols-5 gap-1.5">
               {SECTION_ICONS.map(({ name, label, icon: Icon }) => {
                 const sel = draft.icon === name;

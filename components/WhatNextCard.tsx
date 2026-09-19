@@ -61,7 +61,7 @@ export default function WhatNextCard({
               {timeLabel}
             </span>
           )}
-          <span className="text-[13px] text-neutral-400 dark:text-neutral-500">
+          <span className="text-[13px] text-neutral-500 dark:text-neutral-400">
             {plan.emoji} {plan.title}
           </span>
         </div>
@@ -80,7 +80,7 @@ export default function WhatNextCard({
           <button
             type="button"
             onClick={onMarkDone}
-            className="flex min-h-[44px] items-center gap-1.5 rounded-xl bg-[#00A63E] px-4 py-2 text-[13px] font-semibold text-white transition-colors hover:bg-[#008236] dark:bg-[#2FD46E] dark:text-neutral-950 dark:hover:bg-[#2FD46E]/90"
+            className="flex min-h-[44px] items-center gap-1.5 rounded-xl bg-[#008236] px-4 py-2 text-[13px] font-semibold text-white transition-colors hover:bg-[#006B2C] dark:bg-[#2FD46E] dark:text-neutral-950 dark:hover:bg-[#2FD46E]/90"
           >
             <IconCheck size={14} strokeWidth={2.5} />
             Mark done
@@ -88,7 +88,7 @@ export default function WhatNextCard({
           <button
             type="button"
             onClick={onDismissDay}
-            className="min-h-[44px] rounded-xl px-3 py-2 text-[13px] font-medium text-neutral-400 transition-colors hover:text-neutral-600 dark:text-neutral-500 dark:hover:text-neutral-300"
+            className="min-h-[44px] rounded-xl px-3 py-2 text-[13px] font-medium text-neutral-500 transition-colors hover:text-neutral-600 dark:text-neutral-400 dark:hover:text-neutral-300"
           >
             Focus later
           </button>

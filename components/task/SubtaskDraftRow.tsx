@@ -86,7 +86,7 @@ function SubtaskDraftRow({
           {...attributes}
           {...listeners}
           aria-label="Reorder subtask"
-          className="flex h-10 w-7 shrink-0 cursor-grab items-center justify-center rounded-lg text-neutral-300 transition-colors hover:text-neutral-500 active:cursor-grabbing dark:text-white/20 dark:hover:text-white"
+          className="flex h-10 w-7 shrink-0 cursor-grab items-center justify-center rounded-lg text-neutral-500 dark:text-neutral-400 transition-colors hover:text-neutral-500 active:cursor-grabbing dark:text-white/20 dark:hover:text-white"
         >
           <IconGripVertical size={14} />
         </button>
@@ -183,7 +183,7 @@ function SubtaskDraftRow({
                         className={`h-9 rounded-lg px-2.5 text-[12px] font-bold transition-colors ${
                           (draft.deadlineScope ?? "day") === scope
                             ? "bg-neutral-900 text-white dark:bg-white dark:text-neutral-900"
-                            : "border border-neutral-200 text-neutral-400 hover:text-neutral-600 dark:border-white/10 dark:text-neutral-500 dark:hover:text-neutral-300"
+                            : "border border-neutral-200 text-neutral-500 hover:text-neutral-600 dark:border-white/10 dark:text-neutral-400 dark:hover:text-neutral-300"
                         }`}
                       >
                         {SCOPE_LABEL[scope]}

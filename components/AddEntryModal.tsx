@@ -58,7 +58,7 @@ export default function AddEntryModal({ isOpen, onClose, onSave, metric, quickAm
         <SheetHeader eyebrow="Log" title="New Entry" onClose={handleClose} />
 
         {!!todayTotal && todayTotal > 0 && (
-          <p className="text-[12px] font-medium text-neutral-400 dark:text-neutral-500">
+          <p className="text-[12px] font-medium text-neutral-500 dark:text-neutral-400">
             Today: {todayTotal}{metric?.unit ? ` ${metric.unit}` : ""}
           </p>
         )}

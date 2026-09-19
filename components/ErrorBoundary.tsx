@@ -88,7 +88,7 @@ export class ErrorBoundary extends Component<Props, State> {
               {this.props.name ? `${this.props.name} hit a problem` : "This section hit a problem"}
             </p>
             {this.state.message && (
-              <p className="max-w-full break-words font-mono text-[11px] text-neutral-400 dark:text-neutral-500">
+              <p className="max-w-full break-words font-mono text-[11px] text-neutral-500 dark:text-neutral-400">
                 {this.state.message}
               </p>
             )}
@@ -109,7 +109,7 @@ export class ErrorBoundary extends Component<Props, State> {
             <p className="text-[16px] font-semibold text-neutral-900 dark:text-white mb-1">
               Something went wrong
             </p>
-            <p className="text-[12px] text-neutral-400 dark:text-neutral-500 mb-5 font-mono break-all">
+            <p className="text-[12px] text-neutral-500 dark:text-neutral-400 mb-5 font-mono break-all">
               {chunkError
                 ? "A cached app version is stale or failed to load. Reloading the app should restore the latest build."
                 : this.state.message}

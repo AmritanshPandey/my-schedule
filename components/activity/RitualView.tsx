@@ -32,6 +32,7 @@ import { buildAllRoutinesMonthDays } from "@/lib/consistency/ritualCalendar";
 import { buildRoutineInsights } from "@/lib/consistency/routineInsights";
 import RoutineMonthCalendar from "./RoutineMonthCalendar";
 import RoutineInsightsSection from "./RoutineInsightsSection";
+import { typography } from "@/components/ui/Typography";
 
 // JS getDay() 0=Sunday → DayKey
 const JS_TO_DAY: DayKey[] = ["sunday","monday","tuesday","wednesday","thursday","friday","saturday"];
@@ -64,9 +65,9 @@ function GroupHeader({
   const Icon = BUCKET_ICONS[bucketKey];
   return (
     <div className="flex items-center gap-2 pb-1 pt-4 first:pt-1">
-      <Icon size={14} strokeWidth={2} className="text-neutral-400 dark:text-neutral-500" />
+      <Icon size={14} strokeWidth={2} className="text-neutral-500 dark:text-neutral-400" />
       <span className="text-[12px] font-bold text-neutral-600 dark:text-neutral-300">{label}</span>
-      <span className="text-[12px] font-semibold text-neutral-300 dark:text-neutral-600">{count}</span>
+      <span className="text-[12px] font-semibold text-neutral-500 dark:text-neutral-400">{count}</span>
     </div>
   );
 }
@@ -241,7 +242,7 @@ function DateActionButton({
               {["M", "T", "W", "T", "F", "S", "S"].map((day, index) => (
                 <span
                   key={`${day}-${index}`}
-                  className="flex h-7 items-center justify-center text-[11px] font-bold text-neutral-400 dark:text-neutral-500"
+                  className="flex h-7 items-center justify-center text-[11px] font-bold text-neutral-500 dark:text-neutral-400"
                 >
                   {day}
                 </span>
@@ -263,7 +264,7 @@ function DateActionButton({
                         ? "border border-neutral-950 text-neutral-950 hover:bg-neutral-100 dark:border-white dark:text-white dark:hover:bg-white/[0.08]"
                         : day.inMonth
                           ? "text-neutral-700 hover:bg-neutral-100 dark:text-neutral-200 dark:hover:bg-white/[0.07]"
-                          : "text-neutral-300 hover:bg-neutral-50 dark:text-neutral-700 dark:hover:bg-white/[0.04]"
+                          : "text-neutral-400 hover:bg-neutral-50 dark:text-neutral-500 dark:hover:bg-white/[0.04]"
                   }`}
                 >
                   {day.dayNumber}
@@ -502,7 +503,7 @@ export default function RitualView({
                     }`}
                   >
                     <span className={`text-[12px] font-semibold leading-none ${
-                      isToday ? "text-emerald-600 dark:text-emerald-400" : sel ? "text-neutral-700 dark:text-neutral-200" : "text-neutral-400 dark:text-neutral-500"
+                      isToday ? "text-emerald-600 dark:text-emerald-400" : sel ? "text-neutral-700 dark:text-neutral-200" : "text-neutral-600 dark:text-neutral-400"
                     }`}>
                       {DAY_SHORT[day]}
                     </span>
@@ -540,7 +541,7 @@ export default function RitualView({
               No routines for {DAY_SHORT[selectedDay]}
             </p>
             <button type="button" onClick={() => onAddOpenChange(true)}
-              className="mt-1 text-[13px] font-semibold text-neutral-400 underline underline-offset-2 hover:text-neutral-600 dark:text-neutral-500 dark:hover:text-neutral-300"
+              className="mt-1 text-[13px] font-semibold text-neutral-500 underline underline-offset-2 hover:text-neutral-600 dark:text-neutral-400 dark:hover:text-neutral-300"
             >
               Add one
             </button>
@@ -591,7 +592,7 @@ export default function RitualView({
 
             <aside className="hidden min-w-0 space-y-3 xl:block">
               <div className={`rounded-2xl border p-4 ${allDone ? "border-emerald-200 bg-emerald-50 dark:border-emerald-500/20 dark:bg-emerald-500/[0.07]" : "border-neutral-200 bg-white dark:border-white/[0.08] dark:bg-neutral-900"}`}>
-                <p className="text-[11px] font-semibold uppercase tracking-[0.08em] text-neutral-400 dark:text-neutral-500">
+                <p className={typography.eyebrow}>
                   Today&apos;s signal
                 </p>
                 <p className={`mt-2 text-[24px] font-black leading-none ${allDone ? "text-emerald-600 dark:text-emerald-400" : "text-neutral-950 dark:text-white"}`}>
@@ -606,7 +607,7 @@ export default function RitualView({
               </div>
 
               <div className="rounded-2xl border border-neutral-200 bg-white p-4 dark:border-white/[0.08] dark:bg-neutral-900">
-                <p className="text-[11px] font-semibold uppercase tracking-[0.08em] text-neutral-400 dark:text-neutral-500">
+                <p className={typography.eyebrow}>
                   Routine totals
                 </p>
                 <div className="mt-3 space-y-2">

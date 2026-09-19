@@ -92,13 +92,13 @@ export default function ErrorReporter() {
                     <span className="rounded bg-red-100 px-1.5 py-0.5 text-[10px] font-bold text-red-700 dark:bg-red-500/20 dark:text-red-300">
                       {e.source}
                     </span>
-                    <span className="text-[10px] text-neutral-400">{new Date(e.time).toLocaleTimeString()}</span>
+                    <span className="text-[10px] text-neutral-500 dark:text-neutral-400">{new Date(e.time).toLocaleTimeString()}</span>
                   </div>
                   <p className="mt-1 break-words font-mono text-[11px] leading-snug text-neutral-800 dark:text-neutral-200">
                     {e.message}
                   </p>
                   {e.stack && (
-                    <pre className="mt-1 max-h-24 overflow-auto whitespace-pre-wrap break-words font-mono text-[10px] leading-snug text-neutral-400 dark:text-neutral-500">
+                    <pre className="mt-1 max-h-24 overflow-auto whitespace-pre-wrap break-words font-mono text-[10px] leading-snug text-neutral-500 dark:text-neutral-400">
                       {e.stack}
                     </pre>
                   )}

@@ -29,7 +29,7 @@ interface DayActionsSheetProps {
 }
 
 const SECTION_LABEL =
-  "text-[11px] font-bold uppercase tracking-[0.08em] text-neutral-500 dark:text-neutral-400";
+  "text-[11px] font-bold uppercase tracking-[0.08em] text-neutral-600 dark:text-neutral-400";
 
 /**
  * Day-level actions: swap two whole weekdays, duplicate a day onto others, or

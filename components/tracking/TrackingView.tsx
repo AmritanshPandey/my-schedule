@@ -150,19 +150,19 @@ function MetricCard({
           <p className="mt-0.5 text-[13px] font-bold tabular-nums text-neutral-600 dark:text-neutral-300">
             {stat.isDaily ? (
               <>
-                {fmt(stat.todayTotal)} <span className="text-neutral-400 dark:text-neutral-500">/ {fmt(stat.targetValue!)}</span>
-                {unit && <span className="text-neutral-400 dark:text-neutral-500"> {unit}</span>}
+                {fmt(stat.todayTotal)} <span className="text-neutral-500 dark:text-neutral-400">/ {fmt(stat.targetValue!)}</span>
+                {unit && <span className="text-neutral-500 dark:text-neutral-400"> {unit}</span>}
               </>
             ) : stat.latestValue !== null ? (
               <>
                 {fmt(stat.latestValue)}
-                {unit && <span className="text-neutral-400 dark:text-neutral-500"> {unit}</span>}
+                {unit && <span className="text-neutral-500 dark:text-neutral-400"> {unit}</span>}
                 {stat.targetValue !== null && (
-                  <span className="text-neutral-400 dark:text-neutral-500"> → {fmt(stat.targetValue)}</span>
+                  <span className="text-neutral-500 dark:text-neutral-400"> → {fmt(stat.targetValue)}</span>
                 )}
               </>
             ) : (
-              <span className="font-semibold text-neutral-400 dark:text-neutral-500">Nothing logged yet</span>
+              <span className="font-semibold text-neutral-500 dark:text-neutral-400">Nothing logged yet</span>
             )}
           </p>
         </div>
@@ -234,7 +234,7 @@ function MetricCard({
                   type="button"
                   onClick={() => onDeleteEntry(entry.id)}
                   aria-label={`Delete ${fmt(entry.value)}${unit ? ` ${unit}` : ""} entry`}
-                  className="flex h-7 w-7 items-center justify-center rounded-full text-neutral-400 transition-colors hover:bg-neutral-100 hover:text-rose-600 dark:hover:bg-white/[0.06] dark:hover:text-rose-400"
+                  className="flex h-7 w-7 items-center justify-center rounded-full text-neutral-500 dark:text-neutral-400 transition-colors hover:bg-neutral-100 hover:text-rose-600 dark:hover:bg-white/[0.06] dark:hover:text-rose-400"
                 >
                   <IconTrash size={13} strokeWidth={2} />
                 </button>
@@ -299,7 +299,7 @@ export default function TrackingView({
           <div className="flex flex-col gap-6">
             {groups.map((group, i) => (
               <section key={group.plan?.id ?? `ungrouped-${i}`}>
-                <h2 className="mb-2 text-[11px] font-bold uppercase tracking-[0.08em] text-neutral-500 dark:text-neutral-400">
+                <h2 className="mb-2 text-[11px] font-bold uppercase tracking-[0.08em] text-neutral-600 dark:text-neutral-400">
                   {group.plan?.title ?? "Other"}
                 </h2>
                 <div className="grid gap-3 lg:grid-cols-2">

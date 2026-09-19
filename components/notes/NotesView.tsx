@@ -20,7 +20,7 @@ import EmptyState from "@/components/ui/EmptyState";
 const NoteEditor = dynamic(() => import("./NoteEditor"), {
   ssr: false,
   loading: () => (
-    <div className="flex h-full items-center justify-center bg-white text-[13px] font-semibold text-neutral-400 dark:bg-neutral-950 dark:text-neutral-500">
+    <div className="flex h-full items-center justify-center bg-white text-[13px] font-semibold text-neutral-500 dark:bg-neutral-950 dark:text-neutral-400">
       Opening note...
     </div>
   ),
@@ -68,7 +68,7 @@ function tagColor(tag: string) {
 
 function SectionLabel({ icon, label }: { icon?: React.ReactNode; label: string }) {
   return (
-    <div className="flex items-center gap-1.5 px-1 pb-1 text-[11px] font-bold uppercase tracking-[0.08em] text-neutral-400 dark:text-neutral-500">
+    <div className="flex items-center gap-1.5 px-1 pb-1 text-[11px] font-bold uppercase tracking-[0.08em] text-neutral-600 dark:text-neutral-400">
       {icon}
       {label}
     </div>
@@ -104,7 +104,7 @@ function NoteCard({
           {deriveTitle(note)}
         </span>
         <div className="flex shrink-0 items-center gap-1.5">
-          <span className="text-[11px] font-medium text-neutral-400 dark:text-neutral-500">
+          <span className="text-[11px] font-medium text-neutral-500 dark:text-neutral-400">
             {relativeDate(note.updatedAt)}
           </span>
           <button
@@ -115,7 +115,7 @@ function NoteCard({
             className={`-mr-1 flex h-6 w-6 items-center justify-center rounded-lg transition-colors ${
               note.pinned
                 ? "text-amber-500"
-                : "text-neutral-300 hover:text-neutral-500 dark:text-neutral-600 dark:hover:text-neutral-400"
+                : "text-neutral-500 hover:text-neutral-600 dark:text-neutral-400 dark:hover:text-neutral-300"
             }`}
           >
             <IconPinnedFilled size={15} strokeWidth={2} />
@@ -325,7 +325,7 @@ export default function NotesView({
         {isDesktop ? (
           <div className="flex shrink-0 items-center gap-2 px-3 pt-4 pb-1">
             <div className="flex items-center gap-2">
-              <IconNotebook size={20} strokeWidth={1.9} className="text-neutral-400 dark:text-neutral-500" />
+              <IconNotebook size={20} strokeWidth={1.9} className="text-neutral-500 dark:text-neutral-400" />
               <h1 className="text-[22px] font-bold tracking-[-0.5px] text-neutral-900 dark:text-white">Notes</h1>
             </div>
             <div className="flex-1" />
@@ -361,7 +361,7 @@ export default function NotesView({
         {/* Search */}
         <div className="px-4 pt-3 pb-3">
           <div className="relative">
-            <IconSearch size={15} strokeWidth={2} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-neutral-400" />
+            <IconSearch size={15} strokeWidth={2} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-neutral-500 dark:text-neutral-400" />
             <input
               value={query}
               onChange={(e) => setQuery(e.target.value)}
@@ -369,7 +369,7 @@ export default function NotesView({
               className="h-10 w-full rounded-xl border border-neutral-200 bg-neutral-50 pl-9 pr-9 text-[14px] text-neutral-900 outline-none focus:border-neutral-300 focus:bg-white dark:border-white/[0.08] dark:bg-white/[0.04] dark:text-white"
             />
             {query && (
-              <button type="button" onClick={() => setQuery("")} className="absolute right-2.5 top-1/2 -translate-y-1/2 text-neutral-400 hover:text-neutral-600">
+              <button type="button" onClick={() => setQuery("")} className="absolute right-2.5 top-1/2 -translate-y-1/2 text-neutral-500 dark:text-neutral-400 hover:text-neutral-600">
                 <IconX size={15} strokeWidth={2} />
               </button>
             )}
@@ -468,7 +468,7 @@ export default function NotesView({
               </span>
               <div className="min-w-0 flex-1">
                 <p className="text-[16px] font-bold text-neutral-900 dark:text-white">{label}</p>
-                <p className="mt-0.5 text-[13px] text-neutral-400 dark:text-neutral-500">{description}</p>
+                <p className="mt-0.5 text-[13px] text-neutral-500 dark:text-neutral-400">{description}</p>
               </div>
             </button>
           ))}

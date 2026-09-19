@@ -24,7 +24,7 @@ interface MissedTaskSheetProps {
 
 const CONTROL =
   "h-11 w-full rounded-xl border border-neutral-200 bg-white px-3 text-[15px] font-semibold text-neutral-900 dark:border-white/[0.10] dark:bg-white/[0.04] dark:text-white";
-const LABEL = "text-[11px] font-bold uppercase tracking-[0.08em] text-neutral-500 dark:text-neutral-400";
+const LABEL = "text-[11px] font-bold uppercase tracking-[0.08em] text-neutral-600 dark:text-neutral-400";
 
 function friendlyDate(iso: string, todayISO: string): string {
   if (iso === todayISO) return "Today";
@@ -89,7 +89,7 @@ export default function MissedTaskSheet({ missed, onClose, onReschedule, onDismi
                   Today
                 </button>
                 <div className="relative min-w-0 flex-1">
-                  <IconCalendar size={15} strokeWidth={2} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-neutral-400" />
+                  <IconCalendar size={15} strokeWidth={2} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-neutral-500 dark:text-neutral-400" />
                   <input
                     type="date"
                     aria-label="Custom date"
@@ -105,7 +105,7 @@ export default function MissedTaskSheet({ missed, onClose, onReschedule, onDismi
             <div>
               <TimeInput label="At" value={timeStr} onChange={setTimeStr} ariaLabel="Start time" />
               {originalStart != null && (
-                <p className="mt-1.5 text-[11px] font-medium text-neutral-400 dark:text-neutral-500">
+                <p className="mt-1.5 text-[11px] font-medium text-neutral-500 dark:text-neutral-400">
                   {keepsOriginalTime ? "Keeping the original time" : `Original: ${formatDisplayTime(minutesToInputTime(originalStart))}`}
                 </p>
               )}

@@ -221,7 +221,7 @@ export default function IOSTimelineRow({
           <div className="min-w-0 flex-1">
             <p className={`truncate text-[16px] font-bold leading-tight ${
               !tracked ? "text-neutral-500 dark:text-neutral-400"
-              : missed ? "text-neutral-500 line-through decoration-rose-400 dark:text-neutral-500"
+              : missed ? "text-neutral-400 line-through decoration-rose-400 dark:text-neutral-500"
               : "text-neutral-900 dark:text-white"
             }`}>
               {task.title}

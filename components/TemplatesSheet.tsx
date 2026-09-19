@@ -10,6 +10,7 @@ import {
 import BottomSheet from "@/components/ui/BottomSheet";
 import { TEMPLATES, type Template } from "@/lib/templates";
 import { accentStyles } from "@/lib/colorSystem";
+import { typography } from "@/components/ui/Typography";
 
 // ── Icon map (mirrors SectionIcons) ──────────────────────────────────────────
 
@@ -85,7 +86,7 @@ function TemplateCard({ template, onUse }: TemplateCardProps) {
             <div key={i} className="flex items-center gap-2">
               <div className={`h-1.5 w-1.5 shrink-0 rounded-full ${accent.dot}`} />
               <p className="text-[12px] text-neutral-500 dark:text-neutral-400 truncate">{m.title}</p>
-              <p className="ml-auto shrink-0 text-[11px] font-semibold text-neutral-400 dark:text-neutral-500">
+              <p className="ml-auto shrink-0 text-[11px] font-semibold text-neutral-500 dark:text-neutral-400">
                 Day {m.offsetDays}
               </p>
             </div>
@@ -137,7 +138,7 @@ function TemplatesSheetInner({ open, onClose, onApply }: TemplatesSheetProps) {
         {/* Header */}
         <div className="flex items-start justify-between mb-5">
           <div>
-            <p className="text-[11px] font-semibold uppercase tracking-[0.08em] text-neutral-400 dark:text-neutral-500">
+            <p className={typography.eyebrow}>
               Get started
             </p>
             <h2 className="text-[22px] font-extrabold tracking-tight text-neutral-900 dark:text-white">

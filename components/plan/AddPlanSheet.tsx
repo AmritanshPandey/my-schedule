@@ -20,6 +20,7 @@ import Button from "@/components/ui/Button";
 import Input from "@/components/ui/Input";
 import { cycleAccentColor } from "@/components/ui/Badge";
 import { stableFieldHash } from "@/lib/hash";
+import { typography } from "@/components/ui/Typography";
 import {
   PLAN_TITLE_MAX,
   DurationPresets,
@@ -162,7 +163,7 @@ export default function AddPlanSheet({ open, onClose, setSchedule, onUseAI, goal
               maxLength={PLAN_TITLE_MAX}
               onKeyDown={(e) => { if (e.key === "Enter" && title.trim()) handleSubmit(); }}
             />
-            <p className="mt-1 text-right text-[11px] font-medium tabular-nums text-neutral-400 dark:text-neutral-500">
+            <p className="mt-1 text-right text-[11px] font-medium tabular-nums text-neutral-500 dark:text-neutral-400">
               {title.length}/{PLAN_TITLE_MAX}
             </p>
           </div>
@@ -173,7 +174,7 @@ export default function AddPlanSheet({ open, onClose, setSchedule, onUseAI, goal
           />
           <div className="grid grid-cols-2 gap-2">
             <div>
-              <p className="mb-1 text-[11px] font-semibold uppercase tracking-[0.08em] text-neutral-400 dark:text-neutral-500">Start date</p>
+              <p className={`mb-1 ${typography.eyebrow}`}>Start date</p>
               <input
                 type="date"
                 value={startDate}
@@ -182,7 +183,7 @@ export default function AddPlanSheet({ open, onClose, setSchedule, onUseAI, goal
               />
             </div>
             <div>
-              <p className="mb-1 text-[11px] font-semibold uppercase tracking-[0.08em] text-neutral-400 dark:text-neutral-500">
+              <p className={`mb-1 ${typography.eyebrow}`}>
                 End date
               </p>
               <input
@@ -203,8 +204,8 @@ export default function AddPlanSheet({ open, onClose, setSchedule, onUseAI, goal
 
         {goals.length > 0 && (
           <div>
-            <p className="mb-1 text-[11px] font-semibold uppercase tracking-[0.08em] text-neutral-400 dark:text-neutral-500">
-              Goal <span className="normal-case font-normal text-neutral-400">(optional)</span>
+            <p className={`mb-1 ${typography.eyebrow}`}>
+              Goal <span className="normal-case font-normal text-neutral-500 dark:text-neutral-400">(optional)</span>
             </p>
             <select
               value={goalId}
@@ -220,7 +221,7 @@ export default function AddPlanSheet({ open, onClose, setSchedule, onUseAI, goal
         )}
 
         <div>
-          <p className="mb-2 text-[11px] font-semibold uppercase tracking-[0.08em] text-neutral-400 dark:text-neutral-500">Icon</p>
+          <p className={`mb-2 ${typography.eyebrow}`}>Icon</p>
           <div className="grid grid-cols-5 gap-1.5">
             {SECTION_ICONS.map(({ name, label, icon: Icon }) => {
               const sel = iconName === name;
@@ -247,8 +248,8 @@ export default function AddPlanSheet({ open, onClose, setSchedule, onUseAI, goal
             meaningful for any task that inherits it. */}
 
         <div>
-          <p className="mb-2 text-[11px] font-semibold uppercase tracking-[0.08em] text-neutral-400 dark:text-neutral-500">
-            Progress trackers <span className="normal-case font-normal text-neutral-400">(optional)</span>
+          <p className={`mb-2 ${typography.eyebrow}`}>
+            Progress trackers <span className="normal-case font-normal text-neutral-500 dark:text-neutral-400">(optional)</span>
           </p>
           <div className="flex gap-2">
             <Input

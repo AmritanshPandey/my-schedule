@@ -56,14 +56,14 @@ export default function EmptyState({
       </div>
       <div>
         <p className="text-[16px] font-semibold text-neutral-700 dark:text-neutral-200">{title}</p>
-        <p className="mt-1.5 max-w-[260px] text-[14px] leading-relaxed text-neutral-400">{description}</p>
+        <p className="mt-1.5 max-w-[260px] text-[14px] leading-relaxed text-neutral-500 dark:text-neutral-400">{description}</p>
       </div>
       {action && (
         <m.button
           type="button"
           whileTap={{ scale: 0.96 }}
           onClick={() => { haptic("medium"); action.onClick(); }}
-          className="mt-2 inline-flex min-h-[44px] items-center gap-2 rounded-full bg-[#00A63E] px-5 py-2.5 text-[14px] font-semibold text-white hover:bg-[#008236] dark:bg-[#2FD46E] dark:text-neutral-950 dark:hover:bg-[#2FD46E]/90"
+          className="mt-2 inline-flex min-h-[44px] items-center gap-2 rounded-full bg-[#008236] px-5 py-2.5 text-[14px] font-semibold text-white hover:bg-[#006B2C] dark:bg-[#2FD46E] dark:text-neutral-950 dark:hover:bg-[#2FD46E]/90"
         >
           {ActionIcon && <ActionIcon size={16} strokeWidth={2.5} />}
           {action.label}
@@ -73,7 +73,7 @@ export default function EmptyState({
         <button
           type="button"
           onClick={() => { haptic("light"); secondaryAction.onClick(); }}
-          className="text-[13px] font-semibold text-neutral-400 underline underline-offset-2 transition-colors hover:text-neutral-600 dark:text-neutral-500 dark:hover:text-neutral-300"
+          className="text-[13px] font-semibold text-neutral-500 underline underline-offset-2 transition-colors hover:text-neutral-600 dark:text-neutral-400 dark:hover:text-neutral-300"
         >
           {secondaryAction.label}
         </button>

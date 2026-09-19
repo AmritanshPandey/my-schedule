@@ -180,7 +180,7 @@ export default function DayBreakdownCard({ activities, categories, todayKey, tod
     <section data-testid="overview-day-breakdown" className={`${CARD} px-5 py-4`}>
       <div className="mb-3 flex items-center justify-between gap-3">
         <div className="flex min-w-0 items-center gap-2">
-          <IconChartPie size={15} strokeWidth={2} className="shrink-0 text-neutral-400 dark:text-neutral-500" />
+          <IconChartPie size={15} strokeWidth={2} className="shrink-0 text-neutral-500 dark:text-neutral-400" />
           <p className="truncate text-[13px] font-bold text-neutral-800 dark:text-neutral-200">Where the day goes</p>
         </div>
         {committedMinutes > 0 && (
@@ -357,7 +357,7 @@ export default function DayBreakdownCard({ activities, categories, todayKey, tod
           third named only in a footnote below. */}
       <div className="mt-4 border-t border-neutral-200/70 pt-3 dark:border-white/[0.07]">
         <div className="flex items-baseline justify-between gap-3">
-          <p className="text-[11px] font-bold uppercase tracking-[0.08em] text-neutral-500 dark:text-neutral-400">
+          <p className="text-[11px] font-bold uppercase tracking-[0.08em] text-neutral-600 dark:text-neutral-400">
             Active hours
           </p>
           <p className="shrink-0 text-[12px] font-bold tabular-nums text-neutral-700 dark:text-neutral-300">

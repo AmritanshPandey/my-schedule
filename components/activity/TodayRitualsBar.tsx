@@ -46,7 +46,7 @@ export default function TodayRitualsBar({
         <span className="text-[12px] font-black uppercase tracking-[0.10em] text-neutral-800 dark:text-neutral-200">
           Routines
         </span>
-        <div className="flex items-center gap-1.5 text-neutral-400 dark:text-neutral-500">
+        <div className="flex items-center gap-1.5 text-neutral-500 dark:text-neutral-400">
           <IconRepeat size={14} strokeWidth={1.8} />
           <span className="text-[13px] font-bold tabular-nums">
             {doneCount}/{todayRituals.length}
@@ -122,12 +122,12 @@ export default function TodayRitualsBar({
               </span>
               <span className={`whitespace-nowrap text-[12px] font-semibold leading-none ${
                 done
-                  ? "text-neutral-400 line-through decoration-neutral-300 dark:text-neutral-600"
+                  ? "text-neutral-400 line-through decoration-neutral-300 dark:text-neutral-500"
                   : "text-neutral-700 dark:text-neutral-200"
               }`}>
                 {ritual.title}
               </span>
-              <span className="whitespace-nowrap text-[11px] font-medium tabular-nums text-neutral-400 dark:text-neutral-500">
+              <span className="whitespace-nowrap text-[11px] font-medium tabular-nums text-neutral-500 dark:text-neutral-400">
                 {meta}
               </span>
             </m.button>

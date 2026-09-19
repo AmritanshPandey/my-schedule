@@ -121,10 +121,10 @@ export default function AIOnboarding({ onOpenAISettings }: { onOpenAISettings: (
                     sheet (no free-text chat), which otherwise reads as a
                     missing feature rather than an intentional, smaller
                     surface for a smaller screen. */}
-                <p className="mt-2 text-[13px] leading-snug text-neutral-400 dark:text-neutral-500 lg:hidden">
+                <p className="mt-2 text-[13px] leading-snug text-neutral-500 dark:text-neutral-400 lg:hidden">
                   On this screen size you get quick one-tap suggestions; open PlanR on a larger screen for free-form AI chat.
                 </p>
-                <p className="mt-3 text-[13px] leading-snug text-neutral-400 dark:text-neutral-500">
+                <p className="mt-3 text-[13px] leading-snug text-neutral-500 dark:text-neutral-400">
                   {/* Read from the provider rather than written in prose: this said
                       "460 MB" while the default model actually cost ~820 MB, because
                       the copy and the model were changed at different times. */}
@@ -155,7 +155,7 @@ export default function AIOnboarding({ onOpenAISettings }: { onOpenAISettings: (
                 <button
                   type="button"
                   onClick={handleOpenSettings}
-                  className="mt-3 w-full py-2 text-[13px] font-medium text-neutral-400 hover:text-neutral-600 dark:text-neutral-500 dark:hover:text-neutral-300"
+                  className="mt-3 w-full py-2 text-[13px] font-medium text-neutral-500 hover:text-neutral-600 dark:text-neutral-400 dark:hover:text-neutral-300"
                 >
                   Open AI settings
                 </button>

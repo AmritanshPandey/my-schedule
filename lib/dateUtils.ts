@@ -91,3 +91,24 @@ export function formatDayNoteLabel(dateISO: string, now: Date = new Date()): str
   if (Number.isNaN(d.getTime())) return dateISO;
   return d.toLocaleDateString(undefined, { weekday: "short", day: "numeric", month: "short" });
 }
+
+/**
+ * The effective "Tracking starts" date, never trusted as stored.
+ *
+ * `isTaskScheduledOn` hides every date before this one, so a start date in the
+ * *future* hides everything at once — tasks, routines, streaks, trends and
+ * metric entries, app-wide, with nothing on screen to explain why. The date
+ * input's `max` is advisory only: it cannot stop a value arriving from a synced
+ * device with a skewed clock, from an older build, or from a hand-edited
+ * payload, so the guard belongs at the normalize boundary every load passes
+ * through rather than on the control.
+ *
+ * Clamped to today rather than dropped: dropping would silently begin counting
+ * years of pre-adoption history into streaks and trends, a larger and less
+ * reversible surprise than "tracking starts today". A malformed or absent value
+ * is undefined, which means all history — the setting's own "off" state.
+ */
+export function clampTrackingStart(raw: unknown, today: string): string | undefined {
+  if (typeof raw !== "string" || !/^\d{4}-\d{2}-\d{2}$/.test(raw)) return undefined;
+  return raw > today ? today : raw;
+}

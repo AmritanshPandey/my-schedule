@@ -24,7 +24,7 @@ export default function TrendChange({
       ? "text-emerald-500 dark:text-emerald-400"
       : state === "negative"
       ? "text-rose-500 dark:text-rose-400"
-      : "text-neutral-400 dark:text-neutral-500";
+      : "text-neutral-500 dark:text-neutral-400";
 
   return (
     <span className={`inline-flex shrink-0 items-center gap-0.5 text-[12px] font-bold tabular-nums ${colorClass}`}>

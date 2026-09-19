@@ -56,7 +56,7 @@ export default function SignInPrompt({ className = "" }: { className?: string })
         type="button"
         onClick={dismiss}
         aria-label="Dismiss"
-        className="absolute right-2 top-2 flex h-7 w-7 items-center justify-center rounded-full text-neutral-400 transition-colors hover:bg-neutral-100 hover:text-neutral-600 dark:text-neutral-500 dark:hover:bg-white/[0.06]"
+        className="absolute right-2 top-2 flex h-7 w-7 items-center justify-center rounded-full text-neutral-500 transition-colors hover:bg-neutral-100 hover:text-neutral-600 dark:text-neutral-400 dark:hover:bg-white/[0.06]"
       >
         <IconX size={15} strokeWidth={2} />
       </button>

@@ -83,7 +83,7 @@ export default function RoutineRow({
         {ritual.icon ? (
           <Glyph size={18} strokeWidth={1.9} className={iconStyle.text} />
         ) : (
-          <span className="text-[15px] font-bold text-neutral-400 dark:text-neutral-500">{ritual.title.charAt(0).toUpperCase()}</span>
+          <span className="text-[15px] font-bold text-neutral-600 dark:text-neutral-400">{ritual.title.charAt(0).toUpperCase()}</span>
         )}
       </button>
 
@@ -119,7 +119,7 @@ export default function RoutineRow({
           )}
         </p>
         {items && items.length > 0 && (
-          <p className="mt-0.5 truncate text-[11px] text-neutral-400 dark:text-neutral-500">
+          <p className="mt-0.5 truncate text-[11px] text-neutral-500 dark:text-neutral-400">
             {items.map((step) => step.label).join(" · ")}
           </p>
         )}
@@ -150,7 +150,7 @@ export default function RoutineRow({
         whileTap={{ scale: 0.9 }}
         onClick={() => { haptic("light"); onOpenDetail(ritual); }}
         aria-label={`Open ${ritual.title} details`}
-        className="flex h-8 w-8 shrink-0 items-center justify-center text-neutral-300 lg:hidden dark:text-neutral-600"
+        className="flex h-8 w-8 shrink-0 items-center justify-center text-neutral-500 lg:hidden dark:text-neutral-400"
       >
         <IconChevronRight size={16} strokeWidth={2} />
       </m.button>

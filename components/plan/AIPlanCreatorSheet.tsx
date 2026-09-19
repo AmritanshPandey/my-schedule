@@ -25,6 +25,7 @@ import { buildTaskGenerationContext } from "@/lib/ai/context/planGenerationConte
 import { AICyclingStatus } from "@/components/ai/AIThinkingStatus";
 import { formatDisplayTime } from "@/lib/timeUtils";
 import { DAYS, type DayKey, type Plan, type Schedule } from "@/lib/useScheduleDB";
+import { typography } from "@/components/ui/Typography";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -362,7 +363,7 @@ export default function AIPlanCreatorSheet({
         />
 
         <div className="space-y-3">
-              <p className="text-[11px] font-semibold uppercase tracking-[0.08em] text-neutral-400 dark:text-neutral-500">
+              <p className={typography.eyebrow}>
                 What&apos;s your goal?
               </p>
               <textarea
@@ -444,7 +445,7 @@ export default function AIPlanCreatorSheet({
         <SheetHeader eyebrow="AI" title="Plan with AI" onClose={onClose} />
 
         <div className="rounded-xl border border-emerald-100 bg-emerald-50/60 px-3.5 py-2.5 dark:border-emerald-500/15 dark:bg-emerald-500/5">
-          <p className="mb-1 flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-[0.08em] text-emerald-700 dark:text-emerald-400">
+          <p className="mb-1 flex items-center gap-1.5 text-[11px] font-bold uppercase tracking-[0.08em] text-emerald-700 dark:text-emerald-400">
             <IconSparkles size={11} strokeWidth={2.2} />
             One quick thing
           </p>
@@ -515,7 +516,7 @@ export default function AIPlanCreatorSheet({
             <IconArrowLeft size={18} strokeWidth={2} />
           </button>
           <div className="flex-1">
-            <p className="text-[11px] font-semibold uppercase tracking-[0.08em] text-neutral-400 dark:text-neutral-500">Review Plan</p>
+            <p className={typography.eyebrow}>Review Plan</p>
           </div>
           <button
             type="button"
@@ -546,7 +547,7 @@ export default function AIPlanCreatorSheet({
 
         {/* Icon picker */}
         <div>
-          <p className="mb-2 text-[11px] font-semibold uppercase tracking-[0.08em] text-neutral-400 dark:text-neutral-500">Icon</p>
+          <p className={`mb-2 ${typography.eyebrow}`}>Icon</p>
           <div className="grid grid-cols-6 gap-1.5">
             {SECTION_ICONS.slice(0, 18).map(({ name, label, icon: Icon }) => {
               const ic = getIconPickerStyle(name);
@@ -573,7 +574,7 @@ export default function AIPlanCreatorSheet({
 
         {/* Color picker */}
         <div>
-          <p className="mb-2 text-[11px] font-semibold uppercase tracking-[0.08em] text-neutral-400 dark:text-neutral-500">Color</p>
+          <p className={`mb-2 ${typography.eyebrow}`}>Color</p>
           <div className="flex gap-2">
             {COLOR_OPTIONS.map(({ value, bg, ring }) => (
               <button
@@ -588,7 +589,7 @@ export default function AIPlanCreatorSheet({
 
         {/* Dates */}
         <div>
-          <p className="mb-2 text-[11px] font-semibold uppercase tracking-[0.08em] text-neutral-400 dark:text-neutral-500">Duration</p>
+          <p className={`mb-2 ${typography.eyebrow}`}>Duration</p>
           <div className="mb-2 flex flex-wrap gap-1.5">
             {DURATION_PRESETS.map(({ label, days }) => {
               const isActive = days !== null
@@ -660,7 +661,7 @@ export default function AIPlanCreatorSheet({
         {/* Tasks */}
         {tasks.length > 0 && (
           <div>
-            <p className="mb-2 text-[11px] font-semibold uppercase tracking-[0.08em] text-neutral-400 dark:text-neutral-500">
+            <p className={`mb-2 ${typography.eyebrow}`}>
               Generated Tasks ({tasks.length})
             </p>
             <div className="overflow-hidden rounded-2xl border border-neutral-200 dark:border-white/[0.08]">
@@ -671,14 +672,14 @@ export default function AIPlanCreatorSheet({
                 >
                   <div className="min-w-0 flex-1">
                     <p className="truncate text-[13px] font-semibold text-neutral-800 dark:text-neutral-200">{t.title}</p>
-                    <p className="text-[11px] capitalize text-neutral-400 dark:text-neutral-500">
+                    <p className="text-[11px] capitalize text-neutral-500 dark:text-neutral-400">
                       {t.day} · {formatDisplayTime(t.startTime)}–{formatDisplayTime(t.endTime)}
                     </p>
                   </div>
                   <button
                     type="button"
                     onClick={() => setTasks((prev) => prev.filter((_, j) => j !== i))}
-                    className="shrink-0 rounded-lg p-1 text-neutral-400 transition-colors hover:bg-neutral-100 hover:text-neutral-600 dark:hover:bg-white/[0.06] dark:hover:text-neutral-300"
+                    className="shrink-0 rounded-lg p-1 text-neutral-500 dark:text-neutral-400 transition-colors hover:bg-neutral-100 hover:text-neutral-600 dark:hover:bg-white/[0.06] dark:hover:text-neutral-300"
                   >
                     <IconX size={13} strokeWidth={2} />
                   </button>
@@ -691,7 +692,7 @@ export default function AIPlanCreatorSheet({
         {/* Milestones */}
         {milestones.length > 0 && (
           <div>
-            <p className="mb-2 text-[11px] font-semibold uppercase tracking-[0.08em] text-neutral-400 dark:text-neutral-500">
+            <p className={`mb-2 ${typography.eyebrow}`}>
               Generated Milestones ({milestones.length})
             </p>
             <div className="overflow-hidden rounded-2xl border border-neutral-200 dark:border-white/[0.08]">
@@ -703,13 +704,13 @@ export default function AIPlanCreatorSheet({
                   <div className="min-w-0 flex-1">
                     <p className="truncate text-[13px] font-semibold text-neutral-800 dark:text-neutral-200">{m.title}</p>
                     {m.targetDate && (
-                      <p className="text-[11px] text-neutral-400 dark:text-neutral-500">{m.targetDate}</p>
+                      <p className="text-[11px] text-neutral-500 dark:text-neutral-400">{m.targetDate}</p>
                     )}
                   </div>
                   <button
                     type="button"
                     onClick={() => setMilestones((prev) => prev.filter((_, j) => j !== i))}
-                    className="shrink-0 rounded-lg p-1 text-neutral-400 transition-colors hover:bg-neutral-100 hover:text-neutral-600 dark:hover:bg-white/[0.06] dark:hover:text-neutral-300"
+                    className="shrink-0 rounded-lg p-1 text-neutral-500 dark:text-neutral-400 transition-colors hover:bg-neutral-100 hover:text-neutral-600 dark:hover:bg-white/[0.06] dark:hover:text-neutral-300"
                   >
                     <IconX size={13} strokeWidth={2} />
                   </button>

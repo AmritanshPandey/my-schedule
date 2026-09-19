@@ -215,12 +215,15 @@ import EditPlanSheet from "@/components/plan/EditPlanSheet";
 import GoalListSheet from "@/components/goal/GoalListSheet";
 import { deleteGoal } from "@/lib/goalMutations";
 import { togglePlanPaused } from "@/lib/planLifecycle";
+import { dismissAllAttention, dismissibleCount } from "@/lib/attentionDismissal";
+import type { NeedsAttention } from "@/lib/needsAttention";
 import { applyAdaptation } from "@/lib/milestoneAdaptation";
 import { calculateMilestoneState } from "@/lib/milestoneHealth";
 import AdaptMilestoneSheet from "@/components/plan/AdaptMilestoneSheet";
 import { haptic } from "@/lib/haptics";
 import { buildDeleteConfirmationCopy } from "@/lib/deleteConfirm";
 import { resolveCustomVisibleDates } from "@/lib/customView";
+import { typography } from "@/components/ui/Typography";
 
 // ─── Constants ───────────────────────────────────────────────────────────────
 
@@ -597,8 +600,8 @@ function StatTile({
   return (
     <div className="h-[98px] rounded-2xl border border-neutral-200 bg-white px-4 py-3.5 dark:border-white/[0.08] dark:bg-neutral-900">
       <div className="mb-1 flex items-center gap-1.5">
-        <Icon size={12} strokeWidth={2} className="text-neutral-400 dark:text-neutral-500" />
-        <p className="text-[11px] font-semibold uppercase tracking-wider text-neutral-400 dark:text-neutral-500">
+        <Icon size={12} strokeWidth={2} className="text-neutral-500 dark:text-neutral-400" />
+        <p className="text-[11px] font-semibold uppercase tracking-wider text-neutral-500 dark:text-neutral-400">
           {label}
         </p>
       </div>
@@ -701,7 +704,7 @@ function WeekSummary({
 
   return (
     <div className="rounded-2xl border border-neutral-200 bg-white dark:border-white/[0.08] dark:bg-neutral-900 px-4 py-4 mb-6">
-      <p className="text-[11px] font-bold uppercase tracking-[0.08em] text-neutral-400 dark:text-neutral-500 mb-3">
+      <p className="text-[11px] font-bold uppercase tracking-[0.08em] text-neutral-600 dark:text-neutral-400 mb-3">
         This Week
       </p>
 
@@ -714,7 +717,7 @@ function WeekSummary({
               <span className={`text-[9px] font-semibold leading-none ${
                 isToday
                   ? "text-emerald-500 dark:text-emerald-400"
-                  : "text-neutral-400 dark:text-neutral-500"
+                  : "text-neutral-500 dark:text-neutral-400"
               }`}>
                 {label}
               </span>
@@ -735,7 +738,7 @@ function WeekSummary({
               <span className={`text-[9px] tabular-nums leading-none ${
                 isToday
                   ? "font-bold text-neutral-700 dark:text-neutral-300"
-                  : "text-neutral-400 dark:text-neutral-500"
+                  : "text-neutral-500 dark:text-neutral-400"
               }`}>
                 {total > 0 && isPastOrToday ? `${done}/${total}` : "·"}
               </span>
@@ -747,21 +750,21 @@ function WeekSummary({
       {/* Stats */}
       <div className="grid grid-cols-2 gap-2">
         <div className="rounded-xl bg-neutral-50 dark:bg-white/[0.03] px-3 py-2.5">
-          <p className="mb-0.5 text-[10px] font-semibold uppercase tracking-[0.06em] text-neutral-400 dark:text-neutral-500">
+          <p className="mb-0.5 text-[10px] font-semibold uppercase tracking-[0.06em] text-neutral-500 dark:text-neutral-400">
             Tasks done
           </p>
           <p className="text-[20px] font-extrabold tabular-nums leading-none text-neutral-950 dark:text-white">
             {weekPct}
-            <span className="text-[12px] font-semibold text-neutral-400 dark:text-neutral-500">%</span>
+            <span className="text-[12px] font-semibold text-neutral-500 dark:text-neutral-400">%</span>
           </p>
         </div>
         <div className="rounded-xl bg-neutral-50 dark:bg-white/[0.03] px-3 py-2.5">
-          <p className="mb-0.5 text-[10px] font-semibold uppercase tracking-[0.06em] text-neutral-400 dark:text-neutral-500">
+          <p className="mb-0.5 text-[10px] font-semibold uppercase tracking-[0.06em] text-neutral-500 dark:text-neutral-400">
             Habits done
           </p>
           <p className="text-[20px] font-extrabold tabular-nums leading-none text-neutral-950 dark:text-white">
             {ritualPct}
-            <span className="text-[12px] font-semibold text-neutral-400 dark:text-neutral-500">%</span>
+            <span className="text-[12px] font-semibold text-neutral-500 dark:text-neutral-400">%</span>
           </p>
         </div>
       </div>
@@ -2176,6 +2179,27 @@ export default function ScheduleApp() {
         setSelectedPlanId((cur) => (cur === planId ? null : cur));
       }
     );
+  }
+
+  /**
+   * Clear every row on "Needs attention".
+   *
+   * Dismissal only — no miss event, milestone date or streak is touched, so
+   * analytics stay honest and each row returns if the same problem recurs on
+   * a new day or against a new target. The undo restores `preferences`
+   * wholesale rather than removing keys, so it cannot strip a dismissal the
+   * user made separately before pressing it.
+   */
+  function handleClearAttention(attention: NeedsAttention) {
+    const cleared = dismissibleCount(attention);
+    if (cleared === 0) return;
+    const previous = schedule.preferences;
+    setSchedule((prev) => dismissAllAttention(prev, attention, todayISO()));
+    setToastMessage({
+      message: `Cleared ${cleared} item${cleared === 1 ? "" : "s"}`,
+      actionLabel: "Undo",
+      onAction: () => setSchedule((prev) => ({ ...prev, preferences: previous })),
+    });
   }
 
   function handleDeleteGoal(goalId: string) {
@@ -3593,7 +3617,7 @@ export default function ScheduleApp() {
                 <button
                   type="button"
                   onClick={() => setTemplatesOpen(true)}
-                  className="mb-3 w-full rounded-2xl border border-dashed border-neutral-200 py-3 text-[13px] font-semibold text-neutral-400 transition-colors hover:border-neutral-300 hover:text-neutral-600 dark:border-white/10 dark:text-neutral-500 dark:hover:border-white/20 dark:hover:text-neutral-300 lg:hidden"
+                  className="mb-3 w-full rounded-2xl border border-dashed border-neutral-200 py-3 text-[13px] font-semibold text-neutral-500 transition-colors hover:border-neutral-300 hover:text-neutral-600 dark:border-white/10 dark:text-neutral-400 dark:hover:border-white/20 dark:hover:text-neutral-300 lg:hidden"
                 >
                   + Browse example templates
                 </button>
@@ -3619,7 +3643,7 @@ export default function ScheduleApp() {
 
               <aside className="hidden min-w-0 space-y-3 xl:block">
                 <div className="rounded-2xl border border-neutral-200 bg-white p-4 dark:border-white/[0.08] dark:bg-neutral-900">
-                  <p className="text-[11px] font-semibold uppercase tracking-[0.08em] text-neutral-400 dark:text-neutral-500">
+                  <p className={typography.eyebrow}>
                     Today&apos;s signal
                   </p>
                   <p className="mt-2 text-[24px] font-black leading-none text-neutral-950 dark:text-white">
@@ -3633,7 +3657,7 @@ export default function ScheduleApp() {
                 </div>
 
                 <div className="rounded-2xl border border-neutral-200 bg-white p-4 dark:border-white/[0.08] dark:bg-neutral-900">
-                  <p className="text-[11px] font-semibold uppercase tracking-[0.08em] text-neutral-400 dark:text-neutral-500">
+                  <p className={typography.eyebrow}>
                     System totals
                   </p>
                   <div className="mt-3 space-y-2">
@@ -3991,7 +4015,7 @@ export default function ScheduleApp() {
                             ? "text-white/55 dark:text-neutral-900/55"
                             : isDateToday
                             ? "text-rose-500"
-                            : "text-neutral-400 dark:text-neutral-500"
+                            : "text-neutral-500 dark:text-neutral-400"
                         }`}>
                           {DAY_LABELS[day]}
                         </span>
@@ -4081,7 +4105,7 @@ export default function ScheduleApp() {
                     {todayEditMode ? <IconCheck size={15} strokeWidth={2.4} /> : <IconEdit size={15} strokeWidth={2} />}
                   </button>
                   {dayProgress.total > 0 && (
-                    <div className="flex items-center gap-1.5 text-neutral-400 dark:text-neutral-500">
+                    <div className="flex items-center gap-1.5 text-neutral-500 dark:text-neutral-400">
                       <IconChecklist size={16} strokeWidth={1.8} />
                       <span className="text-[14px] font-bold tabular-nums text-neutral-500 dark:text-neutral-400">
                         {dayProgress.done}/{dayProgress.total}
@@ -4243,9 +4267,9 @@ export default function ScheduleApp() {
                     {dayTasks.length === 0 && (
                       <div className="mb-3 shrink-0 rounded-2xl border border-dashed border-neutral-200 py-8 text-center dark:border-white/10">
                         <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-neutral-100 dark:bg-white/[0.06] mx-auto mb-2">
-                          <IconCalendar size={17} strokeWidth={1.8} className="text-neutral-400 dark:text-neutral-500" />
+                          <IconCalendar size={17} strokeWidth={1.8} className="text-neutral-500 dark:text-neutral-400" />
                         </div>
-                        <p className="text-[13px] font-medium text-neutral-400 dark:text-neutral-500">
+                        <p className="text-[13px] font-medium text-neutral-500 dark:text-neutral-400">
                           Nothing scheduled — tap + to add a task.
                         </p>
                       </div>
@@ -4292,15 +4316,15 @@ export default function ScheduleApp() {
                                 }}
                               >
                                 {isMidnight ? (
-                                  <span className="text-[10px] font-bold text-neutral-400 dark:text-white/25 leading-none uppercase tracking-wide">
+                                  <span className="text-[10px] font-bold text-neutral-500 dark:text-neutral-400 dark:text-white/25 leading-none uppercase tracking-wide">
                                     tmrw
                                   </span>
                                 ) : (
                                   <span
                                     className={`tabular-nums leading-none ${
                                       isHourMark
-                                        ? "text-[9px] font-semibold text-neutral-500 dark:text-neutral-500"
-                                        : "text-[9px] font-medium text-neutral-500 dark:text-neutral-500"
+                                        ? "text-[9px] font-semibold text-neutral-500 dark:text-neutral-400"
+                                        : "text-[9px] font-medium text-neutral-500 dark:text-neutral-400"
                                     }`}
                                   >
                                     {isHourMark ? formatHourLabel(mark) : formatHalfHourLabel(mark)}
@@ -4638,6 +4662,7 @@ export default function ScheduleApp() {
                 onLogTracker={(tracker) => setEntryTracker(tracker)}
                 onHandleMissed={setMissedSheet}
                 onAdaptMilestone={setAdaptingMilestoneId}
+                onClearAttention={handleClearAttention}
               />
             )}
             </ErrorBoundary>
@@ -4840,6 +4865,14 @@ export default function ScheduleApp() {
             setToastMessage(
               `Subtask copied to ${targetTaskIds.length} task${targetTaskIds.length === 1 ? "" : "s"}`
             );
+          }}
+          onMergeTask={(taskId, partnerId) => {
+            setSchedule(mergeTasks(taskId, partnerId));
+            setToastMessage("Tasks merged");
+          }}
+          onUnmergeTask={(taskId) => {
+            setSchedule(unmergeTask(taskId));
+            setToastMessage("Tasks unmerged");
           }}
           onDelete={taskSheetMode === "edit" && taskSheetTask ? () => {
             const sourceDay = taskSheetActiveDays.includes(activeDay)

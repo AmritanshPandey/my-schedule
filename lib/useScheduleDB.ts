@@ -17,7 +17,7 @@ import { getLocalLastUpdated, writeLocalLastUpdated } from "@/lib/localMeta";
 import { logError } from "@/lib/errorLog";
 import { useAuth } from "@/contexts/AuthProvider";
 import { calculateMilestoneEndDate, normalizeMilestoneTimeline } from "@/lib/roadmapDates";
-import { localISODate } from "@/lib/dateUtils";
+import { clampTrackingStart, localISODate } from "@/lib/dateUtils";
 import { DAYS, DAY_LABELS, type DayKey, MAX_SCHEDULE_EVENTS } from "@/lib/scheduleConstants";
 import { normalizeDayStartTime } from "@/lib/timeline/displayWindow";
 import { MIN_SLEEP_HOURS, MAX_SLEEP_HOURS } from "@/lib/timeline/sleepWindow";
@@ -543,6 +543,14 @@ export interface SchedulePreferences {
    * `"missed"` history event is kept so analytics stay accurate.
    */
   acknowledgedMisses?: string[];
+  /**
+   * Rows of "Needs attention" the user has dismissed that are NOT missed
+   * occurrences — at-risk routines and milestones. Each key ends in the date
+   * that made the row appear (see lib/attentionDismissal.ts), so a genuinely
+   * new instance of the same problem comes back rather than being silenced
+   * forever. Nothing underlying is deleted; this only hides card rows.
+   */
+  acknowledgedAttention?: string[];
   /**
    * Hours of sleep the user needs, used to size the "waking window" the
    * Overview's "Where the day goes" active-hours bar measures free/overbooked
@@ -1387,7 +1395,7 @@ function normalizeNotes(raw: unknown): Note[] {
 
 function normalizeSchedulePreferences(raw: unknown): SchedulePreferences {
   if (!raw || typeof raw !== "object") return {};
-  const source = raw as { dayStartTime?: unknown; dayEndMinutes?: unknown; dayEndAuto?: unknown; startDate?: unknown; lastRolloverISO?: unknown; acknowledgedMisses?: unknown; sleepHours?: unknown };
+  const source = raw as { dayStartTime?: unknown; dayEndMinutes?: unknown; dayEndAuto?: unknown; startDate?: unknown; lastRolloverISO?: unknown; acknowledgedMisses?: unknown; acknowledgedAttention?: unknown; sleepHours?: unknown };
   const dayStartTime = normalizeDayStartTime(source.dayStartTime);
   // Accept a numeric dayEndMinutes in minutes (may be > 1440 to represent next-day hours)
   let dayEndMinutes: number | undefined = undefined;
@@ -1399,10 +1407,8 @@ function normalizeSchedulePreferences(raw: unknown): SchedulePreferences {
   // Accept an explicit boolean to derive the end from tasks
   const dayEndAuto = source.dayEndAuto === true ? true : undefined;
 
-  const startDate =
-    typeof source.startDate === "string" && /^\d{4}-\d{2}-\d{2}$/.test(source.startDate)
-      ? source.startDate
-      : undefined;
+  // See clampTrackingStart: a future value here would blank the whole app.
+  const startDate = clampTrackingStart(source.startDate, localISODate(new Date()));
   const lastRolloverISO =
     typeof source.lastRolloverISO === "string" && /^\d{4}-\d{2}-\d{2}$/.test(source.lastRolloverISO)
       ? source.lastRolloverISO
@@ -1411,6 +1417,13 @@ function normalizeSchedulePreferences(raw: unknown): SchedulePreferences {
   // bound; stale keys past the 7-day attention window are harmless (never read).
   const acknowledgedMisses = Array.isArray(source.acknowledgedMisses)
     ? (source.acknowledgedMisses.filter(
+        (k): k is string => typeof k === "string" && /\|\d{4}-\d{2}-\d{2}$/.test(k),
+      ).slice(-200))
+    : undefined;
+  // Same shape and cap as acknowledgedMisses: every key ends in the date that
+  // scopes it, so anything without one can never match and is dropped.
+  const acknowledgedAttention = Array.isArray(source.acknowledgedAttention)
+    ? (source.acknowledgedAttention.filter(
         (k): k is string => typeof k === "string" && /\|\d{4}-\d{2}-\d{2}$/.test(k),
       ).slice(-200))
     : undefined;
@@ -1430,6 +1443,7 @@ function normalizeSchedulePreferences(raw: unknown): SchedulePreferences {
     ...(startDate ? { startDate } : {}),
     ...(lastRolloverISO ? { lastRolloverISO } : {}),
     ...(acknowledgedMisses && acknowledgedMisses.length ? { acknowledgedMisses } : {}),
+    ...(acknowledgedAttention && acknowledgedAttention.length ? { acknowledgedAttention } : {}),
     ...(typeof sleepHours === "number" ? { sleepHours } : {}),
   };
 }

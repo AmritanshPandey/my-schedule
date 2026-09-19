@@ -411,12 +411,12 @@ export function RitualSheet({ open, onClose, initial, onSave, onDelete }: Ritual
                 {(trackingType === "checklist" || trackingType === "times" || trackingType === "checkbox") && (
                   <div className="space-y-1.5">
                     {trackingType === "checkbox" && (
-                      <p className="text-[11px] leading-snug text-neutral-400 dark:text-neutral-500">
+                      <p className="text-[11px] leading-snug text-neutral-500 dark:text-neutral-400">
                         Optional — list what this routine covers. These aren&apos;t checked off individually; one tap on the routine covers all of them.
                       </p>
                     )}
                     {trackingType === "times" && (
-                      <p className="text-[11px] leading-snug text-neutral-400 dark:text-neutral-500">
+                      <p className="text-[11px] leading-snug text-neutral-500 dark:text-neutral-400">
                         Add each time this happens during the day. Every occurrence gets its own checkbox — the day counts done once all of them are.
                       </p>
                     )}
@@ -425,7 +425,7 @@ export function RitualSheet({ open, onClose, initial, onSave, onDelete }: Ritual
                         <span className="flex-1 truncate text-[13px] font-medium tabular-nums text-neutral-800 dark:text-neutral-100">
                           {trackingType === "times" ? formatDisplayTime(step.label) : step.label}
                         </span>
-                        <button type="button" onClick={() => setSteps((prev) => prev.filter((s) => s.id !== step.id))} aria-label="Remove item" className="text-neutral-400 hover:text-rose-500">
+                        <button type="button" onClick={() => setSteps((prev) => prev.filter((s) => s.id !== step.id))} aria-label="Remove item" className="text-neutral-500 dark:text-neutral-400 hover:text-rose-500">
                           <IconX size={14} strokeWidth={2.2} />
                         </button>
                       </div>
@@ -480,7 +480,7 @@ export function RitualSheet({ open, onClose, initial, onSave, onDelete }: Ritual
                 {showAdvanced && (
                   <div className="mt-3 space-y-3">
                     <div>
-                      <p className={`mb-1.5 ${typography.eyebrow}`}>Description <span className="normal-case font-normal text-neutral-400">(optional)</span></p>
+                      <p className={`mb-1.5 ${typography.eyebrow}`}>Description <span className="normal-case font-normal text-neutral-500 dark:text-neutral-400">(optional)</span></p>
                       <input
                         value={description}
                         onChange={(e) => setDescription(e.target.value)}
@@ -490,7 +490,7 @@ export function RitualSheet({ open, onClose, initial, onSave, onDelete }: Ritual
                     </div>
 
                     <div>
-                      <p className={`mb-2 ${typography.eyebrow}`}>Typical duration <span className="normal-case font-normal text-neutral-400">(optional, display only)</span></p>
+                      <p className={`mb-2 ${typography.eyebrow}`}>Typical duration <span className="normal-case font-normal text-neutral-500 dark:text-neutral-400">(optional, display only)</span></p>
                       <div className="flex flex-wrap gap-2">
                         <button
                           type="button"
@@ -521,7 +521,7 @@ export function RitualSheet({ open, onClose, initial, onSave, onDelete }: Ritual
                     </div>
 
                     <div>
-                      <p className={`mb-1.5 ${typography.eyebrow}`}>Notes <span className="normal-case font-normal text-neutral-400">(optional)</span></p>
+                      <p className={`mb-1.5 ${typography.eyebrow}`}>Notes <span className="normal-case font-normal text-neutral-500 dark:text-neutral-400">(optional)</span></p>
                       <textarea
                         value={notes}
                         onChange={(e) => setNotes(e.target.value)}

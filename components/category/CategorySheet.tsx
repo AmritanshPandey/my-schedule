@@ -10,6 +10,7 @@ import SheetHeader from "@/components/ui/SheetHeader";
 import Button from "@/components/ui/Button";
 import Input from "@/components/ui/Input";
 import { iconPickerClass, PlanColorPicker } from "@/components/plan/planFormShared";
+import { typography } from "@/components/ui/Typography";
 
 export const CATEGORY_TITLE_MAX = 24;
 
@@ -120,7 +121,7 @@ export default function CategorySheet({ open, category, onClose, onSave }: Categ
           />
 
           <div>
-            <p className="mb-2 text-[11px] font-semibold uppercase tracking-[0.08em] text-neutral-400 dark:text-neutral-500">
+            <p className={`mb-2 ${typography.eyebrow}`}>
               Icon
             </p>
             <div className="grid grid-cols-6 gap-2 sm:grid-cols-8">
@@ -143,7 +144,7 @@ export default function CategorySheet({ open, category, onClose, onSave }: Categ
           <PlanColorPicker value={color} onChange={(next) => { setColor(next); setColorTouched(true); }} />
 
           <div>
-            <p className="mb-2 text-[11px] font-semibold uppercase tracking-[0.08em] text-neutral-400 dark:text-neutral-500">
+            <p className={`mb-2 ${typography.eyebrow}`}>
               Counts as
             </p>
             <div role="radiogroup" aria-label="Counts as" className="flex gap-2">
