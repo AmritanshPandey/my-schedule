@@ -53,6 +53,15 @@ export interface BusinessRuleContext {
   dayEndMinutes: number;
   /** Optional user-declared budget for the generated batch, in minutes. */
   availableMinutes?: number;
+  /**
+   * What this user has actually sustained in a week, from
+   * lib/capacityModel.ts. Absent (or null) when there isn't enough history —
+   * the capacity check then stays silent rather than guessing.
+   */
+  sustainedWeeklyMinutes?: number | null;
+  /** Tracked minutes already committed across the current week, excluding the
+   *  generated batch. Paired with `sustainedWeeklyMinutes`. */
+  existingWeeklyMinutes?: number;
   planEndDate?: string;
   todayISO: string;
 }
@@ -174,7 +183,48 @@ export function checkAvailableTimeBudget(tasks: AITask[], availableMinutes?: num
   }];
 }
 
+/** Mirrors lib/capacityModel.ts's own thresholds so a plan warned about here
+ *  and a week warned about on Overview never disagree. Re-declared rather
+ *  than imported to keep this module free of Schedule-shaped dependencies. */
+const CAPACITY_STRETCH_RATIO = 1.15;
+const CAPACITY_UNREALISTIC_RATIO = 1.5;
+
 const TWO_YEARS_MS = 2 * 365 * 24 * 60 * 60 * 1000;
+
+/**
+ * Does the week this batch produces resemble a week this person has ever
+ * actually completed?
+ *
+ * Distinct from `checkTimeBudget`, which asks whether the work physically fits
+ * between the day's start and end. A week can fit perfectly and still be three
+ * times anything the user has ever done — that is the failure this catches,
+ * and the only honest source for it is their own completion history.
+ *
+ * A warning, never an error: the geometric checks describe impossibility, but
+ * this one describes precedent, and a user is entitled to decide this is the
+ * week they change. Silent without enough history.
+ */
+export function checkSustainedCapacity(tasks: AITask[], ctx: BusinessRuleContext): RuleIssue[] {
+  const sustained = ctx.sustainedWeeklyMinutes;
+  if (typeof sustained !== "number" || sustained <= 0) return [];
+
+  const generated = tasks.reduce(
+    (sum, task) => sum + durationMinutes(task.startTime, task.endTime),
+    0,
+  );
+  const total = generated + (ctx.existingWeeklyMinutes ?? 0);
+  const ratio = total / sustained;
+  if (ratio < CAPACITY_STRETCH_RATIO) return [];
+
+  const hours = (m: number) => `${Math.round((m / 60) * 10) / 10}h`;
+  return [{
+    severity: "warning",
+    message:
+      ratio >= CAPACITY_UNREALISTIC_RATIO
+        ? `This would make the week ${hours(total)}, against the ${hours(sustained)} you typically complete. Consider fewer or shorter sessions.`
+        : `This would make the week ${hours(total)}, a little above your usual ${hours(sustained)}.`,
+  }];
+}
 
 export function checkDeadlineSanity(
   tasks: AITask[],
@@ -216,6 +266,7 @@ export function runBusinessRules(
     ...checkDuplicates(tasks, ctx.existingTasksByDay),
     ...checkTimeBudget(tasks, ctx),
     ...checkAvailableTimeBudget(tasks, ctx.availableMinutes),
+    ...checkSustainedCapacity(tasks, ctx),
     ...checkDeadlineSanity(tasks, milestones, ctx),
   ];
 }

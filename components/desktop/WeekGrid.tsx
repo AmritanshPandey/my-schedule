@@ -1474,11 +1474,15 @@ export function WeekGrid({
                         // its own cursor-pointer on the element that actually
                         // sits under the mouse, so a bare cursor-* here never
                         // showed — the grab affordance has been invisible on
-                        // task blocks since it was added.
+                        // task blocks since it was added. `active:` flips grab
+                        // to grabbing the instant the mouse is down, same as
+                        // Google Calendar/Teams — a cursor that never changes
+                        // through the gesture reads as decorative, not real
+                        // feedback.
                         canDragToMove && isEditingSchedule
                           ? altHeld
                             ? "cursor-copy [&_*]:cursor-copy"
-                            : "cursor-grab [&_*]:cursor-grab"
+                            : "cursor-grab [&_*]:cursor-grab active:cursor-grabbing [&_*]:active:cursor-grabbing"
                           : ""
                       }`}
                       style={{
@@ -1511,23 +1515,30 @@ export function WeekGrid({
                           to extend/shrink just that side, independent of the
                           "move" gesture that covers the rest of the card. A
                           continuation only gets the bottom one: its top isn't
-                          the task's real start (see canResizeEnd above). */}
+                          the task's real start (see canResizeEnd above).
+                          Taller than the visible grip (h-3 vs the 3px bar) so
+                          the hit target is easier to land than the affordance
+                          alone would suggest — same idea as Google Calendar's
+                          edge handles, which grab well past their own pixels.
+                          `group` lets the strip's hover wash and the grip's
+                          own grow-and-recolor read as one reaction instead of
+                          two independent hovers. */}
                         {isEditingSchedule && (canDragToMove || canResizeEnd) && (
                         <>
                           {canDragToMove && (
                             <div
-                              className="absolute inset-x-0 top-0 z-[1] flex h-2 cursor-ns-resize items-start justify-center pt-0.5"
+                              className="group absolute inset-x-0 top-0 z-[1] flex h-3 cursor-ns-resize items-start justify-center rounded-t-[6px] pt-1 transition-colors hover:bg-emerald-500/10"
                               onPointerDown={(e) => handleTaskBlockPointerDown(e, day, isContinuation, layout, "resize-start")}
                             >
-                              <div className="h-[3px] w-6 rounded-full bg-neutral-500/70 dark:bg-white/40" />
+                              <div className="h-[3px] w-7 rounded-full bg-neutral-600/60 shadow-[0_0_0_1px_rgba(0,0,0,0.06)] transition-all duration-150 group-hover:h-[5px] group-hover:w-9 group-hover:bg-emerald-500 group-hover:shadow-[0_1px_6px_rgba(16,185,129,0.55)] dark:bg-white/45 dark:group-hover:bg-emerald-400" />
                             </div>
                           )}
                           {canResizeEnd && (
                             <div
-                              className="absolute inset-x-0 bottom-0 z-[1] flex h-2 cursor-ns-resize items-end justify-center pb-0.5"
+                              className="group absolute inset-x-0 bottom-0 z-[1] flex h-3 cursor-ns-resize items-end justify-center rounded-b-[6px] pb-1 transition-colors hover:bg-emerald-500/10"
                               onPointerDown={(e) => handleTaskBlockPointerDown(e, day, isContinuation, layout, "resize-end")}
                             >
-                              <div className="h-[3px] w-6 rounded-full bg-neutral-500/70 dark:bg-white/40" />
+                              <div className="h-[3px] w-7 rounded-full bg-neutral-600/60 shadow-[0_0_0_1px_rgba(0,0,0,0.06)] transition-all duration-150 group-hover:h-[5px] group-hover:w-9 group-hover:bg-emerald-500 group-hover:shadow-[0_1px_6px_rgba(16,185,129,0.55)] dark:bg-white/45 dark:group-hover:bg-emerald-400" />
                             </div>
                           )}
                         </>

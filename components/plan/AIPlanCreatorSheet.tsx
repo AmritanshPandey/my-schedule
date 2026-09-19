@@ -21,6 +21,7 @@ import { resolveAccentColor, type AccentColor } from "@/lib/colorSystem";
 import { localISODate, todayISO } from "@/lib/dateUtils";
 import { validateTaskShapes, type TaskShapeIssue } from "@/lib/ai/validation/taskSchema";
 import { runBusinessRules, resolveDayWindowMinutes, type RuleIssue } from "@/lib/ai/validation/businessRules";
+import { computeCapacityModel, plannedWeeklyMinutes } from "@/lib/capacityModel";
 import { buildTaskGenerationContext } from "@/lib/ai/context/planGenerationContext";
 import { AICyclingStatus } from "@/components/ai/AIThinkingStatus";
 import { formatDisplayTime } from "@/lib/timeUtils";
@@ -333,8 +334,13 @@ export default function AIPlanCreatorSheet({
       },
       {},
     );
+    // The observed ceiling, so a generated plan is checked against weeks this
+    // user has actually completed — not just against what fits in a day.
+    const capacity = computeCapacityModel(schedule);
     return runBusinessRules(tasks, milestones, {
       existingTasksByDay,
+      sustainedWeeklyMinutes: capacity.sustainedWeeklyMinutes,
+      existingWeeklyMinutes: plannedWeeklyMinutes(schedule),
       rituals: schedule.rituals ?? [],
       dayStartMinutes,
       dayEndMinutes,

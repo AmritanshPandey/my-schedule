@@ -40,6 +40,7 @@ const {
   checkTimeBudget,
   checkAvailableTimeBudget,
   checkDeadlineSanity,
+  checkSustainedCapacity,
   runBusinessRules,
   resolveDayWindowMinutes,
 } = await import("@/lib/ai/validation/businessRules.ts");
@@ -264,4 +265,65 @@ test("resolveDayWindowMinutes falls back to sane defaults when preferences are e
 test("resolveDayWindowMinutes honors an explicit non-auto dayEndMinutes", () => {
   const { dayEndMinutes } = resolveDayWindowMinutes({ dayEndMinutes: 20 * 60, dayEndAuto: false });
   assert.equal(dayEndMinutes, 20 * 60);
+});
+
+// ── Sustained capacity ───────────────────────────────────────────────────────
+//
+// Distinct from checkTimeBudget: that asks whether the work physically fits in
+// a day, this asks whether the resulting week resembles one this person has
+// ever actually completed.
+
+const capacityCtx = (over = {}) => ({
+  existingTasksByDay: {},
+  rituals: [],
+  dayStartMinutes: 6 * 60,
+  dayEndMinutes: 22 * 60,
+  todayISO: "2026-01-01",
+  ...over,
+});
+
+test("checkSustainedCapacity stays silent without a measured ceiling", () => {
+  const batch = [task({ startTime: "09:00", endTime: "17:00" })];
+  assert.deepEqual(checkSustainedCapacity(batch, capacityCtx()), []);
+  assert.deepEqual(checkSustainedCapacity(batch, capacityCtx({ sustainedWeeklyMinutes: null })), []);
+  assert.deepEqual(checkSustainedCapacity(batch, capacityCtx({ sustainedWeeklyMinutes: 0 })), []);
+});
+
+test("checkSustainedCapacity is quiet for a batch within the usual week", () => {
+  const issues = checkSustainedCapacity(
+    [task({ startTime: "09:00", endTime: "10:00" })], // 60m
+    capacityCtx({ sustainedWeeklyMinutes: 600 }),
+  );
+  assert.deepEqual(issues, []);
+});
+
+test("checkSustainedCapacity warns — never errors — when the week exceeds precedent", () => {
+  const issues = checkSustainedCapacity(
+    [task({ startTime: "09:00", endTime: "17:00" })], // 480m vs a 300m usual week
+    capacityCtx({ sustainedWeeklyMinutes: 300 }),
+  );
+  assert.equal(issues.length, 1);
+  assert.equal(issues[0].severity, "warning", "precedent is not impossibility — never block on it");
+  assert.match(issues[0].message, /8h/);
+  assert.match(issues[0].message, /5h/);
+});
+
+test("checkSustainedCapacity counts work already committed that week", () => {
+  const batch = [task({ startTime: "09:00", endTime: "10:00" })]; // 60m alone is fine
+  assert.deepEqual(checkSustainedCapacity(batch, capacityCtx({ sustainedWeeklyMinutes: 300 })), []);
+
+  const withExisting = checkSustainedCapacity(
+    batch,
+    capacityCtx({ sustainedWeeklyMinutes: 300, existingWeeklyMinutes: 320 }),
+  );
+  assert.equal(withExisting.length, 1, "the batch is judged on the week it produces, not in isolation");
+});
+
+test("runBusinessRules includes the capacity check", () => {
+  const issues = runBusinessRules(
+    [task({ startTime: "09:00", endTime: "17:00" })],
+    [],
+    capacityCtx({ sustainedWeeklyMinutes: 300 }),
+  );
+  assert.ok(issues.some((i) => /typically complete/.test(i.message)));
 });

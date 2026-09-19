@@ -9,6 +9,7 @@ import {
   type Adaptation,
   type AdaptationOffer,
 } from "@/lib/milestoneAdaptation";
+import { computeSlotReliability } from "@/lib/slotReliability";
 import BottomSheet from "@/components/ui/BottomSheet";
 import SheetHeader from "@/components/ui/SheetHeader";
 import Button from "@/components/ui/Button";
@@ -51,9 +52,16 @@ export default function AdaptMilestoneSheet({
   schedule,
   onApply,
 }: AdaptMilestoneSheetProps) {
+  // Measured from completion history, so a recovered session is put back at a
+  // time this person actually finishes things rather than the one they already
+  // missed it at.
+  const reliability = useMemo(
+    () => (open ? computeSlotReliability(schedule) : null),
+    [open, schedule],
+  );
   const offers = useMemo(
-    () => (open ? proposeAdaptations({ milestone, plan, state, schedule }) : []),
-    [open, milestone, plan, state, schedule],
+    () => (open ? proposeAdaptations({ milestone, plan, state, schedule, reliability }) : []),
+    [open, milestone, plan, state, schedule, reliability],
   );
 
   const [selectedKind, setSelectedKind] = useState<Adaptation["kind"] | null>(null);

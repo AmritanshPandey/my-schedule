@@ -30,6 +30,7 @@
 import type { Milestone, Plan, Schedule, Task } from "./useScheduleDB";
 import type { MilestoneState } from "./milestoneHealth";
 import { pausePlan } from "./planLifecycle";
+import { suggestBetterBand, TIME_BANDS, type SlotReliability } from "./slotReliability";
 import { rescheduleMissedTaskOnce, missKey } from "./missedRecovery";
 import { cascadeMilestoneDates, calculateMilestoneEndDate } from "./roadmapDates";
 import { DAYS } from "./scheduleConstants";
@@ -62,6 +63,12 @@ export interface MissedOccurrence {
   dateISO: string;
   /** The day it would be moved to. */
   targetDateISO: string;
+  /** Start time for the replay, in minutes. Usually the task's own time; moved
+   *  into a more reliable band when this person measurably finishes more of
+   *  what they schedule there (see lib/slotReliability.ts). */
+  startMinutes: number;
+  /** Set only when the time was moved — the reason, for the diff row. */
+  movedToBand?: string;
 }
 
 export interface ExtendTargetAdaptation {
@@ -181,6 +188,9 @@ export interface ProposeParams {
   plan: Plan;
   state: MilestoneState;
   schedule: Pick<Schedule, "activities" | "preferences" | "milestones" | "plans">;
+  /** When this person actually executes. Omitted → recovered sessions keep
+   *  their original time, which is the previous behaviour. */
+  reliability?: SlotReliability | null;
   now?: Date;
 }
 
@@ -206,21 +216,33 @@ export function proposeAdaptations(params: ProposeParams): AdaptationOffer[] {
   // commitment intact. Moving the target or pausing both concede something.
   const misses = recoverableMisses(milestone, schedule, todayISO);
   if (misses.length > 0) {
-    const occurrences: MissedOccurrence[] = misses.map((miss, index) => ({
-      taskId: miss.task.id,
-      taskTitle: miss.task.title,
-      dateISO: miss.dateISO,
-      // One per day from tomorrow, so recovery never stacks several sessions
-      // onto a single day and manufactures a day nobody could complete.
-      targetDateISO: shiftISO(todayISO, index + 1),
-    }));
+    // Where this person actually finishes things. Rescheduling a session back
+    // into the band it was already missed in is how a catch-up queue becomes
+    // next week's missed queue.
+    const reliability = params.reliability ?? null;
+    const occurrences: MissedOccurrence[] = misses.map((miss, index) => {
+      const better = reliability ? suggestBetterBand(reliability, miss.task) : null;
+      const band = better ? TIME_BANDS.find((b) => b.id === better.to.band) : undefined;
+      return {
+        taskId: miss.task.id,
+        taskTitle: miss.task.title,
+        dateISO: miss.dateISO,
+        // One per day from tomorrow, so recovery never stacks several sessions
+        // onto a single day and manufactures a day nobody could complete.
+        targetDateISO: shiftISO(todayISO, index + 1),
+        startMinutes: band ? band.startMinutes : startMinutesOf(miss.task),
+        movedToBand: better ? better.to.label : undefined,
+      };
+    });
     offers.push({
       adaptation: { kind: "reschedule_missed", milestoneId: milestone.id, occurrences },
       label: `Reschedule ${plural(occurrences.length, "missed session")}`,
       rationale:
         `${plural(occurrences.length, "session")} linked to this milestone ${occurrences.length === 1 ? "was" : "were"} missed in the last ${RECOVERABLE_LOOKBACK_DAYS} days.`,
-      changes: occurrences.map(
-        (o) => `${o.taskTitle} — ${formatDateShort(o.dateISO)} → ${formatDateShort(o.targetDateISO)}`,
+      changes: occurrences.map((o) =>
+        o.movedToBand
+          ? `${o.taskTitle} — ${formatDateShort(o.dateISO)} → ${formatDateShort(o.targetDateISO)}, moved to the ${o.movedToBand.toLowerCase()}`
+          : `${o.taskTitle} — ${formatDateShort(o.dateISO)} → ${formatDateShort(o.targetDateISO)}`,
       ),
     });
   }
@@ -315,7 +337,9 @@ export function applyAdaptation(schedule: Schedule, adaptation: Adaptation): Sch
           task,
           occurrence.dateISO,
           occurrence.targetDateISO,
-          startMinutesOf(task),
+          // The time settled at proposal time, so what is applied is exactly
+          // what the user reviewed.
+          occurrence.startMinutes ?? startMinutesOf(task),
         );
       }
       return next;

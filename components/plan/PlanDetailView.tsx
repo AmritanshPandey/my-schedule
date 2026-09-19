@@ -3,6 +3,8 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { AnimatePresence, m } from "framer-motion";
 import {
+  IconBolt,
+  IconChartLine,
   IconCheck,
   IconEdit,
   IconPlayerPause,
@@ -1320,7 +1322,8 @@ export default function PlanDetailView({
               )}
               {(m.linkedTrackers?.length ?? 0) > 0 && (
                 <span className="flex items-center gap-1 text-[11px] font-semibold text-violet-600 dark:text-violet-400">
-                  📊 {m.linkedTrackers!.length} tracker{m.linkedTrackers!.length !== 1 ? "s" : ""}
+                  <IconChartLine size={12} strokeWidth={2} className="shrink-0" aria-hidden="true" />
+                  {m.linkedTrackers!.length} tracker{m.linkedTrackers!.length !== 1 ? "s" : ""}
                 </span>
               )}
             </div>
@@ -1652,7 +1655,15 @@ export default function PlanDetailView({
                                     : "border-neutral-300 text-neutral-600 hover:border-neutral-400 dark:border-white/10 dark:text-neutral-400 dark:hover:border-white/20"
                                 }`}
                               >
-                                {accepted ? "✓ Added" : "+ Add"}
+                                {accepted ? (
+                                  <span className="inline-flex items-center gap-1">
+                                    <IconCheck size={13} strokeWidth={2.5} aria-hidden="true" /> Added
+                                  </span>
+                                ) : (
+                                  <span className="inline-flex items-center gap-1">
+                                    <IconPlus size={13} strokeWidth={2.5} aria-hidden="true" /> Add
+                                  </span>
+                                )}
                               </button>
                             </div>
                           );
@@ -1698,9 +1709,10 @@ export default function PlanDetailView({
                       <button
                         type="button"
                         onClick={() => setMilestoneGenSheetOpen(true)}
-                        className="w-full rounded-xl bg-violet-600 py-2.5 text-[13px] font-semibold text-white transition-opacity hover:opacity-90 active:opacity-80"
+                        className="flex w-full items-center justify-center gap-1.5 rounded-xl bg-violet-600 py-2.5 text-[13px] font-semibold text-white transition-opacity hover:opacity-90 active:opacity-80"
                       >
-                        ⚡ Generate tasks for this milestone
+                        <IconBolt size={14} strokeWidth={2.2} aria-hidden="true" />
+                        Generate tasks for this milestone
                       </button>
                     )}
                     {milestoneTasksAdded && (
@@ -1720,9 +1732,15 @@ export default function PlanDetailView({
                           onLinkTrackerToMilestone?.(postMilestoneContext.milestoneId, trackerId);
                           setMilestoneTrackerAdded(true);
                         }}
-                        className="w-full rounded-xl border border-violet-200 py-2.5 text-[13px] font-semibold text-violet-700 transition-colors hover:bg-violet-100 active:bg-violet-100 dark:border-violet-500/20 dark:text-violet-300 dark:hover:bg-violet-500/[0.1]"
+                        className="flex w-full items-center justify-center gap-1.5 rounded-xl border border-violet-200 py-2.5 text-[13px] font-semibold text-violet-700 transition-colors hover:bg-violet-100 active:bg-violet-100 dark:border-violet-500/20 dark:text-violet-300 dark:hover:bg-violet-500/[0.1]"
                       >
-                        📊 Add tracker: {postMilestoneContext.title} ({postMilestoneTrackerSuggestion.unit}{postMilestoneTrackerSuggestion.goalDirection === "decrease_good" ? " ↓" : " ↑"})
+                        <IconChartLine size={14} strokeWidth={2.2} className="shrink-0" aria-hidden="true" />
+                        Add tracker: {postMilestoneContext.title} ({postMilestoneTrackerSuggestion.unit})
+                        {postMilestoneTrackerSuggestion.goalDirection === "decrease_good" ? (
+                          <IconArrowDown size={13} strokeWidth={2.5} className="shrink-0" aria-hidden="true" />
+                        ) : (
+                          <IconArrowUp size={13} strokeWidth={2.5} className="shrink-0" aria-hidden="true" />
+                        )}
                       </button>
                     )}
                     {postMilestoneTrackerSuggestion && milestoneTrackerAdded && (

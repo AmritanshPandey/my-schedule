@@ -361,3 +361,85 @@ test("RECOVERABLE_LOOKBACK_DAYS is the window the rationale actually quotes", ()
   const offer = propose(schedule({ activities: activitiesWith([t]) }))[0];
   assert.match(offer.rationale, new RegExp(`${RECOVERABLE_LOOKBACK_DAYS} days`));
 });
+
+// ── Reliability-aware recovery ───────────────────────────────────────────────
+//
+// Putting a missed session back into the band it was already missed in is how
+// a catch-up queue becomes next week's missed queue.
+
+/** A reliability model with a strong early band and a weak late one. */
+function reliabilityFixture() {
+  const empty = { resolved: 0, completed: 0, rate: null };
+  return {
+    byBand: {
+      early: { resolved: 10, completed: 9, rate: 0.9 },
+      morning: empty,
+      afternoon: empty,
+      evening: empty,
+      night: { resolved: 10, completed: 2, rate: 0.2 },
+    },
+    byWeekday: Object.fromEntries(ALL_DAYS.map((d) => [d, empty])),
+    sampleSize: 20,
+    hasEnoughData: true,
+  };
+}
+
+test("without a reliability model, a recovered session keeps its own time", () => {
+  const t = task({ startTime: "10:00 PM", endTime: "11:00 PM", completionHistory: [missedEvent("t1", "2026-09-12")] });
+  const offer = propose(schedule({ activities: activitiesWith([t]) }))[0];
+  assert.equal(offer.adaptation.kind, "reschedule_missed");
+  assert.equal(offer.adaptation.occurrences[0].startMinutes, 22 * 60);
+  assert.equal(offer.adaptation.occurrences[0].movedToBand, undefined);
+});
+
+test("a session missed in a weak band is moved to the band that actually works", () => {
+  const t = task({ startTime: "10:00 PM", endTime: "11:00 PM", completionHistory: [missedEvent("t1", "2026-09-12")] });
+  const sched = schedule({ activities: activitiesWith([t]) });
+  const offers = proposeAdaptations({
+    milestone: milestone(),
+    plan: plan(),
+    state: stateFor(sched),
+    schedule: sched,
+    reliability: reliabilityFixture(),
+    now: NOW,
+  });
+  const recover = offers.find((o) => o.adaptation.kind === "reschedule_missed");
+  const occ = recover.adaptation.occurrences[0];
+
+  assert.equal(occ.startMinutes, 4 * 60, "moved to the start of the strong early band");
+  assert.equal(occ.movedToBand, "Early morning");
+  assert.match(recover.changes[0], /moved to the early morning/i);
+});
+
+test("a session already in the strong band is left where it is", () => {
+  const t = task({ startTime: "7:00 AM", endTime: "8:00 AM", completionHistory: [missedEvent("t1", "2026-09-12")] });
+  const sched = schedule({ activities: activitiesWith([t]) });
+  const offers = proposeAdaptations({
+    milestone: milestone(),
+    plan: plan(),
+    state: stateFor(sched),
+    schedule: sched,
+    reliability: reliabilityFixture(),
+    now: NOW,
+  });
+  const occ = offers.find((o) => o.adaptation.kind === "reschedule_missed").adaptation.occurrences[0];
+  assert.equal(occ.startMinutes, 7 * 60);
+  assert.equal(occ.movedToBand, undefined);
+});
+
+test("applying a moved session writes the reviewed time, not the original", () => {
+  const t = task({ startTime: "10:00 PM", endTime: "11:00 PM", completionHistory: [missedEvent("t1", "2026-09-12")] });
+  const before = schedule({ activities: activitiesWith([t]) });
+  const offers = proposeAdaptations({
+    milestone: milestone(),
+    plan: plan(),
+    state: stateFor(before),
+    schedule: before,
+    reliability: reliabilityFixture(),
+    now: NOW,
+  });
+  const after = applyAdaptation(before, offers.find((o) => o.adaptation.kind === "reschedule_missed").adaptation);
+  const clone = after.activities.tuesday.find((x) => x.id !== "t1");
+  assert.ok(clone, "expected the recovered clone");
+  assert.match(clone.startTime, /4:00\s?AM/i, `expected a 4am start, got ${clone.startTime}`);
+});

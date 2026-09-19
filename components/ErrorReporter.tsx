@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { IconX } from "@tabler/icons-react";
 import {
   getErrorLog,
   clearErrorLog,
@@ -78,7 +79,7 @@ export default function ErrorReporter() {
                 aria-label="Collapse error log"
                 className="inline-flex min-h-[44px] min-w-[44px] items-center justify-center rounded-lg border border-neutral-300 bg-white px-3 py-1 text-[11px] font-semibold text-neutral-600 dark:border-white/10 dark:bg-neutral-800 dark:text-neutral-300"
               >
-                ✕
+                <IconX size={14} strokeWidth={2.2} />
               </button>
             </div>
           </div>

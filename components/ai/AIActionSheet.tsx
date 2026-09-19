@@ -315,9 +315,10 @@ export default function AIActionSheet({
                             on
                               ? "border-emerald-400 bg-emerald-50 text-emerald-700 dark:border-emerald-500/50 dark:bg-emerald-500/10 dark:text-emerald-400"
                               : "border-neutral-200 bg-white text-neutral-500 hover:border-neutral-300 hover:text-neutral-700 dark:border-white/[0.08] dark:bg-transparent dark:text-neutral-400 dark:hover:border-white/[0.15]"
-                          }`}
+                          } inline-flex items-center gap-1`}
                         >
-                          {on && "✓ "}{pick}
+                          {on && <IconCheck size={12} strokeWidth={2.6} className="shrink-0" aria-hidden="true" />}
+                          {pick}
                         </button>
                       );
                     })}

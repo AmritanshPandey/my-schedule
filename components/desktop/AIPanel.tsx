@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { AnimatePresence, m } from "framer-motion";
-import { IconArrowRight, IconBrain, IconEraser, IconSend, IconSparkles, IconX } from "@tabler/icons-react";
+import { IconAlertTriangle, IconArrowRight, IconBrain, IconEraser, IconSend, IconSparkles, IconX } from "@tabler/icons-react";
 import ReactMarkdown from "react-markdown";
 import { parseAIAction, buildSystemPrompt, buildPlanContext } from "@/lib/ai";
 import type { AIActionResult } from "@/lib/ai";
@@ -390,8 +390,9 @@ function ActionCard({
           </span>
           <p className="mt-1 truncate text-[13px] font-semibold text-neutral-900 dark:text-white">{title}</p>
           {detail && (
-            <p className={`mt-0.5 truncate text-[11px] leading-relaxed ${warn ? "text-amber-600 dark:text-amber-400" : "text-neutral-500 dark:text-neutral-400"}`}>
-              {warn ? "⚠ " : ""}{detail}
+            <p className={`mt-0.5 flex items-center gap-1 truncate text-[11px] leading-relaxed ${warn ? "text-amber-600 dark:text-amber-400" : "text-neutral-500 dark:text-neutral-400"}`}>
+              {warn && <IconAlertTriangle size={12} strokeWidth={2.2} className="shrink-0" aria-hidden="true" />}
+              {detail}
             </p>
           )}
         </div>

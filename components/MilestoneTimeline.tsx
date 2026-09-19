@@ -1,7 +1,15 @@
 "use client";
 
 import { Fragment, useMemo, useRef, useEffect, useState } from "react";
-import { IconMap2 } from "@tabler/icons-react";
+import {
+  IconAlertTriangle,
+  IconCalendarEvent,
+  IconChartLine,
+  IconCheck,
+  IconLink,
+  IconMap2,
+  IconX,
+} from "@tabler/icons-react";
 import type { Schedule, Milestone, Plan, Task } from "@/lib/useScheduleDB";
 import { addDaysToISO, localISODate, todayISO as getTodayISO } from "@/lib/dateUtils";
 import { calculateMilestoneProgress, type MilestoneProgress } from "@/lib/planProgress";
@@ -92,9 +100,9 @@ function toneLabel(tone: DotTone): string {
 
 function dotInner(m: Milestone, tone: DotTone): React.ReactNode {
   if (tone === "completed")
-    return <span className="text-[8px] font-black text-white">✓</span>;
+    return <IconCheck size={9} strokeWidth={4} className="text-white" />;
   if (tone === "delayed" || tone === "at_risk")
-    return <span className="text-[8px] font-black text-white">!</span>;
+    return <IconAlertTriangle size={9} strokeWidth={3} className="text-white" />;
   if (m.linkedActivities.length > 0)
     return (
       <span
@@ -153,15 +161,22 @@ function MilestoneDetail({
           )}
           {/* Meta row */}
           <div className="mt-1.5 flex flex-wrap items-center gap-3 text-[11px] text-neutral-500 dark:text-neutral-400">
-            <span>📅 Target: {dateLabel}</span>
+            <span className="inline-flex items-center gap-1">
+              <IconCalendarEvent size={12} strokeWidth={2} className="shrink-0" aria-hidden="true" />
+              Target: {dateLabel}
+            </span>
             {milestone.linkedActivities.length > 0 && (
-              <span>
-                🔗 {milestone.linkedActivities.length} task
+              <span className="inline-flex items-center gap-1">
+                <IconLink size={12} strokeWidth={2} className="shrink-0" aria-hidden="true" />
+                {milestone.linkedActivities.length} task
                 {milestone.linkedActivities.length !== 1 ? "s" : ""} linked
               </span>
             )}
             {milestone.linkedTrackers.length > 0 && (
-              <span>📊 {milestone.linkedTrackers.length} tracker linked</span>
+              <span className="inline-flex items-center gap-1">
+                <IconChartLine size={12} strokeWidth={2} className="shrink-0" aria-hidden="true" />
+                {milestone.linkedTrackers.length} tracker linked
+              </span>
             )}
           </div>
         </div>
@@ -169,9 +184,10 @@ function MilestoneDetail({
         <button
           type="button"
           onClick={onClose}
-          className="shrink-0 rounded-lg p-1 text-[16px] leading-none text-neutral-500 dark:text-neutral-400 transition-colors hover:text-neutral-700 dark:hover:text-neutral-200"
+          aria-label="Close"
+          className="shrink-0 rounded-lg p-1 leading-none text-neutral-500 dark:text-neutral-400 transition-colors hover:text-neutral-700 dark:hover:text-neutral-200"
         >
-          ×
+          <IconX size={16} strokeWidth={2} />
         </button>
       </div>
     </div>

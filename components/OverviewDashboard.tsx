@@ -5,6 +5,7 @@ import {
   IconArrowRight,
   IconArrowUpRight,
   IconCalendarEvent,
+  IconScale,
   IconChartLine,
   IconCheck,
   IconChecklist,
@@ -27,6 +28,13 @@ import { selectTodayTasks } from "@/lib/todayTasks";
 import ExecutionStreakBanner from "@/components/ExecutionStreakBanner";
 import NeedsAttentionCard from "@/components/NeedsAttentionCard";
 import { selectNeedsAttention, type MissedTask, type NeedsAttention } from "@/lib/needsAttention";
+import {
+  computeCapacityModel,
+  plannedWeeklyMinutes,
+  assessPlannedLoad,
+  heaviestDay,
+  type LoadVerdict,
+} from "@/lib/capacityModel";
 import CompletionTrendCard from "@/components/analytics/CompletionTrendCard";
 import { computeExecutionTrend } from "@/lib/executionAnalytics";
 
@@ -65,6 +73,15 @@ interface OverviewDashboardProps {
 
 const DAYS_ORDER: DayKey[] = ["monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday"];
 const DAY_LABELS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
+/** Keyed by DayKey, for the capacity check's prose (the array above is positional). */
+const DAY_LABELS_FULL: Record<string, string> = {
+  monday: "Monday", tuesday: "Tuesday", wednesday: "Wednesday", thursday: "Thursday",
+  friday: "Friday", saturday: "Saturday", sunday: "Sunday",
+};
+
+function formatHoursShort(minutes: number): string {
+  return `${Math.round((minutes / 60) * 10) / 10}h`;
+}
 
 type TaskSummary = ReturnType<typeof getTaskSubtaskSummary>;
 type TrackerRow = {
@@ -282,17 +299,67 @@ function StatGrid({
 
 function ThisWeekCard({
   activity,
+  load,
+  heaviest,
 }: {
   activity: {
     days: { label: string; total: number; done: number; isToday: boolean; pct: number }[];
     tasksPct: number;
     habitsPct: number;
   } | null;
+  /** Null until there is enough history to say anything true. */
+  load: LoadVerdict | null;
+  heaviest: ReturnType<typeof heaviestDay>;
 }) {
   if (!activity) return null;
   return (
     <section data-testid="overview-week-card" className={`${CARD} px-4 py-4`}>
       <SectionHeader icon={IconCalendarEvent} title="This week" meta={`${activity.tasksPct}% tasks`} />
+
+      {/* ── Reality check ────────────────────────────────────────────────────
+          What this week ASKS FOR, against what this person has actually
+          sustained (lib/capacityModel.ts). The rest of this card reports what
+          happened; this is the only line that says whether the week ahead is
+          one they have ever actually done. Pure arithmetic over completion
+          history — no inference, and silent when the history is too thin. */}
+      {load && load.level !== "comfortable" && (
+        <div
+          data-testid="overview-capacity-check"
+          className={`mb-3 flex items-start gap-2 rounded-xl border px-3 py-2.5 ${
+            load.level === "unrealistic"
+              ? "border-amber-200 bg-amber-50 dark:border-amber-500/20 dark:bg-amber-500/[0.08]"
+              : "border-neutral-200 bg-neutral-50 dark:border-white/10 dark:bg-white/[0.04]"
+          }`}
+        >
+          <IconScale
+            size={14}
+            strokeWidth={2}
+            className={`mt-0.5 shrink-0 ${
+              load.level === "unrealistic"
+                ? "text-amber-600 dark:text-amber-400"
+                : "text-neutral-500 dark:text-neutral-400"
+            }`}
+          />
+          <div className="min-w-0">
+            <p
+              className={`text-[12.5px] leading-relaxed ${
+                load.level === "unrealistic"
+                  ? "text-amber-900 dark:text-amber-200"
+                  : "text-neutral-600 dark:text-neutral-300"
+              }`}
+            >
+              {load.message}
+            </p>
+            {/* Lumpiness is a different failure from a heavy week: 20h is fine
+                spread out and impossible if 9h lands on one day. */}
+            {heaviest && (
+              <p className="mt-0.5 text-[11.5px] text-neutral-500 dark:text-neutral-400">
+                {DAY_LABELS_FULL[heaviest.day]} is the tightest — {formatHoursShort(heaviest.plannedMinutes)} against your usual {formatHoursShort(heaviest.usualMinutes)}.
+              </p>
+            )}
+          </div>
+        </div>
+      )}
       <div className="grid grid-cols-7 gap-2">
         {activity.days.map(({ label, total, done, pct, isToday }) => (
           <div key={label} className={`rounded-xl border px-2 py-2 ${isToday ? "border-emerald-300 bg-emerald-50 dark:border-emerald-500/30 dark:bg-emerald-500/[0.08]" : "border-neutral-200/70 bg-neutral-50 dark:border-white/[0.07] dark:bg-white/[0.04]"}`}>
@@ -745,6 +812,15 @@ export default function OverviewDashboard({
   // stat and the trend never disagree.
   const missedThisWeek = useMemo(() => computeExecutionTrend(schedule).currentMissed, [schedule]);
 
+  // The observed weekly ceiling, and how the coming week measures against it.
+  // One walk over completion history, shared by both readings.
+  const capacity = useMemo(() => computeCapacityModel(schedule), [schedule]);
+  const weekLoad = useMemo(
+    () => assessPlannedLoad(capacity, plannedWeeklyMinutes(schedule)),
+    [capacity, schedule],
+  );
+  const weekHeaviestDay = useMemo(() => heaviestDay(schedule, capacity), [schedule, capacity]);
+
   const weeklyActivity = useMemo(() => {
     const todayIdx = new Date(todayISO + "T00:00:00").getDay();
     const monday = addDaysToISO(todayISO, -((todayIdx + 6) % 7));
@@ -951,7 +1027,7 @@ export default function OverviewDashboard({
               </div>
 
               <div className="space-y-4">
-                <ThisWeekCard activity={weeklyActivity} />
+                <ThisWeekCard activity={weeklyActivity} load={weekLoad} heaviest={weekHeaviestDay} />
                 {hasScheduledTasks && (
                   <div data-testid="overview-progress-card">
                     <CompletionTrendCard schedule={schedule} />

@@ -90,7 +90,7 @@ export const TEMPLATES: Template[] = [
       { title: "First week complete", offsetDays: 7 },
       { title: "30-day streak", offsetDays: 30 },
       { title: "Halfway mark — 45 days", offsetDays: 45 },
-      { title: "90-day program complete 🏆", offsetDays: 90 },
+      { title: "90-day program complete", offsetDays: 90 },
     ],
   },
   {
@@ -126,7 +126,7 @@ export const TEMPLATES: Template[] = [
       { title: "First week done", offsetDays: 7 },
       { title: "First module complete", offsetDays: 21 },
       { title: "Halfway through", offsetDays: 30 },
-      { title: "Study plan complete 🎓", offsetDays: 60 },
+      { title: "Study plan complete", offsetDays: 60 },
     ],
   },
   {
@@ -163,7 +163,7 @@ export const TEMPLATES: Template[] = [
       { title: "Project setup done", offsetDays: 3 },
       { title: "Core features complete", offsetDays: 14 },
       { title: "Beta ready", offsetDays: 21 },
-      { title: "Launch 🚀", offsetDays: 30 },
+      { title: "Launch", offsetDays: 30 },
     ],
   },
   {
@@ -196,9 +196,9 @@ export const TEMPLATES: Template[] = [
       { title: "Intention for the day", duration: "5m" },
     ],
     milestones: [
-      { title: "7-day streak 🔥", offsetDays: 7 },
+      { title: "7-day streak", offsetDays: 7 },
       { title: "21-day habit locked in", offsetDays: 21 },
-      { title: "30-day wellness complete ✨", offsetDays: 30 },
+      { title: "30-day wellness complete", offsetDays: 30 },
     ],
   },
   {
@@ -234,7 +234,7 @@ export const TEMPLATES: Template[] = [
       { title: "First 5K run completed", offsetDays: 14 },
       { title: "Running 3× a week consistently", offsetDays: 21 },
       { title: "10K without stopping", offsetDays: 45 },
-      { title: "60-day program complete 🏅", offsetDays: 60 },
+      { title: "60-day program complete", offsetDays: 60 },
     ],
   },
   {
