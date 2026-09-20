@@ -40,7 +40,8 @@ import Input from "@/components/ui/Input";
 import MilestoneSheet, { type MilestoneSaveData } from "@/components/plan/MilestoneSheet";
 import { computeRoadmapStats } from "@/lib/roadmapEngine";
 import { calculateMilestoneProgress, type MilestoneProgress } from "@/lib/planProgress";
-import { calculateMilestoneState, type MilestoneState } from "@/lib/milestoneHealth";
+import { calculateMilestoneState, resolvePrimaryTracker, aggregateOccurrences, type MilestoneState } from "@/lib/milestoneHealth";
+import { trackerPace, milestonePace, paceNarrative } from "@/lib/paceModel";
 import { isPlanRunning, planLifecycleLabel } from "@/lib/planLifecycle";
 import { sumEntriesForDate } from "@/lib/metricEntries";
 import { planEffectiveEndDate, resolveMilestoneStatus } from "@/lib/roadmapDates";
@@ -2429,6 +2430,36 @@ export default function PlanDetailView({
                   <p className="text-[13px] leading-relaxed text-neutral-500 dark:text-neutral-400">
                     {health.statusMessage}
                   </p>
+                  {/* The rate gap under the forecast date.
+                      "You'll finish 12 days late" is the diagnosis; "you need
+                      1.4 kg/week and you're averaging 0.6" is the size of the
+                      thing to change, which is what someone can actually
+                      decide about. Silent when the trend is too scattered for
+                      the slope to mean anything (see lib/paceModel.ts). */}
+                  {(() => {
+                    const primary = resolvePrimaryTracker(m, schedule.progressTrackers);
+                    const gap = primary
+                      ? trackerPace({
+                          tracker: primary,
+                          entries: schedule.metricEntries,
+                          deadlineISO: m.plannedEndDate,
+                          trackingStart: schedule.preferences?.startDate,
+                        })
+                      : milestonePace({
+                          milestone: m,
+                          expectedTotal: aggregateOccurrences(m, schedule.activities as unknown as Record<string, Task[]>, m.plannedEndDate).expected,
+                          completedSoFar: aggregateOccurrences(m, schedule.activities as unknown as Record<string, Task[]>, todayISO()).completed,
+                        });
+                    const text = paceNarrative(gap);
+                    return text ? (
+                      <p
+                        data-testid="milestone-pace"
+                        className="mt-1.5 text-[13px] font-semibold leading-relaxed text-neutral-700 dark:text-neutral-300"
+                      >
+                        {text}
+                      </p>
+                    ) : null;
+                  })()}
                   {/* The diagnosis has to lead somewhere. Offered only when the
                       milestone is actually off pace — on a healthy one this
                       button would invite fixing something that isn't broken. */}

@@ -45,6 +45,7 @@ registerHooks({
 
 const {
   dismissAllAttention,
+  dismissAttentionKey,
   dismissibleCount,
   ritualAttentionKey,
   milestoneRiskKey,
@@ -202,6 +203,37 @@ test("restoring the previous preferences undoes the clear", () => {
   const after = dismissAllAttention(before, data, TODAY);
   const undone = { ...after, preferences: before.preferences };
   assert.equal(selectNeedsAttention(undone, TODAY).total, data.total);
+});
+
+// ── The per-row mutation ─────────────────────────────────────────────────────
+
+test("dismissing one row's key removes only that row", () => {
+  const before = busySchedule();
+  const data = selectNeedsAttention(before, TODAY);
+  assert.equal(data.atRiskRituals.length, 1);
+  assert.equal(data.overdueMilestones.length, 1);
+
+  const ritualKey = ritualAttentionKey(data.atRiskRituals[0].ritual.id, TODAY);
+  const after = dismissAttentionKey(before, ritualKey, TODAY);
+  const remaining = selectNeedsAttention(after, TODAY);
+
+  assert.equal(remaining.atRiskRituals.length, 0, "the dismissed ritual is gone");
+  assert.equal(remaining.overdueMilestones.length, 1, "the untouched milestone stays");
+  assert.equal(remaining.missedTasks.length, 1, "the untouched missed task stays");
+});
+
+test("dismissing one row deletes nothing underneath it", () => {
+  const before = busySchedule();
+  const key = milestoneOverdueKey("late", "2026-08-20");
+  const after = dismissAttentionKey(before, key, TODAY);
+  assert.deepEqual(after.milestones, before.milestones);
+  assert.deepEqual(after.rituals, before.rituals);
+});
+
+test("a schedule with nothing dismissed yet still accepts a single dismissal", () => {
+  const before = schedule(); // preferences: {} — no acknowledgedAttention array at all
+  const after = dismissAttentionKey(before, milestoneOverdueKey("m1", "2026-08-20"), TODAY);
+  assert.deepEqual(after.preferences.acknowledgedAttention, [milestoneOverdueKey("m1", "2026-08-20")]);
 });
 
 // ── What must come back ──────────────────────────────────────────────────────

@@ -1,15 +1,10 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
 import {
   IconChartLine,
   IconCalendarEvent,
-  IconCalendarPlus,
   IconClipboardData,
-  IconClipboardPlus,
   IconLayoutDashboard,
-  IconNotes,
-  IconPlus,
   IconRepeat,
 } from "@tabler/icons-react";
 import { haptic } from "@/lib/haptics";
@@ -17,200 +12,94 @@ import { haptic } from "@/lib/haptics";
 interface IOSBottomNavProps {
   activeTab: number;
   onTabChange: (tab: number) => void;
-  onCreateTask: () => void;
-  onCreatePlan: () => void;
-  onCreateRitual: () => void;
-  onCreateNote: () => void;
 }
 
-export default function IOSBottomNav({
-  activeTab,
-  onTabChange,
-  onCreateTask,
-  onCreatePlan,
-  onCreateRitual,
-  onCreateNote,
-}: IOSBottomNavProps) {
-  const [expanded, setExpanded] = useState(false);
-  const navRef = useRef<HTMLDivElement>(null);
+/** Visual left-to-right order — independent of the tab ids themselves, which
+ *  don't run 0..4 (Overview is tab 4, Tracking is tab 8). */
+const TABS = [
+  { id: 4, label: "Overview", icon: IconLayoutDashboard },
+  { id: 0, label: "Today", icon: IconCalendarEvent },
+  { id: 1, label: "Plans", icon: IconClipboardData },
+  { id: 2, label: "Routine", icon: IconRepeat },
+  { id: 8, label: "Tracking", icon: IconChartLine },
+] as const;
 
-  useEffect(() => {
-    function handleOutside(e: MouseEvent | TouchEvent) {
-      if (navRef.current && !navRef.current.contains(e.target as Node)) setExpanded(false);
-    }
-    document.addEventListener("mousedown", handleOutside);
-    document.addEventListener("touchstart", handleOutside, { passive: true });
-    return () => {
-      document.removeEventListener("mousedown", handleOutside);
-      document.removeEventListener("touchstart", handleOutside);
-    };
-  }, []);
+/**
+ * Five tabs, no center action — creating a task/plan/routine/note already has
+ * its own home on each of those tabs (Today's "+", the Plans empty state, the
+ * Routine tab's own add button, Notes' own compose), so the nav's only job is
+ * moving between them, not duplicating creation.
+ *
+ * The active tab is a single sliding pill rather than a background that
+ * snaps on and off per button — switching tabs then reads as one continuous
+ * glide (a "where am I" cue that follows you) instead of one highlight
+ * disappearing and an unrelated one appearing a frame later. Percentage-based
+ * off the five equal columns, so it needs nothing measured: a plain
+ * `transition-transform` is enough, no ResizeObserver, no position math.
+ */
+export default function IOSBottomNav({ activeTab, onTabChange }: IOSBottomNavProps) {
+  const activeIndex = TABS.findIndex((t) => t.id === activeTab);
 
   function changeTab(tab: number) {
     haptic("light");
-    setExpanded(false);
     onTabChange(tab);
   }
 
-  function runCreate(fn: () => void) {
-    haptic("medium");
-    setExpanded(false);
-    fn();
-  }
-
-  const tabClass = (active: boolean) =>
-    `flex h-[56px] min-w-[44px] max-w-[64px] flex-1 flex-col items-center justify-center gap-[2px] rounded-full transition-colors duration-150 ${
-      active
-        ? "bg-black/[0.05] text-neutral-950 dark:bg-white/[0.10] dark:text-white"
-        : "text-neutral-500 dark:text-neutral-400"
-    }`;
-
   return (
-    <>
-      {expanded && <div className="fixed inset-0 z-[38] bg-black/[0.03] dark:bg-black/[0.12]" />}
-      <div
-        className="fixed inset-x-0 z-40 flex justify-center px-4"
-        style={{ bottom: "max(20px, calc(env(safe-area-inset-bottom) + 8px))" }}
+    <div
+      className="fixed inset-x-0 z-40 flex justify-center px-4"
+      style={{ bottom: "max(20px, calc(env(safe-area-inset-bottom) + 8px))" }}
+    >
+      <nav
+        role="navigation"
+        aria-label="Main navigation"
+        data-glass
+        className="relative flex h-[68px] w-full max-w-md items-center rounded-full border border-neutral-200/70 bg-white/80 px-2 shadow-nav backdrop-blur-xl backdrop-saturate-150 supports-[backdrop-filter]:bg-white/70 dark:border-white/[0.09] dark:bg-neutral-900/75 dark:supports-[backdrop-filter]:bg-neutral-900/65"
       >
-        <div ref={navRef} className="relative w-full max-w-md">
-          {expanded && (
-            <div className="absolute left-1/2 top-1/2 z-30 flex -translate-x-1/2 -translate-y-[156px] flex-col items-center">
-              <div className="flex items-start gap-3 rounded-[24px] border border-white/[0.10] bg-neutral-950 px-5 py-4">
-                <button
-                  type="button"
-                  onClick={() => runCreate(onCreateTask)}
-                  className="flex flex-col items-center gap-1.5"
-                  aria-label="Add task"
-                >
-                  <div className="flex h-[52px] w-[60px] items-center justify-center rounded-[18px] bg-white/[0.09]">
-                    <IconCalendarPlus size={24} strokeWidth={2} className="text-white" />
-                  </div>
-                  <span className="text-[11px] font-semibold text-white/75">Task</span>
-                </button>
-                <button
-                  type="button"
-                  onClick={() => runCreate(onCreateNote)}
-                  className="flex flex-col items-center gap-1.5"
-                  aria-label="Quick note"
-                >
-                  <div className="flex h-[52px] w-[60px] items-center justify-center rounded-[18px] bg-white/[0.09]">
-                    <IconNotes size={24} strokeWidth={2} className="text-white" />
-                  </div>
-                  <span className="text-[11px] font-semibold text-white/75">Note</span>
-                </button>
-                <button
-                  type="button"
-                  onClick={() => runCreate(onCreatePlan)}
-                  className="flex flex-col items-center gap-1.5"
-                  aria-label="Add plan"
-                >
-                  <div className="flex h-[52px] w-[60px] items-center justify-center rounded-[18px] bg-white/[0.09]">
-                    <IconClipboardPlus size={24} strokeWidth={2} className="text-white" />
-                  </div>
-                  <span className="text-[11px] font-semibold text-white/75">Plan</span>
-                </button>
-                <button
-                  type="button"
-                  onClick={() => runCreate(onCreateRitual)}
-                  className="flex flex-col items-center gap-1.5"
-                  aria-label="Add habit"
-                >
-                  <div className="flex h-[52px] w-[60px] items-center justify-center rounded-[18px] bg-white/[0.09]">
-                    <IconRepeat size={24} strokeWidth={2} className="text-white" />
-                  </div>
-                  <span className="text-[11px] font-semibold text-white/75">Habit</span>
-                </button>
-              </div>
+        <div className="relative flex h-full w-full items-center">
+          {activeIndex !== -1 && (
+            <div
+              aria-hidden="true"
+              className="absolute inset-y-0 left-0 transition-transform duration-300 ease-[cubic-bezier(0.22,1,0.36,1)] motion-reduce:transition-none"
+              style={{ width: `${100 / TABS.length}%`, transform: `translateX(${activeIndex * 100}%)` }}
+            >
+              <div className="absolute inset-1 rounded-full bg-black/[0.06] dark:bg-white/[0.10]" />
             </div>
           )}
 
-          <button
-            type="button"
-            data-tour="new-item-button"
-            onClick={() => {
-              haptic("medium");
-              setExpanded((v) => !v);
-            }}
-            aria-label="Create"
-            aria-expanded={expanded}
-            className="absolute left-1/2 top-1/2 z-40 flex h-[52px] w-[52px] -translate-x-1/2 -translate-y-1/2 items-center justify-center rounded-full bg-neutral-950 text-white dark:bg-white dark:text-neutral-950"
-          >
-            <IconPlus
-              size={24}
-              strokeWidth={2}
-              className={`transition-transform duration-150 ${expanded ? "rotate-45" : ""}`}
-            />
-          </button>
-
-          <nav
-            role="navigation"
-            aria-label="Main navigation"
-            data-glass
-            className="relative flex h-[68px] w-full items-center rounded-full border border-neutral-200/70 bg-white/80 px-2 shadow-nav backdrop-blur-xl backdrop-saturate-150 supports-[backdrop-filter]:bg-white/70 dark:border-white/[0.09] dark:bg-neutral-900/75 dark:supports-[backdrop-filter]:bg-neutral-900/65"
-          >
-            <div className="flex flex-1 items-center justify-evenly">
-            <button
-              type="button"
-              onClick={() => changeTab(4)}
-              className={tabClass(activeTab === 4)}
-              aria-label="Overview"
-              aria-current={activeTab === 4 ? "page" : undefined}
-            >
-              <IconLayoutDashboard size={20} strokeWidth={2} />
-              <span className="text-[10.5px] font-medium leading-none">Overview</span>
-            </button>
-            <button
-              type="button"
-              onClick={() => changeTab(0)}
-              className={tabClass(activeTab === 0)}
-              aria-label="Today"
-              aria-current={activeTab === 0 ? "page" : undefined}
-            >
-              <IconCalendarEvent size={20} strokeWidth={2} />
-              <span className="text-[10.5px] font-medium leading-none">Today</span>
-            </button>
-            </div>
-            {/* The FAB's slot. Two flex-1 halves rather than justify-evenly on
-                the whole row: with an odd number of tabs, evenly spacing six
-                items puts this gap left of centre while the FAB stays pinned to
-                the container's middle — which parked it on top of a real
-                button. Equal halves keep the gap and the FAB together. */}
-            <div className="w-[52px] shrink-0" aria-hidden="true" />
-            <div className="flex flex-1 items-center justify-evenly">
-            <button
-              type="button"
-              onClick={() => changeTab(1)}
-              className={tabClass(activeTab === 1)}
-              aria-label="Plans"
-              aria-current={activeTab === 1 ? "page" : undefined}
-            >
-              <IconClipboardData size={20} strokeWidth={2} />
-              <span className="text-[10.5px] font-medium leading-none">Plans</span>
-            </button>
-            <button
-              type="button"
-              onClick={() => changeTab(2)}
-              className={tabClass(activeTab === 2)}
-              aria-label="Routine"
-              aria-current={activeTab === 2 ? "page" : undefined}
-            >
-              <IconRepeat size={20} strokeWidth={2} />
-              <span className="text-[10.5px] font-medium leading-none">Routine</span>
-            </button>
-            <button
-              type="button"
-              onClick={() => changeTab(8)}
-              className={tabClass(activeTab === 8)}
-              aria-label="Tracking"
-              aria-current={activeTab === 8 ? "page" : undefined}
-            >
-              <IconChartLine size={20} strokeWidth={2} />
-              <span className="text-[10.5px] font-medium leading-none">Track</span>
-            </button>
-            </div>
-          </nav>
+          {TABS.map((tab) => {
+            const active = tab.id === activeTab;
+            const Icon = tab.icon;
+            return (
+              <button
+                key={tab.id}
+                type="button"
+                onClick={() => changeTab(tab.id)}
+                aria-label={tab.label}
+                aria-current={active ? "page" : undefined}
+                className="relative z-10 flex h-full flex-1 flex-col items-center justify-center gap-[2px] transition-transform duration-150 active:scale-[0.96]"
+              >
+                <Icon
+                  size={20}
+                  strokeWidth={2}
+                  className={`transition-[transform,color] duration-200 motion-reduce:transition-none ${
+                    active
+                      ? "scale-110 text-neutral-950 dark:text-white"
+                      : "text-neutral-500 dark:text-neutral-400"
+                  }`}
+                />
+                <span
+                  className={`text-[10.5px] font-medium leading-none transition-colors duration-200 ${
+                    active ? "text-neutral-950 dark:text-white" : "text-neutral-500 dark:text-neutral-400"
+                  }`}
+                >
+                  {tab.label}
+                </span>
+              </button>
+            );
+          })}
         </div>
-      </div>
-    </>
+      </nav>
+    </div>
   );
 }

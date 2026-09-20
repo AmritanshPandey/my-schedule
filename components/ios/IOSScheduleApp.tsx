@@ -15,11 +15,13 @@ import {
   IconEdit,
   IconFlame,
   IconNotes,
+  IconFileImport,
   IconPhoto,
   IconPlus,
   IconRepeat,
   IconSettings,
   IconTargetArrow,
+  IconTemplate,
   IconTrash,
 } from "@tabler/icons-react";
 import type { TaskSaveData } from "@/components/task/TaskSheet";
@@ -62,7 +64,6 @@ import { bootLog, isIOSSafeMode, isStandalonePWA } from "@/lib/iosSafeMode";
 import { todayISO, localISODate, addDaysToISO, formatDate, formatDayNoteLabel } from "@/lib/dateUtils";
 import { quickAmountsForUnit } from "@/lib/quickAmounts";
 import { sumEntriesForDate } from "@/lib/metricEntries";
-import { createInboxNoteInput } from "@/lib/notes/dailyCapture";
 import {
   applyTaskDelete,
   createTask,
@@ -85,12 +86,15 @@ import {
 import { mergeTasks, unmergeTask, findMergePairs } from "@/lib/taskMerge";
 import { completionForDate, getTaskCheckableItems, getTaskSubtaskSummary, isTaskCompleted, isTaskResolved, isTrackedTask, markTaskMissed, snoozeTaskLater, toggleSlotComplete, toggleSubtaskComplete, toggleTaskFromCheckbox } from "@/lib/taskCompletion";
 import { diffException, isTaskScheduledOn, occurrenceNote, resolveOccurrence } from "@/lib/taskOccurrence";
+import { validateDatedTasks } from "@/lib/scheduleRules";
+import { resolveTimes as resolveParsedTimes } from "@/lib/scheduleParser";
+import { applyTemplate } from "@/lib/templates";
+import type { Template } from "@/lib/templates";
 import { cascadeMilestoneDates, moveMilestone, normalizeMilestoneTimeline } from "@/lib/roadmapDates";
 import { toggleRitualCompletion, appendRitualLog, undoLastRitualLog, toggleRitualStep, removeRitualLog } from "@/lib/ritualCompletions";
-import { MAX_RITUALS } from "@/lib/ritualColors";
 import { deleteGoal } from "@/lib/goalMutations";
 import { togglePlanPaused } from "@/lib/planLifecycle";
-import { dismissAllAttention, dismissibleCount } from "@/lib/attentionDismissal";
+import { dismissAllAttention, dismissibleCount, dismissAttentionKey } from "@/lib/attentionDismissal";
 import { applyAdaptation } from "@/lib/milestoneAdaptation";
 import { calculateMilestoneState } from "@/lib/milestoneHealth";
 import AdaptMilestoneSheet from "@/components/plan/AdaptMilestoneSheet";
@@ -103,6 +107,7 @@ import { computeExecutionTrend } from "@/lib/executionAnalytics";
 import { selectNeedsAttention, type MissedTask } from "@/lib/needsAttention";
 import NeedsAttentionCard from "@/components/NeedsAttentionCard";
 import MissedTaskSheet from "@/components/MissedTaskSheet";
+import QuickRetimeSheet, { type QuickRetimeTarget } from "@/components/QuickRetimeSheet";
 import { rescheduleMissedTaskOnce, acknowledgeMiss } from "@/lib/missedRecovery";
 import { haptic } from "@/lib/haptics";
 import { CARD } from "@/components/ui/surfaces";
@@ -122,6 +127,8 @@ const TrackingView = dynamic(() => import("@/components/tracking/TrackingView"),
 const SettingsView = dynamic(() => import("@/components/SettingsView").then((m) => ({ default: m.SettingsView })), { ssr: false });
 const AIView = dynamic(() => import("@/components/AIView").then((m) => ({ default: m.AIView })), { ssr: false });
 const DayWallpaperSheet = dynamic(() => import("@/components/DayWallpaperSheet"), { ssr: false });
+const BulkImportSheet = dynamic(() => import("@/components/BulkImportSheet"), { ssr: false });
+const TemplatesSheet = dynamic(() => import("@/components/TemplatesSheet").then((m) => ({ default: m.TemplatesSheet })), { ssr: false });
 const NotesView = dynamic(() => import("@/components/notes/NotesView"), { ssr: false });
 const TaskDetailView = dynamic(() => import("@/components/activity/TaskDetailView"), { ssr: false });
 const AddEntryModal = dynamic(() => import("@/components/AddEntryModal"), { ssr: false });
@@ -277,11 +284,13 @@ function EmptyPanel({
   title,
   description,
   action,
+  secondaryAction,
 }: {
   icon: React.ComponentType<{ size?: number; strokeWidth?: number; className?: string }>;
   title: string;
   description: string;
   action?: { label: string; onClick: () => void };
+  secondaryAction?: { label: string; onClick: () => void };
 }) {
   return (
     <div className="rounded-2xl border border-dashed border-neutral-200 bg-white px-5 py-8 text-center dark:border-white/[0.10] dark:bg-neutral-900">
@@ -290,14 +299,27 @@ function EmptyPanel({
       </div>
       <p className="text-[16px] font-extrabold text-neutral-900 dark:text-white">{title}</p>
       <p className="mx-auto mt-1 max-w-[260px] text-[13px] font-medium leading-snug text-neutral-500 dark:text-neutral-400">{description}</p>
-      {action && (
-        <button
-          type="button"
-          onClick={action.onClick}
-          className="mt-4 inline-flex h-10 items-center justify-center rounded-full bg-neutral-950 px-4 text-[13px] font-bold text-white dark:bg-white dark:text-neutral-950"
-        >
-          {action.label}
-        </button>
+      {(action || secondaryAction) && (
+        <div className="mt-4 flex items-center justify-center gap-2">
+          {action && (
+            <button
+              type="button"
+              onClick={action.onClick}
+              className="inline-flex h-10 items-center justify-center rounded-full bg-neutral-950 px-4 text-[13px] font-bold text-white dark:bg-white dark:text-neutral-950"
+            >
+              {action.label}
+            </button>
+          )}
+          {secondaryAction && (
+            <button
+              type="button"
+              onClick={secondaryAction.onClick}
+              className="inline-flex h-10 items-center justify-center rounded-full border border-neutral-200 px-4 text-[13px] font-bold text-neutral-600 dark:border-white/[0.10] dark:text-neutral-300"
+            >
+              {secondaryAction.label}
+            </button>
+          )}
+        </div>
       )}
     </div>
   );
@@ -353,6 +375,9 @@ export default function IOSScheduleApp() {
   /** The weekday awaiting a "clear day" confirmation, or null. */
   const [dayClearRequest, setDayClearRequest] = useState<DayKey | null>(null);
   const [missedSheet, setMissedSheet] = useState<MissedTask | null>(null);
+  const [quickRetimeTarget, setQuickRetimeTarget] = useState<(QuickRetimeTarget & { day: DayKey; dateISO: string }) | null>(null);
+  const [bulkImportOpen, setBulkImportOpen] = useState(false);
+  const [templatesOpen, setTemplatesOpen] = useState(false);
   // Today tab starts as a clean execution surface; editing affordances (per-card
   // pencil, day actions, wallpaper, add-task) are revealed only in edit mode.
   const [todayEditMode, setTodayEditMode] = useState(false);
@@ -931,6 +956,155 @@ export default function IOSScheduleApp() {
     });
   }
 
+  /**
+   * Save from the quick retime sheet — a per-date exception, same mechanism
+   * TaskSheet itself uses for an occurrence-scoped time edit (see the
+   * `diffException`/`setTaskException` pair above). Diffed against the raw
+   * template, not the already-resolved row, so an edit that happens to match
+   * the template writes no exception at all.
+   */
+  function handleQuickRetime(taskId: string, startTime: string, endTime: string) {
+    if (!quickRetimeTarget) return;
+    const { day, dateISO } = quickRetimeTarget;
+    const raw = (schedule.activities[day] ?? []).find((t) => t.id === taskId);
+    if (!raw) return;
+    const patch = diffException(raw, {
+      startTime: inputToDisplayTime(startTime),
+      endTime: inputToDisplayTime(endTime),
+    });
+    if (Object.keys(patch).length === 0) return;
+    setSchedule(setTaskException(taskId, dateISO, patch));
+    setToast({
+      message: "Time updated",
+      actionLabel: "Undo",
+      onAction: () => { undo(); haptic("light"); },
+    });
+  }
+
+  function handleApplyTemplate(template: Template) {
+    setSchedule(applyTemplate(template));
+    setSelectedPlanId(null);
+    setActiveTab(1); // Plans tab
+  }
+
+  /**
+   * Mirrors ScheduleApp.tsx's own handleBulkImport exactly — the two shells
+   * keep independent copies of this (like every other mutation handler here),
+   * not a shared one, so a shell-specific change to one can never silently
+   * shift the other's behavior underfoot.
+   */
+  function handleBulkImport(result: import("@/lib/scheduleParser").ParseResult) {
+    // A dated task belongs to one occurrence, not to every matching weekday —
+    // week 1's Thursday and week 2's Thursday are different sessions with
+    // different checklists. Those are validated against the day they actually
+    // land on before anything is written.
+    const dated = result.days.flatMap((d) =>
+      d.tasks
+        .filter((t) => t.dateISO)
+        .map((t) => {
+          const { startTime, endTime } = resolveParsedTimes(t);
+          return { title: t.title, dateISO: t.dateISO!, startTime, endTime, taskId: t.id };
+        }),
+    );
+
+    let blocked = new Set<string>();
+    let firstConflict: string | null = null;
+    if (dated.length > 0) {
+      const { conflicts } = validateDatedTasks(dated, (dateISO, weekday) =>
+        (schedule.activities[weekday] ?? [])
+          .filter((task) => isTaskScheduledOn(task, dateISO, true, schedule.preferences?.startDate))
+          .flatMap((task) => getSlots(task).map((s) => ({ title: task.title, ...s }))),
+      );
+      blocked = new Set(conflicts.map((c) => c.task.taskId));
+      if (conflicts.length > 0) {
+        const c = conflicts[0].conflict;
+        firstConflict =
+          conflicts.length === 1
+            ? `Skipped "${c.taskTitle}" — it clashes with ${c.conflictsWith} on ${c.dateISO}.`
+            : `Skipped ${conflicts.length} sessions that clash with existing tasks.`;
+      }
+    }
+
+    setSchedule((prev) => {
+      // Create real plans from inline `# Plan` definitions; map temp ref → real plan.
+      const refToPlan = new Map<string, Plan>();
+      const newPlans: Plan[] = result.plans.map((p) => {
+        const plan: Plan = {
+          id: uid(),
+          title: p.title,
+          description: p.description,
+          startDate: p.startDate,
+          endDate: p.endDate,
+          category: p.category,
+          emoji: p.emoji,
+          color: p.color,
+          items: [],
+          metaFields: [],
+          summary: [],
+        };
+        refToPlan.set(p.ref, plan);
+        return plan;
+      });
+
+      const activities = { ...prev.activities };
+      const categoryDraft = [...prev.categories];
+      for (const d of result.days) {
+        const created: Task[] = d.tasks
+          .filter((t) => !blocked.has(t.id))
+          .map((t) => {
+            const { startTime, endTime } = resolveParsedTimes(t);
+            const plan =
+              (t.planRef ? refToPlan.get(t.planRef) : null) ??
+              prev.plans.find((p) => p.id === t.planId) ??
+              prev.plans[0] ??
+              null;
+            const subtasks = t.subtasks?.map((s) => ({
+              id: uid(),
+              task: s.title,
+              info: s.info,
+              duration: s.duration,
+            }));
+            return {
+              id: uid(),
+              title: t.title,
+              startTime,
+              endTime,
+              categoryId: ensureCategoryIn(categoryDraft, t.icon),
+              planId: plan?.id ?? "",
+              ...(subtasks !== undefined ? { subtasks } : {}),
+              // A single dated occurrence rather than a weekly repeat — required,
+              // since TaskException carries no subtasks field, so one recurring
+              // task cannot hold a different checklist per week.
+              ...(t.dateISO ? { recurrence: { type: "once" as const, dateISO: t.dateISO } } : {}),
+            };
+          });
+        activities[d.day] = sortTasksByTime([...(activities[d.day] ?? []), ...created]);
+      }
+      return { ...prev, plans: [...prev.plans, ...newPlans], categories: categoryDraft, activities };
+    });
+    const imported = result.days.reduce(
+      (n, d) => n + d.tasks.filter((t) => !blocked.has(t.id)).length,
+      0,
+    );
+    setToast(
+      firstConflict
+        ? `Imported ${imported}. ${firstConflict}`
+        : result.plans.length > 0
+        ? "Plan & tasks imported"
+        : "Tasks imported",
+    );
+  }
+
+  function handleDismissAttentionOne(key: string) {
+    const previous = schedule.preferences;
+    setSchedule((prev) => dismissAttentionKey(prev, key, todayISO()));
+    setToast({
+      message: "Dismissed",
+      actionLabel: "Undo",
+      onAction: () => setSchedule((prev) => ({ ...prev, preferences: previous })),
+    });
+  }
+
   function handleDeleteGoal(goalId: string) {
     const goal = schedule.goals?.find((item) => item.id === goalId);
     openConfirm({
@@ -1047,13 +1221,6 @@ export default function IOSScheduleApp() {
   }
 
   const handleInitialNoteOpened = useCallback(() => setInitialNoteId(null), []);
-
-  function openQuickNote() {
-    const id = handleCreateNote(createInboxNoteInput());
-    setSelectedPlanId(null);
-    setInitialNoteId(id);
-    setActiveTab(6);
-  }
 
   function handleCreateTaskFromNote(input: CreateTaskFromNoteInput): string | undefined {
     const current = scheduleRef.current;
@@ -1241,6 +1408,16 @@ export default function IOSScheduleApp() {
                 onToggleSlot={(id, si) => handleToggleSlot(id, si, day, dateISO)}
                 onEdit={() => openEditSheet(task, dateISO)}
                 onOpenSubtasks={() => setSubtasksRef({ id: task.id, day, dateISO })}
+                onQuickRetime={() =>
+                  setQuickRetimeTarget({
+                    taskId: task.id,
+                    title: task.title,
+                    startTime: task.startTime ?? "",
+                    endTime: task.endTime ?? "",
+                    day,
+                    dateISO,
+                  })
+                }
               />
             );
           })
@@ -1381,7 +1558,7 @@ export default function IOSScheduleApp() {
             </section>
 
             {/* Recently missed / overdue — renders nothing when all clear. */}
-            <NeedsAttentionCard data={needsAttention} onNavigate={setActiveTab} onHandleMissed={setMissedSheet} onAdaptMilestone={setAdaptingMilestoneId} onReviewUnreliableSlot={(row) => openEditSheet(row.task)} onClearAll={handleClearAttention} />
+            <NeedsAttentionCard data={needsAttention} onNavigate={setActiveTab} onHandleMissed={setMissedSheet} onAdaptMilestone={setAdaptingMilestoneId} onReviewUnreliableSlot={(row) => openEditSheet(row.task)} onClearAll={handleClearAttention} onDismissOne={handleDismissAttentionOne} />
 
             <section data-testid="overview-next-task" className={`${CARD} p-0`}>
               <button
@@ -1611,7 +1788,13 @@ export default function IOSScheduleApp() {
         <ErrorBoundary section name="Plans">
           <div className="space-y-3 px-4 pt-5" data-tour="plans-list">
             {schedule.plans.length === 0 ? (
-              <EmptyPanel icon={IconClipboardData} title="No plans yet" description="Create a plan first, then add tasks to schedule your day." action={{ label: "Create plan", onClick: () => setAddingPlan(true) }} />
+              <EmptyPanel
+                icon={IconClipboardData}
+                title="No plans yet"
+                description="Create a plan first, then add tasks to schedule your day."
+                action={{ label: "Create plan", onClick: () => setAddingPlan(true) }}
+                secondaryAction={{ label: "Browse templates", onClick: () => setTemplatesOpen(true) }}
+              />
             ) : (
               schedule.plans.map((plan) => {
                 const taskCount = DAYS.reduce((sum, day) => sum + schedule.activities[day].filter((task) => task.planId === plan.id).length, 0);
@@ -1792,6 +1975,22 @@ export default function IOSScheduleApp() {
               : activeTab === 1
               ? [
                   {
+                    icon: IconTemplate,
+                    label: "Browse templates",
+                    onClick: () => {
+                      haptic("light");
+                      setTemplatesOpen(true);
+                    },
+                  },
+                  {
+                    icon: IconFileImport,
+                    label: "Paste schedule",
+                    onClick: () => {
+                      haptic("light");
+                      setBulkImportOpen(true);
+                    },
+                  },
+                  {
                     icon: IconTargetArrow,
                     label: "Goals",
                     onClick: () => {
@@ -1831,18 +2030,28 @@ export default function IOSScheduleApp() {
         </IOSMotionBoundary>
       )}
 
+      <QuickRetimeSheet
+        target={quickRetimeTarget}
+        onClose={() => setQuickRetimeTarget(null)}
+        onSave={handleQuickRetime}
+      />
+
+      {bulkImportOpen && (
+        <BulkImportSheet
+          open={bulkImportOpen}
+          plans={schedule.plans}
+          fallbackDay={activeDay}
+          onClose={() => setBulkImportOpen(false)}
+          onCommit={handleBulkImport}
+        />
+      )}
+
+      <TemplatesSheet open={templatesOpen} onClose={() => setTemplatesOpen(false)} onApply={handleApplyTemplate} />
+
       {activeTab !== 6 && !subtasksRef && !taskSheetOpen && (
         <IOSBottomNav
           activeTab={activeTab}
           onTabChange={(tab) => { setActiveTab(tab); setSelectedPlanId(null); }}
-          onCreateTask={() => openCreateSheet()}
-          onCreatePlan={() => { setActiveTab(1); setSelectedPlanId(null); setAddingPlan(true); }}
-          onCreateRitual={() => {
-            setActiveTab(2);
-            if ((schedule.rituals ?? []).length < MAX_RITUALS) setRitualAddOpen(true);
-            else setToast(`You can have up to ${MAX_RITUALS} routines`);
-          }}
-          onCreateNote={openQuickNote}
         />
       )}
 

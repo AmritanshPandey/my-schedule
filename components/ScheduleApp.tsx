@@ -215,7 +215,7 @@ import EditPlanSheet from "@/components/plan/EditPlanSheet";
 import GoalListSheet from "@/components/goal/GoalListSheet";
 import { deleteGoal } from "@/lib/goalMutations";
 import { togglePlanPaused } from "@/lib/planLifecycle";
-import { dismissAllAttention, dismissibleCount } from "@/lib/attentionDismissal";
+import { dismissAllAttention, dismissibleCount, dismissAttentionKey } from "@/lib/attentionDismissal";
 import type { NeedsAttention } from "@/lib/needsAttention";
 import { applyAdaptation } from "@/lib/milestoneAdaptation";
 import { calculateMilestoneState } from "@/lib/milestoneHealth";
@@ -2197,6 +2197,16 @@ export default function ScheduleApp() {
     setSchedule((prev) => dismissAllAttention(prev, attention, todayISO()));
     setToastMessage({
       message: `Cleared ${cleared} item${cleared === 1 ? "" : "s"}`,
+      actionLabel: "Undo",
+      onAction: () => setSchedule((prev) => ({ ...prev, preferences: previous })),
+    });
+  }
+
+  function handleDismissAttentionOne(key: string) {
+    const previous = schedule.preferences;
+    setSchedule((prev) => dismissAttentionKey(prev, key, todayISO()));
+    setToastMessage({
+      message: "Dismissed",
       actionLabel: "Undo",
       onAction: () => setSchedule((prev) => ({ ...prev, preferences: previous })),
     });
@@ -4664,6 +4674,7 @@ export default function ScheduleApp() {
                 onAdaptMilestone={setAdaptingMilestoneId}
                 onReviewUnreliableSlot={(row) => openEditSheet(row.task)}
                 onClearAttention={handleClearAttention}
+                onDismissAttentionOne={handleDismissAttentionOne}
               />
             )}
             </ErrorBoundary>

@@ -4,7 +4,8 @@
  * walk calls this instead of a raw completion-presence check, so the
  * algorithm itself never needs to know about tracking types.
  */
-import type { Ritual, RitualCompletion } from "@/lib/useScheduleDB";
+import type { Ritual, RitualCompletion, RitualStep } from "@/lib/useScheduleDB";
+import { formatDisplayTime, parseTimeToMinutes } from "@/lib/timeUtils";
 
 export interface RitualDayProgress {
   /** Summed logged value for quantity/duration/count (0 if none logged). */
@@ -62,6 +63,37 @@ export function ritualDayProgress(ritual: Ritual, entries: RitualCompletion[]): 
 
 export function isRitualDayComplete(ritual: Ritual, entries: RitualCompletion[]): boolean {
   return ritualDayProgress(ritual, entries).complete;
+}
+
+export interface RitualOccurrenceStatus {
+  /** Already display-formatted ("5:15 AM"). */
+  time: string;
+  /** "due" once this step's own time has passed and it's still unresolved; "next" while there's still time. */
+  state: "next" | "due";
+}
+
+/**
+ * The one occurrence worth naming on a "times" routine's list row: the
+ * earliest not-yet-done step. Sorted by time so a missed early step outranks
+ * a later one that hasn't come due yet — the oldest gap is the one worth
+ * naming first. Null when every step is done, or none have a parseable time.
+ */
+export function nextRitualOccurrence(
+  ritual: Pick<Ritual, "steps">,
+  doneStepIds: ReadonlySet<string>,
+  nowMinutes: number,
+): RitualOccurrenceStatus | null {
+  const pending = (ritual.steps ?? [])
+    .filter((step) => !doneStepIds.has(step.id))
+    .map((step) => ({ step, minutes: parseTimeToMinutes(step.label) }))
+    .filter((s): s is { step: RitualStep; minutes: number } => s.minutes !== null)
+    .sort((a, b) => a.minutes - b.minutes);
+  if (pending.length === 0) return null;
+  const earliest = pending[0];
+  return {
+    time: formatDisplayTime(earliest.step.label),
+    state: earliest.minutes <= nowMinutes ? "due" : "next",
+  };
 }
 
 /**

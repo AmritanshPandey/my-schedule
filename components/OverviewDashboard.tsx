@@ -71,6 +71,7 @@ interface OverviewDashboardProps {
    *  because this component is the one that computed it — asking the parent to
    *  re-derive it would risk the two disagreeing about what was cleared. */
   onClearAttention?: (data: NeedsAttention) => void;
+  onDismissAttentionOne?: (key: string) => void;
 }
 
 const DAYS_ORDER: DayKey[] = ["monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday"];
@@ -783,6 +784,7 @@ export default function OverviewDashboard({
   onAdaptMilestone,
   onReviewUnreliableSlot,
   onClearAttention,
+  onDismissAttentionOne,
 }: OverviewDashboardProps) {
   const todayISO = localISODate(new Date());
   const plansById = useMemo(() => new Map(schedule.plans.map((plan) => [plan.id, plan])), [schedule.plans]);
@@ -1005,7 +1007,7 @@ export default function OverviewDashboard({
                 {/* Above Today's Task: catching up on what slipped comes before
                     working the current day. Renders nothing when there is
                     nothing to fix, so a clean week costs no space. */}
-                <NeedsAttentionCard data={needsAttention} onNavigate={onNavigate} onHandleMissed={onHandleMissed} onAdaptMilestone={onAdaptMilestone} onReviewUnreliableSlot={onReviewUnreliableSlot} onClearAll={onClearAttention ? () => onClearAttention(needsAttention) : undefined} />
+                <NeedsAttentionCard data={needsAttention} onNavigate={onNavigate} onHandleMissed={onHandleMissed} onAdaptMilestone={onAdaptMilestone} onReviewUnreliableSlot={onReviewUnreliableSlot} onClearAll={onClearAttention ? () => onClearAttention(needsAttention) : undefined} onDismissOne={onDismissAttentionOne} />
                 <TodayTaskList
                   tasks={todayTasks}
                   done={tasksDone}

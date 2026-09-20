@@ -19,6 +19,18 @@ const ASSET_CACHE = `${CACHE_VERSION}-assets`;
 
 const ALL_CACHES = [SHELL_CACHE, ASSET_CACHE];
 
+// ── Push-only mode ───────────────────────────────────────────────────────────
+// Registered as `/sw.js?nocache=1` (see components/ServiceWorkerRegistration.tsx).
+//
+// iOS used to have the worker unregistered outright, which also removed the
+// only route iOS has to a notification: Web Push needs a service worker, and
+// iOS has no `new Notification()` fallback. The thing that made unregistering
+// attractive was the CACHING — stale shells surviving a deploy — not the push
+// handler, so this mode keeps install/activate/push/notificationclick and drops
+// every cache interaction instead. Activate still purges old caches, so a
+// device moving into this mode cleans up whatever it had.
+const PUSH_ONLY = new URL(self.location.href).searchParams.get('nocache') === '1';
+
 // Minimal shell precache. The entry JS chunks are appended at build time by
 // scripts/inject-precache.mjs (see PRECACHE_ASSETS); hashed chunks not listed
 // there are still cached on first fetch.
@@ -34,6 +46,7 @@ self.addEventListener('install', (e) => {
   // Take over as soon as installed so a new deploy's cache purge + fresh shell
   // apply on the next load instead of waiting for every tab to close.
   self.skipWaiting();
+  if (PUSH_ONLY) return;
   e.waitUntil(
     Promise.all([
       // Shell is required — a failed shell precache should fail the install.
@@ -54,7 +67,7 @@ self.addEventListener('activate', (e) => {
       .then((keys) =>
         Promise.all(
           keys
-            .filter((k) => !ALL_CACHES.includes(k))
+            .filter((k) => (PUSH_ONLY ? k.startsWith('planr-') : !ALL_CACHES.includes(k)))
             .map((k) => caches.delete(k))
         )
       )
@@ -65,6 +78,10 @@ self.addEventListener('activate', (e) => {
 // ── Fetch ─────────────────────────────────────────────────────────────────────
 
 self.addEventListener('fetch', (e) => {
+  // Returning without calling respondWith leaves the request entirely to the
+  // network — the browser behaves exactly as if no worker were installed.
+  if (PUSH_ONLY) return;
+
   const { request } = e;
   if (request.method !== 'GET') return;
 
@@ -220,6 +237,12 @@ self.addEventListener('push', (event) => {
     renotify: !!payload.tag,
     icon: '/icons/icon.svg',
     badge: '/icons/icon.svg',
+    // Matches lib/reminders.ts's alertOptions. Without requireInteraction a
+    // notification auto-dismisses after a few seconds, so one that arrives
+    // while the user is looking elsewhere is indistinguishable from one that
+    // never arrived. The two paths share tags and must also share behaviour.
+    requireInteraction: true,
+    vibrate: [120, 60, 120],
     data: { url: payload.url || '/' },
   };
   event.waitUntil(self.registration.showNotification(title, options));
