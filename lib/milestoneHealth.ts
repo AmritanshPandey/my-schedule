@@ -124,7 +124,7 @@ function completedDatesFor(copies: Task[]): Set<string> {
   return dates;
 }
 
-interface OccurrenceCounts { expected: number; completed: number; }
+export interface OccurrenceCounts { expected: number; completed: number; }
 
 /** Expected-vs-completed occurrences for one linked task within [fromISO, toISO]. */
 function occurrenceCounts(taskId: string, activities: Record<string, Task[]>, fromISO: string, toISO: string): OccurrenceCounts {
@@ -147,7 +147,16 @@ function occurrenceCounts(taskId: string, activities: Record<string, Task[]>, fr
   return { expected, completed };
 }
 
-function aggregateOccurrences(milestone: Milestone, activities: Record<string, Task[]>, toISO: string): OccurrenceCounts {
+/**
+ * Expected-vs-completed occurrences across every linked task, from the
+ * milestone's start to `toISO`.
+ *
+ * Exported so lib/paceModel.ts can express the same counts as a sessions-per-
+ * week rate without reimplementing the recurrence and exception rules that
+ * decide what "expected" means — two implementations of that would disagree
+ * the first time either changed.
+ */
+export function aggregateOccurrences(milestone: Milestone, activities: Record<string, Task[]>, toISO: string): OccurrenceCounts {
   let expected = 0;
   let completed = 0;
   for (const taskId of milestone.linkedActivities ?? []) {
@@ -209,7 +218,10 @@ export function calculateExpectedProgress(milestone: Milestone, activities: Reco
 
 // ── Metric progress ──────────────────────────────────────────────────────────
 
-function resolvePrimaryTracker(milestone: Milestone, trackers: ProgressTracker[]): ProgressTracker | null {
+/** The milestone's headline tracker. Exported so callers deriving their own
+ *  metric readings (e.g. lib/paceModel.ts's rate gap) resolve the same one
+ *  this module's progress and forecast already use. */
+export function resolvePrimaryTracker(milestone: Milestone, trackers: ProgressTracker[]): ProgressTracker | null {
   const id = milestone.linkedTrackers?.[0];
   if (!id) return null;
   return trackers.find((t) => t.id === id) ?? null;
