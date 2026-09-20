@@ -90,7 +90,7 @@ import { toggleRitualCompletion, appendRitualLog, undoLastRitualLog, toggleRitua
 import { MAX_RITUALS } from "@/lib/ritualColors";
 import { deleteGoal } from "@/lib/goalMutations";
 import { togglePlanPaused } from "@/lib/planLifecycle";
-import { dismissAllAttention, dismissibleCount } from "@/lib/attentionDismissal";
+import { dismissAllAttention, dismissibleCount, dismissAttentionKey } from "@/lib/attentionDismissal";
 import { applyAdaptation } from "@/lib/milestoneAdaptation";
 import { calculateMilestoneState } from "@/lib/milestoneHealth";
 import AdaptMilestoneSheet from "@/components/plan/AdaptMilestoneSheet";
@@ -931,6 +931,16 @@ export default function IOSScheduleApp() {
     });
   }
 
+  function handleDismissAttentionOne(key: string) {
+    const previous = schedule.preferences;
+    setSchedule((prev) => dismissAttentionKey(prev, key, todayISO()));
+    setToast({
+      message: "Dismissed",
+      actionLabel: "Undo",
+      onAction: () => setSchedule((prev) => ({ ...prev, preferences: previous })),
+    });
+  }
+
   function handleDeleteGoal(goalId: string) {
     const goal = schedule.goals?.find((item) => item.id === goalId);
     openConfirm({
@@ -1381,7 +1391,7 @@ export default function IOSScheduleApp() {
             </section>
 
             {/* Recently missed / overdue — renders nothing when all clear. */}
-            <NeedsAttentionCard data={needsAttention} onNavigate={setActiveTab} onHandleMissed={setMissedSheet} onAdaptMilestone={setAdaptingMilestoneId} onReviewUnreliableSlot={(row) => openEditSheet(row.task)} onClearAll={handleClearAttention} />
+            <NeedsAttentionCard data={needsAttention} onNavigate={setActiveTab} onHandleMissed={setMissedSheet} onAdaptMilestone={setAdaptingMilestoneId} onReviewUnreliableSlot={(row) => openEditSheet(row.task)} onClearAll={handleClearAttention} onDismissOne={handleDismissAttentionOne} />
 
             <section data-testid="overview-next-task" className={`${CARD} p-0`}>
               <button

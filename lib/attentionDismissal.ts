@@ -149,3 +149,21 @@ export function dismissAllAttention(
     },
   };
 }
+
+/**
+ * Dismiss a single row by its exact key (see the key builders above).
+ *
+ * Same semantics as `dismissAllAttention` for one row: nothing underneath is
+ * touched, and the row returns the moment a new instance of the same problem
+ * appears (a fresh date, or a milestone target that moved and slipped again).
+ */
+export function dismissAttentionKey(schedule: Schedule, key: string, todayISO: string): Schedule {
+  const attention = [...(schedule.preferences?.acknowledgedAttention ?? []), key];
+  return {
+    ...schedule,
+    preferences: {
+      ...schedule.preferences,
+      acknowledgedAttention: prune(attention, todayISO),
+    },
+  };
+}

@@ -2,8 +2,9 @@
 
 import { IconAlertTriangle, IconArrowUpRight, IconClockExclamation, IconFlag, IconFlame, IconTrendingDown, IconX } from "@tabler/icons-react";
 import { CARD } from "@/components/ui/surfaces";
+import IconButton from "@/components/ui/IconButton";
 import { haptic } from "@/lib/haptics";
-import { formatDateShort } from "@/lib/dateUtils";
+import { formatDateShort, todayISO } from "@/lib/dateUtils";
 import { bandRangeLabel } from "@/lib/slotReliability";
 import {
   formatDaysAgo,
@@ -14,6 +15,7 @@ import {
   type NeedsAttention,
   type UnreliableSlotTask,
 } from "@/lib/needsAttention";
+import { ritualAttentionKey, slotRiskKey, milestoneRiskKey, milestoneOverdueKey } from "@/lib/attentionDismissal";
 
 /** Rows shown before collapsing the rest into a "+N more" line. */
 const MAX_ROWS = 4;
@@ -32,6 +34,9 @@ interface NeedsAttentionCardProps {
   onReviewUnreliableSlot?: (row: UnreliableSlotTask) => void;
   /** Dismiss every row currently listed. Absent = the control isn't offered. */
   onClearAll?: () => void;
+  /** Dismiss one specific row by its attention key. Absent = rows have no
+   *  individual dismiss control (only the "Clear all" affordance, if any). */
+  onDismissOne?: (key: string) => void;
 }
 
 function Row({
@@ -41,6 +46,8 @@ function Row({
   detail,
   pill,
   onClick,
+  dismissKey,
+  onDismissOne,
 }: {
   icon: typeof IconFlag;
   tone: "warn" | "danger";
@@ -48,6 +55,10 @@ function Row({
   detail: string;
   pill: string;
   onClick: () => void;
+  /** Null for rows that already have their own dismiss path elsewhere (a
+   *  missed task's recovery sheet) — no redundant second control for those. */
+  dismissKey: string | null;
+  onDismissOne?: (key: string) => void;
 }) {
   // amber-700 / rose-600 rather than the 500s: at 12–13px the 500s land near
   // 3.7:1 on white and miss WCAG AA. Both pairings below clear it in each theme.
@@ -61,29 +72,43 @@ function Row({
       : "bg-rose-50 dark:bg-rose-500/[0.10]";
 
   return (
-    <button
-      type="button"
-      onClick={() => { haptic("light"); onClick(); }}
-      className="group flex w-full items-center gap-3 py-2.5 text-left"
-    >
-      <span className={`grid h-8 w-8 shrink-0 place-items-center rounded-xl ${tint} ${accent}`}>
-        <Icon size={15} strokeWidth={2} />
-      </span>
-      <span className="min-w-0 flex-1">
-        <span className="block truncate text-[14px] font-bold text-neutral-950 dark:text-white">
-          {title}
+    <div className="group flex w-full items-center gap-1">
+      <button
+        type="button"
+        onClick={() => { haptic("light"); onClick(); }}
+        className="flex min-w-0 flex-1 items-center gap-3 py-2.5 text-left"
+      >
+        <span className={`grid h-8 w-8 shrink-0 place-items-center rounded-xl ${tint} ${accent}`}>
+          <Icon size={15} strokeWidth={2} />
         </span>
-        <span className="mt-0.5 block truncate text-[12px] font-medium text-neutral-500 dark:text-neutral-400">
-          {detail}
+        <span className="min-w-0 flex-1">
+          <span className="block truncate text-[14px] font-bold text-neutral-950 dark:text-white">
+            {title}
+          </span>
+          <span className="mt-0.5 block truncate text-[12px] font-medium text-neutral-500 dark:text-neutral-400">
+            {detail}
+          </span>
         </span>
-      </span>
-      <span className={`shrink-0 text-[12px] font-bold tabular-nums ${accent}`}>{pill}</span>
-      <IconArrowUpRight
-        size={14}
-        strokeWidth={2.2}
-        className="shrink-0 text-neutral-500 transition-colors group-hover:text-neutral-600 dark:text-neutral-400 dark:group-hover:text-neutral-300"
-      />
-    </button>
+        <span className={`shrink-0 text-[12px] font-bold tabular-nums ${accent}`}>{pill}</span>
+        <IconArrowUpRight
+          size={14}
+          strokeWidth={2.2}
+          className="shrink-0 text-neutral-500 transition-colors group-hover:text-neutral-600 dark:text-neutral-400 dark:group-hover:text-neutral-300"
+        />
+      </button>
+      {/* Sibling of the row button, not nested inside it — dismissing never
+          also triggers the row's own navigate/resolve action. */}
+      {dismissKey && onDismissOne && (
+        <IconButton
+          label={`Dismiss "${title}"`}
+          size="xxs"
+          variant="ghost"
+          onClick={() => { haptic("light"); onDismissOne(dismissKey); }}
+        >
+          <IconX size={12} strokeWidth={2.5} />
+        </IconButton>
+      )}
+    </div>
   );
 }
 
@@ -95,8 +120,10 @@ function Row({
  * nothing at all when there is nothing wrong: a card that is always present
  * stops being a signal and starts being a nag, and PlanR's voice "never nags".
  */
-export default function NeedsAttentionCard({ data, onNavigate, onHandleMissed, onAdaptMilestone, onReviewUnreliableSlot, onClearAll }: NeedsAttentionCardProps) {
+export default function NeedsAttentionCard({ data, onNavigate, onHandleMissed, onAdaptMilestone, onReviewUnreliableSlot, onClearAll, onDismissOne }: NeedsAttentionCardProps) {
   if (data.total === 0) return null;
+
+  const today = todayISO();
 
   // Ordered by how recoverable each item is. A ritual streak can still be
   // saved today, so it leads; a task in an unreliable slot is also still
@@ -112,6 +139,7 @@ export default function NeedsAttentionCard({ data, onNavigate, onHandleMissed, o
       detail: `${row.streak}-day run ends tonight`,
       pill: "Not done",
       onClick: () => onNavigate(2),
+      dismissKey: ritualAttentionKey(row.ritual.id, today),
     })),
     ...data.unreliableSlotTasks.map((row) => ({
       key: `slot:${row.task.id}`,
@@ -121,6 +149,7 @@ export default function NeedsAttentionCard({ data, onNavigate, onHandleMissed, o
       detail: `${row.plan ? row.plan.title + " · " : ""}${bandRangeLabel(row.from.band)} rarely finishes`,
       pill: formatReliabilityRate(row.from.rate),
       onClick: () => (onReviewUnreliableSlot ? onReviewUnreliableSlot(row) : onNavigate(0)),
+      dismissKey: slotRiskKey(row.task.id, today),
     })),
     ...data.atRiskMilestones.map((row) => ({
       key: `am:${row.milestone.id}`,
@@ -137,6 +166,7 @@ export default function NeedsAttentionCard({ data, onNavigate, onHandleMissed, o
       // entire reason the forecast exists; dropping the user on the plan
       // page to find it themselves wastes that.
       onClick: () => (onAdaptMilestone ? onAdaptMilestone(row.milestone.id) : onNavigate(1)),
+      dismissKey: milestoneRiskKey(row.milestone.id, row.milestone.plannedEndDate),
     })),
     ...data.overdueMilestones.map((row) => ({
       key: `m:${row.milestone.id}`,
@@ -146,6 +176,7 @@ export default function NeedsAttentionCard({ data, onNavigate, onHandleMissed, o
       detail: row.plan ? row.plan.title : "Milestone",
       pill: formatDaysOverdue(row.daysOverdue),
       onClick: () => (onAdaptMilestone ? onAdaptMilestone(row.milestone.id) : onNavigate(1)),
+      dismissKey: milestoneOverdueKey(row.milestone.id, row.milestone.plannedEndDate),
     })),
     ...data.missedTasks.map((row) => ({
       key: `t:${row.task.id}:${row.dateISO}`,
@@ -155,6 +186,9 @@ export default function NeedsAttentionCard({ data, onNavigate, onHandleMissed, o
       detail: row.plan ? `${row.plan.title} · missed ${formatDaysAgo(row.daysAgo)}` : `Missed ${formatDaysAgo(row.daysAgo)}`,
       pill: formatDaysAgo(row.daysAgo),
       onClick: () => (onHandleMissed ? onHandleMissed(row) : onNavigate(0)),
+      // Already has its own dismiss path via the recovery sheet — no second
+      // control here.
+      dismissKey: null,
     })),
   ];
 
@@ -195,7 +229,7 @@ export default function NeedsAttentionCard({ data, onNavigate, onHandleMissed, o
       </div>
 
       <div className="divide-y divide-neutral-100 dark:divide-white/[0.06]">
-        {visible.map(({ key, ...row }) => <Row key={key} {...row} />)}
+        {visible.map(({ key, ...row }) => <Row key={key} {...row} onDismissOne={onDismissOne} />)}
       </div>
 
       {hidden > 0 && (
