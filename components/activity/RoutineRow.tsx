@@ -9,12 +9,12 @@
 import { m } from "framer-motion";
 import { IconChevronRight, IconFlame, IconTrash } from "@tabler/icons-react";
 import type { Ritual, RitualCompletion } from "@/lib/useScheduleDB";
-import { formatDisplayTime } from "@/lib/timeUtils";
+import { currentMinutes, formatDisplayTime } from "@/lib/timeUtils";
 import { todayISO } from "@/lib/dateUtils";
 import { haptic } from "@/lib/haptics";
 import { calculateRitualStats, ritualScheduledOnDate } from "@/lib/consistency/calculateRitualStreak";
 import { entriesForRitualDate } from "@/lib/ritualCompletions";
-import { ritualDayProgress } from "@/lib/consistency/ritualDayStatus";
+import { nextRitualOccurrence, ritualDayProgress } from "@/lib/consistency/ritualDayStatus";
 import { describeRecurrence } from "@/lib/ritualRecurrence";
 import { iconGlyph, getIconPickerStyle } from "@/components/SectionIcons";
 import IconButton from "@/components/ui/IconButton";
@@ -57,9 +57,15 @@ export default function RoutineRow({
 
   const secondary: string[] = [];
   if (trackingType === "times" && ritual.steps && ritual.steps.length > 0) {
-    // Every occurrence, not just the earliest one `ritual.time` mirrors —
-    // "8:00 AM · 1:00 PM · 6:00 PM" is the whole schedule at a glance.
-    secondary.push(ritual.steps.map((step) => formatDisplayTime(step.label)).join(" · "));
+    // Joining every occurrence ("8:00 AM · 1:00 PM · ... · 9:00 PM") reads
+    // fine at 2-3 times a day and is unusable well past that — overflows on
+    // desktop, hard-truncates on mobile. The full per-step schedule already
+    // lives one tap away in RoutineDetailView; this line only needs to name
+    // whichever one occurrence is worth naming right now.
+    const isToday = selectedDateISO === todayISO();
+    const doneStepIds = new Set(entries.filter((e) => e.stepId).map((e) => e.stepId!));
+    const next = isToday ? nextRitualOccurrence(ritual, doneStepIds, currentMinutes()) : null;
+    secondary.push(next ? `${next.state === "due" ? "Due" : "Next"} ${next.time}` : `${ritual.steps.length}×/day`);
   } else if (ritual.anyTime) secondary.push("Anytime");
   else secondary.push(formatDisplayTime(ritual.time));
   if (missed) secondary.push("Missed");
