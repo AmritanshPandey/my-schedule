@@ -40,6 +40,10 @@ interface IOSTimelineRowProps {
   onToggleSlot?: (taskId: string, slotIndex: number) => void;
   onEdit: () => void;
   onOpenSubtasks?: () => void;
+  /** Open the quick retime sheet for this occurrence. Only offered for a
+   *  single-slot task (see QuickRetimeSheet) — absent = the time label is
+   *  plain text. */
+  onQuickRetime?: () => void;
 }
 
 export default function IOSTimelineRow({
@@ -58,6 +62,7 @@ export default function IOSTimelineRow({
   onToggleSlot,
   onEdit,
   onOpenSubtasks,
+  onQuickRetime,
 }: IOSTimelineRowProps) {
   const summary = getTaskSubtaskSummary(task, linkedPlan);
   const itemCount = summary.totalCount;
@@ -190,10 +195,25 @@ export default function IOSTimelineRow({
 
   return (
     <div className="flex items-stretch gap-3 pb-3" {...longPress.clickGuard}>
-      {/* Time — centered on the card so the whole row shares one baseline. */}
-      <div className="flex w-[52px] shrink-0 items-center justify-end text-right text-[13px] font-semibold tabular-nums leading-none text-neutral-500 dark:text-neutral-400">
-        {timeLabel}
-      </div>
+      {/* Time — centered on the card so the whole row shares one baseline.
+          Tappable on its own, no "Edit day" mode required: retiming just the
+          time is narrow and safe enough not to need that gate, unlike the
+          full editor behind the pencil. Only offered for a single-slot task —
+          a multi-slot task's per-date override can't cleanly target one
+          phase, so those rows keep a plain label. */}
+      {!readOnly && !singleSlot && onQuickRetime ? (
+        <button
+          type="button"
+          onClick={(e) => { e.stopPropagation(); haptic("light"); onQuickRetime(); }}
+          className="flex w-[52px] shrink-0 items-center justify-end text-right text-[13px] font-semibold tabular-nums leading-none text-neutral-500 underline decoration-dotted decoration-neutral-300 underline-offset-4 transition-colors active:text-neutral-800 dark:text-neutral-400 dark:decoration-white/20 dark:active:text-neutral-100"
+        >
+          {timeLabel}
+        </button>
+      ) : (
+        <div className="flex w-[52px] shrink-0 items-center justify-end text-right text-[13px] font-semibold tabular-nums leading-none text-neutral-500 dark:text-neutral-400">
+          {timeLabel}
+        </div>
+      )}
 
       {/* Rail: one continuous line behind a vertically-centered node. The line
           spans the card height and reaches -bottom-3 into the next row's top so

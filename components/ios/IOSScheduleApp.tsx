@@ -103,6 +103,7 @@ import { computeExecutionTrend } from "@/lib/executionAnalytics";
 import { selectNeedsAttention, type MissedTask } from "@/lib/needsAttention";
 import NeedsAttentionCard from "@/components/NeedsAttentionCard";
 import MissedTaskSheet from "@/components/MissedTaskSheet";
+import QuickRetimeSheet, { type QuickRetimeTarget } from "@/components/QuickRetimeSheet";
 import { rescheduleMissedTaskOnce, acknowledgeMiss } from "@/lib/missedRecovery";
 import { haptic } from "@/lib/haptics";
 import { CARD } from "@/components/ui/surfaces";
@@ -353,6 +354,7 @@ export default function IOSScheduleApp() {
   /** The weekday awaiting a "clear day" confirmation, or null. */
   const [dayClearRequest, setDayClearRequest] = useState<DayKey | null>(null);
   const [missedSheet, setMissedSheet] = useState<MissedTask | null>(null);
+  const [quickRetimeTarget, setQuickRetimeTarget] = useState<(QuickRetimeTarget & { day: DayKey; dateISO: string }) | null>(null);
   // Today tab starts as a clean execution surface; editing affordances (per-card
   // pencil, day actions, wallpaper, add-task) are revealed only in edit mode.
   const [todayEditMode, setTodayEditMode] = useState(false);
@@ -931,6 +933,31 @@ export default function IOSScheduleApp() {
     });
   }
 
+  /**
+   * Save from the quick retime sheet — a per-date exception, same mechanism
+   * TaskSheet itself uses for an occurrence-scoped time edit (see the
+   * `diffException`/`setTaskException` pair above). Diffed against the raw
+   * template, not the already-resolved row, so an edit that happens to match
+   * the template writes no exception at all.
+   */
+  function handleQuickRetime(taskId: string, startTime: string, endTime: string) {
+    if (!quickRetimeTarget) return;
+    const { day, dateISO } = quickRetimeTarget;
+    const raw = (schedule.activities[day] ?? []).find((t) => t.id === taskId);
+    if (!raw) return;
+    const patch = diffException(raw, {
+      startTime: inputToDisplayTime(startTime),
+      endTime: inputToDisplayTime(endTime),
+    });
+    if (Object.keys(patch).length === 0) return;
+    setSchedule(setTaskException(taskId, dateISO, patch));
+    setToast({
+      message: "Time updated",
+      actionLabel: "Undo",
+      onAction: () => { undo(); haptic("light"); },
+    });
+  }
+
   function handleDismissAttentionOne(key: string) {
     const previous = schedule.preferences;
     setSchedule((prev) => dismissAttentionKey(prev, key, todayISO()));
@@ -1251,6 +1278,16 @@ export default function IOSScheduleApp() {
                 onToggleSlot={(id, si) => handleToggleSlot(id, si, day, dateISO)}
                 onEdit={() => openEditSheet(task, dateISO)}
                 onOpenSubtasks={() => setSubtasksRef({ id: task.id, day, dateISO })}
+                onQuickRetime={() =>
+                  setQuickRetimeTarget({
+                    taskId: task.id,
+                    title: task.title,
+                    startTime: task.startTime ?? "",
+                    endTime: task.endTime ?? "",
+                    day,
+                    dateISO,
+                  })
+                }
               />
             );
           })
@@ -1840,6 +1877,12 @@ export default function IOSScheduleApp() {
           />
         </IOSMotionBoundary>
       )}
+
+      <QuickRetimeSheet
+        target={quickRetimeTarget}
+        onClose={() => setQuickRetimeTarget(null)}
+        onSave={handleQuickRetime}
+      />
 
       {activeTab !== 6 && !subtasksRef && !taskSheetOpen && (
         <IOSBottomNav
