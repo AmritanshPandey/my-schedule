@@ -4662,6 +4662,7 @@ export default function ScheduleApp() {
                 onLogTracker={(tracker) => setEntryTracker(tracker)}
                 onHandleMissed={setMissedSheet}
                 onAdaptMilestone={setAdaptingMilestoneId}
+                onReviewUnreliableSlot={(row) => openEditSheet(row.task)}
                 onClearAttention={handleClearAttention}
               />
             )}

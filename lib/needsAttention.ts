@@ -20,7 +20,11 @@ import { localISODate } from "./dateUtils";
 import { resolveMilestoneStatus } from "./roadmapDates";
 import { calculateRitualStats, ritualScheduledOnDate } from "./consistency/calculateRitualStreak";
 import { calculateMilestoneState } from "./milestoneHealth";
-import { milestoneOverdueKey, milestoneRiskKey, ritualAttentionKey } from "./attentionDismissal";
+import { computeSlotReliability, suggestBetterBand, type BandReading } from "./slotReliability";
+import { isTaskScheduledOn } from "./taskOccurrence";
+import { isTrackedTask } from "./taskCompletion";
+import { getSlots } from "./taskMutations";
+import { milestoneOverdueKey, milestoneRiskKey, ritualAttentionKey, slotRiskKey } from "./attentionDismissal";
 
 /** How far back a missed task still counts as worth catching up on. */
 export const MISSED_LOOKBACK_DAYS = 7;
@@ -58,9 +62,21 @@ export interface AtRiskMilestone {
   daysBehind: number | null;
 }
 
+export interface UnreliableSlotTask {
+  task: Task;
+  plan: Plan | null;
+  /** Current time band, historically weak — see lib/slotReliability.ts. */
+  from: BandReading;
+  /** A band this person actually finishes what they schedule into. */
+  to: BandReading;
+}
+
 export interface NeedsAttention {
   /** Still savable today — listed first for exactly that reason. */
   atRiskRituals: AtRiskRitual[];
+  /** Scheduled later today, in a slot that historically doesn't work out —
+   *  still fully preventable by retiming before it happens. */
+  unreliableSlotTasks: UnreliableSlotTask[];
   /** Not yet overdue, but the current pace projects missing the target —
    *  the whole point of forecasting is catching this *before* overdueMilestones. */
   atRiskMilestones: AtRiskMilestone[];
@@ -121,6 +137,35 @@ export function selectNeedsAttention(
     .map((ritual) => ({ ritual, streak: calculateRitualStats(ritual, schedule.ritualCompletions ?? [], yesterdayISO, trackingStart).streak }))
     .filter(({ streak }) => streak >= MIN_STREAK_TO_WARN)
     .sort((a, b) => b.streak - a.streak);
+
+  // ── Today's tasks parked in a historically unreliable time slot ──────────
+  // Forward-looking, unlike every other row here: nothing has gone wrong yet,
+  // but suggestBetterBand (lib/slotReliability.ts) already knows this slot
+  // rarely finishes for this person, and where they actually would. Scoped to
+  // today only (via `todayKey`, already passed by both callers but unused
+  // until now) — a task days out has time to be reconsidered on its own; this
+  // is about the thing still sitting on today's schedule.
+  const reliabilityModel = todayKey ? computeSlotReliability(schedule, new Date(`${todayISO}T12:00:00`)) : null;
+  const unreliableSlotTasks: UnreliableSlotTask[] = !reliabilityModel ? [] : (schedule.activities[todayKey!] ?? [])
+    .filter((t) => isTaskScheduledOn(t, todayISO, true, trackingStart))
+    .flatMap((task) => {
+      if (!isTrackedTask(task) || isPaused(task.planId)) return [];
+      // Already resolved today (checked off or marked missed) — nothing left
+      // to move. suggestBetterBand only ever looks at the first slot, so only
+      // that slot's own resolution is what matters here.
+      const totalSlots = getSlots(task).length;
+      const resolvedToday = totalSlots > 1
+        ? (task.completedSlotIndices ?? []).includes(0) || (task.missedSlotIndices ?? []).includes(0)
+        : !!(task.completed || task.missed);
+      if (resolvedToday) return [];
+      if (dismissed.has(slotRiskKey(task.id, todayISO))) return [];
+      const suggestion = suggestBetterBand(reliabilityModel, task);
+      if (!suggestion) return [];
+      return [{ task, plan: task.planId ? plansById.get(task.planId) ?? null : null, ...suggestion }];
+    })
+    // Worst reliability first — same "most worth naming" convention as the
+    // milestone rows below.
+    .sort((a, b) => a.from.rate - b.from.rate);
 
   // ── Overdue milestones ───────────────────────────────────────────────────
   // resolveMilestoneStatus is the same helper the roadmap uses, so a milestone
@@ -211,10 +256,16 @@ export function selectNeedsAttention(
 
   return {
     atRiskRituals,
+    unreliableSlotTasks,
     atRiskMilestones,
     overdueMilestones,
     missedTasks,
-    total: atRiskRituals.length + atRiskMilestones.length + overdueMilestones.length + missedTasks.length,
+    total:
+      atRiskRituals.length
+      + unreliableSlotTasks.length
+      + atRiskMilestones.length
+      + overdueMilestones.length
+      + missedTasks.length,
   };
 }
 
@@ -234,4 +285,10 @@ export function formatDaysOverdue(days: number): string {
 export function formatDaysBehind(days: number | null): string {
   if (days === null || days === 0) return "Off pace";
   return days === 1 ? "1 day behind" : `${days} days behind`;
+}
+
+/** "20% here" — the weak band's completion rate, for an UnreliableSlotTask's
+ *  trailing pill. */
+export function formatReliabilityRate(rate: number): string {
+  return `${Math.round(rate * 100)}% here`;
 }

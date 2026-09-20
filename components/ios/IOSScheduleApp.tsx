@@ -1381,7 +1381,7 @@ export default function IOSScheduleApp() {
             </section>
 
             {/* Recently missed / overdue — renders nothing when all clear. */}
-            <NeedsAttentionCard data={needsAttention} onNavigate={setActiveTab} onHandleMissed={setMissedSheet} onAdaptMilestone={setAdaptingMilestoneId} onClearAll={handleClearAttention} />
+            <NeedsAttentionCard data={needsAttention} onNavigate={setActiveTab} onHandleMissed={setMissedSheet} onAdaptMilestone={setAdaptingMilestoneId} onReviewUnreliableSlot={(row) => openEditSheet(row.task)} onClearAll={handleClearAttention} />
 
             <section data-testid="overview-next-task" className={`${CARD} p-0`}>
               <button

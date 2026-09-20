@@ -2724,6 +2724,196 @@ test("selectNeedsAttention doesn't flag a milestone with nothing linked yet as a
   assert.equal(atRiskMilestones.length, 0, "no linked task/tracker -> 'getting started', not a fake warning");
 });
 
+// ── selectNeedsAttention.unreliableSlotTasks — lib/slotReliability.ts reaching Overview ──
+
+/** Dates well before `today`, clear of both MISSED_LOOKBACK_DAYS (7) and
+ *  `today` itself, so a slot-reliability history fixture doesn't also trip
+ *  the separate missedTasks row. Most recent first. computeSlotReliability
+ *  looks back 56 days, so day 11-14 is comfortably inside its window. */
+function slotHistoryDates(today, count) {
+  const out = [];
+  for (let i = 1; i <= count; i++) out.push(isoShift(today, -(10 + i)));
+  return out;
+}
+
+/** A resolved completion event on a specific date, mirrors missedEvent above
+ *  but for either completion type. */
+function resolvedEvent(taskId, dateISO, type) {
+  return { id: `${taskId}-${dateISO}-${type}`, taskId, completionType: type, completedAt: `${dateISO}T12:00:00.000Z` };
+}
+
+/** A task reliably completed across `dates` — the strong-band anchor every
+ *  fixture below needs so suggestBetterBand has somewhere to point to. */
+function reliableEveningTask(dates) {
+  return {
+    id: "t-evening", title: "Wind down", planId: "p1", startTime: "6:00 PM", endTime: "7:00 PM",
+    completionHistory: dates.map((d) => resolvedEvent("t-evening", d, "task")),
+  };
+}
+
+test("selectNeedsAttention flags a today task parked in a historically weak time band", () => {
+  const today = "2026-08-02";
+  const dayKey = todayKeyFor(today);
+  const dates = slotHistoryDates(today, 4);
+  // Morning band (9am-12pm): 1 completed, 3 missed -> 25%, well under WEAK_BAND_RATE.
+  const morningTask = {
+    id: "t-morning", title: "Portfolio work", planId: "p1", startTime: "10:00 AM", endTime: "11:00 AM",
+    completionHistory: [
+      resolvedEvent("t-morning", dates[0], "task"),
+      resolvedEvent("t-morning", dates[1], "missed"),
+      resolvedEvent("t-morning", dates[2], "missed"),
+      resolvedEvent("t-morning", dates[3], "missed"),
+    ],
+  };
+  const activities = Object.fromEntries(DAYS.map((d) => [d, [morningTask, reliableEveningTask(dates)]]));
+  const schedule = {
+    plans: [{ id: "p1", title: "Career", category: "work", emoji: "briefcase", color: "blue", items: [] }],
+    categories: [], activities, progressTrackers: [], metricEntries: [], milestones: [],
+    rituals: [], ritualCompletions: [], notes: [], preferences: {},
+  };
+
+  const { unreliableSlotTasks, total } = selectNeedsAttention(schedule, today, dayKey);
+  assert.equal(unreliableSlotTasks.length, 1, "only the weak-band task is flagged, not its reliable sibling");
+  assert.equal(unreliableSlotTasks[0].task.id, "t-morning");
+  assert.equal(unreliableSlotTasks[0].from.band, "morning");
+  assert.equal(unreliableSlotTasks[0].to.band, "evening");
+  assert.equal(unreliableSlotTasks[0].plan.title, "Career");
+  assert.equal(total, 1);
+});
+
+test("selectNeedsAttention.unreliableSlotTasks is silent without a todayKey", () => {
+  // A caller that omits the DayKey must not crash or guess which day's tasks
+  // to check — both real callers always pass it, but the param is optional.
+  const today = "2026-08-02";
+  const dates = slotHistoryDates(today, 4);
+  const morningTask = {
+    id: "t-morning", title: "Portfolio work", planId: "p1", startTime: "10:00 AM", endTime: "11:00 AM",
+    completionHistory: [
+      resolvedEvent("t-morning", dates[0], "task"),
+      resolvedEvent("t-morning", dates[1], "missed"),
+      resolvedEvent("t-morning", dates[2], "missed"),
+      resolvedEvent("t-morning", dates[3], "missed"),
+    ],
+  };
+  const activities = Object.fromEntries(DAYS.map((d) => [d, [morningTask, reliableEveningTask(dates)]]));
+  const schedule = {
+    plans: [{ id: "p1", title: "Career", category: "work", emoji: "briefcase", color: "blue", items: [] }],
+    categories: [], activities, progressTrackers: [], metricEntries: [], milestones: [],
+    rituals: [], ritualCompletions: [], notes: [], preferences: {},
+  };
+  const { unreliableSlotTasks } = selectNeedsAttention(schedule, today);
+  assert.equal(unreliableSlotTasks.length, 0);
+});
+
+test("selectNeedsAttention doesn't flag a task already resolved today", () => {
+  const today = "2026-08-02";
+  const dayKey = todayKeyFor(today);
+  const dates = slotHistoryDates(today, 4);
+  const morningTask = {
+    id: "t-morning", title: "Portfolio work", planId: "p1", startTime: "10:00 AM", endTime: "11:00 AM",
+    completed: true, // already checked off today — nothing left to retime
+    completionHistory: [
+      resolvedEvent("t-morning", dates[0], "task"),
+      resolvedEvent("t-morning", dates[1], "missed"),
+      resolvedEvent("t-morning", dates[2], "missed"),
+      resolvedEvent("t-morning", dates[3], "missed"),
+    ],
+  };
+  const activities = Object.fromEntries(DAYS.map((d) => [d, [morningTask, reliableEveningTask(dates)]]));
+  const schedule = {
+    plans: [{ id: "p1", title: "Career", category: "work", emoji: "briefcase", color: "blue", items: [] }],
+    categories: [], activities, progressTrackers: [], metricEntries: [], milestones: [],
+    rituals: [], ritualCompletions: [], notes: [], preferences: {},
+  };
+  const { unreliableSlotTasks } = selectNeedsAttention(schedule, today, dayKey);
+  assert.equal(unreliableSlotTasks.length, 0);
+});
+
+test("selectNeedsAttention doesn't flag a task on a paused plan", () => {
+  const today = "2026-08-02";
+  const dayKey = todayKeyFor(today);
+  const dates = slotHistoryDates(today, 4);
+  const morningTask = {
+    id: "t-morning", title: "Portfolio work", planId: "p1", startTime: "10:00 AM", endTime: "11:00 AM",
+    completionHistory: [
+      resolvedEvent("t-morning", dates[0], "task"),
+      resolvedEvent("t-morning", dates[1], "missed"),
+      resolvedEvent("t-morning", dates[2], "missed"),
+      resolvedEvent("t-morning", dates[3], "missed"),
+    ],
+  };
+  const activities = Object.fromEntries(DAYS.map((d) => [d, [morningTask, reliableEveningTask(dates)]]));
+  const schedule = {
+    plans: [{ id: "p1", title: "Career", category: "work", emoji: "briefcase", color: "blue", items: [], status: "paused" }],
+    categories: [], activities, progressTrackers: [], metricEntries: [], milestones: [],
+    rituals: [], ritualCompletions: [], notes: [], preferences: {},
+  };
+  const { unreliableSlotTasks } = selectNeedsAttention(schedule, today, dayKey);
+  assert.equal(unreliableSlotTasks.length, 0);
+});
+
+test("a dismissed unreliable-slot row doesn't reappear today, but does tomorrow", () => {
+  const today = "2026-08-02";
+  const dayKey = todayKeyFor(today);
+  const dates = slotHistoryDates(today, 4);
+  const morningTask = {
+    id: "t-morning", title: "Portfolio work", planId: "p1", startTime: "10:00 AM", endTime: "11:00 AM",
+    completionHistory: [
+      resolvedEvent("t-morning", dates[0], "task"),
+      resolvedEvent("t-morning", dates[1], "missed"),
+      resolvedEvent("t-morning", dates[2], "missed"),
+      resolvedEvent("t-morning", dates[3], "missed"),
+    ],
+  };
+  const activities = Object.fromEntries(DAYS.map((d) => [d, [morningTask, reliableEveningTask(dates)]]));
+  const scheduleWith = (acknowledgedAttention) => ({
+    plans: [{ id: "p1", title: "Career", category: "work", emoji: "briefcase", color: "blue", items: [] }],
+    categories: [], activities, progressTrackers: [], metricEntries: [], milestones: [],
+    rituals: [], ritualCompletions: [], notes: [], preferences: { acknowledgedAttention },
+  });
+
+  const dismissedToday = selectNeedsAttention(scheduleWith([`slot-risk|t-morning|${today}`]), today, dayKey);
+  assert.equal(dismissedToday.unreliableSlotTasks.length, 0);
+
+  const tomorrow = isoShift(today, 1);
+  const nextDay = selectNeedsAttention(scheduleWith([`slot-risk|t-morning|${today}`]), tomorrow, todayKeyFor(tomorrow));
+  assert.equal(nextDay.unreliableSlotTasks.length, 1, "yesterday's dismissal doesn't silence a new day");
+});
+
+test("selectNeedsAttention sorts unreliableSlotTasks worst reliability first", () => {
+  const today = "2026-08-02";
+  const dayKey = todayKeyFor(today);
+  const dates = slotHistoryDates(today, 4);
+  // Afternoon band: 1/4 completed -> 25%, worse.
+  const worseTask = {
+    id: "t-worse", title: "Worse", planId: "p1", startTime: "1:00 PM", endTime: "2:00 PM",
+    completionHistory: [
+      resolvedEvent("t-worse", dates[0], "task"),
+      resolvedEvent("t-worse", dates[1], "missed"),
+      resolvedEvent("t-worse", dates[2], "missed"),
+      resolvedEvent("t-worse", dates[3], "missed"),
+    ],
+  };
+  // Morning band: 2/4 completed -> 50%, right at WEAK_BAND_RATE but milder.
+  const milderTask = {
+    id: "t-milder", title: "Milder", planId: "p1", startTime: "10:00 AM", endTime: "11:00 AM",
+    completionHistory: [
+      resolvedEvent("t-milder", dates[0], "task"),
+      resolvedEvent("t-milder", dates[1], "task"),
+      resolvedEvent("t-milder", dates[2], "missed"),
+      resolvedEvent("t-milder", dates[3], "missed"),
+    ],
+  };
+  const activities = Object.fromEntries(DAYS.map((d) => [d, [worseTask, milderTask, reliableEveningTask(dates)]]));
+  const schedule = {
+    plans: [{ id: "p1", title: "Career", category: "work", emoji: "briefcase", color: "blue", items: [] }],
+    categories: [], activities, progressTrackers: [], metricEntries: [], milestones: [],
+    rituals: [], ritualCompletions: [], notes: [], preferences: {},
+  };
+  const { unreliableSlotTasks } = selectNeedsAttention(schedule, today, dayKey);
+  assert.deepEqual(unreliableSlotTasks.map((r) => r.task.id), ["t-worse", "t-milder"]);
+});
+
 test("buildDayBreakdown gives a categorised commitment its own wedge", () => {
   // Held time used to be one anonymous grey blob. A commitment the user has
   // categorised now earns a labelled, coloured slice; only uncategorised ones

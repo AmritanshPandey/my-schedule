@@ -1,15 +1,18 @@
 "use client";
 
-import { IconAlertTriangle, IconArrowUpRight, IconFlag, IconFlame, IconTrendingDown, IconX } from "@tabler/icons-react";
+import { IconAlertTriangle, IconArrowUpRight, IconClockExclamation, IconFlag, IconFlame, IconTrendingDown, IconX } from "@tabler/icons-react";
 import { CARD } from "@/components/ui/surfaces";
 import { haptic } from "@/lib/haptics";
 import { formatDateShort } from "@/lib/dateUtils";
+import { bandRangeLabel } from "@/lib/slotReliability";
 import {
   formatDaysAgo,
   formatDaysBehind,
   formatDaysOverdue,
+  formatReliabilityRate,
   type MissedTask,
   type NeedsAttention,
+  type UnreliableSlotTask,
 } from "@/lib/needsAttention";
 
 /** Rows shown before collapsing the rest into a "+N more" line. */
@@ -24,6 +27,9 @@ interface NeedsAttentionCardProps {
   /** Open the adaptation sheet for a milestone that is off pace. Absent =
    *  the row still navigates to the plan, as it always did. */
   onAdaptMilestone?: (milestoneId: string) => void;
+  /** Open the edit sheet for a task parked in an unreliable time slot, so it
+   *  can be retimed. Absent = the row falls back to onNavigate(0). */
+  onReviewUnreliableSlot?: (row: UnreliableSlotTask) => void;
   /** Dismiss every row currently listed. Absent = the control isn't offered. */
   onClearAll?: () => void;
 }
@@ -89,12 +95,14 @@ function Row({
  * nothing at all when there is nothing wrong: a card that is always present
  * stops being a signal and starts being a nag, and PlanR's voice "never nags".
  */
-export default function NeedsAttentionCard({ data, onNavigate, onHandleMissed, onAdaptMilestone, onClearAll }: NeedsAttentionCardProps) {
+export default function NeedsAttentionCard({ data, onNavigate, onHandleMissed, onAdaptMilestone, onReviewUnreliableSlot, onClearAll }: NeedsAttentionCardProps) {
   if (data.total === 0) return null;
 
   // Ordered by how recoverable each item is. A ritual streak can still be
-  // saved today, so it leads; an at-risk milestone still has time before its
-  // deadline; an overdue milestone compounds; a past miss is history.
+  // saved today, so it leads; a task in an unreliable slot is also still
+  // fully preventable today, right up until it happens; an at-risk milestone
+  // still has time before its deadline; an overdue milestone compounds; a
+  // past miss is history.
   const rows = [
     ...data.atRiskRituals.map((row) => ({
       key: `r:${row.ritual.id}`,
@@ -104,6 +112,15 @@ export default function NeedsAttentionCard({ data, onNavigate, onHandleMissed, o
       detail: `${row.streak}-day run ends tonight`,
       pill: "Not done",
       onClick: () => onNavigate(2),
+    })),
+    ...data.unreliableSlotTasks.map((row) => ({
+      key: `slot:${row.task.id}`,
+      icon: IconClockExclamation,
+      tone: "warn" as const,
+      title: row.task.title,
+      detail: `${row.plan ? row.plan.title + " · " : ""}${bandRangeLabel(row.from.band)} rarely finishes`,
+      pill: formatReliabilityRate(row.from.rate),
+      onClick: () => (onReviewUnreliableSlot ? onReviewUnreliableSlot(row) : onNavigate(0)),
     })),
     ...data.atRiskMilestones.map((row) => ({
       key: `am:${row.milestone.id}`,

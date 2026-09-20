@@ -59,6 +59,12 @@ export function milestoneOverdueKey(milestoneId: string, plannedEndDate: string)
   return `ms-late|${milestoneId}|${plannedEndDate}`;
 }
 
+/** A task parked in a historically unreliable time slot, scoped to the day it
+ *  was flagged — returns tomorrow if it's still sitting in that slot then. */
+export function slotRiskKey(taskId: string, todayISO: string): string {
+  return `slot-risk|${taskId}|${todayISO}`;
+}
+
 // ── Pruning ──────────────────────────────────────────────────────────────────
 
 function prune(keys: readonly string[], todayISO: string): string[] {
@@ -95,6 +101,7 @@ function shiftISO(iso: string, days: number): string {
 export function dismissibleCount(data: NeedsAttention): number {
   return (
     data.atRiskRituals.length
+    + data.unreliableSlotTasks.length
     + data.atRiskMilestones.length
     + data.overdueMilestones.length
     + data.missedTasks.length
@@ -119,6 +126,7 @@ export function dismissAllAttention(
   const attention = [
     ...(schedule.preferences?.acknowledgedAttention ?? []),
     ...data.atRiskRituals.map((row) => ritualAttentionKey(row.ritual.id, todayISO)),
+    ...data.unreliableSlotTasks.map((row) => slotRiskKey(row.task.id, todayISO)),
     ...data.atRiskMilestones.map((row) =>
       milestoneRiskKey(row.milestone.id, row.milestone.plannedEndDate),
     ),

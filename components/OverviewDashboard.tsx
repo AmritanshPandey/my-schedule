@@ -27,7 +27,7 @@ import TodayTaskList from "@/components/today/TodayTaskList";
 import { selectTodayTasks } from "@/lib/todayTasks";
 import ExecutionStreakBanner from "@/components/ExecutionStreakBanner";
 import NeedsAttentionCard from "@/components/NeedsAttentionCard";
-import { selectNeedsAttention, type MissedTask, type NeedsAttention } from "@/lib/needsAttention";
+import { selectNeedsAttention, type MissedTask, type NeedsAttention, type UnreliableSlotTask } from "@/lib/needsAttention";
 import {
   computeCapacityModel,
   plannedWeeklyMinutes,
@@ -65,6 +65,8 @@ interface OverviewDashboardProps {
   onHandleMissed?: (missed: MissedTask) => void;
   /** Open the adaptation sheet for an off-pace milestone. */
   onAdaptMilestone?: (milestoneId: string) => void;
+  /** Open the edit sheet for a task parked in an unreliable time slot. */
+  onReviewUnreliableSlot?: (row: UnreliableSlotTask) => void;
   /** Dismiss every row on the "Needs attention" card. The data is passed up
    *  because this component is the one that computed it — asking the parent to
    *  re-derive it would risk the two disagreeing about what was cleared. */
@@ -779,6 +781,7 @@ export default function OverviewDashboard({
   onLogTracker,
   onHandleMissed,
   onAdaptMilestone,
+  onReviewUnreliableSlot,
   onClearAttention,
 }: OverviewDashboardProps) {
   const todayISO = localISODate(new Date());
@@ -1002,7 +1005,7 @@ export default function OverviewDashboard({
                 {/* Above Today's Task: catching up on what slipped comes before
                     working the current day. Renders nothing when there is
                     nothing to fix, so a clean week costs no space. */}
-                <NeedsAttentionCard data={needsAttention} onNavigate={onNavigate} onHandleMissed={onHandleMissed} onAdaptMilestone={onAdaptMilestone} onClearAll={onClearAttention ? () => onClearAttention(needsAttention) : undefined} />
+                <NeedsAttentionCard data={needsAttention} onNavigate={onNavigate} onHandleMissed={onHandleMissed} onAdaptMilestone={onAdaptMilestone} onReviewUnreliableSlot={onReviewUnreliableSlot} onClearAll={onClearAttention ? () => onClearAttention(needsAttention) : undefined} />
                 <TodayTaskList
                   tasks={todayTasks}
                   done={tasksDone}
