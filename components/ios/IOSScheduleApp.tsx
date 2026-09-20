@@ -64,7 +64,6 @@ import { bootLog, isIOSSafeMode, isStandalonePWA } from "@/lib/iosSafeMode";
 import { todayISO, localISODate, addDaysToISO, formatDate, formatDayNoteLabel } from "@/lib/dateUtils";
 import { quickAmountsForUnit } from "@/lib/quickAmounts";
 import { sumEntriesForDate } from "@/lib/metricEntries";
-import { createInboxNoteInput } from "@/lib/notes/dailyCapture";
 import {
   applyTaskDelete,
   createTask,
@@ -93,7 +92,6 @@ import { applyTemplate } from "@/lib/templates";
 import type { Template } from "@/lib/templates";
 import { cascadeMilestoneDates, moveMilestone, normalizeMilestoneTimeline } from "@/lib/roadmapDates";
 import { toggleRitualCompletion, appendRitualLog, undoLastRitualLog, toggleRitualStep, removeRitualLog } from "@/lib/ritualCompletions";
-import { MAX_RITUALS } from "@/lib/ritualColors";
 import { deleteGoal } from "@/lib/goalMutations";
 import { togglePlanPaused } from "@/lib/planLifecycle";
 import { dismissAllAttention, dismissibleCount, dismissAttentionKey } from "@/lib/attentionDismissal";
@@ -1224,13 +1222,6 @@ export default function IOSScheduleApp() {
 
   const handleInitialNoteOpened = useCallback(() => setInitialNoteId(null), []);
 
-  function openQuickNote() {
-    const id = handleCreateNote(createInboxNoteInput());
-    setSelectedPlanId(null);
-    setInitialNoteId(id);
-    setActiveTab(6);
-  }
-
   function handleCreateTaskFromNote(input: CreateTaskFromNoteInput): string | undefined {
     const current = scheduleRef.current;
     const note = current.notes.find((item) => item.id === input.noteId);
@@ -2061,14 +2052,6 @@ export default function IOSScheduleApp() {
         <IOSBottomNav
           activeTab={activeTab}
           onTabChange={(tab) => { setActiveTab(tab); setSelectedPlanId(null); }}
-          onCreateTask={() => openCreateSheet()}
-          onCreatePlan={() => { setActiveTab(1); setSelectedPlanId(null); setAddingPlan(true); }}
-          onCreateRitual={() => {
-            setActiveTab(2);
-            if ((schedule.rituals ?? []).length < MAX_RITUALS) setRitualAddOpen(true);
-            else setToast(`You can have up to ${MAX_RITUALS} routines`);
-          }}
-          onCreateNote={openQuickNote}
         />
       )}
 
