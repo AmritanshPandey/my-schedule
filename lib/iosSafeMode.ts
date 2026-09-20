@@ -1,6 +1,22 @@
 "use client";
 
-export const DISABLE_SW_ON_IOS = true;
+/**
+ * iOS gets the service worker registered in PUSH-ONLY mode rather than not at
+ * all (see public/sw.js's PUSH_ONLY).
+ *
+ * Unregistering it outright also removed the only route iOS has to a
+ * notification — Web Push requires a service worker there, and iOS has no
+ * `new Notification()` fallback to drop back to — so reminders could not work
+ * on the app's primary surface by any path. What actually motivated disabling
+ * it was the caching (stale shells surviving a deploy), so that is the part
+ * that stays off.
+ *
+ * Set this to false to give iOS the full caching worker like everywhere else.
+ */
+export const IOS_SW_PUSH_ONLY = true;
+
+/** @deprecated Kept so diagnostics keep reporting a stable field. */
+export const DISABLE_SW_ON_IOS = false;
 export const PHONE_SHELL_MAX_SHORT_EDGE = 500;
 export const PHONE_SHELL_MAX_LONG_EDGE = 1024;
 
