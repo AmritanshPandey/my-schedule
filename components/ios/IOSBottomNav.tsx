@@ -148,7 +148,7 @@ export default function IOSBottomNav({
             data-glass
             className="relative flex h-[68px] w-full items-center rounded-full border border-neutral-200/70 bg-white/80 px-2 shadow-nav backdrop-blur-xl backdrop-saturate-150 supports-[backdrop-filter]:bg-white/70 dark:border-white/[0.09] dark:bg-neutral-900/75 dark:supports-[backdrop-filter]:bg-neutral-900/65"
           >
-            <div className="flex flex-1 items-center justify-evenly">
+            <div className="flex flex-[2] items-center justify-evenly">
             <button
               type="button"
               onClick={() => changeTab(4)}
@@ -170,13 +170,20 @@ export default function IOSBottomNav({
               <span className="text-[10.5px] font-medium leading-none">Today</span>
             </button>
             </div>
-            {/* The FAB's slot. Two flex-1 halves rather than justify-evenly on
-                the whole row: with an odd number of tabs, evenly spacing six
-                items puts this gap left of centre while the FAB stays pinned to
-                the container's middle — which parked it on top of a real
-                button. Equal halves keep the gap and the FAB together. */}
+            {/* The FAB's slot. Two halves rather than justify-evenly on the
+                whole row: evenly spacing an odd number of tabs puts this gap
+                left of centre while the FAB stays pinned to the container's
+                middle, which parks it on top of a real button. Splitting
+                into two containers keeps the gap and the FAB together — but
+                the two sides hold different tab counts (2 here, 3 on the
+                other side), so the halves carry flex-[2]/flex-[3] rather than
+                matching flex-1s. Equal *container* widths on an uneven split
+                give the 3-tab side visibly narrower buttons than the 2-tab
+                side; grow proportional to each side's tab count instead, so
+                every tab — regardless of which half it's in — ends up the
+                same width. */}
             <div className="w-[52px] shrink-0" aria-hidden="true" />
-            <div className="flex flex-1 items-center justify-evenly">
+            <div className="flex flex-[3] items-center justify-evenly">
             <button
               type="button"
               onClick={() => changeTab(1)}
