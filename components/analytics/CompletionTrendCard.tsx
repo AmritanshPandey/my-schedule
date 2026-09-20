@@ -4,6 +4,8 @@ import { useMemo } from "react";
 import { IconTrendingUp, IconTrendingDown, IconMinus, IconChartBar, IconX } from "@tabler/icons-react";
 import type { Schedule } from "@/lib/useScheduleDB";
 import { computeExecutionTrend, trendNarrative } from "@/lib/executionAnalytics";
+import { computeSlotReliability, reliabilityNarrative } from "@/lib/slotReliability";
+import { IconClockHour4 } from "@tabler/icons-react";
 import { CARD } from "@/components/ui/surfaces";
 import AnimatedNumber from "@/components/ui/AnimatedNumber";
 
@@ -33,6 +35,13 @@ export default function CompletionTrendCard({ schedule }: { schedule: Schedule }
   const trend = useMemo(() => computeExecutionTrend(schedule), [schedule]);
   const { weeks, current, deltaPct, averagePct, bestPct, currentMissed } = trend;
   const narrative = useMemo(() => trendNarrative(trend), [trend]);
+  // A different class of fact from the trend above it: not how this week
+  // moved, but the standing pattern of WHEN this person finishes things.
+  // Null until there are enough resolved occurrences to mean anything.
+  const timing = useMemo(
+    () => reliabilityNarrative(computeSlotReliability(schedule)),
+    [schedule],
+  );
 
   const n = weeks.length;
   // Bars encode outcome *volume* (done + missed), so a week where most tasks
@@ -95,6 +104,19 @@ export default function CompletionTrendCard({ schedule }: { schedule: Schedule }
 
       {narrative && (
         <p className="mt-3 text-[12px] font-medium text-neutral-500 dark:text-neutral-400">{narrative}</p>
+      )}
+
+      {/* When, not how much. Given its own row with a marker so it reads as a
+          standing pattern rather than a second sentence about this week — the
+          two answer different questions and would blur if stacked plainly. */}
+      {timing && (
+        <p
+          data-testid="trend-timing-narrative"
+          className="mt-2 flex items-start gap-1.5 text-[12px] font-medium text-neutral-500 dark:text-neutral-400"
+        >
+          <IconClockHour4 size={13} strokeWidth={2} className="mt-[3px] shrink-0 text-neutral-400 dark:text-neutral-500" />
+          <span className="min-w-0">{timing}</span>
+        </p>
       )}
 
       {/* Legend — bars split done vs missed, line = rate */}
