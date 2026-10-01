@@ -1400,7 +1400,7 @@ test("applyAutoMissed only misses a multi-slot task's unresolved phases, not the
 
 test("every optional Task field is covered by the normalize allowlist", () => {
   const root = new URL("..", import.meta.url).pathname;
-  const source = readFileSync(join(root, "lib/useScheduleDB.ts"), "utf8");
+  const source = readFileSync(join(root, "packages/core/lib/scheduleTypes.ts"), "utf8");
 
   const start = source.indexOf("export interface Task {");
   assert.notEqual(start, -1, "could not locate the Task interface");

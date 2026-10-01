@@ -21,6 +21,11 @@ import {
   type FirebaseStorage,
 } from "firebase/storage";
 
+import {
+  getFunctions,
+  type Functions,
+} from "firebase/functions";
+
 const config = {
   apiKey:            process.env.NEXT_PUBLIC_FIREBASE_API_KEY,
   authDomain:        process.env.NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN,
@@ -65,5 +70,9 @@ export const isFirebaseConfigured = isConfigured;
 export const auth: Auth | null = _app ? getAuth(_app) : null;
 export const db: Firestore | null = _db;
 export const storage: FirebaseStorage | null = _app ? getStorage(_app) : null;
+// Cloud Functions live in the same project/region as the callables declared
+// in functions/src/index.ts — keep this region argument in sync with the
+// `region` option on each onCall/onSchedule there.
+export const functions: Functions | null = _app ? getFunctions(_app, "us-central1") : null;
 
 export default _app;

@@ -2,6 +2,11 @@
   "name": "my-schedule",
   "version": "0.1.0",
   "private": true,
+  "workspaces": [
+    "apps/*",
+    "packages/*",
+    "functions"
+  ],
   "scripts": {
     "copy-pdf-worker": "node scripts/copy-pdf-worker.mjs",
     "predev": "node scripts/copy-pdf-worker.mjs",
@@ -15,9 +20,11 @@
     "prebuild": "node scripts/copy-pdf-worker.mjs",
     "build": "NEXT_PUBLIC_APP_VERSION=\"$(node -p \"require('./package.json').version\")\" NEXT_PUBLIC_BUILD_ID=\"$(git rev-parse --short HEAD 2>/dev/null || echo dev)\" NEXT_PUBLIC_BUILD_TIME=\"$(date -u +%Y-%m-%dT%H:%M:%SZ)\" next build",
     "postbuild": "node scripts/inject-precache.mjs",
-    "start": "next start"
+    "start": "next start",
+    "postinstall": "node scripts/link-native-tailwind.mjs"
   },
   "dependencies": {
+    "@planr/core": "*",
     "@dnd-kit/core": "^6.3.1",
     "@dnd-kit/sortable": "^10.0.0",
     "@dnd-kit/utilities": "^3.2.2",
@@ -38,8 +45,8 @@
     "firebase": "^12.13.0",
     "framer-motion": "^12.38.0",
     "next": "16.2.4",
-    "react": "19.2.4",
-    "react-dom": "19.2.4",
+    "react": "19.2.3",
+    "react-dom": "19.2.3",
     "react-markdown": "^10.1.0",
     "react-pdf": "^10.4.1",
     "zod": "^4.4.3"

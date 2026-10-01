@@ -1,8 +1,10 @@
 "use client";
 
 import { useMemo } from "react";
-import { IconChartLine, IconPlus, IconTargetArrow, IconTrash } from "@tabler/icons-react";
-import type { MetricEntry, Plan, ProgressTracker } from "@/lib/useScheduleDB";
+import { IconChartLine, IconPlus, IconTargetArrow, IconTrash, IconFlag3 } from "@tabler/icons-react";
+import type { MetricEntry, Milestone, Plan, ProgressTracker } from "@/lib/useScheduleDB";
+import type { MilestoneState } from "@/lib/milestoneHealth";
+import { paceNarrative } from "@/lib/paceModel";
 import { buildTrackerStat, groupTrackerStatsByPlan, trackerRampTone, type TrackerStat } from "@/lib/trackerStats";
 import { quickAmountsForUnit } from "@/lib/quickAmounts";
 import { todayISO } from "@/lib/dateUtils";
@@ -12,6 +14,7 @@ import { MainTitleSection } from "@/components/ui/MainTitleSection";
 import EmptyState from "@/components/ui/EmptyState";
 import TrendChange from "@/components/ui/TrendChange";
 import ProgressChart from "@/components/ProgressChart";
+import HealthBadge from "@/components/ui/HealthBadge";
 
 const RING_SIZE = 44;
 const RING_STROKE = 4;
@@ -24,6 +27,14 @@ export interface TrackingViewProps {
   plans: readonly Plan[];
   /** `preferences.startDate` — history before it is not this page's business. */
   trackingStart?: string;
+  /**
+   * The milestone (if any) each tracker is the success metric for, with its
+   * live health/pace already computed — built once by the caller from the
+   * same calculateMilestoneState calls the Plan's milestone view uses, so
+   * Tracking never shows a second, possibly-disagreeing verdict for the same
+   * milestone.
+   */
+  milestoneByTrackerId?: ReadonlyMap<string, { milestone: Milestone; state: MilestoneState }>;
   /** Append one entry. An increment is just another entry on today's date. */
   onLog: (trackerId: string, planId: string, value: number) => void;
   /** Opens AddEntryModal for an arbitrary value or a back-dated entry. */
@@ -86,6 +97,7 @@ function TargetRing({ percent, met }: { percent: number; met: boolean }) {
 function MetricCard({
   stat,
   plan,
+  milestoneLink,
   onLog,
   onOpenAddEntry,
   onDeleteEntry,
@@ -93,6 +105,7 @@ function MetricCard({
   stat: TrackerStat;
   /** Supplies the chart's accent, so a metric matches the plan it serves. */
   plan: Plan | null;
+  milestoneLink?: { milestone: Milestone; state: MilestoneState };
   onLog: TrackingViewProps["onLog"];
   onOpenAddEntry: TrackingViewProps["onOpenAddEntry"];
   onDeleteEntry: TrackingViewProps["onDeleteEntry"];
@@ -168,6 +181,31 @@ function MetricCard({
         </div>
 
       </div>
+
+      {/* Linked milestone — the same "success metric" relationship shown in
+          the Plan's milestone view (lib/milestoneHealth.ts), so a tracker
+          logged here is never disconnected from what it's actually for. The
+          pace sentence is silent (paceNarrative returns null) when the trend
+          is too scattered to quote — no confident-looking number with
+          nothing behind it. */}
+      {milestoneLink && (
+        <div className={`${SOFT_PANEL} mt-3 flex items-start gap-2 px-3 py-2`}>
+          <IconFlag3 size={14} strokeWidth={2} className="mt-0.5 shrink-0 text-neutral-500 dark:text-neutral-400" />
+          <div className="min-w-0 flex-1">
+            <div className="flex items-center gap-1.5">
+              <p className="min-w-0 truncate text-[12.5px] font-bold text-neutral-700 dark:text-neutral-200">
+                {milestoneLink.milestone.title}
+              </p>
+              <HealthBadge health={milestoneLink.state.health} />
+            </div>
+            {paceNarrative(milestoneLink.state.paceGap) && (
+              <p className="mt-0.5 text-[12px] font-medium text-neutral-500 dark:text-neutral-400">
+                {paceNarrative(milestoneLink.state.paceGap)}
+              </p>
+            )}
+          </div>
+        </div>
+      )}
 
       {/* The chart, shown by default rather than behind a tap: a tracker's whole
           point is the shape of the line, and a card that hides it is a list
@@ -260,6 +298,7 @@ export default function TrackingView({
   metricEntries,
   plans,
   trackingStart,
+  milestoneByTrackerId,
   onLog,
   onOpenAddEntry,
   onDeleteEntry,
@@ -308,6 +347,7 @@ export default function TrackingView({
                       key={stat.tracker.id}
                       stat={stat}
                       plan={group.plan}
+                      milestoneLink={milestoneByTrackerId?.get(stat.tracker.id)}
                       onLog={onLog}
                       onOpenAddEntry={onOpenAddEntry}
                       onDeleteEntry={onDeleteEntry}
