@@ -9,6 +9,7 @@ import { getAIInstructions, withInstructions } from "./ai/instructions";
 import { CATEGORY_LABELS } from "./taskCategories";
 import { VALID_TASK_TYPES } from "./ai/domainFacts";
 import { repairTruncatedJSON } from "./ai/jsonRepair";
+import { PROGRESS_SUMMARY_PROMPT, buildSummaryUserMessage, type ProgressFacts } from "./intelligence/progressFacts";
 
 // Same single source of truth as lib/ai.ts — see that file's ICON_LIST comment.
 const ICON_LIST = Object.keys(CATEGORY_LABELS).join(", ");
@@ -279,6 +280,23 @@ export function streamWeeklyInsight(
   return streamAIAction(
     WEEKLY_INSIGHT_PROMPT,
     `Weekly stats:\n${weekContext}\n\nProvide your coaching insight:`,
+    signal,
+  );
+}
+
+// ── Progress summary ─────────────────────────────────────────────────────────
+
+/**
+ * Streams a short progress note rephrasing facts the pattern engine already
+ * established (lib/intelligence/patterns.ts). The caller MUST run the full
+ * text through validateSummary before showing it — the model is a writer
+ * here, not a source of truth.
+ */
+export function streamProgressSummary(facts: ProgressFacts, signal?: AbortSignal): AsyncGenerator<string> {
+  return streamAIChat(
+    [{ role: "user", content: buildSummaryUserMessage(facts) }],
+    PROGRESS_SUMMARY_PROMPT,
+    320,
     signal,
   );
 }

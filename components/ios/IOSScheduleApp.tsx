@@ -121,6 +121,8 @@ const RitualView = dynamic(() => import("@/components/activity/RitualView"), { s
 const TrackingView = dynamic(() => import("@/components/tracking/TrackingView"), { ssr: false });
 const SettingsView = dynamic(() => import("@/components/SettingsView").then((m) => ({ default: m.SettingsView })), { ssr: false });
 const AIView = dynamic(() => import("@/components/AIView").then((m) => ({ default: m.AIView })), { ssr: false });
+// Off the boot path: the weekly read is analysis-heavy and not needed to paint.
+const InsightsCard = dynamic(() => import("@/components/intelligence/InsightsCard"), { ssr: false });
 const DayWallpaperSheet = dynamic(() => import("@/components/DayWallpaperSheet"), { ssr: false });
 const NotesView = dynamic(() => import("@/components/notes/NotesView"), { ssr: false });
 const TaskDetailView = dynamic(() => import("@/components/activity/TaskDetailView"), { ssr: false });
@@ -1382,6 +1384,16 @@ export default function IOSScheduleApp() {
 
             {/* Recently missed / overdue — renders nothing when all clear. */}
             <NeedsAttentionCard data={needsAttention} onNavigate={setActiveTab} onHandleMissed={setMissedSheet} onAdaptMilestone={setAdaptingMilestoneId} onReviewUnreliableSlot={(row) => openEditSheet(row.task)} onClearAll={handleClearAttention} />
+
+            {/* The weekly read — pattern engine only on iPhone (no language
+                model runs in Safari/the PWA), so it costs no model memory. */}
+            <InsightsCard
+              schedule={schedule}
+              setSchedule={setSchedule}
+              onToast={setToast}
+              onReviewTask={(task) => openEditSheet(task)}
+              onReviewDay={(day) => { setActiveDay(day); setActiveTab(0); }}
+            />
 
             <section data-testid="overview-next-task" className={`${CARD} p-0`}>
               <button

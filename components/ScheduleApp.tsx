@@ -4664,6 +4664,10 @@ export default function ScheduleApp() {
                 onAdaptMilestone={setAdaptingMilestoneId}
                 onReviewUnreliableSlot={(row) => openEditSheet(row.task)}
                 onClearAttention={handleClearAttention}
+                setSchedule={setSchedule}
+                onToast={setToastMessage}
+                onReviewTask={(task) => openEditSheet(task)}
+                onReviewDay={(day) => { setActiveDay(day); setActiveTab(0); setSelectedPlanId(null); }}
               />
             )}
             </ErrorBoundary>

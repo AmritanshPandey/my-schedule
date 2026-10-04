@@ -60,6 +60,8 @@ import { constrainTaskToPlanWindow } from "@/lib/planTaskWindow";
 import { PlanSelector } from "./PlanSelector";
 import SubtaskDraftRow, { type SubtaskDraft } from "./SubtaskDraftRow";
 import { validateTaskSlots } from "@/lib/scheduleRules";
+import BuilderHints from "@/components/intelligence/BuilderHints";
+import { buildTaskReviewContext, reviewTaskDraft, type BuilderHint } from "@/lib/intelligence/builderChecks";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -528,6 +530,38 @@ export function TaskSheet({
   function setEditorSlots(next: EditableSlot[]) {
     if (perDayActive) setPerDaySlots((prev) => ({ ...prev, [resolvedEditDay]: next }));
     else setSlots(next);
+  }
+
+  // ── Builder intelligence ─────────────────────────────────────────────────
+  // Evidence from this person's own record (lib/intelligence/builderChecks.ts):
+  // a slot they rarely finish in, sessions that are too long for them, a week
+  // they've never completed. The schedule-wide models are built once per open;
+  // only the cheap draft check re-runs as the form changes.
+  const reviewContext = useMemo(() => {
+    if (!isOpen || !activities) return null;
+    // The checks read only plans, activities and preferences.
+    return buildTaskReviewContext({ plans, activities, preferences } as unknown as Schedule);
+  }, [isOpen, activities, plans, preferences]);
+
+  const builderHints = useMemo(() => {
+    if (!reviewContext || isOccurrenceScope || repeatMode === "once" || perDayActive || slots.length !== 1) return [];
+    return reviewTaskDraft(
+      {
+        title,
+        taskType,
+        days: repeatDays,
+        startTime: slots[0].startTime,
+        endTime: slots[0].endTime,
+        taskId: mode === "edit" ? task?.id : undefined,
+      },
+      reviewContext,
+    );
+  }, [reviewContext, isOccurrenceScope, repeatMode, perDayActive, slots, title, taskType, repeatDays, mode, task?.id]);
+
+  function applyBuilderHint(hint: BuilderHint) {
+    if (hint.action?.kind === "set_time") {
+      setSlots([{ startTime: hint.action.startTime, endTime: hint.action.endTime }]);
+    }
   }
 
   // "Suggested times" — open gaps in the day being edited, sized to whatever
@@ -1141,6 +1175,8 @@ export function TaskSheet({
                   )}
                 </div>
               )}
+
+              <BuilderHints hints={builderHints} onAction={applyBuilderHint} />
 
               {/* Active window — optional start/end dates for a recurring task */}
               {showActiveWindow && (
