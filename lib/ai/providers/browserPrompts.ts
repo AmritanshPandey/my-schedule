@@ -98,6 +98,7 @@ type ActionType =
   | "milestones"
   | "milestone_tasks"
   | "insight"
+  | "summary"
   | "chat"
   | "unknown";
 
@@ -105,6 +106,7 @@ function detectActionType(systemPrompt: string): ActionType {
   if (systemPrompt.includes("task breakdown assistant"))       return "subtasks";
   if (systemPrompt.includes("milestones planner"))            return "milestones";
   if (systemPrompt.includes("performance coach"))             return "insight";
+  if (systemPrompt.includes("execution progress summarizer")) return "summary";
   if (systemPrompt.includes("directly help achieve a specific milestone")) return "milestone_tasks";
   if (systemPrompt.includes("task planner"))                  return "tasks";
   // The AI Assistant chat. Its prompt (lib/ai.ts's GENERAL_PROMPT) is ~1,850
@@ -311,6 +313,29 @@ export function buildInsightRequest(req: AIChatRequest): BrowserAIChatRequest {
   };
 }
 
+// ─────────────────────────────────────────────────────────────────────────────
+// Progress summary — rephrase pattern-engine facts, nothing more
+// ─────────────────────────────────────────────────────────────────────────────
+
+export const SUMMARY_SYSTEM =
+  "Turn the facts into 2-3 sentences of direct coaching, speaking to the user as \"you\". " +
+  "Use only these facts and copy every number exactly. Never invent anything. " +
+  "What needs attention first, then one thing going well, then one next step from the list. " +
+  "No greeting, no lists, no markdown, do not start with 'I'.";
+
+export function buildSummaryRequest(req: AIChatRequest): BrowserAIChatRequest {
+  // The facts message from lib/intelligence/progressFacts.ts is already
+  // compact and fully grounded — only the system prompt needs shrinking.
+  return {
+    ...req,
+    systemPrompt: SUMMARY_SYSTEM,
+    messages: req.messages,
+    _maxNewTokens: 140,
+    _temperature: 0.3,
+    _actionType: "summary",
+  };
+}
+
 // ── Main export ───────────────────────────────────────────────────────────────
 
 
@@ -465,6 +490,7 @@ export function rewriteForBrowserModel(req: AIChatRequest): BrowserAIChatRequest
     case "milestones":      return buildMilestoneRequest(req);
     case "milestone_tasks": return buildMilestoneTaskRequest(req);
     case "insight":         return buildInsightRequest(req);
+    case "summary":         return buildSummaryRequest(req);
     case "chat":            return buildChatRequest(req);
     default:                return req;
   }

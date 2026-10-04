@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import type { Goal, Schedule } from "@/lib/useScheduleDB";
 import { createGoal, updateGoal } from "@/lib/goalMutations";
 import BottomSheet from "@/components/ui/BottomSheet";
@@ -8,6 +8,8 @@ import SheetHeader from "@/components/ui/SheetHeader";
 import Button from "@/components/ui/Button";
 import Input from "@/components/ui/Input";
 import { typography } from "@/components/ui/Typography";
+import BuilderHints from "@/components/intelligence/BuilderHints";
+import { reviewGoalDraft } from "@/lib/intelligence/builderChecks";
 
 type SetScheduleFn = (updater: (prev: Schedule) => Schedule) => void;
 
@@ -39,6 +41,12 @@ export default function GoalFormSheet({ open, onClose, setSchedule, goal }: Goal
     setStartDate(goal?.startDate ?? "");
     setTargetDate(goal?.targetDate ?? "");
   }, [open, goal]);
+
+  // Advisory only — a vague or undated goal still saves.
+  const hints = useMemo(
+    () => reviewGoalDraft({ title, description, startDate, targetDate }),
+    [title, description, startDate, targetDate],
+  );
 
   function handleSubmit() {
     const trimmedTitle = title.trim();
@@ -110,6 +118,8 @@ export default function GoalFormSheet({ open, onClose, setSchedule, goal }: Goal
             </div>
           </div>
         </div>
+
+        <BuilderHints hints={hints} />
 
         <Button fullWidth onClick={handleSubmit} disabled={!title.trim()}>
           {goal ? "Save changes" : "Create goal"}
