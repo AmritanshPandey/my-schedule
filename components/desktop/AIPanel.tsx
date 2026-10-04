@@ -772,6 +772,12 @@ export function AIPanel({ context, plans, rituals, schedule, activePlan, initial
                 </div>
               )}
 
+              {ready.state === "unsupported" && (
+                <p className="px-6 text-[12px] leading-relaxed text-neutral-500 dark:text-neutral-400">
+                  {ready.unsupportedMessage}
+                </p>
+              )}
+
               {ready.state === "downloading" && (
                 <div className="flex flex-col items-center gap-3 px-6">
                   <p className="text-[13px] font-semibold text-neutral-800 dark:text-white/90">

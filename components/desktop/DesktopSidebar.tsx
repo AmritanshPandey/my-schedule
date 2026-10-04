@@ -133,6 +133,7 @@ export default function DesktopSidebar({
     : ai.state === "downloading" ? `Downloading model… ${ai.progress ?? 0}%`
     : ai.state === "needs-download" ? `Download AI model (${ai.downloadLabel})`
     : ai.state === "checking" ? "Checking AI…"
+    : ai.state === "unsupported" ? "On-device AI unavailable"
     : "AI not configured";
   const statusColor =
     ai.state === "ready" ? "text-emerald-600 dark:text-emerald-400"
@@ -142,6 +143,7 @@ export default function DesktopSidebar({
     ai.state === "ready" ? "AI ready"
     : ai.state === "needs-download" ? `The in-browser model hasn't been downloaded yet (${ai.downloadLabel}) — click to set it up`
     : ai.state === "downloading" ? "Downloading the in-browser model…"
+    : ai.state === "unsupported" ? (ai.unsupportedMessage ?? "On-device AI can't run on this device")
     : "AI not configured — click to open Settings";
 
   return (

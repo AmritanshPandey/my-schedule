@@ -68,6 +68,7 @@ function useAINavLabel(): string {
     if (status?.phase === "error") return "Browser · Error";
     // Distinguish "on-device and ready" from "on-device but nothing downloaded
     // yet" — the second used to read identically to the first.
+    if (ready.state === "unsupported") return "On-device · Desktop and iOS app only";
     if (ready.state === "downloading") return `Browser · Downloading ${ready.progress ?? 0}%`;
     if (ready.state === "needs-download") return `Browser · Tap to download (${ready.downloadLabel})`;
     if (ready.state === "checking") return "Browser · On-device";

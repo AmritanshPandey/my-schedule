@@ -23,6 +23,8 @@ import {
   browserModelDownloadLabel,
   type BrowserAIStatus,
 } from "./providers/browser";
+import { hasNativeAI } from "./providers/native";
+import { onDeviceLLMSupport } from "./deviceCapability";
 
 export type AIReadyState =
   /** Still determining — the cache lookup is async. Render nothing decisive. */
@@ -34,7 +36,11 @@ export type AIReadyState =
   /** Downloading right now. */
   | "downloading"
   /** A remote provider is missing required settings. */
-  | "not-configured";
+  | "not-configured"
+  /** On-device AI selected on a device that can't hold the model (a phone
+   *  browser or mobile PWA) — see lib/ai/deviceCapability.ts. Deterministic
+   *  insights still work; only the language model is unavailable. */
+  | "unsupported";
 
 export interface AIReady {
   state: AIReadyState;
@@ -44,6 +50,8 @@ export interface AIReady {
   downloadLabel: string;
   /** Re-run the cache check (after a download finishes elsewhere). */
   refresh: () => void;
+  /** Why on-device AI is off here, when `state` is "unsupported". */
+  unsupportedMessage?: string;
 }
 
 export function useAIReady(): AIReady {
@@ -67,6 +75,17 @@ export function useAIReady(): AIReady {
           setState(isAiConfigured() ? "ready" : "not-configured");
           setProgress(null);
         }
+        return;
+      }
+
+      // Inside the native app the host's model is always there — nothing to
+      // download, and the in-page model is never loaded.
+      if (hasNativeAI()) {
+        if (!cancelled) { setState("ready"); setProgress(null); }
+        return;
+      }
+      if (!onDeviceLLMSupport().supported) {
+        if (!cancelled) { setState("unsupported"); setProgress(null); }
         return;
       }
 
@@ -103,5 +122,11 @@ export function useAIReady(): AIReady {
     };
   }, [nonce]);
 
-  return { state, progress, downloadLabel: browserModelDownloadLabel(model), refresh };
+  return {
+    state,
+    progress,
+    downloadLabel: browserModelDownloadLabel(model),
+    refresh,
+    unsupportedMessage: state === "unsupported" ? onDeviceLLMSupport().message : undefined,
+  };
 }
