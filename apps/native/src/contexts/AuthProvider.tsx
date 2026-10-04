@@ -32,6 +32,7 @@ import { auth, isFirebaseConfigured } from '../lib/firebase';
 import { googleSignInWebClientId, googleSignInIosClientId, isGoogleSignInConfigured } from '../lib/firebaseConfig';
 import { AuthUnavailableError } from '@planr/core/lib/authErrors';
 import { initSync, destroySync, flushNow, getLastSchedule } from '../lib/cloudSync';
+import { initErrorTelemetry } from '../lib/errorTelemetry';
 
 interface AuthContextValue {
   user: User | null;
@@ -81,9 +82,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
     const unsubscribe = onAuthStateChanged(auth, (firebaseUser) => {
       if (firebaseUser) {
+        // Authenticated: start sync engine. useScheduleDB pulls the cloud
+        // snapshot once its per-account local record and merge listener are up.
         initSync(firebaseUser.uid);
+        initErrorTelemetry(firebaseUser.uid); // no-op unless the user opted in
       } else {
         destroySync();
+        initErrorTelemetry(null);
       }
       // Same identity-preserving guard as web: onAuthStateChanged re-fires on
       // token refresh with a new User object for the same uid — keep the old

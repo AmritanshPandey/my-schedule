@@ -538,7 +538,7 @@ test("a merged schedule survives serialization and validation intact", () => {
 
 test("every migrate() return literal carries syncMeta forward", async () => {
   const { readFile } = await import("node:fs/promises");
-  const source = await readFile(new URL("../lib/useScheduleDB.ts", import.meta.url), "utf8");
+  const source = await readFile(new URL("../packages/core/lib/scheduleMigrate.ts", import.meta.url), "utf8");
 
   const start = source.indexOf("function migrate(raw: unknown): Schedule {");
   assert.ok(start > -1, "migrate() was renamed — update this guard");

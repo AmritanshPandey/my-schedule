@@ -21,10 +21,9 @@
  * - No `window.dispatchEvent(CustomEvent)` — merges are delivered through a
  *   plain listener set (onCloudMerge), the same pattern this file already
  *   uses for onSyncStatusChange.
- * - Consumed differently: native has no central reactive schedule hook yet
- *   (apps/native/src/storage/scheduleStore.ts's screens each re-read on
- *   focus), so the merge listener is wired directly into scheduleStore
- *   rather than a useScheduleDB-style hook. See scheduleStore.ts.
+ * - Consumed the same way: apps/native/src/lib/useScheduleDB.ts subscribes
+ *   with onCloudMerge and MERGES the remote into local state, exactly like
+ *   lib/useScheduleDB.ts's 'cloud-sync-merge' listener.
  */
 
 import {
@@ -39,7 +38,7 @@ import {
 } from 'firebase/firestore';
 import { AppState, type AppStateStatus } from 'react-native';
 import { db } from './firebase';
-import { logError } from './logError';
+import { logError } from './errorLog';
 import {
   clearLocalBaseRev,
   getLocalBaseRev,
@@ -48,7 +47,7 @@ import {
 } from '../storage/localMeta';
 import type { Schedule } from '@planr/core/lib/scheduleTypes';
 import { localISODate } from '@planr/core/lib/dateUtils';
-import { schedulePayloadBytes, validateSchedule } from './scheduleSchema';
+import { schedulePayloadBytes, validateSchedule } from '@planr/core/lib/scheduleSchema';
 import { pushIsSafe, type SnapshotDoc } from '@planr/core/lib/syncRevision';
 import { mergeSchedules, PLACEHOLDER_STAMP } from '@planr/core/lib/mergeSchedule';
 import { NS } from '@planr/core/lib/stampSchedule';
@@ -247,9 +246,7 @@ export function getSyncStatus(): SyncStatus {
 }
 
 /** The signed-in uid sync is currently running for, or null for a guest.
- *  scheduleStore.ts reads this to scope the local sync-clock bookkeeping
- *  (writeLocalLastUpdated/getLocalBaseRev) without needing its own copy of
- *  "who's signed in" — AuthProvider is the only writer, via initSync/destroySync. */
+ *  AuthProvider is the only writer, via initSync/destroySync. */
 export function getSyncUid(): string | null {
   return _uid;
 }
@@ -263,8 +260,8 @@ export function onSyncStatusChange(fn: (s: SyncStatus) => void): () => void {
   return () => _statusListeners.delete(fn);
 }
 
-/** Subscribe to remote schedules merged into this device. The listener owns
- *  persisting the result locally (see scheduleStore.ts's wiring). */
+/** Subscribe to remote snapshots read by this device. The listener (native
+ *  useScheduleDB) merges them with local state and owns persisting the result. */
 export function onCloudMerge(fn: (snapshot: CloudSnapshot) => void): () => void {
   _mergeListeners.add(fn);
   return () => _mergeListeners.delete(fn);
@@ -296,7 +293,7 @@ export async function deleteCloudData(): Promise<void> {
 }
 
 /** Queue a debounced cloud sync. No-op for guest users. Safe to call on
- *  every local write (see scheduleStore.ts's updateSchedule). */
+ *  every local write (see useScheduleDB.ts's write effect). */
 export function queueSync(schedule: Schedule): void {
   _lastSchedule = schedule;
   if (!_uid) return;

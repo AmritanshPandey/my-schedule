@@ -30,4 +30,8 @@ const config = {
 
 module.exports = withNativeWind(mergeConfig(getDefaultConfig(projectRoot), config), {
   input: './global.css',
+  // The web app's root font size. NativeWind defaults to 14, which renders
+  // every rem-based utility (p-4, gap-3, h-11, ...) ~12% smaller than the same
+  // class on the PWA — the two must share one spacing scale to look the same.
+  inlineRem: 16,
 });
