@@ -273,10 +273,12 @@ export function TaskSheet({
   const { isGuest } = useAuth();
   const aiEnabled = useAIEnabled();
   const keepBackdropLight = mode === "create" && (!!initialStartTime || !!initialEndTime);
-  // Needs AI switched on and a signed-in user — hidden rather than
-  // shown-and-blocked, since this is a small inline affordance with no room
-  // for its own gate card.
-  const canExpand = aiEnabled && !isGuest;
+  // Needs AI switched on, a signed-in user, and a provider that can actually
+  // run here — hidden rather than shown-and-blocked, since this is a small
+  // inline affordance with no room for its own gate card. `ai.available` is
+  // what keeps this off in iOS Safari / the PWA, where loading the on-device
+  // model would crash the tab (lib/ai/deviceCapability.ts).
+  const canExpand = aiEnabled && !isGuest && ai.available;
 
   // ── Form state ─────────────────────────────────────────────────────────────
   const [planId, setPlanId] = useState("");
