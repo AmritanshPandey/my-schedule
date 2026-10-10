@@ -51,7 +51,37 @@ export function useLongPress(
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const originRef = useRef<{ x: number; y: number } | null>(null);
   const firedRef = useRef(false);
+  /** Tears down the listeners that disarm the click guard — see `arm`. */
+  const disarmRef = useRef<(() => void) | null>(null);
   const [pressing, setPressing] = useState(false);
+
+  /**
+   * Swallow only the click that belongs to THIS gesture.
+   *
+   * That click is not guaranteed to arrive: when the long-press re-renders the
+   * control mid-hold (the checkbox turning into its "missed" state), the
+   * browser drops the trailing click. Left armed, the guard then ate the
+   * user's next deliberate action in the row — clicking or pressing Enter on
+   * the details chip right after marking a task missed did nothing the first
+   * time. Any new pointer-down or key press is a new intent, so it disarms.
+   */
+  const disarm = useCallback(() => {
+    firedRef.current = false;
+    disarmRef.current?.();
+    disarmRef.current = null;
+  }, []);
+
+  const arm = useCallback(() => {
+    disarmRef.current?.();
+    firedRef.current = true;
+    const listeners = new AbortController();
+    const opts = { capture: true, signal: listeners.signal } as const;
+    window.addEventListener("pointerdown", disarm, opts);
+    window.addEventListener("keydown", disarm, opts);
+    disarmRef.current = () => listeners.abort();
+  }, [disarm]);
+
+  useEffect(() => () => disarmRef.current?.(), []);
 
   const cancel = useCallback(() => {
     if (timerRef.current !== null) {
@@ -74,17 +104,17 @@ export function useLongPress(
       // whenever a pointerup/pointercancel is never delivered.
       cancel();
       originRef.current = { x: e.clientX, y: e.clientY };
-      firedRef.current = false;
+      disarm();
       setPressing(true);
       timerRef.current = setTimeout(() => {
         timerRef.current = null;
-        firedRef.current = true;
+        arm();
         setPressing(false);
         haptic("medium");
         onLongPress?.();
       }, delayMs);
     },
-    [cancel, delayMs, onLongPress]
+    [cancel, delayMs, onLongPress, arm, disarm]
   );
 
   const onPointerMove = useCallback(
@@ -101,10 +131,10 @@ export function useLongPress(
 
   const onClickCapture = useCallback((e: ReactMouseEvent<HTMLElement>) => {
     if (!firedRef.current) return;
-    firedRef.current = false;
+    disarm();
     e.preventDefault();
     e.stopPropagation();
-  }, []);
+  }, [disarm]);
 
   if (!onLongPress) return INERT;
 
