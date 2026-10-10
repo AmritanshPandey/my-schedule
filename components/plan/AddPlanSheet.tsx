@@ -141,10 +141,10 @@ export default function AddPlanSheet({ open, onClose, setSchedule, onUseAI, goal
           <button
             type="button"
             onClick={onUseAI}
-            className="flex w-full items-center gap-2.5 rounded-2xl border border-violet-200 bg-violet-50 px-4 py-3 text-left transition-colors hover:border-violet-300 dark:border-violet-500/20 dark:bg-violet-500/[0.08] dark:hover:border-violet-500/30"
+            className="flex w-full items-center gap-2.5 rounded-2xl border border-neutral-200/70 bg-neutral-100 px-4 py-3 text-left transition-colors hover:border-neutral-300 dark:border-white/[0.07] dark:bg-white/[0.05] dark:hover:border-white/[0.14]"
           >
-            <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl bg-[#AD46FF]">
-              <IconSparkles size={14} strokeWidth={2} className="text-white" />
+            <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl bg-neutral-900 dark:bg-white">
+              <IconSparkles size={14} strokeWidth={2} className="text-white dark:text-neutral-900" />
             </div>
             <div className="min-w-0 flex-1">
               <p className="text-[13px] font-bold text-neutral-900 dark:text-white">Build this with AI instead</p>

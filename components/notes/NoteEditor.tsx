@@ -549,7 +549,7 @@ export default function NoteEditor({ note, onUpdate, onDelete, onBack, tasks, pl
                   size="md"
                   radius="xl"
                   onClick={() => { haptic("light"); onTurnIntoPlan(note); }}
-                  className="text-violet-600 dark:text-violet-400"
+                  className="text-neutral-600 dark:text-neutral-400"
                 >
                   <IconSparkles size={16} strokeWidth={2} />
                 </IconButton>

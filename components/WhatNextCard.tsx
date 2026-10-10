@@ -68,8 +68,8 @@ export default function WhatNextCard({
 
         {/* Milestone link */}
         {milestone && (
-          <div className="mt-2 inline-flex items-center gap-1.5 rounded-full bg-violet-50 px-2.5 py-1 dark:bg-violet-500/[0.1]">
-            <span className="text-[11px] font-semibold text-violet-600 dark:text-violet-400">
+          <div className="mt-2 inline-flex items-center gap-1.5 rounded-full bg-neutral-100 px-2.5 py-1 dark:bg-white/[0.05]">
+            <span className="text-[11px] font-semibold text-neutral-600 dark:text-neutral-400">
               → {milestone.title}
             </span>
           </div>
