@@ -1329,7 +1329,7 @@ export default function PlanDetailView({
                 </span>
               )}
               {(m.linkedTrackers?.length ?? 0) > 0 && (
-                <span className="flex items-center gap-1 text-[11px] font-semibold text-violet-600 dark:text-violet-400">
+                <span className="flex items-center gap-1 text-[11px] font-semibold text-neutral-600 dark:text-neutral-400">
                   <IconChartLine size={12} strokeWidth={2} className="shrink-0" aria-hidden="true" />
                   {m.linkedTrackers!.length} tracker{m.linkedTrackers!.length !== 1 ? "s" : ""}
                 </span>
@@ -1697,17 +1697,17 @@ export default function PlanDetailView({
                   animate={{ opacity: 1, y: 0, scale: 1 }}
                   exit={{ opacity: 0, y: -6, scale: 0.97 }}
                   transition={{ duration: 0.22, ease: [0.22, 1, 0.36, 1] }}
-                  className="rounded-2xl border border-violet-200 bg-violet-50 p-4 dark:border-violet-500/20 dark:bg-violet-500/[0.06]"
+                  className="rounded-2xl border border-neutral-200/70 bg-neutral-100 p-4 dark:border-white/[0.07] dark:bg-white/[0.05]"
                 >
                   <div className="mb-3 flex items-start gap-2">
-                    <div className="mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-violet-100 dark:bg-violet-500/20">
-                      <IconCheck size={11} strokeWidth={3} className="text-violet-600 dark:text-violet-400" />
+                    <div className="mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-neutral-100 dark:bg-white/[0.05]">
+                      <IconCheck size={11} strokeWidth={3} className="text-neutral-600 dark:text-neutral-400" />
                     </div>
                     <div className="min-w-0">
-                      <p className="text-[13px] font-semibold text-violet-900 dark:text-violet-200 leading-tight">
+                      <p className="text-[13px] font-semibold text-neutral-900 dark:text-neutral-200 leading-tight">
                         "{postMilestoneContext.title}" added
                       </p>
-                      <p className="mt-0.5 text-[11px] text-violet-600 dark:text-violet-400">
+                      <p className="mt-0.5 text-[11px] text-neutral-600 dark:text-neutral-400">
                         What would you like to do next?
                       </p>
                     </div>
@@ -1717,7 +1717,7 @@ export default function PlanDetailView({
                       <button
                         type="button"
                         onClick={() => setMilestoneGenSheetOpen(true)}
-                        className="flex w-full items-center justify-center gap-1.5 rounded-xl bg-violet-600 py-2.5 text-[13px] font-semibold text-white transition-opacity hover:opacity-90 active:opacity-80"
+                        className="flex w-full items-center justify-center gap-1.5 rounded-xl bg-green-700 py-2.5 text-[13px] font-semibold text-white transition-all hover:bg-green-800 active:scale-[0.98]"
                       >
                         <IconBolt size={14} strokeWidth={2.2} aria-hidden="true" />
                         Generate tasks for this milestone
@@ -1740,7 +1740,7 @@ export default function PlanDetailView({
                           onLinkTrackerToMilestone?.(postMilestoneContext.milestoneId, trackerId);
                           setMilestoneTrackerAdded(true);
                         }}
-                        className="flex w-full items-center justify-center gap-1.5 rounded-xl border border-violet-200 py-2.5 text-[13px] font-semibold text-violet-700 transition-colors hover:bg-violet-100 active:bg-violet-100 dark:border-violet-500/20 dark:text-violet-300 dark:hover:bg-violet-500/[0.1]"
+                        className="flex w-full items-center justify-center gap-1.5 rounded-xl border border-neutral-200/70 py-2.5 text-[13px] font-semibold text-neutral-700 transition-colors hover:bg-neutral-100 active:bg-neutral-100 dark:border-white/[0.07] dark:text-neutral-300 dark:hover:bg-white/[0.08]"
                       >
                         <IconChartLine size={14} strokeWidth={2.2} className="shrink-0" aria-hidden="true" />
                         Add tracker: {postMilestoneContext.title} ({postMilestoneTrackerSuggestion.unit})

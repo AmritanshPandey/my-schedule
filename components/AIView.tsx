@@ -699,8 +699,8 @@ export function AIView({ onClose }: AIViewProps) {
               is gated on the same value in ScheduleApp), which is why it sits
               above everything it controls rather than buried at the bottom. */}
           <div className={`flex items-center gap-3 px-4 py-3.5 ${CARD}`}>
-            <div className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-xl ${aiEnabled ? "bg-[#AD46FF]" : "bg-neutral-200 dark:bg-white/[0.08]"}`}>
-              <IconSparkles size={18} strokeWidth={1.8} className={aiEnabled ? "text-white" : "text-neutral-500 dark:text-neutral-400"} />
+            <div className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-xl ${aiEnabled ? "bg-neutral-900 dark:bg-white" : "bg-neutral-200 dark:bg-white/[0.08]"}`}>
+              <IconSparkles size={18} strokeWidth={1.8} className={aiEnabled ? "text-white dark:text-neutral-900" : "text-neutral-500 dark:text-neutral-400"} />
             </div>
             <div className="min-w-0 flex-1">
               <p className="text-[14px] font-bold text-neutral-900 dark:text-white">AI features</p>

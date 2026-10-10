@@ -306,8 +306,8 @@ export default function AIAssistant({
           id: "new-plan",
           label: "Create a new plan with AI",
           actionType: "generate-plan",
-          iconBg: "bg-violet-100 dark:bg-violet-500/15",
-          icon: <IconBrain size={14} strokeWidth={2} className="text-violet-600 dark:text-violet-400" />,
+          iconBg: "bg-neutral-100 dark:bg-white/[0.05]",
+          icon: <IconBrain size={14} strokeWidth={2} className="text-neutral-600 dark:text-neutral-400" />,
           onAction: () => guardAction(() =>
             setSheetConfig(buildTaskSheet("Design a New Plan", { title: customGoal || "new plan", description: customGoal }))
           ),
@@ -356,8 +356,8 @@ export default function AIAssistant({
         id: "milestone-tasks",
         label: `Generate tasks for "${activeMilestone.title}"`,
         actionType: "generate-tasks",
-        iconBg: "bg-violet-100 dark:bg-violet-500/15",
-        icon: <IconCalendarPlus size={14} strokeWidth={2} className="text-violet-600 dark:text-violet-400" />,
+        iconBg: "bg-neutral-100 dark:bg-white/[0.05]",
+        icon: <IconCalendarPlus size={14} strokeWidth={2} className="text-neutral-600 dark:text-neutral-400" />,
         onAction: () => guardAction(() => setSheetConfig(buildMilestoneTaskSheet())),
       });
     } else {
@@ -365,8 +365,8 @@ export default function AIAssistant({
         id: "generate-tasks",
         label: "Generate weekly tasks for this plan",
         actionType: "generate-tasks",
-        iconBg: "bg-violet-100 dark:bg-violet-500/15",
-        icon: <IconCalendarPlus size={14} strokeWidth={2} className="text-violet-600 dark:text-violet-400" />,
+        iconBg: "bg-neutral-100 dark:bg-white/[0.05]",
+        icon: <IconCalendarPlus size={14} strokeWidth={2} className="text-neutral-600 dark:text-neutral-400" />,
         onAction: () => guardAction(() => setSheetConfig(buildTaskSheet("Generate tasks"))),
       });
     }
@@ -439,8 +439,8 @@ export default function AIAssistant({
       {/* ── Header ─────────────────────────────────────────────────────────── */}
       <div className="flex shrink-0 items-center justify-between px-5 pt-5 pb-4">
         <div className="flex items-center gap-2.5">
-          <div className="flex h-8 w-8 items-center justify-center rounded-xl border border-violet-500 bg-[#AD46FF]">
-            <IconSparkles size={15} strokeWidth={2} className="text-white" />
+          <div className="flex h-8 w-8 items-center justify-center rounded-xl bg-neutral-900 dark:bg-white">
+            <IconSparkles size={15} strokeWidth={2} className="text-white dark:text-neutral-900" />
           </div>
           <span className="text-[16px] font-bold text-neutral-900 dark:text-white tracking-[-0.2px]">
             AI Assistant

@@ -236,10 +236,10 @@ export default function TimeSlotPicker({
                   endTime: minutesToInput(usualTimeSlot.endMinutes),
                 });
               }}
-              className="flex h-8 items-center gap-1.5 rounded-full border border-violet-200 bg-violet-50 px-3 text-[12px] font-semibold text-violet-700 transition-colors hover:border-violet-300 dark:border-violet-500/20 dark:bg-violet-500/[0.08] dark:text-violet-300 dark:hover:border-violet-500/30"
+              className="flex h-8 items-center gap-1.5 rounded-full border border-neutral-200/70 bg-neutral-100 px-3 text-[12px] font-semibold text-neutral-700 transition-colors hover:border-neutral-300 dark:border-white/[0.07] dark:bg-white/[0.05] dark:text-neutral-300 dark:hover:border-white/[0.14]"
             >
               {formatDisplayTime(minutesToInput(usualTimeSlot.startMinutes))}–{formatDisplayTime(minutesToInput(usualTimeSlot.endMinutes))}
-              <span className="font-normal text-violet-600/80 dark:text-violet-300/70">
+              <span className="font-normal text-neutral-500 dark:text-neutral-400">
                 · {usualTimeSlot.sampleSize} similar {usualTimeSlot.sampleSize === 1 ? "task" : "tasks"}
               </span>
             </button>

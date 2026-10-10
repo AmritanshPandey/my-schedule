@@ -45,6 +45,14 @@ html, body {
   height: 100%;
 }
 
+/* 6b. Headings balance their lines; prose avoids a lone orphaned word */
+h1, h2, h3, h4 {
+  text-wrap: balance;
+}
+p {
+  text-wrap: pretty;
+}
+
 /* 7. Smooth momentum scrolling in all scroll containers */
 * {
   -webkit-overflow-scrolling: touch;

@@ -81,7 +81,7 @@ function AIParseStatus() {
         animate={{ opacity: 1, y: 0 }}
         exit={{ opacity: 0, y: -3 }}
         transition={{ duration: 0.22 }}
-        className="text-[13px] font-medium text-violet-600 dark:text-violet-400"
+        className="text-[13px] font-medium text-neutral-600 dark:text-neutral-400"
       >
         {AI_PARSE_PHRASES[idx]}
       </m.span>
@@ -343,7 +343,7 @@ export function BulkImportFlow({ plans, fallbackDay = "monday", onCommit, onDone
             onClick={() => void handleAIParse()}
             disabled={!text.trim() || aiParsing || !aiAvailable}
             title={!aiAvailable ? "Set up an AI provider in Settings first" : "Understands freeform text, not just this format"}
-            className="ml-auto inline-flex items-center gap-1.5 rounded-xl border border-violet-300 bg-violet-50 px-3 py-2 text-[12px] font-semibold text-violet-700 transition-colors hover:border-violet-400 hover:bg-violet-100 disabled:cursor-default disabled:opacity-50 dark:border-violet-500/30 dark:bg-violet-500/10 dark:text-violet-300 dark:hover:bg-violet-500/15"
+            className="ml-auto inline-flex items-center gap-1.5 rounded-xl border border-neutral-200/70 bg-neutral-100 px-3 py-2 text-[12px] font-semibold text-neutral-700 transition-colors hover:border-neutral-400 hover:bg-neutral-100 disabled:cursor-default disabled:opacity-50 dark:border-white/[0.07] dark:bg-white/[0.05] dark:text-neutral-300 dark:hover:bg-white/[0.08]"
           >
             <IconWand size={14} strokeWidth={2} />
             {aiParsing ? "Parsing…" : "Parse with AI"}
@@ -372,7 +372,7 @@ export function BulkImportFlow({ plans, fallbackDay = "monday", onCommit, onDone
               exit={{ opacity: 0, y: -4 }}
               className="flex items-center gap-2 px-1"
             >
-              <IconWand size={14} strokeWidth={2} className="animate-pulse text-violet-500" />
+              <IconWand size={14} strokeWidth={2} className="animate-pulse text-neutral-500" />
               <AIParseStatus />
             </m.div>
           )}
@@ -432,9 +432,9 @@ export function BulkImportFlow({ plans, fallbackDay = "monday", onCommit, onDone
               // Everything a curriculum can't state for itself. Asked once per
               // weekday rather than once per session: a 12-week plan needs two
               // answers here instead of twenty-four.
-              <div className="flex flex-col gap-3 rounded-2xl border border-violet-500/30 bg-violet-500/[0.06] px-4 py-3.5">
+              <div className="flex flex-col gap-3 rounded-2xl border border-neutral-200/70 dark:border-white/[0.07] bg-neutral-50 px-4 py-3.5">
                 <div className="flex items-baseline gap-2">
-                  <span className="text-[13px] font-bold text-violet-700 dark:text-violet-300">
+                  <span className="text-[13px] font-bold text-neutral-700 dark:text-neutral-300">
                     {curriculum.weeks.length}-week plan detected
                   </span>
                   <span className="text-[11px] font-medium text-neutral-500 dark:text-neutral-400">
@@ -486,7 +486,7 @@ export function BulkImportFlow({ plans, fallbackDay = "monday", onCommit, onDone
                                 onClick={() => { haptic("light"); setStartTimes((p) => ({ ...p, [day]: o.time })); }}
                                 className={`rounded-full border px-2.5 py-1 text-[11px] font-semibold transition-colors ${
                                   active
-                                    ? "border-violet-500 bg-violet-500 text-white"
+                                    ? "border-neutral-900 bg-neutral-900 text-white dark:border-white dark:bg-white dark:text-neutral-900"
                                     : "border-neutral-200 bg-white text-neutral-600 hover:bg-neutral-50 dark:border-white/[0.1] dark:bg-neutral-900 dark:text-neutral-300 dark:hover:bg-white/[0.04]"
                                 }`}
                               >
