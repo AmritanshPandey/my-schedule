@@ -183,10 +183,10 @@ function PlanTabSwitcher<T extends string>({ tabs, value, onChange, label }: { t
   return (
     <View className="relative flex-row rounded-2xl bg-neutral-100 p-1 dark:bg-white/[0.06]" onLayout={(e) => setWidth(e.nativeEvent.layout.width)} accessibilityRole="tablist">
       {segment > 0 && (
-        <Animated.View
-          className="absolute rounded-xl border border-neutral-200 bg-white dark:border-white/[0.08] dark:bg-neutral-800"
-          style={{ top: 4, bottom: 4, left: 4, width: segment, transform: [{ translateX: x }] }}
-        />
+        // Classes go on the inner View: NativeWind doesn't style Animated.View.
+        <Animated.View style={{ position: 'absolute', top: 4, bottom: 4, left: 4, width: segment, transform: [{ translateX: x }] }}>
+          <View className="flex-1 rounded-xl border border-neutral-200 bg-white dark:border-white/[0.08] dark:bg-neutral-800" />
+        </Animated.View>
       )}
       {tabs.map((tab) => (
         <Pressable

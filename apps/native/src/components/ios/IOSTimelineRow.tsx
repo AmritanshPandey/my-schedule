@@ -264,6 +264,7 @@ export default function IOSTimelineRow({
               <Pressable
                 accessibilityRole="button"
                 accessibilityLabel="Edit task"
+                hitSlop={6}
                 onPress={() => {
                   haptic('light');
                   onEdit();

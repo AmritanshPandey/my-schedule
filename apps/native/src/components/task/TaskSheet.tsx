@@ -811,7 +811,7 @@ export function TaskSheet({
               <DateInput label="Ends" value={activeUntil} min={activeFrom || undefined} onChange={setActiveUntil} placeholder="Any" />
             </View>
           </View>
-          {(activeFrom || activeUntil) && (
+          {!!(activeFrom || activeUntil) && (
             <View className="flex-row items-center justify-between">
               <Text className="text-[12px] leading-snug text-neutral-500 dark:text-neutral-400">Only shows on the schedule within this range.</Text>
               <Pressable

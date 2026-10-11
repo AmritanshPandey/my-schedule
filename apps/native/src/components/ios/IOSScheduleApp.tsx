@@ -83,7 +83,7 @@ import { completedRitualIdsOn } from '@planr/core/lib/consistency/ritualDayStatu
 import { computeExecutionTrend } from '@planr/core/lib/executionAnalytics';
 import { selectNeedsAttention, type MissedTask } from '@planr/core/lib/needsAttention';
 import { rescheduleMissedTaskOnce, acknowledgeMiss } from '@planr/core/lib/missedRecovery';
-import { TOUR_STEPS, type TourId } from '@planr/core/lib/onboarding/tours';
+import { TOUR_STEPS, type CoachMarkStep, type TourId } from '@planr/core/lib/onboarding/tours';
 import { useScheduleDB } from '../../lib/useScheduleDB';
 import { useReminders } from '../../lib/useReminders';
 import { useNowMinutes } from '../../lib/timeline/useNowMinutes';
@@ -154,6 +154,14 @@ import TourTarget from '../onboarding/TourTarget';
 const JS_DAYS: DayKey[] = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'];
 
 const SETUP_DISMISSED_KEY = 'planr-getting-started-dismissed';
+
+/** The shared tours, minus the AI plan draft the native app doesn't offer. */
+const NATIVE_TOUR_STEPS: Record<TourId, CoachMarkStep[]> = {
+  ...TOUR_STEPS,
+  plans: TOUR_STEPS.plans.map((step) =>
+    step.target === 'new-item-button' ? { ...step, body: 'Build one from scratch, or start from an example template.' } : step,
+  ),
+};
 
 type ConfirmState = {
   title: string;
@@ -419,9 +427,6 @@ export default function IOSScheduleApp() {
 
   // A short, skippable coach-mark tour per tab. Overview (4) and Settings (5)
   // intentionally have no entry in TOUR_STEPS — see lib/onboarding/tours.ts.
-  const activeTourId: TourId | null =
-    activeTab === 0 ? 'today' : activeTab === 1 ? 'plans' : activeTab === 2 ? 'routine' : activeTab === 8 ? 'tracking' : null;
-  const tour = useCoachTour(activeTourId ?? 'none', { enabled: activeTourId !== null, delayMs: 1200 });
 
   const [iosSetupDismissed, setIosSetupDismissed] = useState(readSetupDismissed);
   const dismissIosSetup = useCallback(() => {
@@ -469,6 +474,34 @@ export default function IOSScheduleApp() {
     setToastState(next === null ? null : typeof next === 'string' ? { message: next } : next);
   }, []);
   const [initialNoteId, setInitialNoteId] = useState<string | null>(null);
+
+  const activeTourId: TourId | null =
+    activeTab === 0 ? 'today' : activeTab === 1 ? 'plans' : activeTab === 2 ? 'routine' : activeTab === 8 ? 'tracking' : null;
+  // A tour points at the tab's page, so it waits while a sheet, dialog or
+  // detail page covers it — e.g. "Add plan" from the create menu opens the
+  // Plans tab and its sheet together. (The web shell starts it on the tab alone.)
+  const pageCovered =
+    !!selectedPlanId ||
+    !!subtasksRef ||
+    !!detailRitualId ||
+    taskSheetOpen ||
+    addingPlan ||
+    !!editingPlanId ||
+    !!entryTracker ||
+    goalsSheetOpen ||
+    !!adaptingMilestoneId ||
+    ritualAddOpen ||
+    !!editRitualId ||
+    templatesOpen ||
+    bulkImportOpen ||
+    wallpaperOpen ||
+    !!missedSheet ||
+    !!quickRetimeTarget ||
+    dayActionsOpen ||
+    !!confirmState ||
+    !!taskDeleteRequest ||
+    !!dayClearRequest;
+  const tour = useCoachTour(activeTourId ?? 'none', { enabled: activeTourId !== null && !pageCovered, delayMs: 1200 });
   const scheduleRef = useRef(schedule);
   scheduleRef.current = schedule;
 
@@ -2169,7 +2202,7 @@ export default function IOSScheduleApp() {
       )}
 
       {/* Per-tab guided tour — short, skippable, once per device. */}
-      {activeTourId && <CoachMarks key={activeTourId} open={tour.open} steps={TOUR_STEPS[activeTourId]} onFinish={tour.finish} />}
+      {activeTourId && <CoachMarks key={activeTourId} open={tour.open} steps={NATIVE_TOUR_STEPS[activeTourId]} onFinish={tour.finish} />}
 
       {wallpaperOpen && <DayWallpaperSheet open={wallpaperOpen} onClose={() => setWallpaperOpen(false)} schedule={schedule} todayKey={todayKey} />}
 

@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
-import { Animated, BackHandler, Dimensions, Pressable, ScrollView, View } from 'react-native';
+import { Animated, BackHandler, Dimensions, Pressable, ScrollView, StyleSheet, View } from 'react-native';
 import {
   IconActivity,
   IconBrain,
@@ -386,22 +386,22 @@ export default function NotesView({
       </Animated.View>
 
       {editingNote && (
-        <Animated.View
-          className="absolute inset-0 bg-white dark:bg-neutral-950"
-          style={{ transform: [{ translateX: slide.interpolate({ inputRange: [0, 1], outputRange: [width, 0] }) }] }}
-        >
-          <NoteEditor
-            note={editingNote}
-            onUpdate={onUpdate}
-            onDelete={handleDelete}
-            onBack={() => setEditingId(null)}
-            tasks={tasks}
-            plans={plans}
-            onOpenTask={onOpenTask}
-            onCreateTaskFromNote={onCreateTaskFromNote}
-            onOpenPlan={onOpenPlan}
-            todayDay={todayDay}
-          />
+        // Classes go on the inner View: NativeWind doesn't style Animated.View.
+        <Animated.View style={[StyleSheet.absoluteFill, { transform: [{ translateX: slide.interpolate({ inputRange: [0, 1], outputRange: [width, 0] }) }] }]}>
+          <View className="flex-1 bg-white dark:bg-neutral-950">
+            <NoteEditor
+              note={editingNote}
+              onUpdate={onUpdate}
+              onDelete={handleDelete}
+              onBack={() => setEditingId(null)}
+              tasks={tasks}
+              plans={plans}
+              onOpenTask={onOpenTask}
+              onCreateTaskFromNote={onCreateTaskFromNote}
+              onOpenPlan={onOpenPlan}
+              todayDay={todayDay}
+            />
+          </View>
         </Animated.View>
       )}
 

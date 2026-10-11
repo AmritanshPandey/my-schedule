@@ -139,6 +139,7 @@ function HalfRow({ half, readOnly, editMode, onEdit }: { half: IOSMergedTimeline
         <Pressable
           accessibilityRole="button"
           accessibilityLabel="Edit task"
+          hitSlop={8}
           onPress={() => {
             haptic('light');
             onEdit(task);
