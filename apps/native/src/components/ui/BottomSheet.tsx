@@ -11,6 +11,7 @@ import {
   View,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { ModalNestingContext, useModalTurn } from '../../lib/modalTurn';
 
 /**
  * Native port of components/ui/BottomSheet.tsx's mobile branch: a panel that
@@ -52,11 +53,12 @@ export default function BottomSheet({
   const screenHeight = Dimensions.get('window').height;
   const [visible, setVisible] = useState(open);
   const progress = useRef(new Animated.Value(open ? 1 : 0)).current;
+  // Waits its turn behind any other root-level modal on iOS (lib/modalTurn).
+  const turn = useModalTurn(visible, 60);
 
   useEffect(() => {
     if (open) {
       setVisible(true);
-      Animated.spring(progress, { toValue: 1, stiffness: 380, damping: 30, mass: 0.9, useNativeDriver: true }).start();
     } else if (visible) {
       Animated.timing(progress, { toValue: 0, duration: 200, useNativeDriver: true }).start(({ finished }) => {
         if (finished) setVisible(false);
@@ -65,13 +67,18 @@ export default function BottomSheet({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open]);
 
-  if (!visible) return null;
+  useEffect(() => {
+    if (open && turn) Animated.spring(progress, { toValue: 1, stiffness: 380, damping: 30, mass: 0.9, useNativeDriver: true }).start();
+  }, [open, turn, progress]);
+
+  if (!visible || !turn) return null;
 
   const panelMax = maxHeight ?? screenHeight - insets.top - 12;
   const translateY = progress.interpolate({ inputRange: [0, 1], outputRange: [screenHeight, 0] });
 
   return (
     <Modal visible transparent animationType="none" onRequestClose={onClose} statusBarTranslucent>
+      <ModalNestingContext.Provider value>
       <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={styles.fill}>
         <View style={styles.fill} className="justify-end">
           <Animated.View style={[StyleSheet.absoluteFill, { opacity: progress }]}>
@@ -112,6 +119,7 @@ export default function BottomSheet({
           </Animated.View>
         </View>
       </KeyboardAvoidingView>
+      </ModalNestingContext.Provider>
     </Modal>
   );
 }

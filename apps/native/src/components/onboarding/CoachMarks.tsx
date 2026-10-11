@@ -6,6 +6,7 @@ import type { CoachMarkStep } from '@planr/core/lib/onboarding/tours';
 import { measureTourTarget, type TargetRect } from '../../lib/onboarding/tourTargets';
 import { useReducedMotion } from '../../lib/useReducedMotion';
 import { haptic } from '../../lib/haptics';
+import { useModalTurn } from '../../lib/modalTurn';
 import { Icon } from '../ui/Icon';
 import { Text } from '../ui/Text';
 
@@ -95,6 +96,9 @@ export default function CoachMarks({ open, steps, onFinish }: CoachMarksProps) {
     onFinish();
   }, [onFinish]);
 
+  // A root-level modal: waits its turn behind any open sheet on iOS (lib/modalTurn).
+  const turn = useModalTurn(open && !!step, reducedMotion ? 60 : 350);
+
   if (!open || !step) return null;
 
   const isLast = index === steps.length - 1;
@@ -140,7 +144,7 @@ export default function CoachMarks({ open, steps, onFinish }: CoachMarksProps) {
 
   return (
     <Modal
-      visible
+      visible={turn}
       transparent
       animationType={reducedMotion ? 'none' : 'fade'}
       onRequestClose={finish}

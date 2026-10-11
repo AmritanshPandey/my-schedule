@@ -1456,6 +1456,8 @@ export default function PlanDetailView({
                         onPress={() => {
                           haptic('light');
                           onAdaptMilestone(m.id);
+                          // iOS can't present the adapt sheet over this one (lib/modalTurn).
+                          setViewingMilestone(null);
                         }}
                       >
                         <Icon icon={IconWand} size={14} strokeWidth={2} className={BUTTON_TEXT.secondary} />

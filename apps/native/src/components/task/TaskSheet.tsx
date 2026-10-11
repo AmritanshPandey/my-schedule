@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { Modal, Pressable, ScrollView, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { IconArrowLeft, IconCheck, IconClock, IconCopy, IconCopyPlus, IconTrash } from '@tabler/icons-react-native';
@@ -16,6 +16,7 @@ import { resolveOccurrence } from '@planr/core/lib/taskOccurrence';
 import { constrainTaskToPlanWindow } from '@planr/core/lib/planTaskWindow';
 import { validateTaskSlots } from '@planr/core/lib/scheduleRules';
 import { haptic } from '../../lib/haptics';
+import { ModalNestingContext, useModalTurn } from '../../lib/modalTurn';
 import BottomSheet from '../ui/BottomSheet';
 import SheetHeader from '../ui/SheetHeader';
 import Button, { BUTTON_TEXT } from '../ui/Button';
@@ -85,6 +86,9 @@ export interface TaskSheetProps {
   onMergeTask?: (taskId: string, partnerId: string) => void;
   onUnmergeTask?: (taskId: string) => void;
   presentation?: 'sheet' | 'page';
+  /** Rendered over the page editor (inside its modal) — the shell's toast,
+   *  which would otherwise sit unseen in the window underneath. */
+  overlay?: ReactNode;
 }
 
 function entryToSubtaskDraft(e: ScheduleEntry): SubtaskDraft {
@@ -186,8 +190,11 @@ export function TaskSheet({
   onMergeTask,
   onUnmergeTask,
   presentation = 'sheet',
+  overlay,
 }: TaskSheetProps) {
   const insets = useSafeAreaInsets();
+  // The page editor is a root-level modal: it waits its turn on iOS (lib/modalTurn).
+  const pageTurn = useModalTurn(presentation === 'page' && isOpen, 450);
 
   // ── Form state ─────────────────────────────────────────────────────────────
   const [planId, setPlanId] = useState('');
@@ -1002,7 +1009,8 @@ export function TaskSheet({
     // The iOS shell's full-screen editor: sticky header, scrolling form,
     // pinned footer — the web's `presentation="page"` layout.
     return (
-      <Modal visible={isOpen} animationType="slide" presentationStyle="fullScreen" onRequestClose={duplicateStep === 'picking' ? () => setDuplicateStep('idle') : onClose}>
+      <Modal visible={pageTurn} animationType="slide" presentationStyle="fullScreen" onRequestClose={duplicateStep === 'picking' ? () => setDuplicateStep('idle') : onClose}>
+        <ModalNestingContext.Provider value>
         <View className="flex-1 bg-[#F3F4F1] dark:bg-[#0E0E0E]" style={{ paddingTop: insets.top }}>
           {duplicateStep === 'picking' ? (
             <ScrollView keyboardShouldPersistTaps="handled">{duplicatePicker}</ScrollView>
@@ -1024,7 +1032,9 @@ export function TaskSheet({
           )}
           {categorySheet}
           {copySubtaskSheet}
+          {overlay}
         </View>
+        </ModalNestingContext.Provider>
       </Modal>
     );
   }
@@ -1041,9 +1051,10 @@ export function TaskSheet({
             <View className="mt-6">{footer}</View>
           </View>
         )}
+        {/* Nested inside the sheet so they present over it on iOS (lib/modalTurn). */}
+        {categorySheet}
+        {copySubtaskSheet}
       </BottomSheet>
-      {categorySheet}
-      {copySubtaskSheet}
     </>
   );
 }

@@ -30,6 +30,7 @@ import { MainTitleSection, CtaActionButton } from '../ui/MainTitleSection';
 import ProgressBar from '../ui/ProgressBar';
 import { Icon, type TablerIcon } from '../ui/Icon';
 import { Text } from '../ui/Text';
+import { useModalTurn } from '../../lib/modalTurn';
 import { RitualSheet } from './RitualSheet';
 import RoutineRow from './RoutineRow';
 import RoutineMonthCalendar from './RoutineMonthCalendar';
@@ -161,6 +162,7 @@ function buildCalendarDays(viewMonth: Date, selectedISO: string) {
 function DateActionButton({ value, onChange }: { value: string; onChange: (value: string) => void }) {
   const buttonRef = useRef<ComponentRef<typeof View>>(null);
   const [open, setOpen] = useState(false);
+  const popoverTurn = useModalTurn(open, 300);
   const [anchor, setAnchor] = useState<{ top: number; right: number } | null>(null);
   const [viewMonth, setViewMonth] = useState(() => monthStart(parseISODate(value)));
   const calendarDays = useMemo(() => buildCalendarDays(viewMonth, value), [viewMonth, value]);
@@ -205,7 +207,7 @@ function DateActionButton({ value, onChange }: { value: string; onChange: (value
         <Icon icon={IconCalendarEvent} size={14} strokeWidth={2.3} className="shrink-0 text-neutral-500 dark:text-neutral-400" />
       </Pressable>
 
-      <Modal visible={open} transparent animationType="fade" onRequestClose={() => setOpen(false)} statusBarTranslucent>
+      <Modal visible={popoverTurn} transparent animationType="fade" onRequestClose={() => setOpen(false)} statusBarTranslucent>
         <Pressable accessibilityLabel="Close date picker" onPress={() => setOpen(false)} style={{ flex: 1 }}>
           {anchor && (
             <Pressable

@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { AppState, BackHandler, Modal, Platform, Pressable, ScrollView, View } from 'react-native';
+import { AppState, BackHandler, Modal, Pressable, ScrollView, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import {
   IconAlertCircle,
@@ -89,6 +89,7 @@ import { useReminders } from '../../lib/useReminders';
 import { useNowMinutes } from '../../lib/timeline/useNowMinutes';
 import { useCoachTour } from '../../lib/onboarding/useCoachTour';
 import { useReducedMotion } from '../../lib/useReducedMotion';
+import { useModalTurn } from '../../lib/modalTurn';
 import { haptic } from '../../lib/haptics';
 import { storage } from '../../storage/mmkv';
 import { ErrorBoundary } from '../ErrorBoundary';
@@ -141,17 +142,16 @@ import TourTarget from '../onboarding/TourTarget';
  * - Android's back button walks back out of the detail pages (and Settings /
  *   Notes) the way the web's in-page back buttons do; sheets handle back
  *   themselves through their Modal.
- * - iOS dismisses a modal together with every modal stacked on it, so a
- *   sheet that closes while handing off to another overlay (delete → confirm,
- *   view task → edit task) opens the next one after the first has gone.
+ * - iOS can present only one root-level modal at a time, so sheets and
+ *   dialogs take turns (lib/modalTurn): one that opens as another closes
+ *   waits for it. Deleting a goal closes the Goals sheet before its confirm,
+ *   which on the web sits on top of the sheet.
+ * - While the full-screen task editor is open, the toast renders inside it.
  * - The day rollover also re-checks the date when the app returns to the
  *   foreground, since iOS suspends the midnight timer in the background.
  */
 
 const JS_DAYS: DayKey[] = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'];
-
-/** How long iOS needs to dismiss a sheet before another overlay may present. */
-const MODAL_HANDOFF_MS = Platform.OS === 'ios' ? 350 : 0;
 
 const SETUP_DISMISSED_KEY = 'planr-getting-started-dismissed';
 
@@ -336,8 +336,9 @@ function EmptyPanel({
 function ConfirmOverlay({ state, onClose }: { state: ConfirmState; onClose: () => void }) {
   const insets = useSafeAreaInsets();
   const reducedMotion = useReducedMotion();
+  const turn = useModalTurn(true, reducedMotion ? 60 : 350);
   return (
-    <Modal visible transparent animationType={reducedMotion ? 'none' : 'fade'} onRequestClose={onClose} statusBarTranslucent navigationBarTranslucent>
+    <Modal visible={turn} transparent animationType={reducedMotion ? 'none' : 'fade'} onRequestClose={onClose} statusBarTranslucent navigationBarTranslucent>
       <View className="flex-1 justify-end bg-black/30 px-3" style={{ paddingBottom: Math.max(12, insets.bottom) }}>
         <View accessibilityViewIsModal className="w-full rounded-2xl border border-neutral-200 bg-white p-5 dark:border-white/[0.10] dark:bg-neutral-900">
           <View className="mb-4 flex-row items-start gap-3">
@@ -470,12 +471,6 @@ export default function IOSScheduleApp() {
   const [initialNoteId, setInitialNoteId] = useState<string | null>(null);
   const scheduleRef = useRef(schedule);
   scheduleRef.current = schedule;
-
-  /** Open the next overlay once a closing sheet has gone (see the header note). */
-  const afterSheetCloses = useCallback((fn: () => void) => {
-    if (MODAL_HANDOFF_MS === 0) fn();
-    else setTimeout(fn, MODAL_HANDOFF_MS);
-  }, []);
 
   useEffect(() => {
     if (!ready) return;
@@ -1099,8 +1094,7 @@ export default function IOSScheduleApp() {
   }
 
   function handleDeleteLinkedTask(task: Task, activeDays: DayKey[]) {
-    // Called as the plan page's task sheet closes.
-    afterSheetCloses(() => requestDeleteTask(task.id, activeDays[0] ?? activeDay));
+    requestDeleteTask(task.id, activeDays[0] ?? activeDay);
   }
 
   function handleDeleteTaskSlot(task: Task, day: DayKey, slotIndex: number) {
@@ -1143,24 +1137,21 @@ export default function IOSScheduleApp() {
 
   function handleDeleteMilestone(id: string) {
     const milestone = (schedule.milestones ?? []).find((item) => item.id === id);
-    // Called as the plan page's milestone sheet closes.
-    afterSheetCloses(() =>
-      openConfirm({
-        title: 'Delete milestone?',
-        description: milestone?.title ? `"${milestone.title}" will be removed from the roadmap.` : 'This milestone will be removed from the roadmap.',
-        confirmLabel: 'Delete',
-        destructive: true,
-        onConfirm: () =>
-          setSchedule((prev) => {
-            const existing = (prev.milestones ?? []).find((item) => item.id === id);
-            if (!existing) return prev;
-            const plan = prev.plans.find((item) => item.id === existing.planId);
-            const other = (prev.milestones ?? []).filter((item) => item.planId !== existing.planId);
-            const own = (prev.milestones ?? []).filter((item) => item.planId === existing.planId && item.id !== id);
-            return { ...prev, milestones: [...other, ...normalizeMilestoneTimeline(own, plan?.startDate)] };
-          }),
-      }),
-    );
+    openConfirm({
+      title: 'Delete milestone?',
+      description: milestone?.title ? `"${milestone.title}" will be removed from the roadmap.` : 'This milestone will be removed from the roadmap.',
+      confirmLabel: 'Delete',
+      destructive: true,
+      onConfirm: () =>
+        setSchedule((prev) => {
+          const existing = (prev.milestones ?? []).find((item) => item.id === id);
+          if (!existing) return prev;
+          const plan = prev.plans.find((item) => item.id === existing.planId);
+          const other = (prev.milestones ?? []).filter((item) => item.planId !== existing.planId);
+          const own = (prev.milestones ?? []).filter((item) => item.planId === existing.planId && item.id !== id);
+          return { ...prev, milestones: [...other, ...normalizeMilestoneTimeline(own, plan?.startDate)] };
+        }),
+    });
   }
 
   function handleMoveMilestone(id: string, direction: 'up' | 'down') {
@@ -1801,8 +1792,7 @@ export default function IOSScheduleApp() {
               onTogglePlanPaused={(planId) => setSchedule((prev) => togglePlanPaused(prev, planId))}
               onAdaptMilestone={(milestoneId) => setAdaptingMilestoneId(milestoneId)}
               onAddTask={(planId) => openCreateSheet(planId)}
-              // Called as the plan page's task sheet closes.
-              onEditTask={(task) => afterSheetCloses(() => openEditSheet(task))}
+              onEditTask={(task) => openEditSheet(task)}
               onDeleteLinkedTask={handleDeleteLinkedTask}
               onDeleteTaskSlot={handleDeleteTaskSlot}
               onAddTracker={(planId, title, unit, goalDirection, id, goalValue, startingValue, dailyTarget) => {
@@ -2008,6 +1998,31 @@ export default function IOSScheduleApp() {
   const fullPage = !!subtasksRef || activeTab === 6;
   const showBottomNav = activeTab !== 6 && !subtasksRef && !taskSheetOpen && !detailRitual;
 
+  const toastElement = toastState ? (
+    <View
+      pointerEvents="box-none"
+      className="absolute inset-x-0 z-50 items-center px-4"
+      style={{ bottom: Math.max(112, insets.bottom + 8 + 68 + 16), elevation: 12 }}
+    >
+      <View
+        accessibilityLiveRegion="polite"
+        className="flex-row items-center gap-4 rounded-full border border-neutral-800 bg-neutral-900 px-5 py-2.5 dark:border-white/[0.10] dark:bg-white"
+      >
+        <Text className="shrink text-[14px] font-semibold text-white dark:text-neutral-900">{toastState.message}</Text>
+        {!!toastState.actionLabel && !!toastState.onAction && (
+          <Pressable
+            accessibilityRole="button"
+            onPress={toastState.onAction}
+            hitSlop={10}
+            className="-mr-1 rounded-full bg-white/10 px-2.5 py-1 active:bg-white/20 dark:bg-neutral-900/10 dark:active:bg-neutral-900/20"
+          >
+            <Text className="text-[13px] font-bold text-white dark:text-neutral-900">{toastState.actionLabel}</Text>
+          </Pressable>
+        )}
+      </View>
+    </View>
+  ) : null;
+
   return (
     <View className="flex-1 bg-[#F3F4F1] dark:bg-[#0E0E0E]">
       {fullPage ? (
@@ -2112,7 +2127,7 @@ export default function IOSScheduleApp() {
         onClose={() => setDayActionsOpen(false)}
         onSwap={(target) => setSchedule(swapDays(activeDay, target))}
         onDuplicate={(targets) => setSchedule(duplicateDay(activeDay, targets))}
-        onClear={() => afterSheetCloses(() => setDayClearRequest(activeDay))}
+        onClear={() => setDayClearRequest(activeDay)}
         taskCount={(schedule.activities[activeDay] ?? []).length}
       />
 
@@ -2154,7 +2169,7 @@ export default function IOSScheduleApp() {
       )}
 
       {/* Per-tab guided tour — short, skippable, once per device. */}
-      {activeTourId && <CoachMarks open={tour.open} steps={TOUR_STEPS[activeTourId]} onFinish={tour.finish} />}
+      {activeTourId && <CoachMarks key={activeTourId} open={tour.open} steps={TOUR_STEPS[activeTourId]} onFinish={tour.finish} />}
 
       {wallpaperOpen && <DayWallpaperSheet open={wallpaperOpen} onClose={() => setWallpaperOpen(false)} schedule={schedule} todayKey={todayKey} />}
 
@@ -2179,14 +2194,14 @@ export default function IOSScheduleApp() {
             occurrenceDateISO={taskSheetDateISO}
             canEditOccurrence={!!taskSheetDateISO && taskSheetDateISO >= todayISO()}
             presentation="page"
+            overlay={toastElement}
             onClose={closeTaskSheet}
             onSave={handleTaskSheetSave}
             onDelete={
               taskSheetTask
                 ? () => {
-                    const taskId = taskSheetTask.id;
+                    requestDeleteTask(taskSheetTask.id, activeDay);
                     closeTaskSheet();
-                    afterSheetCloses(() => requestDeleteTask(taskId, activeDay));
                   }
                 : undefined
             }
@@ -2228,7 +2243,17 @@ export default function IOSScheduleApp() {
             />
           )}
 
-          <GoalListSheet open={goalsSheetOpen} onClose={() => setGoalsSheetOpen(false)} schedule={schedule} setSchedule={setSchedule} onDeleteGoal={handleDeleteGoal} />
+          <GoalListSheet
+            open={goalsSheetOpen}
+            onClose={() => setGoalsSheetOpen(false)}
+            schedule={schedule}
+            setSchedule={setSchedule}
+            // The confirm can't present over the open sheet on iOS (see the header note).
+            onDeleteGoal={(goalId) => {
+              setGoalsSheetOpen(false);
+              handleDeleteGoal(goalId);
+            }}
+          />
           <AddEntryModal
             isOpen={!!entryTracker}
             onClose={() => setEntryTracker(null)}
@@ -2281,9 +2306,8 @@ export default function IOSScheduleApp() {
           setEditRitualId(null);
         }}
         onDelete={() => {
-          const id = editingRitual?.id;
+          if (editingRitual) handleDeleteRitual(editingRitual.id);
           setEditRitualId(null);
-          if (id) afterSheetCloses(() => handleDeleteRitual(id));
         }}
       />
 
@@ -2324,30 +2348,7 @@ export default function IOSScheduleApp() {
           );
         })()}
       {confirmState && <ConfirmOverlay state={confirmState} onClose={() => setConfirmState(null)} />}
-      {toastState && (
-        <View
-          pointerEvents="box-none"
-          className="absolute inset-x-0 z-50 items-center px-4"
-          style={{ bottom: Math.max(112, insets.bottom + 8 + 68 + 16), elevation: 12 }}
-        >
-          <View
-            accessibilityLiveRegion="polite"
-            className="flex-row items-center gap-4 rounded-full border border-neutral-800 bg-neutral-900 px-5 py-2.5 dark:border-white/[0.10] dark:bg-white"
-          >
-            <Text className="shrink text-[14px] font-semibold text-white dark:text-neutral-900">{toastState.message}</Text>
-            {toastState.actionLabel && toastState.onAction && (
-              <Pressable
-                accessibilityRole="button"
-                onPress={toastState.onAction}
-                hitSlop={10}
-                className="-mr-1 rounded-full bg-white/10 px-2.5 py-1 active:bg-white/20 dark:bg-neutral-900/10 dark:active:bg-neutral-900/20"
-              >
-                <Text className="text-[13px] font-bold text-white dark:text-neutral-900">{toastState.actionLabel}</Text>
-              </Pressable>
-            )}
-          </View>
-        </View>
-      )}
+      {!taskSheetOpen && toastElement}
     </View>
   );
 }
