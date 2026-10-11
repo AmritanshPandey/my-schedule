@@ -29,7 +29,7 @@ import { canDeleteCategory, categoryUsageCounts, ensureCategoryIn } from '@planr
 import { categoriesById, taskIdentity } from '@planr/core/lib/taskIdentity';
 import { constrainTaskToPlanWindow } from '@planr/core/lib/planTaskWindow';
 import { selectTodayTasks } from '@planr/core/lib/todayTasks';
-import { addDaysToISO, formatDate, formatDayNoteLabel, localISODate, todayISO } from '@planr/core/lib/dateUtils';
+import { formatDate, formatDayNoteLabel, localISODate, todayISO } from '@planr/core/lib/dateUtils';
 import { quickAmountsForUnit } from '@planr/core/lib/quickAmounts';
 import { sumEntriesForDate } from '@planr/core/lib/metricEntries';
 import { createInboxNoteInput } from '@planr/core/lib/notes/dailyCapture';
@@ -79,7 +79,6 @@ import { applyAdaptation } from '@planr/core/lib/milestoneAdaptation';
 import { calculateMilestoneState, type MilestoneState } from '@planr/core/lib/milestoneHealth';
 import { formatDisplayTime, inputToDisplayTime, minutesToInputTime, parseTimeToMinutes, toScheduleDayMinutes } from '@planr/core/lib/timeUtils';
 import { calculateExecutionStreak } from '@planr/core/lib/consistency/calculateExecutionStreak';
-import { ritualScheduledOnDate } from '@planr/core/lib/consistency/calculateRitualStreak';
 import { completedRitualIdsOn } from '@planr/core/lib/consistency/ritualDayStatus';
 import { computeExecutionTrend } from '@planr/core/lib/executionAnalytics';
 import { selectNeedsAttention, type MissedTask } from '@planr/core/lib/needsAttention';
