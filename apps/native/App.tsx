@@ -6,15 +6,18 @@
 
 import './global.css';
 import { useEffect } from 'react';
-import { LogBox, StatusBar, Text, TextInput } from 'react-native';
+import { StatusBar, Text, TextInput } from 'react-native';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
-import { enableScreens } from 'react-native-screens';
 import { useColorScheme } from 'nativewind';
-import RootNavigator from './src/navigation/RootNavigator';
+import IOSScheduleApp from './src/components/ios/IOSScheduleApp';
+import { ErrorBoundary } from './src/components/ErrorBoundary';
 import { getStoredThemePreference } from './src/storage/themeStore';
 import { AuthProvider } from './src/contexts/AuthProvider';
+import { installGlobalErrorHandlers } from './src/lib/errorLog';
 
-enableScreens();
+// Uncaught JS errors and unhandled rejections into the on-device error log
+// (chained — RN's own handling is unchanged), as the web does at startup.
+installGlobalErrorHandlers();
 
 // Applies the web app's actual font (app/globals.css's --font-sans —
 // "Avenir Next", an iOS/macOS system font, no linking needed) everywhere,
@@ -32,11 +35,6 @@ enableScreens();
   ...((TextInput as unknown as { defaultProps?: { style?: unknown } }).defaultProps ?? {}),
   style: [{ fontFamily: 'Avenir Next' }, (TextInput as unknown as { defaultProps?: { style?: unknown } }).defaultProps?.style],
 };
-
-// Upstream deprecation notice (from a nav/screens dependency's internals, not
-// our code) — its own LogBox banner sits above the RN view hierarchy and was
-// eating taps on the bottom nav underneath it.
-LogBox.ignoreLogs(['ImageBackground is deprecated']);
 
 function App() {
   const { colorScheme, setColorScheme } = useColorScheme();
@@ -56,9 +54,11 @@ function App() {
   return (
     <SafeAreaProvider>
       <StatusBar barStyle={colorScheme === 'dark' ? 'light-content' : 'dark-content'} />
-      <AuthProvider>
-        <RootNavigator />
-      </AuthProvider>
+      <ErrorBoundary>
+        <AuthProvider>
+          <IOSScheduleApp />
+        </AuthProvider>
+      </ErrorBoundary>
     </SafeAreaProvider>
   );
 }

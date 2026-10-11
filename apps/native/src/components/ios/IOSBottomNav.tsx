@@ -16,6 +16,7 @@ import {
 import { haptic } from '../../lib/haptics';
 import { Icon, type TablerIcon } from '../ui/Icon';
 import { Text } from '../ui/Text';
+import TourTarget from '../onboarding/TourTarget';
 
 interface IOSBottomNavProps {
   activeTab: number;
@@ -133,20 +134,22 @@ export default function IOSBottomNav({ activeTab, onTabChange, onCreateTask, onC
             </View>
 
             <View pointerEvents="box-none" className="absolute inset-0 items-center justify-center">
-              <Pressable
-                accessibilityRole="button"
-                accessibilityLabel="Create"
-                accessibilityState={{ expanded }}
-                onPress={() => {
-                  haptic('medium');
-                  setExpanded((v) => !v);
-                }}
-                className="h-[52px] w-[52px] items-center justify-center rounded-full bg-neutral-950 dark:bg-white"
-              >
-                <View style={{ transform: [{ rotate: expanded ? '45deg' : '0deg' }] }}>
-                  <Icon icon={IconPlus} size={24} strokeWidth={2} className="text-white dark:text-neutral-950" />
-                </View>
-              </Pressable>
+              <TourTarget id="new-item-button">
+                <Pressable
+                  accessibilityRole="button"
+                  accessibilityLabel="Create"
+                  accessibilityState={{ expanded }}
+                  onPress={() => {
+                    haptic('medium');
+                    setExpanded((v) => !v);
+                  }}
+                  className="h-[52px] w-[52px] items-center justify-center rounded-full bg-neutral-950 dark:bg-white"
+                >
+                  <View style={{ transform: [{ rotate: expanded ? '45deg' : '0deg' }] }}>
+                    <Icon icon={IconPlus} size={24} strokeWidth={2} className="text-white dark:text-neutral-950" />
+                  </View>
+                </Pressable>
+              </TourTarget>
             </View>
           </View>
         </View>

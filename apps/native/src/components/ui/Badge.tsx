@@ -4,7 +4,7 @@ import type { AccentColor } from '@planr/core/lib/colorSystem';
 import { Text } from './Text';
 
 /** Native port of components/ui/Badge.tsx. Container and text classes split (no inheritance). */
-const ACCENT_CLASSES: Record<AccentColor, { box: string; text: string }> = {
+export const ACCENT_CLASSES: Record<AccentColor, { box: string; text: string }> = {
   red: { box: 'bg-red-500/10 border-red-500/25 dark:bg-red-500/15 dark:border-red-400/35', text: 'text-red-600 dark:text-red-400' },
   orange: { box: 'bg-orange-500/10 border-orange-500/25 dark:bg-orange-500/15 dark:border-orange-400/35', text: 'text-orange-600 dark:text-orange-400' },
   amber: { box: 'bg-amber-500/10 border-amber-500/25 dark:bg-amber-500/15 dark:border-amber-400/35', text: 'text-amber-600 dark:text-amber-400' },

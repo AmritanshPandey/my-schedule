@@ -14,7 +14,7 @@ module.exports = {
   // firebase/@firebase ship ESM (`export * from ...`) as their resolved
   // entry point too — same reason as nativewind above, same fix.
   transformIgnorePatterns: [
-    'node_modules/(?!((jest-)?react-native|@react-native(-community)?|nativewind|react-native-css-interop|@react-navigation|react-native-gifted-charts|gifted-charts-core|react-native-linear-gradient|firebase|@firebase)/)',
+    'node_modules/(?!((jest-)?react-native|@react-native(-community)?|nativewind|react-native-css-interop|react-native-gifted-charts|gifted-charts-core|react-native-linear-gradient|firebase|@firebase)/)',
   ],
   // The preset's own `transform` only matches .js/.ts/.tsx (again not
   // merged with the preset, same reason as transformIgnorePatterns above) —
