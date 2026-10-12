@@ -1,22 +1,30 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { Pressable, View } from 'react-native';
-import { IconBell, IconBellOff, IconClock, IconSend } from '@tabler/icons-react-native';
+import { AppState, Platform, Pressable, View } from 'react-native';
+import { IconAlertTriangle, IconBell, IconBellOff, IconClock, IconSend } from '@tabler/icons-react-native';
 import { formatDisplayTime, minutesToInputTime } from '@planr/core/lib/timeUtils';
 import { haptic } from '../../lib/haptics';
 import {
+  batteryOptimizationOn,
   cancelAllReminders,
+  exactAlarmAccess,
+  getReminderDelivery,
   getReminderSettings,
   notificationSupport,
+  openBatteryOptimizationSettings,
+  openExactAlarmSettings,
   requestNotificationPermission,
   sendTestNotification,
+  setReminderDelivery,
   setReminderSettings,
+  type ExactAlarmAccess,
   type NotificationSupport,
+  type ReminderDelivery,
   type ReminderSettings,
   type TestNotificationResult,
 } from '../../lib/reminders';
 import Toggle from '../ui/Toggle';
 import Select from '../ui/Select';
-import { Icon } from '../ui/Icon';
+import { Icon, type TablerIcon } from '../ui/Icon';
 import { Text } from '../ui/Text';
 
 const NUDGE_OPTIONS = Array.from({ length: 12 }, (_, i) => {
@@ -36,6 +44,61 @@ function SubRow({ label, description, on, onChange }: { label: string; descripti
   );
 }
 
+/** A 36pt pill whose hit area reaches 44pt. */
+function RowButton({
+  label,
+  accessibilityLabel,
+  icon,
+  onPress,
+  disabled = false,
+}: {
+  label: string;
+  accessibilityLabel?: string;
+  icon?: TablerIcon;
+  onPress: () => void;
+  disabled?: boolean;
+}) {
+  return (
+    <Pressable
+      accessibilityRole="button"
+      accessibilityLabel={accessibilityLabel}
+      accessibilityState={{ disabled }}
+      onPress={onPress}
+      disabled={disabled}
+      hitSlop={{ top: 4, bottom: 4 }}
+      className={`h-9 shrink-0 flex-row items-center gap-1.5 rounded-full border border-neutral-200 px-3.5 active:bg-neutral-50 dark:border-white/10 dark:active:bg-white/[0.04] ${
+        disabled ? 'opacity-50' : ''
+      }`}
+    >
+      {icon && <Icon icon={icon} size={13} strokeWidth={2.2} className="text-neutral-600 dark:text-neutral-300" />}
+      <Text className="text-[12px] font-semibold text-neutral-600 dark:text-neutral-300">{label}</Text>
+    </Pressable>
+  );
+}
+
+/** Something on this device that makes reminders late, and the way to fix it. */
+function FixRow({ label, description, action, actionLabel, onPress }: { label: string; description: string; action: string; actionLabel: string; onPress: () => void }) {
+  return (
+    <View className="flex-row items-center gap-3 border-t border-neutral-100 py-2.5 dark:border-white/[0.05]">
+      <View className="min-w-0 flex-1">
+        <View className="flex-row items-center gap-1.5">
+          <Icon icon={IconAlertTriangle} size={12} strokeWidth={2.2} className="text-amber-600 dark:text-amber-400" />
+          <Text className="text-[12px] font-semibold text-neutral-700 dark:text-neutral-200">{label}</Text>
+        </View>
+        <Text className="mt-0.5 text-[11px] leading-snug text-neutral-500 dark:text-neutral-400">{description}</Text>
+      </View>
+      <RowButton label={action} accessibilityLabel={actionLabel} onPress={onPress} />
+    </View>
+  );
+}
+
+// iOS can't ring a local notification on repeat; its closest thing is
+// time-sensitive delivery.
+const ALARM_MODE =
+  Platform.OS === 'android'
+    ? { label: 'Alarm mode', description: 'Rings with your alarm tone until you snooze or dismiss it' }
+    : { label: 'Time-sensitive', description: 'Reminders get through Focus and notification summaries' };
+
 const ICON_TILE = 'h-8 w-8 shrink-0 items-center justify-center rounded-xl border border-neutral-100 bg-neutral-50 dark:border-white/[0.06] dark:bg-white/[0.04]';
 
 /**
@@ -45,23 +108,40 @@ const ICON_TILE = 'h-8 w-8 shrink-0 items-center justify-center rounded-xl borde
  * is closed), native schedules local notifications with the OS directly —
  * they fire whether or not PlanR is open, with no subscription to manage — so
  * the copy is the web's background-capable variant.
+ *
+ * Native adds how reminders alert (alarm mode, kept on this device) and, on
+ * Android, the two device settings that make reminders late — exact-alarm
+ * access and battery optimization — each with a shortcut to fix it. Every
+ * status is re-read on return from the system Settings app.
  */
 export default function RemindersRows() {
   const [settings, setSettings] = useState<ReminderSettings | null>(null);
   const [support, setSupport] = useState<NotificationSupport>('unsupported');
+  const [delivery, setDelivery] = useState<ReminderDelivery>(getReminderDelivery);
+  const [exactAlarm, setExactAlarm] = useState<ExactAlarmAccess>('not-needed');
+  const [batteryOptimized, setBatteryOptimized] = useState(false);
   const [sendingTest, setSendingTest] = useState(false);
   const [testResult, setTestResult] = useState<TestNotificationResult | null>(null);
   const clearResultTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
     let cancelled = false;
-    void notificationSupport().then((s) => {
-      if (cancelled) return;
-      setSupport(s);
-      setSettings(getReminderSettings());
+    const check = () => {
+      void Promise.all([notificationSupport(), exactAlarmAccess(), batteryOptimizationOn()]).then(([s, exact, battery]) => {
+        if (cancelled) return;
+        setSupport(s);
+        setExactAlarm(exact);
+        setBatteryOptimized(battery);
+        setSettings(getReminderSettings());
+      });
+    };
+    check();
+    const sub = AppState.addEventListener('change', (next) => {
+      if (next === 'active') check();
     });
     return () => {
       cancelled = true;
+      sub.remove();
     };
   }, []);
 
@@ -164,6 +244,32 @@ export default function RemindersRows() {
               <Select value={settings.nudgeTime} options={NUDGE_OPTIONS} onChange={(v) => patch({ nudgeTime: v })} label="Nudge time" icon={IconClock} className="w-36" />
             </View>
           )}
+          <View className="border-t border-neutral-100 dark:border-white/[0.05]">
+            <SubRow
+              label={ALARM_MODE.label}
+              description={ALARM_MODE.description}
+              on={delivery.alarmMode}
+              onChange={(v) => setDelivery(setReminderDelivery({ alarmMode: v }))}
+            />
+          </View>
+          {exactAlarm === 'denied' && (
+            <FixRow
+              label="Exact timing is off"
+              description="Reminders can arrive minutes late. Allow “Alarms & reminders” for PlanR."
+              action="Allow"
+              actionLabel="Allow exact timing"
+              onPress={() => void openExactAlarmSettings()}
+            />
+          )}
+          {batteryOptimized && (
+            <FixRow
+              label="Battery optimization is on"
+              description="Some phones hold back reminders to save battery. Set PlanR to Unrestricted."
+              action="Fix"
+              actionLabel="Turn off battery optimization"
+              onPress={() => void openBatteryOptimizationSettings()}
+            />
+          )}
           <View className="flex-row items-center justify-between gap-3 border-t border-neutral-100 py-2.5 dark:border-white/[0.05]">
             <View className="min-w-0 flex-1">
               <Text className="text-[12px] font-semibold text-neutral-700 dark:text-neutral-200">Test this device</Text>
@@ -177,17 +283,7 @@ export default function RemindersRows() {
                 </Text>
               )}
             </View>
-            <Pressable
-              accessibilityRole="button"
-              onPress={() => void handleSendTest()}
-              disabled={sendingTest}
-              className={`h-9 shrink-0 flex-row items-center gap-1.5 rounded-full border border-neutral-200 px-3.5 active:bg-neutral-50 dark:border-white/10 dark:active:bg-white/[0.04] ${
-                sendingTest ? 'opacity-50' : ''
-              }`}
-            >
-              <Icon icon={IconSend} size={13} strokeWidth={2.2} className="text-neutral-600 dark:text-neutral-300" />
-              <Text className="text-[12px] font-semibold text-neutral-600 dark:text-neutral-300">{sendingTest ? 'Sending…' : 'Send test'}</Text>
-            </Pressable>
+            <RowButton label={sendingTest ? 'Sending…' : 'Send test'} icon={IconSend} onPress={() => void handleSendTest()} disabled={sendingTest} />
           </View>
         </View>
       )}

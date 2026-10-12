@@ -12,9 +12,11 @@ module.exports = {
   // treatment — Metro transforms them at build time, but Jest ignores
   // node_modules by default, and their source uses untransformed JSX.
   // firebase/@firebase ship ESM (`export * from ...`) as their resolved
-  // entry point too — same reason as nativewind above, same fix.
+  // entry point too — same reason as nativewind above, same fix. So does
+  // react-native-notify-kit, whose real enums and validators the reminders
+  // test runs against.
   transformIgnorePatterns: [
-    'node_modules/(?!((jest-)?react-native|@react-native(-community)?|nativewind|react-native-css-interop|react-native-gifted-charts|gifted-charts-core|react-native-linear-gradient|firebase|@firebase)/)',
+    'node_modules/(?!((jest-)?react-native|@react-native(-community)?|nativewind|react-native-css-interop|react-native-gifted-charts|gifted-charts-core|react-native-linear-gradient|react-native-notify-kit|firebase|@firebase)/)',
   ],
   // The preset's own `transform` only matches .js/.ts/.tsx (again not
   // merged with the preset, same reason as transformIgnorePatterns above) —

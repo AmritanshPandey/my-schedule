@@ -23,12 +23,47 @@ Deliberate differences from the PWA:
 - The on-device AI features are not part of the native app; Settings has no
   AI entry, as on the web with AI turned off.
 - Reminders are local notifications scheduled with the OS
-  (`react-native-notify-kit`), so they fire with the app closed.
+  (`react-native-notify-kit`), so they fire with the app closed. See
+  [Reminders](#reminders).
 - Backups export through the share sheet; restore from a backup by pasting
   its JSON.
 - "Save to lock screen" (day wallpaper) shares the image on iOS; Android shows
   a message that it isn't supported yet.
 - Android's back button closes detail pages, Settings and Notes.
+
+## Reminders
+
+`src/lib/reminders.ts` hands the OS the next 7 days of reminders. iOS keeps at
+most 64 pending local notifications per app, so the app schedules at most 60
+there. The reminders are re-armed on every schedule change and every time the
+app returns to the foreground. Each reminder:
+
+- plays a sound (the system sound; Android uses the `planr-reminders-sound`
+  channel, which replaces the old silent `planr-reminders` channel);
+- fires at its exact minute (on Android, an exact AlarmManager alarm that also
+  fires in Doze);
+- has a **Snooze 10 min** action that works with the app closed.
+
+**Alarm mode** (Settings → Reminders, stored per device):
+
+- Android: rings with the user's alarm tone, on repeat, until the reminder is
+  snoozed or dismissed. It's scheduled as an alarm clock, which Doze never
+  defers.
+- iOS can't repeat a notification sound, so the toggle is labeled
+  "Time-sensitive" instead. Reminders are then delivered time-sensitive, so
+  they get through a Focus.
+
+Device setup that affects delivery:
+
+- **iOS: Time Sensitive.** In Xcode, select the PlanRNative target, open
+  Signing & Capabilities, choose + Capability and add *Time Sensitive
+  Notifications*. Without it, iOS delivers time-sensitive reminders as
+  ordinary ones.
+- **Android 12+: exact alarms.** Exact timing needs the "Alarms & reminders"
+  access. Android 14 doesn't grant it up front, and without it reminders can
+  arrive minutes late. If it's missing, Settings → Reminders shows an
+  **Allow** shortcut. A **Fix** shortcut also appears when battery
+  optimization is on, which some phones use to hold back alarms.
 
 ## Setup
 
