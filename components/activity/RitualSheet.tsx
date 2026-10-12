@@ -19,13 +19,15 @@ import { iconGlyph, SECTION_ICONS } from "@/components/SectionIcons";
 
 const DURATION_PRESETS = [5, 10, 15, 20, 30, 45, 60];
 
+// Every routine is marked done with one tap; this only shapes the detail it
+// carries — an amount to aim for, steps to tick, several times a day.
 const TRACKING_TYPES: { key: RitualTrackingType; label: string }[] = [
-  { key: "checkbox", label: "Checkbox" },
-  { key: "quantity", label: "Quantity" },
-  { key: "duration", label: "Duration" },
+  { key: "checkbox", label: "Just mark done" },
+  { key: "quantity", label: "Amount" },
+  { key: "duration", label: "Minutes" },
   { key: "count", label: "Count" },
   { key: "checklist", label: "Checklist" },
-  { key: "times", label: "Multiple times" },
+  { key: "times", label: "Several times a day" },
 ];
 
 const RECURRENCE_KINDS: { key: RitualRecurrenceKind; label: string }[] = [
@@ -52,7 +54,9 @@ export function RitualSheet({ open, onClose, initial, onSave, onDelete }: Ritual
   const [title, setTitle]       = useState("");
   const [description, setDescription] = useState("");
   const [time, setTime]         = useState("08:00");
-  const [anyTime, setAnyTime]   = useState(false);
+  // A routine is something to stay on track with, not an appointment — new
+  // ones start without a time; setting one is a deliberate choice.
+  const [anyTime, setAnyTime]   = useState(true);
   const [duration, setDuration] = useState<number | undefined>(undefined);
   const [color, setColor]       = useState<RitualColor | "">("");
   const [icon, setIcon]         = useState<string>("");
@@ -68,6 +72,9 @@ export function RitualSheet({ open, onClose, initial, onSave, onDelete }: Ritual
   const [steps, setSteps]       = useState<RitualStep[]>([]);
   const [newStepLabel, setNewStepLabel] = useState("");
   const [newStepTime, setNewStepTime] = useState("12:00");
+  /** A time attached to the next descriptive item ("Lunch" at 13:00), if any. */
+  const [newItemTimed, setNewItemTimed] = useState(false);
+  const [newItemTime, setNewItemTime] = useState("13:00");
 
   const [showAdvanced, setShowAdvanced] = useState(false);
 
@@ -78,7 +85,7 @@ export function RitualSheet({ open, onClose, initial, onSave, onDelete }: Ritual
     setTitle(initial?.title ?? "");
     setDescription(initial?.description ?? "");
     setTime(initial?.time ?? "08:00");
-    setAnyTime(initial?.anyTime ?? false);
+    setAnyTime(initial ? !!initial.anyTime : true);
     setDuration(initial?.duration);
     setColor(initial?.color ?? "");
     setIcon(initial?.icon ?? "");
@@ -91,6 +98,8 @@ export function RitualSheet({ open, onClose, initial, onSave, onDelete }: Ritual
     setTarget(initial?.target !== undefined ? String(initial.target) : "");
     setUnit(initial?.unit ?? "");
     setSteps(initial?.steps ?? []);
+    setNewStepLabel("");
+    setNewItemTimed(false);
     setShowAdvanced(false);
   }, [open]); // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -101,7 +110,7 @@ export function RitualSheet({ open, onClose, initial, onSave, onDelete }: Ritual
     const d = tpl.defaults;
     if (d.title !== undefined) setTitle(d.title);
     if (d.time !== undefined) setTime(d.time);
-    setAnyTime(!!d.anyTime);
+    setAnyTime(d.time === undefined || !!d.anyTime);
     setColor(tpl.color ?? "");
     setIcon(tpl.icon);
     setTrackingType(d.trackingType ?? "checkbox");
@@ -123,8 +132,10 @@ export function RitualSheet({ open, onClose, initial, onSave, onDelete }: Ritual
   function addStep() {
     const label = newStepLabel.trim();
     if (!label) return;
-    setSteps((prev) => [...prev, { id: uid(), label }]);
+    const timed = newItemTimed && !!newItemTime;
+    setSteps((prev) => [...prev, timed ? { id: uid(), label, time: newItemTime } : { id: uid(), label }]);
     setNewStepLabel("");
+    setNewItemTimed(false);
   }
 
   /** The "times" analogue of addStep — pushes the current newStepTime as a
@@ -154,6 +165,7 @@ export function RitualSheet({ open, onClose, initial, onSave, onDelete }: Ritual
     // whole-thing field" convention Task.slots/startTime already uses.
     const effectiveTime = trackingType === "times" && steps.length > 0 ? steps[0].label : time;
 
+    const measured = trackingType === "quantity" || trackingType === "duration" || trackingType === "count";
     onSave({
       title: title.trim(),
       description: description.trim() || undefined,
@@ -167,16 +179,19 @@ export function RitualSheet({ open, onClose, initial, onSave, onDelete }: Ritual
       notes: notes.trim() || undefined,
       sortOrder: initial?.sortOrder,
       trackingType: trackingType === "checkbox" ? undefined : trackingType,
-      target: (trackingType === "quantity" || trackingType === "duration" || trackingType === "count") && Number.isFinite(parsedTarget) && parsedTarget > 0
+      target: measured && Number.isFinite(parsedTarget) && parsedTarget > 0
         ? parsedTarget
         : undefined,
       unit: unit.trim() || undefined,
-      // checklist/times: steps drive per-item completion. checkbox: steps are
-      // an optional, purely descriptive list (undefined when empty, same as
-      // every other optional field, rather than saving `[]`).
+      // checklist/times: steps drive per-item ticks. Every other type: steps
+      // are an optional, purely descriptive list — the meals of a diet, what
+      // a protein target is made of (undefined when empty, same as every
+      // other optional field, rather than saving `[]`). A "times" step's
+      // label already is its time, so an item time never carries over to it.
       steps:
-        trackingType === "checklist" || trackingType === "times" ? steps
-        : trackingType === "checkbox" && steps.length > 0 ? steps
+        trackingType === "checklist" ? steps
+        : trackingType === "times" ? steps.map(({ id, label }) => ({ id, label }))
+        : steps.length > 0 ? steps
         : undefined,
     });
     onClose();
@@ -336,34 +351,39 @@ export function RitualSheet({ open, onClose, initial, onSave, onDelete }: Ritual
                     list below — a second, independent time control here would
                     just be a confusing extra field nothing reads. */}
                 {trackingType !== "times" && (
-                  <div className="flex items-end gap-3">
-                    {/* Disabled, not unmounted, when "Any time" is on — hiding it
-                        outright left a bare flex-1 gap with no "Time" label at
-                        all once toggled, and re-centering the row every time
-                        it's switched back. Dimming it in place keeps the layout
-                        stable and still shows what time it'll revert to. */}
-                    <div className="min-w-0 flex-1">
-                      <TimeInput label="Time" value={time} onChange={setTime} ariaLabel="Routine time" disabled={anyTime} />
+                  <div className="space-y-2">
+                    <div role="radiogroup" aria-label="When" className="grid grid-cols-2 gap-2">
+                      {[{ key: true, label: "Any time" }, { key: false, label: "At a set time" }].map((opt) => (
+                        <button
+                          key={opt.label}
+                          type="button"
+                          role="radio"
+                          aria-checked={anyTime === opt.key}
+                          onClick={() => setAnyTime(opt.key)}
+                          className={`flex h-11 items-center justify-center gap-1.5 rounded-xl border text-[13px] font-semibold transition-colors ${
+                            anyTime === opt.key
+                              ? "border-neutral-900 bg-neutral-900 text-white dark:border-white dark:bg-white dark:text-neutral-900"
+                              : "border-neutral-200 text-neutral-600 hover:border-neutral-300 dark:border-white/10 dark:text-neutral-300"
+                          }`}
+                        >
+                          {!opt.key && <IconClock size={13} strokeWidth={2.2} />}
+                          {opt.label}
+                        </button>
+                      ))}
                     </div>
-                    <button
-                      type="button"
-                      onClick={() => setAnyTime((v) => !v)}
-                      className={`flex h-11 shrink-0 items-center gap-1.5 rounded-xl border px-3 text-[12px] font-semibold transition-colors ${
-                        anyTime
-                          ? "border-neutral-900 bg-neutral-900 text-white dark:border-white dark:bg-white dark:text-neutral-900"
-                          : "border-neutral-200 text-neutral-500 hover:border-neutral-300 dark:border-white/10 dark:text-neutral-400"
-                      }`}
-                    >
-                      <IconClock size={13} strokeWidth={2.2} />
-                      Any time
-                    </button>
+                    {!anyTime && (
+                      <TimeInput label="Time" value={time} onChange={setTime} ariaLabel="Routine time" />
+                    )}
                   </div>
                 )}
               </div>
 
               {/* ── Tracking ───────────────────────────────────────────────── */}
               <div className="space-y-3 border-t border-neutral-100 pt-4 dark:border-white/[0.06]">
-                <p className={typography.eyebrow}>Tracking</p>
+                <p className={typography.eyebrow}>Details</p>
+                <p className="-mt-1 text-[11px] leading-snug text-neutral-500 dark:text-neutral-400">
+                  You&apos;ll mark it done with one tap and say how closely you followed it. This just shapes what it shows.
+                </p>
                 <div className="flex flex-wrap gap-2">
                   {TRACKING_TYPES.map((t) => (
                     <button
@@ -408,11 +428,10 @@ export function RitualSheet({ open, onClose, initial, onSave, onDelete }: Ritual
                     routine is still one tap, the list just shows what it
                     bundles (e.g. "Hair" ⇒ coconut oil, shampoo, conditioner)
                     without asking you to check off each one separately. */}
-                {(trackingType === "checklist" || trackingType === "times" || trackingType === "checkbox") && (
-                  <div className="space-y-1.5">
-                    {trackingType === "checkbox" && (
+                <div className="space-y-1.5">
+                    {trackingType !== "checklist" && trackingType !== "times" && (
                       <p className="text-[11px] leading-snug text-neutral-500 dark:text-neutral-400">
-                        Optional — list what this routine covers. These aren&apos;t checked off individually; one tap on the routine covers all of them.
+                        Optional — what it covers, with a time if it has one (e.g. &ldquo;Lunch: dal, rice, salad&rdquo; at 1:00 PM). One tap on the routine covers all of them.
                       </p>
                     )}
                     {trackingType === "times" && (
@@ -422,6 +441,9 @@ export function RitualSheet({ open, onClose, initial, onSave, onDelete }: Ritual
                     )}
                     {steps.map((step) => (
                       <div key={step.id} className="flex items-center gap-2 rounded-xl border border-neutral-200 bg-neutral-50 px-3 py-2 dark:border-white/10 dark:bg-white/[0.04]">
+                        {trackingType !== "times" && step.time && (
+                          <span className="shrink-0 text-[12px] font-bold tabular-nums text-neutral-500 dark:text-neutral-400">{formatDisplayTime(step.time)}</span>
+                        )}
                         <span className="flex-1 truncate text-[13px] font-medium tabular-nums text-neutral-800 dark:text-neutral-100">
                           {trackingType === "times" ? formatDisplayTime(step.label) : step.label}
                         </span>
@@ -445,26 +467,45 @@ export function RitualSheet({ open, onClose, initial, onSave, onDelete }: Ritual
                         </button>
                       </div>
                     ) : (
-                    <div className="flex gap-2">
-                      <input
-                        value={newStepLabel}
-                        onChange={(e) => setNewStepLabel(e.target.value)}
-                        onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); addStep(); } }}
-                        placeholder={trackingType === "checklist" ? "Add a step…" : "Add an item…"}
-                        className="h-9 flex-1 rounded-xl border border-neutral-200 bg-neutral-50 px-3 text-[13px] text-neutral-900 outline-none placeholder:text-neutral-400 dark:border-white/10 dark:bg-white/[0.04] dark:text-white dark:placeholder:text-neutral-600"
-                      />
-                      <button
-                        type="button"
-                        onClick={addStep}
-                        className="flex h-9 w-9 items-center justify-center rounded-xl border border-neutral-200 text-neutral-500 hover:bg-neutral-50 dark:border-white/10 dark:text-neutral-400"
-                        aria-label="Add item"
-                      >
-                        <IconPlus size={14} strokeWidth={2.4} />
-                      </button>
+                    <div className="space-y-2">
+                      <div className="flex gap-2">
+                        <input
+                          value={newStepLabel}
+                          onChange={(e) => setNewStepLabel(e.target.value)}
+                          onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); addStep(); } }}
+                          placeholder={trackingType === "checklist" ? "Add a step…" : "Add a detail…"}
+                          aria-label={trackingType === "checklist" ? "New step" : "New detail"}
+                          className="h-11 min-w-0 flex-1 rounded-xl border border-neutral-200 bg-neutral-50 px-3 text-[14px] text-neutral-900 outline-none placeholder:text-neutral-500 dark:border-white/10 dark:bg-white/[0.04] dark:text-white dark:placeholder:text-neutral-400"
+                        />
+                        <button
+                          type="button"
+                          onClick={() => setNewItemTimed((v) => !v)}
+                          aria-pressed={newItemTimed}
+                          aria-label={newItemTimed ? "Remove time from this item" : "Add a time to this item"}
+                          className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-xl border transition-colors ${
+                            newItemTimed
+                              ? "border-neutral-900 bg-neutral-900 text-white dark:border-white dark:bg-white dark:text-neutral-900"
+                              : "border-neutral-200 text-neutral-500 hover:bg-neutral-50 dark:border-white/10 dark:text-neutral-400"
+                          }`}
+                        >
+                          <IconClock size={15} strokeWidth={2.2} />
+                        </button>
+                        <button
+                          type="button"
+                          onClick={addStep}
+                          disabled={!newStepLabel.trim()}
+                          className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl border border-neutral-200 text-neutral-500 hover:bg-neutral-50 disabled:opacity-40 dark:border-white/10 dark:text-neutral-400"
+                          aria-label="Add item"
+                        >
+                          <IconPlus size={14} strokeWidth={2.4} />
+                        </button>
+                      </div>
+                      {newItemTimed && (
+                        <TimeInput value={newItemTime} onChange={setNewItemTime} ariaLabel="Time for this item" />
+                      )}
                     </div>
                     )}
-                  </div>
-                )}
+                </div>
               </div>
 
               {/* ── Advanced (progressive disclosure) ─────────────────────── */}

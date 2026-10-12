@@ -11,6 +11,8 @@ import { uid } from "./id";
 export type RoutineTemplateKey =
   | "custom"
   | "water"
+  | "protein"
+  | "diet"
   | "food"
   | "exercise"
   | "skincare"
@@ -33,6 +35,11 @@ function steps(...labels: string[]): RitualStep[] {
   return labels.map((label) => ({ id: uid(), label }));
 }
 
+/** Descriptive items that each carry a time — a meal plan, say. */
+function timedItems(...items: Array<[label: string, time: string]>): RitualStep[] {
+  return items.map(([label, time]) => ({ id: uid(), label, time }));
+}
+
 export const ROUTINE_TEMPLATES: readonly RoutineTemplate[] = [
   {
     key: "custom",
@@ -52,6 +59,36 @@ export const ROUTINE_TEMPLATES: readonly RoutineTemplate[] = [
       unit: "ml",
       target: 2500,
       quickAmounts: [250, 500, 750],
+      anyTime: true,
+      recurrence: DAILY,
+    },
+  },
+  {
+    key: "protein",
+    label: "Protein",
+    icon: "barbell",
+    color: "rose",
+    defaults: {
+      title: "Protein intake",
+      trackingType: "quantity",
+      unit: "g",
+      target: 120,
+      quickAmounts: [20, 30, 40],
+      anyTime: true,
+      recurrence: DAILY,
+    },
+  },
+  {
+    // A plan to stay close to, not a checklist to pass: the meals are the
+    // reference detail ("Lunch: dal, rice, salad · 1:00 PM"), and the day is
+    // marked done once with how closely it was followed.
+    key: "diet",
+    label: "Diet",
+    icon: "leaf",
+    color: "emerald",
+    defaults: {
+      title: "Diet plan",
+      steps: timedItems(["Breakfast", "08:00"], ["Lunch", "13:00"], ["Dinner", "19:30"]),
       anyTime: true,
       recurrence: DAILY,
     },

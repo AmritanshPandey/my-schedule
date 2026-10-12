@@ -28,6 +28,7 @@ import { selectTodayTasks } from "@/lib/todayTasks";
 import ExecutionStreakBanner from "@/components/ExecutionStreakBanner";
 import NeedsAttentionCard from "@/components/NeedsAttentionCard";
 import InsightsCard, { type InsightToast } from "@/components/intelligence/InsightsCard";
+import CheckInsDueCard from "@/components/tracking/CheckInsDueCard";
 import { selectNeedsAttention, type MissedTask, type NeedsAttention, type UnreliableSlotTask } from "@/lib/needsAttention";
 import {
   computeCapacityModel,
@@ -1028,6 +1029,16 @@ export default function OverviewDashboard({
                   onToggleSlot={onToggleSlot}
                   onMissed={onMissedTask}
                   onOpenSubtasks={onOpenSubtasks}
+                />
+                {/* Trackers waiting on this period's entry — renders nothing
+                    once every check-in is in. */}
+                <CheckInsDueCard
+                  trackers={schedule.progressTrackers ?? []}
+                  metricEntries={schedule.metricEntries ?? []}
+                  todayISO={todayISO}
+                  trackingStart={schedule.preferences?.startDate}
+                  onLog={onLogTracker}
+                  onOpenTracking={() => onNavigate(8)}
                 />
                 <DayBreakdownCard
                   activities={schedule.activities}
