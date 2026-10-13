@@ -4693,6 +4693,7 @@ export default function ScheduleApp() {
                 onToast={setToastMessage}
                 onReviewTask={(task) => openEditSheet(task)}
                 onReviewDay={(day) => { setActiveDay(day); setActiveTab(0); setSelectedPlanId(null); }}
+                onCreateTaskAtTime={(day, startMinutes, endMinutes) => openCreateSheetWithTime(startMinutes, endMinutes, day)}
               />
             )}
             </ErrorBoundary>

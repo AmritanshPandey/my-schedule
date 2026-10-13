@@ -79,6 +79,8 @@ interface OverviewDashboardProps {
   onToast?: (toast: InsightToast) => void;
   onReviewTask?: (task: Task) => void;
   onReviewDay?: (day: DayKey) => void;
+  /** Opens "new task" pre-filled into a free slot from "Where the day goes". */
+  onCreateTaskAtTime?: (day: DayKey, startMinutes: number, endMinutes: number) => void;
 }
 
 const DAYS_ORDER: DayKey[] = ["monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday"];
@@ -795,6 +797,7 @@ export default function OverviewDashboard({
   onToast,
   onReviewTask,
   onReviewDay,
+  onCreateTaskAtTime,
 }: OverviewDashboardProps) {
   const todayISO = localISODate(new Date());
   const plansById = useMemo(() => new Map(schedule.plans.map((plan) => [plan.id, plan])), [schedule.plans]);
@@ -1046,6 +1049,7 @@ export default function OverviewDashboard({
                   todayKey={todayKey}
                   todayISO={todayISO}
                   preferences={schedule.preferences}
+                  onFillSlot={onCreateTaskAtTime}
                 />
         
                 <RoutineConsistencyCard rows={ritualConsistency} />
