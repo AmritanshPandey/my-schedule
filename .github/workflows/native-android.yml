@@ -1,0 +1,78 @@
+name: Native Android
+
+# Builds the native app's release APK and runs it on an Android emulator:
+# launch, a walk through Today and Settings → Reminders, and a test reminder,
+# with screenshots, notification channels and logcat kept as artifacts. The
+# APK artifact installs on any emulator or device (drag it onto the emulator
+# window in Android Studio).
+
+on:
+  pull_request:
+    paths:
+      - 'apps/native/**'
+      - 'packages/core/**'
+      - 'package-lock.json'
+      - '.github/workflows/native-android.yml'
+      - '.github/scripts/android-emulator-smoke.sh'
+  workflow_dispatch:
+
+concurrency:
+  group: native-android-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  android:
+    name: Android build & emulator run
+    runs-on: ubuntu-latest
+    timeout-minutes: 75
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: zulu
+          java-version: 17
+
+      - uses: gradle/actions/setup-gradle@v4
+
+      - name: Install dependencies
+        run: npm ci
+
+      # x86_64 for this emulator, arm64-v8a for Apple Silicon emulators and
+      # phones.
+      - name: Build release APK
+        working-directory: apps/native/android
+        run: ./gradlew assembleRelease -PreactNativeArchitectures=x86_64,arm64-v8a
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: planr-android-apk
+          path: apps/native/android/app/build/outputs/apk/release/app-release.apk
+
+      - name: Enable KVM
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+
+      - name: Run on the emulator
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 35
+          arch: x86_64
+          target: google_apis
+          profile: pixel_6
+          disable-animations: true
+          emulator-options: -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -camera-back none
+          script: bash .github/scripts/android-emulator-smoke.sh
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: planr-android-emulator-run
+          path: emulator-out/
