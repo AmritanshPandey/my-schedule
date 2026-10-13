@@ -280,8 +280,9 @@ async function expectNoBannedVisualEffects(page: Page) {
 
 async function exerciseTaskSheetInputs(page: Page, isMobile: boolean) {
   if (isMobile) {
-    await page.getByRole("button", { name: "Create" }).click();
-    await page.getByRole("button", { name: "Add task" }).click();
+    // The iPhone tab bar only navigates; Today's header adds a task.
+    await expect(page.getByRole("button", { name: "Create" })).toHaveCount(0);
+    await page.getByRole("button", { name: "Add task" }).first().click();
   } else {
     await page.getByText("New task").first().click();
   }

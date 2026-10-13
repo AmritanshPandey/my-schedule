@@ -16,6 +16,14 @@ export const metadata: Metadata = {
     statusBarStyle: "black-translucent",
     title: "PlanR",
   },
+  // iOS otherwise turns every "6:15 AM" on the timeline into a dotted-underlined
+  // calendar link (and numbers into phone links). None of it is useful here.
+  formatDetection: {
+    telephone: false,
+    date: false,
+    address: false,
+    email: false,
+  },
 };
 
 export const viewport: Viewport = {

@@ -332,7 +332,19 @@ export interface ProgressTracker {
    * neither — so this could not be folded into the existing field.
    */
   dailyTarget?: number;
+  /**
+   * How often this metric wants an entry — the check-in rhythm the Tracking
+   * page, Today and Overview prompt against (see lib/trackerCadence.ts).
+   * Optional: an unset cadence reads as "daily" for a tracker with a
+   * `dailyTarget` (it already resets every day) and "weekly" otherwise, so
+   * every existing tracker gets a sensible rhythm with no migration.
+   */
+  cadence?: TrackerCadence;
 }
+
+/** How often a tracker asks for an entry. */
+export const TRACKER_CADENCES = ["daily", "weekly", "monthly", "yearly"] as const;
+export type TrackerCadence = typeof TRACKER_CADENCES[number];
 
 export interface MetricEntry {
   id: string;
@@ -396,6 +408,13 @@ export type RitualTrackingType = typeof RITUAL_TRACKING_TYPES[number];
 export interface RitualStep {
   id: string;
   label: string;
+  /**
+   * Optional "HH:MM" for a descriptive item — "Lunch: dal, rice, salad" at
+   * 13:00 on a diet routine. Reference detail only: it never schedules
+   * anything or changes when the routine counts as done. Unused by "times",
+   * whose `label` already is the time.
+   */
+  time?: string;
 }
 
 /**
@@ -498,6 +517,15 @@ export interface RitualCompletion {
   value?: number;      // amount logged — quantity/duration/count
   stepId?: string;     // which checklist step this row completes
   note?: string;
+  /**
+   * How closely the routine was followed that day, 1–100 — set by the user
+   * when marking the day done ("Protein intake: 75%"). Only meaningful on the
+   * day-done sentinel row; absent means 100, so every completion written
+   * before this field existed reads as fully followed. It never decides
+   * whether the day counts as done — marking it done does that. See
+   * `ritualDayProgress` in lib/consistency/ritualDayStatus.ts.
+   */
+  followed?: number;
 }
 
 export interface Note {
@@ -1006,6 +1034,7 @@ function normalizeTracker(value: unknown): ProgressTracker | null {
     goalValue: typeof t.goalValue === "number" && Number.isFinite(t.goalValue) ? t.goalValue : undefined,
     startingValue: typeof t.startingValue === "number" && Number.isFinite(t.startingValue) ? t.startingValue : undefined,
     dailyTarget: typeof t.dailyTarget === "number" && Number.isFinite(t.dailyTarget) ? t.dailyTarget : undefined,
+    cadence: (TRACKER_CADENCES as readonly unknown[]).includes(t.cadence) ? t.cadence : undefined,
   };
 }
 

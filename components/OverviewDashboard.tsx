@@ -28,6 +28,7 @@ import { selectTodayTasks } from "@/lib/todayTasks";
 import ExecutionStreakBanner from "@/components/ExecutionStreakBanner";
 import NeedsAttentionCard from "@/components/NeedsAttentionCard";
 import InsightsCard, { type InsightToast } from "@/components/intelligence/InsightsCard";
+import CheckInsDueCard from "@/components/tracking/CheckInsDueCard";
 import { selectNeedsAttention, type MissedTask, type NeedsAttention, type UnreliableSlotTask } from "@/lib/needsAttention";
 import {
   computeCapacityModel,
@@ -78,6 +79,8 @@ interface OverviewDashboardProps {
   onToast?: (toast: InsightToast) => void;
   onReviewTask?: (task: Task) => void;
   onReviewDay?: (day: DayKey) => void;
+  /** Opens "new task" pre-filled into a free slot from "Where the day goes". */
+  onCreateTaskAtTime?: (day: DayKey, startMinutes: number, endMinutes: number) => void;
 }
 
 const DAYS_ORDER: DayKey[] = ["monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday"];
@@ -794,6 +797,7 @@ export default function OverviewDashboard({
   onToast,
   onReviewTask,
   onReviewDay,
+  onCreateTaskAtTime,
 }: OverviewDashboardProps) {
   const todayISO = localISODate(new Date());
   const plansById = useMemo(() => new Map(schedule.plans.map((plan) => [plan.id, plan])), [schedule.plans]);
@@ -1029,12 +1033,23 @@ export default function OverviewDashboard({
                   onMissed={onMissedTask}
                   onOpenSubtasks={onOpenSubtasks}
                 />
+                {/* Trackers waiting on this period's entry — renders nothing
+                    once every check-in is in. */}
+                <CheckInsDueCard
+                  trackers={schedule.progressTrackers ?? []}
+                  metricEntries={schedule.metricEntries ?? []}
+                  todayISO={todayISO}
+                  trackingStart={schedule.preferences?.startDate}
+                  onLog={onLogTracker}
+                  onOpenTracking={() => onNavigate(8)}
+                />
                 <DayBreakdownCard
                   activities={schedule.activities}
                   categories={schedule.categories}
                   todayKey={todayKey}
                   todayISO={todayISO}
                   preferences={schedule.preferences}
+                  onFillSlot={onCreateTaskAtTime}
                 />
         
                 <RoutineConsistencyCard rows={ritualConsistency} />

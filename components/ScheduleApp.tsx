@@ -79,6 +79,7 @@ import {
   Ritual,
   Schedule,
   SummaryConfig,
+  TrackerCadence,
   Task,
   TaskCategory,
   TaskSlot,
@@ -181,7 +182,7 @@ import { applyScheduleRules, validateDatedTasks } from "@/lib/scheduleRules";
 import { resolveTimes as resolveParsedTimes } from "@/lib/scheduleParser";
 import { applyTemplate } from "@/lib/templates";
 import type { Template } from "@/lib/templates";
-import { toggleRitualCompletion, appendRitualLog, undoLastRitualLog, toggleRitualStep, removeRitualLog } from "@/lib/ritualCompletions";
+import { toggleRitualCompletion, appendRitualLog, undoLastRitualLog, toggleRitualStep, removeRitualLog, markRitualDone, unmarkRitualDone } from "@/lib/ritualCompletions";
 import { MAX_RITUALS } from "@/lib/ritualColors";
 import { formatDisplayTime, parseTimeToMinutes, formatDuration } from "@/lib/timeUtils";
 import { duplicateRitualAt, setRitualTime } from "@/lib/ritualMutations";
@@ -1974,6 +1975,28 @@ export default function ScheduleApp() {
     setSchedule((prev) => ({
       ...prev,
       ritualCompletions: undoLastRitualLog(prev.ritualCompletions ?? [], ritualId, dateISO),
+    }));
+  }
+
+  /** Mark a routine done for a day, rated for how closely it was followed. */
+  function handleMarkRitualDone(ritualId: string, dateISO: string, followed: number) {
+    setSchedule((prev) => ({
+      ...prev,
+      ritualCompletions: markRitualDone(prev.ritualCompletions ?? [], ritualId, dateISO, followed),
+    }));
+  }
+
+  function handleUnmarkRitualDone(ritualId: string, dateISO: string) {
+    setSchedule((prev) => ({
+      ...prev,
+      ritualCompletions: unmarkRitualDone(prev.ritualCompletions ?? [], ritualId, dateISO),
+    }));
+  }
+
+  function handleSetTrackerCadence(trackerId: string, cadence: TrackerCadence) {
+    setSchedule((prev) => ({
+      ...prev,
+      progressTrackers: prev.progressTrackers.map((t) => (t.id === trackerId ? { ...t, cadence } : t)),
     }));
   }
 
@@ -4155,14 +4178,15 @@ export default function ScheduleApp() {
                 rituals={schedule.rituals ?? []}
                 dateISO={todayISO()}
                 ritualCompletions={schedule.ritualCompletions ?? []}
-                onToggle={handleToggleRitualComplete}
-                onLogAmount={(id, amount) => handleLogRitualAmount(id, amount, todayISO())}
+                onMarkDone={(id) => handleMarkRitualDone(id, todayISO(), 100)}
+                onUnmarkDone={(id) => handleUnmarkRitualDone(id, todayISO())}
                 onOpenDetail={(ritual) => setDetailRitualId(ritual.id)}
               />
               <TrackerQuickBar
                 trackers={schedule.progressTrackers}
                 plans={schedule.plans}
                 metricEntries={schedule.metricEntries}
+                trackingStart={schedule.preferences?.startDate}
                 onLog={setEntryTracker}
                 onNavigate={(planId) => { setActiveTab(1); setSelectedPlanId(planId); }}
               />
@@ -4527,7 +4551,7 @@ export default function ScheduleApp() {
               onEditTask={(task) => openEditSheet(task)}
               onDeleteLinkedTask={handleDeleteLinkedTask}
               onDeleteTaskSlot={handleDeleteTaskSlot}
-              onAddTracker={(planId, title, unit, goalDirection, id, goalValue, startingValue, dailyTarget) => {
+              onAddTracker={(planId, title, unit, goalDirection, id, goalValue, startingValue, dailyTarget, cadence) => {
                 setSchedule((prev) => ({
                   ...prev,
                   progressTrackers: [
@@ -4542,6 +4566,7 @@ export default function ScheduleApp() {
                       goalValue,
                       startingValue,
                       dailyTarget,
+                      cadence,
                     },
                   ],
                 }));
@@ -4590,9 +4615,8 @@ export default function ScheduleApp() {
               rituals={schedule.rituals ?? []}
               ritualCompletions={schedule.ritualCompletions ?? []}
               trackingStart={schedule.preferences?.startDate}
-              onToggleComplete={handleToggleRitualComplete}
-              onLogAmount={handleLogRitualAmount}
-              onUndoLastLog={handleUndoRitualLog}
+              onMarkDone={handleMarkRitualDone}
+              onUnmarkDone={handleUnmarkRitualDone}
               onOpenDetail={(ritual) => setDetailRitualId(ritual.id)}
               onAdd={handleAddRitual}
               onUpdate={handleUpdateRitual}
@@ -4622,6 +4646,7 @@ export default function ScheduleApp() {
               onLog={handleLogTrackerAmount}
               onOpenAddEntry={(tracker) => setEntryTracker(tracker)}
               onDeleteEntry={handleDeleteEntry}
+              onSetCadence={handleSetTrackerCadence}
               onNavigateToPlans={() => setActiveTab(1)}
             />
             </ErrorBoundary>
@@ -4668,6 +4693,7 @@ export default function ScheduleApp() {
                 onToast={setToastMessage}
                 onReviewTask={(task) => openEditSheet(task)}
                 onReviewDay={(day) => { setActiveDay(day); setActiveTab(0); setSelectedPlanId(null); }}
+                onCreateTaskAtTime={(day, startMinutes, endMinutes) => openCreateSheetWithTime(startMinutes, endMinutes, day)}
               />
             )}
             </ErrorBoundary>
@@ -4921,7 +4947,8 @@ export default function ScheduleApp() {
             ritualCompletions={schedule.ritualCompletions ?? []}
             trackingStart={schedule.preferences?.startDate}
             onBack={() => setDetailRitualId(null)}
-            onToggleCheckbox={() => handleToggleRitualComplete(detailRitual.id)}
+            onMarkDone={(followed) => handleMarkRitualDone(detailRitual.id, todayISO(), followed)}
+            onUnmarkDone={() => handleUnmarkRitualDone(detailRitual.id, todayISO())}
             onLogAmount={(amount) => handleLogRitualAmount(detailRitual.id, amount, todayISO())}
             onUndoLastLog={() => handleUndoRitualLog(detailRitual.id, todayISO())}
             onRemoveLog={(entryId) => setSchedule((prev) => ({ ...prev, ritualCompletions: removeRitualLog(prev.ritualCompletions ?? [], entryId) }))}

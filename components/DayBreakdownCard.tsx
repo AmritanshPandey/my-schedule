@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { IconChartPie } from "@tabler/icons-react";
+import { IconChartPie, IconPlus } from "@tabler/icons-react";
 import type { DayKey, Schedule, TaskCategory } from "@/lib/useScheduleDB";
 import { DAYS } from "@/lib/scheduleConstants";
 import { categoryHex } from "@/lib/colorSystem";
@@ -13,8 +13,10 @@ import {
   buildDayBreakdown,
   donutSegments,
   formatMinutesCompact,
+  formatSlotRange,
   HELD_TIME_ID,
   SCHEDULE_DAY_MINUTES,
+  summarizeFreeSlots,
   UNSCHEDULED_ID,
 } from "@/lib/dayBreakdown";
 import { DEFAULT_TIMELINE_START_MINUTES, getConfiguredDayStartMinutes } from "@/lib/timeline/displayWindow";
@@ -45,7 +47,17 @@ interface DayBreakdownCardProps {
    * the default — the same trap `TaskBlockCard.category` documents.
    */
   preferences: Schedule["preferences"];
+  /**
+   * Opens "new task" pre-filled into a free slot, in clock minutes (0–1439).
+   * Without it the slots are listed but not actionable.
+   */
+  onFillSlot?: (day: DayKey, startMinutes: number, endMinutes: number) => void;
 }
+
+/** Slots listed before the rest collapse into "+N more". */
+const MAX_LISTED_SLOTS = 4;
+/** A slot pre-fills at most this much — a free evening is room for a task, not one task. */
+const FILL_SLOT_MAX_MINUTES = 60;
 
 /**
  * "7 AM" / "11:30 PM" / "4 AM (next day)" — a schedule-day minute as a clock time.
@@ -85,7 +97,7 @@ function isoForWeekday(todayISO: string, todayKey: DayKey, day: DayKey): string 
  * be a share of whatever happened to be booked, which read the same at 2 hours
  * scheduled as at 14.
  */
-export default function DayBreakdownCard({ activities, categories, todayKey, todayISO, preferences }: DayBreakdownCardProps) {
+export default function DayBreakdownCard({ activities, categories, todayKey, todayISO, preferences, onFillSlot }: DayBreakdownCardProps) {
   const [day, setDay] = useState<DayKey>(todayKey);
   // Hovering/focusing a legend row lifts its wedge and swaps the centre readout
   // to that slice — an informative peek, not decoration. Null = show the total.
@@ -155,6 +167,9 @@ export default function DayBreakdownCard({ activities, categories, todayKey, tod
     () => donutSegments(slices, totalMinutes, CIRCUMFERENCE),
     [slices, totalMinutes],
   );
+  // Where the unscheduled time actually sits, so "1h 15m unscheduled" comes
+  // with the slots that make it up.
+  const freeSlots = useMemo(() => summarizeFreeSlots(breakdown.freeSlots), [breakdown.freeSlots]);
   // The chart is the only thing the filter changes, so its label has to name
   // the day too — otherwise a screen reader hears the same "today" for all
   // seven selections.
@@ -346,6 +361,62 @@ export default function DayBreakdownCard({ activities, categories, todayKey, tod
               </li>
             ))}
           </ul>
+
+        </div>
+      )}
+
+      {/* The unscheduled time, located: each open slot on the clock, so the
+          total in the legend isn't an abstraction. Full width under the ring
+          so a range never wraps mid-time; dashed like the empty state, since
+          this is room, not a booking. */}
+      {committedMinutes > 0 && (freeSlots.usable.length > 0 || freeSlots.shortCount > 0) && (
+        <div data-testid="day-breakdown-free-slots" className="mt-4">
+          <p className="mb-2 text-[11px] font-bold uppercase tracking-[0.08em] text-neutral-600 dark:text-neutral-400">
+            Unscheduled slots
+          </p>
+          <div className="flex flex-wrap gap-1.5">
+            {freeSlots.usable.slice(0, MAX_LISTED_SLOTS).map((slot) => {
+              const range = formatSlotRange(slot.start, slot.end);
+              const content = (
+                <>
+                  <span className="tabular-nums">{range}</span>
+                  <span className="tabular-nums text-neutral-500 dark:text-neutral-400">· {formatMinutesCompact(slot.minutes)}</span>
+                </>
+              );
+              const chip =
+                "inline-flex min-h-[30px] items-center gap-1 whitespace-nowrap rounded-full border border-dashed border-neutral-300 px-2.5 text-[12px] font-semibold text-neutral-700 dark:border-white/[0.18] dark:text-neutral-300";
+              return onFillSlot ? (
+                <button
+                  key={slot.start}
+                  type="button"
+                  onClick={() => {
+                    haptic("light");
+                    const end = Math.min(slot.end, slot.start + FILL_SLOT_MAX_MINUTES);
+                    onFillSlot(day, slot.start % 1440, end % 1440);
+                  }}
+                  aria-label={`Add a task ${range}, ${formatMinutesCompact(slot.minutes)} free`}
+                  className={`tap-target ${chip} transition-colors hover:border-neutral-400 hover:bg-neutral-50 dark:hover:border-white/30 dark:hover:bg-white/[0.04]`}
+                >
+                  {content}
+                  <IconPlus size={12} strokeWidth={2.6} aria-hidden="true" className="text-neutral-500 dark:text-neutral-400" />
+                </button>
+              ) : (
+                <span key={slot.start} className={chip}>{content}</span>
+              );
+            })}
+          </div>
+          {(freeSlots.usable.length > MAX_LISTED_SLOTS || freeSlots.shortCount > 0) && (
+            <p className="mt-1.5 text-[11px] font-medium text-neutral-500 dark:text-neutral-400">
+              {[
+                freeSlots.usable.length > MAX_LISTED_SLOTS
+                  ? `${freeSlots.usable.length - MAX_LISTED_SLOTS} more open ${freeSlots.usable.length - MAX_LISTED_SLOTS === 1 ? "slot" : "slots"}`
+                  : null,
+                freeSlots.shortCount > 0
+                  ? `${formatMinutesCompact(freeSlots.shortMinutes)} in ${freeSlots.shortCount === 1 ? "a short gap" : `${freeSlots.shortCount} short gaps`}`
+                  : null,
+              ].filter(Boolean).join(" · ")}
+            </p>
+          )}
         </div>
       )}
 

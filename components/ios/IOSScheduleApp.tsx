@@ -49,6 +49,7 @@ import {
   type Schedule,
   type Task,
   type TaskTypeValue,
+  type TrackerCadence,
   resetStaleCompletions,
 } from "@/lib/useScheduleDB";
 import { useScheduleDB } from "@/lib/useScheduleDB";
@@ -62,7 +63,6 @@ import { bootLog, isIOSSafeMode, isStandalonePWA } from "@/lib/iosSafeMode";
 import { todayISO, localISODate, addDaysToISO, formatDate, formatDayNoteLabel } from "@/lib/dateUtils";
 import { quickAmountsForUnit } from "@/lib/quickAmounts";
 import { sumEntriesForDate } from "@/lib/metricEntries";
-import { createInboxNoteInput } from "@/lib/notes/dailyCapture";
 import {
   applyTaskDelete,
   createTask,
@@ -86,8 +86,7 @@ import { mergeTasks, unmergeTask, findMergePairs } from "@/lib/taskMerge";
 import { completionForDate, getTaskCheckableItems, getTaskSubtaskSummary, isTaskCompleted, isTaskResolved, isTrackedTask, markTaskMissed, snoozeTaskLater, toggleSlotComplete, toggleSubtaskComplete, toggleTaskFromCheckbox } from "@/lib/taskCompletion";
 import { diffException, isTaskScheduledOn, occurrenceNote, resolveOccurrence } from "@/lib/taskOccurrence";
 import { cascadeMilestoneDates, moveMilestone, normalizeMilestoneTimeline } from "@/lib/roadmapDates";
-import { toggleRitualCompletion, appendRitualLog, undoLastRitualLog, toggleRitualStep, removeRitualLog } from "@/lib/ritualCompletions";
-import { MAX_RITUALS } from "@/lib/ritualColors";
+import { toggleRitualCompletion, appendRitualLog, undoLastRitualLog, toggleRitualStep, removeRitualLog, markRitualDone, unmarkRitualDone } from "@/lib/ritualCompletions";
 import { deleteGoal } from "@/lib/goalMutations";
 import { togglePlanPaused } from "@/lib/planLifecycle";
 import { dismissAllAttention, dismissibleCount } from "@/lib/attentionDismissal";
@@ -123,6 +122,7 @@ const SettingsView = dynamic(() => import("@/components/SettingsView").then((m) 
 const AIView = dynamic(() => import("@/components/AIView").then((m) => ({ default: m.AIView })), { ssr: false });
 // Off the boot path: the weekly read is analysis-heavy and not needed to paint.
 const InsightsCard = dynamic(() => import("@/components/intelligence/InsightsCard"), { ssr: false });
+const CheckInsDueCard = dynamic(() => import("@/components/tracking/CheckInsDueCard"), { ssr: false });
 const DayWallpaperSheet = dynamic(() => import("@/components/DayWallpaperSheet"), { ssr: false });
 const NotesView = dynamic(() => import("@/components/notes/NotesView"), { ssr: false });
 const TaskDetailView = dynamic(() => import("@/components/activity/TaskDetailView"), { ssr: false });
@@ -203,6 +203,8 @@ function IOSHeader({
     label: string;
     onClick: () => void;
     destructive?: boolean;
+    /** `data-tour` id, when a coach-mark step points at this action. */
+    tour?: string;
   }>;
   onSettings?: () => void;
   onNotes?: () => void;
@@ -234,6 +236,7 @@ function IOSHeader({
                   type="button"
                   onClick={action.onClick}
                   aria-label={action.label}
+                  data-tour={action.tour}
                     className={`flex h-10 w-10 items-center justify-center rounded-xl transition-colors ${
                     action.destructive
                       ? "text-neutral-500 hover:bg-rose-500/10 hover:text-rose-500 dark:text-neutral-400 dark:hover:text-rose-400"
@@ -884,6 +887,28 @@ export default function IOSScheduleApp() {
     }));
   }
 
+  /** Mark a routine done for a day, rated for how closely it was followed. */
+  function handleMarkRitualDone(ritualId: string, dateISO: string, followed: number) {
+    setSchedule((prev) => ({
+      ...prev,
+      ritualCompletions: markRitualDone(prev.ritualCompletions ?? [], ritualId, dateISO, followed),
+    }));
+  }
+
+  function handleUnmarkRitualDone(ritualId: string, dateISO: string) {
+    setSchedule((prev) => ({
+      ...prev,
+      ritualCompletions: unmarkRitualDone(prev.ritualCompletions ?? [], ritualId, dateISO),
+    }));
+  }
+
+  function handleSetTrackerCadence(trackerId: string, cadence: TrackerCadence) {
+    setSchedule((prev) => ({
+      ...prev,
+      progressTrackers: prev.progressTrackers.map((t) => (t.id === trackerId ? { ...t, cadence } : t)),
+    }));
+  }
+
   function handleToggleRitualStep(ritualId: string, stepId: string, dateISO: string = todayISO()) {
     setSchedule((prev) => ({
       ...prev,
@@ -1049,13 +1074,6 @@ export default function IOSScheduleApp() {
   }
 
   const handleInitialNoteOpened = useCallback(() => setInitialNoteId(null), []);
-
-  function openQuickNote() {
-    const id = handleCreateNote(createInboxNoteInput());
-    setSelectedPlanId(null);
-    setInitialNoteId(id);
-    setActiveTab(6);
-  }
 
   function handleCreateTaskFromNote(input: CreateTaskFromNoteInput): string | undefined {
     const current = scheduleRef.current;
@@ -1385,6 +1403,16 @@ export default function IOSScheduleApp() {
             {/* Recently missed / overdue — renders nothing when all clear. */}
             <NeedsAttentionCard data={needsAttention} onNavigate={setActiveTab} onHandleMissed={setMissedSheet} onAdaptMilestone={setAdaptingMilestoneId} onReviewUnreliableSlot={(row) => openEditSheet(row.task)} onClearAll={handleClearAttention} />
 
+            {/* Trackers waiting on this period's entry — nothing once all are in. */}
+            <CheckInsDueCard
+              trackers={schedule.progressTrackers}
+              metricEntries={schedule.metricEntries}
+              todayISO={todayISO()}
+              trackingStart={schedule.preferences?.startDate}
+              onLog={(tracker) => setEntryTracker(tracker)}
+              onOpenTracking={() => setActiveTab(8)}
+            />
+
             {/* The weekly read — pattern engine only on iPhone (no language
                 model runs in Safari/the PWA), so it costs no model memory. */}
             <InsightsCard
@@ -1491,25 +1519,26 @@ export default function IOSScheduleApp() {
               </div>
               <div className="flex items-center gap-2">
                 {todayEditMode && (
-                  <>
-                    <button
-                      type="button"
-                      aria-label="Lock screen wallpaper"
-                      onClick={() => { haptic("light"); setWallpaperOpen(true); }}
-                      className="flex h-12 w-12 items-center justify-center rounded-full bg-neutral-100 text-neutral-600 dark:bg-white/[0.08] dark:text-neutral-300"
-                    >
-                      <IconPhoto size={24} strokeWidth={2} />
-                    </button>
-                    <button
-                      type="button"
-                      aria-label="Add task"
-                      onClick={() => openCreateSheet()}
-                      className="flex h-12 w-12 items-center justify-center rounded-full bg-neutral-100 text-neutral-600 dark:bg-white/[0.08] dark:text-neutral-300"
-                    >
-                      <IconPlus size={24} strokeWidth={2} />
-                    </button>
-                  </>
+                  <button
+                    type="button"
+                    aria-label="Lock screen wallpaper"
+                    onClick={() => { haptic("light"); setWallpaperOpen(true); }}
+                    className="flex h-12 w-12 items-center justify-center rounded-full bg-neutral-100 text-neutral-600 dark:bg-white/[0.08] dark:text-neutral-300"
+                  >
+                    <IconPhoto size={24} strokeWidth={2} />
+                  </button>
                 )}
+                {/* Adding to the day is a primary action, so it isn't hidden
+                    behind edit mode — the tab bar no longer carries a + . */}
+                <button
+                  type="button"
+                  aria-label="Add task"
+                  data-tour="new-item-button"
+                  onClick={() => { haptic("light"); openCreateSheet(); }}
+                  className="flex h-12 w-12 items-center justify-center rounded-full bg-neutral-950 text-white transition-colors active:scale-[0.96] dark:bg-white dark:text-neutral-950"
+                >
+                  <IconPlus size={24} strokeWidth={2.2} />
+                </button>
                 <button
                   type="button"
                   onClick={() => { haptic("light"); setTodayEditMode((v) => !v); }}
@@ -1553,10 +1582,10 @@ export default function IOSScheduleApp() {
                 onEditTask={(task) => openEditSheet(task)}
                 onDeleteLinkedTask={handleDeleteLinkedTask}
                 onDeleteTaskSlot={handleDeleteTaskSlot}
-                onAddTracker={(planId, title, unit, goalDirection, id, goalValue, startingValue, dailyTarget) => {
+                onAddTracker={(planId, title, unit, goalDirection, id, goalValue, startingValue, dailyTarget, cadence) => {
                   setSchedule((prev) => ({
                     ...prev,
-                    progressTrackers: [...prev.progressTrackers, { id: id ?? uid(), planId, title, type: "number", unit: unit || undefined, goalDirection, goalValue, startingValue, dailyTarget }],
+                    progressTrackers: [...prev.progressTrackers, { id: id ?? uid(), planId, title, type: "number", unit: unit || undefined, goalDirection, goalValue, startingValue, dailyTarget, cadence }],
                   }));
                 }}
                 onUpdateTracker={(trackerId, data) => {
@@ -1671,9 +1700,8 @@ export default function IOSScheduleApp() {
                 rituals={schedule.rituals ?? []}
                 ritualCompletions={schedule.ritualCompletions ?? []}
                 trackingStart={schedule.preferences?.startDate}
-                onToggleComplete={handleToggleRitualComplete}
-                onLogAmount={handleLogRitualAmount}
-                onUndoLastLog={handleUndoRitualLog}
+                onMarkDone={handleMarkRitualDone}
+                onUnmarkDone={handleUnmarkRitualDone}
                 onOpenDetail={(ritual) => setDetailRitualId(ritual.id)}
                 onAdd={handleAddRitual}
                 onUpdate={handleUpdateRitual}
@@ -1758,6 +1786,7 @@ export default function IOSScheduleApp() {
                 onLog={handleLogTrackerAmount}
                 onOpenAddEntry={(tracker) => setEntryTracker(tracker)}
                 onDeleteEntry={handleDeleteEntry}
+                onSetCadence={handleSetTrackerCadence}
                 onNavigateToPlans={() => setActiveTab(1)}
               />
             </div>
@@ -1811,6 +1840,15 @@ export default function IOSScheduleApp() {
                       setGoalsSheetOpen(true);
                     },
                   },
+                  {
+                    icon: IconPlus,
+                    label: "New plan",
+                    tour: "new-item-button",
+                    onClick: () => {
+                      haptic("light");
+                      setAddingPlan(true);
+                    },
+                  },
                 ]
               : undefined
           }
@@ -1847,14 +1885,6 @@ export default function IOSScheduleApp() {
         <IOSBottomNav
           activeTab={activeTab}
           onTabChange={(tab) => { setActiveTab(tab); setSelectedPlanId(null); }}
-          onCreateTask={() => openCreateSheet()}
-          onCreatePlan={() => { setActiveTab(1); setSelectedPlanId(null); setAddingPlan(true); }}
-          onCreateRitual={() => {
-            setActiveTab(2);
-            if ((schedule.rituals ?? []).length < MAX_RITUALS) setRitualAddOpen(true);
-            else setToast(`You can have up to ${MAX_RITUALS} routines`);
-          }}
-          onCreateNote={openQuickNote}
         />
       )}
 
@@ -1987,7 +2017,8 @@ export default function IOSScheduleApp() {
             ritualCompletions={schedule.ritualCompletions ?? []}
             trackingStart={schedule.preferences?.startDate}
             onBack={() => setDetailRitualId(null)}
-            onToggleCheckbox={() => handleToggleRitualComplete(detailRitual.id)}
+            onMarkDone={(followed) => handleMarkRitualDone(detailRitual.id, todayISO(), followed)}
+            onUnmarkDone={() => handleUnmarkRitualDone(detailRitual.id, todayISO())}
             onLogAmount={(amount) => handleLogRitualAmount(detailRitual.id, amount, todayISO())}
             onUndoLastLog={() => handleUndoRitualLog(detailRitual.id, todayISO())}
             onRemoveLog={(entryId) => setSchedule((prev) => ({ ...prev, ritualCompletions: removeRitualLog(prev.ritualCompletions ?? [], entryId) }))}

@@ -27,7 +27,7 @@ import ProgressBar from "@/components/ui/ProgressBar";
 import { RitualSheet } from "./RitualSheet";
 import RoutineRow from "./RoutineRow";
 import { groupRitualsIntoBuckets, type RitualTimeBucketKey } from "@/lib/ritualGrouping";
-import { isRitualDayComplete } from "@/lib/consistency/ritualDayStatus";
+import { summarizeRoutineDay } from "@/lib/consistency/ritualDayStatus";
 import { buildAllRoutinesMonthDays } from "@/lib/consistency/ritualCalendar";
 import { buildRoutineInsights } from "@/lib/consistency/routineInsights";
 import RoutineMonthCalendar from "./RoutineMonthCalendar";
@@ -293,9 +293,9 @@ interface RitualViewProps {
   ritualCompletions: RitualCompletion[];
   /** Settings → Tracking → "Tracking starts" (schedule.preferences?.startDate). */
   trackingStart?: string;
-  onToggleComplete: (id: string, dateISO?: string) => void;
-  onLogAmount: (ritualId: string, amount: number, dateISO: string) => void;
-  onUndoLastLog: (ritualId: string, dateISO: string) => void;
+  /** Mark a routine done for a day, rated 1–100 for how closely it was followed. */
+  onMarkDone: (ritualId: string, dateISO: string, followed: number) => void;
+  onUnmarkDone: (ritualId: string, dateISO: string) => void;
   onOpenDetail: (ritual: Ritual) => void;
   onAdd: (data: Omit<Ritual, "id">) => void;
   onUpdate: (id: string, data: Omit<Ritual, "id">) => void;
@@ -310,9 +310,8 @@ export default function RitualView({
   rituals,
   ritualCompletions,
   trackingStart,
-  onToggleComplete,
-  onLogAmount,
-  onUndoLastLog,
+  onMarkDone,
+  onUnmarkDone,
   onOpenDetail,
   onAdd,
   onUpdate,
@@ -337,29 +336,36 @@ export default function RitualView({
     return sorted.filter((r) => appliesToDay(r, selectedDateISO, trackingStart));
   }, [sorted, selectedDateISO, trackingStart]);
 
-  const completedToday = filteredRituals.filter((r) =>
-    isRitualDayComplete(r, ritualCompletions.filter((c) => c.ritualId === r.id && c.date === selectedDateISO)),
-  ).length;
-  const total = filteredRituals.length;
-  const pct = total > 0 ? Math.round((completedToday / total) * 100) : 0;
+  // The day said back to you: what's done, what's open, and how much of the
+  // routine you followed overall — the number that matters more than a tally.
+  const daySummary = useMemo(
+    () => summarizeRoutineDay(filteredRituals, ritualCompletions, selectedDateISO),
+    [filteredRituals, ritualCompletions, selectedDateISO],
+  );
+  const completedToday = daySummary.done;
+  const total = daySummary.total;
+  const pct = daySummary.followedPct ?? 0;
   const allDone = total > 0 && completedToday === total;
+  const dayWord = selectedDateISO === todayISO() ? "today" : DAY_SHORT[selectedDay];
 
-  // Week strip carries the reward loop: each day shows done ÷ due for THIS week,
-  // not the raw schedule count (which was identical across days and told you
-  // nothing about follow-through).
+  // Week strip carries the reward loop: each day's ring fills with how much of
+  // that day's routine was followed, not the raw schedule count (which was
+  // identical across days and told you nothing about follow-through).
   const weekStrip = useMemo(
     () =>
       DAYS.map((day) => {
         const dateISO = dateForCurrentWeekDay(day);
-        const dueRituals = sorted.filter((r) => appliesToDay(r, dateISO, trackingStart));
-        const done = dueRituals.filter((r) =>
-          isRitualDayComplete(r, ritualCompletions.filter((c) => c.ritualId === r.id && c.date === dateISO)),
-        ).length;
+        const summary = summarizeRoutineDay(
+          sorted.filter((r) => appliesToDay(r, dateISO, trackingStart)),
+          ritualCompletions,
+          dateISO,
+        );
         return {
           day,
           dateISO,
-          due: dueRituals.length,
-          done,
+          due: summary.total,
+          done: summary.done,
+          followedPct: summary.followedPct ?? 0,
           dayNum: new Date(`${dateISO}T00:00:00`).getDate(),
           isToday: dateISO === todayISO(),
         };
@@ -424,6 +430,7 @@ export default function RitualView({
               )}
               <CtaActionButton
                 label="Add routine"
+                tour="new-item-button"
                 icon={<IconPlus size={14} strokeWidth={2.5} />}
                 onClick={() => { haptic("medium"); onAddOpenChange(true); }}
               />
@@ -461,23 +468,39 @@ export default function RitualView({
             </span>
             <div className="min-w-0">
               <p className="text-[16px] font-black leading-tight text-emerald-700 dark:text-emerald-300">Daily practice complete</p>
-              <p className="mt-0.5 text-[13px] font-semibold text-emerald-600/80 dark:text-emerald-400/80">
-                All {total} done for {DAY_SHORT[selectedDay]}.
+              <p className="mt-0.5 text-[13px] font-semibold text-emerald-700/80 dark:text-emerald-400/80">
+                All {total} done for {DAY_SHORT[selectedDay]} — you followed {pct}% of it.
               </p>
             </div>
           </m.div>
         )}
 
-        {/* ── Progress bar (in-progress, mobile) ───────────────────────────── */}
+        {/* ── The day so far (in progress; the aside carries it at xl) ─────── */}
         {viewMode === "day" && total > 0 && !allDone && (
-          <div className="mb-5 lg:hidden">
-            <div className="mb-2 flex items-center justify-between">
-              <span className="text-[14px] font-semibold text-neutral-500 dark:text-neutral-400">
-                {completedToday} of {total} done
+          <div data-testid="routine-day-summary" className="mb-5 rounded-2xl border border-neutral-200/80 bg-white px-4 py-3.5 dark:border-white/[0.08] dark:bg-neutral-900 xl:hidden">
+            <div className="flex items-baseline justify-between gap-3">
+              <p className="text-[15px] font-extrabold leading-snug text-neutral-950 dark:text-white">
+                {completedToday === 0 ? `Nothing marked ${dayWord === "today" ? "yet today" : `for ${dayWord}`}` : `You followed ${pct}% ${dayWord === "today" ? "today" : `on ${dayWord}`}`}
+              </p>
+              <span className="shrink-0 text-[13px] font-bold tabular-nums text-neutral-500 dark:text-neutral-400">
+                {completedToday}/{total} done
               </span>
-              <span className="text-[14px] font-bold tabular-nums text-neutral-500 dark:text-neutral-400">{pct}%</span>
             </div>
-            <ProgressBar pct={pct} height={8} fillClassName="bg-green-500" />
+            <div className="mt-2.5">
+              <ProgressBar pct={pct} height={6} fillClassName="bg-green-500" />
+            </div>
+            {daySummary.doneTitles.length > 0 && (
+              <p className="mt-2.5 text-[13px] leading-snug text-neutral-600 dark:text-neutral-300">
+                <span className="font-bold text-neutral-800 dark:text-neutral-100">Completed: </span>
+                {daySummary.doneTitles.join(", ")}
+              </p>
+            )}
+            {daySummary.openTitles.length > 0 && (
+              <p className="mt-1 text-[13px] leading-snug text-neutral-500 dark:text-neutral-400">
+                <span className="font-semibold">Still open: </span>
+                {daySummary.openTitles.join(", ")}
+              </p>
+            )}
           </div>
         )}
 
@@ -485,16 +508,16 @@ export default function RitualView({
         {viewMode === "day" && rituals.length > 0 && (
           <div className="mb-6">
             <div className="grid grid-cols-7 gap-1.5">
-              {weekStrip.map(({ day, due, done, dayNum, isToday }) => {
+              {weekStrip.map(({ day, due, done, followedPct, dayNum, isToday }) => {
                 const sel = selectedDay === day;
-                const ratio = due > 0 ? done / due : 0;
+                const ratio = due > 0 ? followedPct / 100 : 0;
                 const complete = due > 0 && done === due;
                 return (
                   <button
                     key={day}
                     type="button"
                     onClick={() => setSelectedDateISO(dateForCurrentWeekDay(day))}
-                    aria-label={`${DAY_SHORT[day]} ${dayNum}, ${due > 0 ? `${done} of ${due} done` : "nothing scheduled"}`}
+                    aria-label={`${DAY_SHORT[day]} ${dayNum}, ${due > 0 ? `${done} of ${due} done, ${followedPct}% followed` : "nothing scheduled"}`}
                     aria-pressed={sel}
                     className={`flex w-full flex-col items-center gap-1.5 rounded-2xl py-2.5 transition-colors ${
                       sel
@@ -576,9 +599,8 @@ export default function RitualView({
                             ritualCompletions={ritualCompletions}
                             selectedDateISO={selectedDateISO}
                             trackingStart={trackingStart}
-                            onToggleComplete={onToggleComplete}
-                            onLogAmount={onLogAmount}
-                            onUndoLastLog={onUndoLastLog}
+                            onMarkDone={onMarkDone}
+                            onUnmarkDone={onUnmarkDone}
                             onOpenDetail={onOpenDetail}
                             onDelete={(ritual) => onDelete(ritual.id)}
                           />
@@ -595,8 +617,8 @@ export default function RitualView({
                 <p className={typography.eyebrow}>
                   Today&apos;s signal
                 </p>
-                <p className={`mt-2 text-[24px] font-black leading-none ${allDone ? "text-emerald-600 dark:text-emerald-400" : "text-neutral-950 dark:text-white"}`}>
-                  {allDone ? "All done" : `${pct}%`}
+                <p className={`mt-2 text-[24px] font-black leading-none tabular-nums ${allDone ? "text-emerald-700 dark:text-emerald-400" : "text-neutral-950 dark:text-white"}`}>
+                  {pct}% followed
                 </p>
                 <p className="mt-2 text-[13px] leading-relaxed text-neutral-500 dark:text-neutral-400">
                   {completedToday} of {total} done for {DAY_SHORT[selectedDay]}.
@@ -604,6 +626,12 @@ export default function RitualView({
                 <div className="mt-3">
                   <ProgressBar pct={pct} height={6} fillClassName="bg-green-500" />
                 </div>
+                {daySummary.doneTitles.length > 0 && (
+                  <p className="mt-3 text-[12px] leading-snug text-neutral-600 dark:text-neutral-300">
+                    <span className="font-bold text-neutral-800 dark:text-neutral-100">Completed: </span>
+                    {daySummary.doneTitles.join(", ")}
+                  </p>
+                )}
               </div>
 
               <div className="rounded-2xl border border-neutral-200 bg-white p-4 dark:border-white/[0.08] dark:bg-neutral-900">

@@ -850,7 +850,7 @@ export function TaskSheet({
             animate={{ opacity: 1, x: 0 }}
             exit={{ opacity: 0, x: 32 }}
             transition={{ duration: 0.2, ease: [0.22, 1, 0.36, 1] }}
-            className="flex flex-col px-5 pb-6 pt-4"
+            className={`flex flex-col px-5 pb-6 ${presentation === "page" ? "pt-[calc(env(safe-area-inset-top)+16px)]" : "pt-4"}`}
           >
             {/* Header */}
             <div className="mb-5 flex items-center gap-3">
@@ -894,15 +894,20 @@ export function TaskSheet({
             animate={{ opacity: 1, x: 0 }}
             exit={{ opacity: 0, x: -32 }}
             transition={{ duration: 0.2, ease: [0.22, 1, 0.36, 1] }}
-            className={`flex flex-col px-5 pt-4 ${presentation === "page" ? "pb-28" : "pb-6"}`}
+            className={`flex flex-col px-5 ${presentation === "page" ? "pb-28" : "pt-4 pb-6"}`}
           >
+            {/* As a full page, the header owns the status-bar strip: its own
+                top padding clears the notch and its fill sits behind the clock,
+                so scrolling content never slides under the status bar. (A
+                padded scroll container can't do this: a sticky child pins to
+                the container's very top, padding included.) */}
             <SheetHeader
               eyebrow={eyebrow}
               title={headingTitle}
               onClose={handleClose}
               className={
                 presentation === "page"
-                  ? "sticky top-0 z-20 -mx-5 border-b border-neutral-200 bg-white px-5 py-3 dark:border-white/[0.08] dark:bg-neutral-950"
+                  ? "sticky top-0 z-20 -mx-5 border-b border-neutral-200 bg-white px-5 pb-3 pt-[calc(env(safe-area-inset-top)+12px)] dark:border-white/[0.08] dark:bg-neutral-950"
                   : ""
               }
             />
@@ -1520,7 +1525,7 @@ export function TaskSheet({
             animate={{ opacity: 1, x: 0 }}
             exit={{ opacity: 0, x: 28 }}
             transition={{ duration: 0.2, ease: [0.22, 1, 0.36, 1] }}
-            className="fixed inset-0 z-40 h-dvh overflow-y-auto overscroll-contain bg-[#F3F4F1] pt-[env(safe-area-inset-top)] text-neutral-900 dark:bg-[#0E0E0E] dark:text-white"
+            className="fixed inset-0 z-40 h-dvh overflow-y-auto overscroll-contain bg-[#F3F4F1] text-neutral-900 dark:bg-[#0E0E0E] dark:text-white"
             style={{ paddingBottom: "env(safe-area-inset-bottom)" }}
           >
             {sheetContent}

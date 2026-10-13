@@ -11,7 +11,7 @@
 
 import type { DayKey, Ritual, RitualCompletion } from "@/lib/useScheduleDB";
 import { localISODate, todayISO } from "@/lib/dateUtils";
-import { isRitualDayComplete } from "./ritualDayStatus";
+import { isRitualDayComplete, ritualDayProgress } from "./ritualDayStatus";
 
 // JS getDay() 0=Sunday → DayKey
 const JS_TO_DAY: DayKey[] = ["sunday", "monday", "tuesday", "wednesday", "thursday", "friday", "saturday"];
@@ -77,6 +77,18 @@ export interface RitualStats {
   /** Completed ÷ scheduled over the last ADHERENCE_WINDOW_DAYS (0–100). Today's
    * still-open slot is excluded so an in-progress day never drags it down. */
   adherencePct: number;
+  /**
+   * How many scheduled days in that same window were done — "22 times in the
+   * last 30 days". The plain count behind `adherencePct`.
+   */
+  timesDone: number;
+  /**
+   * How closely the routine was followed over that window, 0–100: each
+   * counted day contributes its own rating (a missed day contributes 0), so a
+   * run of "done, but 50%" days reads as half followed rather than perfect.
+   * Equal to `adherencePct` for a routine nobody ever rated below 100.
+   */
+  followedPct: number;
   /** Last 7 days' completion, oldest → newest — feeds the row sparkline dots. */
   dots: boolean[];
 }
@@ -123,19 +135,25 @@ export function calculateRitualStats(
   // ── Adherence over the window ───────────────────────────────────────────
   let scheduled = 0;
   let completed = 0;
+  let followedSum = 0;
   const adCursor = new Date(`${uptoISO}T00:00:00`);
   for (let i = 0; i < ADHERENCE_WINDOW_DAYS; i++) {
     const iso = localISODate(adCursor);
     if (ritualScheduledOnDate(ritual, iso, trackingStart)) {
+      const progress = ritualDayProgress(ritual, byDate.get(iso) ?? []);
       // Skip today's still-open slot so an in-progress day isn't a "miss".
-      if (!(iso === today && !completeOn(iso))) {
+      if (!(iso === today && !progress.complete)) {
         scheduled++;
-        if (completeOn(iso)) completed++;
+        if (progress.complete) {
+          completed++;
+          followedSum += progress.followed ?? 100;
+        }
       }
     }
     adCursor.setDate(adCursor.getDate() - 1);
   }
   const adherencePct = scheduled > 0 ? Math.round((completed / scheduled) * 100) : 0;
+  const followedPct = scheduled > 0 ? Math.round(followedSum / scheduled) : 0;
 
   // ── Last-7 dots (oldest → newest) ───────────────────────────────────────
   const dots: boolean[] = [];
@@ -147,7 +165,7 @@ export function calculateRitualStats(
 
   const bestStreak = Math.max(streak, calculateBestStreak(ritual, completions, uptoISO, trackingStart));
 
-  return { streak, bestStreak, adherencePct, dots };
+  return { streak, bestStreak, adherencePct, timesDone: completed, followedPct, dots };
 }
 
 /**

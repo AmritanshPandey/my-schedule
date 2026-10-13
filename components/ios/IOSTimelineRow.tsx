@@ -17,6 +17,18 @@ import { formatSlotsDuration, formatDisplayTime } from "@/lib/timeUtils";
 import { useLongPress } from "@/lib/useLongPress";
 import { haptic } from "@/lib/haptics";
 
+/** "10:30 AM" → digits at full size, the period a step smaller beside them. */
+function TimeLabel({ value }: { value: string }) {
+  const match = /^(.*?)\s*(AM|PM)$/i.exec(value);
+  if (!match) return <>{value}</>;
+  return (
+    <span>
+      {match[1]}
+      <span className="ml-[2px] text-[10px] font-bold">{match[2].toUpperCase()}</span>
+    </span>
+  );
+}
+
 interface IOSTimelineRowProps {
   task: Task;
   linkedPlan: Plan | null;
@@ -191,8 +203,10 @@ export default function IOSTimelineRow({
   return (
     <div className="flex items-stretch gap-3 pb-3" {...longPress.clickGuard}>
       {/* Time — centered on the card so the whole row shares one baseline. */}
-      <div className="flex w-[52px] shrink-0 items-center justify-end text-right text-[13px] font-semibold tabular-nums leading-none text-neutral-500 dark:text-neutral-400">
-        {timeLabel}
+      {/* One line, always: the period sits smaller beside the digits, the way
+          iOS Calendar sets it, so "10:30 AM" never wraps in the gutter. */}
+      <div className="flex w-[56px] shrink-0 items-center justify-end whitespace-nowrap text-right text-[13px] font-semibold tabular-nums leading-none text-neutral-500 dark:text-neutral-400">
+        <TimeLabel value={timeLabel} />
       </div>
 
       {/* Rail: one continuous line behind a vertically-centered node. The line
