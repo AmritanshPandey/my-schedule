@@ -24,8 +24,8 @@ export const TOUR_STEPS: Record<TourId, CoachMarkStep[]> = {
     },
     {
       target: "new-item-button",
-      title: "Add anything, anytime",
-      body: "Create a task, plan, or habit from here — wherever you are in the app.",
+      title: "Add to your day",
+      body: "Put a new task on the schedule from here. Plans and routines each have their own add button.",
     },
   ],
   plans: [

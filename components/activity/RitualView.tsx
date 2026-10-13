@@ -430,6 +430,7 @@ export default function RitualView({
               )}
               <CtaActionButton
                 label="Add routine"
+                tour="new-item-button"
                 icon={<IconPlus size={14} strokeWidth={2.5} />}
                 onClick={() => { haptic("medium"); onAddOpenChange(true); }}
               />

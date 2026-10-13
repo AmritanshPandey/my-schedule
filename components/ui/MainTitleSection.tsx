@@ -92,15 +92,19 @@ export function CtaActionButton({
   label,
   icon,
   onClick,
+  tour,
 }: {
   label: string;
   icon?: React.ReactNode;
   onClick: () => void;
+  /** `data-tour` id, when a coach-mark step points at this button. */
+  tour?: string;
 }) {
   return (
     <button
       type="button"
       onClick={onClick}
+      data-tour={tour}
       className="inline-flex items-center gap-2 rounded-full border-[1.5px] border-neutral-200 bg-white px-4 min-h-[44px] py-[10px] text-[13px] font-bold text-neutral-700 transition-colors hover:bg-neutral-100 active:scale-[0.97] dark:border-white/15 dark:bg-neutral-900 dark:text-neutral-300 dark:hover:bg-neutral-800"
     >
       {icon}
