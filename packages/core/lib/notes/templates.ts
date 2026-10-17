@@ -1,40 +1,43 @@
-import {
-  IconActivity,
-  IconBrain,
-  IconCalendarEvent,
-  IconMoon,
-  IconNote,
-  IconRepeat,
-  IconSalad,
-  IconTargetArrow,
-  type IconProps,
-} from "@tabler/icons-react";
-import type { ComponentType } from "react";
+/**
+ * Note templates — pure data, shared by web and native. `iconName` is a Tabler
+ * icon name; lib/notes/templates.ts (web) and apps/native resolve it to their
+ * own icon components.
+ */
+export type NoteTemplateIconName =
+  | "note"
+  | "calendar-event"
+  | "repeat"
+  | "salad"
+  | "activity"
+  | "target-arrow"
+  | "moon"
+  | "brain";
 
 export interface NoteTemplate {
   id: string;
   label: string;
   description: string;
-  icon: ComponentType<IconProps>;
+  /** Tabler icon name — each app resolves it against its own icon package. */
+  iconName: NoteTemplateIconName;
   title?: string;
   tags?: string[];
   /** Seed markdown body. Empty for the blank note. */
   body: string;
 }
 
-export const NOTE_TEMPLATES: NoteTemplate[] = [
+export const NOTE_TEMPLATE_DEFS: NoteTemplate[] = [
   {
     id: "blank",
     label: "Blank note",
     description: "Start from scratch",
-    icon: IconNote,
+    iconName: "note",
     body: "",
   },
   {
     id: "daily-capture",
     label: "Daily capture",
     description: "Priorities, captures, decisions, and follow-ups",
-    icon: IconCalendarEvent,
+    iconName: "calendar-event",
     title: "Daily Capture",
     tags: ["daily"],
     body: [
@@ -55,7 +58,7 @@ export const NOTE_TEMPLATES: NoteTemplate[] = [
     id: "habit-system",
     label: "Habit system",
     description: "Cue, routine, reward, and weekly tracking",
-    icon: IconRepeat,
+    iconName: "repeat",
     title: "Habit System",
     tags: ["habits", "system"],
     body: [
@@ -86,7 +89,7 @@ export const NOTE_TEMPLATES: NoteTemplate[] = [
     id: "diet-plan",
     label: "Diet plan",
     description: "Meals, calories, macros, and prep",
-    icon: IconSalad,
+    iconName: "salad",
     title: "Diet Plan",
     tags: ["diet", "health"],
     body: [
@@ -115,7 +118,7 @@ export const NOTE_TEMPLATES: NoteTemplate[] = [
     id: "daily-operating-system",
     label: "Daily OS",
     description: "Plan the day around energy and habits",
-    icon: IconActivity,
+    iconName: "activity",
     title: "Daily OS",
     tags: ["daily", "habits"],
     body: [
@@ -140,7 +143,7 @@ export const NOTE_TEMPLATES: NoteTemplate[] = [
     id: "goal-breakdown",
     label: "Goal breakdown",
     description: "Turn a goal into systems and milestones",
-    icon: IconTargetArrow,
+    iconName: "target-arrow",
     title: "Goal Breakdown",
     tags: ["goals", "system"],
     body: [
@@ -169,7 +172,7 @@ export const NOTE_TEMPLATES: NoteTemplate[] = [
     id: "sleep-recovery",
     label: "Sleep and recovery",
     description: "Track sleep quality, routines, and recovery",
-    icon: IconMoon,
+    iconName: "moon",
     title: "Sleep and Recovery",
     tags: ["sleep", "recovery"],
     body: [
@@ -195,7 +198,7 @@ export const NOTE_TEMPLATES: NoteTemplate[] = [
     id: "mindset-reset",
     label: "Mindset reset",
     description: "Clear friction and choose the next response",
-    icon: IconBrain,
+    iconName: "brain",
     title: "Mindset Reset",
     tags: ["mindset", "reflection"],
     body: [

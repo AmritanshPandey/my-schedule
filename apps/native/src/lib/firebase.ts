@@ -13,6 +13,7 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 import { initializeApp, getApps, getApp, type FirebaseApp } from "firebase/app";
 import { initializeAuth, getReactNativePersistence, type Auth } from "firebase/auth";
 import { initializeFirestore, getFirestore, type Firestore } from "firebase/firestore";
+import { getFunctions, type Functions } from "firebase/functions";
 import { firebaseConfig, isFirebaseConfigured } from "./firebaseConfig";
 
 let _app: FirebaseApp | null = null;
@@ -45,4 +46,7 @@ function getAuthOrFallback(app: FirebaseApp): Auth {
 export { isFirebaseConfigured };
 export const auth: Auth | null = _auth;
 export const db: Firestore | null = _db;
+// Same project/region as the callables in functions/src/index.ts — keep in
+// step with lib/firebase.ts's `functions` and each onCall's `region`.
+export const functions: Functions | null = _app ? getFunctions(_app, "us-central1") : null;
 export default _app;
