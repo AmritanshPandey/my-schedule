@@ -102,8 +102,8 @@ export default function AIOnboarding({ onOpenAISettings }: { onOpenAISettings: (
               </div>
 
               <div className="flex justify-center px-5 pt-2 pb-5">
-                <div className="flex h-20 w-20 items-center justify-center rounded-2xl border border-violet-500 bg-[#AD46FF]">
-                  <IconSparkles size={36} strokeWidth={1.5} className="text-white" />
+                <div className="flex h-20 w-20 items-center justify-center rounded-2xl bg-neutral-900 dark:bg-white">
+                  <IconSparkles size={36} strokeWidth={1.5} className="text-white dark:text-neutral-900" />
                 </div>
               </div>
 
