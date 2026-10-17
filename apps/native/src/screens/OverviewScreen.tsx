@@ -108,9 +108,9 @@ export default function OverviewScreen() {
   const missedThisWeek = useMemo(() => computeExecutionTrend(schedule).currentMissed, [schedule]);
 
   const setupSteps = [
-    { label: 'Create your first plan', done: schedule.plans.length > 0, Icon: IconClipboardList, go: () => navigation.navigate('Plans') },
-    { label: "Schedule today's tasks", done: Object.values(schedule.activities).some((a) => (a?.length ?? 0) > 0), Icon: IconCalendarEvent, go: () => navigation.navigate('Today') },
-    { label: 'Build a daily routine', done: (schedule.rituals?.length ?? 0) > 0, Icon: IconRepeat, go: () => navigation.navigate('Routine') },
+    { label: 'Create your first plan', done: schedule.plans.length > 0, Icon: IconClipboardList, go: () => navigation.navigate('PlansTab' as never) },
+    { label: "Schedule today's tasks", done: Object.values(schedule.activities).some((a) => (a?.length ?? 0) > 0), Icon: IconCalendarEvent, go: () => navigation.navigate('TodayTab' as never) },
+    { label: 'Build a daily routine', done: (schedule.rituals?.length ?? 0) > 0, Icon: IconRepeat, go: () => navigation.navigate('RoutineTab' as never) },
   ];
   const setupDoneCount = setupSteps.filter((s) => s.done).length;
   const showSetup = !setupDismissed && setupDoneCount < 2;
@@ -212,7 +212,7 @@ export default function OverviewScreen() {
         </View>
 
         <Pressable
-          onPress={() => navigation.navigate('Today')}
+          onPress={() => navigation.navigate('TodayTab' as never)}
           className="min-h-[72px] flex-row items-center gap-3 rounded-2xl border border-black/[0.08] bg-white px-4 py-3 active:bg-neutral-50 dark:border-white/[0.09] dark:bg-neutral-900 dark:active:bg-white/[0.04]"
         >
           <View className="h-10 w-10 items-center justify-center rounded-xl bg-emerald-500/12">

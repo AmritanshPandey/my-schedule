@@ -1,8 +1,8 @@
 import { NavigationContainer, DarkTheme, DefaultTheme } from '@react-navigation/native';
-import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
+import { createNativeBottomTabNavigator } from '@react-navigation/bottom-tabs/unstable';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
+import type { ComponentType } from 'react';
 import { useColorScheme } from 'nativewind';
-import BottomNav from './BottomNav';
 import OverviewScreen from '../screens/OverviewScreen';
 import TodayScreen from '../screens/TodayScreen';
 import PlansScreen from '../screens/PlansScreen';
@@ -24,26 +24,83 @@ import MilestoneDetailScreen from '../screens/MilestoneDetailScreen';
 import AdaptMilestoneScreen from '../screens/AdaptMilestoneScreen';
 import { colors } from '../theme/colors';
 
-const Tab = createBottomTabNavigator();
+const Tab = createNativeBottomTabNavigator();
 const Stack = createNativeStackNavigator();
 
 /**
+ * Each tab hosts its own native stack so its screen gets a real UINavigationBar
+ * (large title, Liquid Glass bar buttons on iOS 26). Screen.tsx fills in the
+ * title and buttons via setOptions; navigating to Notes/Settings/New* bubbles
+ * up to the root stack below.
+ */
+function tabStack(name: string, Component: ComponentType) {
+  const TabStack = createNativeStackNavigator();
+  return function TabStackScreen() {
+    const { colorScheme } = useColorScheme();
+    const c = colors[colorScheme ?? 'light'];
+    return (
+      <TabStack.Navigator
+        screenOptions={{
+          headerLargeTitle: true,
+          headerLargeTitleShadowVisible: false,
+          headerShadowVisible: false,
+          headerTintColor: c.text,
+          contentStyle: { backgroundColor: c.surface },
+        }}
+      >
+        <TabStack.Screen name={name} component={Component} />
+      </TabStack.Navigator>
+    );
+  };
+}
+
+const OverviewTab = tabStack('Overview', OverviewScreen);
+const TodayTab = tabStack('Today', TodayScreen);
+const PlansTab = tabStack('Plans', PlansScreen);
+const RoutineTab = tabStack('Routine', RoutineScreen);
+const TrackingTab = tabStack('Tracking', TrackingScreen);
+
+/**
  * The 5 primary tabs from components/ios/IOSBottomNav.tsx, in the same
- * order. Settings, Notes, and its editor are off-nav stack screens (reached
- * from Header's Notes/Settings buttons, same as the web app's IOSHeader),
- * pushed above the tab navigator with the platform's native back gesture.
+ * order, rendered by UITabBarController (system tab bar — Liquid Glass on
+ * iOS 26). Settings, Notes, and its editor are off-nav stack screens pushed
+ * above the tab navigator with the platform's native back gesture.
  */
 function Tabs() {
+  const { colorScheme } = useColorScheme();
+  const c = colors[colorScheme ?? 'light'];
   return (
     <Tab.Navigator
-      tabBar={(props) => <BottomNav {...props} />}
-      screenOptions={{ headerShown: false }}
+      screenOptions={{
+        tabBarActiveTintColor: c.momentumGreen,
+        tabBarMinimizeBehavior: 'onScrollDown',
+      }}
     >
-      <Tab.Screen name="Overview" component={OverviewScreen} />
-      <Tab.Screen name="Today" component={TodayScreen} />
-      <Tab.Screen name="Plans" component={PlansScreen} />
-      <Tab.Screen name="Routine" component={RoutineScreen} />
-      <Tab.Screen name="Tracking" component={TrackingScreen} />
+      <Tab.Screen
+        name="OverviewTab"
+        component={OverviewTab}
+        options={{ title: 'Overview', tabBarIcon: { type: 'image', source: require('../assets/nav-icons/tab-overview.png') } }}
+      />
+      <Tab.Screen
+        name="TodayTab"
+        component={TodayTab}
+        options={{ title: 'Today', tabBarIcon: { type: 'image', source: require('../assets/nav-icons/tab-today.png') } }}
+      />
+      <Tab.Screen
+        name="PlansTab"
+        component={PlansTab}
+        options={{ title: 'Plans', tabBarIcon: { type: 'image', source: require('../assets/nav-icons/tab-plans.png') } }}
+      />
+      <Tab.Screen
+        name="RoutineTab"
+        component={RoutineTab}
+        options={{ title: 'Routine', tabBarIcon: { type: 'image', source: require('../assets/nav-icons/tab-routine.png') } }}
+      />
+      <Tab.Screen
+        name="TrackingTab"
+        component={TrackingTab}
+        options={{ title: 'Track', tabBarIcon: { type: 'image', source: require('../assets/nav-icons/tab-tracking.png') } }}
+      />
     </Tab.Navigator>
   );
 }
@@ -57,10 +114,10 @@ export default function RootNavigator() {
     <NavigationContainer theme={navTheme}>
       <Stack.Navigator
         screenOptions={{
-          headerStyle: { backgroundColor: c.surface },
           headerTintColor: c.text,
           headerShadowVisible: false,
-          headerTitleStyle: { fontWeight: '800' },
+          headerBackButtonDisplayMode: 'minimal',
+          contentStyle: { backgroundColor: c.surface },
         }}
       >
         <Stack.Screen name="Tabs" component={Tabs} options={{ headerShown: false }} />
@@ -76,7 +133,7 @@ export default function RootNavigator() {
         <Stack.Screen name="PlanDetail" component={PlanDetailScreen} options={{ title: '' }} />
         <Stack.Screen name="NewPlan" component={NewPlanScreen} options={{ title: 'New Plan' }} />
         <Stack.Screen name="NewTracker" component={NewTrackerScreen} options={{ title: 'New Tracker' }} />
-        <Stack.Screen name="Goals" component={GoalsScreen} options={{ headerShown: false }} />
+        <Stack.Screen name="Goals" component={GoalsScreen} options={{ headerLargeTitle: true }} />
         <Stack.Screen name="GoalDetail" component={GoalDetailScreen} options={{ title: '' }} />
         <Stack.Screen name="NewGoal" component={NewGoalScreen} options={{ title: 'New Goal' }} />
         <Stack.Screen name="NewMilestone" component={NewMilestoneScreen} options={{ title: 'Add Milestone' }} />
