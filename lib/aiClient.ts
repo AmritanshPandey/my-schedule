@@ -29,6 +29,8 @@ import { MLXProvider } from "./ai/providers/mlx";
 import { OllamaProvider } from "./ai/providers/ollama";
 import { OpenAICompatibleProvider } from "./ai/providers/openai-compatible";
 import { BrowserProvider } from "./ai/providers/browser";
+import { NativeProvider, hasNativeAI } from "./ai/providers/native";
+import { onDeviceLLMSupport } from "./ai/deviceCapability";
 import { REQUEST_TIMEOUT_MS, clampMaxTokens } from "@/lib/ai/limits";
 import type { AIMessage, AIProvider } from "./ai/types";
 
@@ -51,6 +53,10 @@ export class AiConnectionError extends Error {
 export function isAiConfigured(): boolean {
   const state = getAIProviderState();
   if (state.active === "openai-compatible") return !!state.remote.baseUrl && !!state.remote.model;
+  // On-device means the native host's model inside the iOS app, or the
+  // in-page model where the page can actually hold it — never a mobile
+  // browser (lib/ai/deviceCapability.ts).
+  if (state.active === "browser") return hasNativeAI() || onDeviceLLMSupport().supported;
   return true;
 }
 
@@ -62,7 +68,7 @@ export function activeProvider(): AIProvider {
     case "openai-compatible":
       return new OpenAICompatibleProvider(state.remote);
     case "browser":
-      return new BrowserProvider(state.browser);
+      return hasNativeAI() ? new NativeProvider() : new BrowserProvider(state.browser);
     case "mlx":
     default:
       return new MLXProvider(state.mlx);

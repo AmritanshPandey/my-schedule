@@ -154,6 +154,12 @@ function seedSchedule() {
 async function writeGuestSchedule(page: Page) {
   await page.goto("/", { waitUntil: "domcontentloaded" });
   await page.evaluate(async (schedule) => {
+    // First-run overlays aren't what these specs exercise, and both swallow
+    // clicks: the AI notice mounts a full-screen backdrop, and a running coach
+    // tour covers the page with a "Skip tour" button. Mark them seen, as for a
+    // returning user (same flags two-tabs.spec.ts sets).
+    localStorage.setItem("planr_ai_default_notice_v2", "true");
+    for (const id of ["today", "plans", "routine", "tracking"]) localStorage.setItem(`planr-tour-${id}`, "1");
     await new Promise<void>((resolve, reject) => {
       const request = indexedDB.open("daily-planner", 10);
       request.onupgradeneeded = () => {
@@ -274,8 +280,9 @@ async function expectNoBannedVisualEffects(page: Page) {
 
 async function exerciseTaskSheetInputs(page: Page, isMobile: boolean) {
   if (isMobile) {
-    await page.getByRole("button", { name: "Create" }).click();
-    await page.getByRole("button", { name: "Add task" }).click();
+    // The iPhone tab bar only navigates; Today's header adds a task.
+    await expect(page.getByRole("button", { name: "Create" })).toHaveCount(0);
+    await page.getByRole("button", { name: "Add task" }).first().click();
   } else {
     await page.getByText("New task").first().click();
   }
@@ -290,7 +297,8 @@ async function exerciseTaskSheetInputs(page: Page, isMobile: boolean) {
   await note.type("Line two");
   await expect(note).toHaveValue("Line one\nLine two");
 
-  await page.getByRole("button", { name: "One-off" }).click();
+  // The repeat picker is a SegmentedControl radiogroup.
+  await page.getByRole("radio", { name: "One-off" }).click();
   await page.getByLabel("One-off task date").fill("2026-06-26");
 
   await page.getByRole("button", { name: /Add subtask|Add step/ }).click();
@@ -332,7 +340,7 @@ async function expectOverviewDashboard(page: Page, isMobile: boolean) {
     expect(nextTaskBox!.y).toBeLessThan(summaryBox!.y);
   } else {
     await expect(page.getByTestId("overview-today-card")).toContainText("Morning Run");
-    await expect(page.getByTestId("overview-week-card")).toContainText("This Week");
+    await expect(page.getByTestId("overview-week-card")).toContainText("This week");
     await expect(page.getByTestId("overview-progress-card")).toContainText("Task completion trend");
     await expect(page.getByTestId("overview-tracking-card")).toContainText("Run Distance");
     await expect(page.getByTestId("overview-plan-card")).toContainText("Cardio");
@@ -428,7 +436,7 @@ async function expectDesktopSchedule(page: Page) {
 
   await page.getByText("Overview", { exact: true }).first().click();
   await expect(page.getByText("Overview").first()).toBeVisible();
-  await expect(page.locator("body")).toContainText("Tasks Done");
+  await expect(page.locator("body")).toContainText("Tasks done");
   await expectOverviewDashboard(page, false);
 
   await expectNoDocumentOverflow(page);
@@ -464,9 +472,13 @@ test("renders seeded schedule in the configured viewport", async ({ page }, test
 
 test("a missed task is counted and announced separately from completion", async ({ page }, testInfo) => {
   const assertNoRuntimeErrors = collectRuntimeErrors(page, testInfo);
-  test.skip(testInfo.project.name === "desktop-chromium", "Overview card verified on the mobile shell");
+  // The Today's Task card (components/today/TodayTaskList.tsx) renders on the
+  // desktop Overview. The phone project boots the iOS shell (iPhone UA), whose
+  // dashboard is a different component without this card.
+  test.skip(testInfo.project.name === "mobile-chromium", "Today's Task card renders on the desktop Overview");
 
-  await openSeededApp(page, "/?mobileShell=1");
+  await openSeededApp(page);
+  await page.getByText("Overview", { exact: true }).first().click();
 
   const card = page.getByTestId("overview-today-card");
   await expect(card).toBeVisible();
@@ -500,7 +512,9 @@ test("a missed task is counted and announced separately from completion", async 
   const details = card.getByRole("button", { name: /^Open (subtasks|task details)/ });
   await expect(details).toHaveCount(3);
   await details.first().press("Enter");
-  await expect(page.getByRole("button", { name: "Missed" })).toBeVisible();
+  // Scoped to the detail view: the Overview's own "Missed" stat and the row's
+  // missed checkbox would otherwise match a bare "Missed" too.
+  await expect(page.getByRole("dialog").getByRole("button", { name: "Mark as missed" })).toBeVisible();
 
   await expectNoBannedVisualEffects(page);
   await assertNoRuntimeErrors();

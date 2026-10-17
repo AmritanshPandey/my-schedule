@@ -26,7 +26,7 @@ import { isTaskScheduledOn, resolveOccurrence } from "./taskOccurrence";
 import { parseTimeToMinutes, toScheduleDayMinutes } from "./timeUtils";
 import { DEFAULT_TIMELINE_START_MINUTES, TIMELINE_END_MINUTES } from "./timeline/displayWindow";
 import { getWakingWindowMinutes } from "./timeline/sleepWindow";
-import { ownedMinutesByOwner, summedMinutes, type OwnedInterval } from "./timeline/intervals";
+import { mergeIntervals, ownedMinutesByOwner, summedMinutes, type OwnedInterval } from "./timeline/intervals";
 
 // Re-exported for back-compat with existing importers of this constant.
 export { DEFAULT_WAKING_START_MINUTES } from "./timeline/sleepWindow";
@@ -52,6 +52,17 @@ export interface DaySlice {
   kind: CategoryKind | "unscheduled";
 }
 
+/**
+ * One stretch of the day with nothing booked in it, in schedule-day minutes
+ * (the same coordinates as the timeline: `dayStartMinutes` up to 24 hours on,
+ * so a value of 1440 or more is past midnight).
+ */
+export interface FreeSlot {
+  start: number;
+  end: number;
+  minutes: number;
+}
+
 export interface DayBreakdown {
   /**
    * Every category with time on this day, largest first, followed by the
@@ -75,6 +86,12 @@ export interface DayBreakdown {
   overlapMinutes: number;
   /** Was any of `sleepMinutes` actually scheduled, or is it the implied fallback? */
   sleepIsScheduled: boolean;
+  /**
+   * Where the unscheduled time actually is: every gap between booked blocks
+   * across the day's window, in order. They are the exact complement of what
+   * the wedges count, so their minutes sum to `unscheduledMinutes`.
+   */
+  freeSlots: FreeSlot[];
 }
 
 export interface TaskDayMinutes {
@@ -241,6 +258,21 @@ export function buildDayBreakdown(
   const sleepIsScheduled = sleepMinutes > 0;
   const unscheduledMinutes = Math.max(0, SCHEDULE_DAY_MINUTES - committedMinutes);
 
+  // The complement of the booked union, walked across the window. Built from
+  // the same intervals the wedges are, so the slots and the "Unscheduled"
+  // figure can never disagree.
+  const freeSlots: FreeSlot[] = [];
+  const windowEnd = dayStartMinutes + SCHEDULE_DAY_MINUTES;
+  let cursor = dayStartMinutes;
+  for (const block of mergeIntervals(owned)) {
+    const start = Math.max(block.start, dayStartMinutes);
+    const end = Math.min(block.end, windowEnd);
+    if (end <= start) continue;
+    if (start > cursor) freeSlots.push({ start: cursor, end: start, minutes: start - cursor });
+    cursor = Math.max(cursor, end);
+  }
+  if (cursor < windowEnd) freeSlots.push({ start: cursor, end: windowEnd, minutes: windowEnd - cursor });
+
   const categorySlices: DaySlice[] = Array.from(minutesById.entries())
     .filter(([, minutes]) => minutes > 0)
     .map(([id, minutes]) => ({
@@ -283,7 +315,58 @@ export function buildDayBreakdown(
     unscheduledMinutes,
     overlapMinutes,
     sleepIsScheduled,
+    freeSlots,
   };
+}
+
+/** Gaps shorter than this are transitions, not time you could plan into. */
+export const MIN_FREE_SLOT_MINUTES = 15;
+
+export interface FreeSlotSummary {
+  /** Slots long enough to use, in order. */
+  usable: FreeSlot[];
+  /** How many gaps were too short to list, and their total. */
+  shortCount: number;
+  shortMinutes: number;
+}
+
+/** Split the day's gaps into ones worth naming and short in-between minutes. */
+export function summarizeFreeSlots(slots: readonly FreeSlot[], minMinutes = MIN_FREE_SLOT_MINUTES): FreeSlotSummary {
+  const usable: FreeSlot[] = [];
+  let shortCount = 0;
+  let shortMinutes = 0;
+  for (const slot of slots) {
+    if (slot.minutes >= minMinutes) usable.push(slot);
+    else {
+      shortCount += 1;
+      shortMinutes += slot.minutes;
+    }
+  }
+  return { usable, shortCount, shortMinutes };
+}
+
+function clockParts(minutes: number): { text: string; period: "AM" | "PM" } {
+  const total = ((minutes % 1440) + 1440) % 1440;
+  const h24 = Math.floor(total / 60);
+  const mm = total % 60;
+  const h = h24 % 12 || 12;
+  return { text: mm === 0 ? `${h}` : `${h}:${String(mm).padStart(2, "0")}`, period: h24 >= 12 ? "PM" : "AM" };
+}
+
+/**
+ * "12:15 – 1 PM", "11 PM – 1 AM (next day)", "4:30 – 5 AM (next day)" — a slot
+ * in schedule-day minutes as a compact clock range. The period is written once
+ * when both ends share it, and "(next day)" marks an end past midnight.
+ */
+export function formatSlotRange(start: number, end: number): string {
+  const a = clockParts(start);
+  const b = clockParts(end);
+  // Ending exactly at midnight reads "12 AM", not "the next day".
+  const startNext = start >= 1440;
+  const endNext = end > 1440;
+  const sameHalf = a.period === b.period && startNext === endNext;
+  const left = sameHalf ? a.text : `${a.text} ${a.period}`;
+  return `${left} – ${b.text} ${b.period}${endNext ? " (next day)" : ""}`;
 }
 
 export interface ActiveHours {

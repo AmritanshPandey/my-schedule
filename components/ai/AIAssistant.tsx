@@ -34,6 +34,8 @@ import type { AIActionType } from "@/lib/ai/runtime";
 import { IconLock } from "@tabler/icons-react";
 import { AIThinkingDots, AIStreamingCursor } from "@/components/ai/AIThinkingStatus";
 import { AIErrorBanner } from "@/components/ai/AIErrorBanner";
+import { analyzeExecution } from "@/lib/intelligence/patterns";
+import { buildPlanWeekContext } from "@/lib/intelligence/progressFacts";
 
 interface AIAssistantProps {
   open: boolean;
@@ -130,25 +132,17 @@ export default function AIAssistant({
     [planMilestones],
   );
 
+  // Dated outcomes from the pattern engine, not the live `completed` flag —
+  // that flag only describes today, so "this week" used to mean "today".
   const weekContext = useMemo(() => {
-    if (!selectedPlan) return "";
-    const lines: string[] = [`Plan: "${selectedPlan.title}"`];
-    let done = 0, total = 0;
-    for (const day of DAYS) {
-      const tasks = (schedule.activities[day] ?? []).filter((t) => t.planId === selectedPlan.id);
-      total += tasks.length;
-      done += tasks.filter((t) => t.completed).length;
-    }
-    lines.push(`Tasks this week: ${done}/${total} completed`);
-    if (activeMilestone) {
-      lines.push(`Active milestone: "${activeMilestone.title}" — due ${activeMilestone.plannedEndDate}`);
-    }
+    if (!selectedPlan || !open) return "";
+    const lines = [buildPlanWeekContext(analyzeExecution(schedule), selectedPlan, activeMilestone)];
     const trackers = schedule.progressTrackers.filter((t) => t.planId === selectedPlan.id);
     if (trackers.length > 0) {
       lines.push(`Trackers: ${trackers.map((t) => t.title).join(", ")}`);
     }
-    return lines.join(". ");
-  }, [selectedPlan, schedule, activeMilestone]);
+    return lines.join("\n");
+  }, [selectedPlan, schedule, activeMilestone, open]);
 
   const parsedTasksRef = useRef<AIGeneratedTask[]>([]);
   const parsedMilestonesRef = useRef<AIGeneratedMilestone[]>([]);

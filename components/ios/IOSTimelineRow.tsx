@@ -17,6 +17,18 @@ import { formatSlotsDuration, formatDisplayTime } from "@/lib/timeUtils";
 import { useLongPress } from "@/lib/useLongPress";
 import { haptic } from "@/lib/haptics";
 
+/** "10:30 AM" → digits at full size, the period a step smaller beside them. */
+function TimeLabel({ value }: { value: string }) {
+  const match = /^(.*?)\s*(AM|PM)$/i.exec(value);
+  if (!match) return <>{value}</>;
+  return (
+    <span>
+      {match[1]}
+      <span className="ml-[2px] text-[10px] font-bold">{match[2].toUpperCase()}</span>
+    </span>
+  );
+}
+
 interface IOSTimelineRowProps {
   task: Task;
   linkedPlan: Plan | null;
@@ -196,22 +208,25 @@ export default function IOSTimelineRow({
   return (
     <div className="flex items-stretch gap-3 pb-3" {...longPress.clickGuard}>
       {/* Time — centered on the card so the whole row shares one baseline.
+          One line, always: the period sits smaller beside the digits, the way
+          iOS Calendar sets it, so "10:30 AM" never wraps in the gutter.
+
           Tappable on its own, no "Edit day" mode required: retiming just the
           time is narrow and safe enough not to need that gate, unlike the
-          full editor behind the pencil. Only offered for a single-slot task —
-          a multi-slot task's per-date override can't cleanly target one
-          phase, so those rows keep a plain label. */}
+          full editor behind the pencil. Not offered when this row is one
+          phase of a multi-slot task — a per-date override can't cleanly
+          target a single phase, so those rows keep a plain label. */}
       {!readOnly && !singleSlot && onQuickRetime ? (
         <button
           type="button"
           onClick={(e) => { e.stopPropagation(); haptic("light"); onQuickRetime(); }}
-          className="flex w-[52px] shrink-0 items-center justify-end text-right text-[13px] font-semibold tabular-nums leading-none text-neutral-500 underline decoration-dotted decoration-neutral-300 underline-offset-4 transition-colors active:text-neutral-800 dark:text-neutral-400 dark:decoration-white/20 dark:active:text-neutral-100"
+          className="flex w-[56px] shrink-0 items-center justify-end whitespace-nowrap text-right text-[13px] font-semibold tabular-nums leading-none text-neutral-500 underline decoration-dotted underline-offset-4 dark:text-neutral-400"
         >
-          {timeLabel}
+          <TimeLabel value={timeLabel} />
         </button>
       ) : (
-        <div className="flex w-[52px] shrink-0 items-center justify-end text-right text-[13px] font-semibold tabular-nums leading-none text-neutral-500 dark:text-neutral-400">
-          {timeLabel}
+        <div className="flex w-[56px] shrink-0 items-center justify-end whitespace-nowrap text-right text-[13px] font-semibold tabular-nums leading-none text-neutral-500 dark:text-neutral-400">
+          <TimeLabel value={timeLabel} />
         </div>
       )}
 

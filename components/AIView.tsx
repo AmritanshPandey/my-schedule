@@ -52,6 +52,8 @@ import { MLXProvider } from "@/lib/ai/providers/mlx";
 import { OllamaProvider } from "@/lib/ai/providers/ollama";
 import { OpenAICompatibleProvider } from "@/lib/ai/providers/openai-compatible";
 import { BrowserProvider, isBrowserModelCached, browserModelDownloadLabel, BROWSER_AI_STATUS_EVENT } from "@/lib/ai/providers/browser";
+import { NativeProvider, hasNativeAI } from "@/lib/ai/providers/native";
+import { onDeviceLLMSupport } from "@/lib/ai/deviceCapability";
 import { BrowserAIStatusBar } from "@/components/ai/BrowserAIStatusBar";
 import { useAIEnabledSetting } from "@/lib/ai/useAIEnabled";
 import Toggle from "@/components/ui/Toggle";
@@ -64,7 +66,7 @@ import { SETTINGS_CONTROL_CLASS } from "@/components/ui/Input";
 function providerFor(kind: ProviderKind, config: AIProviderConfig): AIProvider {
   if (kind === "ollama") return new OllamaProvider(config);
   if (kind === "openai-compatible") return new OpenAICompatibleProvider(config);
-  if (kind === "browser") return new BrowserProvider(config);
+  if (kind === "browser") return hasNativeAI() ? new NativeProvider() : new BrowserProvider(config);
   return new MLXProvider(config);
 }
 
@@ -200,6 +202,10 @@ function ProviderForm({
   }, [kind, saved.model]);
 
   const needsDownload = kind === "browser" && downloaded === false;
+  // On-device AI on a phone browser / PWA: the model can't load here, so
+  // there's nothing to test — say why instead (lib/ai/deviceCapability.ts).
+  const deviceBlockedMessage =
+    kind === "browser" && !hasNativeAI() ? onDeviceLLMSupport().message ?? null : null;
 
   async function runTest(cfg: AIProviderConfig) {
     haptic("light");
@@ -218,7 +224,7 @@ function ProviderForm({
 
   function handleActivateAndTest() {
     onActivate();
-    if (result === null) void runTest(config);
+    if (result === null && !deviceBlockedMessage) void runTest(config);
   }
 
   async function handleDetectModels() {
@@ -272,7 +278,14 @@ function ProviderForm({
         )}
       </button>
 
-      {isActive && (
+      {isActive && deviceBlockedMessage && (
+        <div className="flex items-start gap-2 border-t border-neutral-100 px-4 py-3 dark:border-white/[0.06]">
+          <IconDeviceLaptop size={14} strokeWidth={2} className="mt-0.5 shrink-0 text-neutral-500 dark:text-neutral-400" />
+          <p className="text-[12px] font-medium leading-relaxed text-neutral-600 dark:text-neutral-300">{deviceBlockedMessage}</p>
+        </div>
+      )}
+
+      {isActive && !deviceBlockedMessage && (
         <>
           <div className="mx-4 border-t border-neutral-100 dark:border-white/[0.06]" />
           <div className="flex items-center justify-between px-4 py-2.5">

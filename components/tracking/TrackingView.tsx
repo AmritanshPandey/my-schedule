@@ -2,8 +2,16 @@
 
 import { useMemo } from "react";
 import { IconChartLine, IconPlus, IconTargetArrow, IconTrash } from "@tabler/icons-react";
-import type { MetricEntry, Plan, ProgressTracker } from "@/lib/useScheduleDB";
+import type { MetricEntry, Plan, ProgressTracker, TrackerCadence } from "@/lib/useScheduleDB";
 import { buildTrackerStat, groupTrackerStatsByPlan, trackerRampTone, type TrackerStat } from "@/lib/trackerStats";
+import {
+  buildCheckIn,
+  checkInRecordLabel,
+  checkInStatusLabel,
+  nextCheckInLabel,
+  type CheckInState,
+} from "@/lib/trackerCadence";
+import { CadenceSelect } from "@/components/tracking/CadencePicker";
 import { quickAmountsForUnit } from "@/lib/quickAmounts";
 import { todayISO } from "@/lib/dateUtils";
 import { haptic } from "@/lib/haptics";
@@ -29,6 +37,8 @@ export interface TrackingViewProps {
   /** Opens AddEntryModal for an arbitrary value or a back-dated entry. */
   onOpenAddEntry: (tracker: ProgressTracker) => void;
   onDeleteEntry: (entryId: string) => void;
+  /** Change how often a tracker asks for an entry. */
+  onSetCadence: (trackerId: string, cadence: TrackerCadence) => void;
   /** Sends the user to Plans, the only place a tracker can be created. */
   onNavigateToPlans: () => void;
 }
@@ -83,19 +93,91 @@ function TargetRing({ percent, met }: { percent: number; met: boolean }) {
   );
 }
 
+/** "Last logged 9 days ago" — how long the record has been quiet. */
+function lastLoggedLabel(lastDate: string | null, todayISO: string): string | null {
+  if (!lastDate) return null;
+  const days = Math.round(
+    (new Date(`${todayISO}T00:00:00`).getTime() - new Date(`${lastDate}T00:00:00`).getTime()) / 86_400_000,
+  );
+  if (days <= 0) return "Last logged today";
+  if (days === 1) return "Last logged yesterday";
+  return `Last logged ${days} days ago`;
+}
+
+/**
+ * The tracker's rhythm, in one line: how often, whether this period's entry
+ * is in, when the next is wanted, and the honest record behind it.
+ */
+function CheckInRow({
+  state,
+  trackerTitle,
+  onSetCadence,
+}: {
+  state: CheckInState;
+  trackerTitle: string;
+  onSetCadence: (cadence: TrackerCadence) => void;
+}) {
+  const record = checkInRecordLabel(state);
+  return (
+    <div className="mt-3 space-y-2">
+      <div className="flex items-center justify-between gap-3">
+        <p className={`min-w-0 truncate text-[13px] font-bold ${
+          state.overdue
+            ? "text-rose-700 dark:text-rose-400"
+            : state.due
+              ? "text-amber-800 dark:text-amber-300"
+              : "text-emerald-700 dark:text-emerald-400"
+        }`}>
+          {checkInStatusLabel(state)}
+          {!state.due && (
+            <span className="font-semibold text-neutral-500 dark:text-neutral-400"> · next {nextCheckInLabel(state)}</span>
+          )}
+        </p>
+        {/* The last few periods, oldest first. Hollow before first use. */}
+        <div className="flex shrink-0 items-center gap-1" aria-hidden="true">
+          {state.history.map((period) => (
+            <span
+              key={period.start}
+              className={`h-2 w-2 rounded-full ${
+                period.logged === null
+                  ? "border border-neutral-300 dark:border-white/[0.15]"
+                  : period.logged
+                    ? "bg-green-500"
+                    : "bg-neutral-200 dark:bg-white/10"
+              }`}
+            />
+          ))}
+        </div>
+      </div>
+      <div className="flex items-center gap-3">
+        <CadenceSelect value={state.cadence} onChange={onSetCadence} trackerTitle={trackerTitle} />
+        {record && (
+          <p className="min-w-0 text-[12px] font-medium leading-snug text-neutral-500 dark:text-neutral-400">
+            {record}{state.streak >= 2 ? ` · ${state.streak} in a row` : ""}
+          </p>
+        )}
+      </div>
+    </div>
+  );
+}
+
 function MetricCard({
   stat,
+  checkIn,
   plan,
   onLog,
   onOpenAddEntry,
   onDeleteEntry,
+  onSetCadence,
 }: {
   stat: TrackerStat;
+  checkIn: CheckInState;
   /** Supplies the chart's accent, so a metric matches the plan it serves. */
   plan: Plan | null;
   onLog: TrackingViewProps["onLog"];
   onOpenAddEntry: TrackingViewProps["onOpenAddEntry"];
   onDeleteEntry: TrackingViewProps["onDeleteEntry"];
+  onSetCadence: TrackingViewProps["onSetCadence"];
 }) {
   const { tracker } = stat;
   const unit = tracker.unit?.trim() ?? "";
@@ -168,6 +250,12 @@ function MetricCard({
         </div>
 
       </div>
+
+      <CheckInRow
+        state={checkIn}
+        trackerTitle={tracker.title}
+        onSetCadence={(cadence) => onSetCadence(tracker.id, cadence)}
+      />
 
       {/* The chart, shown by default rather than behind a tap: a tracker's whole
           point is the shape of the line, and a card that hides it is a list
@@ -263,6 +351,7 @@ export default function TrackingView({
   onLog,
   onOpenAddEntry,
   onDeleteEntry,
+  onSetCadence,
   onNavigateToPlans,
 }: TrackingViewProps) {
   const today = todayISO();
@@ -273,9 +362,25 @@ export default function TrackingView({
     return groupTrackerStatsByPlan(stats, plansById);
   }, [trackers, metricEntries, today, trackingStart, plansById]);
 
-  const loggedToday = useMemo(
-    () => groups.reduce((sum, g) => sum + g.stats.filter((s) => s.todayCount > 0).length, 0),
-    [groups],
+  const checkIns = useMemo(
+    () => new Map(trackers.map((t) => [t.id, buildCheckIn(t, metricEntries, today, trackingStart)])),
+    [trackers, metricEntries, today, trackingStart],
+  );
+
+  // Each tracker asks once per its own period, so "done" here means this
+  // period's entry is in — a weekly weigh-in done on Monday counts all week.
+  const checkedIn = useMemo(
+    () => [...checkIns.values()].filter((c) => c.loggedThisPeriod).length,
+    [checkIns],
+  );
+
+  const due = useMemo(
+    () =>
+      trackers
+        .map((tracker, index) => ({ tracker, state: checkIns.get(tracker.id)!, index }))
+        .filter(({ state }) => state.due)
+        .sort((a, b) => Number(b.state.overdue) - Number(a.state.overdue) || a.index - b.index),
+    [trackers, checkIns],
   );
 
   return (
@@ -284,7 +389,7 @@ export default function TrackingView({
         <MainTitleSection
           label="Keep the record honest"
           title="Tracking"
-          progressMeta={trackers.length > 0 ? { done: loggedToday, total: trackers.length } : undefined}
+          progressMeta={trackers.length > 0 ? { done: checkedIn, total: trackers.length } : undefined}
           className="mb-6"
         />
 
@@ -292,11 +397,50 @@ export default function TrackingView({
           <EmptyState
             icon={IconChartLine}
             title="Nothing to track yet"
-            description="Add a progress tracker to any plan — weight, distance, a score — and it shows up here to log every day."
+            description="Add a progress tracker to any plan — weight, distance, a score — set how often to check in, and it shows up here when an entry is due."
             action={{ label: "Go to Plans", onClick: onNavigateToPlans, icon: IconTargetArrow }}
           />
         ) : (
           <div className="flex flex-col gap-6">
+            {/* What's waiting on an entry, first — the reason to open this page. */}
+            {due.length > 0 && (
+              <section data-testid="tracking-due" aria-labelledby="tracking-due-title" className={`${CARD} px-4 py-3`}>
+                <div className="flex items-baseline justify-between gap-3">
+                  <h2 id="tracking-due-title" className="text-[15px] font-extrabold text-neutral-950 dark:text-white">
+                    Check-ins due
+                  </h2>
+                  <span className="text-[12px] font-bold tabular-nums text-neutral-500 dark:text-neutral-400">{due.length}</span>
+                </div>
+                <ul className="mt-1 divide-y divide-neutral-100 dark:divide-white/[0.06]">
+                  {due.map(({ tracker, state }) => {
+                    const last = lastLoggedLabel(state.lastLoggedDate, today);
+                    return (
+                      <li key={tracker.id} className="flex items-center gap-3 py-2.5">
+                        <div className="min-w-0 flex-1">
+                          <p className="truncate text-[14px] font-bold text-neutral-900 dark:text-white">{tracker.title}</p>
+                          <p className="truncate text-[12px] font-medium text-neutral-500 dark:text-neutral-400">
+                            <span className={state.overdue ? "font-bold text-rose-700 dark:text-rose-400" : "font-bold text-amber-800 dark:text-amber-300"}>
+                              {checkInStatusLabel(state)}
+                            </span>
+                            {last ? ` · ${last}` : " · Not logged yet"}
+                          </p>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => { haptic("light"); onOpenAddEntry(tracker); }}
+                          aria-label={`Log ${tracker.title}`}
+                          className="inline-flex h-11 shrink-0 items-center gap-1.5 rounded-full bg-neutral-950 px-4 text-[13px] font-extrabold text-white transition-colors hover:bg-neutral-800 dark:bg-white dark:text-neutral-950 dark:hover:bg-neutral-200"
+                        >
+                          <IconPlus size={14} strokeWidth={2.6} />
+                          Log
+                        </button>
+                      </li>
+                    );
+                  })}
+                </ul>
+              </section>
+            )}
+
             {groups.map((group, i) => (
               <section key={group.plan?.id ?? `ungrouped-${i}`}>
                 <h2 className="mb-2 text-[11px] font-bold uppercase tracking-[0.08em] text-neutral-600 dark:text-neutral-400">
@@ -307,10 +451,12 @@ export default function TrackingView({
                     <MetricCard
                       key={stat.tracker.id}
                       stat={stat}
+                      checkIn={checkIns.get(stat.tracker.id)!}
                       plan={group.plan}
                       onLog={onLog}
                       onOpenAddEntry={onOpenAddEntry}
                       onDeleteEntry={onDeleteEntry}
+                      onSetCadence={onSetCadence}
                     />
                   ))}
                 </div>

@@ -43,6 +43,8 @@ lib/
   reminders.ts           Local timer-based notifications
   consistency/ strategy/ timeline/ ai/ …
   ai/providers/browser.ts Transformers.js inference (main thread, WebGPU/WASM)
+  ai/deviceCapability.ts Where an on-device model may load (never mobile web)
+  intelligence/          Pattern engine, suggestions, builder checks, progress note
 ```
 
 **Data model.** One `Schedule` document holds Plans, Tasks (on weekday
@@ -109,6 +111,20 @@ Transformers.js (WebGPU, falling back to WASM) — no server, no API key.
 MLX, Ollama, and OpenAI-compatible providers are also supported for anyone
 running their own local/hosted model. See `docs/fine-tuning.md` for how to
 fine-tune the Browser AI model on real usage data.
+
+**Execution intelligence** (`lib/intelligence/`) is the layer that thinks for
+the user without taking over: a deterministic pattern engine spots tasks that
+keep slipping, plans gone quiet, overloaded weeks and real wins, and proposes
+reviewable fixes (move a task to a slot you actually finish in, shorten it,
+pause a plan) that apply only when accepted and can be undone. Inline hints
+check goals, milestones and tasks as they're written. The on-device model only
+rewrites the weekly progress note, and its draft is discarded if it cites a
+number the facts don't contain.
+
+The in-page model runs on desktop and, via a native bridge, inside the iOS app —
+never in a phone browser or mobile PWA, where loading it would crash the tab
+(`lib/ai/deviceCapability.ts`). Everything deterministic still works there. See
+`docs/intelligence.md` for the architecture, model choice and the iOS bridge.
 
 ## Design
 

@@ -26,6 +26,50 @@ export function toggleRitualCompletion(
   return [...completions, { ritualId, date: dateISO }];
 }
 
+// ── Mark done + how closely it was followed ─────────────────────────────────
+
+const isDayMark = (c: RitualCompletion, ritualId: string, dateISO: string) =>
+  c.ritualId === ritualId && c.date === dateISO && c.value === undefined && c.stepId === undefined;
+
+/**
+ * Mark a routine done for a day — the one tap every routine type shares —
+ * and record how closely it was followed (1–100; 100 when not given).
+ *
+ * Writes the same bare `{ritualId, date}` day-mark the checkbox toggle always
+ * has, so streaks, calendars and sync read it with no new rules; `followed` is
+ * omitted at 100 to keep that row byte-identical to a legacy one. Re-marking
+ * replaces the rating in place rather than adding a second mark, and any
+ * amounts or ticked steps already logged that day are left alone.
+ */
+export function markRitualDone(
+  completions: RitualCompletion[],
+  ritualId: string,
+  dateISO: string,
+  followed = 100,
+): RitualCompletion[] {
+  const pct = Math.max(1, Math.min(100, Math.round(Number.isFinite(followed) ? followed : 100)));
+  const mark: RitualCompletion = pct === 100 ? { ritualId, date: dateISO } : { ritualId, date: dateISO, followed: pct };
+  const existing = completions.findIndex((c) => isDayMark(c, ritualId, dateISO));
+  if (existing === -1) return [...completions, mark];
+  const prev = completions[existing];
+  // Keep the row's identity (and any note) so sync sees an edit, not a swap.
+  const next: RitualCompletion = { ...prev };
+  delete next.followed;
+  if (pct !== 100) next.followed = pct;
+  return completions
+    .filter((c, i) => i === existing || !isDayMark(c, ritualId, dateISO))
+    .map((c) => (c === prev ? next : c));
+}
+
+/**
+ * Take back an explicit "done" for a day. Only the day-mark goes: logged
+ * amounts and ticked steps are real records of what happened and stay, so a
+ * routine that reached its target through logging remains done.
+ */
+export function unmarkRitualDone(completions: RitualCompletion[], ritualId: string, dateISO: string): RitualCompletion[] {
+  return completions.filter((c) => !isDayMark(c, ritualId, dateISO));
+}
+
 // ── Quantity / duration / count logging ────────────────────────────────────
 
 /** Appends one log event for a quantity/duration/count routine. Always adds

@@ -7,12 +7,15 @@ import { haptic } from "@/lib/haptics";
 import { PLAN_NEUTRAL } from "@/lib/colorSystem";
 import { sumEntriesForDate } from "@/lib/metricEntries";
 import { todayISO } from "@/lib/dateUtils";
+import { buildCheckIn, checkInStatusLabel } from "@/lib/trackerCadence";
 import type { Plan, ProgressTracker, MetricEntry } from "@/lib/useScheduleDB";
 
 interface TrackerQuickBarProps {
   trackers: ProgressTracker[];
   plans: Plan[];
   metricEntries: MetricEntry[];
+  /** `preferences.startDate` — entries before it don't count as a check-in. */
+  trackingStart?: string;
   onLog: (tracker: ProgressTracker) => void;
   onNavigate: (planId: string) => void;
 }
@@ -21,6 +24,7 @@ export default function TrackerQuickBar({
   trackers,
   plans,
   metricEntries,
+  trackingStart,
   onLog,
   onNavigate,
 }: TrackerQuickBarProps) {
@@ -42,6 +46,20 @@ export default function TrackerQuickBar({
     [plans]
   );
 
+  // Waiting on an entry this period first (overdue before merely due), so the
+  // strip leads with what to log rather than with whatever was added first.
+  const ordered = useMemo(
+    () =>
+      trackers
+        .map((tracker, index) => ({ tracker, index, checkIn: buildCheckIn(tracker, metricEntries, today, trackingStart) }))
+        .sort((a, b) =>
+          Number(b.checkIn.due) - Number(a.checkIn.due) ||
+          Number(b.checkIn.overdue) - Number(a.checkIn.overdue) ||
+          a.index - b.index,
+        ),
+    [trackers, metricEntries, today, trackingStart],
+  );
+
   if (trackers.length === 0) return null;
 
   return (
@@ -53,8 +71,12 @@ export default function TrackerQuickBar({
 
       {/* Horizontal scroll row */}
       <div className="flex gap-2 overflow-x-auto pb-0.5 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
-        {trackers.map((tracker) => {
-          const dotClass = PLAN_NEUTRAL.dot;
+        {ordered.map(({ tracker, checkIn }) => {
+          const dotClass = checkIn.overdue
+            ? "bg-rose-500"
+            : checkIn.due
+              ? "bg-amber-500"
+              : PLAN_NEUTRAL.dot;
           const lastEntry = lastEntryByTracker.get(tracker.id);
           const todayTotal = sumEntriesForDate(metricEntries, tracker.id, today);
           const lastValueDisplay = todayTotal > 0
@@ -89,7 +111,13 @@ export default function TrackerQuickBar({
                     {tracker.title}
                   </p>
                   <p className="text-[11px] text-neutral-500 dark:text-neutral-400 leading-tight tabular-nums">
-                    {lastValueDisplay}
+                    {checkIn.due ? (
+                      <span className={`font-bold ${checkIn.overdue ? "text-rose-700 dark:text-rose-400" : "text-amber-800 dark:text-amber-300"}`}>
+                        {checkInStatusLabel(checkIn)}
+                      </span>
+                    ) : (
+                      lastValueDisplay
+                    )}
                   </p>
                 </div>
               </button>

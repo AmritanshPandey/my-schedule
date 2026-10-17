@@ -112,12 +112,36 @@ async function suppressFirstRun(page: Page) {
 }
 
 /**
- * The completion toggle inside the card for `title`.
+ * The mobile project sends an iPhone user agent, so the app boots the iOS
+ * shell (components/ios/IOSScheduleApp.tsx): it lands on its dashboard, and
+ * each task row's toggle is a "Mark done" / "Mark not done" button beside the
+ * card rather than a toggle inside it. Desktop keeps the week-grid cards.
+ */
+const IOS_TOGGLE = /^Mark (not )?done$/;
+
+/** Get to where today's tasks are listed. */
+async function showTodayTasks(page: Page, isMobile: boolean) {
+  if (!isMobile) return;
+  await page.getByRole("navigation", { name: "Main navigation" }).getByRole("button", { name: "Today" }).click();
+}
+
+/**
+ * The completion toggle for `title`.
  *
  * A task renders in more than one place (week grid block and list row), so
- * `.first()` on a bare aria-label is not stable — scope to the card first.
+ * `.first()` on a bare aria-label is not stable — scope to the task first. On
+ * the iOS shell, the innermost element holding both the title and a toggle is
+ * that task's timeline row.
  */
-function toggleFor(page: Page, title: string) {
+function toggleFor(page: Page, title: string, isMobile: boolean) {
+  if (isMobile) {
+    return page
+      .locator("div")
+      .filter({ has: page.getByText(title, { exact: true }) })
+      .filter({ has: page.getByRole("button", { name: IOS_TOGGLE }) })
+      .last()
+      .getByRole("button", { name: IOS_TOGGLE });
+  }
   return page
     .locator('[role="button"]')
     .filter({ hasText: title })
@@ -125,12 +149,21 @@ function toggleFor(page: Page, title: string) {
     .first();
 }
 
+/** Assert a toggle shows `done`, in whichever shell's vocabulary it speaks. */
+async function expectDone(toggle: ReturnType<typeof toggleFor>, done: boolean, isMobile: boolean, timeout: number) {
+  if (isMobile) {
+    await expect(toggle).toHaveAttribute("aria-pressed", String(done), { timeout });
+  } else {
+    await expect(toggle).toHaveAttribute("aria-label", done ? /^completed/i : /not completed/i, { timeout });
+  }
+}
+
 /** Click a task's toggle and confirm the UI actually registered it. */
-async function complete(page: Page, title: string) {
-  const toggle = toggleFor(page, title);
-  await expect(toggle).toHaveAttribute("aria-label", /not completed/i, { timeout: 10_000 });
+async function complete(page: Page, title: string, isMobile: boolean) {
+  const toggle = toggleFor(page, title, isMobile);
+  await expectDone(toggle, false, isMobile, 10_000);
   await toggle.click();
-  await expect(toggle).toHaveAttribute("aria-label", /^completed/i, { timeout: 5_000 });
+  await expectDone(toggle, true, isMobile, 5_000);
 }
 
 async function dismissOverlays(page: Page) {
@@ -140,7 +173,7 @@ async function dismissOverlays(page: Page) {
   }
 }
 
-test("two tabs editing different tasks keep both edits", async ({ browser }) => {
+test("two tabs editing different tasks keep both edits", async ({ browser, isMobile }) => {
   const context = await browser.newContext();
   const tabA = await context.newPage();
   await seedGuest(tabA);
@@ -152,18 +185,20 @@ test("two tabs editing different tasks keep both edits", async ({ browser }) => 
   await tabB.goto("/", { waitUntil: "domcontentloaded" });
   await dismissOverlays(tabA);
   await dismissOverlays(tabB);
+  await showTodayTasks(tabA, isMobile);
+  await showTodayTasks(tabB, isMobile);
 
   // Both tabs must be showing the seeded data before either edits, or this
   // tests nothing: the whole point is that each holds its own stale copy.
   await expect(tabA.getByText("Alpha").first()).toBeVisible({ timeout: 15_000 });
   await expect(tabB.getByText("Beta").first()).toBeVisible({ timeout: 15_000 });
 
-  await complete(tabA, "Alpha");
+  await complete(tabA, "Alpha", isMobile);
   await tabA.waitForTimeout(1_200); // clear the 500ms write debounce
 
   // Tab B still holds its pre-edit tree here — this is the write that used to
   // erase Tab A's work.
-  await complete(tabB, "Beta");
+  await complete(tabB, "Beta", isMobile);
   await tabB.waitForTimeout(1_500);
 
   const stored = await storedCompletions(tabA);
@@ -180,7 +215,7 @@ test("two tabs editing different tasks keep both edits", async ({ browser }) => 
   await context.close();
 });
 
-test("an idle tab catches up without a reload", async ({ browser }) => {
+test("an idle tab catches up without a reload", async ({ browser, isMobile }) => {
   const context = await browser.newContext();
   const tabA = await context.newPage();
   await seedGuest(tabA);
@@ -191,14 +226,16 @@ test("an idle tab catches up without a reload", async ({ browser }) => {
   await tabB.goto("/", { waitUntil: "domcontentloaded" });
   await dismissOverlays(tabA);
   await dismissOverlays(tabB);
+  await showTodayTasks(tabA, isMobile);
+  await showTodayTasks(tabB, isMobile);
 
-  const alphaInB = toggleFor(tabB, "Alpha");
-  await expect(alphaInB).toHaveAttribute("aria-label", /not completed/i, { timeout: 15_000 });
+  const alphaInB = toggleFor(tabB, "Alpha", isMobile);
+  await expectDone(alphaInB, false, isMobile, 15_000);
 
-  await complete(tabA, "Alpha");
+  await complete(tabA, "Alpha", isMobile);
 
   // Tab B is never touched or reloaded; the cross-tab channel has to reach it.
-  await expect(alphaInB).toHaveAttribute("aria-label", /^completed/i, { timeout: 10_000 });
+  await expectDone(alphaInB, true, isMobile, 10_000);
 
   await context.close();
 });

@@ -166,6 +166,7 @@ export const ProgressTrackerSchema = z.object({
   goalValue: z.number().finite().optional(),
   startingValue: z.number().finite().optional(),
   dailyTarget: z.number().finite().optional(),
+  cadence: z.enum(["daily", "weekly", "monthly", "yearly"]).optional(),
 }).passthrough();
 
 export const MetricEntrySchema = z.object({
@@ -200,7 +201,7 @@ export const MilestoneSchema = z.object({
 }).passthrough();
 
 const ritualTrackingType = z.enum(["checkbox", "quantity", "duration", "count", "checklist", "times"]);
-const ritualStep = z.object({ id: nonEmptyId, label: z.string() }).passthrough();
+const ritualStep = z.object({ id: nonEmptyId, label: z.string(), time: z.string().optional() }).passthrough();
 const ritualRecurrence = z.object({
   kind: z.enum(["daily", "weekdays", "weekends", "custom", "interval"]),
   days: z.array(dayKey).optional(),
@@ -236,6 +237,9 @@ export const RitualCompletionSchema = z.object({
   value: z.number().finite().optional(),
   stepId: nonEmptyId.optional(),
   note: z.string().optional(),
+  // Range-clamped where it is read (ritualDayProgress), not rejected here: one
+  // out-of-range number must never fail a whole schedule's validation.
+  followed: z.number().finite().optional(),
 }).passthrough();
 
 export const NoteSchema = z.object({

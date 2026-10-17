@@ -92,6 +92,29 @@ function shiftISO(iso: string, days: number): string {
 // ── Mutations ────────────────────────────────────────────────────────────────
 
 /**
+ * Add keys to `acknowledgedAttention`, pruned and capped exactly like every
+ * other dismissal. For callers outside this card that keep their own
+ * date-suffixed keys in the same synced set (lib/intelligence/suggestions.ts).
+ */
+export function appendAttentionKeys(
+  schedule: Schedule,
+  keys: readonly string[],
+  todayISO: string,
+): Schedule {
+  if (keys.length === 0) return schedule;
+  return {
+    ...schedule,
+    preferences: {
+      ...schedule.preferences,
+      acknowledgedAttention: prune(
+        [...(schedule.preferences?.acknowledgedAttention ?? []), ...keys],
+        todayISO,
+      ),
+    },
+  };
+}
+
+/**
  * How many rows `dismissAllAttention` would actually clear.
  *
  * The card's own `total` is the right number to show *before* the action, but

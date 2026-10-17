@@ -57,6 +57,37 @@ textarea {
   font-size: max(16px, 1em) !important;
 }
 
+/* 9. Native date & time fields size like every other input.
+   iOS Safari (and so the installed PWA) draws input[type=date|time|…] as a
+   native control with its own intrinsic width that ignores `width: 100%`: in
+   a two-column grid or a narrow sheet it runs past its container's right edge.
+   Dropping the native appearance lets the field take the width its classes
+   give it. iOS also centres the value inside the field and collapses an empty
+   one to zero height; both are undone on the inner value box. Layered as
+   `base` so a width or min-width utility on a particular field still wins. */
+@layer base {
+  input[type="date"],
+  input[type="time"],
+  input[type="datetime-local"],
+  input[type="month"],
+  input[type="week"] {
+    -webkit-appearance: none;
+    appearance: none;
+    min-width: 0;
+    max-width: 100%;
+    box-sizing: border-box;
+  }
+  input[type="date"]::-webkit-date-and-time-value,
+  input[type="time"]::-webkit-date-and-time-value,
+  input[type="datetime-local"]::-webkit-date-and-time-value,
+  input[type="month"]::-webkit-date-and-time-value,
+  input[type="week"]::-webkit-date-and-time-value {
+    min-height: 1.5em;
+    margin: 0;
+    text-align: left;
+  }
+}
+
 /* The native dropdown LIST needs an explicit surface — an unstyled <option>
    can render white-on-white in dark mode.
    Scope this to <option> only. Applying it to <select> as well silently
@@ -644,6 +675,47 @@ nav[aria-label="Main navigation"] {
    PlanCard delete and several sheet close buttons). The ::before hit-area still
    works whether the host ends up relative or absolute, since both are
    positioned ancestors for it. */
+/* ── Liquid glass ─────────────────────────────────────────────────────────────
+   The material of the iPhone's own floating tab bar: a translucent capsule
+   that blurs and brightens what scrolls beneath it, a bright specular edge
+   along its top, a hairline that separates it from busy content, and the Nav
+   lift. For genuinely floating chrome only (DESIGN.md §4) — anything using it
+   carries `data-glass`. Where the blur isn't available, or the user asked for
+   less transparency, it falls back to a near-opaque surface so labels keep
+   their contrast. */
+@layer components {
+  .liquid-glass {
+    background-color: rgb(255 255 255 / 0.58);
+    -webkit-backdrop-filter: blur(24px) saturate(1.9) brightness(1.04);
+    backdrop-filter: blur(24px) saturate(1.9) brightness(1.04);
+    border: 1px solid rgb(255 255 255 / 0.75);
+    box-shadow:
+      inset 0 1px 0 rgb(255 255 255 / 0.9),
+      inset 0 -0.5px 0 rgb(0 0 0 / 0.05),
+      0 0 0 0.5px rgb(0 0 0 / 0.08),
+      var(--pr-shadow-nav);
+  }
+  .dark .liquid-glass {
+    background-color: rgb(44 44 46 / 0.52);
+    -webkit-backdrop-filter: blur(24px) saturate(1.8) brightness(1.1);
+    backdrop-filter: blur(24px) saturate(1.8) brightness(1.1);
+    border-color: rgb(255 255 255 / 0.13);
+    box-shadow:
+      inset 0 1px 0 rgb(255 255 255 / 0.18),
+      inset 0 -0.5px 0 rgb(255 255 255 / 0.04),
+      0 0 0 0.5px rgb(0 0 0 / 0.55),
+      var(--pr-shadow-nav);
+  }
+  @supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
+    .liquid-glass { background-color: rgb(250 250 250 / 0.97); }
+    .dark .liquid-glass { background-color: rgb(28 28 30 / 0.97); }
+  }
+  @media (prefers-reduced-transparency: reduce) {
+    .liquid-glass { background-color: rgb(250 250 250 / 0.97); }
+    .dark .liquid-glass { background-color: rgb(28 28 30 / 0.97); }
+  }
+}
+
 @layer components {
   .tap-target {
     position: relative;

@@ -37,6 +37,7 @@ import { DEFAULT_BROWSER_CONFIG } from "../config";
 import type { AIConnectionTestResult, AIGenerateOptions, AIMessage, AIProvider, AIProviderConfig } from "../types";
 import { rewriteForBrowserModel } from "./browserPrompts";
 import { captureInteraction, isCaptureEnabled } from "../capture";
+import { onDeviceLLMSupport, OnDeviceModelUnavailableError } from "../deviceCapability";
 import type { TextGenerationPipeline, PreTrainedTokenizer } from "@huggingface/transformers";
 
 // ─── Status event ────────────────────────────────────────────────────────────
@@ -178,6 +179,11 @@ let _initPromise: Promise<TextGenerationPipeline> | null = null;
 let _loadedModel = "";
 
 async function getPipeline(model: string): Promise<TextGenerationPipeline> {
+  // The last line of defence: whatever UI path asked, never pull the weights
+  // into a page that would be killed for it (see lib/ai/deviceCapability.ts).
+  const support = onDeviceLLMSupport();
+  if (!support.supported) throw new OnDeviceModelUnavailableError(support);
+
   // Return the cached pipeline if the model hasn't changed.
   if (_pipeline && _loadedModel === model) return _pipeline;
 

@@ -60,6 +60,8 @@ import { constrainTaskToPlanWindow } from "@/lib/planTaskWindow";
 import { PlanSelector } from "./PlanSelector";
 import SubtaskDraftRow, { type SubtaskDraft } from "./SubtaskDraftRow";
 import { validateTaskSlots } from "@/lib/scheduleRules";
+import BuilderHints from "@/components/intelligence/BuilderHints";
+import { buildTaskReviewContext, reviewTaskDraft, type BuilderHint } from "@/lib/intelligence/builderChecks";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -273,10 +275,12 @@ export function TaskSheet({
   const { isGuest } = useAuth();
   const aiEnabled = useAIEnabled();
   const keepBackdropLight = mode === "create" && (!!initialStartTime || !!initialEndTime);
-  // Needs AI switched on and a signed-in user — hidden rather than
-  // shown-and-blocked, since this is a small inline affordance with no room
-  // for its own gate card.
-  const canExpand = aiEnabled && !isGuest;
+  // Needs AI switched on, a signed-in user, and a provider that can actually
+  // run here — hidden rather than shown-and-blocked, since this is a small
+  // inline affordance with no room for its own gate card. `ai.available` is
+  // what keeps this off in iOS Safari / the PWA, where loading the on-device
+  // model would crash the tab (lib/ai/deviceCapability.ts).
+  const canExpand = aiEnabled && !isGuest && ai.available;
 
   // ── Form state ─────────────────────────────────────────────────────────────
   const [planId, setPlanId] = useState("");
@@ -526,6 +530,38 @@ export function TaskSheet({
   function setEditorSlots(next: EditableSlot[]) {
     if (perDayActive) setPerDaySlots((prev) => ({ ...prev, [resolvedEditDay]: next }));
     else setSlots(next);
+  }
+
+  // ── Builder intelligence ─────────────────────────────────────────────────
+  // Evidence from this person's own record (lib/intelligence/builderChecks.ts):
+  // a slot they rarely finish in, sessions that are too long for them, a week
+  // they've never completed. The schedule-wide models are built once per open;
+  // only the cheap draft check re-runs as the form changes.
+  const reviewContext = useMemo(() => {
+    if (!isOpen || !activities) return null;
+    // The checks read only plans, activities and preferences.
+    return buildTaskReviewContext({ plans, activities, preferences } as unknown as Schedule);
+  }, [isOpen, activities, plans, preferences]);
+
+  const builderHints = useMemo(() => {
+    if (!reviewContext || isOccurrenceScope || repeatMode === "once" || perDayActive || slots.length !== 1) return [];
+    return reviewTaskDraft(
+      {
+        title,
+        taskType,
+        days: repeatDays,
+        startTime: slots[0].startTime,
+        endTime: slots[0].endTime,
+        taskId: mode === "edit" ? task?.id : undefined,
+      },
+      reviewContext,
+    );
+  }, [reviewContext, isOccurrenceScope, repeatMode, perDayActive, slots, title, taskType, repeatDays, mode, task?.id]);
+
+  function applyBuilderHint(hint: BuilderHint) {
+    if (hint.action?.kind === "set_time") {
+      setSlots([{ startTime: hint.action.startTime, endTime: hint.action.endTime }]);
+    }
   }
 
   // "Suggested times" — open gaps in the day being edited, sized to whatever
@@ -814,7 +850,7 @@ export function TaskSheet({
             animate={{ opacity: 1, x: 0 }}
             exit={{ opacity: 0, x: 32 }}
             transition={{ duration: 0.2, ease: [0.22, 1, 0.36, 1] }}
-            className="flex flex-col px-5 pb-6 pt-4"
+            className={`flex flex-col px-5 pb-6 ${presentation === "page" ? "pt-[calc(env(safe-area-inset-top)+16px)]" : "pt-4"}`}
           >
             {/* Header */}
             <div className="mb-5 flex items-center gap-3">
@@ -858,15 +894,20 @@ export function TaskSheet({
             animate={{ opacity: 1, x: 0 }}
             exit={{ opacity: 0, x: -32 }}
             transition={{ duration: 0.2, ease: [0.22, 1, 0.36, 1] }}
-            className={`flex flex-col px-5 pt-4 ${presentation === "page" ? "pb-28" : "pb-6"}`}
+            className={`flex flex-col px-5 ${presentation === "page" ? "pb-28" : "pt-4 pb-6"}`}
           >
+            {/* As a full page, the header owns the status-bar strip: its own
+                top padding clears the notch and its fill sits behind the clock,
+                so scrolling content never slides under the status bar. (A
+                padded scroll container can't do this: a sticky child pins to
+                the container's very top, padding included.) */}
             <SheetHeader
               eyebrow={eyebrow}
               title={headingTitle}
               onClose={handleClose}
               className={
                 presentation === "page"
-                  ? "sticky top-0 z-20 -mx-5 border-b border-neutral-200 bg-white px-5 py-3 dark:border-white/[0.08] dark:bg-neutral-950"
+                  ? "sticky top-0 z-20 -mx-5 border-b border-neutral-200 bg-white px-5 pb-3 pt-[calc(env(safe-area-inset-top)+12px)] dark:border-white/[0.08] dark:bg-neutral-950"
                   : ""
               }
             />
@@ -1139,6 +1180,8 @@ export function TaskSheet({
                   )}
                 </div>
               )}
+
+              <BuilderHints hints={builderHints} onAction={applyBuilderHint} />
 
               {/* Active window — optional start/end dates for a recurring task */}
               {showActiveWindow && (
@@ -1482,7 +1525,7 @@ export function TaskSheet({
             animate={{ opacity: 1, x: 0 }}
             exit={{ opacity: 0, x: 28 }}
             transition={{ duration: 0.2, ease: [0.22, 1, 0.36, 1] }}
-            className="fixed inset-0 z-40 h-dvh overflow-y-auto overscroll-contain bg-[#F3F4F1] pt-[env(safe-area-inset-top)] text-neutral-900 dark:bg-[#0E0E0E] dark:text-white"
+            className="fixed inset-0 z-40 h-dvh overflow-y-auto overscroll-contain bg-[#F3F4F1] text-neutral-900 dark:bg-[#0E0E0E] dark:text-white"
             style={{ paddingBottom: "env(safe-area-inset-bottom)" }}
           >
             {sheetContent}

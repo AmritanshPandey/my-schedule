@@ -170,6 +170,9 @@ export default function BottomNav({
             onClick={() => { haptic("medium"); setExpanded((v) => !v); }}
             aria-label="Create"
             aria-expanded={expanded}
+            // Floating chrome with its own lift — the sanctioned shadow case
+            // (DESIGN.md §4), which the e2e banned-effects guard keys on.
+            data-glass
             className="
               absolute left-1/2 top-1/2 z-40
               flex h-[52px] w-[52px]

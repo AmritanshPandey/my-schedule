@@ -48,7 +48,7 @@ export default function IOSMergedTimelineRow({
 }: IOSMergedTimelineRowProps) {
   return (
     <div className="flex items-stretch gap-3 pb-3">
-      <div className="w-[52px] shrink-0" />
+      <div className="w-[56px] shrink-0" />
 
       {/* Rail: a single connector spans both halves, with two nodes on it. */}
       <div className="relative flex w-7 shrink-0 flex-col items-center justify-center gap-2">
