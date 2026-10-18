@@ -4836,7 +4836,6 @@ export default function ScheduleApp() {
             onCreateTask={() => openCreateSheet()}
             onCreatePlan={openAddPlan}
             onCreateRitual={openCreateRitual}
-            onBulkImport={() => setBulkImportOpen(true)}
           />
         </div>
       )}

@@ -11,7 +11,6 @@ import {
   IconClipboardData,
   IconCalendarPlus,
   IconClipboardPlus,
-  IconFileImport,
   IconLayoutDashboard,
   IconPlus,
   IconRepeat,
@@ -23,7 +22,6 @@ interface BottomNavProps {
   onCreateTask: () => void;
   onCreatePlan: () => void;
   onCreateRitual: () => void;
-  onBulkImport?: () => void;
 }
 
 function NoopPresence({ children }: { children: ReactNode; initial?: boolean }) {
@@ -36,7 +34,6 @@ export default function BottomNav({
   onCreateTask,
   onCreatePlan,
   onCreateRitual,
-  onBulkImport,
 }: BottomNavProps) {
   const iosSafeMode = isIOSSafeMode();
   const SafePresence = iosSafeMode ? NoopPresence : AnimatePresence;
@@ -143,20 +140,6 @@ export default function BottomNav({
                     <span className="text-[11px] font-semibold text-white/75">Habit</span>
                   </m.button>
 
-                  {/* BULK IMPORT */}
-                  {onBulkImport && (
-                    <m.button
-                      whileTap={{ scale: 0.95 }}
-                      onClick={() => { haptic("medium"); setExpanded(false); onBulkImport(); }}
-                      className="flex flex-col items-center gap-1.5"
-                      aria-label="Paste schedule"
-                    >
-                      <div className="flex h-[52px] w-[60px] items-center justify-center rounded-[18px] bg-white/[0.09]">
-                        <IconFileImport size={24} strokeWidth={2} className="text-white" />
-                      </div>
-                      <span className="text-[11px] font-semibold text-white/75">Import</span>
-                    </m.button>
-                  )}
                 </div>
               </m.div>
             )}

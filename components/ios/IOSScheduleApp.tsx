@@ -15,7 +15,6 @@ import {
   IconEdit,
   IconFlame,
   IconNotes,
-  IconFileImport,
   IconPhoto,
   IconPlus,
   IconRepeat,
@@ -131,7 +130,6 @@ const AIView = dynamic(() => import("@/components/AIView").then((m) => ({ defaul
 const InsightsCard = dynamic(() => import("@/components/intelligence/InsightsCard"), { ssr: false });
 const CheckInsDueCard = dynamic(() => import("@/components/tracking/CheckInsDueCard"), { ssr: false });
 const DayWallpaperSheet = dynamic(() => import("@/components/DayWallpaperSheet"), { ssr: false });
-const BulkImportSheet = dynamic(() => import("@/components/BulkImportSheet"), { ssr: false });
 const TemplatesSheet = dynamic(() => import("@/components/TemplatesSheet").then((m) => ({ default: m.TemplatesSheet })), { ssr: false });
 const NotesView = dynamic(() => import("@/components/notes/NotesView"), { ssr: false });
 const TaskDetailView = dynamic(() => import("@/components/activity/TaskDetailView"), { ssr: false });
@@ -383,7 +381,6 @@ export default function IOSScheduleApp() {
   const [dayClearRequest, setDayClearRequest] = useState<DayKey | null>(null);
   const [missedSheet, setMissedSheet] = useState<MissedTask | null>(null);
   const [quickRetimeTarget, setQuickRetimeTarget] = useState<(QuickRetimeTarget & { day: DayKey; dateISO: string }) | null>(null);
-  const [bulkImportOpen, setBulkImportOpen] = useState(false);
   const [templatesOpen, setTemplatesOpen] = useState(false);
   // Today tab starts as a clean execution surface; editing affordances (per-card
   // pencil, day actions, wallpaper, add-task) are revealed only in edit mode.
@@ -1014,114 +1011,6 @@ export default function IOSScheduleApp() {
     setSchedule(applyTemplate(template));
     setSelectedPlanId(null);
     setActiveTab(1); // Plans tab
-  }
-
-  /**
-   * Mirrors ScheduleApp.tsx's own handleBulkImport exactly — the two shells
-   * keep independent copies of this (like every other mutation handler here),
-   * not a shared one, so a shell-specific change to one can never silently
-   * shift the other's behavior underfoot.
-   */
-  function handleBulkImport(result: import("@/lib/scheduleParser").ParseResult) {
-    // A dated task belongs to one occurrence, not to every matching weekday —
-    // week 1's Thursday and week 2's Thursday are different sessions with
-    // different checklists. Those are validated against the day they actually
-    // land on before anything is written.
-    const dated = result.days.flatMap((d) =>
-      d.tasks
-        .filter((t) => t.dateISO)
-        .map((t) => {
-          const { startTime, endTime } = resolveParsedTimes(t);
-          return { title: t.title, dateISO: t.dateISO!, startTime, endTime, taskId: t.id };
-        }),
-    );
-
-    let blocked = new Set<string>();
-    let firstConflict: string | null = null;
-    if (dated.length > 0) {
-      const { conflicts } = validateDatedTasks(dated, (dateISO, weekday) =>
-        (schedule.activities[weekday] ?? [])
-          .filter((task) => isTaskScheduledOn(task, dateISO, true, schedule.preferences?.startDate))
-          .flatMap((task) => getSlots(task).map((s) => ({ title: task.title, ...s }))),
-      );
-      blocked = new Set(conflicts.map((c) => c.task.taskId));
-      if (conflicts.length > 0) {
-        const c = conflicts[0].conflict;
-        firstConflict =
-          conflicts.length === 1
-            ? `Skipped "${c.taskTitle}" — it clashes with ${c.conflictsWith} on ${c.dateISO}.`
-            : `Skipped ${conflicts.length} sessions that clash with existing tasks.`;
-      }
-    }
-
-    setSchedule((prev) => {
-      // Create real plans from inline `# Plan` definitions; map temp ref → real plan.
-      const refToPlan = new Map<string, Plan>();
-      const newPlans: Plan[] = result.plans.map((p) => {
-        const plan: Plan = {
-          id: uid(),
-          title: p.title,
-          description: p.description,
-          startDate: p.startDate,
-          endDate: p.endDate,
-          category: p.category,
-          emoji: p.emoji,
-          color: p.color,
-          items: [],
-          metaFields: [],
-          summary: [],
-        };
-        refToPlan.set(p.ref, plan);
-        return plan;
-      });
-
-      const activities = { ...prev.activities };
-      const categoryDraft = [...prev.categories];
-      for (const d of result.days) {
-        const created: Task[] = d.tasks
-          .filter((t) => !blocked.has(t.id))
-          .map((t) => {
-            const { startTime, endTime } = resolveParsedTimes(t);
-            const plan =
-              (t.planRef ? refToPlan.get(t.planRef) : null) ??
-              prev.plans.find((p) => p.id === t.planId) ??
-              prev.plans[0] ??
-              null;
-            const subtasks = t.subtasks?.map((s) => ({
-              id: uid(),
-              task: s.title,
-              info: s.info,
-              duration: s.duration,
-            }));
-            return {
-              id: uid(),
-              title: t.title,
-              startTime,
-              endTime,
-              categoryId: ensureCategoryIn(categoryDraft, t.icon),
-              planId: plan?.id ?? "",
-              ...(subtasks !== undefined ? { subtasks } : {}),
-              // A single dated occurrence rather than a weekly repeat — required,
-              // since TaskException carries no subtasks field, so one recurring
-              // task cannot hold a different checklist per week.
-              ...(t.dateISO ? { recurrence: { type: "once" as const, dateISO: t.dateISO } } : {}),
-            };
-          });
-        activities[d.day] = sortTasksByTime([...(activities[d.day] ?? []), ...created]);
-      }
-      return { ...prev, plans: [...prev.plans, ...newPlans], categories: categoryDraft, activities };
-    });
-    const imported = result.days.reduce(
-      (n, d) => n + d.tasks.filter((t) => !blocked.has(t.id)).length,
-      0,
-    );
-    setToast(
-      firstConflict
-        ? `Imported ${imported}. ${firstConflict}`
-        : result.plans.length > 0
-        ? "Plan & tasks imported"
-        : "Tasks imported",
-    );
   }
 
   function handleDismissAttentionOne(key: string) {
@@ -2033,14 +1922,6 @@ export default function IOSScheduleApp() {
                     },
                   },
                   {
-                    icon: IconFileImport,
-                    label: "Paste schedule",
-                    onClick: () => {
-                      haptic("light");
-                      setBulkImportOpen(true);
-                    },
-                  },
-                  {
                     icon: IconTargetArrow,
                     label: "Goals",
                     onClick: () => {
@@ -2094,16 +1975,6 @@ export default function IOSScheduleApp() {
         onClose={() => setQuickRetimeTarget(null)}
         onSave={handleQuickRetime}
       />
-
-      {bulkImportOpen && (
-        <BulkImportSheet
-          open={bulkImportOpen}
-          plans={schedule.plans}
-          fallbackDay={activeDay}
-          onClose={() => setBulkImportOpen(false)}
-          onCommit={handleBulkImport}
-        />
-      )}
 
       <TemplatesSheet open={templatesOpen} onClose={() => setTemplatesOpen(false)} onApply={handleApplyTemplate} />
 
