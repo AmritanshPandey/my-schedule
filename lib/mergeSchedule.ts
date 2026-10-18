@@ -199,7 +199,7 @@ function mergeKeyed<T>(
  * cloud payload's 90-day history trim non-destructive: a device receiving a
  * trimmed snapshot keeps its own longer archive instead of adopting the gap.
  */
-function unionHistory(
+export function unionHistory(
   a: TaskCompletionEvent[] | undefined,
   b: TaskCompletionEvent[] | undefined,
 ): TaskCompletionEvent[] | undefined {

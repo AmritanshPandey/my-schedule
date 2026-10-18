@@ -512,8 +512,18 @@ export function swapDays(a: DayKey, b: DayKey): (prev: Schedule) => Schedule {
   };
 }
 
-/** Strip per-occurrence completion/history so a copied task starts fresh. */
-function freshCopy(task: Task): Task {
+/**
+ * Strip per-occurrence completion/history, keeping the task's identity.
+ *
+ * Split out from `freshCopy` because the paths that add a weekday to an
+ * existing task need the clearing without a new id — a task gaining a day must
+ * stay the same task (see lib/taskSiblings.ts).
+ *
+ * `missedSlotIndices` is cleared here and was not before: a copy inheriting
+ * the original's missed-phase marks showed phases struck through on a day they
+ * had never been missed on.
+ */
+export function clearOccurrenceState(task: Task): Task {
   const {
     completed: _c,
     completedAt: _ca,
@@ -521,11 +531,23 @@ function freshCopy(task: Task): Task {
     completedSlotIndices: _csl,
     missed: _m,
     missedAt: _ma,
+    missedSlotIndices: _msl,
     completionHistory: _ch,
     exceptions: _ex,
     ...rest
   } = task;
-  return { ...rest, id: uid() };
+  return rest as Task;
+}
+
+/**
+ * A genuinely independent copy: fresh state, fresh id, no pairing.
+ *
+ * `mergeGroupId` is dropped deliberately. Carrying it over made a third task
+ * join a group that `findMergePartner` (lib/taskMerge.ts) documents as strictly
+ * pairwise, so it returned the first match and the third row rendered alone.
+ */
+function freshCopy(task: Task): Task {
+  return { ...clearOccurrenceState(task), id: uid(), mergeGroupId: undefined };
 }
 
 /**
