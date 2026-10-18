@@ -27,6 +27,7 @@
 
 import { buildPushPayload } from "@block65/webcrypto-web-push";
 import { Firestore, uidFromName, idFromName, type Env } from "./firestore.js";
+import { isVapidFailure, vapidConfigProblem } from "./vapid.js";
 import { computeDueReminders, type ReminderSettings, type Schedule } from "./reminders.js";
 
 interface Subscription {
@@ -86,6 +87,11 @@ async function handleTestPush(request: Request, env: Env): Promise<Response> {
   }
 
   const vapid: Vapid = { subject: env.VAPID_SUBJECT, publicKey: env.VAPID_PUBLIC_KEY, privateKey: env.VAPID_PRIVATE_KEY };
+  const configProblem = vapidConfigProblem(vapid);
+  if (configProblem) {
+    return json(500, { ok: false, error: `Push isn't configured on the server yet — ${configProblem}.` });
+  }
+
   const message = {
     title: "Test notification",
     body: "If you can see this, background push is working.",
@@ -108,6 +114,11 @@ async function handleTestPush(request: Request, env: Env): Promise<Response> {
         : `Push service returned ${res.status}.`,
     });
   } catch (err) {
+    if (err instanceof VapidConfigError) {
+      // Server-side. "Turn Reminders off and on again" would be a wild goose
+      // chase — no amount of re-subscribing fixes a missing Worker secret.
+      return json(500, { ok: false, error: "Push isn't configured on the server yet (VAPID keys). Nothing to fix on this device." });
+    }
     if (err instanceof InvalidSubscriptionError) {
       return json(500, { ok: false, error: "This subscription's stored key data is invalid — turn Reminders off and on again." });
     }
@@ -147,6 +158,21 @@ export default {
 class InvalidSubscriptionError extends Error {}
 
 /**
+ * Thrown when the failure is OUR configuration, not the user's subscription —
+ * a missing or malformed VAPID subject/key pair.
+ *
+ * This distinction is not cosmetic. Every VAPID problem surfaces as a throw
+ * from `buildPushPayload`, exactly like genuinely corrupt subscription keys do,
+ * and the cron handler's response to `InvalidSubscriptionError` is to DELETE
+ * the subscription from Firestore. Collapsing the two meant one bad secret on
+ * the Worker silently destroyed every user's valid subscription, on the first
+ * tick, once a minute, for a problem no user could fix — while the test
+ * endpoint told them to "turn Reminders off and on again", which could never
+ * help.
+ */
+class VapidConfigError extends Error {}
+
+/**
  * Sends one Web Push message to one subscription. Returns the upstream push
  * service's Response so callers can branch on 404/410 (dead subscription) vs
  * other failures — used by both the cron run and the test-push endpoint so
@@ -168,7 +194,13 @@ async function sendPush(
       vapid,
     );
   } catch (err) {
-    throw new InvalidSubscriptionError(err instanceof Error ? err.message : String(err));
+    const message = err instanceof Error ? err.message : String(err);
+    // "Vapid private key is empty", "Vapid subject is empty", and a malformed
+    // key's "Invalid keyData" all come out of here looking identical to bad
+    // subscription bytes. Only the latter is the user's to fix.
+    throw isVapidFailure(message)
+      ? new VapidConfigError(message)
+      : new InvalidSubscriptionError(message);
   }
   return fetch(sub.endpoint, payload);
 }
@@ -176,6 +208,15 @@ async function sendPush(
 async function run(env: Env): Promise<void> {
   const fs = new Firestore(env);
   const vapid: Vapid = { subject: env.VAPID_SUBJECT, publicKey: env.VAPID_PUBLIC_KEY, privateKey: env.VAPID_PRIVATE_KEY };
+
+  // Nothing can be sent without VAPID, and attempting it anyway would walk
+  // every user and prune subscriptions that are perfectly good.
+  const configProblem = vapidConfigProblem(vapid);
+  if (configProblem) {
+    console.error(`reminder run skipped — ${configProblem}`);
+    return;
+  }
+
   const now = new Date();
 
   // Every user's config doc lives at users/{uid}/push/config.
@@ -219,7 +260,11 @@ async function run(env: Env): Promise<void> {
                 sent++;
               }
             } catch (err) {
-              if (err instanceof InvalidSubscriptionError) {
+              if (err instanceof VapidConfigError) {
+                // Our problem, not theirs. Pruning here would delete a working
+                // subscription because the server was misconfigured.
+                console.error("push send failed — VAPID config", String(err));
+              } else if (err instanceof InvalidSubscriptionError) {
                 // Permanently broken (bad stored keys, not a network blip) —
                 // pruned so it stops erroring on every single cron tick
                 // forever. The device gets a fresh, valid subscription next

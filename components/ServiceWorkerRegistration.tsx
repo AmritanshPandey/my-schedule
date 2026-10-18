@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect } from "react";
-import { DISABLE_SW_ON_IOS, isIOSSafeMode } from "@/lib/iosSafeMode";
+import { IOS_SW_PUSH_ONLY, isIOSSafeMode } from "@/lib/iosSafeMode";
 
 const CACHE_PREFIX = "planr-";
 
@@ -10,9 +10,11 @@ export default function ServiceWorkerRegistration() {
     if (!("serviceWorker" in navigator)) return;
 
     const isDev = process.env.NODE_ENV !== "production";
-    const disableForIOS = DISABLE_SW_ON_IOS && isIOSSafeMode();
+    // iOS keeps a worker, just without the caching — it is the only way a
+    // notification can reach an iOS PWA at all. See IOS_SW_PUSH_ONLY.
+    const pushOnly = IOS_SW_PUSH_ONLY && isIOSSafeMode();
 
-    if (isDev || disableForIOS) {
+    if (isDev) {
       // Prevent stale cached JS in local development from causing hydration mismatches.
       navigator.serviceWorker.getRegistrations().then((regs) => {
         regs.forEach((reg) => {
@@ -41,7 +43,7 @@ export default function ServiceWorkerRegistration() {
 
     function register(attempt: number) {
       navigator.serviceWorker
-        .register("/sw.js", { updateViaCache: "none" })
+        .register(pushOnly ? "/sw.js?nocache=1" : "/sw.js", { updateViaCache: "none" })
         .then((registration) => {
           void registration.update();
         })

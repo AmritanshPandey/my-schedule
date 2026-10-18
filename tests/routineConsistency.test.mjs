@@ -38,7 +38,7 @@ registerHooks({
 
 const { calculateRitualStats, calculateBestStreak, ritualScheduledOn } =
   await import("../lib/consistency/calculateRitualStreak.ts");
-const { isRitualDayComplete, ritualDayProgress } = await import("../lib/consistency/ritualDayStatus.ts");
+const { isRitualDayComplete, ritualDayProgress, nextRitualOccurrence } = await import("../lib/consistency/ritualDayStatus.ts");
 const { ritualScheduledOnDate } = await import("../lib/ritualRecurrence.ts");
 const { appendRitualLog, toggleRitualStep } = await import("../lib/ritualCompletions.ts");
 const { todayISO, localISODate } = await import("../lib/dateUtils.ts");
@@ -231,6 +231,57 @@ test("times: calculateRitualStats' streak walk only counts a day once every occu
   completions = toggleRitualStep(completions, "r1", "2026-01-07", "a");
   const stats = calculateRitualStats(r, completions, "2026-01-09");
   assert.equal(stats.streak, 2, "only the two fully-completed days count toward the streak");
+});
+
+// ── nextRitualOccurrence — the row's "Next"/"Due" label ─────────────────────
+
+test("nextRitualOccurrence names the earliest not-yet-done step", () => {
+  const steps = [{ id: "a", label: "08:00" }, { id: "b", label: "13:00" }, { id: "c", label: "18:00" }];
+  const r = ritual({ trackingType: "times", steps });
+  // 6am: nothing done yet, nothing due yet — the earliest step is "next".
+  const result = nextRitualOccurrence(r, new Set(), 6 * 60);
+  assert.equal(result.state, "next");
+  assert.equal(result.time, "8:00 AM");
+});
+
+test("nextRitualOccurrence reads 'due' once the earliest pending step's own time has passed", () => {
+  const steps = [{ id: "a", label: "08:00" }, { id: "b", label: "13:00" }];
+  const r = ritual({ trackingType: "times", steps });
+  // 9am: 8am has passed and is still undone.
+  const result = nextRitualOccurrence(r, new Set(), 9 * 60);
+  assert.equal(result.state, "due");
+  assert.equal(result.time, "8:00 AM");
+});
+
+test("nextRitualOccurrence ignores done steps and names the next pending one", () => {
+  const steps = [{ id: "a", label: "08:00" }, { id: "b", label: "13:00" }, { id: "c", label: "18:00" }];
+  const r = ritual({ trackingType: "times", steps });
+  const result = nextRitualOccurrence(r, new Set(["a"]), 9 * 60);
+  assert.equal(result.time, "1:00 PM");
+  assert.equal(result.state, "next");
+});
+
+test("nextRitualOccurrence surfaces the oldest missed gap, not the next arbitrary one", () => {
+  // Both 8am and 1pm have passed, undone — the day's already 6pm. The oldest
+  // gap is the one worth naming, not whichever sorts last.
+  const steps = [{ id: "a", label: "08:00" }, { id: "b", label: "13:00" }, { id: "c", label: "18:00" }];
+  const r = ritual({ trackingType: "times", steps });
+  const result = nextRitualOccurrence(r, new Set(), 17 * 60);
+  assert.equal(result.time, "8:00 AM");
+  assert.equal(result.state, "due");
+});
+
+test("nextRitualOccurrence is null once every step is done", () => {
+  const steps = [{ id: "a", label: "08:00" }, { id: "b", label: "13:00" }];
+  const r = ritual({ trackingType: "times", steps });
+  assert.equal(nextRitualOccurrence(r, new Set(["a", "b"]), 20 * 60), null);
+});
+
+test("nextRitualOccurrence skips a step with an unparseable time rather than crashing", () => {
+  const steps = [{ id: "a", label: "not a time" }, { id: "b", label: "13:00" }];
+  const r = ritual({ trackingType: "times", steps });
+  const result = nextRitualOccurrence(r, new Set(), 6 * 60);
+  assert.equal(result.time, "1:00 PM");
 });
 
 // ── Best streak ──────────────────────────────────────────────────────────────

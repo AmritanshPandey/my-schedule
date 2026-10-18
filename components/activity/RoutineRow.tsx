@@ -13,11 +13,12 @@ import { useState } from "react";
 import { m, AnimatePresence } from "framer-motion";
 import { IconChevronRight, IconFlame, IconTrash } from "@tabler/icons-react";
 import type { Ritual, RitualCompletion } from "@/lib/useScheduleDB";
+import { currentMinutes } from "@/lib/timeUtils";
 import { todayISO } from "@/lib/dateUtils";
 import { haptic } from "@/lib/haptics";
 import { calculateRitualStats, ritualScheduledOnDate } from "@/lib/consistency/calculateRitualStreak";
 import { entriesForRitualDate } from "@/lib/ritualCompletions";
-import { ritualDayProgress } from "@/lib/consistency/ritualDayStatus";
+import { nextRitualOccurrence, ritualDayProgress } from "@/lib/consistency/ritualDayStatus";
 import { describeRecurrence } from "@/lib/ritualRecurrence";
 import { formatAmount, routineDetailLine, routineWhenLabel } from "@/lib/routineDetails";
 import { iconGlyph, getIconPickerStyle } from "@/components/SectionIcons";
@@ -81,6 +82,23 @@ export default function RoutineRow({
     }
   }
 
+  // "3× a day" is true but inert. On today, name the one occurrence that
+  // actually matters right now — "Due 1:00 PM" when one is overdue, "Next
+  // 6:00 PM" otherwise — and fall back to the count once they're all done or
+  // when looking at another date. routineWhenLabel stays pure and handles
+  // every other kind of routine; only this case needs the day's entries.
+  const nextOccurrence =
+    ritual.trackingType === "times" && (ritual.steps?.length ?? 0) > 0 && selectedDateISO === todayISO()
+      ? nextRitualOccurrence(
+          ritual,
+          new Set(entries.filter((e) => e.stepId).map((e) => e.stepId!)),
+          currentMinutes(),
+        )
+      : null;
+  const whenLabel = nextOccurrence
+    ? `${nextOccurrence.state === "due" ? "Due" : "Next"} ${nextOccurrence.time}`
+    : routineWhenLabel(ritual);
+
   return (
     <div className="py-3">
       <div className="group flex items-center gap-3">
@@ -116,7 +134,7 @@ export default function RoutineRow({
           {/* One inline run, truncated at the end: when it happens and how
               often stay visible, the record trails off first on a narrow row. */}
           <p className="mt-0.5 truncate text-[12px] font-medium text-neutral-500 dark:text-neutral-400">
-            <span className="tabular-nums">{routineWhenLabel(ritual)}</span>
+            <span className="tabular-nums">{whenLabel}</span>
             {" · "}
             {missed ? "Missed" : describeRecurrence(ritual)}
             {streak >= 2 && (

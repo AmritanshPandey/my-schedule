@@ -43,13 +43,45 @@ function urlBase64ToUint8Array(base64: string): Uint8Array<ArrayBuffer> {
 }
 
 /**
+ * The active service worker registration, or null — without ever hanging.
+ *
+ * `navigator.serviceWorker.ready` NEVER settles when nothing is registered. It
+ * is not slow and it does not reject: the promise simply stays pending
+ * forever, so an `await` on it stalls its caller permanently and the
+ * surrounding try/catch never runs. That is the exact state this app puts iOS
+ * into on purpose — see DISABLE_SW_ON_IOS in lib/iosSafeMode.ts, which
+ * unregisters the worker on every iOS device — so the push toggle there would
+ * spin with no error and no timeout.
+ *
+ * `getRegistration()` settles immediately either way, so it is the safe thing
+ * to ask first. The `ready` await afterwards is still bounded, because a
+ * registration that exists can still be stuck activating.
+ */
+const REGISTRATION_TIMEOUT_MS = 5_000;
+
+async function activeRegistration(): Promise<ServiceWorkerRegistration | null> {
+  if (typeof navigator === "undefined" || !("serviceWorker" in navigator)) return null;
+  const existing = await navigator.serviceWorker.getRegistration();
+  if (!existing) return null;
+  return Promise.race([
+    navigator.serviceWorker.ready,
+    new Promise<null>((resolve) => setTimeout(() => resolve(null), REGISTRATION_TIMEOUT_MS)),
+  ]);
+}
+
+/**
  * Ensure a push subscription for this device and return it as JSON (to store in
  * Firestore for the server). Reuses an existing subscription when present.
- * Returns null when unsupported/unconfigured.
+ *
+ * Returns null — promptly — when push is unsupported, unconfigured, or there is
+ * no service worker to subscribe through. Null is the honest answer for the
+ * last case: callers should treat it as "this device cannot receive background
+ * reminders" rather than as a transient failure to retry.
  */
 export async function subscribeToPush(): Promise<PushSubscriptionJSON | null> {
   if (!isPushSupported()) return null;
-  const reg = await navigator.serviceWorker.ready;
+  const reg = await activeRegistration();
+  if (!reg) return null;
   let sub = await reg.pushManager.getSubscription();
   if (!sub) {
     sub = await reg.pushManager.subscribe({
@@ -62,8 +94,8 @@ export async function subscribeToPush(): Promise<PushSubscriptionJSON | null> {
 
 /** Tear down this device's subscription; returns the JSON that was removed. */
 export async function unsubscribeFromPush(): Promise<PushSubscriptionJSON | null> {
-  if (typeof navigator === "undefined" || !("serviceWorker" in navigator)) return null;
-  const reg = await navigator.serviceWorker.ready;
+  const reg = await activeRegistration();
+  if (!reg) return null;
   const sub = await reg.pushManager.getSubscription();
   if (!sub) return null;
   const json = sub.toJSON();
