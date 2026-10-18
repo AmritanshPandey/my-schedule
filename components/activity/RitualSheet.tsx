@@ -27,7 +27,6 @@ const TRACKING_TYPES: { key: RitualTrackingType; label: string }[] = [
   { key: "duration", label: "Minutes" },
   { key: "count", label: "Count" },
   { key: "checklist", label: "Checklist" },
-  { key: "times", label: "Several times a day" },
 ];
 
 const RECURRENCE_KINDS: { key: RitualRecurrenceKind; label: string }[] = [
@@ -71,7 +70,6 @@ export function RitualSheet({ open, onClose, initial, onSave, onDelete }: Ritual
   const [unit, setUnit]         = useState("");
   const [steps, setSteps]       = useState<RitualStep[]>([]);
   const [newStepLabel, setNewStepLabel] = useState("");
-  const [newStepTime, setNewStepTime] = useState("12:00");
   /** A time attached to the next descriptive item ("Lunch" at 13:00), if any. */
   const [newItemTimed, setNewItemTimed] = useState(false);
   const [newItemTime, setNewItemTime] = useState("13:00");
@@ -126,7 +124,6 @@ export function RitualSheet({ open, onClose, initial, onSave, onDelete }: Ritual
     !!title.trim() &&
     !!time &&
     (trackingType !== "checklist" || steps.length > 0) &&
-    (trackingType !== "times" || steps.length > 0) &&
     (recurrenceKind !== "custom" || customDays.length > 0);
 
   function addStep() {
@@ -136,17 +133,6 @@ export function RitualSheet({ open, onClose, initial, onSave, onDelete }: Ritual
     setSteps((prev) => [...prev, timed ? { id: uid(), label, time: newItemTime } : { id: uid(), label }]);
     setNewStepLabel("");
     setNewItemTimed(false);
-  }
-
-  /** The "times" analogue of addStep — pushes the current newStepTime as a
-   *  new occurrence, skips an exact duplicate, and keeps the list sorted
-   *  ascending (zero-padded "HH:MM" strings sort lexicographically =
-   *  chronologically) so `steps[0]` is always the earliest occurrence. */
-  function addStepTime() {
-    setSteps((prev) => {
-      if (prev.some((s) => s.label === newStepTime)) return prev;
-      return [...prev, { id: uid(), label: newStepTime }].sort((a, b) => a.label.localeCompare(b.label));
-    });
   }
 
   function handleSave() {
@@ -163,14 +149,12 @@ export function RitualSheet({ open, onClose, initial, onSave, onDelete }: Ritual
     // a single `ritual.time` (reminders, sort order, the non-"times" secondary
     // line) still sees a sensible value, the same "first slot mirrors the
     // whole-thing field" convention Task.slots/startTime already uses.
-    const effectiveTime = trackingType === "times" && steps.length > 0 ? steps[0].label : time;
-
     const measured = trackingType === "quantity" || trackingType === "duration" || trackingType === "count";
     onSave({
       title: title.trim(),
       description: description.trim() || undefined,
-      time: effectiveTime,
-      anyTime: trackingType === "times" ? false : anyTime,
+      time,
+      anyTime,
       duration: duration ?? undefined,
       color: color || undefined,
       icon: icon || undefined,
@@ -188,11 +172,7 @@ export function RitualSheet({ open, onClose, initial, onSave, onDelete }: Ritual
       // a protein target is made of (undefined when empty, same as every
       // other optional field, rather than saving `[]`). A "times" step's
       // label already is its time, so an item time never carries over to it.
-      steps:
-        trackingType === "checklist" ? steps
-        : trackingType === "times" ? steps.map(({ id, label }) => ({ id, label }))
-        : steps.length > 0 ? steps
-        : undefined,
+      steps: trackingType === "checklist" ? steps : steps.length > 0 ? steps : undefined,
     });
     onClose();
   }
@@ -347,11 +327,7 @@ export function RitualSheet({ open, onClose, initial, onSave, onDelete }: Ritual
                   </div>
                 )}
 
-                {/* "times" manages its occurrence times entirely via the step
-                    list below — a second, independent time control here would
-                    just be a confusing extra field nothing reads. */}
-                {trackingType !== "times" && (
-                  <div className="space-y-2">
+                <div className="space-y-2">
                     <div role="radiogroup" aria-label="When" className="grid grid-cols-2 gap-2">
                       {[{ key: true, label: "Any time" }, { key: false, label: "At a set time" }].map((opt) => (
                         <button
@@ -375,7 +351,6 @@ export function RitualSheet({ open, onClose, initial, onSave, onDelete }: Ritual
                       <TimeInput label="Time" value={time} onChange={setTime} ariaLabel="Routine time" />
                     )}
                   </div>
-                )}
               </div>
 
               {/* ── Tracking ───────────────────────────────────────────────── */}
@@ -429,44 +404,25 @@ export function RitualSheet({ open, onClose, initial, onSave, onDelete }: Ritual
                     bundles (e.g. "Hair" ⇒ coconut oil, shampoo, conditioner)
                     without asking you to check off each one separately. */}
                 <div className="space-y-1.5">
-                    {trackingType !== "checklist" && trackingType !== "times" && (
+                    {trackingType !== "checklist" && (
                       <p className="text-[11px] leading-snug text-neutral-500 dark:text-neutral-400">
                         Optional — what it covers, with a time if it has one (e.g. &ldquo;Lunch: dal, rice, salad&rdquo; at 1:00 PM). One tap on the routine covers all of them.
                       </p>
                     )}
-                    {trackingType === "times" && (
-                      <p className="text-[11px] leading-snug text-neutral-500 dark:text-neutral-400">
-                        Add each time this happens during the day. Every occurrence gets its own checkbox — the day counts done once all of them are.
-                      </p>
-                    )}
                     {steps.map((step) => (
                       <div key={step.id} className="flex items-center gap-2 rounded-xl border border-neutral-200 bg-neutral-50 px-3 py-2 dark:border-white/10 dark:bg-white/[0.04]">
-                        {trackingType !== "times" && step.time && (
+                        {step.time && (
                           <span className="shrink-0 text-[12px] font-bold tabular-nums text-neutral-500 dark:text-neutral-400">{formatDisplayTime(step.time)}</span>
                         )}
                         <span className="flex-1 truncate text-[13px] font-medium tabular-nums text-neutral-800 dark:text-neutral-100">
-                          {trackingType === "times" ? formatDisplayTime(step.label) : step.label}
+                          {step.label}
                         </span>
                         <button type="button" onClick={() => setSteps((prev) => prev.filter((s) => s.id !== step.id))} aria-label="Remove item" className="text-neutral-500 dark:text-neutral-400 hover:text-rose-500">
                           <IconX size={14} strokeWidth={2.2} />
                         </button>
                       </div>
                     ))}
-                    {trackingType === "times" ? (
-                      <div className="flex items-end gap-2">
-                        <div className="min-w-0 flex-1">
-                          <TimeInput value={newStepTime} onChange={setNewStepTime} ariaLabel="New occurrence time" />
-                        </div>
-                        <button
-                          type="button"
-                          onClick={addStepTime}
-                          className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl border border-neutral-200 text-neutral-500 hover:bg-neutral-50 dark:border-white/10 dark:text-neutral-400"
-                          aria-label="Add time"
-                        >
-                          <IconPlus size={14} strokeWidth={2.4} />
-                        </button>
-                      </div>
-                    ) : (
+                    {(
                     <div className="space-y-2">
                       <div className="flex gap-2">
                         <input

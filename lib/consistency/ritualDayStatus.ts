@@ -80,8 +80,7 @@ export function ritualDayProgress(ritual: Ritual, entries: RitualCompletion[]): 
       const followed = value <= 0 ? null : hasTarget ? Math.min(100, Math.round((value / target) * 100)) : 100;
       return { value, target, complete, stepsDone: 0, stepsTotal: 0, entries, markedDone: false, followed };
     }
-    case "checklist":
-    case "times": {
+    case "checklist": {
       const stepsDone = doneIds.size;
       // No steps defined yet — fall back to checkbox semantics rather than
       // being permanently uncompletable.

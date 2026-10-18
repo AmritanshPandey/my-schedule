@@ -1654,7 +1654,7 @@ export default function ScheduleApp() {
       const ritual = (schedule.rituals ?? []).find((r) => r.id === ritualId);
       if (!ritual) return;
       haptic("medium");
-      setSchedule(setRitualTime(ritualId, stepId, nextTime));
+      setSchedule(setRitualTime(ritualId, nextTime));
       setToastMessage({
         message: `${ritual.title} moved to ${formatDisplayTime(nextTime)} on every day it repeats`,
         actionLabel: "Undo",
@@ -1775,19 +1775,14 @@ export default function ScheduleApp() {
       const rituals = schedule.rituals ?? [];
       const ritual = rituals.find((r) => r.id === ritualId);
       if (!ritual) return;
-      // A "times" routine gains an occurrence rather than a sibling routine, so
-      // the ceiling doesn't apply to it — mirror that when reporting a refusal.
-      const addsWholeRitual = !(stepId && ritual.trackingType === "times" && ritual.steps?.length);
-      if (addsWholeRitual && rituals.length >= MAX_RITUALS) {
+      if (rituals.length >= MAX_RITUALS) {
         setToastMessage(`You can have up to ${MAX_RITUALS} routines`);
         return;
       }
       haptic("medium");
-      setSchedule(duplicateRitualAt(ritualId, stepId, nextTime, uid, MAX_RITUALS));
+      setSchedule(duplicateRitualAt(ritualId, nextTime, uid, MAX_RITUALS));
       setToastMessage({
-        message: addsWholeRitual
-          ? `Copied "${ritual.title}" to ${formatDisplayTime(nextTime)}`
-          : `${ritual.title} added at ${formatDisplayTime(nextTime)}`,
+        message: `Copied "${ritual.title}" to ${formatDisplayTime(nextTime)}`,
         actionLabel: "Undo",
         onAction: () => { undo(); setToastMessage(null); haptic("light"); },
       });

@@ -237,12 +237,9 @@ test("a measured routine leads with its goal", () => {
   assert.equal(routineDetailLine(ritual({ trackingType: "quantity", target: 120, unit: "g" })), "Goal 120 g");
 });
 
-test("when-labels: anytime, a set time, or several times a day", () => {
+test("when-labels: anytime, or a set time", () => {
   assert.equal(routineWhenLabel(ritual({ anyTime: true })), "Anytime");
   assert.equal(routineWhenLabel(ritual({ time: "13:00" })), "1:00 PM");
-  const times = ritual({ trackingType: "times", steps: [{ id: "a", label: "08:00" }, { id: "b", label: "13:00" }, { id: "c", label: "18:00" }] });
-  assert.equal(routineWhenLabel(times), "3× a day");
-  assert.equal(routineDetailLine(times), "8:00 AM · 1:00 PM · 6:00 PM");
 });
 
 test("no detail at all reads as null, a description fills in otherwise", () => {

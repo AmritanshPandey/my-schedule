@@ -30,9 +30,7 @@ export interface RitualGroup {
  *  own raw "HH:MM" time. Every trackingType but "times" is a single
  *  occurrence at the ritual's own time — unchanged from before this existed. */
 function occurrencesFor(ritual: Ritual): Array<{ stepId?: string; time: string }> {
-  if (ritual.trackingType === "times" && ritual.steps && ritual.steps.length > 0) {
-    return ritual.steps.map((step) => ({ stepId: step.id, time: step.label }));
-  }
+  // One occurrence, always — see the note on WeekGrid's twin of this.
   return [{ time: ritual.time }];
 }
 

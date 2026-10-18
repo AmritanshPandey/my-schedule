@@ -49,36 +49,28 @@ const { setRitualTime } = await import("../lib/ritualMutations.ts");
 
 const sched = (rituals) => ({ rituals });
 const plain = (over = {}) => ({ id: "r1", title: "Stretch", time: "08:00", ...over });
-const times = (labels) => ({
-  id: "r1",
-  title: "Water",
-  time: labels[0],
-  trackingType: "times",
-  steps: labels.map((label, i) => ({ id: `s${i}`, label })),
-});
-const labelsOf = (r) => r.steps.map((s) => s.label);
 
 // ── The ordinary routine ────────────────────────────────────────────────────
 
 test("moving a plain routine changes its time", () => {
-  const out = setRitualTime("r1", undefined, "09:30")(sched([plain()]));
+  const out = setRitualTime("r1", "09:30")(sched([plain()]));
   assert.equal(out.rituals[0].time, "09:30");
 });
 
 test("a time is normalised to the stored 24-hour form", () => {
   // Callers hand this whatever the timeline produced; the model stores "HH:MM".
-  assert.equal(setRitualTime("r1", undefined, "9:05 PM")(sched([plain()])).rituals[0].time, "21:05");
-  assert.equal(setRitualTime("r1", undefined, "7:05")(sched([plain()])).rituals[0].time, "07:05");
-  assert.equal(setRitualTime("r1", undefined, "12:00 AM")(sched([plain()])).rituals[0].time, "00:00");
+  assert.equal(setRitualTime("r1", "9:05 PM")(sched([plain()])).rituals[0].time, "21:05");
+  assert.equal(setRitualTime("r1", "7:05")(sched([plain()])).rituals[0].time, "07:05");
+  assert.equal(setRitualTime("r1", "12:00 AM")(sched([plain()])).rituals[0].time, "00:00");
 });
 
 test("an unparseable time is ignored rather than stored", () => {
   const before = sched([plain()]);
-  assert.equal(setRitualTime("r1", undefined, "not a time")(before), before);
+  assert.equal(setRitualTime("r1", "not a time")(before), before);
 });
 
 test("only the addressed routine moves", () => {
-  const out = setRitualTime("r1", undefined, "10:00")(
+  const out = setRitualTime("r1", "10:00")(
     sched([plain(), plain({ id: "r2", time: "08:00" })]),
   );
   assert.equal(out.rituals[0].time, "10:00");
@@ -89,60 +81,8 @@ test("a no-op move returns the same schedule reference", () => {
   // React and the sync stamper both bail out on reference equality, so a drag
   // that lands where it started must not look like an edit.
   const before = sched([plain({ time: "08:00" })]);
-  assert.equal(setRitualTime("r1", undefined, "08:00")(before), before);
-  assert.equal(setRitualTime("missing", undefined, "09:00")(before), before);
-});
-
-// ── The "times" routine ─────────────────────────────────────────────────────
-
-test("moving one occurrence leaves the others alone", () => {
-  const out = setRitualTime("r1", "s1", "14:00")(sched([times(["08:00", "13:00", "18:00"])]));
-  assert.deepEqual(labelsOf(out.rituals[0]), ["08:00", "14:00", "18:00"]);
-});
-
-test("occurrences stay sorted after a move past a sibling", () => {
-  // Dragging the 6pm occurrence to 7am must not leave the list out of order —
-  // RitualStep's contract says these are kept ascending.
-  const out = setRitualTime("r1", "s2", "07:00")(sched([times(["08:00", "13:00", "18:00"])]));
-  assert.deepEqual(labelsOf(out.rituals[0]), ["07:00", "08:00", "13:00"]);
-});
-
-test("ritual.time follows the earliest occurrence", () => {
-  // Readers that treat a routine as happening once read ritual.time; leaving it
-  // stale would draw the routine in two places at once.
-  const out = setRitualTime("r1", "s2", "07:00")(sched([times(["08:00", "13:00", "18:00"])]));
-  assert.equal(out.rituals[0].time, "07:00");
-});
-
-test("moving a later occurrence does not disturb ritual.time", () => {
-  const out = setRitualTime("r1", "s2", "19:00")(sched([times(["08:00", "13:00", "18:00"])]));
-  assert.equal(out.rituals[0].time, "08:00");
-  assert.deepEqual(labelsOf(out.rituals[0]), ["08:00", "13:00", "19:00"]);
-});
-
-test("an unknown step id changes nothing", () => {
-  const before = sched([times(["08:00", "13:00"])]);
-  assert.equal(setRitualTime("r1", "nope", "09:00")(before), before);
-});
-
-test("a stepId on a non-times routine falls back to the routine's own time", () => {
-  // Checklist steps are names, not times — writing one would corrupt the list.
-  const out = setRitualTime("r1", "s0", "09:30")(
-    sched([plain({ trackingType: "checklist", steps: [{ id: "s0", label: "Rinse" }] })]),
-  );
-  assert.equal(out.rituals[0].time, "09:30");
-  assert.deepEqual(out.rituals[0].steps, [{ id: "s0", label: "Rinse" }]);
-});
-
-test("a times routine addressed without a step moves as a whole", () => {
-  const out = setRitualTime("r1", undefined, "09:00")(sched([times(["08:00", "13:00"])]));
-  assert.equal(out.rituals[0].time, "09:00");
-  assert.deepEqual(labelsOf(out.rituals[0]), ["08:00", "13:00"]);
-});
-
-test("a no-op occurrence move returns the same reference", () => {
-  const before = sched([times(["08:00", "13:00"])]);
-  assert.equal(setRitualTime("r1", "s0", "08:00")(before), before);
+  assert.equal(setRitualTime("r1", "08:00")(before), before);
+  assert.equal(setRitualTime("missing", "09:00")(before), before);
 });
 
 // ── Duplicating (Alt held with the drag modifier) ───────────────────────────
@@ -153,7 +93,7 @@ const nextId = () => `new${++idN}`;
 
 test("duplicating a plain routine adds a second one at the new time", () => {
   idN = 0;
-  const out = duplicateRitualAt("r1", undefined, "17:00", nextId)(sched([plain()]));
+  const out = duplicateRitualAt("r1", "17:00", nextId)(sched([plain()]));
   assert.equal(out.rituals.length, 2);
   assert.equal(out.rituals[0].time, "08:00", "the original must not move");
   assert.deepEqual(
@@ -162,35 +102,17 @@ test("duplicating a plain routine adds a second one at the new time", () => {
   );
 });
 
-test("duplicating one occurrence of a times routine adds an occurrence, not a routine", () => {
-  // A second Ritual would split one habit's completion across two rows and
-  // break its day-complete rule.
-  idN = 0;
-  const out = duplicateRitualAt("r1", "s1", "16:00", nextId)(sched([times(["08:00", "13:00"])]));
-  assert.equal(out.rituals.length, 1);
-  assert.deepEqual(labelsOf(out.rituals[0]), ["08:00", "13:00", "16:00"]);
-});
 
-test("a duplicated occurrence lands sorted and can become the earliest", () => {
-  idN = 0;
-  const out = duplicateRitualAt("r1", "s1", "06:30", nextId)(sched([times(["08:00", "13:00"])]));
-  assert.deepEqual(labelsOf(out.rituals[0]), ["06:30", "08:00", "13:00"]);
-  assert.equal(out.rituals[0].time, "06:30", "ritual.time mirrors the earliest occurrence");
-});
 
 test("duplicating respects the routine ceiling", () => {
   idN = 0;
   const before = sched([plain(), plain({ id: "r2" })]);
-  assert.equal(duplicateRitualAt("r1", undefined, "17:00", nextId, 2)(before), before);
-  // The ceiling applies to whole routines, not to occurrences of one.
-  const timesBefore = sched([times(["08:00"]), plain({ id: "r2" })]);
-  const out = duplicateRitualAt("r1", "s0", "12:00", nextId, 2)(timesBefore);
-  assert.deepEqual(labelsOf(out.rituals[0]), ["08:00", "12:00"]);
+  assert.equal(duplicateRitualAt("r1", "17:00", nextId, 2)(before), before);
 });
 
 test("duplicating an unknown routine, or to an invalid time, changes nothing", () => {
   idN = 0;
   const before = sched([plain()]);
-  assert.equal(duplicateRitualAt("missing", undefined, "17:00", nextId)(before), before);
-  assert.equal(duplicateRitualAt("r1", undefined, "nope", nextId)(before), before);
+  assert.equal(duplicateRitualAt("missing", "17:00", nextId)(before), before);
+  assert.equal(duplicateRitualAt("r1", "nope", nextId)(before), before);
 });

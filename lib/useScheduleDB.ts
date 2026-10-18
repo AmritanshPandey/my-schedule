@@ -37,6 +37,7 @@ import { pushHistory, popHistory, HISTORY_LIMIT } from "@/lib/scheduleHistory";
 import { validateSchedule } from "@/lib/scheduleSchema";
 import { mergeSchedules, resolveLocalWrite } from "@/lib/mergeSchedule";
 import { onLocalWrite, publishLocalWrite } from "@/lib/tabSync";
+import { retireTimesRituals } from "./ritualMigrations";
 import {
   entityMap,
   normalizeSyncMeta,
@@ -391,7 +392,7 @@ export type RitualColor = typeof RITUAL_COLORS[number];
  * same per-item completion, same day-complete-only-when-every-item-is-done
  * rule; see `RitualStep`'s own comment for what `label` holds under each type.
  */
-export const RITUAL_TRACKING_TYPES = ["checkbox", "quantity", "duration", "count", "checklist", "times"] as const;
+export const RITUAL_TRACKING_TYPES = ["checkbox", "quantity", "duration", "count", "checklist"] as const;
 export type RitualTrackingType = typeof RITUAL_TRACKING_TYPES[number];
 
 /**
@@ -1253,9 +1254,11 @@ function migrate(raw: unknown): Schedule {
       : [];
     const normalizedMilestones = normalizeMilestoneTimelines(plans, milestones);
 
-    const rituals: Ritual[] = Array.isArray(r.rituals)
-      ? (r.rituals as Ritual[]).filter((ri) => ri && typeof ri.id === "string" && typeof ri.title === "string" && typeof ri.time === "string")
-      : [];
+    const rituals: Ritual[] = retireTimesRituals(
+      Array.isArray(r.rituals)
+        ? (r.rituals as Ritual[]).filter((ri) => ri && typeof ri.id === "string" && typeof ri.title === "string" && typeof ri.time === "string")
+        : [],
+    );
 
     const notes = normalizeNotes(r.notes);
 

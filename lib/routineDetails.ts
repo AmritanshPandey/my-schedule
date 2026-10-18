@@ -37,9 +37,6 @@ function displayTime(raw: string | undefined): string | undefined {
  */
 export function routineDetailItems(ritual: Pick<Ritual, "trackingType" | "steps">): RoutineDetailItem[] {
   const steps = ritual.steps ?? [];
-  if (ritual.trackingType === "times") {
-    return steps.map((s) => ({ id: s.id, label: formatDisplayTime(s.label) }));
-  }
   const items = steps.map((s, index) => ({
     item: { id: s.id, label: s.label, time: displayTime(s.time) } as RoutineDetailItem,
     minutes: s.time ? parseTimeToMinutes(s.time) : null,
@@ -50,12 +47,8 @@ export function routineDetailItems(ritual: Pick<Ritual, "trackingType" | "steps"
   return [...timed, ...untimed].map((x) => x.item);
 }
 
-/** When it happens: "Anytime", "8:00 AM", or "3× a day" for several times. */
+/** When it happens: "Anytime" for a routine with no time of its own, else "8:00 AM". */
 export function routineWhenLabel(ritual: Pick<Ritual, "trackingType" | "steps" | "anyTime" | "time">): string {
-  if (ritual.trackingType === "times" && (ritual.steps?.length ?? 0) > 0) {
-    const n = ritual.steps!.length;
-    return n === 1 ? formatDisplayTime(ritual.steps![0].label) : `${n}× a day`;
-  }
   if (ritual.anyTime) return "Anytime";
   return formatDisplayTime(ritual.time);
 }
@@ -77,12 +70,8 @@ export function routineDetailLine(
 ): string | null {
   const items = routineDetailItems(ritual);
   const goal = routineGoalLabel(ritual);
-  if (items.length > 0 && ritual.trackingType !== "times") {
+  if (items.length > 0) {
     const text = items.map((i) => (i.time ? `${i.label} ${i.time}` : i.label)).join(" · ");
-    return goal ? `${goal} · ${text}` : text;
-  }
-  if (items.length > 1 && ritual.trackingType === "times") {
-    const text = items.map((i) => i.label).join(" · ");
     return goal ? `${goal} · ${text}` : text;
   }
   if (goal) return goal;

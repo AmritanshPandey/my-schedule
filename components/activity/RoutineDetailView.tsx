@@ -71,7 +71,7 @@ export default function RoutineDetailView({
   const [calMonth, setCalMonth] = useState(now.getMonth());
   const trackingType = ritual.trackingType ?? "checkbox";
   const measured = trackingType === "quantity" || trackingType === "duration" || trackingType === "count";
-  const tickable = trackingType === "checklist" || trackingType === "times";
+  const tickable = trackingType === "checklist";
   const todaysEntries = entriesForRitualDate(ritualCompletions, ritual.id, today);
   const loggedEntries = todaysEntries.filter((e) => e.value !== undefined);
   const progress = ritualDayProgress(ritual, todaysEntries);

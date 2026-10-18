@@ -212,9 +212,9 @@ interface RitualMark { top: number; occurrences: RitualOccurrence[] }
  *  purpose — kept separate here only because this grid positions marks per
  *  weekday column rather than per absolute time-of-day. */
 function occurrencesFor(ritual: Ritual): Array<{ stepId?: string; time: string }> {
-  if (ritual.trackingType === "times" && ritual.steps && ritual.steps.length > 0) {
-    return ritual.steps.map((step) => ({ stepId: step.id, time: step.label }));
-  }
+  // One occurrence, always. This returned several for the retired "times"
+  // tracking type; the shape is kept so the per-column mark rendering below
+  // doesn't need rewriting, and can be flattened whenever that is touched.
   return [{ time: ritual.time }];
 }
 
