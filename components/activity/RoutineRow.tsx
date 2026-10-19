@@ -198,7 +198,10 @@ export default function RoutineRow({
               prompt="How closely did you follow it?"
               value={progress.followed}
               routineTitle={ritual.title}
-              onChange={(pct) => { onMarkDone(ritual.id, selectedDateISO, pct); setRating(false); }}
+              // The slider stays open after a release: unlike the four chips it
+              // replaced, a rating you can drag invites a second look, and the
+              // pill beside the title already shows the committed value.
+              onChange={(pct) => onMarkDone(ritual.id, selectedDateISO, pct)}
             />
           </m.div>
         )}
