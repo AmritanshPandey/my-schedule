@@ -243,11 +243,24 @@ export function TaskBlockCard({
 
   const title = (
     <span
-      className={`min-w-0 truncate font-extrabold leading-tight tracking-normal ${styles.title} ${
+      className={`flex min-w-0 items-baseline font-extrabold leading-tight tracking-normal ${isList ? "gap-1.5" : "gap-1"} ${styles.title} ${
         isList ? (slim ? "text-[14px]" : "text-[17px]") : compact ? "text-[11px]" : "text-[12.5px]"
       } ${resolved && isList ? `line-through ${missed ? "decoration-rose-400" : "decoration-neutral-400"}` : ""}`}
     >
-      {task.title}
+      {/* The continuation marker sits IN the title row, not floating over the
+          card. Absolutely positioned at left-1 it overlapped the first letter,
+          because nothing reserved space for it — "↳Recover" with the glyph
+          inside the R. The card's aria-label already says "continued from the
+          previous day", so this is decoration for sighted readers only. */}
+      {continuation && (
+        <IconCornerDownRight
+          aria-hidden="true"
+          size={isList ? 15 : compact ? 10 : 12}
+          strokeWidth={2.4}
+          className="shrink-0 self-center opacity-70"
+        />
+      )}
+      <span className="min-w-0 truncate">{task.title}</span>
     </span>
   );
 
@@ -375,14 +388,6 @@ export function TaskBlockCard({
       } ${continuation ? "opacity-80 !cursor-not-allowed" : onClick ? "cursor-pointer" : ""} ${className}`}
       style={style}
     >
-      {continuation && (
-        <span
-          aria-hidden="true"
-          className={`pointer-events-none absolute left-1 top-1 ${compact ? "" : "top-1.5"} ${styles.planLabel}`}
-        >
-          <IconCornerDownRight size={compact ? 10 : 12} strokeWidth={2.4} />
-        </span>
-      )}
       {isList && (
         <>
           <div className={`pointer-events-none absolute ${slim ? "inset-y-2" : "inset-y-4"} left-0 w-1 rounded-r-full ${styles.dot}`} />
