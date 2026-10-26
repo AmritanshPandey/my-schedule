@@ -15,7 +15,6 @@ import {
   IconTrophy,
   IconPlus,
   IconRepeat,
-  IconSparkles,
   IconTarget,
 } from "@tabler/icons-react";
 import type { DayKey, Plan, ProgressTracker, Schedule, Task } from "@/lib/useScheduleDB";
@@ -48,6 +47,7 @@ import { calculateRitualStats, ritualScheduledOnDate } from "@/lib/consistency/c
 import { completedRitualIdsOn } from "@/lib/consistency/ritualDayStatus";
 import { haptic } from "@/lib/haptics";
 import { CARD, CARD_INTERACTIVE, SOFT_PANEL } from "@/components/ui/surfaces";
+import Button from "@/components/ui/Button";
 import ProgressBar from "@/components/ui/ProgressBar";
 import AnimatedNumber from "@/components/ui/AnimatedNumber";
 import Sparkline from "@/components/ui/Sparkline";
@@ -689,93 +689,120 @@ function GettingStarted({
   const nextStep = steps.find((s) => !s.done) ?? steps[0];
   const ctaLabel = nextStep.n === 1 ? "Create plan" : nextStep.n === 2 ? "Schedule tasks" : "Add a routine";
 
+  // A soft green wash marks this as a welcome moment without the loud solid
+  // panel; saturated green is still spent only on progress (finished
+  // segments, done markers) and the single next action — the One Signal rule.
   return (
-    <section className="mx-auto grid w-full max-w-[980px] gap-4 lg:grid-cols-[1.05fr_0.95fr]">
-      <div className="rounded-2xl border border-emerald-700 bg-[#00A63E] px-6 py-6 text-neutral-950 dark:border-emerald-400/30 dark:bg-[#2FD46E]">
-        <div className="flex items-start justify-between gap-4">
-          <div>
-            <p className="text-[12px] font-extrabold uppercase tracking-[0.10em] text-neutral-950/70">Getting started</p>
-            <h2 className="mt-3 max-w-[360px] text-[32px] font-extrabold leading-[0.98] tracking-[-0.04em]">
-              Make your day trackable
-            </h2>
-            <p className="mt-3 max-w-[360px] text-[14px] font-semibold text-neutral-950/70">
-              {doneCount === 0
-                ? "Finish a few steps to turn goals into a working dashboard."
-                : `${doneCount} of ${steps.length} done — keep going.`}
-            </p>
-          </div>
-          <span className="grid h-12 w-12 shrink-0 place-items-center rounded-2xl bg-neutral-950 text-white">
-            <IconSparkles size={24} strokeWidth={1.8} />
-          </span>
-        </div>
-        <div className="mt-8 h-2 overflow-hidden rounded-full bg-neutral-950/15">
-          <div
-            className="h-full rounded-full bg-neutral-950 transition-[width] duration-500"
-            style={{ width: `${Math.max(6, (doneCount / steps.length) * 100)}%` }}
-          />
-        </div>
-        <button
-          type="button"
-          onClick={() => { haptic("light"); onNavigate(nextStep.tab); }}
-          className="mt-8 inline-flex min-h-[48px] w-full items-center justify-center rounded-xl bg-neutral-950 px-5 text-[16px] font-extrabold text-white transition-colors hover:bg-neutral-800"
-        >
-          {ctaLabel}
-        </button>
-        <button
-          type="button"
-          onClick={() => { haptic("light"); onDismiss(); }}
-          className="mt-3 inline-flex min-h-[36px] w-full items-center justify-center rounded-xl px-5 text-[12px] font-bold text-neutral-950/60 transition-colors hover:text-neutral-950"
-        >
-          Skip setup — take me to the dashboard
-        </button>
-      </div>
-      <div className={`${CARD} px-4 py-4`}>
-        <SectionHeader icon={IconSparkles} title="Setup checklist" />
-        <div className="divide-y divide-neutral-100 dark:divide-white/[0.06]">
-          {steps.map(({ n, icon: Icon, title, desc, tab, done: stepDone }) => (
-            <button
-              key={n}
-              type="button"
-              onClick={() => { haptic("light"); onNavigate(tab); }}
-              className="flex w-full items-center gap-3 py-4 text-left"
-            >
-              <span
-                className={`grid h-10 w-10 shrink-0 place-items-center rounded-xl ${
-                  stepDone
-                    ? "bg-emerald-500/15 text-emerald-600 dark:text-emerald-400"
-                    : "bg-neutral-100 text-neutral-500 dark:bg-white/[0.06] dark:text-neutral-400"
-                }`}
-              >
-                <Icon size={20} strokeWidth={1.8} />
-              </span>
-              <div className="min-w-0 flex-1">
-                <div className="flex items-center gap-2">
-                  <span
-                    className={`grid h-[18px] w-[18px] shrink-0 place-items-center rounded-full text-[10px] font-extrabold tabular-nums ${
-                      stepDone
-                        ? "bg-emerald-500 text-white"
-                        : "bg-emerald-500/15 text-emerald-600 dark:text-emerald-400"
-                    }`}
-                  >
-                    {stepDone ? <IconCheck size={11} strokeWidth={3.2} /> : n}
-                  </span>
-                  <p
-                    className={`truncate text-[16px] font-bold ${
-                      stepDone
-                        ? "text-neutral-400 line-through decoration-neutral-300 dark:text-neutral-500 dark:decoration-neutral-600"
-                        : "text-neutral-950 dark:text-white"
-                    }`}
-                  >
-                    {title}
-                  </p>
-                </div>
-                <p className="mt-1 text-[12px] leading-snug text-neutral-500 dark:text-neutral-400">{desc}</p>
-              </div>
-              <IconArrowRight size={17} strokeWidth={2.4} className="shrink-0 text-neutral-400 dark:text-neutral-500" />
-            </button>
+    <section
+      aria-labelledby="getting-started-title"
+      className="w-full max-w-[640px] rounded-2xl border border-emerald-600/15 bg-emerald-50/70 px-5 py-5 dark:border-emerald-400/15 dark:bg-emerald-400/[0.06] sm:px-6 sm:py-6"
+    >
+      <h2
+        id="getting-started-title"
+        className="text-[24px] font-extrabold leading-[1.1] tracking-[-0.02em] text-neutral-950 [text-wrap:balance] dark:text-white"
+      >
+        Set up your first day
+      </h2>
+      <p className="mt-1.5 text-[14px] font-medium text-neutral-600 dark:text-neutral-400">
+        Three steps, about two minutes.
+      </p>
+
+      {/* Honest progress: one segment per step, filled only when that step is
+          actually done. No head-start sliver at 0 of 3. */}
+      <div className="mt-5 flex items-center gap-3">
+        <div className="flex flex-1 gap-1.5" role="img" aria-label={`${doneCount} of ${steps.length} setup steps done`}>
+          {steps.map((s) => (
+            <span
+              key={s.n}
+              className={`h-1.5 flex-1 rounded-full transition-colors duration-300 motion-reduce:transition-none ${
+                s.done ? "bg-[#00A63E] dark:bg-[#2FD46E]" : "bg-emerald-900/10 dark:bg-white/[0.10]"
+              }`}
+            />
           ))}
         </div>
+        <span className="shrink-0 text-[12px] font-bold tabular-nums text-emerald-800 dark:text-emerald-300">
+          {doneCount} of {steps.length} done
+        </span>
       </div>
+
+      <ol className="mt-4 flex flex-col gap-1">
+        {steps.map(({ n, icon: Icon, title, desc, tab, done: stepDone }) => {
+          const isNext = !stepDone && n === nextStep.n;
+          // The marker carries the step's icon, and becomes the check once
+          // the step is done — no separate number badge or icon tile.
+          const marker = (
+            <span
+              aria-hidden
+              className={`grid h-9 w-9 shrink-0 place-items-center rounded-full ${
+                stepDone
+                  ? "bg-[#00A63E] text-white dark:bg-[#2FD46E] dark:text-neutral-950"
+                  : isNext
+                  ? "border-2 border-neutral-950 bg-white text-neutral-950 dark:border-white dark:bg-transparent dark:text-white"
+                  : "border border-emerald-900/15 bg-white/60 text-neutral-500 dark:border-white/[0.15] dark:bg-transparent dark:text-neutral-400"
+              }`}
+            >
+              {stepDone ? <IconCheck size={16} strokeWidth={3} /> : <Icon size={17} strokeWidth={2} />}
+            </span>
+          );
+          const text = (
+            <div className="min-w-0 flex-1">
+              <p
+                className={`truncate text-[15px] font-bold leading-snug ${
+                  stepDone ? "text-neutral-500 dark:text-neutral-400" : "text-neutral-950 dark:text-white"
+                }`}
+              >
+                <span className="sr-only">Step {n}: </span>
+                {title}
+                {stepDone && <span className="sr-only"> (done)</span>}
+              </p>
+              <p className="mt-0.5 text-[13px] leading-snug text-neutral-600 dark:text-neutral-400">{desc}</p>
+            </div>
+          );
+
+          return (
+            <li key={n}>
+              {isNext ? (
+                // The next step is the one place on the card that acts: a
+                // lighter row (not a second bordered card) and the green CTA.
+                <div className="flex flex-wrap items-center gap-3 rounded-xl bg-white/90 px-3 py-3 dark:bg-white/[0.05] sm:flex-nowrap">
+                  {marker}
+                  {text}
+                  <Button
+                    variant="cta"
+                    size="md"
+                    onClick={() => { haptic("light"); onNavigate(tab); }}
+                    className="ml-12 shrink-0 sm:ml-0"
+                  >
+                    {ctaLabel}
+                  </Button>
+                </div>
+              ) : (
+                <button
+                  type="button"
+                  onClick={() => { haptic("light"); onNavigate(tab); }}
+                  className="group flex w-full items-center gap-3 rounded-xl px-3 py-3 text-left transition-colors hover:bg-white/60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500/60 dark:hover:bg-white/[0.04]"
+                >
+                  {marker}
+                  {text}
+                  <IconArrowRight
+                    size={16}
+                    strokeWidth={2.2}
+                    className="shrink-0 text-neutral-400 transition-transform duration-150 group-hover:translate-x-0.5 motion-reduce:transition-none dark:text-neutral-500"
+                  />
+                </button>
+              )}
+            </li>
+          );
+        })}
+      </ol>
+
+      <button
+        type="button"
+        onClick={() => { haptic("light"); onDismiss(); }}
+        className="-ml-2 mt-3 inline-flex min-h-[44px] items-center rounded-lg px-2 text-[13px] font-semibold text-neutral-600 transition-colors hover:text-neutral-950 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500/60 dark:text-neutral-400 dark:hover:text-white"
+      >
+        I&apos;ll do this later
+      </button>
     </section>
   );
 }

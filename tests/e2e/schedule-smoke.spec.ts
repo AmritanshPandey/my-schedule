@@ -560,7 +560,7 @@ test("shows the getting-started guide for a fresh user", async ({ page }, testIn
   await page.goto(path, { waitUntil: "domcontentloaded" });
   await dismissInstallPrompt(page);
 
-  await expect(page.locator("body")).toContainText("Make your day trackable", { timeout: 20_000 });
+  await expect(page.locator("body")).toContainText("Set up your first day", { timeout: 20_000 });
   await expect(page.getByText("Create your first plan").first()).toBeVisible();
   await expectNoDocumentOverflow(page);
   await expectVisibleControlsInsideViewport(page);

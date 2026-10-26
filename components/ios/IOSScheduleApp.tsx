@@ -1438,47 +1438,85 @@ export default function IOSScheduleApp() {
         <ErrorBoundary section name="Dashboard">
           <div data-testid="overview-dashboard" className="space-y-4 px-4 pt-5">
             {showSetup && (
-              <section className="overflow-hidden rounded-2xl border border-emerald-600/40 bg-[#00A63E] p-4 text-neutral-950 dark:border-emerald-400/25 dark:bg-[#2FD46E]">
-                <div className="flex items-start justify-between gap-3">
-                  <div className="min-w-0">
-                    <p className="text-[11px] font-black uppercase tracking-[0.10em] text-neutral-950/80">Getting started</p>
-                    <p className="mt-1 text-[19px] font-black leading-tight">Make your day trackable</p>
+              // Same treatment as the desktop card (OverviewDashboard's
+              // GettingStarted): a soft green wash, honest per-step segments,
+              // and saturated green only on progress and the one next action.
+              <section
+                aria-labelledby="ios-setup-title"
+                className="rounded-2xl border border-emerald-600/15 bg-emerald-50/70 p-4 dark:border-emerald-400/15 dark:bg-emerald-400/[0.06]"
+              >
+                <p id="ios-setup-title" className="text-[19px] font-extrabold leading-tight tracking-[-0.01em] text-neutral-950 dark:text-white">
+                  Set up your first day
+                </p>
+                <p className="mt-1 text-[13px] font-medium text-neutral-600 dark:text-neutral-400">Three steps, about two minutes.</p>
+                <div className="mt-3 flex items-center gap-3">
+                  <div className="flex flex-1 gap-1.5" role="img" aria-label={`${setupDoneCount} of 3 setup steps done`}>
+                    {setupSteps.map(({ label, done }) => (
+                      <span
+                        key={label}
+                        className={`h-1.5 flex-1 rounded-full transition-colors duration-300 motion-reduce:transition-none ${
+                          done ? "bg-[#00A63E] dark:bg-[#2FD46E]" : "bg-emerald-900/10 dark:bg-white/[0.10]"
+                        }`}
+                      />
+                    ))}
                   </div>
-                  <span className="text-[12px] font-black tabular-nums text-neutral-950/70">{setupDoneCount}/3</span>
+                  <span className="shrink-0 text-[12px] font-bold tabular-nums text-emerald-800 dark:text-emerald-300">
+                    {setupDoneCount} of 3
+                  </span>
                 </div>
-                <div className="mt-3 mb-3.5 h-1.5 overflow-hidden rounded-full bg-neutral-950/15">
-                  <div className="h-full rounded-full bg-neutral-950 transition-[width] duration-500" style={{ width: `${Math.max(8, (setupDoneCount / 3) * 100)}%` }} />
-                </div>
-                <div className="space-y-1.5">
-                  {setupSteps.map(({ label, tab, done, Icon }) => (
-                    <button
-                      key={label}
-                      type="button"
-                      onClick={() => { haptic("light"); setActiveTab(tab); }}
-                      className="flex w-full items-center gap-2.5 rounded-xl bg-neutral-950/5 px-3 py-2.5 text-left active:bg-neutral-950/10"
-                    >
-                      <span className={`grid h-7 w-7 shrink-0 place-items-center rounded-lg ${done ? "bg-neutral-950 text-white" : "bg-neutral-950/10 text-neutral-950"}`}>
-                        {done ? <IconCheck size={15} strokeWidth={3} /> : <Icon size={15} strokeWidth={2.2} />}
-                      </span>
-                      <span className={`min-w-0 flex-1 truncate text-[14px] font-bold ${done ? "text-neutral-950/45 line-through" : "text-neutral-950"}`}>{label}</span>
-                      {!done && <IconChevronRight size={16} strokeWidth={2.4} className="shrink-0 text-neutral-950/40" />}
-                    </button>
-                  ))}
-                </div>
-                <div className="mt-3.5 flex gap-2">
+                <ol className="mt-3 space-y-1">
+                  {setupSteps.map(({ label, tab, done, Icon }, index) => {
+                    const isNext = !done && label === nextSetup.label;
+                    return (
+                      <li key={label}>
+                        <button
+                          type="button"
+                          onClick={() => { haptic("light"); setActiveTab(tab); }}
+                          className={`flex min-h-[52px] w-full items-center gap-3 rounded-xl px-3 py-2 text-left active:bg-white/70 dark:active:bg-white/[0.06] ${
+                            isNext ? "bg-white/90 dark:bg-white/[0.05]" : ""
+                          }`}
+                        >
+                          <span
+                            aria-hidden
+                            className={`grid h-8 w-8 shrink-0 place-items-center rounded-full ${
+                              done
+                                ? "bg-[#00A63E] text-white dark:bg-[#2FD46E] dark:text-neutral-950"
+                                : isNext
+                                ? "border-2 border-neutral-950 bg-white text-neutral-950 dark:border-white dark:bg-transparent dark:text-white"
+                                : "border border-emerald-900/15 bg-white/60 text-neutral-500 dark:border-white/[0.15] dark:bg-transparent dark:text-neutral-400"
+                            }`}
+                          >
+                            {done ? <IconCheck size={15} strokeWidth={3} /> : <Icon size={16} strokeWidth={2} />}
+                          </span>
+                          <span
+                            className={`min-w-0 flex-1 truncate text-[14px] font-bold ${
+                              done ? "text-neutral-500 dark:text-neutral-400" : "text-neutral-950 dark:text-white"
+                            }`}
+                          >
+                            <span className="sr-only">Step {index + 1}: </span>
+                            {label}
+                            {done && <span className="sr-only"> (done)</span>}
+                          </span>
+                          <IconChevronRight size={16} strokeWidth={2.4} className="shrink-0 text-neutral-400 dark:text-neutral-500" />
+                        </button>
+                      </li>
+                    );
+                  })}
+                </ol>
+                <div className="mt-3 flex items-center gap-2">
                   <button
                     type="button"
                     onClick={() => { haptic("light"); setActiveTab(nextSetup.tab); }}
-                    className="flex min-h-[44px] flex-1 items-center justify-center rounded-xl bg-neutral-950 text-[14px] font-black text-white active:bg-neutral-800"
+                    className="flex min-h-[44px] flex-1 items-center justify-center rounded-full bg-[#008236] text-[14px] font-bold text-white active:scale-[0.98] active:bg-[#006B2C] dark:bg-[#2FD46E] dark:text-neutral-950"
                   >
                     {nextSetup.tab === 1 ? "Create plan" : nextSetup.tab === 0 ? "Schedule tasks" : "Add routine"}
                   </button>
                   <button
                     type="button"
                     onClick={() => { haptic("light"); dismissIosSetup(); }}
-                    className="flex min-h-[44px] items-center justify-center rounded-xl px-4 text-[13px] font-bold text-neutral-950/55 active:text-neutral-950"
+                    className="flex min-h-[44px] items-center justify-center rounded-full px-3 text-[13px] font-semibold text-neutral-600 active:text-neutral-950 dark:text-neutral-400 dark:active:text-white"
                   >
-                    Skip
+                    I&apos;ll do this later
                   </button>
                 </div>
               </section>
