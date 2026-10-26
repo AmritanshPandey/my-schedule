@@ -1416,51 +1416,84 @@ export default function IOSScheduleApp() {
         <ErrorBoundary section name="Dashboard">
           <View testID="overview-dashboard" className="gap-4 px-4 pt-5">
             {showSetup && (
-              <View className="overflow-hidden rounded-2xl border border-emerald-600/40 bg-[#00A63E] p-4 dark:border-emerald-400/25 dark:bg-[#2FD46E]">
-                <View className="flex-row items-start justify-between gap-3">
-                  <View className="min-w-0 flex-1">
-                    <Text className="text-[11px] font-black uppercase tracking-[0.10em] text-neutral-950/80">Getting started</Text>
-                    <Text className="mt-1 text-[19px] font-black leading-tight text-neutral-950">Make your day trackable</Text>
+              // Same treatment as the web card (components/OverviewDashboard.tsx
+              // GettingStarted): a soft green wash, honest per-step segments,
+              // and saturated green only on progress and the one next action.
+              <View className="rounded-2xl border border-emerald-600/15 bg-emerald-50/70 p-4 dark:border-emerald-400/15 dark:bg-emerald-400/[0.06]">
+                <Text accessibilityRole="header" className="text-[19px] font-extrabold leading-tight tracking-[-0.01em] text-neutral-950 dark:text-white">
+                  Set up your first day
+                </Text>
+                <Text className="mt-1 text-[13px] font-medium text-neutral-600 dark:text-neutral-400">Three steps, about two minutes.</Text>
+                <View className="mt-3 flex-row items-center gap-3">
+                  <View accessible accessibilityLabel={`${setupDoneCount} of 3 setup steps done`} className="flex-1 flex-row gap-1.5">
+                    {setupSteps.map(({ label, done }) => (
+                      <View
+                        key={label}
+                        className={`h-1.5 flex-1 rounded-full ${done ? 'bg-[#00A63E] dark:bg-[#2FD46E]' : 'bg-emerald-900/10 dark:bg-white/[0.10]'}`}
+                      />
+                    ))}
                   </View>
-                  <Text className="text-[12px] font-black tabular-nums text-neutral-950/70">{setupDoneCount}/3</Text>
+                  <Text className="shrink-0 text-[12px] font-bold tabular-nums text-emerald-800 dark:text-emerald-300">{setupDoneCount} of 3</Text>
                 </View>
-                <View className="mb-3.5 mt-3 h-1.5 overflow-hidden rounded-full bg-neutral-950/15">
-                  <View className="h-full rounded-full bg-neutral-950" style={{ width: `${Math.max(8, (setupDoneCount / 3) * 100)}%` }} />
+                <View className="mt-3 gap-1">
+                  {setupSteps.map(({ label, tab, done, icon }, index) => {
+                    const isNext = !done && label === nextSetup.label;
+                    return (
+                      <Pressable
+                        key={label}
+                        accessibilityRole="button"
+                        accessibilityLabel={`Step ${index + 1}: ${label}${done ? ' (done)' : ''}`}
+                        onPress={() => {
+                          haptic('light');
+                          setActiveTab(tab);
+                        }}
+                        className={`min-h-[52px] w-full flex-row items-center gap-3 rounded-xl px-3 py-2 active:bg-white/70 dark:active:bg-white/[0.06] ${
+                          isNext ? 'bg-white/90 dark:bg-white/[0.05]' : ''
+                        }`}
+                      >
+                        <View
+                          className={`h-8 w-8 shrink-0 items-center justify-center rounded-full ${
+                            done
+                              ? 'bg-[#00A63E] dark:bg-[#2FD46E]'
+                              : isNext
+                                ? 'border-2 border-neutral-950 bg-white dark:border-white dark:bg-transparent'
+                                : 'border border-emerald-900/15 bg-white/60 dark:border-white/[0.15] dark:bg-transparent'
+                          }`}
+                        >
+                          {done ? (
+                            <Icon icon={IconCheck} size={15} strokeWidth={3} className="text-white dark:text-neutral-950" />
+                          ) : (
+                            <Icon
+                              icon={icon}
+                              size={16}
+                              strokeWidth={2}
+                              className={isNext ? 'text-neutral-950 dark:text-white' : 'text-neutral-500 dark:text-neutral-400'}
+                            />
+                          )}
+                        </View>
+                        <Text
+                          numberOfLines={1}
+                          className={`min-w-0 flex-1 text-[14px] font-bold ${done ? 'text-neutral-500 dark:text-neutral-400' : 'text-neutral-950 dark:text-white'}`}
+                        >
+                          {label}
+                        </Text>
+                        <Icon icon={IconChevronRight} size={16} strokeWidth={2.4} className="shrink-0 text-neutral-400 dark:text-neutral-500" />
+                      </Pressable>
+                    );
+                  })}
                 </View>
-                <View className="gap-1.5">
-                  {setupSteps.map(({ label, tab, done, icon }) => (
-                    <Pressable
-                      key={label}
-                      accessibilityRole="button"
-                      accessibilityState={{ checked: done }}
-                      onPress={() => {
-                        haptic('light');
-                        setActiveTab(tab);
-                      }}
-                      className="w-full flex-row items-center gap-2.5 rounded-xl bg-neutral-950/5 px-3 py-2.5 active:bg-neutral-950/10"
-                    >
-                      <View className={`h-7 w-7 shrink-0 items-center justify-center rounded-lg ${done ? 'bg-neutral-950' : 'bg-neutral-950/10'}`}>
-                        {done ? (
-                          <Icon icon={IconCheck} size={15} strokeWidth={3} className="text-white" />
-                        ) : (
-                          <Icon icon={icon} size={15} strokeWidth={2.2} className="text-neutral-950" />
-                        )}
-                      </View>
-                      <Text className={`min-w-0 flex-1 truncate text-[14px] font-bold ${done ? 'text-neutral-950/45 line-through' : 'text-neutral-950'}`}>{label}</Text>
-                      {!done && <Icon icon={IconChevronRight} size={16} strokeWidth={2.4} className="shrink-0 text-neutral-950/40" />}
-                    </Pressable>
-                  ))}
-                </View>
-                <View className="mt-3.5 flex-row gap-2">
+                <View className="mt-3 flex-row items-center gap-2">
                   <Pressable
                     accessibilityRole="button"
                     onPress={() => {
                       haptic('light');
                       setActiveTab(nextSetup.tab);
                     }}
-                    className="min-h-[44px] flex-1 items-center justify-center rounded-xl bg-neutral-950 active:bg-neutral-800"
+                    className="min-h-[44px] flex-1 items-center justify-center rounded-full bg-[#008236] active:scale-[0.98] active:bg-[#006B2C] dark:bg-[#2FD46E]"
                   >
-                    <Text className="text-[14px] font-black text-white">{nextSetup.tab === 1 ? 'Create plan' : nextSetup.tab === 0 ? 'Schedule tasks' : 'Add routine'}</Text>
+                    <Text className="text-[14px] font-bold text-white dark:text-neutral-950">
+                      {nextSetup.tab === 1 ? 'Create plan' : nextSetup.tab === 0 ? 'Schedule tasks' : 'Add routine'}
+                    </Text>
                   </Pressable>
                   <Pressable
                     accessibilityRole="button"
@@ -1468,9 +1501,9 @@ export default function IOSScheduleApp() {
                       haptic('light');
                       dismissIosSetup();
                     }}
-                    className="min-h-[44px] items-center justify-center rounded-xl px-4"
+                    className="min-h-[44px] items-center justify-center rounded-full px-3"
                   >
-                    <Text className="text-[13px] font-bold text-neutral-950/55">Skip</Text>
+                    <Text className="text-[13px] font-semibold text-neutral-600 dark:text-neutral-400">I'll do this later</Text>
                   </Pressable>
                 </View>
               </View>
