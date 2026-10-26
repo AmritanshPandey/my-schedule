@@ -657,6 +657,14 @@ export default function PlanDetailView({
   }
 
   function handleMilestoneSave(data: MilestoneSaveData) {
+    // A brand-new success-metric tracker is created first — via the same
+    // onAddTracker path the title-detection suggestion already uses below —
+    // so it exists before the milestone is saved pointing at it
+    // (data.linkedTrackers is already set to [newTracker.id] by MilestoneSheet).
+    if (data.newTracker) {
+      const { id, title: trackerTitle, unit, goalDirection, goalValue, startingValue } = data.newTracker;
+      onAddTracker(plan.id, trackerTitle, unit, goalDirection, id, goalValue, startingValue);
+    }
     if (milestoneSheetMode === "edit" && editingMilestone) {
       onUpdateMilestone(editingMilestone.id, data);
     } else {
@@ -2196,6 +2204,7 @@ export default function PlanDetailView({
         mode={milestoneSheetMode}
         milestone={editingMilestone}
         milestones={planMilestones}
+        trackers={trackers}
         planStartDate={plan.startDate}
         isOpen={milestoneSheetOpen}
         onClose={() => {

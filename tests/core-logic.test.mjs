@@ -1385,7 +1385,7 @@ test("applyAutoMissed only misses a multi-slot task's unresolved phases, not the
 
 test("every optional Task field is covered by the normalize allowlist", () => {
   const root = new URL("..", import.meta.url).pathname;
-  const source = readFileSync(join(root, "lib/useScheduleDB.ts"), "utf8");
+  const source = readFileSync(join(root, "packages/core/lib/scheduleTypes.ts"), "utf8");
 
   const start = source.indexOf("export interface Task {");
   assert.notEqual(start, -1, "could not locate the Task interface");
@@ -2220,7 +2220,7 @@ test("buildActiveHours' waking window shrinks/grows with configured sleepHours",
 // dropped on every load — the daily target would look saved until you reloaded.
 test("normalizeTracker carries `dailyTarget` through the whitelist", async () => {
   const { readFile } = await import("node:fs/promises");
-  const source = await readFile(new URL("../lib/useScheduleDB.ts", import.meta.url), "utf8");
+  const source = await readFile(new URL("../packages/core/lib/scheduleMigrate.ts", import.meta.url), "utf8");
 
   const start = source.indexOf("function normalizeTracker(value: unknown): ProgressTracker | null {");
   assert.ok(start > -1, "normalizeTracker() was renamed — update this guard");
@@ -2235,7 +2235,7 @@ test("normalizeTracker carries `dailyTarget` through the whitelist", async () =>
 
 test("normalizeCategories carries `kind` through the whitelist", async () => {
   const { readFile } = await import("node:fs/promises");
-  const source = await readFile(new URL("../lib/useScheduleDB.ts", import.meta.url), "utf8");
+  const source = await readFile(new URL("../packages/core/lib/scheduleMigrate.ts", import.meta.url), "utf8");
 
   const start = source.indexOf("function normalizeCategories(value: unknown): TaskCategory[] {");
   assert.ok(start > -1, "normalizeCategories() was renamed — update this guard");

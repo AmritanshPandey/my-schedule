@@ -96,7 +96,7 @@ import { deleteGoal } from "@/lib/goalMutations";
 import { togglePlanPaused } from "@/lib/planLifecycle";
 import { dismissAllAttention, dismissibleCount, dismissAttentionKey } from "@/lib/attentionDismissal";
 import { applyAdaptation } from "@/lib/milestoneAdaptation";
-import { calculateMilestoneState } from "@/lib/milestoneHealth";
+import { calculateMilestoneState, type MilestoneState } from "@/lib/milestoneHealth";
 import AdaptMilestoneSheet from "@/components/plan/AdaptMilestoneSheet";
 import { formatDisplayTime, inputToDisplayTime, minutesToInputTime, parseTimeToMinutes, toScheduleDayMinutes } from "@/lib/timeUtils";
 import { calculateExecutionStreak } from "@/lib/consistency/calculateExecutionStreak";
@@ -506,6 +506,49 @@ export default function IOSScheduleApp() {
   }, [toast, setToast]);
 
   const plansById = useMemo(() => new Map(schedule.plans.map((plan) => [plan.id, plan])), [schedule.plans]);
+
+  // Every milestone's success-metric tracker, keyed by tracker id, with its
+  // live health/pace already computed — the Tracking tab's own view of the
+  // same relationship PlanDetailView already shows, from the same
+  // calculateMilestoneState call so the two surfaces never disagree.
+  //
+  // A tracker can be the success metric for more than one milestone along a
+  // roadmap (e.g. "Beta signups" gating both an earlier and a later
+  // milestone) — the still-relevant (not completed), earliest-in-roadmap one
+  // wins, since that's the one someone logging today actually cares about,
+  // not one further down the line. Explicit sortOrder comparison rather than
+  // relying on array order, since schedule.milestones isn't guaranteed
+  // sortOrder-sorted.
+  const milestoneByTrackerId = useMemo(() => {
+    const map = new Map<string, { milestone: Milestone; state: MilestoneState }>();
+    for (const m of schedule.milestones ?? []) {
+      const trackerId = m.linkedTrackers?.[0];
+      if (!trackerId) continue;
+      const existing = map.get(trackerId);
+      if (existing) {
+        const existingDone = existing.milestone.status === "completed";
+        const candidateDone = m.status === "completed";
+        const candidateIsBetter = existingDone
+          ? !candidateDone || m.sortOrder < existing.milestone.sortOrder
+          : !candidateDone && m.sortOrder < existing.milestone.sortOrder;
+        if (!candidateIsBetter) continue;
+      }
+      const plan = plansById.get(m.planId);
+      if (!plan) continue;
+      map.set(trackerId, {
+        milestone: m,
+        state: calculateMilestoneState({
+          milestone: m,
+          plan,
+          activities: schedule.activities,
+          trackers: schedule.progressTrackers,
+          metricEntries: schedule.metricEntries,
+          trackingStart: schedule.preferences?.startDate,
+        }),
+      });
+    }
+    return map;
+  }, [schedule.milestones, plansById, schedule.activities, schedule.progressTrackers, schedule.metricEntries, schedule.preferences?.startDate]);
 
   function performDayClear() {
     if (!dayClearRequest) return;
@@ -1864,6 +1907,7 @@ export default function IOSScheduleApp() {
                 metricEntries={schedule.metricEntries}
                 plans={schedule.plans}
                 trackingStart={schedule.preferences?.startDate}
+                milestoneByTrackerId={milestoneByTrackerId}
                 onLog={handleLogTrackerAmount}
                 onOpenAddEntry={(tracker) => setEntryTracker(tracker)}
                 onDeleteEntry={handleDeleteEntry}

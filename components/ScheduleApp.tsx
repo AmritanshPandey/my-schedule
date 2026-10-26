@@ -219,7 +219,7 @@ import { togglePlanPaused } from "@/lib/planLifecycle";
 import { dismissAllAttention, dismissibleCount, dismissAttentionKey } from "@/lib/attentionDismissal";
 import type { NeedsAttention } from "@/lib/needsAttention";
 import { applyAdaptation } from "@/lib/milestoneAdaptation";
-import { calculateMilestoneState } from "@/lib/milestoneHealth";
+import { calculateMilestoneState, type MilestoneState } from "@/lib/milestoneHealth";
 import AdaptMilestoneSheet from "@/components/plan/AdaptMilestoneSheet";
 import { haptic } from "@/lib/haptics";
 import { buildDeleteConfirmationCopy } from "@/lib/deleteConfirm";
@@ -2079,6 +2079,54 @@ export default function ScheduleApp() {
     }
     return Array.from(byId.values());
   }, [schedule.activities]);
+
+  // Every milestone's success-metric tracker, keyed by tracker id, with its
+  // live health/pace already computed — the Tracking tab's own view of the
+  // same relationship PlanDetailView already shows, from the same
+  // calculateMilestoneState call so the two surfaces never disagree.
+  //
+  // A tracker can be the success metric for more than one milestone along a
+  // roadmap (e.g. "Beta signups" gating both an earlier and a later
+  // milestone) — the first still-relevant (not completed) one in roadmap
+  // order wins, since that's the one someone logging today actually cares
+  // about; a later, not-yet-started milestone would otherwise silently
+  // shadow the one that's actually overdue or in progress.
+  const milestoneByTrackerId = useMemo(() => {
+    const map = new Map<string, { milestone: Milestone; state: MilestoneState }>();
+    for (const m of schedule.milestones ?? []) {
+      const trackerId = m.linkedTrackers?.[0];
+      if (!trackerId) continue;
+      // Explicit roadmap-order comparison rather than relying on array
+      // iteration order (schedule.milestones isn't guaranteed sortOrder-
+      // sorted): a still-relevant milestone always wins over a completed
+      // one, and among two still-relevant ones the earlier in the roadmap
+      // (lower sortOrder) wins — that's the one someone logging today cares
+      // about, not one further down the line.
+      const existing = map.get(trackerId);
+      if (existing) {
+        const existingDone = existing.milestone.status === "completed";
+        const candidateDone = m.status === "completed";
+        const candidateIsBetter = existingDone
+          ? !candidateDone || m.sortOrder < existing.milestone.sortOrder
+          : !candidateDone && m.sortOrder < existing.milestone.sortOrder;
+        if (!candidateIsBetter) continue;
+      }
+      const plan = schedule.plans.find((p) => p.id === m.planId);
+      if (!plan) continue;
+      map.set(trackerId, {
+        milestone: m,
+        state: calculateMilestoneState({
+          milestone: m,
+          plan,
+          activities: schedule.activities,
+          trackers: schedule.progressTrackers,
+          metricEntries: schedule.metricEntries,
+          trackingStart: schedule.preferences?.startDate,
+        }),
+      });
+    }
+    return map;
+  }, [schedule.milestones, schedule.plans, schedule.activities, schedule.progressTrackers, schedule.metricEntries, schedule.preferences?.startDate]);
 
   const handleOpenLinkedTask = useCallback((taskId: string) => {
     const task = DAYS.flatMap((d) => scheduleRef.current.activities[d] ?? []).find((t) => t.id === taskId);
@@ -4648,6 +4696,7 @@ export default function ScheduleApp() {
               metricEntries={schedule.metricEntries}
               plans={schedule.plans}
               trackingStart={schedule.preferences?.startDate}
+              milestoneByTrackerId={milestoneByTrackerId}
               onLog={handleLogTrackerAmount}
               onOpenAddEntry={(tracker) => setEntryTracker(tracker)}
               onDeleteEntry={handleDeleteEntry}

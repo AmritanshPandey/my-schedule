@@ -1,0 +1,294 @@
+/**
+ * What slipped — the things the app would have told you about if it could.
+ *
+ * PlanR has no push notifications, so it can never reach out in the moment a
+ * deadline passes or a task goes unmarked. Overview is the only re-engagement
+ * surface there is, which means it has to answer "what did I let slip?" the
+ * moment it opens. This module computes that, and nothing else surfaces it.
+ *
+ * Deliberately excludes today: today's misses are already visible, and styled
+ * as missed, in the Today's Task card. Repeating them here would read as
+ * nagging rather than catching the user up.
+ *
+ * Pure and React-free so it can be unit-tested directly.
+ */
+
+import type { Milestone, Plan, Ritual, Schedule, Task, DayKey } from "./scheduleTypes";
+import { isPlanRunning } from "./planLifecycle";
+import { DAYS } from "./scheduleConstants";
+import { localISODate } from "./dateUtils";
+import { resolveMilestoneStatus } from "./roadmapDates";
+import { calculateRitualStats, ritualScheduledOnDate } from "./consistency/calculateRitualStreak";
+import { calculateMilestoneState } from "./milestoneHealth";
+import { computeSlotReliability, suggestBetterBand, type BandReading } from "./slotReliability";
+import { isTaskScheduledOn } from "./taskOccurrence";
+import { isTrackedTask } from "./taskCompletion";
+import { getSlots } from "./taskMutations";
+import { milestoneOverdueKey, milestoneRiskKey, ritualAttentionKey, slotRiskKey } from "./attentionDismissal";
+
+/** How far back a missed task still counts as worth catching up on. */
+export const MISSED_LOOKBACK_DAYS = 7;
+
+export interface OverdueMilestone {
+  milestone: Milestone;
+  plan: Plan | null;
+  /** Whole days past `plannedEndDate`, always >= 1. */
+  daysOverdue: number;
+}
+
+export interface MissedTask {
+  task: Task;
+  plan: Plan | null;
+  /** ISO date of the occurrence that was marked missed. */
+  dateISO: string;
+  /** Whole days ago, always >= 1 (today is excluded). */
+  daysAgo: number;
+}
+
+export interface AtRiskRitual {
+  ritual: Ritual;
+  /** Consecutive days completed up to yesterday; only >= 2 is worth naming. */
+  streak: number;
+}
+
+export interface AtRiskMilestone {
+  milestone: Milestone;
+  plan: Plan | null;
+  /** From calculateMilestoneState (lib/milestoneHealth.ts) — where the current
+   *  pace actually projects finishing, not the target date itself. */
+  forecastDate: string | null;
+  /** Whole days the forecast lands past the target, always >= 0. Null when
+   *  there isn't yet enough data to project a date at all. */
+  daysBehind: number | null;
+}
+
+export interface UnreliableSlotTask {
+  task: Task;
+  plan: Plan | null;
+  /** Current time band, historically weak — see lib/slotReliability.ts. */
+  from: BandReading;
+  /** A band this person actually finishes what they schedule into. */
+  to: BandReading;
+}
+
+export interface NeedsAttention {
+  /** Still savable today — listed first for exactly that reason. */
+  atRiskRituals: AtRiskRitual[];
+  /** Scheduled later today, in a slot that historically doesn't work out —
+   *  still fully preventable by retiming before it happens. */
+  unreliableSlotTasks: UnreliableSlotTask[];
+  /** Not yet overdue, but the current pace projects missing the target —
+   *  the whole point of forecasting is catching this *before* overdueMilestones. */
+  atRiskMilestones: AtRiskMilestone[];
+  overdueMilestones: OverdueMilestone[];
+  missedTasks: MissedTask[];
+  /** Combined count — the card renders only when this is > 0. */
+  total: number;
+}
+
+/** Minimum run before losing it is worth interrupting someone over. */
+export const MIN_STREAK_TO_WARN = 2;
+
+/** Whole days between two ISO dates (b - a), via UTC noon to dodge DST. */
+function daysBetweenISO(a: string, b: string): number {
+  const toUTC = (iso: string) => Date.UTC(+iso.slice(0, 4), +iso.slice(5, 7) - 1, +iso.slice(8, 10), 12);
+  return Math.round((toUTC(b) - toUTC(a)) / 86_400_000);
+}
+
+function shiftISO(iso: string, days: number): string {
+  const d = new Date(`${iso}T12:00:00`);
+  d.setDate(d.getDate() + days);
+  return localISODate(d);
+}
+
+export function selectNeedsAttention(
+  schedule: Schedule,
+  todayISO: string,
+  todayKey?: DayKey,
+  completedRitualIds: ReadonlySet<string> = new Set(),
+): NeedsAttention {
+  const plansById = new Map(schedule.plans.map((p) => [p.id, p]));
+
+  // Nothing from a paused plan belongs here. Pausing is the user telling the
+  // app to stop expecting this work; continuing to list its overdue
+  // milestones and missed tasks would be the app arguing with that.
+  const isPaused = (planId: string | undefined) =>
+    !!planId && !isPlanRunning(plansById.get(planId));
+
+  // Rows the user has explicitly waved away. Keyed per instance (see
+  // lib/attentionDismissal.ts), so dismissing today's warning never silences
+  // tomorrow's, and dismissing "off pace" never hides the milestone actually
+  // going overdue later.
+  const dismissed = new Set(schedule.preferences?.acknowledgedAttention ?? []);
+
+  // ── Rituals whose run ends tonight unless acted on ───────────────────────
+  const yesterdayISO = shiftISO(todayISO, -1);
+  const trackingStart = schedule.preferences?.startDate;
+  const atRiskRituals: AtRiskRitual[] = (schedule.rituals ?? [])
+    .filter((r) => {
+      const dueToday = ritualScheduledOnDate(r, todayISO, trackingStart);
+      if (!dueToday || completedRitualIds.has(r.id)) return false;
+      return !dismissed.has(ritualAttentionKey(r.id, todayISO));
+    })
+    // The shared, trackingType/recurrence-aware helper — the old inline walk
+    // here only ever checked `repeatDays` via exact-date lookups, so a
+    // Mon/Wed/Fri routine's "next scheduled day" always broke on the
+    // in-between non-scheduled days and read as streak 0.
+    .map((ritual) => ({ ritual, streak: calculateRitualStats(ritual, schedule.ritualCompletions ?? [], yesterdayISO, trackingStart).streak }))
+    .filter(({ streak }) => streak >= MIN_STREAK_TO_WARN)
+    .sort((a, b) => b.streak - a.streak);
+
+  // ── Today's tasks parked in a historically unreliable time slot ──────────
+  // Forward-looking, unlike every other row here: nothing has gone wrong yet,
+  // but suggestBetterBand (lib/slotReliability.ts) already knows this slot
+  // rarely finishes for this person, and where they actually would. Scoped to
+  // today only (via `todayKey`, already passed by both callers but unused
+  // until now) — a task days out has time to be reconsidered on its own; this
+  // is about the thing still sitting on today's schedule.
+  const reliabilityModel = todayKey ? computeSlotReliability(schedule, new Date(`${todayISO}T12:00:00`)) : null;
+  const unreliableSlotTasks: UnreliableSlotTask[] = !reliabilityModel ? [] : (schedule.activities[todayKey!] ?? [])
+    .filter((t) => isTaskScheduledOn(t, todayISO, true, trackingStart))
+    .flatMap((task) => {
+      if (!isTrackedTask(task) || isPaused(task.planId)) return [];
+      // Already resolved today (checked off or marked missed) — nothing left
+      // to move. suggestBetterBand only ever looks at the first slot, so only
+      // that slot's own resolution is what matters here.
+      const totalSlots = getSlots(task).length;
+      const resolvedToday = totalSlots > 1
+        ? (task.completedSlotIndices ?? []).includes(0) || (task.missedSlotIndices ?? []).includes(0)
+        : !!(task.completed || task.missed);
+      if (resolvedToday) return [];
+      if (dismissed.has(slotRiskKey(task.id, todayISO))) return [];
+      const suggestion = suggestBetterBand(reliabilityModel, task);
+      if (!suggestion) return [];
+      return [{ task, plan: task.planId ? plansById.get(task.planId) ?? null : null, ...suggestion }];
+    })
+    // Worst reliability first — same "most worth naming" convention as the
+    // milestone rows below.
+    .sort((a, b) => a.from.rate - b.from.rate);
+
+  // ── Overdue milestones ───────────────────────────────────────────────────
+  // resolveMilestoneStatus is the same helper the roadmap uses, so a milestone
+  // can never read "delayed" here and something else on the plan page.
+  const overdueMilestones: OverdueMilestone[] = (schedule.milestones ?? [])
+    .filter((m) =>
+      !isPaused(m.planId)
+      && !dismissed.has(milestoneOverdueKey(m.id, m.plannedEndDate))
+      && resolveMilestoneStatus(m, todayISO) === "delayed")
+    .map((milestone) => ({
+      milestone,
+      plan: plansById.get(milestone.planId) ?? null,
+      daysOverdue: daysBetweenISO(milestone.plannedEndDate, todayISO),
+    }))
+    .filter((row) => row.daysOverdue >= 1)
+    // Most overdue first: the thing that has been slipping longest is the thing
+    // most worth naming.
+    .sort((a, b) => b.daysOverdue - a.daysOverdue);
+
+  // ── Milestones trending to miss their target, before it's too late ───────
+  // Scoped to "active" (by date) milestones only: "upcoming" hasn't started
+  // (nothing to forecast yet), "delayed" already means the deadline passed —
+  // that's overdueMilestones above, not duplicated here — and "completed"
+  // needs nothing. This is the one case those two miss: the deadline hasn't
+  // hit yet, but the current pace already projects missing it.
+  const atRiskMilestones: AtRiskMilestone[] = (schedule.milestones ?? [])
+    .flatMap((milestone) => {
+      if (resolveMilestoneStatus(milestone, todayISO) !== "active") return [];
+      if (dismissed.has(milestoneRiskKey(milestone.id, milestone.plannedEndDate))) return [];
+      const plan = plansById.get(milestone.planId);
+      if (!plan || !isPlanRunning(plan)) return [];
+      const state = calculateMilestoneState({
+        milestone,
+        plan,
+        activities: schedule.activities,
+        trackers: schedule.progressTrackers,
+        metricEntries: schedule.metricEntries,
+        trackingStart: schedule.preferences?.startDate,
+      });
+      if (state.health !== "at_risk" && state.health !== "delayed") return [];
+      return [{
+        milestone,
+        plan,
+        forecastDate: state.forecastDate,
+        daysBehind: state.daysAheadBehind !== null ? Math.max(0, -state.daysAheadBehind) : null,
+      }];
+    })
+    // Worst-projected first, same "most worth naming" ordering as overdueMilestones.
+    // Unknowable-forecast rows (daysBehind null) sort last rather than first.
+    .sort((a, b) => (b.daysBehind ?? -1) - (a.daysBehind ?? -1));
+
+  // ── Recently missed tasks ────────────────────────────────────────────────
+  // "Missed" lives in completionHistory as a dated event, so this reads real
+  // occurrences rather than the task template's live `missed` flag (which only
+  // ever describes today).
+  const cutoff = shiftISO(todayISO, -MISSED_LOOKBACK_DAYS);
+  const seen = new Set<string>();
+  // Misses the user has handled (dismissed or rescheduled) — hidden here, but
+  // their "missed" history event stays, so analytics remain accurate.
+  const acknowledged = new Set(schedule.preferences?.acknowledgedMisses ?? []);
+  const missedTasks: MissedTask[] = [];
+
+  for (const day of DAYS) {
+    for (const task of schedule.activities[day] ?? []) {
+      for (const event of task.completionHistory ?? []) {
+        if (event.completionType !== "missed" || event.subtaskId) continue;
+        const dateISO = localISODate(new Date(event.completedAt));
+        if (dateISO >= todayISO || dateISO < cutoff) continue;
+        if (trackingStart && dateISO < trackingStart) continue;
+        // A recurring task shares one id across weekday buckets, so the same
+        // event would otherwise be counted once per bucket it appears in.
+        if (isPaused(task.planId)) continue;
+        const key = `${task.id}|${dateISO}`;
+        if (seen.has(key) || acknowledged.has(key)) continue;
+        seen.add(key);
+        missedTasks.push({
+          task,
+          plan: task.planId ? plansById.get(task.planId) ?? null : null,
+          dateISO,
+          daysAgo: daysBetweenISO(dateISO, todayISO),
+        });
+      }
+    }
+  }
+
+  // Most recent first — the closer it is, the more recoverable it feels.
+  missedTasks.sort((a, b) => a.daysAgo - b.daysAgo || a.task.title.localeCompare(b.task.title));
+
+  return {
+    atRiskRituals,
+    unreliableSlotTasks,
+    atRiskMilestones,
+    overdueMilestones,
+    missedTasks,
+    total:
+      atRiskRituals.length
+      + unreliableSlotTasks.length
+      + atRiskMilestones.length
+      + overdueMilestones.length
+      + missedTasks.length,
+  };
+}
+
+/** "yesterday" / "3 days ago" — the card reads as prose, not as a date log. */
+export function formatDaysAgo(days: number): string {
+  return days === 1 ? "yesterday" : `${days} days ago`;
+}
+
+/** "1 day over" / "5 days over" — compact enough for a trailing pill. */
+export function formatDaysOverdue(days: number): string {
+  return days === 1 ? "1 day over" : `${days} days over`;
+}
+
+/** "Off pace" / "1 day behind" / "5 days behind" — the not-yet-overdue
+ *  analogue of formatDaysOverdue, for an AtRiskMilestone's trailing pill.
+ *  Null (no forecast yet) reads as "Off pace" rather than a fake number. */
+export function formatDaysBehind(days: number | null): string {
+  if (days === null || days === 0) return "Off pace";
+  return days === 1 ? "1 day behind" : `${days} days behind`;
+}
+
+/** "20% here" — the weak band's completion rate, for an UnreliableSlotTask's
+ *  trailing pill. */
+export function formatReliabilityRate(rate: number): string {
+  return `${Math.round(rate * 100)}% here`;
+}

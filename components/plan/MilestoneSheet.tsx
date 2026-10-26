@@ -5,7 +5,7 @@ import BottomSheet from "@/components/ui/BottomSheet";
 import SheetHeader from "@/components/ui/SheetHeader";
 import Button from "@/components/ui/Button";
 import Input from "@/components/ui/Input";
-import type { Milestone } from "@/lib/useScheduleDB";
+import type { Milestone, ProgressTracker, GoalDirection } from "@/lib/useScheduleDB";
 import {
   calculateMilestoneEndDate,
   calculateNextMilestoneStart,
@@ -14,6 +14,7 @@ import {
   type DurationType,
 } from "@/lib/roadmapDates";
 import { formatDate, todayISO } from "@/lib/dateUtils";
+import { uid } from "@/lib/id";
 import { IconChevronDown } from "@tabler/icons-react";
 import { typography } from "@/components/ui/Typography";
 import BuilderHints from "@/components/intelligence/BuilderHints";
@@ -37,12 +38,31 @@ export interface MilestoneSaveData {
   linkedTrackerId?: string;
   completionStatus?: "pending" | "completed";
   completedDate?: string;
+  /**
+   * A brand-new tracker to create and link as this milestone's success
+   * metric, when the draft defined one instead of picking an existing
+   * tracker. The caller (PlanDetailView's handleMilestoneSave) creates it via
+   * the same onAddTracker path the title-detection suggestion already uses,
+   * then saves the milestone with `linkedTrackers: [newTracker.id]` (already
+   * set on this same MilestoneSaveData) pointing at it.
+   */
+  newTracker?: {
+    id: string;
+    title: string;
+    unit: string;
+    goalDirection: GoalDirection;
+    goalValue?: number;
+    startingValue?: number;
+  };
 }
 
 interface MilestoneSheetProps {
   mode: "create" | "edit";
   milestone?: Milestone | null;
   milestones: Milestone[];
+  /** The plan's existing trackers — offered as a pick for this milestone's
+   *  success metric, alongside defining a brand-new one. */
+  trackers: ProgressTracker[];
   planStartDate?: string;
   isOpen: boolean;
   onClose: () => void;
@@ -56,6 +76,16 @@ interface DraftState {
   startDate: string;
   durationValue: string;
   durationType: DurationType;
+  // Success metric — only editable while the milestone has no tracker linked
+  // yet (a linked one is managed from the milestone's own detail view, so
+  // this never becomes a second, conflicting place to unlink it).
+  metricMode: "none" | "existing" | "new";
+  existingTrackerId: string;
+  newTrackerTitle: string;
+  newTrackerUnit: string;
+  newTrackerGoalDirection: GoalDirection;
+  newTrackerGoalValue: string;
+  newTrackerStartingValue: string;
 }
 
 const DURATION_TYPES: Array<{ value: DurationType; label: string }> = [
@@ -97,11 +127,19 @@ function emptyDraft(startDate: string): DraftState {
     startDate,
     durationValue: "7",
     durationType: "days",
+    metricMode: "none",
+    existingTrackerId: "",
+    newTrackerTitle: "",
+    newTrackerUnit: "",
+    newTrackerGoalDirection: "increase_good",
+    newTrackerGoalValue: "",
+    newTrackerStartingValue: "",
   };
 }
 
 function milestoneToDraft(milestone: Milestone): DraftState {
   const duration = inferDurationDraft(milestone.plannedDurationDays);
+  const linkedTrackerId = milestone.linkedTrackers?.[0];
   return {
     title: milestone.title,
     description: milestone.description ?? "",
@@ -109,6 +147,13 @@ function milestoneToDraft(milestone: Milestone): DraftState {
     startDate: milestone.startDate,
     durationValue: duration.durationValue,
     durationType: duration.durationType,
+    metricMode: linkedTrackerId ? "existing" : "none",
+    existingTrackerId: linkedTrackerId ?? "",
+    newTrackerTitle: "",
+    newTrackerUnit: "",
+    newTrackerGoalDirection: "increase_good",
+    newTrackerGoalValue: "",
+    newTrackerStartingValue: "",
   };
 }
 
@@ -116,6 +161,7 @@ export default function MilestoneSheet({
   mode,
   milestone,
   milestones,
+  trackers,
   planStartDate,
   isOpen,
   onClose,
@@ -195,10 +241,36 @@ export default function MilestoneSheet({
     [draft.title, draft.description, draft.startDate, plannedDurationDays, plannedEndDate, milestone, milestones, mode],
   );
 
+  // A brand-new tracker only gets created on save when the draft actually
+  // named one — an empty title means "didn't fill this in", not "create a
+  // nameless tracker".
+  const newTrackerTitle = draft.newTrackerTitle.trim();
+  const willCreateNewTracker = draft.metricMode === "new" && newTrackerTitle.length > 0;
+
   function handleSave() {
     const title = draft.title.trim();
     if (!title || !draft.startDate || !plannedEndDate) return;
     const status = milestone?.status === "completed" ? "completed" : "upcoming";
+
+    let linkedTrackers = milestone?.linkedTrackers ?? [];
+    let newTracker: MilestoneSaveData["newTracker"];
+    if (willCreateNewTracker) {
+      const goalValue = draft.newTrackerGoalValue.trim() ? Number(draft.newTrackerGoalValue) : undefined;
+      const startingValue = draft.newTrackerStartingValue.trim() ? Number(draft.newTrackerStartingValue) : undefined;
+      const newTrackerId = uid();
+      newTracker = {
+        id: newTrackerId,
+        title: newTrackerTitle,
+        unit: draft.newTrackerUnit.trim(),
+        goalDirection: draft.newTrackerGoalDirection,
+        goalValue: Number.isFinite(goalValue) ? goalValue : undefined,
+        startingValue: Number.isFinite(startingValue) ? startingValue : undefined,
+      };
+      linkedTrackers = [newTrackerId];
+    } else if (draft.metricMode === "existing" && draft.existingTrackerId) {
+      linkedTrackers = [draft.existingTrackerId];
+    }
+
     onSave({
       title,
       description: draft.description.trim() || undefined,
@@ -209,11 +281,12 @@ export default function MilestoneSheet({
       actualCompletedDate: milestone?.actualCompletedDate,
       status,
       linkedActivities: milestone?.linkedActivities ?? [],
-      linkedTrackers: milestone?.linkedTrackers ?? [],
+      linkedTrackers,
+      newTracker,
       sortOrder: milestone?.sortOrder ?? orderedMilestones.length,
       targetDate: plannedEndDate,
       estimatedDays: plannedDurationDays,
-      linkedTrackerId: milestone?.linkedTrackers[0],
+      linkedTrackerId: linkedTrackers[0],
       completionStatus: status === "completed" ? "completed" : "pending",
       completedDate: milestone?.actualCompletedDate,
     });
@@ -223,6 +296,9 @@ export default function MilestoneSheet({
   const eyebrow = mode === "edit" ? "Edit" : "New";
   const title = mode === "edit" ? "Edit milestone" : "Add milestone";
   const canSave = !!draft.title.trim() && !!draft.startDate && plannedDurationDays > 0;
+  const alreadyLinkedTracker = milestone?.linkedTrackers?.[0]
+    ? trackers.find((t) => t.id === milestone.linkedTrackers[0]) ?? null
+    : null;
 
   return (
     <BottomSheet open={isOpen} onClose={onClose} maxHeight="85vh">
@@ -320,6 +396,122 @@ export default function MilestoneSheet({
               <p className="text-[12px] font-semibold text-amber-700 dark:text-amber-300">
                 This change will shift {preview.count} future milestone{preview.count === 1 ? "" : "s"} by {preview.shiftDays > 0 ? "+" : ""}{preview.shiftDays} days.
               </p>
+            </div>
+          )}
+
+          {/* Success metric — the target this milestone is matched against,
+              jointly with how consistently its linked tasks get done (see
+              lib/milestoneHealth.ts). Only editable here while nothing is
+              linked yet: an already-linked tracker is shown read-only and
+              managed from the milestone's own detail view instead, so there
+              is one place that mutates the link, not two competing ones. */}
+          {alreadyLinkedTracker ? (
+            <div className="rounded-2xl border border-neutral-200 bg-neutral-50 px-4 py-3 dark:border-white/10 dark:bg-white/[0.04]">
+              <p className={typography.eyebrow}>Success metric</p>
+              <p className="mt-1 text-[14px] font-semibold text-neutral-800 dark:text-neutral-100">
+                {alreadyLinkedTracker.title}
+                {alreadyLinkedTracker.unit ? ` (${alreadyLinkedTracker.unit})` : ""}
+              </p>
+              <p className="mt-0.5 text-[12px] text-neutral-500 dark:text-neutral-400">
+                Manage this from the milestone's detail view.
+              </p>
+            </div>
+          ) : (
+            <div>
+              <p className={`mb-1.5 ${typography.eyebrow}`}>Success metric (optional)</p>
+              <div className="mb-2 flex flex-wrap gap-1.5">
+                {(["none", ...(trackers.length > 0 ? ["existing"] : []), "new"] as DraftState["metricMode"][]).map((mode) => (
+                  <button
+                    key={mode}
+                    type="button"
+                    onClick={() => setDraft((d) => ({
+                      ...d,
+                      metricMode: mode,
+                      existingTrackerId: mode === "existing" && !d.existingTrackerId ? trackers[0]?.id ?? "" : d.existingTrackerId,
+                    }))}
+                    className={`rounded-full px-3 py-1.5 text-[12.5px] font-semibold transition-colors ${
+                      draft.metricMode === mode
+                        ? "bg-neutral-900 text-white dark:bg-white dark:text-neutral-900"
+                        : "border border-neutral-200 text-neutral-600 hover:border-neutral-300 dark:border-white/10 dark:text-neutral-300 dark:hover:border-white/20"
+                    }`}
+                  >
+                    {mode === "none" ? "None" : mode === "existing" ? "Existing tracker" : "Define new"}
+                  </button>
+                ))}
+              </div>
+
+              {draft.metricMode === "existing" && trackers.length > 0 && (
+                <div className="flex flex-wrap gap-1.5">
+                  {trackers.map((t) => (
+                    <button
+                      key={t.id}
+                      type="button"
+                      onClick={() => setDraft((d) => ({ ...d, existingTrackerId: t.id }))}
+                      className={`rounded-full px-3 py-1.5 text-[12.5px] font-semibold transition-colors ${
+                        draft.existingTrackerId === t.id
+                          ? "bg-emerald-600 text-white dark:bg-emerald-500 dark:text-neutral-950"
+                          : "border border-neutral-200 text-neutral-600 hover:border-neutral-300 dark:border-white/10 dark:text-neutral-300 dark:hover:border-white/20"
+                      }`}
+                    >
+                      {t.title}{t.unit ? ` (${t.unit})` : ""}
+                    </button>
+                  ))}
+                </div>
+              )}
+
+              {draft.metricMode === "new" && (
+                <div className="space-y-2.5 rounded-2xl border border-neutral-200 bg-neutral-50 p-3 dark:border-white/10 dark:bg-white/[0.04]">
+                  <Input
+                    label="Metric title"
+                    value={draft.newTrackerTitle}
+                    onChange={(e) => setDraft((d) => ({ ...d, newTrackerTitle: e.target.value }))}
+                    placeholder="e.g. Weight"
+                  />
+                  <div className="flex gap-2">
+                    <Input
+                      label="Unit"
+                      className="flex-1"
+                      value={draft.newTrackerUnit}
+                      onChange={(e) => setDraft((d) => ({ ...d, newTrackerUnit: e.target.value }))}
+                      placeholder="kg"
+                    />
+                    <div className="flex-1">
+                      <p className={`mb-1.5 ${typography.eyebrow}`}>Direction</p>
+                      <div className="relative">
+                        <select
+                          value={draft.newTrackerGoalDirection}
+                          onChange={(e) => setDraft((d) => ({ ...d, newTrackerGoalDirection: e.target.value as GoalDirection }))}
+                          className="h-11 w-full appearance-none rounded-xl border border-neutral-200 bg-neutral-50 px-3 pr-9 text-[16px] font-semibold text-neutral-700 outline-none transition-colors focus:border-neutral-300 focus:bg-neutral-100 dark:border-white/10 dark:bg-white/[0.04] dark:text-neutral-200 dark:focus:border-white/20 dark:focus:bg-white/[0.07]"
+                        >
+                          <option value="increase_good">Increase ↑</option>
+                          <option value="decrease_good">Decrease ↓</option>
+                        </select>
+                        <IconChevronDown size={14} strokeWidth={2} className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-neutral-500 dark:text-neutral-400" />
+                      </div>
+                    </div>
+                  </div>
+                  <div className="flex gap-2">
+                    <Input
+                      label="Target value"
+                      type="number"
+                      inputMode="decimal"
+                      className="flex-1"
+                      value={draft.newTrackerGoalValue}
+                      onChange={(e) => setDraft((d) => ({ ...d, newTrackerGoalValue: e.target.value }))}
+                      placeholder="75"
+                    />
+                    <Input
+                      label="Starting value (optional)"
+                      type="number"
+                      inputMode="decimal"
+                      className="flex-1"
+                      value={draft.newTrackerStartingValue}
+                      onChange={(e) => setDraft((d) => ({ ...d, newTrackerStartingValue: e.target.value }))}
+                      placeholder="82"
+                    />
+                  </div>
+                </div>
+              )}
             </div>
           )}
 

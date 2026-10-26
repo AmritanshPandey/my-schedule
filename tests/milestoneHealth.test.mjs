@@ -414,6 +414,92 @@ test("health boundary: getting_started flips to a graded state exactly at GETTIN
   assert.equal(noLongerEarly, "delayed");
 });
 
+// ── Joint AND-gate: pace (target matching) × task consistency ──────────────
+// A milestone's health now requires BOTH signals to hold, not just whichever
+// one has data — a good metric trend can no longer mask a collapsed task
+// cadence, and vice versa.
+
+test("AND-gate: an ahead pace still gets pulled down when task consistency has collapsed", () => {
+  const delayed = calculateMilestoneHealth(healthInput({
+    paceGap: { level: "ahead" }, forecastDate: null, daysAheadBehind: null, consistency: 40,
+  }));
+  assert.equal(delayed, "delayed", "consistency below CONSISTENCY_AT_RISK_THRESHOLD floors health regardless of pace");
+
+  const atRisk = calculateMilestoneHealth(healthInput({
+    paceGap: { level: "ahead" }, forecastDate: null, daysAheadBehind: null, consistency: 65,
+  }));
+  assert.equal(atRisk, "at_risk");
+});
+
+test("AND-gate: solid consistency doesn't rescue a target that's falling behind or moving the wrong way", () => {
+  const behind = calculateMilestoneHealth(healthInput({
+    paceGap: { level: "behind" }, forecastDate: null, daysAheadBehind: null, consistency: 95,
+  }));
+  assert.equal(behind, "at_risk");
+
+  const wrongWay = calculateMilestoneHealth(healthInput({
+    paceGap: { level: "wrong_way" }, forecastDate: null, daysAheadBehind: null, consistency: 95,
+  }));
+  assert.equal(wrongWay, "delayed");
+});
+
+test("AND-gate: 'ahead' is a pace-only bonus tier — it survives merely-on_track consistency, not just perfect consistency", () => {
+  const h = calculateMilestoneHealth(healthInput({
+    paceGap: { level: "ahead" }, forecastDate: null, daysAheadBehind: null, consistency: CONSISTENCY_ON_TRACK_THRESHOLD,
+  }));
+  assert.equal(h, "ahead", "consistency merely being fine (not itself 'ahead', which doesn't exist) must not cap this to on_track");
+});
+
+test("AND-gate: both signals good reads on_track", () => {
+  const h = calculateMilestoneHealth(healthInput({
+    paceGap: { level: "on_pace" }, forecastDate: null, daysAheadBehind: null, consistency: 90,
+  }));
+  assert.equal(h, "on_track");
+});
+
+// ── Joint AND-gate, end-to-end via calculateMilestoneState ─────────────────
+
+test("end-to-end AND-gate: a metric on pace to its target still reads delayed when the linked task's completion has collapsed", () => {
+  const t = tracker({ id: "tr1", goalDirection: "increase_good", goalValue: 100000, startingValue: 50000 });
+  const entries = [
+    entry("tr1", "2026-09-01", 50000),
+    entry("tr1", "2026-09-08", 62000),
+    entry("tr1", "2026-09-15", 75000),
+  ];
+  // Daily task, only completed twice in the first 14 days — well under the
+  // CONSISTENCY_AT_RISK_THRESHOLD, independent of how the tracker is doing.
+  const events = ["2026-09-01", "2026-09-03"].map((d) => taskEvent("t1", d));
+  const activities = activitiesFor([{ id: "t1", events }]);
+  const m = milestone({ linkedTrackers: ["tr1"], linkedActivities: ["t1"] });
+  const state = calculateMilestoneState({ milestone: m, plan: plan(), activities, trackers: [t], metricEntries: entries, now: NOW("2026-09-15") });
+
+  assert.ok(state.paceGap !== null, "three clean entries are enough for a trustworthy regression");
+  assert.notEqual(state.paceGap.level, "wrong_way", "the metric itself really is trending toward the target");
+  assert.ok(state.consistency < CONSISTENCY_AT_RISK_THRESHOLD);
+  assert.equal(state.health, "delayed", "a good metric trend must not mask a collapsed completion cadence");
+});
+
+test("end-to-end AND-gate: consistently completing linked tasks doesn't rescue a metric moving the wrong way", () => {
+  const t = tracker({ id: "tr1", goalDirection: "decrease_good", goalValue: 75, startingValue: 80 });
+  // Weight is rising each week — moving away from a decrease_good target.
+  const entries = [
+    entry("tr1", "2026-09-01", 80),
+    entry("tr1", "2026-09-08", 82),
+    entry("tr1", "2026-09-15", 84),
+  ];
+  // The daily task itself is done every single day — consistency is perfect.
+  const events = ["2026-09-01","2026-09-02","2026-09-03","2026-09-04","2026-09-05","2026-09-06","2026-09-07",
+    "2026-09-08","2026-09-09","2026-09-10","2026-09-11","2026-09-12","2026-09-13","2026-09-14","2026-09-15"]
+    .map((d) => taskEvent("t1", d));
+  const activities = activitiesFor([{ id: "t1", events }]);
+  const m = milestone({ linkedTrackers: ["tr1"], linkedActivities: ["t1"] });
+  const state = calculateMilestoneState({ milestone: m, plan: plan(), activities, trackers: [t], metricEntries: entries, now: NOW("2026-09-15") });
+
+  assert.equal(state.paceGap?.level, "wrong_way");
+  assert.equal(state.consistency, 100);
+  assert.equal(state.health, "delayed", "perfect task consistency must not mask a target moving the wrong way");
+});
+
 // ── End-to-end via calculateMilestoneState ──────────────────────────────────
 
 test("end-to-end: outcome-driven milestone (tracker linked) uses metric as the headline progress", () => {

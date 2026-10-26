@@ -1,0 +1,10 @@
+{
+  "name": "@planr/core",
+  "version": "0.0.1",
+  "private": true,
+  "description": "PlanR's shared domain logic — pure TypeScript, no React/DOM dependency. Consumed as source (no build step) by apps/web and apps/native.",
+  "type": "module",
+  "exports": {
+    "./*": "./*.ts"
+  }
+}

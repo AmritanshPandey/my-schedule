@@ -19,7 +19,8 @@
       }
     ],
     "paths": {
-      "@/*": ["./*"]
+      "@/*": ["./*"],
+      "@planr/core/*": ["./packages/core/*"]
     }
   },
   "include": [

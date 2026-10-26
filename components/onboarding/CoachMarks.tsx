@@ -23,17 +23,12 @@ import { AnimatePresence, m } from "framer-motion";
 import { IconArrowRight, IconX } from "@tabler/icons-react";
 import { useReducedMotion } from "@/lib/performance/useReducedMotion";
 import { haptic } from "@/lib/haptics";
+// The step shape is shared with the tour registry (and apps/native) via
+// @planr/core; `target` is a `data-tour="<id>"` value here, looked up fresh on
+// every step change via document.querySelector.
+import type { CoachMarkStep } from "@planr/core/lib/onboarding/tours";
 
-export interface CoachMarkStep {
-  /** A `data-tour="<id>"` value on the element to spotlight (looked up fresh
-   *  on every step change via document.querySelector) — not a React ref, so
-   *  a step can target an element mounted by a totally different part of
-   *  the tree (e.g. the sidebar's "New task" button from a Today-tab tour)
-   *  without threading refs through the component tree. */
-  target: string;
-  title: string;
-  body: string;
-}
+export type { CoachMarkStep };
 
 interface CoachMarksProps {
   open: boolean;

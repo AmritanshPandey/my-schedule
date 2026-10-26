@@ -1,67 +1,34 @@
 /**
- * Reminders — local notifications for today's tasks and rituals, fired from an
- * open PlanR. A fully-closed app is covered by the server push path instead
- * (worker/src/reminders.ts), which shares these notification tags so the two
- * collapse rather than double up.
+ * Reminders — local, timer-based notifications for today's tasks and rituals.
  *
- * ── Why a ticker and not one long timeout
+ * Honest scope: these fire from an open PlanR (foreground tab, or a background
+ * tab on desktop). There is no push backend yet, so a fully-closed app cannot
+ * notify — on iOS that means reminders work while the PWA is open. The settings
+ * are per-device (localStorage), like the notification permission itself.
  *
- * This used to arm a single `setTimeout` for the next reminder and re-arm
- * itself after each fire. Three things made that unreliable, and all three
- * presented to the user as "sometimes they just don't arrive":
- *
- *  1. `collectReminders` only ever returns TODAY's reminders. Once the last one
- *     fired, the chain ended with no timer pending, and nothing re-armed until
- *     the schedule changed or the tab went hidden→visible. An app left open
- *     past midnight fired nothing at all the next day.
- *  2. Anything whose moment had passed was silently dropped on the next re-arm,
- *     so a reminder a throttled tab was late for simply vanished.
- *  3. Browsers throttle background timers to about once a minute and can freeze
- *     them entirely after a few minutes, so a timeout hours out might fire very
- *     late, or not until the tab was focused again.
- *
- * A short repeating tick fixes all three at once: every tick recomputes from
- * the wall clock, so the day rolling over is not a special case, a throttled
- * tick still runs (just less often) and catches up, and nothing depends on a
- * single timer surviving hours in the background.
- *
- * Late reminders fire only inside `CATCH_UP_GRACE_MS`. A "Starts now" three
- * hours late is worse than silence, but one ninety seconds late — the common
- * case when a tick was throttled — is exactly what the user expected.
- *
- * Settings are per-device (localStorage), like the notification permission.
+ * armReminders(schedule) is idempotent: it cancels the previous timer chain and
+ * schedules the next upcoming reminder; after one fires, it re-arms for the
+ * next. Callers re-arm on every schedule change, so completing a task drops its
+ * pending reminder naturally.
  */
 
-import type { Schedule, Task } from "@/lib/useScheduleDB";
-import type { DayKey } from "@/lib/scheduleConstants";
-import { isTaskScheduledOn, resolveOccurrence } from "@/lib/taskOccurrence";
-import { getSlots } from "@/lib/taskMutations";
-import { isTrackedTask } from "@/lib/taskCompletion";
-import { parseTimeToMinutes, formatDisplayTime } from "@/lib/timeUtils";
+import type { Schedule } from "@/lib/useScheduleDB";
 import { localISODate } from "@/lib/dateUtils";
-import { isRitualDayComplete } from "@/lib/consistency/ritualDayStatus";
-import { ritualScheduledOnDate } from "@/lib/consistency/calculateRitualStreak";
+import {
+  collectRemindersFor,
+  DEFAULT_REMINDER_SETTINGS,
+  type PendingReminder,
+  type ReminderSettings,
+} from "@planr/core/lib/reminders";
+
+export type { PendingReminder, ReminderSettings } from "@planr/core/lib/reminders";
 
 // ── Settings ──────────────────────────────────────────────────────────────────
-
-export interface ReminderSettings {
-  enabled: boolean;
-  tasks: boolean;       // notify at each task's start time
-  rituals: boolean;     // notify at each ritual's time
-  streakNudge: boolean; // evening nudge when tasks are still open
-  nudgeTime: string;    // "HH:MM" 24-hour
-}
 
 const SETTINGS_KEY = "planr-reminders";
 export const REMINDERS_CHANGED_EVENT = "planr-reminders-changed";
 
-const DEFAULT_SETTINGS: ReminderSettings = {
-  enabled: false,
-  tasks: true,
-  rituals: true,
-  streakNudge: true,
-  nudgeTime: "19:00",
-};
+const DEFAULT_SETTINGS: ReminderSettings = DEFAULT_REMINDER_SETTINGS;
 
 export function getReminderSettings(): ReminderSettings {
   if (typeof window === "undefined") return DEFAULT_SETTINGS;
@@ -105,17 +72,6 @@ export async function requestNotificationPermission(): Promise<NotificationSuppo
 
 // ── Scheduling ────────────────────────────────────────────────────────────────
 
-interface PendingReminder {
-  atMs: number;   // epoch ms
-  tag: string;    // stable per occurrence — dedupes across re-arms
-  title: string;
-  body: string;
-}
-
-const JS_TO_DAYKEY: DayKey[] = [
-  "sunday", "monday", "tuesday", "wednesday", "thursday", "friday", "saturday",
-];
-
 /** How often the ticker re-checks. Short enough that a fire lands close to
  *  its minute, long enough to be free even when a tab runs all day. */
 export const TICK_MS = 30_000;
@@ -144,105 +100,17 @@ function rememberFired(tag: string, todayISO: string): void {
   _fired.add(tag);
 }
 
-function msAt(dateISO: string, minutes: number): number {
-  const d = new Date(`${dateISO}T00:00:00`);
-  d.setMinutes(minutes);
-  return d.getTime();
-}
-
-function taskIsDone(task: Task): boolean {
-  return !!task.completed || !!task.missed;
-}
-
 /**
- * Today's reminders that are still worth firing, per current settings.
- *
- * `graceMs` widens the window backwards so a reminder whose moment passed
- * while the tab was throttled is still returned, rather than silently dropped
- * the way a strict `atMs > now` filter drops it.
+ * Today's reminders that are still worth firing, per current settings, minus
+ * any already shown. Selection lives in @planr/core (shared with native);
+ * `graceMs` is explained there.
  */
 export function collectReminders(
   schedule: Schedule,
   now = new Date(),
   graceMs = 0,
 ): PendingReminder[] {
-  const settings = getReminderSettings();
-  if (!settings.enabled) return [];
-
-  const todayISO = localISODate(now);
-  const dayKey = JS_TO_DAYKEY[now.getDay()];
-  const nowMs = now.getTime();
-  const earliestMs = nowMs - graceMs;
-  const out: PendingReminder[] = [];
-
-  if (settings.tasks) {
-    for (const task of schedule.activities[dayKey] ?? []) {
-      if (taskIsDone(task)) continue;
-      if (!isTaskScheduledOn(task, todayISO, true, schedule.preferences?.startDate)) continue;
-      const occ = resolveOccurrence(task, todayISO);
-      // One reminder per phase — a multi-slot task fires at each start time.
-      getSlots(occ).forEach((slot, index) => {
-        const startMin = parseTimeToMinutes(slot.startTime);
-        if (startMin == null) return;
-        const atMs = msAt(todayISO, startMin);
-        if (atMs <= earliestMs) return;
-        out.push({
-          atMs,
-          tag: `planr-task-${task.id}-${todayISO}-${index}`,
-          title: occ.title,
-          body: `Starts now · ${formatDisplayTime(slot.startTime)}`,
-        });
-      });
-    }
-  }
-
-  if (settings.rituals) {
-    const completionsToday = (schedule.ritualCompletions ?? []).filter((c) => c.date === todayISO);
-    for (const ritual of schedule.rituals ?? []) {
-      // "Any time" routines have no meaningful reminder moment — `time` is
-      // just a leftover placeholder for readers that still need one.
-      if (ritual.anyTime) continue;
-      if (!ritualScheduledOnDate(ritual, todayISO, schedule.preferences?.startDate)) continue;
-      // trackingType-aware: a quantity/checklist routine only cancels its
-      // reminder once the day is actually complete, not on the first partial log.
-      if (isRitualDayComplete(ritual, completionsToday.filter((c) => c.ritualId === ritual.id))) continue;
-      const min = parseTimeToMinutes(ritual.time);
-      if (min == null) continue;
-      const atMs = msAt(todayISO, min);
-      if (atMs <= earliestMs) continue;
-      out.push({
-        atMs,
-        tag: `planr-ritual-${ritual.id}-${todayISO}`,
-        title: ritual.title,
-        body: `Routine · ${formatDisplayTime(ritual.time)}`,
-      });
-    }
-  }
-
-  if (settings.streakNudge) {
-    const nudgeMin = parseTimeToMinutes(settings.nudgeTime);
-    if (nudgeMin != null) {
-      const atMs = msAt(todayISO, nudgeMin);
-      // Commitments are excluded: nagging "1 task still open" about a commute
-      // you can't close is exactly the kind of noise this nudge must avoid.
-      // Their start-time reminders above still fire — that part is useful.
-      const openCount = (schedule.activities[dayKey] ?? []).filter(
-        (t) => !taskIsDone(t) && isTaskScheduledOn(t, todayISO, true, schedule.preferences?.startDate) && isTrackedTask(t),
-      ).length;
-      if (atMs > earliestMs && openCount > 0) {
-        out.push({
-          atMs,
-          tag: `planr-nudge-${todayISO}`,
-          title: openCount === 1 ? "1 task still open" : `${openCount} tasks still open`,
-          body: "Close the loop before the day ends.",
-        });
-      }
-    }
-  }
-
-  return out
-    .filter((r) => !_fired.has(r.tag))
-    .sort((a, b) => a.atMs - b.atMs);
+  return collectRemindersFor(schedule, getReminderSettings(), now, graceMs).filter((r) => !_fired.has(r.tag));
 }
 
 /**
