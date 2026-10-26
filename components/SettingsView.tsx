@@ -49,7 +49,7 @@ import { SETTINGS_CONTROL_CLASS, SETTINGS_ICON_BUTTON_CLASS } from "@/components
 import { buildDeleteConfirmationCopy } from "@/lib/deleteConfirm";
 import { normalizeDayStartTime } from "@/lib/timeline/displayWindow";
 import { MIN_SLEEP_HOURS, MAX_SLEEP_HOURS } from "@/lib/timeline/sleepWindow";
-import { localISODate } from "@/lib/dateUtils";
+import { formatDayNoteLabel, localISODate } from "@/lib/dateUtils";
 
 const PROVIDER_LABEL: Record<string, string> = {
   mlx: "MLX",
@@ -425,6 +425,7 @@ export function SettingsView({
     ? String(schedule.preferences.dayEndMinutes)
     : "";
   const trackingStart = schedule.preferences?.startDate ?? "";
+  const trackingStartsLater = trackingStart > localISODate(new Date());
   const handleTrackingStartChange = useCallback((value: string) => {
     onUpdatePreferences?.({ startDate: value || undefined });
   }, [onUpdatePreferences]);
@@ -695,13 +696,17 @@ export function SettingsView({
                   <p className="mt-0.5 text-[11px] leading-snug text-neutral-500 dark:text-neutral-400">
                     Tasks, routines, streaks and trends are all ignored before this date. Off = show and count all history.
                   </p>
+                  {trackingStartsLater && (
+                    <p className="mt-1 text-[11px] font-semibold leading-snug text-amber-700 dark:text-amber-300">
+                      Starts {formatDayNoteLabel(trackingStart)}. Until then, nothing shows or counts.
+                    </p>
+                  )}
                 </div>
                 <div className="flex w-full min-w-0 items-center gap-2 sm:w-auto sm:shrink-0">
                   <input
                     type="date"
                     aria-label="Tracking start date"
                     value={trackingStart}
-                    max={localISODate(new Date())}
                     onChange={(e) => handleTrackingStartChange(e.target.value)}
                     className={`${SETTINGS_CONTROL_CLASS} flex-1 sm:w-44 sm:flex-none`}
                   />

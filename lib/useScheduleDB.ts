@@ -17,7 +17,7 @@ import { getLocalLastUpdated, writeLocalLastUpdated } from "@/lib/localMeta";
 import { logError } from "@/lib/errorLog";
 import { useAuth } from "@/contexts/AuthProvider";
 import { calculateMilestoneEndDate, normalizeMilestoneTimeline } from "@/lib/roadmapDates";
-import { clampTrackingStart, localISODate } from "@/lib/dateUtils";
+import { localISODate, normalizeTrackingStart } from "@/lib/dateUtils";
 import { DAYS, DAY_LABELS, type DayKey, MAX_SCHEDULE_EVENTS } from "@/lib/scheduleConstants";
 import { normalizeDayStartTime } from "@/lib/timeline/displayWindow";
 import { MIN_SLEEP_HOURS, MAX_SLEEP_HOURS } from "@/lib/timeline/sleepWindow";
@@ -1439,8 +1439,7 @@ function normalizeSchedulePreferences(raw: unknown): SchedulePreferences {
   // Accept an explicit boolean to derive the end from tasks
   const dayEndAuto = source.dayEndAuto === true ? true : undefined;
 
-  // See clampTrackingStart: a future value here would blank the whole app.
-  const startDate = clampTrackingStart(source.startDate, localISODate(new Date()));
+  const startDate = normalizeTrackingStart(source.startDate);
   const lastRolloverISO =
     typeof source.lastRolloverISO === "string" && /^\d{4}-\d{2}-\d{2}$/.test(source.lastRolloverISO)
       ? source.lastRolloverISO
