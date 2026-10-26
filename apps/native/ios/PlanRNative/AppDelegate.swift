@@ -5,8 +5,6 @@ import ReactAppDependencyProvider
 
 @main
 class AppDelegate: UIResponder, UIApplicationDelegate {
-  var window: UIWindow?
-
   var reactNativeDelegate: ReactNativeDelegate?
   var reactNativeFactory: RCTReactNativeFactory?
 
@@ -21,15 +19,35 @@ class AppDelegate: UIResponder, UIApplicationDelegate {
     reactNativeDelegate = delegate
     reactNativeFactory = factory
 
-    window = UIWindow(frame: UIScreen.main.bounds)
+    return true
+  }
+}
+
+/// iOS 27 terminates apps that have not adopted the UIScene lifecycle, so the
+/// window lives here rather than on the app delegate. React Native itself is
+/// still created once, in `application(_:didFinishLaunchingWithOptions:)`.
+class SceneDelegate: UIResponder, UIWindowSceneDelegate {
+  var window: UIWindow?
+
+  func scene(
+    _ scene: UIScene,
+    willConnectTo session: UISceneSession,
+    options connectionOptions: UIScene.ConnectionOptions
+  ) {
+    guard
+      let windowScene = scene as? UIWindowScene,
+      let appDelegate = UIApplication.shared.delegate as? AppDelegate,
+      let factory = appDelegate.reactNativeFactory
+    else { return }
+
+    let window = UIWindow(windowScene: windowScene)
+    self.window = window
 
     factory.startReactNative(
       withModuleName: "PlanRNative",
       in: window,
-      launchOptions: launchOptions
+      launchOptions: nil
     )
-
-    return true
   }
 }
 

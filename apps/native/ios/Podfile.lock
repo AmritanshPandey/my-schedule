@@ -1778,7 +1778,7 @@ PODS:
     - ReactCommon/turbomodule/core
     - ReactNativeDependencies
     - Yoga
-  - RNScreens (4.28.0):
+  - RNNotifee (9.7.0):
     - hermes-engine
     - RCTRequired
     - RCTTypeSafety
@@ -1793,16 +1793,15 @@ PODS:
     - React-jsi
     - React-NativeModulesApple
     - React-RCTFabric
-    - React-RCTImage
     - React-renderercss
     - React-rendererdebug
     - React-utils
     - ReactCodegen
     - ReactCommon/turbomodule/core
     - ReactNativeDependencies
-    - RNScreens/common (= 4.28.0)
+    - RNNotifee/NotifeeCore (= 9.7.0)
     - Yoga
-  - RNScreens/common (4.28.0):
+  - RNNotifee/NotifeeCore (9.7.0):
     - hermes-engine
     - RCTRequired
     - RCTTypeSafety
@@ -1817,7 +1816,6 @@ PODS:
     - React-jsi
     - React-NativeModulesApple
     - React-RCTFabric
-    - React-RCTImage
     - React-renderercss
     - React-rendererdebug
     - React-utils
@@ -1966,7 +1964,7 @@ DEPENDENCIES:
   - "RNCAsyncStorage (from `../../../node_modules/@react-native-async-storage/async-storage`)"
   - "RNDateTimePicker (from `../../../node_modules/@react-native-community/datetimepicker`)"
   - "RNGoogleSignin (from `../../../node_modules/@react-native-google-signin/google-signin`)"
-  - RNScreens (from `../../../node_modules/react-native-screens`)
+  - RNNotifee (from `../node_modules/react-native-notify-kit`)
   - RNSVG (from `../../../node_modules/react-native-svg`)
   - SocketRocket (from `build/rndeps-facades/SocketRocket`)
   - Yoga (from `build/rncore-facades/Yoga`)
@@ -2158,8 +2156,8 @@ EXTERNAL SOURCES:
     :path: "../../../node_modules/@react-native-community/datetimepicker"
   RNGoogleSignin:
     :path: "../../../node_modules/@react-native-google-signin/google-signin"
-  RNScreens:
-    :path: "../../../node_modules/react-native-screens"
+  RNNotifee:
+    :path: "../node_modules/react-native-notify-kit"
   RNSVG:
     :path: "../../../node_modules/react-native-svg"
   SocketRocket:
@@ -2261,11 +2259,11 @@ SPEC CHECKSUMS:
   RNCAsyncStorage: 2f5e3ddbfb3d3168345311b25fb3c470edf36d9d
   RNDateTimePicker: c3fc062fa18439d8da7b510b242534c0d334af36
   RNGoogleSignin: 5e03ea216080045660a744dffe000da8436303bf
-  RNScreens: 038dc998fe1ab34778d9e8f4a33318a6c7a5bde8
+  RNNotifee: 673f20627457ff4ff71d4132690aadd8a56d1f53
   RNSVG: 6c9bcbf53822153be6f6c1484f6b0b57c0040d21
   SocketRocket: 37aec555668fb852ec12e3c0de59a86ca58f0871
   Yoga: d1c536142c5ff8ec8cd856ab2a7c227a1d875c8e
 
-PODFILE CHECKSUM: 77b599d5c001b13148ab87bb99f3c7ec44136265
+PODFILE CHECKSUM: b21146b7c4c796d800f76b4c1f84dc3a3554ada9
 
-COCOAPODS: 1.16.2
+COCOAPODS: 1.15.2
