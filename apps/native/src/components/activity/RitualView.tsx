@@ -35,6 +35,7 @@ import { RitualSheet } from './RitualSheet';
 import RoutineRow from './RoutineRow';
 import RoutineMonthCalendar from './RoutineMonthCalendar';
 import RoutineInsightsSection from './RoutineInsightsSection';
+import TourTarget from '../onboarding/TourTarget';
 
 // JS getDay() 0=Sunday → DayKey
 const JS_TO_DAY: DayKey[] = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'];
@@ -450,14 +451,16 @@ export default function RitualView({
                 </Pressable>
               )}
               {rituals.length > 0 && viewMode === 'day' && <DateActionButton value={selectedDateISO} onChange={setSelectedDateISO} />}
-              <CtaActionButton
-                label="Add routine"
-                icon={<Icon icon={IconPlus} size={14} strokeWidth={2.5} className="text-neutral-700 dark:text-neutral-300" />}
-                onClick={() => {
-                  haptic('medium');
-                  onAddOpenChange(true);
-                }}
-              />
+              <TourTarget id="new-item-button">
+                <CtaActionButton
+                  label="Add routine"
+                  icon={<Icon icon={IconPlus} size={14} strokeWidth={2.5} className="text-neutral-700 dark:text-neutral-300" />}
+                  onClick={() => {
+                    haptic('medium');
+                    onAddOpenChange(true);
+                  }}
+                />
+              </TourTarget>
             </>
           }
           className="mb-4"

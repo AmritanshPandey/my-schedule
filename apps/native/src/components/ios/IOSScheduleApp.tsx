@@ -31,7 +31,6 @@ import { selectTodayTasks } from '@planr/core/lib/todayTasks';
 import { formatDate, formatDayNoteLabel, localISODate, todayISO } from '@planr/core/lib/dateUtils';
 import { quickAmountsForUnit } from '@planr/core/lib/quickAmounts';
 import { sumEntriesForDate } from '@planr/core/lib/metricEntries';
-import { createInboxNoteInput } from '@planr/core/lib/notes/dailyCapture';
 import {
   addSubtaskToTasks,
   applyTaskDelete,
@@ -69,7 +68,6 @@ import { validateDatedTasks } from '@planr/core/lib/scheduleRules';
 import { applyTemplate, type Template } from '@planr/core/lib/templates';
 import { cascadeMilestoneDates, moveMilestone, normalizeMilestoneTimeline } from '@planr/core/lib/roadmapDates';
 import { appendRitualLog, removeRitualLog, toggleRitualCompletion, toggleRitualStep, undoLastRitualLog } from '@planr/core/lib/ritualCompletions';
-import { MAX_RITUALS } from '@planr/core/lib/ritualColors';
 import { deleteGoal } from '@planr/core/lib/goalMutations';
 import { togglePlanPaused } from '@planr/core/lib/planLifecycle';
 import { dismissAllAttention, dismissAttentionKey, dismissibleCount } from '@planr/core/lib/attentionDismissal';
@@ -217,7 +215,14 @@ function quickTaskTimeRange(now = new Date()): { startTime: string; endTime: str
   };
 }
 
-type HeaderAction = { icon: TablerIcon; label: string; onClick: () => void; destructive?: boolean };
+type HeaderAction = {
+  icon: TablerIcon;
+  label: string;
+  onClick: () => void;
+  destructive?: boolean;
+  /** Coach-mark target id, when a tour step points at this action. */
+  tour?: string;
+};
 
 function IOSHeader({
   title,
@@ -258,20 +263,29 @@ function IOSHeader({
         </View>
         <View className="shrink-0 flex-row items-center gap-1">
           {actions?.length ? (
-            actions.map((action) => (
-              <Pressable
-                key={action.label}
-                accessibilityRole="button"
-                accessibilityLabel={action.label}
-                onPress={action.onClick}
-                hitSlop={2}
-                className={`h-10 w-10 items-center justify-center rounded-xl ${
-                  action.destructive ? 'active:bg-rose-500/10' : 'active:bg-neutral-200/70 dark:active:bg-white/[0.07]'
-                }`}
-              >
-                <Icon icon={action.icon} size={21} strokeWidth={2} className="text-neutral-500 dark:text-neutral-400" />
-              </Pressable>
-            ))
+            actions.map((action) => {
+              const button = (
+                <Pressable
+                  key={action.label}
+                  accessibilityRole="button"
+                  accessibilityLabel={action.label}
+                  onPress={action.onClick}
+                  hitSlop={2}
+                  className={`h-10 w-10 items-center justify-center rounded-xl ${
+                    action.destructive ? 'active:bg-rose-500/10' : 'active:bg-neutral-200/70 dark:active:bg-white/[0.07]'
+                  }`}
+                >
+                  <Icon icon={action.icon} size={21} strokeWidth={2} className="text-neutral-500 dark:text-neutral-400" />
+                </Pressable>
+              );
+              return action.tour ? (
+                <TourTarget key={action.label} id={action.tour}>
+                  {button}
+                </TourTarget>
+              ) : (
+                button
+              );
+            })
           ) : (
             <>
               {onNotes && (
@@ -1148,13 +1162,6 @@ export default function IOSScheduleApp() {
 
   const handleInitialNoteOpened = useCallback(() => setInitialNoteId(null), []);
 
-  function openQuickNote() {
-    const id = handleCreateNote(createInboxNoteInput());
-    setSelectedPlanId(null);
-    setInitialNoteId(id);
-    setActiveTab(6);
-  }
-
   const notesLinkableTasks = useMemo(() => {
     const byId = new Map<string, Task>();
     for (const day of DAYS) for (const task of schedule.activities[day] ?? []) if (!byId.has(task.id)) byId.set(task.id, task);
@@ -1702,28 +1709,33 @@ export default function IOSScheduleApp() {
               </View>
               <View className="flex-row items-center gap-2">
                 {todayEditMode && (
-                  <>
-                    <Pressable
-                      accessibilityRole="button"
-                      accessibilityLabel="Lock screen wallpaper"
-                      onPress={() => {
-                        haptic('light');
-                        setWallpaperOpen(true);
-                      }}
-                      className="h-12 w-12 items-center justify-center rounded-full bg-neutral-100 active:scale-[0.96] dark:bg-white/[0.08]"
-                    >
-                      <Icon icon={IconPhoto} size={24} strokeWidth={2} className="text-neutral-600 dark:text-neutral-300" />
-                    </Pressable>
-                    <Pressable
-                      accessibilityRole="button"
-                      accessibilityLabel="Add task"
-                      onPress={() => openCreateSheet()}
-                      className="h-12 w-12 items-center justify-center rounded-full bg-neutral-100 active:scale-[0.96] dark:bg-white/[0.08]"
-                    >
-                      <Icon icon={IconPlus} size={24} strokeWidth={2} className="text-neutral-600 dark:text-neutral-300" />
-                    </Pressable>
-                  </>
+                  <Pressable
+                    accessibilityRole="button"
+                    accessibilityLabel="Lock screen wallpaper"
+                    onPress={() => {
+                      haptic('light');
+                      setWallpaperOpen(true);
+                    }}
+                    className="h-12 w-12 items-center justify-center rounded-full bg-neutral-100 active:scale-[0.96] dark:bg-white/[0.08]"
+                  >
+                    <Icon icon={IconPhoto} size={24} strokeWidth={2} className="text-neutral-600 dark:text-neutral-300" />
+                  </Pressable>
                 )}
+                {/* Adding to the day is a primary action, so it isn't hidden
+                    behind edit mode — the tab bar no longer carries a + . */}
+                <TourTarget id="new-item-button">
+                  <Pressable
+                    accessibilityRole="button"
+                    accessibilityLabel="Add task"
+                    onPress={() => {
+                      haptic('light');
+                      openCreateSheet();
+                    }}
+                    className="h-12 w-12 items-center justify-center rounded-full bg-neutral-950 active:scale-[0.96] dark:bg-white"
+                  >
+                    <Icon icon={IconPlus} size={24} strokeWidth={2.2} className="text-white dark:text-neutral-950" />
+                  </Pressable>
+                </TourTarget>
                 <Pressable
                   accessibilityRole="button"
                   accessibilityLabel={todayEditMode ? 'Done editing' : 'Edit day'}
@@ -2074,6 +2086,15 @@ export default function IOSScheduleApp() {
                         setGoalsSheetOpen(true);
                       },
                     },
+                    {
+                      icon: IconPlus,
+                      label: 'New plan',
+                      tour: 'new-item-button',
+                      onClick: () => {
+                        haptic('light');
+                        setAddingPlan(true);
+                      },
+                    },
                   ]
                 : undefined
           }
@@ -2119,18 +2140,6 @@ export default function IOSScheduleApp() {
             setActiveTab(tab);
             setSelectedPlanId(null);
           }}
-          onCreateTask={() => openCreateSheet()}
-          onCreatePlan={() => {
-            setActiveTab(1);
-            setSelectedPlanId(null);
-            setAddingPlan(true);
-          }}
-          onCreateRitual={() => {
-            setActiveTab(2);
-            if ((schedule.rituals ?? []).length < MAX_RITUALS) setRitualAddOpen(true);
-            else setToast(`You can have up to ${MAX_RITUALS} routines`);
-          }}
-          onCreateNote={openQuickNote}
         />
       )}
 

@@ -42,7 +42,7 @@ export default function IOSMergedTimelineRow({
 }: IOSMergedTimelineRowProps) {
   return (
     <View className="flex-row items-stretch gap-3 pb-3">
-      <View className="w-[52px] shrink-0" />
+      <View className="w-[56px] shrink-0" />
       <View className="relative w-7 shrink-0 items-center justify-center gap-2">
         <View
           pointerEvents="none"

@@ -1,5 +1,5 @@
 import type { ReactNode } from 'react';
-import { Pressable, View } from 'react-native';
+import { Pressable, View, type TextStyle } from 'react-native';
 import { IconEdit, IconListCheck, IconX } from '@tabler/icons-react-native';
 import type { Plan, Task, TaskCategory } from '@planr/core/lib/scheduleTypes';
 import {
@@ -18,6 +18,18 @@ import Pill from '../ui/Pill';
 import Pulse from '../ui/Pulse';
 import { Icon } from '../ui/Icon';
 import { Text } from '../ui/Text';
+
+/** "10:30 AM" → digits at full size, the period a step smaller beside them,
+ *  on one line — the way iOS Calendar sets it, so the gutter never wraps. */
+function TimeLabel({ value, className, style }: { value: string; className: string; style?: TextStyle }) {
+  const match = /^(.*?)\s*(AM|PM)$/i.exec(value);
+  return (
+    <Text numberOfLines={1} className={className} style={style}>
+      {match ? match[1] : value}
+      {match && <Text className="text-[10px] font-bold">{` ${match[2].toUpperCase()}`}</Text>}
+    </Text>
+  );
+}
 
 /** Matches lib/useLongPress.ts's MISSED_LONG_PRESS_MS — the platform hold value. */
 const MISSED_LONG_PRESS_MS = 500;
@@ -211,15 +223,13 @@ export default function IOSTimelineRow({
             haptic('light');
             onQuickRetime();
           }}
-          className="w-[52px] shrink-0 items-end justify-center"
+          className="w-[56px] shrink-0 items-end justify-center"
         >
-          <Text className={timeText} style={{ textDecorationLine: 'underline', textDecorationStyle: 'dotted' }}>
-            {timeLabel}
-          </Text>
+          <TimeLabel value={timeLabel} className={timeText} style={{ textDecorationLine: 'underline', textDecorationStyle: 'dotted' }} />
         </Pressable>
       ) : (
-        <View className="w-[52px] shrink-0 items-end justify-center">
-          <Text className={timeText}>{timeLabel}</Text>
+        <View className="w-[56px] shrink-0 items-end justify-center">
+          <TimeLabel value={timeLabel} className={timeText} />
         </View>
       )}
 
