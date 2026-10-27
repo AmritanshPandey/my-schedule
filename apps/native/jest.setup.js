@@ -4,3 +4,10 @@
 jest.mock('@react-native-async-storage/async-storage', () =>
   require('@react-native-async-storage/async-storage/jest/async-storage-mock'),
 );
+
+// The liquid-glass views are native components that don't exist under Jest;
+// render them as plain Views, as the library itself does off iOS.
+jest.mock('@callstack/liquid-glass', () => {
+  const { View } = require('react-native');
+  return { LiquidGlassView: View, LiquidGlassContainerView: View, isLiquidGlassSupported: false };
+});

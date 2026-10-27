@@ -217,68 +217,78 @@ function IOSHeader({
   onNotes?: () => void;
 }) {
   return (
-    <header data-glass className="fixed inset-x-0 top-0 z-30 border-b border-neutral-200/80 bg-[#F3F4F1]/90 px-4 pb-2 pt-[calc(env(safe-area-inset-top)+10px)] backdrop-blur-xl dark:border-white/[0.08] dark:bg-[#0E0E0E]/90">
+    // No bar: content scrolls up under a fade of the page color, and the
+    // controls float on liquid glass — the shape of iOS's own navigation bar.
+    // Dropping the full-width backdrop blur is also the cheaper option: blur
+    // is only paid for on the two small capsules.
+    <header data-glass data-scroll-edge className="ios-scroll-edge fixed inset-x-0 top-0 z-30 px-4 pb-2 pt-[calc(env(safe-area-inset-top)+10px)]">
       <div className="flex h-12 items-center justify-between gap-3">
         <div className="min-w-0">
           {onBack ? (
             <button
               type="button"
               onClick={onBack}
-              className="-ml-1.5 flex items-center gap-1 text-left"
+              aria-label={`Back from ${title}`}
+              className="group flex min-h-[44px] items-center gap-2.5 text-left"
             >
-              <IconChevronLeft size={24} strokeWidth={1.5} className="shrink-0 text-neutral-950 dark:text-white" />
+              <span data-glass className="liquid-glass flex h-11 w-11 shrink-0 items-center justify-center rounded-full transition-transform duration-150 group-active:scale-[0.94]">
+                <IconChevronLeft size={22} strokeWidth={2} className="text-neutral-900 dark:text-white" />
+              </span>
               <h1 className="truncate text-[16px] font-semibold leading-none text-neutral-950 dark:text-white">{title}</h1>
             </button>
           ) : (
             <h1 className="truncate text-[16px] font-semibold leading-none text-neutral-950 dark:text-white">{title}</h1>
           )}
         </div>
-        <div className="flex shrink-0 items-center gap-1">
-          {actions?.length ? (
-            actions.map((action) => {
-              const Icon = action.icon;
-              return (
-                <button
-                  key={action.label}
-                  type="button"
-                  onClick={action.onClick}
-                  aria-label={action.label}
-                  data-tour={action.tour}
-                    className={`flex h-10 w-10 items-center justify-center rounded-xl transition-colors ${
-                    action.destructive
-                      ? "text-neutral-500 hover:bg-rose-500/10 hover:text-rose-500 dark:text-neutral-400 dark:hover:text-rose-400"
-                      : "text-neutral-500 hover:bg-neutral-200/70 hover:text-neutral-800 dark:text-neutral-400 dark:hover:bg-white/[0.07] dark:hover:text-white"
-                  }`}
-                >
-                  <Icon size={21} strokeWidth={2} />
-                </button>
-              );
-            })
-          ) : (
-            <>
-              {onNotes && (
-                <button
-                  type="button"
-                  onClick={onNotes}
-                  aria-label="Notes"
-                  className="flex h-10 w-10 items-center justify-center rounded-xl text-neutral-500 transition-colors hover:bg-neutral-200/70 dark:text-neutral-400 dark:hover:bg-white/[0.07]"
-                >
-                  <IconNotes size={20} strokeWidth={2} />
-                </button>
-              )}
-              {onSettings && (
-                <button
-                  type="button"
-                  onClick={onSettings}
-                  aria-label="Settings"
-                  className="flex h-10 w-10 items-center justify-center rounded-xl text-neutral-500 transition-colors hover:bg-neutral-200/70 dark:text-neutral-400 dark:hover:bg-white/[0.07]"
-                >
-                  <IconSettings size={20} strokeWidth={2} />
-                </button>
-              )}
-            </>
-          )}
-        </div>
+        {(actions?.length || onNotes || onSettings) && (
+          // One capsule for the group, like a system toolbar.
+          <div data-glass className="liquid-glass flex shrink-0 items-center rounded-full">
+            {actions?.length ? (
+              actions.map((action) => {
+                const Icon = action.icon;
+                return (
+                  <button
+                    key={action.label}
+                    type="button"
+                    onClick={action.onClick}
+                    aria-label={action.label}
+                    data-tour={action.tour}
+                    className={`flex h-11 w-11 items-center justify-center rounded-full transition-colors ${
+                      action.destructive
+                        ? "text-neutral-800 hover:bg-rose-500/10 hover:text-rose-500 dark:text-neutral-100 dark:hover:text-rose-400"
+                        : "text-neutral-800 hover:bg-black/[0.06] dark:text-neutral-100 dark:hover:bg-white/[0.1]"
+                    }`}
+                  >
+                    <Icon size={21} strokeWidth={2} />
+                  </button>
+                );
+              })
+            ) : (
+              <>
+                {onNotes && (
+                  <button
+                    type="button"
+                    onClick={onNotes}
+                    aria-label="Notes"
+                    className="flex h-11 w-11 items-center justify-center rounded-full text-neutral-800 transition-colors hover:bg-black/[0.06] dark:text-neutral-100 dark:hover:bg-white/[0.1]"
+                  >
+                    <IconNotes size={20} strokeWidth={2} />
+                  </button>
+                )}
+                {onSettings && (
+                  <button
+                    type="button"
+                    onClick={onSettings}
+                    aria-label="Settings"
+                    className="flex h-11 w-11 items-center justify-center rounded-full text-neutral-800 transition-colors hover:bg-black/[0.06] dark:text-neutral-100 dark:hover:bg-white/[0.1]"
+                  >
+                    <IconSettings size={20} strokeWidth={2} />
+                  </button>
+                )}
+              </>
+            )}
+          </div>
+        )}
       </div>
     </header>
   );

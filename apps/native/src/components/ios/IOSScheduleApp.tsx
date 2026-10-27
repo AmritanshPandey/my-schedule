@@ -1,6 +1,8 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { AppState, BackHandler, Modal, Pressable, ScrollView, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import LinearGradient from 'react-native-linear-gradient';
+import { useColorScheme } from 'nativewind';
 import {
   IconAlertCircle,
   IconCalendar,
@@ -98,6 +100,7 @@ import { haptic } from '../../lib/haptics';
 import { storage } from '../../storage/mmkv';
 import { ErrorBoundary } from '../ErrorBoundary';
 import { CARD } from '../ui/surfaces';
+import { Glass, isLiquidGlassSupported } from '../ui/Glass';
 import { Icon, type TablerIcon } from '../ui/Icon';
 import { Text } from '../ui/Text';
 import { SECTION_ICONS } from '../SectionIcons';
@@ -247,19 +250,84 @@ function IOSHeader({
   onNotes?: () => void;
 }) {
   const insets = useSafeAreaInsets();
+  const { colorScheme } = useColorScheme();
+  // iOS 26+: no bar. Content scrolls up under a fade of the page color, and
+  // the controls float on liquid glass, the way the system's own navigation
+  // bars do. Older systems keep the solid bar.
+  const glass = isLiquidGlassSupported;
   const titleClass = 'truncate text-[16px] font-semibold leading-none text-neutral-950 dark:text-white';
-  const buttonClass = 'h-10 w-10 items-center justify-center rounded-xl active:bg-neutral-200/70 dark:active:bg-white/[0.07]';
+  const shapeClass = `items-center justify-center ${glass ? 'h-11 w-11 rounded-full' : 'h-10 w-10 rounded-xl'}`;
+  const buttonClass = `${shapeClass} ${glass ? 'active:bg-black/[0.06] dark:active:bg-white/[0.1]' : 'active:bg-neutral-200/70 dark:active:bg-white/[0.07]'}`;
+  // On glass the icons sit on a moving backdrop, so they take full ink.
+  const iconClass = glass ? 'text-neutral-800 dark:text-neutral-100' : 'text-neutral-500 dark:text-neutral-400';
+  const page = colorScheme === 'dark' ? '#0E0E0E' : '#F3F4F1';
+
+  const actionButtons = actions?.length ? (
+    actions.map((action) => {
+      const button = (
+        <Pressable
+          key={action.label}
+          accessibilityRole="button"
+          accessibilityLabel={action.label}
+          onPress={action.onClick}
+          hitSlop={2}
+          className={action.destructive ? `${shapeClass} active:bg-rose-500/10` : buttonClass}
+        >
+          <Icon icon={action.icon} size={21} strokeWidth={2} className={iconClass} />
+        </Pressable>
+      );
+      return action.tour ? (
+        <TourTarget key={action.label} id={action.tour}>
+          {button}
+        </TourTarget>
+      ) : (
+        button
+      );
+    })
+  ) : (
+    <>
+      {onNotes && (
+        <Pressable accessibilityRole="button" accessibilityLabel="Notes" onPress={onNotes} hitSlop={2} className={buttonClass}>
+          <Icon icon={IconNotes} size={20} strokeWidth={2} className={iconClass} />
+        </Pressable>
+      )}
+      {onSettings && (
+        <Pressable accessibilityRole="button" accessibilityLabel="Settings" onPress={onSettings} hitSlop={2} className={buttonClass}>
+          <Icon icon={IconSettings} size={20} strokeWidth={2} className={iconClass} />
+        </Pressable>
+      )}
+    </>
+  );
+  const hasActions = Boolean(actions?.length || onNotes || onSettings);
 
   return (
     <View
-      className="absolute inset-x-0 top-0 z-30 border-b border-neutral-200/80 bg-[#F3F4F1]/95 px-4 pb-2 dark:border-white/[0.08] dark:bg-[#0E0E0E]/95"
+      className={`absolute inset-x-0 top-0 z-30 px-4 pb-2 ${
+        glass ? '' : 'border-b border-neutral-200/80 bg-[#F3F4F1]/95 dark:border-white/[0.08] dark:bg-[#0E0E0E]/95'
+      }`}
       style={{ paddingTop: insets.top + 10 }}
     >
+      {glass && (
+        // Solid under the status bar and title, then gone: titles stay legible
+        // while the page reads as one continuous surface.
+        <LinearGradient
+          pointerEvents="none"
+          colors={[page, page, `${page}00`]}
+          locations={[0, 0.6, 1]}
+          style={{ position: 'absolute', left: 0, right: 0, top: 0, bottom: -16 }}
+        />
+      )}
       <View className="h-12 flex-row items-center justify-between gap-3">
         <View className="min-w-0 shrink">
           {onBack ? (
-            <Pressable accessibilityRole="button" accessibilityLabel={`Back from ${title}`} onPress={onBack} className="-ml-1.5 min-h-[44px] flex-row items-center gap-1">
-              <Icon icon={IconChevronLeft} size={24} strokeWidth={1.5} className="shrink-0 text-neutral-950 dark:text-white" />
+            <Pressable accessibilityRole="button" accessibilityLabel={`Back from ${title}`} onPress={onBack} className={`min-h-[44px] flex-row items-center ${glass ? 'gap-2.5' : '-ml-1.5 gap-1'}`}>
+              {glass ? (
+                <Glass className="h-11 w-11 items-center justify-center rounded-full">
+                  <Icon icon={IconChevronLeft} size={22} strokeWidth={2} className="text-neutral-900 dark:text-white" />
+                </Glass>
+              ) : (
+                <Icon icon={IconChevronLeft} size={24} strokeWidth={1.5} className="shrink-0 text-neutral-950 dark:text-white" />
+              )}
               <Text accessibilityRole="header" className={`shrink ${titleClass}`}>
                 {title}
               </Text>
@@ -270,46 +338,13 @@ function IOSHeader({
             </Text>
           )}
         </View>
-        <View className="shrink-0 flex-row items-center gap-1">
-          {actions?.length ? (
-            actions.map((action) => {
-              const button = (
-                <Pressable
-                  key={action.label}
-                  accessibilityRole="button"
-                  accessibilityLabel={action.label}
-                  onPress={action.onClick}
-                  hitSlop={2}
-                  className={`h-10 w-10 items-center justify-center rounded-xl ${
-                    action.destructive ? 'active:bg-rose-500/10' : 'active:bg-neutral-200/70 dark:active:bg-white/[0.07]'
-                  }`}
-                >
-                  <Icon icon={action.icon} size={21} strokeWidth={2} className="text-neutral-500 dark:text-neutral-400" />
-                </Pressable>
-              );
-              return action.tour ? (
-                <TourTarget key={action.label} id={action.tour}>
-                  {button}
-                </TourTarget>
-              ) : (
-                button
-              );
-            })
-          ) : (
-            <>
-              {onNotes && (
-                <Pressable accessibilityRole="button" accessibilityLabel="Notes" onPress={onNotes} hitSlop={2} className={buttonClass}>
-                  <Icon icon={IconNotes} size={20} strokeWidth={2} className="text-neutral-500 dark:text-neutral-400" />
-                </Pressable>
-              )}
-              {onSettings && (
-                <Pressable accessibilityRole="button" accessibilityLabel="Settings" onPress={onSettings} hitSlop={2} className={buttonClass}>
-                  <Icon icon={IconSettings} size={20} strokeWidth={2} className="text-neutral-500 dark:text-neutral-400" />
-                </Pressable>
-              )}
-            </>
-          )}
-        </View>
+        {glass ? (
+          // One capsule for the whole group, like a system toolbar — and one
+          // glass layer rather than one per button.
+          hasActions && <Glass className="shrink-0 flex-row items-center rounded-full">{actionButtons}</Glass>
+        ) : (
+          <View className="shrink-0 flex-row items-center gap-1">{actionButtons}</View>
+        )}
       </View>
     </View>
   );

@@ -4,6 +4,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useColorScheme } from 'nativewind';
 import { IconCalendarEvent, IconChartLine, IconClipboardData, IconLayoutDashboard, IconRepeat } from '@tabler/icons-react-native';
 import { haptic } from '../../lib/haptics';
+import { Glass, isLiquidGlassSupported } from '../ui/Glass';
 import { Icon } from '../ui/Icon';
 import { Text } from '../ui/Text';
 
@@ -33,8 +34,8 @@ const INSET = 6;
  *
  * The active tab is one pill that glides between the five equal columns
  * rather than a highlight that snaps off one button and onto another. The
- * web's backdrop blur has no native equivalent without a blur module, so the
- * capsule is a solid translucent surface.
+ * capsule is the system's liquid glass on iOS 26+ (see ui/Glass), the same
+ * material as iOS's own tab bar; older systems get a solid translucent one.
  */
 export default function IOSBottomNav({ activeTab, onTabChange }: IOSBottomNavProps) {
   const insets = useSafeAreaInsets();
@@ -75,18 +76,21 @@ export default function IOSBottomNav({ activeTab, onTabChange }: IOSBottomNavPro
 
   return (
     <View pointerEvents="box-none" className="absolute inset-x-0 z-40 items-center px-4" style={{ bottom }}>
-      <View
+      <Glass
         accessibilityRole="tablist"
         accessibilityLabel="Main navigation"
-        className="h-[64px] w-full max-w-md flex-row items-center rounded-full border border-neutral-200/70 bg-white/95 dark:border-white/[0.09] dark:bg-neutral-900/95"
-        style={{
-          paddingHorizontal: INSET,
-          shadowColor: '#000',
-          shadowOffset: { width: 0, height: 8 },
-          shadowOpacity: colorScheme === 'dark' ? 0.4 : 0.12,
-          shadowRadius: 24,
-          elevation: 8,
-        }}
+        className="h-[64px] w-full max-w-md flex-row items-center rounded-full"
+        style={[
+          { paddingHorizontal: INSET },
+          // The glass casts its own soft shadow; the fallback needs the lift.
+          !isLiquidGlassSupported && {
+            shadowColor: '#000',
+            shadowOffset: { width: 0, height: 8 },
+            shadowOpacity: colorScheme === 'dark' ? 0.4 : 0.12,
+            shadowRadius: 24,
+            elevation: 8,
+          },
+        ]}
       >
         <View className="h-full flex-1 flex-row items-center" onLayout={(e: LayoutChangeEvent) => setTrackWidth(e.nativeEvent.layout.width)}>
           {/* The pill rides behind the buttons; decoration only, so hidden
@@ -134,7 +138,7 @@ export default function IOSBottomNav({ activeTab, onTabChange }: IOSBottomNavPro
             );
           })}
         </View>
-      </View>
+      </Glass>
     </View>
   );
 }

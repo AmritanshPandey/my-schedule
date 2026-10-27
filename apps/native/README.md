@@ -71,8 +71,12 @@ Device setup that affects delivery:
 npm install
 cd ios
 bundle install        # once
-LANG=en_US.UTF-8 LC_ALL=en_US.UTF-8 bundle exec pod install
+LANG=en_US.UTF-8 LC_ALL=en_US.UTF-8 RCT_USE_RN_DEP=1 RCT_USE_PREBUILT_RNCORE=1 bundle exec pod install
 ```
+
+The two `RCT_USE_*` flags match how `Podfile.lock` was generated (prebuilt
+React Native core and dependencies); without them CocoaPods can't find
+`ReactNativeDependencies`.
 
 Run `pod install` again after pulling changes that add a native module (the
 reminders module, `react-native-notify-kit`, needs it).
