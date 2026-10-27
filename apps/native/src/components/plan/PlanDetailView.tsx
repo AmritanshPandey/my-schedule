@@ -20,7 +20,9 @@ import {
   IconTrash,
   IconWand,
 } from '@tabler/icons-react-native';
-import type { DayKey, GoalDirection, MetricEntry, Milestone, Plan, ProgressTracker, Schedule, Task } from '@planr/core/lib/scheduleTypes';
+import type { DayKey, GoalDirection, MetricEntry, Milestone, Plan, ProgressTracker, Schedule, Task, TrackerCadence } from '@planr/core/lib/scheduleTypes';
+import { trackerCadence } from '@planr/core/lib/trackerCadence';
+import { CadencePicker } from '../tracking/CadencePicker';
 import { DAYS } from '@planr/core/lib/scheduleConstants';
 import { computeRoadmapStats } from '@planr/core/lib/roadmapEngine';
 import { calculateMilestoneProgress, type MilestoneProgress } from '@planr/core/lib/planProgress';
@@ -233,10 +235,11 @@ interface PlanDetailViewProps {
     goalValue?: number,
     startingValue?: number,
     dailyTarget?: number,
+    cadence?: TrackerCadence,
   ) => void;
   onUpdateTracker: (
     trackerId: string,
-    data: { title: string; unit: string; goalDirection: GoalDirection; goalValue?: number; startingValue?: number; dailyTarget?: number },
+    data: { title: string; unit: string; goalDirection: GoalDirection; goalValue?: number; startingValue?: number; dailyTarget?: number; cadence?: TrackerCadence },
   ) => void;
   onDeleteTracker: (trackerId: string) => void;
   // Entry handlers
@@ -315,10 +318,12 @@ export default function PlanDetailView({
     goalValue?: number;
     startingValue?: number;
     dailyTarget?: number;
+    cadence: TrackerCadence;
   }>({
     title: '',
     unit: '',
     goalDirection: 'increase_good',
+    cadence: 'weekly',
   });
 
   // ── Add tracker state ───────────────────────────────────────────────────
@@ -329,6 +334,7 @@ export default function PlanDetailView({
   const [newTrackerStartingValue, setNewTrackerStartingValue] = useState('');
   const [newTrackerDailyTarget, setNewTrackerDailyTarget] = useState('');
   const [newTrackerGoalDirection, setNewTrackerGoalDirection] = useState<GoalDirection>('increase_good');
+  const [newTrackerCadence, setNewTrackerCadence] = useState<TrackerCadence>('weekly');
 
   // ── Selected tracker state ──────────────────────────────────────────────
   const [selectedTrackerIdRaw, setSelectedTrackerId] = useState<string | null>(null);
@@ -424,6 +430,7 @@ export default function PlanDetailView({
       Number.isFinite(goalValue) ? goalValue : undefined,
       Number.isFinite(startingValue) ? startingValue : undefined,
       Number.isFinite(dailyTarget) ? dailyTarget : undefined,
+      newTrackerCadence,
     );
     setNewTrackerTitle('');
     setNewTrackerUnit('');
@@ -431,6 +438,7 @@ export default function PlanDetailView({
     setNewTrackerStartingValue('');
     setNewTrackerDailyTarget('');
     setNewTrackerGoalDirection('increase_good');
+    setNewTrackerCadence('weekly');
     setAddingTracker(false);
   }
 
@@ -444,6 +452,7 @@ export default function PlanDetailView({
       goalValue: editTrackerDraft.goalValue,
       startingValue: editTrackerDraft.startingValue,
       dailyTarget: editTrackerDraft.dailyTarget,
+      cadence: editTrackerDraft.cadence,
     });
     setEditingTrackerId(null);
   }
@@ -637,6 +646,7 @@ export default function PlanDetailView({
                 className={editFieldClass}
               />
               <GoalDirectionPicker value={editTrackerDraft.goalDirection} onChange={(gd) => setEditTrackerDraft((d) => ({ ...d, goalDirection: gd }))} />
+              <CadencePicker value={editTrackerDraft.cadence} onChange={(cadence) => setEditTrackerDraft((d) => ({ ...d, cadence }))} />
               <View className="flex-row gap-2 pt-1">
                 <Pressable
                   accessibilityRole="button"
@@ -678,6 +688,7 @@ export default function PlanDetailView({
                         goalValue: tracker.goalValue,
                         startingValue: tracker.startingValue,
                         dailyTarget: tracker.dailyTarget,
+                        cadence: trackerCadence(tracker),
                       });
                     }}
                     className="h-8 w-8 items-center justify-center rounded-lg"
@@ -1292,6 +1303,7 @@ export default function PlanDetailView({
             />
           </View>
           <GoalDirectionPicker value={newTrackerGoalDirection} onChange={setNewTrackerGoalDirection} />
+          <CadencePicker value={newTrackerCadence} onChange={setNewTrackerCadence} />
           <View className="rounded-2xl bg-neutral-50 px-4 py-3 dark:bg-white/[0.04]">
             <Text className="mb-1.5 text-[11px] font-semibold text-neutral-500 dark:text-neutral-400">Examples</Text>
             <View className="flex-row flex-wrap gap-1.5">

@@ -20,7 +20,7 @@ import {
   IconTemplate,
   IconTrash,
 } from '@tabler/icons-react-native';
-import type { DayKey, MetricEntry, Milestone, Note, Plan, ProgressTracker, Ritual, Schedule, Task, TaskTypeValue } from '@planr/core/lib/scheduleTypes';
+import type { DayKey, MetricEntry, Milestone, Note, Plan, ProgressTracker, Ritual, Schedule, Task, TaskTypeValue, TrackerCadence } from '@planr/core/lib/scheduleTypes';
 import { DAYS, DAY_FULL_LABELS, DAY_LABELS } from '@planr/core/lib/scheduleConstants';
 import { resetStaleCompletions } from '@planr/core/lib/scheduleNormalize';
 import { categoryHex, resolveAccentColor } from '@planr/core/lib/colorSystem';
@@ -107,6 +107,7 @@ import IOSMergedTimelineRow from './IOSMergedTimelineRow';
 import SignInPrompt from '../auth/SignInPrompt';
 import DayActionsSheet from '../DayActionsSheet';
 import NeedsAttentionCard from '../NeedsAttentionCard';
+import CheckInsDueCard from '../tracking/CheckInsDueCard';
 import MissedTaskSheet from '../MissedTaskSheet';
 import QuickRetimeSheet, { type QuickRetimeTarget } from '../QuickRetimeSheet';
 import { TaskSheet, type TaskSaveData } from '../task/TaskSheet';
@@ -973,6 +974,13 @@ export default function IOSScheduleApp() {
     }));
   }
 
+  function handleSetTrackerCadence(trackerId: string, cadence: TrackerCadence) {
+    setSchedule((prev) => ({
+      ...prev,
+      progressTrackers: prev.progressTrackers.map((t) => (t.id === trackerId ? { ...t, cadence } : t)),
+    }));
+  }
+
   function handleToggleRitualStep(ritualId: string, stepId: string, dateISO: string = todayISO()) {
     setSchedule((prev) => ({
       ...prev,
@@ -1588,6 +1596,16 @@ export default function IOSScheduleApp() {
               onDismissOne={handleDismissAttentionOne}
             />
 
+            {/* Trackers waiting on this period's entry — nothing once all are in. */}
+            <CheckInsDueCard
+              trackers={schedule.progressTrackers}
+              metricEntries={schedule.metricEntries}
+              todayISO={todayISO()}
+              trackingStart={schedule.preferences?.startDate}
+              onLog={(tracker) => setEntryTracker(tracker)}
+              onOpenTracking={() => setActiveTab(8)}
+            />
+
             <View testID="overview-next-task" className={`${CARD} p-0`}>
               <Pressable
                 accessibilityRole="button"
@@ -1804,12 +1822,12 @@ export default function IOSScheduleApp() {
               onEditTask={(task) => openEditSheet(task)}
               onDeleteLinkedTask={handleDeleteLinkedTask}
               onDeleteTaskSlot={handleDeleteTaskSlot}
-              onAddTracker={(planId, title, unit, goalDirection, id, goalValue, startingValue, dailyTarget) => {
+              onAddTracker={(planId, title, unit, goalDirection, id, goalValue, startingValue, dailyTarget, cadence) => {
                 setSchedule((prev) => ({
                   ...prev,
                   progressTrackers: [
                     ...prev.progressTrackers,
-                    { id: id ?? uid(), planId, title, type: 'number', unit: unit || undefined, goalDirection, goalValue, startingValue, dailyTarget },
+                    { id: id ?? uid(), planId, title, type: 'number', unit: unit || undefined, goalDirection, goalValue, startingValue, dailyTarget, cadence },
                   ],
                 }));
               }}
@@ -1992,6 +2010,7 @@ export default function IOSScheduleApp() {
               onLog={handleLogTrackerAmount}
               onOpenAddEntry={(tracker) => setEntryTracker(tracker)}
               onDeleteEntry={handleDeleteEntry}
+              onSetCadence={handleSetTrackerCadence}
               onNavigateToPlans={() => setActiveTab(1)}
             />
           </TourTarget>

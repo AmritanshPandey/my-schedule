@@ -3,10 +3,11 @@ import { Pressable, View } from 'react-native';
 import Svg, { Circle } from 'react-native-svg';
 import { useColorScheme } from 'nativewind';
 import { IconChartLine, IconFlag3, IconPlus, IconTargetArrow, IconTrash } from '@tabler/icons-react-native';
-import type { MetricEntry, Milestone, Plan, ProgressTracker } from '@planr/core/lib/scheduleTypes';
+import type { MetricEntry, Milestone, Plan, ProgressTracker, TrackerCadence } from '@planr/core/lib/scheduleTypes';
 import type { MilestoneState } from '@planr/core/lib/milestoneHealth';
 import { paceNarrative } from '@planr/core/lib/paceModel';
 import { buildTrackerStat, groupTrackerStatsByPlan, trackerRampTone, type TrackerStat } from '@planr/core/lib/trackerStats';
+import { buildCheckIn, checkInRecordLabel, checkInStatusLabel, nextCheckInLabel, type CheckInState } from '@planr/core/lib/trackerCadence';
 import { quickAmountsForUnit } from '@planr/core/lib/quickAmounts';
 import { todayISO } from '@planr/core/lib/dateUtils';
 import { haptic } from '../../lib/haptics';
@@ -18,6 +19,7 @@ import HealthBadge from '../ui/HealthBadge';
 import { Icon } from '../ui/Icon';
 import { Text } from '../ui/Text';
 import ProgressChart from '../ProgressChart';
+import { CadenceSelect } from './CadencePicker';
 
 const RING_SIZE = 44;
 const RING_STROKE = 4;
@@ -47,6 +49,8 @@ export interface TrackingViewProps {
   /** Opens AddEntryModal for an arbitrary value or a back-dated entry. */
   onOpenAddEntry: (tracker: ProgressTracker) => void;
   onDeleteEntry: (entryId: string) => void;
+  /** Change how often a tracker asks for an entry. */
+  onSetCadence: (trackerId: string, cadence: TrackerCadence) => void;
   /** Sends the user to Plans, the only place a tracker can be created. */
   onNavigateToPlans: () => void;
 }
@@ -89,21 +93,77 @@ function TargetRing({ percent, met }: { percent: number; met: boolean }) {
   );
 }
 
+/** "Last logged 9 days ago" — how long the record has been quiet. */
+function lastLoggedLabel(lastDate: string | null, todayISO: string): string | null {
+  if (!lastDate) return null;
+  const days = Math.round((new Date(`${todayISO}T00:00:00`).getTime() - new Date(`${lastDate}T00:00:00`).getTime()) / 86_400_000);
+  if (days <= 0) return 'Last logged today';
+  if (days === 1) return 'Last logged yesterday';
+  return `Last logged ${days} days ago`;
+}
+
+/**
+ * The tracker's rhythm, in one line: how often, whether this period's entry
+ * is in, when the next is wanted, and the honest record behind it.
+ */
+function CheckInRow({ state, trackerTitle, onSetCadence }: { state: CheckInState; trackerTitle: string; onSetCadence: (cadence: TrackerCadence) => void }) {
+  const record = checkInRecordLabel(state);
+  return (
+    <View className="mt-3 gap-2">
+      <View className="flex-row items-center justify-between gap-3">
+        <Text
+          numberOfLines={1}
+          className={`min-w-0 flex-1 text-[13px] font-bold ${
+            state.overdue ? 'text-rose-700 dark:text-rose-400' : state.due ? 'text-amber-800 dark:text-amber-300' : 'text-emerald-700 dark:text-emerald-400'
+          }`}
+        >
+          {checkInStatusLabel(state)}
+          {!state.due && <Text className="font-semibold text-neutral-500 dark:text-neutral-400"> · next {nextCheckInLabel(state)}</Text>}
+        </Text>
+        {/* The last few periods, oldest first. Hollow before first use. */}
+        <View accessibilityElementsHidden importantForAccessibility="no-hide-descendants" className="shrink-0 flex-row items-center gap-1">
+          {state.history.map((period) => (
+            <View
+              key={period.start}
+              className={`h-2 w-2 rounded-full ${
+                period.logged === null ? 'border border-neutral-300 dark:border-white/[0.15]' : period.logged ? 'bg-green-500' : 'bg-neutral-200 dark:bg-white/10'
+              }`}
+            />
+          ))}
+        </View>
+      </View>
+      <View className="flex-row items-center gap-3">
+        <CadenceSelect value={state.cadence} onChange={onSetCadence} trackerTitle={trackerTitle} />
+        {record && (
+          <Text className="min-w-0 flex-1 text-[12px] font-medium leading-snug text-neutral-500 dark:text-neutral-400">
+            {record}
+            {state.streak >= 2 ? ` · ${state.streak} in a row` : ''}
+          </Text>
+        )}
+      </View>
+    </View>
+  );
+}
+
 function MetricCard({
   stat,
+  checkIn,
   plan,
   milestoneLink,
   onLog,
   onOpenAddEntry,
   onDeleteEntry,
+  onSetCadence,
 }: {
   stat: TrackerStat;
+  checkIn: CheckInState;
   /** Supplies the chart's accent, so a metric matches the plan it serves. */
   plan: Plan | null;
   milestoneLink?: { milestone: Milestone; state: MilestoneState };
   onLog: TrackingViewProps['onLog'];
   onOpenAddEntry: TrackingViewProps['onOpenAddEntry'];
   onDeleteEntry: TrackingViewProps['onDeleteEntry'];
+  onSetCadence: TrackingViewProps['onSetCadence'];
 }) {
   const { tracker } = stat;
   const unit = tracker.unit?.trim() ?? '';
@@ -165,6 +225,8 @@ function MetricCard({
           </Text>
         </View>
       </View>
+
+      <CheckInRow state={checkIn} trackerTitle={tracker.title} onSetCadence={(cadence) => onSetCadence(tracker.id, cadence)} />
 
       {/* Linked milestone — the same "success metric" relationship shown in
           the Plan's milestone view. The pace sentence is silent when the
@@ -269,6 +331,7 @@ export default function TrackingView({
   onLog,
   onOpenAddEntry,
   onDeleteEntry,
+  onSetCadence,
   onNavigateToPlans,
 }: TrackingViewProps) {
   const today = todayISO();
@@ -279,14 +342,30 @@ export default function TrackingView({
     return groupTrackerStatsByPlan(stats, plansById);
   }, [trackers, metricEntries, today, trackingStart, plansById]);
 
-  const loggedToday = useMemo(() => groups.reduce((sum, g) => sum + g.stats.filter((s) => s.todayCount > 0).length, 0), [groups]);
+  const checkIns = useMemo(
+    () => new Map(trackers.map((t) => [t.id, buildCheckIn(t, metricEntries, today, trackingStart)])),
+    [trackers, metricEntries, today, trackingStart],
+  );
+
+  // Each tracker asks once per its own period, so "done" here means this
+  // period's entry is in — a weekly weigh-in done on Monday counts all week.
+  const checkedIn = useMemo(() => [...checkIns.values()].filter((c) => c.loggedThisPeriod).length, [checkIns]);
+
+  const due = useMemo(
+    () =>
+      trackers
+        .map((tracker, index) => ({ tracker, state: checkIns.get(tracker.id)!, index }))
+        .filter(({ state }) => state.due)
+        .sort((a, b) => Number(b.state.overdue) - Number(a.state.overdue) || a.index - b.index),
+    [trackers, checkIns],
+  );
 
   return (
     <View className="px-4 py-6">
       <MainTitleSection
         label="Keep the record honest"
         title="Tracking"
-        progressMeta={trackers.length > 0 ? { done: loggedToday, total: trackers.length } : undefined}
+        progressMeta={trackers.length > 0 ? { done: checkedIn, total: trackers.length } : undefined}
         className="mb-6"
       />
 
@@ -294,11 +373,55 @@ export default function TrackingView({
         <EmptyState
           icon={IconChartLine}
           title="Nothing to track yet"
-          description="Add a progress tracker to any plan — weight, distance, a score — and it shows up here to log every day."
+          description="Add a progress tracker to any plan — weight, distance, a score — set how often to check in, and it shows up here when an entry is due."
           action={{ label: 'Go to Plans', onClick: onNavigateToPlans, icon: IconTargetArrow }}
         />
       ) : (
         <View className="gap-6">
+          {/* What's waiting on an entry, first — the reason to open this page. */}
+          {due.length > 0 && (
+            <View testID="tracking-due" className={`${CARD} px-4 py-3`}>
+              <View className="flex-row items-baseline justify-between gap-3">
+                <Text accessibilityRole="header" className="text-[15px] font-extrabold text-neutral-950 dark:text-white">
+                  Check-ins due
+                </Text>
+                <Text className="text-[12px] font-bold tabular-nums text-neutral-500 dark:text-neutral-400">{due.length}</Text>
+              </View>
+              <View className="mt-1">
+                {due.map(({ tracker, state }, i) => {
+                  const last = lastLoggedLabel(state.lastLoggedDate, today);
+                  return (
+                    <View key={tracker.id} className={`flex-row items-center gap-3 py-2.5 ${i > 0 ? 'border-t border-neutral-100 dark:border-white/[0.06]' : ''}`}>
+                      <View className="min-w-0 flex-1">
+                        <Text numberOfLines={1} className="text-[14px] font-bold text-neutral-900 dark:text-white">
+                          {tracker.title}
+                        </Text>
+                        <Text numberOfLines={1} className="text-[12px] font-medium text-neutral-500 dark:text-neutral-400">
+                          <Text className={state.overdue ? 'font-bold text-rose-700 dark:text-rose-400' : 'font-bold text-amber-800 dark:text-amber-300'}>
+                            {checkInStatusLabel(state)}
+                          </Text>
+                          {last ? ` · ${last}` : ' · Not logged yet'}
+                        </Text>
+                      </View>
+                      <Pressable
+                        accessibilityRole="button"
+                        accessibilityLabel={`Log ${tracker.title}`}
+                        onPress={() => {
+                          haptic('light');
+                          onOpenAddEntry(tracker);
+                        }}
+                        className="h-11 shrink-0 flex-row items-center gap-1.5 rounded-full bg-neutral-950 px-4 active:bg-neutral-800 dark:bg-white dark:active:bg-neutral-200"
+                      >
+                        <Icon icon={IconPlus} size={14} strokeWidth={2.6} className="text-white dark:text-neutral-950" />
+                        <Text className="text-[13px] font-extrabold text-white dark:text-neutral-950">Log</Text>
+                      </Pressable>
+                    </View>
+                  );
+                })}
+              </View>
+            </View>
+          )}
+
           {groups.map((group, i) => (
             <View key={group.plan?.id ?? `ungrouped-${i}`}>
               <Text accessibilityRole="header" className="mb-2 text-[11px] font-bold uppercase tracking-[0.08em] text-neutral-600 dark:text-neutral-400">
@@ -309,11 +432,13 @@ export default function TrackingView({
                   <MetricCard
                     key={stat.tracker.id}
                     stat={stat}
+                    checkIn={checkIns.get(stat.tracker.id)!}
                     plan={group.plan}
                     milestoneLink={milestoneByTrackerId?.get(stat.tracker.id)}
                     onLog={onLog}
                     onOpenAddEntry={onOpenAddEntry}
                     onDeleteEntry={onDeleteEntry}
+                    onSetCadence={onSetCadence}
                   />
                 ))}
               </View>
