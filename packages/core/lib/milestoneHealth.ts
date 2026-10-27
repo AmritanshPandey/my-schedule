@@ -455,6 +455,10 @@ export function calculateMilestoneHealth(input: {
    *  falls back to forecastDate/daysAheadBehind, same as before this field
    *  existed — existing callers that don't pass it are unaffected. */
   paceGap?: PaceGap | null;
+  /** Whether anything has been logged toward this milestone yet (a linked
+   *  task completed or a tracker entry). Optional/absent = unknown, and the
+   *  grace-period check below is skipped, same as before this field existed. */
+  hasLoggedActivity?: boolean;
 }): MilestoneHealth {
   const { milestone, hasData, overallProgress, consistency, forecastDate, daysAheadBehind } = input;
   const paceGap = input.paceGap ?? null;
@@ -468,6 +472,9 @@ export function calculateMilestoneHealth(input: {
   const elapsedDays = daysBetweenInclusive(milestone.startDate, todayStr);
   const stillEarly = elapsedDays < GETTING_STARTED_DAYS;
   if (overallProgress === null && stillEarly) return "getting_started";
+  // Nothing logged yet inside the grace period: a zero rate on day one is
+  // not evidence of falling behind, so it can't read as at_risk/delayed.
+  if (stillEarly && input.hasLoggedActivity === false) return "getting_started";
 
   // Target date passed and not completed: never reads on_track/ahead past the deadline.
   if (todayStr > milestone.plannedEndDate) return "delayed";
@@ -493,6 +500,8 @@ function buildStatusMessage(
    *  name the actual limiting factor instead of always describing pace. */
   consistencyLimited: boolean,
   consistency: number | null,
+  hasLoggedActivity: boolean,
+  todayStr: string,
 ): string {
   const target = formatDateShort(milestone.plannedEndDate);
   switch (health) {
@@ -521,7 +530,11 @@ function buildStatusMessage(
       }
       return forecastDate
         ? `At your current pace, this milestone is projected to finish ${formatDateShort(forecastDate)} — after your ${target} target.`
-        : `This milestone is past its target date of ${target}.`;
+        : todayStr > milestone.plannedEndDate
+        ? `This milestone is past its target date of ${target}.`
+        : hasLoggedActivity
+        ? `You're behind the pace needed to hit your ${target} target.`
+        : `Nothing logged yet, and you're behind the pace needed to hit your ${target} target.`;
   }
 }
 
@@ -575,8 +588,12 @@ export function calculateMilestoneState(params: {
       })
     : null;
 
+  const hasLoggedActivity =
+    (hasTasks && aggregateOccurrences(milestone, activities, localISODate(now)).completed > 0) ||
+    metric.current !== null;
+
   const health = calculateMilestoneHealth({
-    milestone, now, hasData, overallProgress, consistency, forecastDate, daysAheadBehind, paceGap,
+    milestone, now, hasData, overallProgress, consistency, forecastDate, daysAheadBehind, paceGap, hasLoggedActivity,
   });
 
   // Whether consistency (not pace) is the reason health isn't higher — lets
@@ -586,7 +603,9 @@ export function calculateMilestoneState(params: {
   const cadence = consistencyBucket(consistency);
   const consistencyLimited = pace !== null && cadence !== null && HEALTH_RANK[cadence] < HEALTH_RANK[pace];
 
-  const statusMessage = buildStatusMessage(health, milestone, forecastDate, consistencyLimited, consistency);
+  const statusMessage = buildStatusMessage(
+    health, milestone, forecastDate, consistencyLimited, consistency, hasLoggedActivity, localISODate(now),
+  );
 
   return {
     milestoneId: milestone.id,

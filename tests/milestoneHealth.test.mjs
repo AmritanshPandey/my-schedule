@@ -537,3 +537,38 @@ test("end-to-end: status message references the milestone's real dates, not a ge
   assert.ok(state.statusMessage.length > 0);
   assert.notEqual(state.statusMessage, "");
 });
+
+// ── Nothing logged yet: classification and status message ───────────────────
+
+test("health: nothing logged inside the grace period reads getting_started, not delayed off a zero rate", () => {
+  const h = calculateMilestoneHealth(healthInput({
+    now: NOW("2026-09-01"), overallProgress: 0, consistency: null, forecastDate: null, daysAheadBehind: null,
+    paceGap: { level: "wrong_way", requiredPerWeek: 7, actualPerWeek: 0, ratio: 0, projectedDateISO: null, daysAheadBehind: null, fit: 1, remaining: 30, unit: "sessions" },
+    hasLoggedActivity: false,
+  }));
+  assert.equal(h, "getting_started");
+});
+
+test("end-to-end: a milestone starting today with one daily task and nothing done is getting_started", () => {
+  const m = milestone({ startDate: "2026-10-27", plannedEndDate: "2026-11-02", linkedActivities: ["t1"] });
+  const state = calculateMilestoneState({ milestone: m, plan: plan(), activities: activitiesFor([{ id: "t1" }]), trackers: [], metricEntries: [], now: NOW("2026-10-27") });
+  assert.equal(state.health, "getting_started");
+  assert.doesNotMatch(state.statusMessage, /past its target/);
+});
+
+test("end-to-end: delayed with nothing logged and a future target says so, not that the target has passed", () => {
+  const m = milestone({ linkedActivities: ["t1"] });
+  const state = calculateMilestoneState({ milestone: m, plan: plan(), activities: activitiesFor([{ id: "t1" }]), trackers: [], metricEntries: [], now: NOW("2026-09-10") });
+  assert.equal(state.health, "delayed");
+  assert.equal(state.forecastDate, null);
+  assert.doesNotMatch(state.statusMessage, /past its target/);
+  assert.match(state.statusMessage, /^Nothing logged yet/);
+  assert.doesNotMatch(state.statusMessage, /—/);
+});
+
+test("end-to-end: delayed with nothing logged and the target behind us says it's past its target date", () => {
+  const m = milestone({ plannedEndDate: "2026-09-10", linkedActivities: ["t1"] });
+  const state = calculateMilestoneState({ milestone: m, plan: plan(), activities: activitiesFor([{ id: "t1" }]), trackers: [], metricEntries: [], now: NOW("2026-09-15") });
+  assert.equal(state.health, "delayed");
+  assert.match(state.statusMessage, /past its target date/);
+});
