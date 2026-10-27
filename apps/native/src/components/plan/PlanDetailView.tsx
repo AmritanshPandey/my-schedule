@@ -26,7 +26,8 @@ import { CadencePicker } from '../tracking/CadencePicker';
 import { DAYS } from '@planr/core/lib/scheduleConstants';
 import { computeRoadmapStats } from '@planr/core/lib/roadmapEngine';
 import { calculateMilestoneProgress, type MilestoneProgress } from '@planr/core/lib/planProgress';
-import { calculateMilestoneState, type MilestoneState } from '@planr/core/lib/milestoneHealth';
+import { aggregateOccurrences, calculateMilestoneState, resolvePrimaryTracker, type MilestoneState } from '@planr/core/lib/milestoneHealth';
+import { milestonePace, paceNarrative, trackerPace } from '@planr/core/lib/paceModel';
 import { isPlanRunning, planLifecycleLabel } from '@planr/core/lib/planLifecycle';
 import { sumEntriesForDate } from '@planr/core/lib/metricEntries';
 import { planEffectiveEndDate, resolveMilestoneStatus } from '@planr/core/lib/roadmapDates';
@@ -1458,6 +1459,33 @@ export default function PlanDetailView({
                       </View>
                     )}
                     <Text className="text-[13px] leading-relaxed text-neutral-500 dark:text-neutral-400">{health.statusMessage}</Text>
+                    {/* The rate gap under the forecast date. "You'll finish 12
+                        days late" is the diagnosis; "you need 1.4 kg/week and
+                        you're averaging 0.6" is the size of the thing to
+                        change. Silent when the trend is too scattered for the
+                        slope to mean anything (see packages/core/lib/paceModel.ts). */}
+                    {(() => {
+                      const primary = resolvePrimaryTracker(m, schedule.progressTrackers);
+                      const activities = schedule.activities as unknown as Record<string, Task[]>;
+                      const gap = primary
+                        ? trackerPace({
+                            tracker: primary,
+                            entries: schedule.metricEntries,
+                            deadlineISO: m.plannedEndDate,
+                            trackingStart: schedule.preferences?.startDate,
+                          })
+                        : milestonePace({
+                            milestone: m,
+                            expectedTotal: aggregateOccurrences(m, activities, m.plannedEndDate).expected,
+                            completedSoFar: aggregateOccurrences(m, activities, todayISO()).completed,
+                          });
+                      const text = paceNarrative(gap);
+                      return text ? (
+                        <Text testID="milestone-pace" className="mt-1.5 text-[13px] font-semibold leading-relaxed text-neutral-700 dark:text-neutral-300">
+                          {text}
+                        </Text>
+                      ) : null;
+                    })()}
                     {/* The diagnosis has to lead somewhere — offered only when
                         the milestone is actually off pace. */}
                     {onAdaptMilestone && !isCompleted && (health.health === 'at_risk' || health.health === 'delayed') && (
