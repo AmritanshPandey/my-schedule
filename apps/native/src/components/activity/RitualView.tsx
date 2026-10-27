@@ -21,7 +21,7 @@ import { DAYS } from '@planr/core/lib/scheduleConstants';
 import { localISODate, todayISO } from '@planr/core/lib/dateUtils';
 import { ritualScheduledOnDate } from '@planr/core/lib/ritualRecurrence';
 import { groupRitualsIntoBuckets, type RitualTimeBucketKey } from '@planr/core/lib/ritualGrouping';
-import { isRitualDayComplete } from '@planr/core/lib/consistency/ritualDayStatus';
+import { summarizeRoutineDay } from '@planr/core/lib/consistency/ritualDayStatus';
 import { buildAllRoutinesMonthDays } from '@planr/core/lib/consistency/ritualCalendar';
 import { buildRoutineInsights } from '@planr/core/lib/consistency/routineInsights';
 import { haptic } from '../../lib/haptics';
@@ -302,9 +302,9 @@ interface RitualViewProps {
   ritualCompletions: RitualCompletion[];
   /** Settings → Tracking → "Tracking starts" (schedule.preferences?.startDate). */
   trackingStart?: string;
-  onToggleComplete: (id: string, dateISO?: string) => void;
-  onLogAmount: (ritualId: string, amount: number, dateISO: string) => void;
-  onUndoLastLog: (ritualId: string, dateISO: string) => void;
+  /** Mark a routine done for a day, rated 1–100 for how closely it was followed. */
+  onMarkDone: (ritualId: string, dateISO: string, followed: number) => void;
+  onUnmarkDone: (ritualId: string, dateISO: string) => void;
   onOpenDetail: (ritual: Ritual) => void;
   onAdd: (data: Omit<Ritual, 'id'>) => void;
   onUpdate: (id: string, data: Omit<Ritual, 'id'>) => void;
@@ -325,9 +325,8 @@ export default function RitualView({
   rituals,
   ritualCompletions,
   trackingStart,
-  onToggleComplete,
-  onLogAmount,
-  onUndoLastLog,
+  onMarkDone,
+  onUnmarkDone,
   onOpenDetail,
   onAdd,
   onUpdate,
@@ -357,34 +356,35 @@ export default function RitualView({
     return sorted.filter((r) => appliesToDay(r, selectedDateISO, trackingStart));
   }, [sorted, selectedDateISO, trackingStart]);
 
-  const completedToday = filteredRituals.filter((r) =>
-    isRitualDayComplete(
-      r,
-      ritualCompletions.filter((c) => c.ritualId === r.id && c.date === selectedDateISO),
-    ),
-  ).length;
-  const total = filteredRituals.length;
-  const pct = total > 0 ? Math.round((completedToday / total) * 100) : 0;
+  // The day said back to you: what's done, what's open, and how much of the
+  // routine you followed overall — the number that matters more than a tally.
+  const daySummary = useMemo(
+    () => summarizeRoutineDay(filteredRituals, ritualCompletions, selectedDateISO),
+    [filteredRituals, ritualCompletions, selectedDateISO],
+  );
+  const completedToday = daySummary.done;
+  const total = daySummary.total;
+  const pct = daySummary.followedPct ?? 0;
   const allDone = total > 0 && completedToday === total;
+  const dayWord = selectedDateISO === todayISO() ? 'today' : DAY_SHORT[selectedDay];
 
-  // Week strip carries the reward loop: each day shows done ÷ due for THIS week,
-  // not the raw schedule count.
+  // Week strip carries the reward loop: each day's ring fills with how much of
+  // that day's routine was followed, not the raw schedule count.
   const weekStrip = useMemo(
     () =>
       DAYS.map((day) => {
         const dateISO = dateForCurrentWeekDay(day);
-        const dueRituals = sorted.filter((r) => appliesToDay(r, dateISO, trackingStart));
-        const done = dueRituals.filter((r) =>
-          isRitualDayComplete(
-            r,
-            ritualCompletions.filter((c) => c.ritualId === r.id && c.date === dateISO),
-          ),
-        ).length;
+        const summary = summarizeRoutineDay(
+          sorted.filter((r) => appliesToDay(r, dateISO, trackingStart)),
+          ritualCompletions,
+          dateISO,
+        );
         return {
           day,
           dateISO,
-          due: dueRituals.length,
-          done,
+          due: summary.total,
+          done: summary.done,
+          followedPct: summary.followedPct ?? 0,
           dayNum: new Date(`${dateISO}T00:00:00`).getDate(),
           isToday: dateISO === todayISO(),
         };
@@ -494,38 +494,56 @@ export default function RitualView({
             </View>
             <View className="min-w-0 flex-1">
               <Text className="text-[16px] font-black leading-tight text-emerald-700 dark:text-emerald-300">Daily practice complete</Text>
-              <Text className="mt-0.5 text-[13px] font-semibold text-emerald-600/80 dark:text-emerald-400/80">
-                All {total} done for {DAY_SHORT[selectedDay]}.
+              <Text className="mt-0.5 text-[13px] font-semibold text-emerald-700/80 dark:text-emerald-400/80">
+                All {total} done for {DAY_SHORT[selectedDay]}, and you followed {pct}% of it.
               </Text>
             </View>
           </View>
         )}
 
-        {/* ── Progress bar (in-progress) ───────────────────────────────────── */}
+        {/* ── The day so far (in progress) ─────────────────────────────────── */}
         {viewMode === 'day' && total > 0 && !allDone && (
-          <View className="mb-5">
-            <View className="mb-2 flex-row items-center justify-between">
-              <Text className="text-[14px] font-semibold text-neutral-500 dark:text-neutral-400">
-                {completedToday} of {total} done
+          <View testID="routine-day-summary" className="mb-5 rounded-2xl border border-neutral-200/80 bg-white px-4 py-3.5 dark:border-white/[0.08] dark:bg-neutral-900">
+            <View className="flex-row items-baseline justify-between gap-3">
+              <Text className="min-w-0 flex-1 text-[15px] font-extrabold leading-snug text-neutral-950 dark:text-white">
+                {completedToday === 0
+                  ? `Nothing marked ${dayWord === 'today' ? 'yet today' : `for ${dayWord}`}`
+                  : `You followed ${pct}% ${dayWord === 'today' ? 'today' : `on ${dayWord}`}`}
               </Text>
-              <Text className="text-[14px] font-bold tabular-nums text-neutral-500 dark:text-neutral-400">{pct}%</Text>
+              <Text className="shrink-0 text-[13px] font-bold tabular-nums text-neutral-500 dark:text-neutral-400">
+                {completedToday}/{total} done
+              </Text>
             </View>
-            <ProgressBar pct={pct} height={8} fillClassName="bg-green-500" />
+            <View className="mt-2.5">
+              <ProgressBar pct={pct} height={6} fillClassName="bg-green-500" />
+            </View>
+            {daySummary.doneTitles.length > 0 && (
+              <Text className="mt-2.5 text-[13px] leading-snug text-neutral-600 dark:text-neutral-300">
+                <Text className="font-bold text-neutral-800 dark:text-neutral-100">Completed: </Text>
+                {daySummary.doneTitles.join(', ')}
+              </Text>
+            )}
+            {daySummary.openTitles.length > 0 && (
+              <Text className="mt-1 text-[13px] leading-snug text-neutral-500 dark:text-neutral-400">
+                <Text className="font-semibold">Still open: </Text>
+                {daySummary.openTitles.join(', ')}
+              </Text>
+            )}
           </View>
         )}
 
         {/* ── Week strip — completion per day (the reward loop) ────────────── */}
         {viewMode === 'day' && rituals.length > 0 && (
           <View className="mb-6 flex-row" style={{ marginHorizontal: -3 }}>
-            {weekStrip.map(({ day, due, done, dayNum, isToday }) => {
+            {weekStrip.map(({ day, due, done, followedPct, dayNum, isToday }) => {
               const sel = selectedDay === day;
-              const ratio = due > 0 ? done / due : 0;
+              const ratio = due > 0 ? followedPct / 100 : 0;
               const complete = due > 0 && done === due;
               return (
                 <View key={day} style={{ width: SEVENTH, paddingHorizontal: 3 }}>
                   <Pressable
                     accessibilityRole="button"
-                    accessibilityLabel={`${DAY_SHORT[day]} ${dayNum}, ${due > 0 ? `${done} of ${due} done` : 'nothing scheduled'}`}
+                    accessibilityLabel={`${DAY_SHORT[day]} ${dayNum}, ${due > 0 ? `${done} of ${due} done, ${followedPct}% followed` : 'nothing scheduled'}`}
                     accessibilityState={{ selected: sel }}
                     onPress={() => setSelectedDateISO(dateForCurrentWeekDay(day))}
                     className={`w-full items-center gap-1.5 rounded-2xl py-2.5 ${
@@ -589,9 +607,8 @@ export default function RitualView({
                       ritualCompletions={ritualCompletions}
                       selectedDateISO={selectedDateISO}
                       trackingStart={trackingStart}
-                      onToggleComplete={onToggleComplete}
-                      onLogAmount={onLogAmount}
-                      onUndoLastLog={onUndoLastLog}
+                      onMarkDone={onMarkDone}
+                      onUnmarkDone={onUnmarkDone}
                       onOpenDetail={onOpenDetail}
                       onDelete={(r) => onDelete(r.id)}
                     />

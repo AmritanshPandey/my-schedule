@@ -8,6 +8,7 @@ import { uid } from '@planr/core/lib/id';
 import { RITUAL_COLOR_DOT } from '@planr/core/lib/ritualColors';
 import { ROUTINE_TEMPLATES, type RoutineTemplateKey } from '@planr/core/lib/routineTemplates';
 import { recurrenceToRepeatDays, repeatDaysToRecurrence } from '@planr/core/lib/ritualRecurrence';
+import { formatDisplayTime } from '@planr/core/lib/timeUtils';
 import { haptic } from '../../lib/haptics';
 import BottomSheet from '../ui/BottomSheet';
 import SheetHeader from '../ui/SheetHeader';
@@ -20,10 +21,12 @@ import { iconGlyph, SECTION_ICONS } from '../SectionIcons';
 
 const DURATION_PRESETS = [5, 10, 15, 20, 30, 45, 60];
 
+// Every routine is marked done with one tap; this only shapes the detail it
+// carries — an amount to aim for, steps to tick.
 const TRACKING_TYPES: { key: RitualTrackingType; label: string }[] = [
-  { key: 'checkbox', label: 'Checkbox' },
-  { key: 'quantity', label: 'Quantity' },
-  { key: 'duration', label: 'Duration' },
+  { key: 'checkbox', label: 'Just mark done' },
+  { key: 'quantity', label: 'Amount' },
+  { key: 'duration', label: 'Minutes' },
   { key: 'count', label: 'Count' },
   { key: 'checklist', label: 'Checklist' },
 ];
@@ -95,7 +98,9 @@ export function RitualSheet({ open, onClose, initial, onSave, onDelete }: Ritual
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
   const [time, setTime] = useState('08:00');
-  const [anyTime, setAnyTime] = useState(false);
+  // A routine is something to stay on track with, not an appointment — new
+  // ones start without a time; setting one is a deliberate choice.
+  const [anyTime, setAnyTime] = useState(true);
   const [duration, setDuration] = useState<number | undefined>(undefined);
   const [color, setColor] = useState<RitualColor | ''>('');
   const [icon, setIcon] = useState<string>('');
@@ -110,6 +115,9 @@ export function RitualSheet({ open, onClose, initial, onSave, onDelete }: Ritual
   const [unit, setUnit] = useState('');
   const [steps, setSteps] = useState<RitualStep[]>([]);
   const [newStepLabel, setNewStepLabel] = useState('');
+  /** A time attached to the next descriptive item ("Lunch" at 13:00), if any. */
+  const [newItemTimed, setNewItemTimed] = useState(false);
+  const [newItemTime, setNewItemTime] = useState('13:00');
 
   const [showAdvanced, setShowAdvanced] = useState(false);
 
@@ -120,7 +128,7 @@ export function RitualSheet({ open, onClose, initial, onSave, onDelete }: Ritual
     setTitle(initial?.title ?? '');
     setDescription(initial?.description ?? '');
     setTime(initial?.time ?? '08:00');
-    setAnyTime(initial?.anyTime ?? false);
+    setAnyTime(initial ? !!initial.anyTime : true);
     setDuration(initial?.duration);
     setColor(initial?.color ?? '');
     setIcon(initial?.icon ?? '');
@@ -133,6 +141,8 @@ export function RitualSheet({ open, onClose, initial, onSave, onDelete }: Ritual
     setTarget(initial?.target !== undefined ? String(initial.target) : '');
     setUnit(initial?.unit ?? '');
     setSteps(initial?.steps ?? []);
+    setNewStepLabel('');
+    setNewItemTimed(false);
     setShowAdvanced(false);
   }, [open]); // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -143,7 +153,7 @@ export function RitualSheet({ open, onClose, initial, onSave, onDelete }: Ritual
     const d = tpl.defaults;
     if (d.title !== undefined) setTitle(d.title);
     if (d.time !== undefined) setTime(d.time);
-    setAnyTime(!!d.anyTime);
+    setAnyTime(d.time === undefined || !!d.anyTime);
     setColor(tpl.color ?? '');
     setIcon(tpl.icon);
     setTrackingType(d.trackingType ?? 'checkbox');
@@ -164,8 +174,10 @@ export function RitualSheet({ open, onClose, initial, onSave, onDelete }: Ritual
   function addStep() {
     const label = newStepLabel.trim();
     if (!label) return;
-    setSteps((prev) => [...prev, { id: uid(), label }]);
+    const timed = newItemTimed && !!newItemTime;
+    setSteps((prev) => [...prev, timed ? { id: uid(), label, time: newItemTime } : { id: uid(), label }]);
     setNewStepLabel('');
+    setNewItemTimed(false);
   }
 
   function handleSave() {
@@ -197,14 +209,10 @@ export function RitualSheet({ open, onClose, initial, onSave, onDelete }: Ritual
           ? parsedTarget
           : undefined,
       unit: unit.trim() || undefined,
-      // checklist: steps drive per-item completion. checkbox: steps are
-      // an optional, purely descriptive list (undefined when empty).
-      steps:
-        trackingType === 'checklist'
-          ? steps
-          : trackingType === 'checkbox' && steps.length > 0
-            ? steps
-            : undefined,
+      // checklist: steps drive per-item completion. Every other kind: steps
+      // are an optional, purely descriptive list — the meals of a diet, what a
+      // protein target is made of (undefined when empty).
+      steps: trackingType === 'checklist' ? steps : steps.length > 0 ? steps : undefined,
     });
     onClose();
   }
@@ -358,30 +366,39 @@ export function RitualSheet({ open, onClose, initial, onSave, onDelete }: Ritual
                   </View>
                 )}
 
-                <View className="flex-row items-end gap-3">
-                  {/* Disabled, not unmounted, when "Any time" is on — keeps
-                      the layout stable and still shows what time it'll
-                      revert to. */}
-                  <View className="min-w-0 flex-1">
-                    <TimeInput label="Time" value={time} onChange={setTime} ariaLabel="Routine time" disabled={anyTime} />
+                <View className="gap-2">
+                  <View accessibilityRole="radiogroup" accessibilityLabel="When" className="flex-row gap-2">
+                    {[
+                      { key: true, label: 'Any time' },
+                      { key: false, label: 'At a set time' },
+                    ].map((opt) => {
+                      const on = anyTime === opt.key;
+                      return (
+                        <Pressable
+                          key={opt.label}
+                          accessibilityRole="radio"
+                          accessibilityState={{ checked: on }}
+                          onPress={() => setAnyTime(opt.key)}
+                          className={`h-11 flex-1 flex-row items-center justify-center gap-1.5 rounded-xl border ${
+                            on ? 'border-neutral-900 bg-neutral-900 dark:border-white dark:bg-white' : 'border-neutral-200 dark:border-white/10'
+                          }`}
+                        >
+                          {!opt.key && <Icon icon={IconClock} size={13} strokeWidth={2.2} className={on ? CHIP_TEXT_ON : CHIP_TEXT_OFF} />}
+                          <Text className={`text-[13px] font-semibold ${on ? CHIP_TEXT_ON : CHIP_TEXT_OFF}`}>{opt.label}</Text>
+                        </Pressable>
+                      );
+                    })}
                   </View>
-                  <Pressable
-                    accessibilityRole="button"
-                    accessibilityState={{ selected: anyTime }}
-                    onPress={() => setAnyTime((v) => !v)}
-                    className={`h-11 shrink-0 flex-row items-center gap-1.5 rounded-xl border px-3 ${
-                      anyTime ? 'border-neutral-900 bg-neutral-900 dark:border-white dark:bg-white' : 'border-neutral-200 dark:border-white/10'
-                    }`}
-                  >
-                    <Icon icon={IconClock} size={13} strokeWidth={2.2} className={anyTime ? CHIP_TEXT_ON : CHIP_TEXT_OFF} />
-                    <Text className={`text-[12px] font-semibold ${anyTime ? CHIP_TEXT_ON : CHIP_TEXT_OFF}`}>Any time</Text>
-                  </Pressable>
+                  {!anyTime && <TimeInput label="Time" value={time} onChange={setTime} ariaLabel="Routine time" />}
                 </View>
               </View>
 
               {/* ── Tracking ───────────────────────────────────────────────── */}
               <View className="gap-3 border-t border-neutral-100 pt-4 dark:border-white/[0.06]">
-                <Text className={typography.eyebrow}>Tracking</Text>
+                <Text className={typography.eyebrow}>Details</Text>
+                <Text className="-mt-1 text-[11px] leading-snug text-neutral-500 dark:text-neutral-400">
+                  You'll mark it done with one tap and say how closely you followed it. This just shapes what it shows.
+                </Text>
                 <View className="flex-row flex-wrap gap-2">
                   {TRACKING_TYPES.map((t) => (
                     <Chip key={t.key} label={t.label} selected={trackingType === t.key} onPress={() => setTrackingType(t.key)} />
@@ -407,33 +424,38 @@ export function RitualSheet({ open, onClose, initial, onSave, onDelete }: Ritual
                 )}
 
                 {/* Checklist: each item is its own checkbox, and the routine
-                    counts done once every item is. Checkbox: items are a reference list
-                    only — completing the routine is still one tap. */}
-                {(trackingType === 'checklist' || trackingType === 'checkbox') && (
-                  <View className="gap-1.5">
-                    {trackingType === 'checkbox' && (
-                      <Text className="text-[11px] leading-snug text-neutral-500 dark:text-neutral-400">
-                        Optional — list what this routine covers. These aren't checked off individually; one tap on the routine covers all of them.
+                    counts done once every item is. Every other kind: items
+                    are a reference list only — completing the routine is
+                    still one tap, the list just shows what it covers, with a
+                    time when an item has one. */}
+                <View className="gap-1.5">
+                  {trackingType !== 'checklist' && (
+                    <Text className="text-[11px] leading-snug text-neutral-500 dark:text-neutral-400">
+                      Optional: what it covers, with a time if it has one (e.g. "Lunch: dal, rice, salad" at 1:00 PM). One tap on the routine covers all of them.
+                    </Text>
+                  )}
+                  {steps.map((step) => (
+                    <View
+                      key={step.id}
+                      className="flex-row items-center gap-2 rounded-xl border border-neutral-200 bg-neutral-50 px-3 py-2 dark:border-white/10 dark:bg-white/[0.04]"
+                    >
+                      {step.time ? (
+                        <Text className="shrink-0 text-[12px] font-bold tabular-nums text-neutral-500 dark:text-neutral-400">{formatDisplayTime(step.time)}</Text>
+                      ) : null}
+                      <Text numberOfLines={1} className="flex-1 text-[13px] font-medium tabular-nums text-neutral-800 dark:text-neutral-100">
+                        {step.label}
                       </Text>
-                    )}
-                    {steps.map((step) => (
-                      <View
-                        key={step.id}
-                        className="flex-row items-center gap-2 rounded-xl border border-neutral-200 bg-neutral-50 px-3 py-2 dark:border-white/10 dark:bg-white/[0.04]"
+                      <Pressable
+                        accessibilityRole="button"
+                        accessibilityLabel="Remove item"
+                        hitSlop={10}
+                        onPress={() => setSteps((prev) => prev.filter((s) => s.id !== step.id))}
                       >
-                        <Text className="flex-1 truncate text-[13px] font-medium tabular-nums text-neutral-800 dark:text-neutral-100">
-                          {step.label}
-                        </Text>
-                        <Pressable
-                          accessibilityRole="button"
-                          accessibilityLabel="Remove item"
-                          hitSlop={10}
-                          onPress={() => setSteps((prev) => prev.filter((s) => s.id !== step.id))}
-                        >
-                          <Icon icon={IconX} size={14} strokeWidth={2.2} className="text-neutral-500 dark:text-neutral-400" />
-                        </Pressable>
-                      </View>
-                    ))}
+                        <Icon icon={IconX} size={14} strokeWidth={2.2} className="text-neutral-500 dark:text-neutral-400" />
+                      </Pressable>
+                    </View>
+                  ))}
+                  <View className="gap-2">
                     <View className="flex-row gap-2">
                       <TextInput
                         value={newStepLabel}
@@ -441,20 +463,36 @@ export function RitualSheet({ open, onClose, initial, onSave, onDelete }: Ritual
                         onSubmitEditing={addStep}
                         blurOnSubmit={false}
                         returnKeyType="done"
-                        placeholder={trackingType === 'checklist' ? 'Add a step…' : 'Add an item…'}
-                        className={`h-9 flex-1 px-3 text-[13px] ${fieldBase}`}
+                        placeholder={trackingType === 'checklist' ? 'Add a step…' : 'Add a detail…'}
+                        accessibilityLabel={trackingType === 'checklist' ? 'New step' : 'New detail'}
+                        className={`h-11 min-w-0 flex-1 px-3 text-[14px] ${fieldBase}`}
                       />
+                      <Pressable
+                        accessibilityRole="button"
+                        accessibilityLabel={newItemTimed ? 'Remove time from this item' : 'Add a time to this item'}
+                        accessibilityState={{ selected: newItemTimed }}
+                        onPress={() => setNewItemTimed((v) => !v)}
+                        className={`h-11 w-11 shrink-0 items-center justify-center rounded-xl border ${
+                          newItemTimed ? 'border-neutral-900 bg-neutral-900 dark:border-white dark:bg-white' : 'border-neutral-200 active:bg-neutral-50 dark:border-white/10'
+                        }`}
+                      >
+                        <Icon icon={IconClock} size={15} strokeWidth={2.2} className={newItemTimed ? CHIP_TEXT_ON : 'text-neutral-500 dark:text-neutral-400'} />
+                      </Pressable>
                       <Pressable
                         accessibilityRole="button"
                         accessibilityLabel="Add item"
                         onPress={addStep}
-                        className="h-9 w-9 items-center justify-center rounded-xl border border-neutral-200 active:bg-neutral-50 dark:border-white/10"
+                        disabled={!newStepLabel.trim()}
+                        className={`h-11 w-11 shrink-0 items-center justify-center rounded-xl border border-neutral-200 active:bg-neutral-50 dark:border-white/10 ${
+                          newStepLabel.trim() ? '' : 'opacity-40'
+                        }`}
                       >
                         <Icon icon={IconPlus} size={14} strokeWidth={2.4} className="text-neutral-500 dark:text-neutral-400" />
                       </Pressable>
                     </View>
+                    {newItemTimed && <TimeInput value={newItemTime} onChange={setNewItemTime} ariaLabel="Time for this item" />}
                   </View>
-                )}
+                </View>
               </View>
 
               {/* ── Advanced (progressive disclosure) ─────────────────────── */}

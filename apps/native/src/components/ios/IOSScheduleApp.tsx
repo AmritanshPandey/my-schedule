@@ -67,7 +67,15 @@ import { diffException, isTaskScheduledOn, occurrenceNote, resolveOccurrence } f
 import { validateDatedTasks } from '@planr/core/lib/scheduleRules';
 import { applyTemplate, type Template } from '@planr/core/lib/templates';
 import { cascadeMilestoneDates, moveMilestone, normalizeMilestoneTimeline } from '@planr/core/lib/roadmapDates';
-import { appendRitualLog, removeRitualLog, toggleRitualCompletion, toggleRitualStep, undoLastRitualLog } from '@planr/core/lib/ritualCompletions';
+import {
+  appendRitualLog,
+  markRitualDone,
+  removeRitualLog,
+  toggleRitualCompletion,
+  toggleRitualStep,
+  undoLastRitualLog,
+  unmarkRitualDone,
+} from '@planr/core/lib/ritualCompletions';
 import { deleteGoal } from '@planr/core/lib/goalMutations';
 import { togglePlanPaused } from '@planr/core/lib/planLifecycle';
 import { dismissAllAttention, dismissAttentionKey, dismissibleCount } from '@planr/core/lib/attentionDismissal';
@@ -948,6 +956,20 @@ export default function IOSScheduleApp() {
     setSchedule((prev) => ({
       ...prev,
       ritualCompletions: undoLastRitualLog(prev.ritualCompletions ?? [], ritualId, dateISO),
+    }));
+  }
+
+  function handleMarkRitualDone(ritualId: string, dateISO: string, followed: number) {
+    setSchedule((prev) => ({
+      ...prev,
+      ritualCompletions: markRitualDone(prev.ritualCompletions ?? [], ritualId, dateISO, followed),
+    }));
+  }
+
+  function handleUnmarkRitualDone(ritualId: string, dateISO: string) {
+    setSchedule((prev) => ({
+      ...prev,
+      ritualCompletions: unmarkRitualDone(prev.ritualCompletions ?? [], ritualId, dateISO),
     }));
   }
 
@@ -1903,9 +1925,8 @@ export default function IOSScheduleApp() {
               rituals={schedule.rituals ?? []}
               ritualCompletions={schedule.ritualCompletions ?? []}
               trackingStart={schedule.preferences?.startDate}
-              onToggleComplete={handleToggleRitualComplete}
-              onLogAmount={handleLogRitualAmount}
-              onUndoLastLog={handleUndoRitualLog}
+              onMarkDone={handleMarkRitualDone}
+              onUnmarkDone={handleUnmarkRitualDone}
               onOpenDetail={(ritual) => setDetailRitualId(ritual.id)}
               onAdd={handleAddRitual}
               onUpdate={handleUpdateRitual}
@@ -2255,7 +2276,8 @@ export default function IOSScheduleApp() {
             ritualCompletions={schedule.ritualCompletions ?? []}
             trackingStart={schedule.preferences?.startDate}
             onBack={() => setDetailRitualId(null)}
-            onToggleCheckbox={() => handleToggleRitualComplete(detailRitual.id)}
+            onMarkDone={(followed) => handleMarkRitualDone(detailRitual.id, todayISO(), followed)}
+            onUnmarkDone={() => handleUnmarkRitualDone(detailRitual.id, todayISO())}
             onLogAmount={(amount) => handleLogRitualAmount(detailRitual.id, amount, todayISO())}
             onUndoLastLog={() => handleUndoRitualLog(detailRitual.id, todayISO())}
             onRemoveLog={(entryId) => setSchedule((prev) => ({ ...prev, ritualCompletions: removeRitualLog(prev.ritualCompletions ?? [], entryId) }))}
