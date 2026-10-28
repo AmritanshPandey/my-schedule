@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { categoryFromIcon } from "@/lib/colorSystem";
-import { mergeCloudIfNewer, queueSync, noteLatestSchedule } from "@/lib/cloudSync";
+import { mergeCloudIfNewer, queueSync, noteLatestSchedule, type CloudSnapshot } from "@/lib/cloudSync";
 import { getLocalLastUpdated, writeLocalLastUpdated } from "@/lib/localMeta";
 import { logError } from "@/lib/errorLog";
 import { useAuth } from "@/contexts/AuthProvider";
@@ -405,12 +405,15 @@ export function useScheduleDB() {
     const activeStorageKey = storageKey;
 
     function handleCloudMerge(e: Event) {
-      const { uid, schedule: cloudSchedule, lastUpdated, pushed } =
-        (e as CustomEvent<{ uid: string; schedule: Schedule; lastUpdated: number; pushed?: boolean }>).detail;
+      const detail = (e as CustomEvent<CloudSnapshot>).detail;
+      const { uid, schedule: cloudSchedule, lastUpdated, pushed } = detail;
       if (uid !== storageUid) return;
 
       const migrated = safeMigrate(cloudSchedule);
       if (!migrated) return; // corrupt cloud snapshot — keep current local state
+      // Tell the engine this state now contains the snapshot, so it may record
+      // the remote rev. Left unset above, it won't — see CloudSnapshot.absorbed.
+      detail.absorbed = true;
 
       loadedKeyRef.current = activeStorageKey;
       const localLastUpdated = getLocalLastUpdated(storageUid);

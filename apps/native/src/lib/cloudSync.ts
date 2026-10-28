@@ -48,7 +48,7 @@ import {
 import type { Schedule } from '@planr/core/lib/scheduleTypes';
 import { localISODate } from '@planr/core/lib/dateUtils';
 import { schedulePayloadBytes, validateSchedule } from '@planr/core/lib/scheduleSchema';
-import { pushIsSafe, type SnapshotDoc } from '@planr/core/lib/syncRevision';
+import { baseRevAfterHandoff, pushIsSafe, type SnapshotDoc } from '@planr/core/lib/syncRevision';
 import { mergeSchedules, PLACEHOLDER_STAMP } from '@planr/core/lib/mergeSchedule';
 import { NS } from '@planr/core/lib/stampSchedule';
 
@@ -65,7 +65,9 @@ export interface CloudSnapshot {
   pushed?: boolean;
 }
 
-export type CloudMergeResult = 'merged' | 'equal' | 'missing' | 'error';
+/** 'unabsorbed': a snapshot was read but no listener accepted it into local
+ *  state, so the device does not hold that rev (see lib/cloudSync.ts). */
+export type CloudMergeResult = 'merged' | 'unabsorbed' | 'equal' | 'missing' | 'error';
 
 // ── Module state ──────────────────────────────────────────────────────────────
 
@@ -87,7 +89,9 @@ let _remoteReadOk = false;
 const PULL_THROTTLE_MS = 10_000;
 
 const _statusListeners = new Set<(s: SyncStatus) => void>();
-const _mergeListeners = new Set<(snapshot: CloudSnapshot) => void>();
+/** A merge listener returns true when it accepted the snapshot into local state. */
+type CloudMergeListener = (snapshot: CloudSnapshot) => boolean;
+const _mergeListeners = new Set<CloudMergeListener>();
 
 function firestoreRef(uid: string) {
   if (!db) throw new Error('[CloudSync] Firestore not initialized');
@@ -165,8 +169,14 @@ function setStatus(s: SyncStatus) {
   _statusListeners.forEach((fn) => fn(s));
 }
 
-function emitMerge(snapshot: CloudSnapshot) {
-  _mergeListeners.forEach((fn) => fn(snapshot));
+/** True when some listener absorbed the snapshot. Only then may this device
+ *  record the snapshot's rev as incorporated. */
+function emitMerge(snapshot: CloudSnapshot): boolean {
+  let absorbed = false;
+  _mergeListeners.forEach((fn) => {
+    if (fn(snapshot)) absorbed = true;
+  });
+  return absorbed;
 }
 
 // ── AppState handler (foreground/background — mobile's tab-visibility analog) ──
@@ -262,7 +272,7 @@ export function onSyncStatusChange(fn: (s: SyncStatus) => void): () => void {
 
 /** Subscribe to remote snapshots read by this device. The listener (native
  *  useScheduleDB) merges them with local state and owns persisting the result. */
-export function onCloudMerge(fn: (snapshot: CloudSnapshot) => void): () => void {
+export function onCloudMerge(fn: CloudMergeListener): () => void {
   _mergeListeners.add(fn);
   return () => _mergeListeners.delete(fn);
 }
@@ -337,7 +347,9 @@ export async function mergeCloudIfNewer(uid: string, localLastUpdated: number): 
       return 'equal';
     }
 
-    emitMerge({ uid, schedule: data.schedule, lastUpdated: data.lastUpdated });
+    // Nobody took it (account still switching over, or the snapshot failed
+    // migration): leave the base rev alone so the next push merges instead.
+    if (!emitMerge({ uid, schedule: data.schedule, lastUpdated: data.lastUpdated })) return 'unabsorbed';
 
     writeLocalBaseRev(remoteRev, uid);
     if (data.lastUpdated > _lastSyncedAt) _lastSyncedAt = data.lastUpdated;
@@ -549,6 +561,10 @@ async function performSync(schedule: Schedule): Promise<void> {
         return;
       }
       if (bootstrap === 'merged') {
+        // `schedule` is the pre-merge copy; the merged result is re-queued by
+        // the listener's write path. Drop the stale copy so a background flush
+        // can't push it over the rev just claimed.
+        if (_pending === pendingSnapshot) _pending = null;
         setStatus('idle');
         return;
       }
@@ -568,7 +584,12 @@ async function performSync(schedule: Schedule): Promise<void> {
       return;
     }
 
-    writeLocalBaseRev(outcome.rev, uid);
+    // A merged push only matches local state once the app absorbs the merge.
+    const absorbed = outcome.merged
+      ? emitMerge({ uid, schedule: outcome.merged, lastUpdated: now, pushed: true })
+      : true;
+    const baseRev = baseRevAfterHandoff(outcome.rev, absorbed, getLocalBaseRev(uid));
+    if (baseRev !== null) writeLocalBaseRev(baseRev, uid);
     _lastSyncedAt = now;
     _retryCount = 0;
     if (_retryTimer) {
@@ -578,7 +599,6 @@ async function performSync(schedule: Schedule): Promise<void> {
     if (_pending === pendingSnapshot) _pending = null;
 
     if (outcome.merged) {
-      emitMerge({ uid, schedule: outcome.merged, lastUpdated: now, pushed: true });
       setStatus('merged');
     } else {
       setStatus('idle');

@@ -40,7 +40,7 @@ import {
 } from "@/lib/localMeta";
 import { localISODate } from "@/lib/dateUtils";
 import { schedulePayloadBytes, validateSchedule } from "@/lib/scheduleSchema";
-import { pushIsSafe, type SnapshotDoc } from "@/lib/syncRevision";
+import { baseRevAfterHandoff, pushIsSafe, type SnapshotDoc } from "@/lib/syncRevision";
 import { mergeSchedules, PLACEHOLDER_STAMP } from "@/lib/mergeSchedule";
 import { NS } from "@/lib/stampSchedule";
 
@@ -58,6 +58,13 @@ export interface CloudSnapshot {
    * echoing it straight back up.
    */
   pushed?: boolean;
+  /**
+   * Set by the app's merge listener when it accepted this snapshot into local
+   * state. The engine only records the remote rev as incorporated when this is
+   * true: claiming a rev the app ignored or rejected let the next push replace
+   * the cloud document with local data that never contained it.
+   */
+  absorbed?: boolean;
 }
 
 /**
@@ -67,7 +74,7 @@ export interface CloudSnapshot {
  * has never seen, and skipping it there is how a device stayed permanently
  * unaware of the other one's work.
  */
-export type CloudMergeResult = "merged" | "equal" | "missing" | "error";
+export type CloudMergeResult = "merged" | "unabsorbed" | "equal" | "missing" | "error";
 
 // ── Module state ──────────────────────────────────────────────────────────────
 
@@ -400,9 +407,12 @@ export async function mergeCloudIfNewer(
       return "equal";
     }
 
-    window.dispatchEvent(new CustomEvent<CloudSnapshot>("cloud-sync-merge", {
-      detail: { uid, schedule: data.schedule, lastUpdated: data.lastUpdated },
-    }));
+    const detail: CloudSnapshot = { uid, schedule: data.schedule, lastUpdated: data.lastUpdated };
+    window.dispatchEvent(new CustomEvent<CloudSnapshot>("cloud-sync-merge", { detail }));
+    // Nobody took it (account still switching over, or the snapshot failed
+    // migration): this device does NOT hold that rev, so leave the base rev
+    // alone and let the next push merge inside the transaction instead.
+    if (!detail.absorbed) return "unabsorbed";
 
     writeLocalBaseRev(remoteRev, uid);
     if (data.lastUpdated > _lastSyncedAt) _lastSyncedAt = data.lastUpdated;
@@ -679,7 +689,9 @@ async function performSync(schedule: Schedule): Promise<void> {
         // The app is combining the remote with local state right now, and
         // `schedule` is the pre-merge copy — pushing it would drop whatever we
         // just pulled. The merged result re-enters through the normal write
-        // path and is pushed then.
+        // path and is pushed then — so drop the stale copy, or a flush before
+        // that write lands would push it over the rev we just claimed.
+        if (_pending === pendingSnapshot) _pending = null;
         setStatus("idle");
         return;
       }
@@ -703,7 +715,19 @@ async function performSync(schedule: Schedule): Promise<void> {
       return;
     }
 
-    writeLocalBaseRev(outcome.rev, uid);
+    // A plain push leaves the cloud equal to `schedule`. A merged push only
+    // matches local state once the app absorbs the merge (dispatched below).
+    let absorbed = true;
+    if (outcome.merged) {
+      // The cloud now holds both devices' work; this one is still showing only
+      // its own half. `pushed` tells the app to absorb the merge without
+      // echoing it straight back up.
+      const detail: CloudSnapshot = { uid, schedule: outcome.merged, lastUpdated: now, pushed: true };
+      window.dispatchEvent(new CustomEvent<CloudSnapshot>("cloud-sync-merge", { detail }));
+      absorbed = detail.absorbed === true;
+    }
+    const baseRev = baseRevAfterHandoff(outcome.rev, absorbed, getLocalBaseRev(uid));
+    if (baseRev !== null) writeLocalBaseRev(baseRev, uid);
     _lastSyncedAt = now;
     _retryCount = 0;
     if (_retryTimer) { clearTimeout(_retryTimer); _retryTimer = null; }
@@ -711,12 +735,6 @@ async function performSync(schedule: Schedule): Promise<void> {
     if (_pending === pendingSnapshot) _pending = null;
 
     if (outcome.merged) {
-      // The cloud now holds both devices' work; this one is still showing only
-      // its own half. `pushed` tells the app to absorb the merge without
-      // echoing it straight back up.
-      window.dispatchEvent(new CustomEvent<CloudSnapshot>("cloud-sync-merge", {
-        detail: { uid, schedule: outcome.merged, lastUpdated: now, pushed: true },
-      }));
       setStatus("merged");
     } else {
       setStatus("idle");

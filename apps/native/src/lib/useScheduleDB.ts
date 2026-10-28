@@ -228,10 +228,10 @@ export function useScheduleDB() {
     const activeStorageKey = storageKey;
 
     return onCloudMerge(({ uid, schedule: cloudSchedule, lastUpdated, pushed }) => {
-      if (uid !== storageUid) return;
+      if (uid !== storageUid) return false;
 
       const migrated = safeMigrate(cloudSchedule);
-      if (!migrated) return; // corrupt cloud snapshot — keep current local state
+      if (!migrated) return false; // corrupt cloud snapshot — keep current local state
 
       loadedKeyRef.current = activeStorageKey;
       const localLastUpdated = getLocalLastUpdated(storageUid);
@@ -257,9 +257,10 @@ export function useScheduleDB() {
         // Otherwise the debounced write effect persists this and queues the
         // push: the merge may hold local entities the cloud has never seen.
         setScheduleState(merged);
-        return;
+        return true;
       }
       if (storageUid && !pushed && !schedulesEqual(migrated, merged)) queueSync(merged);
+      return true;
     });
   }, [storageKey, storageUid]);
 

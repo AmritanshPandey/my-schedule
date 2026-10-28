@@ -166,3 +166,35 @@ test("garbage in storage reads as unknown, not as rev 0", () => {
   store.set("planr_baseRev:uid-a", "not-a-number");
   assert.equal(getLocalBaseRev("uid-a"), null);
 });
+
+// ── First sign-in on a new device ───────────────────────────────────────────
+// Reported: signing in on a new web device wiped every task, note, check-in and
+// plan. The pull handed the cloud snapshot to the app, the app did not absorb
+// it, but the engine recorded the remote rev anyway — so the new device's first
+// edit counted as a "safe" push and replaced the whole document.
+
+const { baseRevAfterHandoff } = await import("@/lib/syncRevision.ts");
+
+test("a pulled snapshot the app did not absorb does not license an overwrite", () => {
+  const remote = { rev: 12, lastUpdated: AN_HOUR_AGO, schedule: { plans: [{ id: "p1" }] } };
+  // Brand-new device: never pulled, so no base rev yet.
+  const baseRev = baseRevAfterHandoff(remote.rev, false, null);
+  assert.equal(baseRev, null);
+  // Its first edit must merge with the cloud, not replace it.
+  assert.equal(pushIsSafe(remote, baseRev, NOW), false);
+});
+
+test("an absorbed snapshot does claim the rev, so the next push is direct", () => {
+  const remote = { rev: 12, lastUpdated: AN_HOUR_AGO, schedule: {} };
+  const baseRev = baseRevAfterHandoff(remote.rev, true, null);
+  assert.equal(baseRev, 12);
+  assert.equal(pushIsSafe(remote, baseRev, NOW), true);
+});
+
+test("an unabsorbed pull keeps the rev the device really holds", () => {
+  // Device last absorbed rev 9; the cloud moved to 12 and the hand-off failed.
+  const remote = { rev: 12, lastUpdated: NOW, schedule: {} };
+  const baseRev = baseRevAfterHandoff(remote.rev, false, 9);
+  assert.equal(baseRev, 9);
+  assert.equal(pushIsSafe(remote, baseRev, NOW), false);
+});

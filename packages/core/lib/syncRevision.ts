@@ -42,3 +42,26 @@ export function pushIsSafe(
   if (data.rev !== undefined) return false;
   return (data.lastUpdated ?? 0) <= localLastUpdated;
 }
+
+/**
+ * The base rev a device may claim after handing a pulled snapshot to the app.
+ *
+ * Recording the remote rev says "my local state contains this revision", and
+ * from then on pushIsSafe lets this device replace the document without
+ * merging. That claim is only true once the app has actually absorbed the
+ * snapshot. When it didn't — the merge listener ignored it (signed-in account
+ * still switching over) or rejected it (failed migration) — claiming the rev
+ * anyway let a freshly signed-in device's first edit replace the whole cloud
+ * document with its near-empty local state.
+ *
+ * @param remoteRev  the rev of the snapshot that was handed over
+ * @param absorbed   whether the app accepted it into local state
+ * @param current    the base rev this device held before the pull
+ */
+export function baseRevAfterHandoff(
+  remoteRev: number,
+  absorbed: boolean,
+  current: number | null,
+): number | null {
+  return absorbed ? remoteRev : current;
+}
