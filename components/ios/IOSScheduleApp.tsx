@@ -255,8 +255,8 @@ function IOSHeader({
                     data-tour={action.tour}
                     className={`flex h-11 w-11 items-center justify-center rounded-full transition-colors ${
                       action.destructive
-                        ? "text-neutral-800 hover:bg-rose-500/10 hover:text-rose-500 dark:text-neutral-100 dark:hover:text-rose-400"
-                        : "text-neutral-800 hover:bg-black/[0.06] dark:text-neutral-100 dark:hover:bg-white/[0.1]"
+                        ? "text-neutral-800 hover:bg-rose-500/10 hover:text-rose-500 active:bg-rose-500/10 dark:text-neutral-100 dark:hover:text-rose-400"
+                        : "text-neutral-800 hover:bg-black/[0.06] active:bg-black/[0.06] dark:text-neutral-100 dark:hover:bg-white/[0.1] dark:active:bg-white/[0.1]"
                     }`}
                   >
                     <Icon size={21} strokeWidth={2} />
@@ -270,7 +270,7 @@ function IOSHeader({
                     type="button"
                     onClick={onNotes}
                     aria-label="Notes"
-                    className="flex h-11 w-11 items-center justify-center rounded-full text-neutral-800 transition-colors hover:bg-black/[0.06] dark:text-neutral-100 dark:hover:bg-white/[0.1]"
+                    className="flex h-11 w-11 items-center justify-center rounded-full text-neutral-800 transition-colors hover:bg-black/[0.06] active:bg-black/[0.06] dark:text-neutral-100 dark:hover:bg-white/[0.1] dark:active:bg-white/[0.1]"
                   >
                     <IconNotes size={20} strokeWidth={2} />
                   </button>
@@ -280,7 +280,7 @@ function IOSHeader({
                     type="button"
                     onClick={onSettings}
                     aria-label="Settings"
-                    className="flex h-11 w-11 items-center justify-center rounded-full text-neutral-800 transition-colors hover:bg-black/[0.06] dark:text-neutral-100 dark:hover:bg-white/[0.1]"
+                    className="flex h-11 w-11 items-center justify-center rounded-full text-neutral-800 transition-colors hover:bg-black/[0.06] active:bg-black/[0.06] dark:text-neutral-100 dark:hover:bg-white/[0.1] dark:active:bg-white/[0.1]"
                   >
                     <IconSettings size={20} strokeWidth={2} />
                   </button>
