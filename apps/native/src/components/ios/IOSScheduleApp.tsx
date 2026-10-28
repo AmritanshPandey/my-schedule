@@ -1707,8 +1707,11 @@ export default function IOSScheduleApp() {
           <TourTarget id="today-timeline" className="gap-5 px-4 pt-5">
             <View className="rounded-2xl bg-white py-4 dark:bg-neutral-950">
               <View className="mb-3 flex-row items-center justify-between px-4">
-                <Text className="text-[20px] font-bold text-neutral-900 dark:text-white">{weekLabel}</Text>
-                <View className="flex-row items-center">
+                {/* Shrinks rather than pushing the week arrows off the card. */}
+                <Text numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.75} className="mr-2 min-w-0 flex-1 text-[20px] font-bold text-neutral-900 dark:text-white">
+                  {weekLabel}
+                </Text>
+                <View className="shrink-0 flex-row items-center">
                   <Pressable
                     accessibilityRole="button"
                     onPress={() => {
@@ -1751,17 +1754,19 @@ export default function IOSScheduleApp() {
                       accessibilityLabel={date.toLocaleDateString(undefined, { weekday: 'long', month: 'long', day: 'numeric' })}
                       accessibilityState={{ selected: isActive }}
                       onPress={() => setActiveDay(day)}
-                      className={`flex-1 items-center gap-2 rounded-[14px] py-3 ${isActive ? 'bg-neutral-950 dark:bg-white' : ''}`}
+                      // gap/py tightened by the line-height added to the labels
+                      // below, so the cell stays the same height at default size.
+                      className={`flex-1 items-center gap-1 rounded-[14px] py-2.5 ${isActive ? 'bg-neutral-950 dark:bg-white' : ''}`}
                     >
                       <Text
-                        className={`text-[11px] font-semibold leading-none ${
+                        className={`text-[11px] font-semibold leading-[14px] ${
                           isActive ? 'text-white opacity-60 dark:text-neutral-950' : isToday ? 'text-rose-500' : 'text-neutral-500 dark:text-neutral-400'
                         }`}
                       >
                         {DAY_LABELS[day]}
                       </Text>
                       <Text
-                        className={`text-[18px] font-bold leading-none tabular-nums ${
+                        className={`text-[18px] font-bold leading-[24px] tabular-nums ${
                           isActive ? 'text-white dark:text-neutral-950' : isToday ? 'text-rose-500' : 'text-neutral-900 dark:text-white'
                         }`}
                       >

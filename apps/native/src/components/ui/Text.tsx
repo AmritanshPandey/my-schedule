@@ -22,11 +22,20 @@ import { useColorScheme } from 'nativewind';
  * 3. `tabular-nums`. NativeWind has no mapping for font-variant-numeric; RN
  *    takes it as the `fontVariant` style.
  *
+ * Text also follows the iOS text-size setting, capped at MAX_FONT_SCALE. The
+ * PWA's pixel sizes don't scale at all, so its dense chrome (the week strip,
+ * the tab bar, header rows) was never laid out for 2× text: uncapped, dates
+ * clip and labels truncate. The cap still lets text grow for people who
+ * need it; a caller can pass its own `maxFontSizeMultiplier` to differ.
+ *
  * Reading the class string keeps every ported component's markup a line-by-
  * line match for its web original rather than a re-expression of it.
  */
 const BASE: TextStyle = { fontFamily: 'Avenir Next' };
 const TNUM: TextStyle = { fontVariant: ['tabular-nums'] };
+
+/** How far the iOS text-size setting may enlarge text (see above). */
+export const MAX_FONT_SCALE = 1.3;
 
 const TRUNCATE_RE = /(?:^|\s)truncate(?:\s|$)/;
 const CLAMP_RE = /(?:^|\s)line-clamp-(\d)(?:\s|$)/;
@@ -34,7 +43,10 @@ const TNUM_RE = /(?:^|\s)tabular-nums(?:\s|$)/;
 
 export type TextProps = RNTextProps & { className?: string };
 
-export const Text = forwardRef<ComponentRef<typeof RNText>, TextProps>(function Text({ className, style, numberOfLines, ...props }, ref) {
+export const Text = forwardRef<ComponentRef<typeof RNText>, TextProps>(function Text(
+  { className, style, numberOfLines, maxFontSizeMultiplier = MAX_FONT_SCALE, ...props },
+  ref,
+) {
   const cls = className ?? '';
   const clamp = CLAMP_RE.exec(cls);
   const lines = numberOfLines ?? (TRUNCATE_RE.test(cls) ? 1 : clamp ? Number(clamp[1]) : undefined);
@@ -43,6 +55,7 @@ export const Text = forwardRef<ComponentRef<typeof RNText>, TextProps>(function 
       ref={ref}
       className={cls}
       numberOfLines={lines}
+      maxFontSizeMultiplier={maxFontSizeMultiplier}
       style={[BASE, TNUM_RE.test(cls) ? TNUM : null, style]}
       {...props}
     />
@@ -59,7 +72,7 @@ export type TextInputProps = RNTextInputProps & { className?: string };
 export type TextInputRef = ComponentRef<typeof RNTextInput>;
 
 export const TextInput = forwardRef<TextInputRef, TextInputProps>(function TextInput(
-  { className, style, placeholderTextColor, ...props },
+  { className, style, placeholderTextColor, maxFontSizeMultiplier = MAX_FONT_SCALE, ...props },
   ref,
 ) {
   const { colorScheme } = useColorScheme();
@@ -69,6 +82,7 @@ export const TextInput = forwardRef<TextInputRef, TextInputProps>(function TextI
       ref={ref}
       className={cls}
       placeholderTextColor={placeholderTextColor ?? (colorScheme === 'dark' ? '#A3A3A3' : '#737373')}
+      maxFontSizeMultiplier={maxFontSizeMultiplier}
       style={[BASE, TNUM_RE.test(cls) ? TNUM : null, style]}
       {...props}
     />
