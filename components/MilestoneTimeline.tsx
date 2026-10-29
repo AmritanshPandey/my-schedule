@@ -286,11 +286,14 @@ export default function MilestoneTimeline({ schedule }: MilestoneTimelineProps) 
           activities: schedule.activities as unknown as Record<string, Task[]>,
           trackers: schedule.progressTrackers, metricEntries: schedule.metricEntries,
           trackingStart: schedule.preferences?.startDate,
+          milestones: schedule.milestones,
+          rituals: schedule.rituals,
+          ritualCompletions: schedule.ritualCompletions,
         }).health);
       }
     }
     return map;
-  }, [planRows, schedule.activities, schedule.progressTrackers, schedule.metricEntries, schedule.preferences?.startDate]);
+  }, [planRows, schedule.activities, schedule.progressTrackers, schedule.metricEntries, schedule.preferences?.startDate, schedule.milestones, schedule.rituals, schedule.ritualCompletions]);
 
   // Scroll so today is roughly 1/3 from the left on mount
   useEffect(() => {

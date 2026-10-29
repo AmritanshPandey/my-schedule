@@ -83,6 +83,7 @@ import { togglePlanPaused } from '@planr/core/lib/planLifecycle';
 import { dismissAllAttention, dismissAttentionKey, dismissibleCount } from '@planr/core/lib/attentionDismissal';
 import { applyAdaptation } from '@planr/core/lib/milestoneAdaptation';
 import { calculateMilestoneState, type MilestoneState } from '@planr/core/lib/milestoneHealth';
+import { unlinkEverywhere } from '@planr/core/lib/milestoneLinks';
 import { formatDisplayTime, inputToDisplayTime, minutesToInputTime, parseTimeToMinutes, toScheduleDayMinutes } from '@planr/core/lib/timeUtils';
 import { calculateExecutionStreak } from '@planr/core/lib/consistency/calculateExecutionStreak';
 import { completedRitualIdsOn } from '@planr/core/lib/consistency/ritualDayStatus';
@@ -624,11 +625,14 @@ export default function IOSScheduleApp() {
           trackers: schedule.progressTrackers,
           metricEntries: schedule.metricEntries,
           trackingStart: schedule.preferences?.startDate,
+          milestones: schedule.milestones,
+          rituals: schedule.rituals,
+          ritualCompletions: schedule.ritualCompletions,
         }),
       });
     }
     return map;
-  }, [schedule.milestones, plansById, schedule.activities, schedule.progressTrackers, schedule.metricEntries, schedule.preferences?.startDate]);
+  }, [schedule.milestones, plansById, schedule.activities, schedule.progressTrackers, schedule.metricEntries, schedule.preferences?.startDate, schedule.rituals, schedule.ritualCompletions]);
 
   function performDayClear() {
     if (!dayClearRequest) return;
@@ -967,6 +971,8 @@ export default function IOSScheduleApp() {
           ...prev,
           rituals: (prev.rituals ?? []).filter((item) => item.id !== id),
           ritualCompletions: (prev.ritualCompletions ?? []).filter((item) => item.ritualId !== id),
+          // A deleted routine can't advance anything — drop it from every milestone.
+          milestones: unlinkEverywhere(prev.milestones, 'ritual', id),
         })),
     });
   }
@@ -2292,6 +2298,9 @@ export default function IOSScheduleApp() {
                 trackers: schedule.progressTrackers,
                 metricEntries: schedule.metricEntries,
                 trackingStart: schedule.preferences?.startDate,
+                milestones: schedule.milestones,
+                rituals: schedule.rituals,
+                ritualCompletions: schedule.ritualCompletions,
               })}
               schedule={schedule}
               onApply={(adaptation) => setSchedule((prev) => applyAdaptation(prev, adaptation))}

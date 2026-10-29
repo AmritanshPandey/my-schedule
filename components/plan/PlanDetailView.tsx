@@ -26,6 +26,7 @@ import {
   IconSend,
   IconPlayerStop,
   IconCopy,
+  IconRepeat,
 } from "@tabler/icons-react";
 import ReactMarkdown from "react-markdown";
 import { haptic } from "@/lib/haptics";
@@ -42,8 +43,11 @@ import { trackerCadence } from "@/lib/trackerCadence";
 import MilestoneSheet, { type MilestoneSaveData } from "@/components/plan/MilestoneSheet";
 import { computeRoadmapStats } from "@/lib/roadmapEngine";
 import { calculateMilestoneProgress, type MilestoneProgress } from "@/lib/planProgress";
-import { calculateMilestoneState, resolvePrimaryTracker, aggregateOccurrences, type MilestoneState } from "@/lib/milestoneHealth";
-import { trackerPace, milestonePace, paceNarrative } from "@/lib/paceModel";
+import { calculateMilestoneState, type MilestoneState } from "@/lib/milestoneHealth";
+import { paceNarrative } from "@/lib/paceModel";
+import type { MilestoneLinkKind } from "@/lib/milestoneLinks";
+import { milestoneSpan } from "@/lib/milestoneTargets";
+import MilestoneLinks from "@/components/milestone/MilestoneLinks";
 import { isPlanRunning, planLifecycleLabel } from "@/lib/planLifecycle";
 import { sumEntriesForDate } from "@/lib/metricEntries";
 import { planEffectiveEndDate, resolveMilestoneStatus } from "@/lib/roadmapDates";
@@ -281,6 +285,9 @@ interface PlanDetailViewProps {
   // linking/unlinking an already-existing task by hand.
   onLinkTaskToMilestone?: (milestoneId: string, taskId: string) => void;
   onUnlinkTaskFromMilestone?: (milestoneId: string, taskId: string) => void;
+  // Milestone <-> routine linking (and the generic form the item-side views
+  // use). Routines aren't plan-scoped, so any routine can be linked.
+  onSetMilestoneLink?: (milestoneId: string, kind: MilestoneLinkKind, itemId: string, linked: boolean) => void;
   // AI
   onAddGeneratedTasks?: (tasks: AIGeneratedTask[], planId: string, milestoneId?: string) => void;
   onUpdateCoachMessages?: (planId: string, messages: PlanCoachMessage[]) => void;
@@ -316,6 +323,7 @@ export default function PlanDetailView({
   onUnlinkTrackerFromMilestone,
   onLinkTaskToMilestone,
   onUnlinkTaskFromMilestone,
+  onSetMilestoneLink,
   onUpdateCoachMessages,
 }: PlanDetailViewProps) {
   // Whether this plan is still expected to run. Drives the pause affordance
@@ -556,10 +564,13 @@ export default function PlanDetailView({
         trackers: schedule.progressTrackers,
         metricEntries: schedule.metricEntries,
         trackingStart: schedule.preferences?.startDate,
+        milestones: schedule.milestones,
+        rituals: schedule.rituals,
+        ritualCompletions: schedule.ritualCompletions,
       }));
     }
     return map;
-  }, [planMilestones, schedule.activities, schedule.progressTrackers, schedule.metricEntries, schedule.preferences?.startDate, plan]);
+  }, [planMilestones, schedule.activities, schedule.progressTrackers, schedule.metricEntries, schedule.preferences?.startDate, schedule.milestones, schedule.rituals, schedule.ritualCompletions, plan]);
 
   const roadmapStats = useMemo(
     () =>
@@ -1334,7 +1345,7 @@ export default function PlanDetailView({
               linked-task/subtask completion when there's anything to show
               (calculateMilestoneProgress), falling back to the plain linked
               count for a milestone with nothing trackable linked yet. */}
-          {((m.linkedActivities?.length ?? 0) > 0 || (m.linkedTrackers?.length ?? 0) > 0) && (
+          {((m.linkedActivities?.length ?? 0) > 0 || (m.linkedTrackers?.length ?? 0) > 0 || (m.linkedRituals?.length ?? 0) > 0) && (
             <div className="mt-1.5 flex items-center gap-2">
               {(m.linkedActivities?.length ?? 0) > 0 && (
                 <span className="flex items-center gap-1 text-[11px] font-semibold text-emerald-600 dark:text-emerald-400">
@@ -1348,6 +1359,12 @@ export default function PlanDetailView({
                 <span className="flex items-center gap-1 text-[11px] font-semibold text-neutral-600 dark:text-neutral-400">
                   <IconChartLine size={12} strokeWidth={2} className="shrink-0" aria-hidden="true" />
                   {m.linkedTrackers!.length} tracker{m.linkedTrackers!.length !== 1 ? "s" : ""}
+                </span>
+              )}
+              {(m.linkedRituals?.length ?? 0) > 0 && (
+                <span className="flex items-center gap-1 text-[11px] font-semibold text-neutral-600 dark:text-neutral-400">
+                  <IconRepeat size={12} strokeWidth={2} className="shrink-0" aria-hidden="true" />
+                  {m.linkedRituals!.length} routine{m.linkedRituals!.length !== 1 ? "s" : ""}
                 </span>
               )}
             </div>
@@ -2346,6 +2363,14 @@ export default function PlanDetailView({
           // Tasks this milestone could still link — excludes commitments
           // (never tracked, see isTrackedTask) since linking one would
           // silently contribute nothing to progress.
+          // This milestone's own stretch of the tracker's planned path —
+          // the figure it's measured against, not the tracker's overall goal.
+          const linkedSpan = linkedTracker
+            ? milestoneSpan(m, linkedTracker, schedule.milestones, schedule.metricEntries, schedule.preferences?.startDate)
+            : null;
+          const routines = schedule.rituals ?? [];
+          const linkedRoutineIds = m.linkedRituals ?? [];
+          const linkableRoutines = routines.filter((r) => !linkedRoutineIds.includes(r.id));
           const linkableTasks = uniqueTasks.filter(
             ({ task }) => isTrackedTask(task) && !(m.linkedActivities ?? []).includes(task.id)
           );
@@ -2436,18 +2461,22 @@ export default function PlanDetailView({
                       Projected {formatDateShort(health.forecastDate)} · Target {formatDateShort(m.plannedEndDate)}
                     </p>
                   )}
-                  {(health.taskProgress !== null || health.consistency !== null) && (
-                    <div className="flex items-center gap-4 pt-1">
-                      {health.taskProgress !== null && (
-                        <div>
-                          <p className="text-[11px] font-bold uppercase tracking-[0.08em] text-neutral-600 dark:text-neutral-400">Activity</p>
-                          <p className="text-[14px] font-semibold text-neutral-800 dark:text-neutral-100">{health.taskProgress}% task progress</p>
+                  {/* What the headline blends — each linked source on its
+                      own, so a strong metric can't hide slipping routines. */}
+                  {(health.progressSources.length > 1 || health.consistency !== null) && (
+                    <div data-testid="milestone-sources" className="flex flex-wrap items-center gap-x-5 gap-y-2 pt-1">
+                      {health.progressSources.length > 1 && health.progressSources.map((src) => (
+                        <div key={src.kind}>
+                          <p className="text-[12px] font-bold text-neutral-500 dark:text-neutral-400">
+                            {src.kind === "metric" ? "Metric" : src.kind === "tasks" ? "Tasks" : "Routines"}
+                          </p>
+                          <p className="text-[14px] font-semibold tabular-nums text-neutral-800 dark:text-neutral-100">{src.pct}%</p>
                         </div>
-                      )}
+                      ))}
                       {health.consistency !== null && (
                         <div>
-                          <p className="text-[11px] font-bold uppercase tracking-[0.08em] text-neutral-600 dark:text-neutral-400">Consistency</p>
-                          <p className="text-[14px] font-semibold text-neutral-800 dark:text-neutral-100">{health.consistency}%</p>
+                          <p className="text-[12px] font-bold text-neutral-500 dark:text-neutral-400">Consistency</p>
+                          <p className="text-[14px] font-semibold tabular-nums text-neutral-800 dark:text-neutral-100">{health.consistency}%</p>
                         </div>
                       )}
                     </div>
@@ -2462,20 +2491,10 @@ export default function PlanDetailView({
                       decide about. Silent when the trend is too scattered for
                       the slope to mean anything (see lib/paceModel.ts). */}
                   {(() => {
-                    const primary = resolvePrimaryTracker(m, schedule.progressTrackers);
-                    const gap = primary
-                      ? trackerPace({
-                          tracker: primary,
-                          entries: schedule.metricEntries,
-                          deadlineISO: m.plannedEndDate,
-                          trackingStart: schedule.preferences?.startDate,
-                        })
-                      : milestonePace({
-                          milestone: m,
-                          expectedTotal: aggregateOccurrences(m, schedule.activities as unknown as Record<string, Task[]>, m.plannedEndDate).expected,
-                          completedSoFar: aggregateOccurrences(m, schedule.activities as unknown as Record<string, Task[]>, todayISO()).completed,
-                        });
-                    const text = paceNarrative(gap);
+                    // The state's own pace gap — measured against this
+                    // milestone's figure and counting its routines, exactly
+                    // as the health verdict above was.
+                    const text = paceNarrative(health.paceGap);
                     return text ? (
                       <p
                         data-testid="milestone-pace"
@@ -2586,6 +2605,52 @@ export default function PlanDetailView({
                 </div>
               )}
 
+              {/* Linked routines — their due days count toward consistency
+                  and pace like task occurrences, and their follow-through
+                  is one of the sources the headline blends. */}
+              {onSetMilestoneLink && (linkedRoutineIds.length > 0 || routines.length > 0) && (
+                <div className="mb-5" data-testid="milestone-routines">
+                  <p className="mb-2 text-[11px] font-bold uppercase tracking-[0.08em] text-neutral-600 dark:text-neutral-400">
+                    Linked routines
+                  </p>
+                  {linkedRoutineIds.length > 0 && (
+                    <div className="mb-2 space-y-1">
+                      {linkedRoutineIds.map((rid) => {
+                        const r = routines.find((x) => x.id === rid);
+                        return (
+                          <div key={rid} className="flex min-h-11 items-center justify-between gap-3">
+                            <span className="min-w-0 flex-1 truncate text-[14px] font-medium text-neutral-700 dark:text-neutral-300">
+                              {r?.title ?? "Deleted routine"}
+                            </span>
+                            <button
+                              type="button"
+                              onClick={() => onSetMilestoneLink(m.id, "ritual", rid, false)}
+                              className="min-h-11 px-1 text-[11px] font-semibold text-neutral-500 hover:text-rose-500 dark:text-neutral-400 dark:hover:text-rose-400"
+                            >
+                              Unlink
+                            </button>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
+                  {linkableRoutines.length > 0 && (
+                    <div className="flex flex-wrap gap-1.5">
+                      {linkableRoutines.map((r) => (
+                        <button
+                          key={r.id}
+                          type="button"
+                          onClick={() => onSetMilestoneLink(m.id, "ritual", r.id, true)}
+                          className="rounded-full border border-neutral-200 px-3 py-1.5 text-[12.5px] font-semibold text-neutral-600 hover:border-neutral-300 hover:bg-neutral-50 dark:border-white/10 dark:text-neutral-300 dark:hover:border-white/20 dark:hover:bg-white/[0.04]"
+                        >
+                          + {r.title}
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )}
+
               {/* Success metric — links this milestone to the tracker its
                   metric progress/forecast is computed from
                   (lib/milestoneHealth.ts). A linked tracker can be unlinked
@@ -2604,9 +2669,10 @@ export default function PlanDetailView({
                           {linkedTracker.title}
                         </p>
                         <p className="text-[12px] text-neutral-500 dark:text-neutral-400">
-                          {linkedTracker.startingValue ?? "–"} → {linkedTracker.goalValue ?? "–"}
+                          {linkedSpan ? linkedSpan.from : linkedTracker.startingValue ?? "–"} → {linkedSpan ? linkedSpan.to : linkedTracker.goalValue ?? "–"}
                           {linkedTracker.unit ? ` ${linkedTracker.unit}` : ""}
                           {linkedTracker.goalDirection === "decrease_good" ? " ↓" : " ↑"}
+                          {m.targetValue === undefined && linkedSpan && " · implied by the plan"}
                         </p>
                       </div>
                       {onUnlinkTrackerFromMilestone && (
@@ -2792,6 +2858,18 @@ export default function PlanDetailView({
                     ))}
                   </div>
                 </div>
+              )}
+
+              {/* Which milestones this task moves forward. */}
+              {onSetMilestoneLink && isTrackedTask(task) && (
+                <MilestoneLinks
+                  className="mb-5"
+                  milestones={schedule.milestones}
+                  kind="task"
+                  itemId={task.id}
+                  planId={plan.id}
+                  onSetLink={onSetMilestoneLink}
+                />
               )}
 
               {/* Actions */}

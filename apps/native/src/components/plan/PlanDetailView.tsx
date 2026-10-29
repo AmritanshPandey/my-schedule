@@ -400,11 +400,14 @@ export default function PlanDetailView({
           trackers: schedule.progressTrackers,
           metricEntries: schedule.metricEntries,
           trackingStart: schedule.preferences?.startDate,
+          milestones: schedule.milestones,
+          rituals: schedule.rituals,
+          ritualCompletions: schedule.ritualCompletions,
         }),
       );
     }
     return map;
-  }, [planMilestones, schedule.activities, schedule.progressTrackers, schedule.metricEntries, schedule.preferences?.startDate, plan]);
+  }, [planMilestones, schedule.activities, schedule.progressTrackers, schedule.metricEntries, schedule.preferences?.startDate, schedule.milestones, schedule.rituals, schedule.ritualCompletions, plan]);
 
   const roadmapStats = useMemo(
     () => computeRoadmapStats(plan.id, schedule.activities as unknown as Record<string, Task[]>, milestones, plan),

@@ -189,6 +189,8 @@ export const MilestoneSchema = z.object({
   status: z.enum(["upcoming", "active", "completed", "delayed"]),
   linkedActivities: z.array(nonEmptyId),
   linkedTrackers: z.array(nonEmptyId),
+  linkedRituals: z.array(nonEmptyId).optional(),
+  targetValue: z.number().finite().optional(),
   createdAt: isoDateTime,
   updatedAt: isoDateTime,
   targetDate: isoDate.optional(),

@@ -204,6 +204,9 @@ export function selectNeedsAttention(
         trackers: schedule.progressTrackers,
         metricEntries: schedule.metricEntries,
         trackingStart: schedule.preferences?.startDate,
+        milestones: schedule.milestones,
+        rituals: schedule.rituals,
+        ritualCompletions: schedule.ritualCompletions,
       });
       if (state.health !== "at_risk" && state.health !== "delayed") return [];
       return [{

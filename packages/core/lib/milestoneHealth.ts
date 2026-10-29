@@ -16,13 +16,16 @@
  * Pure and React-free, matching planProgress.ts / planInsights.ts / roadmapDates.ts.
  */
 
-import type { Milestone, Plan, Task, ProgressTracker, MetricEntry, DayKey } from "./scheduleTypes";
+import type { Milestone, Plan, Task, ProgressTracker, MetricEntry, DayKey, Ritual, RitualCompletion } from "./scheduleTypes";
 import { DAYS } from "./scheduleConstants";
 import { isTaskScheduledOn } from "./taskOccurrence";
 import { isTrackedTask } from "./taskCompletion";
 import { calculateMilestoneProgress } from "./planProgress";
 import { addDaysToISO, localISODate, formatDateShort } from "./dateUtils";
 import { trackerPace, milestonePace, type PaceGap } from "./paceModel";
+import { ritualScheduledOnDate } from "./consistency/calculateRitualStreak";
+import { ritualDayProgress } from "./consistency/ritualDayStatus";
+import { milestoneSpan, type MilestoneSpan } from "./milestoneTargets";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -36,6 +39,10 @@ export interface MilestoneState {
   hasData: boolean;
   /** 0-100, from the existing calculateMilestoneProgress (lib/planProgress.ts). Null = no linked tasks. */
   taskProgress: number | null;
+  /** 0-100 — linked routines' followed due days ÷ due days across the whole window. Null = none linked. */
+  routineProgress: number | null;
+  /** Each source the headline % blends, in a fixed order (metric, tasks, routines). */
+  progressSources: ProgressSource[];
   /** 0-100 rolling cadence of linked tasks within the milestone's elapsed window. Null = not enough signal yet. */
   consistency: number | null;
   /** 0-100 clamped display value for the primary linked tracker. Null = no linked tracker or no entries yet. */
@@ -48,7 +55,7 @@ export interface MilestoneState {
   metricCurrentValue: number | null;
   metricTargetValue: number | null;
   metricUnit: string | undefined;
-  /** The ONE headline % — metric-primary when a tracker is linked, else task-primary. Null = no data. */
+  /** The ONE headline % — the equal-weight mean of `progressSources`. Null = no data. */
   overallProgress: number | null;
   /** 0-100 — how far along the milestone "should" be by now. */
   expectedProgress: number | null;
@@ -66,6 +73,23 @@ export interface MilestoneState {
   paceGap: PaceGap | null;
   /** A contextual sentence referencing the milestone's real dates/numbers — never a generic canned line. */
   statusMessage: string;
+}
+
+export interface ProgressSource {
+  kind: "metric" | "tasks" | "routines";
+  pct: number;
+}
+
+/**
+ * Linked routines need the routine collections to be measured. Optional on
+ * every function below so callers that predate routine links keep working —
+ * they simply see no routine signal.
+ */
+export interface RoutineInputs {
+  rituals: readonly Ritual[];
+  completions: readonly RitualCompletion[];
+  /** `preferences.startDate` — due days before it are not expected. */
+  trackingStart?: string;
 }
 
 // ── Thresholds — centralized here, nothing hardcoded inline in the UI ──────────
@@ -165,7 +189,12 @@ function occurrenceCounts(taskId: string, activities: Record<string, Task[]>, fr
  * decide what "expected" means — two implementations of that would disagree
  * the first time either changed.
  */
-export function aggregateOccurrences(milestone: Milestone, activities: Record<string, Task[]>, toISO: string): OccurrenceCounts {
+export function aggregateOccurrences(
+  milestone: Milestone,
+  activities: Record<string, Task[]>,
+  toISO: string,
+  routines?: RoutineInputs,
+): OccurrenceCounts {
   let expected = 0;
   let completed = 0;
   for (const taskId of milestone.linkedActivities ?? []) {
@@ -173,7 +202,72 @@ export function aggregateOccurrences(milestone: Milestone, activities: Record<st
     expected += c.expected;
     completed += c.completed;
   }
+  if (routines) {
+    const r = routineOccurrences(milestone, routines, milestone.startDate, toISO);
+    expected += r.expected;
+    completed += r.completed;
+  }
   return { expected, completed };
+}
+
+// ── Linked-routine occurrence counting ──────────────────────────────────────
+
+function linkedRituals(milestone: Milestone, routines: RoutineInputs | undefined): Ritual[] {
+  if (!routines) return [];
+  const ids = new Set(milestone.linkedRituals ?? []);
+  return routines.rituals.filter((r) => ids.has(r.id));
+}
+
+/**
+ * Due-vs-followed routine days within [fromISO, toISO]. A due day is one the
+ * routine is scheduled on (ritualScheduledOnDate, honouring trackingStart); a
+ * done day counts its `followed` share, so "75% followed" advances the
+ * milestone by three quarters of a day rather than a whole one. `completed`
+ * can therefore be fractional.
+ */
+export function routineOccurrences(
+  milestone: Milestone,
+  routines: RoutineInputs,
+  fromISO: string,
+  toISO: string,
+): OccurrenceCounts {
+  let expected = 0;
+  let completed = 0;
+  for (const ritual of linkedRituals(milestone, routines)) {
+    const byDate = new Map<string, RitualCompletion[]>();
+    for (const c of routines.completions) {
+      if (c.ritualId !== ritual.id || c.date < fromISO || c.date > toISO) continue;
+      const list = byDate.get(c.date);
+      if (list) list.push(c);
+      else byDate.set(c.date, [c]);
+    }
+    let cursor = fromISO;
+    while (cursor <= toISO) {
+      if (ritualScheduledOnDate(ritual, cursor, routines.trackingStart)) {
+        expected++;
+        const entries = byDate.get(cursor);
+        if (entries) {
+          const day = ritualDayProgress(ritual, entries);
+          if (day.complete) completed += (day.followed ?? 100) / 100;
+        }
+      }
+      cursor = addDaysToISO(cursor, 1);
+    }
+  }
+  return { expected, completed };
+}
+
+/** Whether anything activity-shaped (a task or, when measurable, a routine) is linked. */
+function hasActivityLinks(milestone: Milestone, routines: RoutineInputs | undefined): boolean {
+  return (milestone.linkedActivities?.length ?? 0) > 0 || linkedRituals(milestone, routines).length > 0;
+}
+
+/** Linked routines' followed due days ÷ all due days across the whole window. */
+export function calculateRoutineProgress(milestone: Milestone, routines: RoutineInputs | undefined): number | null {
+  if (!routines || linkedRituals(milestone, routines).length === 0) return null;
+  const { expected, completed } = routineOccurrences(milestone, routines, milestone.startDate, milestone.plannedEndDate);
+  if (expected === 0) return null;
+  return Math.round(Math.min(100, (completed / expected) * 100));
 }
 
 // ── Consistency ───────────────────────────────────────────────────────────────
@@ -184,16 +278,21 @@ export function aggregateOccurrences(milestone: Milestone, activities: Record<st
  * nothing is linked, the milestone hasn't started, or the window is still
  * too short to mean anything (avoids a false alarm from one missed task).
  */
-export function calculateConsistency(milestone: Milestone, activities: Record<string, Task[]>, now: Date = new Date()): number | null {
+export function calculateConsistency(
+  milestone: Milestone,
+  activities: Record<string, Task[]>,
+  now: Date = new Date(),
+  routines?: RoutineInputs,
+): number | null {
   const todayStr = localISODate(now);
   if (todayStr < milestone.startDate) return null;
-  if ((milestone.linkedActivities?.length ?? 0) === 0) return null;
+  if (!hasActivityLinks(milestone, routines)) return null;
 
   const toISO = clampISO(todayStr, milestone.startDate, milestone.plannedEndDate);
   const elapsedDays = daysBetweenInclusive(milestone.startDate, toISO);
   if (elapsedDays < CONSISTENCY_MIN_WINDOW_DAYS) return null;
 
-  const { expected, completed } = aggregateOccurrences(milestone, activities, toISO);
+  const { expected, completed } = aggregateOccurrences(milestone, activities, toISO, routines);
   if (expected === 0) return null;
   return Math.round((completed / expected) * 100);
 }
@@ -207,15 +306,20 @@ export function calculateConsistency(milestone: Milestone, activities: Record<st
  * falling back to plain elapsed-time only when there's nothing activity-based
  * to expect from at all.
  */
-export function calculateExpectedProgress(milestone: Milestone, activities: Record<string, Task[]>, now: Date = new Date()): number | null {
+export function calculateExpectedProgress(
+  milestone: Milestone,
+  activities: Record<string, Task[]>,
+  now: Date = new Date(),
+  routines?: RoutineInputs,
+): number | null {
   const todayStr = localISODate(now);
   if (todayStr < milestone.startDate) return 0;
   const toISO = clampISO(todayStr, milestone.startDate, milestone.plannedEndDate);
 
-  if ((milestone.linkedActivities?.length ?? 0) > 0) {
-    const total = aggregateOccurrences(milestone, activities, milestone.plannedEndDate);
+  if (hasActivityLinks(milestone, routines)) {
+    const total = aggregateOccurrences(milestone, activities, milestone.plannedEndDate, routines);
     if (total.expected === 0) return null;
-    const elapsed = aggregateOccurrences(milestone, activities, toISO);
+    const elapsed = aggregateOccurrences(milestone, activities, toISO, routines);
     return Math.round(Math.min(100, (elapsed.expected / total.expected) * 100));
   }
 
@@ -270,19 +374,36 @@ export function calculateMetricProgress(
   metricEntries: MetricEntry[],
   now: Date = new Date(),
   trackingStart?: string,
+  /** Sibling milestones, so this one is measured over its own stretch of the
+   *  tracker's planned path (lib/milestoneTargets.ts). Absent = the tracker's
+   *  own startingValue → goalValue, as before milestones had figures. */
+  milestones?: readonly Milestone[],
 ): MetricProgressResult {
-  const empty: MetricProgressResult = { progress: null, raw: null, wrongDirection: false, current: null, startingValue: null };
   const tracker = resolvePrimaryTracker(milestone, trackers);
-  if (!tracker || tracker.goalValue === undefined) return empty;
+  if (!tracker) return EMPTY_METRIC;
+  const span = milestoneSpan(milestone, tracker, milestones, metricEntries, trackingStart);
+  return metricProgressOver(tracker, span, metricEntries, now, trackingStart);
+}
 
+const EMPTY_METRIC: MetricProgressResult = { progress: null, raw: null, wrongDirection: false, current: null, startingValue: null };
+
+/** Progress for one tracker over one span — shared by the primary tracker and the blend's secondary ones. */
+function metricProgressOver(
+  tracker: ProgressTracker,
+  span: MilestoneSpan | null,
+  metricEntries: MetricEntry[],
+  now: Date,
+  trackingStart?: string,
+): MetricProgressResult {
+  if (!span) return EMPTY_METRIC;
   const nowStr = localISODate(now);
   const entries = entriesForTracker(tracker.id, metricEntries, trackingStart).filter((e) => e.date <= nowStr);
-  if (entries.length === 0) return empty;
+  if (entries.length === 0) return EMPTY_METRIC;
 
   const current = entries[entries.length - 1].value;
-  const startingValue = tracker.startingValue ?? entries[0].value;
+  const startingValue = span.from;
   const direction = tracker.goalDirection ?? "increase_good";
-  const target = tracker.goalValue;
+  const target = span.to;
 
   let raw: number;
   if (direction === "decrease_good") {
@@ -304,16 +425,25 @@ export function calculateMetricProgress(
 
 // ── Forecast ──────────────────────────────────────────────────────────────────
 
-function forecastMetricDate(milestone: Milestone, trackers: ProgressTracker[], metricEntries: MetricEntry[], now: Date, trackingStart?: string): string | null {
+function forecastMetricDate(
+  milestone: Milestone,
+  trackers: ProgressTracker[],
+  metricEntries: MetricEntry[],
+  now: Date,
+  trackingStart?: string,
+  milestones?: readonly Milestone[],
+): string | null {
   const tracker = resolvePrimaryTracker(milestone, trackers);
-  if (!tracker || tracker.goalValue === undefined) return null;
+  if (!tracker) return null;
+  const span = milestoneSpan(milestone, tracker, milestones, metricEntries, trackingStart);
+  if (!span) return null;
   const nowStr = localISODate(now);
   const entries = entriesForTracker(tracker.id, metricEntries, trackingStart).filter((e) => e.date <= nowStr);
   if (entries.length === 0) return null;
 
   const direction = tracker.goalDirection ?? "increase_good";
   const current = entries[entries.length - 1].value;
-  const target = tracker.goalValue;
+  const target = span.to;
   const remaining = direction === "decrease_good" ? current - target : target - current;
   if (remaining <= 0) return nowStr; // target already reached or exceeded
 
@@ -338,12 +468,12 @@ function forecastMetricDate(milestone: Milestone, trackers: ProgressTracker[], m
   return addDaysToISO(nowStr, Math.ceil(weeksNeeded * 7));
 }
 
-function forecastTaskDate(milestone: Milestone, activities: Record<string, Task[]>, now: Date): string | null {
+function forecastTaskDate(milestone: Milestone, activities: Record<string, Task[]>, now: Date, routines?: RoutineInputs): string | null {
   const nowStr = localISODate(now);
   if (nowStr < milestone.startDate) return null;
 
-  const total = aggregateOccurrences(milestone, activities, milestone.plannedEndDate);
-  const elapsedToNow = aggregateOccurrences(milestone, activities, clampISO(nowStr, milestone.startDate, milestone.plannedEndDate));
+  const total = aggregateOccurrences(milestone, activities, milestone.plannedEndDate, routines);
+  const elapsedToNow = aggregateOccurrences(milestone, activities, clampISO(nowStr, milestone.startDate, milestone.plannedEndDate), routines);
   const remaining = total.expected - elapsedToNow.completed;
   if (remaining <= 0) return nowStr;
 
@@ -355,6 +485,10 @@ function forecastTaskDate(milestone: Milestone, activities: Record<string, Task[
     for (const d of completedDatesFor(copies)) {
       if (d >= rateFrom && d <= nowStr) recentCompleted++;
     }
+  }
+  if (routines) {
+    const from = rateFrom > milestone.startDate ? rateFrom : milestone.startDate;
+    recentCompleted += routineOccurrences(milestone, routines, from, nowStr).completed;
   }
   const ratePerWeek = recentCompleted / (TASK_RATE_WINDOW_DAYS / 7);
   if (ratePerWeek <= 0) return null;
@@ -375,12 +509,14 @@ export function calculateForecastDate(
   metricEntries: MetricEntry[],
   now: Date = new Date(),
   trackingStart?: string,
+  routines?: RoutineInputs,
+  milestones?: readonly Milestone[],
 ): string | null {
   if ((milestone.linkedTrackers?.length ?? 0) > 0) {
-    return forecastMetricDate(milestone, trackers, metricEntries, now, trackingStart);
+    return forecastMetricDate(milestone, trackers, metricEntries, now, trackingStart, milestones);
   }
-  if ((milestone.linkedActivities?.length ?? 0) > 0) {
-    return forecastTaskDate(milestone, activities, now);
+  if (hasActivityLinks(milestone, routines)) {
+    return forecastTaskDate(milestone, activities, now, routines);
   }
   return null;
 }
@@ -549,47 +685,77 @@ export function calculateMilestoneState(params: {
   now?: Date;
   /** `preferences.startDate` — entries before it are not counted. */
   trackingStart?: string;
+  /** Every milestone (or at least this one's siblings on its tracker), so the
+   *  metric is measured over this milestone's own stretch of the planned path.
+   *  Absent = the tracker's overall goal, as before. */
+  milestones?: readonly Milestone[];
+  /** Routine collections, so linked routines count. Absent = routines ignored. */
+  rituals?: readonly Ritual[];
+  ritualCompletions?: readonly RitualCompletion[];
 }): MilestoneState {
-  const { milestone, plan, activities, trackers, metricEntries, trackingStart } = params;
+  const { milestone, plan, activities, trackers, metricEntries, trackingStart, milestones } = params;
   const now = params.now ?? new Date();
+  const routines: RoutineInputs | undefined = params.rituals
+    ? { rituals: params.rituals, completions: params.ritualCompletions ?? [], trackingStart }
+    : undefined;
 
   const hasTasks = (milestone.linkedActivities?.length ?? 0) > 0;
   const hasTracker = (milestone.linkedTrackers?.length ?? 0) > 0;
-  const hasData = hasTasks || hasTracker;
+  const hasRoutines = linkedRituals(milestone, routines).length > 0;
+  const hasActivity = hasTasks || hasRoutines;
+  const hasData = hasTasks || hasTracker || hasRoutines;
 
   const taskProgressResult = calculateMilestoneProgress(milestone, activities, plan);
   const taskProgress = taskProgressResult.hasLinkedTasks ? taskProgressResult.pct : null;
+  const routineProgress = calculateRoutineProgress(milestone, routines);
 
-  const consistency = calculateConsistency(milestone, activities, now);
-  const expectedProgress = calculateExpectedProgress(milestone, activities, now);
-  const metric = calculateMetricProgress(milestone, trackers, metricEntries, now, trackingStart);
+  const consistency = calculateConsistency(milestone, activities, now, routines);
+  const expectedProgress = calculateExpectedProgress(milestone, activities, now, routines);
+  const metric = calculateMetricProgress(milestone, trackers, metricEntries, now, trackingStart, milestones);
   const primaryTracker = resolvePrimaryTracker(milestone, trackers);
-  const forecastDate = calculateForecastDate(milestone, activities, trackers, metricEntries, now, trackingStart);
+  const primarySpan = primaryTracker ? milestoneSpan(milestone, primaryTracker, milestones, metricEntries, trackingStart) : null;
+  const forecastDate = calculateForecastDate(milestone, activities, trackers, metricEntries, now, trackingStart, routines, milestones);
   const daysAheadBehind = forecastDate !== null ? daysBetweenSigned(forecastDate, milestone.plannedEndDate) : null;
 
-  // Outcome-driven (a tracker is linked) uses the metric as the headline
-  // number; activity-driven (tasks only) uses task completion. Task
-  // progress/consistency/metric progress are always returned regardless, so
-  // the UI can show them as secondary breakdown signals either way.
-  const overallProgress = hasTracker ? metric.progress : hasTasks ? taskProgress : null;
+  // The headline blends every linked source with equal weight: the metric
+  // (averaged across linked trackers — the primary over this milestone's own
+  // span, the rest over their overall goals), task completion, and routine
+  // follow-through. Each is also returned on its own for the breakdown.
+  const progressSources: ProgressSource[] = [];
+  const metricPcts: number[] = [];
+  if (metric.progress !== null) metricPcts.push(metric.progress);
+  for (const id of (milestone.linkedTrackers ?? []).slice(1)) {
+    const t = trackers.find((x) => x.id === id);
+    if (!t) continue;
+    const p = metricProgressOver(t, milestoneSpan(milestone, t, undefined, metricEntries, trackingStart), metricEntries, now, trackingStart).progress;
+    if (p !== null) metricPcts.push(p);
+  }
+  if (metricPcts.length > 0) {
+    progressSources.push({ kind: "metric", pct: Math.round(metricPcts.reduce((a, b) => a + b, 0) / metricPcts.length) });
+  }
+  if (taskProgress !== null) progressSources.push({ kind: "tasks", pct: taskProgress });
+  if (routineProgress !== null) progressSources.push({ kind: "routines", pct: routineProgress });
+  const overallProgress = progressSources.length > 0
+    ? Math.round(progressSources.reduce((sum, s) => sum + s.pct, 0) / progressSources.length)
+    : null;
 
   // The "success metric" target-matching signal — required vs. actual rate,
-  // via the same primary tracker/occurrence counts as everything above, so
-  // it never resolves a different tracker or a different "expected" than the
+  // via the same primary tracker/span/occurrence counts as everything above,
+  // so it never resolves a different tracker, target or "expected" than the
   // rest of this state does.
-  const paceGap: PaceGap | null = primaryTracker
-    ? trackerPace({ tracker: primaryTracker, entries: metricEntries, deadlineISO: milestone.plannedEndDate, now, trackingStart })
-    : hasTasks
+  const paceGap: PaceGap | null = primaryTracker && primarySpan
+    ? trackerPace({ tracker: { ...primaryTracker, goalValue: primarySpan.to }, entries: metricEntries, deadlineISO: milestone.plannedEndDate, now, trackingStart })
+    : hasActivity
     ? milestonePace({
         milestone,
-        expectedTotal: aggregateOccurrences(milestone, activities, milestone.plannedEndDate).expected,
-        completedSoFar: aggregateOccurrences(milestone, activities, localISODate(now)).completed,
+        expectedTotal: aggregateOccurrences(milestone, activities, milestone.plannedEndDate, routines).expected,
+        completedSoFar: aggregateOccurrences(milestone, activities, localISODate(now), routines).completed,
         now,
       })
     : null;
 
   const hasLoggedActivity =
-    (hasTasks && aggregateOccurrences(milestone, activities, localISODate(now)).completed > 0) ||
+    (hasActivity && aggregateOccurrences(milestone, activities, localISODate(now), routines).completed > 0) ||
     metric.current !== null;
 
   const health = calculateMilestoneHealth({
@@ -612,12 +778,14 @@ export function calculateMilestoneState(params: {
     health,
     hasData,
     taskProgress,
+    routineProgress,
+    progressSources,
     consistency,
     metricProgress: metric.progress,
     metricProgressRaw: metric.raw,
     metricMovedWrongDirection: metric.wrongDirection,
     metricCurrentValue: metric.current,
-    metricTargetValue: primaryTracker?.goalValue ?? null,
+    metricTargetValue: primarySpan?.to ?? null,
     metricUnit: primaryTracker?.unit,
     overallProgress,
     expectedProgress,
