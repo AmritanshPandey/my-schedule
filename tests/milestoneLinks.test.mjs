@@ -250,3 +250,15 @@ test("normalization defaults linkedRituals and keeps a valid targetValue", () =>
   assert.deepEqual(b.linkedRituals, ["r1"]);
   assert.equal(b.targetValue, undefined);
 });
+
+test("a routine-limited status message names routines, not tasks", () => {
+  const m = milestone({ startDate: "2026-09-01", plannedEndDate: "2026-09-30", linkedTrackers: ["t1"], linkedRituals: ["r1"], targetValue: 15 });
+  // Metric well ahead of pace, routine done 1 day in 10 → consistency limits health.
+  const entries = [entry("2026-09-01", 5), entry("2026-09-05", 9), entry("2026-09-10", 14)];
+  const state = calculateMilestoneState({
+    milestone: m, plan, activities: {}, trackers: [distance], metricEntries: entries,
+    now: new Date("2026-09-10T12:00:00"), milestones: [m], rituals: [daily], ritualCompletions: [done("2026-09-01")],
+  });
+  assert.match(state.statusMessage, /routine consistency/);
+  assert.doesNotMatch(state.statusMessage, /task consistency/);
+});

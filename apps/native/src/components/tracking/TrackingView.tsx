@@ -7,6 +7,9 @@ import type { MetricEntry, Milestone, Plan, ProgressTracker, TrackerCadence } fr
 import type { MilestoneState } from '@planr/core/lib/milestoneHealth';
 import { paceNarrative } from '@planr/core/lib/paceModel';
 import { buildTrackerStat, groupTrackerStatsByPlan, trackerRampTone, type TrackerStat } from '@planr/core/lib/trackerStats';
+import { plannedTrackerPath, planGap, type PlannedTrackerPath, type PlanGap } from '@planr/core/lib/milestoneTargets';
+import type { MilestoneLinkKind } from '@planr/core/lib/milestoneLinks';
+import MilestoneLinks from '../milestone/MilestoneLinks';
 import { buildCheckIn, checkInRecordLabel, checkInStatusLabel, nextCheckInLabel, type CheckInState } from '@planr/core/lib/trackerCadence';
 import { quickAmountsForUnit } from '@planr/core/lib/quickAmounts';
 import { todayISO } from '@planr/core/lib/dateUtils';
@@ -53,6 +56,10 @@ export interface TrackingViewProps {
   onSetCadence: (trackerId: string, cadence: TrackerCadence) => void;
   /** Sends the user to Plans, the only place a tracker can be created. */
   onNavigateToPlans: () => void;
+  /** Every milestone — draws each tracker's planned path and lists what it advances. */
+  milestones?: readonly Milestone[];
+  /** Link/unlink a tracker to a milestone from its card. Absent = read-only. */
+  onSetMilestoneLink?: (milestoneId: string, kind: MilestoneLinkKind, itemId: string, linked: boolean) => void;
 }
 
 /** "1.5" not "1.50", "500" not "500.0" — values are user-typed, not currency. */
@@ -150,6 +157,9 @@ function MetricCard({
   checkIn,
   plan,
   milestoneLink,
+  planned,
+  milestones,
+  onSetMilestoneLink,
   onLog,
   onOpenAddEntry,
   onDeleteEntry,
@@ -160,6 +170,10 @@ function MetricCard({
   /** Supplies the chart's accent, so a metric matches the plan it serves. */
   plan: Plan | null;
   milestoneLink?: { milestone: Milestone; state: MilestoneState };
+  /** The tracker's planned path and today's gap to it. Null = no path to draw. */
+  planned: { path: PlannedTrackerPath; gap: PlanGap | null } | null;
+  milestones?: readonly Milestone[];
+  onSetMilestoneLink?: TrackingViewProps['onSetMilestoneLink'];
   onLog: TrackingViewProps['onLog'];
   onOpenAddEntry: TrackingViewProps['onOpenAddEntry'];
   onDeleteEntry: TrackingViewProps['onDeleteEntry'];
@@ -190,9 +204,9 @@ function MetricCard({
       return { entries, goalValue: tracker.dailyTarget, startingValue: undefined };
     }
     const startingValue = tracker.goalValue !== undefined && stat.startingValue !== null ? stat.startingValue : undefined;
-    if (entries.length === 0 && startingValue === undefined) return null;
+    if (entries.length === 0 && startingValue === undefined && !planned) return null;
     return { entries, goalValue: tracker.goalValue, startingValue };
-  }, [stat, tracker]);
+  }, [stat, tracker, planned]);
 
   const pace = milestoneLink ? paceNarrative(milestoneLink.state.paceGap) : null;
 
@@ -223,6 +237,19 @@ function MetricCard({
               <Text className="font-semibold text-neutral-500 dark:text-neutral-400">Nothing logged yet</Text>
             )}
           </Text>
+          {/* Where the plan says this should be today, and how far off it is. */}
+          {!stat.isDaily && planned?.gap ? (
+            <Text testID="tracker-plan-gap" className="mt-0.5 text-[12px] font-semibold tabular-nums text-neutral-500 dark:text-neutral-400">
+              Plan: {fmt(planned.gap.expected)}{unit ? ` ${unit}` : ''} by today ·{' '}
+              {planned.gap.delta === 0 ? (
+                <Text className="text-emerald-700 dark:text-emerald-400">on plan</Text>
+              ) : (
+                <Text className={planned.gap.ahead ? 'text-emerald-700 dark:text-emerald-400' : 'text-amber-800 dark:text-amber-300'}>
+                  {fmt(Math.abs(planned.gap.delta))}{unit ? ` ${unit}` : ''} {planned.gap.ahead ? 'ahead' : 'behind'}
+                </Text>
+              )}
+            </Text>
+          ) : null}
         </View>
       </View>
 
@@ -244,6 +271,17 @@ function MetricCard({
         </View>
       )}
 
+      {milestones && onSetMilestoneLink && (
+        <MilestoneLinks
+          className="mt-3"
+          milestones={milestones}
+          kind="tracker"
+          itemId={tracker.id}
+          planId={tracker.planId}
+          onSetLink={onSetMilestoneLink}
+        />
+      )}
+
       {/* The chart, shown by default: a tracker's whole point is the shape of
           the line. Points are daily totals. */}
       {chart && (
@@ -255,6 +293,7 @@ function MetricCard({
             metric={{ name: tracker.title, unit }}
             goalValue={chart.goalValue}
             startingValue={chart.startingValue}
+            plannedPath={stat.isDaily ? undefined : planned?.path.points}
           />
         </View>
       )}
@@ -333,9 +372,21 @@ export default function TrackingView({
   onDeleteEntry,
   onSetCadence,
   onNavigateToPlans,
+  milestones,
+  onSetMilestoneLink,
 }: TrackingViewProps) {
   const today = todayISO();
   const plansById = useMemo(() => new Map(plans.map((p) => [p.id, p])), [plans]);
+
+  const plannedByTracker = useMemo(() => {
+    const map = new Map<string, { path: PlannedTrackerPath; gap: PlanGap | null }>();
+    if (!milestones) return map;
+    for (const t of trackers) {
+      const path = plannedTrackerPath(t, milestones, metricEntries, trackingStart);
+      if (path) map.set(t.id, { path, gap: planGap(t, path, metricEntries, today, trackingStart) });
+    }
+    return map;
+  }, [milestones, trackers, metricEntries, today, trackingStart]);
 
   const groups = useMemo(() => {
     const stats = trackers.map((t) => buildTrackerStat(t, metricEntries, today, trackingStart));
@@ -435,6 +486,9 @@ export default function TrackingView({
                     checkIn={checkIns.get(stat.tracker.id)!}
                     plan={group.plan}
                     milestoneLink={milestoneByTrackerId?.get(stat.tracker.id)}
+                    planned={plannedByTracker.get(stat.tracker.id) ?? null}
+                    milestones={milestones}
+                    onSetMilestoneLink={onSetMilestoneLink}
                     onLog={onLog}
                     onOpenAddEntry={onOpenAddEntry}
                     onDeleteEntry={onDeleteEntry}

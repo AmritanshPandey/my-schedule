@@ -638,6 +638,9 @@ function buildStatusMessage(
   consistency: number | null,
   hasLoggedActivity: boolean,
   todayStr: string,
+  /** What "consistency" is measured over — named so the sentence points at
+   *  the thing that actually slipped. */
+  cadenceLabel: string = "task consistency",
 ): string {
   const target = formatDateShort(milestone.plannedEndDate);
   switch (health) {
@@ -655,14 +658,14 @@ function buildStatusMessage(
       return `You're on track to reach this milestone by ${target}.`;
     case "at_risk":
       if (consistencyLimited) {
-        return `Your metric is on pace, but task consistency has dropped to ${consistency}% — that's what's putting this at risk.`;
+        return `Your metric is on pace, but ${cadenceLabel} has dropped to ${consistency}% — that's what's putting this at risk.`;
       }
       return forecastDate
         ? `Your current pace projects this milestone for ${formatDateShort(forecastDate)} — slightly behind your ${target} target.`
         : "Your recent consistency has dropped. You're slightly behind the pace needed to hit your target.";
     case "delayed":
       if (consistencyLimited) {
-        return `Your metric is on pace, but task consistency has fallen to ${consistency}%, which is delaying this milestone.`;
+        return `Your metric is on pace, but ${cadenceLabel} has fallen to ${consistency}%, which is delaying this milestone.`;
       }
       return forecastDate
         ? `At your current pace, this milestone is projected to finish ${formatDateShort(forecastDate)} — after your ${target} target.`
@@ -769,8 +772,9 @@ export function calculateMilestoneState(params: {
   const cadence = consistencyBucket(consistency);
   const consistencyLimited = pace !== null && cadence !== null && HEALTH_RANK[cadence] < HEALTH_RANK[pace];
 
+  const cadenceLabel = hasTasks && hasRoutines ? "task and routine consistency" : hasRoutines ? "routine consistency" : "task consistency";
   const statusMessage = buildStatusMessage(
-    health, milestone, forecastDate, consistencyLimited, consistency, hasLoggedActivity, localISODate(now),
+    health, milestone, forecastDate, consistencyLimited, consistency, hasLoggedActivity, localISODate(now), cadenceLabel,
   );
 
   return {
