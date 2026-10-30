@@ -502,15 +502,19 @@ test("end-to-end AND-gate: consistently completing linked tasks doesn't rescue a
 
 // ── End-to-end via calculateMilestoneState ──────────────────────────────────
 
-test("end-to-end: outcome-driven milestone (tracker linked) uses metric as the headline progress", () => {
+test("end-to-end: a milestone with a tracker and tasks blends both into the headline progress", () => {
   const t = tracker({ goalDirection: "decrease_good", goalValue: 75, startingValue: 82 });
   const entries = [entry("tr1", "2026-09-01", 82), entry("tr1", "2026-09-22", 80.3)];
   const events = ["2026-09-01", "2026-09-02"].map((d) => taskEvent("t1", d));
   const m = milestone({ linkedTrackers: ["tr1"], linkedActivities: ["t1"] });
   const activities = activitiesFor([{ id: "t1", events }]);
   const state = calculateMilestoneState({ milestone: m, plan: plan(), activities, trackers: [t], metricEntries: entries, now: NOW("2026-09-22") });
-  assert.equal(state.overallProgress, state.metricProgress);
-  assert.notEqual(state.taskProgress, null, "task progress is still reported as a secondary signal");
+  // The headline is the equal-weight mean of every linked source (metric,
+  // tasks, routines), each still reported on its own for the breakdown.
+  assert.notEqual(state.metricProgress, null);
+  assert.notEqual(state.taskProgress, null, "task progress is still reported on its own");
+  assert.deepEqual(state.progressSources.map((s) => s.kind), ["metric", "tasks"]);
+  assert.equal(state.overallProgress, Math.round((state.metricProgress + state.taskProgress) / 2));
 });
 
 test("end-to-end: activity-driven milestone (no tracker) uses task progress as the headline", () => {
