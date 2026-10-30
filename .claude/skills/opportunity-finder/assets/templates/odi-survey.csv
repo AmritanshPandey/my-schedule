@@ -1,0 +1,401 @@
+respondent_id,segment,outcome,importance,satisfaction
+A001,Clinics 20-50 staff,Minimize time to get a payer decision,9,4
+A001,Clinics 20-50 staff,Reduce the likelihood of a denied claim,9,4
+A001,Clinics 20-50 staff,Minimize time spent re-entering patient data,7,3
+A001,Clinics 20-50 staff,Increase visibility of request status,8,6
+A001,Clinics 20-50 staff,Minimize cost of the tool,7,6
+A002,Clinics 20-50 staff,Minimize time to get a payer decision,9,3
+A002,Clinics 20-50 staff,Reduce the likelihood of a denied claim,7,5
+A002,Clinics 20-50 staff,Minimize time spent re-entering patient data,9,4
+A002,Clinics 20-50 staff,Increase visibility of request status,5,3
+A002,Clinics 20-50 staff,Minimize cost of the tool,5,5
+A003,Clinics 20-50 staff,Minimize time to get a payer decision,9,3
+A003,Clinics 20-50 staff,Reduce the likelihood of a denied claim,10,3
+A003,Clinics 20-50 staff,Minimize time spent re-entering patient data,8,4
+A003,Clinics 20-50 staff,Increase visibility of request status,6,7
+A003,Clinics 20-50 staff,Minimize cost of the tool,7,8
+A004,Clinics 20-50 staff,Minimize time to get a payer decision,8,2
+A004,Clinics 20-50 staff,Reduce the likelihood of a denied claim,9,4
+A004,Clinics 20-50 staff,Minimize time spent re-entering patient data,9,3
+A004,Clinics 20-50 staff,Increase visibility of request status,6,4
+A004,Clinics 20-50 staff,Minimize cost of the tool,5,8
+A005,Clinics 20-50 staff,Minimize time to get a payer decision,8,3
+A005,Clinics 20-50 staff,Reduce the likelihood of a denied claim,10,2
+A005,Clinics 20-50 staff,Minimize time spent re-entering patient data,8,5
+A005,Clinics 20-50 staff,Increase visibility of request status,5,5
+A005,Clinics 20-50 staff,Minimize cost of the tool,6,5
+A006,Clinics 20-50 staff,Minimize time to get a payer decision,10,3
+A006,Clinics 20-50 staff,Reduce the likelihood of a denied claim,7,5
+A006,Clinics 20-50 staff,Minimize time spent re-entering patient data,9,4
+A006,Clinics 20-50 staff,Increase visibility of request status,9,6
+A006,Clinics 20-50 staff,Minimize cost of the tool,6,4
+A007,Clinics 20-50 staff,Minimize time to get a payer decision,10,2
+A007,Clinics 20-50 staff,Reduce the likelihood of a denied claim,8,2
+A007,Clinics 20-50 staff,Minimize time spent re-entering patient data,7,2
+A007,Clinics 20-50 staff,Increase visibility of request status,9,2
+A007,Clinics 20-50 staff,Minimize cost of the tool,4,6
+A008,Clinics 20-50 staff,Minimize time to get a payer decision,10,4
+A008,Clinics 20-50 staff,Reduce the likelihood of a denied claim,7,1
+A008,Clinics 20-50 staff,Minimize time spent re-entering patient data,8,2
+A008,Clinics 20-50 staff,Increase visibility of request status,6,6
+A008,Clinics 20-50 staff,Minimize cost of the tool,7,6
+A009,Clinics 20-50 staff,Minimize time to get a payer decision,9,4
+A009,Clinics 20-50 staff,Reduce the likelihood of a denied claim,10,5
+A009,Clinics 20-50 staff,Minimize time spent re-entering patient data,9,4
+A009,Clinics 20-50 staff,Increase visibility of request status,5,7
+A009,Clinics 20-50 staff,Minimize cost of the tool,7,7
+A010,Clinics 20-50 staff,Minimize time to get a payer decision,7,2
+A010,Clinics 20-50 staff,Reduce the likelihood of a denied claim,10,1
+A010,Clinics 20-50 staff,Minimize time spent re-entering patient data,8,4
+A010,Clinics 20-50 staff,Increase visibility of request status,5,7
+A010,Clinics 20-50 staff,Minimize cost of the tool,7,6
+A011,Clinics 20-50 staff,Minimize time to get a payer decision,9,4
+A011,Clinics 20-50 staff,Reduce the likelihood of a denied claim,9,6
+A011,Clinics 20-50 staff,Minimize time spent re-entering patient data,7,2
+A011,Clinics 20-50 staff,Increase visibility of request status,8,5
+A011,Clinics 20-50 staff,Minimize cost of the tool,5,7
+A012,Clinics 20-50 staff,Minimize time to get a payer decision,10,2
+A012,Clinics 20-50 staff,Reduce the likelihood of a denied claim,7,4
+A012,Clinics 20-50 staff,Minimize time spent re-entering patient data,8,3
+A012,Clinics 20-50 staff,Increase visibility of request status,9,4
+A012,Clinics 20-50 staff,Minimize cost of the tool,8,4
+A013,Clinics 20-50 staff,Minimize time to get a payer decision,8,4
+A013,Clinics 20-50 staff,Reduce the likelihood of a denied claim,10,5
+A013,Clinics 20-50 staff,Minimize time spent re-entering patient data,8,3
+A013,Clinics 20-50 staff,Increase visibility of request status,7,6
+A013,Clinics 20-50 staff,Minimize cost of the tool,6,6
+A014,Clinics 20-50 staff,Minimize time to get a payer decision,10,3
+A014,Clinics 20-50 staff,Reduce the likelihood of a denied claim,10,5
+A014,Clinics 20-50 staff,Minimize time spent re-entering patient data,10,3
+A014,Clinics 20-50 staff,Increase visibility of request status,6,4
+A014,Clinics 20-50 staff,Minimize cost of the tool,6,7
+A015,Clinics 20-50 staff,Minimize time to get a payer decision,9,4
+A015,Clinics 20-50 staff,Reduce the likelihood of a denied claim,10,1
+A015,Clinics 20-50 staff,Minimize time spent re-entering patient data,7,3
+A015,Clinics 20-50 staff,Increase visibility of request status,7,5
+A015,Clinics 20-50 staff,Minimize cost of the tool,5,7
+A016,Clinics 20-50 staff,Minimize time to get a payer decision,9,2
+A016,Clinics 20-50 staff,Reduce the likelihood of a denied claim,10,4
+A016,Clinics 20-50 staff,Minimize time spent re-entering patient data,7,3
+A016,Clinics 20-50 staff,Increase visibility of request status,7,5
+A016,Clinics 20-50 staff,Minimize cost of the tool,3,5
+A017,Clinics 20-50 staff,Minimize time to get a payer decision,10,1
+A017,Clinics 20-50 staff,Reduce the likelihood of a denied claim,9,5
+A017,Clinics 20-50 staff,Minimize time spent re-entering patient data,9,5
+A017,Clinics 20-50 staff,Increase visibility of request status,5,5
+A017,Clinics 20-50 staff,Minimize cost of the tool,6,7
+A018,Clinics 20-50 staff,Minimize time to get a payer decision,10,1
+A018,Clinics 20-50 staff,Reduce the likelihood of a denied claim,10,2
+A018,Clinics 20-50 staff,Minimize time spent re-entering patient data,9,1
+A018,Clinics 20-50 staff,Increase visibility of request status,7,7
+A018,Clinics 20-50 staff,Minimize cost of the tool,6,6
+A019,Clinics 20-50 staff,Minimize time to get a payer decision,10,3
+A019,Clinics 20-50 staff,Reduce the likelihood of a denied claim,9,6
+A019,Clinics 20-50 staff,Minimize time spent re-entering patient data,9,3
+A019,Clinics 20-50 staff,Increase visibility of request status,10,3
+A019,Clinics 20-50 staff,Minimize cost of the tool,7,6
+A020,Clinics 20-50 staff,Minimize time to get a payer decision,9,4
+A020,Clinics 20-50 staff,Reduce the likelihood of a denied claim,9,5
+A020,Clinics 20-50 staff,Minimize time spent re-entering patient data,6,1
+A020,Clinics 20-50 staff,Increase visibility of request status,8,4
+A020,Clinics 20-50 staff,Minimize cost of the tool,5,4
+A021,Clinics 20-50 staff,Minimize time to get a payer decision,10,4
+A021,Clinics 20-50 staff,Reduce the likelihood of a denied claim,10,3
+A021,Clinics 20-50 staff,Minimize time spent re-entering patient data,8,1
+A021,Clinics 20-50 staff,Increase visibility of request status,8,7
+A021,Clinics 20-50 staff,Minimize cost of the tool,5,8
+A022,Clinics 20-50 staff,Minimize time to get a payer decision,10,3
+A022,Clinics 20-50 staff,Reduce the likelihood of a denied claim,7,6
+A022,Clinics 20-50 staff,Minimize time spent re-entering patient data,8,2
+A022,Clinics 20-50 staff,Increase visibility of request status,7,6
+A022,Clinics 20-50 staff,Minimize cost of the tool,8,5
+A023,Clinics 20-50 staff,Minimize time to get a payer decision,10,5
+A023,Clinics 20-50 staff,Reduce the likelihood of a denied claim,10,4
+A023,Clinics 20-50 staff,Minimize time spent re-entering patient data,7,4
+A023,Clinics 20-50 staff,Increase visibility of request status,7,5
+A023,Clinics 20-50 staff,Minimize cost of the tool,8,6
+A024,Clinics 20-50 staff,Minimize time to get a payer decision,6,2
+A024,Clinics 20-50 staff,Reduce the likelihood of a denied claim,7,5
+A024,Clinics 20-50 staff,Minimize time spent re-entering patient data,8,2
+A024,Clinics 20-50 staff,Increase visibility of request status,7,6
+A024,Clinics 20-50 staff,Minimize cost of the tool,6,8
+A025,Clinics 20-50 staff,Minimize time to get a payer decision,9,4
+A025,Clinics 20-50 staff,Reduce the likelihood of a denied claim,10,6
+A025,Clinics 20-50 staff,Minimize time spent re-entering patient data,7,4
+A025,Clinics 20-50 staff,Increase visibility of request status,5,3
+A025,Clinics 20-50 staff,Minimize cost of the tool,4,7
+A026,Clinics 20-50 staff,Minimize time to get a payer decision,8,3
+A026,Clinics 20-50 staff,Reduce the likelihood of a denied claim,9,4
+A026,Clinics 20-50 staff,Minimize time spent re-entering patient data,7,3
+A026,Clinics 20-50 staff,Increase visibility of request status,9,5
+A026,Clinics 20-50 staff,Minimize cost of the tool,7,7
+A027,Clinics 20-50 staff,Minimize time to get a payer decision,9,1
+A027,Clinics 20-50 staff,Reduce the likelihood of a denied claim,8,6
+A027,Clinics 20-50 staff,Minimize time spent re-entering patient data,6,2
+A027,Clinics 20-50 staff,Increase visibility of request status,8,6
+A027,Clinics 20-50 staff,Minimize cost of the tool,6,7
+A028,Clinics 20-50 staff,Minimize time to get a payer decision,9,1
+A028,Clinics 20-50 staff,Reduce the likelihood of a denied claim,7,3
+A028,Clinics 20-50 staff,Minimize time spent re-entering patient data,9,2
+A028,Clinics 20-50 staff,Increase visibility of request status,6,4
+A028,Clinics 20-50 staff,Minimize cost of the tool,4,6
+A029,Clinics 20-50 staff,Minimize time to get a payer decision,8,4
+A029,Clinics 20-50 staff,Reduce the likelihood of a denied claim,6,4
+A029,Clinics 20-50 staff,Minimize time spent re-entering patient data,7,1
+A029,Clinics 20-50 staff,Increase visibility of request status,8,5
+A029,Clinics 20-50 staff,Minimize cost of the tool,3,5
+A030,Clinics 20-50 staff,Minimize time to get a payer decision,9,2
+A030,Clinics 20-50 staff,Reduce the likelihood of a denied claim,10,5
+A030,Clinics 20-50 staff,Minimize time spent re-entering patient data,9,3
+A030,Clinics 20-50 staff,Increase visibility of request status,9,6
+A030,Clinics 20-50 staff,Minimize cost of the tool,7,3
+A031,Clinics 20-50 staff,Minimize time to get a payer decision,10,5
+A031,Clinics 20-50 staff,Reduce the likelihood of a denied claim,9,3
+A031,Clinics 20-50 staff,Minimize time spent re-entering patient data,10,1
+A031,Clinics 20-50 staff,Increase visibility of request status,8,8
+A031,Clinics 20-50 staff,Minimize cost of the tool,5,7
+A032,Clinics 20-50 staff,Minimize time to get a payer decision,10,3
+A032,Clinics 20-50 staff,Reduce the likelihood of a denied claim,10,5
+A032,Clinics 20-50 staff,Minimize time spent re-entering patient data,7,3
+A032,Clinics 20-50 staff,Increase visibility of request status,7,6
+A032,Clinics 20-50 staff,Minimize cost of the tool,6,6
+A033,Clinics 20-50 staff,Minimize time to get a payer decision,8,2
+A033,Clinics 20-50 staff,Reduce the likelihood of a denied claim,10,4
+A033,Clinics 20-50 staff,Minimize time spent re-entering patient data,7,2
+A033,Clinics 20-50 staff,Increase visibility of request status,10,7
+A033,Clinics 20-50 staff,Minimize cost of the tool,7,2
+A034,Clinics 20-50 staff,Minimize time to get a payer decision,10,4
+A034,Clinics 20-50 staff,Reduce the likelihood of a denied claim,10,5
+A034,Clinics 20-50 staff,Minimize time spent re-entering patient data,8,4
+A034,Clinics 20-50 staff,Increase visibility of request status,5,6
+A034,Clinics 20-50 staff,Minimize cost of the tool,6,5
+A035,Clinics 20-50 staff,Minimize time to get a payer decision,10,6
+A035,Clinics 20-50 staff,Reduce the likelihood of a denied claim,7,3
+A035,Clinics 20-50 staff,Minimize time spent re-entering patient data,8,3
+A035,Clinics 20-50 staff,Increase visibility of request status,7,4
+A035,Clinics 20-50 staff,Minimize cost of the tool,9,7
+A036,Clinics 20-50 staff,Minimize time to get a payer decision,8,1
+A036,Clinics 20-50 staff,Reduce the likelihood of a denied claim,10,5
+A036,Clinics 20-50 staff,Minimize time spent re-entering patient data,10,4
+A036,Clinics 20-50 staff,Increase visibility of request status,6,5
+A036,Clinics 20-50 staff,Minimize cost of the tool,3,5
+A037,Clinics 20-50 staff,Minimize time to get a payer decision,9,4
+A037,Clinics 20-50 staff,Reduce the likelihood of a denied claim,8,4
+A037,Clinics 20-50 staff,Minimize time spent re-entering patient data,9,4
+A037,Clinics 20-50 staff,Increase visibility of request status,8,5
+A037,Clinics 20-50 staff,Minimize cost of the tool,6,7
+A038,Clinics 20-50 staff,Minimize time to get a payer decision,9,2
+A038,Clinics 20-50 staff,Reduce the likelihood of a denied claim,8,4
+A038,Clinics 20-50 staff,Minimize time spent re-entering patient data,8,3
+A038,Clinics 20-50 staff,Increase visibility of request status,7,5
+A038,Clinics 20-50 staff,Minimize cost of the tool,6,4
+A039,Clinics 20-50 staff,Minimize time to get a payer decision,10,4
+A039,Clinics 20-50 staff,Reduce the likelihood of a denied claim,10,4
+A039,Clinics 20-50 staff,Minimize time spent re-entering patient data,9,2
+A039,Clinics 20-50 staff,Increase visibility of request status,5,5
+A039,Clinics 20-50 staff,Minimize cost of the tool,5,7
+A040,Clinics 20-50 staff,Minimize time to get a payer decision,8,1
+A040,Clinics 20-50 staff,Reduce the likelihood of a denied claim,8,6
+A040,Clinics 20-50 staff,Minimize time spent re-entering patient data,8,1
+A040,Clinics 20-50 staff,Increase visibility of request status,6,6
+A040,Clinics 20-50 staff,Minimize cost of the tool,7,6
+A041,Clinics 20-50 staff,Minimize time to get a payer decision,10,4
+A041,Clinics 20-50 staff,Reduce the likelihood of a denied claim,9,5
+A041,Clinics 20-50 staff,Minimize time spent re-entering patient data,10,4
+A041,Clinics 20-50 staff,Increase visibility of request status,8,3
+A041,Clinics 20-50 staff,Minimize cost of the tool,6,7
+A042,Clinics 20-50 staff,Minimize time to get a payer decision,9,4
+A042,Clinics 20-50 staff,Reduce the likelihood of a denied claim,10,5
+A042,Clinics 20-50 staff,Minimize time spent re-entering patient data,8,7
+A042,Clinics 20-50 staff,Increase visibility of request status,8,5
+A042,Clinics 20-50 staff,Minimize cost of the tool,6,10
+B001,Clinics 51-200 staff,Minimize time to get a payer decision,9,5
+B001,Clinics 51-200 staff,Reduce the likelihood of a denied claim,9,5
+B001,Clinics 51-200 staff,Minimize time spent re-entering patient data,5,5
+B001,Clinics 51-200 staff,Increase visibility of request status,7,5
+B001,Clinics 51-200 staff,Minimize cost of the tool,9,5
+B002,Clinics 51-200 staff,Minimize time to get a payer decision,10,5
+B002,Clinics 51-200 staff,Reduce the likelihood of a denied claim,8,5
+B002,Clinics 51-200 staff,Minimize time spent re-entering patient data,6,6
+B002,Clinics 51-200 staff,Increase visibility of request status,6,2
+B002,Clinics 51-200 staff,Minimize cost of the tool,8,3
+B003,Clinics 51-200 staff,Minimize time to get a payer decision,8,1
+B003,Clinics 51-200 staff,Reduce the likelihood of a denied claim,7,6
+B003,Clinics 51-200 staff,Minimize time spent re-entering patient data,7,5
+B003,Clinics 51-200 staff,Increase visibility of request status,7,1
+B003,Clinics 51-200 staff,Minimize cost of the tool,10,6
+B004,Clinics 51-200 staff,Minimize time to get a payer decision,10,3
+B004,Clinics 51-200 staff,Reduce the likelihood of a denied claim,8,2
+B004,Clinics 51-200 staff,Minimize time spent re-entering patient data,7,6
+B004,Clinics 51-200 staff,Increase visibility of request status,5,3
+B004,Clinics 51-200 staff,Minimize cost of the tool,9,3
+B005,Clinics 51-200 staff,Minimize time to get a payer decision,7,3
+B005,Clinics 51-200 staff,Reduce the likelihood of a denied claim,7,3
+B005,Clinics 51-200 staff,Minimize time spent re-entering patient data,6,5
+B005,Clinics 51-200 staff,Increase visibility of request status,8,4
+B005,Clinics 51-200 staff,Minimize cost of the tool,10,7
+B006,Clinics 51-200 staff,Minimize time to get a payer decision,7,3
+B006,Clinics 51-200 staff,Reduce the likelihood of a denied claim,7,3
+B006,Clinics 51-200 staff,Minimize time spent re-entering patient data,6,5
+B006,Clinics 51-200 staff,Increase visibility of request status,8,1
+B006,Clinics 51-200 staff,Minimize cost of the tool,7,5
+B007,Clinics 51-200 staff,Minimize time to get a payer decision,9,4
+B007,Clinics 51-200 staff,Reduce the likelihood of a denied claim,8,4
+B007,Clinics 51-200 staff,Minimize time spent re-entering patient data,7,5
+B007,Clinics 51-200 staff,Increase visibility of request status,7,2
+B007,Clinics 51-200 staff,Minimize cost of the tool,8,1
+B008,Clinics 51-200 staff,Minimize time to get a payer decision,8,4
+B008,Clinics 51-200 staff,Reduce the likelihood of a denied claim,6,5
+B008,Clinics 51-200 staff,Minimize time spent re-entering patient data,6,3
+B008,Clinics 51-200 staff,Increase visibility of request status,7,3
+B008,Clinics 51-200 staff,Minimize cost of the tool,9,6
+B009,Clinics 51-200 staff,Minimize time to get a payer decision,9,3
+B009,Clinics 51-200 staff,Reduce the likelihood of a denied claim,8,5
+B009,Clinics 51-200 staff,Minimize time spent re-entering patient data,7,5
+B009,Clinics 51-200 staff,Increase visibility of request status,6,1
+B009,Clinics 51-200 staff,Minimize cost of the tool,8,4
+B010,Clinics 51-200 staff,Minimize time to get a payer decision,8,4
+B010,Clinics 51-200 staff,Reduce the likelihood of a denied claim,7,5
+B010,Clinics 51-200 staff,Minimize time spent re-entering patient data,7,4
+B010,Clinics 51-200 staff,Increase visibility of request status,10,3
+B010,Clinics 51-200 staff,Minimize cost of the tool,9,5
+B011,Clinics 51-200 staff,Minimize time to get a payer decision,10,1
+B011,Clinics 51-200 staff,Reduce the likelihood of a denied claim,7,5
+B011,Clinics 51-200 staff,Minimize time spent re-entering patient data,7,8
+B011,Clinics 51-200 staff,Increase visibility of request status,7,5
+B011,Clinics 51-200 staff,Minimize cost of the tool,9,6
+B012,Clinics 51-200 staff,Minimize time to get a payer decision,10,4
+B012,Clinics 51-200 staff,Reduce the likelihood of a denied claim,9,3
+B012,Clinics 51-200 staff,Minimize time spent re-entering patient data,7,4
+B012,Clinics 51-200 staff,Increase visibility of request status,7,6
+B012,Clinics 51-200 staff,Minimize cost of the tool,8,5
+B013,Clinics 51-200 staff,Minimize time to get a payer decision,10,4
+B013,Clinics 51-200 staff,Reduce the likelihood of a denied claim,7,5
+B013,Clinics 51-200 staff,Minimize time spent re-entering patient data,7,6
+B013,Clinics 51-200 staff,Increase visibility of request status,6,5
+B013,Clinics 51-200 staff,Minimize cost of the tool,10,5
+B014,Clinics 51-200 staff,Minimize time to get a payer decision,9,3
+B014,Clinics 51-200 staff,Reduce the likelihood of a denied claim,10,4
+B014,Clinics 51-200 staff,Minimize time spent re-entering patient data,7,4
+B014,Clinics 51-200 staff,Increase visibility of request status,6,4
+B014,Clinics 51-200 staff,Minimize cost of the tool,10,5
+B015,Clinics 51-200 staff,Minimize time to get a payer decision,8,5
+B015,Clinics 51-200 staff,Reduce the likelihood of a denied claim,8,5
+B015,Clinics 51-200 staff,Minimize time spent re-entering patient data,8,7
+B015,Clinics 51-200 staff,Increase visibility of request status,6,6
+B015,Clinics 51-200 staff,Minimize cost of the tool,8,6
+B016,Clinics 51-200 staff,Minimize time to get a payer decision,8,4
+B016,Clinics 51-200 staff,Reduce the likelihood of a denied claim,6,8
+B016,Clinics 51-200 staff,Minimize time spent re-entering patient data,8,3
+B016,Clinics 51-200 staff,Increase visibility of request status,5,1
+B016,Clinics 51-200 staff,Minimize cost of the tool,9,4
+B017,Clinics 51-200 staff,Minimize time to get a payer decision,9,4
+B017,Clinics 51-200 staff,Reduce the likelihood of a denied claim,8,3
+B017,Clinics 51-200 staff,Minimize time spent re-entering patient data,6,3
+B017,Clinics 51-200 staff,Increase visibility of request status,7,3
+B017,Clinics 51-200 staff,Minimize cost of the tool,9,5
+B018,Clinics 51-200 staff,Minimize time to get a payer decision,8,4
+B018,Clinics 51-200 staff,Reduce the likelihood of a denied claim,7,7
+B018,Clinics 51-200 staff,Minimize time spent re-entering patient data,7,5
+B018,Clinics 51-200 staff,Increase visibility of request status,6,2
+B018,Clinics 51-200 staff,Minimize cost of the tool,7,5
+B019,Clinics 51-200 staff,Minimize time to get a payer decision,9,5
+B019,Clinics 51-200 staff,Reduce the likelihood of a denied claim,9,8
+B019,Clinics 51-200 staff,Minimize time spent re-entering patient data,5,5
+B019,Clinics 51-200 staff,Increase visibility of request status,10,1
+B019,Clinics 51-200 staff,Minimize cost of the tool,7,5
+B020,Clinics 51-200 staff,Minimize time to get a payer decision,9,5
+B020,Clinics 51-200 staff,Reduce the likelihood of a denied claim,8,6
+B020,Clinics 51-200 staff,Minimize time spent re-entering patient data,6,6
+B020,Clinics 51-200 staff,Increase visibility of request status,5,2
+B020,Clinics 51-200 staff,Minimize cost of the tool,8,4
+B021,Clinics 51-200 staff,Minimize time to get a payer decision,8,5
+B021,Clinics 51-200 staff,Reduce the likelihood of a denied claim,7,6
+B021,Clinics 51-200 staff,Minimize time spent re-entering patient data,7,5
+B021,Clinics 51-200 staff,Increase visibility of request status,8,3
+B021,Clinics 51-200 staff,Minimize cost of the tool,6,5
+B022,Clinics 51-200 staff,Minimize time to get a payer decision,10,3
+B022,Clinics 51-200 staff,Reduce the likelihood of a denied claim,8,6
+B022,Clinics 51-200 staff,Minimize time spent re-entering patient data,5,6
+B022,Clinics 51-200 staff,Increase visibility of request status,9,2
+B022,Clinics 51-200 staff,Minimize cost of the tool,8,5
+B023,Clinics 51-200 staff,Minimize time to get a payer decision,10,4
+B023,Clinics 51-200 staff,Reduce the likelihood of a denied claim,9,4
+B023,Clinics 51-200 staff,Minimize time spent re-entering patient data,6,5
+B023,Clinics 51-200 staff,Increase visibility of request status,5,5
+B023,Clinics 51-200 staff,Minimize cost of the tool,9,3
+B024,Clinics 51-200 staff,Minimize time to get a payer decision,10,4
+B024,Clinics 51-200 staff,Reduce the likelihood of a denied claim,9,6
+B024,Clinics 51-200 staff,Minimize time spent re-entering patient data,4,5
+B024,Clinics 51-200 staff,Increase visibility of request status,9,2
+B024,Clinics 51-200 staff,Minimize cost of the tool,7,3
+B025,Clinics 51-200 staff,Minimize time to get a payer decision,8,4
+B025,Clinics 51-200 staff,Reduce the likelihood of a denied claim,10,6
+B025,Clinics 51-200 staff,Minimize time spent re-entering patient data,6,8
+B025,Clinics 51-200 staff,Increase visibility of request status,6,2
+B025,Clinics 51-200 staff,Minimize cost of the tool,9,6
+B026,Clinics 51-200 staff,Minimize time to get a payer decision,8,2
+B026,Clinics 51-200 staff,Reduce the likelihood of a denied claim,8,5
+B026,Clinics 51-200 staff,Minimize time spent re-entering patient data,4,5
+B026,Clinics 51-200 staff,Increase visibility of request status,6,4
+B026,Clinics 51-200 staff,Minimize cost of the tool,8,5
+B027,Clinics 51-200 staff,Minimize time to get a payer decision,9,5
+B027,Clinics 51-200 staff,Reduce the likelihood of a denied claim,10,4
+B027,Clinics 51-200 staff,Minimize time spent re-entering patient data,7,4
+B027,Clinics 51-200 staff,Increase visibility of request status,7,4
+B027,Clinics 51-200 staff,Minimize cost of the tool,10,4
+B028,Clinics 51-200 staff,Minimize time to get a payer decision,9,4
+B028,Clinics 51-200 staff,Reduce the likelihood of a denied claim,6,5
+B028,Clinics 51-200 staff,Minimize time spent re-entering patient data,5,6
+B028,Clinics 51-200 staff,Increase visibility of request status,6,1
+B028,Clinics 51-200 staff,Minimize cost of the tool,8,5
+B029,Clinics 51-200 staff,Minimize time to get a payer decision,8,5
+B029,Clinics 51-200 staff,Reduce the likelihood of a denied claim,8,4
+B029,Clinics 51-200 staff,Minimize time spent re-entering patient data,7,3
+B029,Clinics 51-200 staff,Increase visibility of request status,6,3
+B029,Clinics 51-200 staff,Minimize cost of the tool,9,5
+B030,Clinics 51-200 staff,Minimize time to get a payer decision,9,3
+B030,Clinics 51-200 staff,Reduce the likelihood of a denied claim,8,7
+B030,Clinics 51-200 staff,Minimize time spent re-entering patient data,5,8
+B030,Clinics 51-200 staff,Increase visibility of request status,6,3
+B030,Clinics 51-200 staff,Minimize cost of the tool,8,6
+B031,Clinics 51-200 staff,Minimize time to get a payer decision,8,1
+B031,Clinics 51-200 staff,Reduce the likelihood of a denied claim,9,6
+B031,Clinics 51-200 staff,Minimize time spent re-entering patient data,7,9
+B031,Clinics 51-200 staff,Increase visibility of request status,7,3
+B031,Clinics 51-200 staff,Minimize cost of the tool,9,6
+B032,Clinics 51-200 staff,Minimize time to get a payer decision,10,2
+B032,Clinics 51-200 staff,Reduce the likelihood of a denied claim,8,1
+B032,Clinics 51-200 staff,Minimize time spent re-entering patient data,7,4
+B032,Clinics 51-200 staff,Increase visibility of request status,8,6
+B032,Clinics 51-200 staff,Minimize cost of the tool,8,5
+B033,Clinics 51-200 staff,Minimize time to get a payer decision,8,3
+B033,Clinics 51-200 staff,Reduce the likelihood of a denied claim,7,6
+B033,Clinics 51-200 staff,Minimize time spent re-entering patient data,6,5
+B033,Clinics 51-200 staff,Increase visibility of request status,7,4
+B033,Clinics 51-200 staff,Minimize cost of the tool,9,5
+B034,Clinics 51-200 staff,Minimize time to get a payer decision,10,4
+B034,Clinics 51-200 staff,Reduce the likelihood of a denied claim,7,7
+B034,Clinics 51-200 staff,Minimize time spent re-entering patient data,7,4
+B034,Clinics 51-200 staff,Increase visibility of request status,8,3
+B034,Clinics 51-200 staff,Minimize cost of the tool,6,7
+B035,Clinics 51-200 staff,Minimize time to get a payer decision,9,5
+B035,Clinics 51-200 staff,Reduce the likelihood of a denied claim,8,5
+B035,Clinics 51-200 staff,Minimize time spent re-entering patient data,4,6
+B035,Clinics 51-200 staff,Increase visibility of request status,7,3
+B035,Clinics 51-200 staff,Minimize cost of the tool,8,5
+B036,Clinics 51-200 staff,Minimize time to get a payer decision,10,3
+B036,Clinics 51-200 staff,Reduce the likelihood of a denied claim,8,2
+B036,Clinics 51-200 staff,Minimize time spent re-entering patient data,5,6
+B036,Clinics 51-200 staff,Increase visibility of request status,9,2
+B036,Clinics 51-200 staff,Minimize cost of the tool,8,7
+B037,Clinics 51-200 staff,Minimize time to get a payer decision,9,5
+B037,Clinics 51-200 staff,Reduce the likelihood of a denied claim,10,5
+B037,Clinics 51-200 staff,Minimize time spent re-entering patient data,7,4
+B037,Clinics 51-200 staff,Increase visibility of request status,7,3
+B037,Clinics 51-200 staff,Minimize cost of the tool,8,7
+B038,Clinics 51-200 staff,Minimize time to get a payer decision,10,3
+B038,Clinics 51-200 staff,Reduce the likelihood of a denied claim,7,6
+B038,Clinics 51-200 staff,Minimize time spent re-entering patient data,5,6
+B038,Clinics 51-200 staff,Increase visibility of request status,8,3
+B038,Clinics 51-200 staff,Minimize cost of the tool,9,3

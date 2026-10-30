@@ -1,0 +1,3 @@
+id,title,publisher_or_owner,date,as_of,location,type,trust,access,notes
+S1,Example: customer interview notes (12 interviews),Our customer success team,2026-08-30,2026-08-30,interviews folder file 1-12,primary-internal,high,internal,Illustrative row - replace
+S2,Example: outcome survey,Our research,2026-09-15,2026-09-15,odi-survey.csv,primary-internal,high,internal,Illustrative row - replace

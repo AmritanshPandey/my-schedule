@@ -1,0 +1,16 @@
+{
+  "_note": "Illustrative, fictional competitors.",
+  "title": "Prior-authorization tools: strategic groups",
+  "x_axis": {"label": "Price level", "low": "Low", "high": "Premium"},
+  "y_axis": {"label": "Automation depth", "low": "Manual forms", "high": "End-to-end automated"},
+  "competitors": [
+    {"name": "Suite One", "x": 8.5, "y": 6.5, "size": 60, "group": "Enterprise suites", "source": "S3"},
+    {"name": "Suite Two", "x": 9, "y": 5.5, "size": 45, "group": "Enterprise suites", "source": "S3"},
+    {"name": "FormFast", "x": 2.5, "y": 2, "size": 20, "group": "Form tools", "source": "S4"},
+    {"name": "PA Lite", "x": 3, "y": 3, "size": 12, "group": "Form tools", "source": "S4"},
+    {"name": "Outsourced RCM", "x": 7, "y": 2.5, "size": 30, "group": "Services"},
+    {"name": "Our company", "x": 4, "y": 3.5, "size": 10, "group": "Us"}
+  ],
+  "open_positions": [{"x": 4, "y": 8, "label": "Affordable + automated?"}],
+  "us": "Our company"
+}

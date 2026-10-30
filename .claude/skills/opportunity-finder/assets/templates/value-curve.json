@@ -1,0 +1,13 @@
+{
+  "_note": "Illustrative, fictional market. Scores 0-10, labeled in the write-up.",
+  "title": "Prior-authorization tools for mid-size clinics: strategy canvas",
+  "factors": ["Price", "Setup effort", "Payer coverage", "Manual data entry", "Status visibility", "Denial prediction", "Human support"],
+  "scale_max": 10,
+  "curves": {
+    "Industry average": [7, 8, 8, 7, 5, 2, 6],
+    "Enterprise suite": [9, 9, 9, 5, 6, 4, 7],
+    "Our new curve": [4, 2, 6, 1, 9, 8, 4]
+  },
+  "highlight": "Our new curve",
+  "actions": {"Price": "reduce", "Setup effort": "eliminate", "Payer coverage": "reduce", "Manual data entry": "eliminate", "Status visibility": "raise", "Denial prediction": "create", "Human support": "reduce"}
+}

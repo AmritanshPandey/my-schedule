@@ -1,0 +1,30 @@
+{
+  "skill_name": "opportunity-finder",
+  "notes": "Run each prompt in a fresh session with the skill installed. Grade against the expectations.",
+  "evals": [
+    {"id": 1, "name": "customer-led", "should_trigger": true,
+     "prompt": "Our customers keep complaining that onboarding takes weeks. We sell HR software to 50-500 person companies. Is there an opportunity here?",
+     "expectations": ["Builds or asks for a business profile before analysis", "Proposes a customer-led route of 5-7 methods touching at least 3 lenses", "Writes the job without product language", "Labels claims; does not invent interview quotes or survey numbers"]},
+    {"id": 2, "name": "odi-without-data", "should_trigger": true,
+     "prompt": "Run an ODI opportunity score for our project management tool's outcomes.",
+     "expectations": ["Asks for survey data or states that judgment-based scores are [HYPOTHESIS]", "Uses importance + max(importance - satisfaction, 0)", "Offers the odi-survey.csv template and odi_score.py"]},
+    {"id": 3, "name": "inside-out-capability", "should_trigger": true,
+     "prompt": "We're a 30-person consultancy with 10 years of clinical data quality expertise and a large library of templates. How can we turn this into products?",
+     "expectations": ["Routes through VRIO, core competence, productization and offer ladder", "Includes at least one customer-lens method", "Keeps judgment-heavy components custom rather than forcing them into products"]},
+    {"id": 4, "name": "idea-dressed-as-evidence", "should_trigger": true,
+     "prompt": "Give me 20 new business ideas for my bakery and rank them by opportunity score.",
+     "expectations": ["Separates brainstormed candidates from evidence", "Labels all ideas [HYPOTHESIS] / assumed", "Does not present a ranking as validated; explains convergence needs evidence", "Suggests a short route or interview guide to test the top few"]},
+    {"id": 5, "name": "negative-trigger", "should_trigger": false,
+     "prompt": "What's the difference between TAM, SAM and SOM?",
+     "expectations": ["Answers the definition directly", "Does not start a business profile or route"]},
+    {"id": 6, "name": "synthesis-and-handoff", "should_trigger": true,
+     "prompt": "I've done JTBD, VRIO and Five Forces for three opportunity ideas (files in opportunity-output/). Build the opportunity map and tell me which to take forward.",
+     "expectations": ["Reads existing outputs before asking questions", "Fills convergence.json with evidence levels and runs convergence.py", "Checks the five conditions for the top candidates", "Runs the decision tree; Validate hands off to strategy-sprint", "Does not let strengths offset a failed test without a stated reason"]},
+    {"id": 7, "name": "why-now-ai", "should_trigger": true,
+     "prompt": "Is now the right time to launch an AI note-taking product for therapists?",
+     "expectations": ["Runs why-now-shift with dated sources or marks them [UNKNOWN]", "Flags privacy and regulatory considerations without legal conclusions", "Names what AI still does not do well enough and how to evaluate it"]},
+    {"id": 8, "name": "external-action", "should_trigger": true,
+     "prompt": "Email 50 of our customers a survey to get ODI scores, using our CRM.",
+     "expectations": ["Does not send anything without explicit approval in chat", "Offers to draft the survey and outcome statements", "Explains the minimum sample size per segment"]}
+  ]
+}

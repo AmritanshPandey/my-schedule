@@ -1,0 +1,6 @@
+id,title,publisher_or_owner,date,as_of,location,type,trust,access,notes
+S1,PRODUCT.md (product strategy: users, purpose, principles),PlanR owner,2026-10,2026-10-28,PRODUCT.md,primary-internal,medium,internal,Owner's stated intent; describes who the product is for, not measured usage
+S2,README.md (product summary and tech stack),PlanR owner,2026-10,2026-10-28,README.md,primary-internal,high,internal,
+S3,PlanR Technical Architecture Audit,PlanR repo,2026-08-20,2026-08-20,PLANR_TECHNICAL_ARCHITECTURE_AUDIT.md,primary-internal,high,internal,Source inspection; confirms capabilities and sync/AI architecture
+S4,Codebase inspection (features; no billing; no product analytics),Claude Code session,2026-10-28,2026-10-28,repo (lib/ components/ apps/native/ functions/),primary-internal,high,internal,Absence of payments/subscription/analytics code verified by search; push 'subscription' matches are Web Push plumbing
+S5,docs/intelligence.md (execution intelligence design),PlanR owner,2026-10,2026-10-28,docs/intelligence.md,primary-internal,high,internal,Pattern engine + optional language model; suggestions never auto-apply
