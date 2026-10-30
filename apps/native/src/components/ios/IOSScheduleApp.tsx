@@ -10,13 +10,10 @@ import {
   IconChevronLeft,
   IconChevronRight,
   IconClipboardData,
-  IconClipboardList,
   IconEdit,
-  IconFlame,
   IconNotes,
   IconPhoto,
   IconPlus,
-  IconRepeat,
   IconSettings,
   IconTargetArrow,
   IconTemplate,
@@ -29,7 +26,6 @@ import { categoryHex, resolveAccentColor } from '@planr/core/lib/colorSystem';
 import { canDeleteCategory, categoryUsageCounts, ensureCategoryIn } from '@planr/core/lib/taskCategories';
 import { categoriesById, taskIdentity } from '@planr/core/lib/taskIdentity';
 import { constrainTaskToPlanWindow } from '@planr/core/lib/planTaskWindow';
-import { selectTodayTasks } from '@planr/core/lib/todayTasks';
 import { formatDate, formatDayNoteLabel, localISODate, todayISO } from '@planr/core/lib/dateUtils';
 import { quickAmountsForUnit } from '@planr/core/lib/quickAmounts';
 import { sumEntriesForDate } from '@planr/core/lib/metricEntries';
@@ -57,7 +53,6 @@ import {
   completionForDate,
   getTaskSubtaskSummary,
   isTaskCompleted,
-  isTaskResolved,
   isTrackedTask,
   markTaskMissed,
   snoozeTaskLater,
@@ -85,9 +80,7 @@ import { applyAdaptation } from '@planr/core/lib/milestoneAdaptation';
 import { calculateMilestoneState, type MilestoneState } from '@planr/core/lib/milestoneHealth';
 import { linkItem, unlinkItem, unlinkEverywhere, type MilestoneLinkKind } from '@planr/core/lib/milestoneLinks';
 import { formatDisplayTime, inputToDisplayTime, minutesToInputTime, parseTimeToMinutes, toScheduleDayMinutes } from '@planr/core/lib/timeUtils';
-import { calculateExecutionStreak } from '@planr/core/lib/consistency/calculateExecutionStreak';
 import { completedRitualIdsOn } from '@planr/core/lib/consistency/ritualDayStatus';
-import { computeExecutionTrend } from '@planr/core/lib/executionAnalytics';
 import { selectNeedsAttention, type MissedTask } from '@planr/core/lib/needsAttention';
 import { rescheduleMissedTaskOnce, acknowledgeMiss } from '@planr/core/lib/missedRecovery';
 import { TOUR_STEPS, type CoachMarkStep, type TourId } from '@planr/core/lib/onboarding/tours';
@@ -100,7 +93,6 @@ import { useModalTurn } from '../../lib/modalTurn';
 import { haptic } from '../../lib/haptics';
 import { storage } from '../../storage/mmkv';
 import { ErrorBoundary } from '../ErrorBoundary';
-import { CARD } from '../ui/surfaces';
 import { Glass, isLiquidGlassSupported } from '../ui/Glass';
 import { Icon, type TablerIcon } from '../ui/Icon';
 import { Text } from '../ui/Text';
@@ -110,8 +102,7 @@ import IOSTimelineRow from './IOSTimelineRow';
 import IOSMergedTimelineRow from './IOSMergedTimelineRow';
 import SignInPrompt from '../auth/SignInPrompt';
 import DayActionsSheet from '../DayActionsSheet';
-import NeedsAttentionCard from '../NeedsAttentionCard';
-import CheckInsDueCard from '../tracking/CheckInsDueCard';
+import IOSOverview from './IOSOverview';
 import MissedTaskSheet from '../MissedTaskSheet';
 import QuickRetimeSheet, { type QuickRetimeTarget } from '../QuickRetimeSheet';
 import { TaskSheet, type TaskSaveData } from '../task/TaskSheet';
@@ -200,24 +191,6 @@ function getWeekDates(offset: number): Array<{ day: DayKey; date: Date }> {
   });
 }
 
-function taskDurationMinutes(task: Task): number {
-  const start = parseTimeToMinutes(task.startTime);
-  const end = parseTimeToMinutes(task.endTime);
-  if (start === null || end === null) return 0;
-  const normalizedStart = toScheduleDayMinutes(start);
-  let normalizedEnd = toScheduleDayMinutes(end);
-  if (normalizedEnd <= normalizedStart) normalizedEnd += 24 * 60;
-  return Math.max(0, normalizedEnd - normalizedStart);
-}
-
-function formatMinutesBrief(minutes: number): string {
-  if (minutes <= 0) return '0m';
-  const hours = Math.floor(minutes / 60);
-  const mins = minutes % 60;
-  if (hours === 0) return `${mins}m`;
-  if (mins === 0) return `${hours}h`;
-  return `${hours}h ${mins}m`;
-}
 
 function quickTaskTimeRange(now = new Date()): { startTime: string; endTime: string } {
   const current = now.getHours() * 60 + now.getMinutes();
@@ -737,8 +710,6 @@ export default function IOSScheduleApp() {
         }),
     [activeDateISO, dayTasks, isViewingToday, schedule.preferences?.startDate],
   );
-  // Shared with the desktop dashboard so the two cards can't drift.
-  const { tasks: todayTasks, done: todayDone } = useMemo(() => selectTodayTasks(schedule, todayISO(), todayKey), [schedule, todayKey]);
   const selectedPlan = selectedPlanId ? plansById.get(selectedPlanId) ?? null : null;
   const taskSheetActiveDays = useMemo(() => {
     if (taskSheetMode !== 'edit' || !taskSheetTask) return [activeDay];
@@ -765,11 +736,6 @@ export default function IOSScheduleApp() {
   // the rendered day list, which does show them.
   const dayTracked = useMemo(() => dayTasksView.filter(isTrackedTask), [dayTasksView]);
   const dayDone = dayTracked.filter((task) => isTaskCompleted(task, taskEffectiveItemCount(task))).length;
-  const todayOpenTasks = useMemo(() => todayTasks.filter((task) => !isTaskResolved(task, taskEffectiveItemCount(task))), [todayTasks, taskEffectiveItemCount]);
-  const remainingPlannedMinutes = useMemo(() => todayOpenTasks.reduce((sum, task) => sum + taskDurationMinutes(task), 0), [todayOpenTasks]);
-  const dashboardProgressPct = todayTasks.length > 0 ? Math.round((todayDone / todayTasks.length) * 100) : 0;
-  const executionStreak = useMemo(() => calculateExecutionStreak(schedule, todayISO()), [schedule]);
-  const missedThisWeek = useMemo(() => computeExecutionTrend(schedule).currentMissed, [schedule]);
   const needsAttention = useMemo(() => {
     // trackingType-aware — a half-logged quantity routine must still count as
     // unfinished here, or its at-risk warning is silently suppressed.
@@ -1492,228 +1458,35 @@ export default function IOSScheduleApp() {
     }
 
     if (activeTab === 4) {
-      const setupSteps = [
-        { label: 'Create your first plan', tab: 1, done: schedule.plans.length > 0, icon: IconClipboardList },
-        { label: "Schedule today's tasks", tab: 0, done: Object.values(schedule.activities).some((a) => (a?.length ?? 0) > 0), icon: IconCalendar },
-        { label: 'Build a daily routine', tab: 2, done: (schedule.rituals?.length ?? 0) > 0, icon: IconRepeat },
-      ];
-      const setupDoneCount = setupSteps.filter((s) => s.done).length;
-      const showSetup = !iosSetupDismissed && setupDoneCount < 2;
-      const nextSetup = setupSteps.find((s) => !s.done) ?? setupSteps[0];
-
       return (
         <ErrorBoundary section name="Dashboard">
-          <View testID="overview-dashboard" className="gap-4 px-4 pt-5">
-            {showSetup && (
-              // Same treatment as the web card (components/OverviewDashboard.tsx
-              // GettingStarted): a soft green wash, honest per-step segments,
-              // and saturated green only on progress and the one next action.
-              <View className="rounded-2xl border border-emerald-600/15 bg-emerald-50/70 p-4 dark:border-emerald-400/15 dark:bg-emerald-400/[0.06]">
-                <Text accessibilityRole="header" className="text-[19px] font-extrabold leading-tight tracking-[-0.01em] text-neutral-950 dark:text-white">
-                  Set up your first day
-                </Text>
-                <Text className="mt-1 text-[13px] font-medium text-neutral-600 dark:text-neutral-400">Three steps, about two minutes.</Text>
-                <View className="mt-3 flex-row items-center gap-3">
-                  <View accessible accessibilityLabel={`${setupDoneCount} of 3 setup steps done`} className="flex-1 flex-row gap-1.5">
-                    {setupSteps.map(({ label, done }) => (
-                      <View
-                        key={label}
-                        className={`h-1.5 flex-1 rounded-full ${done ? 'bg-[#00A63E] dark:bg-[#2FD46E]' : 'bg-emerald-900/10 dark:bg-white/[0.10]'}`}
-                      />
-                    ))}
-                  </View>
-                  <Text className="shrink-0 text-[12px] font-bold tabular-nums text-emerald-800 dark:text-emerald-300">{setupDoneCount} of 3</Text>
-                </View>
-                <View className="mt-3 gap-1">
-                  {setupSteps.map(({ label, tab, done, icon }, index) => {
-                    const isNext = !done && label === nextSetup.label;
-                    return (
-                      <Pressable
-                        key={label}
-                        accessibilityRole="button"
-                        accessibilityLabel={`Step ${index + 1}: ${label}${done ? ' (done)' : ''}`}
-                        onPress={() => {
-                          haptic('light');
-                          setActiveTab(tab);
-                        }}
-                        className={`min-h-[52px] w-full flex-row items-center gap-3 rounded-xl px-3 py-2 active:bg-white/70 dark:active:bg-white/[0.06] ${
-                          isNext ? 'bg-white/90 dark:bg-white/[0.05]' : ''
-                        }`}
-                      >
-                        <View
-                          className={`h-8 w-8 shrink-0 items-center justify-center rounded-full ${
-                            done
-                              ? 'bg-[#00A63E] dark:bg-[#2FD46E]'
-                              : isNext
-                                ? 'border-2 border-neutral-950 bg-white dark:border-white dark:bg-transparent'
-                                : 'border border-emerald-900/15 bg-white/60 dark:border-white/[0.15] dark:bg-transparent'
-                          }`}
-                        >
-                          {done ? (
-                            <Icon icon={IconCheck} size={15} strokeWidth={3} className="text-white dark:text-neutral-950" />
-                          ) : (
-                            <Icon
-                              icon={icon}
-                              size={16}
-                              strokeWidth={2}
-                              className={isNext ? 'text-neutral-950 dark:text-white' : 'text-neutral-500 dark:text-neutral-400'}
-                            />
-                          )}
-                        </View>
-                        <Text
-                          numberOfLines={1}
-                          className={`min-w-0 flex-1 text-[14px] font-bold ${done ? 'text-neutral-500 dark:text-neutral-400' : 'text-neutral-950 dark:text-white'}`}
-                        >
-                          {label}
-                        </Text>
-                        <Icon icon={IconChevronRight} size={16} strokeWidth={2.4} className="shrink-0 text-neutral-400 dark:text-neutral-500" />
-                      </Pressable>
-                    );
-                  })}
-                </View>
-                <View className="mt-3 flex-row items-center gap-2">
-                  <Pressable
-                    accessibilityRole="button"
-                    onPress={() => {
-                      haptic('light');
-                      setActiveTab(nextSetup.tab);
-                    }}
-                    className="min-h-[44px] flex-1 items-center justify-center rounded-full bg-[#008236] active:scale-[0.98] active:bg-[#006B2C] dark:bg-[#2FD46E]"
-                  >
-                    <Text className="text-[14px] font-bold text-white dark:text-neutral-950">
-                      {nextSetup.tab === 1 ? 'Create plan' : nextSetup.tab === 0 ? 'Schedule tasks' : 'Add routine'}
-                    </Text>
-                  </Pressable>
-                  <Pressable
-                    accessibilityRole="button"
-                    onPress={() => {
-                      haptic('light');
-                      dismissIosSetup();
-                    }}
-                    className="min-h-[44px] items-center justify-center rounded-full px-3"
-                  >
-                    <Text className="text-[13px] font-semibold text-neutral-600 dark:text-neutral-400">I'll do this later</Text>
-                  </Pressable>
-                </View>
-              </View>
-            )}
-            <View testID="overview-streak-card" className={`${CARD} p-4`}>
-              <View className="flex-row items-center gap-3">
-                <View
-                  className={`h-12 w-12 shrink-0 items-center justify-center rounded-2xl ${
-                    executionStreak.atRisk ? 'bg-amber-500/12 dark:bg-amber-400/12' : 'bg-emerald-500/12 dark:bg-emerald-400/12'
-                  }`}
-                >
-                  <Icon
-                    icon={IconFlame}
-                    size={22}
-                    strokeWidth={2}
-                    className={executionStreak.atRisk ? 'text-amber-500 dark:text-amber-400' : 'text-emerald-600 dark:text-emerald-400'}
-                  />
-                </View>
-                <View className="min-w-0 flex-1">
-                  <Text className="truncate text-[16px] font-bold leading-none text-neutral-950 dark:text-white">
-                    {executionStreak.streak === 0 ? 'No streak yet' : `${executionStreak.streak}-day streak`}
-                  </Text>
-                  <Text className="mt-1.5 truncate text-[12px] font-semibold text-neutral-500 dark:text-neutral-400">
-                    {executionStreak.atRisk
-                      ? 'Complete one thing to keep it alive.'
-                      : executionStreak.milestone
-                        ? 'New milestone — keep the run going.'
-                        : executionStreak.streak === 0
-                          ? 'Finish a task or ritual to start.'
-                          : 'You showed up. Keep the run going.'}
-                  </Text>
-                </View>
-                {executionStreak.streak > 0 && (
-                  <Text
-                    className={`shrink-0 text-[24px] font-semibold tabular-nums leading-none ${
-                      executionStreak.atRisk ? 'text-amber-500 dark:text-amber-400' : 'text-emerald-600 dark:text-emerald-400'
-                    }`}
-                  >
-                    {executionStreak.streak}
-                  </Text>
-                )}
-              </View>
-            </View>
-
-            {/* Recently missed / overdue — renders nothing when all clear. */}
-            <NeedsAttentionCard
-              data={needsAttention}
-              onNavigate={setActiveTab}
-              onHandleMissed={setMissedSheet}
-              onAdaptMilestone={setAdaptingMilestoneId}
-              onReviewUnreliableSlot={(row) => openEditSheet(row.task)}
-              onClearAll={handleClearAttention}
-              onDismissOne={handleDismissAttentionOne}
-            />
-
-            {/* Trackers waiting on this period's entry — nothing once all are in. */}
-            <CheckInsDueCard
-              trackers={schedule.progressTrackers}
-              metricEntries={schedule.metricEntries}
-              todayISO={todayISO()}
-              trackingStart={schedule.preferences?.startDate}
-              onLog={(tracker) => setEntryTracker(tracker)}
-              onOpenTracking={() => setActiveTab(8)}
-            />
-
-            <View testID="overview-next-task" className={`${CARD} p-0`}>
-              <Pressable
-                accessibilityRole="button"
-                onPress={() => {
-                  haptic('light');
-                  setActiveTab(0);
-                }}
-                className="min-h-[72px] w-full flex-row items-center gap-3 rounded-2xl px-4 py-3 active:bg-neutral-50 dark:active:bg-white/[0.04]"
-              >
-                <View className="h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-emerald-500/12 dark:bg-emerald-400/12">
-                  <Icon icon={IconCalendar} size={19} strokeWidth={2.2} className="text-emerald-600 dark:text-emerald-400" />
-                </View>
-                <View className="min-w-0 flex-1">
-                  <Text className="text-[11px] font-bold uppercase tracking-[0.08em] text-neutral-600 dark:text-neutral-400">Next up</Text>
-                  <Text className="mt-0.5 truncate text-[16px] font-bold text-neutral-950 dark:text-white">{todayOpenTasks[0]?.title ?? 'Plan your day'}</Text>
-                  <Text className="mt-0.5 truncate text-[12px] font-medium text-neutral-500 dark:text-neutral-400">
-                    {todayOpenTasks[0]
-                      ? [todayOpenTasks[0].startTime && formatDisplayTime(todayOpenTasks[0].startTime), schedule.plans.find((plan) => plan.id === todayOpenTasks[0].planId)?.title]
-                          .filter(Boolean)
-                          .join(' · ') || 'Open Today to continue'
-                      : todayTasks.length > 0
-                        ? 'Everything scheduled is complete'
-                        : 'Open Today to add your first task'}
-                  </Text>
-                </View>
-                <Icon icon={IconChevronRight} size={18} strokeWidth={2.2} className="shrink-0 text-neutral-500 dark:text-neutral-400" />
-              </Pressable>
-            </View>
-
-            <View testID="overview-week-summary" className={`${CARD} p-4`}>
-              <View className="flex-row items-start justify-between gap-4">
-                <View>
-                  <Text className="text-[13px] font-bold text-neutral-950 dark:text-white">Today's execution</Text>
-                  <Text className="mt-1 text-[28px] font-semibold leading-none tabular-nums text-neutral-950 dark:text-white">{dashboardProgressPct}%</Text>
-                </View>
-                <View className={`rounded-full px-2.5 py-1 ${missedThisWeek > 0 ? 'bg-rose-500/10 dark:bg-rose-400/10' : 'bg-emerald-500/10 dark:bg-emerald-400/10'}`}>
-                  <Text
-                    className={`text-[12px] font-bold tabular-nums ${missedThisWeek > 0 ? 'text-rose-600 dark:text-rose-400' : 'text-emerald-700 dark:text-emerald-400'}`}
-                  >
-                    {missedThisWeek > 0 ? `${missedThisWeek} missed` : 'On track'}
-                  </Text>
-                </View>
-              </View>
-              <View className="mt-4 flex-row gap-3 border-t border-neutral-200/70 pt-3 dark:border-white/[0.07]">
-                <Text className="flex-1 text-[12px] font-medium text-neutral-500 dark:text-neutral-400">
-                  <Text className="font-bold tabular-nums text-neutral-950 dark:text-white">
-                    {todayDone}/{todayTasks.length}
-                  </Text>{' '}
-                  done
-                </Text>
-                <Text className="flex-1 text-right text-[12px] font-medium text-neutral-500 dark:text-neutral-400">
-                  <Text className="font-bold tabular-nums text-neutral-950 dark:text-white">{formatMinutesBrief(remainingPlannedMinutes)}</Text> remaining
-                </Text>
-              </View>
-            </View>
-          </View>
+          <IOSOverview
+            schedule={schedule}
+            setSchedule={setSchedule}
+            todayKey={todayKey}
+            needsAttention={needsAttention}
+            setupDismissed={iosSetupDismissed}
+            onDismissSetup={dismissIosSetup}
+            onNavigate={setActiveTab}
+            onOpenPlan={(planId) => {
+              setSelectedPlanId(planId);
+              setActiveTab(1);
+            }}
+            onMarkDone={(taskId, ids) => handleToggleTaskComplete(taskId, ids, todayKey, todayISO())}
+            onToggleSlot={(taskId, slotIndex) => handleToggleSlot(taskId, slotIndex, todayKey, todayISO())}
+            onHandleMissed={setMissedSheet}
+            onAdaptMilestone={setAdaptingMilestoneId}
+            onReviewUnreliableSlot={(row) => openEditSheet(row.task)}
+            onClearAttention={handleClearAttention}
+            onDismissAttentionOne={handleDismissAttentionOne}
+            onLogTracker={(tracker) => setEntryTracker(tracker)}
+            onToast={setToast}
+            onReviewTask={(task) => openEditSheet(task)}
+            onReviewDay={(day) => {
+              setActiveDay(day);
+              setActiveTab(0);
+            }}
+          />
         </ErrorBoundary>
       );
     }

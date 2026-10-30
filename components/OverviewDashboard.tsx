@@ -3,14 +3,12 @@
 import { useCallback, useMemo, useState, type ComponentType } from "react";
 import {
   IconArrowRight,
-  IconArrowUpRight,
   IconCalendarEvent,
   IconScale,
   IconChartLine,
   IconCheck,
-  IconChecklist,
+  IconChevronDown,
   IconClipboardList,
-  IconAlertTriangle,
   IconFlame,
   IconTrophy,
   IconPlus,
@@ -18,13 +16,8 @@ import {
   IconTarget,
 } from "@tabler/icons-react";
 import type { DayKey, Plan, ProgressTracker, Schedule, Task } from "@/lib/useScheduleDB";
-import { getTaskCheckableItems, getTaskSubtaskSummary, isTaskCompleted, isTrackedTask } from "@/lib/taskCompletion";
-import { getPlanCardStats } from "@/lib/planInsights";
-import { PLAN_NEUTRAL, accentStyles } from "@/lib/colorSystem";
+import { accentStyles } from "@/lib/colorSystem";
 import DayBreakdownCard from "@/components/DayBreakdownCard";
-import TodayTaskList from "@/components/today/TodayTaskList";
-import { selectTodayTasks } from "@/lib/todayTasks";
-import ExecutionStreakBanner from "@/components/ExecutionStreakBanner";
 import NeedsAttentionCard from "@/components/NeedsAttentionCard";
 import InsightsCard, { type InsightToast } from "@/components/intelligence/InsightsCard";
 import CheckInsDueCard from "@/components/tracking/CheckInsDueCard";
@@ -37,19 +30,18 @@ import {
   type LoadVerdict,
 } from "@/lib/capacityModel";
 import CompletionTrendCard from "@/components/analytics/CompletionTrendCard";
-import { computeExecutionTrend } from "@/lib/executionAnalytics";
+import { selectGoalPace, selectNextUp, selectSetupSteps, selectWeekStatus } from "@/lib/overview";
+import NextUpCard from "@/components/overview/NextUpCard";
+import WeekStatusCard from "@/components/overview/WeekStatusCard";
+import GoalPaceCard from "@/components/overview/GoalPaceCard";
 
 import { computeTrend, type TrendResult } from "@/lib/trendUtils";
-import { addDaysToISO, localISODate } from "@/lib/dateUtils";
+import { localISODate } from "@/lib/dateUtils";
 import { formatDisplayTime } from "@/lib/timeUtils";
-import { calculateExecutionStreak, type ExecutionStreak } from "@/lib/consistency/calculateExecutionStreak";
 import { calculateRitualStats, ritualScheduledOnDate } from "@/lib/consistency/calculateRitualStreak";
-import { completedRitualIdsOn } from "@/lib/consistency/ritualDayStatus";
 import { haptic } from "@/lib/haptics";
-import { CARD, CARD_INTERACTIVE, SOFT_PANEL } from "@/components/ui/surfaces";
+import { CARD } from "@/components/ui/surfaces";
 import Button from "@/components/ui/Button";
-import ProgressBar from "@/components/ui/ProgressBar";
-import AnimatedNumber from "@/components/ui/AnimatedNumber";
 import Sparkline from "@/components/ui/Sparkline";
 import TrendChange from "@/components/ui/TrendChange";
 
@@ -59,8 +51,8 @@ interface OverviewDashboardProps {
   onNavigate: (tab: number) => void;
   onMarkTaskDone: (taskId: string, subtaskIds: string[]) => void;
   onToggleSlot: (taskId: string, slotIndex: number) => void;
-  onMissedTask: (taskId: string, subtaskIds: string[]) => void;
-  onOpenSubtasks?: (taskId: string) => void;
+  /** Opens one plan's detail (Goals & milestones rows). Falls back to the Plans tab. */
+  onOpenPlan?: (planId: string) => void;
   completedRitualIds: Set<string>;
   onLogTracker: (tracker: ProgressTracker) => void;
   /** Open the recovery sheet for a missed task in "Needs attention". */
@@ -84,9 +76,7 @@ interface OverviewDashboardProps {
   onCreateTaskAtTime?: (day: DayKey, startMinutes: number, endMinutes: number) => void;
 }
 
-const DAYS_ORDER: DayKey[] = ["monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday"];
-const DAY_LABELS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
-/** Keyed by DayKey, for the capacity check's prose (the array above is positional). */
+/** Keyed by DayKey, for the capacity check's prose. */
 const DAY_LABELS_FULL: Record<string, string> = {
   monday: "Monday", tuesday: "Tuesday", wednesday: "Wednesday", thursday: "Thursday",
   friday: "Friday", saturday: "Saturday", sunday: "Sunday",
@@ -96,7 +86,6 @@ function formatHoursShort(minutes: number): string {
   return `${Math.round((minutes / 60) * 10) / 10}h`;
 }
 
-type TaskSummary = ReturnType<typeof getTaskSubtaskSummary>;
 type TrackerRow = {
   tracker: ProgressTracker;
   latest?: { value: number };
@@ -105,21 +94,6 @@ type TrackerRow = {
   trend: TrendResult | null;
   plan?: Plan;
 };
-
-function clampPct(value: number): number {
-  return Math.max(0, Math.min(100, Math.round(value)));
-}
-
-function ratioPct(done: number, total: number): number {
-  return total > 0 ? clampPct((done / total) * 100) : 0;
-}
-
-function progressFillClass(pct: number): string {
-  if (pct >= 70) return "bg-emerald-500";
-  if (pct >= 35) return "bg-amber-400";
-  if (pct > 0) return "bg-rose-400";
-  return "bg-neutral-300 dark:bg-white/15";
-}
 
 function SectionHeader({
   icon: Icon,
@@ -146,261 +120,50 @@ function SectionHeader({
 }
 
 /**
- * Renders a metric string ("3/8", "34%", "12") with its leading number
- * counting up on mount; the suffix stays static.
+ * What this week ASKS FOR, against what this person has actually sustained
+ * (lib/capacityModel.ts). The week card reports what happened; this is the
+ * only line that says whether the week ahead is one they have ever actually
+ * done. Pure arithmetic over completion history, silent when it is too thin.
  */
-function MetricValue({ text }: { text: string }) {
-  const match = /^(\d+)(.*)$/.exec(text);
-  if (!match) return <>{text}</>;
-  const target = Number(match[1]);
+function CapacityCheck({ load, heaviest }: { load: LoadVerdict | null; heaviest: ReturnType<typeof heaviestDay> }) {
+  if (!load || load.level === "comfortable") return null;
   return (
-    <>
-      <AnimatedNumber value={target} />
-      {match[2]}
-    </>
-  );
-}
-
-function DashboardMetricCard({
-  label,
-  value,
-  detail,
-  pct,
-  primary = false,
-  icon: Icon,
-  iconClass,
-  onClick,
-}: {
-  label: string;
-  value: string;
-  detail: string;
-  pct?: number;
-  primary?: boolean;
-  icon: ComponentType<{ size?: number; strokeWidth?: number; className?: string }>;
-  iconClass?: string;
-  onClick?: () => void;
-}) {
-  const Tag = onClick ? "button" : "div";
-  return (
-    <Tag
-      // The one elevated moment on the dashboard — hero shadow is sanctioned
-      // chrome-led depth, tagged data-glass for the e2e banned-effects guard.
-      data-glass={primary ? "" : undefined}
-      type={onClick ? "button" : undefined}
-      onClick={onClick ? () => { haptic("light"); onClick(); } : undefined}
-      className={`px-4 py-4 ${onClick ? "text-left" : ""} ${
-        primary
-          ? `rounded-2xl border border-green-700 bg-green-700 text-white shadow-hero dark:border-emerald-400/25 dark:bg-green-950 ${onClick ? "transition-colors lg:hover:bg-green-800 dark:lg:hover:bg-[#07401F]" : ""}`
-          : `${onClick ? CARD_INTERACTIVE : CARD} text-neutral-950 dark:text-white`
+    <div
+      data-testid="overview-capacity-check"
+      className={`mt-3 flex items-start gap-2 rounded-xl border px-3 py-2.5 ${
+        load.level === "unrealistic"
+          ? "border-amber-200 bg-amber-50 dark:border-amber-500/20 dark:bg-amber-500/[0.08]"
+          : "border-neutral-200 bg-neutral-50 dark:border-white/10 dark:bg-white/[0.04]"
       }`}
     >
-      <div className="flex items-start justify-between gap-3">
-        <span
-          className={`grid h-9 w-9 shrink-0 place-items-center rounded-xl ${
-            primary
-              ? "bg-white/15 text-white"
-              : iconClass ?? "bg-neutral-100 text-neutral-500 dark:bg-white/[0.06] dark:text-neutral-400"
+      <IconScale
+        size={14}
+        strokeWidth={2}
+        className={`mt-0.5 shrink-0 ${
+          load.level === "unrealistic"
+            ? "text-amber-600 dark:text-amber-400"
+            : "text-neutral-500 dark:text-neutral-400"
+        }`}
+      />
+      <div className="min-w-0">
+        <p
+          className={`text-[12.5px] leading-relaxed ${
+            load.level === "unrealistic"
+              ? "text-amber-900 dark:text-amber-200"
+              : "text-neutral-600 dark:text-neutral-300"
           }`}
         >
-          <Icon size={18} strokeWidth={2} />
-        </span>
-        {/* The arrow only appears when the card actually navigates. */}
-        {onClick && (
-          <IconArrowUpRight size={16} strokeWidth={2.2} className={primary ? "text-white/80" : "text-neutral-400 dark:text-neutral-500"} />
+          {load.message}
+        </p>
+        {/* Lumpiness is a different failure from a heavy week: 20h is fine
+            spread out and impossible if 9h lands on one day. */}
+        {heaviest && (
+          <p className="mt-0.5 text-[11.5px] text-neutral-500 dark:text-neutral-400">
+            {DAY_LABELS_FULL[heaviest.day]} is the tightest — {formatHoursShort(heaviest.plannedMinutes)} against your usual {formatHoursShort(heaviest.usualMinutes)}.
+          </p>
         )}
       </div>
-      <p className={`mt-3 text-[12px] font-bold uppercase tracking-[0.08em] ${primary ? "text-white/80" : "text-neutral-500 dark:text-neutral-400"}`}>
-        {label}
-      </p>
-      <p className="mt-1 text-[34px] font-extrabold leading-none tracking-[-0.03em] tabular-nums"><MetricValue text={value} /></p>
-      <p className={`mt-2 text-[12px] font-medium ${primary ? "text-white/80" : "text-neutral-500 dark:text-neutral-400"}`}>{detail}</p>
-      {pct !== undefined && (
-        <ProgressBar
-          pct={pct}
-          height={5}
-          animateOnMount
-          className="mt-3"
-          fillClassName={primary ? "bg-white" : progressFillClass(pct)}
-          trackClassName={primary ? "bg-white/20 dark:bg-white/20" : ""}
-        />
-      )}
-    </Tag>
-  );
-}
-
-function streakDetail(streak: ExecutionStreak): string {
-  if (streak.atRisk) return "At risk — act today";
-  if (streak.milestone) return "New milestone reached";
-  if (streak.streak === 0) return "Start your run today";
-  if (streak.streak === 1) return "1 day — keep going";
-  return `${streak.streak} days strong`;
-}
-
-function StatGrid({
-  tasksDone,
-  tasksTotal,
-  weekPct,
-  missed,
-  plans,
-  trackers,
-  streak,
-  onNavigate,
-}: {
-  tasksDone: number;
-  tasksTotal: number;
-  weekPct: number;
-  missed: number;
-  plans: number;
-  trackers: number;
-  streak: ExecutionStreak;
-  onNavigate: (tab: number) => void;
-}) {
-  const taskPct = ratioPct(tasksDone, tasksTotal);
-  return (
-    <div className="stagger-rise grid gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6">
-      <DashboardMetricCard
-        primary
-        icon={IconChecklist}
-        label="Tasks today"
-        value={`${tasksDone}/${tasksTotal}`}
-        detail={`${taskPct}% complete`}
-        pct={taskPct}
-        onClick={() => onNavigate(0)}
-      />
-      <DashboardMetricCard
-        icon={IconCalendarEvent}
-        label="This week"
-        value={`${weekPct}%`}
-        detail="tasks completed"
-        pct={weekPct}
-      />
-      <DashboardMetricCard
-        icon={IconAlertTriangle}
-        iconClass="bg-rose-500/12 text-rose-600 dark:bg-rose-400/12 dark:text-rose-400"
-        label="Missed"
-        value={String(missed)}
-        detail={missed === 0 ? "none this week" : "this week"}
-        onClick={() => onNavigate(0)}
-      />
-      <DashboardMetricCard
-        icon={IconFlame}
-        iconClass={
-          streak.atRisk
-            ? "bg-amber-500/12 text-amber-500 dark:bg-amber-400/12 dark:text-amber-400"
-            : "bg-emerald-500/12 text-emerald-600 dark:bg-emerald-400/12 dark:text-emerald-400"
-        }
-        label="Streak"
-        value={String(streak.streak)}
-        detail={streakDetail(streak)}
-      />
-      <DashboardMetricCard
-        icon={IconClipboardList}
-        label="Plans"
-        value={String(plans)}
-        detail={plans === 1 ? "active plan" : "active plans"}
-        onClick={() => onNavigate(1)}
-      />
-      <DashboardMetricCard
-        icon={IconTarget}
-        label="Trackers"
-        value={String(trackers)}
-        detail={trackers === 1 ? "metric tracked" : "metrics tracked"}
-      />
     </div>
-  );
-}
-
-function ThisWeekCard({
-  activity,
-  load,
-  heaviest,
-}: {
-  activity: {
-    days: { label: string; total: number; done: number; isToday: boolean; pct: number }[];
-    tasksPct: number;
-    habitsPct: number;
-  } | null;
-  /** Null until there is enough history to say anything true. */
-  load: LoadVerdict | null;
-  heaviest: ReturnType<typeof heaviestDay>;
-}) {
-  if (!activity) return null;
-  return (
-    <section data-testid="overview-week-card" className={`${CARD} px-4 py-4`}>
-      <SectionHeader icon={IconCalendarEvent} title="This week" meta={`${activity.tasksPct}% tasks`} />
-
-      {/* ── Reality check ────────────────────────────────────────────────────
-          What this week ASKS FOR, against what this person has actually
-          sustained (lib/capacityModel.ts). The rest of this card reports what
-          happened; this is the only line that says whether the week ahead is
-          one they have ever actually done. Pure arithmetic over completion
-          history — no inference, and silent when the history is too thin. */}
-      {load && load.level !== "comfortable" && (
-        <div
-          data-testid="overview-capacity-check"
-          className={`mb-3 flex items-start gap-2 rounded-xl border px-3 py-2.5 ${
-            load.level === "unrealistic"
-              ? "border-amber-200 bg-amber-50 dark:border-amber-500/20 dark:bg-amber-500/[0.08]"
-              : "border-neutral-200 bg-neutral-50 dark:border-white/10 dark:bg-white/[0.04]"
-          }`}
-        >
-          <IconScale
-            size={14}
-            strokeWidth={2}
-            className={`mt-0.5 shrink-0 ${
-              load.level === "unrealistic"
-                ? "text-amber-600 dark:text-amber-400"
-                : "text-neutral-500 dark:text-neutral-400"
-            }`}
-          />
-          <div className="min-w-0">
-            <p
-              className={`text-[12.5px] leading-relaxed ${
-                load.level === "unrealistic"
-                  ? "text-amber-900 dark:text-amber-200"
-                  : "text-neutral-600 dark:text-neutral-300"
-              }`}
-            >
-              {load.message}
-            </p>
-            {/* Lumpiness is a different failure from a heavy week: 20h is fine
-                spread out and impossible if 9h lands on one day. */}
-            {heaviest && (
-              <p className="mt-0.5 text-[11.5px] text-neutral-500 dark:text-neutral-400">
-                {DAY_LABELS_FULL[heaviest.day]} is the tightest — {formatHoursShort(heaviest.plannedMinutes)} against your usual {formatHoursShort(heaviest.usualMinutes)}.
-              </p>
-            )}
-          </div>
-        </div>
-      )}
-      <div className="grid grid-cols-7 gap-2">
-        {activity.days.map(({ label, total, done, pct, isToday }) => (
-          <div key={label} className={`rounded-xl border px-2 py-2 ${isToday ? "border-emerald-300 bg-emerald-50 dark:border-emerald-500/30 dark:bg-emerald-500/[0.08]" : "border-neutral-200/70 bg-neutral-50 dark:border-white/[0.07] dark:bg-white/[0.04]"}`}>
-            <p className={`text-center text-[10px] font-bold ${isToday ? "text-emerald-700 dark:text-emerald-300" : "text-neutral-500 dark:text-neutral-400"}`}>{label}</p>
-            <div className="mt-2">
-              <ProgressBar pct={pct} height={4} animateOnMount fillClassName={progressFillClass(pct)} />
-            </div>
-            <p className="mt-1.5 text-center text-[10px] font-bold tabular-nums text-neutral-500 dark:text-neutral-400">
-              {done}/{total}
-            </p>
-          </div>
-        ))}
-      </div>
-      <div className="mt-3 grid grid-cols-2 gap-3">
-        <div className={SOFT_PANEL + " px-3 py-3"}>
-          <p className="text-[10px] font-bold uppercase tracking-[0.08em] text-neutral-500 dark:text-neutral-400">Tasks done</p>
-          <p className="mt-1 text-[24px] font-extrabold leading-none tabular-nums text-neutral-950 dark:text-white">
-            <AnimatedNumber value={activity.tasksPct} /><span className="text-[14px]">%</span>
-          </p>
-        </div>
-        <div className={SOFT_PANEL + " px-3 py-3"}>
-          <p className="text-[10px] font-bold uppercase tracking-[0.08em] text-neutral-500 dark:text-neutral-400">Habits done</p>
-          <p className="mt-1 text-[24px] font-extrabold leading-none tabular-nums text-neutral-950 dark:text-white">
-            <AnimatedNumber value={activity.habitsPct} /><span className="text-[14px]">%</span>
-          </p>
-        </div>
-      </div>
-    </section>
   );
 }
 
@@ -552,93 +315,6 @@ function RoutineConsistencyCard({
             </div>
           </div>
         ))}
-      </div>
-    </section>
-  );
-}
-
-function PlanConsistencyCard({
-  rows,
-  onNavigate,
-}: {
-  rows: { plan: Plan; consistency: number; milestonesTotal: number; milestonesDone: number }[];
-  onNavigate: (tab: number) => void;
-}) {
-  if (rows.length === 0) return null;
-  // No min-height: PlanCard's lg:min-h-[220px] works because it pairs with
-  // lg:mt-auto on a footer that pushes down to meet it. This card has no such
-  // anchor, so a fixed min-height just leaves dead space below the rows
-  // whenever real content falls short of it — which it reliably did, since
-  // 520px didn't even match this card's own siblings' height. Let it be
-  // exactly as tall as its rows.
-  return (
-    <section data-testid="overview-plan-card" className={`${CARD} px-4 py-4`}>
-      <SectionHeader icon={IconClipboardList} title="Plan consistency" meta={`${rows.length} ${rows.length === 1 ? "plan" : "plans"}`} />
-      {/* Each row carries two figures that measure different things: the
-          percentage counts *days* (calculateConsistency), the line under the
-          title counts milestones. Said once here rather than per row —
-          without it "0/5 milestones" beside "50%" reads as a contradiction. */}
-      <p className="-mt-1 mb-3 text-[12px] text-neutral-500 dark:text-neutral-400">
-        % of days you&rsquo;ve completed at least one task
-      </p>
-      <div className="divide-y divide-neutral-100 dark:divide-white/[0.06]">
-        {rows.map(({ plan, consistency, milestonesTotal, milestonesDone }) => {
-          const accent = PLAN_NEUTRAL;
-          return (
-            <button
-              key={plan.id}
-              type="button"
-              onClick={() => { haptic("light"); onNavigate(1); }}
-              // max-w keeps the plan name and its % pill close together on very
-              // wide screens, while smaller tablet widths can let the row stretch
-              // to fill the card. -mx-2/px-2 means the hover wash reads as a row
-              // with breathing room around its content instead of a hard band
-              // flush to text.
-              className="-mx-2 grid w-full xl:max-w-[520px] grid-cols-[minmax(0,1fr)_minmax(90px,160px)] items-center gap-4 px-2 py-3.5 text-left transition-colors lg:hover:bg-neutral-50/80 dark:lg:hover:bg-white/[0.03]"
-            >
-              <div className="min-w-0">
-                <div className="flex items-center gap-2">
-                  <span className={`h-2.5 w-2.5 shrink-0 rounded-full ${accent.dot}`} />
-                  <p className="truncate text-[16px] font-bold text-neutral-950 dark:text-white">{plan.title}</p>
-                </div>
-                {/* Milestone line and dots only when the plan actually has
-                    milestones. One dot per real milestone (capped at 10), so a
-                    plan without any shows nothing here rather than a row of
-                    placeholders standing in for milestones that don't exist. */}
-                {milestonesTotal > 0 && (
-                  <>
-                    {/* "N of M", not "N/M": a slash reads as a fraction that
-                        ought to agree with the percentage beside it, and it
-                        never will — the two count different things.
-                        neutral-500/400 rather than 400/500 because #A1A1A1 on
-                        white is 2.5:1 and fails AA at this size. */}
-                    <p className="mt-1 text-[11px] font-semibold text-neutral-500 dark:text-neutral-400">
-                      {milestonesDone} of {milestonesTotal} milestones
-                    </p>
-                    <div className="mt-2 flex flex-wrap gap-1">
-                      {Array.from({ length: Math.min(milestonesTotal, 10) }, (_, i) => (
-                        <span
-                          key={i}
-                          className={`h-2 w-2 rounded-full ${
-                            i < milestonesDone ? "bg-emerald-500" : "bg-neutral-200 dark:bg-white/[0.10]"
-                          }`}
-                        />
-                      ))}
-                    </div>
-                  </>
-                )}
-              </div>
-              <div className="min-w-0">
-                <div className="mb-2 flex justify-end">
-                  <span className="rounded-full border border-neutral-200 bg-neutral-50 px-2.5 py-1 text-[12px] font-extrabold tabular-nums text-neutral-900 dark:border-white/[0.10] dark:bg-white/[0.05] dark:text-white">
-                    <AnimatedNumber value={consistency} />%
-                  </span>
-                </div>
-                <ProgressBar pct={consistency} height={6} animateOnMount fillClassName={progressFillClass(consistency)} />
-              </div>
-            </button>
-          );
-        })}
       </div>
     </section>
   );
@@ -813,8 +489,7 @@ export default function OverviewDashboard({
   onNavigate,
   onMarkTaskDone,
   onToggleSlot,
-  onMissedTask,
-  onOpenSubtasks,
+  onOpenPlan,
   completedRitualIds,
   onLogTracker,
   onHandleMissed,
@@ -829,24 +504,11 @@ export default function OverviewDashboard({
   onCreateTaskAtTime,
 }: OverviewDashboardProps) {
   const todayISO = localISODate(new Date());
-  const plansById = useMemo(() => new Map(schedule.plans.map((plan) => [plan.id, plan])), [schedule.plans]);
-  const linkedPlanFor = useCallback(
-    (task: Task) => (task.planId ? plansById.get(task.planId) ?? null : null),
-    [plansById]
-  );
-  const taskSummary = useCallback(
-    (task: Task) => getTaskSubtaskSummary(task, linkedPlanFor(task)),
-    [linkedPlanFor]
-  );
-  const taskCheckableIds = useCallback(
-    (task: Task) => getTaskCheckableItems(task, linkedPlanFor(task)).map((item) => item.id),
-    [linkedPlanFor]
-  );
 
-  const { tasks: todayTasks, done: tasksDone, total: tasksTotal } = useMemo(
-    () => selectTodayTasks(schedule, todayISO, todayKey),
-    [schedule, todayISO, todayKey],
-  );
+  // Next → Fix → Status → Goals → Patterns (lib/overview.ts). Desktop is the
+  // weekly review: Next is a strip in the header that hands off to Today,
+  // and the page below is about the week and the plans.
+  const nextUp = useMemo(() => selectNextUp(schedule, todayISO, todayKey), [schedule, todayISO, todayKey]);
 
   // What slipped while the app had no way to say so. Empty for a user who is
   // on top of things, and the card renders nothing in that case.
@@ -855,9 +517,8 @@ export default function OverviewDashboard({
     [schedule, todayISO, todayKey, completedRitualIds],
   );
 
-  // Tasks missed this week — from the same trend engine the chart uses, so the
-  // stat and the trend never disagree.
-  const missedThisWeek = useMemo(() => computeExecutionTrend(schedule).currentMissed, [schedule]);
+  const weekStatus = useMemo(() => selectWeekStatus(schedule, todayISO), [schedule, todayISO]);
+  const goalPace = useMemo(() => selectGoalPace(schedule), [schedule]);
 
   // The observed weekly ceiling, and how the coming week measures against it.
   // One walk over completion history, shared by both readings.
@@ -868,53 +529,8 @@ export default function OverviewDashboard({
   );
   const weekHeaviestDay = useMemo(() => heaviestDay(schedule, capacity), [schedule, capacity]);
 
-  const weeklyActivity = useMemo(() => {
-    const todayIdx = new Date(todayISO + "T00:00:00").getDay();
-    const monday = addDaysToISO(todayISO, -((todayIdx + 6) % 7));
-    const days = DAYS_ORDER.map((day, i) => {
-      // Commitments never count. (This bar deliberately keeps its existing
-      // occurrence behaviour — it doesn't call isTaskScheduledOn — so that
-      // adding commitments doesn't shift any pre-existing number.)
-      const tasks = (schedule.activities[day] ?? []).filter(isTrackedTask);
-      const total = tasks.length;
-      const date = addDaysToISO(monday, i);
-      const isToday = date === todayISO;
-      const done = tasks.filter((task) =>
-        isToday
-          ? isTaskCompleted(task, taskSummary(task).totalCount)
-          : (task.completionHistory ?? []).some(
-              (event) => event.completionType === "task" && localISODate(new Date(event.completedAt)) === date
-            )
-      ).length;
-      return { label: DAY_LABELS[i], total, done, isToday, pct: ratioPct(done, total) };
-    });
-
-    const totalTasks = days.reduce((sum, day) => sum + day.total, 0);
-    const totalDone = days.reduce((sum, day) => sum + day.done, 0);
-    const tasksPct = ratioPct(totalDone, totalTasks);
-    let habitTotal = 0;
-    let habitDone = 0;
-
-    DAYS_ORDER.forEach((day, i) => {
-      const date = addDaysToISO(monday, i);
-      if (date > todayISO) return;
-      const scheduled = (schedule.rituals ?? []).filter((ritual) => ritualScheduledOnDate(ritual, date, schedule.preferences?.startDate));
-      habitTotal += scheduled.length;
-      // trackingType-aware, and per-date rather than a flat id|date presence
-      // set — a partially logged quantity routine must not count as done here
-      // or this bar disagrees with every other consistency figure in the app.
-      const doneToday = completedRitualIdsOn(schedule.rituals ?? [], schedule.ritualCompletions ?? [], date);
-      habitDone += scheduled.filter((ritual) => doneToday.has(ritual.id)).length;
-    });
-
-    if (totalTasks === 0 && habitTotal === 0) return null;
-    return { days, tasksPct, habitsPct: ratioPct(habitDone, habitTotal) };
-  }, [schedule.activities, schedule.ritualCompletions, schedule.rituals, schedule.preferences?.startDate, taskSummary, todayISO]);
-
-  const hasScheduledTasks = useMemo(
-    () => Object.values(schedule.activities).some((activities) => (activities?.length ?? 0) > 0),
-    [schedule.activities]
-  );
+  const setup = useMemo(() => selectSetupSteps(schedule), [schedule]);
+  const hasScheduledTasks = setup.steps[1].done;
 
   // Getting-started stays up until the user has real momentum (2 of 3 setup
   // steps) or explicitly skips it; the flag is per-device.
@@ -935,12 +551,11 @@ export default function OverviewDashboard({
   }, []);
 
   const setupDone: SetupDone = {
-    plan: schedule.plans.length > 0,
-    task: hasScheduledTasks,
-    ritual: (schedule.rituals?.length ?? 0) > 0,
+    plan: setup.steps[0].done,
+    task: setup.steps[1].done,
+    ritual: setup.steps[2].done,
   };
-  const setupDoneCount = Number(setupDone.plan) + Number(setupDone.task) + Number(setupDone.ritual);
-  const showGettingStarted = !setupDismissed && setupDoneCount < 2;
+  const showGettingStarted = !setupDismissed && setup.show;
 
   const ritualConsistency = useMemo(() => {
     const completions = schedule.ritualCompletions ?? [];
@@ -958,22 +573,6 @@ export default function OverviewDashboard({
         a.dueToday !== b.dueToday ? (a.dueToday ? -1 : 1) : a.adherencePct - b.adherencePct,
       );
   }, [schedule.ritualCompletions, schedule.rituals, schedule.preferences?.startDate, todayISO]);
-
-  // Every plan, because consistency is the point of this card and every plan has
-  // a consistency score whether or not it has milestones. Milestone-less plans
-  // used to be dropped entirely: they rendered a "No milestones" label plus six
-  // grey placeholder dots that read as six unfinished milestones that don't
-  // exist. The row now simply omits the milestone line and dots instead, which
-  // removes the fiction without hiding real plans.
-  const planConsistency = useMemo(() =>
-    schedule.plans.map((plan) => {
-      const milestones = (schedule.milestones ?? []).filter((milestone) => milestone.planId === plan.id);
-      const { consistency } = getPlanCardStats(plan, schedule.activities, todayKey, schedule.preferences?.startDate, schedule.milestones);
-      const milestonesDone = milestones.filter((milestone) => milestone.status === "completed").length;
-      return { plan, consistency, milestonesTotal: milestones.length, milestonesDone };
-    }),
-    [schedule.activities, schedule.milestones, schedule.plans, todayKey]
-  );
 
   const trackerData = useMemo<TrackerRow[]>(() =>
     (schedule.progressTrackers ?? []).map((tracker) => {
@@ -1008,15 +607,12 @@ export default function OverviewDashboard({
     [schedule.metricEntries, schedule.plans, schedule.progressTrackers]
   );
 
-  const executionStreak = useMemo(
-    () => calculateExecutionStreak(schedule, todayISO),
-    [schedule, todayISO]
-  );
+  const openPlan = (planId: string) => (onOpenPlan ? onOpenPlan(planId) : onNavigate(1));
 
   return (
     <div data-testid="overview-dashboard" className="pb-24 lg:pb-8">
-      <div className="mx-auto w-full max-w-[1480px] pt-5 lg:pt-4">
-        <div className="mb-4 hidden items-end justify-between gap-4 lg:flex">
+      <div className="mx-auto w-full max-w-[1320px] pt-5 lg:pt-4">
+        <div className="mb-4 flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
           <div>
             <p className="text-[13px] font-semibold text-neutral-600 dark:text-neutral-400">
               {new Date().toLocaleDateString("en-US", { weekday: "long", month: "long", day: "numeric" })}
@@ -1025,98 +621,85 @@ export default function OverviewDashboard({
               Overview
             </h1>
           </div>
+          {!showGettingStarted && (
+            <NextUpCard
+              next={nextUp}
+              variant="strip"
+              onMarkDone={onMarkTaskDone}
+              onToggleSlot={onToggleSlot}
+              onOpenToday={() => onNavigate(0)}
+            />
+          )}
         </div>
 
         {showGettingStarted ? (
           <GettingStarted onNavigate={onNavigate} done={setupDone} onDismiss={dismissGettingStarted} />
         ) : (
-          <div className="space-y-4">
-            <ExecutionStreakBanner data={executionStreak} />
+          <div className="stagger-rise grid gap-4 lg:grid-cols-[minmax(0,1.7fr)_minmax(320px,1fr)]">
+            {/* ── The review: the week, the plans, the long trends. ── */}
+            <div className="min-w-0 space-y-4">
+              <WeekStatusCard status={weekStatus}>
+                <CapacityCheck load={weekLoad} heaviest={weekHeaviestDay} />
+              </WeekStatusCard>
+              <GoalPaceCard
+                rows={goalPace.rows}
+                totalCount={goalPace.totalCount}
+                onOpenPlan={openPlan}
+                onSeeAll={() => onNavigate(1)}
+              />
+              {hasScheduledTasks && (
+                <div data-testid="overview-progress-card">
+                  <CompletionTrendCard schedule={schedule} />
+                </div>
+              )}
+              <ActiveTrackingCard rows={trackerData} onNavigate={onNavigate} onLogTracker={onLogTracker} />
+            </div>
 
-            <StatGrid
-              tasksDone={tasksDone}
-              tasksTotal={tasksTotal}
-              weekPct={weeklyActivity?.tasksPct ?? 0}
-              missed={missedThisWeek}
-              plans={schedule.plans.length}
-              trackers={trackerData.length}
-              streak={executionStreak}
-              onNavigate={onNavigate}
-            />
-
-            <div className="stagger-rise grid gap-4 lg:grid-cols-[minmax(330px,0.92fr)_minmax(360px,1fr)] xl:grid-cols-[minmax(360px,0.9fr)_minmax(410px,1fr)_minmax(360px,0.92fr)]">
-              <div className="space-y-4">
-                {/* Above Today's Task: catching up on what slipped comes before
-                    working the current day. Renders nothing when there is
-                    nothing to fix, so a clean week costs no space. */}
-                <NeedsAttentionCard data={needsAttention} onNavigate={onNavigate} onHandleMissed={onHandleMissed} onAdaptMilestone={onAdaptMilestone} onReviewUnreliableSlot={onReviewUnreliableSlot} onClearAll={onClearAttention ? () => onClearAttention(needsAttention) : undefined} onDismissOne={onDismissAttentionOne} />
-                <TodayTaskList
-                  tasks={todayTasks}
-                  done={tasksDone}
-                  total={tasksTotal}
-                  plans={schedule.plans}
-                  taskSummary={taskSummary}
-                  taskCheckableIds={taskCheckableIds}
-                  onMarkDone={onMarkTaskDone}
-                  onToggleSlot={onToggleSlot}
-                  onMissed={onMissedTask}
-                  onOpenSubtasks={onOpenSubtasks}
+            {/* ── The rail: what to act on after reading the review. ── */}
+            <div className="min-w-0 space-y-4">
+              <NeedsAttentionCard data={needsAttention} onNavigate={onNavigate} onHandleMissed={onHandleMissed} onAdaptMilestone={onAdaptMilestone} onReviewUnreliableSlot={onReviewUnreliableSlot} onClearAll={onClearAttention ? () => onClearAttention(needsAttention) : undefined} onDismissOne={onDismissAttentionOne} />
+              {/* Trackers waiting on this period's entry — renders nothing
+                  once every check-in is in. */}
+              <CheckInsDueCard
+                trackers={schedule.progressTrackers ?? []}
+                metricEntries={schedule.metricEntries ?? []}
+                todayISO={todayISO}
+                trackingStart={schedule.preferences?.startDate}
+                onLog={onLogTracker}
+                onOpenTracking={() => onNavigate(8)}
+              />
+              {/* The weekly read: what the record says, what to change.
+                  Hidden until there's history to read. */}
+              {setSchedule && (
+                <InsightsCard
+                  schedule={schedule}
+                  setSchedule={setSchedule}
+                  onToast={onToast}
+                  onReviewTask={onReviewTask}
+                  onReviewDay={onReviewDay}
                 />
-                {/* Trackers waiting on this period's entry — renders nothing
-                    once every check-in is in. */}
-                <CheckInsDueCard
-                  trackers={schedule.progressTrackers ?? []}
-                  metricEntries={schedule.metricEntries ?? []}
-                  todayISO={todayISO}
-                  trackingStart={schedule.preferences?.startDate}
-                  onLog={onLogTracker}
-                  onOpenTracking={() => onNavigate(8)}
-                />
-                <DayBreakdownCard
-                  activities={schedule.activities}
-                  categories={schedule.categories}
-                  todayKey={todayKey}
-                  todayISO={todayISO}
-                  preferences={schedule.preferences}
-                  onFillSlot={onCreateTaskAtTime}
-                />
-        
-                <RoutineConsistencyCard rows={ritualConsistency} />
-              </div>
-
-              <div className="space-y-4">
-                {/* The weekly read leads the strategy column: what the record
-                    says, what to change, what's working. Hidden until there's
-                    history to read. */}
-                {setSchedule && (
-                  <InsightsCard
-                    schedule={schedule}
-                    setSchedule={setSchedule}
-                    onToast={onToast}
-                    onReviewTask={onReviewTask}
-                    onReviewDay={onReviewDay}
-                  />
-                )}
-                <ThisWeekCard activity={weeklyActivity} load={weekLoad} heaviest={weekHeaviestDay} />
-                {hasScheduledTasks && (
-                  <div data-testid="overview-progress-card">
-                    <CompletionTrendCard schedule={schedule} />
+              )}
+              <RoutineConsistencyCard rows={ritualConsistency} />
+              {/* Planning the day belongs on the planner; until it moves there
+                  it stays reachable here, folded away from the review. */}
+              {hasScheduledTasks && (
+                <details data-testid="overview-day-breakdown" className={`${CARD} group`}>
+                  <summary className="flex min-h-[48px] cursor-pointer list-none items-center justify-between gap-3 px-4 text-[13px] font-bold text-neutral-800 dark:text-neutral-200 [&::-webkit-details-marker]:hidden">
+                    Where today goes
+                    <IconChevronDown size={16} strokeWidth={2.2} className="text-neutral-500 transition-transform group-open:rotate-180 motion-reduce:transition-none" aria-hidden />
+                  </summary>
+                  <div className="px-1 pb-1">
+                    <DayBreakdownCard
+                      activities={schedule.activities}
+                      categories={schedule.categories}
+                      todayKey={todayKey}
+                      todayISO={todayISO}
+                      preferences={schedule.preferences}
+                      onFillSlot={onCreateTaskAtTime}
+                    />
                   </div>
-                )}
-                <ActiveTrackingCard rows={trackerData} onNavigate={onNavigate} onLogTracker={onLogTracker} />
-              </div>
-
-              {/* col-span-2 at lg is load-bearing, not decorative: the grid only
-                  has 2 template columns until xl, so without a span this card
-                  becomes an orphan in column 1 of a new row, leaving column 2
-                  empty beside it for the rest of the page. At xl a real 3rd
-                  column exists, so col-span-1 there is correct. The row-level
-                  stretch this used to cause (title far from the % pill on an
-                  890px-wide banner) is fixed at the row, not by giving up the
-                  span — see the max-w on each row below. */}
-              <div className="space-y-4 lg:col-span-2 xl:col-span-1">
-                <PlanConsistencyCard rows={planConsistency} onNavigate={onNavigate} />
-              </div>
+                </details>
+              )}
             </div>
           </div>
         )}
