@@ -1,12 +1,13 @@
 import { forwardRef, type ComponentRef } from 'react';
 import {
+  StyleSheet,
   Text as RNText,
   TextInput as RNTextInput,
   type TextInputProps as RNTextInputProps,
   type TextProps as RNTextProps,
   type TextStyle,
 } from 'react-native';
-import { useColorScheme } from 'nativewind';
+import { cssInterop, useColorScheme } from 'nativewind';
 
 /**
  * The app's Text and TextInput — RN's own, plus the three things the PWA's
@@ -30,6 +31,11 @@ import { useColorScheme } from 'nativewind';
  *
  * Reading the class string keeps every ported component's markup a line-by-
  * line match for its web original rather than a re-expression of it.
+ *
+ * 4. Tight leading. A browser lets glyphs spill out of a short line box;
+ *    iOS cuts them off at the top. Avenir Next is tall (ascent + descent is
+ *    about 1.37× its size), so the PWA's `leading-none` / `leading-tight`
+ *    clipped every big number and title. See `fitLineHeight` below.
  */
 const BASE: TextStyle = { fontFamily: 'Avenir Next' };
 const TNUM: TextStyle = { fontVariant: ['tabular-nums'] };
@@ -41,6 +47,36 @@ const TRUNCATE_RE = /(?:^|\s)truncate(?:\s|$)/;
 const CLAMP_RE = /(?:^|\s)line-clamp-(\d)(?:\s|$)/;
 const TNUM_RE = /(?:^|\s)tabular-nums(?:\s|$)/;
 
+/** Avenir Next's own ascent + descent, as a multiple of its font size. */
+const NATURAL_LINE_HEIGHT = 1.37;
+
+/**
+ * Raises a line height shorter than the font to the font's own height, and
+ * takes the difference back out of the vertical margins so the box keeps
+ * the size the PWA's `leading-*` gave it. The glyphs then overhang the box
+ * the way they do in a browser, instead of being clipped. Text that wraps
+ * still grows by the extra space between its lines, which it needs: each
+ * line would clip otherwise.
+ */
+function fitLineHeight(style: RNTextProps['style']): RNTextProps['style'] {
+  const flat = StyleSheet.flatten(style) as TextStyle | undefined;
+  const fontSize = flat?.fontSize;
+  const lineHeight = flat?.lineHeight;
+  if (!fontSize || !lineHeight) return style;
+  const natural = Math.ceil(fontSize * NATURAL_LINE_HEIGHT);
+  if (lineHeight >= natural) return style;
+  const half = (natural - lineHeight) / 2;
+  const top = Number(flat.marginTop ?? flat.marginVertical ?? flat.margin ?? 0);
+  const bottom = Number(flat.marginBottom ?? flat.marginVertical ?? flat.margin ?? 0);
+  return [style, { lineHeight: natural, marginTop: top - half, marginBottom: bottom - half }];
+}
+
+/** RN's Text with NativeWind's classes already resolved into `style`, so the line height can be read. */
+const ResolvedText = forwardRef<ComponentRef<typeof RNText>, RNTextProps>(function ResolvedText({ style, ...props }, ref) {
+  return <RNText ref={ref} style={fitLineHeight(style)} {...props} />;
+});
+cssInterop(ResolvedText, { className: 'style' });
+
 export type TextProps = RNTextProps & { className?: string };
 
 export const Text = forwardRef<ComponentRef<typeof RNText>, TextProps>(function Text(
@@ -51,7 +87,7 @@ export const Text = forwardRef<ComponentRef<typeof RNText>, TextProps>(function 
   const clamp = CLAMP_RE.exec(cls);
   const lines = numberOfLines ?? (TRUNCATE_RE.test(cls) ? 1 : clamp ? Number(clamp[1]) : undefined);
   return (
-    <RNText
+    <ResolvedText
       ref={ref}
       className={cls}
       numberOfLines={lines}
