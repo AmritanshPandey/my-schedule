@@ -35,6 +35,9 @@ export function computeAllMilestoneStates(schedule: Schedule, now = new Date()):
       metricEntries: schedule.metricEntries,
       now,
       trackingStart: schedule.preferences?.startDate,
+      milestones: schedule.milestones,
+      rituals: schedule.rituals,
+      ritualCompletions: schedule.ritualCompletions,
     });
     results.push({
       milestoneId: milestone.id,

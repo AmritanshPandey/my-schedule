@@ -227,6 +227,9 @@ export function calculateGoalProgress(
       metricEntries: schedule.metricEntries ?? [],
       now,
       trackingStart: schedule.preferences?.startDate,
+      milestones: schedule.milestones,
+      rituals: schedule.rituals,
+      ritualCompletions: schedule.ritualCompletions,
     }),
   }));
 

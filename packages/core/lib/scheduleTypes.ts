@@ -339,6 +339,20 @@ export interface Milestone {
   status: "upcoming" | "active" | "completed" | "delayed";
   linkedActivities: string[];
   linkedTrackers: string[];
+  /**
+   * Routine (Ritual) ids whose follow-through counts toward this milestone —
+   * each due day is an expected occurrence, the same way a linked task's is
+   * (see lib/milestoneHealth.ts). Optional so milestones written before
+   * routines could be linked still load; normalization fills in `[]`.
+   */
+  linkedRituals?: string[];
+  /**
+   * The figure the primary linked tracker (`linkedTrackers[0]`) should reach
+   * by `plannedEndDate` — this milestone's checkpoint on the tracker's planned
+   * path (lib/milestoneTargets.ts). Unset = implied by spreading the tracker's
+   * `goalValue` across its milestones by date.
+   */
+  targetValue?: number;
   createdAt: string;
   updatedAt: string;
   // Legacy fields retained for backward-compatible reads/writes.

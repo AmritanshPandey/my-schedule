@@ -15,7 +15,9 @@ import { compareDeadline } from "@/lib/subtaskDeadline";
 import { calculateTaskProgress, isTrackedTask, phaseProgress, resolveSlotState, resolveTaskState } from "@/lib/taskCompletion";
 import { getSlots } from "@/lib/taskMutations";
 import { formatDisplayTime, formatDuration } from "@/lib/timeUtils";
-import type { Plan, Task } from "@/lib/useScheduleDB";
+import type { Milestone, Plan, Task } from "@/lib/useScheduleDB";
+import type { MilestoneLinkKind } from "@/lib/milestoneLinks";
+import MilestoneLinks from "@/components/milestone/MilestoneLinks";
 
 export interface TaskDetailViewProps {
   task: Task | null;
@@ -39,6 +41,9 @@ export interface TaskDetailViewProps {
   dayLabel?: string;
   onEdit?: () => void;
   presentation?: "sheet" | "page";
+  /** Every milestone — shows which ones this task advances. Absent = hidden. */
+  milestones?: readonly Milestone[];
+  onSetMilestoneLink?: (milestoneId: string, kind: MilestoneLinkKind, itemId: string, linked: boolean) => void;
 }
 
 export default function TaskDetailView({
@@ -59,6 +64,8 @@ export default function TaskDetailView({
   dayLabel,
   onEdit,
   presentation = "sheet",
+  milestones,
+  onSetMilestoneLink,
 }: TaskDetailViewProps) {
   const isSession = task?.taskType === "session";
 
@@ -281,6 +288,18 @@ export default function TaskDetailView({
       )}
 
       {dayNoteBlock}
+
+      {/* Which milestones this task moves forward — commitments are never
+          tracked, so linking one would count for nothing. */}
+      {milestones && onSetMilestoneLink && tracked && !readOnly && (
+        <MilestoneLinks
+          milestones={milestones}
+          kind="task"
+          itemId={task.id}
+          planId={task.planId}
+          onSetLink={onSetMilestoneLink}
+        />
+      )}
 
       {/* No empty state when there are no subtasks. The panel that used to sit
           here read "No subtasks — mark the whole task done below", which only

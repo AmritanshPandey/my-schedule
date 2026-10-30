@@ -2,7 +2,9 @@ import { useEffect, useMemo, useState, type ReactNode } from 'react';
 import { Pressable, ScrollView, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { IconArrowBackUp, IconBan, IconCheck, IconClockHour4, IconEdit, IconListCheck, IconNotes, IconX } from '@tabler/icons-react-native';
-import type { Plan, Task } from '@planr/core/lib/scheduleTypes';
+import type { Milestone, Plan, Task } from '@planr/core/lib/scheduleTypes';
+import type { MilestoneLinkKind } from '@planr/core/lib/milestoneLinks';
+import MilestoneLinks from '../milestone/MilestoneLinks';
 import type { ScheduleEntry } from '@planr/core/lib/scheduleEntry';
 import { todayISO } from '@planr/core/lib/dateUtils';
 import { compareDeadline } from '@planr/core/lib/subtaskDeadline';
@@ -36,6 +38,9 @@ export interface TaskDetailViewProps {
   dayLabel?: string;
   onEdit?: () => void;
   presentation?: 'sheet' | 'page';
+  /** Every milestone — shows which ones this item advances. Absent = hidden. */
+  milestones?: readonly Milestone[];
+  onSetMilestoneLink?: (milestoneId: string, kind: MilestoneLinkKind, itemId: string, linked: boolean) => void;
 }
 
 /**
@@ -63,6 +68,8 @@ export default function TaskDetailView({
   dayLabel,
   onEdit,
   presentation = 'sheet',
+  milestones,
+  onSetMilestoneLink,
 }: TaskDetailViewProps) {
   const insets = useSafeAreaInsets();
   const isSession = task?.taskType === 'session';
@@ -257,6 +264,10 @@ export default function TaskDetailView({
     <>
       {task.description ? <Text className="text-[14px] leading-relaxed text-neutral-500 dark:text-neutral-400">{task.description}</Text> : null}
       {dayNoteBlock}
+      {/* Which milestones this task moves forward — commitments never count. */}
+      {milestones && onSetMilestoneLink && tracked && !readOnly ? (
+        <MilestoneLinks milestones={milestones} kind="task" itemId={task.id} planId={task.planId} onSetLink={onSetMilestoneLink} />
+      ) : null}
       {items.length > 0 && (
         <View className="gap-2">
           {items.map((item) => (

@@ -362,6 +362,11 @@ function normalizeMilestone(value: unknown): Milestone | null {
   const linkedActivities = Array.isArray(m.linkedActivities)
     ? m.linkedActivities.filter((id): id is string => typeof id === "string")
     : [];
+  const linkedRituals = Array.isArray(m.linkedRituals)
+    ? m.linkedRituals.filter((id): id is string => typeof id === "string")
+    : [];
+  const targetValue =
+    typeof m.targetValue === "number" && Number.isFinite(m.targetValue) ? m.targetValue : undefined;
   const now = new Date().toISOString();
   return {
     id: m.id,
@@ -375,6 +380,8 @@ function normalizeMilestone(value: unknown): Milestone | null {
     status,
     linkedActivities,
     linkedTrackers,
+    linkedRituals,
+    targetValue,
     createdAt: typeof m.createdAt === "string" ? m.createdAt : now,
     updatedAt: typeof m.updatedAt === "string" ? m.updatedAt : now,
     targetDate: plannedEndDate,

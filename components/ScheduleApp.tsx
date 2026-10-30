@@ -220,6 +220,7 @@ import { dismissAllAttention, dismissibleCount, dismissAttentionKey } from "@/li
 import type { NeedsAttention } from "@/lib/needsAttention";
 import { applyAdaptation } from "@/lib/milestoneAdaptation";
 import { calculateMilestoneState, type MilestoneState } from "@/lib/milestoneHealth";
+import { linkItem, unlinkItem, unlinkEverywhere, type MilestoneLinkKind } from "@/lib/milestoneLinks";
 import AdaptMilestoneSheet from "@/components/plan/AdaptMilestoneSheet";
 import { haptic } from "@/lib/haptics";
 import { buildDeleteConfirmationCopy } from "@/lib/deleteConfirm";
@@ -1927,6 +1928,15 @@ export default function ScheduleApp() {
     }
   }
 
+  // One handler for every milestone link — task, tracker or routine, from
+  // either side (the milestone view or the item's own view).
+  function handleSetMilestoneLink(milestoneId: string, kind: MilestoneLinkKind, itemId: string, linked: boolean) {
+    setSchedule((prev) => ({
+      ...prev,
+      milestones: (linked ? linkItem : unlinkItem)(prev.milestones ?? [], milestoneId, kind, itemId),
+    }));
+  }
+
   function handleDeleteRitual(id: string) {
     const ritual = (schedule.rituals ?? []).find((r) => r.id === id);
     openConfirm(
@@ -1938,6 +1948,8 @@ export default function ScheduleApp() {
         ...prev,
         rituals: (prev.rituals ?? []).filter((r) => r.id !== id),
         ritualCompletions: (prev.ritualCompletions ?? []).filter((c) => c.ritualId !== id),
+        // A deleted routine can't advance anything — drop it from every milestone.
+        milestones: unlinkEverywhere(prev.milestones, "ritual", id),
       }))
     );
   }
@@ -2122,11 +2134,14 @@ export default function ScheduleApp() {
           trackers: schedule.progressTrackers,
           metricEntries: schedule.metricEntries,
           trackingStart: schedule.preferences?.startDate,
+          milestones: schedule.milestones,
+          rituals: schedule.rituals,
+          ritualCompletions: schedule.ritualCompletions,
         }),
       });
     }
     return map;
-  }, [schedule.milestones, schedule.plans, schedule.activities, schedule.progressTrackers, schedule.metricEntries, schedule.preferences?.startDate]);
+  }, [schedule.milestones, schedule.plans, schedule.activities, schedule.progressTrackers, schedule.metricEntries, schedule.preferences?.startDate, schedule.rituals, schedule.ritualCompletions]);
 
   const handleOpenLinkedTask = useCallback((taskId: string) => {
     const task = DAYS.flatMap((d) => scheduleRef.current.activities[d] ?? []).find((t) => t.id === taskId);
@@ -3892,6 +3907,8 @@ export default function ScheduleApp() {
           style={{ paddingTop: "env(safe-area-inset-top, 0px)" }}
         >
           <TaskDetailView
+            milestones={schedule.milestones}
+            onSetMilestoneLink={handleSetMilestoneLink}
             task={subtasksDetailTask}
             linkedPlan={subtasksLinkedPlan}
             readOnly={!!subtasksRef && subtasksRef.dateISO !== todayISO()}
@@ -4593,6 +4610,7 @@ export default function ScheduleApp() {
           {selectedPlan ? (
             <ErrorBoundary section name="Plans">
             <PlanDetailView
+              onSetMilestoneLink={handleSetMilestoneLink}
               plan={selectedPlan}
               schedule={schedule}
               milestones={schedule.milestones ?? []}
@@ -4692,6 +4710,8 @@ export default function ScheduleApp() {
           >
             <ErrorBoundary section name="Tracking">
             <TrackingView
+              milestones={schedule.milestones}
+              onSetMilestoneLink={handleSetMilestoneLink}
               trackers={schedule.progressTrackers}
               metricEntries={schedule.metricEntries}
               plans={schedule.plans}
@@ -4829,6 +4849,9 @@ export default function ScheduleApp() {
                   trackers: schedule.progressTrackers,
                   metricEntries: schedule.metricEntries,
                   trackingStart: schedule.preferences?.startDate,
+                  milestones: schedule.milestones,
+                  rituals: schedule.rituals,
+                  ritualCompletions: schedule.ritualCompletions,
                 })}
                 schedule={schedule}
                 onApply={(adaptation) => setSchedule((prev) => applyAdaptation(prev, adaptation))}
@@ -4997,6 +5020,8 @@ export default function ScheduleApp() {
           style={{ paddingTop: "env(safe-area-inset-top, 0px)" }}
         >
           <RoutineDetailView
+            milestones={schedule.milestones}
+            onSetMilestoneLink={handleSetMilestoneLink}
             ritual={detailRitual}
             ritualCompletions={schedule.ritualCompletions ?? []}
             trackingStart={schedule.preferences?.startDate}

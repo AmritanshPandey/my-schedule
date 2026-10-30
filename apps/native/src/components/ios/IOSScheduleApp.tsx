@@ -83,6 +83,7 @@ import { togglePlanPaused } from '@planr/core/lib/planLifecycle';
 import { dismissAllAttention, dismissAttentionKey, dismissibleCount } from '@planr/core/lib/attentionDismissal';
 import { applyAdaptation } from '@planr/core/lib/milestoneAdaptation';
 import { calculateMilestoneState, type MilestoneState } from '@planr/core/lib/milestoneHealth';
+import { linkItem, unlinkItem, unlinkEverywhere, type MilestoneLinkKind } from '@planr/core/lib/milestoneLinks';
 import { formatDisplayTime, inputToDisplayTime, minutesToInputTime, parseTimeToMinutes, toScheduleDayMinutes } from '@planr/core/lib/timeUtils';
 import { calculateExecutionStreak } from '@planr/core/lib/consistency/calculateExecutionStreak';
 import { completedRitualIdsOn } from '@planr/core/lib/consistency/ritualDayStatus';
@@ -624,11 +625,14 @@ export default function IOSScheduleApp() {
           trackers: schedule.progressTrackers,
           metricEntries: schedule.metricEntries,
           trackingStart: schedule.preferences?.startDate,
+          milestones: schedule.milestones,
+          rituals: schedule.rituals,
+          ritualCompletions: schedule.ritualCompletions,
         }),
       });
     }
     return map;
-  }, [schedule.milestones, plansById, schedule.activities, schedule.progressTrackers, schedule.metricEntries, schedule.preferences?.startDate]);
+  }, [schedule.milestones, plansById, schedule.activities, schedule.progressTrackers, schedule.metricEntries, schedule.preferences?.startDate, schedule.rituals, schedule.ritualCompletions]);
 
   function performDayClear() {
     if (!dayClearRequest) return;
@@ -955,6 +959,15 @@ export default function IOSScheduleApp() {
     }));
   }
 
+  // One handler for every milestone link — task, tracker or routine, from
+  // either side (the milestone view or the item's own view).
+  function handleSetMilestoneLink(milestoneId: string, kind: MilestoneLinkKind, itemId: string, linked: boolean) {
+    setSchedule((prev) => ({
+      ...prev,
+      milestones: (linked ? linkItem : unlinkItem)(prev.milestones ?? [], milestoneId, kind, itemId),
+    }));
+  }
+
   function handleDeleteRitual(id: string) {
     const ritual = (schedule.rituals ?? []).find((item) => item.id === id);
     openConfirm({
@@ -967,6 +980,8 @@ export default function IOSScheduleApp() {
           ...prev,
           rituals: (prev.rituals ?? []).filter((item) => item.id !== id),
           ritualCompletions: (prev.ritualCompletions ?? []).filter((item) => item.ritualId !== id),
+          // A deleted routine can't advance anything — drop it from every milestone.
+          milestones: unlinkEverywhere(prev.milestones, 'ritual', id),
         })),
     });
   }
@@ -1445,6 +1460,8 @@ export default function IOSScheduleApp() {
       return (
         <ErrorBoundary section name="Task detail">
           <TaskDetailView
+            milestones={schedule.milestones}
+            onSetMilestoneLink={handleSetMilestoneLink}
             task={subtasksTask}
             linkedPlan={subtasksTask?.planId ? plansById.get(subtasksTask.planId) ?? null : null}
             readOnly={subtasksRef.dateISO !== todayISO()}
@@ -1849,6 +1866,7 @@ export default function IOSScheduleApp() {
         return (
           <ErrorBoundary section name="Plans">
             <PlanDetailView
+              onSetMilestoneLink={handleSetMilestoneLink}
               plan={selectedPlan}
               schedule={schedule}
               milestones={schedule.milestones ?? []}
@@ -2042,6 +2060,8 @@ export default function IOSScheduleApp() {
         <ErrorBoundary section name="Tracking">
           <TourTarget id="tracking-view">
             <TrackingView
+              milestones={schedule.milestones}
+              onSetMilestoneLink={handleSetMilestoneLink}
               trackers={schedule.progressTrackers}
               metricEntries={schedule.metricEntries}
               plans={schedule.plans}
@@ -2292,6 +2312,9 @@ export default function IOSScheduleApp() {
                 trackers: schedule.progressTrackers,
                 metricEntries: schedule.metricEntries,
                 trackingStart: schedule.preferences?.startDate,
+                milestones: schedule.milestones,
+                rituals: schedule.rituals,
+                ritualCompletions: schedule.ritualCompletions,
               })}
               schedule={schedule}
               onApply={(adaptation) => setSchedule((prev) => applyAdaptation(prev, adaptation))}
@@ -2331,6 +2354,8 @@ export default function IOSScheduleApp() {
       {detailRitual && (
         <View className="absolute inset-0 z-50 bg-[#F5F5F5] dark:bg-[#0E0E0E]" style={{ paddingTop: insets.top }}>
           <RoutineDetailView
+            milestones={schedule.milestones}
+            onSetMilestoneLink={handleSetMilestoneLink}
             ritual={detailRitual}
             ritualCompletions={schedule.ritualCompletions ?? []}
             trackingStart={schedule.preferences?.startDate}

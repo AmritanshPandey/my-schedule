@@ -1,5 +1,5 @@
 import { View } from 'react-native';
-import Svg, { Circle, G, Line, Path, Text as SvgText } from 'react-native-svg';
+import Svg, { Circle, G, Line, Path, Rect, Text as SvgText } from 'react-native-svg';
 import { useColorScheme } from 'nativewind';
 import type { MetricEntry } from '@planr/core/lib/scheduleTypes';
 import type { AccentColor } from '@planr/core/lib/colorSystem';
@@ -52,6 +52,12 @@ interface ProgressChartProps {
   goalValue?: number;
   startingValue?: number;
   bare?: boolean;
+  /** The tracker's planned path through its milestones' figures — see the web chart. */
+  plannedPath?: ReadonlyArray<{ date: string; value: number; milestoneId?: string }>;
+}
+
+function dayNum(iso: string): number {
+  return Math.round(new Date(`${iso}T00:00:00`).getTime() / 86_400_000);
 }
 
 const W = 400;
@@ -71,7 +77,7 @@ function fmtVal(v: number): string {
  * (axis labels, start→goal target line or flat goal rule, dots, date ticks),
  * drawn with react-native-svg from the same coordinate math.
  */
-export default function ProgressChart({ entries, color, metric, goalValue, startingValue, bare = false }: ProgressChartProps) {
+export default function ProgressChart({ entries, color, metric, goalValue, startingValue, bare = false, plannedPath }: ProgressChartProps) {
   const { colorScheme } = useColorScheme();
   const ink = colorScheme === 'dark' ? '#FFFFFF' : '#171717';
   const stroke = STROKE[color] ?? STROKE.cyan;
@@ -80,12 +86,14 @@ export default function ProgressChart({ entries, color, metric, goalValue, start
   // A start and a goal describe the journey with nothing logged yet, so the
   // chart still has something true to say. Without either, an empty tracker
   // has no axis worth drawing.
-  const hasTargetLine = startingValue !== undefined && goalValue !== undefined;
-  if (entries.length === 0 && !hasTargetLine) return null;
+  const path = plannedPath && plannedPath.length > 1 ? plannedPath : null;
+  const hasTargetLine = !path && startingValue !== undefined && goalValue !== undefined;
+  if (entries.length === 0 && !hasTargetLine && !path) return null;
 
   const values = entries.map((e) => e.value);
   const bounds = [
     ...values,
+    ...(path ? path.map((p) => p.value) : []),
     ...(goalValue !== undefined ? [goalValue] : []),
     ...(startingValue !== undefined ? [startingValue] : []),
   ];
@@ -96,8 +104,15 @@ export default function ProgressChart({ entries, color, metric, goalValue, start
   const maxVal = rawMax + padding;
   const valRange = maxVal - minVal || 1;
 
+  // With a planned path the x-axis is time, spanning both the plan and the log.
+  const dayNums = path ? [...entries.map((e) => dayNum(e.date)), ...path.map((p) => dayNum(p.date))] : [];
+  const firstDay = path ? Math.min(...dayNums) : 0;
+  const daySpan = path ? Math.max(...dayNums) - firstDay || 1 : 1;
+  const toX = (iso: string) => PAD.left + ((dayNum(iso) - firstDay) / daySpan) * chartW;
+  const domain = path ? [...entries.map((e) => e.date), ...path.map((p) => p.date)].sort() : [];
+
   const pts = entries.map((e, i) => {
-    const x = PAD.left + (entries.length > 1 ? (i / (entries.length - 1)) * chartW : chartW / 2);
+    const x = path ? toX(e.date) : PAD.left + (entries.length > 1 ? (i / (entries.length - 1)) * chartW : chartW / 2);
     const y = PAD.top + chartH - ((e.value - minVal) / valRange) * chartH;
     return { x, y, e };
   });
@@ -159,7 +174,42 @@ export default function ProgressChart({ entries, color, metric, goalValue, start
             );
           })()}
 
+        {path && (
+          <G>
+            <Path
+              d={path.map((p, i) => `${i === 0 ? 'M' : 'L'} ${toX(p.date).toFixed(1)} ${toY(p.value).toFixed(1)}`).join(' ')}
+              fill="none"
+              stroke={stroke}
+              strokeWidth={1.5}
+              strokeDasharray="4 3"
+              strokeOpacity={0.55}
+            />
+            {path.map((p, i) =>
+              p.milestoneId ? (
+                <Rect
+                  key={`cp${i}`}
+                  x={toX(p.date) - 3}
+                  y={toY(p.value) - 3}
+                  width={6}
+                  height={6}
+                  rotation={45}
+                  originX={toX(p.date)}
+                  originY={toY(p.value)}
+                  fill="none"
+                  stroke={stroke}
+                  strokeWidth={1.5}
+                  strokeOpacity={0.8}
+                />
+              ) : null,
+            )}
+            <SvgText x={W - PAD.right - 2} y={toY(path[path.length - 1].value) - 6} textAnchor="end" fontSize={8} fill={stroke} fillOpacity={0.65}>
+              Plan
+            </SvgText>
+          </G>
+        )}
+
         {!hasTargetLine &&
+          !path &&
           goalValue !== undefined &&
           (() => {
             const gy = PAD.top + chartH - ((goalValue - minVal) / valRange) * chartH;
@@ -177,7 +227,14 @@ export default function ProgressChart({ entries, color, metric, goalValue, start
           <Circle key={`d${i}`} cx={p.x} cy={p.y} r={3.5} fill={stroke} />
         ))}
 
-        {pts.map((p, i) => {
+        {path &&
+          [domain[0], domain[domain.length - 1]].map((d, i) => (
+            <SvgText key={`xd${i}`} x={toX(d)} y={H - 6} textAnchor={i === 0 ? 'start' : 'end'} fontSize={9} fill={ink} fillOpacity={0.4}>
+              {fmtDate(d)}
+            </SvgText>
+          ))}
+
+        {!path && pts.map((p, i) => {
           if (!xLabelIndices.has(i)) return null;
           return (
             <SvgText key={`x${i}`} x={p.x} y={H - 6} textAnchor="middle" fontSize={9} fill={ink} fillOpacity={0.4}>

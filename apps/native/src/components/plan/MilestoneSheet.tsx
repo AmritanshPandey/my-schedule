@@ -10,6 +10,7 @@ import {
 } from '@planr/core/lib/roadmapDates';
 import { formatDate, todayISO } from '@planr/core/lib/dateUtils';
 import { uid } from '@planr/core/lib/id';
+import { milestoneSpan } from '@planr/core/lib/milestoneTargets';
 import BottomSheet from '../ui/BottomSheet';
 import SheetHeader from '../ui/SheetHeader';
 import Button from '../ui/Button';
@@ -31,6 +32,8 @@ export interface MilestoneSaveData {
   status: Milestone['status'];
   linkedActivities: string[];
   linkedTrackers: string[];
+  /** This milestone's own figure on its tracker (see lib/milestoneTargets.ts). Undefined = implied. */
+  targetValue?: number;
   sortOrder: number;
   targetDate?: string;
   estimatedDays?: number;
@@ -85,6 +88,8 @@ interface DraftState {
   newTrackerGoalDirection: GoalDirection;
   newTrackerGoalValue: string;
   newTrackerStartingValue: string;
+  /** The figure the tracker should reach by this milestone's end. Blank = implied by the plan. */
+  targetValue: string;
 }
 
 const DURATION_TYPES: Array<{ value: DurationType; label: string }> = [
@@ -133,6 +138,7 @@ function emptyDraft(startDate: string): DraftState {
     newTrackerGoalDirection: 'increase_good',
     newTrackerGoalValue: '',
     newTrackerStartingValue: '',
+    targetValue: '',
   };
 }
 
@@ -153,6 +159,7 @@ function milestoneToDraft(milestone: Milestone): DraftState {
     newTrackerGoalDirection: 'increase_good',
     newTrackerGoalValue: '',
     newTrackerStartingValue: '',
+    targetValue: milestone.targetValue !== undefined ? String(milestone.targetValue) : '',
   };
 }
 
@@ -222,6 +229,31 @@ export default function MilestoneSheet({
     return { count: originalFuture.length, shiftDays };
   }, [draft.startDate, milestone, mode, orderedMilestones, plannedDurationDays, plannedEndDate]);
 
+  // The tracker this milestone's own figure is set on — the linked one, or
+  // the existing one being picked. A brand-new tracker's goal is its figure.
+  const targetTracker =
+    (milestone?.linkedTrackers?.[0]
+      ? trackers.find((t) => t.id === milestone.linkedTrackers[0])
+      : draft.metricMode === 'existing'
+        ? trackers.find((t) => t.id === draft.existingTrackerId)
+        : undefined) ?? null;
+
+  // What the plan implies when no figure is typed — the input's placeholder.
+  const impliedTarget = useMemo(() => {
+    if (!targetTracker || !draft.startDate || !plannedEndDate) return null;
+    const self = {
+      ...(milestone ?? {}),
+      id: milestone?.id ?? '__draft',
+      startDate: draft.startDate,
+      plannedEndDate,
+      linkedTrackers: [targetTracker.id],
+      targetValue: undefined,
+      sortOrder: milestone?.sortOrder ?? milestones.length,
+    } as Milestone;
+    const siblings = [...milestones.filter((m) => m.id !== self.id), self];
+    return milestoneSpan(self, targetTracker, siblings, [])?.to ?? null;
+  }, [targetTracker, draft.startDate, plannedEndDate, milestone, milestones]);
+
   const newTrackerTitle = draft.newTrackerTitle.trim();
   const willCreateNewTracker = draft.metricMode === 'new' && newTrackerTitle.length > 0;
 
@@ -249,6 +281,9 @@ export default function MilestoneSheet({
       linkedTrackers = [draft.existingTrackerId];
     }
 
+    const parsedTarget = draft.targetValue.trim() ? Number(draft.targetValue) : undefined;
+    const targetValue = targetTracker && Number.isFinite(parsedTarget) ? parsedTarget : undefined;
+
     onSave({
       title,
       description: draft.description.trim() || undefined,
@@ -260,6 +295,7 @@ export default function MilestoneSheet({
       status,
       linkedActivities: milestone?.linkedActivities ?? [],
       linkedTrackers,
+      targetValue,
       newTracker,
       sortOrder: milestone?.sortOrder ?? orderedMilestones.length,
       targetDate: plannedEndDate,
@@ -414,6 +450,21 @@ export default function MilestoneSheet({
                   </View>
                 </View>
               )}
+            </View>
+          )}
+
+          {targetTracker && (
+            <View>
+              <Input
+                label={`Target by ${plannedEndDate ? formatDate(plannedEndDate) : 'the end'}${targetTracker.unit ? ` (${targetTracker.unit})` : ''}`}
+                keyboardType="decimal-pad"
+                value={draft.targetValue}
+                onChangeText={(v) => setDraft((d) => ({ ...d, targetValue: v }))}
+                placeholder={impliedTarget !== null ? `${impliedTarget} — from the plan` : 'e.g. 21'}
+              />
+              <Text className="mt-1.5 text-[12px] leading-snug text-neutral-500 dark:text-neutral-400">
+                Where {targetTracker.title} should be when this milestone ends. Leave blank to spread its goal across the plan's milestones.
+              </Text>
             </View>
           )}
         </View>
