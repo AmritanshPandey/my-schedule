@@ -27,9 +27,9 @@ import { CadencePicker } from '../tracking/CadencePicker';
 import { DAYS } from '@planr/core/lib/scheduleConstants';
 import { computeRoadmapStats } from '@planr/core/lib/roadmapEngine';
 import { calculateMilestoneProgress, type MilestoneProgress } from '@planr/core/lib/planProgress';
-import { calculateMilestoneState, type MilestoneState } from '@planr/core/lib/milestoneHealth';
+import { calculateMilestoneState, linkedRoutineFollowThrough, planProgressFromMilestones, type MilestoneState } from '@planr/core/lib/milestoneHealth';
 import type { MilestoneLinkKind } from '@planr/core/lib/milestoneLinks';
-import { milestoneSpan } from '@planr/core/lib/milestoneTargets';
+import { formatTrackerFigure, milestoneSpan } from '@planr/core/lib/milestoneTargets';
 import MilestoneLinks from '../milestone/MilestoneLinks';
 import { paceNarrative } from '@planr/core/lib/paceModel';
 import { isPlanRunning, planLifecycleLabel } from '@planr/core/lib/planLifecycle';
@@ -357,6 +357,12 @@ export default function PlanDetailView({
 
   // ── Milestone detail sheet ───────────────────────────────────────────────
   const [viewingMilestone, setViewingMilestone] = useState<Milestone | null>(null);
+  // The routine picker stays folded until asked for, so a wall of every
+  // routine doesn't bury the ones already linked.
+  const [routinePickerOpen, setRoutinePickerOpen] = useState(false);
+  useEffect(() => {
+    setRoutinePickerOpen(false);
+  }, [viewingMilestone?.id]);
 
   // ── Section edit modes ──────────────────────────────────────────────────
   const [trackersEditMode, setTrackersEditMode] = useState(false);
@@ -364,8 +370,21 @@ export default function PlanDetailView({
   // ── Derived data ────────────────────────────────────────────────────────
   const uniqueTasks = useMemo(() => getUniquePlanTasks(plan.id, schedule.activities), [plan.id, schedule.activities]);
 
-  // Task-id → title lookup for the milestone task-breakdown list.
-  const taskTitleById = useMemo(() => new Map(uniqueTasks.map(({ task }) => [task.id, task.title])), [uniqueTasks]);
+  // Task-id → label for the milestone task list and its add chips. A weekly
+  // task is stored once per weekday, so when a title repeats, its weekdays
+  // tell the copies apart.
+  const taskTitleById = useMemo(() => {
+    const titleCounts = new Map<string, number>();
+    for (const { task } of uniqueTasks) titleCounts.set(task.title, (titleCounts.get(task.title) ?? 0) + 1);
+    return new Map(
+      uniqueTasks.map(({ task, activeDays }) => [
+        task.id,
+        (titleCounts.get(task.title) ?? 0) > 1
+          ? `${task.title} · ${activeDays.map((d) => d.charAt(0).toUpperCase() + d.slice(1, 3)).join(', ')}`
+          : task.title,
+      ]),
+    );
+  }, [uniqueTasks]);
 
   const trackers = useMemo(() => schedule.progressTrackers.filter((t) => t.planId === plan.id), [plan.id, schedule.progressTrackers]);
 
@@ -420,6 +439,10 @@ export default function PlanDetailView({
     () => computeRoadmapStats(plan.id, schedule.activities as unknown as Record<string, Task[]>, milestones, plan),
     [plan, schedule.activities, milestones],
   );
+
+  // The plan's headline % is the mean of its milestones' headline figures, so
+  // the card and each milestone row agree. Null until any milestone has data.
+  const planMilestonePct = useMemo(() => planProgressFromMilestones(planMilestones, milestoneStateById), [planMilestones, milestoneStateById]);
 
   const roadmapEndDate = planEffectiveEndDate(plan, planMilestones);
   const dateRange = plan.startDate && roadmapEndDate ? `${formatPlanDate(plan.startDate)} – ${formatPlanDate(roadmapEndDate)}` : formatPlanRange(plan);
@@ -793,6 +816,7 @@ export default function PlanDetailView({
     const isCompleted = status === 'completed';
     const progress = milestoneProgressById.get(m.id);
     const health = milestoneStateById.get(m.id);
+    const rowPct = isCompleted ? 100 : health?.overallProgress ?? null;
     const isActive = status === 'active';
     const isDelayed = status === 'delayed';
     const daysLabel = `${m.plannedDurationDays} Day${m.plannedDurationDays === 1 ? '' : 's'}`;
@@ -888,10 +912,10 @@ export default function PlanDetailView({
               <View className="mt-1.5 flex-row items-center gap-2">
                 {(m.linkedActivities?.length ?? 0) > 0 && (
                   <View className="flex-row items-center gap-1">
-                    <Icon icon={IconCheck} size={11} strokeWidth={2.5} className="text-emerald-600 dark:text-emerald-400" />
-                    <Text className="text-[11px] font-semibold text-emerald-600 dark:text-emerald-400">
+                    <Icon icon={IconListCheck} size={12} strokeWidth={2} className="shrink-0 text-neutral-600 dark:text-neutral-400" />
+                    <Text className="text-[11px] font-semibold text-neutral-600 dark:text-neutral-400">
                       {progress?.hasLinkedTasks
-                        ? `${progress.completedCount}/${progress.totalCount} tasks · ${progress.pct}%`
+                        ? `${progress.completedCount}/${progress.totalCount} tasks`
                         : `${m.linkedActivities!.length} task${m.linkedActivities!.length !== 1 ? 's' : ''}`}
                     </Text>
                   </View>
@@ -914,13 +938,18 @@ export default function PlanDetailView({
                 )}
               </View>
             )}
-            {health?.overallProgress !== null && health?.overallProgress !== undefined && (
-              <ProgressBar
-                pct={health.overallProgress}
-                height={4}
-                fillClassName={isCompleted ? 'bg-neutral-300 dark:bg-white/20' : 'bg-emerald-500'}
-                className="mt-1.5 max-w-[160px]"
-              />
+            {/* The milestone's one headline %, the figure the plan card
+                averages; a completed milestone counts as done there too. */}
+            {rowPct !== null && (
+              <View className="mt-1.5 flex-row items-center gap-2">
+                <ProgressBar
+                  pct={rowPct}
+                  height={4}
+                  fillClassName={isCompleted ? 'bg-neutral-300 dark:bg-white/20' : 'bg-emerald-500'}
+                  className="max-w-[160px] flex-1"
+                />
+                <Text className="text-[11px] font-bold tabular-nums text-neutral-600 dark:text-neutral-400">{rowPct}%</Text>
+              </View>
             )}
             {/* Forecast vs target — only once there's an actual projection. */}
             {health?.forecastDate && showHealthBadge && (
@@ -967,18 +996,21 @@ export default function PlanDetailView({
   // ── Roadmap overview ─────────────────────────────────────────────────────
 
   function renderRoadmapOverview() {
-    const { currentPhaseName, consistencyPct, overallPct, overallPctFromLinkedTasks, totalMilestones } = roadmapStats;
+    const { currentPhaseName, consistencyPct, totalMilestones } = roadmapStats;
+    // Plan Progress averages the milestones' headline figures (the same
+    // numbers the rows show); with nothing to measure yet, Task Consistency.
+    const overallPct = planMilestonePct ?? consistencyPct;
     const targetLabel = roadmapStats.targetDate ? formatPlanDate(roadmapStats.targetDate) : '—';
     const progressSummary =
-      overallPct === 0 ? 'Complete a task in this plan to start progress.' : overallPct >= 80 ? "You're on track." : 'Progress is building as you complete plan tasks.';
+      overallPct === 0 ? 'Log progress on a milestone to start.' : overallPct >= 80 ? "You're on track." : 'Progress builds as your milestones move.';
     // Names the source so Plan Progress, Task Consistency and Accuracy read as
     // complementary, not disagreeing.
     const progressBlendNote =
       totalMilestones === 0
         ? '= Task Consistency (no milestones yet)'
-        : overallPctFromLinkedTasks
-          ? 'Based on linked task & subtask completion'
-          : '= Task Consistency (no linked tasks yet)';
+        : planMilestonePct !== null
+          ? `Average of ${totalMilestones} milestone${totalMilestones !== 1 ? 's' : ''}`
+          : '= Task Consistency (nothing logged yet)';
 
     const tiles: { label: string; value: string; caption: string | null }[] = [
       { label: 'Current focus', value: currentPhaseName ?? 'Starting out', caption: null },
@@ -1383,12 +1415,15 @@ export default function PlanDetailView({
             const linkedSpan = linkedTracker
               ? milestoneSpan(m, linkedTracker, schedule.milestones, schedule.metricEntries, schedule.preferences?.startDate)
               : null;
+            // Planned checkpoints are fractional; show them at the precision
+            // this tracker is logged in.
+            const fig = (v: number) => (linkedTracker ? formatTrackerFigure(v, linkedTracker, schedule.metricEntries) : String(v));
             const routines = schedule.rituals ?? [];
             const linkedRoutineIds = m.linkedRituals ?? [];
             const linkableRoutines = routines.filter((r) => !linkedRoutineIds.includes(r.id));
 
-            const chip = 'rounded-full border border-neutral-200 px-3 py-1.5 active:bg-neutral-50 dark:border-white/10 dark:active:bg-white/[0.04]';
-            const chipText = 'text-[12.5px] font-semibold text-neutral-600 dark:text-neutral-300';
+            const chip = 'min-h-11 justify-center rounded-full border border-neutral-200 px-3.5 active:bg-neutral-50 dark:border-white/10 dark:active:bg-white/[0.04]';
+            const chipText = 'text-[13px] font-semibold text-neutral-600 dark:text-neutral-300';
 
             return (
               <View className="px-5 pb-8 pt-4">
@@ -1447,11 +1482,11 @@ export default function PlanDetailView({
                     {health.metricCurrentValue !== null && health.metricTargetValue !== null && (
                       <View className="flex-row items-baseline justify-between">
                         <Text className="text-[22px] font-bold tracking-[-0.3px] text-neutral-900 dark:text-white">
-                          {health.metricCurrentValue}
+                          {fig(health.metricCurrentValue)}
                           {health.metricUnit ? ` ${health.metricUnit}` : ''}
                         </Text>
                         <Text className="text-[13px] font-medium text-neutral-500 dark:text-neutral-400">
-                          Target: {health.metricTargetValue}
+                          Target: {fig(health.metricTargetValue)}
                           {health.metricUnit ? ` ${health.metricUnit}` : ''}
                         </Text>
                       </View>
@@ -1474,7 +1509,7 @@ export default function PlanDetailView({
                           health.progressSources.map((src) => (
                             <View key={src.kind}>
                               <Text className="text-[12px] font-bold text-neutral-500 dark:text-neutral-400">
-                                {src.kind === 'metric' ? 'Metric' : src.kind === 'tasks' ? 'Tasks' : 'Routines'}
+                                {src.kind === 'metric' ? linkedTracker?.title ?? 'Metric' : src.kind === 'tasks' ? 'Tasks' : 'Routines'}
                               </Text>
                               <Text className="text-[14px] font-semibold tabular-nums text-neutral-800 dark:text-neutral-100">{src.pct}%</Text>
                             </View>
@@ -1557,7 +1592,7 @@ export default function PlanDetailView({
                                 {t.completedCount}/{t.totalCount}
                               </Text>
                               {onUnlinkTaskFromMilestone && (
-                                <Pressable accessibilityRole="button" hitSlop={8} onPress={() => onUnlinkTaskFromMilestone(m.id, t.taskId)}>
+                                <Pressable accessibilityRole="button" hitSlop={12} onPress={() => onUnlinkTaskFromMilestone(m.id, t.taskId)} className="min-h-11 justify-center px-1">
                                   <Text className="text-[11px] font-semibold text-neutral-500 dark:text-neutral-400">Unlink</Text>
                                 </Pressable>
                               )}
@@ -1571,13 +1606,13 @@ export default function PlanDetailView({
                         <View className="flex-row flex-wrap gap-1.5">
                           {linkableTasks.map(({ task }) => (
                             <Pressable key={task.id} accessibilityRole="button" onPress={() => onLinkTaskToMilestone(m.id, task.id)} className={chip}>
-                              <Text className={chipText}>+ {task.title}</Text>
+                              <Text className={chipText}>+ {taskTitleById.get(task.id) ?? task.title}</Text>
                             </Pressable>
                           ))}
                         </View>
                       ) : !progress?.hasLinkedTasks ? (
                         <Text className="text-[13px] leading-relaxed text-neutral-500 dark:text-neutral-400">
-                          No tasks on this plan yet — add one to track activity toward this milestone.
+                          No tasks on this plan yet. Add one to track activity toward this milestone.
                         </Text>
                       ) : null)}
                   </View>
@@ -1592,28 +1627,58 @@ export default function PlanDetailView({
                       <View className="mb-2">
                         {linkedRoutineIds.map((rid) => {
                           const r = routines.find((x) => x.id === rid);
+                          const follow = linkedRoutineFollowThrough(
+                            m,
+                            { rituals: routines, completions: schedule.ritualCompletions ?? [], trackingStart: schedule.preferences?.startDate },
+                            rid,
+                            todayISO(),
+                          );
                           return (
                             <View key={rid} className="min-h-11 flex-row items-center justify-between gap-3">
                               <Text className="min-w-0 flex-1 truncate text-[14px] font-medium text-neutral-700 dark:text-neutral-300">
                                 {r?.title ?? 'Deleted routine'}
                               </Text>
-                              <Pressable accessibilityRole="button" hitSlop={10} onPress={() => onSetMilestoneLink(m.id, 'ritual', rid, false)}>
-                                <Text className="text-[11px] font-semibold text-neutral-500 dark:text-neutral-400">Unlink</Text>
-                              </Pressable>
+                              <View className="shrink-0 flex-row items-center gap-2">
+                                <Text className="text-[12px] font-semibold tabular-nums text-neutral-500 dark:text-neutral-400">
+                                  {follow ? `${follow.pct}% followed` : 'Not due yet'}
+                                </Text>
+                                <Pressable
+                                  accessibilityRole="button"
+                                  hitSlop={10}
+                                  onPress={() => onSetMilestoneLink(m.id, 'ritual', rid, false)}
+                                  className="min-h-11 justify-center px-1"
+                                >
+                                  <Text className="text-[11px] font-semibold text-neutral-500 dark:text-neutral-400">Unlink</Text>
+                                </Pressable>
+                              </View>
                             </View>
                           );
                         })}
                       </View>
                     )}
-                    {linkableRoutines.length > 0 && (
-                      <View className="flex-row flex-wrap gap-1.5">
-                        {linkableRoutines.map((r) => (
-                          <Pressable key={r.id} accessibilityRole="button" onPress={() => onSetMilestoneLink(m.id, 'ritual', r.id, true)} className={chip}>
-                            <Text className={chipText}>+ {r.title}</Text>
-                          </Pressable>
-                        ))}
-                      </View>
-                    )}
+                    {linkableRoutines.length > 0 &&
+                      (routinePickerOpen || linkedRoutineIds.length === 0 ? (
+                        <View className="flex-row flex-wrap gap-1.5">
+                          {linkableRoutines.map((r) => (
+                            <Pressable
+                              key={r.id}
+                              accessibilityRole="button"
+                              onPress={() => {
+                                onSetMilestoneLink(m.id, 'ritual', r.id, true);
+                                setRoutinePickerOpen(false);
+                              }}
+                              className={chip}
+                            >
+                              <Text className={chipText}>+ {r.title}</Text>
+                            </Pressable>
+                          ))}
+                        </View>
+                      ) : (
+                        <Pressable accessibilityRole="button" onPress={() => setRoutinePickerOpen(true)} className="min-h-11 flex-row items-center gap-1.5 self-start">
+                          <Icon icon={IconPlus} size={14} strokeWidth={2.25} className="text-neutral-700 dark:text-neutral-300" />
+                          <Text className="text-[13px] font-semibold text-neutral-700 dark:text-neutral-300">Link a routine</Text>
+                        </Pressable>
+                      ))}
                   </View>
                 )}
 
@@ -1627,7 +1692,7 @@ export default function PlanDetailView({
                         <View className="min-w-0 flex-1">
                           <Text className="truncate text-[14px] font-semibold text-neutral-800 dark:text-neutral-100">{linkedTracker.title}</Text>
                           <Text className="text-[12px] text-neutral-500 dark:text-neutral-400">
-                            {linkedSpan ? linkedSpan.from : linkedTracker.startingValue ?? '–'} → {linkedSpan ? linkedSpan.to : linkedTracker.goalValue ?? '–'}
+                            {linkedSpan ? fig(linkedSpan.from) : linkedTracker.startingValue ?? '–'} → {linkedSpan ? fig(linkedSpan.to) : linkedTracker.goalValue ?? '–'}
                             {linkedTracker.unit ? ` ${linkedTracker.unit}` : ''}
                             {linkedTracker.goalDirection === 'decrease_good' ? ' ↓' : ' ↑'}
                             {m.targetValue === undefined && linkedSpan ? ' · implied by the plan' : ''}

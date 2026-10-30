@@ -36,12 +36,12 @@ registerHooks({
   },
 });
 
-const { plannedTrackerPath, milestoneSpan, expectedValueOn, planGap } = await import("@/packages/core/lib/milestoneTargets.ts");
+const { plannedTrackerPath, milestoneSpan, expectedValueOn, planGap, formatTrackerFigure } = await import("@/packages/core/lib/milestoneTargets.ts");
 const {
   milestonesForTask, milestonesForTracker, milestonesForRitual, linkableMilestones,
   linkItem, unlinkItem, unlinkEverywhere,
 } = await import("@/packages/core/lib/milestoneLinks.ts");
-const { calculateMilestoneState, calculateConsistency, routineOccurrences } = await import("@/packages/core/lib/milestoneHealth.ts");
+const { calculateMilestoneState, calculateConsistency, routineOccurrences, planProgressFromMilestones, linkedRoutineFollowThrough } = await import("@/packages/core/lib/milestoneHealth.ts");
 const { migrate } = await import("@/packages/core/lib/scheduleMigrate.ts");
 
 // ── Fixtures ─────────────────────────────────────────────────────────────────
@@ -261,4 +261,66 @@ test("a routine-limited status message names routines, not tasks", () => {
   });
   assert.match(state.statusMessage, /routine consistency/);
   assert.doesNotMatch(state.statusMessage, /task consistency/);
+});
+
+test("behind a milestone's planned start is not 'moved away from the target' while still ahead of the real start", () => {
+  // 5 → 35 km over three milestones; the second milestone's planned span
+  // starts at 15. A long run of 14 km is behind that checkpoint but well up
+  // on where the tracker began, so it has not moved the wrong way.
+  const all = [base, half, thirty];
+  const state = calculateMilestoneState({
+    milestone: half, plan, activities: {}, trackers: [distance],
+    metricEntries: [entry("2026-07-01", 5), entry("2026-08-05", 14)],
+    now: new Date("2026-08-05T12:00:00"), milestones: all,
+  });
+  assert.equal(state.metricMovedWrongDirection, false);
+  assert.equal(state.metricProgress, 0, "still behind this milestone's own starting checkpoint");
+
+  // Dropping below the real starting figure is moving the wrong way.
+  const worse = calculateMilestoneState({
+    milestone: half, plan, activities: {}, trackers: [distance],
+    metricEntries: [entry("2026-07-01", 5), entry("2026-08-05", 4)],
+    now: new Date("2026-08-05T12:00:00"), milestones: all,
+  });
+  assert.equal(worse.metricMovedWrongDirection, true);
+});
+
+test("plan progress is the mean of milestone headlines, a completed one counting as 100", () => {
+  const ms = [
+    { id: "a", status: "completed" },
+    { id: "b", status: "active" },
+    { id: "c", status: "active" },
+  ];
+  const states = new Map([["a", { overallProgress: 40 }], ["b", { overallProgress: 2 }], ["c", { overallProgress: null }]]);
+  assert.equal(planProgressFromMilestones(ms, states), 34);
+  // Nothing to measure anywhere: null, so the caller can fall back.
+  assert.equal(planProgressFromMilestones([{ id: "x", status: "active" }], new Map([["x", { overallProgress: null }]])), null);
+  assert.equal(planProgressFromMilestones([], new Map()), null);
+});
+
+test("planned figures round to the precision the tracker is logged in", () => {
+  const tracker = { id: "w", startingValue: 82, goalValue: 72 };
+  const entries = [{ trackerId: "w", value: 81.2 }, { trackerId: "other", value: 1.234 }];
+  assert.equal(formatTrackerFigure(78.7857, tracker, entries), "78.8");
+  assert.equal(formatTrackerFigure(75.45, tracker, entries), "75.5");
+  // Whole-number tracker: whole-number figures.
+  assert.equal(formatTrackerFigure(21.6, { id: "km", startingValue: 5, goalValue: 35 }), "22");
+});
+
+test("a linked routine's follow-through counts its due days so far, not the whole window", () => {
+  const milestone = { id: "m", startDate: "2026-10-26", plannedEndDate: "2026-11-22", linkedRituals: [] };
+  const daily = { id: "r", title: "Protein", time: "08:00", repeatDays: ["monday","tuesday","wednesday","thursday","friday","saturday","sunday"], color: "emerald" };
+  const routines = {
+    rituals: [daily],
+    completions: [
+      { id: "c1", ritualId: "r", date: "2026-10-26" },
+      { id: "c2", ritualId: "r", date: "2026-10-27" },
+    ],
+  };
+  const f = linkedRoutineFollowThrough(milestone, routines, "r", "2026-10-29");
+  assert.equal(f.expected, 4);
+  assert.equal(f.completed, 2);
+  assert.equal(f.pct, 50);
+  // Before the milestone starts there is nothing to report.
+  assert.equal(linkedRoutineFollowThrough(milestone, routines, "r", "2026-10-20"), null);
 });

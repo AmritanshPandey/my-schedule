@@ -10,7 +10,7 @@ import {
 } from '@planr/core/lib/roadmapDates';
 import { formatDate, todayISO } from '@planr/core/lib/dateUtils';
 import { uid } from '@planr/core/lib/id';
-import { milestoneSpan } from '@planr/core/lib/milestoneTargets';
+import { formatTrackerFigure, milestoneSpan } from '@planr/core/lib/milestoneTargets';
 import BottomSheet from '../ui/BottomSheet';
 import SheetHeader from '../ui/SheetHeader';
 import Button from '../ui/Button';
@@ -460,7 +460,7 @@ export default function MilestoneSheet({
                 keyboardType="decimal-pad"
                 value={draft.targetValue}
                 onChangeText={(v) => setDraft((d) => ({ ...d, targetValue: v }))}
-                placeholder={impliedTarget !== null ? `${impliedTarget} — from the plan` : 'e.g. 21'}
+                placeholder={impliedTarget !== null && targetTracker ? `${formatTrackerFigure(impliedTarget, targetTracker)} from the plan` : 'e.g. 21'}
               />
               <Text className="mt-1.5 text-[12px] leading-snug text-neutral-500 dark:text-neutral-400">
                 Where {targetTracker.title} should be when this milestone ends. Leave blank to spread its goal across the plan's milestones.

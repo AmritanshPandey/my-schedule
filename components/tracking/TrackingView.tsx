@@ -335,6 +335,7 @@ function MetricCard({
           itemId={tracker.id}
           planId={tracker.planId}
           onSetLink={onSetMilestoneLink}
+          hideIds={milestoneLink ? [milestoneLink.milestone.id] : undefined}
         />
       )}
 

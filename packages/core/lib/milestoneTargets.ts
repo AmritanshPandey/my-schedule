@@ -174,3 +174,34 @@ export function planGap(
   const ahead = tracker.goalDirection === "decrease_good" ? delta <= 0 : delta >= 0;
   return { expected, actual, delta, ahead };
 }
+
+/** Decimal places in a number as written (82 → 0, 81.2 → 1). */
+function decimalsOf(value: number): number {
+  if (!Number.isFinite(value) || Number.isInteger(value)) return 0;
+  const text = String(value);
+  const dot = text.indexOf(".");
+  return dot === -1 ? 0 : text.length - dot - 1;
+}
+
+/**
+ * A planned figure (an implied checkpoint like 78.7857…) shown at the
+ * precision the person actually logs this tracker in: the most decimals
+ * among its start, goal and entries, capped at 2. 78.79 kg on a tracker
+ * logged as 81.2, 80.6 reads as 78.8 kg.
+ */
+export function formatTrackerFigure(
+  value: number,
+  tracker: Pick<ProgressTracker, "id" | "startingValue" | "goalValue">,
+  metricEntries: readonly MetricEntry[] = [],
+): string {
+  let places = 0;
+  for (const v of [tracker.startingValue, tracker.goalValue]) {
+    if (typeof v === "number") places = Math.max(places, decimalsOf(v));
+  }
+  for (const e of metricEntries) {
+    if (e.trackerId === tracker.id) places = Math.max(places, decimalsOf(e.value));
+  }
+  places = Math.min(2, places);
+  const factor = 10 ** places;
+  return String(Math.round((value + Number.EPSILON) * factor) / factor);
+}

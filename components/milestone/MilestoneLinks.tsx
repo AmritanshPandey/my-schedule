@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { IconFlag3, IconPlus, IconX } from "@tabler/icons-react";
+import { IconCircleCheck, IconFlag3, IconPlus, IconX } from "@tabler/icons-react";
 import type { Milestone } from "@/lib/useScheduleDB";
 import { linkableMilestones, milestonesForItem, type MilestoneLinkKind } from "@/lib/milestoneLinks";
 import { haptic } from "@/lib/haptics";
@@ -18,6 +18,7 @@ export default function MilestoneLinks({
   itemId,
   planId,
   onSetLink,
+  hideIds,
   className = "",
 }: {
   milestones: readonly Milestone[];
@@ -26,37 +27,58 @@ export default function MilestoneLinks({
   /** Limit the picker to one plan's milestones (tasks and trackers). Omit for routines. */
   planId?: string;
   onSetLink: (milestoneId: string, kind: MilestoneLinkKind, itemId: string, linked: boolean) => void;
+  /** Milestones the surrounding card already shows (Tracking's milestone panel), so they aren't listed twice. */
+  hideIds?: readonly string[];
   className?: string;
 }) {
   const [picking, setPicking] = useState(false);
   const linked = milestonesForItem(milestones, kind, itemId);
   const linkedIds = new Set(linked.map((m) => m.id));
   const options = linkableMilestones(milestones, planId).filter((m) => !linkedIds.has(m.id));
-  if (linked.length === 0 && options.length === 0) return null;
+  const shown = hideIds ? linked.filter((m) => !hideIds.includes(m.id)) : linked;
+  if (shown.length === 0 && options.length === 0) return null;
+  // A link is only shown as missing when there truly is none; one the card
+  // already shows elsewhere just isn't repeated.
+  const label = shown.length > 0 ? (shown.length < linked.length ? "Also advances" : "Advances") : linked.length === 0 ? "Not linked to a milestone" : null;
 
   return (
     <div className={className} data-testid={`milestone-links-${kind}`}>
-      <p className="mb-1.5 text-[12px] font-bold text-neutral-500 dark:text-neutral-400">
-        {linked.length > 0 ? "Advances" : "Not linked to a milestone"}
-      </p>
+      {label && (
+        <p className="mb-1.5 text-[11px] font-bold uppercase tracking-[0.08em] text-neutral-600 dark:text-neutral-400">
+          {label}
+        </p>
+      )}
       <div className="flex flex-wrap items-center gap-1.5">
-        {linked.map((m) => (
-          <span
-            key={m.id}
-            className="inline-flex min-h-11 items-center gap-1.5 rounded-full border border-neutral-200 pl-3 pr-1 text-[12.5px] font-bold text-neutral-700 dark:border-white/10 dark:text-neutral-200"
-          >
-            <IconFlag3 size={13} strokeWidth={2} className="shrink-0 text-neutral-500 dark:text-neutral-400" />
-            <span className="max-w-[180px] truncate">{m.title}</span>
-            <button
-              type="button"
-              onClick={() => { haptic("light"); onSetLink(m.id, kind, itemId, false); }}
-              aria-label={`Unlink from ${m.title}`}
-              className="flex h-9 w-9 items-center justify-center rounded-full text-neutral-500 transition-colors hover:bg-neutral-100 hover:text-rose-600 active:scale-[0.98] dark:text-neutral-400 dark:hover:bg-white/[0.06] dark:hover:text-rose-400"
+        {shown.map((m) => {
+          // A finished milestone is history: it stays listed, but unlinking
+          // it now would quietly rewrite how it was measured.
+          const done = m.status === "completed" || !!m.actualCompletedDate;
+          return (
+            <span
+              key={m.id}
+              className={`inline-flex min-h-11 items-center gap-1.5 rounded-full border border-neutral-200 pl-3 text-[12.5px] font-bold dark:border-white/10 ${
+                done ? "pr-3 text-neutral-500 dark:text-neutral-400" : "pr-1 text-neutral-700 dark:text-neutral-200"
+              }`}
             >
-              <IconX size={13} strokeWidth={2.5} />
-            </button>
-          </span>
-        ))}
+              {done ? (
+                <IconCircleCheck size={13} strokeWidth={2} className="shrink-0" aria-label="Completed" />
+              ) : (
+                <IconFlag3 size={13} strokeWidth={2} className="shrink-0 text-neutral-500 dark:text-neutral-400" aria-hidden="true" />
+              )}
+              <span className="max-w-[180px] truncate">{m.title}</span>
+              {!done && (
+                <button
+                  type="button"
+                  onClick={() => { haptic("light"); onSetLink(m.id, kind, itemId, false); }}
+                  aria-label={`Unlink from ${m.title}`}
+                  className="flex h-9 w-9 items-center justify-center rounded-full text-neutral-500 transition-colors hover:bg-neutral-100 hover:text-rose-600 active:scale-[0.98] dark:text-neutral-400 dark:hover:bg-white/[0.06] dark:hover:text-rose-400"
+                >
+                  <IconX size={13} strokeWidth={2.5} />
+                </button>
+              )}
+            </span>
+          );
+        })}
         {options.length > 0 && !picking && (
           <button
             type="button"

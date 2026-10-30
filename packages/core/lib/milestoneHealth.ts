@@ -414,10 +414,16 @@ function metricProgressOver(
     raw = span !== 0 ? ((current - startingValue) / span) * 100 : current >= target ? 100 : 0;
   }
   const rounded = Math.round(raw);
+  // "Moved away from your target since you started" is about the real
+  // starting figure, not this span's planned start: a milestone that opens
+  // slightly behind its checkpoint (79.1 kg against a planned 78.79) is
+  // behind the plan, not moving the wrong way.
+  const origin = tracker.startingValue ?? entries[0].value;
+  const wrongDirection = direction === "decrease_good" ? current > origin : current < origin;
   return {
     progress: Math.max(0, Math.min(100, rounded)),
     raw: rounded,
-    wrongDirection: raw < 0,
+    wrongDirection,
     current,
     startingValue,
   };
@@ -649,7 +655,7 @@ function buildStatusMessage(
     case "not_started":
       return `Starts ${formatDateShort(milestone.startDate)}.`;
     case "getting_started":
-      return "Getting started — check back once there's a bit more activity to go on.";
+      return "Getting started. Check back once there's a bit more activity to go on.";
     case "ahead":
       return forecastDate
         ? `You're ahead of pace and may reach this milestone by ${formatDateShort(forecastDate)}, before your ${target} target.`
@@ -658,17 +664,17 @@ function buildStatusMessage(
       return `You're on track to reach this milestone by ${target}.`;
     case "at_risk":
       if (consistencyLimited) {
-        return `Your metric is on pace, but ${cadenceLabel} has dropped to ${consistency}% — that's what's putting this at risk.`;
+        return `Your metric is on pace, but ${cadenceLabel} has dropped to ${consistency}%, and that's what's putting this at risk.`;
       }
       return forecastDate
-        ? `Your current pace projects this milestone for ${formatDateShort(forecastDate)} — slightly behind your ${target} target.`
+        ? `Your current pace projects this milestone for ${formatDateShort(forecastDate)}, slightly behind your ${target} target.`
         : "Your recent consistency has dropped. You're slightly behind the pace needed to hit your target.";
     case "delayed":
       if (consistencyLimited) {
         return `Your metric is on pace, but ${cadenceLabel} has fallen to ${consistency}%, which is delaying this milestone.`;
       }
       return forecastDate
-        ? `At your current pace, this milestone is projected to finish ${formatDateShort(forecastDate)} — after your ${target} target.`
+        ? `At your current pace, this milestone is projected to finish ${formatDateShort(forecastDate)}, after your ${target} target.`
         : todayStr > milestone.plannedEndDate
         ? `This milestone is past its target date of ${target}.`
         : hasLoggedActivity
@@ -798,4 +804,51 @@ export function calculateMilestoneState(params: {
     paceGap,
     statusMessage,
   };
+}
+
+/**
+ * The plan's headline % as the mean of its milestones' headline figures, so
+ * the plan card and every milestone row speak the same number. A completed
+ * milestone counts as 100; one with no data yet counts as 0. Null when no
+ * milestone has anything to show (the caller falls back to consistency).
+ */
+export function planProgressFromMilestones(
+  milestones: readonly Milestone[],
+  stateById: ReadonlyMap<string, Pick<MilestoneState, "overallProgress">>,
+): number | null {
+  if (milestones.length === 0) return null;
+  let sum = 0;
+  let any = false;
+  for (const m of milestones) {
+    if (m.status === "completed" || m.completionStatus === "completed") {
+      sum += 100;
+      any = true;
+      continue;
+    }
+    const pct = stateById.get(m.id)?.overallProgress ?? null;
+    if (pct !== null) any = true;
+    sum += pct ?? 0;
+  }
+  return any ? Math.round(sum / milestones.length) : null;
+}
+
+/**
+ * One linked routine's follow-through on this milestone so far: due days from
+ * the milestone's start to `todayISO` (capped at its planned end), and how
+ * many of them were followed. Null before the milestone starts or when the
+ * routine hasn't been due yet.
+ */
+export function linkedRoutineFollowThrough(
+  milestone: Milestone,
+  routines: RoutineInputs,
+  ritualId: string,
+  todayISO: string,
+): { expected: number; completed: number; pct: number } | null {
+  const to = todayISO < milestone.plannedEndDate ? todayISO : milestone.plannedEndDate;
+  if (to < milestone.startDate) return null;
+  const { expected, completed } = routineOccurrences(
+    { ...milestone, linkedRituals: [ritualId] }, routines, milestone.startDate, to,
+  );
+  if (expected === 0) return null;
+  return { expected, completed, pct: Math.round(Math.min(100, (completed / expected) * 100)) };
 }
