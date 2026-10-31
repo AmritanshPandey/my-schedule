@@ -57,7 +57,7 @@ export default function AddEntryModal({ isOpen, onClose, onSave, metric, quickAm
 
   return (
     <BottomSheet open={isOpen} onClose={handleClose} maxHeight={Dimensions.get('window').height * 0.8}>
-      <View className="gap-4 px-5 pb-8 pt-4">
+      <View className="gap-5 px-5 pb-8 pt-1">
         <SheetHeader eyebrow="Log" title="New entry" onClose={handleClose} />
 
         {!!todayTotal && todayTotal > 0 && (
@@ -79,15 +79,15 @@ export default function AddEntryModal({ isOpen, onClose, onSave, metric, quickAm
         />
 
         {!!quickAmounts?.length && (
-          <View className="flex-row flex-wrap gap-1.5">
+          <View className="-mt-1 flex-row flex-wrap gap-2">
             {quickAmounts.map((amount) => (
               <Pressable
                 key={amount}
                 accessibilityRole="button"
                 onPress={() => addQuickAmount(amount)}
-                className="rounded-lg border border-neutral-200 px-2.5 py-1.5 active:bg-neutral-50 dark:border-white/[0.08] dark:active:bg-white/[0.05]"
+                className="min-h-11 justify-center rounded-full border border-neutral-200 bg-white px-4 active:bg-neutral-50 dark:border-white/[0.08] dark:bg-neutral-900 dark:active:bg-white/[0.05]"
               >
-                <Text className="text-[12px] font-semibold text-neutral-600 dark:text-neutral-300">
+                <Text className="text-[14px] font-semibold text-neutral-600 dark:text-neutral-300">
                   +{amount}
                   {metric?.unit ? ` ${metric.unit}` : ''}
                 </Text>

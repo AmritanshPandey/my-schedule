@@ -89,8 +89,18 @@ export default function WeekStatusCard({
                 style={{ height: `${day.total > 0 ? Math.max(day.pct, day.pct > 0 ? 8 : 0) : 0}%` }}
               />
             </div>
-            <span className={`text-[11px] font-bold leading-none ${day.isToday ? "text-emerald-700 dark:text-emerald-400" : "text-neutral-500 dark:text-neutral-400"}`}>
-              {day.label}
+            <span className="flex flex-col items-center gap-1">
+              <span className={`text-[11px] font-bold leading-none ${day.isToday ? "text-emerald-700 dark:text-emerald-400" : "text-neutral-500 dark:text-neutral-400"}`}>
+                {day.label}
+              </span>
+              {/* The date itself, so the week can be read without counting back from today. */}
+              <span
+                className={`text-[13px] font-bold leading-none tabular-nums ${
+                  day.isToday ? "text-emerald-700 dark:text-emerald-400" : "text-neutral-800 dark:text-neutral-200"
+                }`}
+              >
+                {Number(day.dateISO.slice(8, 10))}
+              </span>
             </span>
             {!compact && (
               <span className="text-[10.5px] font-semibold leading-none tabular-nums text-neutral-500 dark:text-neutral-400">

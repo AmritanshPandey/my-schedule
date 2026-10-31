@@ -187,9 +187,11 @@ function IOSSheet({ open, onClose, onDismissed, children, maxHeight, className =
     // Not TrueSheet's `scrollable`, which pins the ScrollView to the full
     // sheet and so defeats the 'auto' detent: a ScrollView capped at the
     // sheet's largest size measures to its content, and scrolls past it.
+    // No automaticallyAdjustKeyboardInsets: UIKit already lifts the whole
+    // sheet above the keyboard, and adjusting here too scrolled the content
+    // up by a second keyboard's height, hiding the title and the field.
     <ScrollView
       keyboardShouldPersistTaps="handled"
-      automaticallyAdjustKeyboardInsets
       className={className}
       style={{ maxHeight: maxHeight ?? screenHeight - insets.top - 24 }}
     >

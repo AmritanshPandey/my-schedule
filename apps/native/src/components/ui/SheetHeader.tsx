@@ -16,16 +16,17 @@ interface SheetHeaderProps {
 
 /**
  * Native port of components/ui/SheetHeader.tsx, laid out the way iOS's own
- * sheets are: a round close button on the left, the title centered, and
- * room for actions on the right. The eyebrow ("Edit routine") stays as a
- * small line over the title, so a sheet still says what it is for. On iOS
+ * sheets are: a round close button on the left, one centered title level
+ * with it, room for actions on the right, and clear space under the
+ * grabber. The eyebrow ("Edit routine") isn't drawn, since a second line
+ * crowded the top of the sheet; it stays as the screen-reader hint. On iOS
  * 26+ the buttons are liquid glass.
  */
 export default function SheetHeader({ eyebrow, title, onClose, right, className = '' }: SheetHeaderProps) {
   // Wide enough for the close button, or for right-side actions when there are any.
   const side = right ? 'w-[88px]' : 'w-12';
   return (
-    <View className={`min-h-[52px] flex-row items-center ${className}`}>
+    <View className={`mt-3 mb-2 min-h-[48px] flex-row items-center ${className}`}>
       {/* Equal side columns keep the title centered on the sheet, not between the buttons. */}
       <View className={`${side} flex-row items-center`}>
         <Pressable accessibilityRole="button" accessibilityLabel="Close" onPress={onClose} hitSlop={4} className="active:scale-[0.94]">
@@ -40,11 +41,8 @@ export default function SheetHeader({ eyebrow, title, onClose, right, className 
           )}
         </Pressable>
       </View>
-      <View className="min-w-0 flex-1 items-center">
-        <Text numberOfLines={1} className="text-[12px] font-semibold text-neutral-500 dark:text-neutral-400">
-          {eyebrow}
-        </Text>
-        <Text accessibilityRole="header" numberOfLines={2} className="text-center text-[17px] font-bold tracking-[-0.2px] text-neutral-950 dark:text-white">
+      <View className="min-w-0 flex-1 items-center px-1">
+        <Text accessibilityRole="header" accessibilityHint={eyebrow} numberOfLines={2} className="text-center text-[17px] font-bold tracking-[-0.2px] text-neutral-950 dark:text-white">
           {title}
         </Text>
       </View>

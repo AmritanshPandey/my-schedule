@@ -94,9 +94,19 @@ export default function WeekStatusCard({ status, onOpen }: { status: WeekStatus;
                   style={{ height: `${day.total > 0 ? Math.max(day.pct, day.pct > 0 ? 8 : 0) : 0}%` }}
                 />
               </View>
-              <Text className={`text-[11px] font-bold leading-none ${day.isToday ? 'text-emerald-700 dark:text-emerald-400' : 'text-neutral-500 dark:text-neutral-400'}`}>
-                {day.label}
-              </Text>
+              <View className="items-center gap-0.5">
+                <Text className={`text-[11px] font-bold leading-none ${day.isToday ? 'text-emerald-700 dark:text-emerald-400' : 'text-neutral-500 dark:text-neutral-400'}`}>
+                  {day.label}
+                </Text>
+                {/* The date itself, so the week can be read without counting back from today. */}
+                <Text
+                  className={`text-[13px] font-bold leading-none tabular-nums ${
+                    day.isToday ? 'text-emerald-700 dark:text-emerald-400' : 'text-neutral-800 dark:text-neutral-200'
+                  }`}
+                >
+                  {Number(day.dateISO.slice(8, 10))}
+                </Text>
+              </View>
             </View>
           ))}
         </View>
