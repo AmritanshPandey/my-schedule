@@ -6,6 +6,10 @@
  * since `signInWithPopup` has no meaning without a window. The native flow
  * gets a Google ID token first, then hands it to Firebase the same way the
  * web flow ultimately does: a GoogleAuthProvider credential.
+ *
+ * Sign in with Apple is native-only (App Store guideline 4.8: an app that
+ * offers a third-party login must offer Apple's too). Same shape: Apple's
+ * identity token plus the raw nonce become an OAuthProvider credential.
  */
 import {
   createContext,
@@ -18,17 +22,21 @@ import {
 } from 'react';
 import {
   GoogleAuthProvider,
+  OAuthProvider,
   onAuthStateChanged,
+  revokeAccessToken,
   signInWithCredential,
   signOut,
   type User,
 } from 'firebase/auth';
+import { appleAuth } from '@invertase/react-native-apple-authentication';
 import {
   GoogleSignin,
   isSuccessResponse,
   isCancelledResponse,
 } from '@react-native-google-signin/google-signin';
-import { auth, isFirebaseConfigured } from '../lib/firebase';
+import { httpsCallable } from 'firebase/functions';
+import { auth, functions, isFirebaseConfigured } from '../lib/firebase';
 import { googleSignInWebClientId, googleSignInIosClientId, isGoogleSignInConfigured } from '../lib/firebaseConfig';
 import { AuthUnavailableError } from '@planr/core/lib/authErrors';
 import { initSync, destroySync, flushNow, getLastSchedule } from '../lib/cloudSync';
@@ -45,7 +53,12 @@ interface AuthContextValue {
    *  of failing cleanly. */
   isGoogleSignInReady: boolean;
   login: () => Promise<void>;
+  /** True on devices that support Sign in with Apple (iOS 13+). */
+  isAppleSignInAvailable: boolean;
+  loginWithApple: () => Promise<void>;
   logout: () => Promise<void>;
+  /** Same contract as web: delete cloud data and the login, then `wipeLocal`, then sign out. */
+  deleteAccount: (wipeLocal: () => Promise<void>) => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextValue>({
@@ -55,7 +68,10 @@ const AuthContext = createContext<AuthContextValue>({
   isAuthAvailable: false,
   isGoogleSignInReady: false,
   login: async () => {},
+  isAppleSignInAvailable: false,
+  loginWithApple: async () => {},
   logout: async () => {},
+  deleteAccount: async () => {},
 });
 
 if (isGoogleSignInConfigured) {
@@ -118,6 +134,29 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     // onAuthStateChanged fires automatically after this.
   }, []);
 
+  const loginWithApple = useCallback(async () => {
+    if (!auth) throw new AuthUnavailableError();
+    let response;
+    try {
+      // The library generates a nonce, sends Apple its SHA-256 and returns the
+      // raw value, which Firebase needs to check the token was minted for us.
+      response = await appleAuth.performRequest({
+        requestedOperation: appleAuth.Operation.LOGIN,
+        requestedScopes: [appleAuth.Scope.EMAIL, appleAuth.Scope.FULL_NAME],
+      });
+    } catch (err) {
+      if ((err as { code?: string }).code === appleAuth.Error.CANCELED) return; // backed out — not a failure
+      throw err;
+    }
+    if (!response.identityToken) throw new Error('Apple sign-in did not return an identity token.');
+    const credential = new OAuthProvider('apple.com').credential({
+      idToken: response.identityToken,
+      rawNonce: response.nonce,
+    });
+    await signInWithCredential(auth, credential);
+    // onAuthStateChanged fires automatically after this.
+  }, []);
+
   const logout = useCallback(async () => {
     if (!auth) return;
     try {
@@ -135,6 +174,35 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     // onAuthStateChanged fires automatically → destroySync() called there.
   }, []);
 
+  const deleteAccount = useCallback(async (wipeLocal: () => Promise<void>) => {
+    const current = auth?.currentUser;
+    if (!auth || !current || !functions) throw new AuthUnavailableError();
+    // Apple requires an app to revoke its Sign in with Apple tokens when the
+    // account is deleted. That needs a fresh authorization code, so an Apple
+    // user confirms once more; cancelling here cancels the whole delete.
+    if (current.providerData.some((p) => p.providerId === 'apple.com') && appleAuth.isSupported) {
+      const response = await appleAuth.performRequest({ requestedOperation: appleAuth.Operation.LOGIN });
+      if (!response.authorizationCode) throw new Error('Apple did not return an authorization code.');
+      await revokeAccessToken(auth, response.authorizationCode);
+    }
+    // Stop syncing first: a push landing after the server-side delete would
+    // recreate the account's data under a uid nobody owns.
+    destroySync();
+    try {
+      await httpsCallable(functions, 'deleteAccount')({});
+    } catch (err) {
+      initSync(current.uid);
+      throw err;
+    }
+    await wipeLocal();
+    await signOut(auth).catch(() => {});
+    try {
+      await GoogleSignin.signOut();
+    } catch {
+      // non-fatal: not signed in with Google, or already signed out
+    }
+  }, []);
+
   const value = useMemo<AuthContextValue>(
     () => ({
       user,
@@ -143,9 +211,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       isAuthAvailable: isFirebaseConfigured,
       isGoogleSignInReady: isGoogleSignInConfigured,
       login,
+      isAppleSignInAvailable: isFirebaseConfigured && appleAuth.isSupported,
+      loginWithApple,
       logout,
+      deleteAccount,
     }),
-    [user, authLoading, login, logout],
+    [user, authLoading, login, loginWithApple, logout, deleteAccount],
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

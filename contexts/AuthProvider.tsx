@@ -17,7 +17,8 @@ import {
   signOut,
   type User,
 } from "firebase/auth";
-import { auth, isFirebaseConfigured } from "@/lib/firebase";
+import { httpsCallable } from "firebase/functions";
+import { auth, functions, isFirebaseConfigured } from "@/lib/firebase";
 import { AuthUnavailableError } from "@/lib/authErrors";
 import {
   initSync,
@@ -43,6 +44,13 @@ interface AuthContextValue {
   isAuthAvailable: boolean;
   login: () => Promise<void>;
   logout: () => Promise<void>;
+  /**
+   * Permanently delete the signed-in account: its cloud data and the login.
+   * `wipeLocal` runs after the server delete succeeds and before sign-out, so
+   * the caller can erase this device's copy while it is still addressable.
+   * Throws (and keeps syncing) when the delete fails.
+   */
+  deleteAccount: (wipeLocal: () => Promise<void>) => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextValue>({
@@ -52,6 +60,7 @@ const AuthContext = createContext<AuthContextValue>({
   isAuthAvailable: false,
   login: async () => {},
   logout: async () => {},
+  deleteAccount: async () => {},
 });
 
 // ── Provider ──────────────────────────────────────────────────────────────────
@@ -122,6 +131,23 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     // onAuthStateChanged fires automatically → destroySync() called there.
   }, []);
 
+  const deleteAccount = useCallback(async (wipeLocal: () => Promise<void>) => {
+    const current = auth?.currentUser;
+    if (!auth || !current || !functions) throw new AuthUnavailableError();
+    // Stop syncing first: a debounced push that lands after the server-side
+    // delete would recreate the account's data under a uid nobody owns.
+    destroySync();
+    try {
+      await httpsCallable(functions, "deleteAccount")({});
+    } catch (err) {
+      initSync(current.uid);
+      throw err;
+    }
+    await wipeLocal();
+    // The Auth user is gone server-side; this just drops the cached session.
+    await signOut(auth).catch(() => {});
+  }, []);
+
   // Memoized so consumers only re-render when user/authLoading actually change,
   // not on every AuthProvider render (login/logout are stable useCallbacks).
   const value = useMemo<AuthContextValue>(
@@ -132,8 +158,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       isAuthAvailable: isFirebaseConfigured,
       login,
       logout,
+      deleteAccount,
     }),
-    [user, authLoading, login, logout],
+    [user, authLoading, login, logout, deleteAccount],
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

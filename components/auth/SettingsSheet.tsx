@@ -19,6 +19,7 @@ import {
 } from "@tabler/icons-react";
 import BottomSheet from "@/components/ui/BottomSheet";
 import BackupRows from "@/components/settings/BackupRows";
+import DeleteAccountRow from "@/components/settings/DeleteAccountRow";
 import RemindersRows from "@/components/settings/RemindersRows";
 import { useAuth } from "@/contexts/AuthProvider";
 import { useGoogleSignIn } from "@/components/auth/useGoogleSignIn";
@@ -35,6 +36,7 @@ import { haptic } from "@/lib/haptics";
 import { useAIEnabledSetting } from "@/lib/ai/useAIEnabled";
 import Toggle from "@/components/ui/Toggle";
 import { normalizeDayStartTime } from "@/lib/timeline/displayWindow";
+import type { RestoreHandler } from "@/lib/restoreMerge";
 
 // ── Theme helpers ─────────────────────────────────────────────────────────────
 
@@ -617,7 +619,7 @@ interface SettingsSheetProps {
   onClose: () => void;
   onClearData: () => Promise<void>;
   onClearProgress?: () => Promise<void>;
-  onRestoreData?: (raw: unknown) => boolean;
+  onRestoreData?: RestoreHandler;
   schedule: Schedule;
   onUpdatePreferences?: (patch: Partial<SchedulePreferences>) => void;
   onOpenAI: () => void;
@@ -829,6 +831,12 @@ export function SettingsSheet({
             </>
           )}
           <ClearDataRow onClearData={onClearData} onDone={onClose} />
+          {!isGuest && (
+            <>
+              <Divider />
+              <DeleteAccountRow onClearData={onClearData} onDone={onClose} />
+            </>
+          )}
         </SettingsCard>
 
         {/* ── Footer ───────────────────────────────────────────────────────── */}
