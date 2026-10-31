@@ -43,6 +43,13 @@ interface BottomSheetProps {
   scroll?: boolean;
   /** Full-height panel — the web's "page" presentation of a sheet. */
   fullHeight?: boolean;
+  /**
+   * Called once the sheet has finished leaving the screen. An action that
+   * unmounts the sheet's own owner (deleting the note whose editor holds it)
+   * belongs here rather than before the close: an iOS sheet whose component
+   * unmounts mid-presentation is never told to go, and stays on screen.
+   */
+  onDismissed?: () => void;
 }
 
 export default function BottomSheet(props: BottomSheetProps) {
@@ -98,8 +105,14 @@ function OverlayHost({ store, onActive }: { store: OverlayStore; onActive: (acti
   return <>{panels}</>;
 }
 
-function InSheetPanel({ open, onClose, children, store }: BottomSheetProps & { store: OverlayStore }) {
+function InSheetPanel({ open, onClose, onDismissed, children, store }: BottomSheetProps & { store: OverlayStore }) {
   const id = useRef(Symbol('panel')).current;
+  // A panel has no exit animation, so it is gone the moment it closes.
+  const wasOpen = useRef(open);
+  useEffect(() => {
+    if (wasOpen.current && !open) onDismissed?.();
+    wasOpen.current = open;
+  }, [open, onDismissed]);
   const key = useRef(`panel-${nextPanelKey++}`).current;
   const insets = useSafeAreaInsets();
   const node = open ? (
@@ -123,7 +136,7 @@ function InSheetPanel({ open, onClose, children, store }: BottomSheetProps & { s
 /** How long UIKit's sheet dismissal runs, during which the next modal waits. */
 const IOS_DISMISS_MS = 350;
 
-function IOSSheet({ open, onClose, children, maxHeight, className = '', scroll = true, fullHeight = false }: BottomSheetProps) {
+function IOSSheet({ open, onClose, onDismissed, children, maxHeight, className = '', scroll = true, fullHeight = false }: BottomSheetProps) {
   const sheet = useRef<TrueSheet>(null);
   const insets = useSafeAreaInsets();
   const { colorScheme } = useColorScheme();
@@ -137,6 +150,20 @@ function IOSSheet({ open, onClose, children, maxHeight, className = '', scroll =
   const closing = useRef(false);
   const [overlays] = useState(createOverlayStore);
   const [panelOpen, setPanelOpen] = useState(false);
+
+  // Safety net for an owner that unmounts while the sheet is up: the native
+  // view is recycled rather than destroyed, and only destruction dismisses
+  // it, so it would stay on screen with nothing behind it.
+  const instance = useRef<TrueSheet | null>(null);
+  useEffect(() => {
+    if (sheet.current) instance.current = sheet.current;
+  });
+  useLayoutEffect(
+    () => () => {
+      if (presented.current) void instance.current?.dismiss();
+    },
+    [],
+  );
 
   useEffect(() => {
     if (open) {
@@ -192,6 +219,7 @@ function IOSSheet({ open, onClose, children, maxHeight, className = '', scroll =
         // Swiped away rather than closed by the caller: tell the caller.
         if (!closing.current) onClose();
         closing.current = false;
+        onDismissed?.();
       }}
     >
       <ModalNestingContext.Provider value>
@@ -209,6 +237,7 @@ function IOSSheet({ open, onClose, children, maxHeight, className = '', scroll =
 function ModalSheet({
   open,
   onClose,
+  onDismissed,
   children,
   maxHeight,
   className = '',
@@ -228,7 +257,10 @@ function ModalSheet({
       setVisible(true);
     } else if (visible) {
       Animated.timing(progress, { toValue: 0, duration: 200, useNativeDriver: true }).start(({ finished }) => {
-        if (finished) setVisible(false);
+        if (finished) {
+          setVisible(false);
+          onDismissed?.();
+        }
       });
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
