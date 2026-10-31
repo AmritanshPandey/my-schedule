@@ -11,6 +11,7 @@
   },
   "dependencies": {
     "@callstack/liquid-glass": "^0.8.2",
+    "@lodev09/react-native-true-sheet": "^3.11.18",
     "@planr/core": "*",
     "@react-native-async-storage/async-storage": "^2.1.2",
     "@react-native-community/datetimepicker": "^8.4.5",

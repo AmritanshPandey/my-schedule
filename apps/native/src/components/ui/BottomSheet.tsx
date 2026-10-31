@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type ReactNode } from 'react';
+import { createContext, useContext, useEffect, useLayoutEffect, useRef, useState, useSyncExternalStore, type ReactNode } from 'react';
 import {
   Animated,
   Dimensions,
@@ -11,7 +11,10 @@ import {
   View,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { TrueSheet } from '@lodev09/react-native-true-sheet';
+import { useColorScheme } from 'nativewind';
 import { ModalNestingContext, useModalTurn } from '../../lib/modalTurn';
+import { SHEET_BG, SHEET_BG_CLASS } from './surfaces';
 
 /**
  * Native port of components/ui/BottomSheet.tsx's mobile branch: a panel that
@@ -20,8 +23,11 @@ import { ModalNestingContext, useModalTurn } from '../../lib/modalTurn';
  * web's visualViewport tracking), backdrop-tap and hardware-back to close
  * (the web's Escape), and the safe-area inset under the content.
  *
- * Built on RN's Modal + Animated rather than a sheet library so no new native
- * module is needed. The panel's spring matches the web's MOBILE_SPRING feel.
+ * On iOS it is the system sheet itself (UISheetPresentationController, via
+ * TrueSheet): sized to its content, the native grabber and swipe-to-dismiss,
+ * the page behind receding, and on iOS 26 the floating liquid-glass sheet the
+ * OS draws for every app. Android keeps the RN Modal + Animated panel below,
+ * whose spring matches the web's MOBILE_SPRING feel.
  *
  * `scroll={false}` hands the caller the panel body as a plain View, for sheets
  * that manage their own scrolling (a long list with a pinned footer).
@@ -39,7 +45,168 @@ interface BottomSheetProps {
   fullHeight?: boolean;
 }
 
-export default function BottomSheet({
+export default function BottomSheet(props: BottomSheetProps) {
+  const nested = useContext(ModalNestingContext);
+  const overlays = useContext(SheetOverlayContext);
+  // Inside a native iOS sheet, a sheet opened from its content (a picker, a
+  // confirm) is drawn as a panel within that sheet. Anything presented on top
+  // of a TrueSheet — another TrueSheet or an RN Modal — leaves it deaf to
+  // taps once it closes, so nothing is ever presented over one.
+  if (overlays) return <InSheetPanel {...props} store={overlays} />;
+  // Only a top-level sheet is the native one; a sheet nested in an RN Modal
+  // sheet (Android, or the panel above) stays an RN Modal.
+  return Platform.OS === 'ios' && !nested ? <IOSSheet {...props} /> : <ModalSheet {...props} />;
+}
+
+/**
+ * The panels open inside one native sheet. An external store rather than
+ * React state, so a panel re-rendering only re-renders the host that draws
+ * it — never the sheet content it was rendered from (which would re-render
+ * the panel, which would update the store, and so on).
+ */
+function createOverlayStore() {
+  const panels = new Map<symbol, ReactNode>();
+  const listeners = new Set<() => void>();
+  let snapshot: ReactNode[] = [];
+  return {
+    set(id: symbol, node: ReactNode | null) {
+      if (node === null) {
+        if (!panels.delete(id)) return;
+      } else panels.set(id, node);
+      snapshot = Array.from(panels.values());
+      listeners.forEach((l) => l());
+    },
+    subscribe(listener: () => void) {
+      listeners.add(listener);
+      return () => listeners.delete(listener);
+    },
+    get: () => snapshot,
+  };
+}
+type OverlayStore = ReturnType<typeof createOverlayStore>;
+
+let nextPanelKey = 0;
+
+const SheetOverlayContext = createContext<OverlayStore | null>(null);
+
+/** Height the sheet grows to while a panel is open, so a short sheet can hold a calendar. */
+const PANEL_MIN_HEIGHT = 500;
+
+function OverlayHost({ store, onActive }: { store: OverlayStore; onActive: (active: boolean) => void }) {
+  const panels = useSyncExternalStore(store.subscribe, store.get);
+  useEffect(() => onActive(panels.length > 0), [panels.length, onActive]);
+  return <>{panels}</>;
+}
+
+function InSheetPanel({ open, onClose, children, store }: BottomSheetProps & { store: OverlayStore }) {
+  const id = useRef(Symbol('panel')).current;
+  const key = useRef(`panel-${nextPanelKey++}`).current;
+  const insets = useSafeAreaInsets();
+  const node = open ? (
+    <View key={key} style={StyleSheet.absoluteFill} className="justify-end">
+      <Pressable accessibilityRole="button" accessibilityLabel="Close" onPress={onClose} style={StyleSheet.absoluteFill} className="bg-black/25" />
+      <View accessibilityViewIsModal className={`max-h-full rounded-t-[28px] pt-2 ${SHEET_BG_CLASS}`}>
+        <ScrollView keyboardShouldPersistTaps="handled" contentContainerStyle={{ paddingBottom: insets.bottom }}>
+          <ModalNestingContext.Provider value>{children}</ModalNestingContext.Provider>
+        </ScrollView>
+      </View>
+    </View>
+  ) : null;
+  // Re-published on every render so the panel shows the caller's latest state.
+  useLayoutEffect(() => {
+    store.set(id, node);
+  });
+  useEffect(() => () => store.set(id, null), [id, store]);
+  return null;
+}
+
+/** How long UIKit's sheet dismissal runs, during which the next modal waits. */
+const IOS_DISMISS_MS = 350;
+
+function IOSSheet({ open, onClose, children, maxHeight, className = '', scroll = true, fullHeight = false }: BottomSheetProps) {
+  const sheet = useRef<TrueSheet>(null);
+  const insets = useSafeAreaInsets();
+  const { colorScheme } = useColorScheme();
+  const screenHeight = Dimensions.get('window').height;
+  // Mounted from the moment it's wanted until UIKit reports it gone, so the
+  // modal queue (lib/modalTurn) holds the next one through the dismissal.
+  const [mounted, setMounted] = useState(open);
+  const turn = useModalTurn(mounted, IOS_DISMISS_MS);
+  const presented = useRef(false);
+  // Set when the caller closes it, so a swipe-down can be told apart.
+  const closing = useRef(false);
+  const [overlays] = useState(createOverlayStore);
+  const [panelOpen, setPanelOpen] = useState(false);
+
+  useEffect(() => {
+    if (open) {
+      closing.current = false;
+      setMounted(true);
+    } else if (presented.current) {
+      closing.current = true;
+      sheet.current?.dismiss();
+    } else {
+      setMounted(false);
+    }
+  }, [open]);
+
+  useEffect(() => {
+    if (open && mounted && turn && !presented.current) sheet.current?.present();
+  }, [open, mounted, turn]);
+
+  if (!mounted || !turn) return null;
+
+  const body = scroll ? (
+    // Not TrueSheet's `scrollable`, which pins the ScrollView to the full
+    // sheet and so defeats the 'auto' detent: a ScrollView capped at the
+    // sheet's largest size measures to its content, and scrolls past it.
+    <ScrollView
+      keyboardShouldPersistTaps="handled"
+      automaticallyAdjustKeyboardInsets
+      className={className}
+      style={{ maxHeight: maxHeight ?? screenHeight - insets.top - 24 }}
+    >
+      {children}
+    </ScrollView>
+  ) : (
+    <View className={`${fullHeight ? 'flex-1' : ''} ${className}`}>{children}</View>
+  );
+
+  return (
+    <TrueSheet
+      ref={sheet}
+      // Short sheets fit their content; a long one can still be pulled to
+      // full height, as the system's own sheets allow.
+      detents={fullHeight ? [1] : ['auto', 1]}
+      // Solid, not the see-through glass sheet: the content sits on an opaque
+      // gray, and the glass is kept for the controls on top of it.
+      backgroundColor={colorScheme === 'dark' ? SHEET_BG.dark : SHEET_BG.light}
+      grabber
+      maxContentHeight={maxHeight}
+      onDidPresent={() => {
+        presented.current = true;
+      }}
+      onDidDismiss={() => {
+        presented.current = false;
+        setMounted(false);
+        // Swiped away rather than closed by the caller: tell the caller.
+        if (!closing.current) onClose();
+        closing.current = false;
+      }}
+    >
+      <ModalNestingContext.Provider value>
+        <SheetOverlayContext.Provider value={overlays}>
+          <View style={[fullHeight ? styles.fill : null, panelOpen ? { minHeight: PANEL_MIN_HEIGHT } : null]}>
+            {body}
+            <OverlayHost store={overlays} onActive={setPanelOpen} />
+          </View>
+        </SheetOverlayContext.Provider>
+      </ModalNestingContext.Provider>
+    </TrueSheet>
+  );
+}
+
+function ModalSheet({
   open,
   onClose,
   children,
@@ -95,13 +262,13 @@ export default function BottomSheet({
             style={{ transform: [{ translateY }], maxHeight: panelMax, height: fullHeight ? panelMax : undefined }}
           >
             <View
-              className={`w-full overflow-hidden rounded-t-2xl border-t border-neutral-200 bg-white dark:border-white/[0.08] dark:bg-neutral-900 ${
+              className={`w-full overflow-hidden rounded-t-[28px] border-t border-neutral-200 dark:border-white/[0.08] ${SHEET_BG_CLASS} ${
                 fullHeight ? 'flex-1' : ''
               } ${className}`}
               style={{ maxHeight: panelMax }}
             >
               {/* Drag handle */}
-              <View className="items-center rounded-t-2xl bg-white pb-1 pt-3 dark:bg-neutral-900">
+              <View className={`items-center pb-1 pt-3 ${SHEET_BG_CLASS}`}>
                 <View className="h-1 w-10 rounded-full bg-neutral-300 dark:bg-white/20" />
               </View>
               {scroll ? (

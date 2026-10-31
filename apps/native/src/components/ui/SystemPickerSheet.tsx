@@ -32,6 +32,17 @@ interface SystemPickerSheetProps {
   onClear?: () => void;
 }
 
+/**
+ * Closes a picker once the finger that picked has lifted. UIDatePicker
+ * reports a day on touch-down-and-up inside its own gesture, before React
+ * Native's touch handler has seen that touch end; removing the picker in
+ * that instant left the touch open, and the sheet holding it ignored every
+ * tap after. A beat later the touch is over and the picker can go.
+ */
+export function closeAfterTouch(close: () => void) {
+  setTimeout(close, 180);
+}
+
 export default function SystemPickerSheet({ open, onClose, mode, title, value, onPick, minimumDate, maximumDate, onClear }: SystemPickerSheetProps) {
   const { colorScheme } = useColorScheme();
   const [draft, setDraft] = useState(value);
@@ -62,7 +73,7 @@ export default function SystemPickerSheet({ open, onClose, mode, title, value, o
               setDraft(date);
               if (mode === 'date') {
                 onPick(date);
-                onClose();
+                closeAfterTouch(onClose);
               }
             }}
           />

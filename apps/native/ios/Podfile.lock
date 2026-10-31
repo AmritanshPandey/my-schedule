@@ -1890,6 +1890,28 @@ PODS:
     - ReactCommon/turbomodule/core
     - ReactNativeDependencies
     - Yoga
+  - RNTrueSheet (3.11.18):
+    - hermes-engine
+    - RCTRequired
+    - RCTTypeSafety
+    - React-bridging
+    - React-Core
+    - React-Core-prebuilt
+    - React-debug
+    - React-Fabric
+    - React-featureflags
+    - React-graphics
+    - React-ImageManager
+    - React-jsi
+    - React-NativeModulesApple
+    - React-RCTFabric
+    - React-renderercss
+    - React-rendererdebug
+    - React-utils
+    - ReactCodegen
+    - ReactCommon/turbomodule/core
+    - ReactNativeDependencies
+    - Yoga
   - SocketRocket (0.7.1):
     - ReactNativeDependencies
   - Yoga (0.0.0):
@@ -1989,6 +2011,7 @@ DEPENDENCIES:
   - "RNGoogleSignin (from `../../../node_modules/@react-native-google-signin/google-signin`)"
   - RNNotifee (from `../node_modules/react-native-notify-kit`)
   - RNSVG (from `../../../node_modules/react-native-svg`)
+  - "RNTrueSheet (from `../../../node_modules/@lodev09/react-native-true-sheet`)"
   - SocketRocket (from `build/rndeps-facades/SocketRocket`)
   - Yoga (from `build/rncore-facades/Yoga`)
 
@@ -2185,6 +2208,8 @@ EXTERNAL SOURCES:
     :path: "../node_modules/react-native-notify-kit"
   RNSVG:
     :path: "../../../node_modules/react-native-svg"
+  RNTrueSheet:
+    :path: "../../../node_modules/@lodev09/react-native-true-sheet"
   SocketRocket:
     :path: build/rndeps-facades/SocketRocket
   Yoga:
@@ -2287,6 +2312,7 @@ SPEC CHECKSUMS:
   RNGoogleSignin: 5e03ea216080045660a744dffe000da8436303bf
   RNNotifee: 673f20627457ff4ff71d4132690aadd8a56d1f53
   RNSVG: 6c9bcbf53822153be6f6c1484f6b0b57c0040d21
+  RNTrueSheet: a2f499b5f1e3291d5492b83ec4655d8b690cd7fb
   SocketRocket: 37aec555668fb852ec12e3c0de59a86ca58f0871
   Yoga: d1c536142c5ff8ec8cd856ab2a7c227a1d875c8e
 

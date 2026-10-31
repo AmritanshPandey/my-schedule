@@ -2,6 +2,9 @@ import { useEffect, useRef, useState } from 'react';
 import { Platform, Pressable, View } from 'react-native';
 import { IconClock } from '@tabler/icons-react-native';
 import { displayToInputTime, formatDisplayTime, minutesToInputTime, parseTimeToMinutes, punctuateTimeDigits } from '@planr/core/lib/timeUtils';
+import DateTimePicker from '@react-native-community/datetimepicker';
+import { useColorScheme } from 'nativewind';
+import { INLINE_MIN_WIDTH } from './DateInput';
 import { Icon } from './Icon';
 import SystemPickerSheet from './SystemPickerSheet';
 import { typography } from './Typography';
@@ -13,9 +16,10 @@ import { Text, TextInput } from './Text';
  * (never re-format under the user's fingers), and the same output: a 24-hour
  * "HH:MM" string. Arrow-key stepping has no phone equivalent and is dropped.
  *
- * On iOS the typed field gives way to the system time wheels: a tap on the
- * field opens them in the app's sheet (ui/SystemPickerSheet), the same
- * pattern as ui/DateInput.
+ * On iOS the typed field gives way to the system time wheels, expanding inline
+ * under the field as in Apple's Calendar app and committing as they turn; a
+ * field too narrow for them opens the wheels in a panel instead
+ * (ui/SystemPickerSheet). The same pattern as ui/DateInput.
  */
 interface TimeInputProps {
   value: string;
@@ -85,14 +89,18 @@ export default function TimeInput({ value, onChange, label, ariaLabel, onFocus, 
 
   const isEmpty = draft === '';
   const [picking, setPicking] = useState(false);
+  const [width, setWidth] = useState(0);
+  const { colorScheme } = useColorScheme();
 
   if (Platform.OS === 'ios') {
     const minutes = parseTimeToMinutes(displayToInputTime(value) || value);
     const at = new Date();
     at.setHours(minutes === null ? 9 : Math.floor(minutes / 60), minutes === null ? 0 : minutes % 60, 0, 0);
     const shown = minutes === null ? '' : formatDisplayTime(minutesToInputTime(minutes));
+    const inline = width >= INLINE_MIN_WIDTH;
+    const commitWheel = (date: Date) => onChange(minutesToInputTime(date.getHours() * 60 + date.getMinutes()));
     return (
-      <View>
+      <View onLayout={(e) => setWidth(e.nativeEvent.layout.width)}>
         {label && <Text className={`mb-1.5 ${typography.eyebrow}`}>{label}</Text>}
         <Pressable
           accessibilityRole="button"
@@ -101,7 +109,7 @@ export default function TimeInput({ value, onChange, label, ariaLabel, onFocus, 
           disabled={disabled}
           onPress={() => {
             onFocus?.();
-            setPicking(true);
+            setPicking((v) => !v);
           }}
           className={`h-11 min-w-0 flex-row items-center gap-2 rounded-xl border bg-neutral-50 px-3 dark:bg-white/[0.04] ${
             picking ? 'border-emerald-600/60 dark:border-emerald-400/50' : 'border-neutral-200 dark:border-white/10'
@@ -112,13 +120,27 @@ export default function TimeInput({ value, onChange, label, ariaLabel, onFocus, 
             {shown || '--:--'}
           </Text>
         </Pressable>
+        {picking && inline && (
+          <View className="mt-2 items-center overflow-hidden rounded-2xl bg-neutral-50 dark:bg-white/[0.04]">
+            <DateTimePicker
+              value={at}
+              mode="time"
+              display="spinner"
+              themeVariant={colorScheme === 'dark' ? 'dark' : 'light'}
+              textColor={colorScheme === 'dark' ? '#FFFFFF' : '#0A0A0A'}
+              onChange={(event, date) => {
+                if (event.type === 'set' && date) commitWheel(date);
+              }}
+            />
+          </View>
+        )}
         <SystemPickerSheet
-          open={picking}
+          open={picking && !inline}
           onClose={() => setPicking(false)}
           mode="time"
           title={label ?? ariaLabel ?? 'Time'}
           value={at}
-          onPick={(date) => onChange(minutesToInputTime(date.getHours() * 60 + date.getMinutes()))}
+          onPick={commitWheel}
         />
       </View>
     );

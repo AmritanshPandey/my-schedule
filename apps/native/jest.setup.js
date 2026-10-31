@@ -11,3 +11,16 @@ jest.mock('@callstack/liquid-glass', () => {
   const { View } = require('react-native');
   return { LiquidGlassView: View, LiquidGlassContainerView: View, isLiquidGlassSupported: false };
 });
+
+// TrueSheet (the iOS bottom sheet) is a native component; render its content
+// inline with no-op present/dismiss. It returns the children as they are, as
+// a createElement here would be rewritten by NativeWind's Babel plugin into a
+// reference Jest's mock factories may not make.
+jest.mock('@lodev09/react-native-true-sheet', () => {
+  const mockReact = require('react');
+  const TrueSheet = mockReact.forwardRef(({ children }, ref) => {
+    mockReact.useImperativeHandle(ref, () => ({ present: async () => {}, dismiss: async () => {}, resize: async () => {} }));
+    return children ?? null;
+  });
+  return { TrueSheet };
+});

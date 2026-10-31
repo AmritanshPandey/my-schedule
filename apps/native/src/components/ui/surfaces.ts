@@ -17,3 +17,11 @@ export const SOFT_PANEL =
 
 /** Hairline border colors alone (for dividers and custom containers). */
 export const HAIRLINE = 'border-neutral-200/70 dark:border-white/[0.07]';
+
+/**
+ * The bottom sheet's own surface: an opaque, slightly warm gray (the system
+ * grouped background), so the white fields and cards inside read as grouped
+ * cards and the sheet stays solid rather than see-through glass.
+ */
+export const SHEET_BG = { light: '#F7F7F5', dark: '#1C1C1E' } as const;
+export const SHEET_BG_CLASS = 'bg-[#F7F7F5] dark:bg-[#1C1C1E]';
