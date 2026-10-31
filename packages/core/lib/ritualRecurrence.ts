@@ -44,7 +44,7 @@ export function recurrenceToRepeatDays(recurrence: RitualRecurrence): DayKey[] |
  *  `repeatDays`) into the richer recurrence editor without collapsing a
  *  recognizable preset down to "Custom". */
 export function repeatDaysToRecurrence(repeatDays: DayKey[] | undefined): RitualRecurrence {
-  if (!repeatDays || repeatDays.length === 0) return { kind: "daily" };
+  if (!repeatDays || repeatDays.length === 0 || sameDaySet(repeatDays, DAYS)) return { kind: "daily" };
   if (sameDaySet(repeatDays, WEEKDAYS)) return { kind: "weekdays" };
   if (sameDaySet(repeatDays, WEEKENDS)) return { kind: "weekends" };
   return { kind: "custom", days: repeatDays };
@@ -59,7 +59,10 @@ export function describeRecurrence(ritual: Pick<Ritual, "repeatDays" | "recurren
     case "interval": return recurrence.intervalDays ? `Every ${recurrence.intervalDays} days` : "Every day";
     case "custom": {
       const days = recurrence.days ?? ritual.repeatDays ?? [];
-      if (days.length === 0) return "Every day";
+      // A "custom" pick that happens to be a preset reads as that preset,
+      // not seven day abbreviations.
+      const preset = repeatDaysToRecurrence(days);
+      if (preset.kind !== "custom") return describeRecurrence({ recurrence: preset });
       return DAYS.filter((d) => days.includes(d)).map((d) => DAY_LABELS[d]).join(" · ");
     }
   }

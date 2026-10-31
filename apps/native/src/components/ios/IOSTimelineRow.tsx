@@ -1,3 +1,5 @@
+import { memo } from 'react';
+import { sameRowProps } from '../../lib/sameRowProps';
 import type { ReactNode } from 'react';
 import { Pressable, View, type TextStyle } from 'react-native';
 import { IconEdit, IconListCheck, IconX } from '@tabler/icons-react-native';
@@ -58,7 +60,7 @@ interface IOSTimelineRowProps {
  * timeline: time label (tap to quick-retime), the rail node that toggles
  * completion (hold to mark missed), the progress spine, and the card.
  */
-export default function IOSTimelineRow({
+function IOSTimelineRow({
   task,
   linkedPlan,
   category,
@@ -290,3 +292,6 @@ export default function IOSTimelineRow({
     </View>
   );
 }
+
+// Today re-renders on every tick and edit; untouched rows skip it.
+export default memo(IOSTimelineRow, sameRowProps);

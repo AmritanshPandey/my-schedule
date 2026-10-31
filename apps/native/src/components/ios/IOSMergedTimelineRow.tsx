@@ -1,3 +1,5 @@
+import { memo } from 'react';
+import { sameRowProps } from '../../lib/sameRowProps';
 import { Pressable, View } from 'react-native';
 import { IconEdit } from '@tabler/icons-react-native';
 import type { Plan, Task, TaskCategory } from '@planr/core/lib/scheduleTypes';
@@ -29,7 +31,7 @@ interface IOSMergedTimelineRowProps {
 }
 
 /** Native port of components/ios/IOSMergedTimelineRow.tsx — two merged tasks on one rail. */
-export default function IOSMergedTimelineRow({
+function IOSMergedTimelineRow({
   primary,
   partner,
   isLast = false,
@@ -152,3 +154,6 @@ function HalfRow({ half, readOnly, editMode, onEdit }: { half: IOSMergedTimeline
     </View>
   );
 }
+
+// Today re-renders on every tick and edit; untouched rows skip it.
+export default memo(IOSMergedTimelineRow, sameRowProps);

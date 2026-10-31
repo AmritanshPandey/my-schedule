@@ -3,12 +3,10 @@ import { Dimensions, Modal, Pressable, View } from 'react-native';
 import Svg, { Circle } from 'react-native-svg';
 import {
   IconCalendarEvent,
-  IconCalendarStats,
   IconCheck,
   IconChevronLeft,
   IconChevronRight,
   IconInfinity,
-  IconListCheck,
   IconMoon,
   IconPlus,
   IconRepeat,
@@ -26,7 +24,8 @@ import { buildAllRoutinesMonthDays } from '@planr/core/lib/consistency/ritualCal
 import { buildRoutineInsights } from '@planr/core/lib/consistency/routineInsights';
 import { haptic } from '../../lib/haptics';
 import EmptyState from '../ui/EmptyState';
-import { MainTitleSection, CtaActionButton } from '../ui/MainTitleSection';
+import { CtaActionButton } from '../ui/MainTitleSection';
+import SegmentedControl from '../ui/SegmentedControl';
 import ProgressBar from '../ui/ProgressBar';
 import { Icon, type TablerIcon } from '../ui/Icon';
 import { Text } from '../ui/Text';
@@ -67,7 +66,7 @@ function appliesToDay(ritual: Ritual, dateISO: string, trackingStart?: string): 
 // group, so `first:` wins and every header renders at pt-1.
 function GroupHeader({ bucketKey, label, count }: { bucketKey: RitualTimeBucketKey; label: string; count: number }) {
   return (
-    <View className="flex-row items-center gap-2 pb-1 pt-1">
+    <View className="flex-row items-center gap-2 pb-2 pt-4">
       <Icon icon={BUCKET_ICONS[bucketKey]} size={14} strokeWidth={2} className="text-neutral-500 dark:text-neutral-400" />
       <Text className="text-[12px] font-bold text-neutral-600 dark:text-neutral-300">{label}</Text>
       <Text className="text-[12px] font-semibold text-neutral-500 dark:text-neutral-400">{count}</Text>
@@ -295,6 +294,11 @@ function DateActionButton({ value, onChange }: { value: string; onChange: (value
   );
 }
 
+const VIEW_OPTIONS = [
+  { value: 'day', label: 'Day' },
+  { value: 'month', label: 'Month' },
+] as const;
+
 // ── Props ─────────────────────────────────────────────────────────────────────
 
 interface RitualViewProps {
@@ -420,51 +424,37 @@ export default function RitualView({
 
   return (
     <>
-      <View className="px-4 py-6">
-        {/* ── Header ───────────────────────────────────────────────────────── */}
-        <MainTitleSection
-          label="Daily practice"
-          title="Routines"
-          actions={
-            <>
-              {rituals.length > 0 && (
-                <Pressable
-                  accessibilityRole="button"
-                  accessibilityLabel={viewMode === 'day' ? 'Show month view' : 'Show day view'}
-                  accessibilityState={{ selected: viewMode === 'month' }}
-                  onPress={() => {
-                    haptic('light');
-                    setViewMode((m) => (m === 'day' ? 'month' : 'day'));
-                  }}
-                  className={`h-11 w-11 items-center justify-center rounded-full border-[1.5px] active:scale-[0.97] ${
-                    viewMode === 'month'
-                      ? 'border-neutral-300 bg-neutral-100 dark:border-white/20 dark:bg-neutral-800'
-                      : 'border-neutral-200 bg-white active:bg-neutral-100 dark:border-white/15 dark:bg-neutral-900 dark:active:bg-neutral-800'
-                  }`}
-                >
-                  <Icon
-                    icon={viewMode === 'day' ? IconCalendarStats : IconListCheck}
-                    size={16}
-                    strokeWidth={2.2}
-                    className={viewMode === 'month' ? 'text-neutral-900 dark:text-white' : 'text-neutral-500 dark:text-neutral-400'}
-                  />
-                </Pressable>
-              )}
-              {rituals.length > 0 && viewMode === 'day' && <DateActionButton value={selectedDateISO} onChange={setSelectedDateISO} />}
-              <TourTarget id="new-item-button">
-                <CtaActionButton
-                  label="Add routine"
-                  icon={<Icon icon={IconPlus} size={14} strokeWidth={2.5} className="text-neutral-700 dark:text-neutral-300" />}
-                  onClick={() => {
-                    haptic('medium');
-                    onAddOpenChange(true);
-                  }}
-                />
-              </TourTarget>
-            </>
-          }
-          className="mb-4"
-        />
+      <View className="px-4 pb-8 pt-2">
+        {/* ── Toolbar ──────────────────────────────────────────────────────────
+            No page title: the header bar and the tab already say "Routine".
+            The labelled Day / Month switch replaces an unlabelled calendar
+            icon that looked just like the date picker beside it. */}
+        <View className="mb-5 flex-row items-center gap-2">
+          {rituals.length > 0 && (
+            <SegmentedControl
+              ariaLabel="Routine view"
+              options={VIEW_OPTIONS}
+              value={viewMode}
+              onChange={(mode) => {
+                haptic('light');
+                setViewMode(mode);
+              }}
+              className="w-[148px]"
+            />
+          )}
+          <View className="flex-1" />
+          {rituals.length > 0 && viewMode === 'day' && <DateActionButton value={selectedDateISO} onChange={setSelectedDateISO} />}
+          <TourTarget id="new-item-button">
+            <CtaActionButton
+              label="Add"
+              icon={<Icon icon={IconPlus} size={14} strokeWidth={2.5} className="text-neutral-700 dark:text-neutral-300" />}
+              onClick={() => {
+                haptic('medium');
+                onAddOpenChange(true);
+              }}
+            />
+          </TourTarget>
+        </View>
 
         {/* ── Month view — aggregate consistency calendar ──────────────────── */}
         {rituals.length > 0 && viewMode === 'month' && (
@@ -488,7 +478,7 @@ export default function RitualView({
 
         {/* ── Earned "all done" moment ─────────────────────────────────────── */}
         {viewMode === 'day' && allDone && (
-          <View className="mb-5 flex-row items-center gap-3 rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-3.5 dark:border-emerald-500/20 dark:bg-emerald-500/[0.08]">
+          <View className="mb-6 flex-row items-center gap-3 rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-3.5 dark:border-emerald-500/20 dark:bg-emerald-500/[0.08]">
             <View className="h-9 w-9 shrink-0 items-center justify-center rounded-full bg-emerald-500">
               <Icon icon={IconCheck} size={20} strokeWidth={3} className="text-white" />
             </View>
@@ -503,7 +493,7 @@ export default function RitualView({
 
         {/* ── The day so far (in progress) ─────────────────────────────────── */}
         {viewMode === 'day' && total > 0 && !allDone && (
-          <View testID="routine-day-summary" className="mb-5 rounded-2xl border border-neutral-200/80 bg-white px-4 py-3.5 dark:border-white/[0.08] dark:bg-neutral-900">
+          <View testID="routine-day-summary" className="mb-6 rounded-2xl border border-neutral-200/80 bg-white px-4 py-4 dark:border-white/[0.08] dark:bg-neutral-900">
             <View className="flex-row items-baseline justify-between gap-3">
               <Text className="min-w-0 flex-1 text-[15px] font-extrabold leading-snug text-neutral-950 dark:text-white">
                 {completedToday === 0
@@ -517,24 +507,12 @@ export default function RitualView({
             <View className="mt-2.5">
               <ProgressBar pct={pct} height={6} fillClassName="bg-green-500" />
             </View>
-            {daySummary.doneTitles.length > 0 && (
-              <Text className="mt-2.5 text-[13px] leading-snug text-neutral-600 dark:text-neutral-300">
-                <Text className="font-bold text-neutral-800 dark:text-neutral-100">Completed: </Text>
-                {daySummary.doneTitles.join(', ')}
-              </Text>
-            )}
-            {daySummary.openTitles.length > 0 && (
-              <Text className="mt-1 text-[13px] leading-snug text-neutral-500 dark:text-neutral-400">
-                <Text className="font-semibold">Still open: </Text>
-                {daySummary.openTitles.join(', ')}
-              </Text>
-            )}
           </View>
         )}
 
         {/* ── Week strip — completion per day (the reward loop) ────────────── */}
         {viewMode === 'day' && rituals.length > 0 && (
-          <View className="mb-6 flex-row" style={{ marginHorizontal: -3 }}>
+          <View className="mb-3 flex-row" style={{ marginHorizontal: -3 }}>
             {weekStrip.map(({ day, due, done, followedPct, dayNum, isToday }) => {
               const sel = selectedDay === day;
               const ratio = due > 0 ? followedPct / 100 : 0;

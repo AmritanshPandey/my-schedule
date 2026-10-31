@@ -36,6 +36,16 @@ function windowPct(
   endISO: string,
   trackingStart?: string,
 ): number | null {
+  // Index the window's rows once rather than re-scanning the whole history
+  // for every routine on every day.
+  const rowsByKey = new Map<string, RitualCompletion[]>();
+  for (const c of completions) {
+    if (c.date < startISO || c.date > endISO) continue;
+    const key = `${c.ritualId}|${c.date}`;
+    const bucket = rowsByKey.get(key);
+    if (bucket) bucket.push(c);
+    else rowsByKey.set(key, [c]);
+  }
   let scheduled = 0;
   let done = 0;
   const cursor = new Date(`${startISO}T00:00:00`);
@@ -45,8 +55,7 @@ function windowPct(
     for (const ritual of rituals) {
       if (!ritualScheduledOnDate(ritual, iso, trackingStart)) continue;
       scheduled++;
-      const dayRows = completions.filter((c) => c.ritualId === ritual.id && c.date === iso);
-      if (isRitualDayComplete(ritual, dayRows)) done++;
+      if (isRitualDayComplete(ritual, rowsByKey.get(`${ritual.id}|${iso}`) ?? [])) done++;
     }
     cursor.setDate(cursor.getDate() + 1);
   }
@@ -75,8 +84,11 @@ export function buildRoutineInsights(
   let mostConsistent: RoutineInsights["mostConsistent"] = null;
   let needsAttention: RoutineInsights["needsAttention"] = null;
 
+  // One stats pass per routine, shared by both picks below.
+  const stats = new Map(rituals.map((ritual) => [ritual.id, calculateRitualStats(ritual, completions, todayISO, trackingStart)]));
+
   for (const ritual of rituals) {
-    const { streak, adherencePct } = calculateRitualStats(ritual, completions, todayISO, trackingStart);
+    const { streak } = stats.get(ritual.id)!;
     if (streak >= MIN_STREAK_TO_HIGHLIGHT && (!mostConsistent || streak > mostConsistent.streak)) {
       mostConsistent = { ritual, streak };
     }
@@ -94,7 +106,7 @@ export function buildRoutineInsights(
   };
   const candidates = rituals
     .filter(hasRecentSchedule)
-    .map((ritual) => ({ ritual, ...calculateRitualStats(ritual, completions, todayISO, trackingStart) }))
+    .map((ritual) => ({ ritual, ...stats.get(ritual.id)! }))
     .filter((r) => r.adherencePct < LOW_ADHERENCE_THRESHOLD);
   if (candidates.length > 0) {
     const worst = candidates.reduce((a, b) => (b.adherencePct < a.adherencePct ? b : a));

@@ -46,6 +46,7 @@ export const MAX_FONT_SCALE = 1.3;
 const TRUNCATE_RE = /(?:^|\s)truncate(?:\s|$)/;
 const CLAMP_RE = /(?:^|\s)line-clamp-(\d)(?:\s|$)/;
 const TNUM_RE = /(?:^|\s)tabular-nums(?:\s|$)/;
+const LEADING_RE = /(?:^|\s|:)leading-/;
 
 /** Avenir Next's own ascent + descent, as a multiple of its font size. */
 const NATURAL_LINE_HEIGHT = 1.37;
@@ -86,8 +87,12 @@ export const Text = forwardRef<ComponentRef<typeof RNText>, TextProps>(function 
   const cls = className ?? '';
   const clamp = CLAMP_RE.exec(cls);
   const lines = numberOfLines ?? (TRUNCATE_RE.test(cls) ? 1 : clamp ? Number(clamp[1]) : undefined);
+  // Only text with a `leading-*` class can need the line-height fix, and
+  // routing it through ResolvedText costs a style flatten per render, so
+  // everything else goes straight to RN's Text.
+  const Inner = LEADING_RE.test(cls) ? ResolvedText : RNText;
   return (
-    <ResolvedText
+    <Inner
       ref={ref}
       className={cls}
       numberOfLines={lines}

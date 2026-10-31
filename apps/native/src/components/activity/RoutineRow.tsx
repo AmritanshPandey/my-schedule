@@ -68,7 +68,9 @@ export default function RoutineRow({
   // Once something is logged, "60 of 120 g logged" already states the goal.
   const detail = routineDetailLine(logged ? { ...ritual, target: undefined } : ritual);
 
-  const meta = [routineWhenLabel(ritual), missed ? 'Missed' : describeRecurrence(ritual)].join(' · ');
+  // An anytime routine already sits under the "Anytime" group header, so the
+  // row doesn't repeat it; a timed one keeps its time.
+  const meta = [ritual.anyTime ? null : routineWhenLabel(ritual), missed ? 'Missed' : describeRecurrence(ritual)].filter(Boolean).join(' · ');
 
   function press() {
     if (!done) {

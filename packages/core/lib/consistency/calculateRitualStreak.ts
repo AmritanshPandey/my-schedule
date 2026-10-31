@@ -185,13 +185,22 @@ export function calculateBestStreak(
   const completeOn = (iso: string) => isRitualDayComplete(ritual, byDate.get(iso) ?? []);
   const today = todayISO();
 
-  const start = new Date(`${uptoISO}T00:00:00`);
+  const end = new Date(`${uptoISO}T00:00:00`);
+  const start = new Date(end);
   start.setDate(start.getDate() - (BEST_STREAK_LOOKBACK_DAYS - 1));
+  // A run can only begin on a completed day, so nothing before this
+  // routine's first completion can count: start there instead of two years
+  // back. Same answer, a fraction of the days for anyone with a short history.
+  let firstDone: string | null = null;
+  for (const iso of byDate.keys()) if (firstDone === null || iso < firstDone) firstDone = iso;
+  if (firstDone === null) return 0;
+  const first = new Date(`${firstDone}T00:00:00`);
+  if (first > start) start.setTime(first.getTime());
 
   let run = 0;
   let best = 0;
   const cursor = new Date(start);
-  while (cursor <= new Date(`${uptoISO}T00:00:00`)) {
+  while (cursor <= end) {
     const iso = localISODate(cursor);
     if (ritualScheduledOnDate(ritual, iso, trackingStart)) {
       if (completeOn(iso)) {
