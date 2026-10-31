@@ -4755,8 +4755,7 @@ export default function ScheduleApp() {
                 onNavigate={(tab) => { setActiveTab(tab); setSelectedPlanId(null); }}
                 onMarkTaskDone={(id, subtaskIds) => handleToggleTaskComplete(id, subtaskIds, todayKey)}
                 onToggleSlot={(id, slotIndex) => handleToggleSlot(id, slotIndex, todayKey, todayISO())}
-                onMissedTask={(id, subtaskIds) => handleMarkTaskMissed(id, subtaskIds, todayKey)}
-                onOpenSubtasks={(id) => setSubtasksRef({ id, day: todayKey, dateISO: todayISO() })}
+                onOpenPlan={(planId) => { setActiveTab(1); setSelectedPlanId(planId); }}
                 completedRitualIds={completedRitualIds}
                 onLogTracker={(tracker) => setEntryTracker(tracker)}
                 onHandleMissed={setMissedSheet}

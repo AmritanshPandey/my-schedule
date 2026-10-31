@@ -325,25 +325,29 @@ async function expectOverviewDashboard(page: Page, isMobile: boolean) {
   const dashboard = page.getByTestId("overview-dashboard");
   await expect(dashboard).toBeVisible();
 
+  // Next → Fix → Status → Goals → Patterns (lib/overview.ts): "Next up"
+  // leads on both surfaces.
+  await expect(page.getByTestId("overview-next-task")).toContainText("Morning Run");
+  await expect(page.getByTestId("overview-week-status")).toContainText("This week");
+
   if (isMobile) {
     await expect(page.getByText("Current Task")).toHaveCount(0);
-    await expect(page.getByTestId("overview-streak-card")).toBeVisible();
-    await expect(page.getByTestId("overview-next-task")).toContainText("Morning Run");
-    await expect(page.getByTestId("overview-week-summary")).toContainText("Today's execution");
+    // The streak folded into the week card; the strategy cards stay on desktop.
+    await expect(page.getByTestId("overview-streak-card")).toHaveCount(0);
     await expect(page.getByTestId("overview-tracking-card")).toHaveCount(0);
     await expect(page.getByTestId("overview-plan-card")).toHaveCount(0);
     await expect(page.getByTestId("overview-routine-card")).toHaveCount(0);
     const nextTaskBox = await page.getByTestId("overview-next-task").boundingBox();
-    const summaryBox = await page.getByTestId("overview-week-summary").boundingBox();
+    const weekBox = await page.getByTestId("overview-week-status").boundingBox();
     expect(nextTaskBox).not.toBeNull();
-    expect(summaryBox).not.toBeNull();
-    expect(nextTaskBox!.y).toBeLessThan(summaryBox!.y);
+    expect(weekBox).not.toBeNull();
+    expect(nextTaskBox!.y).toBeLessThan(weekBox!.y);
   } else {
-    await expect(page.getByTestId("overview-today-card")).toContainText("Morning Run");
-    await expect(page.getByTestId("overview-week-card")).toContainText("This week");
+    // Desktop is the weekly review: Today owns the task list.
+    await expect(page.getByTestId("overview-today-card")).toHaveCount(0);
     await expect(page.getByTestId("overview-progress-card")).toContainText("Task completion trend");
     await expect(page.getByTestId("overview-tracking-card")).toContainText("Run Distance");
-    await expect(page.getByTestId("overview-plan-card")).toContainText("Cardio");
+    await expect(page.getByTestId("overview-goal-pace")).toContainText("Cardio");
     await expect(page.getByTestId("overview-routine-card")).toContainText("Hydrate");
   }
 
@@ -436,7 +440,7 @@ async function expectDesktopSchedule(page: Page) {
 
   await page.getByText("Overview", { exact: true }).first().click();
   await expect(page.getByText("Overview").first()).toBeVisible();
-  await expect(page.locator("body")).toContainText("Tasks done");
+  await expect(page.locator("body")).toContainText("Goals & milestones");
   await expectOverviewDashboard(page, false);
 
   await expectNoDocumentOverflow(page);
@@ -470,51 +474,19 @@ test("renders seeded schedule in the configured viewport", async ({ page }, test
   await assertNoRuntimeErrors();
 });
 
-test("a missed task is counted and announced separately from completion", async ({ page }, testInfo) => {
+test("Next up marks the next task done from Overview", async ({ page }, testInfo) => {
   const assertNoRuntimeErrors = collectRuntimeErrors(page, testInfo);
-  // The Today's Task card (components/today/TodayTaskList.tsx) renders on the
-  // desktop Overview. The phone project boots the iOS shell (iPhone UA), whose
-  // dashboard is a different component without this card.
-  test.skip(testInfo.project.name === "mobile-chromium", "Today's Task card renders on the desktop Overview");
 
   await openSeededApp(page);
   await page.getByText("Overview", { exact: true }).first().click();
 
-  const card = page.getByTestId("overview-today-card");
-  await expect(card).toBeVisible();
+  const next = page.getByTestId("overview-next-task");
+  await expect(next).toContainText("Morning Run");
+  await next.getByRole("button", { name: "Mark Morning Run done" }).click();
 
-  // Long-press the first checkbox: tap completes, hold marks missed.
-  const checkbox = card.getByRole("button", { name: /Mark done$/ }).first();
-  await expect(checkbox).toBeVisible();
-  const box = await checkbox.boundingBox();
-  expect(box).not.toBeNull();
-  await page.mouse.move(box!.x + box!.width / 2, box!.y + box!.height / 2);
-  await page.mouse.down();
-  await page.waitForTimeout(700);
-  await page.mouse.up();
-
-  // Missed is acknowledged in its own marker, never folded into the numerator.
-  const missed = page.getByTestId("overview-today-missed");
-  await expect(missed).toContainText("1 missed");
-  await expect(card).toContainText("0/");
-
-  // The state must reach assistive tech, which it never did before.
-  await expect(card.getByRole("button", { name: "Missed, Clear missed mark" }).first()).toBeVisible();
-
-  // Long-press is pointer-only, so the action must also be reachable by
-  // keyboard. Every row carries a trailing chip into the detail view, which is
-  // where the labelled "Missed" button lives — including tasks with no
-  // subtasks, which previously had no route in at all.
-  // One chip per row — "Open subtasks (n of m done)" when the task has items,
-  // "Open task details" when it does not. The seeded plans all carry template
-  // items, so this fixture exercises the former; the latter is what unblocks a
-  // subtask-less task, which previously had no route in at all.
-  const details = card.getByRole("button", { name: /^Open (subtasks|task details)/ });
-  await expect(details).toHaveCount(3);
-  await details.first().press("Enter");
-  // Scoped to the detail view: the Overview's own "Missed" stat and the row's
-  // missed checkbox would otherwise match a bare "Missed" too.
-  await expect(page.getByRole("dialog").getByRole("button", { name: "Mark as missed" })).toBeVisible();
+  // The card moves on to whatever is next (or reports the day done).
+  await expect(next).not.toContainText("Morning Run");
+  await expect(page.getByTestId("overview-week-status")).toBeVisible();
 
   await expectNoBannedVisualEffects(page);
   await assertNoRuntimeErrors();

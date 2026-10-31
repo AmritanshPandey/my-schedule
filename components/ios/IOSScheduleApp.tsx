@@ -10,14 +10,11 @@ import {
   IconChevronRight,
   IconCheck,
   IconClipboardData,
-  IconClipboardList,
   IconClockHour3,
   IconEdit,
-  IconFlame,
   IconNotes,
   IconPhoto,
   IconPlus,
-  IconRepeat,
   IconSettings,
   IconTargetArrow,
   IconTemplate,
@@ -33,7 +30,6 @@ import IOSMergedTimelineRow from "@/components/ios/IOSMergedTimelineRow";
 import { useNowMinutes } from "@/lib/timeline/useNowMinutes";
 import SignInPrompt from "@/components/auth/SignInPrompt";
 import TodayTaskList from "@/components/today/TodayTaskList";
-import { selectTodayTasks } from "@/lib/todayTasks";
 import DayActionsSheet from "@/components/DayActionsSheet";
 import {
   DAYS,
@@ -84,7 +80,7 @@ import {
   type TaskRemovalScope,
 } from "@/lib/taskMutations";
 import { mergeTasks, unmergeTask, findMergePairs } from "@/lib/taskMerge";
-import { completionForDate, getTaskCheckableItems, getTaskSubtaskSummary, isTaskCompleted, isTaskResolved, isTrackedTask, markTaskMissed, snoozeTaskLater, toggleSlotComplete, toggleSubtaskComplete, toggleTaskFromCheckbox } from "@/lib/taskCompletion";
+import { completionForDate, getTaskCheckableItems, getTaskSubtaskSummary, isTaskCompleted, isTrackedTask, markTaskMissed, snoozeTaskLater, toggleSlotComplete, toggleSubtaskComplete, toggleTaskFromCheckbox } from "@/lib/taskCompletion";
 import { diffException, isTaskScheduledOn, occurrenceNote, resolveOccurrence } from "@/lib/taskOccurrence";
 import { validateDatedTasks } from "@/lib/scheduleRules";
 import { resolveTimes as resolveParsedTimes } from "@/lib/scheduleParser";
@@ -100,18 +96,15 @@ import { calculateMilestoneState, type MilestoneState } from "@/lib/milestoneHea
 import { linkItem, unlinkItem, unlinkEverywhere, type MilestoneLinkKind } from "@/lib/milestoneLinks";
 import AdaptMilestoneSheet from "@/components/plan/AdaptMilestoneSheet";
 import { formatDisplayTime, inputToDisplayTime, minutesToInputTime, parseTimeToMinutes, toScheduleDayMinutes } from "@/lib/timeUtils";
-import { calculateExecutionStreak } from "@/lib/consistency/calculateExecutionStreak";
 import { ritualScheduledOnDate } from "@/lib/consistency/calculateRitualStreak";
 import { completedRitualIdsOn } from "@/lib/consistency/ritualDayStatus";
 import { useAIEnabled } from "@/lib/ai/useAIEnabled";
-import { computeExecutionTrend } from "@/lib/executionAnalytics";
 import { selectNeedsAttention, type MissedTask } from "@/lib/needsAttention";
-import NeedsAttentionCard from "@/components/NeedsAttentionCard";
+import IOSOverview from "@/components/ios/IOSOverview";
 import MissedTaskSheet from "@/components/MissedTaskSheet";
 import QuickRetimeSheet, { type QuickRetimeTarget } from "@/components/QuickRetimeSheet";
 import { rescheduleMissedTaskOnce, acknowledgeMiss } from "@/lib/missedRecovery";
 import { haptic } from "@/lib/haptics";
-import { CARD } from "@/components/ui/surfaces";
 import CheckDraw from "@/components/ui/CheckDraw";
 import type { CreateTaskFromNoteInput } from "@/components/notes/NotesView";
 import { useCoachTour } from "@/lib/onboarding/useCoachTour";
@@ -128,8 +121,6 @@ const TrackingView = dynamic(() => import("@/components/tracking/TrackingView"),
 const SettingsView = dynamic(() => import("@/components/SettingsView").then((m) => ({ default: m.SettingsView })), { ssr: false });
 const AIView = dynamic(() => import("@/components/AIView").then((m) => ({ default: m.AIView })), { ssr: false });
 // Off the boot path: the weekly read is analysis-heavy and not needed to paint.
-const InsightsCard = dynamic(() => import("@/components/intelligence/InsightsCard"), { ssr: false });
-const CheckInsDueCard = dynamic(() => import("@/components/tracking/CheckInsDueCard"), { ssr: false });
 const DayWallpaperSheet = dynamic(() => import("@/components/DayWallpaperSheet"), { ssr: false });
 const TemplatesSheet = dynamic(() => import("@/components/TemplatesSheet").then((m) => ({ default: m.TemplatesSheet })), { ssr: false });
 const NotesView = dynamic(() => import("@/components/notes/NotesView"), { ssr: false });
@@ -169,24 +160,6 @@ function getWeekDates(offset: number): Array<{ day: DayKey; date: Date }> {
 }
 
 
-function taskDurationMinutes(task: Task): number {
-  const start = parseTimeToMinutes(task.startTime);
-  const end = parseTimeToMinutes(task.endTime);
-  if (start === null || end === null) return 0;
-  const normalizedStart = toScheduleDayMinutes(start);
-  let normalizedEnd = toScheduleDayMinutes(end);
-  if (normalizedEnd <= normalizedStart) normalizedEnd += 24 * 60;
-  return Math.max(0, normalizedEnd - normalizedStart);
-}
-
-function formatMinutesBrief(minutes: number): string {
-  if (minutes <= 0) return "0m";
-  const hours = Math.floor(minutes / 60);
-  const mins = minutes % 60;
-  if (hours === 0) return `${mins}m`;
-  if (mins === 0) return `${hours}h`;
-  return `${hours}h ${mins}m`;
-}
 
 function quickTaskTimeRange(now = new Date()): { startTime: string; endTime: string } {
   const current = now.getHours() * 60 + now.getMinutes();
@@ -650,11 +623,6 @@ export default function IOSScheduleApp() {
         }),
     [activeDateISO, dayTasks, isViewingToday, schedule.preferences?.startDate]
   );
-  // Shared with the desktop dashboard so the two cards can't drift again.
-  const { tasks: todayTasks, done: todayDone } = useMemo(
-    () => selectTodayTasks(schedule, todayISO(), todayKey),
-    [schedule, todayKey]
-  );
   const selectedPlan = selectedPlanId ? plansById.get(selectedPlanId) ?? null : null;
   const taskSheetActiveDays = useMemo(() => {
     if (taskSheetMode !== "edit" || !taskSheetTask) return [activeDay];
@@ -691,21 +659,9 @@ export default function IOSScheduleApp() {
   }, [schedule.rituals, schedule.ritualCompletions, todayKey, schedule.preferences?.startDate]);
 
   // Counts cover tracked work only. dayTasksView keeps commitments — it drives
-  // the rendered day list, which does show them. todayTasks is already
-  // tracked-only (selectTodayTasks), so todayDone comes straight from it.
+  // the rendered day list, which does show them.
   const dayTracked = useMemo(() => dayTasksView.filter(isTrackedTask), [dayTasksView]);
   const dayDone = dayTracked.filter((task) => isTaskCompleted(task, taskEffectiveItemCount(task))).length;
-  const todayOpenTasks = useMemo(
-    () => todayTasks.filter((task) => !isTaskResolved(task, taskEffectiveItemCount(task))),
-    [todayTasks, taskEffectiveItemCount]
-  );
-  const remainingPlannedMinutes = useMemo(
-    () => todayOpenTasks.reduce((sum, task) => sum + taskDurationMinutes(task), 0),
-    [todayOpenTasks]
-  );
-  const dashboardProgressPct = todayTasks.length > 0 ? Math.round((todayDone / todayTasks.length) * 100) : 0;
-  const executionStreak = useMemo(() => calculateExecutionStreak(schedule, todayISO()), [schedule]);
-  const missedThisWeek = useMemo(() => computeExecutionTrend(schedule).currentMissed, [schedule]);
   const needsAttention = useMemo(() => {
     // trackingType-aware — a half-logged quantity routine must still count as
     // unfinished here, or its at-risk warning is silently suppressed.
@@ -1452,208 +1408,29 @@ export default function IOSScheduleApp() {
     }
 
     if (activeTab === 4) {
-      const setupSteps = [
-        { label: "Create your first plan", tab: 1, done: schedule.plans.length > 0, Icon: IconClipboardList },
-        { label: "Schedule today's tasks", tab: 0, done: Object.values(schedule.activities).some((a) => (a?.length ?? 0) > 0), Icon: IconCalendar },
-        { label: "Build a daily routine", tab: 2, done: (schedule.rituals?.length ?? 0) > 0, Icon: IconRepeat },
-      ];
-      const setupDoneCount = setupSteps.filter((s) => s.done).length;
-      const showSetup = !iosSetupDismissed && setupDoneCount < 2;
-      const nextSetup = setupSteps.find((s) => !s.done) ?? setupSteps[0];
-
       return (
         <ErrorBoundary section name="Dashboard">
-          <div data-testid="overview-dashboard" className="space-y-4 px-4 pt-5">
-            {showSetup && (
-              // Same treatment as the desktop card (OverviewDashboard's
-              // GettingStarted): a soft green wash, honest per-step segments,
-              // and saturated green only on progress and the one next action.
-              <section
-                aria-labelledby="ios-setup-title"
-                className="rounded-2xl border border-emerald-600/15 bg-emerald-50/70 p-4 dark:border-emerald-400/15 dark:bg-emerald-400/[0.06]"
-              >
-                <p id="ios-setup-title" className="text-[19px] font-extrabold leading-tight tracking-[-0.01em] text-neutral-950 dark:text-white">
-                  Set up your first day
-                </p>
-                <p className="mt-1 text-[13px] font-medium text-neutral-600 dark:text-neutral-400">Three steps, about two minutes.</p>
-                <div className="mt-3 flex items-center gap-3">
-                  <div className="flex flex-1 gap-1.5" role="img" aria-label={`${setupDoneCount} of 3 setup steps done`}>
-                    {setupSteps.map(({ label, done }) => (
-                      <span
-                        key={label}
-                        className={`h-1.5 flex-1 rounded-full transition-colors duration-300 motion-reduce:transition-none ${
-                          done ? "bg-[#00A63E] dark:bg-[#2FD46E]" : "bg-emerald-900/10 dark:bg-white/[0.10]"
-                        }`}
-                      />
-                    ))}
-                  </div>
-                  <span className="shrink-0 text-[12px] font-bold tabular-nums text-emerald-800 dark:text-emerald-300">
-                    {setupDoneCount} of 3
-                  </span>
-                </div>
-                <ol className="mt-3 space-y-1">
-                  {setupSteps.map(({ label, tab, done, Icon }, index) => {
-                    const isNext = !done && label === nextSetup.label;
-                    return (
-                      <li key={label}>
-                        <button
-                          type="button"
-                          onClick={() => { haptic("light"); setActiveTab(tab); }}
-                          className={`flex min-h-[52px] w-full items-center gap-3 rounded-xl px-3 py-2 text-left active:bg-white/70 dark:active:bg-white/[0.06] ${
-                            isNext ? "bg-white/90 dark:bg-white/[0.05]" : ""
-                          }`}
-                        >
-                          <span
-                            aria-hidden
-                            className={`grid h-8 w-8 shrink-0 place-items-center rounded-full ${
-                              done
-                                ? "bg-[#00A63E] text-white dark:bg-[#2FD46E] dark:text-neutral-950"
-                                : isNext
-                                ? "border-2 border-neutral-950 bg-white text-neutral-950 dark:border-white dark:bg-transparent dark:text-white"
-                                : "border border-emerald-900/15 bg-white/60 text-neutral-500 dark:border-white/[0.15] dark:bg-transparent dark:text-neutral-400"
-                            }`}
-                          >
-                            {done ? <IconCheck size={15} strokeWidth={3} /> : <Icon size={16} strokeWidth={2} />}
-                          </span>
-                          <span
-                            className={`min-w-0 flex-1 truncate text-[14px] font-bold ${
-                              done ? "text-neutral-500 dark:text-neutral-400" : "text-neutral-950 dark:text-white"
-                            }`}
-                          >
-                            <span className="sr-only">Step {index + 1}: </span>
-                            {label}
-                            {done && <span className="sr-only"> (done)</span>}
-                          </span>
-                          <IconChevronRight size={16} strokeWidth={2.4} className="shrink-0 text-neutral-400 dark:text-neutral-500" />
-                        </button>
-                      </li>
-                    );
-                  })}
-                </ol>
-                <div className="mt-3 flex items-center gap-2">
-                  <button
-                    type="button"
-                    onClick={() => { haptic("light"); setActiveTab(nextSetup.tab); }}
-                    className="flex min-h-[44px] flex-1 items-center justify-center rounded-full bg-[#008236] text-[14px] font-bold text-white active:scale-[0.98] active:bg-[#006B2C] dark:bg-[#2FD46E] dark:text-neutral-950"
-                  >
-                    {nextSetup.tab === 1 ? "Create plan" : nextSetup.tab === 0 ? "Schedule tasks" : "Add routine"}
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => { haptic("light"); dismissIosSetup(); }}
-                    className="flex min-h-[44px] items-center justify-center rounded-full px-3 text-[13px] font-semibold text-neutral-600 active:text-neutral-950 dark:text-neutral-400 dark:active:text-white"
-                  >
-                    I&apos;ll do this later
-                  </button>
-                </div>
-              </section>
-            )}
-            <section data-testid="overview-streak-card" className={`${CARD} p-4`}>
-              <div className="flex items-center gap-3">
-                <span
-                  className={`grid h-12 w-12 shrink-0 place-items-center rounded-2xl ${
-                    executionStreak.atRisk
-                      ? "bg-amber-500/12 text-amber-500 dark:bg-amber-400/12 dark:text-amber-400"
-                      : "bg-emerald-500/12 text-emerald-600 dark:bg-emerald-400/12 dark:text-emerald-400"
-                  }`}
-                >
-                  <IconFlame size={22} strokeWidth={2} />
-                </span>
-                <div className="min-w-0 flex-1">
-                  <p className="truncate text-[16px] font-bold leading-none text-neutral-950 dark:text-white">
-                    {executionStreak.streak === 0 ? "No streak yet" : `${executionStreak.streak}-day streak`}
-                  </p>
-                  <p className="mt-1.5 truncate text-[12px] font-semibold text-neutral-500 dark:text-neutral-400">
-                    {executionStreak.atRisk
-                      ? "Complete one thing to keep it alive."
-                      : executionStreak.milestone
-                        ? "New milestone — keep the run going."
-                        : executionStreak.streak === 0
-                          ? "Finish a task or ritual to start."
-                          : "You showed up. Keep the run going."}
-                  </p>
-                </div>
-                {executionStreak.streak > 0 && (
-                  <span className={`shrink-0 text-[24px] font-semibold tabular-nums leading-none ${
-                    executionStreak.atRisk ? "text-amber-500 dark:text-amber-400" : "text-emerald-600 dark:text-emerald-400"
-                  }`}>
-                    {executionStreak.streak}
-                  </span>
-                )}
-              </div>
-            </section>
-
-            {/* Recently missed / overdue — renders nothing when all clear. */}
-            <NeedsAttentionCard data={needsAttention} onNavigate={setActiveTab} onHandleMissed={setMissedSheet} onAdaptMilestone={setAdaptingMilestoneId} onReviewUnreliableSlot={(row) => openEditSheet(row.task)} onClearAll={handleClearAttention} onDismissOne={handleDismissAttentionOne} />
-
-            {/* Trackers waiting on this period's entry — nothing once all are in. */}
-            <CheckInsDueCard
-              trackers={schedule.progressTrackers}
-              metricEntries={schedule.metricEntries}
-              todayISO={todayISO()}
-              trackingStart={schedule.preferences?.startDate}
-              onLog={(tracker) => setEntryTracker(tracker)}
-              onOpenTracking={() => setActiveTab(8)}
-            />
-
-            {/* The weekly read — pattern engine only on iPhone (no language
-                model runs in Safari/the PWA), so it costs no model memory. */}
-            <InsightsCard
-              schedule={schedule}
-              setSchedule={setSchedule}
-              onToast={setToast}
-              onReviewTask={(task) => openEditSheet(task)}
-              onReviewDay={(day) => { setActiveDay(day); setActiveTab(0); }}
-            />
-
-            <section data-testid="overview-next-task" className={`${CARD} p-0`}>
-              <button
-                type="button"
-                onClick={() => { haptic("light"); setActiveTab(0); }}
-                className="flex min-h-[72px] w-full items-center gap-3 px-4 py-3 text-left active:bg-neutral-50 dark:active:bg-white/[0.04]"
-              >
-                <span className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-emerald-500/12 text-emerald-600 dark:bg-emerald-400/12 dark:text-emerald-400">
-                  <IconCalendar size={19} strokeWidth={2.2} />
-                </span>
-                <span className="min-w-0 flex-1">
-                  <span className="block text-[11px] font-bold uppercase tracking-[0.08em] text-neutral-600 dark:text-neutral-400">Next up</span>
-                  <span className="mt-0.5 block truncate text-[16px] font-bold text-neutral-950 dark:text-white">
-                    {todayOpenTasks[0]?.title ?? "Plan your day"}
-                  </span>
-                  <span className="mt-0.5 block truncate text-[12px] font-medium text-neutral-500 dark:text-neutral-400">
-                    {todayOpenTasks[0]
-                      ? [todayOpenTasks[0].startTime && formatDisplayTime(todayOpenTasks[0].startTime), schedule.plans.find((plan) => plan.id === todayOpenTasks[0].planId)?.title].filter(Boolean).join(" · ") || "Open Today to continue"
-                      : todayTasks.length > 0
-                        ? "Everything scheduled is complete"
-                        : "Open Today to add your first task"}
-                  </span>
-                </span>
-                <IconChevronRight size={18} strokeWidth={2.2} className="shrink-0 text-neutral-500 dark:text-neutral-400" />
-              </button>
-            </section>
-
-            <section data-testid="overview-week-summary" className={`${CARD} p-4`}>
-              <div className="flex items-start justify-between gap-4">
-                <div>
-                  <p className="text-[13px] font-bold text-neutral-950 dark:text-white">Today&apos;s execution</p>
-                  <p className="mt-1 text-[28px] font-semibold leading-none tabular-nums text-neutral-950 dark:text-white">
-                    {dashboardProgressPct}%
-                  </p>
-                </div>
-                <span className={`rounded-full px-2.5 py-1 text-[12px] font-bold tabular-nums ${missedThisWeek > 0 ? "bg-rose-500/10 text-rose-600 dark:bg-rose-400/10 dark:text-rose-400" : "bg-emerald-500/10 text-emerald-700 dark:bg-emerald-400/10 dark:text-emerald-400"}`}>
-                  {missedThisWeek > 0 ? `${missedThisWeek} missed` : "On track"}
-                </span>
-              </div>
-              <div className="mt-4 grid grid-cols-2 gap-3 border-t border-neutral-200/70 pt-3 dark:border-white/[0.07]">
-                <p className="text-[12px] font-medium text-neutral-500 dark:text-neutral-400">
-                  <span className="font-bold tabular-nums text-neutral-950 dark:text-white">{todayDone}/{todayTasks.length}</span> done
-                </p>
-                <p className="text-right text-[12px] font-medium text-neutral-500 dark:text-neutral-400">
-                  <span className="font-bold tabular-nums text-neutral-950 dark:text-white">{formatMinutesBrief(remainingPlannedMinutes)}</span> remaining
-                </p>
-              </div>
-            </section>
-          </div>
+          <IOSOverview
+            schedule={schedule}
+            setSchedule={setSchedule}
+            todayKey={todayKey}
+            needsAttention={needsAttention}
+            setupDismissed={iosSetupDismissed}
+            onDismissSetup={dismissIosSetup}
+            onNavigate={setActiveTab}
+            onOpenPlan={(planId) => { setSelectedPlanId(planId); setActiveTab(1); }}
+            onMarkDone={(taskId, ids) => handleToggleTaskComplete(taskId, ids, todayKey, todayISO())}
+            onToggleSlot={(taskId, slotIndex) => handleToggleSlot(taskId, slotIndex, todayKey, todayISO())}
+            onHandleMissed={setMissedSheet}
+            onAdaptMilestone={setAdaptingMilestoneId}
+            onReviewUnreliableSlot={(row) => openEditSheet(row.task)}
+            onClearAttention={handleClearAttention}
+            onDismissAttentionOne={handleDismissAttentionOne}
+            onLogTracker={(tracker) => setEntryTracker(tracker)}
+            onToast={setToast}
+            onReviewTask={(task) => openEditSheet(task)}
+            onReviewDay={(day) => { setActiveDay(day); setActiveTab(0); }}
+          />
         </ErrorBoundary>
       );
     }
