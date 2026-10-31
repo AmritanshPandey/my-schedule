@@ -33,7 +33,7 @@ import { formatTrackerFigure, milestoneSpan } from '@planr/core/lib/milestoneTar
 import MilestoneLinks from '../milestone/MilestoneLinks';
 import { paceNarrative } from '@planr/core/lib/paceModel';
 import { isPlanRunning, planLifecycleLabel } from '@planr/core/lib/planLifecycle';
-import { sumEntriesForDate } from '@planr/core/lib/metricEntries';
+import { valueForDate } from '@planr/core/lib/metricEntries';
 import { planEffectiveEndDate, resolveMilestoneStatus } from '@planr/core/lib/roadmapDates';
 import { computeTrend, type TrendResult } from '@planr/core/lib/trendUtils';
 import { getTaskCheckableItems, isTrackedTask } from '@planr/core/lib/taskCompletion';
@@ -766,7 +766,7 @@ export default function PlanDetailView({
             const avg = entries.reduce((s, e) => s + e.value, 0) / entries.length;
             const unit = tracker.unit ? ` ${tracker.unit}` : '';
             const fmtAvg = Number.isInteger(avg) ? String(avg) : avg.toFixed(1);
-            const todayTotal = sumEntriesForDate(schedule.metricEntries, tracker.id, todayISO());
+            const todayTotal = valueForDate(schedule.metricEntries, tracker, todayISO());
             return (
               <View className="flex-row items-stretch border-t border-neutral-100 dark:border-white/[0.06]">
                 {[

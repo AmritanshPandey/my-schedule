@@ -5,7 +5,7 @@ import { m } from "framer-motion";
 import { IconPlus } from "@tabler/icons-react";
 import { haptic } from "@/lib/haptics";
 import { PLAN_NEUTRAL } from "@/lib/colorSystem";
-import { sumEntriesForDate } from "@/lib/metricEntries";
+import { valueForDate } from "@/lib/metricEntries";
 import { todayISO } from "@/lib/dateUtils";
 import { buildCheckIn, checkInStatusLabel } from "@/lib/trackerCadence";
 import type { Plan, ProgressTracker, MetricEntry } from "@/lib/useScheduleDB";
@@ -78,7 +78,7 @@ export default function TrackerQuickBar({
               ? "bg-amber-500"
               : PLAN_NEUTRAL.dot;
           const lastEntry = lastEntryByTracker.get(tracker.id);
-          const todayTotal = sumEntriesForDate(metricEntries, tracker.id, today);
+          const todayTotal = valueForDate(metricEntries, tracker, today);
           const lastValueDisplay = todayTotal > 0
             ? `${todayTotal}${tracker.unit ? ` ${tracker.unit}` : ""} today`
             : lastEntry

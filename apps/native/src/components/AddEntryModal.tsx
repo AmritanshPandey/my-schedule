@@ -19,7 +19,7 @@ interface AddEntryModalProps {
    *  chip increments the value field rather than saving immediately, so a
    *  misfire doesn't write a bad row. Omit/empty = no chip row. */
   quickAmounts?: number[];
-  /** Today's already-logged total for this tracker, shown under the label when > 0. */
+  /** What this tracker reads today (valueForDate), shown under the label when > 0. */
   todayTotal?: number;
 }
 

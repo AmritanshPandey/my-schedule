@@ -28,7 +28,7 @@ import { categoriesById, taskIdentity } from '@planr/core/lib/taskIdentity';
 import { constrainTaskToPlanWindow } from '@planr/core/lib/planTaskWindow';
 import { formatDate, formatDayNoteLabel, localISODate, todayISO } from '@planr/core/lib/dateUtils';
 import { quickAmountsForUnit } from '@planr/core/lib/quickAmounts';
-import { sumEntriesForDate } from '@planr/core/lib/metricEntries';
+import { valueForDate } from '@planr/core/lib/metricEntries';
 import {
   addSubtaskToTasks,
   applyTaskDelete,
@@ -490,6 +490,11 @@ export default function IOSScheduleApp() {
   const editingRitual = editRitualId ? (schedule.rituals ?? []).find((r) => r.id === editRitualId) ?? null : null;
   const [subtasksRef, setSubtasksRef] = useState<{ id: string; day: DayKey; dateISO: string } | null>(null);
   const [entryTracker, setEntryTracker] = useState<ProgressTracker | null>(null);
+  // The log sheet outlives entryTracker by its dismissal, so it keeps the last
+  // tracker's labels while it slides away rather than flashing "Value".
+  const lastEntryTracker = useRef<ProgressTracker | null>(null);
+  if (entryTracker) lastEntryTracker.current = entryTracker;
+  const entrySheetTracker = entryTracker ?? lastEntryTracker.current;
   const [confirmState, setConfirmState] = useState<ConfirmState | null>(null);
   const [taskDeleteRequest, setTaskDeleteRequest] = useState<TaskDeleteRequest | null>(null);
   const [toastState, setToastState] = useState<ToastState | null>(null);
@@ -2105,24 +2110,28 @@ export default function IOSScheduleApp() {
               handleDeleteGoal(goalId);
             }}
           />
-          <AddEntryModal
-            isOpen={!!entryTracker}
-            onClose={() => setEntryTracker(null)}
-            metric={entryTracker ? { name: entryTracker.title, unit: entryTracker.unit ?? '' } : undefined}
-            quickAmounts={entryTracker ? quickAmountsForUnit(entryTracker.unit) : undefined}
-            todayTotal={entryTracker ? sumEntriesForDate(schedule.metricEntries, entryTracker.id, todayISO()) : undefined}
-            onSave={(value, date) => {
-              if (!entryTracker) return;
-              const entry: MetricEntry = { id: uid(), planId: entryTracker.planId, trackerId: entryTracker.id, value, date };
-              setSchedule((prev) => ({
-                ...prev,
-                progressTrackers: prev.progressTrackers.some((tracker) => tracker.id === entryTracker.id) ? prev.progressTrackers : [...prev.progressTrackers, entryTracker],
-                metricEntries: [...prev.metricEntries, entry],
-              }));
-            }}
-          />
         </>
       )}
+
+      {/* Always mounted, outside the block above: closing it clears
+          entryTracker, and a native iOS sheet unmounted mid-presentation is
+          never dismissed — it froze on screen after every Save. */}
+      <AddEntryModal
+        isOpen={!!entryTracker}
+        onClose={() => setEntryTracker(null)}
+        metric={entrySheetTracker ? { name: entrySheetTracker.title, unit: entrySheetTracker.unit ?? '' } : undefined}
+        quickAmounts={entrySheetTracker ? quickAmountsForUnit(entrySheetTracker.unit) : undefined}
+        todayTotal={entrySheetTracker ? valueForDate(schedule.metricEntries, entrySheetTracker, todayISO()) : undefined}
+        onSave={(value, date) => {
+          if (!entryTracker) return;
+          const entry: MetricEntry = { id: uid(), planId: entryTracker.planId, trackerId: entryTracker.id, value, date };
+          setSchedule((prev) => ({
+            ...prev,
+            progressTrackers: prev.progressTrackers.some((tracker) => tracker.id === entryTracker.id) ? prev.progressTrackers : [...prev.progressTrackers, entryTracker],
+            metricEntries: [...prev.metricEntries, entry],
+          }));
+        }}
+      />
 
       {detailRitual && (
         <View className="absolute inset-0 z-50 bg-[#F5F5F5] dark:bg-[#0E0E0E]" style={{ paddingTop: insets.top }}>

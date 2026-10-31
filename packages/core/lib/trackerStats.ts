@@ -21,7 +21,7 @@
  */
 
 import type { MetricEntry, ProgressTracker } from "./scheduleTypes";
-import { dailyTotals, sumEntriesForDate } from "./metricEntries";
+import { dailyLatest, dailyTotals, sumEntriesForDate } from "./metricEntries";
 import { computeTrend, type TrendResult } from "./trendUtils";
 
 /** How many daily points the sparkline shows. */
@@ -53,8 +53,9 @@ export interface TrackerStat {
   /** Per-day totals, oldest first — the sparkline's data. */
   series: number[];
   /**
-   * Per-day totals with their dates, oldest first — what the chart plots.
-   * One point per day even for a metric logged several times, so a busy
+   * Per-day values with their dates, oldest first — what the chart plots:
+   * the day's sum for a daily metric, its last reading for a point-in-time
+   * one. One point per day even for a metric logged several times, so a busy
    * afternoon reads as one day rather than a spike.
    */
   points: Array<{ date: string; value: number }>;
@@ -126,7 +127,12 @@ export function buildTrackerStat(
     .sort((a, b) => a.entry.date.localeCompare(b.entry.date) || a.index - b.index)
     .map((x) => x.entry);
 
-  const totals = dailyTotals(mine as MetricEntry[], tracker.id);
+  const isDaily = typeof tracker.dailyTarget === "number" && tracker.dailyTarget > 0;
+
+  // One value per day. A cumulative metric's day is the sum of its logs; a
+  // point-in-time one's is its last reading — summing two weigh-ins on one
+  // day charted a 78 kg person at 156 kg.
+  const totals = isDaily ? dailyTotals(mine as MetricEntry[], tracker.id) : dailyLatest(mine, tracker.id);
   const todayTotal = sumEntriesForDate(mine as MetricEntry[], tracker.id, todayISO);
   const todayCount = mine.filter((e) => e.date === todayISO).length;
   const latest = sorted.length > 0 ? sorted[sorted.length - 1] : null;
@@ -143,8 +149,6 @@ export function buildTrackerStat(
           goalDirection: tracker.goalDirection ?? "increase_good",
         })
       : null;
-
-  const isDaily = typeof tracker.dailyTarget === "number" && tracker.dailyTarget > 0;
 
   let percent: number | null = null;
   let targetValue: number | null = null;

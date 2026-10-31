@@ -5,7 +5,7 @@ import { AnimatePresence, m } from "framer-motion";
 import dynamic from "next/dynamic";
 import AddEntryModal from "@/components/AddEntryModal";
 import { quickAmountsForUnit } from "@/lib/quickAmounts";
-import { sumEntriesForDate } from "@/lib/metricEntries";
+import { valueForDate } from "@/lib/metricEntries";
 import { completedRitualIdsOn } from "@/lib/consistency/ritualDayStatus";
 import { ritualScheduledOnDate } from "@/lib/ritualRecurrence";
 import { TaskBlockCard } from "@/components/TaskBlockCard";
@@ -5008,7 +5008,7 @@ export default function ScheduleApp() {
           }}
           metric={{ name: entryTracker.title, unit: entryTracker.unit ?? "" }}
           quickAmounts={quickAmountsForUnit(entryTracker.unit)}
-          todayTotal={sumEntriesForDate(schedule.metricEntries, entryTracker.id, todayISO())}
+          todayTotal={valueForDate(schedule.metricEntries, entryTracker, todayISO())}
         />
       )}
 

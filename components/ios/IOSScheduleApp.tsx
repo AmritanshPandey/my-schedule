@@ -59,7 +59,7 @@ import { useReminders } from "@/lib/useReminders";
 import { bootLog, isIOSSafeMode, isStandalonePWA } from "@/lib/iosSafeMode";
 import { todayISO, localISODate, addDaysToISO, formatDate, formatDayNoteLabel } from "@/lib/dateUtils";
 import { quickAmountsForUnit } from "@/lib/quickAmounts";
-import { sumEntriesForDate } from "@/lib/metricEntries";
+import { valueForDate } from "@/lib/metricEntries";
 import {
   applyTaskDelete,
   createTask,
@@ -1980,7 +1980,7 @@ export default function IOSScheduleApp() {
             onClose={() => setEntryTracker(null)}
             metric={entryTracker ? { name: entryTracker.title, unit: entryTracker.unit ?? "" } : undefined}
             quickAmounts={entryTracker ? quickAmountsForUnit(entryTracker.unit) : undefined}
-            todayTotal={entryTracker ? sumEntriesForDate(schedule.metricEntries, entryTracker.id, todayISO()) : undefined}
+            todayTotal={entryTracker ? valueForDate(schedule.metricEntries, entryTracker, todayISO()) : undefined}
             onSave={(value, date) => {
               if (!entryTracker) return;
               const entry: MetricEntry = { id: uid(), planId: entryTracker.planId, trackerId: entryTracker.id, value, date };

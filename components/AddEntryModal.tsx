@@ -19,8 +19,9 @@ interface AddEntryModalProps {
    *  misfire doesn't write a bad row. Omit/empty = no chip row, unchanged
    *  behavior — see lib/quickAmounts.ts's quickAmountsForUnit. */
   quickAmounts?: number[];
-  /** Today's already-logged total for this tracker, shown as a small line
-   *  under the label when > 0. See lib/metricEntries.ts's sumEntriesForDate. */
+  /** What this tracker reads today, shown as a small line under the label
+   *  when > 0: the sum for a daily metric, the last reading otherwise. See
+   *  lib/metricEntries.ts's valueForDate. */
   todayTotal?: number;
 }
 

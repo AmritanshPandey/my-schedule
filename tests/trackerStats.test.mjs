@@ -225,6 +225,54 @@ test("points are daily totals with their dates, oldest first", () => {
   ], "two logs on one day are one point, not a spike");
 });
 
+test("a point-in-time metric logged twice in a day plots the later reading, not the sum", () => {
+  // Regression: re-logging a weight on the same day (a correction, or a
+  // morning and an evening weigh-in) charted 78.5 + 78.2 = 156.7 kg and read
+  // as a +98% swing — logging looked broken.
+  const t = tracker({ id: "w", title: "Weight", unit: "kg", goalDirection: "decrease_good" });
+  const stat = buildTrackerStat(
+    t,
+    [entry("2026-08-31", 79.1, "w"), entry(TODAY, 78.5, "w"), entry(TODAY, 78.2, "w")],
+    TODAY,
+  );
+
+  assert.deepEqual(stat.points, [
+    { date: "2026-08-31", value: 79.1 },
+    { date: TODAY, value: 78.2 },
+  ]);
+  assert.deepEqual(stat.series, [79.1, 78.2]);
+  assert.equal(stat.trend.direction, "down");
+  assert.equal(stat.trend.state, "positive", "78.2 vs 79.1 is progress for a decrease-good metric");
+  assert.equal(stat.latestValue, 78.2);
+});
+
+test("the later reading wins by log order when two share a date", () => {
+  // A back-dated entry appended after today's must not depend on array
+  // position across days, but within one day the last one logged is the truth.
+  const t = tracker({ id: "w", unit: "kg" });
+  const stat = buildTrackerStat(
+    t,
+    [entry(TODAY, 80, "w"), entry("2026-08-31", 81, "w"), entry(TODAY, 79, "w")],
+    TODAY,
+  );
+  assert.deepEqual(stat.points, [
+    { date: "2026-08-31", value: 81 },
+    { date: TODAY, value: 79 },
+  ]);
+});
+
+test("valueForDate sums a daily metric but reads a point-in-time one's last log", async () => {
+  const { valueForDate } = await import("../lib/metricEntries.ts");
+  const entries = [
+    entry(TODAY, 500), entry(TODAY, 250),
+    entry(TODAY, 78.5, "w"), entry(TODAY, 78.2, "w"), entry("2026-08-31", 79, "w"),
+  ];
+
+  assert.equal(valueForDate(entries, { id: "t1", dailyTarget: 2000 }, TODAY), 750);
+  assert.equal(valueForDate(entries, { id: "w" }, TODAY), 78.2, "the log sheet said 156.7 kg");
+  assert.equal(valueForDate(entries, { id: "w" }, "2026-08-30"), 0, "nothing logged reads as 0");
+});
+
 test("startingValue falls back to the first entry, and is null with neither", () => {
   const explicit = buildTrackerStat(tracker({ startingValue: 110 }), [entry(TODAY, 107)], TODAY);
   assert.equal(explicit.startingValue, 110, "the configured value wins");

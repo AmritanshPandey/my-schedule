@@ -49,7 +49,7 @@ import type { MilestoneLinkKind } from "@/lib/milestoneLinks";
 import { formatTrackerFigure, milestoneSpan } from "@/lib/milestoneTargets";
 import MilestoneLinks from "@/components/milestone/MilestoneLinks";
 import { isPlanRunning, planLifecycleLabel } from "@/lib/planLifecycle";
-import { sumEntriesForDate } from "@/lib/metricEntries";
+import { valueForDate } from "@/lib/metricEntries";
 import { planEffectiveEndDate, resolveMilestoneStatus } from "@/lib/roadmapDates";
 import { computeTrend } from "@/lib/trendUtils";
 import { getTaskCheckableItems, isTrackedTask } from "@/lib/taskCompletion";
@@ -1146,7 +1146,7 @@ export default function PlanDetailView({
           const avg = entries.reduce((s, e) => s + e.value, 0) / entries.length;
           const unit = tracker.unit ? ` ${tracker.unit}` : "";
           const fmtAvg = Number.isInteger(avg) ? String(avg) : avg.toFixed(1);
-          const todayTotal = sumEntriesForDate(schedule.metricEntries, tracker.id, todayISO());
+          const todayTotal = valueForDate(schedule.metricEntries, tracker, todayISO());
           return (
             <div className="flex items-stretch divide-x divide-neutral-100 border-t border-neutral-100 dark:divide-white/[0.06] dark:border-white/[0.06]">
               {[
