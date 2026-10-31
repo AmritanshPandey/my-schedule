@@ -30,7 +30,7 @@ import BottomSheet from "@/components/ui/BottomSheet";
 import SheetHeader from "@/components/ui/SheetHeader";
 import Button from "@/components/ui/Button";
 import IconButton from "@/components/ui/IconButton";
-import Input, { FORM_INPUT_CLASS, FORM_LABEL, Textarea } from "@/components/ui/Input";
+import Input, { FORM_LABEL, Textarea } from "@/components/ui/Input";
 import AddRowButton from "@/components/ui/AddRowButton";
 import SegmentedControl from "@/components/ui/SegmentedControl";
 import WeekdayPicker from "@/components/ui/WeekdayPicker";
@@ -62,6 +62,7 @@ import SubtaskDraftRow, { type SubtaskDraft } from "./SubtaskDraftRow";
 import { validateTaskSlots } from "@/lib/scheduleRules";
 import BuilderHints from "@/components/intelligence/BuilderHints";
 import { buildTaskReviewContext, reviewTaskDraft, type BuilderHint } from "@/lib/intelligence/builderChecks";
+import DateInput from "@/components/ui/DateInput";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -1167,14 +1168,12 @@ export function TaskSheet({
                   {repeatMode === "once" && (
                     <div>
                       <label className={FORM_LABEL} htmlFor="task-once-date">Date</label>
-                      <input
-                        id="task-once-date"
-                        type="date"
+                      <DateInput
                         value={onceDate}
-                        onChange={(e) => setOnceDate(e.target.value)}
-                        aria-label="One-off task date"
+                        onChange={(v) => setOnceDate(v)}
+                        id="task-once-date"
                         aria-invalid={!onceDate}
-                        className={`${FORM_INPUT_CLASS} px-3`}
+                        ariaLabel="One-off task date"
                       />
                     </div>
                   )}
@@ -1197,26 +1196,22 @@ export function TaskSheet({
                   <div className="grid grid-cols-2 gap-2">
                     <div>
                       <label className={FORM_LABEL} htmlFor="task-active-from">Starts</label>
-                      <input
-                        id="task-active-from"
-                        type="date"
+                      <DateInput
                         value={activeFrom}
+                        onChange={(v) => setActiveFrom(v)}
                         max={activeUntil || undefined}
-                        onChange={(e) => setActiveFrom(e.target.value)}
-                        aria-label="Task start date"
-                        className={`${FORM_INPUT_CLASS} px-3`}
+                        id="task-active-from"
+                        ariaLabel="Task start date"
                       />
                     </div>
                     <div>
                       <label className={FORM_LABEL} htmlFor="task-active-until">Ends</label>
-                      <input
-                        id="task-active-until"
-                        type="date"
+                      <DateInput
                         value={activeUntil}
+                        onChange={(v) => setActiveUntil(v)}
                         min={activeFrom || undefined}
-                        onChange={(e) => setActiveUntil(e.target.value)}
-                        aria-label="Task end date"
-                        className={`${FORM_INPUT_CLASS} px-3`}
+                        id="task-active-until"
+                        ariaLabel="Task end date"
                       />
                     </div>
                   </div>

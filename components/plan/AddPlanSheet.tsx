@@ -26,6 +26,7 @@ import {
   DurationPresets,
   iconPickerClass,
 } from "./planFormShared";
+import DateInput from "@/components/ui/DateInput";
 
 type SetScheduleFn = (updater: (prev: Schedule) => Schedule) => void;
 
@@ -175,23 +176,13 @@ export default function AddPlanSheet({ open, onClose, setSchedule, onUseAI, goal
           <div className="grid grid-cols-2 gap-2">
             <div>
               <p className={`mb-1 ${typography.eyebrow}`}>Start date</p>
-              <input
-                type="date"
-                value={startDate}
-                onChange={(e) => setStartDate(e.target.value)}
-                className="h-11 w-full min-w-0 rounded-xl border border-neutral-200 bg-neutral-50 px-3 text-[16px] text-neutral-900 outline-none transition-colors focus:border-neutral-300 focus:bg-neutral-100 dark:border-white/10 dark:bg-white/[0.04] dark:text-white dark:focus:border-white/20 dark:focus:bg-white/[0.07] dark:[color-scheme:dark]"
-              />
+              <DateInput value={startDate} onChange={(v) => setStartDate(v)} />
             </div>
             <div>
               <p className={`mb-1 ${typography.eyebrow}`}>
                 End date
               </p>
-              <input
-                type="date"
-                value={endDate}
-                onChange={(e) => setEndDate(e.target.value)}
-                className="h-11 w-full min-w-0 rounded-xl border border-neutral-200 bg-neutral-50 px-3 text-[16px] text-neutral-900 outline-none transition-colors focus:border-neutral-300 focus:bg-neutral-100 dark:border-white/10 dark:bg-white/[0.04] dark:text-white dark:focus:border-white/20 dark:focus:bg-white/[0.07] dark:[color-scheme:dark]"
-              />
+              <DateInput value={endDate} onChange={(v) => setEndDate(v)} />
             </div>
           </div>
 

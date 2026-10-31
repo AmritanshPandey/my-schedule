@@ -13,6 +13,7 @@ import { describeAction, canConfirm, actionNoun, type ReviewField } from "@/lib/
 import { describeBreaches, type CreationCounts } from "@/lib/ai/limits";
 import type { TaskCandidate } from "@/lib/ai/targets";
 import { DAYS, DAY_LABELS, type DayKey } from "@/lib/scheduleConstants";
+import DateInput from "@/components/ui/DateInput";
 
 /**
  * The last thing between an AI response and the schedule.
@@ -361,12 +362,7 @@ function FieldEditor({
       );
     case "date":
       return (
-        <input
-          type="date"
-          value={(value as string) ?? ""}
-          onChange={(e) => onChange(e.target.value)}
-          className="h-11 w-full min-w-0 rounded-xl border border-neutral-200 bg-neutral-50 px-3 text-[14px] text-neutral-900 outline-none transition-colors focus:border-neutral-300 focus:bg-white dark:border-white/10 dark:bg-white/[0.04] dark:text-white dark:focus:border-white/20 dark:focus:bg-white/[0.07] dark:[color-scheme:dark]"
-        />
+        <DateInput value={(value as string) ?? ""} onChange={(v) => onChange(v)} />
       );
     case "time":
       return <TimeInput value={(value as string) ?? ""} onChange={onChange} ariaLabel={field.label} />;

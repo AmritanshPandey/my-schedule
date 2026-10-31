@@ -10,6 +10,7 @@ import Input from "@/components/ui/Input";
 import { typography } from "@/components/ui/Typography";
 import BuilderHints from "@/components/intelligence/BuilderHints";
 import { reviewGoalDraft } from "@/lib/intelligence/builderChecks";
+import DateInput from "@/components/ui/DateInput";
 
 type SetScheduleFn = (updater: (prev: Schedule) => Schedule) => void;
 
@@ -100,21 +101,11 @@ export default function GoalFormSheet({ open, onClose, setSchedule, goal }: Goal
           <div className="grid grid-cols-2 gap-2">
             <div>
               <p className={`mb-1 ${typography.eyebrow}`}>Start date</p>
-              <input
-                type="date"
-                value={startDate}
-                onChange={(e) => setStartDate(e.target.value)}
-                className="h-11 w-full min-w-0 rounded-xl border border-neutral-200 bg-neutral-50 px-3 text-[16px] text-neutral-900 outline-none transition-colors focus:border-neutral-300 focus:bg-neutral-100 dark:border-white/10 dark:bg-white/[0.04] dark:text-white dark:focus:border-white/20 dark:focus:bg-white/[0.07] dark:[color-scheme:dark]"
-              />
+              <DateInput value={startDate} onChange={(v) => setStartDate(v)} />
             </div>
             <div>
               <p className={`mb-1 ${typography.eyebrow}`}>Target date</p>
-              <input
-                type="date"
-                value={targetDate}
-                onChange={(e) => setTargetDate(e.target.value)}
-                className="h-11 w-full min-w-0 rounded-xl border border-neutral-200 bg-neutral-50 px-3 text-[16px] text-neutral-900 outline-none transition-colors focus:border-neutral-300 focus:bg-neutral-100 dark:border-white/10 dark:bg-white/[0.04] dark:text-white dark:focus:border-white/20 dark:focus:bg-white/[0.07] dark:[color-scheme:dark]"
-              />
+              <DateInput value={targetDate} onChange={(v) => setTargetDate(v)} />
             </div>
           </div>
         </div>

@@ -27,6 +27,7 @@ import { AICyclingStatus } from "@/components/ai/AIThinkingStatus";
 import { formatDisplayTime } from "@/lib/timeUtils";
 import { DAYS, type DayKey, type Plan, type Schedule } from "@/lib/useScheduleDB";
 import { typography } from "@/components/ui/Typography";
+import DateInput from "@/components/ui/DateInput";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -619,18 +620,8 @@ export default function AIPlanCreatorSheet({
             })}
           </div>
           <div className="grid grid-cols-2 gap-2">
-            <input
-              type="date"
-              value={startDate}
-              onChange={(e) => setStartDate(e.target.value)}
-              className="h-10 w-full rounded-xl border border-neutral-200 bg-neutral-50 px-3 text-[14px] text-neutral-900 outline-none dark:border-white/10 dark:bg-white/[0.04] dark:text-white dark:[color-scheme:dark]"
-            />
-            <input
-              type="date"
-              value={endDate}
-              onChange={(e) => setEndDate(e.target.value)}
-              className="h-10 w-full rounded-xl border border-neutral-200 bg-neutral-50 px-3 text-[14px] text-neutral-900 outline-none dark:border-white/10 dark:bg-white/[0.04] dark:text-white dark:[color-scheme:dark]"
-            />
+            <DateInput value={startDate} onChange={(v) => setStartDate(v)} size="sm" />
+            <DateInput value={endDate} onChange={(v) => setEndDate(v)} size="sm" />
           </div>
         </div>
 

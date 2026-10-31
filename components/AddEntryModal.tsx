@@ -5,7 +5,8 @@ import { IconCheck } from "@tabler/icons-react";
 import BottomSheet from "@/components/ui/BottomSheet";
 import SheetHeader from "@/components/ui/SheetHeader";
 import Button from "@/components/ui/Button";
-import Input from "@/components/ui/Input";
+import Input, { FORM_LABEL } from "@/components/ui/Input";
+import DateInput from "@/components/ui/DateInput";
 import { todayISO } from "@/lib/dateUtils";
 
 interface AddEntryModalProps {
@@ -89,12 +90,10 @@ export default function AddEntryModal({ isOpen, onClose, onSave, metric, quickAm
           </div>
         )}
 
-        <Input
-          label="Date"
-          type="date"
-          value={date}
-          onChange={(e) => setDate(e.target.value)}
-        />
+        <div>
+          <p className={FORM_LABEL}>Date</p>
+          <DateInput value={date} onChange={setDate} ariaLabel="Date" />
+        </div>
 
         <div className="flex gap-2 pt-1">
           <Button

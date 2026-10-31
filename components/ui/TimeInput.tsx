@@ -1,9 +1,12 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import { IconClock } from "@tabler/icons-react";
 import { displayToInputTime, formatDisplayTime, minutesToInputTime, parseTimeToMinutes, punctuateTimeDigits } from "@/lib/timeUtils";
 import { stopTextEditKeyPropagation } from "@/lib/keyboardEvents";
 import { typography } from "@/components/ui/Typography";
+import { useFinePointer } from "@/components/ui/DateInput";
+import { FORM_CONTROL_CHROME } from "@/components/ui/Input";
 
 interface TimeInputProps {
   value: string;
@@ -29,6 +32,12 @@ function partsFor(value: string): { draft: string; period: Period } {
     draft: `${String(hour).padStart(2, "0")}:${String(minutes % 60).padStart(2, "0")}`,
     period: minutes >= 720 ? "PM" : "AM",
   };
+}
+
+/** The 24-hour "HH:MM" a native time input accepts, or "" when unset. */
+function nativeValue(value: string): string {
+  const minutes = parseTimeToMinutes(displayToInputTime(value) || value);
+  return minutes === null ? "" : minutesToInputTime(minutes);
 }
 
 function parseDraft(draft: string, period: Period): string | null {
@@ -106,6 +115,37 @@ export default function TimeInput({
   // an already-set time. Keeping the selected segment quiet until there are
   // digits makes the whole control read as one unset field.
   const isEmpty = draft === "";
+  const fine = useFinePointer();
+
+  // On touch the platform's own time picker is the better control: iOS's
+  // wheels, Android's clock dialog. The typed field below is for keyboards.
+  if (!fine) {
+    return (
+      <div>
+        {label && <p className={`mb-1.5 ${typography.eyebrow}`}>{label}</p>}
+        <div className={`${FORM_CONTROL_CHROME} relative flex h-11 w-full items-center focus-within:border-emerald-600/60 dark:focus-within:border-emerald-400/50 ${disabled ? "opacity-60" : ""} ${className}`}>
+          <IconClock size={16} strokeWidth={2} aria-hidden="true" className="pointer-events-none absolute left-3 text-neutral-500 dark:text-neutral-400" />
+          <input
+            type="time"
+            value={nativeValue(value)}
+            aria-label={ariaLabel ?? label ?? "Time"}
+            disabled={disabled}
+            onFocus={onFocus}
+            onChange={(event) => {
+              if (event.currentTarget.value) onChange(event.currentTarget.value);
+            }}
+            className="[&::-webkit-calendar-picker-indicator]:hidden h-full w-full min-w-0 bg-transparent pl-9 pr-3 text-[16px] font-semibold tabular-nums outline-none disabled:cursor-not-allowed dark:[color-scheme:dark]"
+          />
+          {!value && (
+            <span aria-hidden="true" className="pointer-events-none absolute left-9 text-[16px] font-semibold text-neutral-400 dark:text-neutral-500">
+              --:--
+            </span>
+          )}
+        </div>
+        <span className="sr-only">{formatDisplayTime(value)}</span>
+      </div>
+    );
+  }
 
   return (
     <div>
@@ -116,7 +156,7 @@ export default function TimeInput({
       )}
 
       <div
-        className={`flex h-11 min-w-0 items-stretch overflow-hidden rounded-xl border border-neutral-200 bg-neutral-50 transition-colors focus-within:border-neutral-300 focus-within:bg-white dark:border-white/10 dark:bg-white/[0.04] dark:focus-within:border-white/20 dark:focus-within:bg-white/[0.07] ${className}`}
+        className={`flex h-11 min-w-0 items-stretch overflow-hidden rounded-xl border border-neutral-200 bg-neutral-50 transition-colors focus-within:border-emerald-600/60 focus-within:bg-neutral-100 dark:border-white/10 dark:bg-white/[0.04] dark:focus-within:border-emerald-400/50 dark:focus-within:bg-white/[0.07] ${className}`}
       >
         <input
           type="text"

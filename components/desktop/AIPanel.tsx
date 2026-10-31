@@ -20,6 +20,7 @@ import { buildCreateTaskProposal, type AIProposal } from "@/lib/aiProposal";
 import { ProposalPreviewCard } from "@/components/ai/ProposalPreviewCard";
 import { AIThinkingStatus, AIStreamingCursor } from "@/components/ai/AIThinkingStatus";
 import { AIErrorBanner } from "@/components/ai/AIErrorBanner";
+import DateInput from "@/components/ui/DateInput";
 
 interface Message {
   role: "user" | "assistant";
@@ -210,13 +211,11 @@ function PlanDraftCard({ action, onApply }: { action: Extract<AIActionResult, { 
       <div className="mb-3 flex gap-2">
         <div className="flex-1">
           <p className="mb-0.5 text-[10px] font-medium text-neutral-500 dark:text-neutral-400">Start date</p>
-          <input type="date" value={startDate} onChange={(e) => setStart(e.target.value)}
-            className="w-[144px] rounded-xl border border-neutral-200 bg-neutral-50 px-2.5 py-1.5 text-[11px] text-neutral-700 outline-none transition-colors focus:border-neutral-300 focus:bg-white dark:border-white/[0.08] dark:bg-white/[0.04] dark:text-neutral-300 dark:focus:border-white/20 dark:focus:bg-white/[0.07] dark:[color-scheme:dark]" />
+          <DateInput value={startDate} onChange={(v) => setStart(v)} size="sm" className="w-[144px]" />
         </div>
         <div className="flex-1">
           <p className="mb-0.5 text-[10px] font-medium text-neutral-500 dark:text-neutral-400">End date</p>
-          <input type="date" value={endDate} onChange={(e) => setEnd(e.target.value)}
-            className="w-[144px] rounded-xl border border-neutral-200 bg-neutral-50 px-2.5 py-1.5 text-[11px] text-neutral-700 outline-none transition-colors focus:border-neutral-300 focus:bg-white dark:border-white/[0.08] dark:bg-white/[0.04] dark:text-neutral-300 dark:focus:border-white/20 dark:focus:bg-white/[0.07] dark:[color-scheme:dark]" />
+          <DateInput value={endDate} onChange={(v) => setEnd(v)} size="sm" className="w-[144px]" />
         </div>
       </div>
 

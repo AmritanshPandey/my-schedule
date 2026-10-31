@@ -24,6 +24,7 @@ import { isAiConfigured } from "@/lib/aiClient";
 import { SECTION_ICONS } from "@/components/SectionIcons";
 import { haptic } from "@/lib/haptics";
 import { formatDisplayTime } from "@/lib/timeUtils";
+import DateInput from "@/components/ui/DateInput";
 
 const PLAN_ICONS: Record<string, (typeof SECTION_ICONS)[number]["icon"]> = Object.fromEntries(
   SECTION_ICONS.map((s) => [s.name, s.icon])
@@ -458,12 +459,7 @@ export function BulkImportFlow({ plans, fallbackDay = "monday", onCommit, onDone
 
                 <label className="flex flex-col gap-1">
                   <span className="text-[11px] font-semibold text-neutral-500 dark:text-neutral-400">Week 1 starts</span>
-                  <input
-                    type="date"
-                    value={startDateISO}
-                    onChange={(e) => e.target.value && setStartDateISO(e.target.value)}
-                    className="rounded-xl border border-neutral-200 bg-white px-3 py-2 text-[13px] font-semibold text-neutral-900 dark:border-white/[0.1] dark:bg-neutral-900 dark:text-white"
-                  />
+                  <DateInput value={startDateISO} onChange={(v) => v && setStartDateISO(v)} size="sm" />
                 </label>
 
                 {needTimeFor.length > 0 && (

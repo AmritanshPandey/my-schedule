@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { IconCalendar, IconArrowUp, IconTrash } from "@tabler/icons-react";
+import { IconArrowUp, IconTrash } from "@tabler/icons-react";
 import BottomSheet from "@/components/ui/BottomSheet";
 import SheetHeader from "@/components/ui/SheetHeader";
 import Button from "@/components/ui/Button";
@@ -11,6 +11,7 @@ import TimeInput from "@/components/ui/TimeInput";
 import { localISODate } from "@/lib/dateUtils";
 import { haptic } from "@/lib/haptics";
 import { formatDaysAgo, type MissedTask } from "@/lib/needsAttention";
+import DateInput from "@/components/ui/DateInput";
 
 interface MissedTaskSheetProps {
   /** The missed occurrence being handled, or null when the sheet is closed. */
@@ -22,8 +23,6 @@ interface MissedTaskSheetProps {
   onDismiss: (missed: MissedTask) => void;
 }
 
-const CONTROL =
-  "h-11 w-full rounded-xl border border-neutral-200 bg-white px-3 text-[15px] font-semibold text-neutral-900 dark:border-white/[0.10] dark:bg-white/[0.04] dark:text-white";
 const LABEL = "text-[11px] font-bold uppercase tracking-[0.08em] text-neutral-600 dark:text-neutral-400";
 
 function friendlyDate(iso: string, todayISO: string): string {
@@ -89,14 +88,11 @@ export default function MissedTaskSheet({ missed, onClose, onReschedule, onDismi
                   Today
                 </button>
                 <div className="relative min-w-0 flex-1">
-                  <IconCalendar size={15} strokeWidth={2} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-neutral-500 dark:text-neutral-400" />
-                  <input
-                    type="date"
-                    aria-label="Custom date"
+                  <DateInput
                     value={dateISO}
+                    onChange={(v) => setDateISO(v || todayISO)}
                     min={todayISO}
-                    onChange={(e) => setDateISO(e.target.value || todayISO)}
-                    className={`${CONTROL} pl-9`}
+                    ariaLabel="Custom date"
                   />
                 </div>
               </div>

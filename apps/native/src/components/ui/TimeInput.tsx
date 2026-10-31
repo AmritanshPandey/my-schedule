@@ -1,6 +1,9 @@
 import { useEffect, useRef, useState } from 'react';
-import { Pressable, View } from 'react-native';
-import { displayToInputTime, minutesToInputTime, parseTimeToMinutes, punctuateTimeDigits } from '@planr/core/lib/timeUtils';
+import { Platform, Pressable, View } from 'react-native';
+import { IconClock } from '@tabler/icons-react-native';
+import { displayToInputTime, formatDisplayTime, minutesToInputTime, parseTimeToMinutes, punctuateTimeDigits } from '@planr/core/lib/timeUtils';
+import { Icon } from './Icon';
+import SystemPickerSheet from './SystemPickerSheet';
 import { typography } from './Typography';
 import { Text, TextInput } from './Text';
 
@@ -9,6 +12,10 @@ import { Text, TextInput } from './Text';
  * with an AM/PM segmented pair, the same draft-vs-committed reconciliation
  * (never re-format under the user's fingers), and the same output: a 24-hour
  * "HH:MM" string. Arrow-key stepping has no phone equivalent and is dropped.
+ *
+ * On iOS the typed field gives way to the system time wheels: a tap on the
+ * field opens them in the app's sheet (ui/SystemPickerSheet), the same
+ * pattern as ui/DateInput.
  */
 interface TimeInputProps {
   value: string;
@@ -77,6 +84,45 @@ export default function TimeInput({ value, onChange, label, ariaLabel, onFocus, 
   }
 
   const isEmpty = draft === '';
+  const [picking, setPicking] = useState(false);
+
+  if (Platform.OS === 'ios') {
+    const minutes = parseTimeToMinutes(displayToInputTime(value) || value);
+    const at = new Date();
+    at.setHours(minutes === null ? 9 : Math.floor(minutes / 60), minutes === null ? 0 : minutes % 60, 0, 0);
+    const shown = minutes === null ? '' : formatDisplayTime(minutesToInputTime(minutes));
+    return (
+      <View>
+        {label && <Text className={`mb-1.5 ${typography.eyebrow}`}>{label}</Text>}
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel={ariaLabel ?? label ?? 'Time'}
+          accessibilityValue={{ text: shown || 'Not set' }}
+          disabled={disabled}
+          onPress={() => {
+            onFocus?.();
+            setPicking(true);
+          }}
+          className={`h-11 min-w-0 flex-row items-center gap-2 rounded-xl border bg-neutral-50 px-3 dark:bg-white/[0.04] ${
+            picking ? 'border-emerald-600/60 dark:border-emerald-400/50' : 'border-neutral-200 dark:border-white/10'
+          } ${disabled ? 'opacity-60' : ''} ${className}`}
+        >
+          <Icon icon={IconClock} size={16} strokeWidth={2} className="text-neutral-500 dark:text-neutral-400" />
+          <Text className={`flex-1 text-[16px] font-semibold tabular-nums ${shown ? 'text-neutral-900 dark:text-white' : 'text-neutral-400 dark:text-neutral-500'}`}>
+            {shown || '--:--'}
+          </Text>
+        </Pressable>
+        <SystemPickerSheet
+          open={picking}
+          onClose={() => setPicking(false)}
+          mode="time"
+          title={label ?? ariaLabel ?? 'Time'}
+          value={at}
+          onPick={(date) => onChange(minutesToInputTime(date.getHours() * 60 + date.getMinutes()))}
+        />
+      </View>
+    );
+  }
 
   return (
     <View>

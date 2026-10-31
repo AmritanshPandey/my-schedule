@@ -50,6 +50,7 @@ import { buildDeleteConfirmationCopy } from "@/lib/deleteConfirm";
 import { normalizeDayStartTime } from "@/lib/timeline/displayWindow";
 import { MIN_SLEEP_HOURS, MAX_SLEEP_HOURS } from "@/lib/timeline/sleepWindow";
 import { formatDayNoteLabel, localISODate } from "@/lib/dateUtils";
+import DateInput from "@/components/ui/DateInput";
 
 const PROVIDER_LABEL: Record<string, string> = {
   mlx: "MLX",
@@ -703,12 +704,12 @@ export function SettingsView({
                   )}
                 </div>
                 <div className="flex w-full min-w-0 items-center gap-2 sm:w-auto sm:shrink-0">
-                  <input
-                    type="date"
-                    aria-label="Tracking start date"
+                  <DateInput
                     value={trackingStart}
-                    onChange={(e) => handleTrackingStartChange(e.target.value)}
-                    className={`${SETTINGS_CONTROL_CLASS} flex-1 sm:w-44 sm:flex-none`}
+                    onChange={(v) => handleTrackingStartChange(v)}
+                    ariaLabel="Tracking start date"
+                    size="sm"
+                    className="flex-1 sm:w-44 sm:flex-none"
                   />
                   <button
                     type="button"

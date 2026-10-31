@@ -17,6 +17,7 @@ import {
   DurationPresets,
   iconPickerClass,
 } from "./planFormShared";
+import DateInput from "@/components/ui/DateInput";
 
 type SetScheduleFn = (updater: (prev: Schedule) => Schedule) => void;
 
@@ -134,23 +135,13 @@ export default function EditPlanSheet({ planId, plan, setSchedule, onClose, goal
           <div className="grid grid-cols-2 gap-2">
             <div>
               <p className={`mb-1 ${typography.eyebrow}`}>Start date</p>
-              <input
-                type="date"
-                value={draft.startDate}
-                onChange={(e) => setDraft((d) => ({ ...d, startDate: e.target.value }))}
-                className="h-11 w-full min-w-0 rounded-xl border border-neutral-200 bg-neutral-50 px-3 text-[16px] text-neutral-900 outline-none transition-colors focus:border-neutral-300 focus:bg-neutral-100 dark:border-white/10 dark:bg-white/[0.04] dark:text-white dark:focus:border-white/20 dark:focus:bg-white/[0.07] dark:[color-scheme:dark]"
-              />
+              <DateInput value={draft.startDate} onChange={(v) => setDraft((d) => ({ ...d, startDate: v }))} />
             </div>
             <div>
               <p className={`mb-1 ${typography.eyebrow}`}>
                 End date{duration ? <span className="normal-case font-normal ml-1">({duration} days)</span> : null}
               </p>
-              <input
-                type="date"
-                value={draft.endDate}
-                onChange={(e) => setDraft((d) => ({ ...d, endDate: e.target.value }))}
-                className="h-11 w-full min-w-0 rounded-xl border border-neutral-200 bg-neutral-50 px-3 text-[16px] text-neutral-900 outline-none transition-colors focus:border-neutral-300 focus:bg-neutral-100 dark:border-white/10 dark:bg-white/[0.04] dark:text-white dark:focus:border-white/20 dark:focus:bg-white/[0.07] dark:[color-scheme:dark]"
-              />
+              <DateInput value={draft.endDate} onChange={(v) => setDraft((d) => ({ ...d, endDate: v }))} />
             </div>
           </div>
 

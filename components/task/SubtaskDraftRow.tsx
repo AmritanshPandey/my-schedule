@@ -11,6 +11,7 @@ import { parseDurationMinutes, formatMinutes } from "@/lib/timeUtils";
 import { haptic } from "@/lib/haptics";
 import ConfirmSheet from "@/components/ui/ConfirmSheet";
 import { buildDeleteConfirmationCopy } from "@/lib/deleteConfirm";
+import DateInput from "@/components/ui/DateInput";
 
 export interface SubtaskDraft {
   id: string;
@@ -159,18 +160,17 @@ function SubtaskDraftRow({
             />
             {showDeadline && (
               <div className="flex min-w-0 flex-wrap items-center gap-1.5">
-                <input
-                  type="date"
+                <DateInput
                   value={draft.deadline ?? ""}
-                  onChange={(e) =>
+                  onChange={(v) =>
                     onChange(draft.id, {
                       ...draft,
-                      deadline: e.target.value || undefined,
-                      deadlineScope: e.target.value ? draft.deadlineScope ?? "day" : undefined,
-                    })
-                  }
-                  aria-label="Subtask deadline date"
-                  className={`h-10 w-[150px] shrink-0 font-medium text-neutral-600 dark:text-neutral-300 ${ROW_INPUT}`}
+                      deadline: v || undefined,
+                      deadlineScope: v ? draft.deadlineScope ?? "day" : undefined,
+                    })}
+                  ariaLabel="Subtask deadline date"
+                  size="sm"
+                  className="w-[150px] shrink-0"
                 />
                 {draft.deadline && (
                   <div className="flex shrink-0 gap-1">
