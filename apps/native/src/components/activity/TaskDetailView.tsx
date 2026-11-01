@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState, type ReactNode } from 'react';
 import { Pressable, ScrollView, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { IconArrowBackUp, IconBan, IconCheck, IconClockHour4, IconEdit, IconListCheck, IconNotes, IconX } from '@tabler/icons-react-native';
-import type { Milestone, Plan, Task } from '@planr/core/lib/scheduleTypes';
+import type { Milestone, Plan, Schedule, Task } from '@planr/core/lib/scheduleTypes';
 import type { MilestoneLinkKind } from '@planr/core/lib/milestoneLinks';
 import MilestoneLinks from '../milestone/MilestoneLinks';
 import type { ScheduleEntry } from '@planr/core/lib/scheduleEntry';
@@ -40,6 +40,8 @@ export interface TaskDetailViewProps {
   presentation?: 'sheet' | 'page';
   /** Every milestone — shows which ones this item advances. Absent = hidden. */
   milestones?: readonly Milestone[];
+  /** The schedule's activities, so milestones that count this task automatically show. */
+  activities?: Schedule['activities'];
   onSetMilestoneLink?: (milestoneId: string, kind: MilestoneLinkKind, itemId: string, linked: boolean) => void;
 }
 
@@ -69,6 +71,7 @@ export default function TaskDetailView({
   onEdit,
   presentation = 'sheet',
   milestones,
+  activities,
   onSetMilestoneLink,
 }: TaskDetailViewProps) {
   const insets = useSafeAreaInsets();
@@ -266,7 +269,7 @@ export default function TaskDetailView({
       {dayNoteBlock}
       {/* Which milestones this task moves forward — commitments never count. */}
       {milestones && onSetMilestoneLink && tracked && !readOnly ? (
-        <MilestoneLinks milestones={milestones} kind="task" itemId={task.id} planId={task.planId} onSetLink={onSetMilestoneLink} />
+        <MilestoneLinks milestones={milestones} kind="task" itemId={task.id} planId={task.planId} activities={activities} onSetLink={onSetMilestoneLink} />
       ) : null}
       {items.length > 0 && (
         <View className="gap-2">

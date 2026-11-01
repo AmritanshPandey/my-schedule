@@ -1,11 +1,17 @@
 import { useState } from 'react';
 import { Pressable, View } from 'react-native';
 import { IconCircleCheck, IconFlag3, IconPlus, IconX } from '@tabler/icons-react-native';
-import type { Milestone } from '@planr/core/lib/scheduleTypes';
+import type { Milestone, ProgressTracker, Schedule, Task } from '@planr/core/lib/scheduleTypes';
+import { resolveMilestoneLinks } from '@planr/core/lib/milestoneAutoLinks';
 import { linkableMilestones, milestonesForItem, type MilestoneLinkKind } from '@planr/core/lib/milestoneLinks';
 import { haptic } from '../../lib/haptics';
 import { Icon } from '../ui/Icon';
 import { Text } from '../ui/Text';
+
+function handLinks(milestone: Milestone | undefined, kind: MilestoneLinkKind): string[] {
+  if (!milestone) return [];
+  return (kind === 'task' ? milestone.linkedActivities : kind === 'tracker' ? milestone.linkedTrackers : milestone.linkedRituals) ?? [];
+}
 
 /**
  * Native port of components/milestone/MilestoneLinks.tsx — which milestones
@@ -19,6 +25,8 @@ export default function MilestoneLinks({
   planId,
   onSetLink,
   hideIds,
+  activities,
+  trackers,
   className = '',
 }: {
   milestones: readonly Milestone[];
@@ -29,17 +37,24 @@ export default function MilestoneLinks({
   onSetLink: (milestoneId: string, kind: MilestoneLinkKind, itemId: string, linked: boolean) => void;
   /** Milestones the surrounding card already shows (Tracking's milestone panel), so they aren't listed twice. */
   hideIds?: readonly string[];
+  /** The schedule's activities — shows milestones that count this task automatically (lib/milestoneAutoLinks.ts). */
+  activities?: Schedule['activities'];
+  /** Every tracker — shows milestones that use a plan's only tracker automatically. */
+  trackers?: readonly ProgressTracker[];
   className?: string;
 }) {
   const [picking, setPicking] = useState(false);
-  const linked = milestonesForItem(milestones, kind, itemId);
+  const resolved = activities || trackers ? resolveMilestoneLinks(milestones, activities as unknown as Record<string, Task[]> | undefined, trackers) : milestones;
+  const linked = milestonesForItem(resolved, kind, itemId);
+  // Counted because the milestone has no hand-made links of this kind.
+  const auto = new Set(linked.filter((m) => handLinks(milestones.find((raw) => raw.id === m.id), kind).length === 0).map((m) => m.id));
   const linkedIds = new Set(linked.map((m) => m.id));
   const options = linkableMilestones(milestones, planId).filter((m) => !linkedIds.has(m.id));
   const shown = hideIds ? linked.filter((m) => !hideIds.includes(m.id)) : linked;
   if (shown.length === 0 && options.length === 0) return null;
   // A link is only shown as missing when there truly is none; one the card
   // already shows elsewhere just isn't repeated.
-  const label = shown.length > 0 ? (shown.length < linked.length ? 'Also advances' : 'Advances') : linked.length === 0 ? 'Not linked to a milestone' : null;
+  const label = shown.length > 0 ? (shown.length < linked.length ? 'Also advances' : 'Advances') : linked.length === 0 ? 'Not counted toward a milestone' : null;
 
   return (
     <View className={className} testID={`milestone-links-${kind}`}>
@@ -69,6 +84,14 @@ export default function MilestoneLinks({
               >
                 {m.title}
               </Text>
+              {auto.has(m.id) && (
+                <Text
+                  accessibilityLabel="Counted automatically"
+                  className="rounded-full bg-neutral-100 px-1.5 py-0.5 text-[10.5px] font-semibold text-neutral-600 dark:bg-white/[0.07] dark:text-neutral-300"
+                >
+                  Auto
+                </Text>
+              )}
               {!done && (
                 <Pressable
                   accessibilityRole="button"

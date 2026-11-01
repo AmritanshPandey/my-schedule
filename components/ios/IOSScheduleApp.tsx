@@ -93,7 +93,7 @@ import { togglePlanPaused } from "@/lib/planLifecycle";
 import { dismissAllAttention, dismissibleCount, dismissAttentionKey } from "@/lib/attentionDismissal";
 import { applyAdaptation } from "@/lib/milestoneAdaptation";
 import { calculateMilestoneState, type MilestoneState } from "@/lib/milestoneHealth";
-import { linkItem, unlinkItem, unlinkEverywhere, type MilestoneLinkKind } from "@/lib/milestoneLinks";
+import { unlinkEverywhere, type MilestoneLinkKind } from "@/lib/milestoneLinks";
 import AdaptMilestoneSheet from "@/components/plan/AdaptMilestoneSheet";
 import { formatDisplayTime, inputToDisplayTime, minutesToInputTime, parseTimeToMinutes, toScheduleDayMinutes } from "@/lib/timeUtils";
 import { ritualScheduledOnDate } from "@/lib/consistency/calculateRitualStreak";
@@ -110,6 +110,7 @@ import CheckDraw from "@/components/ui/CheckDraw";
 import type { CreateTaskFromNoteInput } from "@/components/notes/NotesView";
 import { useCoachTour } from "@/lib/onboarding/useCoachTour";
 import { TOUR_STEPS, type TourId } from "@/lib/onboarding/tours";
+import { setMilestoneLink } from "@/lib/milestoneAutoLinks";
 
 const IOSMotionBoundary = dynamic(() => import("@/components/ios/IOSMotionBoundary"), { ssr: false });
 const TaskSheet = dynamic(() => import("@/components/task/TaskSheet").then((m) => ({ default: m.TaskSheet })), { ssr: false });
@@ -890,7 +891,7 @@ export default function IOSScheduleApp() {
   function handleSetMilestoneLink(milestoneId: string, kind: MilestoneLinkKind, itemId: string, linked: boolean) {
     setSchedule((prev) => ({
       ...prev,
-      milestones: (linked ? linkItem : unlinkItem)(prev.milestones ?? [], milestoneId, kind, itemId),
+      milestones: setMilestoneLink(prev, milestoneId, kind, itemId, linked),
     }));
   }
 
@@ -1384,6 +1385,7 @@ export default function IOSScheduleApp() {
           <ErrorBoundary section name="Task detail">
             <TaskDetailView
               milestones={schedule.milestones}
+              activities={schedule.activities}
               onSetMilestoneLink={handleSetMilestoneLink}
               task={subtasksTask}
               linkedPlan={subtasksTask?.planId ? plansById.get(subtasksTask.planId) ?? null : null}
@@ -1549,33 +1551,25 @@ export default function IOSScheduleApp() {
                 onLinkTrackerToMilestone={(milestoneId, trackerId) => {
                   setSchedule((prev) => ({
                     ...prev,
-                    milestones: (prev.milestones ?? []).map((milestone) =>
-                      milestone.id === milestoneId ? { ...milestone, linkedTrackers: [...new Set([...(milestone.linkedTrackers ?? []), trackerId])] } : milestone
-                    ),
+                    milestones: setMilestoneLink(prev, milestoneId, "tracker", trackerId, true),
                   }));
                 }}
                 onUnlinkTrackerFromMilestone={(milestoneId, trackerId) => {
                   setSchedule((prev) => ({
                     ...prev,
-                    milestones: (prev.milestones ?? []).map((milestone) =>
-                      milestone.id === milestoneId ? { ...milestone, linkedTrackers: (milestone.linkedTrackers ?? []).filter((id) => id !== trackerId) } : milestone
-                    ),
+                    milestones: setMilestoneLink(prev, milestoneId, "tracker", trackerId, false),
                   }));
                 }}
                 onLinkTaskToMilestone={(milestoneId, taskId) => {
                   setSchedule((prev) => ({
                     ...prev,
-                    milestones: (prev.milestones ?? []).map((milestone) =>
-                      milestone.id === milestoneId ? { ...milestone, linkedActivities: [...new Set([...(milestone.linkedActivities ?? []), taskId])] } : milestone
-                    ),
+                    milestones: setMilestoneLink(prev, milestoneId, "task", taskId, true),
                   }));
                 }}
                 onUnlinkTaskFromMilestone={(milestoneId, taskId) => {
                   setSchedule((prev) => ({
                     ...prev,
-                    milestones: (prev.milestones ?? []).map((milestone) =>
-                      milestone.id === milestoneId ? { ...milestone, linkedActivities: (milestone.linkedActivities ?? []).filter((id) => id !== taskId) } : milestone
-                    ),
+                    milestones: setMilestoneLink(prev, milestoneId, "task", taskId, false),
                   }));
                 }}
                 onUpdateCoachMessages={(planId: string, messages: PlanCoachMessage[]) => {

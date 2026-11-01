@@ -220,12 +220,13 @@ import { dismissAllAttention, dismissibleCount, dismissAttentionKey } from "@/li
 import type { NeedsAttention } from "@/lib/needsAttention";
 import { applyAdaptation } from "@/lib/milestoneAdaptation";
 import { calculateMilestoneState, type MilestoneState } from "@/lib/milestoneHealth";
-import { linkItem, unlinkItem, unlinkEverywhere, type MilestoneLinkKind } from "@/lib/milestoneLinks";
+import { unlinkEverywhere, type MilestoneLinkKind } from "@/lib/milestoneLinks";
 import AdaptMilestoneSheet from "@/components/plan/AdaptMilestoneSheet";
 import { haptic } from "@/lib/haptics";
 import { buildDeleteConfirmationCopy } from "@/lib/deleteConfirm";
 import { resolveCustomVisibleDates } from "@/lib/customView";
 import { typography } from "@/components/ui/Typography";
+import { setMilestoneLink } from "@/lib/milestoneAutoLinks";
 
 // ─── Constants ───────────────────────────────────────────────────────────────
 
@@ -1933,7 +1934,7 @@ export default function ScheduleApp() {
   function handleSetMilestoneLink(milestoneId: string, kind: MilestoneLinkKind, itemId: string, linked: boolean) {
     setSchedule((prev) => ({
       ...prev,
-      milestones: (linked ? linkItem : unlinkItem)(prev.milestones ?? [], milestoneId, kind, itemId),
+      milestones: setMilestoneLink(prev, milestoneId, kind, itemId, linked),
     }));
   }
 
@@ -2195,11 +2196,7 @@ export default function ScheduleApp() {
   function handleLinkTrackerToMilestone(milestoneId: string, trackerId: string) {
     setSchedule((prev) => ({
       ...prev,
-      milestones: (prev.milestones ?? []).map((m) =>
-        m.id === milestoneId
-          ? { ...m, linkedTrackers: [...new Set([...(m.linkedTrackers ?? []), trackerId])] }
-          : m
-      ),
+      milestones: setMilestoneLink(prev, milestoneId, "tracker", trackerId, true),
     }));
   }
 
@@ -2208,11 +2205,7 @@ export default function ScheduleApp() {
   function handleUnlinkTrackerFromMilestone(milestoneId: string, trackerId: string) {
     setSchedule((prev) => ({
       ...prev,
-      milestones: (prev.milestones ?? []).map((m) =>
-        m.id === milestoneId
-          ? { ...m, linkedTrackers: (m.linkedTrackers ?? []).filter((id) => id !== trackerId) }
-          : m
-      ),
+      milestones: setMilestoneLink(prev, milestoneId, "tracker", trackerId, false),
     }));
   }
 
@@ -2220,22 +2213,14 @@ export default function ScheduleApp() {
   function handleLinkTaskToMilestone(milestoneId: string, taskId: string) {
     setSchedule((prev) => ({
       ...prev,
-      milestones: (prev.milestones ?? []).map((m) =>
-        m.id === milestoneId
-          ? { ...m, linkedActivities: [...new Set([...(m.linkedActivities ?? []), taskId])] }
-          : m
-      ),
+      milestones: setMilestoneLink(prev, milestoneId, "task", taskId, true),
     }));
   }
 
   function handleUnlinkTaskFromMilestone(milestoneId: string, taskId: string) {
     setSchedule((prev) => ({
       ...prev,
-      milestones: (prev.milestones ?? []).map((m) =>
-        m.id === milestoneId
-          ? { ...m, linkedActivities: (m.linkedActivities ?? []).filter((id) => id !== taskId) }
-          : m
-      ),
+      milestones: setMilestoneLink(prev, milestoneId, "task", taskId, false),
     }));
   }
 
@@ -3908,6 +3893,7 @@ export default function ScheduleApp() {
         >
           <TaskDetailView
             milestones={schedule.milestones}
+            activities={schedule.activities}
             onSetMilestoneLink={handleSetMilestoneLink}
             task={subtasksDetailTask}
             linkedPlan={subtasksLinkedPlan}

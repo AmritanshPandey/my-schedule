@@ -15,7 +15,7 @@ import { compareDeadline } from "@/lib/subtaskDeadline";
 import { calculateTaskProgress, isTrackedTask, phaseProgress, resolveSlotState, resolveTaskState } from "@/lib/taskCompletion";
 import { getSlots } from "@/lib/taskMutations";
 import { formatDisplayTime, formatDuration } from "@/lib/timeUtils";
-import type { Milestone, Plan, Task } from "@/lib/useScheduleDB";
+import type { Milestone, Plan, Schedule, Task } from "@/lib/useScheduleDB";
 import type { MilestoneLinkKind } from "@/lib/milestoneLinks";
 import MilestoneLinks from "@/components/milestone/MilestoneLinks";
 
@@ -43,6 +43,8 @@ export interface TaskDetailViewProps {
   presentation?: "sheet" | "page";
   /** Every milestone — shows which ones this task advances. Absent = hidden. */
   milestones?: readonly Milestone[];
+  /** The schedule's activities, so milestones that count this task automatically show. */
+  activities?: Schedule["activities"];
   onSetMilestoneLink?: (milestoneId: string, kind: MilestoneLinkKind, itemId: string, linked: boolean) => void;
 }
 
@@ -65,6 +67,7 @@ export default function TaskDetailView({
   onEdit,
   presentation = "sheet",
   milestones,
+  activities,
   onSetMilestoneLink,
 }: TaskDetailViewProps) {
   const isSession = task?.taskType === "session";
@@ -297,6 +300,7 @@ export default function TaskDetailView({
           kind="task"
           itemId={task.id}
           planId={task.planId}
+          activities={activities}
           onSetLink={onSetMilestoneLink}
         />
       )}

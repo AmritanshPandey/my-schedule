@@ -90,6 +90,7 @@ import AIActionSheet, { type ResultItem } from "@/components/ai/AIActionSheet";
 import { detectMeasurableGoal, type MeasurableGoal } from "@/lib/milestoneIntelligence";
 import { getSlots, uid } from "@/lib/taskMutations";
 import { typography } from "@/components/ui/Typography";
+import { withAutoLinks } from "@/lib/milestoneAutoLinks";
 
 
 
@@ -1253,7 +1254,11 @@ export default function PlanDetailView({
     );
   }
 
-  function renderMilestoneCard(m: Milestone, isFirst: boolean, isLast: boolean) {
+  function renderMilestoneCard(raw: Milestone, isFirst: boolean, isLast: boolean) {
+    // The row counts what the milestone actually measures: its hand-made
+    // links, or the plan's own work when it has none (lib/milestoneAutoLinks).
+    const m = withAutoLinks(raw, schedule.activities as unknown as Record<string, Task[]>, trackers);
+    const autoTasks = (raw.linkedActivities?.length ?? 0) === 0 && (m.linkedActivities?.length ?? 0) > 0;
     const status = resolveMilestoneStatus(m);
     const isCompleted = status === "completed";
     const progress = milestoneProgressById.get(m.id);
@@ -1272,7 +1277,7 @@ export default function PlanDetailView({
       <div className="group relative flex items-center gap-1">
       <button
         type="button"
-        onClick={() => { haptic("light"); setViewingMilestone(m); }}
+        onClick={() => { haptic("light"); setViewingMilestone(raw); }}
         // No px-1: it put this row 4px inside the card above it, which reads as
         // a misalignment against that card's border. flex-1/min-w-0 rather than
         // w-full: this is now one item in a row alongside the move column, not
@@ -1360,7 +1365,8 @@ export default function PlanDetailView({
               {daysLabel}
             </span>
           </div>
-          {/* Linked tasks + tracker badges — the task badge shows live
+          {/* Linked tasks + tracker badges ("auto" when the plan's own tasks
+              are what's counted) — the task badge shows live
               linked-task/subtask completion when there's anything to show
               (calculateMilestoneProgress), falling back to the plain linked
               count for a milestone with nothing trackable linked yet. */}
@@ -1372,6 +1378,7 @@ export default function PlanDetailView({
                   {progress?.hasLinkedTasks
                     ? `${progress.completedCount}/${progress.totalCount} tasks`
                     : `${m.linkedActivities!.length} task${m.linkedActivities!.length !== 1 ? "s" : ""}`}
+                  {autoTasks && <span className="font-medium text-neutral-500 dark:text-neutral-400">· auto</span>}
                 </span>
               )}
               {(m.linkedTrackers?.length ?? 0) > 0 && (
@@ -2381,10 +2388,15 @@ export default function PlanDetailView({
           // The "success metric" a milestone's outcome-driven progress is
           // computed from (lib/milestoneHealth.ts) — the first linked tracker
           // is the one that counts, matching calculateMilestoneState.
-          const linkedTrackerId = m.linkedTrackers?.[0];
+          // What the milestone actually measures — its hand-made links, or the
+          // plan's own work when it has none (lib/milestoneAutoLinks.ts).
+          const em = withAutoLinks(m, schedule.activities as unknown as Record<string, Task[]>, trackers);
+          const autoTasks = (m.linkedActivities?.length ?? 0) === 0 && (em.linkedActivities?.length ?? 0) > 0;
+          const autoTracker = (m.linkedTrackers?.length ?? 0) === 0 && (em.linkedTrackers?.length ?? 0) > 0;
+          const linkedTrackerId = em.linkedTrackers?.[0];
           const linkedTracker = linkedTrackerId ? trackers.find((t) => t.id === linkedTrackerId) ?? null : null;
           // `trackers` is already scoped to this plan (see its own definition above).
-          const linkableTrackers = trackers.filter((t) => !(m.linkedTrackers ?? []).includes(t.id));
+          const linkableTrackers = trackers.filter((t) => !(em.linkedTrackers ?? []).includes(t.id));
           // Tasks this milestone could still link — excludes commitments
           // (never tracked, see isTrackedTask) since linking one would
           // silently contribute nothing to progress.
@@ -2400,7 +2412,7 @@ export default function PlanDetailView({
           const linkedRoutineIds = m.linkedRituals ?? [];
           const linkableRoutines = routines.filter((r) => !linkedRoutineIds.includes(r.id));
           const linkableTasks = uniqueTasks.filter(
-            ({ task }) => isTrackedTask(task) && !(m.linkedActivities ?? []).includes(task.id)
+            ({ task }) => isTrackedTask(task) && !(em.linkedActivities ?? []).includes(task.id)
           );
 
           return (
@@ -2583,8 +2595,13 @@ export default function PlanDetailView({
               {(progress?.hasLinkedTasks || onLinkTaskToMilestone) && (
                 <div className="mb-5">
                   <p className="mb-2 text-[11px] font-bold uppercase tracking-[0.08em] text-neutral-600 dark:text-neutral-400">
-                    Linked tasks
+                    {autoTasks ? "Tasks counted" : "Linked tasks"}
                   </p>
+                  {autoTasks && (
+                    <p className="-mt-1 mb-2 text-[12px] leading-snug text-neutral-500 dark:text-neutral-400">
+                      Automatic: every task in this plan due in these dates. Link or unlink one to choose them yourself.
+                    </p>
+                  )}
                   {progress?.hasLinkedTasks && (
                     <div className="mb-2 space-y-2">
                       {progress.taskBreakdown.map((t) => (
@@ -2712,6 +2729,11 @@ export default function PlanDetailView({
                   <p className="mb-2 text-[11px] font-bold uppercase tracking-[0.08em] text-neutral-600 dark:text-neutral-400">
                     Success metric
                   </p>
+                  {autoTracker && (
+                    <p className="-mt-1 mb-2 text-[12px] leading-snug text-neutral-500 dark:text-neutral-400">
+                      Automatic: this plan&apos;s only tracker.
+                    </p>
+                  )}
                   {linkedTracker ? (
                     <div className="flex items-center justify-between gap-3 rounded-xl border border-neutral-200 bg-neutral-50 px-3 py-2.5 dark:border-white/10 dark:bg-white/[0.04]">
                       <div className="min-w-0">
@@ -2918,6 +2940,7 @@ export default function PlanDetailView({
                   kind="task"
                   itemId={task.id}
                   planId={plan.id}
+                  activities={schedule.activities}
                   onSetLink={onSetMilestoneLink}
                 />
               )}

@@ -78,7 +78,7 @@ import { togglePlanPaused } from '@planr/core/lib/planLifecycle';
 import { dismissAllAttention, dismissAttentionKey, dismissibleCount } from '@planr/core/lib/attentionDismissal';
 import { applyAdaptation } from '@planr/core/lib/milestoneAdaptation';
 import { calculateMilestoneState, type MilestoneState } from '@planr/core/lib/milestoneHealth';
-import { linkItem, unlinkItem, unlinkEverywhere, type MilestoneLinkKind } from '@planr/core/lib/milestoneLinks';
+import { unlinkEverywhere, type MilestoneLinkKind } from '@planr/core/lib/milestoneLinks';
 import { formatDisplayTime, inputToDisplayTime, minutesToInputTime, parseTimeToMinutes, toScheduleDayMinutes } from '@planr/core/lib/timeUtils';
 import { completedRitualIdsOn } from '@planr/core/lib/consistency/ritualDayStatus';
 import { overviewGreeting } from '@planr/core/lib/overview';
@@ -126,6 +126,7 @@ import NotesView, { type CreateTaskFromNoteInput } from '../notes/NotesView';
 import AddEntryModal from '../AddEntryModal';
 import CoachMarks from '../onboarding/CoachMarks';
 import TourTarget from '../onboarding/TourTarget';
+import { setMilestoneLink } from '@planr/core/lib/milestoneAutoLinks';
 
 /**
  * Native port of components/ios/IOSScheduleApp.tsx — the phone shell: one
@@ -936,7 +937,7 @@ export default function IOSScheduleApp() {
   function handleSetMilestoneLink(milestoneId: string, kind: MilestoneLinkKind, itemId: string, linked: boolean) {
     setSchedule((prev) => ({
       ...prev,
-      milestones: (linked ? linkItem : unlinkItem)(prev.milestones ?? [], milestoneId, kind, itemId),
+      milestones: setMilestoneLink(prev, milestoneId, kind, itemId, linked),
     }));
   }
 
@@ -1433,6 +1434,7 @@ export default function IOSScheduleApp() {
         <ErrorBoundary section name="Task detail">
           <TaskDetailView
             milestones={schedule.milestones}
+            activities={schedule.activities}
             onSetMilestoneLink={handleSetMilestoneLink}
             task={subtasksTask}
             linkedPlan={subtasksTask?.planId ? plansById.get(subtasksTask.planId) ?? null : null}
@@ -1657,33 +1659,25 @@ export default function IOSScheduleApp() {
               onLinkTrackerToMilestone={(milestoneId, trackerId) => {
                 setSchedule((prev) => ({
                   ...prev,
-                  milestones: (prev.milestones ?? []).map((milestone) =>
-                    milestone.id === milestoneId ? { ...milestone, linkedTrackers: [...new Set([...(milestone.linkedTrackers ?? []), trackerId])] } : milestone,
-                  ),
+                  milestones: setMilestoneLink(prev, milestoneId, 'tracker', trackerId, true),
                 }));
               }}
               onUnlinkTrackerFromMilestone={(milestoneId, trackerId) => {
                 setSchedule((prev) => ({
                   ...prev,
-                  milestones: (prev.milestones ?? []).map((milestone) =>
-                    milestone.id === milestoneId ? { ...milestone, linkedTrackers: (milestone.linkedTrackers ?? []).filter((id) => id !== trackerId) } : milestone,
-                  ),
+                  milestones: setMilestoneLink(prev, milestoneId, 'tracker', trackerId, false),
                 }));
               }}
               onLinkTaskToMilestone={(milestoneId, taskId) => {
                 setSchedule((prev) => ({
                   ...prev,
-                  milestones: (prev.milestones ?? []).map((milestone) =>
-                    milestone.id === milestoneId ? { ...milestone, linkedActivities: [...new Set([...(milestone.linkedActivities ?? []), taskId])] } : milestone,
-                  ),
+                  milestones: setMilestoneLink(prev, milestoneId, 'task', taskId, true),
                 }));
               }}
               onUnlinkTaskFromMilestone={(milestoneId, taskId) => {
                 setSchedule((prev) => ({
                   ...prev,
-                  milestones: (prev.milestones ?? []).map((milestone) =>
-                    milestone.id === milestoneId ? { ...milestone, linkedActivities: (milestone.linkedActivities ?? []).filter((id) => id !== taskId) } : milestone,
-                  ),
+                  milestones: setMilestoneLink(prev, milestoneId, 'task', taskId, false),
                 }));
               }}
             />

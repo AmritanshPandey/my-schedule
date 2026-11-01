@@ -2,15 +2,26 @@
 
 import { useState } from "react";
 import { IconCircleCheck, IconFlag3, IconPlus, IconX } from "@tabler/icons-react";
-import type { Milestone } from "@/lib/useScheduleDB";
+import type { Milestone, ProgressTracker, Schedule, Task } from "@/lib/useScheduleDB";
 import { linkableMilestones, milestonesForItem, type MilestoneLinkKind } from "@/lib/milestoneLinks";
+import { resolveMilestoneLinks } from "@/lib/milestoneAutoLinks";
 import { haptic } from "@/lib/haptics";
+
+function handLinks(milestone: Milestone | undefined, kind: MilestoneLinkKind): string[] {
+  if (!milestone) return [];
+  return (kind === "task" ? milestone.linkedActivities : kind === "tracker" ? milestone.linkedTrackers : milestone.linkedRituals) ?? [];
+}
 
 /**
  * The item side of a milestone link — which milestones this task, tracker or
  * routine advances, with a way to link or unlink one without leaving the item.
  * The link itself still lives on the milestone (lib/milestoneLinks.ts); this
  * only reads and toggles it.
+ *
+ * Given the schedule's activities and trackers, it also shows the milestones
+ * that count this item automatically — the plan's own work, due in their
+ * dates (lib/milestoneAutoLinks.ts) — marked "Auto", so "Not linked" only
+ * ever means nothing is counting it.
  */
 export default function MilestoneLinks({
   milestones,
@@ -19,6 +30,8 @@ export default function MilestoneLinks({
   planId,
   onSetLink,
   hideIds,
+  activities,
+  trackers,
   className = "",
 }: {
   milestones: readonly Milestone[];
@@ -29,17 +42,26 @@ export default function MilestoneLinks({
   onSetLink: (milestoneId: string, kind: MilestoneLinkKind, itemId: string, linked: boolean) => void;
   /** Milestones the surrounding card already shows (Tracking's milestone panel), so they aren't listed twice. */
   hideIds?: readonly string[];
+  /** The schedule's activities — lets a task show milestones that count it automatically. */
+  activities?: Schedule["activities"];
+  /** Every tracker — lets a plan's only tracker show the milestones that use it automatically. */
+  trackers?: readonly ProgressTracker[];
   className?: string;
 }) {
   const [picking, setPicking] = useState(false);
-  const linked = milestonesForItem(milestones, kind, itemId);
+  const resolved = activities || trackers
+    ? resolveMilestoneLinks(milestones, activities as unknown as Record<string, Task[]> | undefined, trackers)
+    : milestones;
+  const linked = milestonesForItem(resolved, kind, itemId);
+  // Counted because the milestone has no hand-made links of this kind.
+  const auto = new Set(linked.filter((m) => handLinks(milestones.find((raw) => raw.id === m.id), kind).length === 0).map((m) => m.id));
   const linkedIds = new Set(linked.map((m) => m.id));
   const options = linkableMilestones(milestones, planId).filter((m) => !linkedIds.has(m.id));
   const shown = hideIds ? linked.filter((m) => !hideIds.includes(m.id)) : linked;
   if (shown.length === 0 && options.length === 0) return null;
   // A link is only shown as missing when there truly is none; one the card
   // already shows elsewhere just isn't repeated.
-  const label = shown.length > 0 ? (shown.length < linked.length ? "Also advances" : "Advances") : linked.length === 0 ? "Not linked to a milestone" : null;
+  const label = shown.length > 0 ? (shown.length < linked.length ? "Also advances" : "Advances") : linked.length === 0 ? "Not counted toward a milestone" : null;
 
   return (
     <div className={className} data-testid={`milestone-links-${kind}`}>
@@ -66,6 +88,14 @@ export default function MilestoneLinks({
                 <IconFlag3 size={13} strokeWidth={2} className="shrink-0 text-neutral-500 dark:text-neutral-400" aria-hidden="true" />
               )}
               <span className="max-w-[180px] truncate">{m.title}</span>
+              {auto.has(m.id) && (
+                <span
+                  title="Counted automatically: part of this plan and due in these dates"
+                  className="rounded-full bg-neutral-100 px-1.5 py-0.5 text-[10.5px] font-semibold text-neutral-600 dark:bg-white/[0.07] dark:text-neutral-300"
+                >
+                  Auto
+                </span>
+              )}
               {!done && (
                 <button
                   type="button"

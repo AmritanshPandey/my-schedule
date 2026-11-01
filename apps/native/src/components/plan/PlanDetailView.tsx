@@ -57,6 +57,7 @@ import { Icon } from '../ui/Icon';
 import { Text, TextInput } from '../ui/Text';
 import AccuracyCalendar from './AccuracyCalendar';
 import MilestoneSheet, { type MilestoneSaveData } from './MilestoneSheet';
+import { withAutoLinks } from '@planr/core/lib/milestoneAutoLinks';
 
 // ── Local constants ───────────────────────────────────────────────────────────
 
@@ -811,7 +812,11 @@ export default function PlanDetailView({
     );
   }
 
-  function renderMilestoneCard(m: Milestone, isFirst: boolean, isLast: boolean) {
+  function renderMilestoneCard(raw: Milestone, isFirst: boolean, isLast: boolean) {
+    // The row counts what the milestone actually measures: its hand-made
+    // links, or the plan's own work when it has none (lib/milestoneAutoLinks).
+    const m = withAutoLinks(raw, schedule.activities as unknown as Record<string, Task[]>, trackers);
+    const autoTasks = (raw.linkedActivities?.length ?? 0) === 0 && (m.linkedActivities?.length ?? 0) > 0;
     const status = resolveMilestoneStatus(m);
     const isCompleted = status === 'completed';
     const progress = milestoneProgressById.get(m.id);
@@ -832,7 +837,7 @@ export default function PlanDetailView({
           accessibilityLabel={m.title}
           onPress={() => {
             haptic('light');
-            setViewingMilestone(m);
+            setViewingMilestone(raw);
           }}
           className="relative min-w-0 flex-1 flex-row gap-[14px] rounded-xl px-3 pb-[18px] pt-[14px] active:bg-white/60 dark:active:bg-white/[0.03]"
         >
@@ -917,6 +922,7 @@ export default function PlanDetailView({
                       {progress?.hasLinkedTasks
                         ? `${progress.completedCount}/${progress.totalCount} tasks`
                         : `${m.linkedActivities!.length} task${m.linkedActivities!.length !== 1 ? 's' : ''}`}
+                      {autoTasks ? ' · auto' : ''}
                     </Text>
                   </View>
                 )}
@@ -1406,11 +1412,16 @@ export default function PlanDetailView({
             const readyToComplete = !!progress?.hasLinkedTasks && progress.pct === 100 && !isCompleted;
             const showHealthBadge = health && !['not_started', 'completed', 'getting_started'].includes(health.health);
             // The first linked tracker is the success metric that counts.
-            const linkedTrackerId = m.linkedTrackers?.[0];
+            // What the milestone actually measures — its hand-made links, or the
+            // plan's own work when it has none (lib/milestoneAutoLinks.ts).
+            const em = withAutoLinks(m, schedule.activities as unknown as Record<string, Task[]>, trackers);
+            const autoTasks = (m.linkedActivities?.length ?? 0) === 0 && (em.linkedActivities?.length ?? 0) > 0;
+            const autoTracker = (m.linkedTrackers?.length ?? 0) === 0 && (em.linkedTrackers?.length ?? 0) > 0;
+            const linkedTrackerId = em.linkedTrackers?.[0];
             const linkedTracker = linkedTrackerId ? trackers.find((t) => t.id === linkedTrackerId) ?? null : null;
-            const linkableTrackers = trackers.filter((t) => !(m.linkedTrackers ?? []).includes(t.id));
+            const linkableTrackers = trackers.filter((t) => !(em.linkedTrackers ?? []).includes(t.id));
             // Tasks this milestone could still link — excludes commitments.
-            const linkableTasks = uniqueTasks.filter(({ task }) => isTrackedTask(task) && !(m.linkedActivities ?? []).includes(task.id));
+            const linkableTasks = uniqueTasks.filter(({ task }) => isTrackedTask(task) && !(em.linkedActivities ?? []).includes(task.id));
             // This milestone's own stretch of the tracker's planned path.
             const linkedSpan = linkedTracker
               ? milestoneSpan(m, linkedTracker, schedule.milestones, schedule.metricEntries, schedule.preferences?.startDate)
@@ -1579,7 +1590,12 @@ export default function PlanDetailView({
                     untouched); unlinked plan tasks can be added below. */}
                 {(progress?.hasLinkedTasks || onLinkTaskToMilestone) && (
                   <View className="mb-5">
-                    <Text className={`mb-2 ${EYEBROW}`}>Linked tasks</Text>
+                    <Text className={`mb-2 ${EYEBROW}`}>{autoTasks ? 'Tasks counted' : 'Linked tasks'}</Text>
+                    {autoTasks && (
+                      <Text className="-mt-1 mb-2 text-[12px] leading-snug text-neutral-500 dark:text-neutral-400">
+                        Automatic: every task in this plan due in these dates. Link or unlink one to choose them yourself.
+                      </Text>
+                    )}
                     {progress?.hasLinkedTasks && (
                       <View className="mb-2 gap-2">
                         {progress.taskBreakdown.map((t) => (
@@ -1687,6 +1703,11 @@ export default function PlanDetailView({
                 {(onLinkTrackerToMilestone || onUnlinkTrackerFromMilestone) && (
                   <View className="mb-5">
                     <Text className={`mb-2 ${EYEBROW}`}>Success metric</Text>
+                    {autoTracker && (
+                      <Text className="-mt-1 mb-2 text-[12px] leading-snug text-neutral-500 dark:text-neutral-400">
+                        Automatic: this plan's only tracker.
+                      </Text>
+                    )}
                     {linkedTracker ? (
                       <View className="flex-row items-center justify-between gap-3 rounded-xl border border-neutral-200 bg-neutral-50 px-3 py-2.5 dark:border-white/10 dark:bg-white/[0.04]">
                         <View className="min-w-0 flex-1">
@@ -1880,6 +1901,7 @@ export default function PlanDetailView({
                   <MilestoneLinks
                     className="mb-5"
                     milestones={schedule.milestones}
+                    activities={schedule.activities}
                     kind="task"
                     itemId={task.id}
                     planId={plan.id}

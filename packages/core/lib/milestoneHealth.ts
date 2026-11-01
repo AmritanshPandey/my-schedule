@@ -26,6 +26,7 @@ import { trackerPace, milestonePace, type PaceGap } from "./paceModel";
 import { ritualScheduledOnDate } from "./consistency/calculateRitualStreak";
 import { ritualDayProgress } from "./consistency/ritualDayStatus";
 import { milestoneSpan, type MilestoneSpan } from "./milestoneTargets";
+import { autoLinkedKinds, withAutoLinks, type AutoLinked } from "./milestoneAutoLinks";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -37,6 +38,9 @@ export interface MilestoneState {
   health: MilestoneHealth;
   /** False = neither a linked task nor a linked tracker — setup guidance, not fake progress. */
   hasData: boolean;
+  /** Which of the links behind these numbers were filled automatically from
+   *  the plan (lib/milestoneAutoLinks.ts) rather than picked by hand. */
+  autoLinked: AutoLinked;
   /** 0-100, from the existing calculateMilestoneProgress (lib/planProgress.ts). Null = no linked tasks. */
   taskProgress: number | null;
   /** 0-100 — linked routines' followed due days ÷ due days across the whole window. Null = none linked. */
@@ -702,7 +706,18 @@ export function calculateMilestoneState(params: {
   rituals?: readonly Ritual[];
   ritualCompletions?: readonly RitualCompletion[];
 }): MilestoneState {
-  const { milestone, plan, activities, trackers, metricEntries, trackingStart, milestones } = params;
+  const { plan, activities, trackers, metricEntries, trackingStart } = params;
+  // Hand-made links where there are any, the plan's own work where there
+  // aren't — every number below reads the milestone this way.
+  const milestone = withAutoLinks(params.milestone, activities, trackers);
+  const unlinked = autoLinkedKinds(params.milestone);
+  const autoLinked: AutoLinked = {
+    tasks: unlinked.tasks && (milestone.linkedActivities?.length ?? 0) > 0,
+    tracker: unlinked.tracker && (milestone.linkedTrackers?.length ?? 0) > 0,
+  };
+  // Siblings resolve their tracker the same way, so each milestone's stretch
+  // of the planned path is measured against the same set.
+  const milestones = params.milestones?.map((m) => withAutoLinks(m, undefined, trackers));
   const now = params.now ?? new Date();
   const routines: RoutineInputs | undefined = params.rituals
     ? { rituals: params.rituals, completions: params.ritualCompletions ?? [], trackingStart }
@@ -787,6 +802,7 @@ export function calculateMilestoneState(params: {
     milestoneId: milestone.id,
     health,
     hasData,
+    autoLinked,
     taskProgress,
     routineProgress,
     progressSources,

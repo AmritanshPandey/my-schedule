@@ -30,6 +30,7 @@
 import { DAYS } from "./scheduleConstants";
 import type { Task, Milestone, Plan } from "./scheduleTypes";
 import { isTrackedTask, calculateTaskProgress, getTaskSubtaskSummary } from "./taskCompletion";
+import { withAutoLinks } from "./milestoneAutoLinks";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -115,7 +116,8 @@ export function calculateLinkedTaskProgress(
 }
 
 /**
- * A milestone's progress from its `linkedActivities` — the % of linked
+ * A milestone's progress from its `linkedActivities` (or, when it has none,
+ * the plan's tasks due in its window — lib/milestoneAutoLinks.ts) — the % of linked
  * tasks/subtasks ever completed. Does NOT drive `milestone.status`, which
  * stays manual ("Mark as Done") and date-derived otherwise; this is a
  * separate, purely informational live number layered on top.
@@ -127,7 +129,8 @@ export function calculateMilestoneProgress(
 ): MilestoneProgress {
   const seen = new Set<string>();
   const taskBreakdown: LinkedTaskProgress[] = [];
-  for (const taskId of milestone.linkedActivities ?? []) {
+  // No hand-made task links = the plan's own tasks due in this stretch.
+  for (const taskId of withAutoLinks(milestone, activities).linkedActivities ?? []) {
     if (seen.has(taskId)) continue;
     seen.add(taskId);
     const progress = calculateLinkedTaskProgress(taskId, activities, plan);

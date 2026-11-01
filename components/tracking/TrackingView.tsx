@@ -190,6 +190,7 @@ function MetricCard({
   milestoneLink,
   planned,
   milestones,
+  allTrackers,
   onSetMilestoneLink,
   onLog,
   onOpenAddEntry,
@@ -204,6 +205,8 @@ function MetricCard({
   /** The tracker's planned path and today's gap to it. Null = no path to draw. */
   planned: { path: PlannedTrackerPath; gap: PlanGap | null } | null;
   milestones?: readonly Milestone[];
+  /** Every tracker, so a plan's only tracker shows the milestones that use it automatically. */
+  allTrackers?: readonly ProgressTracker[];
   onSetMilestoneLink?: TrackingViewProps["onSetMilestoneLink"];
   onLog: TrackingViewProps["onLog"];
   onOpenAddEntry: TrackingViewProps["onOpenAddEntry"];
@@ -334,6 +337,7 @@ function MetricCard({
           kind="tracker"
           itemId={tracker.id}
           planId={tracker.planId}
+          trackers={allTrackers}
           onSetLink={onSetMilestoneLink}
           hideIds={milestoneLink ? [milestoneLink.milestone.id] : undefined}
         />
@@ -552,6 +556,7 @@ export default function TrackingView({
                       milestoneLink={milestoneByTrackerId?.get(stat.tracker.id)}
                       planned={plannedByTracker.get(stat.tracker.id) ?? null}
                       milestones={milestones}
+                      allTrackers={trackers}
                       onSetMilestoneLink={onSetMilestoneLink}
                       onLog={onLog}
                       onOpenAddEntry={onOpenAddEntry}

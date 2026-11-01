@@ -353,6 +353,13 @@ export interface Milestone {
    * `goalValue` across its milestones by date.
    */
   targetValue?: number;
+  /**
+   * Kinds of link someone has switched off by unlinking the last automatic
+   * item (lib/milestoneAutoLinks.ts). Without it an emptied list would read
+   * as "automatic" again and the item would come straight back. Absent =
+   * automatic wherever there are no hand-made links.
+   */
+  autoLinkOff?: { tasks?: boolean; tracker?: boolean };
   createdAt: string;
   updatedAt: string;
   // Legacy fields retained for backward-compatible reads/writes.
