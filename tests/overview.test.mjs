@@ -254,6 +254,18 @@ test("a completion beats a missed mark on the same day, and today's misses count
   assert.equal(selectWeekStatus(schedule({ activities }), SATURDAY).verdict, "behind");
 });
 
+test("days before the tracking start are left out of the week", () => {
+  const s = schedule({
+    activities: daily([task("a", { completionHistory: ["2026-09-14", "2026-09-15", "2026-09-16"].map((d) => missedEvent("a", d)).concat(doneEvent("a", "2026-09-18")) })]),
+    preferences: { startDate: "2026-09-17" },
+  });
+  const status = selectWeekStatus(s, SATURDAY);
+  assert.deepEqual(status.days.slice(0, 3).map((d) => d.total), [0, 0, 0]);
+  assert.equal(status.verdict, "on-track");
+  assert.equal(status.verdictPct, 100);
+  assert.equal(status.missed, 0);
+});
+
 test("days run Monday first and an empty week has no data", () => {
   const status = selectWeekStatus(schedule(), SATURDAY);
   assert.deepEqual(status.days.map((d) => d.label), ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"]);

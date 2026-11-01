@@ -5,10 +5,13 @@
  * task completion log. One source of truth for the Overview + Review trend.
  *
  * Method & honest limitations:
- * - `completed` for a week = the number of *distinct* scheduled tasks that have
- *   at least one whole-task completion (`completionType === "task"`) dated in
- *   that week. De-duping per task means a task toggled done several times in a
- *   week counts once, so `completed` can never exceed `scheduled` (no >100%).
+ * - `completed` for a week = the number of *distinct* occurrences (task id +
+ *   date) with a whole-task completion (`completionType === "task"`) dated in
+ *   that week. A task toggled done several times on a day counts once, and a
+ *   log shared by a task's weekday copies counts once, not once per copy.
+ * - `missed` = distinct occurrences with a dated miss and no completion, capped
+ *   so `completed + missed` never exceeds `scheduled`.
+ * - Nothing dated before the tracking start (`preferences.startDate`) counts.
  * - `scheduled` = the current count of scheduled tasks across all weekday
  *   buckets. The data model stores recurring weekday templates with no history,
  *   so we cannot reconstruct what the schedule looked like weeks ago — every
@@ -67,6 +70,9 @@ export function computeExecutionTrend(schedule: Schedule, weeksCount = 8, now: D
   const today = new Date(now);
   today.setHours(0, 0, 0, 0);
   const currentMonday = mondayOf(today);
+  // Settings → Tracking → "Tracking starts": nothing before it counts — not
+  // its scheduled days, and not done or missed events dated before it.
+  const trackingStart = schedule.preferences?.startDate;
 
   // Scheduled occurrences in a week = sum over that week's 7 dates of the tasks
   // due on each (honors skips + recurrence intervals/one-off, so a biweekly task
@@ -78,54 +84,58 @@ export function computeExecutionTrend(schedule: Schedule, weeksCount = 8, now: D
       d.setDate(mon.getDate() + di);
       const dateISO = localISODate(d);
       for (const task of schedule.activities[DAYS[di]] ?? []) {
-        if (isTaskScheduledOn(task, dateISO, true) && isTrackedTask(task)) count++;
+        if (isTaskScheduledOn(task, dateISO, true, trackingStart) && isTrackedTask(task)) count++;
       }
     }
     return count;
   };
 
-  // Bucket distinct completed / missed task ids by their week's Monday. Both are
-  // de-duped per occurrence per week, so a task toggled repeatedly counts once.
-  const weekDone = new Map<string, Set<string>>();
-  const weekMissed = new Map<string, Set<string>>();
-  const markInto = (map: Map<string, Set<string>>, weekMon: string, occurrenceId: string) => {
-    let set = map.get(weekMon);
-    if (!set) { set = new Set(); map.set(weekMon, set); }
-    set.add(occurrenceId);
-  };
-  const weekMondayOf = (iso: string): string => localISODate(mondayOf(new Date(iso + "T00:00:00")));
+  // An occurrence is a task on a date. A recurring task lives in several
+  // weekday buckets under one id, and those copies can carry the same
+  // completion log, so keying by bucket would count one miss once per copy.
+  // Keying by task id + date counts it once however many copies hold it.
+  const doneKeys = new Set<string>();
+  const missedKeys = new Set<string>();
+  const counts = (dateISO: string) => !trackingStart || dateISO >= trackingStart;
 
   for (const day of DAYS) {
     for (const task of schedule.activities[day] ?? []) {
-      const doneDates = new Set<string>();
-      const missedDates = new Set<string>();
+      if (!isTrackedTask(task)) continue;
+      let sawDone = false;
       if (Array.isArray(task.completionHistory)) {
         for (const ev of task.completionHistory) {
           if (!ev.completedAt) continue;
+          const dateISO = localISODate(new Date(ev.completedAt));
+          if (!counts(dateISO)) continue;
           if (ev.completionType === "task") {
-            doneDates.add(localISODate(new Date(ev.completedAt)));
+            doneKeys.add(`${task.id}|${dateISO}`);
+            sawDone = true;
           } else if (ev.completionType === "missed" && !ev.subtaskId) {
-            missedDates.add(localISODate(new Date(ev.completedAt)));
+            missedKeys.add(`${task.id}|${dateISO}`);
           }
         }
       }
       // Legacy fallback: completed flag with no event history.
-      if (doneDates.size === 0 && task.completed && task.completedAt) {
-        doneDates.add(localISODate(new Date(task.completedAt)));
-      }
-      const occurrenceId = `${day}:${task.id}`;
-      for (const d of doneDates) markInto(weekDone, weekMondayOf(d), occurrenceId);
-      // A completion wins over a missed mark for the same occurrence/week.
-      for (const d of missedDates) {
-        const wk = weekMondayOf(d);
-        if (!(weekDone.get(wk)?.has(occurrenceId))) markInto(weekMissed, wk, occurrenceId);
+      if (!sawDone && task.completed && task.completedAt) {
+        const dateISO = localISODate(new Date(task.completedAt));
+        if (counts(dateISO)) doneKeys.add(`${task.id}|${dateISO}`);
       }
     }
   }
 
+  // Bucket by week. A completion wins over a missed mark for the same occurrence.
+  const weekMondayOf = (iso: string): string => localISODate(mondayOf(new Date(iso + "T00:00:00")));
+  const weekDone = new Map<string, number>();
+  const weekMissed = new Map<string, number>();
+  const bump = (map: Map<string, number>, key: string) => {
+    const wk = weekMondayOf(key.slice(key.lastIndexOf("|") + 1));
+    map.set(wk, (map.get(wk) ?? 0) + 1);
+  };
+  for (const key of doneKeys) bump(weekDone, key);
+  for (const key of missedKeys) if (!doneKeys.has(key)) bump(weekMissed, key);
+
   // Weeks that finish before the schedule's tracking start are dropped: they
   // predate the user's adoption and would drag the average down with zeroes.
-  const trackingStart = schedule.preferences?.startDate;
 
   const weeks: ExecutionWeek[] = [];
   for (let i = weeksCount - 1; i >= 0; i--) {
@@ -138,8 +148,9 @@ export function computeExecutionTrend(schedule: Schedule, weeksCount = 8, now: D
     // the tracking start is set to a future date.
     if (i !== 0 && trackingStart && localISODate(sun) < trackingStart) continue;
     const scheduled = scheduledInWeek(mon);
-    const completed = Math.min(weekDone.get(monStr)?.size ?? 0, scheduled || Infinity);
-    const missed = Math.min(weekMissed.get(monStr)?.size ?? 0, scheduled || Infinity);
+    const completed = Math.min(weekDone.get(monStr) ?? 0, scheduled || Infinity);
+    // Done + missed can never exceed what was scheduled.
+    const missed = Math.min(weekMissed.get(monStr) ?? 0, scheduled ? Math.max(0, scheduled - completed) : Infinity);
     const pct = scheduled > 0 ? Math.min(100, Math.round((completed / scheduled) * 100)) : 0;
     weeks.push({
       monStr,

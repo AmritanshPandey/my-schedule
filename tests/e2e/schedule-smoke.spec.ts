@@ -482,7 +482,8 @@ test("Next up marks the next task done from Overview", async ({ page }, testInfo
 
   const next = page.getByTestId("overview-next-task");
   await expect(next).toContainText("Morning Run");
-  await next.getByRole("button", { name: "Mark Morning Run done" }).click();
+  // Desktop names the task in the label; the phone card's button reads "Mark done".
+  await next.getByRole("button", { name: /^Mark (Morning Run )?done$/ }).click();
 
   // The card moves on to whatever is next (or reports the day done).
   await expect(next).not.toContainText("Morning Run");

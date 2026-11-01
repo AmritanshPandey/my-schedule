@@ -210,14 +210,17 @@ export const WEEK_VERDICT_LABEL: Record<WeekVerdict, string> = {
 
 export function selectWeekStatus(schedule: Schedule, todayISO: string): WeekStatus {
   const plansById = new Map(schedule.plans.map((plan) => [plan.id, plan]));
+  const trackingStart = schedule.preferences?.startDate;
   const todayIdx = new Date(`${todayISO}T00:00:00`).getDay();
   const monday = addDaysToISO(todayISO, -((todayIdx + 6) % 7));
 
   const days: WeekDayStatus[] = DAYS.map((day, i) => {
     // Commitments never count. This keeps the desktop week bar's long-standing
     // occurrence behaviour (no isTaskScheduledOn) so no existing number moves.
-    const tasks = (schedule.activities[day] ?? []).filter(isTrackedTask);
     const dateISO = addDaysToISO(monday, i);
+    // A day before the tracking start isn't part of the record at all.
+    const tracked = !trackingStart || dateISO >= trackingStart;
+    const tasks = tracked ? (schedule.activities[day] ?? []).filter(isTrackedTask) : [];
     const isToday = dateISO === todayISO;
     const eventOn = (task: Task, type: "task" | "missed") =>
       (task.completionHistory ?? []).some(
@@ -278,7 +281,7 @@ export function selectWeekStatus(schedule: Schedule, todayISO: string): WeekStat
     tasksDone,
     tasksTotal,
     routinesPct: ratioPct(routinesDone, routinesDue),
-    missed: computeExecutionTrend(schedule).currentMissed,
+    missed: computeExecutionTrend(schedule, 8, new Date(`${todayISO}T12:00:00`)).currentMissed,
     streak: calculateExecutionStreak(schedule, todayISO),
     verdict,
     verdictPct,
