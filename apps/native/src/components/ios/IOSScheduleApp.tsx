@@ -1597,40 +1597,6 @@ export default function IOSScheduleApp() {
                     <Icon icon={IconPhoto} size={24} strokeWidth={2} className="text-neutral-600 dark:text-neutral-300" />
                   </Pressable>
                 )}
-                {/* Adding to the day is a primary action, so it isn't hidden
-                    behind edit mode — the tab bar no longer carries a + . */}
-                <TourTarget id="new-item-button">
-                  <Pressable
-                    accessibilityRole="button"
-                    accessibilityLabel="Add task"
-                    onPress={() => {
-                      haptic('light');
-                      openCreateSheet();
-                    }}
-                    className="h-12 w-12 items-center justify-center rounded-full bg-neutral-950 active:scale-[0.96] dark:bg-white"
-                  >
-                    <Icon icon={IconPlus} size={24} strokeWidth={2.2} className="text-white dark:text-neutral-950" />
-                  </Pressable>
-                </TourTarget>
-                <Pressable
-                  accessibilityRole="button"
-                  accessibilityLabel={todayEditMode ? 'Done editing' : 'Edit day'}
-                  accessibilityState={{ selected: todayEditMode }}
-                  onPress={() => {
-                    haptic('light');
-                    setTodayEditMode((v) => !v);
-                  }}
-                  className={`h-12 w-12 items-center justify-center rounded-full active:scale-[0.96] ${
-                    todayEditMode ? 'bg-neutral-200 dark:bg-white/[0.18]' : 'bg-neutral-100 dark:bg-white/[0.08]'
-                  }`}
-                >
-                  <Icon
-                    icon={todayEditMode ? IconCheck : IconEdit}
-                    size={24}
-                    strokeWidth={2}
-                    className={todayEditMode ? 'text-neutral-900 dark:text-white' : 'text-neutral-600 dark:text-neutral-300'}
-                  />
-                </Pressable>
               </View>
             </View>
             <SignInPrompt />
@@ -1975,7 +1941,41 @@ export default function IOSScheduleApp() {
                       },
                     },
                   ]
-                : undefined
+                : // Every tab adds from the same place: a glass + in the header,
+                  // never a button inside the page.
+                  activeTab === 0
+                  ? [
+                      {
+                        icon: todayEditMode ? IconCheck : IconEdit,
+                        label: todayEditMode ? 'Done editing' : 'Edit day',
+                        onClick: () => {
+                          haptic('light');
+                          setTodayEditMode((v) => !v);
+                        },
+                      },
+                      {
+                        icon: IconPlus,
+                        label: 'Add task',
+                        tour: 'new-item-button',
+                        onClick: () => {
+                          haptic('light');
+                          openCreateSheet();
+                        },
+                      },
+                    ]
+                  : activeTab === 2
+                    ? [
+                        {
+                          icon: IconPlus,
+                          label: 'Add routine',
+                          tour: 'new-item-button',
+                          onClick: () => {
+                            haptic('medium');
+                            setRitualAddOpen(true);
+                          },
+                        },
+                      ]
+                    : undefined
           }
           onSettings={() => {
             setSelectedPlanId(null);

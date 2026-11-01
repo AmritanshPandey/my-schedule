@@ -117,8 +117,13 @@ export default function RoutineRow({
           {/* One inline run, truncated at the end: when it happens and how
               often stay visible, the record trails off first on a narrow row. */}
           <p className="mt-0.5 truncate text-[12px] font-medium text-neutral-500 dark:text-neutral-400">
-            <span className="tabular-nums">{routineWhenLabel(ritual)}</span>
-            {" · "}
+            {/* An anytime routine already sits under the "Anytime" group header. */}
+            {!ritual.anyTime && (
+              <>
+                <span className="tabular-nums">{routineWhenLabel(ritual)}</span>
+                {" · "}
+              </>
+            )}
             {missed ? "Missed" : describeRecurrence(ritual)}
             {streak >= 2 && (
               <>

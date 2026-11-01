@@ -24,7 +24,6 @@ import { buildAllRoutinesMonthDays } from '@planr/core/lib/consistency/ritualCal
 import { buildRoutineInsights } from '@planr/core/lib/consistency/routineInsights';
 import { haptic } from '../../lib/haptics';
 import EmptyState from '../ui/EmptyState';
-import { CtaActionButton } from '../ui/MainTitleSection';
 import SegmentedControl from '../ui/SegmentedControl';
 import ProgressBar from '../ui/ProgressBar';
 import { Icon, type TablerIcon } from '../ui/Icon';
@@ -34,7 +33,6 @@ import { RitualSheet } from './RitualSheet';
 import RoutineRow from './RoutineRow';
 import RoutineMonthCalendar from './RoutineMonthCalendar';
 import RoutineInsightsSection from './RoutineInsightsSection';
-import TourTarget from '../onboarding/TourTarget';
 
 // JS getDay() 0=Sunday → DayKey
 const JS_TO_DAY: DayKey[] = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'];
@@ -426,11 +424,12 @@ export default function RitualView({
     <>
       <View className="px-4 pb-8 pt-2">
         {/* ── Toolbar ──────────────────────────────────────────────────────────
-            No page title: the header bar and the tab already say "Routine".
-            The labelled Day / Month switch replaces an unlabelled calendar
-            icon that looked just like the date picker beside it. */}
-        <View className="mb-5 flex-row items-center gap-2">
-          {rituals.length > 0 && (
+            No page title: the header bar and the tab already say "Routine",
+            and adding lives in the header's glass +, as on every tab. The
+            labelled Day / Month switch replaces an unlabelled calendar icon
+            that looked just like the date picker beside it. */}
+        {rituals.length > 0 && (
+          <View className="mb-5 flex-row items-center gap-2">
             <SegmentedControl
               ariaLabel="Routine view"
               options={VIEW_OPTIONS}
@@ -441,20 +440,10 @@ export default function RitualView({
               }}
               className="w-[148px]"
             />
-          )}
-          <View className="flex-1" />
-          {rituals.length > 0 && viewMode === 'day' && <DateActionButton value={selectedDateISO} onChange={setSelectedDateISO} />}
-          <TourTarget id="new-item-button">
-            <CtaActionButton
-              label="Add"
-              icon={<Icon icon={IconPlus} size={14} strokeWidth={2.5} className="text-neutral-700 dark:text-neutral-300" />}
-              onClick={() => {
-                haptic('medium');
-                onAddOpenChange(true);
-              }}
-            />
-          </TourTarget>
-        </View>
+            <View className="flex-1" />
+            {viewMode === 'day' && <DateActionButton value={selectedDateISO} onChange={setSelectedDateISO} />}
+          </View>
+        )}
 
         {/* ── Month view — aggregate consistency calendar ──────────────────── */}
         {rituals.length > 0 && viewMode === 'month' && (

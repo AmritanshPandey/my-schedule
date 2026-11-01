@@ -23,6 +23,7 @@ import { ritualScheduledOnDate } from "@/lib/ritualRecurrence";
 import { haptic } from "@/lib/haptics";
 import EmptyState from "@/components/ui/EmptyState";
 import { MainTitleSection, CtaActionButton } from "@/components/ui/MainTitleSection";
+import SegmentedControl from "@/components/ui/SegmentedControl";
 import ProgressBar from "@/components/ui/ProgressBar";
 import { RitualSheet } from "./RitualSheet";
 import RoutineRow from "./RoutineRow";
@@ -52,6 +53,11 @@ const BUCKET_ICONS: Record<RitualTimeBucketKey, ComponentType<{ size?: number; s
 function appliesToDay(ritual: Ritual, dateISO: string, trackingStart?: string): boolean {
   return ritualScheduledOnDate(ritual, dateISO, trackingStart);
 }
+
+const VIEW_OPTIONS = [
+  { value: "day", label: "Day" },
+  { value: "month", label: "Month" },
+] as const;
 
 function GroupHeader({
   bucketKey,
@@ -289,6 +295,13 @@ function DateActionButton({
 // ── Props ─────────────────────────────────────────────────────────────────────
 
 interface RitualViewProps {
+  /**
+   * The phone shell's layout: no page title (its header bar and tab already
+   * say "Routine"), adding from the header's glass +, a labelled Day / Month
+   * switch, and a day card without the title lists the rows already show.
+   * Desktop keeps its title, actions and lists.
+   */
+  phoneShell?: boolean;
   rituals: Ritual[];
   ritualCompletions: RitualCompletion[];
   /** Settings → Tracking → "Tracking starts" (schedule.preferences?.startDate). */
@@ -307,6 +320,7 @@ interface RitualViewProps {
 // ── Component ─────────────────────────────────────────────────────────────────
 
 export default function RitualView({
+  phoneShell = false,
   rituals,
   ritualCompletions,
   trackingStart,
@@ -400,7 +414,23 @@ export default function RitualView({
       <div className="py-6 px-4 lg:pb-10 lg:pt-6">
        <div className="mx-auto w-full max-w-[1500px]">
 
+        {/* ── Phone toolbar (see `phoneShell`) ─────────────────────────────── */}
+        {phoneShell && rituals.length > 0 && (
+          <div className="mb-5 flex items-center gap-2">
+            <SegmentedControl
+              ariaLabel="Routine view"
+              options={VIEW_OPTIONS}
+              value={viewMode}
+              onChange={(mode) => { haptic("light"); setViewMode(mode); }}
+              className="w-[148px]"
+            />
+            <div className="flex-1" />
+            {viewMode === "day" && <DateActionButton value={selectedDateISO} onChange={setSelectedDateISO} />}
+          </div>
+        )}
+
         {/* ── Header ───────────────────────────────────────────────────────── */}
+        {!phoneShell && (
         <MainTitleSection
           label="Daily practice"
           title="Routines"
@@ -438,6 +468,7 @@ export default function RitualView({
           }
           className="mb-4"
         />
+        )}
 
         {/* ── Month view — aggregate consistency calendar ──────────────────── */}
         {rituals.length > 0 && viewMode === "month" && (
@@ -477,7 +508,7 @@ export default function RitualView({
 
         {/* ── The day so far (in progress; the aside carries it at xl) ─────── */}
         {viewMode === "day" && total > 0 && !allDone && (
-          <div data-testid="routine-day-summary" className="mb-5 rounded-2xl border border-neutral-200/80 bg-white px-4 py-3.5 dark:border-white/[0.08] dark:bg-neutral-900 xl:hidden">
+          <div data-testid="routine-day-summary" className="mb-6 rounded-2xl border border-neutral-200/80 bg-white px-4 py-4 dark:border-white/[0.08] dark:bg-neutral-900 xl:hidden">
             <div className="flex items-baseline justify-between gap-3">
               <p className="text-[15px] font-extrabold leading-snug text-neutral-950 dark:text-white">
                 {completedToday === 0 ? `Nothing marked ${dayWord === "today" ? "yet today" : `for ${dayWord}`}` : `You followed ${pct}% ${dayWord === "today" ? "today" : `on ${dayWord}`}`}
@@ -489,13 +520,13 @@ export default function RitualView({
             <div className="mt-2.5">
               <ProgressBar pct={pct} height={6} fillClassName="bg-green-500" />
             </div>
-            {daySummary.doneTitles.length > 0 && (
+            {!phoneShell && daySummary.doneTitles.length > 0 && (
               <p className="mt-2.5 text-[13px] leading-snug text-neutral-600 dark:text-neutral-300">
                 <span className="font-bold text-neutral-800 dark:text-neutral-100">Completed: </span>
                 {daySummary.doneTitles.join(", ")}
               </p>
             )}
-            {daySummary.openTitles.length > 0 && (
+            {!phoneShell && daySummary.openTitles.length > 0 && (
               <p className="mt-1 text-[13px] leading-snug text-neutral-500 dark:text-neutral-400">
                 <span className="font-semibold">Still open: </span>
                 {daySummary.openTitles.join(", ")}

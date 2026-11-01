@@ -1489,30 +1489,6 @@ export default function IOSScheduleApp() {
                     <IconPhoto size={24} strokeWidth={2} />
                   </button>
                 )}
-                {/* Adding to the day is a primary action, so it isn't hidden
-                    behind edit mode — the tab bar no longer carries a + . */}
-                <button
-                  type="button"
-                  aria-label="Add task"
-                  data-tour="new-item-button"
-                  onClick={() => { haptic("light"); openCreateSheet(); }}
-                  className="flex h-12 w-12 items-center justify-center rounded-full bg-neutral-950 text-white transition-colors active:scale-[0.96] dark:bg-white dark:text-neutral-950"
-                >
-                  <IconPlus size={24} strokeWidth={2.2} />
-                </button>
-                <button
-                  type="button"
-                  onClick={() => { haptic("light"); setTodayEditMode((v) => !v); }}
-                  aria-pressed={todayEditMode}
-                  aria-label={todayEditMode ? "Done editing" : "Edit day"}
-                  className={`flex h-12 w-12 items-center justify-center rounded-full transition-colors ${
-                    todayEditMode
-                      ? "bg-neutral-200 text-neutral-900 dark:bg-white/[0.18] dark:text-white"
-                      : "bg-neutral-100 text-neutral-600 dark:bg-white/[0.08] dark:text-neutral-300"
-                  }`}
-                >
-                  {todayEditMode ? <IconCheck size={24} strokeWidth={2} /> : <IconEdit size={24} strokeWidth={2} />}
-                </button>
               </div>
             </div>
             <SignInPrompt />
@@ -1665,6 +1641,7 @@ export default function IOSScheduleApp() {
           <ErrorBoundary section name="Routine">
             <div data-tour="routine-view">
               <RitualView
+                phoneShell
                 rituals={schedule.rituals ?? []}
                 ritualCompletions={schedule.ritualCompletions ?? []}
                 trackingStart={schedule.preferences?.startDate}
@@ -1826,6 +1803,40 @@ export default function IOSScheduleApp() {
                     onClick: () => {
                       haptic("light");
                       setAddingPlan(true);
+                    },
+                  },
+                ]
+              : // Every tab adds from the same place: a glass + in the header,
+                // never a button inside the page.
+                activeTab === 0
+              ? [
+                  {
+                    icon: todayEditMode ? IconCheck : IconEdit,
+                    label: todayEditMode ? "Done editing" : "Edit day",
+                    onClick: () => {
+                      haptic("light");
+                      setTodayEditMode((v) => !v);
+                    },
+                  },
+                  {
+                    icon: IconPlus,
+                    label: "Add task",
+                    tour: "new-item-button",
+                    onClick: () => {
+                      haptic("light");
+                      openCreateSheet();
+                    },
+                  },
+                ]
+              : activeTab === 2
+              ? [
+                  {
+                    icon: IconPlus,
+                    label: "Add routine",
+                    tour: "new-item-button",
+                    onClick: () => {
+                      haptic("medium");
+                      setRitualAddOpen(true);
                     },
                   },
                 ]
