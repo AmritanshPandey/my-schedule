@@ -168,7 +168,7 @@ export default function IOSOverview({
       )}
 
       {/* Next — the first answer. */}
-      <NextUpCard next={nextUp} onMarkDone={onMarkDone} onToggleSlot={onToggleSlot} onOpenToday={() => onNavigate(0)} />
+      <NextUpCard next={nextUp} streak={weekStatus.streak} onMarkDone={onMarkDone} onToggleSlot={onToggleSlot} onOpenToday={() => onNavigate(0)} />
 
       {/* Fix — both render nothing when all clear. */}
       <NeedsAttentionCard

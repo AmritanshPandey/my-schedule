@@ -54,9 +54,9 @@ export default function WeekStatusCard({
           <p className="text-[14px] font-bold text-neutral-950 dark:text-white">This week</p>
           {verdict ? (
             <p className="mt-1.5 flex items-baseline gap-2">
-              <span className={`font-extrabold leading-none tracking-[-0.03em] tabular-nums text-neutral-950 dark:text-white ${compact ? "text-[30px]" : "text-[40px]"}`}>
+              <span className={`font-extrabold leading-none tracking-[-0.03em] tabular-nums text-neutral-950 dark:text-white ${"text-[40px]"}`}>
                 <AnimatedNumber value={verdictPct} />
-                <span className={compact ? "text-[17px]" : "text-[22px]"}>%</span>
+                <span className={"text-[22px]"}>%</span>
               </span>
               <span className="text-[12px] font-medium text-neutral-500 dark:text-neutral-400">of what&rsquo;s due so far</span>
             </p>
@@ -80,7 +80,7 @@ export default function WeekStatusCard({
         {days.map((day) => (
           <div key={day.day} className={`flex flex-col items-center gap-1.5 ${day.isFuture ? "opacity-45" : ""}`}>
             <div
-              className={`relative w-full max-w-[34px] overflow-hidden rounded-full bg-neutral-100 dark:bg-white/[0.07] ${compact ? "h-12" : "h-16"} ${
+              className={`relative w-full max-w-[34px] overflow-hidden rounded-full bg-neutral-100 dark:bg-white/[0.07] h-16 ${
                 day.isToday ? "ring-2 ring-[#00A63E] ring-offset-2 ring-offset-white dark:ring-[#2FD46E] dark:ring-offset-neutral-900" : ""
               }`}
             >
@@ -113,7 +113,7 @@ export default function WeekStatusCard({
 
       <div className={`flex flex-wrap items-center justify-between gap-x-3 gap-y-1 border-t border-neutral-200/70 pt-3 dark:border-white/[0.07] ${compact ? "mt-3" : "mt-4"}`}>
         <p className="text-[12.5px] font-medium tabular-nums text-neutral-600 dark:text-neutral-400">{meta}</p>
-        {streak.streak > 0 && (
+        {streak.streak > 0 && !compact && (
           <p
             className={`inline-flex items-center gap-1 text-[12.5px] font-bold tabular-nums ${
               streak.atRisk ? "text-amber-700 dark:text-amber-300" : "text-emerald-700 dark:text-emerald-400"

@@ -13,6 +13,8 @@ interface ProgressBarProps {
   animateOnMount?: boolean;
   className?: string;
   trackClassName?: string;
+  /** Explicit track color, for a bar on a dark or tinted surface where the default gray track would glare. */
+  trackColor?: string;
 }
 
 /**
@@ -35,6 +37,7 @@ export default function ProgressBar({
   animateOnMount = false,
   className = '',
   trackClassName = '',
+  trackColor,
 }: ProgressBarProps) {
   const clamped = Math.max(0, Math.min(100, pct));
   const width = clamped <= 0 ? 0 : minVisible ? Math.max(clamped, 6) : clamped;
@@ -55,7 +58,7 @@ export default function ProgressBar({
   return (
     <View
       className={`relative w-full overflow-hidden bg-neutral-200 dark:bg-white/10 ${rounded} ${trackClassName} ${className}`}
-      style={{ height }}
+      style={trackColor ? { height, backgroundColor: trackColor } : { height }}
       onLayout={onLayout}
     >
       <Animated.View

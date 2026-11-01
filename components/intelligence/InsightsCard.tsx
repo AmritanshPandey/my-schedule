@@ -33,6 +33,9 @@ interface InsightsCardProps {
   onReviewTask?: (task: Task) => void;
   /** Show one weekday's schedule. */
   onReviewDay?: (day: DayKey) => void;
+  /** Drawn as an open section rather than a card: on the phone Overview it
+   *  closes a column of cards, and one more box made the screen read flat. */
+  bare?: boolean;
 }
 
 function findTask(schedule: Schedule, taskId: string): Task | undefined {
@@ -122,7 +125,7 @@ function InsightRow({
  * no language model runs. The on-device model, where available, only rewrites
  * the note's wording — never what it says.
  */
-export default function InsightsCard({ schedule, setSchedule, onToast, onReviewTask, onReviewDay }: InsightsCardProps) {
+export default function InsightsCard({ schedule, setSchedule, onToast, onReviewTask, onReviewDay, bare = false }: InsightsCardProps) {
   // Analysis takes tens of milliseconds; deferring keeps a task tick instant.
   const deferred = useDeferredValue(schedule);
   const report = useMemo(() => analyzeExecution(deferred), [deferred]);
@@ -165,9 +168,9 @@ export default function InsightsCard({ schedule, setSchedule, onToast, onReviewT
   };
 
   return (
-    <section data-testid="insights-card" aria-labelledby="insights-card-title" className={`${CARD} px-5 py-4`}>
+    <section data-testid="insights-card" aria-labelledby="insights-card-title" className={bare ? "px-1 pb-2 pt-3" : `${CARD} px-5 py-4`}>
       <div className="flex items-start justify-between gap-3">
-        <h2 id="insights-card-title" className="text-[15px] font-bold leading-tight text-neutral-950 dark:text-white">
+        <h2 id="insights-card-title" className={`font-bold leading-tight text-neutral-950 dark:text-white ${bare ? "text-[17px]" : "text-[15px]"}`}>
           This week&apos;s read
         </h2>
         {summary.source === "ai" ? (

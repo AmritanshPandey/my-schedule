@@ -4,7 +4,8 @@ import type { GoalPaceRow } from '@planr/core/lib/overview';
 import { accentStyles } from '@planr/core/lib/colorSystem';
 import { haptic } from '../../lib/haptics';
 import { CARD } from '../ui/surfaces';
-import HealthBadge from '../ui/HealthBadge';
+import HealthBadge, { HEALTH_FILL } from '../ui/HealthBadge';
+import ProgressBar from '../ui/ProgressBar';
 import { Icon } from '../ui/Icon';
 import { Text } from '../ui/Text';
 
@@ -70,6 +71,15 @@ export default function GoalPaceCard({
                 <Text className="mt-0.5 truncate text-[12px] font-medium text-neutral-500 dark:text-neutral-400">
                   {plan.title} · due {formatShortDate(milestone.plannedEndDate)}
                 </Text>
+                {/* How far along it is, so a slipping goal reads before its badge is read. */}
+                {state && state.overallProgress !== null && (
+                  <View className="mt-2 flex-row items-center gap-2">
+                    <ProgressBar pct={state.overallProgress} height={5} fillClassName={HEALTH_FILL[state.health]} className="flex-1" />
+                    <Text className="w-9 shrink-0 text-right text-[11.5px] font-bold tabular-nums text-neutral-600 dark:text-neutral-400">
+                      {state.overallProgress}%
+                    </Text>
+                  </View>
+                )}
               </View>
               {state && <HealthBadge health={state.health} />}
               <Icon icon={IconChevronRight} size={16} strokeWidth={2.2} className="shrink-0 text-neutral-400 dark:text-neutral-500" />

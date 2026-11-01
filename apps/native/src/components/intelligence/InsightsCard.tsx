@@ -9,7 +9,6 @@ import { applySuggestion, dismissInsight, undoSuggestion } from '@planr/core/lib
 import { isAppliable, type Insight } from '@planr/core/lib/intelligence/types';
 import { buildProgressFacts, templateSummary } from '@planr/core/lib/intelligence/progressFacts';
 import { haptic } from '../../lib/haptics';
-import { CARD } from '../ui/surfaces';
 import { Icon } from '../ui/Icon';
 import { Text } from '../ui/Text';
 
@@ -153,8 +152,10 @@ export default function InsightsCard({
   };
 
   return (
-    <View testID="insights-card" className={`${CARD} px-5 py-4`}>
-      <Text accessibilityRole="header" className="text-[15px] font-bold leading-tight text-neutral-950 dark:text-white">
+    // An open section, not a card: it closes the Overview's column of cards,
+    // and one more box made the screen read flat.
+    <View testID="insights-card" className="px-1 pb-2 pt-3">
+      <Text accessibilityRole="header" className="text-[17px] font-bold leading-tight text-neutral-950 dark:text-white">
         This week's read
       </Text>
       <Text className="mt-2 text-[14px] font-medium leading-relaxed text-neutral-700 dark:text-neutral-300">{summary}</Text>

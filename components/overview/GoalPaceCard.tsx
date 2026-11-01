@@ -98,7 +98,7 @@ export default function GoalPaceCard({
                       ? `All ${milestonesTotal} milestones done · ${consistency}% of days active`
                       : `No milestones yet · ${consistency}% of days active`}
                 </span>
-                {!compact && state && (
+                {state && (
                   <>
                     {state.overallProgress !== null && (
                       <span className="mt-2 flex items-center gap-2">
@@ -113,9 +113,11 @@ export default function GoalPaceCard({
                         </span>
                       </span>
                     )}
-                    <span className="mt-1.5 line-clamp-2 block text-[12px] leading-snug text-neutral-600 dark:text-neutral-400">
-                      {state.statusMessage}
-                    </span>
+                    {!compact && (
+                      <span className="mt-1.5 line-clamp-2 block text-[12px] leading-snug text-neutral-600 dark:text-neutral-400">
+                        {state.statusMessage}
+                      </span>
+                    )}
                   </>
                 )}
               </span>

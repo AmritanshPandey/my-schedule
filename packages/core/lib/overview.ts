@@ -366,3 +366,13 @@ export function selectGoalPace(
     totalCount: rows.length,
   };
 }
+
+// ── Greeting ─────────────────────────────────────────────────────────────────
+
+/** The Overview's title on the phone: a greeting by local time, not "Dashboard". */
+export function overviewGreeting(now: Date = new Date()): string {
+  const hour = now.getHours();
+  if (hour >= 5 && hour < 12) return "Good morning";
+  if (hour >= 12 && hour < 17) return "Good afternoon";
+  return "Good evening";
+}

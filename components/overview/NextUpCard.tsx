@@ -1,6 +1,7 @@
 "use client";
 
-import { IconCheck, IconChevronRight, IconCircleCheck, IconCalendarPlus } from "@tabler/icons-react";
+import { IconCheck, IconChevronRight, IconCircleCheck, IconCalendarPlus, IconFlame } from "@tabler/icons-react";
+import type { ExecutionStreak } from "@/lib/consistency/calculateExecutionStreak";
 import { formatMinutesBrief, type NextUp } from "@/lib/overview";
 import { haptic } from "@/lib/haptics";
 import { CARD } from "@/components/ui/surfaces";
@@ -16,17 +17,21 @@ import { CARD } from "@/components/ui/surfaces";
 export default function NextUpCard({
   next,
   variant = "card",
+  streak,
   onMarkDone,
   onToggleSlot,
   onOpenToday,
 }: {
   next: NextUp;
   variant?: "card" | "strip";
+  /** Shown in the phone hero beside the date, so the reward sits with the next action. */
+  streak?: ExecutionStreak;
   onMarkDone: (taskId: string, checkableIds: string[]) => void;
   onToggleSlot: (taskId: string, slotIndex: number) => void;
   onOpenToday: () => void;
 }) {
   const strip = variant === "strip";
+  if (!strip) return <NextUpHero next={next} streak={streak} onMarkDone={onMarkDone} onToggleSlot={onToggleSlot} onOpenToday={onOpenToday} />;
   const shell = strip
     ? `${CARD} flex min-w-0 items-center gap-1 p-1.5 lg:w-[420px]`
     : `${CARD} flex items-center gap-1 p-2`;
@@ -97,6 +102,147 @@ export default function NextUpCard({
         <IconCheck size={20} strokeWidth={3} aria-hidden />
       </button>
       {open(task.title, meta, timeLabel ? `Next up · ${timeLabel}` : "Next up")}
+    </section>
+  );
+}
+
+/**
+ * The phone Overview's focal point: today's date and streak, today's
+ * progress, the next task as the headline, and Mark done as a real button.
+ * A raised white card (the one hero shadow on the screen, DESIGN.md) so the
+ * eye lands here first; green is spent only on the progress fill, a live
+ * streak, and the affirmative action (One Signal Rule).
+ */
+function NextUpHero({
+  next,
+  streak,
+  onMarkDone,
+  onToggleSlot,
+  onOpenToday,
+}: {
+  next: NextUp;
+  streak?: ExecutionStreak;
+  onMarkDone: (taskId: string, checkableIds: string[]) => void;
+  onToggleSlot: (taskId: string, slotIndex: number) => void;
+  onOpenToday: () => void;
+}) {
+  const dateLabel = new Date().toLocaleDateString("en-US", { weekday: "long", month: "short", day: "numeric" });
+  const done = next.kind === "empty" ? 0 : next.done;
+  const total = next.kind === "empty" ? 0 : next.total;
+  const pct = total > 0 ? Math.round((done / total) * 100) : 0;
+
+  let label: string;
+  let title: string;
+  let meta: string;
+  if (next.kind === "task") {
+    const { task, plan, timeLabel, openCount, remainingMinutes } = next;
+    label = timeLabel ? `Next up · ${timeLabel}` : "Next up";
+    title = task.title;
+    meta = [
+      plan?.title,
+      openCount > 1 ? `${openCount} left · ${formatMinutesBrief(remainingMinutes)}` : remainingMinutes > 0 ? formatMinutesBrief(remainingMinutes) : "",
+    ].filter(Boolean).join(" · ");
+  } else if (next.kind === "day-done") {
+    label = "Today";
+    title = "Day complete";
+    meta = next.total > next.done ? "The rest are logged as missed." : "Everything on today's list is done.";
+  } else {
+    label = "Next up";
+    title = "Plan your day";
+    meta = "Nothing is scheduled for today yet.";
+  }
+
+  const secondary =
+    "inline-flex h-12 items-center justify-center gap-1.5 rounded-full bg-neutral-100 px-5 text-[15px] font-semibold text-neutral-900 transition-[background-color,transform] duration-150 active:scale-[0.98] active:bg-neutral-200 motion-reduce:transition-none lg:hover:bg-neutral-200 dark:bg-white/10 dark:text-white dark:active:bg-white/15 dark:lg:hover:bg-white/15";
+  const primary =
+    "inline-flex h-12 min-w-0 flex-1 items-center justify-center gap-2 rounded-full bg-[#008236] px-5 text-[15px] font-bold text-white transition-[background-color,transform] duration-150 active:scale-[0.98] active:bg-[#006B2C] motion-reduce:transition-none lg:hover:bg-[#006B2C] dark:bg-[#2FD46E] dark:text-neutral-950 dark:active:bg-[#25B85D] dark:lg:hover:bg-[#25B85D]";
+
+  return (
+    <section
+      data-testid="overview-next-task"
+      data-glass
+      className="rounded-[24px] bg-white p-5 shadow-hero ring-1 ring-neutral-200/70 dark:bg-neutral-900 dark:ring-white/[0.08]"
+    >
+      <div className="flex items-center justify-between gap-3">
+        <p className="truncate text-[13px] font-semibold text-neutral-500 dark:text-neutral-400">{dateLabel}</p>
+        {streak && streak.streak > 0 && (
+          <p
+            className={`inline-flex shrink-0 items-center gap-1 rounded-full px-2.5 py-1 text-[12px] font-bold tabular-nums ${
+              streak.atRisk
+                ? "bg-amber-500/12 text-amber-800 dark:bg-amber-400/12 dark:text-amber-300"
+                : "bg-emerald-500/10 text-emerald-700 dark:bg-emerald-400/10 dark:text-emerald-400"
+            }`}
+            title={streak.atRisk ? "Do one thing today to keep it" : undefined}
+          >
+            <IconFlame size={14} strokeWidth={2.2} aria-hidden />
+            {streak.streak}-day streak
+          </p>
+        )}
+      </div>
+
+      <div className="mt-4 flex items-start gap-3">
+        <div className="min-w-0 flex-1">
+          <p className="text-[13px] font-semibold text-neutral-500 dark:text-neutral-400">{label}</p>
+          <h2 className="mt-1 line-clamp-2 text-[28px] font-extrabold leading-[1.1] tracking-[-0.02em] text-neutral-950 [text-wrap:balance] dark:text-white">{title}</h2>
+          {meta && <p className="mt-1.5 truncate text-[13px] font-medium text-neutral-500 dark:text-neutral-400">{meta}</p>}
+        </div>
+        {next.kind === "day-done" && (
+          <span className="grid h-11 w-11 shrink-0 place-items-center rounded-full bg-emerald-500/12 text-emerald-600 dark:bg-emerald-400/12 dark:text-emerald-400">
+            <IconCircleCheck size={24} strokeWidth={2} aria-hidden />
+          </span>
+        )}
+      </div>
+
+      {total > 0 && (
+        <div className="mt-4 flex items-center gap-3">
+          <div
+            className="h-1.5 min-w-0 flex-1 overflow-hidden rounded-full bg-neutral-100 dark:bg-white/10"
+            role="progressbar"
+            aria-label="Today's progress"
+            aria-valuenow={pct}
+            aria-valuemin={0}
+            aria-valuemax={100}
+          >
+            <div className="h-full rounded-full bg-[#00A63E] transition-[width] duration-500 ease-out motion-reduce:transition-none dark:bg-[#2FD46E]" style={{ width: `${pct}%` }} />
+          </div>
+          <p className="shrink-0 text-[12px] font-bold tabular-nums text-neutral-600 dark:text-neutral-300">
+            {done} of {total} done
+          </p>
+        </div>
+      )}
+
+      <div className="mt-5 flex items-center gap-2">
+        {next.kind === "task" ? (
+          <>
+            <button
+              type="button"
+              onClick={() => {
+                haptic("medium");
+                if (next.slotIndex !== undefined) onToggleSlot(next.task.id, next.slotIndex);
+                else onMarkDone(next.task.id, next.checkableIds);
+              }}
+              className={primary}
+            >
+              <IconCheck size={18} strokeWidth={3} aria-hidden />
+              Mark done
+            </button>
+            <button type="button" onClick={() => { haptic("light"); onOpenToday(); }} className={secondary}>
+              Today
+              <IconChevronRight size={16} strokeWidth={2.4} aria-hidden />
+            </button>
+          </>
+        ) : next.kind === "empty" ? (
+          <button type="button" onClick={() => { haptic("light"); onOpenToday(); }} className={primary}>
+            <IconCalendarPlus size={18} strokeWidth={2.4} aria-hidden />
+            Add a task
+          </button>
+        ) : (
+          <button type="button" onClick={() => { haptic("light"); onOpenToday(); }} className={secondary}>
+            Open Today
+            <IconChevronRight size={16} strokeWidth={2.4} aria-hidden />
+          </button>
+        )}
+      </div>
     </section>
   );
 }

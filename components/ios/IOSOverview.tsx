@@ -173,7 +173,7 @@ export default function IOSOverview({
       )}
 
       {/* Next — the first answer. */}
-      <NextUpCard next={nextUp} onMarkDone={onMarkDone} onToggleSlot={onToggleSlot} onOpenToday={() => onNavigate(0)} />
+      <NextUpCard next={nextUp} streak={weekStatus.streak} onMarkDone={onMarkDone} onToggleSlot={onToggleSlot} onOpenToday={() => onNavigate(0)} />
 
       {/* Fix — both render nothing when all clear. */}
       <NeedsAttentionCard
@@ -209,6 +209,7 @@ export default function IOSOverview({
       {/* Patterns — the weekly read. Pattern engine only on iPhone (no
           language model runs in Safari/the PWA), so it costs no model memory. */}
       <InsightsCard
+        bare
         schedule={schedule}
         setSchedule={setSchedule}
         onToast={onToast}

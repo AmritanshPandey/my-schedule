@@ -81,6 +81,7 @@ import { calculateMilestoneState, type MilestoneState } from '@planr/core/lib/mi
 import { linkItem, unlinkItem, unlinkEverywhere, type MilestoneLinkKind } from '@planr/core/lib/milestoneLinks';
 import { formatDisplayTime, inputToDisplayTime, minutesToInputTime, parseTimeToMinutes, toScheduleDayMinutes } from '@planr/core/lib/timeUtils';
 import { completedRitualIdsOn } from '@planr/core/lib/consistency/ritualDayStatus';
+import { overviewGreeting } from '@planr/core/lib/overview';
 import { selectNeedsAttention, type MissedTask } from '@planr/core/lib/needsAttention';
 import { rescheduleMissedTaskOnce, acknowledgeMiss } from '@planr/core/lib/missedRecovery';
 import { TOUR_STEPS, type CoachMarkStep, type TourId } from '@planr/core/lib/onboarding/tours';
@@ -1922,7 +1923,7 @@ export default function IOSScheduleApp() {
                       ? 'Tracking'
                       : activeTab === 5
                         ? 'Settings'
-                        : 'Dashboard'
+                        : overviewGreeting()
           }
           onBack={selectedPlan ? () => setSelectedPlanId(null) : undefined}
           actions={

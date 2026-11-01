@@ -99,6 +99,7 @@ import { formatDisplayTime, inputToDisplayTime, minutesToInputTime, parseTimeToM
 import { ritualScheduledOnDate } from "@/lib/consistency/calculateRitualStreak";
 import { completedRitualIdsOn } from "@/lib/consistency/ritualDayStatus";
 import { useAIEnabled } from "@/lib/ai/useAIEnabled";
+import { overviewGreeting } from "@/lib/overview";
 import { selectNeedsAttention, type MissedTask } from "@/lib/needsAttention";
 import IOSOverview from "@/components/ios/IOSOverview";
 import MissedTaskSheet from "@/components/MissedTaskSheet";
@@ -1777,7 +1778,7 @@ export default function IOSScheduleApp() {
     <main className="min-h-dvh shrink-0 bg-[#F3F4F1] text-neutral-900 dark:bg-[#0E0E0E] dark:text-white">
       {!subtasksRef && activeTab !== 6 && (
         <IOSHeader
-          title={selectedPlan ? selectedPlan.title : activeTab === 0 ? "Today" : activeTab === 1 ? "Plans" : activeTab === 2 ? "Routine" : activeTab === 8 ? "Tracking" : activeTab === 5 ? "Settings" : activeTab === 6 ? "Notes" : "Dashboard"}
+          title={selectedPlan ? selectedPlan.title : activeTab === 0 ? "Today" : activeTab === 1 ? "Plans" : activeTab === 2 ? "Routine" : activeTab === 8 ? "Tracking" : activeTab === 5 ? "Settings" : activeTab === 6 ? "Notes" : overviewGreeting()}
           onBack={selectedPlan ? () => setSelectedPlanId(null) : undefined}
           actions={
             selectedPlan
