@@ -5,6 +5,7 @@ import { useAuth } from '../../contexts/AuthProvider';
 import { useGoogleSignIn } from './useGoogleSignIn';
 import { useAppleSignIn } from './useAppleSignIn';
 import { AppleSignInButton } from './AppleSignInButton';
+import { GoogleSignInButton } from './GoogleSignInButton';
 import { AuthErrorNote } from './AuthErrorNote';
 import { haptic } from '../../lib/haptics';
 import { storage } from '../../storage/mmkv';
@@ -65,23 +66,13 @@ export default function SignInPrompt({ className = '' }: { className?: string })
           </Text>
           {apple.isAppleSignInAvailable && (
             <View className={`mt-2.5 ${apple.signingIn ? 'opacity-60' : ''}`} pointerEvents={apple.signingIn ? 'none' : 'auto'}>
-              <AppleSignInButton onPress={() => void apple.signIn()} height={36} cornerRadius={18} />
+              <AppleSignInButton onPress={() => void apple.signIn()} />
             </View>
           )}
           {isGoogleSignInReady && (
-            <Pressable
-              accessibilityRole="button"
-              disabled={signingIn}
-              onPress={() => {
-                haptic('light');
-                void signIn();
-              }}
-              className={`mt-2.5 h-9 flex-row items-center gap-2 self-start rounded-full bg-neutral-950 px-4 active:bg-neutral-800 dark:bg-white dark:active:bg-neutral-200 ${
-                signingIn ? 'opacity-60' : ''
-              }`}
-            >
-              <Text className="text-[13px] font-bold text-white dark:text-neutral-950">{signingIn ? 'Signing in…' : 'Continue with Google'}</Text>
-            </Pressable>
+            <View className="mt-2.5">
+              <GoogleSignInButton onPress={() => void signIn()} signingIn={signingIn} />
+            </View>
           )}
           <AuthErrorNote message={error ?? apple.error} className="text-[11px]" />
         </View>
