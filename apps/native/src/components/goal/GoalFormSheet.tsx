@@ -1,13 +1,15 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { View } from 'react-native';
 import type { Goal, Schedule } from '@planr/core/lib/scheduleTypes';
 import { createGoal, updateGoal } from '@planr/core/lib/goalMutations';
+import { reviewGoalDraft } from '@planr/core/lib/intelligence/builderChecks';
 import BottomSheet from '../ui/BottomSheet';
 import SheetHeader from '../ui/SheetHeader';
 import Button from '../ui/Button';
 import Input from '../ui/Input';
 import DateInput from '../ui/DateInput';
 import { Text } from '../ui/Text';
+import BuilderHints from '../intelligence/BuilderHints';
 
 type SetScheduleFn = (updater: (prev: Schedule) => Schedule) => void;
 
@@ -19,6 +21,12 @@ export default function GoalFormSheet({ open, onClose, setSchedule, goal }: { op
   const [description, setDescription] = useState('');
   const [startDate, setStartDate] = useState('');
   const [targetDate, setTargetDate] = useState('');
+
+  // Vague or unmeasurable wording, impossible dates — same checks as the PWA.
+  const hints = useMemo(
+    () => reviewGoalDraft({ title, description, startDate, targetDate }),
+    [title, description, startDate, targetDate],
+  );
 
   useEffect(() => {
     if (!open) return;
@@ -68,6 +76,8 @@ export default function GoalFormSheet({ open, onClose, setSchedule, goal }: { op
             </View>
           </View>
         </View>
+        <BuilderHints hints={hints} />
+
         <Button fullWidth onPress={handleSubmit} disabled={!title.trim()}>
           {goal ? 'Save changes' : 'Create goal'}
         </Button>

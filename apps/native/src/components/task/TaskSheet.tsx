@@ -15,6 +15,7 @@ import { displayToInputTime, inputToDisplayTime, parseTimeToMinutes, formatMinut
 import { resolveOccurrence } from '@planr/core/lib/taskOccurrence';
 import { constrainTaskToPlanWindow } from '@planr/core/lib/planTaskWindow';
 import { validateTaskSlots } from '@planr/core/lib/scheduleRules';
+import { buildTaskReviewContext, reviewTaskDraft, type BuilderHint } from '@planr/core/lib/intelligence/builderChecks';
 import { haptic } from '../../lib/haptics';
 import { ModalNestingContext, useModalTurn } from '../../lib/modalTurn';
 import BottomSheet from '../ui/BottomSheet';
@@ -34,6 +35,7 @@ import { CategorySelector } from './CategorySelector';
 import CategorySheet, { type CategoryDraft } from '../category/CategorySheet';
 import { PlanSelector } from './PlanSelector';
 import SubtaskDraftRow, { type SubtaskDraft } from './SubtaskDraftRow';
+import BuilderHints from '../intelligence/BuilderHints';
 
 export interface TaskSaveData {
   taskDraft: Omit<Task, 'id'>;
@@ -422,6 +424,38 @@ export function TaskSheet({
     return fits ? candidate : null;
   }, [activities, categoryId, planId, task?.id, resolvedEditDay, activeDay, baseDateISO, preferences]);
 
+  // ── Builder intelligence ─────────────────────────────────────────────────
+  // Evidence from this person's own record (builderChecks): a slot they
+  // rarely finish in, sessions that are too long for them, a week they've
+  // never completed. The schedule-wide models are built once per open; only
+  // the cheap draft check re-runs as the form changes. Same rules as the PWA.
+  const reviewContext = useMemo(() => {
+    if (!isOpen || !activities) return null;
+    // The checks read only plans, activities and preferences.
+    return buildTaskReviewContext({ plans, activities, preferences } as unknown as Schedule);
+  }, [isOpen, activities, plans, preferences]);
+
+  const builderHints = useMemo(() => {
+    if (!reviewContext || isOccurrenceScope || repeatMode === 'once' || perDayActive || slots.length !== 1) return [];
+    return reviewTaskDraft(
+      {
+        title,
+        taskType,
+        days: repeatDays,
+        startTime: slots[0].startTime,
+        endTime: slots[0].endTime,
+        taskId: mode === 'edit' ? task?.id : undefined,
+      },
+      reviewContext,
+    );
+  }, [reviewContext, isOccurrenceScope, repeatMode, perDayActive, slots, title, taskType, repeatDays, mode, task?.id]);
+
+  function applyBuilderHint(hint: BuilderHint) {
+    if (hint.action?.kind === 'set_time') {
+      setSlots([{ startTime: hint.action.startTime, endTime: hint.action.endTime }]);
+    }
+  }
+
   const mergePartner = useMemo(() => (task ? findMergePartner(task, activities ?? {}) : null), [task, activities]);
   const mergeCandidateTasks = useMemo(() => {
     if (!task || task.mergeGroupId || !activities) return [];
@@ -794,6 +828,8 @@ export function TaskSheet({
           {repeatMode === 'once' && <DateInput label="Date" value={onceDate} onChange={setOnceDate} />}
         </View>
       )}
+
+      <BuilderHints hints={builderHints} onAction={applyBuilderHint} />
 
       {showActiveWindow && (
         <View className="gap-2">
