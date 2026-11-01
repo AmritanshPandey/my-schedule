@@ -146,7 +146,7 @@ export function taskScheduledMinutes(task: Task, dayStartMinutes = DEFAULT_TIMEL
  * coordinates, which is where the timeline draws it as a continuation. Same
  * split as `taskDayMinutes`, but keeping the intervals so they can be unioned.
  */
-function taskIntervals(
+export function taskIntervals(
   task: Task,
   window: "sameDay" | "overflow",
   dayStartMinutes = DEFAULT_TIMELINE_START_MINUTES,

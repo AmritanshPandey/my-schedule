@@ -14,6 +14,8 @@ import InsightsCard, { type InsightToast } from '../intelligence/InsightsCard';
 import NextUpCard from '../overview/NextUpCard';
 import WeekStatusCard from '../overview/WeekStatusCard';
 import GoalPaceCard from '../overview/GoalPaceCard';
+import DaySpreadCard from '../overview/DaySpreadCard';
+import { buildDaySpread } from '@planr/core/lib/daySpread';
 
 const SETUP_ICON: Record<SetupStep['key'], TablerIcon> = {
   plan: IconClipboardList,
@@ -74,6 +76,7 @@ export default function IOSOverview({
   const setup = useMemo(() => selectSetupSteps(schedule), [schedule]);
   const nextUp = useMemo(() => selectNextUp(schedule, todayISO, todayKey), [schedule, todayISO, todayKey]);
   const weekStatus = useMemo(() => selectWeekStatus(schedule, todayISO), [schedule, todayISO]);
+  const daySpread = useMemo(() => buildDaySpread(schedule, todayKey, todayISO), [schedule, todayKey, todayISO]);
   const goalPace = useMemo(() => selectGoalPace(schedule, { limit: MOBILE_GOAL_ROWS, withMilestoneOnly: true }), [schedule]);
   const showSetup = !setupDismissed && setup.show;
 
@@ -189,7 +192,10 @@ export default function IOSOverview({
         onOpenTracking={() => onNavigate(8)}
       />
 
-      {/* Status — the week in one card, streak included. */}
+      {/* Today — where the waking hours go; nothing when nothing is booked. */}
+      <DaySpreadCard spread={daySpread} onOpen={() => onNavigate(0)} />
+
+      {/* Status — the week in one card. */}
       <WeekStatusCard status={weekStatus} onOpen={() => onNavigate(0)} />
 
       {/* Goals — worst first; hidden when no plan has a milestone to pace. */}

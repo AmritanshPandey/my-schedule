@@ -44,7 +44,8 @@ export default function ConfirmSheet({
         run?.();
       }}
     >
-      <View className="px-5 pb-8 pt-2">
+      {/* Same clearance under the grabber as SheetHeader gives the other sheets. */}
+      <View className="px-5 pb-8 pt-5">
         <Text className="mb-1 text-[18px] font-bold text-neutral-900 dark:text-white">{title}</Text>
         {description && <Text className="mb-6 text-[14px] leading-relaxed text-neutral-500 dark:text-neutral-400">{description}</Text>}
         {!description && <View className="mb-6" />}

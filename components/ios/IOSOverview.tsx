@@ -12,6 +12,8 @@ import NeedsAttentionCard from "@/components/NeedsAttentionCard";
 import NextUpCard from "@/components/overview/NextUpCard";
 import WeekStatusCard from "@/components/overview/WeekStatusCard";
 import GoalPaceCard from "@/components/overview/GoalPaceCard";
+import DaySpreadCard from "@/components/overview/DaySpreadCard";
+import { buildDaySpread } from "@/lib/daySpread";
 import type { InsightToast } from "@/components/intelligence/InsightsCard";
 
 const InsightsCard = dynamic(() => import("@/components/intelligence/InsightsCard"), { ssr: false });
@@ -78,6 +80,7 @@ export default function IOSOverview({
   const setup = useMemo(() => selectSetupSteps(schedule), [schedule]);
   const nextUp = useMemo(() => selectNextUp(schedule, todayISO, todayKey), [schedule, todayISO, todayKey]);
   const weekStatus = useMemo(() => selectWeekStatus(schedule, todayISO), [schedule, todayISO]);
+  const daySpread = useMemo(() => buildDaySpread(schedule, todayKey, todayISO), [schedule, todayKey, todayISO]);
   const goalPace = useMemo(
     () => selectGoalPace(schedule, { limit: MOBILE_GOAL_ROWS, withMilestoneOnly: true }),
     [schedule],
@@ -195,6 +198,9 @@ export default function IOSOverview({
       />
 
       {/* Status — the week in one card, streak included. */}
+      {/* Today — where the waking hours go; nothing when nothing is booked. */}
+      <DaySpreadCard spread={daySpread} onOpen={() => onNavigate(0)} />
+
       <WeekStatusCard status={weekStatus} compact onOpen={() => { haptic("light"); onNavigate(0); }} />
 
       {/* Goals — worst first; hidden when no plan has a milestone to pace. */}
