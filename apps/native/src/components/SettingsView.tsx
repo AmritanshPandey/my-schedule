@@ -61,16 +61,11 @@ function RowIcon({ icon, tone = 'text-neutral-500 dark:text-neutral-300', box = 
   );
 }
 
-function SmallButton({ label, onPress, disabled = false, tone = 'text-neutral-700 dark:text-neutral-200' }: { label: string; onPress: () => void; disabled?: boolean; tone?: string }) {
+function SmallButton({ label, onPress, disabled = false }: { label: string; onPress: () => void; disabled?: boolean }) {
   return (
-    <Pressable
-      accessibilityRole="button"
-      onPress={onPress}
-      disabled={disabled}
-      className={`shrink-0 rounded-xl border border-neutral-200 bg-neutral-50 px-3 py-1.5 active:bg-neutral-100 dark:border-white/[0.08] dark:bg-white/[0.04] dark:active:bg-white/[0.07] ${disabled ? 'opacity-50' : ''}`}
-    >
-      <Text className={`text-[11px] font-semibold ${tone}`}>{label}</Text>
-    </Pressable>
+    <Button variant="secondary" size="sm" onPress={onPress} disabled={disabled}>
+      {label}
+    </Button>
   );
 }
 
@@ -132,15 +127,15 @@ function SyncRow() {
         <Text className="text-[13px] font-semibold text-neutral-800 dark:text-white">Cloud sync</Text>
         <Text className={`text-[11px] font-medium ${color}`}>{lastResult || label}</Text>
       </View>
-      <Pressable
-        accessibilityRole="button"
+      <Button
+        variant="secondary"
+        size="sm"
         onPress={() => void syncNow()}
-        disabled={isBusy}
-        className={`flex-row items-center gap-1.5 rounded-xl border border-neutral-200 bg-neutral-50 px-3 py-1.5 active:scale-[0.93] dark:border-white/[0.08] dark:bg-white/[0.04] ${isBusy ? 'opacity-40' : ''}`}
+        loading={isBusy}
+        icon={<Icon icon={IconCloud} size={15} strokeWidth={2} className={BUTTON_TEXT.secondary} />}
       >
-        {isBusy ? <ActivityIndicator size="small" /> : <Icon icon={IconCloud} size={11} strokeWidth={2} className="text-neutral-600 dark:text-neutral-300" />}
-        <Text className="text-[11px] font-semibold text-neutral-600 dark:text-neutral-300">{isBusy ? 'Syncing…' : 'Sync now'}</Text>
-      </Pressable>
+        {isBusy ? 'Syncing…' : 'Sync now'}
+      </Button>
     </Row>
   );
 }
@@ -217,29 +212,23 @@ function DiagnosticsCard() {
       </Row>
       <Divider />
       <View className="flex-row gap-2 px-4 py-3">
-        {[
-          { label: 'Share', onPress: () => void shareDiagnostics(), disabled: !snapshot, tone: 'text-neutral-700 dark:text-neutral-200' },
-          { label: 'Refresh', onPress: refresh, disabled: false, tone: 'text-neutral-700 dark:text-neutral-200' },
-          {
-            label: 'Clear logs',
-            onPress: () => {
-              clearErrorLog();
-              refresh();
-            },
-            disabled: false,
-            tone: 'text-neutral-500 dark:text-neutral-300',
-          },
-        ].map((b) => (
-          <Pressable
-            key={b.label}
-            accessibilityRole="button"
-            onPress={b.onPress}
-            disabled={b.disabled}
-            className={`flex-1 items-center rounded-xl border border-neutral-200 bg-neutral-50 px-3 py-2 dark:border-white/[0.08] dark:bg-white/[0.04] ${b.disabled ? 'opacity-40' : ''}`}
-          >
-            <Text className={`text-[11px] font-semibold ${b.tone}`}>{b.label}</Text>
-          </Pressable>
-        ))}
+        <Button variant="secondary" size="sm" onPress={() => void shareDiagnostics()} disabled={!snapshot} className="flex-1">
+          Share
+        </Button>
+        <Button variant="secondary" size="sm" onPress={refresh} className="flex-1">
+          Refresh
+        </Button>
+        <Button
+          variant="ghost"
+          size="sm"
+          onPress={() => {
+            clearErrorLog();
+            refresh();
+          }}
+          className="flex-1"
+        >
+          Clear logs
+        </Button>
       </View>
       <ErrorTelemetryRow />
     </Card>
@@ -380,17 +369,17 @@ export function SettingsView({ schedule, setSchedule, onClearData, onClearProgre
                   <View className="px-4 py-4">
                     <Text className="mb-0.5 text-[14px] font-bold text-neutral-900 dark:text-white">Sign in to sync</Text>
                     <Text className="mb-3.5 text-[12px] text-neutral-500 dark:text-neutral-400">Back up your data and access it across all your devices.</Text>
-                    <Pressable
-                      accessibilityRole="button"
+                    <Button
+                      variant="secondary"
+                      size="md"
+                      fullWidth
                       onPress={() => void signIn()}
-                      disabled={signingIn || !isAuthAvailable}
-                      className={`w-full flex-row items-center justify-center gap-2 rounded-xl border border-neutral-200 bg-neutral-50 px-4 py-2.5 active:scale-[0.97] active:bg-white dark:border-white/[0.08] dark:bg-white/[0.04] dark:active:bg-white/[0.07] ${
-                        signingIn || !isAuthAvailable ? 'opacity-50' : ''
-                      }`}
+                      disabled={!isAuthAvailable}
+                      loading={signingIn}
+                      icon={<GoogleLogo />}
                     >
-                      {signingIn ? <ActivityIndicator size="small" /> : <GoogleLogo />}
-                      <Text className="text-[13px] font-semibold text-neutral-700 dark:text-white">{signingIn ? 'Signing in…' : 'Continue with Google'}</Text>
-                    </Pressable>
+                      {signingIn ? 'Signing in…' : 'Continue with Google'}
+                    </Button>
                     <AuthErrorNote
                       message={signInError ?? (isAuthAvailable && !isGoogleSignInReady ? "Google Sign-In isn't set up for this build yet." : null)}
                       unavailable={!isAuthAvailable}
@@ -414,14 +403,9 @@ export function SettingsView({ schedule, setSchedule, onClearData, onClearProgre
                       <Text className="truncate text-[14px] font-bold text-neutral-900 dark:text-white">{user?.displayName ?? 'User'}</Text>
                       <Text className="truncate text-[12px] text-neutral-500 dark:text-neutral-400">{user?.email}</Text>
                     </View>
-                    <Pressable
-                      accessibilityRole="button"
-                      onPress={() => void handleLogout()}
-                      disabled={busy}
-                      className={`rounded-lg border border-neutral-200 px-3 py-2 active:scale-[0.94] dark:border-white/[0.08] ${busy ? 'opacity-50' : ''}`}
-                    >
-                      <Text className="text-[12px] font-semibold text-neutral-500 dark:text-neutral-400">{busy ? '…' : 'Sign out'}</Text>
-                    </Pressable>
+                    <Button variant="ghost" size="sm" onPress={() => void handleLogout()} loading={busy}>
+                      Sign out
+                    </Button>
                   </Row>
                 </Card>
               )}
