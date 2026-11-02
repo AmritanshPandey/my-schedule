@@ -232,7 +232,7 @@ function NextUpHero({
           </>
         ) : next.kind === "empty" ? (
           <Button
-            variant="cta"
+            variant="primary"
             onClick={() => { haptic("light"); onOpenToday(); }}
             icon={<IconCalendarPlus size={18} strokeWidth={2.4} aria-hidden />}
             className="min-w-0 flex-1"

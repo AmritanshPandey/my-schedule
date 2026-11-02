@@ -23,6 +23,7 @@ import { useAuth } from "@/contexts/AuthProvider";
 import { useSyncStatus } from "@/lib/useSyncStatus";
 import SyncDot from "@/components/sync/SyncDot";
 import IconButton from "@/components/ui/IconButton";
+import { BUTTON_FOCUS_RING } from "@/components/ui/Button";
 
 interface DesktopSidebarProps {
   activeTab: number;
@@ -209,11 +210,11 @@ export default function DesktopSidebar({
             data-tour="new-item-button"
             onClick={handleCreate}
             title={collapsed ? (activeTab === 1 ? "New plan" : activeTab === 2 ? "New routine" : "New task") : undefined}
-            className={`flex w-full items-center rounded-full bg-[#008236] py-2.5 text-white transition-colors hover:bg-[#006B2C] active:scale-[0.98] dark:bg-[#2FD46E] dark:text-neutral-950 dark:hover:bg-[#2FD46E]/90 ${collapsed ? "justify-center px-0" : "gap-2 px-3.5"}`}
+            className={`flex h-11 w-full items-center rounded-full bg-neutral-950 text-white transition-colors hover:bg-neutral-800 active:scale-[0.97] dark:bg-white dark:text-neutral-950 dark:hover:bg-neutral-200 ${collapsed ? "justify-center px-0" : "gap-2 px-4"} ${BUTTON_FOCUS_RING}`}
           >
             <IconPlus size={15} strokeWidth={2.5} />
             {!collapsed && (
-              <span className="text-[13px] font-semibold">
+              <span className="text-[14px] font-semibold">
                 {activeTab === 1 ? "New plan" : activeTab === 2 ? "New routine" : "New task"}
               </span>
             )}

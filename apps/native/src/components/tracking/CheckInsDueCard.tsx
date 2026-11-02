@@ -62,13 +62,14 @@ export default function CheckInsDueCard({ trackers, metricEntries, todayISO, tra
             </Text>
           </View>
           <Button
+            variant="secondary"
             size="md"
             accessibilityLabel={`Log ${tracker.title}`}
             onPress={() => {
               haptic('light');
               onLog(tracker);
             }}
-            icon={<Icon icon={IconPlus} size={16} strokeWidth={2.5} className={BUTTON_TEXT.primary} />}
+            icon={<Icon icon={IconPlus} size={16} strokeWidth={2.5} className={BUTTON_TEXT.secondary} />}
           >
             Log
           </Button>

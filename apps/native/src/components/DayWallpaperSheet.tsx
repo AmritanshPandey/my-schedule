@@ -388,8 +388,8 @@ export default function DayWallpaperSheet({ open, onClose, schedule, todayKey }:
         </Text>
 
         <View className="mt-4">
-          <Button variant="cta" fullWidth disabled={saving} onPress={handleSave}>
-            <Text className={`text-[16px] font-semibold ${BUTTON_TEXT.cta}`}>{saving ? 'Exporting…' : 'Save wallpaper'}</Text>
+          <Button fullWidth disabled={saving} onPress={handleSave}>
+            <Text className={`text-[16px] font-semibold ${BUTTON_TEXT.primary}`}>{saving ? 'Exporting…' : 'Save wallpaper'}</Text>
           </Button>
           {feedback && <Text className="mt-2 text-center text-[11px] font-semibold text-neutral-500 dark:text-neutral-400">{feedback}</Text>}
         </View>

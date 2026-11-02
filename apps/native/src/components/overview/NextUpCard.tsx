@@ -166,9 +166,9 @@ export default function NextUpCard({
           </>
         ) : next.kind === 'empty' ? (
           <Button
-            variant="cta"
+            variant="primary"
             onPress={openToday}
-            icon={<Icon icon={IconCalendarPlus} size={18} strokeWidth={2.4} className={BUTTON_TEXT.cta} />}
+            icon={<Icon icon={IconCalendarPlus} size={18} strokeWidth={2.4} className={BUTTON_TEXT.primary} />}
             className="min-w-0 flex-1"
           >
             Add a task

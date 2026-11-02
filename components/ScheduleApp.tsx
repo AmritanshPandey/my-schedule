@@ -4137,7 +4137,7 @@ export default function ScheduleApp() {
                   )}
                   {viewMode === "timeline" && (
                     <Button
-                      variant="cta"
+                      variant="primary"
                       size="sm"
                       onClick={handleTimelineSave}
                       loading={savingTimeline}

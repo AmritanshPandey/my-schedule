@@ -65,7 +65,7 @@ export default function QuickRetimeSheet({ target, onClose, onSave }: QuickRetim
             Changes just today's occurrence — the rest of the series keeps its usual time.
           </p>
 
-          <Button variant="cta" fullWidth className="mt-5" onClick={handleSave}>
+          <Button fullWidth className="mt-5" onClick={handleSave}>
             <IconClock size={16} strokeWidth={2.4} />
             Save
           </Button>

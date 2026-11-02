@@ -282,7 +282,7 @@ export default function AIReviewSheet({
             Cancel
           </Button>
           <Button
-            variant="cta"
+            variant="primary"
             size="md"
             disabled={!ready}
             onClick={() => { haptic("medium"); onConfirm(effective); close(); }}

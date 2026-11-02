@@ -62,8 +62,8 @@ export default function QuickRetimeSheet({
           <Text className="mt-2 text-[11px] font-medium text-neutral-500 dark:text-neutral-400">
             Changes just today's occurrence — the rest of the series keeps its usual time.
           </Text>
-          <Button variant="cta" fullWidth className="mt-5" onPress={handleSave}>
-            <Icon icon={IconClock} size={16} strokeWidth={2.4} className={BUTTON_TEXT.cta} />
+          <Button fullWidth className="mt-5" onPress={handleSave}>
+            <Icon icon={IconClock} size={16} strokeWidth={2.4} className={BUTTON_TEXT.primary} />
             Save
           </Button>
         </View>

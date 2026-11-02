@@ -61,7 +61,7 @@ export default function EmptyState({
       </div>
       {action && (
         <Button
-          variant="cta"
+          variant="primary"
           size="md"
           onClick={() => { haptic("medium"); action.onClick(); }}
           icon={ActionIcon && <ActionIcon size={16} strokeWidth={2.5} />}

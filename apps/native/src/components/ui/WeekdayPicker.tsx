@@ -68,7 +68,11 @@ export default function WeekdayPicker({
             onPress={() => toggleDay(day)}
             className={`${CHIP} w-10 px-0 ${chipClass(active)}`}
           >
-            <Text className={`${CHIP_TEXT} ${chipText(active)}`}>{DAY_LABELS[day]}</Text>
+            {/* Full chip width: iOS measures Nunito's "Mo" / "We" a hair narrow and
+                clips the last letter of a content-sized label. */}
+            <Text numberOfLines={1} className={`w-full text-center ${CHIP_TEXT} ${chipText(active)}`}>
+              {DAY_LABELS[day]}
+            </Text>
           </Pressable>
         );
       })}

@@ -67,6 +67,7 @@ export default function CheckInsDueCard({
               </p>
             </div>
             <Button
+              variant="secondary"
               size="md"
               aria-label={`Log ${tracker.title}`}
               onClick={() => { haptic("light"); onLog(tracker); }}

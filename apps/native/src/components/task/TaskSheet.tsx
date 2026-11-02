@@ -778,7 +778,7 @@ export function TaskSheet({
                       on ? 'border-neutral-900 bg-neutral-900 dark:border-white dark:bg-white' : 'border-neutral-200 bg-white dark:border-white/10 dark:bg-white/[0.04]'
                     }`}
                   >
-                    <Text className={`text-[12px] font-semibold ${on ? 'text-white dark:text-neutral-900' : 'text-neutral-500 dark:text-neutral-400'}`}>{DAY_LABELS[day]}</Text>
+                    <Text numberOfLines={1} className={`w-full text-center text-[12px] font-semibold ${on ? 'text-white dark:text-neutral-900' : 'text-neutral-500 dark:text-neutral-400'}`}>{DAY_LABELS[day]}</Text>
                   </Pressable>
                 );
               })}

@@ -44,13 +44,13 @@ export default function EmptyState({
       </View>
       {action && (
         <Button
-          variant="cta"
+          variant="primary"
           size="md"
           onPress={() => {
             haptic('medium');
             action.onClick();
           }}
-          icon={ActionIcon && <Icon icon={ActionIcon} size={16} strokeWidth={2.5} className={BUTTON_TEXT.cta} />}
+          icon={ActionIcon && <Icon icon={ActionIcon} size={16} strokeWidth={2.5} className={BUTTON_TEXT.primary} />}
           className="mt-2"
         >
           {action.label}

@@ -109,7 +109,7 @@ export default function MissedTaskSheet({ missed, onClose, onReschedule, onDismi
           </div>
 
           <div className="mt-6 space-y-2.5">
-            <Button variant="cta" fullWidth onClick={handleReschedule}>
+            <Button fullWidth onClick={handleReschedule}>
               <IconArrowUp size={16} strokeWidth={2.4} />
               Add to {friendlyDate(dateISO, todayISO)}
             </Button>

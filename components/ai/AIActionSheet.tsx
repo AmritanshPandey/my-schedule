@@ -339,7 +339,7 @@ export default function AIActionSheet({
 
               {/* CTA */}
               <Button
-                variant="cta"
+                variant="primary"
                 fullWidth
                 onClick={handleGenerate}
                 loading={loading || modelIsLoading}
@@ -401,7 +401,7 @@ export default function AIActionSheet({
                 <Button variant="secondary" onClick={handleSkipQuestion} disabled={loading}>
                   Skip
                 </Button>
-                <Button variant="cta" onClick={handleAnswerSubmit} loading={loading} className="flex-1">
+                <Button variant="primary" onClick={handleAnswerSubmit} loading={loading} className="flex-1">
                   {loading ? "Thinking…" : "Continue"}
                 </Button>
               </div>
@@ -484,7 +484,7 @@ export default function AIActionSheet({
                   Retry
                 </Button>
                 <Button
-                  variant="cta"
+                  variant="primary"
                   onClick={handleAdd}
                   disabled={selectedCount === 0}
                   icon={<IconCheck size={18} strokeWidth={2.5} />}

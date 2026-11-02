@@ -167,8 +167,8 @@ next-step CTA. It never appears as decoration. If green isn't reporting forward 
 shouldn't be on screen.
 
 **The Ink-First Rule.** The default action button is ink (#0A0A0A), not green. Green is
-spent on the *affirmative* action (Create, Complete, Log). Two green buttons competing on
-one screen is a bug.
+spent on completing work (Mark done, Done, Complete). Creating, adding and saving are ink.
+Two green buttons competing on one screen is a bug.
 
 ## 3. Typography
 
@@ -245,9 +245,9 @@ like a button; if a case isn't covered, extend the component.
 
 | Variant | Light | Dark | Use it for |
 |---|---|---|---|
-| `primary` | Ink #0A0A0A fill, white label | White fill, ink label | The main action of a sheet or section ("Save changes", "Done"). The default. |
-| `cta` (Button only) | #008236 fill, white (4.95:1) | #2FD46E fill, ink (10.2:1) | The one affirmative, progress-making action on a screen: Create, Complete, Log, Start. Never two on one screen. |
-| `secondary` | `black/5%` wash, neutral-900 label | `white/8%` wash, neutral-100 label | Alternatives beside a primary ("Cancel", "Skip"), and standing tools like Add / Edit / Duplicate. The everyday icon button. |
+| `primary` | Ink #0A0A0A fill, white label | White fill, ink label | The main action of a sheet, card or empty state: Create, Add, Save, Reschedule, Continue, Go to. The default. |
+| `cta` (Button only) | #008236 fill, white (4.95:1) | #2FD46E fill, ink (10.2:1) | Completing work and nothing else: Mark done, Done, Complete session, Complete goal. Never two on one screen. Adding or creating is `primary`, not green. |
+| `secondary` | `black/5%` wash, neutral-900 label | `white/8%` wash, neutral-100 label | Alternatives beside a primary ("Cancel", "Skip"), standing tools like Add / Edit / Duplicate, and an action repeated down a list (each row's "+ Log"). The everyday icon button. |
 | `ghost` | Transparent, neutral-600 (7.8:1) | Transparent, neutral-300 (12:1) | Low-emphasis and inline actions: "Clear", "Show all", toolbar icons, header icons on glass. |
 | `destructive` | #E11D48 fill, white (4.70:1) | same | The confirm step of a destructive action ("Delete plan" in a ConfirmSheet). |
 | `destructiveSecondary` | Rose 10% wash, #BE123C label (5.5:1) | Rose 14% wash, #FB7185 (5.9:1) | The entry point to a destructive action in a list or settings row ("Delete account…", "Reset data"), which then confirms. |
@@ -275,7 +275,7 @@ the #FAFAFA page, a sheet and the liquid-glass header.
 | `md` (default) | 40px | 18px | 44px |
 | `lg` | 44px | 20–22px | 44px |
 
-Use `lg` / `md` on phone screens, `sm` for dense desktop toolbars and in-row actions. A
+Use `lg` for full-width and sheet-footer actions, `md` for actions inside cards and empty states, `sm` for dense desktop toolbars and in-row actions. A
 Button's icon sits before its label (`+ Add`, not `Add +`) and takes the label's colour; the
 one exception is a navigation chevron after the label (`trailingIcon`: "Today ›").
 Buttons side by side share a size. Next to an IconButton, match heights: IconButton `lg`
@@ -382,7 +382,7 @@ orchestrated entrances, no scroll-driven sequences. Every motion has a
 - **Do** keep Momentum Green (#00A63E) for progress only — CTAs, completion, streaks, the
   next action. Let its rarity make it mean something (The One Signal Rule).
 - **Do** make the default action button ink (#0A0A0A), spending green only on the
-  affirmative action on a screen (The Ink-First Rule).
+  action that completes work (The Ink-First Rule).
 - **Do** define resting surfaces with 1px hairline borders and tonal layering; reach for
   shadow only when an element truly floats (The Border-Before-Shadow Rule).
 - **Do** carry the whole type hierarchy with Nunito weight + scale; one Display number per
@@ -411,6 +411,6 @@ orchestrated entrances, no scroll-driven sequences. Every motion has a
 - **Don't** nest a bordered card inside another bordered card; use a tonal inner panel.
 - **Don't** stack drop shadows on flat resting cards, or use ALL-CAPS sentences.
 - **Don't** spend a category accent (Cardio Orange, Focus Blue, etc.) on UI chrome or a
-  CTA. They color-code plans only; the affirmative action is always Momentum Green.
+  CTA. They color-code plans only; completing work is always Momentum Green.
 - **Don't** linear-slide a mobile sheet or skip the drag handle — it should spring, and it
   must look grabbable.

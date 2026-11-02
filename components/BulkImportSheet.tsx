@@ -625,7 +625,7 @@ export function BulkImportFlow({ plans, fallbackDay = "monday", onCommit, onDone
 
         {/* Create */}
         <Button
-          variant="cta"
+          variant="primary"
           fullWidth
           disabled={total === 0}
           onClick={commit}

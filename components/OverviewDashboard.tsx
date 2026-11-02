@@ -441,7 +441,7 @@ function GettingStarted({
                   {marker}
                   {text}
                   <Button
-                    variant="cta"
+                    variant="primary"
                     size="md"
                     onClick={() => { haptic("light"); onNavigate(tab); }}
                     className="ml-12 shrink-0 sm:ml-0"

@@ -1762,7 +1762,7 @@ export default function PlanDetailView({
                   </div>
                   <div className="space-y-2">
                     {!milestoneTasksAdded && (
-                      <Button variant="cta" size="md" fullWidth onClick={() => setMilestoneGenSheetOpen(true)} icon={<IconBolt size={16} strokeWidth={2.2} aria-hidden="true" />}>
+                      <Button size="md" fullWidth onClick={() => setMilestoneGenSheetOpen(true)} icon={<IconBolt size={16} strokeWidth={2.2} aria-hidden="true" />}>
                         Generate tasks for this milestone
                       </Button>
                     )}

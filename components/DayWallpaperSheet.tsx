@@ -316,7 +316,7 @@ export default function DayWallpaperSheet({ open, onClose, schedule, todayKey }:
         </p>
 
         <div className="mt-4">
-          <Button variant="cta" fullWidth disabled={saving} onClick={() => void handleSave()}>
+          <Button fullWidth disabled={saving} onClick={() => void handleSave()}>
             {saving ? "Exporting…" : "Save wallpaper"}
           </Button>
           {feedback && (

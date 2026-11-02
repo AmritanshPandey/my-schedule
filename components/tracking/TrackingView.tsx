@@ -529,6 +529,7 @@ export default function TrackingView({
                           </p>
                         </div>
                         <Button
+                          variant="secondary"
                           size="md"
                           onClick={() => { haptic("light"); onOpenAddEntry(tracker); }}
                           aria-label={`Log ${tracker.title}`}
