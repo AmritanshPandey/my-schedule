@@ -41,6 +41,9 @@ class SceneDelegate: UIResponder, UIWindowSceneDelegate {
     else { return }
 
     let window = UIWindow(windowScene: windowScene)
+    // The launch screen's colour, so nothing flashes white between it and
+    // React Native's first frame.
+    window.backgroundColor = UIColor(named: "SplashBackground")
     self.window = window
 
     factory.startReactNative(
@@ -52,6 +55,11 @@ class SceneDelegate: UIResponder, UIWindowSceneDelegate {
 }
 
 class ReactNativeDelegate: RCTDefaultReactNativeFactoryDelegate {
+  override func customize(_ rootView: RCTRootView) {
+    super.customize(rootView)
+    rootView.backgroundColor = UIColor(named: "SplashBackground")
+  }
+
   override func sourceURL(for bridge: RCTBridge) -> URL? {
     self.bundleURL()
   }

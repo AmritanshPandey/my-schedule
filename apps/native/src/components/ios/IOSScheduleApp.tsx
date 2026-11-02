@@ -1,3 +1,4 @@
+import LaunchOverlay from '../ui/LaunchOverlay';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { AppState, BackHandler, Modal, Pressable, ScrollView, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -2178,3 +2179,5 @@ export default function IOSScheduleApp() {
     </View>
   );
 }
+      {/* Holds the launch screen until the schedule has loaded. */}
+      <LaunchOverlay ready={ready} />
