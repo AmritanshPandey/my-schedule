@@ -46,7 +46,7 @@ export default function TaskLinkPicker({
       <div className="flex flex-col gap-4 px-5 pb-8 pt-5">
         <div className="flex items-center justify-between">
           <h2 className="text-[18px] font-bold text-neutral-900 dark:text-white">Link a task</h2>
-          <IconButton label="Close" variant="soft" size="md" radius="full" onClick={onClose}>
+          <IconButton label="Close" variant="secondary" size="md" onClick={onClose}>
             <IconX size={18} strokeWidth={2.2} />
           </IconButton>
         </div>

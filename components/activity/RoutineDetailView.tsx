@@ -32,6 +32,8 @@ import FollowedPicker from "@/components/activity/FollowedPicker";
 import { CARD, SOFT_PANEL } from "@/components/ui/surfaces";
 import MilestoneLinks from "@/components/milestone/MilestoneLinks";
 import type { MilestoneLinkKind } from "@/lib/milestoneLinks";
+import Button from "@/components/ui/Button";
+import IconButton from "@/components/ui/IconButton";
 
 interface RoutineDetailViewProps {
   ritual: Ritual;
@@ -162,23 +164,13 @@ export default function RoutineDetailView({
                 )}
               </div>
               {!progress.complete ? (
-                <button
-                  type="button"
-                  onClick={() => { haptic("medium"); onMarkDone(100); }}
-                  className="inline-flex h-12 shrink-0 items-center gap-2 rounded-full bg-neutral-950 px-5 text-[14px] font-extrabold text-white transition-colors hover:bg-neutral-800 dark:bg-white dark:text-neutral-950 dark:hover:bg-neutral-200"
-                >
-                  <IconCheck size={17} strokeWidth={2.8} />
+                <Button variant="cta" onClick={() => { haptic("medium"); onMarkDone(100); }} icon={<IconCheck size={18} strokeWidth={2.8} />}>
                   Mark done
-                </button>
+                </Button>
               ) : progress.markedDone ? (
-                <button
-                  type="button"
-                  onClick={() => { haptic("light"); onUnmarkDone(); }}
-                  className="inline-flex h-11 shrink-0 items-center gap-1.5 rounded-full border border-neutral-200 px-4 text-[13px] font-bold text-neutral-700 transition-colors hover:bg-neutral-50 dark:border-white/[0.12] dark:text-neutral-200 dark:hover:bg-white/[0.05]"
-                >
-                  <IconX size={14} strokeWidth={2.4} />
+                <Button variant="secondary" size="md" onClick={() => { haptic("light"); onUnmarkDone(); }} icon={<IconX size={16} strokeWidth={2.4} />}>
                   Mark not done
-                </button>
+                </Button>
               ) : null}
             </div>
 
@@ -278,26 +270,21 @@ export default function RoutineDetailView({
               ) : null}
               <div className="flex flex-wrap items-center gap-1.5">
                 {progress.value > 0 && (
-                  <button
-                    type="button"
-                    onClick={() => { haptic("light"); onUndoLastLog(); }}
-                    className="flex h-11 w-11 items-center justify-center rounded-full border border-neutral-200 text-neutral-500 dark:border-white/[0.10] dark:text-neutral-400"
-                    aria-label="Undo last amount"
-                  >
-                    <IconMinus size={15} strokeWidth={2.4} />
-                  </button>
+                  <IconButton label="Undo last amount" size="lg" onClick={() => { haptic("light"); onUndoLastLog(); }}>
+                    <IconMinus size={18} strokeWidth={2.4} />
+                  </IconButton>
                 )}
                 {quickAmounts.map((amount) => (
-                  <button
+                  <Button
                     key={amount}
-                    type="button"
+                    variant="secondary"
+                    size="md"
                     onClick={() => { haptic("medium"); onLogAmount(amount); }}
                     aria-label={`Log ${formatAmount(amount)}${unit}`}
-                    className="flex h-11 items-center gap-1 rounded-full border border-neutral-200 px-3.5 text-[13px] font-bold text-neutral-700 hover:bg-neutral-50 dark:border-white/[0.10] dark:text-neutral-200 dark:hover:bg-white/[0.05]"
+                    icon={<IconPlus size={14} strokeWidth={2.5} />}
                   >
-                    <IconPlus size={12} strokeWidth={2.6} />
                     {formatAmount(amount)}{unit}
-                  </button>
+                  </Button>
                 ))}
                 <div className="flex h-11 items-center gap-1 rounded-full border border-neutral-200 pl-3.5 pr-1 dark:border-white/[0.10]">
                   <input

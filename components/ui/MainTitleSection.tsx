@@ -6,6 +6,8 @@ import { IconCheck, IconChecklist } from "@tabler/icons-react";
 import { Eyebrow, PageTitle } from "@/components/ui/Typography";
 import ProgressBar from "@/components/ui/ProgressBar";
 import { ICON } from "@/components/ui/Icon";
+import Button from "@/components/ui/Button";
+import IconButton from "@/components/ui/IconButton";
 
 type ProgressMeta =
   | { done: number; total: number }
@@ -36,14 +38,9 @@ export function ViewToggleButton({
 }) {
   const other = options.find((o) => o.value !== value) ?? options[1];
   return (
-    <button
-      type="button"
-      onClick={() => onChange(other.value)}
-      className="inline-flex items-center gap-2 rounded-full border-[1.5px] border-neutral-200 bg-white px-3.5 min-h-[44px] py-[9px] text-[13px] font-semibold tracking-[-0.15px] text-neutral-700 transition-colors hover:bg-neutral-100 active:scale-[0.97] dark:border-white/10 dark:bg-neutral-900 dark:text-neutral-400 dark:hover:bg-white/[0.07]"
-    >
-      <span>{other.label}</span>
-      {other.icon}
-    </button>
+    <Button variant="secondary" size="md" onClick={() => onChange(other.value)} trailingIcon={other.icon}>
+      {other.label}
+    </Button>
   );
 }
 
@@ -53,26 +50,18 @@ export function IconActionButton({
   saving = false,
   onClick,
   show = true,
+  label,
 }: {
   icon: React.ReactNode;
   saveIcon?: React.ReactNode;
   saving?: boolean;
   onClick: () => void;
   show?: boolean;
+  label?: string;
 }) {
   if (!show) return null;
   return (
-    <m.button
-      type="button"
-      onClick={onClick}
-      whileTap={{ scale: 0.92 }}
-      transition={{ type: "spring", stiffness: 400, damping: 22 }}
-      className={`inline-flex h-10 w-10 items-center justify-center rounded-[10px] border-[1.5px] transition-colors ${
-        saving
-          ? "border-neutral-950 bg-neutral-950 text-white dark:border-white dark:bg-white dark:text-neutral-950"
-          : "border-neutral-200 bg-white text-neutral-500 hover:bg-neutral-100 dark:border-white/10 dark:bg-neutral-900 dark:text-neutral-400 dark:hover:bg-white/[0.07]"
-      }`}
-    >
+    <IconButton label={label ?? ""} size="md" selected={saving} onClick={onClick}>
       <AnimatePresence mode="wait" initial={false}>
         <m.span
           key={saving ? "save" : "edit"}
@@ -80,11 +69,12 @@ export function IconActionButton({
           animate={{ opacity: 1, scale: 1 }}
           exit={{ opacity: 0, scale: 0.75 }}
           transition={{ duration: 0.14 }}
+          className="inline-flex"
         >
           {saving && saveIcon ? saveIcon : icon}
         </m.span>
       </AnimatePresence>
-    </m.button>
+    </IconButton>
   );
 }
 
@@ -101,15 +91,9 @@ export function CtaActionButton({
   tour?: string;
 }) {
   return (
-    <button
-      type="button"
-      onClick={onClick}
-      data-tour={tour}
-      className="inline-flex items-center gap-2 rounded-full border-[1.5px] border-neutral-200 bg-white px-4 min-h-[44px] py-[10px] text-[13px] font-bold text-neutral-700 transition-colors hover:bg-neutral-100 active:scale-[0.97] dark:border-white/15 dark:bg-neutral-900 dark:text-neutral-300 dark:hover:bg-neutral-800"
-    >
-      {icon}
-      <span>{label}</span>
-    </button>
+    <Button variant="secondary" size="md" onClick={onClick} data-tour={tour} icon={icon}>
+      {label}
+    </Button>
   );
 }
 

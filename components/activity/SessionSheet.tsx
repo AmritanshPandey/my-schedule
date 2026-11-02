@@ -1,7 +1,6 @@
 "use client";
 
 import { useMemo } from "react";
-import { m } from "framer-motion";
 import { IconCheck } from "@tabler/icons-react";
 import BottomSheet from "@/components/ui/BottomSheet";
 import SheetHeader from "@/components/ui/SheetHeader";
@@ -9,6 +8,7 @@ import Pill from "@/components/ui/Pill";
 import type { Task, Plan } from "@/lib/useScheduleDB";
 import type { ScheduleEntry } from "@/components/ScheduleItem";
 import { formatDisplayTime, formatMinutes } from "@/lib/timeUtils";
+import Button from "@/components/ui/Button";
 
 interface SessionSheetProps {
   isOpen: boolean;
@@ -112,29 +112,17 @@ export default function SessionSheet({
             Edit session
           </button>
 
-          <m.button
-            type="button"
-            whileTap={{ scale: 0.97 }}
-            transition={{ type: "spring", stiffness: 500, damping: 25 }}
+          <Button
+            variant={done ? "secondary" : "cta"}
             onClick={() => {
               onComplete(task.id, allItemIds);
               if (!done) onClose();
             }}
-            className={`ml-auto flex items-center gap-2 rounded-full px-6 py-3.5 text-[16px] font-bold transition-colors duration-200 ${
-              done
-                ? "bg-neutral-100 text-neutral-500 dark:bg-white/[0.07] dark:text-neutral-400"
-                : "bg-neutral-900 text-white dark:bg-white dark:text-neutral-950"
-            }`}
+            icon={done ? <IconCheck size={18} strokeWidth={2.5} /> : undefined}
+            className="ml-auto"
           >
-            {done ? (
-              <>
-                <IconCheck size={16} strokeWidth={2.5} />
-                Completed
-              </>
-            ) : (
-              "Complete session"
-            )}
-          </m.button>
+            {done ? "Completed" : "Complete session"}
+          </Button>
         </div>
       </div>
     </BottomSheet>

@@ -8,6 +8,7 @@ import { iconGlyph } from '../SectionIcons';
 import { typography } from '../ui/Typography';
 import { Icon } from '../ui/Icon';
 import { Text } from '../ui/Text';
+import IconButton, { ICON_BUTTON_TONE } from '../ui/IconButton';
 
 export interface CategorySelectorProps {
   categories: TaskCategory[];
@@ -118,32 +119,30 @@ export function CategorySelector({ categories, selectedId, onSelect, onClear, on
                   {(onEdit || onDelete) && (
                     <View className="shrink-0 flex-row items-center gap-0.5 pr-2">
                       {onEdit && (
-                        <Pressable
-                          accessibilityRole="button"
-                          accessibilityLabel={`Edit ${category.title}`}
+                        <IconButton
+                          label={`Edit ${category.title}`}
+                          variant="ghost"
+                          size="sm"
                           onPress={() => {
                             setOpen(false);
                             onEdit(category);
                           }}
-                          className="h-8 w-8 items-center justify-center rounded-lg active:bg-neutral-200/70 dark:active:bg-white/[0.08]"
                         >
-                          <Icon icon={IconPencil} size={14} strokeWidth={2} className="text-neutral-500 dark:text-neutral-400" />
-                        </Pressable>
+                          <Icon icon={IconPencil} size={16} strokeWidth={2} className={ICON_BUTTON_TONE.ghost} />
+                        </IconButton>
                       )}
                       {onDelete && (
-                        <Pressable
-                          accessibilityRole="button"
+                        <IconButton
+                          label={deletable ? `Delete ${category.title}` : `Can't delete ${category.title} — used by ${inUse} task${inUse === 1 ? '' : 's'}`}
+                          variant="destructive"
+                          size="sm"
                           disabled={!deletable}
-                          accessibilityLabel={
-                            deletable ? `Delete ${category.title}` : `Can't delete ${category.title} — used by ${inUse} task${inUse === 1 ? '' : 's'}`
-                          }
                           onPress={() => {
                             if (deletable) onDelete(category);
                           }}
-                          className={`h-8 w-8 items-center justify-center rounded-lg active:bg-rose-500/10 ${deletable ? '' : 'opacity-30'}`}
                         >
-                          <Icon icon={IconTrash} size={14} strokeWidth={2} className="text-neutral-500 dark:text-neutral-400" />
-                        </Pressable>
+                          <Icon icon={IconTrash} size={16} strokeWidth={2} className={ICON_BUTTON_TONE.destructive} />
+                        </IconButton>
                       )}
                     </View>
                   )}

@@ -25,6 +25,7 @@ import { CARD } from './ui/surfaces';
 import IconButton, { ICON_BUTTON_TONE } from './ui/IconButton';
 import { Icon, type TablerIcon } from './ui/Icon';
 import { Text } from './ui/Text';
+import Button from './ui/Button';
 
 const MAX_ROWS = 4;
 
@@ -83,7 +84,7 @@ function Row({
       {dismissKey && onDismissOne && (
         <IconButton
           label={`Dismiss "${title}"`}
-          size="xxs"
+          size="xs"
           variant="ghost"
           onPress={() => {
             haptic('light');
@@ -186,17 +187,16 @@ export default function NeedsAttentionCard({
         </View>
         <View className="shrink-0 flex-row items-center gap-1.5">
           {onClearAll && (
-            <Pressable
-              accessibilityRole="button"
-              hitSlop={10}
+            <Button
+              variant="ghost"
+              size="sm"
               onPress={() => {
                 haptic('light');
                 onClearAll();
               }}
-              className="rounded-full px-2 py-1 active:bg-neutral-100 dark:active:bg-white/[0.07]"
             >
-              <Text className="text-[11px] font-bold text-neutral-500 dark:text-neutral-400">Clear all</Text>
-            </Pressable>
+              Clear all
+            </Button>
           )}
           <View className="rounded-full border border-neutral-200 bg-neutral-50 px-2 py-1 dark:border-white/[0.10] dark:bg-white/[0.05]">
             <Text className="text-[11px] font-black tabular-nums text-neutral-500 dark:text-neutral-400">{data.total}</Text>

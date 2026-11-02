@@ -11,6 +11,7 @@ import { IconChevronDown } from "@tabler/icons-react";
 import { TRACKER_CADENCES, type TrackerCadence } from "@/lib/useScheduleDB";
 import { CADENCE_LABEL } from "@/lib/trackerCadence";
 import { typography } from "@/components/ui/Typography";
+import { BUTTON_FOCUS_RING } from "@/components/ui/Button";
 
 export function CadencePicker({
   value,
@@ -65,7 +66,7 @@ export function CadenceSelect({
       <select
         value={value}
         onChange={(e) => onChange(e.target.value as TrackerCadence)}
-        className="h-11 appearance-none rounded-full border border-neutral-200 bg-white pl-3.5 pr-8 text-[13px] font-bold text-neutral-700 outline-none transition-colors hover:bg-neutral-50 focus-visible:ring-2 focus-visible:ring-neutral-400 dark:border-white/[0.12] dark:bg-neutral-900 dark:text-neutral-200 dark:hover:bg-white/[0.05]"
+        className={`h-11 appearance-none rounded-full bg-black/[0.05] pl-4 pr-9 text-[14px] font-semibold text-neutral-900 transition-colors hover:bg-black/[0.09] dark:bg-white/[0.08] dark:text-neutral-100 dark:hover:bg-white/[0.14] ${BUTTON_FOCUS_RING}`}
       >
         {TRACKER_CADENCES.map((cadence) => (
           <option key={cadence} value={cadence}>
@@ -73,7 +74,7 @@ export function CadenceSelect({
           </option>
         ))}
       </select>
-      <IconChevronDown size={14} strokeWidth={2.4} aria-hidden="true" className="pointer-events-none absolute right-3 text-neutral-500 dark:text-neutral-400" />
+      <IconChevronDown size={16} strokeWidth={2.4} aria-hidden="true" className="pointer-events-none absolute right-3.5 text-neutral-900 dark:text-neutral-100" />
     </label>
   );
 }

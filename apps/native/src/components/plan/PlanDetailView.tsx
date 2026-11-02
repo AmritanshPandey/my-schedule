@@ -629,8 +629,8 @@ export default function PlanDetailView({
               {entry.value}
               {tracker.unit ? <Text className="text-[11px] font-medium text-neutral-500 dark:text-neutral-400"> {tracker.unit}</Text> : null}
             </Text>
-            <IconButton label="Delete entry" variant="dangerGhost" size="xxs" radius="lg" onPress={() => onDeleteEntry(entry.id)}>
-              <Icon icon={IconTrash} size={14} strokeWidth={1.5} className={ICON_BUTTON_TONE.dangerGhost} />
+            <IconButton label="Delete entry" variant="destructive" size="xs" onPress={() => onDeleteEntry(entry.id)}>
+              <Icon icon={IconTrash} size={14} strokeWidth={1.5} className={ICON_BUTTON_TONE.destructive} />
             </IconButton>
           </View>
         </View>
@@ -683,21 +683,17 @@ export default function PlanDetailView({
               <GoalDirectionPicker value={editTrackerDraft.goalDirection} onChange={(gd) => setEditTrackerDraft((d) => ({ ...d, goalDirection: gd }))} />
               <CadencePicker value={editTrackerDraft.cadence} onChange={(cadence) => setEditTrackerDraft((d) => ({ ...d, cadence }))} />
               <View className="flex-row gap-2 pt-1">
-                <Pressable
-                  accessibilityRole="button"
+                <Button
+                  size="sm"
                   onPress={() => handleSaveEditTracker(tracker.id)}
-                  className="h-9 flex-1 flex-row items-center justify-center gap-1 rounded-xl bg-neutral-950 dark:bg-white"
+                  icon={<Icon icon={IconCheck} size={15} className={BUTTON_TEXT.primary} />}
+                  className="flex-1"
                 >
-                  <Icon icon={IconCheck} size={16} className="text-white dark:text-neutral-950" />
-                  <Text className="text-[13px] font-semibold text-white dark:text-neutral-950">Save</Text>
-                </Pressable>
-                <Pressable
-                  accessibilityRole="button"
-                  onPress={() => setEditingTrackerId(null)}
-                  className="h-9 flex-row items-center gap-1 rounded-xl border border-neutral-200 px-4 dark:border-white/10"
-                >
-                  <Text className="text-[13px] font-medium text-neutral-500 dark:text-neutral-400">Cancel</Text>
-                </Pressable>
+                  Save
+                </Button>
+                <Button variant="secondary" size="sm" onPress={() => setEditingTrackerId(null)}>
+                  Cancel
+                </Button>
               </View>
             </View>
           ) : (
@@ -730,8 +726,8 @@ export default function PlanDetailView({
                   >
                     <Icon icon={IconEdit} size={16} strokeWidth={2} className="text-neutral-500 dark:text-neutral-400" />
                   </Pressable>
-                  <IconButton label="Delete tracker" variant="dangerGhost" size="xs" radius="lg" onPress={() => onDeleteTracker(tracker.id)}>
-                    <Icon icon={IconTrash} size={16} strokeWidth={2} className={ICON_BUTTON_TONE.dangerGhost} />
+                  <IconButton label="Delete tracker" variant="destructive" size="sm" onPress={() => onDeleteTracker(tracker.id)}>
+                    <Icon icon={IconTrash} size={16} strokeWidth={2} className={ICON_BUTTON_TONE.destructive} />
                   </IconButton>
                 </View>
               )}
@@ -972,7 +968,7 @@ export default function PlanDetailView({
         <View className="shrink-0 gap-0.5">
           <IconButton
             label={`Move "${m.title}" earlier`}
-            size="xxs"
+            size="xs"
             variant="ghost"
             disabled={isFirst}
             onPress={() => {
@@ -984,7 +980,7 @@ export default function PlanDetailView({
           </IconButton>
           <IconButton
             label={`Move "${m.title}" later`}
-            size="xxs"
+            size="xs"
             variant="ghost"
             disabled={isLast}
             onPress={() => {
@@ -1123,14 +1119,15 @@ export default function PlanDetailView({
         {trackers.length === 0 ? (
           <View className="items-center rounded-2xl border border-neutral-200 bg-white py-10 dark:border-white/[0.08] dark:bg-neutral-900">
             <Text className="text-[14px] font-medium text-neutral-500 dark:text-neutral-400">No progress trackers yet.</Text>
-            <Pressable
-              accessibilityRole="button"
+            <Button
+              variant="secondary"
+              size="md"
               onPress={() => setAddingTracker(true)}
-              className="mt-3 flex-row items-center gap-1.5 rounded-xl border border-neutral-200 px-4 py-2 active:bg-neutral-50 dark:border-white/10 dark:active:bg-white/[0.04]"
+              icon={<Icon icon={IconPlus} size={16} strokeWidth={2.5} className={BUTTON_TEXT.secondary} />}
+              className="mt-3"
             >
-              <Icon icon={IconPlus} size={16} strokeWidth={2} className="text-neutral-600 dark:text-neutral-400" />
-              <Text className="text-[13px] font-semibold text-neutral-600 dark:text-neutral-400">Create tracker</Text>
-            </Pressable>
+              Create tracker
+            </Button>
           </View>
         ) : (
           <>
@@ -1184,14 +1181,15 @@ export default function PlanDetailView({
         {planMilestones.length === 0 ? (
           <View className="items-center rounded-2xl border border-dashed border-neutral-200 py-12 dark:border-white/[0.08]">
             <Text className="max-w-[220px] text-center text-[14px] font-medium text-neutral-500 dark:text-neutral-400">Add milestones to track your progress journey.</Text>
-            <Pressable
-              accessibilityRole="button"
+            <Button
+              variant="secondary"
+              size="md"
               onPress={openAddMilestone}
-              className="mt-3 flex-row items-center gap-1.5 rounded-xl border border-neutral-200 px-4 py-2 active:bg-neutral-50 dark:border-white/10 dark:active:bg-white/[0.04]"
+              icon={<Icon icon={IconPlus} size={16} strokeWidth={2.5} className={BUTTON_TEXT.secondary} />}
+              className="mt-3"
             >
-              <Icon icon={IconPlus} size={16} strokeWidth={1.5} className="text-neutral-600 dark:text-neutral-400" />
-              <Text className="text-[13px] font-semibold text-neutral-600 dark:text-neutral-400">Add first milestone</Text>
-            </Pressable>
+              Add first milestone
+            </Button>
           </View>
         ) : (
           <View accessibilityRole="list">
@@ -1224,46 +1222,40 @@ export default function PlanDetailView({
               {onTogglePlanPaused && (
                 <IconButton
                   label={running ? 'Pause plan' : 'Resume plan'}
-                  variant="ghost"
+                  variant="secondary"
                   size="md"
-                  radius="xl"
                   onPress={() => {
                     haptic('light');
                     onTogglePlanPaused(plan.id);
                   }}
-                  className="h-10 w-10 border border-neutral-200 dark:border-white/10"
                 >
-                  <Icon icon={running ? IconPlayerPause : IconPlayerPlay} size={18} strokeWidth={1.9} className={ICON_BUTTON_TONE.ghost} />
+                  <Icon icon={running ? IconPlayerPause : IconPlayerPlay} size={18} strokeWidth={1.9} className={ICON_BUTTON_TONE.secondary} />
                 </IconButton>
               )}
               {onEditPlan && (
                 <IconButton
                   label="Edit plan"
-                  variant="ghost"
+                  variant="secondary"
                   size="md"
-                  radius="xl"
                   onPress={() => {
                     haptic('light');
                     onEditPlan(plan.id);
                   }}
-                  className="h-10 w-10 border border-neutral-200 dark:border-white/10"
                 >
-                  <Icon icon={IconEdit} size={18} strokeWidth={1.9} className={ICON_BUTTON_TONE.ghost} />
+                  <Icon icon={IconEdit} size={18} strokeWidth={1.9} className={ICON_BUTTON_TONE.secondary} />
                 </IconButton>
               )}
               {onDeletePlan && (
                 <IconButton
                   label="Delete plan"
-                  variant="dangerGhost"
+                  variant="destructive"
                   size="md"
-                  radius="xl"
                   onPress={() => {
                     haptic('light');
                     onDeletePlan(plan.id);
                   }}
-                  className="h-10 w-10 border border-neutral-200 dark:border-white/10"
                 >
-                  <Icon icon={IconTrash} size={18} strokeWidth={1.9} className={ICON_BUTTON_TONE.dangerGhost} />
+                  <Icon icon={IconTrash} size={18} strokeWidth={1.9} className={ICON_BUTTON_TONE.destructive} />
                 </IconButton>
               )}
             </View>
@@ -1753,47 +1745,43 @@ export default function PlanDetailView({
 
                 {/* Mark Done — any non-completed milestone */}
                 {!isCompleted && (
-                  <Pressable
-                    accessibilityRole="button"
+                  <Button
+                    variant="cta"
+                    fullWidth
+                    icon={<Icon icon={IconCheck} size={18} strokeWidth={2.5} className={BUTTON_TEXT.cta} />}
                     onPress={() => {
                       onCompleteMilestone(m.id);
                       setViewingMilestone(null);
                     }}
-                    className={`mb-3 w-full flex-row items-center justify-center gap-2 rounded-2xl py-3.5 ${
-                      readyToComplete ? 'border-2 border-emerald-300 bg-emerald-600 active:bg-emerald-700 dark:border-emerald-500/40' : 'bg-green-600 active:bg-green-700'
-                    }`}
+                    className="mb-3"
                   >
-                    <Icon icon={IconCheck} size={16} strokeWidth={2.5} className="text-white" />
-                    <Text className="text-[16px] font-semibold text-white">Mark as Done</Text>
-                  </Pressable>
+                    Mark as done
+                  </Button>
                 )}
 
                 {/* Edit + Delete */}
                 <View className="flex-row gap-3">
-                  <IconButton
-                    label="Delete milestone"
-                    variant="dangerGhost"
-                    size="md"
-                    radius="xl"
+                  <Button
+                    variant="destructiveSecondary"
+                    icon={<Icon icon={IconTrash} size={18} strokeWidth={2} className={BUTTON_TEXT.destructiveSecondary} />}
                     onPress={() => {
                       onDeleteMilestone(m.id);
                       setViewingMilestone(null);
                     }}
-                    className="h-12 w-12 rounded-2xl border border-neutral-200 dark:border-white/10"
                   >
-                    <Icon icon={IconTrash} size={18} strokeWidth={1.8} className={ICON_BUTTON_TONE.dangerGhost} />
-                  </IconButton>
-                  <Pressable
-                    accessibilityRole="button"
+                    Delete
+                  </Button>
+                  <Button
+                    variant="primary"
+                    icon={<Icon icon={IconEdit} size={18} strokeWidth={2} className={BUTTON_TEXT.primary} />}
                     onPress={() => {
                       setViewingMilestone(null);
                       openEditMilestone(m);
                     }}
-                    className="h-12 flex-1 flex-row items-center justify-center gap-2 rounded-2xl bg-neutral-900 dark:bg-white"
+                    className="flex-1"
                   >
-                    <Icon icon={IconEdit} size={16} strokeWidth={2} className="text-white dark:text-neutral-900" />
-                    <Text className="text-[16px] font-semibold text-white dark:text-neutral-900">Edit milestone</Text>
-                  </Pressable>
+                    Edit milestone
+                  </Button>
                 </View>
               </View>
             );
@@ -1865,15 +1853,14 @@ export default function PlanDetailView({
                           </Text>
                           <IconButton
                             label={`Delete ${formatDisplayTime(slot.startTime)} time block`}
-                            variant="dangerGhost"
-                            size="xs"
-                            radius="xl"
+                            variant="destructive"
+                            size="sm"
                             onPress={() => {
                               onDeleteTaskSlot(task, sourceDay, slotIndex);
                               setViewingTask(null);
                             }}
                           >
-                            <Icon icon={IconTrash} size={15} strokeWidth={1.8} className={ICON_BUTTON_TONE.dangerGhost} />
+                            <Icon icon={IconTrash} size={15} strokeWidth={1.8} className={ICON_BUTTON_TONE.destructive} />
                           </IconButton>
                         </View>
                       ))}
@@ -1911,30 +1898,27 @@ export default function PlanDetailView({
 
                 {/* Actions */}
                 <View className="flex-row gap-3">
-                  <IconButton
-                    label="Delete task"
-                    variant="dangerGhost"
-                    size="md"
-                    radius="xl"
+                  <Button
+                    variant="destructiveSecondary"
+                    icon={<Icon icon={IconTrash} size={18} strokeWidth={2} className={BUTTON_TEXT.destructiveSecondary} />}
                     onPress={() => {
                       onDeleteLinkedTask(task, taskDays);
                       setViewingTask(null);
                     }}
-                    className="h-12 w-12 rounded-2xl border border-neutral-200 dark:border-white/10"
                   >
-                    <Icon icon={IconTrash} size={18} strokeWidth={1.8} className={ICON_BUTTON_TONE.dangerGhost} />
-                  </IconButton>
-                  <Pressable
-                    accessibilityRole="button"
+                    Delete
+                  </Button>
+                  <Button
+                    variant="primary"
+                    icon={<Icon icon={IconEdit} size={18} strokeWidth={2} className={BUTTON_TEXT.primary} />}
                     onPress={() => {
                       onEditTask(task);
                       setViewingTask(null);
                     }}
-                    className="h-12 flex-1 flex-row items-center justify-center gap-2 rounded-2xl bg-neutral-900 dark:bg-white"
+                    className="flex-1"
                   >
-                    <Icon icon={IconEdit} size={16} strokeWidth={2} className="text-white dark:text-neutral-900" />
-                    <Text className="text-[16px] font-semibold text-white dark:text-neutral-900">Edit task</Text>
-                  </Pressable>
+                    Edit task
+                  </Button>
                 </View>
               </View>
             );

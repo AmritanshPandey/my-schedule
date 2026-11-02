@@ -3,6 +3,7 @@ import { IconPlus } from '@tabler/icons-react-native';
 import { haptic } from '../../lib/haptics';
 import { Icon, type TablerIcon } from './Icon';
 import { Text } from './Text';
+import Button, { BUTTON_TEXT } from './Button';
 
 interface EmptyAction {
   label: string;
@@ -42,17 +43,18 @@ export default function EmptyState({
         <Text className="mt-1.5 max-w-[260px] text-center text-[14px] leading-relaxed text-neutral-500 dark:text-neutral-400">{description}</Text>
       </View>
       {action && (
-        <Pressable
-          accessibilityRole="button"
+        <Button
+          variant="cta"
+          size="md"
           onPress={() => {
             haptic('medium');
             action.onClick();
           }}
-          className="mt-2 min-h-[44px] flex-row items-center gap-2 rounded-full bg-[#008236] px-5 py-2.5 active:scale-[0.96] active:bg-[#006B2C] dark:bg-[#2FD46E]"
+          icon={ActionIcon && <Icon icon={ActionIcon} size={16} strokeWidth={2.5} className={BUTTON_TEXT.cta} />}
+          className="mt-2"
         >
-          {ActionIcon && <Icon icon={ActionIcon} size={16} strokeWidth={2.5} className="text-white dark:text-neutral-950" />}
-          <Text className="text-[14px] font-semibold text-white dark:text-neutral-950">{action.label}</Text>
-        </Pressable>
+          {action.label}
+        </Button>
       )}
       {secondaryAction && (
         <Pressable

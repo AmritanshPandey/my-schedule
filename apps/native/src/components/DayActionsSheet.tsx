@@ -106,8 +106,8 @@ export default function DayActionsSheet({ open, sourceDay, onClose, onSwap, onDu
   function BackHeader({ title }: { title: string }) {
     return (
       <View className="mb-5 flex-row items-center gap-3">
-        <IconButton label="Back" variant="soft" size="md" radius="full" onPress={() => setStep('menu')}>
-          <Icon icon={IconArrowLeft} size={18} strokeWidth={2} className={ICON_BUTTON_TONE.soft} />
+        <IconButton label="Back" variant="secondary" size="md" onPress={() => setStep('menu')}>
+          <Icon icon={IconArrowLeft} size={18} strokeWidth={2} className={ICON_BUTTON_TONE.secondary} />
         </IconButton>
         <Text className="text-[18px] font-bold text-neutral-900 dark:text-white">{title}</Text>
       </View>

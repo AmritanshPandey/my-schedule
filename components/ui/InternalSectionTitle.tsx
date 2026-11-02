@@ -3,6 +3,8 @@
 import { memo } from "react";
 import { AnimatePresence, m } from "framer-motion";
 import { SectionTitle } from "@/components/ui/Typography";
+import Button from "@/components/ui/Button";
+import IconButton from "@/components/ui/IconButton";
 
 interface InternalSectionTitleProps {
   title: string;
@@ -27,18 +29,7 @@ export function SectionIconButton({
   label,
 }: SectionIconButtonProps) {
   return (
-    <m.button
-      type="button"
-      onClick={onClick}
-      whileTap={{ scale: 0.88 }}
-      transition={{ type: "spring", stiffness: 450, damping: 22 }}
-      aria-label={label}
-      className={`inline-flex h-[34px] w-[34px] items-center justify-center rounded-[9px] transition-colors ${
-        saving
-          ? "bg-neutral-950 text-white dark:bg-white dark:text-neutral-950"
-          : "bg-transparent text-neutral-700 hover:bg-neutral-100 dark:text-neutral-300 dark:hover:bg-white/[0.06]"
-      }`}
-    >
+    <IconButton label={label ?? ""} variant="ghost" size="md" selected={saving} onClick={onClick}>
       <AnimatePresence mode="wait" initial={false}>
         <m.span
           key={saving ? "save" : "normal"}
@@ -46,11 +37,12 @@ export function SectionIconButton({
           animate={{ opacity: 1, scale: 1 }}
           exit={{ opacity: 0, scale: 0.7 }}
           transition={{ duration: 0.13 }}
+          className="inline-flex"
         >
           {saving && saveIcon ? saveIcon : icon}
         </m.span>
       </AnimatePresence>
-    </m.button>
+    </IconButton>
   );
 }
 
@@ -62,14 +54,9 @@ interface SectionTextActionProps {
 
 export function SectionTextAction({ label, icon, onClick }: SectionTextActionProps) {
   return (
-    <button
-      type="button"
-      onClick={onClick}
-      className="inline-flex items-center gap-1.5 text-[13px] font-semibold text-neutral-500 transition-colors hover:text-neutral-900 dark:text-neutral-400 dark:hover:text-white"
-    >
-      {icon}
+    <Button variant="ghost" size="sm" onClick={onClick} icon={icon}>
       {label}
-    </button>
+    </Button>
   );
 }
 

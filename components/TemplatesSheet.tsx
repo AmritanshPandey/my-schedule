@@ -11,6 +11,7 @@ import BottomSheet from "@/components/ui/BottomSheet";
 import { TEMPLATES, type Template } from "@/lib/templates";
 import { accentStyles } from "@/lib/colorSystem";
 import { typography } from "@/components/ui/Typography";
+import IconButton from "@/components/ui/IconButton";
 
 // ── Icon map (mirrors SectionIcons) ──────────────────────────────────────────
 
@@ -148,13 +149,9 @@ function TemplatesSheetInner({ open, onClose, onApply }: TemplatesSheetProps) {
               Pick a template to create a plan with tasks and milestones already set up.
             </p>
           </div>
-          <button
-            type="button"
-            onClick={onClose}
-            className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-neutral-100 text-neutral-500 hover:bg-neutral-200 dark:bg-white/[0.07] dark:text-neutral-400 dark:hover:bg-white/[0.12] ml-3 mt-0.5"
-          >
-            <IconX size={15} strokeWidth={2.5} />
-          </button>
+          <IconButton label="Close" size="sm" onClick={onClose} className="ml-3 mt-0.5">
+            <IconX size={16} strokeWidth={2.5} />
+          </IconButton>
         </div>
 
         {/* Cards */}

@@ -13,6 +13,7 @@ import { haptic } from "@/lib/haptics";
 import { TaskBlockCard } from "@/components/TaskBlockCard";
 import ProgressBar from "@/components/ui/ProgressBar";
 import IconButton from "@/components/ui/IconButton";
+import Button from "@/components/ui/Button";
 
 // ── Plan accent dot colors ────────────────────────────────────────────────────
 
@@ -276,55 +277,42 @@ function ListTaskCardInner({
       </button>
       <IconButton
         label="Delete task"
-        variant="dangerGhost"
-        size="xs"
-        radius="xl"
+        variant="destructive"
+        size="sm"
         onClick={(e) => { e.stopPropagation(); onDelete(); }}
       >
         <IconTrash size={16} />
       </IconButton>
     </div>
   ) : (canExpand || hasRoutine) && onOpenSubtasks ? (
-    <button
-      type="button"
+    <Button
+      variant="secondary"
+      size="sm"
       onClick={(e) => { e.stopPropagation(); onOpenSubtasks(); }}
       aria-label="Open subtasks"
-      className="inline-flex items-center gap-1 rounded-full bg-neutral-100 px-2.5 py-1.5 text-[12px] font-bold tabular-nums text-neutral-600 transition-colors hover:bg-neutral-200 dark:bg-white/[0.07] dark:text-neutral-300 dark:hover:bg-white/[0.12]"
+      icon={<IconListCheck size={15} strokeWidth={2} />}
+      trailingIcon={<IconArrowUpRight size={15} strokeWidth={2.2} />}
+      className="tabular-nums"
     >
-      <IconListCheck size={14} strokeWidth={2} />
       {completedCount}/{totalCount || itemCount}
-      <IconArrowUpRight size={13} strokeWidth={2.2} />
-    </button>
+    </Button>
   ) : isRoutine && hasRoutine && onOpenRoutine ? (
-    <button
-      type="button"
-      onClick={(e) => { e.stopPropagation(); onOpenRoutine(); }}
-      className="inline-flex items-center rounded-full bg-neutral-100 px-3 py-1.5 text-[12px] font-semibold text-neutral-600 transition-colors hover:bg-neutral-200 dark:bg-white/[0.07] dark:text-neutral-300 dark:hover:bg-white/[0.12]"
-    >
+    <Button variant="secondary" size="sm" onClick={(e) => { e.stopPropagation(); onOpenRoutine(); }}>
       View
-    </button>
+    </Button>
   ) : canExpand ? (
-    <button
-      type="button"
-      onClick={(e) => { e.stopPropagation(); setExpanded((v) => !v); }}
-      className="flex h-8 w-8 items-center justify-center rounded-full bg-neutral-100 text-neutral-500 transition-colors hover:bg-neutral-200 dark:bg-white/[0.07] dark:text-neutral-400 dark:hover:bg-white/[0.12]"
-    >
+    <IconButton label={expanded ? "Collapse" : "Expand"} size="sm" aria-expanded={expanded} onClick={(e) => { e.stopPropagation(); setExpanded((v) => !v); }}>
       <m.span animate={{ rotate: expanded ? 180 : 0 }} transition={{ duration: 0.22, ease: "easeInOut" }} style={{ display: "flex" }}>
         <IconChevronDown size={18} strokeWidth={2} />
       </m.span>
-    </button>
+    </IconButton>
   ) : tracked && onOpenSubtasks ? (
     /* A tracked task with no subtasks still needs a route into its detail view,
        which is where "Missed" lives. Commitments stay chip-free — they carry no
        completion state to act on. */
-    <button
-      type="button"
-      onClick={(e) => { e.stopPropagation(); onOpenSubtasks(); }}
-      aria-label="Open task details"
-      className="flex h-8 w-8 items-center justify-center rounded-full bg-neutral-100 text-neutral-500 transition-colors hover:bg-neutral-200 dark:bg-white/[0.07] dark:text-neutral-400 dark:hover:bg-white/[0.12]"
-    >
+    <IconButton label="Open task details" size="sm" onClick={(e) => { e.stopPropagation(); onOpenSubtasks(); }}>
       <IconArrowUpRight size={16} strokeWidth={2.2} />
-    </button>
+    </IconButton>
   ) : null;
 
   // ── Note + progress bar (below the time row) ────────────────────────────────

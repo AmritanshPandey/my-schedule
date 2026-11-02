@@ -54,28 +54,32 @@ spacing:
   md: "16px"
   lg: "20px"
 components:
+  # Full spec in §5 Buttons. Every button and icon button is a pill/circle.
   button-primary:
     backgroundColor: "{colors.ink}"
     textColor: "#FFFFFF"
-    rounded: "{rounded.lg}"
-    padding: "0 20px"
-    height: "48px"
-  button-primary-hover:
-    backgroundColor: "{colors.ink-soft}"
-    textColor: "#FFFFFF"
-  button-cta:
-    backgroundColor: "{colors.momentum-green}"
-    textColor: "#FFFFFF"
     rounded: "{rounded.full}"
-    padding: "12px 16px"
-  button-cta-hover:
+    height: "48px"
+  button-cta:
     backgroundColor: "{colors.green-pressed}"
     textColor: "#FFFFFF"
+    rounded: "{rounded.full}"
+    height: "48px"
+  button-secondary:
+    backgroundColor: "#F5F5F5"
+    textColor: "#171717"
+    rounded: "{rounded.full}"
+    height: "48px"
   button-ghost:
     backgroundColor: "transparent"
-    textColor: "{colors.muted}"
-    rounded: "{rounded.md}"
-    padding: "6px 10px"
+    textColor: "#525252"
+    rounded: "{rounded.full}"
+    height: "48px"
+  button-destructive:
+    backgroundColor: "#E11D48"
+    textColor: "#FFFFFF"
+    rounded: "{rounded.full}"
+    height: "48px"
   card:
     backgroundColor: "{colors.card-dark}"
     textColor: "#FFFFFF"
@@ -228,19 +232,74 @@ The feel across all components is **precise and native-fast**: crisp borders, ne
 fills, instant `active:scale` feedback, restraint over flourish.
 
 ### Buttons
-- **Shape:** Rounded — `rounded-xl`/`rounded-2xl` (16px) for standard buttons, `rounded-full`
-  for primary CTAs and pill controls.
-- **Primary (default UI):** Ink fill (#0A0A0A) / white text; in dark mode it inverts to
-  white fill / ink text. Hover lightens to Ink Soft. Sizes: sm h-36px, md h-44px, lg h-48px (md meets the 44px touch minimum).
-- **CTA (affirmative):** Green Pressed fill (#008236) / white text, usually `rounded-full`.
-  Reserved for Create / Complete / Log. Hover → #006B2C. The lighter Momentum Green
-  (#00A63E) cannot carry white text — it measures 3.22:1, under the 4.5 floor — so a
-  white-on-green button uses the deeper value while #00A63E stays the signal colour
-  for toggles, rings, icons and the ink-on-green hero cards (6.15:1).
-- **Secondary / Ghost:** Transparent or hairline-bordered, muted text (#737373), subtle
-  `neutral-100` / `white/[0.07]` hover wash.
-- **Press:** `active:scale-[0.98]` on every button; `transition-all`. This tactile press is
-  the signature, paired with haptics on mobile.
+
+One vocabulary on both surfaces. Web: `components/ui/Button.tsx` and
+`components/ui/IconButton.tsx`. Native: the same files under `apps/native/src/components/ui/`,
+with the same variant and size names. Never hand-roll a `<button>` / `Pressable` that looks
+like a button; if a case isn't covered, extend the component.
+
+**Shape.** Every button is a pill (`rounded-full`); every icon button is a circle. No
+`rounded-xl` buttons, no square icon buttons. The shape is how you know it's pressable.
+
+**Variants** (`Button` and `IconButton` share the names and colours):
+
+| Variant | Light | Dark | Use it for |
+|---|---|---|---|
+| `primary` | Ink #0A0A0A fill, white label | White fill, ink label | The main action of a sheet or section ("Save changes", "Done"). The default. |
+| `cta` (Button only) | #008236 fill, white (4.95:1) | #2FD46E fill, ink (10.2:1) | The one affirmative, progress-making action on a screen: Create, Complete, Log, Start. Never two on one screen. |
+| `secondary` | `black/5%` wash, neutral-900 label | `white/8%` wash, neutral-100 label | Alternatives beside a primary ("Cancel", "Skip"), and standing tools like Add / Edit / Duplicate. The everyday icon button. |
+| `ghost` | Transparent, neutral-600 (7.8:1) | Transparent, neutral-300 (12:1) | Low-emphasis and inline actions: "Clear", "Show all", toolbar icons, header icons on glass. |
+| `destructive` | #E11D48 fill, white (4.70:1) | same | The confirm step of a destructive action ("Delete plan" in a ConfirmSheet). |
+| `destructiveSecondary` | Rose 10% wash, #BE123C label (5.5:1) | Rose 14% wash, #FB7185 (5.9:1) | The entry point to a destructive action in a list or settings row ("Delete account…", "Reset data"), which then confirms. |
+
+IconButton's `destructive` is quiet: neutral icon at rest, rose wash and #BE123C / #FB7185 on
+hover, focus and press. A trash icon already says what it does, and a column of red icons is
+noise. Its `primary` is for a toggle's on state; pass `selected` and the button switches to
+ink with `aria-pressed`.
+
+The washes are translucent on purpose: `secondary` and `ghost` read the same on a white card,
+the #FAFAFA page, a sheet and the liquid-glass header.
+
+**Sizes.** Visual height, with the hit area always at least 44px:
+
+| Button | Height | Padding | Label | Icon | Hit area |
+|---|---|---|---|---|---|
+| `sm` | 36px | 14px | 13px semibold | 15px | 44px (`tap-target` / `hitSlop`) |
+| `md` | 44px | 16px | 14px semibold | 16px | 44px |
+| `lg` (default) | 48px | 20px | 16px semibold | 18px | 48px |
+
+| IconButton | Size | Icon | Hit area |
+|---|---|---|---|
+| `xs` | 24px | 14px | 44px |
+| `sm` | 32px | 16px | 44px |
+| `md` (default) | 40px | 18px | 44px |
+| `lg` | 44px | 20–22px | 44px |
+
+Use `lg` / `md` on phone screens, `sm` for dense desktop toolbars and in-row actions. A
+Button's icon sits before its label (`+ Add`, not `Add +`) and takes the label's colour; the
+one exception is a navigation chevron after the label (`trailingIcon`: "Today ›").
+Buttons side by side share a size. Next to an IconButton, match heights: IconButton `lg`
+(44px) sits with Button `md` (44px), IconButton `sm` (32px) with nothing smaller than
+Button `sm`.
+
+**States.**
+- **Hover** (pointer only): one step darker fill (`primary` → neutral-800 / neutral-200,
+  `secondary` → `black/9%` / `white/14%`, `ghost` gains the `secondary` wash).
+- **Pressed:** the hover fill plus `scale(0.97)`, 150ms. Paired with a light haptic on native.
+  Reduced motion keeps the colour change and drops the scale.
+- **Focus-visible:** 2px ring, 2px offset, #008236 (light, 4.95:1 on white) / #2FD46E (dark,
+  10.2:1 on #0A0A0A). Never `outline: none` without it.
+- **Disabled:** 40% opacity, no hover or press, `cursor: not-allowed`, `aria-disabled`.
+  Prefer explaining why over disabling.
+- **Loading:** `loading` swaps the leading icon for a spinner in the label colour, keeps the
+  width, sets `aria-busy`, and ignores presses. The label may change to the present
+  participle ("Saving…").
+- **Selected** (IconButton toggles): `primary` fill and `aria-pressed="true"`.
+
+**Not buttons.** Chips, segmented tabs, day pickers, list rows and checkboxes have their own
+patterns (below). `AddRowButton`, the dashed full-width row that ends a repeatable list, is the
+one add affordance that isn't a Button; anywhere else, adding is a `secondary` Button with a
+`+` icon ("+ Add") or a `secondary` / glass-header IconButton.
 
 ### Chips / Pills
 - **Style:** `rounded-lg`/`rounded-full`, hairline border, `text-[12px] font-bold`, muted
@@ -328,7 +387,7 @@ orchestrated entrances, no scroll-driven sequences. Every motion has a
   shadow only when an element truly floats (The Border-Before-Shadow Rule).
 - **Do** carry the whole type hierarchy with Nunito weight + scale; one Display number per
   card.
-- **Do** give every button `active:scale-[0.98]` and pair it with haptics on mobile; keep
+- **Do** build every button from `Button` / `IconButton` (pill / circle, press scale, haptics on mobile); keep
   tap targets ≥44px.
 - **Do** match motion to the surface: springs for mobile sheets, short eased curves for
   desktop modals (The Native-Register Rule).

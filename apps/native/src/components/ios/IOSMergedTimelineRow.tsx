@@ -10,6 +10,7 @@ import { haptic } from '../../lib/haptics';
 import CheckDraw from '../ui/CheckDraw';
 import { Icon } from '../ui/Icon';
 import { Text } from '../ui/Text';
+import IconButton, { ICON_BUTTON_TONE } from '../ui/IconButton';
 
 export interface IOSMergedTimelineHalf {
   task: Task;
@@ -138,18 +139,16 @@ function HalfRow({ half, readOnly, editMode, onEdit }: { half: IOSMergedTimeline
         {subtitle ? <Text className="mt-0.5 truncate text-[12px] font-medium text-neutral-500 dark:text-neutral-400">{subtitle}</Text> : null}
       </View>
       {editMode && !readOnly && (
-        <Pressable
-          accessibilityRole="button"
-          accessibilityLabel="Edit task"
-          hitSlop={8}
+        <IconButton
+          label="Edit task"
+          size="sm"
           onPress={() => {
             haptic('light');
             onEdit(task);
           }}
-          className="h-7 w-7 shrink-0 items-center justify-center rounded-full border border-black/10 bg-white/60 dark:border-white/[0.10] dark:bg-white/[0.08]"
         >
-          <Icon icon={IconEdit} size={13} strokeWidth={2} className="text-neutral-600 dark:text-neutral-200" />
-        </Pressable>
+          <Icon icon={IconEdit} size={16} strokeWidth={2} className={ICON_BUTTON_TONE.secondary} />
+        </IconButton>
       )}
     </View>
   );

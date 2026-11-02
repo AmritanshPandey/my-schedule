@@ -27,6 +27,8 @@ import { haptic } from "@/lib/haptics";
 // @planr/core; `target` is a `data-tour="<id>"` value here, looked up fresh on
 // every step change via document.querySelector.
 import type { CoachMarkStep } from "@planr/core/lib/onboarding/tours";
+import Button from "@/components/ui/Button";
+import IconButton from "@/components/ui/IconButton";
 
 export type { CoachMarkStep };
 
@@ -207,34 +209,23 @@ export default function CoachMarks({ open, steps, onFinish }: CoachMarksProps) {
             <p className="text-[11px] font-bold uppercase tracking-[0.08em] text-neutral-600 dark:text-neutral-400">
               {index + 1} of {steps.length}
             </p>
-            <button
-              type="button"
-              onClick={finish}
-              aria-label="Skip tour"
-              className="flex h-6 w-6 items-center justify-center rounded-full text-neutral-500 dark:text-neutral-400 hover:bg-neutral-100 dark:hover:bg-white/[0.06]"
-            >
-              <IconX size={13} strokeWidth={2} />
-            </button>
+            <IconButton label="Skip tour" variant="ghost" size="xs" onClick={finish}>
+              <IconX size={14} strokeWidth={2} />
+            </IconButton>
           </div>
           <p className="text-[15px] font-bold text-neutral-900 dark:text-white">{step.title}</p>
           <p className="mt-1 text-[13px] leading-relaxed text-neutral-500 dark:text-neutral-400">{step.body}</p>
           <div className="mt-4 flex items-center justify-between">
-            <button
-              type="button"
-              onClick={finish}
-              className="text-[12px] font-semibold text-neutral-500 dark:text-neutral-400 hover:text-neutral-600 dark:hover:text-neutral-300"
-            >
+            <Button variant="ghost" size="sm" onClick={finish} className="-ml-3.5">
               Skip
-            </button>
-            <m.button
-              type="button"
+            </Button>
+            <Button
+              size="sm"
               onClick={advance}
-              whileTap={{ scale: 0.97 }}
-              className="flex items-center gap-1 rounded-full bg-neutral-900 px-4 py-2 text-[13px] font-bold text-white dark:bg-white dark:text-neutral-900"
+              trailingIcon={!isLast ? <IconArrowRight size={15} strokeWidth={2.4} /> : undefined}
             >
               {isLast ? "Got it" : "Next"}
-              {!isLast && <IconArrowRight size={14} strokeWidth={2.4} />}
-            </m.button>
+            </Button>
           </div>
         </div>
       </m.div>

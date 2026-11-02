@@ -1,5 +1,5 @@
 import { useDeferredValue, useMemo } from 'react';
-import { Pressable, View } from 'react-native';
+import { View } from 'react-native';
 import { IconAlertTriangle, IconArrowRight, IconCircleCheck, IconTrendingDown } from '@tabler/icons-react-native';
 import type { DayKey, Schedule, Task } from '@planr/core/lib/scheduleTypes';
 import { DAYS } from '@planr/core/lib/scheduleConstants';
@@ -11,6 +11,7 @@ import { buildProgressFacts, templateSummary } from '@planr/core/lib/intelligenc
 import { haptic } from '../../lib/haptics';
 import { Icon } from '../ui/Icon';
 import { Text } from '../ui/Text';
+import Button from '../ui/Button';
 
 export interface InsightToast {
   message: string;
@@ -65,27 +66,26 @@ function InsightRow({ insight, onPrimary, onDismiss, first }: { insight: Insight
         )}
         <View className="mt-2 flex-row flex-wrap items-center gap-1.5">
           {s && onPrimary && (
-            <Pressable
-              accessibilityRole="button"
+            <Button
+              size="md"
               onPress={() => {
                 haptic('light');
                 onPrimary();
               }}
-              className="min-h-[44px] justify-center rounded-full bg-neutral-950 px-4 active:scale-[0.98] dark:bg-white"
             >
-              <Text className="text-[13px] font-semibold text-white dark:text-neutral-950">{s.label}</Text>
-            </Pressable>
+              {s.label}
+            </Button>
           )}
-          <Pressable
-            accessibilityRole="button"
+          <Button
+            variant="ghost"
+            size="md"
             onPress={() => {
               haptic('light');
               onDismiss();
             }}
-            className="min-h-[44px] justify-center rounded-full px-3 active:bg-neutral-100 dark:active:bg-white/[0.07]"
           >
-            <Text className="text-[13px] font-semibold text-neutral-500 dark:text-neutral-400">Not now</Text>
-          </Pressable>
+            Not now
+          </Button>
         </View>
       </View>
     </View>

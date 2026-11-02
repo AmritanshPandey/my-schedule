@@ -34,6 +34,8 @@ import { buildRoutineInsights } from "@/lib/consistency/routineInsights";
 import RoutineMonthCalendar from "./RoutineMonthCalendar";
 import RoutineInsightsSection from "./RoutineInsightsSection";
 import { typography } from "@/components/ui/Typography";
+import Button from "@/components/ui/Button";
+import IconButton from "@/components/ui/IconButton";
 
 // JS getDay() 0=Sunday → DayKey
 const JS_TO_DAY: DayKey[] = ["sunday","monday","tuesday","wednesday","thursday","friday","saturday"];
@@ -192,8 +194,9 @@ function DateActionButton({
 
   return (
     <div ref={rootRef} className="relative inline-flex">
-      <button
-        type="button"
+      <Button
+        variant={open ? "primary" : "secondary"}
+        size="md"
         aria-label={`Select routine date, ${formatDateButtonLabel(value)}`}
         aria-haspopup="dialog"
         aria-expanded={open}
@@ -201,15 +204,11 @@ function DateActionButton({
           setViewMonth(monthStart(parseISODate(value)));
           setOpen((current) => !current);
         }}
-        className={`inline-flex min-h-[44px] items-center gap-2 rounded-full border-[1.5px] px-3 py-[10px] text-[13px] font-bold transition-colors active:scale-[0.97] sm:px-4 ${
-          open
-            ? "border-neutral-300 bg-neutral-100 text-neutral-900 dark:border-white/20 dark:bg-neutral-800 dark:text-white"
-            : "border-neutral-200 bg-white text-neutral-700 hover:bg-neutral-100 dark:border-white/15 dark:bg-neutral-900 dark:text-neutral-300 dark:hover:bg-neutral-800"
-        }`}
+        icon={<IconCalendarEvent size={16} strokeWidth={2.3} />}
+        className="w-11 px-0 sm:w-auto sm:px-4"
       >
-        <IconCalendarEvent size={14} strokeWidth={2.3} className="shrink-0 text-neutral-500 dark:text-neutral-400" />
         <span className="hidden tabular-nums sm:inline">{formatDateButtonLabel(value)}</span>
-      </button>
+      </Button>
 
       <AnimatePresence>
         {open && (
@@ -223,25 +222,15 @@ function DateActionButton({
             className="absolute right-0 top-[calc(100%+8px)] z-50 w-[292px] max-w-[calc(100vw-32px)] rounded-2xl border border-neutral-200 bg-white p-3 dark:border-white/10 dark:bg-neutral-900"
           >
             <div className="mb-3 flex items-center justify-between gap-2">
-              <button
-                type="button"
-                aria-label="Previous month"
-                onClick={() => setViewMonth((current) => addMonths(current, -1))}
-                className="flex h-9 w-9 items-center justify-center rounded-full text-neutral-500 transition-colors hover:bg-neutral-100 hover:text-neutral-900 dark:text-neutral-400 dark:hover:bg-white/[0.07] dark:hover:text-white"
-              >
-                <IconChevronLeft size={16} strokeWidth={2.2} />
-              </button>
+              <IconButton label="Previous month" variant="ghost" size="md" onClick={() => setViewMonth((current) => addMonths(current, -1))}>
+                <IconChevronLeft size={18} strokeWidth={2.2} />
+              </IconButton>
               <p className="text-[14px] font-extrabold text-neutral-950 dark:text-white">
                 {monthLabel}
               </p>
-              <button
-                type="button"
-                aria-label="Next month"
-                onClick={() => setViewMonth((current) => addMonths(current, 1))}
-                className="flex h-9 w-9 items-center justify-center rounded-full text-neutral-500 transition-colors hover:bg-neutral-100 hover:text-neutral-900 dark:text-neutral-400 dark:hover:bg-white/[0.07] dark:hover:text-white"
-              >
-                <IconChevronRight size={16} strokeWidth={2.2} />
-              </button>
+              <IconButton label="Next month" variant="ghost" size="md" onClick={() => setViewMonth((current) => addMonths(current, 1))}>
+                <IconChevronRight size={18} strokeWidth={2.2} />
+              </IconButton>
             </div>
 
             <div className="mb-1 grid grid-cols-7 gap-1">
@@ -278,13 +267,9 @@ function DateActionButton({
               ))}
             </div>
 
-            <button
-              type="button"
-              onClick={() => selectDate(todayISO())}
-              className="mt-3 flex h-10 w-full items-center justify-center rounded-full border border-neutral-200 text-[13px] font-extrabold text-neutral-700 transition-colors hover:bg-neutral-100 dark:border-white/10 dark:text-neutral-300 dark:hover:bg-white/[0.07]"
-            >
+            <Button variant="secondary" size="md" fullWidth onClick={() => selectDate(todayISO())} className="mt-3">
               Today
-            </button>
+            </Button>
           </m.div>
         )}
       </AnimatePresence>
@@ -437,23 +422,18 @@ export default function RitualView({
           actions={
             <>
               {rituals.length > 0 && (
-                <button
-                  type="button"
-                  aria-label={viewMode === "day" ? "Show month view" : "Show day view"}
-                  aria-pressed={viewMode === "month"}
+                <IconButton
+                  label={viewMode === "day" ? "Show month view" : "Show day view"}
+                  size="lg"
+                  selected={viewMode === "month"}
                   onClick={() => { haptic("light"); setViewMode((m) => (m === "day" ? "month" : "day")); }}
-                  className={`inline-flex h-11 w-11 items-center justify-center rounded-full border-[1.5px] transition-colors active:scale-[0.97] ${
-                    viewMode === "month"
-                      ? "border-neutral-300 bg-neutral-100 text-neutral-900 dark:border-white/20 dark:bg-neutral-800 dark:text-white"
-                      : "border-neutral-200 bg-white text-neutral-500 hover:bg-neutral-100 dark:border-white/15 dark:bg-neutral-900 dark:text-neutral-400 dark:hover:bg-neutral-800"
-                  }`}
                 >
                   {viewMode === "day" ? (
-                    <IconCalendarStats size={16} strokeWidth={2.2} />
+                    <IconCalendarStats size={20} strokeWidth={2.2} />
                   ) : (
-                    <IconListCheck size={16} strokeWidth={2.2} />
+                    <IconListCheck size={20} strokeWidth={2.2} />
                   )}
-                </button>
+                </IconButton>
               )}
               {rituals.length > 0 && viewMode === "day" && (
                 <DateActionButton value={selectedDateISO} onChange={setSelectedDateISO} />

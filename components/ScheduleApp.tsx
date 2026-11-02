@@ -329,13 +329,9 @@ function IOSSafeDashboard({
       <section className="mt-5">
         <div className="mb-3 flex items-center justify-between">
           <h2 className="text-[16px] font-extrabold text-neutral-950 dark:text-white">Today's tasks</h2>
-          <button
-            type="button"
-            onClick={() => onNavigate(0)}
-            className="text-[13px] font-bold text-neutral-500 dark:text-neutral-400"
-          >
+          <Button variant="ghost" size="sm" onClick={() => onNavigate(0)}>
             Open
-          </button>
+          </Button>
         </div>
 
         {todayTasks.length === 0 ? (
@@ -3747,13 +3743,9 @@ export default function ScheduleApp() {
                     </div>
                     <div className="flex items-center justify-between">
                       <span className="text-[12px] font-semibold text-neutral-500 dark:text-neutral-400">Templates</span>
-                      <button
-                        type="button"
-                        onClick={() => setTemplatesOpen(true)}
-                        className="text-[12px] font-bold text-neutral-950 transition-colors hover:text-neutral-600 dark:text-white dark:hover:text-neutral-300"
-                      >
+                      <Button variant="ghost" size="sm" onClick={() => setTemplatesOpen(true)} className="-mr-3.5">
                         Browse
-                      </button>
+                      </Button>
                     </div>
                   </div>
                 </div>
@@ -4032,30 +4024,16 @@ export default function ScheduleApp() {
                 </span>
                 <div className="flex items-center gap-1">
                   {weekOffset !== 0 && (
-                    <button
-                      type="button"
-                      onClick={() => { setWeekOffset(0); setActiveDay(todayKey); }}
-                      className="mr-0.5 text-[12px] font-semibold text-emerald-600 dark:text-emerald-400"
-                    >
+                    <Button variant="ghost" size="sm" onClick={() => { setWeekOffset(0); setActiveDay(todayKey); }}>
                       Today
-                    </button>
+                    </Button>
                   )}
-                  <button
-                    type="button"
-                    onClick={() => { haptic("light"); setWeekOffset((w) => w - 1); }}
-                    aria-label="Previous week"
-                    className="flex h-8 w-8 items-center justify-center rounded-full text-neutral-500 hover:bg-neutral-100 dark:text-neutral-400 dark:hover:bg-white/[0.07]"
-                  >
+                  <IconButton label="Previous week" variant="ghost" size="sm" onClick={() => { haptic("light"); setWeekOffset((w) => w - 1); }}>
                     <IconChevronLeft size={16} strokeWidth={2} />
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => { haptic("light"); setWeekOffset((w) => w + 1); }}
-                    aria-label="Next week"
-                    className="flex h-8 w-8 items-center justify-center rounded-full text-neutral-500 hover:bg-neutral-100 dark:text-neutral-400 dark:hover:bg-white/[0.07]"
-                  >
+                  </IconButton>
+                  <IconButton label="Next week" variant="ghost" size="sm" onClick={() => { haptic("light"); setWeekOffset((w) => w + 1); }}>
                     <IconChevronRight size={16} strokeWidth={2} />
-                  </button>
+                  </IconButton>
                 </div>
               </div>
 
@@ -4138,9 +4116,8 @@ export default function ScheduleApp() {
                   {todayEditMode && (
                     <IconButton
                       label="Lock screen wallpaper"
-                      variant="soft"
+                      variant="secondary"
                       size="sm"
-                      radius="full"
                       onClick={() => { haptic("light"); setWallpaperOpen(true); }}
                     >
                       <IconPhoto size={15} strokeWidth={2} />
@@ -4151,38 +4128,32 @@ export default function ScheduleApp() {
                   {todayEditMode && (
                     <IconButton
                       label={`${DAY_FULL_LABELS[activeDay]} actions — swap, duplicate or clear day`}
-                      variant="soft"
+                      variant="secondary"
                       size="sm"
-                      radius="full"
                       onClick={() => { haptic("light"); setDayActionsOpen(true); }}
                     >
                       <IconDotsVertical size={15} strokeWidth={2} />
                     </IconButton>
                   )}
                   {viewMode === "timeline" && (
-                    <button
-                      type="button"
+                    <Button
+                      variant="cta"
+                      size="sm"
                       onClick={handleTimelineSave}
-                      disabled={savingTimeline}
-                      className="inline-flex h-8 items-center gap-1.5 rounded-full bg-emerald-600 px-3.5 text-[13px] font-bold text-white transition-colors hover:bg-emerald-700 disabled:opacity-60 dark:bg-emerald-500 dark:hover:bg-emerald-400 dark:text-neutral-950"
+                      loading={savingTimeline}
+                      icon={<IconDeviceFloppy size={15} strokeWidth={2} />}
                     >
-                      <IconDeviceFloppy size={15} strokeWidth={2} />
                       {savingTimeline ? "Saving…" : "Save"}
-                    </button>
+                    </Button>
                   )}
-                  <button
-                    type="button"
-                    aria-label={todayEditMode ? "Done editing" : "Edit day"}
-                    aria-pressed={todayEditMode}
+                  <IconButton
+                    label={todayEditMode ? "Done editing" : "Edit day"}
+                    size="sm"
+                    selected={todayEditMode}
                     onClick={() => { haptic("light"); setTodayEditMode((v) => !v); }}
-                    className={`tap-target flex h-8 w-8 items-center justify-center rounded-full transition-colors ${
-                      todayEditMode
-                        ? "bg-neutral-200 text-neutral-900 dark:bg-white/[0.18] dark:text-white"
-                        : "bg-neutral-100 text-neutral-600 dark:bg-white/[0.08] dark:text-neutral-300"
-                    }`}
                   >
-                    {todayEditMode ? <IconCheck size={15} strokeWidth={2.4} /> : <IconEdit size={15} strokeWidth={2} />}
-                  </button>
+                    {todayEditMode ? <IconCheck size={16} strokeWidth={2.4} /> : <IconEdit size={16} strokeWidth={2} />}
+                  </IconButton>
                   {dayProgress.total > 0 && (
                     <div className="flex items-center gap-1.5 text-neutral-500 dark:text-neutral-400">
                       <IconChecklist size={16} strokeWidth={1.8} />
@@ -4208,20 +4179,12 @@ export default function ScheduleApp() {
                     {selectedTaskIds.size} selected
                   </span>
                   <div className="flex items-center gap-2">
-                    <button
-                      type="button"
-                      onClick={() => { haptic("light"); setSelectedTaskIds(new Set()); }}
-                      className="rounded-full px-2.5 py-1 text-[12px] font-semibold text-emerald-800 hover:bg-emerald-100 dark:text-emerald-300 dark:hover:bg-emerald-500/15"
-                    >
+                    <Button variant="ghost" size="sm" onClick={() => { haptic("light"); setSelectedTaskIds(new Set()); }}>
                       Clear
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => { haptic("light"); setBulkDeleteConfirmOpen(true); }}
-                      className="rounded-full bg-red-600 px-3 py-1 text-[12px] font-bold text-white hover:bg-red-700 dark:bg-red-500 dark:hover:bg-red-400"
-                    >
+                    </Button>
+                    <Button variant="destructiveSecondary" size="sm" onClick={() => { haptic("light"); setBulkDeleteConfirmOpen(true); }}>
                       Delete
-                    </button>
+                    </Button>
                   </div>
                 </div>
               )}
@@ -5095,7 +5058,7 @@ export default function ScheduleApp() {
               {canDeleteThisDate && taskDeleteRequest?.dateISO && (
                 <Button
                   type="button"
-                  variant="dangerSecondary"
+                  variant="destructiveSecondary"
                   fullWidth
                   onClick={() => performTaskDelete("date")}
                 >
@@ -5104,7 +5067,7 @@ export default function ScheduleApp() {
               )}
               <Button
                 type="button"
-                variant="dangerSecondary"
+                variant="destructiveSecondary"
                 fullWidth
                 onClick={() => performTaskDelete("day")}
               >

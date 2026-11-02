@@ -22,6 +22,8 @@ import { Icon } from '../ui/Icon';
 import { Text, TextInput } from '../ui/Text';
 import RoutineMonthCalendar from './RoutineMonthCalendar';
 import FollowedPicker from './FollowedPicker';
+import Button, { BUTTON_TEXT } from '../ui/Button';
+import IconButton, { ICON_BUTTON_TONE } from '../ui/IconButton';
 
 interface RoutineDetailViewProps {
   ritual: Ritual;
@@ -169,29 +171,28 @@ export default function RoutineDetailView({
                 )}
               </View>
               {!progress.complete ? (
-                <Pressable
-                  accessibilityRole="button"
+                <Button
+                  variant="cta"
                   onPress={() => {
                     haptic('medium');
                     onMarkDone(100);
                   }}
-                  className="h-12 shrink-0 flex-row items-center gap-2 rounded-full bg-neutral-950 px-5 active:bg-neutral-800 dark:bg-white dark:active:bg-neutral-200"
+                  icon={<Icon icon={IconCheck} size={18} strokeWidth={2.8} className={BUTTON_TEXT.cta} />}
                 >
-                  <Icon icon={IconCheck} size={17} strokeWidth={2.8} className="text-white dark:text-neutral-950" />
-                  <Text className="text-[14px] font-extrabold text-white dark:text-neutral-950">Mark done</Text>
-                </Pressable>
+                  Mark done
+                </Button>
               ) : progress.markedDone ? (
-                <Pressable
-                  accessibilityRole="button"
+                <Button
+                  variant="secondary"
+                  size="md"
                   onPress={() => {
                     haptic('light');
                     onUnmarkDone();
                   }}
-                  className="h-11 shrink-0 flex-row items-center gap-1.5 rounded-full border border-neutral-200 px-4 active:bg-neutral-50 dark:border-white/[0.12] dark:active:bg-white/[0.05]"
+                  icon={<Icon icon={IconX} size={16} strokeWidth={2.4} className={BUTTON_TEXT.secondary} />}
                 >
-                  <Icon icon={IconX} size={14} strokeWidth={2.4} className="text-neutral-700 dark:text-neutral-200" />
-                  <Text className="text-[13px] font-bold text-neutral-700 dark:text-neutral-200">Mark not done</Text>
-                </Pressable>
+                  Mark not done
+                </Button>
               ) : null}
             </View>
 
@@ -302,35 +303,31 @@ export default function RoutineDetailView({
               {ritual.target ? <ProgressBar pct={Math.min(100, Math.round((progress.value / ritual.target) * 100))} height={6} fillClassName="bg-green-500" /> : null}
               <View className="flex-row flex-wrap items-center gap-1.5">
                 {progress.value > 0 && (
-                  <Pressable
-                    accessibilityRole="button"
-                    accessibilityLabel="Undo last amount"
+                  <IconButton
+                    label="Undo last amount"
+                    size="lg"
                     onPress={() => {
                       haptic('light');
                       onUndoLastLog();
                     }}
-                    className="h-11 w-11 items-center justify-center rounded-full border border-neutral-200 dark:border-white/[0.10]"
                   >
-                    <Icon icon={IconMinus} size={15} strokeWidth={2.4} className="text-neutral-500 dark:text-neutral-400" />
-                  </Pressable>
+                    <Icon icon={IconMinus} size={18} strokeWidth={2.4} className={ICON_BUTTON_TONE.secondary} />
+                  </IconButton>
                 )}
                 {quickAmounts.map((amount) => (
-                  <Pressable
+                  <Button
                     key={amount}
-                    accessibilityRole="button"
+                    variant="secondary"
+                    size="md"
                     accessibilityLabel={`Log ${formatAmount(amount)}${unit}`}
                     onPress={() => {
                       haptic('medium');
                       onLogAmount(amount);
                     }}
-                    className="h-11 flex-row items-center gap-1 rounded-full border border-neutral-200 px-3.5 active:bg-neutral-50 dark:border-white/[0.10] dark:active:bg-white/[0.05]"
+                    icon={<Icon icon={IconPlus} size={14} strokeWidth={2.5} className={BUTTON_TEXT.secondary} />}
                   >
-                    <Icon icon={IconPlus} size={12} strokeWidth={2.6} className="text-neutral-700 dark:text-neutral-200" />
-                    <Text className="text-[13px] font-bold text-neutral-700 dark:text-neutral-200">
-                      {formatAmount(amount)}
-                      {unit}
-                    </Text>
-                  </Pressable>
+                    {`${formatAmount(amount)}${unit}`}
+                  </Button>
                 ))}
                 <View className="h-11 flex-row items-center gap-1 rounded-full border border-neutral-200 pl-3.5 pr-1 dark:border-white/[0.10]">
                   <TextInput

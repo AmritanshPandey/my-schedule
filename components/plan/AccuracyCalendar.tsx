@@ -8,6 +8,7 @@ import { todayISO, localISODate } from "@/lib/dateUtils";
 import { completedOnDate } from "@/lib/consistency/calculateDailyStats";
 import { isTrackedTask } from "@/lib/taskCompletion";
 import { isTaskScheduledOn } from "@/lib/taskOccurrence";
+import Button from "@/components/ui/Button";
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 
@@ -170,14 +171,9 @@ export default function AccuracyCalendar({
         <p className="text-[13px] text-neutral-500 dark:text-neutral-400 max-w-[200px] mx-auto leading-relaxed mb-4">
           Link activities to this plan to start tracking accuracy.
         </p>
-        <button
-          type="button"
-          onClick={onAddTask}
-          className="inline-flex items-center gap-1.5 rounded-xl border border-neutral-200 px-4 py-2 text-[13px] font-semibold text-neutral-600 hover:bg-neutral-50 dark:border-white/10 dark:text-neutral-400 dark:hover:bg-white/[0.04] transition-colors"
-        >
-          <IconPlus size={16} strokeWidth={1.5} />
+        <Button variant="secondary" size="md" onClick={onAddTask} icon={<IconPlus size={16} strokeWidth={2.5} />}>
           Add activity
-        </button>
+        </Button>
       </div>
     );
   }

@@ -22,6 +22,7 @@ import { useAIReady } from "@/lib/ai/useAIReady";
 import { useAuth } from "@/contexts/AuthProvider";
 import { useSyncStatus } from "@/lib/useSyncStatus";
 import SyncDot from "@/components/sync/SyncDot";
+import IconButton from "@/components/ui/IconButton";
 
 interface DesktopSidebarProps {
   activeTab: number;
@@ -157,19 +158,15 @@ export default function DesktopSidebar({
             <img src="/logo-dark.svg" alt="PlanR" className="hidden h-[18px] w-auto dark:block" />
           </>
         )}
-        <button
-          type="button"
-          onClick={() => { haptic("light"); onToggleCollapse(); }}
+        <IconButton
+          label={collapsed ? "Expand sidebar" : "Collapse sidebar"}
           title={collapsed ? "Expand sidebar" : "Collapse sidebar"}
-          aria-label={collapsed ? "Expand sidebar" : "Collapse sidebar"}
-          className={`grid h-9 w-9 shrink-0 place-items-center rounded-[9px] text-neutral-600 transition-colors dark:text-neutral-300 ${
-            collapsed
-              ? "hover:bg-neutral-100 dark:hover:bg-white/[0.06]"
-              : "bg-neutral-100 hover:bg-neutral-200 dark:bg-white/[0.06] dark:hover:bg-white/[0.1]"
-          }`}
+          variant={collapsed ? "ghost" : "secondary"}
+          size="md"
+          onClick={() => { haptic("light"); onToggleCollapse(); }}
         >
           <IconLayoutSidebar size={18} strokeWidth={2} />
-        </button>
+        </IconButton>
       </div>
 
       {/* ── Nav ──────────────────────────────────────────────────────────────── */}

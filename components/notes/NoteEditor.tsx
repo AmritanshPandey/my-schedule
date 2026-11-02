@@ -54,6 +54,7 @@ import {
 } from "@/lib/notes/richText";
 import { buildNoteEditorExtensions } from "./richTextExtensions";
 import { deriveTaskTitleFromNoteText } from "@/lib/notes/dailyCapture";
+import Button from "@/components/ui/Button";
 
 type NotePatch = Partial<Pick<Note, "title" | "body" | "pinned" | "tags" | "linkedTaskIds" | "linkedPlanIds">>;
 type CreateTaskFromNoteInput = { title: string; noteId: string; day: DayKey; planId?: string };
@@ -547,7 +548,6 @@ export default function NoteEditor({ note, onUpdate, onDelete, onBack, tasks, pl
                   label="Turn into plan"
                   variant="ghost"
                   size="md"
-                  radius="xl"
                   onClick={() => { haptic("light"); onTurnIntoPlan(note); }}
                   className="text-neutral-600 dark:text-neutral-400"
                 >
@@ -558,7 +558,6 @@ export default function NoteEditor({ note, onUpdate, onDelete, onBack, tasks, pl
                 label={copied ? "Copied!" : "Copy note"}
                 variant="ghost"
                 size="md"
-                radius="xl"
                 onClick={copyNote}
               >
                 {copied ? <IconCheck size={16} strokeWidth={2.5} /> : <IconCopy size={16} strokeWidth={2} />}
@@ -567,7 +566,6 @@ export default function NoteEditor({ note, onUpdate, onDelete, onBack, tasks, pl
                 label={note.pinned ? "Unpin note" : "Pin note"}
                 variant="ghost"
                 size="md"
-                radius="xl"
                 onClick={togglePin}
                 className={note.pinned ? "text-amber-500" : ""}
               >
@@ -575,9 +573,8 @@ export default function NoteEditor({ note, onUpdate, onDelete, onBack, tasks, pl
               </IconButton>
               <IconButton
                 label="Delete note"
-                variant="dangerGhost"
+                variant="destructive"
                 size="md"
-                radius="xl"
                 onClick={() => {
                   haptic("light");
                   setConfirmDelete(true);
@@ -662,34 +659,19 @@ export default function NoteEditor({ note, onUpdate, onDelete, onBack, tasks, pl
                     <Icon size={13} strokeWidth={2} className="shrink-0 text-neutral-500 dark:text-neutral-400" />
                     <span className="truncate">{task.title}</span>
                   </button>
-                  <button
-                    type="button"
-                    aria-label={`Unlink ${task.title}`}
-                    onClick={() => removeLinkedTask(task.id)}
-                    className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-neutral-500 dark:text-neutral-400 transition-colors hover:bg-neutral-100 hover:text-neutral-600 dark:hover:bg-white/[0.08]"
-                  >
-                    <IconX size={12} strokeWidth={2.4} />
-                  </button>
+                  <IconButton label={`Unlink ${task.title}`} variant="ghost" size="xs" onClick={() => removeLinkedTask(task.id)}>
+                    <IconX size={14} strokeWidth={2.4} />
+                  </IconButton>
                 </span>
               );
             })}
-            <button
-              type="button"
-              onClick={() => setLinkPickerOpen(true)}
-              className="inline-flex min-h-9 shrink-0 items-center gap-1.5 rounded-full border border-dashed border-neutral-300 bg-white/70 px-3 text-[13px] font-semibold text-neutral-500 transition-colors hover:border-neutral-400 hover:text-neutral-700 dark:border-white/[0.14] dark:bg-white/[0.03] dark:text-neutral-400 dark:hover:text-neutral-200"
-            >
-              <IconPlus size={13} strokeWidth={2.4} />
+            <Button variant="secondary" size="sm" onClick={() => setLinkPickerOpen(true)} icon={<IconPlus size={15} strokeWidth={2.5} />}>
               Link task
-            </button>
+            </Button>
             {onCreateTaskFromNote && (
-              <button
-                type="button"
-                onClick={createTaskFromSelection}
-                className="inline-flex min-h-9 shrink-0 items-center gap-1.5 rounded-full border border-neutral-900 bg-neutral-900 px-3.5 text-[13px] font-semibold text-white transition-colors hover:bg-neutral-800 dark:border-white dark:bg-white dark:text-neutral-900 dark:hover:bg-neutral-100"
-              >
-                <IconCalendarPlus size={13} strokeWidth={2.4} />
+              <Button size="sm" onClick={createTaskFromSelection} icon={<IconCalendarPlus size={15} strokeWidth={2.4} />} className="shrink-0">
                 Create task
-              </button>
+              </Button>
             )}
             {taskCreateState !== "idle" && (
               <span className={`shrink-0 text-[12px] font-semibold ${taskCreateState === "added" ? "text-emerald-500" : "text-neutral-500 dark:text-neutral-400"}`}>
@@ -723,14 +705,9 @@ export default function NoteEditor({ note, onUpdate, onDelete, onBack, tasks, pl
                       <Icon size={13} strokeWidth={2} className="shrink-0 text-neutral-500 dark:text-neutral-400" />
                       <span className="truncate">{plan.title}</span>
                     </button>
-                    <button
-                      type="button"
-                      aria-label={`Unlink ${plan.title}`}
-                      onClick={() => removeLinkedPlan(plan.id)}
-                      className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-neutral-500 dark:text-neutral-400 transition-colors hover:bg-neutral-100 hover:text-neutral-600 dark:hover:bg-white/[0.08]"
-                    >
-                      <IconX size={12} strokeWidth={2.4} />
-                    </button>
+                    <IconButton label={`Unlink ${plan.title}`} variant="ghost" size="xs" onClick={() => removeLinkedPlan(plan.id)}>
+                      <IconX size={14} strokeWidth={2.4} />
+                    </IconButton>
                   </span>
                 );
               })}
@@ -878,13 +855,9 @@ export default function NoteEditor({ note, onUpdate, onDelete, onBack, tasks, pl
                 placeholder="Pill label"
                 className="w-28 bg-transparent text-[13px] font-medium text-neutral-800 outline-none placeholder:text-neutral-300 dark:text-white dark:placeholder:text-neutral-600"
               />
-              <button
-                type="button"
-                onClick={() => commitPill(pillDraft)}
-                className="rounded-lg bg-neutral-900 px-2.5 py-1 text-[11px] font-semibold text-white dark:bg-white dark:text-neutral-900"
-              >
+              <Button size="sm" onClick={() => commitPill(pillDraft)}>
                 Add
-              </button>
+              </Button>
             </div>
           )}
           <div className="relative shrink-0">
@@ -941,13 +914,9 @@ export default function NoteEditor({ note, onUpdate, onDelete, onBack, tasks, pl
               )}
             </button>
           </div>
-          <button
-            type="button"
-            onClick={flushAndBack}
-            className="shrink-0 rounded-xl bg-neutral-900 px-4 py-2 text-[13px] font-bold text-white dark:bg-white dark:text-neutral-900"
-          >
+          <Button size="sm" onClick={flushAndBack} className="shrink-0">
             Done
-          </button>
+          </Button>
         </div>
         </div>
       </div>

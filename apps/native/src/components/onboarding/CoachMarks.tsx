@@ -9,6 +9,8 @@ import { haptic } from '../../lib/haptics';
 import { useModalTurn } from '../../lib/modalTurn';
 import { Icon } from '../ui/Icon';
 import { Text } from '../ui/Text';
+import Button, { BUTTON_TEXT } from '../ui/Button';
+import IconButton, { ICON_BUTTON_TONE } from '../ui/IconButton';
 
 export type { CoachMarkStep };
 
@@ -173,32 +175,25 @@ export default function CoachMarks({ open, steps, onFinish }: CoachMarksProps) {
               <Text className="text-[11px] font-bold uppercase tracking-[0.08em] text-neutral-600 dark:text-neutral-400">
                 {index + 1} of {steps.length}
               </Text>
-              <Pressable
-                accessibilityRole="button"
-                accessibilityLabel="Skip tour"
-                onPress={finish}
-                hitSlop={10}
-                className="h-6 w-6 items-center justify-center rounded-full active:bg-neutral-100 dark:active:bg-white/[0.06]"
-              >
-                <Icon icon={IconX} size={13} strokeWidth={2} className="text-neutral-500 dark:text-neutral-400" />
-              </Pressable>
+              <IconButton label="Skip tour" variant="ghost" size="xs" onPress={finish}>
+                <Icon icon={IconX} size={14} strokeWidth={2} className={ICON_BUTTON_TONE.ghost} />
+              </IconButton>
             </View>
             <Text accessibilityRole="header" className="text-[15px] font-bold text-neutral-900 dark:text-white">
               {step.title}
             </Text>
             <Text className="mt-1 text-[13px] leading-relaxed text-neutral-500 dark:text-neutral-400">{step.body}</Text>
             <View className="mt-4 flex-row items-center justify-between">
-              <Pressable accessibilityRole="button" onPress={finish} hitSlop={12} className="min-h-[44px] justify-center pr-4">
-                <Text className="text-[12px] font-semibold text-neutral-500 dark:text-neutral-400">Skip</Text>
-              </Pressable>
-              <Pressable
-                accessibilityRole="button"
+              <Button variant="ghost" size="sm" onPress={finish} className="-ml-3.5">
+                Skip
+              </Button>
+              <Button
+                size="sm"
                 onPress={advance}
-                className="min-h-[44px] flex-row items-center gap-1 rounded-full bg-neutral-900 px-4 active:scale-[0.97] dark:bg-white"
+                trailingIcon={!isLast ? <Icon icon={IconArrowRight} size={15} strokeWidth={2.4} className={BUTTON_TEXT.primary} /> : undefined}
               >
-                <Text className="text-[13px] font-bold text-white dark:text-neutral-900">{isLast ? 'Got it' : 'Next'}</Text>
-                {!isLast && <Icon icon={IconArrowRight} size={14} strokeWidth={2.4} className="text-white dark:text-neutral-900" />}
-              </Pressable>
+                {isLast ? 'Got it' : 'Next'}
+              </Button>
             </View>
           </View>
         )}

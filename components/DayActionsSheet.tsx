@@ -151,7 +151,7 @@ export default function DayActionsSheet({
               transition={{ duration: 0.18, ease: [0.22, 1, 0.36, 1] }}
             >
               <div className="mb-5 flex items-center gap-3">
-                <IconButton label="Back" variant="soft" size="md" radius="full" onClick={() => setStep("menu")}>
+                <IconButton label="Back" variant="secondary" size="md" onClick={() => setStep("menu")}>
                   <IconArrowLeft size={18} strokeWidth={2} />
                 </IconButton>
                 <p className="text-[18px] font-bold text-neutral-900 dark:text-white">Swap {DAY_FULL_LABELS[sourceDay]} with</p>
@@ -180,7 +180,7 @@ export default function DayActionsSheet({
               transition={{ duration: 0.18, ease: [0.22, 1, 0.36, 1] }}
             >
               <div className="mb-5 flex items-center gap-3">
-                <IconButton label="Back" variant="soft" size="md" radius="full" onClick={() => setStep("menu")}>
+                <IconButton label="Back" variant="secondary" size="md" onClick={() => setStep("menu")}>
                   <IconArrowLeft size={18} strokeWidth={2} />
                 </IconButton>
                 <p className="text-[18px] font-bold text-neutral-900 dark:text-white">Copy {DAY_FULL_LABELS[sourceDay]} to</p>

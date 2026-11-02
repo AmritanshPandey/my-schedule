@@ -16,6 +16,7 @@ import BottomSheet from "@/components/ui/BottomSheet";
 import SheetHeader from "@/components/ui/SheetHeader";
 import DetailHeader from "@/components/ui/DetailHeader";
 import EmptyState from "@/components/ui/EmptyState";
+import Button from "@/components/ui/Button";
 
 const NoteEditor = dynamic(() => import("./NoteEditor"), {
   ssr: false,
@@ -329,23 +330,18 @@ export default function NotesView({
               <h1 className="text-[22px] font-bold tracking-[-0.5px] text-neutral-900 dark:text-white">Notes</h1>
             </div>
             <div className="flex-1" />
-            <button
-              type="button"
+            <Button
+              variant="secondary"
+              size="sm"
               onClick={() => setTemplatePickerOpen(true)}
               aria-label="New from template"
-              className="flex h-9 items-center gap-1.5 rounded-xl border border-neutral-200 px-3 text-[13px] font-semibold text-neutral-600 transition-colors hover:bg-neutral-100 dark:border-white/[0.1] dark:text-neutral-300 dark:hover:bg-white/[0.06]"
+              icon={<IconLayoutGrid size={15} strokeWidth={2} />}
             >
-              <IconLayoutGrid size={16} strokeWidth={2} />
               Templates
-            </button>
-            <button
-              type="button"
-              onClick={() => handleCreate()}
-              className="flex h-9 items-center gap-1.5 rounded-xl bg-neutral-900 px-3 text-[13px] font-bold text-white transition-colors hover:bg-neutral-800 dark:bg-white dark:text-neutral-900 dark:hover:bg-neutral-100"
-            >
-              <IconPlus size={16} strokeWidth={2.5} />
+            </Button>
+            <Button size="sm" onClick={() => handleCreate()} icon={<IconPlus size={15} strokeWidth={2.5} />}>
               New
-            </button>
+            </Button>
           </div>
         ) : (
           <DetailHeader

@@ -7,6 +7,7 @@ import { haptic } from "@/lib/haptics";
 import { CARD } from "@/components/ui/surfaces";
 import HealthBadge, { HEALTH_FILL } from "@/components/ui/HealthBadge";
 import ProgressBar from "@/components/ui/ProgressBar";
+import Button from "@/components/ui/Button";
 
 function formatShortDate(iso: string): string {
   return new Date(`${iso}T00:00:00`).toLocaleDateString("en-US", { month: "short", day: "numeric" });
@@ -43,14 +44,15 @@ export default function GoalPaceCard({
           <IconTarget size={22} strokeWidth={2} className="mx-auto text-neutral-400" aria-hidden />
           <p className="mt-2 text-[13px] text-neutral-600 dark:text-neutral-400">No active plans. Create a plan with milestones to see its pace here.</p>
           {onSeeAll && (
-            <button
-              type="button"
+            <Button
+              variant="secondary"
+              size="md"
               onClick={() => { haptic("light"); onSeeAll(); }}
-              className="mt-3 inline-flex min-h-[44px] items-center gap-2 rounded-full border border-neutral-200 px-4 text-[13px] font-bold text-neutral-700 transition-colors hover:bg-neutral-50 dark:border-white/[0.10] dark:text-neutral-300 dark:hover:bg-white/[0.05]"
+              trailingIcon={<IconArrowRight size={16} strokeWidth={2.5} />}
+              className="mt-3"
             >
               Open plans
-              <IconArrowRight size={14} strokeWidth={2.5} />
-            </button>
+            </Button>
           )}
         </div>
       </section>
@@ -62,13 +64,9 @@ export default function GoalPaceCard({
       <div className={`flex items-center justify-between gap-3 ${compact ? "px-2" : ""}`}>
         <p className="text-[14px] font-bold text-neutral-950 dark:text-white">{compact ? "Goals on pace" : "Goals & milestones"}</p>
         {onSeeAll && totalCount > rows.length && (
-          <button
-            type="button"
-            onClick={() => { haptic("light"); onSeeAll(); }}
-            className="-my-2 inline-flex min-h-[44px] items-center px-1 text-[13px] font-bold text-neutral-600 dark:text-neutral-400"
-          >
+          <Button variant="ghost" size="sm" onClick={() => { haptic("light"); onSeeAll(); }} className="-my-2">
             See all {totalCount}
-          </button>
+          </Button>
         )}
       </div>
 

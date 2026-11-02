@@ -33,6 +33,8 @@ import { RitualSheet } from './RitualSheet';
 import RoutineRow from './RoutineRow';
 import RoutineMonthCalendar from './RoutineMonthCalendar';
 import RoutineInsightsSection from './RoutineInsightsSection';
+import Button from '../ui/Button';
+import IconButton, { ICON_BUTTON_TONE } from '../ui/IconButton';
 
 // JS getDay() 0=Sunday → DayKey
 const JS_TO_DAY: DayKey[] = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'];
@@ -191,19 +193,15 @@ function DateActionButton({ value, onChange }: { value: string; onChange: (value
 
   return (
     <View ref={buttonRef} collapsable={false}>
-      <Pressable
-        accessibilityRole="button"
-        accessibilityLabel={`Select routine date, ${formatDateButtonLabel(value)}`}
-        accessibilityState={{ expanded: open }}
+      <IconButton
+        label={`Select routine date, ${formatDateButtonLabel(value)}`}
+        size="lg"
+        selected={open}
+        accessibilityState={{ expanded: open, selected: open }}
         onPress={toggle}
-        className={`min-h-[44px] flex-row items-center gap-2 rounded-full border-[1.5px] px-3 py-[10px] active:scale-[0.97] ${
-          open
-            ? 'border-neutral-300 bg-neutral-100 dark:border-white/20 dark:bg-neutral-800'
-            : 'border-neutral-200 bg-white active:bg-neutral-100 dark:border-white/15 dark:bg-neutral-900 dark:active:bg-neutral-800'
-        }`}
       >
-        <Icon icon={IconCalendarEvent} size={14} strokeWidth={2.3} className="shrink-0 text-neutral-500 dark:text-neutral-400" />
-      </Pressable>
+        <Icon icon={IconCalendarEvent} size={18} strokeWidth={2.3} className={ICON_BUTTON_TONE[open ? 'primary' : 'secondary']} />
+      </IconButton>
 
       <Modal visible={popoverTurn} transparent animationType="fade" onRequestClose={() => setOpen(false)} statusBarTranslucent>
         <Pressable accessibilityLabel="Close date picker" onPress={() => setOpen(false)} style={{ flex: 1 }}>
@@ -216,23 +214,13 @@ function DateActionButton({ value, onChange }: { value: string; onChange: (value
               className="rounded-2xl border border-neutral-200 bg-white p-3 dark:border-white/10 dark:bg-neutral-900"
             >
               <View className="mb-3 flex-row items-center justify-between gap-2">
-                <Pressable
-                  accessibilityRole="button"
-                  accessibilityLabel="Previous month"
-                  onPress={() => setViewMonth((current) => addMonths(current, -1))}
-                  className="h-9 w-9 items-center justify-center rounded-full active:bg-neutral-100 dark:active:bg-white/[0.07]"
-                >
-                  <Icon icon={IconChevronLeft} size={16} strokeWidth={2.2} className="text-neutral-500 dark:text-neutral-400" />
-                </Pressable>
+                <IconButton label="Previous month" variant="ghost" size="md" onPress={() => setViewMonth((current) => addMonths(current, -1))}>
+                  <Icon icon={IconChevronLeft} size={18} strokeWidth={2.2} className={ICON_BUTTON_TONE.ghost} />
+                </IconButton>
                 <Text className="text-[14px] font-extrabold text-neutral-950 dark:text-white">{monthLabel}</Text>
-                <Pressable
-                  accessibilityRole="button"
-                  accessibilityLabel="Next month"
-                  onPress={() => setViewMonth((current) => addMonths(current, 1))}
-                  className="h-9 w-9 items-center justify-center rounded-full active:bg-neutral-100 dark:active:bg-white/[0.07]"
-                >
-                  <Icon icon={IconChevronRight} size={16} strokeWidth={2.2} className="text-neutral-500 dark:text-neutral-400" />
-                </Pressable>
+                <IconButton label="Next month" variant="ghost" size="md" onPress={() => setViewMonth((current) => addMonths(current, 1))}>
+                  <Icon icon={IconChevronRight} size={18} strokeWidth={2.2} className={ICON_BUTTON_TONE.ghost} />
+                </IconButton>
               </View>
 
               <View className="mb-1 flex-row">
@@ -277,13 +265,9 @@ function DateActionButton({ value, onChange }: { value: string; onChange: (value
                 ))}
               </View>
 
-              <Pressable
-                accessibilityRole="button"
-                onPress={() => selectDate(todayISO())}
-                className="mt-3 h-10 w-full items-center justify-center rounded-full border border-neutral-200 active:bg-neutral-100 dark:border-white/10 dark:active:bg-white/[0.07]"
-              >
-                <Text className="text-[13px] font-extrabold text-neutral-700 dark:text-neutral-300">Today</Text>
-              </Pressable>
+              <Button variant="secondary" size="md" fullWidth onPress={() => selectDate(todayISO())} className="mt-3">
+                Today
+              </Button>
             </Pressable>
           )}
         </Pressable>

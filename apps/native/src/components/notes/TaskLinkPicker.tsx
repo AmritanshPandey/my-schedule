@@ -49,8 +49,8 @@ export default function TaskLinkPicker({
           <Text accessibilityRole="header" className="text-[18px] font-bold text-neutral-900 dark:text-white">
             Link a task
           </Text>
-          <IconButton label="Close" variant="soft" size="md" radius="full" onPress={onClose}>
-            <Icon icon={IconX} size={18} strokeWidth={2.2} className={ICON_BUTTON_TONE.soft} />
+          <IconButton label="Close" variant="secondary" size="md" onPress={onClose}>
+            <Icon icon={IconX} size={18} strokeWidth={2.2} className={ICON_BUTTON_TONE.secondary} />
           </IconButton>
         </View>
 

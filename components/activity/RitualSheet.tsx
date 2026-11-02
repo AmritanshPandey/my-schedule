@@ -16,6 +16,7 @@ import { RITUAL_COLOR_DOT, RITUAL_COLOR_SELECT_RING } from "@/lib/ritualColors";
 import { ROUTINE_TEMPLATES, type RoutineTemplateKey } from "@/lib/routineTemplates";
 import { recurrenceToRepeatDays, repeatDaysToRecurrence } from "@/lib/ritualRecurrence";
 import { iconGlyph, SECTION_ICONS } from "@/components/SectionIcons";
+import IconButton from "@/components/ui/IconButton";
 
 const DURATION_PRESETS = [5, 10, 15, 20, 30, 45, 60];
 
@@ -446,15 +447,9 @@ export function RitualSheet({ open, onClose, initial, onSave, onDelete }: Ritual
                         >
                           <IconClock size={15} strokeWidth={2.2} />
                         </button>
-                        <button
-                          type="button"
-                          onClick={addStep}
-                          disabled={!newStepLabel.trim()}
-                          className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl border border-neutral-200 text-neutral-500 hover:bg-neutral-50 disabled:opacity-40 dark:border-white/10 dark:text-neutral-400"
-                          aria-label="Add item"
-                        >
-                          <IconPlus size={14} strokeWidth={2.4} />
-                        </button>
+                        <IconButton label="Add item" size="lg" onClick={addStep} disabled={!newStepLabel.trim()}>
+                          <IconPlus size={20} strokeWidth={2.4} />
+                        </IconButton>
                       </div>
                       {newItemTimed && (
                         <TimeInput value={newItemTime} onChange={setNewItemTime} ariaLabel="Time for this item" />
@@ -532,19 +527,18 @@ export function RitualSheet({ open, onClose, initial, onSave, onDelete }: Ritual
               </div>
 
               {/* Submit */}
-              <button
-                type="button"
+              <Button
+                fullWidth
                 onClick={handleSave}
                 disabled={!canSave}
-                className="flex w-full items-center justify-center gap-2 rounded-2xl bg-neutral-900 py-3.5 text-[16px] font-bold text-white transition-opacity disabled:opacity-40 dark:bg-white dark:text-neutral-950"
+                icon={isEdit ? <IconCheck size={18} strokeWidth={2.5} /> : <IconPlus size={18} strokeWidth={2.5} />}
               >
-                {isEdit ? <IconCheck size={16} strokeWidth={2.5} /> : <IconPlus size={16} strokeWidth={2.5} />}
                 {isEdit ? "Save routine" : "Add routine"}
-              </button>
+              </Button>
 
               {isEdit && onDelete && (
                 <Button
-                  variant="dangerSecondary"
+                  variant="destructiveSecondary"
                   fullWidth
                   onClick={() => { haptic("light"); onDelete(); onClose(); }}
                 >

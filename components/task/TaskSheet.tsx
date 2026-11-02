@@ -16,6 +16,7 @@ import {
   IconClock,
   IconCopy,
   IconCopyPlus,
+  IconMinus,
   IconPlus,
   IconSparkles,
   IconTrash,
@@ -857,9 +858,8 @@ export function TaskSheet({
             <div className="mb-5 flex items-center gap-3">
               <IconButton
                 label="Back"
-                variant="soft"
+                variant="secondary"
                 size="md"
-                radius="full"
                 onClick={() => setDuplicateStep("idle")}
                 className="text-neutral-600 dark:text-neutral-300"
               >
@@ -1157,11 +1157,13 @@ export function TaskSheet({
                   {repeatMode === "interval" && (
                     <div className="flex items-center gap-2 pt-1">
                       <span className="text-[13px] text-neutral-500 dark:text-neutral-400">Every</span>
-                      <button type="button" onClick={() => setIntervalWeeks((n) => Math.max(2, n - 1))}
-                        className="flex h-8 w-8 items-center justify-center rounded-full border border-neutral-200 text-[16px] font-bold text-neutral-600 dark:border-white/10 dark:text-neutral-300">−</button>
+                      <IconButton label="Fewer weeks" size="sm" onClick={() => setIntervalWeeks((n) => Math.max(2, n - 1))} disabled={intervalWeeks <= 2}>
+                        <IconMinus size={16} strokeWidth={2.5} />
+                      </IconButton>
                       <span className="w-6 text-center text-[16px] font-bold tabular-nums text-neutral-900 dark:text-white">{intervalWeeks}</span>
-                      <button type="button" onClick={() => setIntervalWeeks((n) => Math.min(8, n + 1))}
-                        className="flex h-8 w-8 items-center justify-center rounded-full border border-neutral-200 text-[16px] font-bold text-neutral-600 dark:border-white/10 dark:text-neutral-300">+</button>
+                      <IconButton label="More weeks" size="sm" onClick={() => setIntervalWeeks((n) => Math.min(8, n + 1))} disabled={intervalWeeks >= 8}>
+                        <IconPlus size={16} strokeWidth={2.5} />
+                      </IconButton>
                       <span className="text-[13px] text-neutral-500 dark:text-neutral-400">weeks</span>
                     </div>
                   )}
@@ -1246,14 +1248,9 @@ export function TaskSheet({
                       {taskType === "session" ? "Session steps" : "Subtasks"}
                     </p>
                     {canExpand && title.trim().length > 0 && (
-                      <button
-                        type="button"
-                        onClick={() => setExpandSheetOpen(true)}
-                        className="flex items-center gap-1 rounded-lg px-2 py-1 text-[12px] font-semibold text-emerald-600 transition-colors hover:bg-emerald-50 dark:text-emerald-400 dark:hover:bg-emerald-500/10"
-                      >
-                        <IconSparkles size={12} strokeWidth={2} />
+                      <Button variant="ghost" size="sm" onClick={() => setExpandSheetOpen(true)} icon={<IconSparkles size={15} strokeWidth={2} />}>
                         Expand
-                      </button>
+                      </Button>
                     )}
                   </div>
 
@@ -1385,7 +1382,7 @@ export function TaskSheet({
               )}
               {mode === "edit" && !isOccurrenceScope && onDelete && (
                 <Button
-                  variant="dangerSecondary"
+                  variant="destructiveSecondary"
                   onClick={() => { haptic("light"); onDelete(); }}
                   aria-label="Delete task"
                   className="h-12 w-12 shrink-0 px-0 text-rose-500 shadow-sm ring-1 ring-rose-500/10 hover:border-rose-300 hover:bg-rose-500/10 dark:bg-rose-500/[0.08] dark:text-rose-300 dark:ring-rose-400/10 dark:hover:border-rose-400/25 dark:hover:bg-rose-500/15"

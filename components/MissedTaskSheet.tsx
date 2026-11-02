@@ -113,7 +113,7 @@ export default function MissedTaskSheet({ missed, onClose, onReschedule, onDismi
               <IconArrowUp size={16} strokeWidth={2.4} />
               Add to {friendlyDate(dateISO, todayISO)}
             </Button>
-            <Button variant="dangerSecondary" fullWidth onClick={handleDismiss}>
+            <Button variant="destructiveSecondary" fullWidth onClick={handleDismiss}>
               <IconTrash size={15} strokeWidth={2} />
               Dismiss
             </Button>

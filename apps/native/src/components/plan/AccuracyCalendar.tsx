@@ -8,6 +8,7 @@ import { isTrackedTask } from '@planr/core/lib/taskCompletion';
 import { isTaskScheduledOn } from '@planr/core/lib/taskOccurrence';
 import { Icon } from '../ui/Icon';
 import { Text } from '../ui/Text';
+import Button, { BUTTON_TEXT } from '../ui/Button';
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 
@@ -166,14 +167,14 @@ export default function AccuracyCalendar({
         <Text className="mb-4 max-w-[200px] text-center text-[13px] leading-relaxed text-neutral-500 dark:text-neutral-400">
           Link activities to this plan to start tracking accuracy.
         </Text>
-        <Pressable
-          accessibilityRole="button"
+        <Button
+          variant="secondary"
+          size="md"
           onPress={onAddTask}
-          className="flex-row items-center gap-1.5 rounded-xl border border-neutral-200 px-4 py-2 active:bg-neutral-50 dark:border-white/10 dark:active:bg-white/[0.04]"
+          icon={<Icon icon={IconPlus} size={16} strokeWidth={2.5} className={BUTTON_TEXT.secondary} />}
         >
-          <Icon icon={IconPlus} size={16} strokeWidth={1.5} className="text-neutral-600 dark:text-neutral-400" />
-          <Text className="text-[13px] font-semibold text-neutral-600 dark:text-neutral-400">Add activity</Text>
-        </Pressable>
+          Add activity
+        </Button>
       </View>
     );
   }

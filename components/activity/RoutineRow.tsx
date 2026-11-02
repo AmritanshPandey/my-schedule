@@ -165,9 +165,8 @@ export default function RoutineRow({
 
         <IconButton
           label="Delete routine"
-          variant="dangerGhost"
-          size="xs"
-          radius="lg"
+          variant="destructive"
+          size="sm"
           onClick={() => onDelete(ritual)}
           className="hidden shrink-0 opacity-0 transition-opacity group-hover:opacity-100 focus-visible:opacity-100 lg:flex"
         >

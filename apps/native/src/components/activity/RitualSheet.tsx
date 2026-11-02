@@ -13,11 +13,12 @@ import { haptic } from '../../lib/haptics';
 import BottomSheet from '../ui/BottomSheet';
 import SheetHeader from '../ui/SheetHeader';
 import { typography } from '../ui/Typography';
-import Button from '../ui/Button';
+import Button, { BUTTON_TEXT } from '../ui/Button';
 import TimeInput from '../ui/TimeInput';
 import { Icon } from '../ui/Icon';
 import { Text, TextInput } from '../ui/Text';
 import { iconGlyph, SECTION_ICONS } from '../SectionIcons';
+import IconButton, { ICON_BUTTON_TONE } from '../ui/IconButton';
 
 const DURATION_PRESETS = [5, 10, 15, 20, 30, 45, 60];
 
@@ -478,17 +479,9 @@ export function RitualSheet({ open, onClose, initial, onSave, onDelete }: Ritual
                       >
                         <Icon icon={IconClock} size={15} strokeWidth={2.2} className={newItemTimed ? CHIP_TEXT_ON : 'text-neutral-500 dark:text-neutral-400'} />
                       </Pressable>
-                      <Pressable
-                        accessibilityRole="button"
-                        accessibilityLabel="Add item"
-                        onPress={addStep}
-                        disabled={!newStepLabel.trim()}
-                        className={`h-11 w-11 shrink-0 items-center justify-center rounded-xl border border-neutral-200 active:bg-neutral-50 dark:border-white/10 ${
-                          newStepLabel.trim() ? '' : 'opacity-40'
-                        }`}
-                      >
-                        <Icon icon={IconPlus} size={14} strokeWidth={2.4} className="text-neutral-500 dark:text-neutral-400" />
-                      </Pressable>
+                      <IconButton label="Add item" size="lg" onPress={addStep} disabled={!newStepLabel.trim()}>
+                        <Icon icon={IconPlus} size={20} strokeWidth={2.4} className={ICON_BUTTON_TONE.secondary} />
+                      </IconButton>
                     </View>
                     {newItemTimed && <TimeInput value={newItemTime} onChange={setNewItemTime} ariaLabel="Time for this item" />}
                   </View>
@@ -559,20 +552,18 @@ export function RitualSheet({ open, onClose, initial, onSave, onDelete }: Ritual
               </View>
 
               {/* Submit */}
-              <Pressable
-                accessibilityRole="button"
-                accessibilityState={{ disabled: !canSave }}
+              <Button
+                fullWidth
                 onPress={handleSave}
                 disabled={!canSave}
-                className={`w-full flex-row items-center justify-center gap-2 rounded-2xl bg-neutral-900 py-3.5 dark:bg-white ${canSave ? '' : 'opacity-40'}`}
+                icon={<Icon icon={isEdit ? IconCheck : IconPlus} size={18} strokeWidth={2.5} className={BUTTON_TEXT.primary} />}
               >
-                <Icon icon={isEdit ? IconCheck : IconPlus} size={16} strokeWidth={2.5} className="text-white dark:text-neutral-950" />
-                <Text className="text-[16px] font-bold text-white dark:text-neutral-950">{isEdit ? 'Save routine' : 'Add routine'}</Text>
-              </Pressable>
+                {isEdit ? 'Save routine' : 'Add routine'}
+              </Button>
 
               {isEdit && onDelete && (
                 <Button
-                  variant="dangerSecondary"
+                  variant="destructiveSecondary"
                   fullWidth
                   onPress={() => {
                     haptic('light');

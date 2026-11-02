@@ -96,6 +96,8 @@ import { storage } from '../../storage/mmkv';
 import { ErrorBoundary } from '../ErrorBoundary';
 import { Glass, isLiquidGlassSupported } from '../ui/Glass';
 import { Icon, type TablerIcon } from '../ui/Icon';
+import Button from '../ui/Button';
+import IconButton, { ICON_BUTTON_TONE } from '../ui/IconButton';
 import { Text } from '../ui/Text';
 import { SECTION_ICONS } from '../SectionIcons';
 import IOSBottomNav from './IOSBottomNav';
@@ -232,25 +234,16 @@ function IOSHeader({
   // bars do. Older systems keep the solid bar.
   const glass = isLiquidGlassSupported;
   const titleClass = 'truncate text-[16px] font-semibold leading-none text-neutral-950 dark:text-white';
-  const shapeClass = `items-center justify-center ${glass ? 'h-11 w-11 rounded-full' : 'h-10 w-10 rounded-xl'}`;
-  const buttonClass = `${shapeClass} ${glass ? 'active:bg-black/[0.06] dark:active:bg-white/[0.1]' : 'active:bg-neutral-200/70 dark:active:bg-white/[0.07]'}`;
   // On glass the icons sit on a moving backdrop, so they take full ink.
-  const iconClass = glass ? 'text-neutral-800 dark:text-neutral-100' : 'text-neutral-500 dark:text-neutral-400';
+  const iconClass = glass ? 'text-neutral-800 dark:text-neutral-100' : ICON_BUTTON_TONE.ghost;
   const page = colorScheme === 'dark' ? '#0E0E0E' : '#F3F4F1';
 
   const actionButtons = actions?.length ? (
     actions.map((action) => {
       const button = (
-        <Pressable
-          key={action.label}
-          accessibilityRole="button"
-          accessibilityLabel={action.label}
-          onPress={action.onClick}
-          hitSlop={2}
-          className={action.destructive ? `${shapeClass} active:bg-rose-500/10` : buttonClass}
-        >
-          <Icon icon={action.icon} size={21} strokeWidth={2} className={iconClass} />
-        </Pressable>
+        <IconButton key={action.label} label={action.label} variant={action.destructive ? 'destructive' : 'ghost'} size="lg" onPress={action.onClick}>
+          <Icon icon={action.icon} size={21} strokeWidth={2} className={action.destructive ? ICON_BUTTON_TONE.destructive : iconClass} />
+        </IconButton>
       );
       return action.tour ? (
         <TourTarget key={action.label} id={action.tour}>
@@ -263,14 +256,14 @@ function IOSHeader({
   ) : (
     <>
       {onNotes && (
-        <Pressable accessibilityRole="button" accessibilityLabel="Notes" onPress={onNotes} hitSlop={2} className={buttonClass}>
+        <IconButton label="Notes" variant="ghost" size="lg" onPress={onNotes}>
           <Icon icon={IconNotes} size={20} strokeWidth={2} className={iconClass} />
-        </Pressable>
+        </IconButton>
       )}
       {onSettings && (
-        <Pressable accessibilityRole="button" accessibilityLabel="Settings" onPress={onSettings} hitSlop={2} className={buttonClass}>
+        <IconButton label="Settings" variant="ghost" size="lg" onPress={onSettings}>
           <Icon icon={IconSettings} size={20} strokeWidth={2} className={iconClass} />
-        </Pressable>
+        </IconButton>
       )}
     </>
   );
@@ -349,22 +342,14 @@ function EmptyPanel({
       {(action || secondaryAction) && (
         <View className="mt-4 flex-row items-center justify-center gap-2">
           {action && (
-            <Pressable
-              accessibilityRole="button"
-              onPress={action.onClick}
-              className="h-11 items-center justify-center rounded-full bg-neutral-950 px-4 active:scale-[0.97] dark:bg-white"
-            >
-              <Text className="text-[13px] font-bold text-white dark:text-neutral-950">{action.label}</Text>
-            </Pressable>
+            <Button size="md" onPress={action.onClick}>
+              {action.label}
+            </Button>
           )}
           {secondaryAction && (
-            <Pressable
-              accessibilityRole="button"
-              onPress={secondaryAction.onClick}
-              className="h-11 items-center justify-center rounded-full border border-neutral-200 px-4 active:scale-[0.97] dark:border-white/[0.10]"
-            >
-              <Text className="text-[13px] font-bold text-neutral-600 dark:text-neutral-300">{secondaryAction.label}</Text>
-            </Pressable>
+            <Button variant="secondary" size="md" onPress={secondaryAction.onClick}>
+              {secondaryAction.label}
+            </Button>
           )}
         </View>
       )}
@@ -401,23 +386,20 @@ function ConfirmOverlay({ state, onClose }: { state: ConfirmState; onClose: () =
             </View>
           </View>
           <View className="flex-row gap-2">
-            <Pressable
-              accessibilityRole="button"
-              onPress={onClose}
-              className="h-11 flex-1 items-center justify-center rounded-full border border-neutral-200 active:bg-neutral-50 dark:border-white/[0.10] dark:active:bg-white/[0.05]"
-            >
-              <Text className="text-[14px] font-bold text-neutral-600 dark:text-neutral-300">Cancel</Text>
-            </Pressable>
-            <Pressable
-              accessibilityRole="button"
+            <Button variant="secondary" size="md" onPress={onClose} className="flex-1">
+              Cancel
+            </Button>
+            <Button
+              variant={state.destructive ? 'destructive' : 'primary'}
+              size="md"
               onPress={() => {
                 state.onConfirm();
                 onClose();
               }}
-              className={`h-11 flex-1 items-center justify-center rounded-full active:opacity-90 ${state.destructive ? 'bg-rose-600' : 'bg-neutral-950 dark:bg-white'}`}
+              className="flex-1"
             >
-              <Text className={`text-[14px] font-bold ${state.destructive ? 'text-white' : 'text-white dark:text-neutral-950'}`}>{state.confirmLabel ?? 'Confirm'}</Text>
-            </Pressable>
+              {state.confirmLabel ?? 'Confirm'}
+            </Button>
           </View>
         </View>
       </View>
@@ -1510,35 +1492,22 @@ export default function IOSScheduleApp() {
                   {weekLabel}
                 </Text>
                 <View className="shrink-0 flex-row items-center">
-                  <Pressable
-                    accessibilityRole="button"
+                  <Button
+                    variant="ghost"
+                    size="sm"
                     onPress={() => {
                       setWeekOffset(0);
                       setActiveDay(todayKey);
                     }}
-                    hitSlop={8}
-                    className="min-h-[44px] justify-center px-1"
                   >
-                    <Text className="text-[14px] font-bold text-emerald-600 dark:text-emerald-400">Today</Text>
-                  </Pressable>
-                  <Pressable
-                    accessibilityRole="button"
-                    accessibilityLabel="Previous week"
-                    onPress={() => setWeekOffset((offset) => offset - 1)}
-                    hitSlop={6}
-                    className="h-8 w-8 items-center justify-center rounded-full active:bg-neutral-100 dark:active:bg-white/[0.07]"
-                  >
-                    <Icon icon={IconChevronLeft} size={16} strokeWidth={2} className="text-neutral-500 dark:text-neutral-400" />
-                  </Pressable>
-                  <Pressable
-                    accessibilityRole="button"
-                    accessibilityLabel="Next week"
-                    onPress={() => setWeekOffset((offset) => offset + 1)}
-                    hitSlop={6}
-                    className="h-8 w-8 items-center justify-center rounded-full active:bg-neutral-100 dark:active:bg-white/[0.07]"
-                  >
-                    <Icon icon={IconChevronRight} size={16} strokeWidth={2} className="text-neutral-500 dark:text-neutral-400" />
-                  </Pressable>
+                    Today
+                  </Button>
+                  <IconButton label="Previous week" variant="ghost" size="md" onPress={() => setWeekOffset((offset) => offset - 1)}>
+                    <Icon icon={IconChevronLeft} size={18} strokeWidth={2} className={ICON_BUTTON_TONE.ghost} />
+                  </IconButton>
+                  <IconButton label="Next week" variant="ghost" size="md" onPress={() => setWeekOffset((offset) => offset + 1)}>
+                    <Icon icon={IconChevronRight} size={18} strokeWidth={2} className={ICON_BUTTON_TONE.ghost} />
+                  </IconButton>
                 </View>
               </View>
               <View className="flex-row px-2">
@@ -1587,17 +1556,16 @@ export default function IOSScheduleApp() {
               </View>
               <View className="flex-row items-center gap-2">
                 {todayEditMode && (
-                  <Pressable
-                    accessibilityRole="button"
-                    accessibilityLabel="Lock screen wallpaper"
+                  <IconButton
+                    label="Lock screen wallpaper"
+                    size="lg"
                     onPress={() => {
                       haptic('light');
                       setWallpaperOpen(true);
                     }}
-                    className="h-12 w-12 items-center justify-center rounded-full bg-neutral-100 active:scale-[0.96] dark:bg-white/[0.08]"
                   >
-                    <Icon icon={IconPhoto} size={24} strokeWidth={2} className="text-neutral-600 dark:text-neutral-300" />
-                  </Pressable>
+                    <Icon icon={IconPhoto} size={21} strokeWidth={2} className={ICON_BUTTON_TONE.secondary} />
+                  </IconButton>
                 )}
               </View>
             </View>

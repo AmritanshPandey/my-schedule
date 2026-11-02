@@ -1,5 +1,5 @@
 import { useCallback, useState } from 'react';
-import { Pressable, View } from 'react-native';
+import { View } from 'react-native';
 import { IconCloudUp, IconX } from '@tabler/icons-react-native';
 import { useAuth } from '../../contexts/AuthProvider';
 import { useGoogleSignIn } from './useGoogleSignIn';
@@ -8,6 +8,8 @@ import { haptic } from '../../lib/haptics';
 import { storage } from '../../storage/mmkv';
 import { Icon } from '../ui/Icon';
 import { Text } from '../ui/Text';
+import Button from '../ui/Button';
+import IconButton, { ICON_BUTTON_TONE } from '../ui/IconButton';
 
 const DISMISS_KEY = 'planr-signin-prompt-dismissed';
 
@@ -41,14 +43,9 @@ export default function SignInPrompt({ className = '' }: { className?: string })
 
   return (
     <View className={`relative overflow-hidden rounded-2xl border border-neutral-200 bg-white px-4 py-3.5 dark:border-white/[0.08] dark:bg-white/[0.03] ${className}`}>
-      <Pressable
-        accessibilityRole="button"
-        accessibilityLabel="Dismiss"
-        onPress={dismiss}
-        className="absolute right-2 top-2 z-10 h-7 w-7 items-center justify-center rounded-full active:bg-neutral-100 dark:active:bg-white/[0.06]"
-      >
-        <Icon icon={IconX} size={15} strokeWidth={2} className="text-neutral-500 dark:text-neutral-400" />
-      </Pressable>
+      <IconButton label="Dismiss" variant="ghost" size="sm" onPress={dismiss} className="absolute right-2 top-2 z-10">
+        <Icon icon={IconX} size={16} strokeWidth={2} className={ICON_BUTTON_TONE.ghost} />
+      </IconButton>
       <View className="flex-row items-start gap-3 pr-6">
         <View className="h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-emerald-500/12">
           <Icon icon={IconCloudUp} size={18} strokeWidth={2} className="text-emerald-600 dark:text-emerald-400" />
@@ -58,19 +55,17 @@ export default function SignInPrompt({ className = '' }: { className?: string })
           <Text className="mt-0.5 text-[12px] leading-snug text-neutral-500 dark:text-neutral-400">
             Sign in to sync across devices and never lose your progress.
           </Text>
-          <Pressable
-            accessibilityRole="button"
-            disabled={signingIn}
+          <Button
+            size="sm"
+            loading={signingIn}
             onPress={() => {
               haptic('light');
               void signIn();
             }}
-            className={`mt-2.5 h-9 flex-row items-center gap-2 self-start rounded-full bg-neutral-950 px-4 active:bg-neutral-800 dark:bg-white dark:active:bg-neutral-200 ${
-              signingIn ? 'opacity-60' : ''
-            }`}
+            className="mt-2.5 self-start"
           >
-            <Text className="text-[13px] font-bold text-white dark:text-neutral-950">{signingIn ? 'Signing in…' : 'Continue with Google'}</Text>
-          </Pressable>
+            {signingIn ? 'Signing in…' : 'Continue with Google'}
+          </Button>
           <AuthErrorNote message={error} className="text-[11px]" />
         </View>
       </View>

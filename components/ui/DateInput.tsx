@@ -5,6 +5,7 @@ import { createPortal } from "react-dom";
 import { IconCalendar, IconChevronLeft, IconChevronRight } from "@tabler/icons-react";
 import { localISODate, todayISO } from "@/lib/dateUtils";
 import { FORM_CONTROL_CHROME } from "@/components/ui/Input";
+import Button from "@/components/ui/Button";
 
 /**
  * The one date field — same "YYYY-MM-DD" | "" value as `<input type="date">`.
@@ -382,22 +383,13 @@ export function Calendar({ value, onSelect, min, max, clearable }: CalendarProps
       </div>
 
       <div className="mt-2 flex items-center justify-between border-t border-neutral-200/70 pt-2 dark:border-white/[0.07]">
-        <button
-          type="button"
-          disabled={!inRange(today)}
-          onClick={() => onSelect(today)}
-          className="h-9 rounded-full px-3 text-[13px] font-semibold text-neutral-800 transition-colors hover:bg-neutral-100 disabled:opacity-40 dark:text-neutral-100 dark:hover:bg-white/[0.07]"
-        >
+        <Button variant="secondary" size="sm" disabled={!inRange(today)} onClick={() => onSelect(today)}>
           Today
-        </button>
+        </Button>
         {clearable && value && (
-          <button
-            type="button"
-            onClick={() => onSelect("")}
-            className="h-9 rounded-full px-3 text-[13px] font-semibold text-neutral-500 transition-colors hover:bg-neutral-100 hover:text-neutral-800 dark:text-neutral-400 dark:hover:bg-white/[0.07] dark:hover:text-white"
-          >
+          <Button variant="ghost" size="sm" onClick={() => onSelect("")}>
             Clear
-          </button>
+          </Button>
         )}
       </div>
     </div>

@@ -15,6 +15,7 @@ import GoalPaceCard from "@/components/overview/GoalPaceCard";
 import DaySpreadCard from "@/components/overview/DaySpreadCard";
 import { buildDaySpread } from "@/lib/daySpread";
 import type { InsightToast } from "@/components/intelligence/InsightsCard";
+import Button from "@/components/ui/Button";
 
 const InsightsCard = dynamic(() => import("@/components/intelligence/InsightsCard"), { ssr: false });
 const CheckInsDueCard = dynamic(() => import("@/components/tracking/CheckInsDueCard"), { ssr: false });
@@ -157,20 +158,12 @@ export default function IOSOverview({
             })}
           </ol>
           <div className="mt-3 flex items-center gap-2">
-            <button
-              type="button"
-              onClick={() => { haptic("light"); onNavigate(setup.next.tab); }}
-              className="flex min-h-[44px] flex-1 items-center justify-center rounded-full bg-[#008236] text-[14px] font-bold text-white active:scale-[0.98] active:bg-[#006B2C] dark:bg-[#2FD46E] dark:text-neutral-950"
-            >
+            <Button size="md" onClick={() => { haptic("light"); onNavigate(setup.next.tab); }} className="flex-1">
               {setup.next.cta}
-            </button>
-            <button
-              type="button"
-              onClick={() => { haptic("light"); onDismissSetup(); }}
-              className="flex min-h-[44px] items-center justify-center rounded-full px-3 text-[13px] font-semibold text-neutral-600 active:text-neutral-950 dark:text-neutral-400 dark:active:text-white"
-            >
+            </Button>
+            <Button variant="ghost" size="md" onClick={() => { haptic("light"); onDismissSetup(); }}>
               I&apos;ll do this later
-            </button>
+            </Button>
           </div>
         </section>
       )}

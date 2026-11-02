@@ -1050,20 +1050,12 @@ export default function PlanDetailView({
                 onChange={(cadence) => setEditTrackerDraft((d) => ({ ...d, cadence }))}
               />
               <div className="flex gap-2 pt-1">
-                <button
-                  type="button"
-                  onClick={() => handleSaveEditTracker(tracker.id)}
-                  className="inline-flex flex-1 h-9 items-center justify-center gap-1 rounded-xl bg-neutral-950 text-[13px] font-semibold text-white dark:bg-white dark:text-neutral-950"
-                >
-                  <IconCheck size={16} /> Save
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setEditingTrackerId(null)}
-                  className="inline-flex h-9 px-4 items-center gap-1 rounded-xl border border-neutral-200 text-[13px] font-medium text-neutral-500 dark:border-white/10 dark:text-neutral-400"
-                >
+                <Button size="sm" onClick={() => handleSaveEditTracker(tracker.id)} icon={<IconCheck size={15} />} className="flex-1">
+                  Save
+                </Button>
+                <Button variant="secondary" size="sm" onClick={() => setEditingTrackerId(null)}>
                   Cancel
-                </button>
+                </Button>
               </div>
             </div>
           ) : (
@@ -1103,9 +1095,8 @@ export default function PlanDetailView({
                   </button>
                   <IconButton
                     label="Delete tracker"
-                    variant="dangerGhost"
-                    size="xs"
-                    radius="lg"
+                    variant="destructive"
+                    size="sm"
                     onClick={() => onDeleteTracker(tracker.id)}
                   >
                     <IconTrash size={16} strokeWidth={2} />
@@ -1235,9 +1226,8 @@ export default function PlanDetailView({
                         </span>
                         <IconButton
                           label="Delete entry"
-                          variant="dangerGhost"
-                          size="xxs"
-                          radius="lg"
+                          variant="destructive"
+                          size="xs"
                           onClick={() => onDeleteEntry(entry.id)}
                         >
                           <IconTrash size={14} strokeWidth={1.5} />
@@ -1427,7 +1417,7 @@ export default function PlanDetailView({
       <div className="flex shrink-0 flex-col gap-0.5">
         <IconButton
           label={`Move "${m.title}" earlier`}
-          size="xxs"
+          size="xs"
           variant="ghost"
           disabled={isFirst}
           onClick={() => { haptic("light"); onMoveMilestone(m.id, "up"); }}
@@ -1436,7 +1426,7 @@ export default function PlanDetailView({
         </IconButton>
         <IconButton
           label={`Move "${m.title}" later`}
-          size="xxs"
+          size="xs"
           variant="ghost"
           disabled={isLast}
           onClick={() => { haptic("light"); onMoveMilestone(m.id, "down"); }}
@@ -1548,19 +1538,16 @@ export default function PlanDetailView({
       >
         {/* Auto-generate button + skill badge */}
             <div className="shrink-0 flex items-center gap-2 px-4 pt-4 pb-3">
-              <button
-                type="button"
+              <Button
+                variant="secondary"
+                size="md"
                 onClick={handleAutoGenerateMilestones}
-                disabled={milestonesGenerating || coachStreaming}
-                className="group relative inline-flex rounded-full border border-neutral-200 bg-white transition-colors hover:bg-neutral-50 active:scale-95 disabled:opacity-60 dark:border-white/[0.10] dark:bg-neutral-950 dark:hover:bg-white/[0.06]"
+                disabled={coachStreaming}
+                loading={milestonesGenerating}
+                icon={<IconSparkles size={16} strokeWidth={2} />}
               >
-                <span className="relative inline-flex items-center gap-2 overflow-hidden rounded-full px-3 py-2 text-[12px] font-semibold text-neutral-950 transition-colors duration-200 dark:text-white">
-                  <span className="inline-flex h-8 w-8 items-center justify-center rounded-full bg-neutral-900 text-white dark:bg-white dark:text-neutral-950">
-                    <IconSparkles size={14} strokeWidth={2} className={milestonesGenerating ? "animate-pulse" : ""} />
-                  </span>
-                  {milestonesGenerating ? "Generating…" : "Auto-generate milestones"}
-                </span>
-              </button>
+                {milestonesGenerating ? "Generating…" : "Auto-generate milestones"}
+              </Button>
               {(() => {
                 const skill = detectCoachSkill(plan);
                 return skill ? (
@@ -1742,13 +1729,9 @@ export default function PlanDetailView({
                           );
                         })}
                         {msg.suggestedMilestones.filter((_, i) => !acceptedMilestoneIds.has(`${msgIdx}-${i}`)).length > 1 && (
-                          <button
-                            type="button"
-                            onClick={() => handleAcceptAllMilestones(msgIdx, msg.suggestedMilestones!)}
-                            className="mt-2 w-full rounded-xl bg-neutral-900 py-2 text-[13px] font-semibold text-white dark:bg-white dark:text-neutral-900"
-                          >
+                          <Button size="sm" fullWidth onClick={() => handleAcceptAllMilestones(msgIdx, msg.suggestedMilestones!)} className="mt-2">
                             Add all remaining milestones
-                          </button>
+                          </Button>
                         )}
                       </div>
                     )}
@@ -1779,14 +1762,9 @@ export default function PlanDetailView({
                   </div>
                   <div className="space-y-2">
                     {!milestoneTasksAdded && (
-                      <button
-                        type="button"
-                        onClick={() => setMilestoneGenSheetOpen(true)}
-                        className="flex w-full items-center justify-center gap-1.5 rounded-xl bg-green-700 py-2.5 text-[13px] font-semibold text-white transition-all hover:bg-green-800 active:scale-[0.98]"
-                      >
-                        <IconBolt size={14} strokeWidth={2.2} aria-hidden="true" />
+                      <Button variant="cta" size="md" fullWidth onClick={() => setMilestoneGenSheetOpen(true)} icon={<IconBolt size={16} strokeWidth={2.2} aria-hidden="true" />}>
                         Generate tasks for this milestone
-                      </button>
+                      </Button>
                     )}
                     {milestoneTasksAdded && (
                       <div className="flex items-center gap-2 rounded-xl bg-emerald-50 px-3 py-2.5 dark:bg-emerald-500/[0.08]">
@@ -1795,8 +1773,10 @@ export default function PlanDetailView({
                       </div>
                     )}
                     {postMilestoneTrackerSuggestion && !milestoneTrackerAdded && (
-                      <button
-                        type="button"
+                      <Button
+                        variant="secondary"
+                        size="md"
+                        fullWidth
                         onClick={() => {
                           if (!postMilestoneTrackerSuggestion || !postMilestoneContext) return;
                           const trackerId = uid();
@@ -1805,16 +1785,15 @@ export default function PlanDetailView({
                           onLinkTrackerToMilestone?.(postMilestoneContext.milestoneId, trackerId);
                           setMilestoneTrackerAdded(true);
                         }}
-                        className="flex w-full items-center justify-center gap-1.5 rounded-xl border border-neutral-200/70 py-2.5 text-[13px] font-semibold text-neutral-700 transition-colors hover:bg-neutral-100 active:bg-neutral-100 dark:border-white/[0.07] dark:text-neutral-300 dark:hover:bg-white/[0.08]"
-                      >
-                        <IconChartLine size={14} strokeWidth={2.2} className="shrink-0" aria-hidden="true" />
-                        Add tracker: {postMilestoneContext.title} ({postMilestoneTrackerSuggestion.unit})
-                        {postMilestoneTrackerSuggestion.goalDirection === "decrease_good" ? (
-                          <IconArrowDown size={13} strokeWidth={2.5} className="shrink-0" aria-hidden="true" />
+                        icon={<IconChartLine size={16} strokeWidth={2.2} aria-hidden="true" />}
+                        trailingIcon={postMilestoneTrackerSuggestion.goalDirection === "decrease_good" ? (
+                          <IconArrowDown size={15} strokeWidth={2.5} aria-hidden="true" />
                         ) : (
-                          <IconArrowUp size={13} strokeWidth={2.5} className="shrink-0" aria-hidden="true" />
+                          <IconArrowUp size={15} strokeWidth={2.5} aria-hidden="true" />
                         )}
-                      </button>
+                      >
+                        Add tracker: {postMilestoneContext.title} ({postMilestoneTrackerSuggestion.unit})
+                      </Button>
                     )}
                     {postMilestoneTrackerSuggestion && milestoneTrackerAdded && (
                       <div className="flex items-center gap-2 rounded-xl bg-emerald-50 px-3 py-2.5 dark:bg-emerald-500/[0.08]">
@@ -1857,24 +1836,13 @@ export default function PlanDetailView({
                   style={{ minHeight: "44px", maxHeight: "120px" }}
                 />
                 {coachStreaming ? (
-                  <m.button
-                    type="button"
-                    whileTap={{ scale: 0.9 }}
-                    onClick={() => coachAbortRef.current?.abort()}
-                    className="flex h-[44px] w-[44px] shrink-0 items-center justify-center rounded-xl bg-neutral-200 text-neutral-700 transition-colors hover:bg-neutral-300 dark:bg-white/[0.1] dark:text-neutral-300 dark:hover:bg-white/[0.15]"
-                  >
-                    <IconPlayerStop size={16} strokeWidth={1.5} />
-                  </m.button>
+                  <IconButton label="Stop" size="lg" onClick={() => coachAbortRef.current?.abort()}>
+                    <IconPlayerStop size={20} strokeWidth={2} />
+                  </IconButton>
                 ) : (
-                  <m.button
-                    type="button"
-                    whileTap={{ scale: 0.9 }}
-                    onClick={handleSendCoachMessage}
-                    disabled={!coachInput.trim()}
-                    className="flex h-[44px] w-[44px] shrink-0 items-center justify-center rounded-xl bg-neutral-900 text-white transition-opacity disabled:opacity-40 dark:bg-white dark:text-neutral-900"
-                  >
-                    <IconSend size={17} strokeWidth={2} />
-                  </m.button>
+                  <IconButton label="Send" variant="primary" size="lg" onClick={handleSendCoachMessage} disabled={!coachInput.trim()}>
+                    <IconSend size={20} strokeWidth={2} />
+                  </IconButton>
                 )}
               </div>
             </div>
@@ -2007,14 +1975,15 @@ export default function PlanDetailView({
                   <p className="text-[14px] font-medium text-neutral-500 dark:text-neutral-400">
                     No progress trackers yet.
                   </p>
-                  <button
-                    type="button"
+                  <Button
+                    variant="secondary"
+                    size="md"
                     onClick={() => setAddingTracker(true)}
-                    className="mt-3 inline-flex items-center gap-1.5 rounded-xl border border-neutral-200 px-4 py-2 text-[13px] font-semibold text-neutral-600 hover:bg-neutral-50 dark:border-white/10 dark:text-neutral-400 dark:hover:bg-white/[0.04] transition-colors"
+                    icon={<IconPlus size={16} strokeWidth={2.5} />}
+                    className="mt-3"
                   >
-                    <IconPlus size={16} strokeWidth={2} />
                     Create tracker
-                  </button>
+                  </Button>
                 </div>
               ) : (
                 <>
@@ -2075,14 +2044,15 @@ export default function PlanDetailView({
               <p className="mx-auto max-w-[220px] text-[14px] font-medium text-neutral-500 dark:text-neutral-400">
                 Add milestones to track your progress journey.
               </p>
-              <button
-                type="button"
+              <Button
+                variant="secondary"
+                size="md"
                 onClick={openAddMilestone}
-                className="mt-3 inline-flex items-center gap-1.5 rounded-xl border border-neutral-200 px-4 py-2 text-[13px] font-semibold text-neutral-600 transition-colors hover:bg-neutral-50 dark:border-white/10 dark:text-neutral-400 dark:hover:bg-white/[0.04]"
+                icon={<IconPlus size={16} strokeWidth={2.5} />}
+                className="mt-3"
               >
-                <IconPlus size={16} strokeWidth={1.5} />
                 Add first milestone
-              </button>
+              </Button>
             </div>
           ) : (
             <div role="list">
@@ -2121,14 +2091,12 @@ export default function PlanDetailView({
             {onTogglePlanPaused && (
               <IconButton
                 label={running ? "Pause plan" : "Resume plan"}
-                variant="ghost"
+                variant="secondary"
                 size="md"
-                radius="xl"
                 onClick={() => { haptic("light"); onTogglePlanPaused(plan.id); }}
                 title={running
                   ? "Pause — its tasks stop being expected, and nothing is marked missed"
                   : "Resume — put this plan back into normal execution"}
-                className="h-10 w-10 border border-neutral-200 dark:border-white/10"
               >
                 {running
                   ? <IconPlayerPause size={18} strokeWidth={1.9} />
@@ -2138,12 +2106,10 @@ export default function PlanDetailView({
             {onEditPlan && (
               <IconButton
                 label="Edit plan"
-                variant="ghost"
+                variant="secondary"
                 size="md"
-                radius="xl"
                 onClick={() => { haptic("light"); onEditPlan(plan.id); }}
                 title="Edit plan"
-                className="h-10 w-10 border border-neutral-200 dark:border-white/10"
               >
                 <IconEdit size={18} strokeWidth={1.9} />
               </IconButton>
@@ -2151,12 +2117,10 @@ export default function PlanDetailView({
             {onDeletePlan && (
               <IconButton
                 label="Delete plan"
-                variant="dangerGhost"
+                variant="destructive"
                 size="md"
-                radius="xl"
                 onClick={() => { haptic("light"); onDeletePlan(plan.id); }}
                 title="Delete plan"
-                className="h-10 w-10 border border-neutral-200 dark:border-white/10"
               >
                 <IconTrash size={18} strokeWidth={1.9} />
               </IconButton>
@@ -2788,40 +2752,34 @@ export default function PlanDetailView({
 
               {/* Mark Done — any non-completed milestone */}
               {!isCompleted && (
-                <button
-                  type="button"
+                <Button
+                  variant="cta"
+                  fullWidth
+                  icon={<IconCheck size={18} strokeWidth={2.5} />}
                   onClick={() => { onCompleteMilestone(m.id); setViewingMilestone(null); }}
-                  className={`mb-3 flex w-full items-center justify-center gap-2 rounded-2xl py-3.5 text-[16px] font-semibold text-white transition-colors ${
-                    readyToComplete
-                      ? "bg-emerald-600 ring-2 ring-emerald-300 hover:bg-emerald-700 dark:ring-emerald-500/40"
-                      : "bg-green-600 hover:bg-green-700"
-                  }`}
+                  className="mb-3"
                 >
-                  <IconCheck size={16} strokeWidth={2.5} />
-                  Mark as Done
-                </button>
+                  Mark as done
+                </Button>
               )}
 
               {/* Edit + Delete */}
               <div className="flex gap-3">
-                <IconButton
-                  label="Delete milestone"
-                  variant="dangerGhost"
-                  size="md"
-                  radius="xl"
+                <Button
+                  variant="destructiveSecondary"
+                  icon={<IconTrash size={18} strokeWidth={2} />}
                   onClick={() => { onDeleteMilestone(m.id); setViewingMilestone(null); }}
-                  className="h-12 w-12 rounded-2xl border border-neutral-200 dark:border-white/10"
                 >
-                  <IconTrash size={18} strokeWidth={1.8} />
-                </IconButton>
-                <button
-                  type="button"
+                  Delete
+                </Button>
+                <Button
+                  variant="primary"
+                  icon={<IconEdit size={18} strokeWidth={2} />}
                   onClick={() => { setViewingMilestone(null); openEditMilestone(m); }}
-                  className="flex h-12 flex-1 items-center justify-center gap-2 rounded-2xl bg-neutral-900 text-[16px] font-semibold text-white dark:bg-white dark:text-neutral-900"
+                  className="flex-1"
                 >
-                  <IconEdit size={16} strokeWidth={2} />
                   Edit milestone
-                </button>
+                </Button>
               </div>
             </div>
           );
@@ -2894,9 +2852,8 @@ export default function PlanDetailView({
                         </span>
                         <IconButton
                           label={`Delete ${formatDisplayTime(slot.startTime)} time block`}
-                          variant="dangerGhost"
-                          size="xs"
-                          radius="xl"
+                          variant="destructive"
+                          size="sm"
                           onClick={() => {
                             onDeleteTaskSlot(task, sourceDay, slotIndex);
                             setViewingTask(null);
@@ -2947,30 +2904,27 @@ export default function PlanDetailView({
 
               {/* Actions */}
               <div className="flex gap-3">
-                <IconButton
-                  label="Delete task"
-                  variant="dangerGhost"
-                  size="md"
-                  radius="xl"
+                <Button
+                  variant="destructiveSecondary"
+                  icon={<IconTrash size={18} strokeWidth={2} />}
                   onClick={() => {
                     onDeleteLinkedTask(task, taskDays);
                     setViewingTask(null);
                   }}
-                  className="h-12 w-12 rounded-2xl border border-neutral-200 dark:border-white/10"
                 >
-                  <IconTrash size={18} strokeWidth={1.8} />
-                </IconButton>
-                <button
-                  type="button"
+                  Delete
+                </Button>
+                <Button
+                  variant="primary"
+                  icon={<IconEdit size={18} strokeWidth={2} />}
                   onClick={() => {
                     onEditTask(task);
                     setViewingTask(null);
                   }}
-                  className="flex h-12 flex-1 items-center justify-center gap-2 rounded-2xl bg-neutral-900 text-[16px] font-semibold text-white dark:bg-white dark:text-neutral-900"
+                  className="flex-1"
                 >
-                  <IconEdit size={16} strokeWidth={2} />
                   Edit task
-                </button>
+                </Button>
               </div>
             </div>
           );

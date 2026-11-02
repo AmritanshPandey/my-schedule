@@ -21,6 +21,7 @@ import BottomSheet from './ui/BottomSheet';
 import { typography } from './ui/Typography';
 import { Icon, type TablerIcon } from './ui/Icon';
 import { Text } from './ui/Text';
+import IconButton, { ICON_BUTTON_TONE } from './ui/IconButton';
 
 // ── Icon map (mirrors SectionIcons) ──────────────────────────────────────────
 
@@ -132,14 +133,9 @@ function TemplatesSheetInner({ open, onClose, onApply }: TemplatesSheetProps) {
             </Text>
             <Text className="mt-0.5 text-[13px] text-neutral-500 dark:text-neutral-400">Pick a template to create a plan with tasks and milestones already set up.</Text>
           </View>
-          <Pressable
-            accessibilityRole="button"
-            accessibilityLabel="Close"
-            onPress={onClose}
-            className="ml-3 mt-0.5 h-8 w-8 shrink-0 items-center justify-center rounded-full bg-neutral-100 active:bg-neutral-200 dark:bg-white/[0.07] dark:active:bg-white/[0.12]"
-          >
-            <Icon icon={IconX} size={15} strokeWidth={2.5} className="text-neutral-500 dark:text-neutral-400" />
-          </Pressable>
+          <IconButton label="Close" size="sm" onPress={onClose} className="ml-3 mt-0.5">
+            <Icon icon={IconX} size={16} strokeWidth={2.5} className={ICON_BUTTON_TONE.secondary} />
+          </IconButton>
         </View>
 
         {/* Cards */}

@@ -16,6 +16,7 @@ import { typography } from '../ui/Typography';
 import { Icon } from '../ui/Icon';
 import { Text } from '../ui/Text';
 import { PLAN_TITLE_MAX, DurationPresets, iconPickerClass } from './planFormShared';
+import IconButton, { ICON_BUTTON_TONE } from '../ui/IconButton';
 
 type SetScheduleFn = (updater: (prev: Schedule) => Schedule) => void;
 
@@ -217,14 +218,9 @@ export default function AddPlanSheet({ open, onClose, setSchedule, goals = [] }:
             <View className="flex-1">
               <Input value={metaInput} onChangeText={setMetaInput} onSubmitEditing={addMetaField} placeholder="Metric name…" accessibilityLabel="Metric name" />
             </View>
-            <Pressable
-              accessibilityRole="button"
-              accessibilityLabel="Add tracker"
-              onPress={addMetaField}
-              className="h-11 w-11 shrink-0 items-center justify-center rounded-xl border border-neutral-200 active:bg-neutral-100 dark:border-white/10 dark:active:bg-white/[0.07]"
-            >
-              <Icon icon={IconPlus} size={16} className="text-neutral-500 dark:text-neutral-400" />
-            </Pressable>
+            <IconButton label="Add tracker" size="lg" onPress={addMetaField}>
+              <Icon icon={IconPlus} size={20} strokeWidth={2.4} className={ICON_BUTTON_TONE.secondary} />
+            </IconButton>
           </View>
           {metaFields.length > 0 && (
             <View className="mt-2 flex-row flex-wrap gap-1.5">

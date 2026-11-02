@@ -1,4 +1,4 @@
-import { Pressable, View } from 'react-native';
+import { View } from 'react-native';
 import { useColorScheme } from 'nativewind';
 import { IconCalendarPlus, IconCheck, IconChevronRight, IconCircleCheck, IconFlame } from '@tabler/icons-react-native';
 import { formatMinutesBrief, type NextUp } from '@planr/core/lib/overview';
@@ -7,6 +7,7 @@ import { haptic } from '../../lib/haptics';
 import ProgressBar from '../ui/ProgressBar';
 import { Icon } from '../ui/Icon';
 import { Text } from '../ui/Text';
+import Button, { BUTTON_TEXT } from '../ui/Button';
 
 /**
  * Native port of components/overview/NextUpCard.tsx (the phone hero) — the
@@ -65,12 +66,6 @@ export default function NextUpCard({
     onOpenToday();
   };
 
-  const primary =
-    'h-12 min-w-0 flex-1 flex-row items-center justify-center gap-2 rounded-full bg-[#008236] px-5 active:scale-[0.98] active:bg-[#006B2C] dark:bg-[#2FD46E] dark:active:bg-[#25B85D]';
-  const primaryText = 'text-[15px] font-bold text-white dark:text-neutral-950';
-  const secondary =
-    'h-12 flex-row items-center justify-center gap-1.5 rounded-full bg-neutral-100 px-5 active:scale-[0.98] active:bg-neutral-200 dark:bg-white/10 dark:active:bg-white/15';
-  const secondaryText = 'text-[15px] font-semibold text-neutral-900 dark:text-white';
 
   return (
     <View
@@ -147,34 +142,45 @@ export default function NextUpCard({
       <View className="mt-5 flex-row items-center gap-2">
         {next.kind === 'task' ? (
           <>
-            <Pressable
-              accessibilityRole="button"
+            <Button
+              variant="cta"
               accessibilityLabel={`Mark ${next.task.title} done`}
               onPress={() => {
                 haptic('medium');
                 if (next.slotIndex !== undefined) onToggleSlot(next.task.id, next.slotIndex);
                 else onMarkDone(next.task.id, next.checkableIds);
               }}
-              className={primary}
+              icon={<Icon icon={IconCheck} size={18} strokeWidth={3} className={BUTTON_TEXT.cta} />}
+              className="min-w-0 flex-1"
             >
-              <Icon icon={IconCheck} size={18} strokeWidth={3} className="text-white dark:text-neutral-950" />
-              <Text className={primaryText}>Mark done</Text>
-            </Pressable>
-            <Pressable accessibilityRole="button" accessibilityLabel="Open Today" onPress={openToday} className={secondary}>
-              <Text className={secondaryText}>Today</Text>
-              <Icon icon={IconChevronRight} size={16} strokeWidth={2.4} className="text-neutral-900 dark:text-white" />
-            </Pressable>
+              Mark done
+            </Button>
+            <Button
+              variant="secondary"
+              accessibilityLabel="Open Today"
+              onPress={openToday}
+              trailingIcon={<Icon icon={IconChevronRight} size={18} strokeWidth={2.4} className={BUTTON_TEXT.secondary} />}
+            >
+              Today
+            </Button>
           </>
         ) : next.kind === 'empty' ? (
-          <Pressable accessibilityRole="button" onPress={openToday} className={primary}>
-            <Icon icon={IconCalendarPlus} size={18} strokeWidth={2.4} className="text-white dark:text-neutral-950" />
-            <Text className={primaryText}>Add a task</Text>
-          </Pressable>
+          <Button
+            variant="cta"
+            onPress={openToday}
+            icon={<Icon icon={IconCalendarPlus} size={18} strokeWidth={2.4} className={BUTTON_TEXT.cta} />}
+            className="min-w-0 flex-1"
+          >
+            Add a task
+          </Button>
         ) : (
-          <Pressable accessibilityRole="button" onPress={openToday} className={secondary}>
-            <Text className={secondaryText}>Open Today</Text>
-            <Icon icon={IconChevronRight} size={16} strokeWidth={2.4} className="text-neutral-900 dark:text-white" />
-          </Pressable>
+          <Button
+            variant="secondary"
+            onPress={openToday}
+            trailingIcon={<Icon icon={IconChevronRight} size={18} strokeWidth={2.4} className={BUTTON_TEXT.secondary} />}
+          >
+            Open Today
+          </Button>
         )}
       </View>
     </View>

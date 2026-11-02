@@ -8,6 +8,8 @@ import { useAIEnabled } from "@/lib/ai/useAIEnabled";
 import { useAIReady } from "@/lib/ai/useAIReady";
 import { getAIProviderState } from "@/lib/ai/config";
 import { preloadBrowserModel } from "@/lib/ai/providers/browser";
+import Button from "@/components/ui/Button";
+import IconButton from "@/components/ui/IconButton";
 
 /**
  * One-time notice that AI is on by default and where the off switch is.
@@ -91,14 +93,9 @@ export default function AIOnboarding({ onOpenAISettings }: { onOpenAISettings: (
           >
             <div className="m-3 overflow-hidden rounded-2xl border border-neutral-200 bg-white dark:border-white/[0.08] dark:bg-neutral-900">
               <div className="flex justify-end px-5 pt-5">
-                <button
-                  type="button"
-                  onClick={dismiss}
-                  aria-label="Dismiss"
-                  className="flex h-7 w-7 items-center justify-center rounded-full bg-neutral-100 text-neutral-500 hover:bg-neutral-200 dark:bg-white/[0.08] dark:text-neutral-400"
-                >
-                  <IconX size={14} strokeWidth={2} />
-                </button>
+                <IconButton label="Dismiss" size="sm" onClick={dismiss}>
+                  <IconX size={16} strokeWidth={2} />
+                </IconButton>
               </div>
 
               <div className="flex justify-center px-5 pt-2 pb-5">
@@ -136,21 +133,13 @@ export default function AIOnboarding({ onOpenAISettings }: { onOpenAISettings: (
 
               <div className="px-5 pb-6">
                 {ready.state === "needs-download" ? (
-                  <button
-                    type="button"
-                    onClick={handleDownload}
-                    className="flex w-full items-center justify-center gap-2.5 rounded-full bg-neutral-900 py-4 text-[16px] font-bold text-white transition-colors dark:bg-white dark:text-neutral-900"
-                  >
+                  <Button fullWidth onClick={handleDownload}>
                     Download now ({ready.downloadLabel})
-                  </button>
+                  </Button>
                 ) : (
-                  <button
-                    type="button"
-                    onClick={dismiss}
-                    className="flex w-full items-center justify-center gap-2.5 rounded-full bg-neutral-900 py-4 text-[16px] font-bold text-white transition-colors dark:bg-white dark:text-neutral-900"
-                  >
+                  <Button fullWidth onClick={dismiss} loading={ready.state === "downloading"}>
                     {ready.state === "downloading" ? `Downloading… ${ready.progress ?? 0}%` : "Got it"}
-                  </button>
+                  </Button>
                 )}
                 <button
                   type="button"

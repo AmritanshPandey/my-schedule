@@ -73,6 +73,7 @@ import { Text, TextInput, type TextInputRef } from '../ui/Text';
 import { SECTION_ICONS } from '../SectionIcons';
 import NoteMarkdown from './NoteMarkdown';
 import TaskLinkPicker from './TaskLinkPicker';
+import Button, { BUTTON_TEXT } from '../ui/Button';
 
 type NotePatch = Partial<Pick<Note, 'title' | 'body' | 'pinned' | 'tags' | 'linkedTaskIds' | 'linkedPlanIds'>>;
 type CreateTaskFromNoteInput = { title: string; noteId: string; day: DayKey; planId?: string };
@@ -493,23 +494,22 @@ export default function NoteEditor({ note, onUpdate, onDelete, onBack, tasks, pl
 
           <View className="shrink-0 flex-row items-center gap-0.5">
             <SaveBadge state={saveState} />
-            <IconButton label="Share note" variant="ghost" size="md" radius="xl" onPress={() => void shareNote()}>
+            <IconButton label="Share note" variant="ghost" size="md" onPress={() => void shareNote()}>
               <Icon icon={IconShare2} size={16} strokeWidth={2} className={ICON_BUTTON_TONE.ghost} />
             </IconButton>
-            <IconButton label={note.pinned ? 'Unpin note' : 'Pin note'} variant="ghost" size="md" radius="xl" onPress={togglePin}>
+            <IconButton label={note.pinned ? 'Unpin note' : 'Pin note'} variant="ghost" size="md" onPress={togglePin}>
               <Icon icon={note.pinned ? IconPinnedFilled : IconPin} size={16} strokeWidth={2} className={note.pinned ? 'text-amber-500' : ICON_BUTTON_TONE.ghost} />
             </IconButton>
             <IconButton
               label="Delete note"
-              variant="dangerGhost"
+              variant="destructive"
               size="md"
-              radius="xl"
               onPress={() => {
                 haptic('light');
                 setConfirmDelete(true);
               }}
             >
-              <Icon icon={IconTrash} size={16} strokeWidth={2} className={ICON_BUTTON_TONE.dangerGhost} />
+              <Icon icon={IconTrash} size={16} strokeWidth={2} className={ICON_BUTTON_TONE.destructive} />
             </IconButton>
           </View>
         </View>
@@ -573,33 +573,28 @@ export default function NoteEditor({ note, onUpdate, onDelete, onBack, tasks, pl
                   <Icon icon={planIcon.get(task.planId) ?? SECTION_ICONS[0].icon} size={13} strokeWidth={2} className="shrink-0 text-neutral-500 dark:text-neutral-400" />
                   <Text className="truncate text-[13px] font-semibold text-neutral-700 dark:text-neutral-200">{task.title}</Text>
                 </Pressable>
-                <Pressable
-                  accessibilityRole="button"
-                  accessibilityLabel={`Unlink ${task.title}`}
-                  onPress={() => removeLinkedTask(task.id)}
-                  className="h-6 w-6 shrink-0 items-center justify-center rounded-full active:bg-neutral-100 dark:active:bg-white/[0.08]"
-                >
-                  <Icon icon={IconX} size={12} strokeWidth={2.4} className="text-neutral-500 dark:text-neutral-400" />
-                </Pressable>
+                <IconButton label={`Unlink ${task.title}`} variant="ghost" size="xs" onPress={() => removeLinkedTask(task.id)}>
+                  <Icon icon={IconX} size={14} strokeWidth={2.4} className={ICON_BUTTON_TONE.ghost} />
+                </IconButton>
               </View>
             ))}
-            <Pressable
-              accessibilityRole="button"
+            <Button
+              variant="secondary"
+              size="sm"
               onPress={() => setLinkPickerOpen(true)}
-              className="min-h-9 shrink-0 flex-row items-center gap-1.5 rounded-full border border-dashed border-neutral-300 bg-white/70 px-3 dark:border-white/[0.14] dark:bg-white/[0.03]"
+              icon={<Icon icon={IconPlus} size={15} strokeWidth={2.5} className={BUTTON_TEXT.secondary} />}
             >
-              <Icon icon={IconPlus} size={13} strokeWidth={2.4} className="text-neutral-500 dark:text-neutral-400" />
-              <Text className="text-[13px] font-semibold text-neutral-500 dark:text-neutral-400">Link task</Text>
-            </Pressable>
+              Link task
+            </Button>
             {onCreateTaskFromNote && (
-              <Pressable
-                accessibilityRole="button"
+              <Button
+                size="sm"
                 onPress={createTaskFromSelection}
-                className="min-h-9 shrink-0 flex-row items-center gap-1.5 rounded-full border border-neutral-900 bg-neutral-900 px-3.5 active:bg-neutral-800 dark:border-white dark:bg-white"
+                icon={<Icon icon={IconCalendarPlus} size={15} strokeWidth={2.4} className={BUTTON_TEXT.primary} />}
+                className="shrink-0"
               >
-                <Icon icon={IconCalendarPlus} size={13} strokeWidth={2.4} className="text-white dark:text-neutral-900" />
-                <Text className="text-[13px] font-semibold text-white dark:text-neutral-900">Create task</Text>
-              </Pressable>
+                Create task
+              </Button>
             )}
             {taskCreateState !== 'idle' && (
               <Text className={`shrink-0 text-[12px] font-semibold ${taskCreateState === 'added' ? 'text-emerald-500' : 'text-neutral-500 dark:text-neutral-400'}`}>
@@ -626,14 +621,9 @@ export default function NoteEditor({ note, onUpdate, onDelete, onBack, tasks, pl
                     <Icon icon={planIcon.get(plan.id) ?? SECTION_ICONS[0].icon} size={13} strokeWidth={2} className="shrink-0 text-neutral-500 dark:text-neutral-400" />
                     <Text className="truncate text-[13px] font-semibold text-neutral-700 dark:text-neutral-200">{plan.title}</Text>
                   </Pressable>
-                  <Pressable
-                    accessibilityRole="button"
-                    accessibilityLabel={`Unlink ${plan.title}`}
-                    onPress={() => removeLinkedPlan(plan.id)}
-                    className="h-6 w-6 shrink-0 items-center justify-center rounded-full active:bg-neutral-100 dark:active:bg-white/[0.08]"
-                  >
-                    <Icon icon={IconX} size={12} strokeWidth={2.4} className="text-neutral-500 dark:text-neutral-400" />
-                  </Pressable>
+                  <IconButton label={`Unlink ${plan.title}`} variant="ghost" size="xs" onPress={() => removeLinkedPlan(plan.id)}>
+                    <Icon icon={IconX} size={14} strokeWidth={2.4} className={ICON_BUTTON_TONE.ghost} />
+                  </IconButton>
                 </View>
               ))}
             </ScrollView>
@@ -726,9 +716,9 @@ export default function NoteEditor({ note, onUpdate, onDelete, onBack, tasks, pl
                 accessibilityLabel="Pill label"
                 className="w-28 py-0 text-[13px] font-medium text-neutral-800 dark:text-white"
               />
-              <Pressable accessibilityRole="button" onPress={() => commitPill(pillDraft)} className="rounded-lg bg-neutral-900 px-2.5 py-1 dark:bg-white">
-                <Text className="text-[11px] font-semibold text-white dark:text-neutral-900">Add</Text>
-              </Pressable>
+              <Button size="sm" onPress={() => commitPill(pillDraft)}>
+                Add
+              </Button>
               <Pressable
                 accessibilityRole="button"
                 accessibilityLabel="Cancel"
@@ -807,9 +797,9 @@ export default function NoteEditor({ note, onUpdate, onDelete, onBack, tasks, pl
               <Text className={`text-[12px] font-semibold ${colorMenuOpen ? 'text-neutral-900 dark:text-white' : 'text-neutral-600 dark:text-neutral-300'}`}>Color</Text>
               {activeColorHex && !colorMenuOpen && <View className="h-2.5 w-2.5 rounded-full border-2 border-white dark:border-neutral-950" style={{ backgroundColor: activeColorHex }} />}
             </Pressable>
-            <Pressable accessibilityRole="button" onPress={handleDone} className="shrink-0 rounded-xl bg-neutral-900 px-4 py-2 dark:bg-white">
-              <Text className="text-[13px] font-bold text-white dark:text-neutral-900">Done</Text>
-            </Pressable>
+            <Button size="sm" onPress={handleDone} className="shrink-0">
+              Done
+            </Button>
           </View>
         </View>
       </View>

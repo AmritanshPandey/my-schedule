@@ -201,8 +201,7 @@ function SubtaskDraftRow({
             <IconButton
               label="Duplicate subtask"
               variant="ghost"
-              size="xs"
-              radius="lg"
+              size="sm"
               onClick={() => { haptic("light"); onDuplicate(draft.id); }}
             >
               <IconCopy size={15} />
@@ -212,8 +211,7 @@ function SubtaskDraftRow({
             <IconButton
               label="Copy subtask to another task"
               variant="ghost"
-              size="xs"
-              radius="lg"
+              size="sm"
               onClick={() => { haptic("light"); onCopyToTask(draft.id); }}
             >
               <IconCornerDownRight size={15} />
@@ -221,9 +219,8 @@ function SubtaskDraftRow({
           )}
           <IconButton
             label="Delete subtask"
-            variant="dangerGhost"
-            size="xs"
-            radius="lg"
+            variant="destructive"
+            size="sm"
             onClick={() => { haptic("light"); setDeleteOpen(true); }}
           >
             <IconTrash size={15} />

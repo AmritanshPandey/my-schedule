@@ -6,6 +6,8 @@ import { useAuth } from "@/contexts/AuthProvider";
 import { useGoogleSignIn } from "./useGoogleSignIn";
 import { AuthErrorNote } from "./AuthErrorNote";
 import { haptic } from "@/lib/haptics";
+import Button from "@/components/ui/Button";
+import IconButton from "@/components/ui/IconButton";
 
 const DISMISS_KEY = "planr-signin-prompt-dismissed";
 
@@ -52,14 +54,9 @@ export default function SignInPrompt({ className = "" }: { className?: string })
     <div
       className={`relative overflow-hidden rounded-2xl border border-neutral-200 bg-white px-4 py-3.5 dark:border-white/[0.08] dark:bg-white/[0.03] ${className}`}
     >
-      <button
-        type="button"
-        onClick={dismiss}
-        aria-label="Dismiss"
-        className="absolute right-2 top-2 flex h-7 w-7 items-center justify-center rounded-full text-neutral-500 transition-colors hover:bg-neutral-100 hover:text-neutral-600 dark:text-neutral-400 dark:hover:bg-white/[0.06]"
-      >
-        <IconX size={15} strokeWidth={2} />
-      </button>
+      <IconButton label="Dismiss" variant="ghost" size="sm" onClick={dismiss} className="absolute right-2 top-2">
+        <IconX size={16} strokeWidth={2} />
+      </IconButton>
       <div className="flex items-start gap-3 pr-6">
         <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-emerald-500/12 text-emerald-600 dark:text-emerald-400">
           <IconCloudUp size={18} strokeWidth={2} />
@@ -69,15 +66,15 @@ export default function SignInPrompt({ className = "" }: { className?: string })
           <p className="mt-0.5 text-[12px] leading-snug text-neutral-500 dark:text-neutral-400">
             Sign in to sync across devices and never lose your progress.
           </p>
-          <button
-            type="button"
+          <Button
+            size="sm"
             onClick={() => { haptic("light"); void signIn(); }}
-            disabled={signingIn}
+            loading={signingIn}
             aria-describedby={error ? "signin-prompt-error" : undefined}
-            className="mt-2.5 inline-flex h-9 items-center gap-2 rounded-full bg-neutral-950 px-4 text-[13px] font-bold text-white transition-colors hover:bg-neutral-800 disabled:opacity-60 dark:bg-white dark:text-neutral-950 dark:hover:bg-neutral-200"
+            className="mt-2.5"
           >
             {signingIn ? "Signing in…" : "Continue with Google"}
-          </button>
+          </Button>
           <AuthErrorNote message={error} id="signin-prompt-error" className="text-[11px]" />
         </div>
       </div>

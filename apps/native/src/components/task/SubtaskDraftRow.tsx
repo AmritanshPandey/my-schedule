@@ -74,10 +74,10 @@ function SubtaskDraftRow({
       <View className="flex-row items-start gap-2">
         {onMove && (
           <View className="shrink-0 items-center gap-0.5">
-            <IconButton label="Move subtask up" variant="ghost" size="xs" radius="lg" disabled={!canMoveUp} onPress={() => onMove(draft.id, 'up')}>
+            <IconButton label="Move subtask up" variant="ghost" size="sm" disabled={!canMoveUp} onPress={() => onMove(draft.id, 'up')}>
               <Icon icon={IconArrowUp} size={14} className="text-neutral-500 dark:text-neutral-400" />
             </IconButton>
-            <IconButton label="Move subtask down" variant="ghost" size="xs" radius="lg" disabled={!canMoveDown} onPress={() => onMove(draft.id, 'down')}>
+            <IconButton label="Move subtask down" variant="ghost" size="sm" disabled={!canMoveDown} onPress={() => onMove(draft.id, 'down')}>
               <Icon icon={IconArrowDown} size={14} className="text-neutral-500 dark:text-neutral-400" />
             </IconButton>
           </View>
@@ -172,8 +172,7 @@ function SubtaskDraftRow({
             <IconButton
               label="Duplicate subtask"
               variant="ghost"
-              size="xs"
-              radius="lg"
+              size="sm"
               onPress={() => {
                 haptic('light');
                 onDuplicate(draft.id);
@@ -186,8 +185,7 @@ function SubtaskDraftRow({
             <IconButton
               label="Copy subtask to another task"
               variant="ghost"
-              size="xs"
-              radius="lg"
+              size="sm"
               onPress={() => {
                 haptic('light');
                 onCopyToTask(draft.id);
@@ -198,9 +196,8 @@ function SubtaskDraftRow({
           )}
           <IconButton
             label="Delete subtask"
-            variant="dangerGhost"
-            size="xs"
-            radius="lg"
+            variant="destructive"
+            size="sm"
             onPress={() => {
               haptic('light');
               setDeleteOpen(true);

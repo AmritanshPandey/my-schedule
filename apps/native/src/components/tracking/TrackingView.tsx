@@ -1,5 +1,5 @@
 import { useMemo } from 'react';
-import { Pressable, View } from 'react-native';
+import { View } from 'react-native';
 import Svg, { Circle } from 'react-native-svg';
 import { useColorScheme } from 'nativewind';
 import { IconChartLine, IconFlag3, IconPlus, IconTargetArrow, IconTrash } from '@tabler/icons-react-native';
@@ -23,6 +23,8 @@ import { Icon } from '../ui/Icon';
 import { Text } from '../ui/Text';
 import ProgressChart from '../ProgressChart';
 import { CadenceSelect } from './CadencePicker';
+import Button, { BUTTON_TEXT } from '../ui/Button';
+import IconButton, { ICON_BUTTON_TONE } from '../ui/IconButton';
 
 const RING_SIZE = 44;
 const RING_STROKE = 4;
@@ -306,32 +308,34 @@ function MetricCard({
       {/* One-tap logging. Green is reserved for the affirmative action. */}
       <View className="mt-3 flex-row flex-wrap items-center gap-2">
         {presets.map((amount) => (
-          <Pressable
+          <Button
             key={amount}
-            accessibilityRole="button"
+            variant="secondary"
+            size="sm"
             accessibilityLabel={`Log ${fmt(amount)}${unit ? ` ${unit}` : ''} of ${tracker.title}`}
             onPress={() => {
               haptic('light');
               onLog(tracker.id, tracker.planId, amount);
             }}
-            className="h-9 min-w-[56px] items-center justify-center rounded-full bg-emerald-600 px-3 active:bg-emerald-700 dark:bg-emerald-500 dark:active:bg-emerald-400"
+            className="min-w-[56px]"
+            textClassName="tabular-nums"
           >
-            <Text className="text-[13px] font-extrabold tabular-nums text-white dark:text-neutral-950">+{fmt(amount)}</Text>
-          </Pressable>
+            {`+${fmt(amount)}`}
+          </Button>
         ))}
         {/* Always present: the presets are a shortcut, not the only way in. */}
-        <Pressable
-          accessibilityRole="button"
+        <Button
+          variant="secondary"
+          size="sm"
           accessibilityLabel={`Log a value for ${tracker.title}`}
           onPress={() => {
             haptic('light');
             onOpenAddEntry(tracker);
           }}
-          className="h-9 flex-row items-center gap-1 rounded-full border border-neutral-200 px-3 active:bg-neutral-50 dark:border-white/[0.12] dark:active:bg-white/[0.05]"
+          icon={<Icon icon={IconPlus} size={15} strokeWidth={2.5} className={BUTTON_TEXT.secondary} />}
         >
-          <Icon icon={IconPlus} size={14} strokeWidth={2.5} className="text-neutral-700 dark:text-neutral-200" />
-          <Text className="text-[13px] font-bold text-neutral-700 dark:text-neutral-200">{presets.length > 0 ? 'Other' : 'Log'}</Text>
-        </Pressable>
+          {presets.length > 0 ? 'Other' : 'Log'}
+        </Button>
       </View>
 
       {todaysEntries.length > 0 && (
@@ -344,14 +348,14 @@ function MetricCard({
                   {fmt(entry.value)}
                   {unit ? ` ${unit}` : ''}
                 </Text>
-                <Pressable
-                  accessibilityRole="button"
-                  accessibilityLabel={`Delete ${fmt(entry.value)}${unit ? ` ${unit}` : ''} entry`}
+                <IconButton
+                  label={`Delete ${fmt(entry.value)}${unit ? ` ${unit}` : ''} entry`}
+                  variant="destructive"
+                  size="sm"
                   onPress={() => onDeleteEntry(entry.id)}
-                  className="h-7 w-7 items-center justify-center rounded-full active:bg-neutral-100 dark:active:bg-white/[0.06]"
                 >
-                  <Icon icon={IconTrash} size={13} strokeWidth={2} className="text-neutral-500 dark:text-neutral-400" />
-                </Pressable>
+                  <Icon icon={IconTrash} size={16} strokeWidth={2} className={ICON_BUTTON_TONE.destructive} />
+                </IconButton>
               </View>
             ))}
           </View>
@@ -459,18 +463,17 @@ export default function TrackingView({
                           {last ? ` · ${last}` : ' · Not logged yet'}
                         </Text>
                       </View>
-                      <Pressable
-                        accessibilityRole="button"
+                      <Button
+                        size="md"
                         accessibilityLabel={`Log ${tracker.title}`}
                         onPress={() => {
                           haptic('light');
                           onOpenAddEntry(tracker);
                         }}
-                        className="h-11 shrink-0 flex-row items-center gap-1.5 rounded-full bg-neutral-950 px-4 active:bg-neutral-800 dark:bg-white dark:active:bg-neutral-200"
+                        icon={<Icon icon={IconPlus} size={16} strokeWidth={2.5} className={BUTTON_TEXT.primary} />}
                       >
-                        <Icon icon={IconPlus} size={14} strokeWidth={2.6} className="text-white dark:text-neutral-950" />
-                        <Text className="text-[13px] font-extrabold text-white dark:text-neutral-950">Log</Text>
-                      </Pressable>
+                        Log
+                      </Button>
                     </View>
                   );
                 })}

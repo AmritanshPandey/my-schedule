@@ -2,57 +2,54 @@ import type { ReactNode } from 'react';
 import { Pressable, type PressableProps } from 'react-native';
 
 /**
- * Native port of components/ui/IconButton.tsx. The icon child carries its own
- * color class (no CSS color inheritance on native); `tone` exposes the
- * variant's text color so callers can pass it straight to <Icon>.
+ * Native port of components/ui/IconButton.tsx; the spec is DESIGN.md §5
+ * Buttons. Always a circle, always labelled. The icon child carries its own
+ * colour class (no CSS colour inheritance on native): pass it
+ * `ICON_BUTTON_TONE[variant]`.
  */
-type Variant = 'outline' | 'soft' | 'ghost' | 'dangerGhost';
-type Size = 'tiny' | 'xxs' | 'xs' | 'sm' | 'md';
-type Radius = 'lg' | 'xl' | 'full';
+export type IconButtonVariant = 'primary' | 'secondary' | 'ghost' | 'destructive';
+type Size = 'xs' | 'sm' | 'md' | 'lg';
 
 interface IconButtonProps extends Omit<PressableProps, 'children'> {
   label: string;
-  variant?: Variant;
+  variant?: IconButtonVariant;
   size?: Size;
-  radius?: Radius;
+  /** A toggle's on state: renders as `primary` and reports `selected`. */
+  selected?: boolean;
   className?: string;
   children: ReactNode;
 }
 
-const variantClasses: Record<Variant, string> = {
-  outline: 'border border-neutral-200 active:bg-neutral-100 dark:border-white/10 dark:active:bg-white/[0.07]',
-  soft: 'bg-neutral-100 active:bg-neutral-200 dark:bg-white/[0.07] dark:active:bg-white/[0.10]',
-  ghost: 'active:bg-neutral-100 dark:active:bg-white/[0.07]',
-  dangerGhost: 'active:bg-rose-500/10 dark:active:bg-rose-500/10',
+const variantClasses: Record<IconButtonVariant, string> = {
+  primary: 'bg-neutral-950 active:bg-neutral-800 dark:bg-white dark:active:bg-neutral-200',
+  secondary: 'bg-black/[0.05] active:bg-black/[0.09] dark:bg-white/[0.08] dark:active:bg-white/[0.14]',
+  ghost: 'active:bg-black/[0.05] dark:active:bg-white/[0.08]',
+  destructive: 'active:bg-[#E11D48]/10 dark:active:bg-[#E11D48]/[0.14]',
 };
 
-/** The variant's icon color — what `text-*` on the web button gave its icon. */
-export const ICON_BUTTON_TONE: Record<Variant, string> = {
-  outline: 'text-neutral-500 dark:text-neutral-400',
-  soft: 'text-neutral-500 dark:text-neutral-400',
-  ghost: 'text-neutral-500 dark:text-neutral-400',
-  dangerGhost: 'text-neutral-500 dark:text-neutral-400',
+/** The variant's icon colour — what `text-*` on the web button gave its icon. */
+export const ICON_BUTTON_TONE: Record<IconButtonVariant, string> = {
+  primary: 'text-white dark:text-neutral-950',
+  secondary: 'text-neutral-800 dark:text-neutral-100',
+  ghost: 'text-neutral-600 dark:text-neutral-300',
+  destructive: 'text-neutral-600 dark:text-neutral-300',
 };
 
 const sizeClasses: Record<Size, string> = {
-  tiny: 'h-[18px] w-[18px]',
-  xxs: 'h-6 w-6',
-  xs: 'h-8 w-8',
+  xs: 'h-6 w-6',
   sm: 'h-8 w-8',
-  md: 'h-9 w-9',
+  md: 'h-10 w-10',
+  lg: 'h-11 w-11',
 };
 
-const radiusClasses: Record<Radius, string> = {
-  lg: 'rounded-lg',
-  xl: 'rounded-xl',
-  full: 'rounded-full',
-};
+// Grows each size's hit area to at least 44px.
+const hitSlop: Record<Size, number | undefined> = { xs: 10, sm: 6, md: 2, lg: undefined };
 
 export default function IconButton({
   label,
-  variant = 'ghost',
-  size = 'sm',
-  radius = 'xl',
+  variant = 'secondary',
+  size = 'md',
+  selected,
   className = '',
   children,
   disabled,
@@ -62,16 +59,15 @@ export default function IconButton({
     <Pressable
       accessibilityRole="button"
       accessibilityLabel={label}
-      accessibilityState={{ disabled: !!disabled }}
+      accessibilityState={{ disabled: !!disabled, selected }}
       disabled={disabled}
-      hitSlop={6}
+      hitSlop={hitSlop[size]}
       {...props}
       className={[
-        'shrink-0 items-center justify-center',
+        'shrink-0 items-center justify-center rounded-full active:scale-[0.94]',
         disabled ? 'opacity-40' : '',
-        variantClasses[variant],
+        variantClasses[selected ? 'primary' : variant],
         sizeClasses[size],
-        radiusClasses[radius],
         className,
       ]
         .filter(Boolean)

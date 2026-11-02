@@ -1,7 +1,6 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { m } from "framer-motion";
 import { IconArrowBackUp, IconBan, IconCheck, IconClockHour4, IconEdit, IconListCheck, IconNotes, IconX } from "@tabler/icons-react";
 import type { ScheduleEntry } from "@/components/ScheduleItem";
 import TaskChecklistItem from "@/components/activity/TaskChecklistItem";
@@ -18,6 +17,7 @@ import { formatDisplayTime, formatDuration } from "@/lib/timeUtils";
 import type { Milestone, Plan, Schedule, Task } from "@/lib/useScheduleDB";
 import type { MilestoneLinkKind } from "@/lib/milestoneLinks";
 import MilestoneLinks from "@/components/milestone/MilestoneLinks";
+import Button from "@/components/ui/Button";
 
 export interface TaskDetailViewProps {
   task: Task | null;
@@ -127,14 +127,15 @@ export default function TaskDetailView({
   const tracked = isTrackedTask(task);
   const eyebrow = linkedPlan?.title ?? (isSession ? "Session" : tracked ? "Task" : "Commitment");
   const skipToggle = onSkip && canSkip ? (
-    <button
-      type="button"
+    <Button
+      variant="secondary"
+      size="md"
       onClick={() => { onSkip(task.id); onClose(); }}
-      className="flex min-h-[44px] flex-1 items-center justify-center gap-1.5 rounded-full border border-neutral-200 text-[13px] font-semibold text-neutral-500 transition-colors hover:bg-neutral-50 dark:border-white/[0.10] dark:text-neutral-400 dark:hover:bg-white/[0.04]"
+      icon={skipped ? <IconArrowBackUp size={16} strokeWidth={2.2} /> : <IconBan size={16} strokeWidth={2.2} />}
+      className="flex-1"
     >
-      {skipped ? <IconArrowBackUp size={16} strokeWidth={2.2} /> : <IconBan size={16} strokeWidth={2.2} />}
       {skipped ? "Restore this day" : "Skip this day"}
-    </button>
+    </Button>
   ) : null;
 
   const summary = (
@@ -331,14 +332,9 @@ export default function TaskDetailView({
   );
 
   const snoozeButton = tracked && !done && onSnooze ? (
-    <button
-      type="button"
-      onClick={() => { onSnooze(task.id); onClose(); }}
-      className="flex min-h-[44px] flex-1 items-center justify-center gap-1.5 rounded-full border border-neutral-200 text-[13px] font-semibold text-neutral-500 transition-colors hover:bg-neutral-50 dark:border-white/[0.10] dark:text-neutral-400 dark:hover:bg-white/[0.04]"
-    >
-      <IconClockHour4 size={16} strokeWidth={2.2} />
+    <Button variant="secondary" size="md" onClick={() => { onSnooze(task.id); onClose(); }} icon={<IconClockHour4 size={16} strokeWidth={2.2} />} className="flex-1">
       Later today
-    </button>
+    </Button>
   ) : null;
 
   /**
@@ -374,19 +370,14 @@ export default function TaskDetailView({
           call to action), and only dismisses. Undoing stays on the header
           checkbox, which is already labelled "Mark task not done". */}
       {tracked && (
-        <m.button
-          type="button"
-          whileTap={{ scale: 0.97 }}
+        <Button
+          variant={done ? "secondary" : "cta"}
+          fullWidth
           onClick={() => { if (!done) completePrimary(); onClose(); }}
-          className={`flex min-h-[48px] w-full items-center justify-center gap-1.5 rounded-full px-4 text-[14px] font-bold transition-colors ${
-            done
-              ? "bg-green-600/10 text-green-700 dark:bg-emerald-400/[0.12] dark:text-emerald-300"
-              : "bg-[#008236] text-white hover:bg-[#006B2C] dark:bg-[#2FD46E] dark:text-neutral-950 dark:hover:bg-[#2FD46E]/90"
-          }`}
+          icon={<IconCheck size={18} strokeWidth={2.6} />}
         >
-          <IconCheck size={18} strokeWidth={2.6} />
           {done ? "Completed" : "Done"}
-        </m.button>
+        </Button>
       )}
 
       {/* The two deferrals share a row — they answer the same question ("not
@@ -402,15 +393,9 @@ export default function TaskDetailView({
       {/* `!done` guard retained: Missed on a completed task silently
           un-completes it and strips today's history events. */}
       {tracked && !done && onMissed && (
-        <m.button
-          type="button"
-          whileTap={{ scale: 0.97 }}
-          onClick={() => { onMissed(task.id, allIds); onClose(); }}
-          className="flex min-h-[44px] w-full items-center justify-center gap-1.5 rounded-full text-[13px] font-semibold text-neutral-500 transition-colors hover:bg-rose-500/[0.06] hover:text-rose-600 dark:text-neutral-400 dark:hover:bg-rose-500/[0.08] dark:hover:text-rose-400"
-        >
-          <IconX size={16} strokeWidth={2.2} />
+        <Button variant="ghost" size="md" fullWidth onClick={() => { onMissed(task.id, allIds); onClose(); }} icon={<IconX size={16} strokeWidth={2.2} />}>
           Mark as missed
-        </m.button>
+        </Button>
       )}
     </div>
   );
@@ -425,9 +410,8 @@ export default function TaskDetailView({
           {onEdit && (
             <IconButton
               label="Edit task"
-              variant="soft"
+              variant="secondary"
               size="md"
-              radius="full"
               onClick={() => { onEdit(); onClose(); }}
             >
               <IconEdit size={18} strokeWidth={2.2} />
@@ -435,9 +419,8 @@ export default function TaskDetailView({
           )}
           <IconButton
             label="Close"
-            variant="soft"
+            variant="secondary"
             size="md"
-            radius="full"
             onClick={onClose}
           >
             <IconX size={18} strokeWidth={2.2} />

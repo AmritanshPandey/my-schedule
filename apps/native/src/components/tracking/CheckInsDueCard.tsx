@@ -7,6 +7,7 @@ import { haptic } from '../../lib/haptics';
 import { CARD } from '../ui/surfaces';
 import { Icon } from '../ui/Icon';
 import { Text } from '../ui/Text';
+import Button, { BUTTON_TEXT } from '../ui/Button';
 
 /** Beyond this many, the card points to Tracking rather than growing. */
 const MAX_ROWS = 4;
@@ -60,18 +61,17 @@ export default function CheckInsDueCard({ trackers, metricEntries, todayISO, tra
               {checkInStatusLabel(state)}
             </Text>
           </View>
-          <Pressable
-            accessibilityRole="button"
+          <Button
+            size="md"
             accessibilityLabel={`Log ${tracker.title}`}
             onPress={() => {
               haptic('light');
               onLog(tracker);
             }}
-            className="h-11 shrink-0 flex-row items-center gap-1.5 rounded-full bg-neutral-950 px-4 active:bg-neutral-800 dark:bg-white dark:active:bg-neutral-200"
+            icon={<Icon icon={IconPlus} size={16} strokeWidth={2.5} className={BUTTON_TEXT.primary} />}
           >
-            <Icon icon={IconPlus} size={14} strokeWidth={2.6} className="text-white dark:text-neutral-950" />
-            <Text className="text-[13px] font-extrabold text-white dark:text-neutral-950">Log</Text>
-          </Pressable>
+            Log
+          </Button>
         </View>
       ))}
       {onOpenTracking && (

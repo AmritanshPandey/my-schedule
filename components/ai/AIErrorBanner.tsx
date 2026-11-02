@@ -6,7 +6,7 @@
  * independent copies (AIPanel's rose banner, AIActionSheet.tsx's red banner
  * shown twice, PlanDetailView's Coach chat writing errors as plain chat
  * bubbles). Rose matches this app's established danger color elsewhere
- * (Button.tsx's destructive/dangerSecondary variants, AIReviewSheet.tsx's
+ * (Button.tsx's destructive/destructiveSecondary variants, AIReviewSheet.tsx's
  * blockers) — the red used in a couple of AI surfaces was the actual
  * outlier, not this one.
  */

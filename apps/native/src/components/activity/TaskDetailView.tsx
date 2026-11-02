@@ -19,6 +19,7 @@ import Pill from '../ui/Pill';
 import ProgressBar from '../ui/ProgressBar';
 import { Icon } from '../ui/Icon';
 import { Text, TextInput } from '../ui/Text';
+import Button, { BUTTON_TEXT } from '../ui/Button';
 
 export interface TaskDetailViewProps {
   task: Task | null;
@@ -119,22 +120,21 @@ export default function TaskDetailView({
   const tracked = isTrackedTask(task);
   const eyebrow = linkedPlan?.title ?? (isSession ? 'Session' : tracked ? 'Task' : 'Commitment');
 
-  const secondaryButton = 'min-h-[44px] flex-1 flex-row items-center justify-center gap-1.5 rounded-full border border-neutral-200 active:bg-neutral-50 dark:border-white/[0.10] dark:active:bg-white/[0.04]';
-  const secondaryText = 'text-[13px] font-semibold text-neutral-500 dark:text-neutral-400';
 
   const skipToggle =
     onSkip && canSkip ? (
-      <Pressable
-        accessibilityRole="button"
+      <Button
+        variant="secondary"
+        size="md"
         onPress={() => {
           onSkip(task.id);
           onClose();
         }}
-        className={secondaryButton}
+        icon={<Icon icon={skipped ? IconArrowBackUp : IconBan} size={16} strokeWidth={2.2} className={BUTTON_TEXT.secondary} />}
+        className="flex-1"
       >
-        <Icon icon={skipped ? IconArrowBackUp : IconBan} size={16} strokeWidth={2.2} className="text-neutral-500 dark:text-neutral-400" />
-        <Text className={secondaryText}>{skipped ? 'Restore this day' : 'Skip this day'}</Text>
-      </Pressable>
+        {skipped ? 'Restore this day' : 'Skip this day'}
+      </Button>
     ) : null;
 
   const summary = (
@@ -291,17 +291,18 @@ export default function TaskDetailView({
 
   const snoozeButton =
     tracked && !done && onSnooze ? (
-      <Pressable
-        accessibilityRole="button"
+      <Button
+        variant="secondary"
+        size="md"
         onPress={() => {
           onSnooze(task.id);
           onClose();
         }}
-        className={secondaryButton}
+        icon={<Icon icon={IconClockHour4} size={16} strokeWidth={2.2} className={BUTTON_TEXT.secondary} />}
+        className="flex-1"
       >
-        <Icon icon={IconClockHour4} size={16} strokeWidth={2.2} className="text-neutral-500 dark:text-neutral-400" />
-        <Text className={secondaryText}>Later today</Text>
-      </Pressable>
+        Later today
+      </Button>
     ) : null;
 
   const actions: ReactNode = readOnly ? (
@@ -315,26 +316,17 @@ export default function TaskDetailView({
   ) : (
     <View className="mt-1 gap-2">
       {tracked && (
-        <Pressable
-          accessibilityRole="button"
+        <Button
+          variant={done ? 'secondary' : 'cta'}
+          fullWidth
           onPress={() => {
             if (!done) completePrimary();
             onClose();
           }}
-          className={`min-h-[48px] w-full flex-row items-center justify-center gap-1.5 rounded-full px-4 active:scale-[0.97] ${
-            done ? 'bg-green-600/10 dark:bg-emerald-400/[0.12]' : 'bg-[#008236] active:bg-[#006B2C] dark:bg-[#2FD46E]'
-          }`}
+          icon={<Icon icon={IconCheck} size={18} strokeWidth={2.6} className={BUTTON_TEXT[done ? 'secondary' : 'cta']} />}
         >
-          <Icon
-            icon={IconCheck}
-            size={18}
-            strokeWidth={2.6}
-            className={done ? 'text-green-700 dark:text-emerald-300' : 'text-white dark:text-neutral-950'}
-          />
-          <Text className={`text-[14px] font-bold ${done ? 'text-green-700 dark:text-emerald-300' : 'text-white dark:text-neutral-950'}`}>
-            {done ? 'Completed' : 'Done'}
-          </Text>
-        </Pressable>
+          {done ? 'Completed' : 'Done'}
+        </Button>
       )}
 
       {(snoozeButton || skipToggle) && (
@@ -345,17 +337,18 @@ export default function TaskDetailView({
       )}
 
       {tracked && !done && onMissed && (
-        <Pressable
-          accessibilityRole="button"
+        <Button
+          variant="ghost"
+          size="md"
+          fullWidth
           onPress={() => {
             onMissed(task.id, allIds);
             onClose();
           }}
-          className="min-h-[44px] w-full flex-row items-center justify-center gap-1.5 rounded-full active:scale-[0.97] active:bg-rose-500/[0.06] dark:active:bg-rose-500/[0.08]"
+          icon={<Icon icon={IconX} size={16} strokeWidth={2.2} className={BUTTON_TEXT.ghost} />}
         >
-          <Icon icon={IconX} size={16} strokeWidth={2.2} className="text-neutral-500 dark:text-neutral-400" />
-          <Text className="text-[13px] font-semibold text-neutral-500 dark:text-neutral-400">Mark as missed</Text>
-        </Pressable>
+          Mark as missed
+        </Button>
       )}
     </View>
   );
@@ -403,19 +396,18 @@ export default function TaskDetailView({
         {onEdit && (
           <IconButton
             label="Edit task"
-            variant="soft"
+            variant="secondary"
             size="md"
-            radius="full"
             onPress={() => {
               onEdit();
               onClose();
             }}
           >
-            <Icon icon={IconEdit} size={18} strokeWidth={2.2} className={ICON_BUTTON_TONE.soft} />
+            <Icon icon={IconEdit} size={18} strokeWidth={2.2} className={ICON_BUTTON_TONE.secondary} />
           </IconButton>
         )}
-        <IconButton label="Close" variant="soft" size="md" radius="full" onPress={onClose}>
-          <Icon icon={IconX} size={18} strokeWidth={2.2} className={ICON_BUTTON_TONE.soft} />
+        <IconButton label="Close" variant="secondary" size="md" onPress={onClose}>
+          <Icon icon={IconX} size={18} strokeWidth={2.2} className={ICON_BUTTON_TONE.secondary} />
         </IconButton>
       </View>
       <View className="flex-row items-start gap-2.5 pr-9">

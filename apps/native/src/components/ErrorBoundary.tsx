@@ -1,7 +1,8 @@
 import { Component, type ErrorInfo, type ReactNode } from 'react';
-import { Pressable, View } from 'react-native';
+import { View } from 'react-native';
 import { logError } from '../lib/errorLog';
 import { Text } from './ui/Text';
+import Button from './ui/Button';
 
 /**
  * Native port of components/ErrorBoundary.tsx. Section mode isolates a
@@ -50,13 +51,9 @@ export class ErrorBoundary extends Component<Props, State> {
               {this.state.message}
             </Text>
           )}
-          <Pressable
-            accessibilityRole="button"
-            onPress={this.reset}
-            className="min-h-[44px] justify-center rounded-xl border border-neutral-200 bg-neutral-50 px-4 active:bg-neutral-100 dark:border-white/[0.08] dark:bg-white/[0.04] dark:active:bg-white/[0.08]"
-          >
-            <Text className="text-[12px] font-semibold text-neutral-700 dark:text-white">Try again</Text>
-          </Pressable>
+          <Button variant="secondary" size="sm" onPress={this.reset}>
+            Try again
+          </Button>
         </View>
       );
     }
@@ -70,13 +67,9 @@ export class ErrorBoundary extends Component<Props, State> {
           <Text selectable className="mb-5 text-center font-mono text-[12px] text-neutral-500 dark:text-neutral-400">
             {this.state.message}
           </Text>
-          <Pressable
-            accessibilityRole="button"
-            onPress={this.reset}
-            className="min-h-[44px] w-full items-center justify-center rounded-xl border border-neutral-200 bg-neutral-50 px-4 active:bg-neutral-100 dark:border-white/[0.08] dark:bg-white/[0.04] dark:active:bg-white/[0.08]"
-          >
-            <Text className="text-[13px] font-semibold text-neutral-700 dark:text-white">Try again</Text>
-          </Pressable>
+          <Button variant="secondary" size="md" fullWidth onPress={this.reset}>
+            Try again
+          </Button>
         </View>
       </View>
     );

@@ -7,6 +7,7 @@ import BottomSheet from '../ui/BottomSheet';
 import { typography } from '../ui/Typography';
 import { Icon } from '../ui/Icon';
 import { Text } from '../ui/Text';
+import Button, { BUTTON_TEXT } from '../ui/Button';
 
 /**
  * Native port of components/tracking/CadencePicker.tsx — how often a tracker
@@ -63,15 +64,16 @@ export function CadenceSelect({
   const [open, setOpen] = useState(false);
   return (
     <>
-      <Pressable
-        accessibilityRole="button"
+      <Button
+        variant="secondary"
+        size="md"
         accessibilityLabel={`How often to log ${trackerTitle}, ${CADENCE_LABEL[value]}`}
         onPress={() => setOpen(true)}
-        className="h-11 shrink-0 flex-row items-center gap-1.5 rounded-full border border-neutral-200 bg-white pl-3.5 pr-3 active:bg-neutral-50 dark:border-white/[0.12] dark:bg-neutral-900 dark:active:bg-white/[0.05]"
+        trailingIcon={<Icon icon={IconChevronDown} size={16} strokeWidth={2.4} className={BUTTON_TEXT.secondary} />}
+        className="shrink-0"
       >
-        <Text className="text-[13px] font-bold text-neutral-700 dark:text-neutral-200">{CADENCE_LABEL[value]}</Text>
-        <Icon icon={IconChevronDown} size={14} strokeWidth={2.4} className="text-neutral-500 dark:text-neutral-400" />
-      </Pressable>
+        {CADENCE_LABEL[value]}
+      </Button>
 
       <BottomSheet open={open} onClose={() => setOpen(false)}>
         <View className="px-5 pb-6 pt-2">

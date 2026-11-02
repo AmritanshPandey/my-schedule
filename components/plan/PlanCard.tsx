@@ -103,9 +103,8 @@ function PlanCardInner({
         <div className="absolute right-2.5 top-2.5 z-10 opacity-60 transition-opacity group-hover:opacity-100">
           <IconButton
             label="Delete plan"
-            variant="dangerGhost"
-            size="xs"
-            radius="xl"
+            variant="destructive"
+            size="sm"
             onClick={(e) => { e.stopPropagation(); haptic("light"); onDelete(); }}
           >
             <IconTrash size={15} strokeWidth={2} />
@@ -210,14 +209,13 @@ function PlanCardInner({
           )}
         </div>
         {onQuickLog && trackerCount > 0 && (
-          <button
-            type="button"
+          <IconButton
+            label="Log entry"
+            size="sm"
             onClick={(e) => { e.stopPropagation(); haptic("light"); onQuickLog(); }}
-            className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border border-neutral-200 text-neutral-500 transition-colors hover:bg-neutral-50 active:scale-95 dark:border-white/10 dark:text-neutral-400 dark:hover:bg-white/[0.06]"
-            aria-label="Log entry"
           >
-            <IconPlus size={14} strokeWidth={2.5} />
-          </button>
+            <IconPlus size={16} strokeWidth={2.5} />
+          </IconButton>
         )}
       </div>
 

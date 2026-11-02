@@ -19,7 +19,7 @@ export default function SheetHeader({ eyebrow, title, onClose, className = "" }:
         <Eyebrow>{eyebrow}</Eyebrow>
         <SheetTitle className="mt-0.5">{title}</SheetTitle>
       </div>
-      <IconButton label="Close" variant="outline" size="sm" radius="xl" onClick={onClose}>
+      <IconButton label="Close" variant="secondary" size="sm" onClick={onClose}>
         <IconX {...ICON.ui} />
       </IconButton>
     </div>

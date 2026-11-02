@@ -44,6 +44,7 @@ import { CARD } from "@/components/ui/surfaces";
 import Button from "@/components/ui/Button";
 import Sparkline from "@/components/ui/Sparkline";
 import TrendChange from "@/components/ui/TrendChange";
+import IconButton from "@/components/ui/IconButton";
 
 interface OverviewDashboardProps {
   schedule: Schedule;
@@ -205,14 +206,15 @@ function ActiveTrackingCard({
           <p className="mx-auto mt-1 max-w-[250px] text-[12px] leading-snug text-neutral-500 dark:text-neutral-400">
             Track a metric on any plan to make your progress visible here.
           </p>
-          <button
-            type="button"
+          <Button
+            variant="secondary"
+            size="md"
             onClick={() => { haptic("light"); onNavigate(1); }}
-            className="mt-4 inline-flex min-h-[40px] items-center gap-2 rounded-full border border-neutral-200 px-4 text-[13px] font-bold text-neutral-700 transition-colors hover:bg-neutral-50 dark:border-white/[0.10] dark:text-neutral-300 dark:hover:bg-white/[0.05]"
+            trailingIcon={<IconArrowRight size={16} strokeWidth={2.5} />}
+            className="mt-4"
           >
             Set up tracking
-            <IconArrowRight size={14} strokeWidth={2.5} />
-          </button>
+          </Button>
         </div>
       ) : (
         <div className="flex flex-col">
@@ -250,14 +252,9 @@ function ActiveTrackingCard({
                         </div>
                       </div>
                       <Sparkline values={series} className={trendColorClass} />
-                      <button
-                        type="button"
-                        aria-label={`Log ${tracker.title}`}
-                        onClick={() => { haptic("light"); onLogTracker(tracker); }}
-                        className="grid h-10 w-10 shrink-0 place-items-center rounded-full bg-neutral-950 text-white transition-colors hover:bg-neutral-800 dark:bg-white dark:text-neutral-950 dark:hover:bg-neutral-200"
-                      >
+                      <IconButton label={`Log ${tracker.title}`} variant="primary" size="md" onClick={() => { haptic("light"); onLogTracker(tracker); }}>
                         <IconPlus size={18} strokeWidth={2.5} />
-                      </button>
+                      </IconButton>
                     </div>
                   );
                 })}
@@ -472,13 +469,9 @@ function GettingStarted({
         })}
       </ol>
 
-      <button
-        type="button"
-        onClick={() => { haptic("light"); onDismiss(); }}
-        className="-ml-2 mt-3 inline-flex min-h-[44px] items-center rounded-lg px-2 text-[13px] font-semibold text-neutral-600 transition-colors hover:text-neutral-950 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500/60 dark:text-neutral-400 dark:hover:text-white"
-      >
+      <Button variant="ghost" size="md" onClick={() => { haptic("light"); onDismiss(); }} className="-ml-4 mt-3">
         I&apos;ll do this later
-      </button>
+      </Button>
     </section>
   );
 }

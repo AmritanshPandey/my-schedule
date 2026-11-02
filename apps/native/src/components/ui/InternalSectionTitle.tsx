@@ -1,7 +1,8 @@
 import { memo, type ReactNode } from 'react';
-import { Pressable, View } from 'react-native';
+import { View } from 'react-native';
 import { SectionTitle } from './Typography';
-import { Text } from './Text';
+import Button from './Button';
+import IconButton from './IconButton';
 
 /** Native port of components/ui/InternalSectionTitle.tsx. */
 export function SectionIconButton({
@@ -18,25 +19,17 @@ export function SectionIconButton({
   label?: string;
 }) {
   return (
-    <Pressable
-      accessibilityRole="button"
-      accessibilityLabel={label}
-      onPress={onClick}
-      className={`h-[34px] w-[34px] items-center justify-center rounded-[9px] active:scale-[0.88] ${
-        saving ? 'bg-neutral-950 dark:bg-white' : 'active:bg-neutral-100 dark:active:bg-white/[0.06]'
-      }`}
-    >
+    <IconButton label={label ?? ''} variant="ghost" size="md" selected={saving} onPress={onClick}>
       {saving && saveIcon ? saveIcon : icon}
-    </Pressable>
+    </IconButton>
   );
 }
 
 export function SectionTextAction({ label, icon, onClick }: { label: string; icon?: ReactNode; onClick: () => void }) {
   return (
-    <Pressable accessibilityRole="button" onPress={onClick} className="flex-row items-center gap-1.5">
-      {icon}
-      <Text className="text-[13px] font-semibold text-neutral-500 dark:text-neutral-400">{label}</Text>
-    </Pressable>
+    <Button variant="ghost" size="sm" onPress={onClick} icon={icon}>
+      {label}
+    </Button>
   );
 }
 

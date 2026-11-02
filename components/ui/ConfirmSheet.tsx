@@ -1,8 +1,8 @@
 "use client";
 
 import type { ReactNode } from "react";
-import { m } from "framer-motion";
 import BottomSheet from "@/components/ui/BottomSheet";
+import Button from "@/components/ui/Button";
 
 interface ConfirmSheetProps {
   open: boolean;
@@ -43,22 +43,12 @@ export default function ConfirmSheet({
 
         {actions ?? (
           <div className="flex gap-3">
-            <m.button
-              type="button"
-              whileTap={{ scale: 0.97 }}
-              onClick={onClose}
-              className="flex-1 rounded-2xl border border-neutral-200 bg-white py-3.5 text-[16px] font-semibold text-neutral-700 transition-colors hover:bg-neutral-100 dark:border-white/[0.08] dark:bg-neutral-900 dark:text-neutral-300 dark:hover:bg-white/[0.07]"
-            >
+            <Button variant="secondary" onClick={onClose} className="flex-1">
               Cancel
-            </m.button>
-            <m.button
-              type="button"
-              whileTap={{ scale: 0.97 }}
-              onClick={handleConfirm}
-              className="flex-1 rounded-2xl bg-rose-500 py-3.5 text-[16px] font-semibold text-white transition-colors hover:bg-rose-600 dark:bg-rose-500 dark:hover:bg-rose-600"
-            >
+            </Button>
+            <Button variant="destructive" onClick={handleConfirm} className="flex-1">
               {confirmLabel}
-            </m.button>
+            </Button>
           </div>
         )}
       </div>

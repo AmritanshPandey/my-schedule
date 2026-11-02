@@ -16,6 +16,7 @@ import { getSlots } from "@/lib/taskMutations";
 import { formatSlotsDuration, formatDisplayTime } from "@/lib/timeUtils";
 import { useLongPress } from "@/lib/useLongPress";
 import { haptic } from "@/lib/haptics";
+import IconButton from "@/components/ui/IconButton";
 
 /** "10:30 AM" → digits at full size, the period a step smaller beside them. */
 function TimeLabel({ value }: { value: string }) {
@@ -270,14 +271,9 @@ export default function IOSTimelineRow({
           <div className="flex shrink-0 items-center gap-1.5">
             {trailing}
             {editMode && (
-              <button
-                type="button"
-                onClick={(e) => { e.stopPropagation(); haptic("light"); onEdit(); }}
-                aria-label="Edit task"
-                className="flex h-8 w-8 items-center justify-center rounded-full border border-black/10 bg-white/60 text-neutral-600 transition-colors active:bg-white/80 dark:border-white/[0.10] dark:bg-white/[0.08] dark:text-neutral-200"
-              >
-                <IconEdit size={15} strokeWidth={2} />
-              </button>
+              <IconButton label="Edit task" size="sm" onClick={(e) => { e.stopPropagation(); haptic("light"); onEdit(); }}>
+                <IconEdit size={16} strokeWidth={2} />
+              </IconButton>
             )}
           </div>
         </div>

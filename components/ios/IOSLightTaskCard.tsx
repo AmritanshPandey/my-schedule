@@ -7,6 +7,8 @@ import { calculateTaskProgress, getTaskCheckableItems, getTaskSubtaskSummary, is
 import { formatSlotsDuration } from "@/lib/timeUtils";
 import { getSlots } from "@/lib/taskMutations";
 import { haptic } from "@/lib/haptics";
+import IconButton from "@/components/ui/IconButton";
+import Button from "@/components/ui/Button";
 
 interface IOSLightTaskCardProps {
   task: Task;
@@ -90,34 +92,34 @@ export default function IOSLightTaskCard({
           a route into its detail view, which is where "Missed" lives. Without
           this a subtask-less task could never be marked missed at all. */}
       {showSubtasksButton && onOpenSubtasks && (
-        <button
-          type="button"
+        <Button
+          variant="secondary"
+          size="sm"
           onClick={(e) => {
             e.stopPropagation();
             haptic("light");
             onOpenSubtasks();
           }}
           aria-label={hasItems ? "Open subtasks" : "Open task details"}
-          className="inline-flex h-9 items-center gap-1.5 rounded-full border border-black/10 bg-white/60 px-3 text-[12px] font-extrabold tabular-nums text-neutral-600 transition-colors active:bg-white/80 dark:border-white/[0.10] dark:bg-white/[0.08] dark:text-neutral-200 dark:active:bg-white/[0.12]"
+          icon={hasItems ? <IconListCheck size={15} strokeWidth={2} /> : undefined}
+          trailingIcon={<IconArrowUpRight size={15} strokeWidth={2.2} />}
+          className="tabular-nums"
         >
-          {hasItems && <IconListCheck size={14} strokeWidth={2} />}
           {hasItems && `${completedCount}/${totalCount || itemCount}`}
-          <IconArrowUpRight size={13} strokeWidth={2.2} />
-        </button>
+        </Button>
       )}
       {editMode && (
-        <button
-          type="button"
+        <IconButton
+          label="Edit task"
+          size="sm"
           onClick={(e) => {
             e.stopPropagation();
             haptic("light");
             onEdit();
           }}
-          aria-label="Edit task"
-          className="flex h-9 w-9 items-center justify-center rounded-full border border-black/10 bg-white/60 text-neutral-600 transition-colors active:bg-white/80 dark:border-white/[0.10] dark:bg-white/[0.08] dark:text-neutral-200 dark:active:bg-white/[0.12]"
         >
           <IconEdit size={16} strokeWidth={2} />
-        </button>
+        </IconButton>
       )}
     </div>
   );

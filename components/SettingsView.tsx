@@ -45,12 +45,14 @@ import ConfirmSheet from "@/components/ui/ConfirmSheet";
 import BackupRows from "@/components/settings/BackupRows";
 import RemindersRows from "@/components/settings/RemindersRows";
 import { CARD as CARD_SURFACE } from "@/components/ui/surfaces";
-import { SETTINGS_CONTROL_CLASS, SETTINGS_ICON_BUTTON_CLASS } from "@/components/ui/Input";
+import { SETTINGS_CONTROL_CLASS } from "@/components/ui/Input";
 import { buildDeleteConfirmationCopy } from "@/lib/deleteConfirm";
 import { normalizeDayStartTime } from "@/lib/timeline/displayWindow";
 import { MIN_SLEEP_HOURS, MAX_SLEEP_HOURS } from "@/lib/timeline/sleepWindow";
 import { formatDayNoteLabel, localISODate } from "@/lib/dateUtils";
 import DateInput from "@/components/ui/DateInput";
+import Button from "@/components/ui/Button";
+import IconButton from "@/components/ui/IconButton";
 
 const PROVIDER_LABEL: Record<string, string> = {
   mlx: "MLX",
@@ -302,32 +304,23 @@ function DiagnosticsCard() {
       </Row>
       <Divider />
       <div className="grid grid-cols-3 gap-2 px-4 py-3">
-        <button
-          type="button"
-          onClick={copyDiagnostics}
-          disabled={!snapshot}
-          className="rounded-xl border border-neutral-200 bg-neutral-50 px-3 py-2 text-[11px] font-semibold text-neutral-700 disabled:opacity-40 dark:border-white/[0.08] dark:bg-white/[0.04] dark:text-neutral-200"
-        >
+        <Button variant="secondary" size="sm" onClick={copyDiagnostics} disabled={!snapshot}>
           {copyState === "copied" ? "Copied" : copyState === "failed" ? "Copy failed" : "Copy"}
-        </button>
-        <button
-          type="button"
-          onClick={refresh}
-          className="rounded-xl border border-neutral-200 bg-neutral-50 px-3 py-2 text-[11px] font-semibold text-neutral-700 dark:border-white/[0.08] dark:bg-white/[0.04] dark:text-neutral-200"
-        >
+        </Button>
+        <Button variant="secondary" size="sm" onClick={refresh}>
           Refresh
-        </button>
-        <button
-          type="button"
+        </Button>
+        <Button
+          variant="ghost"
+          size="sm"
           onClick={() => {
             clearBootLog();
             clearErrorLog();
             refresh();
           }}
-          className="rounded-xl border border-neutral-200 bg-neutral-50 px-3 py-2 text-[11px] font-semibold text-neutral-500 dark:border-white/[0.08] dark:bg-white/[0.04] dark:text-neutral-300"
         >
           Clear logs
-        </button>
+        </Button>
       </div>
       <ErrorTelemetryRow />
     </Card>
@@ -711,16 +704,15 @@ export function SettingsView({
                     size="sm"
                     className="flex-1 sm:w-44 sm:flex-none"
                   />
-                  <button
-                    type="button"
-                    aria-label="Use all history"
+                  <IconButton
+                    label="Use all history"
                     title="All history"
+                    size="md"
                     onClick={() => handleTrackingStartChange("")}
                     disabled={!trackingStart}
-                    className={SETTINGS_ICON_BUTTON_CLASS}
                   >
-                    <IconX size={15} strokeWidth={2.2} />
-                  </button>
+                    <IconX size={16} strokeWidth={2.2} />
+                  </IconButton>
                 </div>
               </Row>
             </Card>
@@ -740,10 +732,9 @@ export function SettingsView({
                     Clears the app cache and reloads the latest version · keeps your data
                   </p>
                 </div>
-                <button type="button" onClick={handleHardRefresh} disabled={refreshing}
-                  className="shrink-0 rounded-xl border border-neutral-200 bg-neutral-50 px-3 py-1.5 text-[11px] font-semibold text-neutral-700 hover:bg-neutral-100 disabled:opacity-50 dark:border-white/[0.08] dark:bg-white/[0.04] dark:text-neutral-200 dark:hover:bg-white/[0.07]">
+                <Button variant="secondary" size="sm" onClick={handleHardRefresh} loading={refreshing}>
                   {refreshing ? "Updating…" : "Update"}
-                </button>
+                </Button>
               </div>
               <Divider />
               <div className="px-4 py-2.5">
@@ -784,10 +775,9 @@ export function SettingsView({
                             <p className="text-[13px] font-semibold text-neutral-800 dark:text-white">Clear progress</p>
                             <p className="text-[11px] text-neutral-500 dark:text-neutral-400">Resets completions & logged values · keeps your plans and tasks</p>
                           </div>
-                          <button type="button" onClick={() => setProgressPhase("confirm")}
-                            className="shrink-0 rounded-xl border border-amber-200 bg-amber-50 px-3 py-1.5 text-[11px] font-semibold text-amber-700 hover:bg-amber-100 dark:border-amber-500/20 dark:bg-amber-500/10 dark:text-amber-400 dark:hover:bg-amber-500/15">
+                          <Button variant="destructiveSecondary" size="sm" onClick={() => setProgressPhase("confirm")}>
                             Reset
-                          </button>
+                          </Button>
                         </m.div>
                       )}
                       {progressPhase === "confirm" && (
@@ -796,14 +786,12 @@ export function SettingsView({
                             Clears all task completions, completion history, routine check-ins, logged metrics, and milestone progress. Your plans, tasks, trackers, milestones, and routines stay. Cannot be undone.
                           </p>
                           <div className="flex gap-2">
-                            <button type="button" onClick={() => setProgressPhase("idle")}
-                              className="flex flex-1 items-center justify-center gap-1.5 rounded-xl border border-neutral-200 bg-white py-2 text-[12px] font-semibold text-neutral-600 hover:bg-neutral-50 dark:border-white/[0.08] dark:bg-white/[0.04] dark:hover:bg-white/[0.07]">
-                              <IconX size={12} strokeWidth={2.5} />Cancel
-                            </button>
-                            <button type="button" onClick={handleClearProgress}
-                              className="flex flex-1 items-center justify-center gap-1.5 rounded-xl border border-amber-200 bg-amber-50 py-2 text-[12px] font-semibold text-amber-700 hover:bg-amber-100 dark:border-amber-500/20 dark:bg-amber-500/10 dark:text-amber-400 dark:hover:bg-amber-500/15">
-                              <IconRefresh size={12} strokeWidth={2} />Clear progress
-                            </button>
+                            <Button variant="secondary" size="md" onClick={() => setProgressPhase("idle")} className="flex-1">
+                              Cancel
+                            </Button>
+                            <Button variant="destructive" size="md" onClick={handleClearProgress} icon={<IconRefresh size={16} strokeWidth={2} />} className="flex-1">
+                              Clear progress
+                            </Button>
                           </div>
                         </m.div>
                       )}
@@ -829,10 +817,9 @@ export function SettingsView({
                         <IconTrash size={14} strokeWidth={2} />
                       </div>
                       <span className="flex-1 text-[13px] font-semibold text-neutral-800 dark:text-white">Clear all data</span>
-                      <button type="button" onClick={() => { haptic("light"); setClearConfirmOpen(true); }}
-                        className="rounded-xl border border-rose-200 bg-rose-50 px-3 py-1.5 text-[11px] font-semibold text-rose-600 hover:bg-rose-100 dark:border-rose-500/20 dark:bg-rose-500/10 dark:text-rose-400 dark:hover:bg-rose-500/15">
+                      <Button variant="destructiveSecondary" size="sm" onClick={() => { haptic("light"); setClearConfirmOpen(true); }}>
                         Clear
-                      </button>
+                      </Button>
                     </m.div>
                   )}
                   {clearPhase === "clearing" && (

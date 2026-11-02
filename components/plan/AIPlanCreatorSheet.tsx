@@ -28,6 +28,7 @@ import { formatDisplayTime } from "@/lib/timeUtils";
 import { DAYS, type DayKey, type Plan, type Schedule } from "@/lib/useScheduleDB";
 import { typography } from "@/components/ui/Typography";
 import DateInput from "@/components/ui/DateInput";
+import IconButton from "@/components/ui/IconButton";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -488,14 +489,9 @@ export default function AIPlanCreatorSheet({
         )}
 
         <div className="flex gap-2">
-          <button
-            type="button"
-            onClick={handleSkipQuestion}
-            disabled={streaming}
-            className="flex h-12 items-center gap-1.5 rounded-xl border border-neutral-200 px-4 text-[13px] font-semibold text-neutral-500 transition-colors hover:bg-neutral-50 disabled:opacity-40 dark:border-white/10 dark:text-neutral-400 dark:hover:bg-white/[0.04]"
-          >
+          <Button variant="secondary" onClick={handleSkipQuestion} disabled={streaming}>
             Skip
-          </button>
+          </Button>
           <div className="flex-1">
             <Button fullWidth onClick={handleAnswerSubmit} disabled={streaming}>
               {streaming ? "Generating…" : "Continue"}
@@ -515,25 +511,21 @@ export default function AIPlanCreatorSheet({
       <div className="space-y-5 p-5 pb-8">
         {/* Header with back arrow */}
         <div className="flex items-center gap-2">
-          <button
-            type="button"
-            onClick={() => setStep("input")}
-            className="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl text-neutral-500 hover:bg-neutral-100 dark:hover:bg-white/[0.06]"
-          >
+          <IconButton label="Back" variant="ghost" size="sm" onClick={() => setStep("input")}>
             <IconArrowLeft size={18} strokeWidth={2} />
-          </button>
+          </IconButton>
           <div className="flex-1">
             <p className={typography.eyebrow}>Review plan</p>
           </div>
-          <button
-            type="button"
-            disabled={streaming}
+          <Button
+            variant="secondary"
+            size="sm"
+            loading={streaming}
             onClick={() => { setStep("input"); void handleGenerate(); }}
-            className="inline-flex items-center gap-1.5 rounded-xl border border-neutral-200 px-3 py-1.5 text-[12px] font-semibold text-neutral-500 transition-colors hover:bg-neutral-50 disabled:opacity-40 dark:border-white/10 dark:text-neutral-400 dark:hover:bg-white/[0.04]"
+            icon={<IconRefresh size={15} strokeWidth={2.5} />}
           >
-            <IconRefresh size={12} strokeWidth={2.5} className={streaming ? "animate-spin" : ""} />
             Regenerate
-          </button>
+          </Button>
         </div>
 
         {/* Title + Description */}

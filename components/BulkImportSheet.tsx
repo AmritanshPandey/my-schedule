@@ -25,6 +25,7 @@ import { SECTION_ICONS } from "@/components/SectionIcons";
 import { haptic } from "@/lib/haptics";
 import { formatDisplayTime } from "@/lib/timeUtils";
 import DateInput from "@/components/ui/DateInput";
+import Button from "@/components/ui/Button";
 
 const PLAN_ICONS: Record<string, (typeof SECTION_ICONS)[number]["icon"]> = Object.fromEntries(
   SECTION_ICONS.map((s) => [s.name, s.icon])
@@ -309,29 +310,17 @@ export function BulkImportFlow({ plans, fallbackDay = "monday", onCommit, onDone
 
         {/* Step 1 — paste */}
         <Step n={1} title="Paste your plan">
-          <button
-            type="button"
-            onClick={() => { haptic("light"); setText(""); }}
-            className="ml-auto inline-flex items-center gap-1.5 rounded-xl border border-neutral-200 bg-white px-3 py-1.5 text-[12px] font-semibold text-neutral-500 transition-colors hover:border-neutral-300 hover:bg-neutral-50 dark:border-white/[0.1] dark:bg-white/[0.03] dark:text-neutral-400 dark:hover:bg-white/[0.05]"
-          >
-            <IconTrash size={14} strokeWidth={2} />Clear
-          </button>
+          <Button variant="ghost" size="sm" onClick={() => { haptic("light"); setText(""); }} icon={<IconTrash size={15} strokeWidth={2} />} className="ml-auto">
+            Clear
+          </Button>
         </Step>
         <div className="flex flex-wrap items-center gap-2">
-          <button
-            type="button"
-            onClick={downloadTemplate}
-            className="inline-flex items-center gap-1.5 rounded-xl border border-neutral-200 bg-white px-3 py-2 text-[12px] font-semibold text-neutral-600 transition-colors hover:border-neutral-300 hover:bg-neutral-50 dark:border-white/[0.1] dark:bg-white/[0.03] dark:text-neutral-300 dark:hover:bg-white/[0.05]"
-          >
-            <IconDownload size={14} strokeWidth={2} />Download template
-          </button>
-          <button
-            type="button"
-            onClick={() => { haptic("light"); fileInputRef.current?.click(); }}
-            className="inline-flex items-center gap-1.5 rounded-xl border border-neutral-200 bg-white px-3 py-2 text-[12px] font-semibold text-neutral-600 transition-colors hover:border-neutral-300 hover:bg-neutral-50 dark:border-white/[0.1] dark:bg-white/[0.03] dark:text-neutral-300 dark:hover:bg-white/[0.05]"
-          >
-            <IconUpload size={14} strokeWidth={2} />Upload file
-          </button>
+          <Button variant="secondary" size="sm" onClick={downloadTemplate} icon={<IconDownload size={15} strokeWidth={2} />}>
+            Download template
+          </Button>
+          <Button variant="secondary" size="sm" onClick={() => { haptic("light"); fileInputRef.current?.click(); }} icon={<IconUpload size={15} strokeWidth={2} />}>
+            Upload file
+          </Button>
           <input
             ref={fileInputRef}
             type="file"
@@ -339,16 +328,18 @@ export function BulkImportFlow({ plans, fallbackDay = "monday", onCommit, onDone
             onChange={handleUpload}
             className="hidden"
           />
-          <button
-            type="button"
+          <Button
+            variant="secondary"
+            size="sm"
             onClick={() => void handleAIParse()}
-            disabled={!text.trim() || aiParsing || !aiAvailable}
+            disabled={!text.trim() || !aiAvailable}
+            loading={aiParsing}
             title={!aiAvailable ? "Set up an AI provider in Settings first" : "Understands freeform text, not just this format"}
-            className="ml-auto inline-flex items-center gap-1.5 rounded-xl border border-neutral-200/70 bg-neutral-100 px-3 py-2 text-[12px] font-semibold text-neutral-700 transition-colors hover:border-neutral-400 hover:bg-neutral-100 disabled:cursor-default disabled:opacity-50 dark:border-white/[0.07] dark:bg-white/[0.05] dark:text-neutral-300 dark:hover:bg-white/[0.08]"
+            icon={<IconWand size={15} strokeWidth={2} />}
+            className="ml-auto"
           >
-            <IconWand size={14} strokeWidth={2} />
             {aiParsing ? "Parsing…" : "Parse with AI"}
-          </button>
+          </Button>
         </div>
         <div className="relative overflow-hidden rounded-2xl border border-neutral-200 bg-white dark:border-white/[0.08] dark:bg-neutral-900">
           <div className="border-b border-neutral-100 px-4 py-2.5 text-[11px] font-bold uppercase tracking-[0.08em] text-neutral-500 dark:border-white/[0.06] dark:text-neutral-400">
@@ -633,23 +624,18 @@ export function BulkImportFlow({ plans, fallbackDay = "monday", onCommit, onDone
         )}
 
         {/* Create */}
-        <m.button
-          type="button"
-          whileTap={{ scale: 0.98 }}
+        <Button
+          variant="cta"
+          fullWidth
           disabled={total === 0}
           onClick={commit}
-          className="mt-1 flex w-full flex-col items-center gap-0.5 rounded-full bg-neutral-900 py-3.5 text-white transition-colors hover:bg-neutral-800 disabled:opacity-50 dark:bg-white dark:text-neutral-900 dark:hover:bg-neutral-100"
+          icon={<IconCircleCheck size={18} strokeWidth={2} />}
+          className="mt-1"
         >
-          <span className="flex items-center gap-2 text-[16px] font-bold">
-            <IconCircleCheck size={18} strokeWidth={2} />
-            {newPlans.length > 0
-              ? `Create Plan + ${total} Task${total !== 1 ? "s" : ""}`
-              : `Create ${total} Task${total !== 1 ? "s" : ""}`}
-          </span>
-          <span className="text-[12px] font-medium opacity-90">
-            {newPlans.length > 0 ? "Review and create your plan" : "Review and create your tasks"}
-          </span>
-        </m.button>
+          {newPlans.length > 0
+            ? `Create plan + ${total} task${total !== 1 ? "s" : ""}`
+            : `Create ${total} task${total !== 1 ? "s" : ""}`}
+        </Button>
     </div>
   );
 }

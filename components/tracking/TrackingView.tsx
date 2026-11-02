@@ -26,6 +26,8 @@ import EmptyState from "@/components/ui/EmptyState";
 import TrendChange from "@/components/ui/TrendChange";
 import ProgressChart from "@/components/ProgressChart";
 import HealthBadge from "@/components/ui/HealthBadge";
+import Button from "@/components/ui/Button";
+import IconButton from "@/components/ui/IconButton";
 
 const RING_SIZE = 44;
 const RING_STROKE = 4;
@@ -370,28 +372,29 @@ function MetricCard({
           DESIGN.md reserves it for the affirmative action and names Log by name. */}
       <div className="mt-3 flex flex-wrap items-center gap-2">
         {presets.map((amount) => (
-          <button
+          <Button
             key={amount}
-            type="button"
+            variant="secondary"
+            size="sm"
             onClick={() => { haptic("light"); onLog(tracker.id, tracker.planId, amount); }}
             aria-label={`Log ${fmt(amount)}${unit ? ` ${unit}` : ""} of ${tracker.title}`}
-            className="h-9 min-w-[56px] rounded-full bg-emerald-600 px-3 text-[13px] font-extrabold tabular-nums text-white transition-colors hover:bg-emerald-700 active:bg-emerald-700 dark:bg-emerald-500 dark:text-neutral-950 dark:hover:bg-emerald-400"
+            className="min-w-[56px] tabular-nums"
           >
             +{fmt(amount)}
-          </button>
+          </Button>
         ))}
         {/* Always present: the presets are a shortcut, not the only way in, and
             a unit with no preset table (or none at all) would otherwise have no
             log affordance on this page. */}
-        <button
-          type="button"
+        <Button
+          variant="secondary"
+          size="sm"
           onClick={() => { haptic("light"); onOpenAddEntry(tracker); }}
           aria-label={`Log a value for ${tracker.title}`}
-          className="flex h-9 items-center gap-1 rounded-full border border-neutral-200 px-3 text-[13px] font-bold text-neutral-700 transition-colors hover:bg-neutral-50 dark:border-white/[0.12] dark:text-neutral-200 dark:hover:bg-white/[0.05]"
+          icon={<IconPlus size={15} strokeWidth={2.5} />}
         >
-          <IconPlus size={14} strokeWidth={2.5} />
           {presets.length > 0 ? "Other" : "Log"}
-        </button>
+        </Button>
       </div>
 
       {todaysEntries.length > 0 && (
@@ -405,14 +408,14 @@ function MetricCard({
                 <span className="text-[13px] font-bold tabular-nums text-neutral-700 dark:text-neutral-200">
                   {fmt(entry.value)}{unit && ` ${unit}`}
                 </span>
-                <button
-                  type="button"
+                <IconButton
+                  label={`Delete ${fmt(entry.value)}${unit ? ` ${unit}` : ""} entry`}
+                  variant="destructive"
+                  size="sm"
                   onClick={() => onDeleteEntry(entry.id)}
-                  aria-label={`Delete ${fmt(entry.value)}${unit ? ` ${unit}` : ""} entry`}
-                  className="flex h-7 w-7 items-center justify-center rounded-full text-neutral-500 dark:text-neutral-400 transition-colors hover:bg-neutral-100 hover:text-rose-600 dark:hover:bg-white/[0.06] dark:hover:text-rose-400"
                 >
-                  <IconTrash size={13} strokeWidth={2} />
-                </button>
+                  <IconTrash size={16} strokeWidth={2} />
+                </IconButton>
               </li>
             ))}
           </ul>
@@ -525,15 +528,14 @@ export default function TrackingView({
                             {last ? ` · ${last}` : " · Not logged yet"}
                           </p>
                         </div>
-                        <button
-                          type="button"
+                        <Button
+                          size="md"
                           onClick={() => { haptic("light"); onOpenAddEntry(tracker); }}
                           aria-label={`Log ${tracker.title}`}
-                          className="inline-flex h-11 shrink-0 items-center gap-1.5 rounded-full bg-neutral-950 px-4 text-[13px] font-extrabold text-white transition-colors hover:bg-neutral-800 dark:bg-white dark:text-neutral-950 dark:hover:bg-neutral-200"
+                          icon={<IconPlus size={16} strokeWidth={2.5} />}
                         >
-                          <IconPlus size={14} strokeWidth={2.6} />
                           Log
-                        </button>
+                        </Button>
                       </li>
                     );
                   })}

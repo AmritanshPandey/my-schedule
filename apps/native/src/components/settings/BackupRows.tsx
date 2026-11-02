@@ -46,7 +46,6 @@ async function shareBackup(schedule: Schedule): Promise<boolean> {
 }
 
 const ICON_TILE = 'h-8 w-8 shrink-0 items-center justify-center rounded-xl border border-neutral-100 bg-neutral-50 dark:border-white/[0.06] dark:bg-white/[0.04]';
-const ROW_BUTTON = 'shrink-0 rounded-xl border border-neutral-200 bg-neutral-50 px-3 py-1.5 active:bg-neutral-100 dark:border-white/[0.08] dark:bg-white/[0.04] dark:active:bg-white/[0.07]';
 const ROW_BUTTON_TEXT = 'text-[11px] font-semibold text-neutral-700 dark:text-neutral-200';
 const DIVIDER = 'mx-4 border-t border-neutral-100 dark:border-white/[0.05]';
 
@@ -220,9 +219,9 @@ export default function BackupRows({ schedule, onRestoreData }: { schedule: Sche
           <Text className="text-[13px] font-semibold text-neutral-800 dark:text-white">Export backup</Text>
           <Text className="mt-0.5 text-[11px] leading-snug text-neutral-500 dark:text-neutral-400">Exports everything as JSON · plans, history, notes</Text>
         </View>
-        <Pressable accessibilityRole="button" onPress={() => void handleExport()} className={ROW_BUTTON}>
-          <Text className={ROW_BUTTON_TEXT}>Export</Text>
-        </Pressable>
+        <Button variant="secondary" size="sm" onPress={() => void handleExport()}>
+          Export
+        </Button>
       </View>
       <View className={DIVIDER} />
       <View className="flex-row items-center gap-3 px-4 py-3.5">
@@ -254,16 +253,16 @@ export default function BackupRows({ schedule, onRestoreData }: { schedule: Sche
               <Text className="text-[13px] font-semibold text-neutral-800 dark:text-white">Restore from backup</Text>
               <Text className="mt-0.5 text-[11px] leading-snug text-neutral-500 dark:text-neutral-400">Replaces current data with the backup's contents</Text>
             </View>
-            <Pressable
-              accessibilityRole="button"
+            <Button
+              variant="secondary"
+              size="sm"
               onPress={() => {
                 haptic('light');
                 setPasteOpen(true);
               }}
-              className={ROW_BUTTON}
             >
-              <Text className={ROW_BUTTON_TEXT}>Restore</Text>
-            </Pressable>
+              Restore
+            </Button>
           </View>
           <View className={DIVIDER} />
           <View className="flex-row items-center gap-3 px-4 py-3.5">
@@ -272,16 +271,16 @@ export default function BackupRows({ schedule, onRestoreData }: { schedule: Sche
               <Text className="text-[13px] font-semibold text-neutral-800 dark:text-white">Load demo data</Text>
               <Text className="mt-0.5 text-[11px] leading-snug text-neutral-500 dark:text-neutral-400">Ten weeks of sample history · see every screen with real numbers</Text>
             </View>
-            <Pressable
-              accessibilityRole="button"
+            <Button
+              variant="secondary"
+              size="sm"
               onPress={() => {
                 haptic('light');
                 setDemoOpen(true);
               }}
-              className={ROW_BUTTON}
             >
-              <Text className={ROW_BUTTON_TEXT}>Load</Text>
-            </Pressable>
+              Load
+            </Button>
           </View>
         </>
       )}
@@ -319,19 +318,17 @@ export default function BackupRows({ schedule, onRestoreData }: { schedule: Sche
                   {history.map((b, i) => (
                     <View key={b.id} className={`flex-row items-center gap-3 px-3 py-2 ${i > 0 ? 'border-t border-neutral-100 dark:border-white/[0.05]' : ''}`}>
                       <Text className="flex-1 text-[12px] font-semibold text-neutral-700 dark:text-neutral-200">{formatBackupDate(b.id)}</Text>
-                      <Pressable
-                        accessibilityRole="button"
+                      <Button
+                        variant="secondary"
+                        size="sm"
                         disabled={cloudRestoring}
                         onPress={() => {
                           haptic('light');
                           setCloudRestoreId(b.id);
                         }}
-                        className={`rounded-lg border border-neutral-200 bg-neutral-50 px-2.5 py-1 active:bg-neutral-100 dark:border-white/[0.08] dark:bg-white/[0.04] dark:active:bg-white/[0.07] ${
-                          cloudRestoring ? 'opacity-50' : ''
-                        }`}
                       >
-                        <Text className="text-[11px] font-semibold text-neutral-600 dark:text-neutral-300">Restore</Text>
-                      </Pressable>
+                        Restore
+                      </Button>
                     </View>
                   ))}
                 </View>

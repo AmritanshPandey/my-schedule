@@ -12,6 +12,7 @@ import { downloadMarkdown, type MarkdownScope } from "@/lib/markdownExport";
 import { listCloudBackups, fetchCloudBackup, type CloudBackupMeta } from "@/lib/cloudSync";
 import { haptic } from "@/lib/haptics";
 import type { Schedule } from "@/lib/useScheduleDB";
+import Button from "@/components/ui/Button";
 
 function formatBackupDate(isoDate: string): string {
   const date = new Date(`${isoDate}T00:00:00`);
@@ -196,13 +197,9 @@ export default function BackupRows({
             Downloads everything as a JSON file · plans, history, notes
           </p>
         </div>
-        <button
-          type="button"
-          onClick={handleExport}
-          className="shrink-0 rounded-xl border border-neutral-200 bg-neutral-50 px-3 py-1.5 text-[11px] font-semibold text-neutral-700 hover:bg-neutral-100 dark:border-white/[0.08] dark:bg-white/[0.04] dark:text-neutral-200 dark:hover:bg-white/[0.07]"
-        >
+        <Button variant="secondary" size="sm" onClick={handleExport}>
           Export
-        </button>
+        </Button>
       </div>
       <div className="mx-4 border-t border-neutral-100 dark:border-white/[0.05]" />
       <div className="flex items-center gap-3 px-4 py-3.5">
@@ -241,13 +238,9 @@ export default function BackupRows({
                 Replaces current data with the file&apos;s contents
               </p>
             </div>
-            <button
-              type="button"
-              onClick={() => { haptic("light"); fileRef.current?.click(); }}
-              className="shrink-0 rounded-xl border border-neutral-200 bg-neutral-50 px-3 py-1.5 text-[11px] font-semibold text-neutral-700 hover:bg-neutral-100 dark:border-white/[0.08] dark:bg-white/[0.04] dark:text-neutral-200 dark:hover:bg-white/[0.07]"
-            >
+            <Button variant="secondary" size="sm" onClick={() => { haptic("light"); fileRef.current?.click(); }}>
               Restore
-            </button>
+            </Button>
             <input
               ref={fileRef}
               type="file"
@@ -267,13 +260,9 @@ export default function BackupRows({
                 Ten weeks of sample history · see every screen with real numbers
               </p>
             </div>
-            <button
-              type="button"
-              onClick={() => { haptic("light"); setDemoOpen(true); }}
-              className="shrink-0 rounded-xl border border-neutral-200 bg-neutral-50 px-3 py-1.5 text-[11px] font-semibold text-neutral-700 hover:bg-neutral-100 dark:border-white/[0.08] dark:bg-white/[0.04] dark:text-neutral-200 dark:hover:bg-white/[0.07]"
-            >
+            <Button variant="secondary" size="sm" onClick={() => { haptic("light"); setDemoOpen(true); }}>
               Load
-            </button>
+            </Button>
           </div>
         </>
       )}
@@ -326,14 +315,9 @@ export default function BackupRows({
                           <span className="flex-1 text-[12px] font-semibold text-neutral-700 dark:text-neutral-200">
                             {formatBackupDate(b.id)}
                           </span>
-                          <button
-                            type="button"
-                            disabled={cloudRestoring}
-                            onClick={() => { haptic("light"); setCloudRestoreId(b.id); }}
-                            className="rounded-lg border border-neutral-200 bg-neutral-50 px-2.5 py-1 text-[11px] font-semibold text-neutral-600 hover:bg-neutral-100 disabled:opacity-50 dark:border-white/[0.08] dark:bg-white/[0.04] dark:text-neutral-300 dark:hover:bg-white/[0.07]"
-                          >
+                          <Button variant="secondary" size="sm" disabled={cloudRestoring} onClick={() => { haptic("light"); setCloudRestoreId(b.id); }}>
                             Restore
-                          </button>
+                          </Button>
                         </li>
                       ))}
                     </ul>

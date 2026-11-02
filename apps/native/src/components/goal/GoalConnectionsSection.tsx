@@ -110,8 +110,7 @@ export default function GoalConnectionsSection({ goal, schedule, setSchedule }: 
               <IconButton
                 label={`Remove connection to ${other.title}`}
                 variant="ghost"
-                size="xs"
-                radius="xl"
+                size="sm"
                 onPress={() => {
                   haptic('light');
                   setSchedule((prev) => disconnectGoals(prev, connection.id));

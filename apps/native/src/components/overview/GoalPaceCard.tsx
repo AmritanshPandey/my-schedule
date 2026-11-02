@@ -8,6 +8,7 @@ import HealthBadge, { HEALTH_FILL } from '../ui/HealthBadge';
 import ProgressBar from '../ui/ProgressBar';
 import { Icon } from '../ui/Icon';
 import { Text } from '../ui/Text';
+import Button from '../ui/Button';
 
 function formatShortDate(iso: string): string {
   return new Date(`${iso}T00:00:00`).toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
@@ -38,16 +39,17 @@ export default function GoalPaceCard({
           Goals on pace
         </Text>
         {totalCount > rows.length && (
-          <Pressable
-            accessibilityRole="button"
+          <Button
+            variant="ghost"
+            size="sm"
             onPress={() => {
               haptic('light');
               onSeeAll();
             }}
-            className="-my-2 min-h-[44px] justify-center px-1"
+            className="-my-2"
           >
-            <Text className="text-[13px] font-bold text-neutral-600 dark:text-neutral-400">See all {totalCount}</Text>
-          </Pressable>
+            {`See all ${totalCount}`}
+          </Button>
         )}
       </View>
 

@@ -62,6 +62,8 @@ import { getAIInstructions, setAIInstructions } from "@/lib/ai/instructions";
 import { haptic } from "@/lib/haptics";
 import { CARD, SOFT_PANEL } from "@/components/ui/surfaces";
 import { SETTINGS_CONTROL_CLASS } from "@/components/ui/Input";
+import Button from "@/components/ui/Button";
+import IconButton from "@/components/ui/IconButton";
 
 function providerFor(kind: ProviderKind, config: AIProviderConfig): AIProvider {
   if (kind === "ollama") return new OllamaProvider(config);
@@ -410,18 +412,18 @@ function ProviderForm({
             )}
 
             <div className="flex gap-2 pt-1">
-              <button
-                type="button"
+              <Button
+                size="sm"
                 onClick={dirty ? handleSave : () => void runTest(config)}
-                disabled={phase === "testing"}
-                className="flex-1 rounded-xl bg-neutral-900 px-3 py-2 text-[12px] font-bold text-white disabled:opacity-60 dark:bg-white dark:text-neutral-900"
+                loading={phase === "testing"}
+                className="flex-1"
               >
                 {isBrowser
                   ? (dirty ? `Save & download model (${browserModelDownloadLabel(config.model)})`
                      : needsDownload ? `Download model (${browserModelDownloadLabel(config.model)})`
                      : "Reload model")
                   : (dirty ? "Save & test connection" : "Test connection")}
-              </button>
+              </Button>
             </div>
           </div>
 
@@ -564,14 +566,9 @@ function InstructionsSection() {
           </Field>
         );
       })}
-      <button
-        type="button"
-        onClick={handleSave}
-        disabled={!dirty && !saved}
-        className="w-full rounded-xl bg-neutral-900 px-3 py-2 text-[12px] font-bold text-white disabled:opacity-40 dark:bg-white dark:text-neutral-900"
-      >
+      <Button size="md" fullWidth onClick={handleSave} disabled={!dirty && !saved}>
         {saved ? "Saved" : "Save instructions"}
-      </button>
+      </Button>
     </div>
   );
 }
@@ -635,30 +632,15 @@ function TrainingDataSection() {
         {count} interaction{count === 1 ? "" : "s"} captured
       </p>
       <div className="grid grid-cols-3 gap-2">
-        <button
-          type="button"
-          onClick={copyJSONL}
-          disabled={count === 0}
-          className="rounded-xl border border-neutral-200 bg-neutral-50 px-3 py-2 text-[11px] font-semibold text-neutral-700 disabled:opacity-40 dark:border-white/[0.08] dark:bg-white/[0.04] dark:text-neutral-200"
-        >
+        <Button variant="secondary" size="sm" onClick={copyJSONL} disabled={count === 0}>
           {copyState === "copied" ? "Copied" : copyState === "failed" ? "Copy failed" : "Copy"}
-        </button>
-        <button
-          type="button"
-          onClick={downloadJSONL}
-          disabled={count === 0}
-          className="rounded-xl border border-neutral-200 bg-neutral-50 px-3 py-2 text-[11px] font-semibold text-neutral-700 disabled:opacity-40 dark:border-white/[0.08] dark:bg-white/[0.04] dark:text-neutral-200"
-        >
+        </Button>
+        <Button variant="secondary" size="sm" onClick={downloadJSONL} disabled={count === 0}>
           Download
-        </button>
-        <button
-          type="button"
-          onClick={clear}
-          disabled={count === 0}
-          className="rounded-xl border border-neutral-200 bg-neutral-50 px-3 py-2 text-[11px] font-semibold text-neutral-500 disabled:opacity-40 dark:border-white/[0.08] dark:bg-white/[0.04] dark:text-neutral-300"
-        >
+        </Button>
+        <Button variant="ghost" size="sm" onClick={clear} disabled={count === 0}>
           Clear
-        </button>
+        </Button>
       </div>
     </div>
   );
@@ -691,14 +673,9 @@ export function AIView({ onClose }: AIViewProps) {
         style={{ paddingBottom: "max(48px, calc(env(safe-area-inset-bottom) + 32px))" }}
       >
         <div className="mb-6 flex items-center gap-3">
-          <button
-            type="button"
-            onClick={onClose}
-            className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl text-neutral-500 dark:text-neutral-400 hover:bg-neutral-100 dark:hover:bg-white/[0.06] lg:hidden"
-            aria-label="Back"
-          >
+          <IconButton label="Back" variant="ghost" size="md" onClick={onClose} className="lg:hidden">
             <IconChevronLeft size={18} strokeWidth={2} />
-          </button>
+          </IconButton>
           <div>
             <h1 className="text-[26px] font-black tracking-[-0.5px] text-neutral-900 dark:text-white">AI</h1>
             <p className="mt-0.5 text-[13px] text-neutral-500 dark:text-neutral-400">

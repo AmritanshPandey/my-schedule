@@ -16,6 +16,7 @@ import WeekStatusCard from '../overview/WeekStatusCard';
 import GoalPaceCard from '../overview/GoalPaceCard';
 import DaySpreadCard from '../overview/DaySpreadCard';
 import { buildDaySpread } from '@planr/core/lib/daySpread';
+import Button from '../ui/Button';
 
 const SETUP_ICON: Record<SetupStep['key'], TablerIcon> = {
   plan: IconClipboardList,
@@ -146,26 +147,26 @@ export default function IOSOverview({
             })}
           </View>
           <View className="mt-3 flex-row items-center gap-2">
-            <Pressable
-              accessibilityRole="button"
+            <Button
+              size="md"
               onPress={() => {
                 haptic('light');
                 onNavigate(setup.next.tab);
               }}
-              className="min-h-[44px] flex-1 items-center justify-center rounded-full bg-[#008236] active:scale-[0.98] active:bg-[#006B2C] dark:bg-[#2FD46E]"
+              className="flex-1"
             >
-              <Text className="text-[14px] font-bold text-white dark:text-neutral-950">{setup.next.cta}</Text>
-            </Pressable>
-            <Pressable
-              accessibilityRole="button"
+              {setup.next.cta}
+            </Button>
+            <Button
+              variant="ghost"
+              size="md"
               onPress={() => {
                 haptic('light');
                 onDismissSetup();
               }}
-              className="min-h-[44px] items-center justify-center rounded-full px-3"
             >
-              <Text className="text-[13px] font-semibold text-neutral-600 dark:text-neutral-400">I'll do this later</Text>
-            </Pressable>
+              I'll do this later
+            </Button>
           </View>
         </View>
       )}

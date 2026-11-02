@@ -27,6 +27,7 @@ import {
   iconPickerClass,
 } from "./planFormShared";
 import DateInput from "@/components/ui/DateInput";
+import IconButton from "@/components/ui/IconButton";
 
 type SetScheduleFn = (updater: (prev: Schedule) => Schedule) => void;
 
@@ -254,13 +255,9 @@ export default function AddPlanSheet({ open, onClose, setSchedule, onUseAI, goal
               }}
               placeholder="Metric name…"
             />
-            <button
-              type="button"
-              onClick={addMetaField}
-              className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl border border-neutral-200 text-neutral-500 hover:bg-neutral-100 dark:border-white/10 dark:text-neutral-400 dark:hover:bg-white/[0.07]"
-            >
-              <IconPlus size={16} />
-            </button>
+            <IconButton label="Add tracker" size="lg" onClick={addMetaField}>
+              <IconPlus size={20} strokeWidth={2.4} />
+            </IconButton>
           </div>
           {metaFields.length > 0 && (
             <div className="mt-2 flex flex-wrap gap-1.5">

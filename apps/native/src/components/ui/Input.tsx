@@ -14,8 +14,6 @@ const FORM_CONTROL_CHROME =
 export const FORM_CONTROL_BASE = `w-full ${FORM_CONTROL_CHROME} text-[16px] font-medium`;
 export const FORM_INPUT_CLASS = `${FORM_CONTROL_BASE} h-11 px-4`;
 export const SETTINGS_CONTROL_CLASS = `${FORM_CONTROL_CHROME} h-10 px-3 text-[16px] font-semibold`;
-export const SETTINGS_ICON_BUTTON_CLASS =
-  'h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-neutral-200 dark:border-white/10';
 export const FORM_TEXTAREA_CLASS = `${FORM_CONTROL_BASE} min-h-[76px] max-h-36 px-4 py-3 leading-snug`;
 export const FORM_LABEL = `mb-1.5 ${typography.eyebrow}`;
 

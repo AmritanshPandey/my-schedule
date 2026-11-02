@@ -31,6 +31,8 @@ import { useNowMinutes } from "@/lib/timeline/useNowMinutes";
 import SignInPrompt from "@/components/auth/SignInPrompt";
 import TodayTaskList from "@/components/today/TodayTaskList";
 import DayActionsSheet from "@/components/DayActionsSheet";
+import Button from "@/components/ui/Button";
+import IconButton from "@/components/ui/IconButton";
 import {
   DAYS,
   DAY_LABELS,
@@ -172,6 +174,8 @@ function quickTaskTimeRange(now = new Date()): { startTime: string; endTime: str
   };
 }
 
+const GLASS_ICON = "text-neutral-800 dark:text-neutral-100";
+
 function IOSHeader({
   title,
   onBack,
@@ -223,43 +227,30 @@ function IOSHeader({
               actions.map((action) => {
                 const Icon = action.icon;
                 return (
-                  <button
+                  <IconButton
                     key={action.label}
-                    type="button"
+                    label={action.label}
+                    variant={action.destructive ? "destructive" : "ghost"}
+                    size="lg"
                     onClick={action.onClick}
-                    aria-label={action.label}
                     data-tour={action.tour}
-                    className={`flex h-11 w-11 items-center justify-center rounded-full transition-colors ${
-                      action.destructive
-                        ? "text-neutral-800 hover:bg-rose-500/10 hover:text-rose-500 active:bg-rose-500/10 dark:text-neutral-100 dark:hover:text-rose-400"
-                        : "text-neutral-800 hover:bg-black/[0.06] active:bg-black/[0.06] dark:text-neutral-100 dark:hover:bg-white/[0.1] dark:active:bg-white/[0.1]"
-                    }`}
                   >
-                    <Icon size={21} strokeWidth={2} />
-                  </button>
+                    {/* On glass the icons sit on a moving backdrop, so they take full ink. */}
+                    <Icon size={21} strokeWidth={2} className={action.destructive ? undefined : GLASS_ICON} />
+                  </IconButton>
                 );
               })
             ) : (
               <>
                 {onNotes && (
-                  <button
-                    type="button"
-                    onClick={onNotes}
-                    aria-label="Notes"
-                    className="flex h-11 w-11 items-center justify-center rounded-full text-neutral-800 transition-colors hover:bg-black/[0.06] active:bg-black/[0.06] dark:text-neutral-100 dark:hover:bg-white/[0.1] dark:active:bg-white/[0.1]"
-                  >
-                    <IconNotes size={20} strokeWidth={2} />
-                  </button>
+                  <IconButton label="Notes" variant="ghost" size="lg" onClick={onNotes}>
+                    <IconNotes size={20} strokeWidth={2} className={GLASS_ICON} />
+                  </IconButton>
                 )}
                 {onSettings && (
-                  <button
-                    type="button"
-                    onClick={onSettings}
-                    aria-label="Settings"
-                    className="flex h-11 w-11 items-center justify-center rounded-full text-neutral-800 transition-colors hover:bg-black/[0.06] active:bg-black/[0.06] dark:text-neutral-100 dark:hover:bg-white/[0.1] dark:active:bg-white/[0.1]"
-                  >
-                    <IconSettings size={20} strokeWidth={2} />
-                  </button>
+                  <IconButton label="Settings" variant="ghost" size="lg" onClick={onSettings}>
+                    <IconSettings size={20} strokeWidth={2} className={GLASS_ICON} />
+                  </IconButton>
                 )}
               </>
             )}
@@ -293,22 +284,14 @@ function EmptyPanel({
       {(action || secondaryAction) && (
         <div className="mt-4 flex items-center justify-center gap-2">
           {action && (
-            <button
-              type="button"
-              onClick={action.onClick}
-              className="inline-flex h-10 items-center justify-center rounded-full bg-neutral-950 px-4 text-[13px] font-bold text-white dark:bg-white dark:text-neutral-950"
-            >
+            <Button size="md" onClick={action.onClick}>
               {action.label}
-            </button>
+            </Button>
           )}
           {secondaryAction && (
-            <button
-              type="button"
-              onClick={secondaryAction.onClick}
-              className="inline-flex h-10 items-center justify-center rounded-full border border-neutral-200 px-4 text-[13px] font-bold text-neutral-600 dark:border-white/[0.10] dark:text-neutral-300"
-            >
+            <Button variant="secondary" size="md" onClick={secondaryAction.onClick}>
               {secondaryAction.label}
-            </button>
+            </Button>
           )}
         </div>
       )}
@@ -330,23 +313,19 @@ function ConfirmOverlay({ state, onClose }: { state: ConfirmState; onClose: () =
           </div>
         </div>
         <div className="grid grid-cols-2 gap-2">
-          <button
-            type="button"
-            onClick={onClose}
-            className="h-11 rounded-full border border-neutral-200 text-[14px] font-bold text-neutral-600 dark:border-white/[0.10] dark:text-neutral-300"
-          >
+          <Button variant="secondary" size="md" onClick={onClose}>
             Cancel
-          </button>
-          <button
-            type="button"
+          </Button>
+          <Button
+            variant={state.destructive ? "destructive" : "primary"}
+            size="md"
             onClick={() => {
               state.onConfirm();
               onClose();
             }}
-            className={`h-11 rounded-full text-[14px] font-bold text-white ${state.destructive ? "bg-rose-600" : "bg-neutral-950 dark:bg-white dark:text-neutral-950"}`}
           >
             {state.confirmLabel ?? "Confirm"}
-          </button>
+          </Button>
         </div>
       </div>
     </div>
@@ -1446,15 +1425,15 @@ export default function IOSScheduleApp() {
               <div className="mb-3 flex items-center justify-between px-4">
                 <span className="text-[20px] font-bold text-neutral-900 dark:text-white">{weekLabel}</span>
                 <div className="flex items-center">
-                  <button type="button" onClick={() => { setWeekOffset(0); setActiveDay(todayKey); }} className="text-[14px] font-bold text-emerald-600 dark:text-emerald-400">
+                  <Button variant="ghost" size="sm" onClick={() => { setWeekOffset(0); setActiveDay(todayKey); }}>
                     Today
-                  </button>
-                  <button type="button" onClick={() => setWeekOffset((offset) => offset - 1)} aria-label="Previous week" className="flex h-8 w-8 items-center justify-center rounded-full text-neutral-500 dark:text-neutral-400">
-                    <IconChevronLeft size={16} strokeWidth={2} />
-                  </button>
-                  <button type="button" onClick={() => setWeekOffset((offset) => offset + 1)} aria-label="Next week" className="flex h-8 w-8 items-center justify-center rounded-full text-neutral-500 dark:text-neutral-400">
-                    <IconChevronRight size={16} strokeWidth={2} />
-                  </button>
+                  </Button>
+                  <IconButton label="Previous week" variant="ghost" size="md" onClick={() => setWeekOffset((offset) => offset - 1)}>
+                    <IconChevronLeft size={18} strokeWidth={2} />
+                  </IconButton>
+                  <IconButton label="Next week" variant="ghost" size="md" onClick={() => setWeekOffset((offset) => offset + 1)}>
+                    <IconChevronRight size={18} strokeWidth={2} />
+                  </IconButton>
                 </div>
               </div>
               <div className="grid grid-cols-7 px-2">
@@ -1482,14 +1461,9 @@ export default function IOSScheduleApp() {
               </div>
               <div className="flex items-center gap-2">
                 {todayEditMode && (
-                  <button
-                    type="button"
-                    aria-label="Lock screen wallpaper"
-                    onClick={() => { haptic("light"); setWallpaperOpen(true); }}
-                    className="flex h-12 w-12 items-center justify-center rounded-full bg-neutral-100 text-neutral-600 dark:bg-white/[0.08] dark:text-neutral-300"
-                  >
-                    <IconPhoto size={24} strokeWidth={2} />
-                  </button>
+                  <IconButton label="Lock screen wallpaper" size="lg" onClick={() => { haptic("light"); setWallpaperOpen(true); }}>
+                    <IconPhoto size={21} strokeWidth={2} />
+                  </IconButton>
                 )}
               </div>
             </div>

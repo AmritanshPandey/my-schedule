@@ -35,6 +35,8 @@ import { SCHEDULE_DAY_HANDOVER_MINUTES, taskContinuations } from "@/lib/timeline
 import { findMergePairs } from "@/lib/taskMerge";
 import TimelineDraftCard from "@/components/timeline/TimelineDraftCard";
 import RitualStrip from "@/components/timeline/RitualStrip";
+import Button from "@/components/ui/Button";
+import IconButton from "@/components/ui/IconButton";
 
 export type CalendarView = "1day" | "3day" | "7day" | "custom3";
 
@@ -1119,13 +1121,9 @@ export function WeekGrid({
                     })}
                   </div>
                   {customDays.length >= 1 && (
-                    <button
-                      type="button"
-                      onClick={() => setShowCustomPicker(false)}
-                      className="mt-3 w-full rounded-xl bg-neutral-900 py-1.5 text-[12px] font-bold text-white dark:bg-white dark:text-neutral-900"
-                    >
+                    <Button size="sm" fullWidth onClick={() => setShowCustomPicker(false)} className="mt-3">
                       Done
-                    </button>
+                    </Button>
                   )}
                 </m.div>
               )}
@@ -1134,42 +1132,24 @@ export function WeekGrid({
         </div>
 
           <div className="flex shrink-0 items-center gap-2 pt-7">
-            <button
-              type="button"
+            <Button
+              variant={isEditingSchedule ? "primary" : "secondary"}
+              size="md"
               aria-pressed={isEditingSchedule}
               onClick={() => { haptic("light"); setIsEditingSchedule((editing) => !editing); }}
-              className={`flex h-10 items-center gap-2 rounded-full px-3.5 text-[13px] font-bold transition-colors ${
-                isEditingSchedule
-                  ? "bg-neutral-950 text-white dark:bg-white dark:text-neutral-950"
-                  : "border border-neutral-200 text-neutral-600 hover:bg-neutral-100 hover:text-neutral-950 dark:border-white/[0.10] dark:text-neutral-300 dark:hover:bg-white/[0.07] dark:hover:text-white"
-              }`}
+              icon={isEditingSchedule ? <IconCheck size={16} strokeWidth={2.4} /> : <IconEdit size={16} strokeWidth={2.2} />}
             >
-              {isEditingSchedule ? <IconCheck size={16} strokeWidth={2.4} /> : <IconEdit size={16} strokeWidth={2.2} />}
               {isEditingSchedule ? "Done editing" : "Edit schedule"}
-            </button>
-            <button
-              type="button"
-              onClick={() => { haptic("light"); onWeekToday(); }}
-              className="mr-2 rounded-full px-3 py-2 text-[13px] font-bold text-neutral-600 transition-colors hover:bg-neutral-100 hover:text-neutral-950 dark:text-neutral-400 dark:hover:bg-white/[0.07] dark:hover:text-white"
-            >
+            </Button>
+            <Button variant="ghost" size="sm" onClick={() => { haptic("light"); onWeekToday(); }} className="mr-2">
               Today
-            </button>
-            <button
-              type="button"
-              onClick={() => { haptic("light"); onWeekPrev(); }}
-              className="flex h-9 w-9 items-center justify-center rounded-full text-neutral-500 transition-colors hover:bg-neutral-100 hover:text-neutral-950 dark:text-neutral-400 dark:hover:bg-white/[0.07] dark:hover:text-white"
-              aria-label="Previous"
-            >
+            </Button>
+            <IconButton label="Previous week" variant="ghost" size="md" onClick={() => { haptic("light"); onWeekPrev(); }}>
               <IconChevronLeft size={20} strokeWidth={2.2} />
-            </button>
-            <button
-              type="button"
-              onClick={() => { haptic("light"); onWeekNext(); }}
-              className="flex h-9 w-9 items-center justify-center rounded-full text-neutral-500 transition-colors hover:bg-neutral-100 hover:text-neutral-950 dark:text-neutral-400 dark:hover:bg-white/[0.07] dark:hover:text-white"
-              aria-label="Next"
-            >
+            </IconButton>
+            <IconButton label="Next week" variant="ghost" size="md" onClick={() => { haptic("light"); onWeekNext(); }}>
               <IconChevronRight size={20} strokeWidth={2.2} />
-            </button>
+            </IconButton>
           </div>
       </div>
 

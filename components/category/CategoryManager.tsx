@@ -1,13 +1,14 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { IconPlus, IconTrash } from "@tabler/icons-react";
+import { IconTrash } from "@tabler/icons-react";
 import type { Schedule, TaskCategory } from "@/lib/useScheduleDB";
 import { canDeleteCategory, categoryUsageCounts } from "@/lib/taskCategories";
 import { accentStyles } from "@/lib/colorSystem";
 import { iconGlyph } from "@/components/SectionIcons";
 import { haptic } from "@/lib/haptics";
 import CategorySheet, { type CategoryDraft } from "@/components/category/CategorySheet";
+import AddRowButton from "@/components/ui/AddRowButton";
 
 type SetScheduleFn = (updater: (prev: Schedule) => Schedule) => void;
 
@@ -113,14 +114,7 @@ export default function CategoryManager({ schedule, setSchedule }: CategoryManag
         </div>
       )}
 
-      <button
-        type="button"
-        onClick={() => { haptic("light"); setEditing(null); setSheetOpen(true); }}
-        className="mt-3 flex w-full items-center justify-center gap-1.5 rounded-xl border border-dashed border-neutral-200 py-2.5 text-[13px] font-semibold text-neutral-500 transition-colors hover:border-neutral-300 hover:text-neutral-700 dark:border-white/[0.10] dark:text-neutral-400 dark:hover:border-white/20 dark:hover:text-neutral-200"
-      >
-        <IconPlus size={15} strokeWidth={2.2} />
-        New category
-      </button>
+      <AddRowButton label="New category" onClick={() => { haptic("light"); setEditing(null); setSheetOpen(true); }} className="mt-3" />
 
       <CategorySheet
         open={sheetOpen}

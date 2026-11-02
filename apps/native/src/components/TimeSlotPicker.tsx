@@ -8,6 +8,7 @@ import TimeInput from './ui/TimeInput';
 import { typography } from './ui/Typography';
 import { Icon } from './ui/Icon';
 import { Text } from './ui/Text';
+import IconButton, { ICON_BUTTON_TONE } from './ui/IconButton';
 
 const START_PRESETS = [
   { label: 'Now', value: 'now' },
@@ -179,14 +180,15 @@ export default function TimeSlotPicker({
               </View>
             </View>
             {slots.length > 1 && (
-              <Pressable
-                accessibilityRole="button"
-                accessibilityLabel={`Remove time slot ${index + 1}`}
+              <IconButton
+                label={`Remove time slot ${index + 1}`}
+                variant="destructive"
+                size="lg"
                 onPress={() => removeSlot(index)}
-                className="mb-0.5 h-11 w-9 shrink-0 items-center justify-center rounded-xl border border-neutral-200 active:border-rose-300 dark:border-white/10"
+                className="mb-0.5"
               >
-                <Icon icon={IconX} size={16} strokeWidth={2.2} className="text-neutral-500 dark:text-neutral-400" />
-              </Pressable>
+                <Icon icon={IconX} size={18} strokeWidth={2.2} className={ICON_BUTTON_TONE.destructive} />
+              </IconButton>
             )}
           </View>
         ))}

@@ -132,7 +132,7 @@ export function ProposalPreviewCard({ proposal, onAccept, onReject }: ProposalPr
       )}
 
       <div className="flex gap-2">
-        <Button size="sm" variant="dangerSecondary" onClick={() => onReject(proposal)}>
+        <Button size="sm" variant="destructiveSecondary" onClick={() => onReject(proposal)}>
           Reject
         </Button>
         <Button size="sm" variant="cta" fullWidth disabled={!ready} onClick={handleAccept}>

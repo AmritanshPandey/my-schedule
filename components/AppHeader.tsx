@@ -6,6 +6,8 @@ import { IconChevronLeft, IconPencil, IconUser } from "@tabler/icons-react";
 import { useAuth } from "@/contexts/AuthProvider";
 import { useSyncStatus } from "@/lib/useSyncStatus";
 import SyncDot from "@/components/sync/SyncDot";
+import Button from "@/components/ui/Button";
+import IconButton from "@/components/ui/IconButton";
 
 interface ActionItem {
   icon: React.ComponentType<{ size?: number; strokeWidth?: number; className?: string }>;
@@ -116,18 +118,9 @@ function RootHeader({ onOpenSettings, onNotes }: Pick<AppHeaderProps, "onOpenSet
 
       {/* Right: Notes pill + avatar */}
       <div className="flex items-center justify-center gap-2.5">
-        <m.button
-          type="button"
-          whileTap={{ scale: 0.94 }}
-          onClick={onNotes}
-          aria-label="Notes"
-          className="flex min-h-[44px] items-center gap-2 rounded-full bg-neutral-900 px-4 py-2.5 dark:bg-white"
-        >
-          <IconPencil size={15} strokeWidth={2.2} className="text-white dark:text-neutral-900" />
-          <span className="text-[14px] font-semibold text-white dark:text-neutral-900 leading-none">
-            Notes
-          </span>
-        </m.button>
+        <Button size="md" onClick={onNotes} aria-label="Notes" icon={<IconPencil size={16} strokeWidth={2.2} />}>
+          Notes
+        </Button>
 
         {/* Avatar opens Settings (full sync detail lives there); the corner dot
             gives at-a-glance sync state. Dot sits outside the overflow-hidden
@@ -204,20 +197,15 @@ function DetailHeader({ back, actions }: Pick<AppHeaderProps, "back" | "actions"
           {actions.map((action, i) => {
             const Icon = action.icon;
             return (
-              <m.button
+              <IconButton
                 key={i}
-                type="button"
-                whileTap={{ scale: 0.86 }}
+                label={action.label ?? ""}
+                variant={action.destructive ? "destructive" : "secondary"}
+                size="md"
                 onClick={action.onClick}
-                aria-label={action.label}
-                className={`flex h-9 w-9 items-center justify-center rounded-full transition-colors ${
-                  action.destructive
-                    ? "bg-neutral-100 text-neutral-500 hover:bg-rose-500/10 hover:text-rose-500 focus-visible:bg-rose-500/10 focus-visible:text-rose-500 dark:bg-white/[0.07] dark:text-neutral-400 dark:hover:bg-rose-500/10 dark:hover:text-rose-400 dark:focus-visible:bg-rose-500/10 dark:focus-visible:text-rose-400"
-                    : "bg-neutral-100 text-neutral-700 dark:bg-white/[0.07] dark:text-white/70"
-                }`}
               >
                 <Icon size={20} strokeWidth={2} />
-              </m.button>
+              </IconButton>
             );
           })}
         </div>

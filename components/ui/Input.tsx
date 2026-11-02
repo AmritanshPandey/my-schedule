@@ -41,9 +41,6 @@ export const FORM_INPUT_CLASS = `${FORM_CONTROL_BASE} h-11 px-4`;
  */
 export const SETTINGS_CONTROL_CLASS = `${FORM_CONTROL_CHROME} h-10 px-3 text-[16px] font-semibold`;
 
-/** The square icon button that pairs with a SETTINGS_CONTROL_CLASS field. */
-export const SETTINGS_ICON_BUTTON_CLASS =
-  "flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-neutral-200 text-neutral-500 transition-colors hover:border-neutral-300 hover:text-neutral-700 disabled:cursor-default disabled:opacity-35 disabled:hover:border-neutral-200 disabled:hover:text-neutral-500 dark:border-white/10 dark:text-neutral-400 dark:hover:border-white/20 dark:hover:text-neutral-200 dark:disabled:hover:border-white/10 dark:disabled:hover:text-neutral-400";
 export const FORM_TEXTAREA_CLASS = `${FORM_CONTROL_BASE} min-h-[76px] max-h-36 resize-none px-4 py-3 leading-snug`;
 export const FORM_LABEL = `mb-1.5 block ${typography.eyebrow}`;
 

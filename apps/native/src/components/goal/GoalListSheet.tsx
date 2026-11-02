@@ -115,8 +115,8 @@ export default function GoalListSheet({
                   <Icon icon={IconChevronLeft} size={16} strokeWidth={2.2} className="text-neutral-500 dark:text-neutral-400" />
                   <Text className="text-[13px] font-semibold text-neutral-500 dark:text-neutral-400">Goals</Text>
                 </Pressable>
-                <IconButton label="Close" variant="outline" size="sm" radius="xl" onPress={handleClose}>
-                  <Icon icon={IconX} size={14} strokeWidth={2} className={ICON_BUTTON_TONE.outline} />
+                <IconButton label="Close" variant="secondary" size="sm" onPress={handleClose}>
+                  <Icon icon={IconX} size={14} strokeWidth={2} className={ICON_BUTTON_TONE.secondary} />
                 </IconButton>
               </View>
 
@@ -176,14 +176,14 @@ export default function GoalListSheet({
                 )}
                 <Button
                   size="sm"
-                  variant="dangerSecondary"
+                  variant="destructiveSecondary"
                   accessibilityLabel="Delete goal"
                   onPress={() => {
                     setSelectedGoalId(null);
                     onDeleteGoal(selectedGoal.id);
                   }}
                 >
-                  <Icon icon={IconTrash} size={14} strokeWidth={2} className={BUTTON_TEXT.dangerSecondary} />
+                  <Icon icon={IconTrash} size={14} strokeWidth={2} className={BUTTON_TEXT.destructiveSecondary} />
                 </Button>
               </View>
 

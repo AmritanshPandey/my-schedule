@@ -4,6 +4,7 @@ import { m } from "framer-motion";
 import { IconBolt, IconCheck } from "@tabler/icons-react";
 import type { Task, Plan, Milestone } from "@/lib/useScheduleDB";
 import { formatDisplayTime } from "@/lib/timeUtils";
+import Button from "@/components/ui/Button";
 
 interface WhatNextCardProps {
   task: Task;
@@ -77,21 +78,12 @@ export default function WhatNextCard({
 
         {/* Actions */}
         <div className="mt-3 flex items-center gap-2">
-          <button
-            type="button"
-            onClick={onMarkDone}
-            className="flex min-h-[44px] items-center gap-1.5 rounded-xl bg-[#008236] px-4 py-2 text-[13px] font-semibold text-white transition-colors hover:bg-[#006B2C] dark:bg-[#2FD46E] dark:text-neutral-950 dark:hover:bg-[#2FD46E]/90"
-          >
-            <IconCheck size={14} strokeWidth={2.5} />
+          <Button variant="cta" size="md" onClick={onMarkDone} icon={<IconCheck size={16} strokeWidth={2.5} />}>
             Mark done
-          </button>
-          <button
-            type="button"
-            onClick={onDismissDay}
-            className="min-h-[44px] rounded-xl px-3 py-2 text-[13px] font-medium text-neutral-500 transition-colors hover:text-neutral-600 dark:text-neutral-400 dark:hover:text-neutral-300"
-          >
+          </Button>
+          <Button variant="ghost" size="md" onClick={onDismissDay}>
             Focus later
-          </button>
+          </Button>
         </div>
       </div>
     </m.div>

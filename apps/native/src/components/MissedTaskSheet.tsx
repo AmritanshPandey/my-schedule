@@ -109,8 +109,8 @@ export default function MissedTaskSheet({ missed, onClose, onReschedule, onDismi
               <Icon icon={IconArrowUp} size={16} strokeWidth={2.4} className={BUTTON_TEXT.cta} />
               {`Add to ${friendlyDate(dateISO, todayISO)}`}
             </Button>
-            <Button variant="dangerSecondary" fullWidth onPress={handleDismiss}>
-              <Icon icon={IconTrash} size={15} strokeWidth={2} className={BUTTON_TEXT.dangerSecondary} />
+            <Button variant="destructiveSecondary" fullWidth onPress={handleDismiss}>
+              <Icon icon={IconTrash} size={15} strokeWidth={2} className={BUTTON_TEXT.destructiveSecondary} />
               Dismiss
             </Button>
           </View>

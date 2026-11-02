@@ -1,12 +1,12 @@
 "use client";
 
 import { useState, memo } from "react";
-import { m } from "framer-motion";
 import Image from "next/image";
 import { useAuth } from "@/contexts/AuthProvider";
 import { SyncStatusBadge } from "@/components/auth/SyncStatusBadge";
 import { useGoogleSignIn } from "@/components/auth/useGoogleSignIn";
 import { AuthErrorNote } from "@/components/auth/AuthErrorNote";
+import Button from "@/components/ui/Button";
 
 // ── Google "G" logo SVG (official colours, no external fetch) ─────────────────
 function GoogleLogo() {
@@ -76,15 +76,9 @@ export const LoginButton = memo(function LoginButton() {
         </div>
 
         {/* Sign out */}
-        <m.button
-          type="button"
-          onClick={handleLogout}
-          disabled={busy}
-          whileTap={{ scale: 0.94 }}
-          className="rounded-xl border border-neutral-200 bg-white px-3 py-1.5 text-[12px] font-semibold text-neutral-500 hover:text-neutral-900 dark:border-white/10 dark:bg-neutral-900 dark:text-neutral-400 dark:hover:text-white transition-colors disabled:opacity-50"
-        >
+        <Button variant="ghost" size="sm" onClick={handleLogout} loading={busy}>
           Sign out
-        </m.button>
+        </Button>
       </div>
     );
   }
@@ -97,24 +91,20 @@ export const LoginButton = memo(function LoginButton() {
         Sign in to back up your data and sync across devices.
       </p>
 
-      <m.button
-        type="button"
+      <Button
+        variant="secondary"
+        size="md"
+        fullWidth
         onClick={signIn}
-        disabled={signingIn || !isAuthAvailable}
+        disabled={!isAuthAvailable}
+        loading={signingIn}
         aria-describedby={
           !isAuthAvailable || error ? "login-button-auth-note" : undefined
         }
-        whileTap={{ scale: 0.97 }}
-        transition={{ type: "spring", stiffness: 400, damping: 22 }}
-        className="inline-flex w-full items-center justify-center gap-2.5 rounded-xl border border-neutral-200 bg-white px-4 py-2.5 text-[14px] font-semibold text-neutral-700 hover:bg-neutral-100 hover:border-neutral-300 dark:border-white/10 dark:bg-neutral-900 dark:text-white dark:hover:bg-white/[0.07] dark:hover:border-white/[0.16] transition-colors disabled:opacity-60"
+        icon={<GoogleLogo />}
       >
-        {signingIn ? (
-          <span className="h-4 w-4 animate-spin rounded-full border-2 border-neutral-300 border-t-neutral-700 dark:border-neutral-700 dark:border-t-neutral-300" />
-        ) : (
-          <GoogleLogo />
-        )}
         {signingIn ? "Signing in…" : "Continue with Google"}
-      </m.button>
+      </Button>
 
       <AuthErrorNote
         id="login-button-auth-note"

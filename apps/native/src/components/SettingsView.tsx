@@ -30,9 +30,10 @@ import Toggle from './ui/Toggle';
 import Select from './ui/Select';
 import DateInput from './ui/DateInput';
 import { CARD as CARD_SURFACE } from './ui/surfaces';
-import { SETTINGS_ICON_BUTTON_CLASS } from './ui/Input';
 import { Icon, type TablerIcon } from './ui/Icon';
 import { Text } from './ui/Text';
+import Button, { BUTTON_TEXT } from './ui/Button';
+import IconButton, { ICON_BUTTON_TONE } from './ui/IconButton';
 
 // ── Primitives ────────────────────────────────────────────────────────────────
 
@@ -564,15 +565,9 @@ export function SettingsView({ schedule, setSchedule, onClearData, onClearProgre
                   <View className="min-w-0 flex-1">
                     <DateInput value={trackingStart} onChange={handleTrackingStartChange} max={localISODate(new Date())} placeholder="All history" />
                   </View>
-                  <Pressable
-                    accessibilityRole="button"
-                    accessibilityLabel="Use all history"
-                    onPress={() => handleTrackingStartChange('')}
-                    disabled={!trackingStart}
-                    className={`${SETTINGS_ICON_BUTTON_CLASS} h-11 w-11 ${!trackingStart ? 'opacity-40' : ''}`}
-                  >
-                    <Icon icon={IconX} size={15} strokeWidth={2.2} className="text-neutral-500 dark:text-neutral-400" />
-                  </Pressable>
+                  <IconButton label="Use all history" size="lg" onPress={() => handleTrackingStartChange('')} disabled={!trackingStart}>
+                    <Icon icon={IconX} size={18} strokeWidth={2.2} className={ICON_BUTTON_TONE.secondary} />
+                  </IconButton>
                 </View>
               </View>
             </Card>
@@ -620,13 +615,9 @@ export function SettingsView({ schedule, setSchedule, onClearData, onClearProgre
                           <Text className={settingTitle}>Clear progress</Text>
                           <Text className="text-[11px] text-neutral-500 dark:text-neutral-400">Resets completions & logged values · keeps your plans and tasks</Text>
                         </View>
-                        <Pressable
-                          accessibilityRole="button"
-                          onPress={() => setProgressPhase('confirm')}
-                          className="shrink-0 rounded-xl border border-amber-200 bg-amber-50 px-3 py-1.5 active:bg-amber-100 dark:border-amber-500/20 dark:bg-amber-500/10"
-                        >
-                          <Text className="text-[11px] font-semibold text-amber-700 dark:text-amber-400">Reset</Text>
-                        </Pressable>
+                        <Button variant="destructiveSecondary" size="sm" onPress={() => setProgressPhase('confirm')}>
+                          Reset
+                        </Button>
                       </View>
                     )}
                     {progressPhase === 'confirm' && (
@@ -636,22 +627,18 @@ export function SettingsView({ schedule, setSchedule, onClearData, onClearProgre
                           routines stay. Cannot be undone.
                         </Text>
                         <View className="flex-row gap-2">
-                          <Pressable
-                            accessibilityRole="button"
-                            onPress={() => setProgressPhase('idle')}
-                            className="flex-1 flex-row items-center justify-center gap-1.5 rounded-xl border border-neutral-200 bg-white py-2 active:bg-neutral-50 dark:border-white/[0.08] dark:bg-white/[0.04]"
-                          >
-                            <Icon icon={IconX} size={12} strokeWidth={2.5} className="text-neutral-600 dark:text-neutral-300" />
-                            <Text className="text-[12px] font-semibold text-neutral-600 dark:text-neutral-300">Cancel</Text>
-                          </Pressable>
-                          <Pressable
-                            accessibilityRole="button"
+                          <Button variant="secondary" size="md" onPress={() => setProgressPhase('idle')} className="flex-1">
+                            Cancel
+                          </Button>
+                          <Button
+                            variant="destructive"
+                            size="md"
                             onPress={() => void handleClearProgress()}
-                            className="flex-1 flex-row items-center justify-center gap-1.5 rounded-xl border border-amber-200 bg-amber-50 py-2 active:bg-amber-100 dark:border-amber-500/20 dark:bg-amber-500/10"
+                            icon={<Icon icon={IconRefresh} size={16} strokeWidth={2} className={BUTTON_TEXT.destructive} />}
+                            className="flex-1"
                           >
-                            <Icon icon={IconRefresh} size={12} strokeWidth={2} className="text-amber-700 dark:text-amber-400" />
-                            <Text className="text-[12px] font-semibold text-amber-700 dark:text-amber-400">Clear progress</Text>
-                          </Pressable>
+                            Clear progress
+                          </Button>
                         </View>
                       </View>
                     )}
@@ -672,16 +659,16 @@ export function SettingsView({ schedule, setSchedule, onClearData, onClearProgre
                   <View className="flex-row items-center gap-3">
                     <RowIcon icon={IconTrash} tone="text-rose-500" box="border-rose-100 bg-rose-50 dark:border-rose-500/20 dark:bg-rose-500/10" />
                     <Text className="flex-1 text-[13px] font-semibold text-neutral-800 dark:text-white">Clear all data</Text>
-                    <Pressable
-                      accessibilityRole="button"
+                    <Button
+                      variant="destructiveSecondary"
+                      size="sm"
                       onPress={() => {
                         haptic('light');
                         setClearConfirmOpen(true);
                       }}
-                      className="rounded-xl border border-rose-200 bg-rose-50 px-3 py-1.5 active:bg-rose-100 dark:border-rose-500/20 dark:bg-rose-500/10"
                     >
-                      <Text className="text-[11px] font-semibold text-rose-600 dark:text-rose-400">Clear</Text>
-                    </Pressable>
+                      Clear
+                    </Button>
                   </View>
                 )}
                 {clearPhase === 'clearing' && (

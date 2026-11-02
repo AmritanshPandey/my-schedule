@@ -12,6 +12,7 @@ import type { MetricEntry, ProgressTracker } from "@/lib/useScheduleDB";
 import { checkInStatusLabel, dueCheckIns } from "@/lib/trackerCadence";
 import { haptic } from "@/lib/haptics";
 import { CARD } from "@/components/ui/surfaces";
+import Button from "@/components/ui/Button";
 
 /** Beyond this many, the card points to Tracking rather than growing. */
 const MAX_ROWS = 4;
@@ -65,15 +66,14 @@ export default function CheckInsDueCard({
                 {checkInStatusLabel(state)}
               </p>
             </div>
-            <button
-              type="button"
+            <Button
+              size="md"
               aria-label={`Log ${tracker.title}`}
               onClick={() => { haptic("light"); onLog(tracker); }}
-              className="inline-flex h-11 shrink-0 items-center gap-1.5 rounded-full bg-neutral-950 px-4 text-[13px] font-extrabold text-white transition-colors hover:bg-neutral-800 dark:bg-white dark:text-neutral-950 dark:hover:bg-neutral-200"
+              icon={<IconPlus size={16} strokeWidth={2.5} aria-hidden="true" />}
             >
-              <IconPlus size={14} strokeWidth={2.6} aria-hidden="true" />
               Log
-            </button>
+            </Button>
           </li>
         ))}
       </ul>

@@ -5,6 +5,7 @@ import type { ExecutionStreak } from "@/lib/consistency/calculateExecutionStreak
 import { formatMinutesBrief, type NextUp } from "@/lib/overview";
 import { haptic } from "@/lib/haptics";
 import { CARD } from "@/components/ui/surfaces";
+import Button from "@/components/ui/Button";
 
 /**
  * "What do I do next?" — the first answer on every Overview. One open task
@@ -152,11 +153,6 @@ function NextUpHero({
     meta = "Nothing is scheduled for today yet.";
   }
 
-  const secondary =
-    "inline-flex h-12 items-center justify-center gap-1.5 rounded-full bg-neutral-100 px-5 text-[15px] font-semibold text-neutral-900 transition-[background-color,transform] duration-150 active:scale-[0.98] active:bg-neutral-200 motion-reduce:transition-none lg:hover:bg-neutral-200 dark:bg-white/10 dark:text-white dark:active:bg-white/15 dark:lg:hover:bg-white/15";
-  const primary =
-    "inline-flex h-12 min-w-0 flex-1 items-center justify-center gap-2 rounded-full bg-[#008236] px-5 text-[15px] font-bold text-white transition-[background-color,transform] duration-150 active:scale-[0.98] active:bg-[#006B2C] motion-reduce:transition-none lg:hover:bg-[#006B2C] dark:bg-[#2FD46E] dark:text-neutral-950 dark:active:bg-[#25B85D] dark:lg:hover:bg-[#25B85D]";
-
   return (
     <section
       data-testid="overview-next-task"
@@ -214,33 +210,43 @@ function NextUpHero({
       <div className="mt-5 flex items-center gap-2">
         {next.kind === "task" ? (
           <>
-            <button
-              type="button"
+            <Button
+              variant="cta"
               onClick={() => {
                 haptic("medium");
                 if (next.slotIndex !== undefined) onToggleSlot(next.task.id, next.slotIndex);
                 else onMarkDone(next.task.id, next.checkableIds);
               }}
-              className={primary}
+              icon={<IconCheck size={18} strokeWidth={3} aria-hidden />}
+              className="min-w-0 flex-1"
             >
-              <IconCheck size={18} strokeWidth={3} aria-hidden />
               Mark done
-            </button>
-            <button type="button" onClick={() => { haptic("light"); onOpenToday(); }} className={secondary}>
+            </Button>
+            <Button
+              variant="secondary"
+              onClick={() => { haptic("light"); onOpenToday(); }}
+              trailingIcon={<IconChevronRight size={18} strokeWidth={2.4} aria-hidden />}
+            >
               Today
-              <IconChevronRight size={16} strokeWidth={2.4} aria-hidden />
-            </button>
+            </Button>
           </>
         ) : next.kind === "empty" ? (
-          <button type="button" onClick={() => { haptic("light"); onOpenToday(); }} className={primary}>
-            <IconCalendarPlus size={18} strokeWidth={2.4} aria-hidden />
+          <Button
+            variant="cta"
+            onClick={() => { haptic("light"); onOpenToday(); }}
+            icon={<IconCalendarPlus size={18} strokeWidth={2.4} aria-hidden />}
+            className="min-w-0 flex-1"
+          >
             Add a task
-          </button>
+          </Button>
         ) : (
-          <button type="button" onClick={() => { haptic("light"); onOpenToday(); }} className={secondary}>
+          <Button
+            variant="secondary"
+            onClick={() => { haptic("light"); onOpenToday(); }}
+            trailingIcon={<IconChevronRight size={18} strokeWidth={2.4} aria-hidden />}
+          >
             Open Today
-            <IconChevronRight size={16} strokeWidth={2.4} aria-hidden />
-          </button>
+          </Button>
         )}
       </div>
     </section>

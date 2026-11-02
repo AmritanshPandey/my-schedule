@@ -1,54 +1,48 @@
 "use client";
 
 import { forwardRef, type ButtonHTMLAttributes, type ReactNode } from "react";
+import { BUTTON_FOCUS_RING } from "./Button";
 
-type Variant = "outline" | "soft" | "ghost" | "dangerGhost";
-type Size = "tiny" | "xxs" | "xs" | "sm" | "md";
-type Radius = "lg" | "xl" | "full";
+/**
+ * The one icon-only button: always a circle, always labelled. Variants and
+ * sizes are specified in DESIGN.md §5 Buttons and share their names and
+ * colours with Button; apps/native/src/components/ui/IconButton.tsx mirrors
+ * this file.
+ */
+export type IconButtonVariant = "primary" | "secondary" | "ghost" | "destructive";
+type Size = "xs" | "sm" | "md" | "lg";
 
 interface IconButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
   label: string;
-  variant?: Variant;
+  variant?: IconButtonVariant;
   size?: Size;
-  radius?: Radius;
+  /** A toggle's on state: renders as `primary` and sets aria-pressed. */
+  selected?: boolean;
   children: ReactNode;
 }
 
-const variantClasses: Record<Variant, string> = {
-  outline:
-    "border border-neutral-200 text-neutral-500 hover:bg-neutral-100 dark:border-white/10 dark:text-neutral-400 dark:hover:bg-white/[0.07]",
-  soft:
-    "bg-neutral-100 text-neutral-500 hover:bg-neutral-200 dark:bg-white/[0.07] dark:text-neutral-400 dark:hover:bg-white/[0.10]",
+const variantClasses: Record<IconButtonVariant, string> = {
+  primary:
+    "bg-neutral-950 text-white hover:bg-neutral-800 dark:bg-white dark:text-neutral-950 dark:hover:bg-neutral-200",
+  secondary:
+    "bg-black/[0.05] text-neutral-800 hover:bg-black/[0.09] dark:bg-white/[0.08] dark:text-neutral-100 dark:hover:bg-white/[0.14]",
   ghost:
-    "text-neutral-500 hover:bg-neutral-100 hover:text-neutral-600 dark:text-neutral-400 dark:hover:bg-white/[0.07] dark:hover:text-neutral-300",
-  dangerGhost:
-    "text-neutral-500 hover:bg-rose-500/10 hover:text-rose-500 focus-visible:bg-rose-500/10 focus-visible:text-rose-500 dark:text-neutral-400 dark:hover:bg-rose-500/10 dark:hover:text-rose-400 dark:focus-visible:bg-rose-500/10 dark:focus-visible:text-rose-400",
+    "text-neutral-600 hover:bg-black/[0.05] hover:text-neutral-900 dark:text-neutral-300 dark:hover:bg-white/[0.08] dark:hover:text-white",
+  // Quiet until engaged: the trash icon already says what it does.
+  destructive:
+    "text-neutral-600 hover:bg-[#E11D48]/10 hover:text-[#BE123C] focus-visible:bg-[#E11D48]/10 focus-visible:text-[#BE123C] active:bg-[#E11D48]/10 active:text-[#BE123C] dark:text-neutral-300 dark:hover:bg-[#E11D48]/[0.14] dark:hover:text-[#FB7185] dark:focus-visible:bg-[#E11D48]/[0.14] dark:focus-visible:text-[#FB7185] dark:active:text-[#FB7185]",
 };
 
+// xs and sm draw smaller than 44px; `tap-target` grows their hit area to it.
 const sizeClasses: Record<Size, string> = {
-  tiny: "h-[18px] w-[18px]",
-  xxs: "h-6 w-6",
-  xs: "h-8 w-8",
-  sm: "h-8 w-8",
-  md: "h-9 w-9",
-};
-
-const radiusClasses: Record<Radius, string> = {
-  lg: "rounded-lg",
-  xl: "rounded-xl",
-  full: "rounded-full",
+  xs: "tap-target h-6 w-6",
+  sm: "tap-target h-8 w-8",
+  md: "tap-target h-10 w-10",
+  lg: "h-11 w-11",
 };
 
 const IconButton = forwardRef<HTMLButtonElement, IconButtonProps>(function IconButton(
-  {
-    label,
-    variant = "ghost",
-    size = "sm",
-    radius = "xl",
-    className = "",
-    children,
-    ...props
-  },
+  { label, variant = "secondary", size = "md", selected, className = "", children, ...props },
   ref
 ) {
   return (
@@ -56,12 +50,13 @@ const IconButton = forwardRef<HTMLButtonElement, IconButtonProps>(function IconB
       ref={ref}
       type="button"
       aria-label={label}
+      aria-pressed={selected}
       {...props}
       className={[
-        "tap-target inline-flex shrink-0 items-center justify-center transition-colors disabled:cursor-not-allowed disabled:opacity-40",
-        variantClasses[variant],
+        "inline-flex shrink-0 select-none items-center justify-center rounded-full transition-[background-color,color,transform] duration-150 active:scale-[0.94] motion-reduce:active:scale-100 disabled:pointer-events-none disabled:opacity-40",
+        BUTTON_FOCUS_RING,
+        variantClasses[selected ? "primary" : variant],
         sizeClasses[size],
-        radiusClasses[radius],
         className,
       ]
         .filter(Boolean)

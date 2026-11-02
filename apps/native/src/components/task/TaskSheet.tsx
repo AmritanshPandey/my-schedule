@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { Modal, Pressable, ScrollView, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { IconArrowLeft, IconCheck, IconClock, IconCopy, IconCopyPlus, IconTrash } from '@tabler/icons-react-native';
+import { IconArrowLeft, IconCheck, IconClock, IconCopy, IconCopyPlus, IconMinus, IconPlus, IconTrash } from '@tabler/icons-react-native';
 import type { DayKey, Plan, Schedule, Task, TaskCategory, TaskRecurrence, TaskSlot, TaskTypeValue } from '@planr/core/lib/scheduleTypes';
 import type { ScheduleEntry } from '@planr/core/lib/scheduleEntry';
 import { DAYS, DAY_LABELS, DAY_FULL_LABELS } from '@planr/core/lib/scheduleConstants';
@@ -21,7 +21,7 @@ import { ModalNestingContext, useModalTurn } from '../../lib/modalTurn';
 import BottomSheet from '../ui/BottomSheet';
 import SheetHeader from '../ui/SheetHeader';
 import Button, { BUTTON_TEXT } from '../ui/Button';
-import IconButton from '../ui/IconButton';
+import IconButton, { ICON_BUTTON_TONE } from '../ui/IconButton';
 import Input, { FORM_LABEL, Textarea } from '../ui/Input';
 import AddRowButton from '../ui/AddRowButton';
 import SegmentedControl from '../ui/SegmentedControl';
@@ -616,7 +616,7 @@ export function TaskSheet({
   const duplicatePicker = (
     <View className="px-5 pb-6 pt-4">
       <View className="mb-5 flex-row items-center gap-3">
-        <IconButton label="Back" variant="soft" size="md" radius="full" onPress={() => setDuplicateStep('idle')}>
+        <IconButton label="Back" variant="secondary" size="md" onPress={() => setDuplicateStep('idle')}>
           <Icon icon={IconArrowLeft} size={18} strokeWidth={2} className="text-neutral-600 dark:text-neutral-300" />
         </IconButton>
         <Text className="text-[18px] font-bold text-neutral-900 dark:text-white">Duplicate task</Text>
@@ -805,23 +805,13 @@ export function TaskSheet({
           {repeatMode === 'interval' && (
             <View className="flex-row items-center gap-2 pt-1">
               <Text className="text-[13px] text-neutral-500 dark:text-neutral-400">Every</Text>
-              <Pressable
-                accessibilityRole="button"
-                accessibilityLabel="Fewer weeks"
-                onPress={() => setIntervalWeeks((n) => Math.max(2, n - 1))}
-                className="h-8 w-8 items-center justify-center rounded-full border border-neutral-200 dark:border-white/10"
-              >
-                <Text className="text-[16px] font-bold text-neutral-600 dark:text-neutral-300">−</Text>
-              </Pressable>
+              <IconButton label="Fewer weeks" size="sm" onPress={() => setIntervalWeeks((n) => Math.max(2, n - 1))} disabled={intervalWeeks <= 2}>
+                <Icon icon={IconMinus} size={16} strokeWidth={2.5} className={ICON_BUTTON_TONE.secondary} />
+              </IconButton>
               <Text className="w-6 text-center text-[16px] font-bold tabular-nums text-neutral-900 dark:text-white">{intervalWeeks}</Text>
-              <Pressable
-                accessibilityRole="button"
-                accessibilityLabel="More weeks"
-                onPress={() => setIntervalWeeks((n) => Math.min(8, n + 1))}
-                className="h-8 w-8 items-center justify-center rounded-full border border-neutral-200 dark:border-white/10"
-              >
-                <Text className="text-[16px] font-bold text-neutral-600 dark:text-neutral-300">+</Text>
-              </Pressable>
+              <IconButton label="More weeks" size="sm" onPress={() => setIntervalWeeks((n) => Math.min(8, n + 1))} disabled={intervalWeeks >= 8}>
+                <Icon icon={IconPlus} size={16} strokeWidth={2.5} className={ICON_BUTTON_TONE.secondary} />
+              </IconButton>
               <Text className="text-[13px] text-neutral-500 dark:text-neutral-400">weeks</Text>
             </View>
           )}
@@ -962,7 +952,7 @@ export function TaskSheet({
       )}
       {mode === 'edit' && !isOccurrenceScope && onDelete && (
         <Button
-          variant="dangerSecondary"
+          variant="destructiveSecondary"
           onPress={() => {
             haptic('light');
             onDelete();

@@ -1,6 +1,7 @@
 import { useRef, type ReactNode } from 'react';
-import { Pressable, View } from 'react-native';
+import { View } from 'react-native';
 import BottomSheet from './BottomSheet';
+import Button from './Button';
 import { Text } from './Text';
 
 interface ConfirmSheetProps {
@@ -52,20 +53,12 @@ export default function ConfirmSheet({
 
         {actions ?? (
           <View className="flex-row gap-3">
-            <Pressable
-              accessibilityRole="button"
-              onPress={onClose}
-              className="flex-1 items-center rounded-2xl border border-neutral-200 bg-white py-3.5 active:scale-[0.97] active:bg-neutral-100 dark:border-white/[0.08] dark:bg-neutral-900 dark:active:bg-white/[0.07]"
-            >
-              <Text className="text-[16px] font-semibold text-neutral-700 dark:text-neutral-300">Cancel</Text>
-            </Pressable>
-            <Pressable
-              accessibilityRole="button"
-              onPress={handleConfirm}
-              className="flex-1 items-center rounded-2xl bg-rose-500 py-3.5 active:scale-[0.97] active:bg-rose-600"
-            >
-              <Text className="text-[16px] font-semibold text-white">{confirmLabel}</Text>
-            </Pressable>
+            <Button variant="secondary" onPress={onClose} className="flex-1">
+              Cancel
+            </Button>
+            <Button variant="destructive" onPress={handleConfirm} className="flex-1">
+              {confirmLabel}
+            </Button>
           </View>
         )}
       </View>

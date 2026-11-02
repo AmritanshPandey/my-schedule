@@ -7,6 +7,7 @@ import { getTaskCheckableItems, isTrackedTask, resolveSlotState, resolveTaskStat
 import { getSlots } from "@/lib/taskMutations";
 import { formatSlotsDuration, formatDisplayTime } from "@/lib/timeUtils";
 import { haptic } from "@/lib/haptics";
+import IconButton from "@/components/ui/IconButton";
 
 export interface IOSMergedTimelineHalf {
   task: Task;
@@ -161,14 +162,9 @@ function HalfRow({
         )}
       </div>
       {editMode && !readOnly && (
-        <button
-          type="button"
-          onClick={() => { haptic("light"); onEdit(task); }}
-          aria-label="Edit task"
-          className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full border border-black/10 bg-white/60 text-neutral-600 dark:border-white/[0.10] dark:bg-white/[0.08] dark:text-neutral-200"
-        >
-          <IconEdit size={13} strokeWidth={2} />
-        </button>
+        <IconButton label="Edit task" size="sm" onClick={() => { haptic("light"); onEdit(task); }}>
+          <IconEdit size={16} strokeWidth={2} />
+        </IconButton>
       )}
     </div>
   );

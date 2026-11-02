@@ -35,6 +35,8 @@ import { haptic } from "@/lib/haptics";
 import { useAIEnabledSetting } from "@/lib/ai/useAIEnabled";
 import Toggle from "@/components/ui/Toggle";
 import { normalizeDayStartTime } from "@/lib/timeline/displayWindow";
+import Button from "@/components/ui/Button";
+import IconButton from "@/components/ui/IconButton";
 
 // ── Theme helpers ─────────────────────────────────────────────────────────────
 
@@ -127,14 +129,9 @@ function ReplayToursRow() {
           {justReset ? "Reset — they'll show again as you visit each tab." : "Short intro to Today, Plans, and Routine"}
         </p>
       </div>
-      <button
-        type="button"
-        onClick={handleReplay}
-        disabled={justReset}
-        className="shrink-0 rounded-xl border border-neutral-200 bg-neutral-50 px-3 py-1.5 text-[11px] font-semibold text-neutral-700 hover:bg-neutral-100 disabled:opacity-50 dark:border-white/[0.08] dark:bg-white/[0.04] dark:text-neutral-200"
-      >
+      <Button variant="secondary" size="sm" onClick={handleReplay} disabled={justReset}>
         {justReset ? "Done" : "Replay"}
-      </button>
+      </Button>
     </div>
   );
 }
@@ -245,16 +242,15 @@ function StartOfDayRow({
           </select>
           <IconClock size={14} strokeWidth={2} className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-neutral-500 dark:text-neutral-400" />
         </div>
-        <button
-          type="button"
-          aria-label="Clear start of day"
+        <IconButton
+          label="Clear start of day"
           title="Clear start of day"
+          size="md"
           onClick={() => onChange?.({ dayStartTime: undefined })}
           disabled={!dayStartTime}
-          className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-neutral-200 text-neutral-500 transition-colors hover:border-neutral-300 disabled:cursor-default disabled:opacity-35 dark:border-white/[0.08] dark:text-neutral-400"
         >
-          <IconX size={15} strokeWidth={2.2} />
-        </button>
+          <IconX size={16} strokeWidth={2.2} />
+        </IconButton>
       </div>
     </div>
   );
@@ -306,16 +302,15 @@ function EndOfDayRow({
           </select>
           <IconClock size={14} strokeWidth={2} className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-neutral-500 dark:text-neutral-400" />
         </div>
-        <button
-          type="button"
-          aria-label="Clear end of day"
+        <IconButton
+          label="Clear end of day"
           title="Clear end of day"
+          size="md"
           onClick={() => onChange?.({ dayEndMinutes: undefined, dayEndAuto: undefined })}
           disabled={current === ""}
-          className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-neutral-200 text-neutral-500 transition-colors hover:border-neutral-300 disabled:cursor-default disabled:opacity-35 dark:border-white/[0.08] dark:text-neutral-400"
         >
-          <IconX size={15} strokeWidth={2.2} />
-        </button>
+          <IconX size={16} strokeWidth={2.2} />
+        </IconButton>
       </div>
     </div>
   );
@@ -416,22 +411,15 @@ function SyncRow({ schedule }: { schedule: Schedule }) {
         </p>
       </div>
 
-      <m.button
-        type="button"
+      <Button
+        variant="secondary"
+        size="sm"
         onClick={handleSyncNow}
-        disabled={isBusy}
-        whileTap={!isBusy ? { scale: 0.93 } : undefined}
-        className="flex items-center gap-1.5 rounded-xl border border-neutral-200 bg-neutral-50 px-3 py-1.5 text-[11px] font-semibold text-neutral-600 transition-colors hover:border-neutral-300 hover:bg-white disabled:opacity-40 dark:border-white/[0.08] dark:bg-white/[0.04] dark:text-neutral-300 dark:hover:bg-white/[0.08]"
+        loading={isBusy}
+        icon={<IconCloud size={15} strokeWidth={2} />}
       >
-        <m.span
-          animate={isBusy ? { rotate: 360 } : { rotate: 0 }}
-          transition={isBusy ? { repeat: Infinity, duration: 0.9, ease: "linear" } : { duration: 0 }}
-          className="inline-flex"
-        >
-          <IconCloud size={11} strokeWidth={2} />
-        </m.span>
         {isBusy ? "Syncing…" : "Sync now"}
-      </m.button>
+      </Button>
     </div>
   );
 }
@@ -475,13 +463,9 @@ function ClearDataRow({ onClearData, onDone }: ClearDataRowProps) {
             <span className="flex-1 text-[13px] font-semibold text-neutral-800 dark:text-white">
               Clear all data
             </span>
-            <button
-              type="button"
-              onClick={() => setPhase("confirm")}
-              className="rounded-xl border border-rose-200 bg-rose-50 px-3 py-1.5 text-[11px] font-semibold text-rose-600 transition-colors hover:bg-rose-100 dark:border-rose-500/20 dark:bg-rose-500/10 dark:text-rose-400 dark:hover:bg-rose-500/20"
-            >
+            <Button variant="destructiveSecondary" size="sm" onClick={() => setPhase("confirm")}>
               Clear
-            </button>
+            </Button>
           </m.div>
         )}
 
@@ -500,22 +484,12 @@ function ClearDataRow({ onClearData, onDone }: ClearDataRowProps) {
               </p>
             </div>
             <div className="flex gap-2">
-              <button
-                type="button"
-                onClick={() => setPhase("idle")}
-                className="flex flex-1 items-center justify-center gap-1.5 rounded-xl border border-neutral-200 bg-white py-2 text-[12px] font-semibold text-neutral-600 transition-colors hover:bg-neutral-100 dark:border-white/[0.08] dark:bg-white/[0.04] dark:text-neutral-400 dark:hover:bg-white/[0.08]"
-              >
-                <IconX size={14} strokeWidth={2.5} />
+              <Button variant="secondary" size="md" onClick={() => setPhase("idle")} className="flex-1">
                 Cancel
-              </button>
-              <button
-                type="button"
-                onClick={handleClear}
-                className="flex flex-1 items-center justify-center gap-1.5 rounded-xl border border-rose-200 bg-rose-50 py-2 text-[12px] font-semibold text-rose-600 transition-colors hover:bg-rose-100 dark:border-rose-500/20 dark:bg-rose-500/10 dark:text-rose-400 dark:hover:bg-rose-500/20"
-              >
-                <IconTrash size={14} strokeWidth={2} />
+              </Button>
+              <Button variant="destructive" size="md" onClick={handleClear} className="flex-1">
                 Delete everything
-              </button>
+              </Button>
             </div>
           </m.div>
         )}
@@ -562,10 +536,9 @@ function ClearProgressRow({ onClearProgress }: { onClearProgress: () => Promise<
               <p className="text-[13px] font-semibold text-neutral-800 dark:text-white">Clear progress</p>
               <p className="text-[11px] text-neutral-500 dark:text-neutral-400">Resets completions & logs · keeps plans and tasks</p>
             </div>
-            <button type="button" onClick={() => setPhase("confirm")}
-              className="shrink-0 rounded-xl border border-amber-200 bg-amber-50 px-3 py-1.5 text-[11px] font-semibold text-amber-700 transition-colors hover:bg-amber-100 dark:border-amber-500/20 dark:bg-amber-500/10 dark:text-amber-400">
+            <Button variant="destructiveSecondary" size="sm" onClick={() => setPhase("confirm")}>
               Reset
-            </button>
+            </Button>
           </m.div>
         )}
         {phase === "confirm" && (
@@ -575,14 +548,12 @@ function ClearProgressRow({ onClearProgress }: { onClearProgress: () => Promise<
               <p className="text-[12px] font-semibold">Clears all completions, history, check-ins, logged metrics & milestone progress. Plans, tasks and milestones stay.</p>
             </div>
             <div className="flex gap-2">
-              <button type="button" onClick={() => setPhase("idle")}
-                className="flex flex-1 items-center justify-center gap-1.5 rounded-xl border border-neutral-200 bg-white py-2 text-[12px] font-semibold text-neutral-600 transition-colors hover:bg-neutral-100 dark:border-white/[0.08] dark:bg-white/[0.04] dark:text-neutral-400">
-                <IconX size={14} strokeWidth={2.5} />Cancel
-              </button>
-              <button type="button" onClick={handleClear}
-                className="flex flex-1 items-center justify-center gap-1.5 rounded-xl border border-amber-200 bg-amber-50 py-2 text-[12px] font-semibold text-amber-700 transition-colors hover:bg-amber-100 dark:border-amber-500/20 dark:bg-amber-500/10 dark:text-amber-400">
-                <IconRefresh size={14} strokeWidth={2} />Clear progress
-              </button>
+              <Button variant="secondary" size="md" onClick={() => setPhase("idle")} className="flex-1">
+                Cancel
+              </Button>
+              <Button variant="destructive" size="md" onClick={handleClear} icon={<IconRefresh size={16} strokeWidth={2} />} className="flex-1">
+                Clear progress
+              </Button>
             </div>
           </m.div>
         )}
@@ -665,23 +636,20 @@ export function SettingsSheet({
                   <p className="mb-3.5 text-[11px] leading-snug text-neutral-500 dark:text-neutral-400">
                     Back up your data and access it across all your devices.
                   </p>
-                  <m.button
-                    type="button"
+                  <Button
+                    variant="secondary"
+                    size="md"
+                    fullWidth
                     onClick={signIn}
-                    disabled={signingIn || !isAuthAvailable}
+                    disabled={!isAuthAvailable}
+                    loading={signingIn}
                     aria-describedby={
                       !isAuthAvailable || signInError ? "settings-sheet-auth-note" : undefined
                     }
-                    whileTap={{ scale: 0.97 }}
-                    className="inline-flex w-full items-center justify-center gap-2 rounded-xl border border-neutral-200 bg-neutral-50 px-4 py-2.5 text-[13px] font-semibold text-neutral-700 transition-colors hover:bg-white hover:border-neutral-300 dark:border-white/[0.08] dark:bg-white/[0.04] dark:text-white dark:hover:bg-white/[0.08] disabled:opacity-50"
+                    icon={<GoogleLogo />}
                   >
-                    {signingIn ? (
-                      <span className="h-3.5 w-3.5 animate-spin rounded-full border-2 border-neutral-300 border-t-neutral-600 dark:border-neutral-600 dark:border-t-neutral-300" />
-                    ) : (
-                      <GoogleLogo />
-                    )}
                     {signingIn ? "Signing in…" : "Continue with Google"}
-                  </m.button>
+                  </Button>
 
                   <AuthErrorNote
                     id="settings-sheet-auth-note"
@@ -723,15 +691,9 @@ export function SettingsSheet({
                     <IconCheck size={14} strokeWidth={2.5} />
                     <span className="text-[11px] font-semibold">Account connected</span>
                   </div>
-                  <m.button
-                    type="button"
-                    onClick={handleLogout}
-                    disabled={busy}
-                    whileTap={{ scale: 0.94 }}
-                    className="rounded-xl border border-neutral-200 px-3 py-1.5 text-[11px] font-semibold text-neutral-500 transition-colors hover:border-neutral-300 hover:text-neutral-800 dark:border-white/[0.08] dark:text-neutral-400 dark:hover:text-white disabled:opacity-50"
-                  >
-                    {busy ? "…" : "Sign out"}
-                  </m.button>
+                  <Button variant="ghost" size="sm" onClick={handleLogout} loading={busy}>
+                    Sign out
+                  </Button>
                 </div>
               </SettingsCard>
             )}

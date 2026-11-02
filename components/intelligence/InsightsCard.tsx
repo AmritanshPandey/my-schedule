@@ -17,6 +17,7 @@ import { analyzeExecution } from "@/lib/intelligence/patterns";
 import { applySuggestion, dismissInsight, undoSuggestion } from "@/lib/intelligence/suggestions";
 import { isAppliable, type Insight } from "@/lib/intelligence/types";
 import { useProgressSummary } from "@/lib/intelligence/useProgressSummary";
+import Button from "@/components/ui/Button";
 
 export interface InsightToast {
   message: string;
@@ -94,21 +95,13 @@ function InsightRow({
 
           <div className="mt-2 flex flex-wrap items-center gap-1.5">
             {s && onPrimary && (
-              <button
-                type="button"
-                onClick={() => { haptic("light"); onPrimary(); }}
-                className="inline-flex min-h-[44px] items-center rounded-full bg-neutral-950 px-4 text-[13px] font-semibold text-white transition-[background-color,transform] duration-150 hover:bg-neutral-800 active:scale-[0.98] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500/60 lg:h-9 lg:min-h-0 dark:bg-white dark:text-neutral-950 dark:hover:bg-neutral-100"
-              >
+              <Button size="md" onClick={() => { haptic("light"); onPrimary(); }}>
                 {s.label}
-              </button>
+              </Button>
             )}
-            <button
-              type="button"
-              onClick={() => { haptic("light"); onDismiss(); }}
-              className="inline-flex min-h-[44px] items-center rounded-full px-3 text-[13px] font-semibold text-neutral-500 transition-colors hover:bg-neutral-100 active:scale-[0.98] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500/60 lg:h-9 lg:min-h-0 dark:text-neutral-400 dark:hover:bg-white/[0.07]"
-            >
+            <Button variant="ghost" size="md" onClick={() => { haptic("light"); onDismiss(); }}>
               Not now
-            </button>
+            </Button>
           </div>
         </div>
       </div>
@@ -179,15 +172,16 @@ export default function InsightsCard({ schedule, setSchedule, onToast, onReviewT
             Written on-device
           </span>
         ) : summary.canRefine ? (
-          <button
-            type="button"
+          <Button
+            variant="ghost"
+            size="sm"
             onClick={() => { haptic("light"); summary.refine(); }}
-            disabled={summary.writing}
-            className="-my-1 inline-flex min-h-[44px] shrink-0 items-center gap-1 rounded-full px-2.5 text-[12px] font-semibold text-neutral-500 transition-colors hover:bg-neutral-100 disabled:opacity-60 lg:h-8 lg:min-h-0 dark:text-neutral-400 dark:hover:bg-white/[0.07]"
+            loading={summary.writing}
+            icon={<IconSparkles size={15} strokeWidth={2} aria-hidden />}
+            className="-my-1 shrink-0"
           >
-            <IconSparkles size={13} strokeWidth={2} aria-hidden />
             {summary.writing ? "Writing…" : "Rewrite with AI"}
-          </button>
+          </Button>
         ) : null}
       </div>
 

@@ -7,6 +7,7 @@ import { canDeleteCategory } from "@/lib/taskCategories";
 import { accentStyles } from "@/lib/colorSystem";
 import { iconGlyph } from "@/components/SectionIcons";
 import { typography } from "@/components/ui/Typography";
+import IconButton from "@/components/ui/IconButton";
 
 const SECTION_LABEL = typography.eyebrow;
 
@@ -160,35 +161,32 @@ export function CategorySelector({ categories, selectedId, onSelect, onClear, on
                   {(onEdit || onDelete) && (
                     <div className="flex shrink-0 items-center gap-0.5 pr-2">
                       {onEdit && (
-                        <button
-                          type="button"
-                          // Closes the dropdown: the edit sheet renders in a
-                          // portal, so leaving this open would stack two layers
-                          // and the outside-click handler would close it anyway.
+                        <IconButton
+                          label={`Edit ${category.title}`}
+                          variant="ghost"
+                          size="sm"
+                          // Closes the dropdown: the edit sheet renders in a portal, so leaving this
+                          // open would stack two layers and the outside-click handler would close it.
                           onClick={() => { setOpen(false); onEdit(category); }}
-                          aria-label={`Edit ${category.title}`}
-                          className="grid h-8 w-8 place-items-center rounded-lg text-neutral-500 transition-colors hover:bg-neutral-200/70 hover:text-neutral-700 dark:text-neutral-400 dark:hover:bg-white/[0.08] dark:hover:text-neutral-200"
                         >
-                          <IconPencil size={14} strokeWidth={2} />
-                        </button>
+                          <IconPencil size={16} strokeWidth={2} />
+                        </IconButton>
                       )}
                       {onDelete && (
-                        <button
-                          type="button"
-                          onClick={() => { if (deletable) onDelete(category); }}
-                          disabled={!deletable}
-                          // Names the reason rather than just going dim, so the
-                          // refusal is explainable instead of mysterious.
-                          aria-label={
+                        <IconButton
+                          label={
                             deletable
                               ? `Delete ${category.title}`
                               : `Can't delete ${category.title} — used by ${inUse} task${inUse === 1 ? "" : "s"}`
                           }
+                          variant="destructive"
+                          size="sm"
+                          onClick={() => { if (deletable) onDelete(category); }}
+                          disabled={!deletable}
                           title={deletable ? undefined : "Move those tasks to another category first"}
-                          className="grid h-8 w-8 place-items-center rounded-lg text-neutral-500 transition-colors hover:bg-rose-500/10 hover:text-rose-500 disabled:pointer-events-none disabled:opacity-30 dark:text-neutral-400 dark:hover:text-rose-400"
                         >
-                          <IconTrash size={14} strokeWidth={2} />
-                        </button>
+                          <IconTrash size={16} strokeWidth={2} />
+                        </IconButton>
                       )}
                     </div>
                   )}

@@ -14,6 +14,7 @@ import { describeBreaches, type CreationCounts } from "@/lib/ai/limits";
 import type { TaskCandidate } from "@/lib/ai/targets";
 import { DAYS, DAY_LABELS, type DayKey } from "@/lib/scheduleConstants";
 import DateInput from "@/components/ui/DateInput";
+import Button from "@/components/ui/Button";
 
 /**
  * The last thing between an AI response and the schedule.
@@ -277,21 +278,18 @@ export default function AIReviewSheet({
         )}
 
         <div className="flex gap-2">
-          <button
-            type="button"
-            onClick={close}
-            className="flex-1 rounded-full border border-neutral-200 px-4 py-3 text-[14px] font-bold text-neutral-700 hover:bg-neutral-50 dark:border-white/[0.1] dark:text-neutral-200 dark:hover:bg-white/[0.04]"
-          >
+          <Button variant="secondary" size="md" onClick={close} className="flex-1">
             Cancel
-          </button>
-          <button
-            type="button"
+          </Button>
+          <Button
+            variant="cta"
+            size="md"
             disabled={!ready}
             onClick={() => { haptic("medium"); onConfirm(effective); close(); }}
-            className="flex-[2] rounded-full bg-[#008236] px-4 py-3 text-[14px] font-bold text-white transition-colors hover:bg-[#006B2C] disabled:opacity-40 dark:bg-[#2FD46E] dark:text-neutral-950 dark:hover:bg-[#2FD46E]/90"
+            className="flex-[2]"
           >
             {ready ? "Add to my plan" : "Fix the above first"}
-          </button>
+          </Button>
         </div>
       </div>
     </BottomSheet>

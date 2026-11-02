@@ -8,6 +8,7 @@ import AddRowButton from "@/components/ui/AddRowButton";
 import TimeInput from "@/components/ui/TimeInput";
 import { typography } from "@/components/ui/Typography";
 import type { UsualTimeSlot } from "@/lib/usualTimeSlot";
+import IconButton from "@/components/ui/IconButton";
 
 const START_PRESETS = [
   { label: "Now", value: "now" },
@@ -201,14 +202,15 @@ export default function TimeSlotPicker({
               />
             </div>
             {slots.length > 1 && (
-              <button
-                type="button"
-                aria-label={`Remove time slot ${index + 1}`}
+              <IconButton
+                label={`Remove time slot ${index + 1}`}
+                variant="destructive"
+                size="lg"
                 onClick={() => removeSlot(index)}
-                className="mb-0.5 flex h-11 w-9 shrink-0 items-center justify-center rounded-xl border border-neutral-200 text-neutral-500 transition-colors hover:border-rose-300 hover:text-rose-500 dark:border-white/10 dark:text-neutral-400 dark:hover:border-rose-500/40 dark:hover:text-rose-400"
+                className="mb-0.5"
               >
-                <IconX size={16} strokeWidth={2.2} />
-              </button>
+                <IconX size={18} strokeWidth={2.2} />
+              </IconButton>
             )}
           </div>
         ))}

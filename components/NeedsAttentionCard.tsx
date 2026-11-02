@@ -16,6 +16,7 @@ import {
   type UnreliableSlotTask,
 } from "@/lib/needsAttention";
 import { ritualAttentionKey, slotRiskKey, milestoneRiskKey, milestoneOverdueKey } from "@/lib/attentionDismissal";
+import Button from "@/components/ui/Button";
 
 /** Rows shown before collapsing the rest into a "+N more" line. */
 const MAX_ROWS = 4;
@@ -101,7 +102,7 @@ function Row({
       {dismissKey && onDismissOne && (
         <IconButton
           label={`Dismiss "${title}"`}
-          size="xxs"
+          size="xs"
           variant="ghost"
           onClick={() => { haptic("light"); onDismissOne(dismissKey); }}
         >
@@ -211,16 +212,9 @@ export default function NeedsAttentionCard({ data, onNavigate, onHandleMissed, o
               count is what makes it necessary: a list this long has stopped
               being a signal. */}
           {onClearAll && (
-            <button
-              type="button"
-              onClick={() => { haptic("light"); onClearAll(); }}
-              // `tap-target` keeps the visual chip small while extending the
-              // hit area to the 44px minimum — at 11px text the painted box is
-              // only ~24px tall, which is a miss-prone target on a phone.
-              className="tap-target rounded-full px-2 py-1 text-[11px] font-bold text-neutral-500 transition-colors hover:bg-neutral-100 hover:text-neutral-800 dark:text-neutral-400 dark:hover:bg-white/[0.07] dark:hover:text-neutral-100"
-            >
+            <Button variant="ghost" size="sm" onClick={() => { haptic("light"); onClearAll(); }}>
               Clear all
-            </button>
+            </Button>
           )}
           <span className="rounded-full border border-neutral-200 bg-neutral-50 px-2 py-1 text-[11px] font-black tabular-nums text-neutral-500 dark:border-white/[0.10] dark:bg-white/[0.05] dark:text-neutral-400">
             {data.total}

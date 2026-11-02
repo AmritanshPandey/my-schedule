@@ -1,24 +1,21 @@
 import { memo, type ReactNode } from 'react';
-import { Pressable, View } from 'react-native';
+import { View } from 'react-native';
 import { IconCheck, IconChecklist } from '@tabler/icons-react-native';
 import { Eyebrow, PageTitle } from './Typography';
 import ProgressBar from './ProgressBar';
 import { ICON, Icon } from './Icon';
 import { Text } from './Text';
+import Button from './Button';
+import IconButton from './IconButton';
 
 /** Native port of components/ui/MainTitleSection.tsx. */
 type ProgressMeta = { done: number; total: number } | 'done';
 
 export function CtaActionButton({ label, icon, onClick }: { label: string; icon?: ReactNode; onClick: () => void }) {
   return (
-    <Pressable
-      accessibilityRole="button"
-      onPress={onClick}
-      className="min-h-[44px] flex-row items-center gap-2 rounded-full border-[1.5px] border-neutral-200 bg-white px-4 py-[10px] active:scale-[0.97] active:bg-neutral-100 dark:border-white/15 dark:bg-neutral-900 dark:active:bg-neutral-800"
-    >
-      {icon}
-      <Text className="text-[13px] font-bold text-neutral-700 dark:text-neutral-300">{label}</Text>
-    </Pressable>
+    <Button variant="secondary" size="md" onPress={onClick} icon={icon}>
+      {label}
+    </Button>
   );
 }
 
@@ -39,18 +36,9 @@ export function IconActionButton({
 }) {
   if (!show) return null;
   return (
-    <Pressable
-      accessibilityRole="button"
-      accessibilityLabel={label}
-      onPress={onClick}
-      className={`h-10 w-10 items-center justify-center rounded-[10px] border-[1.5px] active:scale-[0.92] ${
-        saving
-          ? 'border-neutral-950 bg-neutral-950 dark:border-white dark:bg-white'
-          : 'border-neutral-200 bg-white active:bg-neutral-100 dark:border-white/10 dark:bg-neutral-900 dark:active:bg-white/[0.07]'
-      }`}
-    >
+    <IconButton label={label ?? ''} size="md" selected={saving} onPress={onClick}>
       {saving && saveIcon ? saveIcon : icon}
-    </Pressable>
+    </IconButton>
   );
 }
 

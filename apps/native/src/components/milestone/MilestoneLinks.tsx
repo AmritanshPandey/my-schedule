@@ -7,6 +7,8 @@ import { linkableMilestones, milestonesForItem, type MilestoneLinkKind } from '@
 import { haptic } from '../../lib/haptics';
 import { Icon } from '../ui/Icon';
 import { Text } from '../ui/Text';
+import Button, { BUTTON_TEXT } from '../ui/Button';
+import IconButton, { ICON_BUTTON_TONE } from '../ui/IconButton';
 
 function handLinks(milestone: Milestone | undefined, kind: MilestoneLinkKind): string[] {
   if (!milestone) return [];
@@ -93,27 +95,22 @@ export default function MilestoneLinks({
                 </Text>
               )}
               {!done && (
-                <Pressable
-                  accessibilityRole="button"
-                  accessibilityLabel={`Unlink from ${m.title}`}
-                  onPress={() => { haptic('light'); onSetLink(m.id, kind, itemId, false); }}
-                  className="h-9 w-9 items-center justify-center rounded-full active:bg-neutral-100 dark:active:bg-white/[0.06]"
-                >
-                  <Icon icon={IconX} size={13} strokeWidth={2.5} className="text-neutral-500 dark:text-neutral-400" />
-                </Pressable>
+                <IconButton label={`Unlink from ${m.title}`} variant="destructive" size="md" onPress={() => { haptic('light'); onSetLink(m.id, kind, itemId, false); }}>
+                  <Icon icon={IconX} size={16} strokeWidth={2.5} className={ICON_BUTTON_TONE.destructive} />
+                </IconButton>
               )}
             </View>
           );
         })}
         {options.length > 0 && !picking && (
-          <Pressable
-            accessibilityRole="button"
+          <Button
+            variant="ghost"
+            size="md"
             onPress={() => setPicking(true)}
-            className="min-h-11 flex-row items-center gap-1 rounded-full px-3 active:bg-neutral-100 dark:active:bg-white/[0.06]"
+            icon={<Icon icon={IconPlus} size={16} strokeWidth={2.5} className={BUTTON_TEXT.ghost} />}
           >
-            <Icon icon={IconPlus} size={13} strokeWidth={2.5} className="text-neutral-600 dark:text-neutral-300" />
-            <Text className="text-[12.5px] font-bold text-neutral-600 dark:text-neutral-300">Link to milestone</Text>
-          </Pressable>
+            Link to milestone
+          </Button>
         )}
       </View>
       {picking && options.length > 0 && (

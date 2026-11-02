@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react';
 import { Pressable, View } from 'react-native';
-import { IconPlus, IconTrash } from '@tabler/icons-react-native';
+import { IconTrash } from '@tabler/icons-react-native';
 import type { Schedule, TaskCategory } from '@planr/core/lib/scheduleTypes';
 import { canDeleteCategory, categoryUsageCounts } from '@planr/core/lib/taskCategories';
 import { accentStyles } from '@planr/core/lib/colorSystem';
@@ -9,6 +9,7 @@ import { iconGlyph } from '../SectionIcons';
 import { Icon } from '../ui/Icon';
 import { Text } from '../ui/Text';
 import CategorySheet, { type CategoryDraft } from './CategorySheet';
+import AddRowButton from '../ui/AddRowButton';
 
 type SetScheduleFn = (updater: (prev: Schedule) => Schedule) => void;
 
@@ -110,18 +111,15 @@ export default function CategoryManager({ schedule, setSchedule }: CategoryManag
         </View>
       )}
 
-      <Pressable
-        accessibilityRole="button"
-        onPress={() => {
+      <AddRowButton
+        label="New category"
+        onClick={() => {
           haptic('light');
           setEditing(null);
           setSheetOpen(true);
         }}
-        className="mt-3 w-full flex-row items-center justify-center gap-1.5 rounded-xl border border-dashed border-neutral-200 py-2.5 active:border-neutral-300 dark:border-white/[0.10] dark:active:border-white/20"
-      >
-        <Icon icon={IconPlus} size={15} strokeWidth={2.2} className="text-neutral-500 dark:text-neutral-400" />
-        <Text className="text-[13px] font-semibold text-neutral-500 dark:text-neutral-400">New category</Text>
-      </Pressable>
+        className="mt-3"
+      />
 
       <CategorySheet
         open={sheetOpen}

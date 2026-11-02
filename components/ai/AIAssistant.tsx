@@ -36,6 +36,7 @@ import { AIThinkingDots, AIStreamingCursor } from "@/components/ai/AIThinkingSta
 import { AIErrorBanner } from "@/components/ai/AIErrorBanner";
 import { analyzeExecution } from "@/lib/intelligence/patterns";
 import { buildPlanWeekContext } from "@/lib/intelligence/progressFacts";
+import IconButton from "@/components/ui/IconButton";
 
 interface AIAssistantProps {
   open: boolean;
@@ -441,21 +442,12 @@ export default function AIAssistant({
           </span>
         </div>
         <div className="flex items-center gap-1">
-          <button
-            type="button"
-            onClick={() => onOpenAISettings()}
-            className="flex h-8 w-8 items-center justify-center rounded-xl text-neutral-500 dark:text-neutral-400 transition-colors hover:bg-neutral-100 hover:text-neutral-600 dark:hover:bg-white/[0.06] dark:hover:text-neutral-300"
-            title="AI Settings"
-          >
-            <IconSettings size={15} strokeWidth={2} />
-          </button>
-          <button
-            type="button"
-            onClick={onClose}
-            className="flex h-8 w-8 items-center justify-center rounded-xl text-neutral-500 dark:text-neutral-400 transition-colors hover:bg-neutral-100 hover:text-neutral-600 dark:hover:bg-white/[0.06] dark:hover:text-neutral-300"
-          >
+          <IconButton label="AI settings" title="AI Settings" variant="ghost" size="sm" onClick={() => onOpenAISettings()}>
+            <IconSettings size={16} strokeWidth={2} />
+          </IconButton>
+          <IconButton label="Close" variant="ghost" size="sm" onClick={onClose}>
             <IconX size={16} strokeWidth={2} />
-          </button>
+          </IconButton>
         </div>
       </div>
 
@@ -568,15 +560,9 @@ export default function AIAssistant({
             >
               <IconPlus size={16} strokeWidth={2} />
             </button>
-            <m.button
-              type="button"
-              onClick={handleSend}
-              disabled={!customGoal.trim() || !selectedPlan}
-              whileTap={{ scale: 0.9 }}
-              className="flex h-8 w-8 items-center justify-center rounded-full bg-emerald-500 text-white transition-opacity hover:bg-emerald-600 disabled:opacity-30"
-            >
-              <IconSend size={13} strokeWidth={2.5} />
-            </m.button>
+            <IconButton label="Send" variant="primary" size="sm" onClick={handleSend} disabled={!customGoal.trim() || !selectedPlan}>
+              <IconSend size={15} strokeWidth={2.5} />
+            </IconButton>
           </div>
         </div>
 

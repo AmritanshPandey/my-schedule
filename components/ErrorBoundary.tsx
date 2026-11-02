@@ -9,6 +9,7 @@ import {
   resetReloadCount,
   recoverFromChunkError,
 } from "@/lib/chunkRecovery";
+import Button from "@/components/ui/Button";
 
 interface Props {
   children: ReactNode;
@@ -92,12 +93,9 @@ export class ErrorBoundary extends Component<Props, State> {
                 {this.state.message}
               </p>
             )}
-            <button
-              onClick={() => this.setState({ hasError: false, message: "" })}
-              className="rounded-xl border border-neutral-200 bg-neutral-50 px-4 py-2 text-[12px] font-semibold text-neutral-700 transition-colors hover:bg-neutral-100 dark:border-white/[0.08] dark:bg-white/[0.04] dark:text-white dark:hover:bg-white/[0.08]"
-            >
+            <Button variant="secondary" size="sm" onClick={() => this.setState({ hasError: false, message: "" })}>
               Try again
-            </button>
+            </Button>
           </div>
         );
       }
@@ -114,7 +112,10 @@ export class ErrorBoundary extends Component<Props, State> {
                 ? "A cached app version is stale or failed to load. Reloading the app should restore the latest build."
                 : this.state.message}
             </p>
-            <button
+            <Button
+              variant="secondary"
+              size="md"
+              fullWidth
               onClick={() => {
                 if (chunkError) {
                   void hardRefreshApp();
@@ -123,10 +124,9 @@ export class ErrorBoundary extends Component<Props, State> {
                   clearStaleCaches().finally(() => this.setState({ hasError: false, message: "" }));
                 }
               }}
-              className="w-full rounded-xl border border-neutral-200 bg-neutral-50 px-4 py-2.5 text-[13px] font-semibold text-neutral-700 transition-colors hover:bg-neutral-100 dark:border-white/[0.08] dark:bg-white/[0.04] dark:text-white dark:hover:bg-white/[0.08]"
             >
               {chunkError ? "Reload app" : "Try again"}
-            </button>
+            </Button>
           </div>
         </div>
       );

@@ -2,6 +2,8 @@
 
 import { useEffect, useState } from "react";
 import { IconX, IconDownload } from "@tabler/icons-react";
+import Button from "@/components/ui/Button";
+import IconButton from "@/components/ui/IconButton";
 
 type Platform = "ios" | "android" | "other";
 
@@ -215,13 +217,9 @@ export default function PWAInstallPrompt() {
                   </h2>
                 </div>
               </div>
-              <button
-                onClick={dismiss}
-                className="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl border border-neutral-200 text-neutral-500 hover:bg-neutral-100 dark:border-white/10 dark:text-neutral-400 dark:hover:bg-white/[0.07] transition-colors"
-                aria-label="Dismiss"
-              >
+              <IconButton label="Dismiss" size="sm" onClick={dismiss}>
                 <IconX size={16} />
-              </button>
+              </IconButton>
             </div>
 
             {/* iOS instructions */}
@@ -261,13 +259,9 @@ export default function PWAInstallPrompt() {
                     <p className="text-sm text-neutral-600 dark:text-neutral-400">
                       Get quick access, offline support, and a native-like experience by installing the app.
                     </p>
-                    <button
-                      onClick={handleNativeInstall}
-                      className="flex h-12 w-full items-center justify-center gap-2 rounded-2xl bg-neutral-950 text-[14px] font-semibold text-white transition-all hover:bg-neutral-800 active:scale-[0.98] dark:bg-white dark:text-neutral-900 dark:hover:bg-neutral-100"
-                    >
-                      <IconDownload size={16} />
+                    <Button fullWidth onClick={handleNativeInstall} icon={<IconDownload size={18} />}>
                       Install app
-                    </button>
+                    </Button>
                   </div>
                 ) : (
                   <div className="space-y-2.5">
@@ -300,12 +294,9 @@ export default function PWAInstallPrompt() {
             )}
 
             {/* Dismiss link */}
-            <button
-              onClick={dismiss}
-              className="w-full py-1 text-center text-[12px] font-medium text-neutral-500 transition-colors hover:text-neutral-600 dark:text-neutral-400 dark:hover:text-neutral-300"
-            >
+            <Button variant="ghost" size="sm" fullWidth onClick={dismiss}>
               Maybe later
-            </button>
+            </Button>
           </div>
         </div>
       </div>

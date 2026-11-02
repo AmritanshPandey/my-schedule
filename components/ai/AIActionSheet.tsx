@@ -13,9 +13,10 @@ import BottomSheet from "@/components/ui/BottomSheet";
 import { useBrowserAI } from "@/lib/ai/useBrowserAI";
 import { getAIProviderState, AI_SETTINGS_CHANGED_EVENT } from "@/lib/ai/config";
 import { BrowserAIStatusBar } from "@/components/ai/BrowserAIStatusBar";
-import { AIThinkingDots } from "@/components/ai/AIThinkingStatus";
 import { AIErrorBanner } from "@/components/ai/AIErrorBanner";
 import { typography } from "@/components/ui/Typography";
+import Button from "@/components/ui/Button";
+import IconButton from "@/components/ui/IconButton";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -260,13 +261,9 @@ export default function AIActionSheet({
               )}
             </div>
           </div>
-          <button
-            type="button"
-            onClick={onClose}
-            className="mt-1.5 flex h-7 w-7 items-center justify-center rounded-full text-neutral-500 dark:text-neutral-400 transition-colors hover:bg-neutral-100 hover:text-neutral-600 dark:hover:bg-white/[0.06] dark:hover:text-neutral-300"
-          >
-            <IconX size={15} strokeWidth={2} />
-          </button>
+          <IconButton label="Close" variant="ghost" size="sm" onClick={onClose} className="mt-1.5">
+            <IconX size={16} strokeWidth={2} />
+          </IconButton>
         </div>
 
         <AnimatePresence mode="wait" initial={false}>
@@ -341,34 +338,21 @@ export default function AIActionSheet({
               )}
 
               {/* CTA */}
-              <m.button
-                type="button"
+              <Button
+                variant="cta"
+                fullWidth
                 onClick={handleGenerate}
-                disabled={loading || modelIsLoading}
-                whileTap={!(loading || modelIsLoading) ? { scale: 0.97 } : undefined}
-                className="flex w-full items-center justify-center gap-2 rounded-2xl bg-emerald-500 py-3.5 text-[14px] font-bold text-white transition-all hover:bg-emerald-600 disabled:cursor-default disabled:opacity-70 dark:bg-emerald-500 dark:hover:bg-emerald-400"
+                loading={loading || modelIsLoading}
+                icon={<IconSparkles size={18} strokeWidth={2.2} />}
               >
-                {modelIsLoading ? (
-                  <>
-                    <AIThinkingDots tone="emerald" />
-                    <span>Waiting for model…</span>
-                  </>
-                ) : loading ? (
-                  <>
-                    <AIThinkingDots tone="emerald" />
-                    <span>
-                      {streamCount > 0
-                        ? `Found ${streamCount} ${streamCount === 1 ? resultSingular : resultPlural}…`
-                        : "Thinking…"}
-                    </span>
-                  </>
-                ) : (
-                  <>
-                    <IconSparkles size={15} strokeWidth={2.2} />
-                    {ctaLabel}
-                  </>
-                )}
-              </m.button>
+                {modelIsLoading
+                  ? "Waiting for model…"
+                  : loading
+                    ? streamCount > 0
+                      ? `Found ${streamCount} ${streamCount === 1 ? resultSingular : resultPlural}…`
+                      : "Thinking…"
+                    : ctaLabel}
+              </Button>
             </m.div>
           )}
 
@@ -414,30 +398,12 @@ export default function AIActionSheet({
               )}
 
               <div className="flex gap-2">
-                <button
-                  type="button"
-                  onClick={handleSkipQuestion}
-                  disabled={loading}
-                  className="flex h-12 items-center gap-1.5 rounded-2xl border border-neutral-200 px-4 text-[13px] font-semibold text-neutral-500 transition-colors hover:border-neutral-300 hover:text-neutral-700 disabled:opacity-50 dark:border-white/[0.08] dark:text-neutral-400 dark:hover:border-white/[0.15]"
-                >
+                <Button variant="secondary" onClick={handleSkipQuestion} disabled={loading}>
                   Skip
-                </button>
-                <m.button
-                  type="button"
-                  onClick={handleAnswerSubmit}
-                  disabled={loading}
-                  whileTap={!loading ? { scale: 0.97 } : undefined}
-                  className="flex h-12 flex-1 items-center justify-center gap-2 rounded-2xl bg-emerald-500 text-[14px] font-bold text-white transition-all hover:bg-emerald-600 disabled:cursor-default disabled:opacity-70 dark:bg-emerald-500 dark:hover:bg-emerald-400"
-                >
-                  {loading ? (
-                    <>
-                      <AIThinkingDots tone="emerald" />
-                      <span>Thinking…</span>
-                    </>
-                  ) : (
-                    "Continue"
-                  )}
-                </m.button>
+                </Button>
+                <Button variant="cta" onClick={handleAnswerSubmit} loading={loading} className="flex-1">
+                  {loading ? "Thinking…" : "Continue"}
+                </Button>
               </div>
             </m.div>
           )}
@@ -514,23 +480,18 @@ export default function AIActionSheet({
 
               {/* Footer actions */}
               <div className="flex gap-2">
-                <button
-                  type="button"
-                  onClick={handleRetry}
-                  className="flex h-12 items-center gap-1.5 rounded-2xl border border-neutral-200 px-4 text-[13px] font-semibold text-neutral-500 transition-colors hover:border-neutral-300 hover:text-neutral-700 dark:border-white/[0.08] dark:text-neutral-400 dark:hover:border-white/[0.15]"
-                >
+                <Button variant="secondary" onClick={handleRetry}>
                   Retry
-                </button>
-                <m.button
-                  type="button"
+                </Button>
+                <Button
+                  variant="cta"
                   onClick={handleAdd}
                   disabled={selectedCount === 0}
-                  whileTap={{ scale: 0.97 }}
-                  className="flex h-12 flex-1 items-center justify-center gap-2 rounded-2xl bg-neutral-900 text-[14px] font-bold text-white transition-colors hover:bg-neutral-800 disabled:opacity-40 dark:bg-white dark:text-neutral-900 dark:hover:bg-neutral-100"
+                  icon={<IconCheck size={18} strokeWidth={2.5} />}
+                  className="flex-1"
                 >
-                  <IconCheck size={15} strokeWidth={2.5} />
                   Add {selectedCount} {nLabel}
-                </m.button>
+                </Button>
               </div>
             </m.div>
           )}

@@ -18,6 +18,7 @@ import { safeGetItem, safeSetItem } from "@/lib/safeStorage";
 import { useLongPress } from "@/lib/useLongPress";
 import { CARD, SOFT_PANEL } from "@/components/ui/surfaces";
 import CheckDraw from "@/components/ui/CheckDraw";
+import Button from "@/components/ui/Button";
 
 type TaskSummary = ReturnType<typeof getTaskSubtaskSummary>;
 type TaskRow = { task: Task; slotIndex?: number };
@@ -179,10 +180,10 @@ function TodayTaskRow({
       {isMultiSlot && !isSlotRow && (
         <span
           aria-label={`${new Set(task.completedSlotIndices ?? []).size} of ${slots.length} phases done`}
-          className="inline-flex min-h-[34px] shrink-0 items-center gap-1.5 rounded-full border border-neutral-200 px-2.5 text-neutral-500 dark:border-white/[0.10] dark:text-neutral-400"
+          className="inline-flex h-9 shrink-0 items-center gap-1.5 rounded-full bg-black/[0.05] px-3 text-neutral-600 dark:bg-white/[0.08] dark:text-neutral-300"
         >
-          <IconClock size={14} strokeWidth={2} className="shrink-0" />
-          <span className="text-[12px] font-bold tabular-nums">
+          <IconClock size={15} strokeWidth={2} className="shrink-0" />
+          <span className="text-[13px] font-semibold tabular-nums">
             {new Set(task.completedSlotIndices ?? []).size}/{slots.length}
           </span>
         </span>
@@ -192,8 +193,9 @@ function TodayTaskRow({
           labelled "Missed" button lives. Long-press covers the same action on
           touch. Mirrors IOSLightTaskCard's trailing chip. */}
       {onOpenSubtasks && (!isSlotRow || slotIndex === 0) && (
-        <button
-          type="button"
+        <Button
+          variant="secondary"
+          size="sm"
           onClick={() => {
             haptic("light");
             onOpenSubtasks(task.id);
@@ -201,16 +203,12 @@ function TodayTaskRow({
           aria-label={
             subTotal > 0 ? `Open subtasks (${subDone} of ${subTotal} done)` : "Open task details"
           }
-          className="inline-flex min-h-[34px] shrink-0 items-center gap-1.5 rounded-full border border-neutral-200 px-2.5 text-neutral-500 transition-colors hover:bg-neutral-50 dark:border-white/[0.10] dark:text-neutral-400 dark:hover:bg-white/[0.05]"
+          icon={subTotal > 0 ? <IconListCheck size={15} strokeWidth={2} /> : undefined}
+          trailingIcon={<IconArrowUpRight size={15} strokeWidth={2.2} />}
+          className="tabular-nums"
         >
-          {subTotal > 0 && <IconListCheck size={14} strokeWidth={2} className="shrink-0" />}
-          {subTotal > 0 && (
-            <span className="text-[12px] font-bold tabular-nums">
-              {subDone}/{subTotal}
-            </span>
-          )}
-          <IconArrowUpRight size={13} strokeWidth={2.2} className="shrink-0" />
-        </button>
+          {subTotal > 0 && `${subDone}/${subTotal}`}
+        </Button>
       )}
     </div>
   );
@@ -295,13 +293,9 @@ export default function TodayTaskList({
           <p className="min-w-0 flex-1 text-[12px] font-medium leading-snug text-neutral-500 dark:text-neutral-400">
             Hold a checkbox to mark a task missed.
           </p>
-          <button
-            type="button"
-            onClick={dismissHint}
-            className="tap-target shrink-0 rounded-full px-2 py-0.5 text-[12px] font-bold text-neutral-500 transition-colors hover:bg-neutral-100 dark:text-neutral-400 dark:hover:bg-white/[0.06]"
-          >
+          <Button variant="ghost" size="sm" onClick={dismissHint} className="shrink-0">
             Got it
-          </button>
+          </Button>
         </div>
       )}
 

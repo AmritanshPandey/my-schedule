@@ -6,6 +6,8 @@ import type { Milestone, ProgressTracker, Schedule, Task } from "@/lib/useSchedu
 import { linkableMilestones, milestonesForItem, type MilestoneLinkKind } from "@/lib/milestoneLinks";
 import { resolveMilestoneLinks } from "@/lib/milestoneAutoLinks";
 import { haptic } from "@/lib/haptics";
+import Button from "@/components/ui/Button";
+import IconButton from "@/components/ui/IconButton";
 
 function handLinks(milestone: Milestone | undefined, kind: MilestoneLinkKind): string[] {
   if (!milestone) return [];
@@ -97,27 +99,17 @@ export default function MilestoneLinks({
                 </span>
               )}
               {!done && (
-                <button
-                  type="button"
-                  onClick={() => { haptic("light"); onSetLink(m.id, kind, itemId, false); }}
-                  aria-label={`Unlink from ${m.title}`}
-                  className="flex h-9 w-9 items-center justify-center rounded-full text-neutral-500 transition-colors hover:bg-neutral-100 hover:text-rose-600 active:scale-[0.98] dark:text-neutral-400 dark:hover:bg-white/[0.06] dark:hover:text-rose-400"
-                >
-                  <IconX size={13} strokeWidth={2.5} />
-                </button>
+                <IconButton label={`Unlink from ${m.title}`} variant="destructive" size="md" onClick={() => { haptic("light"); onSetLink(m.id, kind, itemId, false); }}>
+                  <IconX size={16} strokeWidth={2.5} />
+                </IconButton>
               )}
             </span>
           );
         })}
         {options.length > 0 && !picking && (
-          <button
-            type="button"
-            onClick={() => setPicking(true)}
-            className="inline-flex min-h-11 items-center gap-1 rounded-full px-3 text-[12.5px] font-bold text-neutral-600 transition-colors hover:bg-neutral-100 active:scale-[0.98] dark:text-neutral-300 dark:hover:bg-white/[0.06]"
-          >
-            <IconPlus size={13} strokeWidth={2.5} />
+          <Button variant="ghost" size="md" onClick={() => setPicking(true)} icon={<IconPlus size={16} strokeWidth={2.5} />}>
             Link to milestone
-          </button>
+          </Button>
         )}
       </div>
       {picking && options.length > 0 && (

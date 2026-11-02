@@ -155,7 +155,7 @@ export default function GoalListSheet({ open, onClose, schedule, setSchedule, on
                   <IconChevronLeft size={16} strokeWidth={2.2} />
                   Goals
                 </button>
-                <IconButton label="Close" variant="outline" size="sm" radius="xl" onClick={handleClose}>
+                <IconButton label="Close" variant="secondary" size="sm" onClick={handleClose}>
                   <IconX size={14} strokeWidth={2} />
                 </IconButton>
               </div>
@@ -230,7 +230,7 @@ export default function GoalListSheet({ open, onClose, schedule, setSchedule, on
                 )}
                 <Button
                   size="sm"
-                  variant="dangerSecondary"
+                  variant="destructiveSecondary"
                   onClick={() => { setSelectedGoalId(null); onDeleteGoal(selectedGoal.id); }}
                 >
                   <IconTrash size={14} strokeWidth={2} />
