@@ -1,8 +1,8 @@
-import { useMemo } from 'react';
+import { useMemo, useState } from 'react';
 import { View } from 'react-native';
 import Svg, { Circle } from 'react-native-svg';
 import { useColorScheme } from 'nativewind';
-import { IconChartLine, IconFlag3, IconPlus, IconTargetArrow, IconTrash } from '@tabler/icons-react-native';
+import { IconChartLine, IconChevronDown, IconChevronUp, IconFlag3, IconPlus, IconTargetArrow, IconTrash } from '@tabler/icons-react-native';
 import type { MetricEntry, Milestone, Plan, ProgressTracker, TrackerCadence } from '@planr/core/lib/scheduleTypes';
 import type { MilestoneState } from '@planr/core/lib/milestoneHealth';
 import { paceNarrative } from '@planr/core/lib/paceModel';
@@ -14,7 +14,7 @@ import { buildCheckIn, checkInRecordLabel, checkInStatusLabel, nextCheckInLabel,
 import { quickAmountsForUnit } from '@planr/core/lib/quickAmounts';
 import { todayISO } from '@planr/core/lib/dateUtils';
 import { haptic } from '../../lib/haptics';
-import { CARD, SOFT_PANEL } from '../ui/surfaces';
+import { CARD } from '../ui/surfaces';
 import { MainTitleSection } from '../ui/MainTitleSection';
 import EmptyState from '../ui/EmptyState';
 import TrendChange from '../ui/TrendChange';
@@ -118,7 +118,7 @@ function lastLoggedLabel(lastDate: string | null, todayISO: string): string | nu
 function CheckInRow({ state, trackerTitle, onSetCadence }: { state: CheckInState; trackerTitle: string; onSetCadence: (cadence: TrackerCadence) => void }) {
   const record = checkInRecordLabel(state);
   return (
-    <View className="mt-3 gap-2">
+    <View className="gap-2">
       <View className="flex-row items-center justify-between gap-3">
         <Text
           numberOfLines={1}
@@ -214,85 +214,88 @@ function MetricCard({
   }, [stat, tracker, planned]);
 
   const pace = milestoneLink ? paceNarrative(milestoneLink.state.paceGap) : null;
+  const [detailsOpen, setDetailsOpen] = useState(false);
+  const gap = stat.isDaily ? null : (planned?.gap ?? null);
 
   return (
     <View className={`${CARD} px-5 py-4`}>
-      <View className="flex-row items-start gap-3">
+      <View className="flex-row items-center gap-3">
         {stat.isDaily && stat.percent !== null && <TargetRing percent={stat.percent} met={stat.metToday} />}
 
         <View className="min-w-0 flex-1">
-          <View className="flex-row items-baseline justify-between gap-2">
-            <Text className="min-w-0 flex-1 truncate text-[15px] font-extrabold text-neutral-900 dark:text-white">{tracker.title}</Text>
-            {stat.trend && <TrendChange direction={stat.trend.direction} state={stat.trend.state} pct={stat.trend.pct} />}
-          </View>
+          <Text numberOfLines={1} className="text-[15px] font-extrabold text-neutral-900 dark:text-white">{tracker.title}</Text>
 
-          <Text className="mt-0.5 text-[13px] font-bold tabular-nums text-neutral-600 dark:text-neutral-300">
-            {stat.isDaily ? (
-              <>
-                {fmt(stat.todayTotal)} <Text className="text-neutral-500 dark:text-neutral-400">/ {fmt(stat.targetValue!)}</Text>
-                {unit ? <Text className="text-neutral-500 dark:text-neutral-400"> {unit}</Text> : null}
-              </>
-            ) : stat.latestValue !== null ? (
-              <>
-                {fmt(stat.latestValue)}
-                {unit ? <Text className="text-neutral-500 dark:text-neutral-400"> {unit}</Text> : null}
-                {stat.targetValue !== null && <Text className="text-neutral-500 dark:text-neutral-400"> → {fmt(stat.targetValue)}</Text>}
-              </>
-            ) : (
-              <Text className="font-semibold text-neutral-500 dark:text-neutral-400">Nothing logged yet</Text>
-            )}
-          </Text>
-          {/* Where the plan says this should be today, and how far off it is. */}
-          {!stat.isDaily && planned?.gap ? (
-            <Text testID="tracker-plan-gap" className="mt-0.5 text-[12px] font-semibold tabular-nums text-neutral-500 dark:text-neutral-400">
-              Plan: {fmt(planned.gap.expected)}{unit ? ` ${unit}` : ''} by today ·{' '}
-              {planned.gap.delta === 0 ? (
-                <Text className="text-emerald-700 dark:text-emerald-400">on plan</Text>
+          {/* One line: where it is, where it's going, and the single verdict —
+              the gap to the plan's path when there is one, otherwise the trend. */}
+          <View className="mt-0.5 flex-row flex-wrap items-center">
+            <Text className="text-[13px] font-bold tabular-nums text-neutral-600 dark:text-neutral-300">
+              {stat.isDaily ? (
+                <>
+                  {fmt(stat.todayTotal)} <Text className="text-neutral-500 dark:text-neutral-400">/ {fmt(stat.targetValue!)}</Text>
+                  {unit ? <Text className="text-neutral-500 dark:text-neutral-400"> {unit}</Text> : null}
+                </>
+              ) : stat.latestValue !== null ? (
+                <>
+                  {fmt(stat.latestValue)}
+                  {unit ? <Text className="text-neutral-500 dark:text-neutral-400"> {unit}</Text> : null}
+                  {stat.targetValue !== null && <Text className="text-neutral-500 dark:text-neutral-400"> → {fmt(stat.targetValue)}</Text>}
+                </>
               ) : (
-                <Text className={planned.gap.ahead ? 'text-emerald-700 dark:text-emerald-400' : 'text-amber-800 dark:text-amber-300'}>
-                  {fmt(Math.abs(planned.gap.delta))}{unit ? ` ${unit}` : ''} {planned.gap.ahead ? 'ahead' : 'behind'}
-                </Text>
+                <Text className="font-semibold text-neutral-500 dark:text-neutral-400">Nothing logged yet</Text>
               )}
+              {gap ? (
+                <Text testID="tracker-plan-gap">
+                  <Text className="text-neutral-500 dark:text-neutral-400"> · </Text>
+                  {gap.delta === 0 ? (
+                    <Text className="text-emerald-700 dark:text-emerald-400">on plan</Text>
+                  ) : (
+                    <Text className={gap.ahead ? 'text-emerald-700 dark:text-emerald-400' : 'text-amber-800 dark:text-amber-300'}>
+                      {fmt(Math.abs(gap.delta))}{unit ? ` ${unit}` : ''} {gap.ahead ? 'ahead' : 'behind'}
+                    </Text>
+                  )}
+                </Text>
+              ) : null}
             </Text>
-          ) : null}
+            {!gap && stat.trend && stat.trend.pct !== null && stat.trend.direction !== 'neutral' ? (
+              <>
+                <Text className="text-[13px] font-bold text-neutral-500 dark:text-neutral-400"> · </Text>
+                <TrendChange direction={stat.trend.direction} state={stat.trend.state} pct={stat.trend.pct} />
+              </>
+            ) : null}
+          </View>
         </View>
+
+        {/* Always present: the one way in for any value, on any date. */}
+        <Button
+          variant="secondary"
+          size="sm"
+          accessibilityLabel={`Log a value for ${tracker.title}`}
+          onPress={() => {
+            haptic('light');
+            onOpenAddEntry(tracker);
+          }}
+          icon={<Icon icon={IconPlus} size={15} strokeWidth={2.5} className={BUTTON_TEXT.secondary} />}
+        >
+          Log
+        </Button>
       </View>
 
-      <CheckInRow state={checkIn} trackerTitle={tracker.title} onSetCadence={(cadence) => onSetCadence(tracker.id, cadence)} />
-
-      {/* Linked milestone — the same "success metric" relationship shown in
-          the Plan's milestone view. The pace sentence is silent when the
-          trend is too scattered to quote. */}
+      {/* What this number is for — the same "success metric" relationship the
+          Plan's milestone view shows. The plan is the section heading above. */}
       {milestoneLink && (
-        <View className={`${SOFT_PANEL} mt-3 flex-row items-start gap-2 px-3 py-2`}>
-          <Icon icon={IconFlag3} size={14} strokeWidth={2} className="mt-0.5 shrink-0 text-neutral-500 dark:text-neutral-400" />
-          <View className="min-w-0 flex-1">
-            <View className="flex-row items-center gap-1.5">
-              <Text className="min-w-0 shrink truncate text-[12.5px] font-bold text-neutral-700 dark:text-neutral-200">{milestoneLink.milestone.title}</Text>
-              <HealthBadge health={milestoneLink.state.health} />
-            </View>
-            {pace && <Text className="mt-0.5 text-[12px] font-medium text-neutral-500 dark:text-neutral-400">{pace}</Text>}
-          </View>
+        <View className="mt-2 flex-row items-center gap-1.5">
+          <Icon icon={IconFlag3} size={14} strokeWidth={2} className="shrink-0 text-neutral-500 dark:text-neutral-400" />
+          <Text numberOfLines={1} className="min-w-0 shrink text-[13px] font-semibold text-neutral-600 dark:text-neutral-300">
+            {milestoneLink.milestone.title}
+          </Text>
+          <HealthBadge health={milestoneLink.state.health} />
         </View>
       )}
 
-      {milestones && onSetMilestoneLink && (
-        <MilestoneLinks
-          className="mt-3"
-          milestones={milestones}
-          kind="tracker"
-          itemId={tracker.id}
-          planId={tracker.planId}
-          trackers={allTrackers}
-          onSetLink={onSetMilestoneLink}
-          hideIds={milestoneLink ? [milestoneLink.milestone.id] : undefined}
-        />
-      )}
-
-      {/* The chart, shown by default: a tracker's whole point is the shape of
-          the line. Points are daily totals. */}
+      {/* The chart stays out in the open: a tracker's whole point is the shape
+          of the line. Points are daily totals. */}
       {chart && (
-        <View className={`${SOFT_PANEL} mt-3 px-2 py-2`}>
+        <View className="mt-3">
           <ProgressChart
             bare
             entries={chart.entries}
@@ -305,60 +308,85 @@ function MetricCard({
         </View>
       )}
 
-      {/* One-tap logging. Green is reserved for the affirmative action. */}
-      <View className="mt-3 flex-row flex-wrap items-center gap-2">
-        {presets.map((amount) => (
-          <Button
-            key={amount}
-            variant="secondary"
-            size="sm"
-            accessibilityLabel={`Log ${fmt(amount)}${unit ? ` ${unit}` : ''} of ${tracker.title}`}
-            onPress={() => {
-              haptic('light');
-              onLog(tracker.id, tracker.planId, amount);
-            }}
-            className="min-w-[56px]"
-            textClassName="tabular-nums"
-          >
-            {`+${fmt(amount)}`}
-          </Button>
-        ))}
-        {/* Always present: the presets are a shortcut, not the only way in. */}
-        <Button
-          variant="secondary"
-          size="sm"
-          accessibilityLabel={`Log a value for ${tracker.title}`}
-          onPress={() => {
-            haptic('light');
-            onOpenAddEntry(tracker);
-          }}
-          icon={<Icon icon={IconPlus} size={15} strokeWidth={2.5} className={BUTTON_TEXT.secondary} />}
-        >
-          {presets.length > 0 ? 'Other' : 'Log'}
-        </Button>
-      </View>
+      {/* One-tap logging, for units with a preset table. */}
+      {presets.length > 0 && (
+        <View className="mt-3 flex-row flex-wrap items-center gap-2">
+          {presets.map((amount) => (
+            <Button
+              key={amount}
+              variant="secondary"
+              size="sm"
+              accessibilityLabel={`Log ${fmt(amount)}${unit ? ` ${unit}` : ''} of ${tracker.title}`}
+              onPress={() => {
+                haptic('light');
+                onLog(tracker.id, tracker.planId, amount);
+              }}
+              className="min-w-[56px]"
+              textClassName="tabular-nums"
+            >
+              {`+${fmt(amount)}`}
+            </Button>
+          ))}
+        </View>
+      )}
 
-      {todaysEntries.length > 0 && (
-        <View className={`${SOFT_PANEL} mt-3 px-3 py-2`}>
-          <Text className="text-[10px] font-bold uppercase tracking-[0.08em] text-neutral-500 dark:text-neutral-400">Today</Text>
-          <View className="mt-1.5 gap-1">
-            {todaysEntries.map((entry) => (
-              <View key={entry.id} className="flex-row items-center justify-between gap-2">
-                <Text className="text-[13px] font-bold tabular-nums text-neutral-700 dark:text-neutral-200">
-                  {fmt(entry.value)}
-                  {unit ? ` ${unit}` : ''}
-                </Text>
-                <IconButton
-                  label={`Delete ${fmt(entry.value)}${unit ? ` ${unit}` : ''} entry`}
-                  variant="destructive"
-                  size="sm"
-                  onPress={() => onDeleteEntry(entry.id)}
-                >
-                  <Icon icon={IconTrash} size={16} strokeWidth={2} className={ICON_BUTTON_TONE.destructive} />
-                </IconButton>
+      <Button
+        variant="ghost"
+        size="sm"
+        accessibilityState={{ expanded: detailsOpen }}
+        onPress={() => {
+          haptic('light');
+          setDetailsOpen((open) => !open);
+        }}
+        trailingIcon={<Icon icon={detailsOpen ? IconChevronUp : IconChevronDown} size={15} strokeWidth={2.2} className={BUTTON_TEXT.ghost} />}
+        className="-ml-3.5 mt-2 self-start"
+      >
+        Details
+      </Button>
+
+      {/* Everything that's about managing the tracker rather than reading it. */}
+      {detailsOpen && (
+        <View className="mt-2 gap-3 border-t border-neutral-100 pt-3 dark:border-white/[0.06]">
+          <CheckInRow state={checkIn} trackerTitle={tracker.title} onSetCadence={(cadence) => onSetCadence(tracker.id, cadence)} />
+
+          {/* Silent when the trend is too scattered to quote. */}
+          {pace && <Text className="text-[13px] font-medium text-neutral-500 dark:text-neutral-400">{pace}</Text>}
+
+          {milestones && onSetMilestoneLink && (
+            <MilestoneLinks
+              milestones={milestones}
+              kind="tracker"
+              itemId={tracker.id}
+              planId={tracker.planId}
+              trackers={allTrackers}
+              onSetLink={onSetMilestoneLink}
+              hideIds={milestoneLink ? [milestoneLink.milestone.id] : undefined}
+            />
+          )}
+
+          {todaysEntries.length > 0 && (
+            <View>
+              <Text className="text-[13px] font-semibold text-neutral-500 dark:text-neutral-400">Logged today</Text>
+              <View className="mt-1 gap-1">
+                {todaysEntries.map((entry) => (
+                  <View key={entry.id} className="flex-row items-center justify-between gap-2">
+                    <Text className="text-[13px] font-bold tabular-nums text-neutral-700 dark:text-neutral-200">
+                      {fmt(entry.value)}
+                      {unit ? ` ${unit}` : ''}
+                    </Text>
+                    <IconButton
+                      label={`Delete ${fmt(entry.value)}${unit ? ` ${unit}` : ''} entry`}
+                      variant="destructive"
+                      size="sm"
+                      onPress={() => onDeleteEntry(entry.id)}
+                    >
+                      <Icon icon={IconTrash} size={16} strokeWidth={2} className={ICON_BUTTON_TONE.destructive} />
+                    </IconButton>
+                  </View>
+                ))}
               </View>
-            ))}
-          </View>
+            </View>
+          )}
         </View>
       )}
     </View>

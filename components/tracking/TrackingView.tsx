@@ -1,7 +1,7 @@
 "use client";
 
-import { useMemo } from "react";
-import { IconChartLine, IconFlag3, IconPlus, IconTargetArrow, IconTrash } from "@tabler/icons-react";
+import { useMemo, useState } from "react";
+import { IconChartLine, IconChevronDown, IconChevronUp, IconFlag3, IconPlus, IconTargetArrow, IconTrash } from "@tabler/icons-react";
 import type { MetricEntry, Milestone, Plan, ProgressTracker, TrackerCadence } from "@/lib/useScheduleDB";
 import type { MilestoneState } from "@/lib/milestoneHealth";
 import { paceNarrative } from "@/lib/paceModel";
@@ -20,7 +20,7 @@ import { CadenceSelect } from "@/components/tracking/CadencePicker";
 import { quickAmountsForUnit } from "@/lib/quickAmounts";
 import { todayISO } from "@/lib/dateUtils";
 import { haptic } from "@/lib/haptics";
-import { CARD, SOFT_PANEL } from "@/components/ui/surfaces";
+import { CARD } from "@/components/ui/surfaces";
 import { MainTitleSection } from "@/components/ui/MainTitleSection";
 import EmptyState from "@/components/ui/EmptyState";
 import TrendChange from "@/components/ui/TrendChange";
@@ -143,7 +143,7 @@ function CheckInRow({
 }) {
   const record = checkInRecordLabel(state);
   return (
-    <div className="mt-3 space-y-2">
+    <div className="space-y-2">
       <div className="flex items-center justify-between gap-3">
         <p className={`min-w-0 truncate text-[13px] font-bold ${
           state.overdue
@@ -220,6 +220,9 @@ function MetricCard({
   const presets = quickAmountsForUnit(tracker.unit);
   const todaysEntries = stat.todayEntries;
   const chartColor = plan?.color ?? "cyan";
+  const [detailsOpen, setDetailsOpen] = useState(false);
+  const gap = stat.isDaily ? null : planned?.gap ?? null;
+  const pace = milestoneLink ? paceNarrative(milestoneLink.state.paceGap) : null;
 
   /**
    * ProgressChart plots MetricEntry-shaped rows, so the daily totals are
@@ -250,21 +253,18 @@ function MetricCard({
 
   return (
     <div className={`${CARD} px-5 py-4`}>
-      <div className="flex items-start gap-3">
+      <div className="flex items-center gap-3">
         {stat.isDaily && stat.percent !== null && (
           <TargetRing percent={stat.percent} met={stat.metToday} />
         )}
 
         <div className="min-w-0 flex-1">
-          <div className="flex items-baseline justify-between gap-2">
-            <p className="min-w-0 truncate text-[15px] font-extrabold text-neutral-900 dark:text-white">
-              {tracker.title}
-            </p>
-            {stat.trend && (
-              <TrendChange direction={stat.trend.direction} state={stat.trend.state} pct={stat.trend.pct} />
-            )}
-          </div>
+          <p className="truncate text-[15px] font-extrabold text-neutral-900 dark:text-white">
+            {tracker.title}
+          </p>
 
+          {/* One line: where it is, where it's going, and the single verdict —
+              the gap to the plan's path when there is one, otherwise the trend. */}
           <p className="mt-0.5 text-[13px] font-bold tabular-nums text-neutral-600 dark:text-neutral-300">
             {stat.isDaily ? (
               <>
@@ -282,80 +282,60 @@ function MetricCard({
             ) : (
               <span className="font-semibold text-neutral-500 dark:text-neutral-400">Nothing logged yet</span>
             )}
+            {gap ? (
+              <span data-testid="tracker-plan-gap">
+                <span className="text-neutral-500 dark:text-neutral-400"> · </span>
+                {gap.delta === 0 ? (
+                  <span className="text-emerald-700 dark:text-emerald-400">on plan</span>
+                ) : (
+                  <span className={gap.ahead ? "text-emerald-700 dark:text-emerald-400" : "text-amber-800 dark:text-amber-300"}>
+                    {fmt(Math.abs(gap.delta))}{unit && ` ${unit}`} {gap.ahead ? "ahead" : "behind"}
+                  </span>
+                )}
+              </span>
+            ) : (
+              stat.trend && stat.trend.pct !== null && stat.trend.direction !== "neutral" && (
+                <>
+                  <span className="text-neutral-500 dark:text-neutral-400"> · </span>
+                  <TrendChange direction={stat.trend.direction} state={stat.trend.state} pct={stat.trend.pct} />
+                </>
+              )
+            )}
           </p>
-          {/* Where the plan says this should be today, and how far off it is —
-              the milestones' figures made into one readable line. */}
-          {!stat.isDaily && planned?.gap && (
-            <p data-testid="tracker-plan-gap" className="mt-0.5 text-[12px] font-semibold tabular-nums text-neutral-500 dark:text-neutral-400">
-              Plan: {fmt(planned.gap.expected)}{unit && ` ${unit}`} by today ·{" "}
-              {planned.gap.delta === 0 ? (
-                <span className="text-emerald-700 dark:text-emerald-400">on plan</span>
-              ) : (
-                <span className={planned.gap.ahead ? "text-emerald-700 dark:text-emerald-400" : "text-amber-800 dark:text-amber-300"}>
-                  {fmt(Math.abs(planned.gap.delta))}{unit && ` ${unit}`} {planned.gap.ahead ? "ahead" : "behind"}
-                </span>
-              )}
-            </p>
-          )}
         </div>
 
+        {/* Always present: the one way in for any value, on any date. */}
+        <Button
+          variant="secondary"
+          size="sm"
+          onClick={() => { haptic("light"); onOpenAddEntry(tracker); }}
+          aria-label={`Log a value for ${tracker.title}`}
+          icon={<IconPlus size={15} strokeWidth={2.5} />}
+        >
+          Log
+        </Button>
       </div>
 
-      <CheckInRow
-        state={checkIn}
-        trackerTitle={tracker.title}
-        onSetCadence={(cadence) => onSetCadence(tracker.id, cadence)}
-      />
-
-      {/* Linked milestone — the same "success metric" relationship shown in
-          the Plan's milestone view (lib/milestoneHealth.ts), so a tracker
-          logged here is never disconnected from what it's actually for. The
-          pace sentence is silent (paceNarrative returns null) when the trend
-          is too scattered to quote — no confident-looking number with
-          nothing behind it. */}
+      {/* What this number is for — the same "success metric" relationship the
+          Plan's milestone view shows, so a tracker logged here is never
+          disconnected from it. The plan is the section heading above. */}
       {milestoneLink && (
-        <div className={`${SOFT_PANEL} mt-3 flex items-start gap-2 px-3 py-2`}>
-          <IconFlag3 size={14} strokeWidth={2} className="mt-0.5 shrink-0 text-neutral-500 dark:text-neutral-400" />
-          <div className="min-w-0 flex-1">
-            <div className="flex items-center gap-1.5">
-              <p className="min-w-0 truncate text-[12.5px] font-bold text-neutral-700 dark:text-neutral-200">
-                {milestoneLink.milestone.title}
-              </p>
-              <HealthBadge health={milestoneLink.state.health} />
-            </div>
-            {paceNarrative(milestoneLink.state.paceGap) && (
-              <p className="mt-0.5 text-[12px] font-medium text-neutral-500 dark:text-neutral-400">
-                {paceNarrative(milestoneLink.state.paceGap)}
-              </p>
-            )}
-          </div>
+        <div className="mt-2 flex items-center gap-1.5">
+          <IconFlag3 size={14} strokeWidth={2} className="shrink-0 text-neutral-500 dark:text-neutral-400" />
+          <p className="min-w-0 truncate text-[13px] font-semibold text-neutral-600 dark:text-neutral-300">
+            {milestoneLink.milestone.title}
+          </p>
+          <HealthBadge health={milestoneLink.state.health} />
         </div>
       )}
 
-      {milestones && onSetMilestoneLink && (
-        <MilestoneLinks
-          className="mt-3"
-          milestones={milestones}
-          kind="tracker"
-          itemId={tracker.id}
-          planId={tracker.planId}
-          trackers={allTrackers}
-          onSetLink={onSetMilestoneLink}
-          hideIds={milestoneLink ? [milestoneLink.milestone.id] : undefined}
-        />
-      )}
-
-      {/* The chart, shown by default rather than behind a tap: a tracker's whole
-          point is the shape of the line, and a card that hides it is a list
-          entry pretending to be a chart.
-
-          Points are daily totals, so a metric logged five times in an afternoon
-          reads as one day rather than a spike. The reference line runs from the
-          starting value to the goal for a point-in-time metric, or sits flat at
-          the daily target for a cumulative one — either way the gap between the
-          line and the data is the answer. */}
+      {/* The chart stays out in the open: a tracker's whole point is the shape
+          of the line. Points are daily totals, so a metric logged five times in
+          an afternoon reads as one day rather than a spike. The reference line
+          runs from the starting value to the goal for a point-in-time metric,
+          or sits flat at the daily target for a cumulative one. */}
       {chart && (
-        <div className={`${SOFT_PANEL} mt-3 px-2 py-2`}>
+        <div className="mt-3">
           <ProgressChart
             bare
             entries={chart.entries}
@@ -368,57 +348,82 @@ function MetricCard({
         </div>
       )}
 
-      {/* One-tap logging. Green is correct here and nowhere else on this card:
-          DESIGN.md reserves it for the affirmative action and names Log by name. */}
-      <div className="mt-3 flex flex-wrap items-center gap-2">
-        {presets.map((amount) => (
-          <Button
-            key={amount}
-            variant="secondary"
-            size="sm"
-            onClick={() => { haptic("light"); onLog(tracker.id, tracker.planId, amount); }}
-            aria-label={`Log ${fmt(amount)}${unit ? ` ${unit}` : ""} of ${tracker.title}`}
-            className="min-w-[56px] tabular-nums"
-          >
-            +{fmt(amount)}
-          </Button>
-        ))}
-        {/* Always present: the presets are a shortcut, not the only way in, and
-            a unit with no preset table (or none at all) would otherwise have no
-            log affordance on this page. */}
-        <Button
-          variant="secondary"
-          size="sm"
-          onClick={() => { haptic("light"); onOpenAddEntry(tracker); }}
-          aria-label={`Log a value for ${tracker.title}`}
-          icon={<IconPlus size={15} strokeWidth={2.5} />}
-        >
-          {presets.length > 0 ? "Other" : "Log"}
-        </Button>
-      </div>
+      {/* One-tap logging, for units with a preset table. */}
+      {presets.length > 0 && (
+        <div className="mt-3 flex flex-wrap items-center gap-2">
+          {presets.map((amount) => (
+            <Button
+              key={amount}
+              variant="secondary"
+              size="sm"
+              onClick={() => { haptic("light"); onLog(tracker.id, tracker.planId, amount); }}
+              aria-label={`Log ${fmt(amount)}${unit ? ` ${unit}` : ""} of ${tracker.title}`}
+              className="min-w-[56px] tabular-nums"
+            >
+              +{fmt(amount)}
+            </Button>
+          ))}
+        </div>
+      )}
 
-      {todaysEntries.length > 0 && (
-        <div className={`${SOFT_PANEL} mt-3 px-3 py-2`}>
-          <p className="text-[10px] font-bold uppercase tracking-[0.08em] text-neutral-500 dark:text-neutral-400">
-            Today
-          </p>
-          <ul className="mt-1.5 flex flex-col gap-1">
-            {todaysEntries.map((entry) => (
-              <li key={entry.id} className="flex items-center justify-between gap-2">
-                <span className="text-[13px] font-bold tabular-nums text-neutral-700 dark:text-neutral-200">
-                  {fmt(entry.value)}{unit && ` ${unit}`}
-                </span>
-                <IconButton
-                  label={`Delete ${fmt(entry.value)}${unit ? ` ${unit}` : ""} entry`}
-                  variant="destructive"
-                  size="sm"
-                  onClick={() => onDeleteEntry(entry.id)}
-                >
-                  <IconTrash size={16} strokeWidth={2} />
-                </IconButton>
-              </li>
-            ))}
-          </ul>
+      <Button
+        variant="ghost"
+        size="sm"
+        aria-expanded={detailsOpen}
+        onClick={() => { haptic("light"); setDetailsOpen((open) => !open); }}
+        trailingIcon={detailsOpen ? <IconChevronUp size={15} strokeWidth={2.2} /> : <IconChevronDown size={15} strokeWidth={2.2} />}
+        className="-ml-3.5 mt-2"
+      >
+        Details
+      </Button>
+
+      {/* Everything that's about managing the tracker rather than reading it. */}
+      {detailsOpen && (
+        <div className="mt-2 space-y-3 border-t border-neutral-100 pt-3 dark:border-white/[0.06]">
+          <CheckInRow
+            state={checkIn}
+            trackerTitle={tracker.title}
+            onSetCadence={(cadence) => onSetCadence(tracker.id, cadence)}
+          />
+
+          {/* Silent (null) when the trend is too scattered to quote — no
+              confident-looking number with nothing behind it. */}
+          {pace && <p className="text-[13px] font-medium text-neutral-500 dark:text-neutral-400">{pace}</p>}
+
+          {milestones && onSetMilestoneLink && (
+            <MilestoneLinks
+              milestones={milestones}
+              kind="tracker"
+              itemId={tracker.id}
+              planId={tracker.planId}
+              trackers={allTrackers}
+              onSetLink={onSetMilestoneLink}
+              hideIds={milestoneLink ? [milestoneLink.milestone.id] : undefined}
+            />
+          )}
+
+          {todaysEntries.length > 0 && (
+            <div>
+              <p className="text-[13px] font-semibold text-neutral-500 dark:text-neutral-400">Logged today</p>
+              <ul className="mt-1 flex flex-col gap-1">
+                {todaysEntries.map((entry) => (
+                  <li key={entry.id} className="flex items-center justify-between gap-2">
+                    <span className="text-[13px] font-bold tabular-nums text-neutral-700 dark:text-neutral-200">
+                      {fmt(entry.value)}{unit && ` ${unit}`}
+                    </span>
+                    <IconButton
+                      label={`Delete ${fmt(entry.value)}${unit ? ` ${unit}` : ""} entry`}
+                      variant="destructive"
+                      size="sm"
+                      onClick={() => onDeleteEntry(entry.id)}
+                    >
+                      <IconTrash size={16} strokeWidth={2} />
+                    </IconButton>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
         </div>
       )}
     </div>
