@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { IconCheck } from "@tabler/icons-react";
 import BottomSheet from "@/components/ui/BottomSheet";
 import SheetHeader from "@/components/ui/SheetHeader";
@@ -28,6 +28,14 @@ interface AddEntryModalProps {
 export default function AddEntryModal({ isOpen, onClose, onSave, metric, quickAmounts, todayTotal }: AddEntryModalProps) {
   const [value, setValue] = useState("");
   const [date, setDate] = useState(todayISO);
+
+  // Each opening starts on today. This sheet stays mounted for the life of the
+  // app, so the initial state alone is the day the app launched: left open for
+  // days, entries silently landed in an earlier week or month and the check-in
+  // they were meant to clear stayed due.
+  useEffect(() => {
+    if (isOpen) setDate(todayISO());
+  }, [isOpen]);
 
   function handleSave() {
     const num = parseFloat(value);
