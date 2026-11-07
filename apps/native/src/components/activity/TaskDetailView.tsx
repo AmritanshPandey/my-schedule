@@ -315,22 +315,36 @@ export default function TaskDetailView({
     )
   ) : (
     <View className="mt-1 gap-2">
-      {tracked && (
+      {tracked && !done && (
         <Button
-          variant={done ? 'secondary' : 'cta'}
+          variant="cta"
           fullWidth
           onPress={() => {
-            if (!done) completePrimary();
+            completePrimary();
             onClose();
           }}
-          icon={<Icon icon={IconCheck} size={18} strokeWidth={2.6} className={BUTTON_TEXT[done ? 'secondary' : 'cta']} />}
+          icon={<Icon icon={IconCheck} size={18} strokeWidth={2.6} className={BUTTON_TEXT.cta} />}
         >
-          {done ? 'Completed' : 'Done'}
+          Done
         </Button>
       )}
 
-      {(snoozeButton || skipToggle) && (
+      {/* One row for everything secondary — the deferrals, and once done the
+          quiet "Completed" status beside "Skip this day" rather than a
+          full-width row of its own. Each is flex-1, so one alone fills it. */}
+      {((tracked && done) || snoozeButton || skipToggle) && (
         <View className="flex-row items-center gap-2.5">
+          {tracked && done && (
+            <Button
+              variant="secondary"
+              size="md"
+              className="flex-1"
+              onPress={onClose}
+              icon={<Icon icon={IconCheck} size={16} strokeWidth={2.6} className={BUTTON_TEXT.secondary} />}
+            >
+              Completed
+            </Button>
+          )}
           {snoozeButton}
           {skipToggle}
         </View>

@@ -369,22 +369,25 @@ export default function TaskDetailView({
           reads "Completed", is tinted rather than solid (it is no longer a
           call to action), and only dismisses. Undoing stays on the header
           checkbox, which is already labelled "Mark task not done". */}
-      {tracked && (
-        <Button
-          variant={done ? "secondary" : "cta"}
-          fullWidth
-          onClick={() => { if (!done) completePrimary(); onClose(); }}
-          icon={<IconCheck size={18} strokeWidth={2.6} />}
-        >
-          {done ? "Completed" : "Done"}
+      {tracked && !done && (
+        <Button variant="cta" fullWidth onClick={() => { completePrimary(); onClose(); }} icon={<IconCheck size={18} strokeWidth={2.6} />}>
+          Done
         </Button>
       )}
 
-      {/* The two deferrals share a row — they answer the same question ("not
-          now"), and pairing them stops either being mistaken for an outcome.
-          Each is flex-1, so one alone still fills the width. */}
-      {(snoozeButton || skipToggle) && (
+      {/* One row for everything secondary. Undone, that is the two deferrals
+          ("not now"), paired so neither reads as an outcome. Done, "Later
+          today" no longer applies and "Completed" is a quiet status rather
+          than a call to action, so it takes the row beside "Skip this day"
+          instead of a full-width row of its own. Each is flex-1, so one alone
+          still fills the width. */}
+      {((tracked && done) || snoozeButton || skipToggle) && (
         <div className="flex items-center gap-2.5">
+          {tracked && done && (
+            <Button variant="secondary" size="md" onClick={onClose} icon={<IconCheck size={16} strokeWidth={2.6} />} className="flex-1">
+              Completed
+            </Button>
+          )}
           {snoozeButton}
           {skipToggle}
         </div>
