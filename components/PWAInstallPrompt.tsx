@@ -1,6 +1,19 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { isActivated } from "@/lib/activation";
+
+/** "Maybe later" holds the prompt back this long. */
+const SNOOZE_KEY = "planr-install-prompt-snoozed-until";
+const SNOOZE_MS = 14 * 24 * 60 * 60 * 1000;
+
+function isSnoozed(): boolean {
+  try {
+    return Number(localStorage.getItem(SNOOZE_KEY) ?? 0) > Date.now();
+  } catch {
+    return false;
+  }
+}
 import { IconX, IconDownload } from "@tabler/icons-react";
 import Button from "@/components/ui/Button";
 import IconButton from "@/components/ui/IconButton";
@@ -122,7 +135,10 @@ export default function PWAInstallPrompt() {
   const [deferredPrompt, setDeferredPrompt] = useState<BeforeInstallPromptEvent | null>(null);
 
   useEffect(() => {
-    if (isStandalone()) return;
+    // Not for a brand-new user: it waits for a visit that starts with the
+    // first task already in place, so it never lands on top of that first
+    // task's save (with the day's tour) or before there is anything to keep.
+    if (isStandalone() || isSnoozed() || !isActivated()) return;
 
     const p = getPlatform();
     if (p === "other") return;
@@ -172,6 +188,11 @@ export default function PWAInstallPrompt() {
   }, []);
 
   function dismiss() {
+    try {
+      localStorage.setItem(SNOOZE_KEY, String(Date.now() + SNOOZE_MS));
+    } catch {
+      /* hidden for this visit only */
+    }
     setAnimateIn(false);
     setTimeout(() => setVisible(false), 300);
   }

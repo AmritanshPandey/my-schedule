@@ -40,6 +40,8 @@ export default function IOSOverview({
   setupDismissed,
   onDismissSetup,
   onNavigate,
+  onAddTask,
+  onStartSetupStep,
   onOpenPlan,
   onMarkDone,
   onToggleSlot,
@@ -60,6 +62,10 @@ export default function IOSOverview({
   setupDismissed: boolean;
   onDismissSetup: () => void;
   onNavigate: (tab: number) => void;
+  /** Opens the new-task sheet for today (the empty day's "Add a task"). */
+  onAddTask: () => void;
+  /** Opens a setup step's own sheet (new plan, new task, new routine), not just its tab. */
+  onStartSetupStep: (step: SetupStep['key']) => void;
   onOpenPlan: (planId: string) => void;
   onMarkDone: (taskId: string, checkableIds: string[]) => void;
   onToggleSlot: (taskId: string, slotIndex: number) => void;
@@ -100,7 +106,7 @@ export default function IOSOverview({
             <Text className="shrink-0 text-[12px] font-bold tabular-nums text-emerald-800 dark:text-emerald-300">{setup.doneCount} of 3</Text>
           </View>
           <View className="mt-3 gap-1">
-            {setup.steps.map(({ key, label, tab, done }, index) => {
+            {setup.steps.map(({ key, label, done }, index) => {
               const isNext = !done && key === setup.next.key;
               return (
                 <Pressable
@@ -109,7 +115,7 @@ export default function IOSOverview({
                   accessibilityLabel={`Step ${index + 1}: ${label}${done ? ' (done)' : ''}`}
                   onPress={() => {
                     haptic('light');
-                    onNavigate(tab);
+                    onStartSetupStep(key);
                   }}
                   className={`min-h-[52px] w-full flex-row items-center gap-3 rounded-xl px-3 py-2 active:bg-white/70 dark:active:bg-white/[0.06] ${
                     isNext ? 'bg-white/90 dark:bg-white/[0.05]' : ''
@@ -151,7 +157,7 @@ export default function IOSOverview({
               size="md"
               onPress={() => {
                 haptic('light');
-                onNavigate(setup.next.tab);
+                onStartSetupStep(setup.next.key);
               }}
               className="flex-1"
             >
@@ -172,7 +178,7 @@ export default function IOSOverview({
       )}
 
       {/* Next — the first answer. */}
-      <NextUpCard next={nextUp} streak={weekStatus.streak} onMarkDone={onMarkDone} onToggleSlot={onToggleSlot} onOpenToday={() => onNavigate(0)} />
+      <NextUpCard next={nextUp} streak={weekStatus.streak} onMarkDone={onMarkDone} onToggleSlot={onToggleSlot} onOpenToday={() => onNavigate(0)} onAddTask={onAddTask} />
 
       {/* Fix — both render nothing when all clear. */}
       <NeedsAttentionCard

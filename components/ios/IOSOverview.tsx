@@ -44,6 +44,8 @@ export default function IOSOverview({
   setupDismissed,
   onDismissSetup,
   onNavigate,
+  onAddTask,
+  onStartSetupStep,
   onOpenPlan,
   onMarkDone,
   onToggleSlot,
@@ -64,6 +66,10 @@ export default function IOSOverview({
   setupDismissed: boolean;
   onDismissSetup: () => void;
   onNavigate: (tab: number) => void;
+  /** Opens the new-task sheet for today (the empty day's "Add a task"). */
+  onAddTask: () => void;
+  /** Opens a setup step's own sheet (new plan, new task, new routine), not just its tab. */
+  onStartSetupStep: (step: SetupStep["key"]) => void;
   onOpenPlan: (planId: string) => void;
   onMarkDone: (taskId: string, checkableIds: string[]) => void;
   onToggleSlot: (taskId: string, slotIndex: number) => void;
@@ -118,14 +124,14 @@ export default function IOSOverview({
             </span>
           </div>
           <ol className="mt-3 space-y-1">
-            {setup.steps.map(({ key, label, tab, done }, index) => {
+            {setup.steps.map(({ key, label, done }, index) => {
               const isNext = !done && key === setup.next.key;
               const Icon = SETUP_ICON[key];
               return (
                 <li key={key}>
                   <button
                     type="button"
-                    onClick={() => { haptic("light"); onNavigate(tab); }}
+                    onClick={() => { haptic("light"); onStartSetupStep(key); }}
                     className={`flex min-h-[52px] w-full items-center gap-3 rounded-xl px-3 py-2 text-left active:bg-white/70 dark:active:bg-white/[0.06] ${
                       isNext ? "bg-white/90 dark:bg-white/[0.05]" : ""
                     }`}
@@ -158,7 +164,7 @@ export default function IOSOverview({
             })}
           </ol>
           <div className="mt-3 flex items-center gap-2">
-            <Button size="md" onClick={() => { haptic("light"); onNavigate(setup.next.tab); }} className="flex-1">
+            <Button size="md" onClick={() => { haptic("light"); onStartSetupStep(setup.next.key); }} className="flex-1">
               {setup.next.cta}
             </Button>
             <Button variant="ghost" size="md" onClick={() => { haptic("light"); onDismissSetup(); }}>
@@ -169,7 +175,7 @@ export default function IOSOverview({
       )}
 
       {/* Next — the first answer. */}
-      <NextUpCard next={nextUp} streak={weekStatus.streak} onMarkDone={onMarkDone} onToggleSlot={onToggleSlot} onOpenToday={() => onNavigate(0)} />
+      <NextUpCard next={nextUp} streak={weekStatus.streak} onMarkDone={onMarkDone} onToggleSlot={onToggleSlot} onOpenToday={() => onNavigate(0)} onAddTask={onAddTask} />
 
       {/* Fix — both render nothing when all clear. */}
       <NeedsAttentionCard

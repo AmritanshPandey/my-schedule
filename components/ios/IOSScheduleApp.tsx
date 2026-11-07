@@ -51,6 +51,7 @@ import {
   type TrackerCadence,
   resetStaleCompletions,
 } from "@/lib/useScheduleDB";
+import { markActivated } from "@/lib/activation";
 import { useScheduleDB } from "@/lib/useScheduleDB";
 import { accentStyles, categoryHex, resolveAccentColor } from "@/lib/colorSystem";
 import { canDeleteCategory, categoryUsageCounts, ensureCategoryIn } from "@/lib/taskCategories";
@@ -338,6 +339,13 @@ export default function IOSScheduleApp() {
   void isStandalonePWA();
 
   const { schedule, setSchedule, ready, clearData, clearProgress, restoreData, undo } = useScheduleDB();
+
+  // The first task is the moment the app stops being empty; the install and
+  // back-up prompts wait for it (lib/activation.ts).
+  const hasAnyTask = DAYS.some((day) => (schedule.activities[day] ?? []).length > 0);
+  useEffect(() => {
+    if (ready && hasAnyTask) markActivated();
+  }, [ready, hasAnyTask]);
   useReminders(schedule, ready);
   const [todayKey, setTodayKey] = useState<DayKey>(() => JS_DAYS[new Date().getDay()]);
   const [activeDay, setActiveDay] = useState<DayKey>(() => JS_DAYS[new Date().getDay()]);
@@ -372,7 +380,6 @@ export default function IOSScheduleApp() {
   // have no entry in TOUR_STEPS — see lib/onboarding/tours.ts.
   const activeTourId: TourId | null =
     activeTab === 0 ? "today" : activeTab === 1 ? "plans" : activeTab === 2 ? "routine" : activeTab === 8 ? "tracking" : null;
-  const tour = useCoachTour(activeTourId ?? "none", { enabled: activeTourId !== null, delayMs: 1200 });
 
   const [iosSetupDismissed, setIosSetupDismissed] = useState(() => {
     try {
@@ -418,6 +425,25 @@ export default function IOSScheduleApp() {
   const editingRitual = editRitualId ? (schedule.rituals ?? []).find((r) => r.id === editRitualId) ?? null : null;
   const [subtasksRef, setSubtasksRef] = useState<{ id: string; day: DayKey; dateISO: string } | null>(null);
   const [entryTracker, setEntryTracker] = useState<ProgressTracker | null>(null);
+  // A tab's tour explains what's on it, so it waits until there is something
+  // there: on an empty tab the empty state's own button is the guidance, and
+  // the tour's full-screen layer only swallowed the first tap on it. It also
+  // waits while a sheet covers the page.
+  const tourTabHasContent =
+    activeTab === 0
+      ? DAYS.some((day) => (schedule.activities[day] ?? []).length > 0)
+      : activeTab === 1
+        ? schedule.plans.length > 0
+        : activeTab === 2
+          ? (schedule.rituals ?? []).length > 0
+          : activeTab === 8
+            ? schedule.progressTrackers.length > 0
+            : false;
+  const tourPageCovered = taskSheetOpen || addingPlan || ritualAddOpen || templatesOpen || !!entryTracker || !!selectedPlanId;
+  const tour = useCoachTour(activeTourId ?? "none", {
+    enabled: activeTourId !== null && tourTabHasContent && !tourPageCovered,
+    delayMs: 1200,
+  });
   const [confirmState, setConfirmState] = useState<ConfirmState | null>(null);
   const [taskDeleteRequest, setTaskDeleteRequest] = useState<TaskDeleteRequest | null>(null);
   const [toastState, setToastState] = useState<{ message: string; actionLabel?: string; onAction?: () => void } | null>(null);
@@ -1400,6 +1426,15 @@ export default function IOSScheduleApp() {
             setupDismissed={iosSetupDismissed}
             onDismissSetup={dismissIosSetup}
             onNavigate={setActiveTab}
+            onAddTask={() => {
+              setActiveDay(todayKey);
+              openCreateSheet();
+            }}
+            onStartSetupStep={(step) => {
+              if (step === "plan") { setActiveTab(1); setAddingPlan(true); }
+              else if (step === "ritual") { setActiveTab(2); setRitualAddOpen(true); }
+              else { setActiveTab(0); setActiveDay(todayKey); openCreateSheet(); }
+            }}
             onOpenPlan={(planId) => { setSelectedPlanId(planId); setActiveTab(1); }}
             onMarkDone={(taskId, ids) => handleToggleTaskComplete(taskId, ids, todayKey, todayISO())}
             onToggleSlot={(taskId, slotIndex) => handleToggleSlot(taskId, slotIndex, todayKey, todayISO())}
@@ -1467,7 +1502,7 @@ export default function IOSScheduleApp() {
                 )}
               </div>
             </div>
-            <SignInPrompt />
+            {hasAnyTask && <SignInPrompt />}
             {renderTaskList(dayTasksView, activeDay, activeDateISO, () => openCreateSheet(), todayEditMode)}
           </div>
         </ErrorBoundary>
@@ -1897,7 +1932,7 @@ export default function IOSScheduleApp() {
             initialTaskType={taskSheetInitialType}
             occurrenceDateISO={taskSheetDateISO}
             canEditOccurrence={!!taskSheetDateISO && taskSheetDateISO >= todayISO()}
-            presentation="page"
+            presentation={taskSheetMode === "create" ? "sheet" : "page"}
             onClose={closeTaskSheet}
             onSave={handleTaskSheetSave}
             onDelete={taskSheetTask ? () => { requestDeleteTask(taskSheetTask.id, activeDay); closeTaskSheet(); } : undefined}

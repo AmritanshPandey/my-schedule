@@ -20,6 +20,8 @@ export interface CategorySelectorProps {
   onDelete?: (category: TaskCategory) => void;
   usage?: ReadonlyMap<string, number>;
   optional?: boolean;
+  /** What an empty optional field says. Defaults to the commitment wording. */
+  emptyLabel?: string;
 }
 
 /**
@@ -27,7 +29,7 @@ export interface CategorySelectorProps {
  * (icon + colour) a task belongs to, with inline edit/delete and "New
  * category". Delete stays disabled for a category that's still in use.
  */
-export function CategorySelector({ categories, selectedId, onSelect, onClear, onCreate, onEdit, onDelete, usage, optional = false }: CategorySelectorProps) {
+export function CategorySelector({ categories, selectedId, onSelect, onClear, onCreate, onEdit, onDelete, usage, optional = false, emptyLabel = 'No category — counts as held time' }: CategorySelectorProps) {
   const [open, setOpen] = useState(false);
   const selected = categories.find((c) => c.id === selectedId) ?? null;
   const showClear = optional && !!onClear;
@@ -53,7 +55,7 @@ export function CategorySelector({ categories, selectedId, onSelect, onClear, on
           </>
         ) : (
           <Text className="flex-1 text-[14px] font-medium text-neutral-500 dark:text-neutral-400">
-            {optional ? 'No category — counts as held time' : 'Select a category…'}
+            {optional ? emptyLabel : 'Select a category…'}
           </Text>
         )}
         <View style={{ transform: [{ rotate: open ? '180deg' : '0deg' }] }}>

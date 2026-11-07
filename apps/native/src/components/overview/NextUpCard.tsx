@@ -23,6 +23,7 @@ export default function NextUpCard({
   onMarkDone,
   onToggleSlot,
   onOpenToday,
+  onAddTask,
 }: {
   next: NextUp;
   /** Shown beside the date, so the reward sits with the next action. */
@@ -30,6 +31,8 @@ export default function NextUpCard({
   onMarkDone: (taskId: string, checkableIds: string[]) => void;
   onToggleSlot: (taskId: string, slotIndex: number) => void;
   onOpenToday: () => void;
+  /** The empty day's "Add a task" opens the new-task sheet here instead of sending you to Today. */
+  onAddTask?: () => void;
 }) {
   const { colorScheme } = useColorScheme();
   const dark = colorScheme === 'dark';
@@ -167,7 +170,10 @@ export default function NextUpCard({
         ) : next.kind === 'empty' ? (
           <Button
             variant="primary"
-            onPress={openToday}
+            onPress={() => {
+              haptic('light');
+              (onAddTask ?? onOpenToday)();
+            }}
             icon={<Icon icon={IconCalendarPlus} size={18} strokeWidth={2.4} className={BUTTON_TEXT.primary} />}
             className="min-w-0 flex-1"
           >

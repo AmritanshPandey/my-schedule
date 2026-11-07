@@ -419,6 +419,9 @@ function readSetupDismissed(): boolean {
 export default function IOSScheduleApp() {
   const insets = useSafeAreaInsets();
   const { schedule, setSchedule, ready, clearData, clearProgress, restoreData, undo } = useScheduleDB();
+  // The back-up prompt waits for the first task: before it there's nothing
+  // to back up, and it sat between a new user and their first step.
+  const hasAnyTask = DAYS.some((day) => (schedule.activities[day] ?? []).length > 0);
   useReminders(schedule, ready);
   // The calendar date drives the rollover (not just the weekday, so a week
   // spent backgrounded still rolls over); todayKey is derived from it.
@@ -518,7 +521,20 @@ export default function IOSScheduleApp() {
     !!confirmState ||
     !!taskDeleteRequest ||
     !!dayClearRequest;
-  const tour = useCoachTour(activeTourId ?? 'none', { enabled: activeTourId !== null && !pageCovered, delayMs: 1200 });
+  // A tab's tour explains what's on it, so it waits until there is something
+  // there: on an empty tab the empty state's own button is the guidance, and
+  // the tour's full-screen layer only swallowed the first tap on it.
+  const tourTabHasContent =
+    activeTab === 0
+      ? DAYS.some((day) => (schedule.activities[day] ?? []).length > 0)
+      : activeTab === 1
+        ? schedule.plans.length > 0
+        : activeTab === 2
+          ? (schedule.rituals ?? []).length > 0
+          : activeTab === 8
+            ? schedule.progressTrackers.length > 0
+            : false;
+  const tour = useCoachTour(activeTourId ?? 'none', { enabled: activeTourId !== null && tourTabHasContent && !pageCovered, delayMs: 1200 });
   const scheduleRef = useRef(schedule);
   scheduleRef.current = schedule;
 
@@ -1459,6 +1475,23 @@ export default function IOSScheduleApp() {
             setupDismissed={iosSetupDismissed}
             onDismissSetup={dismissIosSetup}
             onNavigate={setActiveTab}
+            onAddTask={() => {
+              setActiveDay(todayKey);
+              openCreateSheet();
+            }}
+            onStartSetupStep={(step) => {
+              if (step === 'plan') {
+                setActiveTab(1);
+                setAddingPlan(true);
+              } else if (step === 'ritual') {
+                setActiveTab(2);
+                setRitualAddOpen(true);
+              } else {
+                setActiveTab(0);
+                setActiveDay(todayKey);
+                openCreateSheet();
+              }
+            }}
             onOpenPlan={(planId) => {
               setSelectedPlanId(planId);
               setActiveTab(1);
@@ -1570,7 +1603,7 @@ export default function IOSScheduleApp() {
                 )}
               </View>
             </View>
-            <SignInPrompt />
+            {hasAnyTask && <SignInPrompt />}
             {renderTaskList(dayTasksView, activeDay, activeDateISO, () => openCreateSheet(), todayEditMode)}
           </TourTarget>
         </ErrorBoundary>
@@ -1990,52 +2023,55 @@ export default function IOSScheduleApp() {
 
       {wallpaperOpen && <DayWallpaperSheet open={wallpaperOpen} onClose={() => setWallpaperOpen(false)} schedule={schedule} todayKey={todayKey} />}
 
-      {(taskSheetOpen || addingPlan || editingPlanId || entryTracker || goalsSheetOpen || adaptingMilestoneId) && (
+      {/* Always mounted: adding is a native iOS sheet, which stays frozen on
+          screen if its component unmounts while presented (BottomSheet). */}
+      <TaskSheet
+        mode={taskSheetMode}
+        task={taskSheetTask}
+        plans={schedule.plans}
+        categories={schedule.categories}
+        onCreateCategory={handleCreateCategory}
+        onUpdateCategory={handleUpdateCategory}
+        onDeleteCategory={handleDeleteCategory}
+        categoryUsage={categoryUsage}
+        activeDay={activeDay}
+        activeDays={taskSheetActiveDays}
+        activities={schedule.activities}
+        preferences={schedule.preferences}
+        isOpen={taskSheetOpen}
+        initialPlanId={taskSheetPlanId}
+        initialTaskType={taskSheetInitialType}
+        occurrenceDateISO={taskSheetDateISO}
+        canEditOccurrence={!!taskSheetDateISO && taskSheetDateISO >= todayISO()}
+        presentation={taskSheetMode === 'create' ? 'sheet' : 'page'}
+        overlay={toastElement}
+        onClose={closeTaskSheet}
+        onSave={handleTaskSheetSave}
+        onDelete={
+          taskSheetTask
+            ? () => {
+                requestDeleteTask(taskSheetTask.id, activeDay);
+                closeTaskSheet();
+              }
+            : undefined
+        }
+        onResetOccurrence={taskSheetTask && taskSheetDateISO ? () => setSchedule(clearTaskException(taskSheetTask.id, taskSheetDateISO)) : undefined}
+        onCopySubtaskToTasks={(entry, targetTaskIds) => {
+          setSchedule(addSubtaskToTasks(targetTaskIds, entry));
+          setToast(`Subtask copied to ${targetTaskIds.length} task${targetTaskIds.length === 1 ? '' : 's'}`);
+        }}
+        onMergeTask={(taskId, partnerId) => {
+          setSchedule(mergeTasks(taskId, partnerId));
+          setToast('Tasks merged');
+        }}
+        onUnmergeTask={(taskId) => {
+          setSchedule(unmergeTask(taskId));
+          setToast('Tasks unmerged');
+        }}
+      />
+
+      {(addingPlan || editingPlanId || entryTracker || goalsSheetOpen || adaptingMilestoneId) && (
         <>
-          <TaskSheet
-            mode={taskSheetMode}
-            task={taskSheetTask}
-            plans={schedule.plans}
-            categories={schedule.categories}
-            onCreateCategory={handleCreateCategory}
-            onUpdateCategory={handleUpdateCategory}
-            onDeleteCategory={handleDeleteCategory}
-            categoryUsage={categoryUsage}
-            activeDay={activeDay}
-            activeDays={taskSheetActiveDays}
-            activities={schedule.activities}
-            preferences={schedule.preferences}
-            isOpen={taskSheetOpen}
-            initialPlanId={taskSheetPlanId}
-            initialTaskType={taskSheetInitialType}
-            occurrenceDateISO={taskSheetDateISO}
-            canEditOccurrence={!!taskSheetDateISO && taskSheetDateISO >= todayISO()}
-            presentation="page"
-            overlay={toastElement}
-            onClose={closeTaskSheet}
-            onSave={handleTaskSheetSave}
-            onDelete={
-              taskSheetTask
-                ? () => {
-                    requestDeleteTask(taskSheetTask.id, activeDay);
-                    closeTaskSheet();
-                  }
-                : undefined
-            }
-            onResetOccurrence={taskSheetTask && taskSheetDateISO ? () => setSchedule(clearTaskException(taskSheetTask.id, taskSheetDateISO)) : undefined}
-            onCopySubtaskToTasks={(entry, targetTaskIds) => {
-              setSchedule(addSubtaskToTasks(targetTaskIds, entry));
-              setToast(`Subtask copied to ${targetTaskIds.length} task${targetTaskIds.length === 1 ? '' : 's'}`);
-            }}
-            onMergeTask={(taskId, partnerId) => {
-              setSchedule(mergeTasks(taskId, partnerId));
-              setToast('Tasks merged');
-            }}
-            onUnmergeTask={(taskId) => {
-              setSchedule(unmergeTask(taskId));
-              setToast('Tasks unmerged');
-            }}
-          />
           <AddPlanSheet open={addingPlan} onClose={() => setAddingPlan(false)} setSchedule={setSchedule} goals={schedule.goals ?? []} />
           {editingPlanId && (
             <EditPlanSheet planId={editingPlanId} plan={plansById.get(editingPlanId) ?? null} setSchedule={setSchedule} onClose={() => setEditingPlanId(null)} goals={schedule.goals ?? []} />
@@ -2176,8 +2212,8 @@ export default function IOSScheduleApp() {
         })()}
       {confirmState && <ConfirmOverlay state={confirmState} onClose={() => setConfirmState(null)} />}
       {!taskSheetOpen && toastElement}
+      {/* Holds the launch screen until the schedule has loaded. */}
+      <LaunchOverlay ready={ready} />
     </View>
   );
 }
-      {/* Holds the launch screen until the schedule has loaded. */}
-      <LaunchOverlay ready={ready} />

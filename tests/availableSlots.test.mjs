@@ -38,7 +38,6 @@ registerHooks({
 });
 
 const { findAvailableSlots, suggestSlots } = await import("../lib/availableSlots.ts");
-const { DEFAULT_TIMELINE_START_MINUTES } = await import("../lib/timeline/displayWindow.ts");
 const { resolveWakingWindow, DEFAULT_SLEEP_HOURS } = await import("../lib/timeline/sleepWindow.ts");
 
 const DATE = "2026-08-24"; // a Monday
@@ -55,8 +54,8 @@ function task(overrides = {}) {
 }
 
 function defaultBounds() {
-  const dayStart = DEFAULT_TIMELINE_START_MINUTES; // 240 (4:00 AM)
-  const dayEnd = resolveWakingWindow(undefined, undefined).endMinutes; // default sleep window end
+  // The default waking day (7:00 AM to 11:00 PM), not the timeline's 4:00 AM edge.
+  const { startMinutes: dayStart, endMinutes: dayEnd } = resolveWakingWindow(undefined, undefined);
   return { dayStart, dayEnd };
 }
 
@@ -197,4 +196,9 @@ test("suggestSlots defaults maxSuggestions to 3", () => {
     { startMinutes: 600, endMinutes: 700 },
   ];
   assert.equal(suggestSlots(gaps, 30).length, 3);
+});
+
+test("notBeforeMinutes: today's free time starts from now", () => {
+  const gaps = findAvailableSlots([], DATE, undefined, { notBeforeMinutes: 14 * 60 + 10 });
+  assert.equal(gaps[0].startMinutes, 14 * 60 + 10);
 });

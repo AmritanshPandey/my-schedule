@@ -155,6 +155,19 @@ function slotsAllValid(slots: EditableSlot[]): boolean {
   return slots.length > 0 && slots.every((s) => isValidInputTime(s.startTime) && isValidInputTime(s.endTime));
 }
 
+/** Free time on today starts from now; any other day, from its start. */
+function slotSearchFrom(dateISO: string) {
+  const now = new Date();
+  return dateISO === localISODate(now) ? { notBeforeMinutes: now.getHours() * 60 + now.getMinutes() } : undefined;
+}
+
+/** "18:00" + 30 → "18:30", wrapping past midnight (24-hour input time). */
+function plusMinutes(inputTime: string, minutes: number): string {
+  const [h, m] = inputTime.split(':').map(Number);
+  const total = (((h * 60 + m + minutes) % 1440) + 1440) % 1440;
+  return `${String(Math.floor(total / 60)).padStart(2, '0')}:${String(total % 60).padStart(2, '0')}`;
+}
+
 /**
  * Native port of components/task/TaskSheet.tsx — create/edit a task: type,
  * plan, title, category, "Occurs with" merging, note, same-vs-custom per-day
@@ -399,6 +412,11 @@ export function TaskSheet({
 
   const editorSlots = perDayActive ? perDaySlots[resolvedEditDay] ?? slots : slots;
   function setEditorSlots(next: EditableSlot[]) {
+    // A start with no end gets 30 minutes, so picking a start is enough to
+    // save; before, Save stayed disabled with nothing saying an end was missing.
+    next = next.map((slot, i) =>
+      slot.startTime && !slot.endTime && !editorSlots[i]?.startTime ? { ...slot, endTime: plusMinutes(slot.startTime, 30) } : slot,
+    );
     if (perDayActive) setPerDaySlots((prev) => ({ ...prev, [resolvedEditDay]: next }));
     else setSlots(next);
   }
@@ -406,7 +424,7 @@ export function TaskSheet({
   const suggestedSlots = useMemo(() => {
     if (!preferences) return undefined;
     const dayTasks = activities?.[resolvedEditDay] ?? activities?.[activeDay] ?? [];
-    const gaps = findAvailableSlots(dayTasks, baseDateISO, preferences);
+    const gaps = findAvailableSlots(dayTasks, baseDateISO, preferences, slotSearchFrom(baseDateISO));
     const firstSlot = editorSlots[0];
     const start = firstSlot ? parseTimeToMinutes(firstSlot.startTime) : null;
     const end = firstSlot ? parseTimeToMinutes(firstSlot.endTime) : null;
@@ -419,7 +437,7 @@ export function TaskSheet({
     const candidate = computeUsualTimeSlot(activities, { categoryId: categoryId || undefined, planId }, task?.id);
     if (!candidate) return null;
     const dayTasks = activities[resolvedEditDay] ?? activities[activeDay] ?? [];
-    const gaps = findAvailableSlots(dayTasks, baseDateISO, preferences);
+    const gaps = findAvailableSlots(dayTasks, baseDateISO, preferences, slotSearchFrom(baseDateISO));
     const fits = gaps.some((g) => candidate.startMinutes >= g.startMinutes && candidate.endMinutes <= g.endMinutes);
     return fits ? candidate : null;
   }, [activities, categoryId, planId, task?.id, resolvedEditDay, activeDay, baseDateISO, preferences]);
@@ -511,13 +529,28 @@ export function TaskSheet({
   const repeatOk = isOccurrenceScope ? true : repeatMode === 'once' ? !!onceDate : repeatDays.length > 0;
   const isCommitment = taskType === 'commitment';
   const canSave =
-    (isCommitment || (!!selectedPlan && !!categoryId)) &&
+    // Category is optional: it adds the icon and colour, but a brand-new
+    // user has none, and requiring one blocked the very first task.
+    (isCommitment || !!selectedPlan) &&
     title.trim().length > 0 &&
     allSlotsValidNow &&
     !timeError &&
     !subtaskDurationError &&
     !dateWindowError &&
     repeatOk;
+
+  // Why Save is off, said next to it rather than left to guesswork.
+  const saveHint = canSave
+    ? null
+    : title.trim().length === 0
+      ? 'Add a title to save.'
+      : !isCommitment && !selectedPlan
+        ? 'Pick a plan to save.'
+        : !allSlotsValidNow
+          ? 'Set a start time to save.'
+          : !repeatOk
+            ? 'Pick at least one day to save.'
+            : null;
 
   function handleSave() {
     if (!canSave || (!isCommitment && !selectedPlan)) return;
@@ -668,11 +701,14 @@ export function TaskSheet({
         <View>
           <Text className={FORM_LABEL}>Type</Text>
           <SegmentedControl ariaLabel="Task type" options={TYPE_OPTIONS} value={taskType} onChange={setTaskType} />
-          {taskType === 'commitment' && (
-            <Text className="mt-2 text-[12px] leading-snug text-neutral-500 dark:text-neutral-400">
-              Blocks your calendar but is never tracked — no checkbox, and it stays out of your streak, consistency and completion stats.
-            </Text>
-          )}
+          {/* Every type says what it is, so the choice isn't jargon to a newcomer. */}
+          <Text className="mt-2 text-[12px] leading-snug text-neutral-500 dark:text-neutral-400">
+            {taskType === 'commitment'
+              ? 'Blocks your calendar but is never tracked — no checkbox, and it stays out of your streak, consistency and completion stats.'
+              : taskType === 'session'
+                ? 'A timed block made of steps, like a workout or a study set, checked off as you go.'
+                : 'Something to get done. Check it off when it is.'}
+          </Text>
         </View>
       )}
 
@@ -717,7 +753,8 @@ export function TaskSheet({
               : undefined
           }
           usage={categoryUsage}
-          optional={isCommitment}
+          optional
+          emptyLabel={isCommitment ? undefined : 'None (adds an icon and colour)'}
         />
       )}
 
@@ -934,7 +971,12 @@ export function TaskSheet({
   );
 
   const footer = (
-    <View className="flex-row items-center gap-2">
+    <View className="flex-row flex-wrap items-center gap-2">
+      {!!saveHint && (
+        <Text accessibilityLiveRegion="polite" className="w-full text-center text-[12px] font-medium text-neutral-500 dark:text-neutral-400">
+          {saveHint}
+        </Text>
+      )}
       <Button className="min-w-0 flex-1" onPress={handleSave} disabled={!canSave}>
         <Icon icon={IconCheck} size={18} strokeWidth={2.5} className={BUTTON_TEXT.primary} />
         {saveLabel}
@@ -1067,14 +1109,22 @@ export function TaskSheet({
 
   return (
     <>
-      <BottomSheet open={isOpen} onClose={duplicateStep === 'picking' ? () => setDuplicateStep('idle') : onClose}>
+      {/* Full height, with the save pinned in the sheet's footer: the form is
+          long, and the field being typed in and the save both stay above the
+          keyboard (BottomSheet). */}
+      <BottomSheet
+        open={isOpen}
+        onClose={duplicateStep === 'picking' ? () => setDuplicateStep('idle') : onClose}
+        fullHeight
+        footer={duplicateStep === 'picking' ? undefined : footer}
+        onPresented={mode === 'create' ? () => titleRef.current?.focus() : undefined}
+      >
         {duplicateStep === 'picking' ? (
           duplicatePicker
         ) : (
           <View className="px-5 pb-6 pt-4">
             <SheetHeader eyebrow={eyebrow} title={headingTitle} onClose={onClose} />
             {formBody}
-            <View className="mt-6">{footer}</View>
           </View>
         )}
         {/* Nested inside the sheet so they present over it on iOS (lib/modalTurn). */}

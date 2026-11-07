@@ -242,6 +242,19 @@ function slotsAllValid(slots: EditableSlot[]): boolean {
 
 // ── Main sheet ────────────────────────────────────────────────────────────────
 
+/** Free time on today starts from now; any other day, from its start. */
+function slotSearchFrom(dateISO: string) {
+  const now = new Date();
+  return dateISO === localISODate(now) ? { notBeforeMinutes: now.getHours() * 60 + now.getMinutes() } : undefined;
+}
+
+/** "18:00" + 30 → "18:30", wrapping past midnight (24-hour input time). */
+function plusMinutes(inputTime: string, minutes: number): string {
+  const [h, m] = inputTime.split(":").map(Number);
+  const total = (((h * 60 + m + minutes) % 1440) + 1440) % 1440;
+  return `${String(Math.floor(total / 60)).padStart(2, "0")}:${String(total % 60).padStart(2, "0")}`;
+}
+
 export function TaskSheet({
   mode,
   task,
@@ -530,6 +543,13 @@ export function TaskSheet({
   // Which slots the picker edits, and where edits are written.
   const editorSlots = perDayActive ? perDaySlots[resolvedEditDay] ?? slots : slots;
   function setEditorSlots(next: EditableSlot[]) {
+    // A start with no end gets 30 minutes, so picking a start is enough to
+    // save; before, Save stayed disabled with nothing saying an end was missing.
+    next = next.map((slot, i) =>
+      slot.startTime && !slot.endTime && !editorSlots[i]?.startTime
+        ? { ...slot, endTime: plusMinutes(slot.startTime, 30) }
+        : slot,
+    );
     if (perDayActive) setPerDaySlots((prev) => ({ ...prev, [resolvedEditDay]: next }));
     else setSlots(next);
   }
@@ -573,7 +593,7 @@ export function TaskSheet({
   const suggestedSlots = useMemo(() => {
     if (!preferences) return undefined;
     const dayTasks = activities?.[resolvedEditDay] ?? activities?.[activeDay] ?? [];
-    const gaps = findAvailableSlots(dayTasks, baseDateISO, preferences);
+    const gaps = findAvailableSlots(dayTasks, baseDateISO, preferences, slotSearchFrom(baseDateISO));
     const firstSlot = editorSlots[0];
     const start = firstSlot ? parseTimeToMinutes(firstSlot.startTime) : null;
     const end = firstSlot ? parseTimeToMinutes(firstSlot.endTime) : null;
@@ -594,7 +614,7 @@ export function TaskSheet({
     );
     if (!candidate) return null;
     const dayTasks = activities[resolvedEditDay] ?? activities[activeDay] ?? [];
-    const gaps = findAvailableSlots(dayTasks, baseDateISO, preferences);
+    const gaps = findAvailableSlots(dayTasks, baseDateISO, preferences, slotSearchFrom(baseDateISO));
     const fits = gaps.some((g) => candidate.startMinutes >= g.startMinutes && candidate.endMinutes <= g.endMinutes);
     return fits ? candidate : null;
   }, [activities, categoryId, planId, task?.id, resolvedEditDay, activeDay, baseDateISO, preferences]);
@@ -699,13 +719,28 @@ export function TaskSheet({
   // plan requirement is lifted for it.
   const isCommitment = taskType === "commitment";
   const canSave =
-    (isCommitment || (!!selectedPlan && !!categoryId)) &&
+    // Category is optional: it adds the icon and colour, but a brand-new
+    // user has none, and requiring one blocked the very first task.
+    (isCommitment || !!selectedPlan) &&
     title.trim().length > 0 &&
     allSlotsValidNow &&
     !timeError &&
     !subtaskDurationError &&
     !dateWindowError &&
     repeatOk;
+
+  // Why Save is off, said next to it rather than left to guesswork.
+  const saveHint = canSave
+    ? null
+    : title.trim().length === 0
+      ? "Add a title to save."
+      : !isCommitment && !selectedPlan
+        ? "Pick a plan to save."
+        : !allSlotsValidNow
+          ? "Set a start time to save."
+          : !repeatOk
+            ? "Pick at least one day to save."
+            : null;
 
   function handleSave() {
     if (!canSave || (!isCommitment && !selectedPlan)) return;
@@ -954,12 +989,14 @@ export function TaskSheet({
                   value={taskType}
                   onChange={setTaskType}
                 />
-                {taskType === "commitment" && (
-                  <p className="mt-2 text-[12px] leading-snug text-neutral-500 dark:text-neutral-400">
-                    Blocks your calendar but is never tracked — no checkbox, and
-                    it stays out of your streak, consistency and completion stats.
-                  </p>
-                )}
+                {/* Every type says what it is, so the choice isn't jargon to a newcomer. */}
+                <p className="mt-2 text-[12px] leading-snug text-neutral-500 dark:text-neutral-400">
+                  {taskType === "commitment"
+                    ? "Blocks your calendar but is never tracked — no checkbox, and it stays out of your streak, consistency and completion stats."
+                    : taskType === "session"
+                      ? "A timed block made of steps, like a workout or a study set, checked off as you go."
+                      : "Something to get done. Check it off when it is."}
+                </p>
               </div>
               )}
 
@@ -1013,7 +1050,8 @@ export function TaskSheet({
                       : undefined
                   }
                   usage={categoryUsage}
-                  optional={isCommitment}
+                  optional
+                  emptyLabel={isCommitment ? undefined : "None (adds an icon and colour)"}
                 />
               )}
 
@@ -1354,15 +1392,22 @@ export function TaskSheet({
               )}
             </div>
 
-            {/* Footer */}
+            {/* Footer — pinned in both, so the save stays in view over a long
+                form and, as the sheet shrinks to the visual viewport, above
+                the keyboard. */}
             <div
               className={
                 presentation === "page"
                   ? "fixed inset-x-0 bottom-0 z-30 flex items-center gap-2 border-t border-neutral-200 bg-white px-5 pt-3 dark:border-white/[0.08] dark:bg-neutral-950"
-                  : "mt-6 flex items-center gap-2"
+                  : "sticky bottom-0 z-20 -mx-5 mt-6 flex flex-wrap items-center gap-2 border-t border-neutral-200 bg-white px-5 py-3 dark:border-white/[0.08] dark:bg-neutral-900"
               }
               style={presentation === "page" ? { paddingBottom: "max(12px, env(safe-area-inset-bottom))" } : undefined}
             >
+              {saveHint && (
+                <p className="w-full text-center text-[12px] font-medium text-neutral-500 dark:text-neutral-400" aria-live="polite">
+                  {saveHint}
+                </p>
+              )}
               <Button className="min-w-0 flex-1" onClick={handleSave} disabled={!canSave}>
                 <IconCheck size={18} strokeWidth={2.5} />
                 <span className="truncate">
@@ -1535,6 +1580,8 @@ export function TaskSheet({
         open={isOpen}
         onClose={duplicateStep === "picking" ? () => setDuplicateStep("idle") : handleClose}
         backdropClassName={keepBackdropLight ? "bg-black/24" : undefined}
+        // A field scrolled into view above the keyboard clears the pinned footer.
+        className="scroll-pb-24"
       >
         {sheetContent}
       </BottomSheet>

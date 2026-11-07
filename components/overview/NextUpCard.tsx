@@ -22,6 +22,7 @@ export default function NextUpCard({
   onMarkDone,
   onToggleSlot,
   onOpenToday,
+  onAddTask,
 }: {
   next: NextUp;
   variant?: "card" | "strip";
@@ -30,9 +31,11 @@ export default function NextUpCard({
   onMarkDone: (taskId: string, checkableIds: string[]) => void;
   onToggleSlot: (taskId: string, slotIndex: number) => void;
   onOpenToday: () => void;
+  /** The empty day's "Add a task" opens the new-task sheet here instead of sending you to Today. */
+  onAddTask?: () => void;
 }) {
   const strip = variant === "strip";
-  if (!strip) return <NextUpHero next={next} streak={streak} onMarkDone={onMarkDone} onToggleSlot={onToggleSlot} onOpenToday={onOpenToday} />;
+  if (!strip) return <NextUpHero next={next} streak={streak} onMarkDone={onMarkDone} onToggleSlot={onToggleSlot} onOpenToday={onOpenToday} onAddTask={onAddTask} />;
   const shell = strip
     ? `${CARD} flex min-w-0 items-center gap-1 p-1.5 lg:w-[420px]`
     : `${CARD} flex items-center gap-1 p-2`;
@@ -120,12 +123,14 @@ function NextUpHero({
   onMarkDone,
   onToggleSlot,
   onOpenToday,
+  onAddTask,
 }: {
   next: NextUp;
   streak?: ExecutionStreak;
   onMarkDone: (taskId: string, checkableIds: string[]) => void;
   onToggleSlot: (taskId: string, slotIndex: number) => void;
   onOpenToday: () => void;
+  onAddTask?: () => void;
 }) {
   const dateLabel = new Date().toLocaleDateString("en-US", { weekday: "long", month: "short", day: "numeric" });
   const done = next.kind === "empty" ? 0 : next.done;
@@ -233,7 +238,7 @@ function NextUpHero({
         ) : next.kind === "empty" ? (
           <Button
             variant="primary"
-            onClick={() => { haptic("light"); onOpenToday(); }}
+            onClick={() => { haptic("light"); (onAddTask ?? onOpenToday)(); }}
             icon={<IconCalendarPlus size={18} strokeWidth={2.4} aria-hidden />}
             className="min-w-0 flex-1"
           >

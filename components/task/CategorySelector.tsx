@@ -40,6 +40,8 @@ export interface CategorySelectorProps {
    * disabled Save button, and reveals the clear action above.
    */
   optional?: boolean;
+  /** What an empty optional field says. Defaults to the commitment wording. */
+  emptyLabel?: string;
 }
 
 /**
@@ -49,7 +51,7 @@ export interface CategorySelectorProps {
  * per category, not re-chosen on every task. Deliberately mirrors PlanSelector
  * so the two dropdowns in this sheet behave identically.
  */
-export function CategorySelector({ categories, selectedId, onSelect, onClear, onCreate, onEdit, onDelete, usage, optional = false }: CategorySelectorProps) {
+export function CategorySelector({ categories, selectedId, onSelect, onClear, onCreate, onEdit, onDelete, usage, optional = false, emptyLabel = "No category — counts as held time" }: CategorySelectorProps) {
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
   const selected = categories.find((c) => c.id === selectedId) ?? null;
@@ -85,7 +87,7 @@ export function CategorySelector({ categories, selectedId, onSelect, onClear, on
           </>
         ) : (
           <span className="flex-1 text-[14px] font-medium text-neutral-500 dark:text-neutral-400">
-            {optional ? "No category — counts as held time" : "Select a category…"}
+            {optional ? emptyLabel : "Select a category…"}
           </span>
         )}
         <IconChevronDown

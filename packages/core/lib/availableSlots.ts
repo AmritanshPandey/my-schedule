@@ -16,7 +16,7 @@ import type { Schedule, Task } from "./scheduleTypes";
 import { getSlots } from "./taskMutations";
 import { isTaskScheduledOn, resolveOccurrence } from "./taskOccurrence";
 import { parseTimeToMinutes, toScheduleDayMinutes } from "./timeUtils";
-import { getConfiguredDayStartMinutes, DEFAULT_TIMELINE_START_MINUTES } from "./timeline/displayWindow";
+import { getConfiguredDayStartMinutes } from "./timeline/displayWindow";
 import { resolveWakingWindow } from "./timeline/sleepWindow";
 import { mergeIntervals } from "./timeline/intervals";
 
@@ -33,6 +33,8 @@ export interface FindAvailableSlotsOptions {
   dayStartMinutes?: number;
   /** Override the computed day-end bound (mainly for tests). */
   dayEndMinutes?: number;
+  /** Nothing before this (schedule-day minutes) — "now", when the day is today. */
+  notBeforeMinutes?: number;
 }
 
 /**
@@ -47,10 +49,13 @@ export function findAvailableSlots(
   preferences: Schedule["preferences"] | undefined,
   options?: FindAvailableSlotsOptions,
 ): AvailableSlot[] {
-  const dayStart =
-    options?.dayStartMinutes
-    ?? getConfiguredDayStartMinutes(preferences?.dayStartTime)
-    ?? DEFAULT_TIMELINE_START_MINUTES;
+  // The waking day, not the timeline's 4:00 AM edge: with no "Start of day"
+  // set, a brand-new user was offered "Free 4:00–4:30 AM" as their first slot.
+  const waking = resolveWakingWindow(preferences?.dayStartTime, preferences?.sleepHours);
+  const dayStart = Math.max(
+    options?.dayStartMinutes ?? getConfiguredDayStartMinutes(preferences?.dayStartTime) ?? waking.startMinutes,
+    options?.notBeforeMinutes ?? 0,
+  );
   const dayEnd =
     options?.dayEndMinutes
     ?? resolveWakingWindow(preferences?.dayStartTime, preferences?.sleepHours).endMinutes;

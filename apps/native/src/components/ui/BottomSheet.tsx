@@ -31,6 +31,11 @@ import { SHEET_BG, SHEET_BG_CLASS } from './surfaces';
  *
  * `scroll={false}` hands the caller the panel body as a plain View, for sheets
  * that manage their own scrolling (a long list with a pinned footer).
+ *
+ * `footer` pins the sheet's primary action under the scrolling body. On iOS
+ * it is TrueSheet's own footer, which rides on top of the keyboard; with
+ * `fullHeight` the body is TrueSheet's pinned scroll view too, which scrolls
+ * the focused field into view above the keyboard and that footer.
  */
 interface BottomSheetProps {
   open: boolean;
@@ -43,6 +48,10 @@ interface BottomSheetProps {
   scroll?: boolean;
   /** Full-height panel — the web's "page" presentation of a sheet. */
   fullHeight?: boolean;
+  /** Pinned under the body and kept above the keyboard (the primary action). */
+  footer?: ReactNode;
+  /** Called once the sheet is fully up — the moment to focus its first field. */
+  onPresented?: () => void;
   /**
    * Called once the sheet has finished leaving the screen. An action that
    * unmounts the sheet's own owner (deleting the note whose editor holds it)
@@ -105,7 +114,7 @@ function OverlayHost({ store, onActive }: { store: OverlayStore; onActive: (acti
   return <>{panels}</>;
 }
 
-function InSheetPanel({ open, onClose, onDismissed, children, store }: BottomSheetProps & { store: OverlayStore }) {
+function InSheetPanel({ open, onClose, onDismissed, children, footer, store }: BottomSheetProps & { store: OverlayStore }) {
   const id = useRef(Symbol('panel')).current;
   // A panel has no exit animation, so it is gone the moment it closes.
   const wasOpen = useRef(open);
@@ -119,9 +128,14 @@ function InSheetPanel({ open, onClose, onDismissed, children, store }: BottomShe
     <View key={key} style={StyleSheet.absoluteFill} className="justify-end">
       <Pressable accessibilityRole="button" accessibilityLabel="Close" onPress={onClose} style={StyleSheet.absoluteFill} className="bg-black/25" />
       <View accessibilityViewIsModal className={`max-h-full rounded-t-[28px] pt-2 ${SHEET_BG_CLASS}`}>
-        <ScrollView keyboardShouldPersistTaps="handled" contentContainerStyle={{ paddingBottom: insets.bottom }}>
+        <ScrollView keyboardShouldPersistTaps="handled" contentContainerStyle={{ paddingBottom: footer ? 0 : insets.bottom }}>
           <ModalNestingContext.Provider value>{children}</ModalNestingContext.Provider>
         </ScrollView>
+        {footer && (
+          <View className="border-t border-neutral-200 px-5 pt-3 dark:border-white/[0.08]" style={{ paddingBottom: Math.max(12, insets.bottom) }}>
+            <ModalNestingContext.Provider value>{footer}</ModalNestingContext.Provider>
+          </View>
+        )}
       </View>
     </View>
   ) : null;
@@ -136,7 +150,7 @@ function InSheetPanel({ open, onClose, onDismissed, children, store }: BottomShe
 /** How long UIKit's sheet dismissal runs, during which the next modal waits. */
 const IOS_DISMISS_MS = 350;
 
-function IOSSheet({ open, onClose, onDismissed, children, maxHeight, className = '', scroll = true, fullHeight = false }: BottomSheetProps) {
+function IOSSheet({ open, onClose, onDismissed, children, maxHeight, className = '', scroll = true, fullHeight = false, footer, onPresented }: BottomSheetProps) {
   const sheet = useRef<TrueSheet>(null);
   const insets = useSafeAreaInsets();
   const { colorScheme } = useColorScheme();
@@ -150,6 +164,11 @@ function IOSSheet({ open, onClose, onDismissed, children, maxHeight, className =
   const closing = useRef(false);
   const [overlays] = useState(createOverlayStore);
   const [panelOpen, setPanelOpen] = useState(false);
+  // The footer floats over the body, so the body ends that much short of it.
+  const [footerHeight, setFooterHeight] = useState(0);
+  // A full-height sheet with a scrolling body hands it to TrueSheet to pin:
+  // only a pinned scroll view is scrolled to the focused field over the keyboard.
+  const pinned = fullHeight && scroll;
 
   // Safety net for an owner that unmounts while the sheet is up: the native
   // view is recycled rather than destroyed, and only destruction dismisses
@@ -183,10 +202,15 @@ function IOSSheet({ open, onClose, onDismissed, children, maxHeight, className =
 
   if (!mounted || !turn) return null;
 
-  const body = scroll ? (
-    // Not TrueSheet's `scrollable`, which pins the ScrollView to the full
-    // sheet and so defeats the 'auto' detent: a ScrollView capped at the
-    // sheet's largest size measures to its content, and scrolls past it.
+  const body = pinned ? (
+    <ScrollView keyboardShouldPersistTaps="handled" className={`flex-1 ${className}`} contentContainerStyle={{ paddingBottom: footerHeight }}>
+      {children}
+    </ScrollView>
+  ) : scroll ? (
+    // Not TrueSheet's `scrollable` for a sheet sized to its content, which
+    // pins the ScrollView to the full sheet and so defeats the 'auto' detent:
+    // a ScrollView capped at the sheet's largest size measures to its
+    // content, and scrolls past it.
     // No automaticallyAdjustKeyboardInsets: UIKit already lifts the whole
     // sheet above the keyboard, and adjusting here too scrolled the content
     // up by a second keyboard's height, hiding the title and the field.
@@ -194,6 +218,7 @@ function IOSSheet({ open, onClose, onDismissed, children, maxHeight, className =
       keyboardShouldPersistTaps="handled"
       className={className}
       style={{ maxHeight: maxHeight ?? screenHeight - insets.top - 24 }}
+      contentContainerStyle={footer ? { paddingBottom: footerHeight } : undefined}
     >
       {children}
     </ScrollView>
@@ -212,8 +237,34 @@ function IOSSheet({ open, onClose, onDismissed, children, maxHeight, className =
       backgroundColor={colorScheme === 'dark' ? SHEET_BG.dark : SHEET_BG.light}
       grabber
       maxContentHeight={maxHeight}
+      scrollable={pinned}
+      footer={
+        // Hidden while a panel (a time picker, a confirm) is open in the
+        // sheet: the footer is drawn over the content, so it covered the
+        // panel's own Done button.
+        footer && !panelOpen ? (
+          // Rendered by TrueSheet outside the content, so it gets the content's
+          // contexts again: a sheet opened from it stays a panel in this one.
+          <ModalNestingContext.Provider value>
+            <SheetOverlayContext.Provider value={overlays}>
+              <View
+                onLayout={(e) => setFooterHeight(e.nativeEvent.layout.height)}
+                className={`border-t border-neutral-200 px-5 pt-3 dark:border-white/[0.08] ${SHEET_BG_CLASS}`}
+                style={{ paddingBottom: Math.max(12, insets.bottom) }}
+              >
+                {footer}
+              </View>
+            </SheetOverlayContext.Provider>
+          </ModalNestingContext.Provider>
+        ) : undefined
+      }
+      // A field scrolled into view above the keyboard clears the footer too.
+      scrollableOptions={pinned ? { keyboardScrollOffset: footerHeight } : undefined}
+      // Over the keyboard, the safe-area padding under the action isn't needed.
+      footerOptions={{ keyboardOffset: -Math.max(0, Math.max(12, insets.bottom) - 12) }}
       onDidPresent={() => {
         presented.current = true;
+        onPresented?.();
       }}
       onDidDismiss={() => {
         presented.current = false;
@@ -246,6 +297,8 @@ function ModalSheet({
   backdropClassName,
   scroll = true,
   fullHeight = false,
+  footer,
+  onPresented,
 }: BottomSheetProps) {
   const insets = useSafeAreaInsets();
   const screenHeight = Dimensions.get('window').height;
@@ -269,7 +322,11 @@ function ModalSheet({
   }, [open]);
 
   useEffect(() => {
-    if (open && turn) Animated.spring(progress, { toValue: 1, stiffness: 380, damping: 30, mass: 0.9, useNativeDriver: true }).start();
+    if (open && turn)
+      Animated.spring(progress, { toValue: 1, stiffness: 380, damping: 30, mass: 0.9, useNativeDriver: true }).start(({ finished }) => {
+        if (finished) onPresented?.();
+      });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open, turn, progress]);
 
   if (!visible || !turn) return null;
@@ -308,13 +365,21 @@ function ModalSheet({
               {scroll ? (
                 <ScrollView
                   keyboardShouldPersistTaps="handled"
-                  contentContainerStyle={{ paddingBottom: insets.bottom }}
-                  style={fullHeight ? styles.fill : undefined}
+                  contentContainerStyle={{ paddingBottom: footer ? 0 : insets.bottom }}
+                  style={fullHeight ? styles.fill : footer ? styles.shrink : undefined}
                 >
                   {children}
                 </ScrollView>
               ) : (
-                <View style={[fullHeight ? styles.fill : null, { paddingBottom: insets.bottom }]}>{children}</View>
+                <View style={[fullHeight ? styles.fill : null, { paddingBottom: footer ? 0 : insets.bottom }]}>{children}</View>
+              )}
+              {footer && (
+                <View
+                  className="border-t border-neutral-200 px-5 pt-3 dark:border-white/[0.08]"
+                  style={{ paddingBottom: Math.max(12, insets.bottom) }}
+                >
+                  {footer}
+                </View>
               )}
             </View>
           </Animated.View>
@@ -327,4 +392,5 @@ function ModalSheet({
 
 const styles = StyleSheet.create({
   fill: { flex: 1 },
+  shrink: { flexShrink: 1 },
 });

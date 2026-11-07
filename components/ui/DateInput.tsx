@@ -103,13 +103,17 @@ export default function DateInput({
           aria-label={ariaLabel}
           aria-invalid={ariaInvalid}
           onChange={(e) => onChange(e.target.value)}
-          className={`[&::-webkit-calendar-picker-indicator]:hidden h-full w-full min-w-0 bg-transparent pl-9 pr-3 outline-none disabled:cursor-not-allowed dark:[color-scheme:dark] ${text}`}
+          // Empty and unfocused, the browser's own "dd/mm/yyyy" is hidden so it
+          // can't print under our placeholder; focused, its editable parts show.
+          className={`peer [&::-webkit-calendar-picker-indicator]:hidden h-full w-full min-w-0 bg-transparent pl-9 pr-3 outline-none disabled:cursor-not-allowed dark:[color-scheme:dark] ${
+            value ? "" : "text-transparent focus:text-inherit"
+          } ${text}`}
         />
         {/* iOS draws an empty date field as blank; say what goes there.
             Chromium's trailing picker icon is hidden above — the leading one
             is ours, and a tap anywhere still opens the system picker. */}
         {!value && (
-          <span aria-hidden="true" className={`pointer-events-none absolute left-9 text-neutral-500 dark:text-neutral-400 ${text}`}>
+          <span aria-hidden="true" className={`pointer-events-none absolute left-9 text-neutral-500 peer-focus:hidden dark:text-neutral-400 ${text}`}>
             {placeholder}
           </span>
         )}

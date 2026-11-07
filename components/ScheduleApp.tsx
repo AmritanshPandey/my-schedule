@@ -1,5 +1,6 @@
 "use client";
 
+import { markActivated } from "@/lib/activation";
 import { memo, useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { AnimatePresence, m } from "framer-motion";
 import dynamic from "next/dynamic";
@@ -830,6 +831,13 @@ export default function ScheduleApp() {
   }
   const { user, isGuest, authLoading } = useAuth();
   const { schedule, setSchedule, ready, clearData, clearProgress, restoreData, isFirstLaunch, undo } = useScheduleDB();
+
+  // The first task is the moment the app stops being empty; the install and
+  // back-up prompts wait for it (lib/activation.ts).
+  const hasAnyTask = DAYS.some((day) => (schedule.activities[day] ?? []).length > 0);
+  useEffect(() => {
+    if (ready && hasAnyTask) markActivated();
+  }, [ready, hasAnyTask]);
   const { available: aiAvailable } = useAIActions();
   const aiEnabled = useAIEnabled();
   useReminders(schedule, ready);
