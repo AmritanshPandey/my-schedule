@@ -120,6 +120,7 @@ import {
   IconClipboardData,
   IconStack2,
   IconTargetArrow,
+  IconTemplate,
 } from "@tabler/icons-react";
 import { DndContext, DragEndEvent, PointerSensor, useSensor, useSensors } from "@dnd-kit/core";
 import { arrayMove, SortableContext, useSortable, verticalListSortingStrategy } from "@dnd-kit/sortable";
@@ -3687,7 +3688,7 @@ export default function ScheduleApp() {
               title="No plans yet"
               description="Start from scratch or pick a template with tasks and milestones ready to go."
               action={{ label: "New plan", onClick: () => setAddingPlan(true) }}
-              secondaryAction={{ label: "Browse templates", onClick: () => setTemplatesOpen(true) }}
+              secondaryAction={{ label: "Browse templates", onClick: () => setTemplatesOpen(true), icon: IconTemplate }}
             />
           )}
 

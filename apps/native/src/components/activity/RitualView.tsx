@@ -530,19 +530,19 @@ export default function RitualView({
           <EmptyState
             icon={IconRepeat}
             title="No routines yet"
-            description="Add anything you want to do regularly — skincare, water, exercise, reading — and track it your own way."
-            action={{ label: 'Add first routine', onClick: () => onAddOpenChange(true) }}
+            description="Add anything you do regularly, like skincare, water, exercise or reading, and track it your own way."
+            action={{ label: 'Add routine', onClick: () => onAddOpenChange(true) }}
           />
         )}
 
         {/* ── Empty filter state ───────────────────────────────────────────── */}
         {viewMode === 'day' && rituals.length > 0 && filteredRituals.length === 0 && (
-          <View className="items-center gap-2 py-12">
-            <Text className="text-center text-[14px] font-semibold text-neutral-500 dark:text-neutral-400">No routines for {DAY_SHORT[selectedDay]}</Text>
-            <Pressable accessibilityRole="button" onPress={() => onAddOpenChange(true)} hitSlop={8} className="mt-1">
-              <Text className="text-[13px] font-semibold text-neutral-500 underline dark:text-neutral-400">Add one</Text>
-            </Pressable>
-          </View>
+          <EmptyState
+            icon={IconRepeat}
+            title={`No routines for ${DAY_SHORT[selectedDay]}`}
+            description="Nothing repeats on this day yet."
+            action={{ label: 'Add routine', onClick: () => onAddOpenChange(true) }}
+          />
         )}
 
         {/* ── Routine rows, grouped by time of day ─────────────────────────── */}

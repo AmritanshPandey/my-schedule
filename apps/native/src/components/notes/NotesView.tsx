@@ -361,9 +361,9 @@ export default function NotesView({
               <EmptyState
                 icon={IconNotebook}
                 title="No notes yet"
-                description="Tap New to start a note — jot a paragraph or a checklist."
+                description="Tap New to start a note: a paragraph or a checklist."
                 action={{ label: 'New note', onClick: () => handleCreate() }}
-                secondaryAction={{ label: 'Browse templates', onClick: () => setTemplatePickerOpen(true) }}
+                secondaryAction={{ label: 'Browse templates', onClick: () => setTemplatePickerOpen(true), icon: IconLayoutGrid }}
               />
             ) : (
               <EmptyState icon={IconSearch} title="No matching notes" description={selectedTags.length > 0 ? 'Try different tags or search.' : 'Try a different search.'} />

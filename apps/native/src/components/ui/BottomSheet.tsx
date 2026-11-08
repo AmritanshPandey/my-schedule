@@ -105,6 +105,20 @@ let nextPanelKey = 0;
 
 const SheetOverlayContext = createContext<OverlayStore | null>(null);
 
+/**
+ * Where a native sheet's SheetHeader goes. Inside one, SheetHeader publishes
+ * itself here and renders nothing in place, so the sheet shows it in its fixed
+ * header while the body scrolls underneath: every sheet gets that without each
+ * one lifting its header out of its content. Null (panels, Android) = inline.
+ */
+export const SheetHeaderSlotContext = createContext<OverlayStore | null>(null);
+
+function HeaderHost({ store }: { store: OverlayStore }) {
+  const headers = useSyncExternalStore(store.subscribe, store.get);
+  const header = headers[headers.length - 1];
+  return header ? <View className={`px-5 ${SHEET_BG_CLASS}`}>{header}</View> : null;
+}
+
 /** Height the sheet grows to while a panel is open, so a short sheet can hold a calendar. */
 const PANEL_MIN_HEIGHT = 500;
 
@@ -129,7 +143,9 @@ function InSheetPanel({ open, onClose, onDismissed, children, footer, store }: B
       <Pressable accessibilityRole="button" accessibilityLabel="Close" onPress={onClose} style={StyleSheet.absoluteFill} className="bg-black/25" />
       <View accessibilityViewIsModal className={`max-h-full rounded-t-[28px] pt-2 ${SHEET_BG_CLASS}`}>
         <ScrollView keyboardShouldPersistTaps="handled" contentContainerStyle={{ paddingBottom: footer ? 0 : insets.bottom }}>
-          <ModalNestingContext.Provider value>{children}</ModalNestingContext.Provider>
+          <ModalNestingContext.Provider value>
+            <SheetHeaderSlotContext.Provider value={null}>{children}</SheetHeaderSlotContext.Provider>
+          </ModalNestingContext.Provider>
         </ScrollView>
         {footer && (
           <View className="border-t border-neutral-200 px-5 pt-3 dark:border-white/[0.08]" style={{ paddingBottom: Math.max(12, insets.bottom) }}>
@@ -163,6 +179,7 @@ function IOSSheet({ open, onClose, onDismissed, children, maxHeight, className =
   // Set when the caller closes it, so a swipe-down can be told apart.
   const closing = useRef(false);
   const [overlays] = useState(createOverlayStore);
+  const [headerSlot] = useState(createOverlayStore);
   const [panelOpen, setPanelOpen] = useState(false);
   // The footer floats over the body, so the body ends that much short of it.
   const [footerHeight, setFooterHeight] = useState(0);
@@ -238,6 +255,7 @@ function IOSSheet({ open, onClose, onDismissed, children, maxHeight, className =
       grabber
       maxContentHeight={maxHeight}
       scrollable={pinned}
+      header={<HeaderHost store={headerSlot} />}
       footer={
         // Hidden while a panel (a time picker, a confirm) is open in the
         // sheet: the footer is drawn over the content, so it covered the
@@ -259,7 +277,8 @@ function IOSSheet({ open, onClose, onDismissed, children, maxHeight, className =
         ) : undefined
       }
       // A field scrolled into view above the keyboard clears the footer too.
-      scrollableOptions={pinned ? { keyboardScrollOffset: footerHeight } : undefined}
+      // The soft edge is iOS 26's blur where content meets the fixed header.
+      scrollableOptions={pinned ? { keyboardScrollOffset: footerHeight, topScrollEdgeEffect: 'soft' } : undefined}
       // Over the keyboard, the safe-area padding under the action isn't needed.
       footerOptions={{ keyboardOffset: -Math.max(0, Math.max(12, insets.bottom) - 12) }}
       onDidPresent={() => {
@@ -278,7 +297,7 @@ function IOSSheet({ open, onClose, onDismissed, children, maxHeight, className =
       <ModalNestingContext.Provider value>
         <SheetOverlayContext.Provider value={overlays}>
           <View style={[fullHeight ? styles.fill : null, panelOpen ? { minHeight: PANEL_MIN_HEIGHT } : null]}>
-            {body}
+            <SheetHeaderSlotContext.Provider value={headerSlot}>{body}</SheetHeaderSlotContext.Provider>
             <OverlayHost store={overlays} onActive={setPanelOpen} />
           </View>
         </SheetOverlayContext.Provider>

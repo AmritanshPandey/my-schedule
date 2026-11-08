@@ -563,23 +563,19 @@ export default function RitualView({
           <EmptyState
             icon={IconRepeat}
             title="No routines yet"
-            description="Add anything you want to do regularly — skincare, water, exercise, reading — and track it your own way."
-            action={{ label: "Add first routine", onClick: () => onAddOpenChange(true) }}
+            description="Add anything you do regularly, like skincare, water, exercise or reading, and track it your own way."
+            action={{ label: "Add routine", onClick: () => onAddOpenChange(true) }}
           />
         )}
 
         {/* ── Empty filter state ───────────────────────────────────────────── */}
         {viewMode === "day" && rituals.length > 0 && filteredRituals.length === 0 && (
-          <m.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="flex flex-col items-center gap-2 py-12 text-center">
-            <p className="text-[14px] font-semibold text-neutral-500 dark:text-neutral-400">
-              No routines for {DAY_SHORT[selectedDay]}
-            </p>
-            <button type="button" onClick={() => onAddOpenChange(true)}
-              className="mt-1 text-[13px] font-semibold text-neutral-500 underline underline-offset-2 hover:text-neutral-600 dark:text-neutral-400 dark:hover:text-neutral-300"
-            >
-              Add one
-            </button>
-          </m.div>
+          <EmptyState
+            icon={IconRepeat}
+            title={`No routines for ${DAY_SHORT[selectedDay]}`}
+            description="Nothing repeats on this day yet."
+            action={{ label: "Add routine", onClick: () => onAddOpenChange(true) }}
+          />
         )}
 
         {/* ── Routine rows, grouped by time of day — same list at every width ── */}

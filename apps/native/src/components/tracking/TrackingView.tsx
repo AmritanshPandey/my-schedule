@@ -15,7 +15,6 @@ import { quickAmountsForUnit } from '@planr/core/lib/quickAmounts';
 import { todayISO } from '@planr/core/lib/dateUtils';
 import { haptic } from '../../lib/haptics';
 import { CARD } from '../ui/surfaces';
-import { MainTitleSection } from '../ui/MainTitleSection';
 import EmptyState from '../ui/EmptyState';
 import TrendChange from '../ui/TrendChange';
 import HealthBadge from '../ui/HealthBadge';
@@ -449,19 +448,19 @@ export default function TrackingView({
   );
 
   return (
-    <View className="px-4 py-6">
-      <MainTitleSection
-        label="Keep the record honest"
-        title="Tracking"
-        progressMeta={trackers.length > 0 ? { done: checkedIn, total: trackers.length } : undefined}
-        className="mb-6"
-      />
+    <View className="px-4 pb-8 pt-2">
+      {/* No page title: the header bar and the tab already say "Tracking". */}
+      {trackers.length > 0 && (
+        <Text className="mb-4 text-[13px] font-semibold tabular-nums text-neutral-500 dark:text-neutral-400">
+          {checkedIn} of {trackers.length} checked in
+        </Text>
+      )}
 
       {trackers.length === 0 ? (
         <EmptyState
           icon={IconChartLine}
           title="Nothing to track yet"
-          description="Add a progress tracker to any plan — weight, distance, a score — set how often to check in, and it shows up here when an entry is due."
+          description="Add a progress tracker to any plan, like weight, distance or a score. It shows up here when a check-in is due."
           action={{ label: 'Go to Plans', onClick: onNavigateToPlans, icon: IconTargetArrow }}
         />
       ) : (

@@ -21,20 +21,19 @@ interface EmptyStateProps {
   description: string;
   /** Primary call-to-action — rendered as a solid pill button. */
   action?: EmptyAction;
-  /** Optional secondary link below the primary action. */
-  secondaryAction?: { label: string; onClick: () => void };
+  /** Optional second action, beside the primary. */
+  secondaryAction?: { label: string; onClick: () => void; icon?: IconCmp };
   /**
    * Vertically center within the available height (use inside flex-filled
-   * detail panes). Defaults to top-anchored with `pt-16`, matching the page
-   * empty states across the app.
+   * detail panes). Defaults to sitting at the top of the page.
    */
   center?: boolean;
   className?: string;
 }
 
 /**
- * The shared empty-state layout — a soft icon tile, title, supporting copy and
- * an optional CTA. Modeled on the Routine page so every page reads the same.
+ * The one empty state, on every tab: a dashed card, a neutral icon tile (green
+ * stays for progress), title, one line of copy, and buttons with icons.
  */
 export default function EmptyState({
   icon: Icon,
@@ -46,39 +45,44 @@ export default function EmptyState({
   className = "",
 }: EmptyStateProps) {
   const ActionIcon = action ? (action.icon === undefined ? IconPlus : action.icon) : null;
+  const SecondaryIcon = secondaryAction?.icon;
   return (
     <m.div
       initial={{ opacity: 0, y: 8 }}
       animate={{ opacity: 1, y: 0 }}
-      className={`flex flex-col items-center gap-4 text-center ${center ? "h-full justify-center" : "pt-16"} ${className}`}
+      className={`${center ? "flex h-full flex-col justify-center" : ""} ${className}`}
     >
-      <div className="flex h-16 w-16 items-center justify-center rounded-2xl border border-emerald-200 bg-emerald-50 dark:border-emerald-500/20 dark:bg-emerald-500/10">
-        <Icon size={30} strokeWidth={1.5} className="text-[#00A63E] dark:text-[#2FD46E]" />
+      <div className="flex flex-col items-center rounded-2xl border border-dashed border-neutral-200 bg-white px-5 py-8 text-center dark:border-white/[0.10] dark:bg-neutral-900">
+        <div className="mb-3 flex h-11 w-11 items-center justify-center rounded-xl bg-neutral-100 dark:bg-white/[0.06]">
+          <Icon size={20} strokeWidth={1.8} className="text-neutral-600 dark:text-neutral-300" />
+        </div>
+        <p className="text-[16px] font-bold text-neutral-950 dark:text-white">{title}</p>
+        <p className="mt-1 max-w-[280px] text-[13px] font-medium leading-snug text-neutral-500 dark:text-neutral-400">{description}</p>
+        {(action || secondaryAction) && (
+          <div className="mt-4 flex flex-wrap items-center justify-center gap-2">
+            {action && (
+              <Button
+                variant="primary"
+                size="md"
+                onClick={() => { haptic("medium"); action.onClick(); }}
+                icon={ActionIcon && <ActionIcon size={16} strokeWidth={2.5} />}
+              >
+                {action.label}
+              </Button>
+            )}
+            {secondaryAction && (
+              <Button
+                variant="secondary"
+                size="md"
+                onClick={() => { haptic("light"); secondaryAction.onClick(); }}
+                icon={SecondaryIcon && <SecondaryIcon size={16} strokeWidth={2.2} />}
+              >
+                {secondaryAction.label}
+              </Button>
+            )}
+          </div>
+        )}
       </div>
-      <div>
-        <p className="text-[16px] font-semibold text-neutral-700 dark:text-neutral-200">{title}</p>
-        <p className="mt-1.5 max-w-[260px] text-[14px] leading-relaxed text-neutral-500 dark:text-neutral-400">{description}</p>
-      </div>
-      {action && (
-        <Button
-          variant="primary"
-          size="md"
-          onClick={() => { haptic("medium"); action.onClick(); }}
-          icon={ActionIcon && <ActionIcon size={16} strokeWidth={2.5} />}
-          className="mt-2"
-        >
-          {action.label}
-        </Button>
-      )}
-      {secondaryAction && (
-        <button
-          type="button"
-          onClick={() => { haptic("light"); secondaryAction.onClick(); }}
-          className="text-[13px] font-semibold text-neutral-500 underline underline-offset-2 transition-colors hover:text-neutral-600 dark:text-neutral-400 dark:hover:text-neutral-300"
-        >
-          {secondaryAction.label}
-        </button>
-      )}
     </m.div>
   );
 }

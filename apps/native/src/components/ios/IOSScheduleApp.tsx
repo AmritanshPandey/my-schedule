@@ -1,4 +1,5 @@
 import LaunchOverlay from '../ui/LaunchOverlay';
+import EmptyState from '../ui/EmptyState';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { AppState, BackHandler, Modal, Pressable, ScrollView, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -316,44 +317,6 @@ function IOSHeader({
           <View className="shrink-0 flex-row items-center gap-1">{actionButtons}</View>
         )}
       </View>
-    </View>
-  );
-}
-
-function EmptyPanel({
-  icon,
-  title,
-  description,
-  action,
-  secondaryAction,
-}: {
-  icon: TablerIcon;
-  title: string;
-  description: string;
-  action?: { label: string; onClick: () => void };
-  secondaryAction?: { label: string; onClick: () => void };
-}) {
-  return (
-    <View className="items-center rounded-2xl border border-dashed border-neutral-200 bg-white px-5 py-8 dark:border-white/[0.10] dark:bg-neutral-900">
-      <View className="mb-3 h-10 w-10 items-center justify-center rounded-xl bg-neutral-100 dark:bg-white/[0.06]">
-        <Icon icon={icon} size={19} strokeWidth={1.8} className="text-neutral-500 dark:text-neutral-400" />
-      </View>
-      <Text className="text-center text-[16px] font-extrabold text-neutral-900 dark:text-white">{title}</Text>
-      <Text className="mt-1 max-w-[260px] text-center text-[13px] font-medium leading-snug text-neutral-500 dark:text-neutral-400">{description}</Text>
-      {(action || secondaryAction) && (
-        <View className="mt-4 flex-row items-center justify-center gap-2">
-          {action && (
-            <Button size="md" onPress={action.onClick}>
-              {action.label}
-            </Button>
-          )}
-          {secondaryAction && (
-            <Button variant="secondary" size="md" onPress={secondaryAction.onClick}>
-              {secondaryAction.label}
-            </Button>
-          )}
-        </View>
-      )}
     </View>
   );
 }
@@ -1349,7 +1312,7 @@ export default function IOSScheduleApp() {
     return (
       <View>
         {groupedRows.length === 0 ? (
-          <EmptyPanel
+          <EmptyState
             icon={IconCalendar}
             title="Nothing scheduled"
             description="Add your first task for this day to start building your schedule."
@@ -1423,7 +1386,7 @@ export default function IOSScheduleApp() {
     if (!ready) {
       return (
         <View className="px-4 pt-6">
-          <EmptyPanel icon={IconCalendar} title="Loading schedule" description="Preparing your local schedule and sync state." />
+          <EmptyState icon={IconCalendar} title="Loading schedule" description="Preparing your local schedule and sync state." />
         </View>
       );
     }
@@ -1690,12 +1653,12 @@ export default function IOSScheduleApp() {
         <ErrorBoundary section name="Plans">
           <TourTarget id="plans-list" className="gap-3 px-4 pt-5">
             {schedule.plans.length === 0 ? (
-              <EmptyPanel
+              <EmptyState
                 icon={IconClipboardData}
                 title="No plans yet"
                 description="Create a plan first, then add tasks to schedule your day."
                 action={{ label: 'Create plan', onClick: () => setAddingPlan(true) }}
-                secondaryAction={{ label: 'Browse templates', onClick: () => setTemplatesOpen(true) }}
+                secondaryAction={{ label: 'Browse templates', onClick: () => setTemplatesOpen(true), icon: IconTemplate }}
               />
             ) : (
               schedule.plans.map((plan) => {

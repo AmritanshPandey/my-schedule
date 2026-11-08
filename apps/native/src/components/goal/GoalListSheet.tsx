@@ -215,7 +215,7 @@ export default function GoalListSheet({
                 <EmptyState
                   icon={IconTargetArrow}
                   title="No goals yet"
-                  description="A Goal is the outcome behind your plans — e.g. “Get a senior UX job.” Optional, and plans work fine without one."
+                  description="A Goal is the outcome behind your plans, like “Get a senior UX job.” Optional, and plans work fine without one."
                   action={{ label: 'New goal', onClick: openCreate }}
                 />
               ) : (

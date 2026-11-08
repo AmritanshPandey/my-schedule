@@ -57,6 +57,8 @@ export interface TrackingViewProps {
   onSetCadence: (trackerId: string, cadence: TrackerCadence) => void;
   /** Sends the user to Plans, the only place a tracker can be created. */
   onNavigateToPlans: () => void;
+  /** The phone shell's header bar and tab already say "Tracking", so the page title is left out there. */
+  phoneShell?: boolean;
   /**
    * Every milestone — draws each tracker's planned path through its
    * milestones' figures (lib/milestoneTargets.ts) and lists which ones it
@@ -449,6 +451,7 @@ export default function TrackingView({
   onDeleteEntry,
   onSetCadence,
   onNavigateToPlans,
+  phoneShell = false,
   milestones,
   onSetMilestoneLink,
 }: TrackingViewProps) {
@@ -492,20 +495,28 @@ export default function TrackingView({
   );
 
   return (
-    <div className="py-6 px-4 lg:pb-10 lg:pt-6">
+    <div className={`px-4 lg:pb-10 lg:pt-6 ${phoneShell ? "pb-8 pt-2" : "py-6"}`}>
       <div className="mx-auto w-full max-w-[1500px]">
-        <MainTitleSection
-          label="Keep the record honest"
-          title="Tracking"
-          progressMeta={trackers.length > 0 ? { done: checkedIn, total: trackers.length } : undefined}
-          className="mb-6"
-        />
+        {phoneShell ? (
+          trackers.length > 0 && (
+            <p className="mb-4 text-[13px] font-semibold tabular-nums text-neutral-500 dark:text-neutral-400">
+              {checkedIn} of {trackers.length} checked in
+            </p>
+          )
+        ) : (
+          <MainTitleSection
+            label="Keep the record honest"
+            title="Tracking"
+            progressMeta={trackers.length > 0 ? { done: checkedIn, total: trackers.length } : undefined}
+            className="mb-6"
+          />
+        )}
 
         {trackers.length === 0 ? (
           <EmptyState
             icon={IconChartLine}
             title="Nothing to track yet"
-            description="Add a progress tracker to any plan — weight, distance, a score — set how often to check in, and it shows up here when an entry is due."
+            description="Add a progress tracker to any plan, like weight, distance or a score. It shows up here when a check-in is due."
             action={{ label: "Go to Plans", onClick: onNavigateToPlans, icon: IconTargetArrow }}
           />
         ) : (

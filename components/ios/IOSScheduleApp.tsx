@@ -52,6 +52,7 @@ import {
   resetStaleCompletions,
 } from "@/lib/useScheduleDB";
 import { markActivated } from "@/lib/activation";
+import EmptyState from "@/components/ui/EmptyState";
 import { useScheduleDB } from "@/lib/useScheduleDB";
 import { accentStyles, categoryHex, resolveAccentColor } from "@/lib/colorSystem";
 import { canDeleteCategory, categoryUsageCounts, ensureCategoryIn } from "@/lib/taskCategories";
@@ -259,44 +260,6 @@ function IOSHeader({
         )}
       </div>
     </header>
-  );
-}
-
-function EmptyPanel({
-  icon: Icon,
-  title,
-  description,
-  action,
-  secondaryAction,
-}: {
-  icon: React.ComponentType<{ size?: number; strokeWidth?: number; className?: string }>;
-  title: string;
-  description: string;
-  action?: { label: string; onClick: () => void };
-  secondaryAction?: { label: string; onClick: () => void };
-}) {
-  return (
-    <div className="rounded-2xl border border-dashed border-neutral-200 bg-white px-5 py-8 text-center dark:border-white/[0.10] dark:bg-neutral-900">
-      <div className="mx-auto mb-3 flex h-10 w-10 items-center justify-center rounded-xl bg-neutral-100 dark:bg-white/[0.06]">
-        <Icon size={19} strokeWidth={1.8} className="text-neutral-500 dark:text-neutral-400" />
-      </div>
-      <p className="text-[16px] font-extrabold text-neutral-900 dark:text-white">{title}</p>
-      <p className="mx-auto mt-1 max-w-[260px] text-[13px] font-medium leading-snug text-neutral-500 dark:text-neutral-400">{description}</p>
-      {(action || secondaryAction) && (
-        <div className="mt-4 flex items-center justify-center gap-2">
-          {action && (
-            <Button size="md" onClick={action.onClick}>
-              {action.label}
-            </Button>
-          )}
-          {secondaryAction && (
-            <Button variant="secondary" size="md" onClick={secondaryAction.onClick}>
-              {secondaryAction.label}
-            </Button>
-          )}
-        </div>
-      )}
-    </div>
   );
 }
 
@@ -1305,7 +1268,7 @@ export default function IOSScheduleApp() {
     return (
       <div className="flex flex-col">
         {groupedRows.length === 0 ? (
-          <EmptyPanel
+          <EmptyState
             icon={IconCalendar}
             title="Nothing scheduled"
             description="Add your first task for this day to start building your schedule."
@@ -1379,7 +1342,7 @@ export default function IOSScheduleApp() {
     if (!ready) {
       return (
         <div className="px-4 pt-6">
-          <EmptyPanel icon={IconCalendar} title="Loading schedule" description="Preparing your local schedule and sync state." />
+          <EmptyState icon={IconCalendar} title="Loading schedule" description="Preparing your local schedule and sync state." />
         </div>
       );
     }
@@ -1593,12 +1556,12 @@ export default function IOSScheduleApp() {
         <ErrorBoundary section name="Plans">
           <div className="space-y-3 px-4 pt-5" data-tour="plans-list">
             {schedule.plans.length === 0 ? (
-              <EmptyPanel
+              <EmptyState
                 icon={IconClipboardData}
                 title="No plans yet"
                 description="Create a plan first, then add tasks to schedule your day."
                 action={{ label: "Create plan", onClick: () => setAddingPlan(true) }}
-                secondaryAction={{ label: "Browse templates", onClick: () => setTemplatesOpen(true) }}
+                secondaryAction={{ label: "Browse templates", onClick: () => setTemplatesOpen(true), icon: IconTemplate }}
               />
             ) : (
               schedule.plans.map((plan) => {
@@ -1727,6 +1690,7 @@ export default function IOSScheduleApp() {
           <ErrorBoundary section name="Tracking">
             <div data-tour="tracking-view">
               <TrackingView
+                phoneShell
                 milestones={schedule.milestones}
                 onSetMilestoneLink={handleSetMilestoneLink}
                 trackers={schedule.progressTrackers}
