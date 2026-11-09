@@ -1,6 +1,6 @@
 "use client";
 
-import { IconArrowRight, IconChevronRight, IconTarget } from "@tabler/icons-react";
+import { IconAlertCircle, IconArrowRight, IconChevronRight, IconTarget } from "@tabler/icons-react";
 import type { GoalPaceRow } from "@/lib/overview";
 import { accentStyles } from "@/lib/colorSystem";
 import { haptic } from "@/lib/haptics";
@@ -28,12 +28,15 @@ export default function GoalPaceCard({
   compact = false,
   onOpenPlan,
   onSeeAll,
+  onAdaptMilestone,
 }: {
   rows: GoalPaceRow[];
   totalCount: number;
   compact?: boolean;
   onOpenPlan: (planId: string) => void;
   onSeeAll?: () => void;
+  /** "Update plan" on a slipping milestone: opens the adapt-milestone sheet. */
+  onAdaptMilestone?: (milestoneId: string) => void;
 }) {
   if (rows.length === 0) {
     if (compact) return null;
@@ -62,7 +65,7 @@ export default function GoalPaceCard({
   return (
     <section data-testid="overview-goal-pace" className={`${CARD} ${compact ? "px-2 pb-1 pt-3" : "p-4"}`}>
       <div className={`flex items-center justify-between gap-3 ${compact ? "px-2" : ""}`}>
-        <p className="text-[14px] font-bold text-neutral-950 dark:text-white">{compact ? "Goals on pace" : "Goals & milestones"}</p>
+        <p className="text-[14px] font-bold text-neutral-950 dark:text-white">Goals &amp; milestones</p>
         {onSeeAll && totalCount > rows.length && (
           <Button variant="ghost" size="sm" onClick={() => { haptic("light"); onSeeAll(); }} className="-my-2">
             See all {totalCount}
@@ -71,7 +74,7 @@ export default function GoalPaceCard({
       </div>
 
       <ul className={`${compact ? "mt-1" : "mt-2"} divide-y divide-neutral-100 dark:divide-white/[0.06]`}>
-        {rows.map(({ plan, milestone, state, milestonesDone, milestonesTotal, consistency }) => (
+        {rows.map(({ plan, milestone, state, milestonesDone, milestonesTotal, consistency, startDate, callout }) => (
           <li key={plan.id}>
             <button
               type="button"
@@ -111,7 +114,7 @@ export default function GoalPaceCard({
                         </span>
                       </span>
                     )}
-                    {!compact && (
+                    {!compact && !callout && (
                       <span className="mt-1.5 line-clamp-2 block text-[12px] leading-snug text-neutral-600 dark:text-neutral-400">
                         {state.statusMessage}
                       </span>
@@ -122,6 +125,31 @@ export default function GoalPaceCard({
               {state ? <HealthBadge health={state.health} /> : null}
               {compact && <IconChevronRight size={16} strokeWidth={2.2} className="shrink-0 text-neutral-400 dark:text-neutral-500" />}
             </button>
+            {!compact && startDate && (
+              <p className="-mt-1 pb-2 pl-[22px] text-[12px] font-medium text-neutral-500 dark:text-neutral-400">
+                Started {formatShortDate(startDate)}
+              </p>
+            )}
+            {/* What to do about a slipping milestone — the milestone half of
+                the old Needs attention card, under the goal it belongs to. */}
+            {callout && (
+              <div className={`mb-3 flex items-start gap-2 rounded-xl bg-amber-500/10 px-3 py-2.5 dark:bg-amber-400/10 ${compact ? "mx-2" : ""}`}>
+                <IconAlertCircle size={16} strokeWidth={2.2} aria-hidden className="mt-0.5 shrink-0 text-amber-700 dark:text-amber-300" />
+                <div className="min-w-0 flex-1">
+                  <p className="text-[13px] font-medium leading-snug text-amber-900 dark:text-amber-200">{callout.text}</p>
+                  {onAdaptMilestone && (
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => { haptic("light"); onAdaptMilestone(callout.milestoneId); }}
+                      className="-ml-3.5 mt-1"
+                    >
+                      Update plan
+                    </Button>
+                  )}
+                </div>
+              </div>
+            )}
           </li>
         ))}
       </ul>

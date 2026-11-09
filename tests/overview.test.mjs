@@ -47,7 +47,17 @@ registerHooks({
   },
 });
 
-const { statusTone, selectNextUp, selectWeekStatus, selectGoalPace, selectSetupSteps } = await import("@/lib/overview.ts");
+const {
+  statusTone,
+  selectNextUp,
+  selectWeekStatus,
+  selectGoalPace,
+  selectSetupSteps,
+  selectTodayPlan,
+  selectTodayRoutines,
+  selectActiveTracking,
+  selectRoutineConsistency,
+} = await import("@/lib/overview.ts");
 
 // ── Fixtures ─────────────────────────────────────────────────────────────────
 
@@ -321,4 +331,108 @@ test("goal pace sorts worst health first and honours the limit", () => {
   assert.equal(result.rows.length, 2);
   assert.equal(result.rows[0].plan.id, "p2");
   assert.equal(result.rows[0].state.health, "delayed");
+});
+
+// ── Today's plan ─────────────────────────────────────────────────────────────
+
+test("today's plan lists tracked tasks in time order with category, state and checklist", () => {
+  const s = schedule({
+    categories: [{ id: "c1", title: "Cardio", icon: "run", color: "orange" }],
+    activities: daily([
+      task("late", { startTime: "1:30 PM", endTime: "2:00 PM", categoryId: "c1", completed: true }),
+      task("early", { startTime: "7:00 AM", subtasks: [{ id: "s1", title: "a" }, { id: "s2", title: "b" }], completedSubtaskIds: ["s1"] }),
+      task("held", { taskType: "commitment" }),
+    ]),
+  });
+  const plan = selectTodayPlan(s, SATURDAY, "saturday");
+  assert.deepEqual(plan.rows.map((r) => r.task.id), ["early", "late"]);
+  assert.equal(plan.rows[0].metaLabel, "Plan");
+  assert.equal(plan.rows[1].metaLabel, "Cardio");
+  assert.equal(plan.rows[0].state, "partial");
+  assert.deepEqual(plan.rows[0].subtasks, { done: 1, total: 2 });
+  assert.equal(plan.rows[1].subtasks, null);
+  assert.equal(plan.done, 1);
+  assert.equal(plan.total, 2);
+  assert.equal(plan.pct, 50);
+});
+
+// ── Today's routines ─────────────────────────────────────────────────────────
+
+test("today's routines lists what's due today, open ones first", () => {
+  const s = schedule({
+    rituals: [
+      { id: "done", title: "Water" },
+      { id: "open", title: "Protein", trackingType: "quantity", target: 120, unit: "g" },
+      { id: "weekday", title: "Standup", recurrence: { kind: "weekdays" }, repeatDays: ["monday"] },
+    ],
+    ritualCompletions: [{ ritualId: "done", date: SATURDAY }],
+  });
+  const routines = selectTodayRoutines(s, SATURDAY);
+  assert.deepEqual(routines.rows.map((r) => r.ritual.id), ["open", "done"]);
+  assert.equal(routines.rows[0].cadenceLabel, "Every day");
+  assert.equal(routines.done, 1);
+  assert.equal(routines.total, 2);
+});
+
+// ── Active tracking ──────────────────────────────────────────────────────────
+
+test("active tracking puts trackers due a check-in first", () => {
+  const s = schedule({
+    progressTrackers: [
+      { id: "logged", planId: "p1", title: "Weight", type: "number", unit: "kg", cadence: "weekly" },
+      { id: "due", planId: "p1", title: "Distance", type: "number", unit: "km", cadence: "weekly" },
+    ],
+    metricEntries: [{ id: "e1", planId: "p1", trackerId: "logged", value: 80, date: SATURDAY }],
+  });
+  const rows = selectActiveTracking(s, SATURDAY);
+  assert.deepEqual(rows.map((r) => r.stat.tracker.id), ["due", "logged"]);
+  assert.equal(rows[0].checkIn.due, true);
+  assert.equal(rows[1].stat.latestValue, 80);
+});
+
+// ── Week status additions ────────────────────────────────────────────────────
+
+test("week status carries routine counts and the change against last week", () => {
+  const s = schedule({
+    rituals: [{ id: "r", title: "Water" }],
+    ritualCompletions: [{ ritualId: "r", date: "2026-09-14" }, { ritualId: "r", date: "2026-09-15" }],
+  });
+  const status = selectWeekStatus(s, SATURDAY);
+  assert.equal(status.routinesTotal, 6);
+  assert.equal(status.routinesDone, 2);
+  assert.equal(typeof status.vsLastWeekPct, "number");
+});
+
+// ── Routine consistency ──────────────────────────────────────────────────────
+
+test("routine consistency marks each day of the week and leaves today open", () => {
+  const s = schedule({
+    rituals: [{ id: "r", title: "Water" }],
+    ritualCompletions: [
+      { ritualId: "r", date: "2026-09-14" },
+      { ritualId: "r", date: "2026-09-16" },
+    ],
+  });
+  const { rows, pct } = selectRoutineConsistency(s, SATURDAY);
+  // Mon done, Tue missed, Wed done, Thu missed, Fri missed, Sat today (open), Sun future.
+  assert.deepEqual(rows[0].days, ["done", "missed", "done", "missed", "missed", "future", "future"]);
+  assert.equal(rows[0].pct, 40);
+  assert.equal(pct, 40);
+});
+
+// ── Goal callout ─────────────────────────────────────────────────────────────
+
+test("goal pace carries a start date and only calls out a slipping milestone", () => {
+  const s = schedule({
+    plans: [plan({ startDate: "2026-08-01" })],
+    milestones: [milestone("m1")],
+  });
+  const { rows } = selectGoalPace(s, { now: new Date(`${SATURDAY}T12:00:00`) });
+  assert.equal(rows[0].startDate, "2026-08-01");
+  const slipping =
+    rows[0].state &&
+    (rows[0].state.health === "at_risk" || rows[0].state.health === "delayed") &&
+    !(rows[0].state.paceGap ? rows[0].state.paceGap.remaining <= 0 : (rows[0].state.overallProgress ?? 0) >= 100);
+  assert.equal(rows[0].callout !== null, !!slipping);
+  if (rows[0].callout) assert.equal(rows[0].callout.milestoneId, "m1");
 });

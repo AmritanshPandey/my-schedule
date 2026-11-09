@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, type ReactNode } from "react";
 import {
   IconArrowUpRight,
   IconChecklist,
@@ -38,6 +38,11 @@ export interface TodayTaskListProps {
   /** Omitted → the missed affordances are absent and the gesture is inert. */
   onMissed?: (taskId: string, subtaskIds: string[]) => void;
   onOpenSubtasks?: (taskId: string) => void;
+  /** Replaces the default "Today's Task · n/m" header (the Overview's hero). */
+  heading?: ReactNode;
+  /** Replaces the default empty-day message. */
+  empty?: ReactNode;
+  testId?: string;
 }
 
 /** "6 AM" / "12:30 PM" — the dashboard reads as prose, not as a 24-hour log. */
@@ -232,6 +237,9 @@ export default function TodayTaskList({
   onToggleSlot,
   onMissed,
   onOpenSubtasks,
+  heading,
+  empty,
+  testId = "overview-today-card",
 }: TodayTaskListProps) {
   // Starts hidden and flips in an effect: reading storage during render would
   // mismatch the statically exported HTML.
@@ -266,7 +274,8 @@ export default function TodayTaskList({
     });
 
   return (
-    <section data-testid="overview-today-card" className={`${CARD} px-4 pt-4 pb-1`}>
+    <section data-testid={testId} className={`${CARD} px-4 pt-4 pb-1`}>
+      {heading ?? (
       <div className="mb-1 flex items-center justify-between gap-3">
         <div className="flex min-w-0 items-center gap-1.5 text-neutral-500 dark:text-neutral-400">
           <IconChecklist size={15} strokeWidth={2} className="shrink-0" />
@@ -287,6 +296,7 @@ export default function TodayTaskList({
           )}
         </div>
       </div>
+      )}
 
       {showHint && tasks.length > 0 && (
         <div className={`mb-2 flex items-center gap-2 ${SOFT_PANEL} px-3 py-2`}>
@@ -300,7 +310,7 @@ export default function TodayTaskList({
       )}
 
       {tasks.length === 0 ? (
-        <div className="mb-3 rounded-xl border border-dashed border-neutral-200 px-4 py-6 text-center dark:border-white/[0.10]">
+        empty ?? <div className="mb-3 rounded-xl border border-dashed border-neutral-200 px-4 py-6 text-center dark:border-white/[0.10]">
           <p className="text-[16px] font-bold text-neutral-950 dark:text-white">Nothing to check off today</p>
           <p className="mt-1 text-[12px] font-medium text-neutral-500 dark:text-neutral-400">
             Add the first block from Today.

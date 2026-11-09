@@ -70,7 +70,7 @@ function InsightRow({
   const risk = insight.tone === "risk";
   const Icon = insight.kind === "declining" ? IconTrendingDown : IconAlertTriangle;
   // amber-700 / rose-600 rather than the 500s — AA at 12–13px on white
-  // (same pairing as NeedsAttentionCard).
+  // (same pairing as the Overview cards).
   const accent = risk ? "text-rose-600 dark:text-rose-400" : "text-amber-700 dark:text-amber-400";
   const tint = risk ? "bg-rose-50 dark:bg-rose-500/[0.10]" : "bg-amber-50 dark:bg-amber-500/[0.10]";
   const s = insight.suggestion;

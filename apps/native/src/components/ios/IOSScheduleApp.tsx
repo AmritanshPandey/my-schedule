@@ -1467,6 +1467,8 @@ export default function IOSScheduleApp() {
             onClearAttention={handleClearAttention}
             onDismissAttentionOne={handleDismissAttentionOne}
             onLogTracker={(tracker) => setEntryTracker(tracker)}
+            onMarkRitualDone={(id) => handleMarkRitualDone(id, todayISO(), 100)}
+            onUnmarkRitualDone={(id) => handleUnmarkRitualDone(id, todayISO())}
             onToast={setToast}
             onReviewTask={(task) => openEditSheet(task)}
             onReviewDay={(day) => {

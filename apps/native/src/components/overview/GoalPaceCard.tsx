@@ -1,5 +1,5 @@
 import { Pressable, View } from 'react-native';
-import { IconChevronRight } from '@tabler/icons-react-native';
+import { IconAlertCircle, IconChevronRight } from '@tabler/icons-react-native';
 import type { GoalPaceRow } from '@planr/core/lib/overview';
 import { accentStyles } from '@planr/core/lib/colorSystem';
 import { haptic } from '../../lib/haptics';
@@ -24,19 +24,22 @@ export default function GoalPaceCard({
   totalCount,
   onOpenPlan,
   onSeeAll,
+  onAdaptMilestone,
 }: {
   rows: GoalPaceRow[];
   totalCount: number;
   onOpenPlan: (planId: string) => void;
   onSeeAll: () => void;
+  /** A slipping milestone's "Update plan": the adapt-milestone sheet. */
+  onAdaptMilestone?: (milestoneId: string) => void;
 }) {
   if (rows.length === 0) return null;
 
   return (
     <View testID="overview-goal-pace" className={`${CARD} px-2 pb-1 pt-3`}>
       <View className="flex-row items-center justify-between gap-3 px-2">
-        <Text accessibilityRole="header" className="text-[14px] font-bold text-neutral-950 dark:text-white">
-          Goals on pace
+        <Text accessibilityRole="header" className="text-[16px] font-bold text-neutral-950 dark:text-white">
+          Goals & milestones
         </Text>
         {totalCount > rows.length && (
           <Button
@@ -54,18 +57,16 @@ export default function GoalPaceCard({
       </View>
 
       <View className="mt-1">
-        {rows.map(({ plan, milestone, state }, index) =>
+        {rows.map(({ plan, milestone, state, callout }, index) =>
           milestone ? (
+            <View key={plan.id} className={index > 0 ? 'border-t border-neutral-100 dark:border-white/[0.06]' : ''}>
             <Pressable
-              key={plan.id}
               accessibilityRole="button"
               onPress={() => {
                 haptic('light');
                 onOpenPlan(plan.id);
               }}
-              className={`min-h-[56px] w-full flex-row items-center gap-3 rounded-xl px-2 py-2.5 active:bg-neutral-50 dark:active:bg-white/[0.03] ${
-                index > 0 ? 'border-t border-neutral-100 dark:border-white/[0.06]' : ''
-              }`}
+              className="min-h-[56px] w-full flex-row items-center gap-3 rounded-xl px-2 py-2.5 active:bg-neutral-50 dark:active:bg-white/[0.03]"
             >
               <View className={`h-2.5 w-2.5 shrink-0 rounded-full ${accentStyles(plan.color).dot}`} />
               <View className="min-w-0 flex-1">
@@ -86,6 +87,30 @@ export default function GoalPaceCard({
               {state && <HealthBadge health={state.health} />}
               <Icon icon={IconChevronRight} size={16} strokeWidth={2.2} className="shrink-0 text-neutral-400 dark:text-neutral-500" />
             </Pressable>
+            {/* What to do about a slipping milestone — the milestone half of
+                the old Needs attention card, under the goal it belongs to. */}
+            {callout && (
+              <View className="mx-2 mb-3 flex-row items-start gap-2 rounded-xl bg-amber-500/10 px-3 py-2.5 dark:bg-amber-400/10">
+                <Icon icon={IconAlertCircle} size={16} strokeWidth={2.2} className="mt-0.5 shrink-0 text-amber-700 dark:text-amber-300" />
+                <View className="min-w-0 flex-1">
+                  <Text className="text-[13px] font-medium leading-snug text-amber-900 dark:text-amber-200">{callout.text}</Text>
+                  {onAdaptMilestone && (
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onPress={() => {
+                        haptic('light');
+                        onAdaptMilestone(callout.milestoneId);
+                      }}
+                      className="-ml-3.5 mt-1 self-start"
+                    >
+                      Update plan
+                    </Button>
+                  )}
+                </View>
+              </View>
+            )}
+            </View>
           ) : null,
         )}
       </View>

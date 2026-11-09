@@ -13,14 +13,14 @@
  * Pure and React-free so it can be unit-tested directly.
  */
 
-import type { DayKey, Milestone, Plan, Schedule, Task } from "./scheduleTypes";
+import type { DayKey, Milestone, Plan, Ritual, Schedule, Task } from "./scheduleTypes";
 import { DAYS } from "./scheduleConstants";
 import { addDaysToISO, localISODate } from "./dateUtils";
 import { formatDisplayTime } from "./timeUtils";
 import { isPlanRunning } from "./planLifecycle";
 import { getPlanCardStats } from "./planInsights";
 import { getSlots } from "./taskMutations";
-import { getTaskCheckableItems, getTaskSubtaskSummary, isTaskCompleted, isTaskResolved, isTrackedTask } from "./taskCompletion";
+import { getTaskCheckableItems, getTaskSubtaskSummary, isTaskCompleted, isTaskResolved, isTrackedTask, resolveTaskState, type TaskState } from "./taskCompletion";
 import { selectTodayTasks } from "./todayTasks";
 import { computeExecutionTrend } from "./executionAnalytics";
 import { calculateExecutionStreak, type ExecutionStreak } from "./consistency/calculateExecutionStreak";
@@ -28,6 +28,12 @@ import { ritualScheduledOnDate } from "./consistency/calculateRitualStreak";
 import { completedRitualIdsOn } from "./consistency/ritualDayStatus";
 import { calculateMilestoneState, type MilestoneHealth, type MilestoneState } from "./milestoneHealth";
 import { taskDurationMinutes } from "./intelligence/taskStats";
+import { categoriesById, taskIdentity } from "./taskIdentity";
+import { describeRecurrence } from "./ritualRecurrence";
+import { routineGoalLabel } from "./routineDetails";
+import { buildTrackerStat, type TrackerStat } from "./trackerStats";
+import { buildCheckIn, type CheckInState } from "./trackerCadence";
+import { paceNarrative } from "./paceModel";
 
 // ── Status ramp ──────────────────────────────────────────────────────────────
 
@@ -184,6 +190,11 @@ export interface WeekStatus {
   tasksTotal: number;
   /** Routine follow-through, Monday through today. */
   routinesPct: number;
+  /** The counts behind routinesPct ("7/12"). */
+  routinesDone: number;
+  routinesTotal: number;
+  /** This week's completion % minus last week's (computeExecutionTrend.deltaPct). */
+  vsLastWeekPct: number;
   /** Missed tasks this week — the same number the execution trend reports. */
   missed: number;
   streak: ExecutionStreak;
@@ -272,6 +283,7 @@ export function selectWeekStatus(schedule: Schedule, todayISO: string): WeekStat
   }
   const verdictPct = ratioPct(judgedDone, judgedDue);
   const tone = statusTone(verdictPct);
+  const trend = computeExecutionTrend(schedule, 8, new Date(`${todayISO}T12:00:00`));
   const verdict: WeekVerdict | null =
     judgedDue === 0 ? null : tone === "good" ? "on-track" : tone === "warn" ? "at-risk" : "behind";
 
@@ -281,7 +293,10 @@ export function selectWeekStatus(schedule: Schedule, todayISO: string): WeekStat
     tasksDone,
     tasksTotal,
     routinesPct: ratioPct(routinesDone, routinesDue),
-    missed: computeExecutionTrend(schedule, 8, new Date(`${todayISO}T12:00:00`)).currentMissed,
+    routinesDone,
+    routinesTotal: routinesDue,
+    vsLastWeekPct: trend.deltaPct,
+    missed: trend.currentMissed,
     streak: calculateExecutionStreak(schedule, todayISO),
     verdict,
     verdictPct,
@@ -300,6 +315,16 @@ export interface GoalPaceRow {
   milestonesTotal: number;
   /** % of days with at least one task done (calculateConsistency). */
   consistency: number;
+  /** When the plan (or, failing that, its next milestone) started. */
+  startDate: string | null;
+  /**
+   * The one thing to act on, when the next milestone is slipping: the pace
+   * sentence (or the status message when the pace is too scattered to quote).
+   * The Overview's "Update plan" opens the adapt-milestone flow for it. This is
+   * the milestone half of the old Needs attention card, folded into the goal it
+   * belongs to.
+   */
+  callout: { text: string; milestoneId: string } | null;
 }
 
 /** Worst first: what's slipping is what the review is for. */
@@ -356,7 +381,27 @@ export function selectGoalPace(
         schedule.preferences?.startDate,
         schedule.milestones,
       );
-      return { plan, milestone, state, milestonesDone, milestonesTotal: milestones.length, consistency };
+      // A milestone that has already hit its target needs closing, not re-planning.
+      const gap = state?.paceGap ?? null;
+      const targetReached = gap ? gap.remaining <= 0 : (state?.overallProgress ?? 0) >= 100;
+      const slipping =
+        !!milestone && !!state && (state.health === "at_risk" || state.health === "delayed") && !targetReached;
+      // The pace sentence only when it is about falling behind; "ahead" or
+      // "on pace" under an amber flag would contradict the flag.
+      const gapSaysBehind = !!gap && (gap.level === "behind" || gap.level === "wrong_way" || !Number.isFinite(gap.requiredPerWeek));
+      const callout = slipping
+        ? { text: (gapSaysBehind ? paceNarrative(gap) : null) ?? state!.statusMessage, milestoneId: milestone!.id }
+        : null;
+      return {
+        plan,
+        milestone,
+        state,
+        milestonesDone,
+        milestonesTotal: milestones.length,
+        consistency,
+        startDate: plan.startDate ?? milestone?.startDate ?? null,
+        callout,
+      };
     })
     .filter((row) => !options.withMilestoneOnly || row.milestone !== null)
     .sort((a, b) => {
@@ -368,6 +413,150 @@ export function selectGoalPace(
     rows: options.limit !== undefined ? rows.slice(0, options.limit) : rows,
     totalCount: rows.length,
   };
+}
+
+// ── Today's plan ─────────────────────────────────────────────────────────────
+
+export interface TodayPlanRow {
+  task: Task;
+  plan: Plan | null;
+  /** "7:00 AM", or "" for an untimed task. */
+  timeLabel: string;
+  /** The task's category ("Cardio"), else its plan's title, else null. */
+  metaLabel: string | null;
+  state: TaskState;
+  /** Checklist progress, or null when the task has no subtasks. */
+  subtasks: { done: number; total: number } | null;
+  /** Ids to pass to the shell's mark-done handler (same as TodayTaskList). */
+  checkableIds: string[];
+}
+
+export interface TodayPlan {
+  rows: TodayPlanRow[];
+  done: number;
+  total: number;
+  pct: number;
+}
+
+/**
+ * Today's tasks as the Overview's hero lists them: the same occurrence-resolved,
+ * tracked-only, time-ordered list Today shows (selectTodayTasks), with each
+ * row's meta line and checklist count worked out once for every shell.
+ */
+export function selectTodayPlan(schedule: Schedule, todayISO: string, todayKey: DayKey): TodayPlan {
+  const { tasks, done, total } = selectTodayTasks(schedule, todayISO, todayKey);
+  const plansById = new Map(schedule.plans.map((plan) => [plan.id, plan]));
+  const categories = categoriesById(schedule.categories ?? []);
+  const rows = tasks.map((task): TodayPlanRow => {
+    const plan = task.planId ? plansById.get(task.planId) ?? null : null;
+    const summary = getTaskSubtaskSummary(task, plan);
+    const category = taskIdentity(task, categories).category;
+    return {
+      task,
+      plan,
+      timeLabel: formatDisplayTime(task.startTime),
+      metaLabel: category?.title ?? plan?.title ?? null,
+      state: resolveTaskState(task, summary.totalCount),
+      subtasks: summary.hasItems ? { done: summary.completedCount, total: summary.totalCount } : null,
+      checkableIds: getTaskCheckableItems(task, plan).map((item) => item.id),
+    };
+  });
+  return { rows, done, total, pct: ratioPct(done, total) };
+}
+
+// ── Today's routines ─────────────────────────────────────────────────────────
+
+export interface TodayRoutineRow {
+  ritual: Ritual;
+  /** "Every day", "Mon, Wed, Fri" … */
+  cadenceLabel: string;
+  /** "Goal 120g", or null for a plain check-off routine. */
+  goalLabel: string | null;
+  done: boolean;
+}
+
+/** The routines due today, open ones first, in their saved order otherwise. */
+export function selectTodayRoutines(schedule: Schedule, todayISO: string): { rows: TodayRoutineRow[]; done: number; total: number } {
+  const rituals = (schedule.rituals ?? []).filter((ritual) =>
+    ritualScheduledOnDate(ritual, todayISO, schedule.preferences?.startDate),
+  );
+  const doneIds = completedRitualIdsOn(schedule.rituals ?? [], schedule.ritualCompletions ?? [], todayISO);
+  const rows = rituals
+    .map((ritual): TodayRoutineRow => ({
+      ritual,
+      cadenceLabel: describeRecurrence(ritual),
+      goalLabel: routineGoalLabel(ritual),
+      done: doneIds.has(ritual.id),
+    }))
+    .sort((a, b) => Number(a.done) - Number(b.done));
+  return { rows, done: rows.filter((row) => row.done).length, total: rows.length };
+}
+
+// ── Active tracking ──────────────────────────────────────────────────────────
+
+export interface ActiveTrackingRow {
+  stat: TrackerStat;
+  checkIn: CheckInState;
+}
+
+/**
+ * Every tracker with its headline numbers and check-in state, due ones first.
+ * "Due" is the Check-ins due card folded into this list as a badge.
+ */
+export function selectActiveTracking(schedule: Schedule, todayISO: string): ActiveTrackingRow[] {
+  const entries = schedule.metricEntries ?? [];
+  const trackingStart = schedule.preferences?.startDate;
+  return (schedule.progressTrackers ?? [])
+    .map((tracker, index) => ({
+      stat: buildTrackerStat(tracker, entries, todayISO, trackingStart),
+      checkIn: buildCheckIn(tracker, entries, todayISO, trackingStart),
+      index,
+    }))
+    .sort((a, b) => Number(b.checkIn.due) - Number(a.checkIn.due) || a.index - b.index)
+    .map(({ stat, checkIn }) => ({ stat, checkIn }));
+}
+
+// ── Routine consistency ──────────────────────────────────────────────────────
+
+export type RoutineDayMark = "done" | "missed" | "off" | "future";
+
+export interface RoutineConsistencyRow {
+  ritual: Ritual;
+  /** Monday-first, one mark per day of this week. */
+  days: RoutineDayMark[];
+  pct: number;
+}
+
+/**
+ * This week's follow-through per routine: done or missed on each day it was
+ * due, "off" on days it wasn't, and the % over the days due so far.
+ */
+export function selectRoutineConsistency(schedule: Schedule, todayISO: string): { rows: RoutineConsistencyRow[]; pct: number } {
+  const todayIdx = new Date(`${todayISO}T00:00:00`).getDay();
+  const monday = addDaysToISO(todayISO, -((todayIdx + 6) % 7));
+  const dates = DAYS.map((_, i) => addDaysToISO(monday, i));
+  const rituals = schedule.rituals ?? [];
+  const doneByDate = new Map(dates.map((dateISO) => [dateISO, completedRitualIdsOn(rituals, schedule.ritualCompletions ?? [], dateISO)]));
+  let allDue = 0;
+  let allDone = 0;
+  const rows = rituals.map((ritual): RoutineConsistencyRow => {
+    let due = 0;
+    let done = 0;
+    const days = dates.map((dateISO): RoutineDayMark => {
+      if (!ritualScheduledOnDate(ritual, dateISO, schedule.preferences?.startDate)) return "off";
+      if (dateISO > todayISO) return "future";
+      const isDone = doneByDate.get(dateISO)!.has(ritual.id);
+      // Today isn't missed until it's over.
+      if (dateISO === todayISO && !isDone) return "future";
+      due += 1;
+      if (isDone) done += 1;
+      return isDone ? "done" : "missed";
+    });
+    allDue += due;
+    allDone += done;
+    return { ritual, days, pct: ratioPct(done, due) };
+  });
+  return { rows, pct: ratioPct(allDone, allDue) };
 }
 
 // ── Greeting ─────────────────────────────────────────────────────────────────

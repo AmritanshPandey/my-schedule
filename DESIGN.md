@@ -369,6 +369,22 @@ amber 40–69%, rose <40%) so a glance answers "on track / at risk / behind":
 
 These are the instruments of Mission Control: never decorative, always reporting real state.
 
+### The Overview
+One set of selectors (`lib/overview.ts`) feeds every surface, so the numbers match everywhere.
+Execution comes first; strategy follows.
+- **Desktop:** header with date and streak pill → Today's plan · Today's routine · Active
+  tracking → Where the day goes · Goals & milestones → Weekly progress (with the Mon–Sun line)
+  · Routine consistency · Task completion trend.
+- **Phone (PWA and iOS):** Today's plan as the hero, with the streak chip in its corner →
+  Today's routine → Active tracking (3 rows) → Goals & milestones → Weekly progress
+  (numbers only). The day donut, routine dots and completion trend stay on desktop.
+- **The hero is a white card.** Green appears only on the progress bar and the checked boxes.
+  Checking a row is the one-tap "mark done".
+- **Needs-attention items fold into the card they belong to.** There is no separate list:
+  - A slipping milestone gets an amber callout with "Update plan" under its goal.
+  - A due check-in gets a "Due" badge on its tracker row, and due trackers sort first.
+  - A routine whose streak ends tonight says so on its own row.
+
 ### Named Rules
 **The Native-Register Rule.** Motion matches the surface. Mobile overlays use springs (they
 feel physical, grabbed-and-released); desktop overlays use short eased curves (≤200ms,

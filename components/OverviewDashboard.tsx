@@ -1,26 +1,17 @@
 "use client";
 
-import { useCallback, useMemo, useState, type ComponentType } from "react";
+import { useCallback, useMemo, useState } from "react";
 import {
   IconArrowRight,
   IconCalendarEvent,
   IconScale,
-  IconChartLine,
   IconCheck,
-  IconChevronDown,
   IconClipboardList,
-  IconFlame,
-  IconTrophy,
-  IconPlus,
   IconRepeat,
-  IconTarget,
 } from "@tabler/icons-react";
-import type { DayKey, Plan, ProgressTracker, Schedule, Task } from "@/lib/useScheduleDB";
-import { accentStyles } from "@/lib/colorSystem";
+import type { DayKey, ProgressTracker, Schedule, Task } from "@/lib/useScheduleDB";
 import DayBreakdownCard from "@/components/DayBreakdownCard";
-import NeedsAttentionCard from "@/components/NeedsAttentionCard";
-import InsightsCard, { type InsightToast } from "@/components/intelligence/InsightsCard";
-import CheckInsDueCard from "@/components/tracking/CheckInsDueCard";
+import type { InsightToast } from "@/components/intelligence/InsightsCard";
 import { selectNeedsAttention, type MissedTask, type NeedsAttention, type UnreliableSlotTask } from "@/lib/needsAttention";
 import {
   computeCapacityModel,
@@ -30,21 +21,26 @@ import {
   type LoadVerdict,
 } from "@/lib/capacityModel";
 import CompletionTrendCard from "@/components/analytics/CompletionTrendCard";
-import { selectGoalPace, selectNextUp, selectSetupSteps, selectWeekStatus } from "@/lib/overview";
-import NextUpCard from "@/components/overview/NextUpCard";
+import {
+  selectActiveTracking,
+  selectGoalPace,
+  selectRoutineConsistency,
+  selectSetupSteps,
+  selectTodayPlan,
+  selectTodayRoutines,
+  selectWeekStatus,
+} from "@/lib/overview";
 import WeekStatusCard from "@/components/overview/WeekStatusCard";
 import GoalPaceCard from "@/components/overview/GoalPaceCard";
-
-import { computeTrend, type TrendResult } from "@/lib/trendUtils";
+import StreakPill from "@/components/overview/StreakPill";
+import TodayPlanCard from "@/components/overview/TodayPlanCard";
+import TodayRoutineCard from "@/components/overview/TodayRoutineCard";
+import ActiveTrackingCard from "@/components/overview/ActiveTrackingCard";
+import RoutineConsistencyCard from "@/components/overview/RoutineConsistencyCard";
 import { localISODate } from "@/lib/dateUtils";
-import { formatDisplayTime } from "@/lib/timeUtils";
-import { calculateRitualStats, ritualScheduledOnDate } from "@/lib/consistency/calculateRitualStreak";
 import { haptic } from "@/lib/haptics";
 import { CARD } from "@/components/ui/surfaces";
 import Button from "@/components/ui/Button";
-import Sparkline from "@/components/ui/Sparkline";
-import TrendChange from "@/components/ui/TrendChange";
-import IconButton from "@/components/ui/IconButton";
 
 interface OverviewDashboardProps {
   schedule: Schedule;
@@ -56,6 +52,13 @@ interface OverviewDashboardProps {
   onOpenPlan?: (planId: string) => void;
   completedRitualIds: Set<string>;
   onLogTracker: (tracker: ProgressTracker) => void;
+  /** Today's routine ring: mark done (fully followed) or take the mark back. */
+  onMarkRitualDone?: (ritualId: string) => void;
+  onUnmarkRitualDone?: (ritualId: string) => void;
+  /** Hold a task's checkbox to mark it missed. */
+  onMissedTask?: (taskId: string, subtaskIds: string[]) => void;
+  /** The empty day's "Add a task". */
+  onAddTask?: () => void;
   /** Open the recovery sheet for a missed task in "Needs attention". */
   onHandleMissed?: (missed: MissedTask) => void;
   /** Open the adaptation sheet for an off-pace milestone. */
@@ -85,39 +88,6 @@ const DAY_LABELS_FULL: Record<string, string> = {
 
 function formatHoursShort(minutes: number): string {
   return `${Math.round((minutes / 60) * 10) / 10}h`;
-}
-
-type TrackerRow = {
-  tracker: ProgressTracker;
-  latest?: { value: number };
-  /** Up to the last 8 entries, chronological — feeds the row's sparkline. */
-  series: number[];
-  trend: TrendResult | null;
-  plan?: Plan;
-};
-
-function SectionHeader({
-  icon: Icon,
-  title,
-  meta,
-}: {
-  icon: ComponentType<{ size?: number; strokeWidth?: number; className?: string }>;
-  title: string;
-  meta?: string;
-}) {
-  return (
-    <div className="mb-3 flex items-center justify-between gap-3">
-      <div className="flex min-w-0 items-center gap-2">
-        <Icon size={15} strokeWidth={2} className="shrink-0 text-neutral-500 dark:text-neutral-400" />
-        <p className="truncate text-[13px] font-bold text-neutral-800 dark:text-neutral-200">{title}</p>
-      </div>
-      {meta && (
-        <span className="shrink-0 rounded-full border border-neutral-200 bg-neutral-50 px-2 py-1 text-[11px] font-bold tabular-nums text-neutral-500 dark:border-white/[0.09] dark:bg-white/[0.04] dark:text-neutral-400">
-          {meta}
-        </span>
-      )}
-    </div>
-  );
 }
 
 /**
@@ -165,155 +135,6 @@ function CapacityCheck({ load, heaviest }: { load: LoadVerdict | null; heaviest:
         )}
       </div>
     </div>
-  );
-}
-
-/** Bucket tracker rows under their plan, preserving first-seen order. */
-function groupTrackerRowsByPlan(rows: TrackerRow[]): Array<{ key: string; plan?: Plan; rows: TrackerRow[] }> {
-  const groups: Array<{ key: string; plan?: Plan; rows: TrackerRow[] }> = [];
-  const index = new Map<string, number>();
-  for (const row of rows) {
-    const key = row.plan?.id ?? "__none__";
-    let gi = index.get(key);
-    if (gi === undefined) {
-      gi = groups.length;
-      index.set(key, gi);
-      groups.push({ key, plan: row.plan, rows: [] });
-    }
-    groups[gi].rows.push(row);
-  }
-  return groups;
-}
-
-function ActiveTrackingCard({
-  rows,
-  onNavigate,
-  onLogTracker,
-}: {
-  rows: TrackerRow[];
-  onNavigate: (tab: number) => void;
-  onLogTracker: (tracker: ProgressTracker) => void;
-}) {
-  return (
-    <section data-testid="overview-tracking-card" className={`${CARD} px-4 py-4`}>
-      <SectionHeader icon={IconTarget} title="Active tracking" meta={rows.length > 0 ? `${rows.length}` : undefined} />
-      {rows.length === 0 ? (
-        <div className="rounded-xl border border-dashed border-neutral-200 px-4 py-5 text-center dark:border-white/[0.09]">
-          <span className="mx-auto grid h-12 w-12 place-items-center rounded-xl bg-emerald-500/10 text-emerald-600 dark:bg-emerald-400/10 dark:text-emerald-400">
-            <IconChartLine size={24} strokeWidth={2} />
-          </span>
-          <p className="mt-3 text-[14px] font-bold text-neutral-900 dark:text-white">No trackers yet</p>
-          <p className="mx-auto mt-1 max-w-[250px] text-[12px] leading-snug text-neutral-500 dark:text-neutral-400">
-            Track a metric on any plan to make your progress visible here.
-          </p>
-          <Button
-            variant="secondary"
-            size="md"
-            onClick={() => { haptic("light"); onNavigate(1); }}
-            trailingIcon={<IconArrowRight size={16} strokeWidth={2.5} />}
-            className="mt-4"
-          >
-            Set up tracking
-          </Button>
-        </div>
-      ) : (
-        <div className="flex flex-col">
-          {groupTrackerRowsByPlan(rows).map((group) => (
-            <div key={group.key} className="pt-3 first:pt-1">
-              {/* Plan heading — trackers are bifurcated under the plan they
-                  belong to, so the same metric name across plans reads apart. */}
-              <div className="mb-1 flex items-center gap-2">
-                <span
-                  className={`h-2 w-2 shrink-0 rounded-full ${
-                    group.plan ? accentStyles(group.plan.color).dot : "bg-neutral-400 dark:bg-neutral-500"
-                  }`}
-                />
-                <p className="truncate text-[11px] font-bold uppercase tracking-[0.08em] text-neutral-600 dark:text-neutral-400">
-                  {group.plan?.title ?? "Other"}
-                </p>
-              </div>
-              <div className="divide-y divide-neutral-100 dark:divide-white/[0.06]">
-                {group.rows.map(({ tracker, latest, series, trend }) => {
-                  const trendColorClass =
-                    trend?.state === "positive"
-                      ? "text-emerald-500 dark:text-emerald-400"
-                      : trend?.state === "negative"
-                      ? "text-rose-500 dark:text-rose-400"
-                      : "text-neutral-500 dark:text-neutral-400";
-                  return (
-                    <div key={tracker.id} className="flex items-center gap-3 py-3">
-                      <div className="min-w-0 flex-1">
-                        <p className="truncate text-[16px] font-semibold leading-tight text-neutral-950 dark:text-white">{tracker.title}</p>
-                        <div className="mt-0.5 flex min-w-0 items-center gap-1.5">
-                          <p className="truncate text-[12px] font-medium text-neutral-500 dark:text-neutral-400">
-                            {latest ? `${latest.value}${tracker.unit ?? ""}` : "No entries yet"}
-                          </p>
-                          {trend && <TrendChange direction={trend.direction} state={trend.state} pct={trend.pct} />}
-                        </div>
-                      </div>
-                      <Sparkline values={series} className={trendColorClass} />
-                      <IconButton label={`Log ${tracker.title}`} variant="primary" size="md" onClick={() => { haptic("light"); onLogTracker(tracker); }}>
-                        <IconPlus size={18} strokeWidth={2.5} />
-                      </IconButton>
-                    </div>
-                  );
-                })}
-              </div>
-            </div>
-          ))}
-        </div>
-      )}
-    </section>
-  );
-}
-
-function RoutineConsistencyCard({
-  rows,
-}: {
-  rows: { ritual: { id: string; title: string; time: string }; streak: number; bestStreak: number; adherencePct: number; dots: boolean[]; dueToday: boolean }[];
-}) {
-  if (rows.length === 0) return null;
-  return (
-    <section data-testid="overview-routine-card" className={`${CARD} px-4 py-4`}>
-      <SectionHeader icon={IconRepeat} title="Routine consistency" meta={`${rows.length}`} />
-      <div className="divide-y divide-neutral-100 dark:divide-white/[0.06]">
-        {rows.map(({ ritual, streak, bestStreak, adherencePct, dots, dueToday }) => (
-          <div key={ritual.id} className={`flex items-center justify-between gap-3 py-3 ${dueToday ? "" : "opacity-70"}`}>
-            <div className="min-w-0">
-              <p className="truncate text-[14px] font-bold text-neutral-950 dark:text-white">
-                {ritual.title}
-                {ritual.time && <span className="ml-1.5 font-semibold text-neutral-500 dark:text-neutral-400">{formatDisplayTime(ritual.time)}</span>}
-              </p>
-              <div className="mt-1 flex items-center gap-2.5">
-                {streak > 0 && (
-                  <span className="inline-flex items-center gap-1 text-[11px] font-bold text-rose-500 dark:text-rose-400">
-                    <IconFlame size={12} strokeWidth={2} />
-                    {streak}d streak
-                  </span>
-                )}
-                {/* Best streak only earns a place here when it's actually a
-                    different (higher) number than the current run — repeating
-                    the same figure twice would read as clutter, not signal. */}
-                {bestStreak > streak && (
-                  <span className="inline-flex items-center gap-1 text-[11px] font-bold text-amber-500 dark:text-amber-400">
-                    <IconTrophy size={12} strokeWidth={2} />
-                    {bestStreak}d best
-                  </span>
-                )}
-                <span className="text-[12px] font-semibold tabular-nums text-neutral-500 dark:text-neutral-400">
-                  {adherencePct}% · 30d
-                </span>
-              </div>
-            </div>
-            <div className="flex shrink-0 gap-1">
-              {dots.map((on, i) => (
-                <span key={i} className={`h-2.5 w-2.5 rounded-full ${on ? "bg-emerald-500" : "bg-neutral-200 dark:bg-white/[0.10]"}`} />
-              ))}
-            </div>
-          </div>
-        ))}
-      </div>
-    </section>
   );
 }
 
@@ -485,6 +306,10 @@ export default function OverviewDashboard({
   onOpenPlan,
   completedRitualIds,
   onLogTracker,
+  onMarkRitualDone,
+  onUnmarkRitualDone,
+  onMissedTask,
+  onAddTask,
   onHandleMissed,
   onAdaptMilestone,
   onReviewUnreliableSlot,
@@ -498,15 +323,17 @@ export default function OverviewDashboard({
 }: OverviewDashboardProps) {
   const todayISO = localISODate(new Date());
 
-  // Next → Fix → Status → Goals → Patterns (lib/overview.ts). Desktop is the
-  // weekly review: Next is a strip in the header that hands off to Today,
-  // and the page below is about the week and the plans.
-  const nextUp = useMemo(() => selectNextUp(schedule, todayISO, todayKey), [schedule, todayISO, todayKey]);
+  // The design's nine modules (docs: ~/Documents/Over View.pdf), all read from
+  // lib/overview.ts so the phone shells show the same numbers.
+  const todayPlan = useMemo(() => selectTodayPlan(schedule, todayISO, todayKey), [schedule, todayISO, todayKey]);
+  const todayRoutines = useMemo(() => selectTodayRoutines(schedule, todayISO), [schedule, todayISO]);
+  const tracking = useMemo(() => selectActiveTracking(schedule, todayISO), [schedule, todayISO]);
+  const routineConsistency = useMemo(() => selectRoutineConsistency(schedule, todayISO), [schedule, todayISO]);
 
-  // What slipped while the app had no way to say so. Empty for a user who is
-  // on top of things, and the card renders nothing in that case.
-  const needsAttention = useMemo(
-    () => selectNeedsAttention(schedule, todayISO, todayKey, completedRitualIds),
+  // Only its at-risk routines are used now: the rest of Needs attention folds
+  // into Goals & milestones (the callout) and Active tracking (the Due badge).
+  const atRiskRitualIds = useMemo(
+    () => new Set(selectNeedsAttention(schedule, todayISO, todayKey, completedRitualIds).atRiskRituals.map((row) => row.ritual.id)),
     [schedule, todayISO, todayKey, completedRitualIds],
   );
 
@@ -550,62 +377,12 @@ export default function OverviewDashboard({
   };
   const showGettingStarted = !setupDismissed && setup.show;
 
-  const ritualConsistency = useMemo(() => {
-    const completions = schedule.ritualCompletions ?? [];
-    const trackingStart = schedule.preferences?.startDate;
-    // All routines, not just today's — an off-day routine still shows its
-    // streak/adherence so the card reviews overall follow-through. Uses the one
-    // shared streak helper so the number matches the Routine tab.
-    return (schedule.rituals ?? [])
-      .map((ritual) => {
-        const { streak, bestStreak, adherencePct, dots } = calculateRitualStats(ritual, completions, todayISO, trackingStart);
-        return { ritual, streak, bestStreak, adherencePct, dots, dueToday: ritualScheduledOnDate(ritual, todayISO, trackingStart) };
-      })
-      // Due today first, then most-at-risk (lowest adherence) so what's slipping surfaces.
-      .sort((a, b) =>
-        a.dueToday !== b.dueToday ? (a.dueToday ? -1 : 1) : a.adherencePct - b.adherencePct,
-      );
-  }, [schedule.ritualCompletions, schedule.rituals, schedule.preferences?.startDate, todayISO]);
-
-  const trackerData = useMemo<TrackerRow[]>(() =>
-    (schedule.progressTrackers ?? []).map((tracker) => {
-      const entries = (schedule.metricEntries ?? [])
-        .filter((entry) => entry.trackerId === tracker.id)
-        .sort((a, b) => b.date.localeCompare(a.date));
-      const latest = entries[0];
-      const previous = entries[1];
-      // pct/direction are well-defined regardless of goalDirection; only the
-      // "is this good?" state needs one, so it falls back to a real direction
-      // but a neutral (gray) state when we have no basis to judge the move.
-      const trend =
-        latest && previous
-          ? (() => {
-              const result = computeTrend({
-                previous: previous.value,
-                current: latest.value,
-                goalDirection: tracker.goalDirection ?? "increase_good",
-              });
-              return tracker.goalDirection ? result : { ...result, state: "neutral" as const };
-            })()
-          : null;
-      return {
-        tracker,
-        latest,
-        // Chronological (oldest first) so the sparkline reads left-to-right.
-        series: entries.slice(0, 8).reverse().map((entry) => entry.value),
-        trend,
-        plan: schedule.plans.find((plan) => plan.id === tracker.planId),
-      };
-    }),
-    [schedule.metricEntries, schedule.plans, schedule.progressTrackers]
-  );
-
   const openPlan = (planId: string) => (onOpenPlan ? onOpenPlan(planId) : onNavigate(1));
 
   return (
     <div data-testid="overview-dashboard" className="pb-24 lg:pb-8">
       <div className="mx-auto w-full max-w-[1320px] pt-5 lg:pt-4">
-        <div className="mb-4 flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
+        <div className="mb-4 flex items-end justify-between gap-3">
           <div>
             <p className="text-[13px] font-semibold text-neutral-600 dark:text-neutral-400">
               {new Date().toLocaleDateString("en-US", { weekday: "long", month: "long", day: "numeric" })}
@@ -614,84 +391,74 @@ export default function OverviewDashboard({
               Overview
             </h1>
           </div>
-          {!showGettingStarted && (
-            <NextUpCard
-              next={nextUp}
-              variant="strip"
-              onMarkDone={onMarkTaskDone}
-              onToggleSlot={onToggleSlot}
-              onOpenToday={() => onNavigate(0)}
-            />
-          )}
+          <StreakPill streak={weekStatus.streak} />
         </div>
 
         {showGettingStarted ? (
           <GettingStarted onNavigate={onNavigate} done={setupDone} onDismiss={dismissGettingStarted} />
         ) : (
-          <div className="stagger-rise grid gap-4 lg:grid-cols-[minmax(0,1.7fr)_minmax(320px,1fr)]">
-            {/* ── The review: the week, the plans, the long trends. ── */}
-            <div className="min-w-0 space-y-4">
+          <div className="stagger-rise flex flex-col gap-4">
+            {/* Today: the work, the routines, the numbers. */}
+            <div className="grid items-start gap-4 md:grid-cols-2 xl:grid-cols-3">
+              <TodayPlanCard
+                plan={todayPlan}
+                plans={schedule.plans}
+                onMarkDone={onMarkTaskDone}
+                onToggleSlot={onToggleSlot}
+                onMissed={onMissedTask}
+                onAddTask={onAddTask ?? (() => onNavigate(0))}
+              />
+              <TodayRoutineCard
+                rows={todayRoutines.rows}
+                done={todayRoutines.done}
+                total={todayRoutines.total}
+                atRiskIds={atRiskRitualIds}
+                onToggle={(id, done) => (done ? onUnmarkRitualDone?.(id) : onMarkRitualDone?.(id))}
+                onOpenRoutine={() => onNavigate(2)}
+              />
+              <ActiveTrackingCard
+                rows={tracking}
+                onLogTracker={onLogTracker}
+                onOpenTracking={() => onNavigate(8)}
+                onSetUp={() => onNavigate(1)}
+              />
+            </div>
+
+            {/* The day's shape and the goals it serves. */}
+            <div className="grid items-start gap-4 xl:grid-cols-3">
+              {hasScheduledTasks && (
+                <div data-testid="overview-day-breakdown" className={`${CARD} overflow-hidden`}>
+                  <DayBreakdownCard
+                    activities={schedule.activities}
+                    categories={schedule.categories}
+                    todayKey={todayKey}
+                    todayISO={todayISO}
+                    preferences={schedule.preferences}
+                    onFillSlot={onCreateTaskAtTime}
+                  />
+                </div>
+              )}
+              <div className={hasScheduledTasks ? "xl:col-span-2" : "xl:col-span-3"}>
+                <GoalPaceCard
+                  rows={goalPace.rows}
+                  totalCount={goalPace.totalCount}
+                  onOpenPlan={openPlan}
+                  onSeeAll={() => onNavigate(1)}
+                  onAdaptMilestone={onAdaptMilestone}
+                />
+              </div>
+            </div>
+
+            {/* The week, and the longer trend. */}
+            <div className="grid items-start gap-4 md:grid-cols-2 xl:grid-cols-3">
               <WeekStatusCard status={weekStatus}>
                 <CapacityCheck load={weekLoad} heaviest={weekHeaviestDay} />
               </WeekStatusCard>
-              <GoalPaceCard
-                rows={goalPace.rows}
-                totalCount={goalPace.totalCount}
-                onOpenPlan={openPlan}
-                onSeeAll={() => onNavigate(1)}
-              />
+              <RoutineConsistencyCard rows={routineConsistency.rows} pct={routineConsistency.pct} />
               {hasScheduledTasks && (
                 <div data-testid="overview-progress-card">
                   <CompletionTrendCard schedule={schedule} />
                 </div>
-              )}
-              <ActiveTrackingCard rows={trackerData} onNavigate={onNavigate} onLogTracker={onLogTracker} />
-            </div>
-
-            {/* ── The rail: what to act on after reading the review. ── */}
-            <div className="min-w-0 space-y-4">
-              <NeedsAttentionCard data={needsAttention} onNavigate={onNavigate} onHandleMissed={onHandleMissed} onAdaptMilestone={onAdaptMilestone} onReviewUnreliableSlot={onReviewUnreliableSlot} onClearAll={onClearAttention ? () => onClearAttention(needsAttention) : undefined} onDismissOne={onDismissAttentionOne} />
-              {/* Trackers waiting on this period's entry — renders nothing
-                  once every check-in is in. */}
-              <CheckInsDueCard
-                trackers={schedule.progressTrackers ?? []}
-                metricEntries={schedule.metricEntries ?? []}
-                todayISO={todayISO}
-                trackingStart={schedule.preferences?.startDate}
-                onLog={onLogTracker}
-                onOpenTracking={() => onNavigate(8)}
-              />
-              {/* The weekly read: what the record says, what to change.
-                  Hidden until there's history to read. */}
-              {setSchedule && (
-                <InsightsCard
-                  schedule={schedule}
-                  setSchedule={setSchedule}
-                  onToast={onToast}
-                  onReviewTask={onReviewTask}
-                  onReviewDay={onReviewDay}
-                />
-              )}
-              <RoutineConsistencyCard rows={ritualConsistency} />
-              {/* Planning the day belongs on the planner; until it moves there
-                  it stays reachable here, folded away from the review. */}
-              {hasScheduledTasks && (
-                <details data-testid="overview-day-breakdown" className={`${CARD} group`}>
-                  <summary className="flex min-h-[48px] cursor-pointer list-none items-center justify-between gap-3 px-4 text-[13px] font-bold text-neutral-800 dark:text-neutral-200 [&::-webkit-details-marker]:hidden">
-                    Where today goes
-                    <IconChevronDown size={16} strokeWidth={2.2} className="text-neutral-500 transition-transform group-open:rotate-180 motion-reduce:transition-none" aria-hidden />
-                  </summary>
-                  <div className="px-1 pb-1">
-                    <DayBreakdownCard
-                      activities={schedule.activities}
-                      categories={schedule.categories}
-                      todayKey={todayKey}
-                      todayISO={todayISO}
-                      preferences={schedule.preferences}
-                      onFillSlot={onCreateTaskAtTime}
-                    />
-                  </div>
-                </details>
               )}
             </div>
           </div>

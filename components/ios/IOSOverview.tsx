@@ -1,24 +1,28 @@
 "use client";
 
 import { useMemo } from "react";
-import dynamic from "next/dynamic";
 import { IconCalendar, IconCheck, IconChevronRight, IconClipboardList, IconRepeat } from "@tabler/icons-react";
 import type { DayKey, ProgressTracker, Schedule, Task } from "@/lib/useScheduleDB";
 import type { MissedTask, NeedsAttention, UnreliableSlotTask } from "@/lib/needsAttention";
-import { selectGoalPace, selectNextUp, selectSetupSteps, selectWeekStatus, type SetupStep } from "@/lib/overview";
+import {
+  selectActiveTracking,
+  selectGoalPace,
+  selectSetupSteps,
+  selectTodayPlan,
+  selectTodayRoutines,
+  selectWeekStatus,
+  type SetupStep,
+} from "@/lib/overview";
 import { localISODate } from "@/lib/dateUtils";
 import { haptic } from "@/lib/haptics";
-import NeedsAttentionCard from "@/components/NeedsAttentionCard";
-import NextUpCard from "@/components/overview/NextUpCard";
 import WeekStatusCard from "@/components/overview/WeekStatusCard";
 import GoalPaceCard from "@/components/overview/GoalPaceCard";
-import DaySpreadCard from "@/components/overview/DaySpreadCard";
-import { buildDaySpread } from "@/lib/daySpread";
+import TodayPlanCard from "@/components/overview/TodayPlanCard";
+import TodayRoutineCard from "@/components/overview/TodayRoutineCard";
+import ActiveTrackingCard from "@/components/overview/ActiveTrackingCard";
 import type { InsightToast } from "@/components/intelligence/InsightsCard";
 import Button from "@/components/ui/Button";
 
-const InsightsCard = dynamic(() => import("@/components/intelligence/InsightsCard"), { ssr: false });
-const CheckInsDueCard = dynamic(() => import("@/components/tracking/CheckInsDueCard"), { ssr: false });
 
 const SETUP_ICON: Record<SetupStep["key"], typeof IconCalendar> = {
   plan: IconClipboardList,
@@ -28,10 +32,13 @@ const SETUP_ICON: Record<SetupStep["key"], typeof IconCalendar> = {
 
 /** Goal rows on the phone: enough to see what's slipping, not a second Plans tab. */
 const MOBILE_GOAL_ROWS = 3;
+/** Trackers on the phone; the rest are a tap away on Tracking. */
+const MOBILE_TRACKER_ROWS = 3;
 
 /**
- * The phone's Overview: status at a glance, plus quick fixes. Same order as
- * every Overview (lib/overview.ts): Next → Fix → Status → Goals → Patterns.
+ * The phone's Overview: the daily-execution part of the Overview design —
+ * today's tasks, routines and trackers, then the goals and the week. Every
+ * number comes from lib/overview.ts, so it matches desktop and native.
  * Each block is short and taps through to the screen that owns the detail.
  * apps/native/src/components/ios/IOSOverview.tsx is the native twin — keep
  * the two in step.
@@ -55,6 +62,9 @@ export default function IOSOverview({
   onClearAttention,
   onDismissAttentionOne,
   onLogTracker,
+  onMissedTask,
+  onMarkRitualDone,
+  onUnmarkRitualDone,
   onToast,
   onReviewTask,
   onReviewDay,
@@ -79,15 +89,26 @@ export default function IOSOverview({
   onClearAttention: () => void;
   onDismissAttentionOne: (key: string) => void;
   onLogTracker: (tracker: ProgressTracker) => void;
+  /** Hold a task's checkbox to mark it missed. */
+  onMissedTask: (taskId: string, subtaskIds: string[]) => void;
+  /** Today's routine ring: mark done (fully followed) or take the mark back. */
+  onMarkRitualDone: (ritualId: string) => void;
+  onUnmarkRitualDone: (ritualId: string) => void;
   onToast: (toast: InsightToast) => void;
   onReviewTask: (task: Task) => void;
   onReviewDay: (day: DayKey) => void;
 }) {
   const todayISO = localISODate(new Date());
   const setup = useMemo(() => selectSetupSteps(schedule), [schedule]);
-  const nextUp = useMemo(() => selectNextUp(schedule, todayISO, todayKey), [schedule, todayISO, todayKey]);
+  const todayPlan = useMemo(() => selectTodayPlan(schedule, todayISO, todayKey), [schedule, todayISO, todayKey]);
+  const todayRoutines = useMemo(() => selectTodayRoutines(schedule, todayISO), [schedule, todayISO]);
+  const tracking = useMemo(() => selectActiveTracking(schedule, todayISO), [schedule, todayISO]);
   const weekStatus = useMemo(() => selectWeekStatus(schedule, todayISO), [schedule, todayISO]);
-  const daySpread = useMemo(() => buildDaySpread(schedule, todayKey, todayISO), [schedule, todayKey, todayISO]);
+  // The at-risk routines from Needs attention, shown on their own rows.
+  const atRiskRitualIds = useMemo(
+    () => new Set(needsAttention.atRiskRituals.map((row) => row.ritual.id)),
+    [needsAttention],
+  );
   const goalPace = useMemo(
     () => selectGoalPace(schedule, { limit: MOBILE_GOAL_ROWS, withMilestoneOnly: true }),
     [schedule],
@@ -174,53 +195,45 @@ export default function IOSOverview({
         </section>
       )}
 
-      {/* Next — the first answer. */}
-      <NextUpCard next={nextUp} streak={weekStatus.streak} onMarkDone={onMarkDone} onToggleSlot={onToggleSlot} onOpenToday={() => onNavigate(0)} onAddTask={onAddTask} />
-
-      {/* Fix — both render nothing when all clear. */}
-      <NeedsAttentionCard
-        data={needsAttention}
-        onNavigate={onNavigate}
-        onHandleMissed={onHandleMissed}
-        onAdaptMilestone={onAdaptMilestone}
-        onReviewUnreliableSlot={onReviewUnreliableSlot}
-        onClearAll={onClearAttention}
-        onDismissOne={onDismissAttentionOne}
+      {/* The execution core of the Overview (desktop adds the day's shape
+          and the longer trends). Same selectors as desktop and native. */}
+      <TodayPlanCard
+        plan={todayPlan}
+        plans={schedule.plans}
+        onMarkDone={onMarkDone}
+        onToggleSlot={onToggleSlot}
+        onMissed={onMissedTask}
+        onAddTask={onAddTask}
+        streak={weekStatus.streak}
       />
-      <CheckInsDueCard
-        trackers={schedule.progressTrackers}
-        metricEntries={schedule.metricEntries}
-        todayISO={todayISO}
-        trackingStart={schedule.preferences?.startDate}
-        onLog={onLogTracker}
+
+      <TodayRoutineCard
+        rows={todayRoutines.rows}
+        done={todayRoutines.done}
+        total={todayRoutines.total}
+        atRiskIds={atRiskRitualIds}
+        onToggle={(id, done) => (done ? onUnmarkRitualDone(id) : onMarkRitualDone(id))}
+        onOpenRoutine={() => onNavigate(2)}
+      />
+
+      <ActiveTrackingCard
+        rows={tracking}
+        limit={MOBILE_TRACKER_ROWS}
+        onLogTracker={onLogTracker}
         onOpenTracking={() => onNavigate(8)}
+        onSetUp={() => onNavigate(1)}
       />
 
-      {/* Status — the week in one card, streak included. */}
-      {/* Today — where the waking hours go; nothing when nothing is booked. */}
-      <DaySpreadCard spread={daySpread} onOpen={() => onNavigate(0)} />
-
-      <WeekStatusCard status={weekStatus} compact onOpen={() => { haptic("light"); onNavigate(0); }} />
-
-      {/* Goals — worst first; hidden when no plan has a milestone to pace. */}
       <GoalPaceCard
         rows={goalPace.rows}
         totalCount={goalPace.totalCount}
         compact
         onOpenPlan={onOpenPlan}
         onSeeAll={() => onNavigate(1)}
+        onAdaptMilestone={onAdaptMilestone}
       />
 
-      {/* Patterns — the weekly read. Pattern engine only on iPhone (no
-          language model runs in Safari/the PWA), so it costs no model memory. */}
-      <InsightsCard
-        bare
-        schedule={schedule}
-        setSchedule={setSchedule}
-        onToast={onToast}
-        onReviewTask={onReviewTask}
-        onReviewDay={onReviewDay}
-      />
+      <WeekStatusCard status={weekStatus} compact onOpen={() => { haptic("light"); onNavigate(0); }} />
     </div>
   );
 }

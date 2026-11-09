@@ -325,28 +325,27 @@ async function expectOverviewDashboard(page: Page, isMobile: boolean) {
   const dashboard = page.getByTestId("overview-dashboard");
   await expect(dashboard).toBeVisible();
 
-  // Next → Fix → Status → Goals → Patterns (lib/overview.ts): "Next up"
-  // leads on both surfaces.
-  await expect(page.getByTestId("overview-next-task")).toContainText("Morning Run");
-  await expect(page.getByTestId("overview-week-status")).toContainText("This week");
+  // Execution first on both surfaces (lib/overview.ts): today's tasks,
+  // routines and trackers, then the goals and the week.
+  await expect(page.getByTestId("overview-today-plan")).toContainText("Morning Run");
+  await expect(page.getByTestId("overview-today-routine")).toBeVisible();
+  await expect(page.getByTestId("overview-tracking-card")).toContainText("Run Distance");
+  await expect(page.getByTestId("overview-week-status")).toContainText("Weekly progress");
 
   if (isMobile) {
     await expect(page.getByText("Current Task")).toHaveCount(0);
-    // The streak folded into the week card; the strategy cards stay on desktop.
-    await expect(page.getByTestId("overview-streak-card")).toHaveCount(0);
-    await expect(page.getByTestId("overview-tracking-card")).toHaveCount(0);
-    await expect(page.getByTestId("overview-plan-card")).toHaveCount(0);
+    // The strategy cards stay on desktop.
+    await expect(page.getByTestId("overview-day-breakdown")).toHaveCount(0);
     await expect(page.getByTestId("overview-routine-card")).toHaveCount(0);
-    const nextTaskBox = await page.getByTestId("overview-next-task").boundingBox();
+    await expect(page.getByTestId("overview-progress-card")).toHaveCount(0);
+    const planBox = await page.getByTestId("overview-today-plan").boundingBox();
     const weekBox = await page.getByTestId("overview-week-status").boundingBox();
-    expect(nextTaskBox).not.toBeNull();
+    expect(planBox).not.toBeNull();
     expect(weekBox).not.toBeNull();
-    expect(nextTaskBox!.y).toBeLessThan(weekBox!.y);
+    expect(planBox!.y).toBeLessThan(weekBox!.y);
   } else {
-    // Desktop is the weekly review: Today owns the task list.
-    await expect(page.getByTestId("overview-today-card")).toHaveCount(0);
+    await expect(page.getByTestId("overview-day-breakdown")).toBeVisible();
     await expect(page.getByTestId("overview-progress-card")).toContainText("Task completion trend");
-    await expect(page.getByTestId("overview-tracking-card")).toContainText("Run Distance");
     await expect(page.getByTestId("overview-goal-pace")).toContainText("Cardio");
     await expect(page.getByTestId("overview-routine-card")).toContainText("Hydrate");
   }
@@ -448,8 +447,7 @@ async function expectDesktopSchedule(page: Page) {
 }
 
 async function expectMobileSchedule(page: Page) {
-  await openSeededApp(page, "/?mobileShell=1", "Dashboard");
-  await expect(page.getByText("Dashboard").first()).toBeVisible();
+  await openSeededApp(page, "/?mobileShell=1", "Weekly progress");
   await expectOverviewDashboard(page, true);
 
   await page.getByRole("navigation", { name: "Main navigation" }).getByRole("button", { name: "Today" }).click();
@@ -474,19 +472,20 @@ test("renders seeded schedule in the configured viewport", async ({ page }, test
   await assertNoRuntimeErrors();
 });
 
-test("Next up marks the next task done from Overview", async ({ page }, testInfo) => {
+test("Today's plan marks a task done from Overview", async ({ page }, testInfo) => {
   const assertNoRuntimeErrors = collectRuntimeErrors(page, testInfo);
 
   await openSeededApp(page);
   await page.getByText("Overview", { exact: true }).first().click();
 
-  const next = page.getByTestId("overview-next-task");
-  await expect(next).toContainText("Morning Run");
-  // Desktop names the task in the label; the phone card's button reads "Mark done".
-  await next.getByRole("button", { name: /^Mark (Morning Run )?done$/ }).click();
+  const plan = page.getByTestId("overview-today-plan");
+  await expect(plan).toContainText("Morning Run");
+  const pctBefore = await plan.getByText(/^\d+%$/).first().textContent();
+  // Checking a row is the one-tap "mark done".
+  await plan.getByRole("button", { name: "Not completed, Mark done" }).first().click();
 
-  // The card moves on to whatever is next (or reports the day done).
-  await expect(next).not.toContainText("Morning Run");
+  await expect(plan.getByRole("button", { name: "Completed, Mark not done" }).first()).toBeVisible();
+  await expect(plan.getByText(/^\d+%$/).first()).not.toHaveText(pctBefore ?? "");
   await expect(page.getByTestId("overview-week-status")).toBeVisible();
 
   await expectNoBannedVisualEffects(page);

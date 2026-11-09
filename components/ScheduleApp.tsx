@@ -4716,6 +4716,10 @@ export default function ScheduleApp() {
                 onOpenPlan={(planId) => { setActiveTab(1); setSelectedPlanId(planId); }}
                 completedRitualIds={completedRitualIds}
                 onLogTracker={(tracker) => setEntryTracker(tracker)}
+                onMarkRitualDone={(id) => handleMarkRitualDone(id, todayISO(), 100)}
+                onUnmarkRitualDone={(id) => handleUnmarkRitualDone(id, todayISO())}
+                onMissedTask={(id, ids) => handleMarkTaskMissed(id, ids, todayKey, todayISO())}
+                onAddTask={() => { setActiveDay(todayKey); openCreateSheet(); }}
                 onHandleMissed={setMissedSheet}
                 onAdaptMilestone={setAdaptingMilestoneId}
                 onReviewUnreliableSlot={(row) => openEditSheet(row.task)}
