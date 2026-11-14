@@ -45,7 +45,7 @@ registerHooks({
   },
 });
 const { migrate } = await import("@/lib/scheduleMigrate.ts");
-const { selectNextUp, selectWeekStatus } = await import("@/lib/overview.ts");
+const { selectNextUp, selectWeekStatus, selectTodayPlan } = await import("@/lib/overview.ts");
 const { buildDaySpread } = await import("@/lib/daySpread.ts");
 const { buildActiveDates } = await import("@/lib/consistency/calculateExecutionStreak.ts");
 const { collectRemindersFor, DEFAULT_REMINDER_SETTINGS } = await import("@/packages/core/lib/reminders.ts");
@@ -131,4 +131,17 @@ test("a timed session gets a reminder", () => {
   assert.equal(out[0].title, "Easy run");
   assert.equal(out[0].body, "Starts now · 6:00 PM · 3 km easy");
   assert.equal(collectRemindersFor(schedule({ sessions: [session("s1")] }), { ...settings, tasks: false }, now).length, 0);
+});
+
+test("today's plan lists today's sessions and counts them", () => {
+  const s = withTask(schedule({ sessions: [session("s1", { status: "done" }), session("s2", { startTime: "07:00" }), session("skip", { status: "skipped" })] }), "09:00 AM");
+  const today = selectTodayPlan(s, TODAY, "wednesday");
+  assert.deepEqual(today.sessions.map((r) => r.session.id), ["s2", "s1"]);
+  assert.equal(today.sessions[0].timeLabel, "7:00 AM");
+  assert.equal(today.sessions[0].headline, "3 km easy");
+  assert.equal(today.sessions[1].state, "done");
+  assert.equal(today.sessions[0].plan.id, "p1");
+  assert.equal(today.total, 3);
+  assert.equal(today.done, 1);
+  assert.equal(today.pct, 33);
 });

@@ -17,7 +17,7 @@ import type { DayKey, Milestone, Plan, Ritual, Schedule, Session, Task } from ".
 import { DAYS } from "./scheduleConstants";
 import { addDaysToISO, localISODate } from "./dateUtils";
 import { formatDisplayTime, parseTimeToMinutes } from "./timeUtils";
-import { sessionState, sessionsForDate } from "./sessions";
+import { headline, sessionState, sessionsForDate, type SessionState } from "./sessions";
 import { isPlanRunning } from "./planLifecycle";
 import { getPlanCardStats } from "./planInsights";
 import { getSlots } from "./taskMutations";
@@ -488,8 +488,21 @@ export interface TodayPlanRow {
   checkableIds: string[];
 }
 
+/** A session on today's plan: a run listed beside the tasks. */
+export interface TodayPlanSessionRow {
+  session: Session;
+  plan: Plan | null;
+  /** "6:00 PM", or "" for an any-time session. */
+  timeLabel: string;
+  state: SessionState;
+  /** "1 km easy · 4 × 400 m @ 5:40/km · 1 km easy". */
+  headline: string;
+}
+
 export interface TodayPlan {
   rows: TodayPlanRow[];
+  /** Today's sessions (skipped ones left out), in the order Today shows them. */
+  sessions: TodayPlanSessionRow[];
   done: number;
   total: number;
   pct: number;
@@ -518,7 +531,18 @@ export function selectTodayPlan(schedule: Schedule, todayISO: string, todayKey: 
       checkableIds: getTaskCheckableItems(task, plan).map((item) => item.id),
     };
   });
-  return { rows, done, total, pct: ratioPct(done, total) };
+  const sessions = sessionsForDate(schedule, todayISO)
+    .filter((s) => s.status !== "skipped")
+    .map((session): TodayPlanSessionRow => ({
+      session,
+      plan: plansById.get(session.planId) ?? null,
+      timeLabel: formatDisplayTime(session.startTime),
+      state: sessionState(session, todayISO),
+      headline: headline(session),
+    }));
+  const allDone = done + sessions.filter((r) => r.state === "done").length;
+  const allTotal = total + sessions.length;
+  return { rows, sessions, done: allDone, total: allTotal, pct: ratioPct(allDone, allTotal) };
 }
 
 // ── Today's routines ─────────────────────────────────────────────────────────
