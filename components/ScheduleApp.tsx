@@ -229,6 +229,12 @@ import { buildDeleteConfirmationCopy } from "@/lib/deleteConfirm";
 import { resolveCustomVisibleDates } from "@/lib/customView";
 import { typography } from "@/components/ui/Typography";
 import { setMilestoneLink } from "@/lib/milestoneAutoLinks";
+import SessionDetailSheet from "@/components/session/SessionDetailSheet";
+import RunPlanSetupSheet from "@/components/session/RunPlanSetupSheet";
+import { actualFor, deletePlanSessions, sessionState } from "@/lib/sessions";
+import { createRunPlan, updateRunInputs } from "@/lib/runPlan";
+import { decideAdjustment, evaluateFinishedWeeks } from "@/lib/runAdjustments";
+import type { RunPlanInputs } from "@/lib/useScheduleDB";
 
 // ─── Constants ───────────────────────────────────────────────────────────────
 
@@ -939,6 +945,9 @@ export default function ScheduleApp() {
 
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [templatesOpen, setTemplatesOpen] = useState(false);
+  // Run sessions: desktop shows them read-only (the phone is where runs are logged).
+  const [sessionDetailId, setSessionDetailId] = useState<string | null>(null);
+  const [runSetupOpen, setRunSetupOpen] = useState(false);
   const [wallpaperOpen, setWallpaperOpen] = useState(false);
   const [dayActionsOpen, setDayActionsOpen] = useState(false);
   /** The weekday awaiting a "clear day" confirmation, or null. */
@@ -1094,6 +1103,12 @@ export default function ScheduleApp() {
     // identically from the date. Recording it as an edit would let a device
     // that was merely left open outrank one that actually did work.
     setSchedule((prev) => resetStaleCompletions(prev, todayISO()), { stamp: false });
+  }, [todayKey, ready, setSchedule]);
+
+  // A finished plan week may bring one suggestion for the next (lib/runAdjustments).
+  useEffect(() => {
+    if (!ready) return;
+    setSchedule((prev) => evaluateFinishedWeeks(prev, todayISO(), new Date().toISOString()));
   }, [todayKey, ready, setSchedule]);
 
   useEffect(() => {
@@ -2237,7 +2252,9 @@ export default function ScheduleApp() {
         description: "All tasks, trackers, and entries linked to this plan will also be deleted.",
       }),
       () => {
-        setSchedule((prev) => ({
+        setSchedule((current) => {
+          const prev = deletePlanSessions(current, planId);
+          return {
           ...prev,
           plans: prev.plans.filter((p) => p.id !== planId),
           activities: Object.fromEntries(
@@ -2246,7 +2263,8 @@ export default function ScheduleApp() {
           metricEntries: prev.metricEntries.filter((e) => e.planId !== planId),
           progressTrackers: prev.progressTrackers.filter((t) => t.planId !== planId),
           milestones: prev.milestones.filter((m) => m.planId !== planId),
-        }));
+          };
+        });
         setSelectedPlanId((cur) => (cur === planId ? null : cur));
       }
     );
@@ -3855,7 +3873,42 @@ export default function ScheduleApp() {
           onOpenAI={() => { setSettingsOpen(false); setActiveTab(7); }}
         />
       )}
-      <TemplatesSheet open={templatesOpen} onClose={() => setTemplatesOpen(false)} onApply={handleApplyTemplate} />
+      <TemplatesSheet
+        open={templatesOpen}
+        onClose={() => setTemplatesOpen(false)}
+        onApply={handleApplyTemplate}
+        onRun5k={() => { setTemplatesOpen(false); setRunSetupOpen(true); }}
+      />
+      <RunPlanSetupSheet
+        open={runSetupOpen}
+        onClose={() => setRunSetupOpen(false)}
+        onCreate={(inputs: RunPlanInputs, createGoal: boolean) => {
+          const { schedule: next, planId } = createRunPlan(schedule, inputs, { createGoal }, new Date().toISOString());
+          setSchedule(() => next);
+          setRunSetupOpen(false);
+          setActiveTab(1);
+          setSelectedPlanId(planId);
+        }}
+      />
+      {(() => {
+        const session = sessionDetailId ? schedule.sessions?.find((s) => s.id === sessionDetailId) ?? null : null;
+        return (
+          <SessionDetailSheet
+            open={!!session}
+            session={session}
+            state={session ? sessionState(session, todayISO()) : "planned"}
+            actual={session ? actualFor(schedule, session.id) : undefined}
+            planTitle={session ? schedule.plans.find((p) => p.id === session.planId)?.title : undefined}
+            readOnly
+            onClose={() => setSessionDetailId(null)}
+            onLog={() => {}}
+            onMarkDone={() => {}}
+            onUndo={() => {}}
+            onSkip={() => {}}
+            onMove={() => {}}
+          />
+        );
+      })()}
 
       <DayWallpaperSheet
         open={wallpaperOpen}
@@ -4568,6 +4621,13 @@ export default function ScheduleApp() {
           {selectedPlan ? (
             <ErrorBoundary section name="Plans">
             <PlanDetailView
+              onOpenSession={setSessionDetailId}
+              onDecideAdjustment={(id, decision) =>
+                setSchedule((prev) => decideAdjustment(prev, id, decision, todayISO(), new Date().toISOString()))
+              }
+              onUpdateRunInputs={(planId, patch) =>
+                setSchedule((prev) => updateRunInputs(prev, planId, patch, todayISO(), new Date().toISOString()))
+              }
               onSetMilestoneLink={handleSetMilestoneLink}
               plan={selectedPlan}
               schedule={schedule}
@@ -4708,6 +4768,7 @@ export default function ScheduleApp() {
               />
             ) : (
               <OverviewDashboard
+                onOpenSession={setSessionDetailId}
                 schedule={schedule}
                 todayKey={todayKey}
                 onNavigate={(tab) => { setActiveTab(tab); setSelectedPlanId(null); }}
