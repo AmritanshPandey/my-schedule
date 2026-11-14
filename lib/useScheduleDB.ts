@@ -21,6 +21,7 @@ import { validateSchedule } from "@/lib/scheduleSchema";
 import { mergeSchedules, resolveLocalWrite } from "@/lib/mergeSchedule";
 import { onLocalWrite, publishLocalWrite } from "@/lib/tabSync";
 import { stampSchedule } from "@/lib/stampSchedule";
+import { clearSessionProgress } from "@/lib/sessions";
 
 // ─── Shared domain types (packages/core/lib/scheduleTypes.ts) ─────────────
 // Moved out so apps/native can use the same types via @planr/core. Re-exported
@@ -684,7 +685,7 @@ export function useScheduleDB() {
           return { ...rest, status: "upcoming" as const, completionStatus: "pending" as const };
         }),
       );
-      return { ...schedule, activities, milestones, ritualCompletions: [], metricEntries: [] };
+      return { ...schedule, activities, milestones, ritualCompletions: [], metricEntries: [], ...clearSessionProgress(schedule) };
     })();
     // Cleared ritual check-ins and metric rows are deletions; the reset tasks
     // and milestones are edits. Both need recording or the merge undoes them.

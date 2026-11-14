@@ -44,7 +44,7 @@ import { MIN_SLEEP_HOURS, MAX_SLEEP_HOURS } from "./timeline/sleepWindow";
 import { normalizeTasks, entryToTask, resetStaleCompletions } from "./scheduleNormalize";
 import { applyAutoMissed } from "./consistency/autoMiss";
 import { CategoryRegistry } from "./taskCategories";
-import { validateSchedule } from "./scheduleSchema";
+import { validateSchedule, PlanGeneratorSchema, SessionSchema, SessionLogSchema, PlanAdjustmentSchema } from "./scheduleSchema";
 import { entityMap, normalizeSyncMeta } from "./stampSchedule";
 import { retireTimesRituals } from "./ritualMigrations";
 
@@ -173,6 +173,9 @@ function normalizePlan(value: unknown): Plan | null {
     goals: Array.isArray(p.goals) ? p.goals : [],
     metric,
     coachMessages,
+    generator: PlanGeneratorSchema.safeParse((value as { generator?: unknown }).generator).success
+      ? (value as Plan).generator
+      : undefined,
     goalId: typeof (p as Plan & { goalId?: unknown }).goalId === "string" ? (p as Plan & { goalId: string }).goalId : undefined,
     // Anything unrecognised (including absent, the case for every Plan that
     // predates this field) normalizes to "active" — a stored plan must never
@@ -567,6 +570,9 @@ export function migrate(raw: unknown): Schedule {
       rituals,
       ritualCompletions,
       notes,
+      sessions: normalizeRows(r.sessions, SessionSchema),
+      sessionLogs: normalizeRows(r.sessionLogs, SessionLogSchema),
+      planAdjustments: normalizeRows(r.planAdjustments, PlanAdjustmentSchema),
       events: normalizeScheduleEvents(r.events),
       preferences,
       // Carried raw here and pruned once in safeMigrate, where the final live
@@ -602,6 +608,9 @@ export function migrate(raw: unknown): Schedule {
       rituals: [],
       ritualCompletions: [],
       notes: normalizeNotes(r.notes),
+      sessions: normalizeRows(r.sessions, SessionSchema),
+      sessionLogs: normalizeRows(r.sessionLogs, SessionLogSchema),
+      planAdjustments: normalizeRows(r.planAdjustments, PlanAdjustmentSchema),
       events: normalizeScheduleEvents(r.events),
       preferences,
       // Carried raw here and pruned once in safeMigrate, where the final live
@@ -645,6 +654,9 @@ export function migrate(raw: unknown): Schedule {
     rituals: [],
     ritualCompletions: [],
     notes: normalizeNotes(r.notes),
+    sessions: normalizeRows(r.sessions, SessionSchema),
+    sessionLogs: normalizeRows(r.sessionLogs, SessionLogSchema),
+    planAdjustments: normalizeRows(r.planAdjustments, PlanAdjustmentSchema),
     events: normalizeScheduleEvents(r.events),
     preferences,
     syncMeta: r.syncMeta as ScheduleSyncMeta | undefined,
@@ -669,6 +681,12 @@ function normalizeNoteTags(raw: unknown): string[] | undefined {
     if (tags.length >= MAX_NOTE_TAGS) break;
   }
   return tags.length > 0 ? tags : undefined;
+}
+
+/** Keep only rows that pass their schema: a malformed row is dropped, never repaired into a wrong one. */
+function normalizeRows<T>(raw: unknown, schema: { safeParse: (v: unknown) => { success: boolean } }): T[] {
+  if (!Array.isArray(raw)) return [];
+  return (raw as unknown[]).filter((row) => schema.safeParse(row).success) as T[];
 }
 
 function normalizeNotes(raw: unknown): Note[] {
@@ -762,6 +780,9 @@ export function emptySchedule(): Schedule {
     rituals: [],
     ritualCompletions: [],
     notes: [],
+    sessions: [],
+    sessionLogs: [],
+    planAdjustments: [],
     events: [],
     preferences: {},
   };

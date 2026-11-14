@@ -276,6 +276,96 @@ export interface Plan {
    * a failing streak, not a silent way to keep failing.
    */
   status?: PlanLifecycle;
+  /** Set on a plan built by a generating template (the 5K): what to rebuild its future sessions from. */
+  generator?: PlanGenerator;
+}
+
+/** What the "Run a 5K" template asks for. Distances in km, paces in seconds per km. */
+export interface RunPlanInputs {
+  currentDistanceKm: number;
+  easyPaceSecPerKm: number;
+  targetDistanceKm: number;
+  /** Absent = "just finish". */
+  targetPaceSecPerKm?: number;
+  weeks: number;
+  runDays: DayKey[];
+  /** "HH:MM" 24-hour; absent = any time that day. */
+  startTime?: string;
+  /** ISO "YYYY-MM-DD", day one of week one. */
+  startISO: string;
+}
+
+export interface PlanGenerator {
+  templateId: string;
+  inputs: RunPlanInputs;
+  /** Bumped whenever the inputs change, so rebuilt sessions can be told apart. */
+  inputsVersion: number;
+}
+
+/**
+ * A dated, individually planned occurrence of a routine within a plan: the
+ * Session in Goal → Plan → Routine → Session → Task → Execution. Its tasks are
+ * what was PLANNED; what actually happened lives in SessionLog and never
+ * overwrites them.
+ */
+export interface Session {
+  id: string;
+  planId: string;
+  /** "easy" | "intervals" | "tempo" | "long" | "race" for running; free string per domain. */
+  routineKey?: string;
+  title: string;
+  dateISO: string;
+  /** "HH:MM" 24-hour; absent = any time that day. */
+  startTime?: string;
+  estimatedMinutes?: number;
+  tasks: SessionTask[];
+  /** "missed" is derived: planned and the date has passed (sessions.ts). */
+  status: "planned" | "done" | "skipped";
+  generated?: { weekIndex: number; slot: number; inputsVersion: number };
+  /** Set when the user edits or moves it by hand; a rebuild never touches it again. */
+  editedAt?: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+/** Base task plus a typed payload: a new kind joins the union without touching the base. */
+export type SessionTask =
+  | { id: string; kind: "simple"; title: string; notes?: string }
+  | {
+      id: string;
+      kind: "distance";
+      title: string;
+      notes?: string;
+      plan: { distanceM: number; paceSecPerKm?: number; repeats?: number; restSec?: number };
+    };
+
+export type RunEffort = "easy" | "ok" | "hard";
+
+/** What actually happened in a session. Never written into the Session itself. */
+export interface SessionLog {
+  id: string;
+  sessionId: string;
+  source: "mark" | "manual" | "health";
+  actual?: { distanceM: number; durationSec: number; effort?: RunEffort };
+  /** HealthKit workout UUID, so the same run is never logged twice. */
+  healthWorkoutId?: string;
+  note?: string;
+  loggedAt: string;
+}
+
+/** A proposed change to a generated plan. Nothing changes until it is accepted. */
+export interface PlanAdjustment {
+  id: string;
+  planId: string;
+  /** The plan week it applies from (1-based). */
+  weekIndex: number;
+  kind: "pace" | "repeat-week" | "ease";
+  detail: Record<string, number>;
+  /** Plain-language why, shown to the user. */
+  reason: string;
+  decision: "pending" | "accepted" | "held";
+  decidedAt?: string;
+  createdAt: string;
 }
 
 export interface ProgressTracker {
@@ -635,6 +725,10 @@ export interface Schedule {
   ritualCompletions: RitualCompletion[];
   notes: Note[];
   events: ScheduleEvent[];
+  /** Optional at the boundary: schedules written before sessions existed have none. */
+  sessions?: Session[];
+  sessionLogs?: SessionLog[];
+  planAdjustments?: PlanAdjustment[];
   preferences: SchedulePreferences;
   /**
    * Which entities changed or were deleted, and when — the bookkeeping the

@@ -25,6 +25,9 @@ import type {
   MetricEntry,
   Milestone,
   Note,
+  PlanAdjustment,
+  Session,
+  SessionLog,
   Plan,
   ProgressTracker,
   Ritual,
@@ -338,6 +341,11 @@ export function mergeSchedules(a: MergeSide, b: MergeSide): Schedule {
       ),
     ),
     notes: collect(mergeKeyed<Note>(a.schedule.notes, b.schedule.notes, byId(NS.note), at, bt)),
+    sessions: collect(mergeKeyed<Session>(a.schedule.sessions, b.schedule.sessions, byId(NS.session), at, bt)),
+    sessionLogs: collect(mergeKeyed<SessionLog>(a.schedule.sessionLogs, b.schedule.sessionLogs, byId(NS.sessionLog), at, bt)),
+    planAdjustments: collect(
+      mergeKeyed<PlanAdjustment>(a.schedule.planAdjustments, b.schedule.planAdjustments, byId(NS.planAdjustment), at, bt),
+    ),
     events: mergeEvents(a.schedule.events, b.schedule.events),
     preferences: mergePreferences(a, b),
   };

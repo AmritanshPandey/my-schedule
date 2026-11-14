@@ -51,6 +51,9 @@ export const NS = {
   ritual: "r",
   ritualCompletion: "x",
   note: "n",
+  session: "ss",
+  sessionLog: "sl",
+  planAdjustment: "pa",
 } as const;
 
 export function entityKey(ns: string, id: string): string {
@@ -96,6 +99,9 @@ export function entityMap(schedule: Schedule): Map<string, unknown> {
     [NS.milestone, schedule.milestones],
     [NS.ritual, schedule.rituals],
     [NS.note, schedule.notes],
+    [NS.session, schedule.sessions],
+    [NS.sessionLog, schedule.sessionLogs],
+    [NS.planAdjustment, schedule.planAdjustments],
   ];
   for (const [ns, items] of simple) {
     for (const item of items ?? []) map.set(entityKey(ns, item.id), item);

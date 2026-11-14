@@ -38,6 +38,7 @@ import { pushHistory, popHistory, HISTORY_LIMIT } from '@planr/core/lib/schedule
 import { validateSchedule } from '@planr/core/lib/scheduleSchema';
 import { mergeSchedules } from '@planr/core/lib/mergeSchedule';
 import { stampSchedule } from '@planr/core/lib/stampSchedule';
+import { clearSessionProgress } from '@planr/core/lib/sessions';
 import {
   emptySchedule as emptyEmpty,
   hasMeaningfulData,
@@ -406,7 +407,7 @@ export function useScheduleDB() {
           return { ...rest, status: 'upcoming' as const, completionStatus: 'pending' as const };
         }),
       );
-      return { ...current, activities, milestones, ritualCompletions: [], metricEntries: [] };
+      return { ...current, activities, milestones, ritualCompletions: [], metricEntries: [], ...clearSessionProgress(current) };
     })();
     const stamped = stampSchedule(current, next);
     scheduleRef.current = stamped;
