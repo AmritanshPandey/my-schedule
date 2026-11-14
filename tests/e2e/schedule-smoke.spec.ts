@@ -238,6 +238,12 @@ async function expectVisibleControlsInsideViewport(page: Page, scope?: Locator) 
         if (style.visibility === "hidden" || style.display === "none") return false;
         if (rect.width <= 0 || rect.height <= 0) return false;
         if (rect.bottom <= 0 || rect.top >= viewportHeight) return false;
+        // A chip row that scrolls sideways (DESIGN.md "One line per row of
+        // choices") clips its chips on purpose; they are a swipe away.
+        for (let parent = element.parentElement; parent; parent = parent.parentElement) {
+          const overflowX = window.getComputedStyle(parent).overflowX;
+          if ((overflowX === "auto" || overflowX === "scroll") && parent.scrollWidth > parent.clientWidth + 1) return false;
+        }
         return rect.left < -1 || rect.right > viewportWidth + 1;
       })
       .map((element) => {
@@ -299,14 +305,14 @@ async function exerciseTaskSheetInputs(page: Page, isMobile: boolean) {
 
   // The repeat picker is a SegmentedControl radiogroup.
   await page.getByRole("radio", { name: "One-off" }).click();
-  await page.getByLabel("One-off task date").fill("2026-06-26");
+  await pickDate(page, "One-off task date", 26);
 
   await page.getByRole("button", { name: /Add subtask|Add step/ }).click();
   await page.getByLabel("Subtask name").first().fill("Prepare input states");
   await page.getByLabel("Subtask time (minutes or hours)").first().fill("10m");
   await page.getByLabel("Subtask detail").first().fill("3x10");
   await page.getByLabel("Subtask info").first().fill("No overflow on mobile");
-  await page.getByLabel("Subtask deadline date").first().fill("2026-06-27");
+  await pickDate(page, "Subtask deadline date", 27);
 
   await expectNoDocumentOverflow(page);
   await expectVisibleControlsInsideViewport(page, isMobile ? undefined : page.getByRole("dialog").last());
@@ -319,6 +325,25 @@ async function exerciseTaskSheetInputs(page: Page, isMobile: boolean) {
     await page.getByRole("button", { name: "Close" }).click();
     await expect(title).toBeHidden();
   }
+}
+
+/**
+ * ui/DateInput is a native `<input type="date">` on touch and a button that
+ * opens a calendar with a mouse; pick the given day of the shown month either way.
+ */
+async function pickDate(page: Page, label: string, day: number) {
+  const field = page.getByLabel(label).first();
+  if ((await field.evaluate((el) => el.tagName)) === "INPUT") {
+    const now = new Date();
+    const iso = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
+    await field.fill(iso);
+    await expect(field).toHaveValue(iso);
+    return;
+  }
+  await field.click();
+  const calendar = page.getByRole("dialog", { name: /^Choose / }).last();
+  await calendar.getByRole("button", { name: new RegExp(`\\b${day}\\b`) }).first().click();
+  await expect(page.getByRole("button", { name: new RegExp(`^${label}, `) }).first()).toBeVisible();
 }
 
 async function expectOverviewDashboard(page: Page, isMobile: boolean) {
@@ -404,7 +429,6 @@ async function exerciseMobileHighImpactRoutes(page: Page) {
   await expectNoBannedVisualEffects(page);
 
   await page.getByRole("navigation", { name: "Main navigation" }).getByRole("button", { name: "Overview" }).click();
-  await expect(page.getByText("Dashboard").first()).toBeVisible();
   await expectOverviewDashboard(page, true);
 
   await page.getByRole("navigation", { name: "Main navigation" }).getByRole("button", { name: "Routine" }).click();
@@ -413,6 +437,9 @@ async function exerciseMobileHighImpactRoutes(page: Page) {
   await expectVisibleControlsInsideViewport(page);
   await expectNoBannedVisualEffects(page);
 
+  // Notes and Settings live in the Overview header; other tabs put their own action there.
+  const nav = page.getByRole("navigation", { name: "Main navigation" });
+  await nav.getByRole("button", { name: "Overview" }).click();
   await page.getByRole("button", { name: "Notes" }).click();
   await expect(page.getByText("Skin and Dental Care").first()).toBeVisible();
   await expectNoDocumentOverflow(page);
@@ -420,6 +447,7 @@ async function exerciseMobileHighImpactRoutes(page: Page) {
   await expectNoBannedVisualEffects(page);
   await page.getByRole("button", { name: "Back" }).click();
 
+  await nav.getByRole("button", { name: "Overview" }).click();
   await page.getByRole("button", { name: "Settings" }).click();
   await expect(page.getByText("Settings").first()).toBeVisible();
   await expect(page.getByText("Appearance").first()).toBeVisible();

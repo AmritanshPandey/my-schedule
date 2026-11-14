@@ -427,7 +427,7 @@ export default function OverviewDashboard({
             {/* The day's shape and the goals it serves. */}
             <div className="grid items-start gap-4 xl:grid-cols-3">
               {hasScheduledTasks && (
-                <div data-testid="overview-day-breakdown" className={`${CARD} overflow-hidden`}>
+                <div className={`${CARD} overflow-hidden`}>
                   <DayBreakdownCard
                     activities={schedule.activities}
                     categories={schedule.categories}

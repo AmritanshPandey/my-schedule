@@ -19,7 +19,8 @@ interface SheetHeaderProps {
  */
 export default function SheetHeader({ eyebrow, title, onClose, className = "" }: SheetHeaderProps) {
   return (
-    <div className={`sticky top-0 z-20 -mx-5 flex items-start justify-between gap-3 bg-white/80 px-5 py-2 backdrop-blur-xl dark:bg-neutral-900/80 ${className}`}>
+    // Frosted on purpose: floating chrome, the sanctioned glass (data-glass).
+    <div data-glass className={`sticky top-0 z-20 -mx-5 flex items-start justify-between gap-3 bg-white/80 px-5 py-2 backdrop-blur-xl dark:bg-neutral-900/80 ${className}`}>
       <div>
         <Eyebrow>{eyebrow}</Eyebrow>
         <SheetTitle className="mt-0.5">{title}</SheetTitle>
