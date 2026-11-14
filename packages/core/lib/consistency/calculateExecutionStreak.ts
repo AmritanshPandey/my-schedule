@@ -44,6 +44,9 @@ export function buildActiveDates(schedule: Schedule): Set<string> {
   for (const c of schedule.ritualCompletions ?? []) {
     if (c?.date) dates.add(c.date);
   }
+  for (const s of schedule.sessions ?? []) {
+    if (s.status === "done") dates.add(s.dateISO);
+  }
   return dates;
 }
 

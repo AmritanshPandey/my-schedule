@@ -13,6 +13,7 @@ import { parseTimeToMinutes, formatDisplayTime } from "./timeUtils";
 import { localISODate } from "./dateUtils";
 import { isRitualDayComplete } from "./consistency/ritualDayStatus";
 import { ritualScheduledOnDate } from "./consistency/calculateRitualStreak";
+import { headline, sessionsForDate } from "./sessions";
 
 export interface ReminderSettings {
   enabled: boolean;
@@ -89,6 +90,22 @@ export function collectRemindersFor(
           title: occ.title,
           body: `Starts now · ${formatDisplayTime(slot.startTime)}`,
         });
+      });
+    }
+  }
+
+  if (settings.tasks) {
+    for (const session of sessionsForDate(schedule, todayISO)) {
+      if (session.status !== "planned" || !session.startTime) continue;
+      const startMin = parseTimeToMinutes(session.startTime);
+      if (startMin == null) continue;
+      const atMs = msAt(todayISO, startMin);
+      if (atMs <= earliestMs) continue;
+      out.push({
+        atMs,
+        tag: `planr-session-${session.id}-${todayISO}`,
+        title: session.title,
+        body: `Starts now · ${formatDisplayTime(session.startTime)} · ${headline(session)}`,
       });
     }
   }

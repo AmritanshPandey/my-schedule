@@ -15,6 +15,8 @@
 import type { DayKey, Plan, Schedule, Task, TaskCategory } from "./scheduleTypes";
 import type { AccentColor } from "./colorSystem";
 import { taskIntervals } from "./dayBreakdown";
+import { sessionsForDate } from "./sessions";
+import { parseTimeToMinutes, toScheduleDayMinutes } from "./timeUtils";
 import { isTaskScheduledOn, resolveOccurrence } from "./taskOccurrence";
 import { resolveWakingWindow } from "./timeline/sleepWindow";
 import { mergeIntervals, ownedMinutesByOwner, type OwnedInterval } from "./timeline/intervals";
@@ -66,7 +68,7 @@ function ownerOf(
 }
 
 export function buildDaySpread(
-  schedule: Pick<Schedule, "activities" | "categories" | "plans" | "preferences">,
+  schedule: Pick<Schedule, "activities" | "categories" | "plans" | "preferences" | "sessions">,
   dayKey: DayKey,
   dateISO: string,
 ): DaySpread {
@@ -93,6 +95,22 @@ export function buildDaySpread(
       owned.push({ start: s, end: e, owner: owner.id });
       if (!groups.has(owner.id)) groups.set(owner.id, { id: owner.id, label: owner.label, color: owner.color, minutes: 0 });
     }
+  }
+
+  // Timed sessions take their estimated length from their start; any-time ones have no place on the strip.
+  for (const session of sessionsForDate(schedule as Schedule, dateISO)) {
+    if (session.status === "skipped" || !session.startTime || !session.estimatedMinutes) continue;
+    const plan = plansById.get(session.planId);
+    if (!plan) continue;
+    const startMin = parseTimeToMinutes(session.startTime);
+    if (startMin == null) continue;
+    const start = toScheduleDayMinutes(startMin, windowStart);
+    const s = Math.max(start, windowStart);
+    const e = Math.min(start + session.estimatedMinutes, windowEnd);
+    if (e <= s) continue;
+    const id = `plan:${plan.id}`;
+    owned.push({ start: s, end: e, owner: id });
+    if (!groups.has(id)) groups.set(id, { id, label: plan.title, color: plan.color ?? null, minutes: 0 });
   }
 
   for (const [id, minutes] of ownedMinutesByOwner(owned, (a, b) => a.localeCompare(b))) {
