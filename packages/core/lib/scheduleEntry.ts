@@ -29,4 +29,48 @@ export interface ScheduleEntry {
   deadline?: string;
   /** Granularity of the deadline — drives the badge label + overdue window. */
   deadlineScope?: "day" | "week" | "month";
+  /**
+   * Structured strength targets ("3 × 10 at 60 kg"). Minutes stay in
+   * `timeMinutes`. These are the base the user set; an accepted progression
+   * step can raise them on read — see subtaskTargets.ts's currentTargets.
+   */
+  targets?: SubtaskTargets;
+  /** Rest after each set, in seconds — focus mode's rest countdown. */
+  restSeconds?: number;
+  /** Step the targets up by a percentage once the user has been consistent. */
+  progression?: SubtaskProgression;
+  /**
+   * When the user last set the targets by hand (ISO datetime). Progression
+   * steps decided before it no longer apply: an edit is a new base.
+   */
+  targetsSetAt?: string;
+}
+
+export type WeightUnit = "kg" | "lb";
+
+export interface SubtaskTargets {
+  sets?: number;
+  reps?: number;
+  weight?: number;
+  weightUnit?: WeightUnit;
+}
+
+/** Which figure a progression step raises; "all" scales every one that is set. */
+export type ProgressionFigure = "all" | "weight" | "reps" | "sets" | "minutes";
+
+export interface SubtaskProgression {
+  /** Percentage to add per step, e.g. 5 for +5%. */
+  percent: number;
+  /** The period a step is judged over (same set as a tracker's cadence). */
+  cadence: "daily" | "weekly" | "monthly" | "yearly";
+  figure: ProgressionFigure;
+  /** Share of scheduled occurrences that must be done to suggest a step, 1–100. */
+  threshold: number;
+  /** ISO date progression was switched on — no period before it counts. */
+  startISO: string;
+}
+
+/** The figures a step can set: the strength targets plus minutes. */
+export interface TargetValues extends SubtaskTargets {
+  minutes?: number;
 }

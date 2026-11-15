@@ -103,12 +103,22 @@ export default function EditPlanSheet({
   const duration = daysBetweenUtil(draft.startDate, draft.endDate);
 
   return (
-    <BottomSheet open={!!planId} onClose={onClose}>
-      <View className="gap-4 p-5 pb-8">
+    <BottomSheet
+      open={!!planId}
+      onClose={onClose}
+      fullHeight
+      footer={
+        <Button fullWidth onPress={handleSave} disabled={!draft.title.trim()}>
+          Save changes
+        </Button>
+      }
+    >
+      <View className="gap-7 p-5 pb-8">
         <SheetHeader eyebrow="Edit" title="Plan details" onClose={onClose} />
-        <View className="gap-2.5">
+        <View className="gap-5">
           <View>
             <Input
+              label="Title"
               value={draft.title}
               onChangeText={(v) => setDraft((d) => ({ ...d, title: v }))}
               placeholder="Plan title"
@@ -119,8 +129,8 @@ export default function EditPlanSheet({
               {draft.title.length}/{PLAN_TITLE_MAX}
             </Text>
           </View>
-          <Input value={draft.description} onChangeText={(v) => setDraft((d) => ({ ...d, description: v }))} placeholder="Short description (optional)" accessibilityLabel="Plan description" />
-          <View className="flex-row gap-2">
+          <Input label="Description (optional)" value={draft.description} onChangeText={(v) => setDraft((d) => ({ ...d, description: v }))} placeholder="What it's for, in a line" accessibilityLabel="Plan description" />
+          <View className="flex-row gap-3">
             <View className="flex-1">
               <DateInput label="Start date" value={draft.startDate} onChange={(v) => setDraft((d) => ({ ...d, startDate: v }))} />
             </View>
@@ -139,7 +149,7 @@ export default function EditPlanSheet({
 
           {goals.length > 0 && (
             <View>
-              <Text className={`mb-1 ${typography.eyebrow}`}>
+              <Text className={`mb-2 ${typography.eyebrow}`}>
                 Goal <Text className="font-normal normal-case text-neutral-500 dark:text-neutral-400">(optional)</Text>
               </Text>
               <GoalChips goals={goals} value={draft.goalId} onChange={(id) => setDraft((d) => ({ ...d, goalId: id }))} />
@@ -148,7 +158,7 @@ export default function EditPlanSheet({
 
           <View>
             <Text className={`mb-2 ${typography.eyebrow}`}>Icon</Text>
-            <View className="flex-row flex-wrap gap-1.5">
+            <View className="flex-row flex-wrap gap-2">
               {SECTION_ICONS.map(({ name, label, icon: glyph }) => {
                 const cls = iconPickerClass(draft.icon === name);
                 return (
@@ -158,10 +168,10 @@ export default function EditPlanSheet({
                     accessibilityLabel={label}
                     accessibilityState={{ selected: draft.icon === name }}
                     onPress={() => setDraft((d) => ({ ...d, icon: name }))}
-                    className={`${cls.box} w-[18.5%]`}
+                    className={`${cls.box} min-h-[64px] w-[23%]`}
                   >
-                    <Icon icon={glyph} size={18} strokeWidth={1.5} className={cls.icon} />
-                    <Text numberOfLines={1} className={`text-[9px] font-semibold leading-none ${cls.icon}`}>
+                    <Icon icon={glyph} size={22} strokeWidth={1.6} className={cls.icon} />
+                    <Text numberOfLines={1} className={`text-[11px] font-semibold leading-tight ${cls.icon}`}>
                       {label}
                     </Text>
                   </Pressable>
@@ -170,9 +180,6 @@ export default function EditPlanSheet({
             </View>
           </View>
         </View>
-        <Button fullWidth onPress={handleSave} disabled={!draft.title.trim()}>
-          Save changes
-        </Button>
       </View>
     </BottomSheet>
   );

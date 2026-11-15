@@ -39,6 +39,7 @@ import {
   writeLocalBaseRev,
 } from "@/lib/localMeta";
 import { localISODate } from "@/lib/dateUtils";
+import { trimSetLogsForSync } from "@/lib/setLogs";
 import { schedulePayloadBytes, validateSchedule } from "@/lib/scheduleSchema";
 import { baseRevAfterHandoff, pushIsSafe, type SnapshotDoc } from "@/lib/syncRevision";
 import { mergeSchedules, PLACEHOLDER_STAMP } from "@/lib/mergeSchedule";
@@ -474,6 +475,7 @@ function trimForSync(schedule: Schedule): Schedule {
         })),
       ])
     ) as Schedule["activities"],
+    ...(schedule.setLogs ? { setLogs: trimSetLogsForSync(schedule.setLogs, localISODate(cutoff)) } : {}),
   };
 }
 

@@ -1,6 +1,6 @@
 "use client";
 
-import { IconClock, IconCopy, IconCornerDownRight, IconGripVertical, IconTrash } from "@tabler/icons-react";
+import { IconBarbell, IconTrendingUp, IconClock, IconCopy, IconCornerDownRight, IconGripVertical, IconTrash } from "@tabler/icons-react";
 import { useSortable } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 import { memo, useState } from "react";
@@ -13,17 +13,15 @@ import ConfirmSheet from "@/components/ui/ConfirmSheet";
 import { buildDeleteConfirmationCopy } from "@/lib/deleteConfirm";
 import DateInput from "@/components/ui/DateInput";
 
-export interface SubtaskDraft {
-  id: string;
-  title: string;
-  info?: string;
-  /** Free-text detail — a quantity, spec, or short note; whatever fits the step. */
-  duration?: string;
-  /** Dedicated time budget in minutes (see ScheduleEntry.timeMinutes). */
-  timeMinutes?: number;
-  deadline?: string;
-  deadlineScope?: DeadlineScope;
-}
+import type { SubtaskDraft } from "@/lib/subtaskDraft";
+import type { SubtaskTargets } from "@planr/core/lib/scheduleEntry";
+import { hasStrengthTargets } from "@/lib/subtaskTargets";
+import { DEFAULT_PROGRESSION_THRESHOLD } from "@/lib/subtaskProgression";
+import type { SubtaskProgression } from "@planr/core/lib/scheduleEntry";
+import { ChoiceChip } from "@/components/ui/FormChips";
+import { todayISO } from "@/lib/dateUtils";
+
+export type { SubtaskDraft };
 
 interface SubtaskDraftRowProps {
   draft: SubtaskDraft;
@@ -70,6 +68,19 @@ function SubtaskDraftRow({
     const mins = parseDurationMinutes(text);
     onChange(draft.id, { ...draft, timeMinutes: mins != null && mins > 0 ? mins : undefined });
   }
+
+  // Sets / reps / weight / rest stay tucked away until asked for — most
+  // subtasks are not lifts — but open on their own once any is set.
+  const [strengthOpen, setStrengthOpen] = useState(() => hasStrengthTargets(draft.targets) || draft.restSeconds != null);
+  function setTarget(key: keyof SubtaskTargets, value: SubtaskTargets[keyof SubtaskTargets]) {
+    onChange(draft.id, { ...draft, targets: { ...draft.targets, [key]: value } });
+  }
+  const numberValue = (n: number | undefined) => (n == null || Number.isNaN(n) ? "" : String(n));
+  const readNumber = (raw: string) => {
+    const n = Number(raw.replace(",", "."));
+    return raw.trim() === "" || !Number.isFinite(n) ? undefined : n;
+  };
+  const weightUnit = draft.targets?.weightUnit ?? "kg";
 
   return (
     <div
@@ -180,10 +191,10 @@ function SubtaskDraftRow({
                         type="button"
                         onClick={() => onChange(draft.id, { ...draft, deadlineScope: scope })}
                         aria-pressed={(draft.deadlineScope ?? "day") === scope}
-                        className={`h-9 rounded-lg px-2.5 text-[12px] font-bold transition-colors ${
+                        className={`h-11 rounded-xl px-3 text-[14px] font-semibold transition-colors lg:h-9 lg:text-[12px] ${
                           (draft.deadlineScope ?? "day") === scope
                             ? "bg-neutral-900 text-white dark:bg-white dark:text-neutral-900"
-                            : "border border-neutral-200 text-neutral-500 hover:text-neutral-600 dark:border-white/10 dark:text-neutral-400 dark:hover:text-neutral-300"
+                            : "border border-neutral-200 text-neutral-700 hover:text-neutral-900 dark:border-white/10 dark:text-neutral-200 dark:hover:text-white"
                         }`}
                       >
                         {SCOPE_LABEL[scope]}
@@ -194,6 +205,55 @@ function SubtaskDraftRow({
               </div>
             )}
           </div>
+
+          {strengthOpen ? (
+            <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+              <StrengthField label="Sets" value={numberValue(draft.targets?.sets)} placeholder="3" inputMode="numeric"
+                onChange={(raw) => setTarget("sets", readNumber(raw))} />
+              <StrengthField label="Reps" value={numberValue(draft.targets?.reps)} placeholder="10" inputMode="numeric"
+                onChange={(raw) => setTarget("reps", readNumber(raw))} />
+              <StrengthField
+                label="Weight"
+                value={numberValue(draft.targets?.weight)}
+                placeholder="0"
+                inputMode="decimal"
+                onChange={(raw) => setTarget("weight", readNumber(raw))}
+                suffix={
+                  <button
+                    type="button"
+                    onClick={() => setTarget("weightUnit", weightUnit === "kg" ? "lb" : "kg")}
+                    aria-label={`Weight unit: ${weightUnit}. Switch to ${weightUnit === "kg" ? "lb" : "kg"}`}
+                    className="flex h-11 min-w-11 items-center justify-center rounded-r-xl px-2 text-[14px] font-semibold text-neutral-500 hover:text-neutral-900 dark:text-neutral-400 dark:hover:text-white"
+                  >
+                    {weightUnit}
+                  </button>
+                }
+              />
+              <StrengthField
+                label="Rest"
+                value={numberValue(draft.restSeconds)}
+                placeholder="90"
+                inputMode="numeric"
+                onChange={(raw) => onChange(draft.id, { ...draft, restSeconds: readNumber(raw) })}
+                suffix={<span className="pr-3 text-[14px] font-semibold text-neutral-500 dark:text-neutral-400">s</span>}
+              />
+              <div className="col-span-2 sm:col-span-4">
+                <ProgressionFields
+                  value={draft.progression}
+                  onChange={(progression) => onChange(draft.id, { ...draft, progression })}
+                />
+              </div>
+            </div>
+          ) : (
+            <button
+              type="button"
+              onClick={() => setStrengthOpen(true)}
+              className="inline-flex h-11 items-center gap-1.5 rounded-full px-3 text-[14px] font-semibold text-neutral-600 hover:bg-neutral-100 hover:text-neutral-900 dark:text-neutral-300 dark:hover:bg-white/[0.06] dark:hover:text-white lg:h-9 lg:text-[13px]"
+            >
+              <IconBarbell size={16} strokeWidth={2} aria-hidden="true" />
+              Sets &amp; weight
+            </button>
+          )}
         </div>
 
         <div className="flex shrink-0 flex-col items-center gap-0.5">
@@ -240,6 +300,126 @@ function SubtaskDraftRow({
         confirmLabel={deleteCopy.confirmLabel}
       />
     </div>
+  );
+}
+
+const CADENCES = [
+  { value: "daily", label: "Day" },
+  { value: "weekly", label: "Week" },
+  { value: "monthly", label: "Month" },
+  { value: "yearly", label: "Year" },
+] as const;
+const FIGURES = [
+  { value: "all", label: "All" },
+  { value: "weight", label: "Weight" },
+  { value: "reps", label: "Reps" },
+  { value: "sets", label: "Sets" },
+  { value: "minutes", label: "Minutes" },
+] as const;
+
+/**
+ * "Increase over time": a percentage, how often, which figure, and how
+ * consistent the user must be first (default 80%). Off until asked for.
+ */
+function ProgressionFields({ value, onChange }: { value: SubtaskProgression | undefined; onChange: (next: SubtaskProgression | undefined) => void }) {
+  if (!value) {
+    return (
+      <button
+        type="button"
+        onClick={() => onChange({ percent: 5, cadence: "weekly", figure: "all", threshold: DEFAULT_PROGRESSION_THRESHOLD, startISO: todayISO() })}
+        className="inline-flex h-11 items-center gap-1.5 rounded-full px-3 text-[14px] font-semibold text-neutral-600 hover:bg-neutral-100 hover:text-neutral-900 dark:text-neutral-300 dark:hover:bg-white/[0.06] dark:hover:text-white lg:h-9 lg:text-[13px]"
+      >
+        <IconTrendingUp size={16} strokeWidth={2} aria-hidden="true" />
+        Increase over time
+      </button>
+    );
+  }
+  const set = (patch: Partial<SubtaskProgression>) => onChange({ ...value, ...patch });
+  return (
+    <div className="space-y-3 rounded-xl bg-white/70 p-3 dark:bg-white/[0.03]">
+      <div className="flex items-center justify-between">
+        <span className="text-[14px] font-bold text-neutral-900 dark:text-white">Increase over time</span>
+        <button type="button" onClick={() => onChange(undefined)} className="h-11 px-2 text-[14px] font-semibold text-neutral-500 hover:text-neutral-900 dark:text-neutral-400 dark:hover:text-white lg:h-9 lg:text-[13px]">
+          Turn off
+        </button>
+      </div>
+      <div className="grid grid-cols-2 gap-2">
+        <StrengthField
+          label="Increase by"
+          value={String(value.percent)}
+          placeholder="5"
+          inputMode="decimal"
+          onChange={(raw) => { const n = Number(raw.replace(",", ".")); if (Number.isFinite(n) && n > 0 && n <= 100) set({ percent: n }); }}
+          suffix={<span className="pr-3 text-[14px] font-semibold text-neutral-500 dark:text-neutral-400">%</span>}
+        />
+        <StrengthField
+          label="When done at least"
+          value={String(value.threshold)}
+          placeholder="80"
+          inputMode="numeric"
+          onChange={(raw) => { const n = Number(raw); if (Number.isFinite(n) && n >= 1 && n <= 100) set({ threshold: Math.round(n) }); }}
+          suffix={<span className="pr-3 text-[14px] font-semibold text-neutral-500 dark:text-neutral-400">%</span>}
+        />
+      </div>
+      <div>
+        <span className="mb-1 block text-[12px] font-semibold text-neutral-500 dark:text-neutral-400">Every</span>
+        <div className="flex flex-wrap gap-2">
+          {CADENCES.map((c) => (
+            <ChoiceChip key={c.value} active={value.cadence === c.value} label={c.label} onClick={() => set({ cadence: c.value })} />
+          ))}
+        </div>
+      </div>
+      <div>
+        <span className="mb-1 block text-[12px] font-semibold text-neutral-500 dark:text-neutral-400">Raise</span>
+        <div className="flex flex-wrap gap-2">
+          {FIGURES.map((f) => (
+            <ChoiceChip key={f.value} active={value.figure === f.value} label={f.label} onClick={() => set({ figure: f.value })} />
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/** A labelled number field: the label above it, the number pad on phones. */
+function StrengthField({
+  label,
+  value,
+  placeholder,
+  inputMode,
+  onChange,
+  suffix,
+}: {
+  label: string;
+  value: string;
+  placeholder: string;
+  inputMode: "numeric" | "decimal";
+  onChange: (raw: string) => void;
+  suffix?: React.ReactNode;
+}) {
+  // Local text so a half-typed "22." keeps its point; the draft gets the number.
+  const [text, setText] = useState(value);
+  return (
+    <label className="block min-w-0">
+      <span className="mb-1 block text-[12px] font-semibold text-neutral-500 dark:text-neutral-400">{label}</span>
+      <span className={`flex h-11 items-center ${ROW_INPUT} !px-0 focus-within:border-emerald-600/60 dark:focus-within:border-emerald-400/50`}>
+        <input
+          type="text"
+          inputMode={inputMode}
+          pattern={inputMode === "numeric" ? "[0-9]*" : undefined}
+          value={text}
+          onChange={(e) => {
+            setText(e.target.value);
+            onChange(e.target.value);
+          }}
+          placeholder={placeholder}
+          aria-label={label}
+          autoComplete="off"
+          className="h-full w-full min-w-0 bg-transparent px-3 text-[16px] font-semibold tabular-nums text-neutral-900 outline-none placeholder:text-neutral-400 dark:text-white"
+        />
+        {suffix}
+      </span>
+    </label>
   );
 }
 

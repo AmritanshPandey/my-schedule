@@ -28,6 +28,8 @@ import { formatDisplayTime } from "@/lib/timeUtils";
 import { DAYS, type DayKey, type Plan, type Schedule } from "@/lib/useScheduleDB";
 import { typography } from "@/components/ui/Typography";
 import DateInput from "@/components/ui/DateInput";
+import Input, { FORM_LABEL } from "@/components/ui/Input";
+import { ChipRow, ChoiceChip, STICKY_SHEET_FOOTER } from "@/components/ui/FormChips";
 import IconButton from "@/components/ui/IconButton";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
@@ -397,21 +399,19 @@ export default function AIPlanCreatorSheet({
 
               {/* Example chips */}
               {!goal && !streaming && (
-                <div className="flex flex-wrap gap-1.5">
+                <ChipRow label="Or start from an example">
                   {EXAMPLE_GOALS.map((eg) => (
-                    <button
+                    <ChoiceChip
                       key={eg}
-                      type="button"
+                      active={false}
+                      label={eg}
                       onClick={() => {
                         setGoal(eg);
                         setTimeout(() => textareaRef.current?.focus(), 0);
                       }}
-                      className="rounded-full border border-neutral-200 bg-neutral-50 px-3 py-1 text-[12px] font-medium text-neutral-600 transition-colors hover:border-neutral-300 hover:bg-white dark:border-white/10 dark:bg-white/[0.03] dark:text-neutral-400 dark:hover:border-white/20 dark:hover:bg-white/[0.06]"
-                    >
-                      {eg}
-                    </button>
+                    />
                   ))}
-                </div>
+                </ChipRow>
               )}
 
               {/* Streaming status */}
@@ -508,7 +508,7 @@ export default function AIPlanCreatorSheet({
     const today = todayISO();
 
     return (
-      <div className="space-y-5 p-5 pb-8">
+      <div className="space-y-6 px-5 pt-5">
         {/* Header with back arrow */}
         <div className="flex items-center gap-2">
           <IconButton label="Back" variant="ghost" size="sm" onClick={() => setStep("input")}>
@@ -529,25 +529,15 @@ export default function AIPlanCreatorSheet({
         </div>
 
         {/* Title + Description */}
-        <div className="space-y-2">
-          <input
-            value={title}
-            onChange={(e) => setTitle(e.target.value)}
-            placeholder="Plan title"
-            className="w-full rounded-xl border border-neutral-200 bg-neutral-50 px-4 py-2.5 text-[16px] font-semibold text-neutral-900 outline-none placeholder:text-neutral-400 focus:border-neutral-300 focus:bg-white dark:border-white/10 dark:bg-white/[0.04] dark:text-white dark:focus:border-white/20"
-          />
-          <input
-            value={desc}
-            onChange={(e) => setDesc(e.target.value)}
-            placeholder="Short description (optional)"
-            className="w-full rounded-xl border border-neutral-200 bg-neutral-50 px-4 py-2.5 text-[14px] text-neutral-900 outline-none placeholder:text-neutral-400 focus:border-neutral-300 focus:bg-white dark:border-white/10 dark:bg-white/[0.04] dark:text-white dark:focus:border-white/20"
-          />
+        <div className="space-y-5">
+          <Input label="Title" value={title} onChange={(e) => setTitle(e.target.value)} placeholder="Plan title" />
+          <Input label="Description (optional)" value={desc} onChange={(e) => setDesc(e.target.value)} placeholder="What it's for, in a line" />
         </div>
 
         {/* Icon picker */}
         <div>
           <p className={`mb-2 ${typography.eyebrow}`}>Icon</p>
-          <div className="grid grid-cols-6 gap-1.5">
+          <div className="grid grid-cols-4 gap-2 sm:grid-cols-6">
             {SECTION_ICONS.slice(0, 18).map(({ name, label, icon: Icon }) => {
               const ic = getIconPickerStyle(name);
               const sel = emoji === name;
@@ -561,10 +551,11 @@ export default function AIPlanCreatorSheet({
                     // sync color to the icon's natural color
                     import("@/lib/colorSystem").then(({ colorFromIcon }) => setColor(colorFromIcon(name)));
                   }}
-                  className={`flex flex-col items-center justify-center gap-1 rounded-xl py-2.5 transition-all duration-150 ${sel ? `${ic.solid} scale-105` : `${ic.tint} ${ic.text} hover:scale-105`}`}
+                  aria-pressed={sel}
+                  className={`flex min-h-16 flex-col items-center justify-center gap-1 rounded-2xl py-3 transition-all duration-150 ${sel ? ic.solid : `${ic.tint} ${ic.text}`}`}
                 >
-                  <Icon size={17} strokeWidth={1.5} />
-                  <span className={`text-[9px] font-semibold leading-none ${sel ? "text-white/80" : ""}`}>{label}</span>
+                  <Icon size={22} strokeWidth={1.6} />
+                  <span className={`text-[11px] font-semibold leading-tight ${sel ? "text-white/85" : ""}`}>{label}</span>
                 </button>
               );
             })}
@@ -574,46 +565,54 @@ export default function AIPlanCreatorSheet({
         {/* Color picker */}
         <div>
           <p className={`mb-2 ${typography.eyebrow}`}>Color</p>
-          <div className="flex gap-2">
+          <div className="flex flex-wrap gap-1">
             {COLOR_OPTIONS.map(({ value, bg, ring }) => (
+              // A 44px target around the 32px swatch.
               <button
                 key={value}
                 type="button"
+                aria-label={value}
+                aria-pressed={color === value}
                 onClick={() => setColor(value)}
-                className={`h-7 w-7 rounded-full transition-all ${bg} ${color === value ? `ring-2 ring-offset-2 ${ring} scale-110 ring-offset-white dark:ring-offset-neutral-900` : "opacity-60 hover:opacity-100"}`}
-              />
+                className="group flex h-11 w-11 items-center justify-center rounded-full"
+              >
+                <span className={`h-8 w-8 rounded-full transition-all ${bg} ${color === value ? `ring-2 ring-offset-2 ${ring} ring-offset-white dark:ring-offset-neutral-900` : "opacity-60 group-hover:opacity-100"}`} />
+              </button>
             ))}
           </div>
         </div>
 
         {/* Dates */}
         <div>
-          <p className={`mb-2 ${typography.eyebrow}`}>Duration</p>
-          <div className="mb-2 flex flex-wrap gap-1.5">
-            {DURATION_PRESETS.map(({ label, days }) => {
-              const isActive = days !== null
-                ? startDate === today && endDate === addDays(days)
-                : startDate === today && !endDate;
-              return (
-                <button
-                  key={label}
-                  type="button"
-                  onClick={() => {
-                    setStartDate(today);
-                    setEndDate(days !== null ? addDays(days) : "");
-                  }}
-                  className={`rounded-full border px-3 py-1 text-[12px] font-semibold transition-all ${isActive
-                    ? "border-neutral-950 bg-neutral-950 text-white dark:border-white dark:bg-white dark:text-neutral-900"
-                    : "border-neutral-200 text-neutral-600 hover:border-neutral-300 dark:border-white/10 dark:text-neutral-400 dark:hover:border-white/20"}`}
-                >
-                  {label}
-                </button>
-              );
-            })}
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <p className={FORM_LABEL}>Start date</p>
+              <DateInput value={startDate} onChange={(v) => setStartDate(v)} />
+            </div>
+            <div>
+              <p className={FORM_LABEL}>End date</p>
+              <DateInput value={endDate} onChange={(v) => setEndDate(v)} />
+            </div>
           </div>
-          <div className="grid grid-cols-2 gap-2">
-            <DateInput value={startDate} onChange={(v) => setStartDate(v)} size="sm" />
-            <DateInput value={endDate} onChange={(v) => setEndDate(v)} size="sm" />
+          <div className="mt-4">
+            <ChipRow label="Quick duration">
+              {DURATION_PRESETS.map(({ label, days }) => {
+                const isActive = days !== null
+                  ? startDate === today && endDate === addDays(days)
+                  : startDate === today && !endDate;
+                return (
+                  <ChoiceChip
+                    key={label}
+                    active={isActive}
+                    label={label}
+                    onClick={() => {
+                      setStartDate(today);
+                      setEndDate(days !== null ? addDays(days) : "");
+                    }}
+                  />
+                );
+              })}
+            </ChipRow>
           </div>
         </div>
 
@@ -709,15 +708,17 @@ export default function AIPlanCreatorSheet({
           </div>
         )}
 
-        <Button fullWidth onClick={handleCreate} disabled={!title.trim() || hasBlockingIssues}>
-          {hasBlockingIssues ? "Resolve issues above to continue" : "Create plan"}
-        </Button>
+        <div className={STICKY_SHEET_FOOTER}>
+          <Button fullWidth onClick={handleCreate} disabled={!title.trim() || hasBlockingIssues}>
+            {hasBlockingIssues ? "Resolve issues above to continue" : "Create plan"}
+          </Button>
+        </div>
       </div>
     );
   }
 
   return (
-    <BottomSheet open={open} onClose={onClose}>
+    <BottomSheet open={open} onClose={onClose} className="scroll-pb-24">
       <AnimatePresence mode="wait">
         {step === "input" && (
           <m.div

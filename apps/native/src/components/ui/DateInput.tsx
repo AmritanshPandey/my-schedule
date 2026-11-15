@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Platform, Pressable, View } from 'react-native';
+import { Keyboard, Platform, Pressable, View } from 'react-native';
 import DateTimePicker, { DateTimePickerAndroid, type DateTimePickerEvent } from '@react-native-community/datetimepicker';
 import { useColorScheme } from 'nativewind';
 import { IconCalendar, IconX } from '@tabler/icons-react-native';
@@ -74,6 +74,8 @@ export default function DateInput({
 
   function openPicker() {
     if (disabled) return;
+    // The picker takes the keyboard's place, as in Apple's own forms.
+    Keyboard.dismiss();
     if (ios) {
       setOpen((v) => !v);
       return;

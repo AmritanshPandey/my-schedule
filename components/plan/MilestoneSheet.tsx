@@ -1,5 +1,6 @@
 "use client";
 
+import { CHOICE_CHIP, choiceChipClass, choiceChipTone, STICKY_SHEET_FOOTER } from "@/components/ui/FormChips";
 import { useEffect, useMemo, useState } from "react";
 import BottomSheet from "@/components/ui/BottomSheet";
 import SheetHeader from "@/components/ui/SheetHeader";
@@ -337,11 +338,11 @@ export default function MilestoneSheet({
     : null;
 
   return (
-    <BottomSheet open={isOpen} onClose={onClose} maxHeight="85vh">
-      <div className="space-y-4 p-5 pb-8">
+    <BottomSheet open={isOpen} onClose={onClose} maxHeight="85vh" className="scroll-pb-24">
+      <div className="space-y-6 px-5 pt-5">
         <SheetHeader eyebrow={eyebrow} title={title} onClose={onClose} />
 
-        <div className="space-y-3">
+        <div className="space-y-5">
           <Input
             label="Title"
             value={draft.title}
@@ -369,7 +370,7 @@ export default function MilestoneSheet({
 
           {/* Start Date — full width row */}
           <div>
-            <p className={`mb-1.5 ${typography.eyebrow}`}>
+            <p className={`mb-2 ${typography.eyebrow}`}>
               Start date
             </p>
             <DateInput
@@ -381,7 +382,7 @@ export default function MilestoneSheet({
 
           {/* Duration — full width row, number + unit in flex */}
           <div>
-            <p className={`mb-1.5 ${typography.eyebrow}`}>
+            <p className={`mb-2 ${typography.eyebrow}`}>
               Duration
             </p>
             <div className="flex gap-2">
@@ -452,8 +453,8 @@ export default function MilestoneSheet({
             </div>
           ) : (
             <div>
-              <p className={`mb-1.5 ${typography.eyebrow}`}>Success metric (optional)</p>
-              <div className="mb-2 flex flex-wrap gap-1.5">
+              <p className={`mb-2 ${typography.eyebrow}`}>Success metric (optional)</p>
+              <div className="mb-3 flex flex-wrap gap-2">
                 {(["none", ...(trackers.length > 0 ? ["existing"] : []), "new"] as DraftState["metricMode"][]).map((mode) => (
                   <button
                     key={mode}
@@ -463,11 +464,8 @@ export default function MilestoneSheet({
                       metricMode: mode,
                       existingTrackerId: mode === "existing" && !d.existingTrackerId ? trackers[0]?.id ?? "" : d.existingTrackerId,
                     }))}
-                    className={`rounded-full px-3 py-1.5 text-[12.5px] font-semibold transition-colors ${
-                      draft.metricMode === mode
-                        ? "bg-neutral-900 text-white dark:bg-white dark:text-neutral-900"
-                        : "border border-neutral-200 text-neutral-600 hover:border-neutral-300 dark:border-white/10 dark:text-neutral-300 dark:hover:border-white/20"
-                    }`}
+                    aria-pressed={draft.metricMode === mode}
+                    className={choiceChipClass(draft.metricMode === mode)}
                   >
                     {mode === "none" ? "None" : mode === "existing" ? "Existing tracker" : "Define new"}
                   </button>
@@ -475,16 +473,17 @@ export default function MilestoneSheet({
               </div>
 
               {draft.metricMode === "existing" && trackers.length > 0 && (
-                <div className="flex flex-wrap gap-1.5">
+                <div className="flex flex-wrap gap-2">
                   {trackers.map((t) => (
                     <button
                       key={t.id}
                       type="button"
                       onClick={() => setDraft((d) => ({ ...d, existingTrackerId: t.id }))}
-                      className={`rounded-full px-3 py-1.5 text-[12.5px] font-semibold transition-colors ${
+                      aria-pressed={draft.existingTrackerId === t.id}
+                      className={`${CHOICE_CHIP} ${
                         draft.existingTrackerId === t.id
-                          ? "bg-emerald-600 text-white dark:bg-emerald-500 dark:text-neutral-950"
-                          : "border border-neutral-200 text-neutral-600 hover:border-neutral-300 dark:border-white/10 dark:text-neutral-300 dark:hover:border-white/20"
+                          ? "border-transparent bg-emerald-600 text-white dark:bg-emerald-500 dark:text-neutral-950"
+                          : choiceChipTone(false)
                       }`}
                     >
                       {t.title}{t.unit ? ` (${t.unit})` : ""}
@@ -494,7 +493,7 @@ export default function MilestoneSheet({
               )}
 
               {draft.metricMode === "new" && (
-                <div className="space-y-2.5 rounded-2xl border border-neutral-200 bg-neutral-50 p-3 dark:border-white/10 dark:bg-white/[0.04]">
+                <div className="space-y-4 rounded-2xl border border-neutral-200 bg-neutral-50 p-4 dark:border-white/10 dark:bg-white/[0.04]">
                   <Input
                     label="Metric title"
                     value={draft.newTrackerTitle}
@@ -510,7 +509,7 @@ export default function MilestoneSheet({
                       placeholder="kg"
                     />
                     <div className="flex-1">
-                      <p className={`mb-1.5 ${typography.eyebrow}`}>Direction</p>
+                      <p className={`mb-2 ${typography.eyebrow}`}>Direction</p>
                       <div className="relative">
                         <select
                           value={draft.newTrackerGoalDirection}
@@ -535,7 +534,7 @@ export default function MilestoneSheet({
                       placeholder="75"
                     />
                     <Input
-                      label="Starting value (optional)"
+                      label="Start (optional)"
                       type="number"
                       inputMode="decimal"
                       className="flex-1"
@@ -569,9 +568,11 @@ export default function MilestoneSheet({
 
         <BuilderHints hints={hints} />
 
-        <Button fullWidth onClick={handleSave} disabled={!canSave}>
-          {mode === "edit" ? "Save changes" : "Add milestone"}
-        </Button>
+        <div className={STICKY_SHEET_FOOTER}>
+          <Button fullWidth onClick={handleSave} disabled={!canSave}>
+            {mode === "edit" ? "Save changes" : "Add milestone"}
+          </Button>
+        </div>
       </div>
     </BottomSheet>
   );

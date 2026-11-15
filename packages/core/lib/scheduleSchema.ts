@@ -17,6 +17,20 @@ const accentColor = z.enum([
 const dayKey = z.enum(DAYS as [string, ...string[]]);
 
 const metaField = z.object({ label: z.string(), value: z.string() }).passthrough();
+const positiveFigure = z.number().finite().positive();
+const subtaskTargets = z.object({
+  sets: positiveFigure.optional(),
+  reps: positiveFigure.optional(),
+  weight: z.number().finite().nonnegative().optional(),
+  weightUnit: z.enum(["kg", "lb"]).optional(),
+}).passthrough();
+const subtaskProgression = z.object({
+  percent: z.number().finite().positive().max(100),
+  cadence: z.enum(["daily", "weekly", "monthly", "yearly"]),
+  figure: z.enum(["all", "weight", "reps", "sets", "minutes"]),
+  threshold: z.number().finite().min(1).max(100),
+  startISO: isoDate,
+}).passthrough();
 const scheduleEntry = z.object({
   id: nonEmptyId,
   task: z.string(),
@@ -30,6 +44,10 @@ const scheduleEntry = z.object({
   notes: z.string().optional(),
   deadline: isoDate.optional(),
   deadlineScope: z.enum(["day", "week", "month"]).optional(),
+  targets: subtaskTargets.optional(),
+  restSeconds: z.number().finite().nonnegative().optional(),
+  progression: subtaskProgression.optional(),
+  targetsSetAt: isoDateTime.optional(),
 }).passthrough();
 
 const taskSlot = z.object({ startTime: z.string(), endTime: z.string() }).passthrough();
@@ -244,6 +262,34 @@ export const RitualCompletionSchema = z.object({
   followed: z.number().finite().optional(),
 }).passthrough();
 
+const loggedSet = z.object({
+  weight: z.number().finite().nonnegative().optional(),
+  reps: z.number().finite().nonnegative().optional(),
+  minutes: z.number().finite().nonnegative().optional(),
+  warmup: z.boolean().optional(),
+  done: z.boolean(),
+}).passthrough();
+
+export const SetLogSchema = z.object({
+  id: nonEmptyId,
+  taskId: nonEmptyId,
+  subtaskId: nonEmptyId,
+  dateISO: isoDate,
+  weightUnit: z.enum(["kg", "lb"]).optional(),
+  sets: z.array(loggedSet),
+  completedAt: isoDateTime,
+}).passthrough();
+
+export const ProgressionStepSchema = z.object({
+  id: nonEmptyId,
+  taskId: nonEmptyId,
+  subtaskId: nonEmptyId,
+  periodStartISO: isoDate,
+  decision: z.enum(["accepted", "held"]),
+  to: subtaskTargets.extend({ minutes: positiveFigure.optional() }),
+  decidedAt: isoDateTime,
+}).passthrough();
+
 export const NoteSchema = z.object({
   id: nonEmptyId,
   title: z.string(),
@@ -280,6 +326,9 @@ export const ScheduleSchema = z.object({
   milestones: z.array(MilestoneSchema),
   rituals: z.array(RitualSchema),
   ritualCompletions: z.array(RitualCompletionSchema),
+  // Optional for the same reason as goalConnections: older schedules lack them.
+  setLogs: z.array(SetLogSchema).optional(),
+  progressionSteps: z.array(ProgressionStepSchema).optional(),
   notes: z.array(NoteSchema),
   events: z.array(ScheduleEventSchema),
   preferences,

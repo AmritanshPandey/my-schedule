@@ -1,9 +1,10 @@
-import { useState, type ReactNode } from 'react';
-import { Pressable, View } from 'react-native';
+import { useState } from 'react';
+import { View } from 'react-native';
 import { IconX } from '@tabler/icons-react-native';
 import { parseTimeToMinutes, minutesToInputTime, currentMinutes, formatDisplayTime } from '@planr/core/lib/timeUtils';
 import type { UsualTimeSlot } from '@planr/core/lib/usualTimeSlot';
 import AddRowButton from './ui/AddRowButton';
+import { ChipRow, ChoiceChip } from './ui/FormChips';
 import TimeInput from './ui/TimeInput';
 import { typography } from './ui/Typography';
 import { Icon } from './ui/Icon';
@@ -48,30 +49,6 @@ function durationLabel(minutes: number | null): string {
   if (hours > 0 && mins > 0) return `${hours}h ${mins}m`;
   if (hours > 0) return `${hours}h`;
   return `${mins}m`;
-}
-
-function Chip({ active, label, onPress }: { active: boolean; label: string; onPress: () => void }) {
-  return (
-    <Pressable
-      accessibilityRole="button"
-      accessibilityState={{ selected: active }}
-      onPress={onPress}
-      className={`h-8 justify-center rounded-full border px-3 ${
-        active ? 'border-neutral-900 bg-neutral-900 dark:border-white dark:bg-white' : 'border-neutral-200 bg-white dark:border-white/10 dark:bg-white/[0.04]'
-      }`}
-    >
-      <Text className={`text-[12px] font-semibold ${active ? 'text-white dark:text-neutral-900' : 'text-neutral-500 dark:text-neutral-400'}`}>{label}</Text>
-    </Pressable>
-  );
-}
-
-function PresetRow({ lead, children }: { lead: string; children: ReactNode }) {
-  return (
-    <View className="flex-row items-start gap-3">
-      <Text className="w-[52px] shrink-0 pt-[7px] text-[12px] font-semibold text-neutral-500 dark:text-neutral-400">{lead}</Text>
-      <View className="min-w-0 flex-1 flex-row flex-wrap gap-2">{children}</View>
-    </View>
-  );
 }
 
 /**
@@ -195,11 +172,13 @@ export default function TimeSlotPicker({
         <AddRowButton label="Add time slot" onClick={addSlot} />
       </View>
 
-      <View className="gap-2.5">
+      <View className="gap-5">
         {usualTimeSlot && (
-          <PresetRow lead="Usual">
-            <Pressable
-              accessibilityRole="button"
+          <ChipRow label="Your usual time">
+            <ChoiceChip
+              active={false}
+              label={`${formatDisplayTime(minutesToInput(usualTimeSlot.startMinutes))}–${formatDisplayTime(minutesToInput(usualTimeSlot.endMinutes))}`}
+              detail={` · ${usualTimeSlot.sampleSize} similar ${usualTimeSlot.sampleSize === 1 ? 'task' : 'tasks'}`}
               onPress={() => {
                 setSelectedDuration(usualTimeSlot.endMinutes - usualTimeSlot.startMinutes);
                 patchSlot(activeIndex, {
@@ -207,26 +186,18 @@ export default function TimeSlotPicker({
                   endTime: minutesToInput(usualTimeSlot.endMinutes),
                 });
               }}
-              className="h-8 flex-row items-center gap-1.5 rounded-full border border-violet-200 bg-violet-50 px-3 dark:border-violet-500/20 dark:bg-violet-500/[0.08]"
-            >
-              <Text className="text-[12px] font-semibold text-violet-700 dark:text-violet-300">
-                {formatDisplayTime(minutesToInput(usualTimeSlot.startMinutes))}–{formatDisplayTime(minutesToInput(usualTimeSlot.endMinutes))}
-                <Text className="font-normal text-violet-600/80 dark:text-violet-300/70">
-                  {` · ${usualTimeSlot.sampleSize} similar ${usualTimeSlot.sampleSize === 1 ? 'task' : 'tasks'}`}
-                </Text>
-              </Text>
-            </Pressable>
-          </PresetRow>
+            />
+          </ChipRow>
         )}
 
         {suggestedSlots && suggestedSlots.length > 0 && (
-          <PresetRow lead="Free">
+          <ChipRow label="Free today">
             {suggestedSlots.map((suggestion) => {
               const startInput = minutesToInput(suggestion.startMinutes);
               const endInput = minutesToInput(suggestion.endMinutes);
               const isActive = active.startTime === startInput && active.endTime === endInput;
               return (
-                <Chip
+                <ChoiceChip
                   key={`${suggestion.startMinutes}-${suggestion.endMinutes}`}
                   active={isActive}
                   label={`${formatDisplayTime(startInput)}–${formatDisplayTime(endInput)}`}
@@ -237,24 +208,24 @@ export default function TimeSlotPicker({
                 />
               );
             })}
-          </PresetRow>
+          </ChipRow>
         )}
 
-        <PresetRow lead={slots.length > 1 ? `Start ${activeIndex + 1}` : 'Start'}>
+        <ChipRow label={slots.length > 1 ? `Start ${activeIndex + 1} at` : 'Start at'}>
           {START_PRESETS.map((preset) => {
             const presetMinutes = preset.value === 'now' ? null : preset.value;
             const isActive = presetMinutes !== null && parseTimeToMinutes(active.startTime) === presetMinutes;
             return (
-              <Chip key={preset.label} active={isActive} label={preset.label} onPress={() => applyStart(preset.value === 'now' ? currentMinutes() : preset.value)} />
+              <ChoiceChip key={preset.label} active={isActive} label={preset.label} onPress={() => applyStart(preset.value === 'now' ? currentMinutes() : preset.value)} />
             );
           })}
-        </PresetRow>
+        </ChipRow>
 
-        <PresetRow lead="For">
+        <ChipRow label="Duration">
           {DURATION_OPTIONS.map((option) => (
-            <Chip key={option.label} active={currentDuration === option.minutes} label={option.label} onPress={() => applyDuration(option.minutes)} />
+            <ChoiceChip key={option.label} active={currentDuration === option.minutes} label={option.label} onPress={() => applyDuration(option.minutes)} />
           ))}
-        </PresetRow>
+        </ChipRow>
       </View>
     </View>
   );

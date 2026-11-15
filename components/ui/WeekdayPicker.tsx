@@ -2,6 +2,7 @@
 
 import { DAYS, DAY_FULL_LABELS, DAY_LABELS } from "@/lib/scheduleConstants";
 import type { DayKey } from "@/lib/useScheduleDB";
+import { ChoiceChip, choiceChipTone } from "@/components/ui/FormChips";
 
 /**
  * Pick the weekdays something happens on.
@@ -37,13 +38,9 @@ interface WeekdayPickerProps {
   className?: string;
 }
 
-function chipClass(active: boolean): string {
-  return active
-    ? "border-neutral-900 bg-neutral-900 text-white dark:border-white dark:bg-white dark:text-neutral-900"
-    : "border-neutral-200 bg-white text-neutral-500 hover:border-neutral-300 hover:text-neutral-800 dark:border-white/10 dark:bg-white/[0.04] dark:text-neutral-400 dark:hover:border-white/20 dark:hover:text-neutral-200";
-}
-
-const CHIP = "h-8 rounded-full border px-3 text-[12px] font-semibold transition-colors";
+// One row of seven equal 44px days, so the week never wraps into a crowded
+// second line on a phone; "Every day" is its own chip above it.
+const DAY = "flex h-11 min-w-0 items-center justify-center rounded-full border text-[14px] font-semibold transition-colors lg:h-10 lg:text-[13px]";
 
 export default function WeekdayPicker({
   selected,
@@ -68,32 +65,31 @@ export default function WeekdayPicker({
   }
 
   return (
-    <div className={`flex flex-wrap gap-2 ${className}`}>
+    <div className={`space-y-2 ${className}`}>
       {allDaysOption && (
-        <button
-          type="button"
-          aria-pressed={allSelected}
+        <ChoiceChip
+          active={allSelected}
+          label="Every day"
           onClick={() => onChange(allSelected ? [fallbackDay ?? selected[0] ?? DAYS[0]] : [...DAYS])}
-          className={`${CHIP} ${chipClass(allSelected)}`}
-        >
-          All days
-        </button>
+        />
       )}
-      {DAYS.map((day) => {
-        const active = allDaysOption ? !allSelected && selected.includes(day) : selected.includes(day);
-        return (
-          <button
-            key={day}
-            type="button"
-            aria-pressed={active}
-            aria-label={DAY_FULL_LABELS[day]}
-            onClick={() => toggleDay(day)}
-            className={`${CHIP} w-10 ${chipClass(active)}`}
-          >
-            {DAY_LABELS[day]}
-          </button>
-        );
-      })}
+      <div className="grid max-w-[392px] grid-cols-7 gap-1.5">
+        {DAYS.map((day) => {
+          const active = allDaysOption ? !allSelected && selected.includes(day) : selected.includes(day);
+          return (
+            <button
+              key={day}
+              type="button"
+              aria-pressed={active}
+              aria-label={DAY_FULL_LABELS[day]}
+              onClick={() => toggleDay(day)}
+              className={`${DAY} ${choiceChipTone(active)}`}
+            >
+              {DAY_LABELS[day]}
+            </button>
+          );
+        })}
+      </div>
     </div>
   );
 }

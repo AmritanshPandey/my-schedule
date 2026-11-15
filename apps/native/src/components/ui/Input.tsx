@@ -1,5 +1,6 @@
-import { forwardRef, useEffect, useRef } from 'react';
+import { forwardRef, useContext, useEffect, useRef } from 'react';
 import { View } from 'react-native';
+import { SheetPresentedContext } from '../../lib/modalTurn';
 import { Text, TextInput, type TextInputProps, type TextInputRef as RNTextInput } from './Text';
 import { typography } from './Typography';
 
@@ -24,14 +25,16 @@ interface InputProps extends TextInputProps {
 /**
  * Delay autoFocus by ~300ms so the sheet's slide-in finishes before the
  * keyboard opens (same reasoning as the web: focusing mid-animation makes the
- * panel jump as the keyboard pushes it).
+ * panel jump as the keyboard pushes it). Inside an iOS sheet it waits for the
+ * sheet to report it's up instead, however long that takes.
  */
 function useDelayedFocus(ref: React.RefObject<RNTextInput | null>, autoFocus?: boolean) {
+  const presented = useContext(SheetPresentedContext);
   useEffect(() => {
-    if (!autoFocus) return undefined;
+    if (!autoFocus || !presented) return undefined;
     const t = setTimeout(() => ref.current?.focus(), 300);
     return () => clearTimeout(t);
-  }, [ref, autoFocus]);
+  }, [ref, autoFocus, presented]);
 }
 
 function assignRef<T>(ref: React.ForwardedRef<T>, value: T | null) {

@@ -7,7 +7,7 @@
  * Pure types/interfaces only — no IndexedDB, no React, no DOM.
  */
 
-import type { ScheduleEntry } from "./scheduleEntry";
+import type { ScheduleEntry, TargetValues } from "./scheduleEntry";
 import type { AccentColor } from "./colorSystem";
 import type { GoalDirection } from "./trendUtils";
 import type { PlanLifecycle } from "./planLifecycle";
@@ -327,6 +327,53 @@ export interface MetricEntry {
   date: string; // ISO "YYYY-MM-DD"
 }
 
+/**
+ * The user's answer to one suggested progression step for one subtask in one
+ * period. Append-only; the id is `taskId~subtaskId~periodStartISO`, so
+ * accepting and holding the same period are the same record (last write wins)
+ * and two devices deciding the same period merge instead of duplicating.
+ */
+export interface ProgressionStep {
+  id: string;
+  taskId: string;
+  subtaskId: string;
+  /** Start of the period whose consistency earned the suggestion. */
+  periodStartISO: string;
+  decision: "accepted" | "held";
+  /** Absolute values after the step (only the figures that changed). */
+  to: TargetValues;
+  /** ISO datetime of the decision. */
+  decidedAt: string;
+}
+
+/** One logged set. Only the figures the subtask tracks are filled in. */
+export interface LoggedSet {
+  weight?: number;
+  reps?: number;
+  /** Minutes, for timed work (a cardio interval). */
+  minutes?: number;
+  /** A warm-up set — shown, but not counted as a working set. */
+  warmup?: boolean;
+  done: boolean;
+}
+
+/**
+ * The sets one subtask got on one day. One row per session rather than per
+ * set keeps the synced document small (each row also carries a sync stamp),
+ * and the id `taskId~subtaskId~dateISO` makes logging the same session twice
+ * an overwrite rather than a duplicate.
+ */
+export interface SetLog {
+  id: string;
+  taskId: string;
+  subtaskId: string;
+  dateISO: string;
+  weightUnit?: "kg" | "lb";
+  sets: LoggedSet[];
+  /** ISO datetime the session was saved. */
+  completedAt: string;
+}
+
 export interface Milestone {
   id: string;
   planId: string;
@@ -636,6 +683,10 @@ export interface Schedule {
   notes: Note[];
   events: ScheduleEvent[];
   preferences: SchedulePreferences;
+  /** One row per subtask per day's session of logged sets (focus mode / Log sets). */
+  setLogs?: SetLog[];
+  /** The user's accept/hold answers to suggested progression steps. */
+  progressionSteps?: ProgressionStep[];
   /**
    * Which entities changed or were deleted, and when — the bookkeeping the
    * cloud merge needs to combine two devices' edits without losing either.

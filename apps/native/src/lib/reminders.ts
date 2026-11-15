@@ -358,6 +358,48 @@ export async function cancelAllReminders(): Promise<void> {
   }
 }
 
+/**
+ * Focus mode's rest alert: one notification when a rest ends, for when the
+ * app is in the background. Its id is outside ID_PREFIX on purpose — the
+ * reminder re-arm cancels every `planr-` trigger it didn't compute, and a rest
+ * must survive that. Silently does nothing without notification permission:
+ * a rest timer is no reason to ask for it.
+ */
+const REST_ALERT_ID = 'focus-rest';
+
+export async function armRestAlert(atMs: number, title: string): Promise<void> {
+  const lib = kit();
+  if (!lib || atMs <= Date.now()) return;
+  try {
+    const notifee = lib.default;
+    const os = await notifee.getNotificationSettings();
+    if (toSupport(lib, os.authorizationStatus) !== 'granted') return;
+    await ensureSetup(lib);
+    await notifee.createTriggerNotification(
+      {
+        id: REST_ALERT_ID,
+        title: 'Rest over',
+        body: title,
+        android: { channelId: CHANNEL_REMINDERS, pressAction: { id: 'default' }, sound: 'default' },
+        ios: { sound: 'default', interruptionLevel: 'timeSensitive' },
+      },
+      buildReminderTrigger(lib, atMs, false),
+    );
+  } catch (err) {
+    logError('reminders:rest', err);
+  }
+}
+
+export async function cancelRestAlert(): Promise<void> {
+  const lib = kit();
+  if (!lib) return;
+  try {
+    await lib.default.cancelTriggerNotifications([REST_ALERT_ID]);
+  } catch (err) {
+    logError('reminders:rest-cancel', err);
+  }
+}
+
 export type TestNotificationResult = { ok: true } | { ok: false; error: string };
 
 /**

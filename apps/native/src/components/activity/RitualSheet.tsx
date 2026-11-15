@@ -3,7 +3,6 @@ import { Pressable, ScrollView, View } from 'react-native';
 import { IconCheck, IconClock, IconPlus, IconX } from '@tabler/icons-react-native';
 import type { DayKey, Ritual, RitualColor, RitualRecurrenceKind, RitualStep, RitualTrackingType } from '@planr/core/lib/scheduleTypes';
 import { RITUAL_COLORS } from '@planr/core/lib/scheduleTypes';
-import { DAYS, DAY_LABELS } from '@planr/core/lib/scheduleConstants';
 import { uid } from '@planr/core/lib/id';
 import { RITUAL_COLOR_DOT } from '@planr/core/lib/ritualColors';
 import { ROUTINE_TEMPLATES, type RoutineTemplateKey } from '@planr/core/lib/routineTemplates';
@@ -13,6 +12,8 @@ import { haptic } from '../../lib/haptics';
 import BottomSheet from '../ui/BottomSheet';
 import SheetHeader from '../ui/SheetHeader';
 import { typography } from '../ui/Typography';
+import { ChipRow, ChoiceChip } from '../ui/FormChips';
+import WeekdayPicker from '../ui/WeekdayPicker';
 import Button, { BUTTON_TEXT } from '../ui/Button';
 import TimeInput from '../ui/TimeInput';
 import { Icon } from '../ui/Icon';
@@ -58,22 +59,11 @@ const RITUAL_COLOR_RING_BORDER: Record<RitualColor, string> = {
   teal: 'border-teal-400',
 };
 
-const CHIP_ON = 'border-neutral-900 bg-neutral-900 dark:border-white dark:bg-white';
-const CHIP_OFF = 'border-neutral-200 bg-white dark:border-white/10 dark:bg-white/[0.04]';
 const CHIP_TEXT_ON = 'text-white dark:text-neutral-900';
 const CHIP_TEXT_OFF = 'text-neutral-500 dark:text-neutral-400';
 
 function Chip({ label, selected, onPress }: { label: string; selected: boolean; onPress: () => void }) {
-  return (
-    <Pressable
-      accessibilityRole="button"
-      accessibilityState={{ selected }}
-      onPress={onPress}
-      className={`h-8 justify-center rounded-full border px-3 ${selected ? CHIP_ON : CHIP_OFF}`}
-    >
-      <Text className={`text-[12px] font-semibold ${selected ? CHIP_TEXT_ON : CHIP_TEXT_OFF}`}>{label}</Text>
-    </Pressable>
-  );
+  return <ChoiceChip active={selected} label={label} onPress={onPress} />;
 }
 
 interface RitualSheetProps {
@@ -227,8 +217,37 @@ export function RitualSheet({ open, onClose, initial, onSave, onDelete }: Ritual
   const fieldBase =
     'rounded-xl border border-neutral-200 bg-neutral-50 text-neutral-900 dark:border-white/10 dark:bg-white/[0.04] dark:text-white';
 
+  // Pinned in the sheet's footer, above the keyboard. Editing, Delete shares
+  // the row on the leading side and Save holds the trailing one; Delete still
+  // confirms before anything is removed. Adding, Save is the only action.
+  const submitRow = (
+    <View className="flex-row items-center gap-2.5">
+      {isEdit && onDelete && (
+        <Button
+          variant="destructiveSecondary"
+          className="flex-1"
+          onPress={() => {
+            haptic('light');
+            onDelete();
+            onClose();
+          }}
+        >
+          Delete routine
+        </Button>
+      )}
+      <Button
+        className="flex-1"
+        onPress={handleSave}
+        disabled={!canSave}
+        icon={<Icon icon={isEdit ? IconCheck : IconPlus} size={18} strokeWidth={2.5} className={BUTTON_TEXT.primary} />}
+      >
+        {isEdit ? 'Save routine' : 'Add routine'}
+      </Button>
+    </View>
+  );
+
   return (
-    <BottomSheet open={open} onClose={handleClose}>
+    <BottomSheet open={open} onClose={handleClose} fullHeight footer={showTemplatePicker ? null : submitRow}>
       <View className="px-5 pb-6 pt-2">
         {showTemplatePicker ? (
           <View className="gap-4">
@@ -260,9 +279,9 @@ export function RitualSheet({ open, onClose, initial, onSave, onDelete }: Ritual
           <>
             <SheetHeader eyebrow={isEdit ? 'Edit routine' : 'New routine'} title={title || 'New routine'} onClose={handleClose} />
 
-            <View className="mt-4 gap-5">
+            <View className="mt-4 gap-7">
               {/* ── Basic ──────────────────────────────────────────────────── */}
-              <View className="gap-3">
+              <View className="gap-5">
                 <TextInput
                   value={title}
                   onChangeText={setTitle}
@@ -288,13 +307,13 @@ export function RitualSheet({ open, onClose, initial, onSave, onDelete }: Ritual
                           accessibilityLabel={name}
                           accessibilityState={{ selected }}
                           onPress={() => setIcon((prev) => (prev === name ? '' : name))}
-                          className={`h-9 w-9 shrink-0 items-center justify-center rounded-full ${
+                          className={`h-11 w-11 shrink-0 items-center justify-center rounded-full ${
                             selected ? 'bg-neutral-900 dark:bg-white' : 'bg-neutral-100 active:bg-neutral-200 dark:bg-white/[0.06] dark:active:bg-white/[0.10]'
                           }`}
                         >
                           <Icon
                             icon={Glyph}
-                            size={16}
+                            size={19}
                             strokeWidth={1.9}
                             className={selected ? 'text-white dark:text-neutral-900' : 'text-neutral-500 dark:text-neutral-400'}
                           />
@@ -307,7 +326,7 @@ export function RitualSheet({ open, onClose, initial, onSave, onDelete }: Ritual
                 {/* Color */}
                 <View>
                   <Text className={`mb-2 ${typography.eyebrow}`}>Color</Text>
-                  <View className="flex-row flex-wrap items-center gap-1.5">
+                  <View className="flex-row flex-wrap items-center gap-1">
                     {RITUAL_COLORS.map((c) => {
                       const selected = color === c;
                       return (
@@ -317,9 +336,9 @@ export function RitualSheet({ open, onClose, initial, onSave, onDelete }: Ritual
                           accessibilityLabel={c}
                           accessibilityState={{ selected }}
                           onPress={() => setColor((prev) => (prev === c ? '' : c))}
-                          className={`rounded-full border-2 p-[2px] ${selected ? RITUAL_COLOR_RING_BORDER[c] : 'border-transparent'}`}
+                          className={`h-11 w-11 items-center justify-center rounded-full border-2 ${selected ? RITUAL_COLOR_RING_BORDER[c] : 'border-transparent'}`}
                         >
-                          <View className={`h-7 w-7 rounded-full ${RITUAL_COLOR_DOT[c]} ${selected ? '' : 'opacity-50'}`} />
+                          <View className={`h-8 w-8 rounded-full ${RITUAL_COLOR_DOT[c]} ${selected ? '' : 'opacity-50'}`} />
                         </Pressable>
                       );
                     })}
@@ -328,7 +347,7 @@ export function RitualSheet({ open, onClose, initial, onSave, onDelete }: Ritual
               </View>
 
               {/* ── Schedule ───────────────────────────────────────────────── */}
-              <View className="gap-3 border-t border-neutral-100 pt-4 dark:border-white/[0.06]">
+              <View className="gap-4 border-t border-neutral-100 pt-6 dark:border-white/[0.06]">
                 <Text className={typography.eyebrow}>Schedule</Text>
 
                 <View className="flex-row flex-wrap gap-2">
@@ -337,21 +356,7 @@ export function RitualSheet({ open, onClose, initial, onSave, onDelete }: Ritual
                   ))}
                 </View>
 
-                {recurrenceKind === 'custom' && (
-                  <View className="flex-row flex-wrap gap-2">
-                    {DAYS.map((day) => {
-                      const sel = customDays.includes(day);
-                      return (
-                        <Chip
-                          key={day}
-                          label={DAY_LABELS[day]}
-                          selected={sel}
-                          onPress={() => setCustomDays((prev) => (sel ? prev.filter((x) => x !== day) : [...prev, day]))}
-                        />
-                      );
-                    })}
-                  </View>
-                )}
+                {recurrenceKind === 'custom' && <WeekdayPicker selected={customDays} onChange={setCustomDays} allowEmpty />}
 
                 {recurrenceKind === 'interval' && (
                   <View className="flex-row items-center gap-2">
@@ -361,7 +366,7 @@ export function RitualSheet({ open, onClose, initial, onSave, onDelete }: Ritual
                       value={String(intervalDays)}
                       onChangeText={(v) => setIntervalDays(Math.max(2, parseInt(v, 10) || 2))}
                       accessibilityLabel="Interval in days"
-                      className={`h-9 w-16 px-2 text-center text-[14px] font-semibold ${fieldBase}`}
+                      className={`h-11 w-20 px-2 text-center text-[16px] font-semibold ${fieldBase}`}
                     />
                     <Text className="text-[13px] text-neutral-500 dark:text-neutral-400">days</Text>
                   </View>
@@ -395,9 +400,9 @@ export function RitualSheet({ open, onClose, initial, onSave, onDelete }: Ritual
               </View>
 
               {/* ── Tracking ───────────────────────────────────────────────── */}
-              <View className="gap-3 border-t border-neutral-100 pt-4 dark:border-white/[0.06]">
+              <View className="gap-4 border-t border-neutral-100 pt-6 dark:border-white/[0.06]">
                 <Text className={typography.eyebrow}>Details</Text>
-                <Text className="-mt-1 text-[11px] leading-snug text-neutral-500 dark:text-neutral-400">
+                <Text className="-mt-1 text-[13px] leading-snug text-neutral-500 dark:text-neutral-400">
                   You'll mark it done with one tap and say how closely you followed it. This just shapes what it shows.
                 </Text>
                 <View className="flex-row flex-wrap gap-2">
@@ -413,13 +418,13 @@ export function RitualSheet({ open, onClose, initial, onSave, onDelete }: Ritual
                       value={target}
                       onChangeText={setTarget}
                       placeholder="Goal"
-                      className={`h-10 w-24 px-3 text-[14px] font-semibold ${fieldBase}`}
+                      className={`h-11 w-24 px-3 text-[16px] font-semibold ${fieldBase}`}
                     />
                     <TextInput
                       value={unit}
                       onChangeText={setUnit}
                       placeholder="Unit (ml, min, reps…)"
-                      className={`h-10 flex-1 px-3 text-[14px] font-medium ${fieldBase}`}
+                      className={`h-11 flex-1 px-3 text-[16px] font-medium ${fieldBase}`}
                     />
                   </View>
                 )}
@@ -431,7 +436,7 @@ export function RitualSheet({ open, onClose, initial, onSave, onDelete }: Ritual
                     time when an item has one. */}
                 <View className="gap-1.5">
                   {trackingType !== 'checklist' && (
-                    <Text className="text-[11px] leading-snug text-neutral-500 dark:text-neutral-400">
+                    <Text className="text-[13px] leading-snug text-neutral-500 dark:text-neutral-400">
                       Optional: what it covers, with a time if it has one (e.g. "Lunch: dal, rice, salad" at 1:00 PM). One tap on the routine covers all of them.
                     </Text>
                   )}
@@ -466,7 +471,7 @@ export function RitualSheet({ open, onClose, initial, onSave, onDelete }: Ritual
                         returnKeyType="done"
                         placeholder={trackingType === 'checklist' ? 'Add a step…' : 'Add a detail…'}
                         accessibilityLabel={trackingType === 'checklist' ? 'New step' : 'New detail'}
-                        className={`h-11 min-w-0 flex-1 px-3 text-[14px] ${fieldBase}`}
+                        className={`h-11 min-w-0 flex-1 px-3 text-[16px] ${fieldBase}`}
                       />
                       <Pressable
                         accessibilityRole="button"
@@ -489,24 +494,24 @@ export function RitualSheet({ open, onClose, initial, onSave, onDelete }: Ritual
               </View>
 
               {/* ── Advanced (progressive disclosure) ─────────────────────── */}
-              <View className="border-t border-neutral-100 pt-4 dark:border-white/[0.06]">
-                <Pressable accessibilityRole="button" onPress={() => setShowAdvanced((v) => !v)} hitSlop={8} className="self-start">
-                  <Text className="text-[12px] font-semibold text-neutral-500 underline dark:text-neutral-400">
+              <View className="border-t border-neutral-100 pt-6 dark:border-white/[0.06]">
+                <Pressable accessibilityRole="button" onPress={() => setShowAdvanced((v) => !v)} className="min-h-11 justify-center self-start">
+                  <Text className="text-[14px] font-semibold text-neutral-600 underline dark:text-neutral-300">
                     {showAdvanced ? 'Hide advanced options' : 'Show advanced options'}
                   </Text>
                 </Pressable>
 
                 {showAdvanced && (
-                  <View className="mt-3 gap-3">
+                  <View className="mt-4 gap-5">
                     <View>
-                      <Text className={`mb-1.5 ${typography.eyebrow}`}>
+                      <Text className={`mb-2 ${typography.eyebrow}`}>
                         Description <Text className="font-normal normal-case text-neutral-500 dark:text-neutral-400">(optional)</Text>
                       </Text>
                       <TextInput
                         value={description}
                         onChangeText={setDescription}
                         placeholder="A short subtitle"
-                        className={`h-10 w-full px-3 text-[13px] ${fieldBase}`}
+                        className={`h-11 w-full px-4 text-[16px] ${fieldBase}`}
                       />
                     </View>
 
@@ -515,22 +520,16 @@ export function RitualSheet({ open, onClose, initial, onSave, onDelete }: Ritual
                         Typical duration{' '}
                         <Text className="font-normal normal-case text-neutral-500 dark:text-neutral-400">(optional, display only)</Text>
                       </Text>
-                      <View className="flex-row flex-wrap gap-2">
-                        {[undefined, ...DURATION_PRESETS].map((d) => {
-                          const selected = duration === d;
-                          return (
-                            <Pressable
-                              key={d ?? 'none'}
-                              accessibilityRole="button"
-                              accessibilityState={{ selected }}
-                              onPress={() => setDuration((prev) => (d === undefined ? undefined : prev === d ? undefined : d))}
-                              className={`rounded-full px-3 py-1 ${selected ? 'bg-neutral-900 dark:bg-white' : 'border border-neutral-200 dark:border-white/10'}`}
-                            >
-                              <Text className={`text-[12px] font-semibold ${selected ? CHIP_TEXT_ON : CHIP_TEXT_OFF}`}>{d === undefined ? 'None' : `${d}m`}</Text>
-                            </Pressable>
-                          );
-                        })}
-                      </View>
+                      <ChipRow>
+                        {[undefined, ...DURATION_PRESETS].map((d) => (
+                          <ChoiceChip
+                            key={d ?? 'none'}
+                            active={duration === d}
+                            label={d === undefined ? 'None' : `${d}m`}
+                            onPress={() => setDuration((prev) => (d === undefined ? undefined : prev === d ? undefined : d))}
+                          />
+                        ))}
+                      </ChipRow>
                     </View>
 
                     <View>
@@ -544,36 +543,13 @@ export function RitualSheet({ open, onClose, initial, onSave, onDelete }: Ritual
                         multiline
                         numberOfLines={2}
                         textAlignVertical="top"
-                        className="min-h-[64px] w-full rounded-xl border border-neutral-200 bg-neutral-50 px-3 py-2.5 text-[14px] text-neutral-700 dark:border-white/10 dark:bg-white/[0.04] dark:text-white"
+                        className="min-h-[76px] w-full rounded-xl border border-neutral-200 bg-neutral-50 px-4 py-3 text-[16px] text-neutral-700 dark:border-white/10 dark:bg-white/[0.04] dark:text-white"
                       />
                     </View>
                   </View>
                 )}
               </View>
 
-              {/* Submit */}
-              <Button
-                fullWidth
-                onPress={handleSave}
-                disabled={!canSave}
-                icon={<Icon icon={isEdit ? IconCheck : IconPlus} size={18} strokeWidth={2.5} className={BUTTON_TEXT.primary} />}
-              >
-                {isEdit ? 'Save routine' : 'Add routine'}
-              </Button>
-
-              {isEdit && onDelete && (
-                <Button
-                  variant="destructiveSecondary"
-                  fullWidth
-                  onPress={() => {
-                    haptic('light');
-                    onDelete();
-                    onClose();
-                  }}
-                >
-                  Delete routine
-                </Button>
-              )}
             </View>
           </>
         )}

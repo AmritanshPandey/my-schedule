@@ -5,6 +5,7 @@ import { IconX } from "@tabler/icons-react";
 import type { DayKey } from "@/lib/useScheduleDB";
 import { parseTimeToMinutes, minutesToInputTime, currentMinutes, formatDisplayTime } from "@/lib/timeUtils";
 import AddRowButton from "@/components/ui/AddRowButton";
+import { ChipRow, ChoiceChip } from "@/components/ui/FormChips";
 import TimeInput from "@/components/ui/TimeInput";
 import { typography } from "@/components/ui/Typography";
 import type { UsualTimeSlot } from "@/lib/usualTimeSlot";
@@ -77,37 +78,7 @@ function durationLabel(minutes: number | null): string {
   return `${mins}m`;
 }
 
-function chipClass(active: boolean): string {
-  return active
-    ? "border-neutral-900 bg-neutral-900 text-white dark:border-white dark:bg-white dark:text-neutral-900"
-    : "border-neutral-200 bg-white text-neutral-500 hover:border-neutral-300 hover:text-neutral-800 dark:border-white/10 dark:bg-white/[0.04] dark:text-neutral-400 dark:hover:border-white/20 dark:hover:text-neutral-200";
-}
-
 const LABEL = typography.eyebrow;
-
-/**
- * One row of presets, introduced by a word rather than by an uppercase eyebrow.
- *
- * These rows used to be three separately-titled sections — SUGGESTED TIMES,
- * QUICK START, DURATION — stacked one under another in identical chip
- * vocabulary. Four rows of interchangeable-looking pills where the pills mean
- * completely different things (a whole slot / a start / a length), and the only
- * thing telling them apart was a 2.6:1 grey caption above each. DESIGN.md bans
- * the eyebrow-above-every-section habit outright; the lead-in also does the job
- * better, because "Start · Now Morning" and "For · 15m 30m" read as sentences
- * and no longer need the "pick a start, then tap a duration" instruction that
- * sat underneath explaining how to operate the control.
- */
-function PresetRow({ lead, children }: { lead: string; children: React.ReactNode }) {
-  return (
-    <div className="flex items-baseline gap-3">
-      <span className="w-[52px] shrink-0 pt-[7px] text-[12px] font-semibold text-neutral-500 dark:text-neutral-400">
-        {lead}
-      </span>
-      <div className="flex min-w-0 flex-1 flex-wrap gap-2">{children}</div>
-    </div>
-  );
-}
 
 export default function TimeSlotPicker({
   slots,
@@ -217,20 +188,18 @@ export default function TimeSlotPicker({
         <AddRowButton label="Add time slot" onClick={addSlot} />
       </div>
 
-      {/*
-        Presets: three ways to fill the two fields above, kept together as one
-        block instead of three separately-titled sections. See PresetRow.
-      */}
-      <div className="space-y-2.5">
+      {/* Presets: quick ways to fill the two fields above, each a labelled
+          row of 44px chips that scrolls sideways on a phone (ui/FormChips). */}
+      <div className="space-y-5">
         {/* Your usual time — personalized, from the user's own scheduling
-            history (lib/usualTimeSlot.ts). Distinct from the open-gap
-            suggestions below: this is "what you actually do," not "what
-            happens to be free." Violet marks personalization throughout this
-            app (AddPlanSheet's "Build this with AI instead"). */}
+            history (lib/usualTimeSlot.ts): "what you actually do," not
+            "what happens to be free." */}
         {usualTimeSlot && (
-          <PresetRow lead="Usual">
-            <button
-              type="button"
+          <ChipRow label="Your usual time">
+            <ChoiceChip
+              active={false}
+              label={`${formatDisplayTime(minutesToInput(usualTimeSlot.startMinutes))}–${formatDisplayTime(minutesToInput(usualTimeSlot.endMinutes))}`}
+              detail={`· ${usualTimeSlot.sampleSize} similar ${usualTimeSlot.sampleSize === 1 ? "task" : "tasks"}`}
               onClick={() => {
                 setSelectedDuration(usualTimeSlot.endMinutes - usualTimeSlot.startMinutes);
                 patchSlot(activeIndex, {
@@ -238,72 +207,50 @@ export default function TimeSlotPicker({
                   endTime: minutesToInput(usualTimeSlot.endMinutes),
                 });
               }}
-              className="flex h-8 items-center gap-1.5 rounded-full border border-neutral-200/70 bg-neutral-100 px-3 text-[12px] font-semibold text-neutral-700 transition-colors hover:border-neutral-300 dark:border-white/[0.07] dark:bg-white/[0.05] dark:text-neutral-300 dark:hover:border-white/[0.14]"
-            >
-              {formatDisplayTime(minutesToInput(usualTimeSlot.startMinutes))}–{formatDisplayTime(minutesToInput(usualTimeSlot.endMinutes))}
-              <span className="font-normal text-neutral-500 dark:text-neutral-400">
-                · {usualTimeSlot.sampleSize} similar {usualTimeSlot.sampleSize === 1 ? "task" : "tasks"}
-              </span>
-            </button>
-          </PresetRow>
+            />
+          </ChipRow>
         )}
 
         {/* Suggested = currently-open gaps in the day being edited. */}
         {suggestedSlots && suggestedSlots.length > 0 && (
-          <PresetRow lead="Free">
+          <ChipRow label="Free today">
             {suggestedSlots.map((suggestion) => {
               const startInput = minutesToInput(suggestion.startMinutes);
               const endInput = minutesToInput(suggestion.endMinutes);
-              const isActive = active.startTime === startInput && active.endTime === endInput;
               return (
-                <button
+                <ChoiceChip
                   key={`${suggestion.startMinutes}-${suggestion.endMinutes}`}
-                  type="button"
-                  aria-pressed={isActive}
+                  active={active.startTime === startInput && active.endTime === endInput}
+                  label={`${formatDisplayTime(startInput)}–${formatDisplayTime(endInput)}`}
                   onClick={() => {
                     setSelectedDuration(suggestion.endMinutes - suggestion.startMinutes);
                     patchSlot(activeIndex, { startTime: startInput, endTime: endInput });
                   }}
-                  className={`h-8 rounded-full border px-3 text-[12px] font-semibold transition-colors ${chipClass(isActive)}`}
-                >
-                  {formatDisplayTime(startInput)}–{formatDisplayTime(endInput)}
-                </button>
+                />
               );
             })}
-          </PresetRow>
+          </ChipRow>
         )}
 
-        <PresetRow lead={slots.length > 1 ? `Start ${activeIndex + 1}` : "Start"}>
+        <ChipRow label={slots.length > 1 ? `Start ${activeIndex + 1} at` : "Start at"}>
           {START_PRESETS.map((preset) => {
             const presetMinutes = preset.value === "now" ? null : preset.value;
-            const isActive = presetMinutes !== null && inputToMinutes(active.startTime) === presetMinutes;
             return (
-              <button
+              <ChoiceChip
                 key={preset.label}
-                type="button"
-                aria-pressed={isActive}
+                active={presetMinutes !== null && inputToMinutes(active.startTime) === presetMinutes}
+                label={preset.label}
                 onClick={() => applyStart(preset.value === "now" ? currentMinutes() : preset.value)}
-                className={`h-8 rounded-full border px-3 text-[12px] font-semibold transition-colors ${chipClass(isActive)}`}
-              >
-                {preset.label}
-              </button>
+              />
             );
           })}
-        </PresetRow>
+        </ChipRow>
 
-        <PresetRow lead="For">
+        <ChipRow label="Duration">
           {DURATION_OPTIONS.map((option) => (
-            <button
-              key={option.label}
-              type="button"
-              aria-pressed={currentDuration === option.minutes}
-              onClick={() => applyDuration(option.minutes)}
-              className={`h-8 rounded-full border px-3 text-[12px] font-semibold transition-colors ${chipClass(currentDuration === option.minutes)}`}
-            >
-              {option.label}
-            </button>
+            <ChoiceChip key={option.label} active={currentDuration === option.minutes} label={option.label} onClick={() => applyDuration(option.minutes)} />
           ))}
-        </PresetRow>
+        </ChipRow>
       </div>
 
     </section>

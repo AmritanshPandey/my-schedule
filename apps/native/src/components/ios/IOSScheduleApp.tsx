@@ -31,6 +31,10 @@ import { constrainTaskToPlanWindow } from '@planr/core/lib/planTaskWindow';
 import { formatDate, formatDayNoteLabel, localISODate, todayISO } from '@planr/core/lib/dateUtils';
 import { quickAmountsForUnit } from '@planr/core/lib/quickAmounts';
 import { valueForDate } from '@planr/core/lib/metricEntries';
+import { upsertSetLog } from '@planr/core/lib/setLogs';
+import { useFocusSession } from '../../lib/useFocusSession';
+import { decideProgression, pendingProgressionsForTask } from '@planr/core/lib/subtaskProgression';
+import FocusHost, { focusItems } from '../focus/FocusHost';
 import {
   addSubtaskToTasks,
   applyTaskDelete,
@@ -440,6 +444,13 @@ export default function IOSScheduleApp() {
   const detailRitual = detailRitualId ? (schedule.rituals ?? []).find((r) => r.id === detailRitualId) ?? null : null;
   const editingRitual = editRitualId ? (schedule.rituals ?? []).find((r) => r.id === editRitualId) ?? null : null;
   const [subtasksRef, setSubtasksRef] = useState<{ id: string; day: DayKey; dateISO: string } | null>(null);
+  // Focus mode: device-local, restored on launch if a session from today is open.
+  const focus = useFocusSession((state) => {
+    const task = schedule.activities[state.day as DayKey]?.find((t) => t.id === state.taskId);
+    return task ? `Back to ${task.title}` : 'Back to it';
+  });
+  const focusShowing = focus.open && !!focus.state;
+
   const [entryTracker, setEntryTracker] = useState<ProgressTracker | null>(null);
   // The log sheet outlives entryTracker by its dismissal, so it keeps the last
   // tracker's labels while it slides away rather than flashing "Value".
@@ -465,6 +476,7 @@ export default function IOSScheduleApp() {
   // detail page covers it — e.g. "Add plan" from the create menu opens the
   // Plans tab and its sheet together. (The web shell starts it on the tab alone.)
   const pageCovered =
+    focusShowing ||
     !!selectedPlanId ||
     !!subtasksRef ||
     !!detailRitualId ||
@@ -1224,6 +1236,11 @@ export default function IOSScheduleApp() {
   // buttons do. Sheets and full-screen modals handle back themselves.
   useEffect(() => {
     const sub = BackHandler.addEventListener('hardwareBackPress', () => {
+      // Back leaves focus but keeps the session, like its own close button.
+      if (focusShowing) {
+        focus.hide();
+        return true;
+      }
       if (detailRitualId) {
         setDetailRitualId(null);
         return true;
@@ -1243,7 +1260,7 @@ export default function IOSScheduleApp() {
       return false;
     });
     return () => sub.remove();
-  }, [detailRitualId, subtasksRef, selectedPlanId, activeTab]);
+  }, [detailRitualId, subtasksRef, selectedPlanId, activeTab, focusShowing, focus]);
 
   const renderTaskList = (tasks: Task[], day: DayKey, dateISO: string, emptyAction?: () => void, editMode = true) => {
     // A task scheduled at several times appears as its own entry at each time —
@@ -1422,6 +1439,24 @@ export default function IOSScheduleApp() {
                 : undefined
             }
             presentation="page"
+            dateISO={subtasksRef.dateISO}
+            setLogs={schedule.setLogs}
+            progressionSteps={schedule.progressionSteps}
+            onSaveSetLog={(log) => setSchedule((prev) => upsertSetLog(prev, log))}
+            suggestions={subtasksTask && subtasksRef.dateISO === todayISO() ? pendingProgressionsForTask(schedule, subtasksTask, todayISO()) : undefined}
+            onDecideProgression={(suggestion, decision) => setSchedule((prev) => decideProgression(prev, suggestion, decision))}
+            onStartFocus={
+              subtasksTask && subtasksRef.dateISO === todayISO()
+                ? () =>
+                    focus.start({
+                      taskId: subtasksTask.id,
+                      day: subtasksRef.day,
+                      dateISO: subtasksRef.dateISO,
+                      stepIds: focusItems(subtasksTask, plansById).map((item) => item.id),
+                      alreadyDone: subtasksTask.completedSubtaskIds,
+                    })
+                : undefined
+            }
           />
         </ErrorBoundary>
       );
@@ -1789,7 +1824,7 @@ export default function IOSScheduleApp() {
 
   // Task detail and Notes are full pages that own their scrolling and header.
   const fullPage = !!subtasksRef || activeTab === 6;
-  const showBottomNav = activeTab !== 6 && !subtasksRef && !taskSheetOpen && !detailRitual;
+  const showBottomNav = activeTab !== 6 && !subtasksRef && !taskSheetOpen && !detailRitual && !focusShowing;
 
   const toastElement = toastState ? (
     <View
@@ -2096,6 +2131,15 @@ export default function IOSScheduleApp() {
             metricEntries: [...prev.metricEntries, entry],
           }));
         }}
+      />
+
+      <FocusHost
+        focus={focus}
+        schedule={schedule}
+        setSchedule={setSchedule}
+        plansById={plansById}
+        onToggleSubtask={(taskId, subtaskId, day, dateISO) => handleToggleSubtask(taskId, subtaskId, day, dateISO)}
+        onToggleComplete={(taskId, ids, day, dateISO) => handleToggleTaskComplete(taskId, ids, day, dateISO)}
       />
 
       {detailRitual && (

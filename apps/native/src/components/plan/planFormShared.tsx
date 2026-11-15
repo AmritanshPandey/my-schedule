@@ -3,6 +3,7 @@ import type { AccentColor } from '@planr/core/lib/colorSystem';
 import { todayISO } from '@planr/core/lib/dateUtils';
 import { typography } from '../ui/Typography';
 import { Text } from '../ui/Text';
+import { ChipRow, ChoiceChip } from '../ui/FormChips';
 
 /** Native port of components/plan/planFormShared.tsx. */
 export const PLAN_TITLE_MAX = 40;
@@ -58,7 +59,7 @@ export function PlanColorPicker({ value, onChange }: { value: AccentColor; onCha
   return (
     <View>
       <Text className={`mb-2 ${typography.eyebrow}`}>Color</Text>
-      <View className="flex-row flex-wrap gap-3">
+      <View className="flex-row flex-wrap gap-1">
         {PLAN_COLOR_SWATCHES.map(({ color, bg }) => {
           const sel = value === color;
           return (
@@ -68,9 +69,9 @@ export function PlanColorPicker({ value, onChange }: { value: AccentColor; onCha
               accessibilityLabel={color}
               accessibilityState={{ selected: sel }}
               onPress={() => onChange(color)}
-              className={`h-9 w-9 items-center justify-center rounded-full ${sel ? 'border-2 border-neutral-900 dark:border-white' : ''}`}
+              className={`h-11 w-11 items-center justify-center rounded-full border-2 ${sel ? 'border-neutral-900 dark:border-white' : 'border-transparent'}`}
             >
-              <View className={`h-7 w-7 rounded-full ${bg}`} />
+              <View className={`h-8 w-8 rounded-full ${bg}`} />
             </Pressable>
           );
         })}
@@ -91,25 +92,12 @@ export function DurationPresets({
   const today = todayISO();
   return (
     <View>
-      <Text className={`mb-2 ${typography.eyebrow}`}>Quick duration</Text>
-      <View className="flex-row flex-wrap gap-2">
+      <ChipRow label="Quick duration">
         {PLAN_DURATION_PRESETS.map(({ label, days }) => {
           const isActive = days !== null ? startDate === today && endDate === addDaysISO(days) : startDate === today && !endDate;
-          return (
-            <Pressable
-              key={label}
-              accessibilityRole="button"
-              accessibilityState={{ selected: isActive }}
-              onPress={() => onSelect(today, days !== null ? addDaysISO(days) : '')}
-              className={`rounded-full border px-3 py-1.5 ${
-                isActive ? 'border-neutral-950 bg-neutral-950 dark:border-white dark:bg-white' : 'border-neutral-200 bg-white dark:border-white/10 dark:bg-white/[0.04]'
-              }`}
-            >
-              <Text className={`text-[13px] font-semibold ${isActive ? 'text-white dark:text-neutral-900' : 'text-neutral-600 dark:text-neutral-300'}`}>{label}</Text>
-            </Pressable>
-          );
+          return <ChoiceChip key={label} active={isActive} label={label} onPress={() => onSelect(today, days !== null ? addDaysISO(days) : '')} />;
         })}
-      </View>
+      </ChipRow>
     </View>
   );
 }

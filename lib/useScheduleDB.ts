@@ -46,6 +46,9 @@ export type {
   ProgressTracker,
   TrackerCadence,
   MetricEntry,
+  LoggedSet,
+  SetLog,
+  ProgressionStep,
   Milestone,
   RitualColor,
   RitualTrackingType,
@@ -684,7 +687,7 @@ export function useScheduleDB() {
           return { ...rest, status: "upcoming" as const, completionStatus: "pending" as const };
         }),
       );
-      return { ...schedule, activities, milestones, ritualCompletions: [], metricEntries: [] };
+      return { ...schedule, activities, milestones, ritualCompletions: [], metricEntries: [], setLogs: [], progressionSteps: [] };
     })();
     // Cleared ritual check-ins and metric rows are deletions; the reset tasks
     // and milestones are edits. Both need recording or the merge undoes them.

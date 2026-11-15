@@ -6,8 +6,10 @@ import BottomSheet from "@/components/ui/BottomSheet";
 import SheetHeader from "@/components/ui/SheetHeader";
 import { typography } from "@/components/ui/Typography";
 import Button from "@/components/ui/Button";
+import { ChipRow, ChoiceChip, choiceChipClass, STICKY_SHEET_FOOTER } from "@/components/ui/FormChips";
+import WeekdayPicker from "@/components/ui/WeekdayPicker";
 import type { Ritual, RitualColor, RitualRecurrenceKind, RitualStep, RitualTrackingType, DayKey } from "@/lib/useScheduleDB";
-import { DAYS, DAY_LABELS, RITUAL_COLORS } from "@/lib/useScheduleDB";
+import { RITUAL_COLORS } from "@/lib/useScheduleDB";
 import { haptic } from "@/lib/haptics";
 import { uid } from "@/lib/id";
 import TimeInput from "@/components/ui/TimeInput";
@@ -186,7 +188,8 @@ export function RitualSheet({ open, onClose, initial, onSave, onDelete }: Ritual
   const needsTargetUnit = trackingType === "quantity" || trackingType === "duration" || trackingType === "count";
 
   return (
-    <BottomSheet open={open} onClose={handleClose}>
+    // A field scrolled into view above the keyboard clears the pinned footer.
+    <BottomSheet open={open} onClose={handleClose} className="scroll-pb-24">
       <div className="px-5 pb-6 pt-2">
         {showTemplatePicker ? (
           <div className="space-y-4">
@@ -218,9 +221,9 @@ export function RitualSheet({ open, onClose, initial, onSave, onDelete }: Ritual
               onClose={handleClose}
             />
 
-            <div className="mt-4 space-y-5">
+            <div className="mt-4 space-y-7">
               {/* ── Basic ──────────────────────────────────────────────────── */}
-              <div className="space-y-3">
+              <div className="space-y-5">
                 <input
                   value={title}
                   onChange={(e) => setTitle(e.target.value)}
@@ -239,13 +242,13 @@ export function RitualSheet({ open, onClose, initial, onSave, onDelete }: Ritual
                         key={name}
                         type="button"
                         onClick={() => setIcon((prev) => (prev === name ? "" : name))}
-                        className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-full transition-colors ${
+                        className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-full transition-colors ${
                           icon === name
                             ? "bg-neutral-900 text-white dark:bg-white dark:text-neutral-900"
                             : "bg-neutral-100 text-neutral-500 hover:bg-neutral-200 dark:bg-white/[0.06] dark:text-neutral-400 dark:hover:bg-white/[0.10]"
                         }`}
                       >
-                        <Glyph size={16} strokeWidth={1.9} />
+                        <Glyph size={19} strokeWidth={1.9} />
                       </button>
                     ))}
                   </div>
@@ -254,25 +257,32 @@ export function RitualSheet({ open, onClose, initial, onSave, onDelete }: Ritual
                 {/* Color */}
                 <div>
                   <p className={`mb-2 ${typography.eyebrow}`}>Color</p>
-                  <div className="flex items-center gap-2.5">
+                  <div className="flex flex-wrap items-center gap-1">
                     {RITUAL_COLORS.map((c) => (
+                      // A 44px target around the 32px swatch.
                       <button
                         key={c}
                         type="button"
+                        aria-label={c}
+                        aria-pressed={color === c}
                         onClick={() => setColor((prev) => (prev === c ? "" : c))}
-                        className={`h-7 w-7 rounded-full transition-all ${RITUAL_COLOR_DOT[c]} ${
-                          color === c
-                            ? `ring-2 ring-offset-2 ${RITUAL_COLOR_SELECT_RING[c]} dark:ring-offset-neutral-900`
-                            : "opacity-50 hover:opacity-90"
-                        }`}
-                      />
+                        className="group flex h-11 w-11 items-center justify-center rounded-full"
+                      >
+                        <span
+                          className={`h-8 w-8 rounded-full transition-all ${RITUAL_COLOR_DOT[c]} ${
+                            color === c
+                              ? `ring-2 ring-offset-2 ${RITUAL_COLOR_SELECT_RING[c]} dark:ring-offset-neutral-900`
+                              : "opacity-50 group-hover:opacity-90"
+                          }`}
+                        />
+                      </button>
                     ))}
                   </div>
                 </div>
               </div>
 
               {/* ── Schedule ───────────────────────────────────────────────── */}
-              <div className="space-y-3 border-t border-neutral-100 pt-4 dark:border-white/[0.06]">
+              <div className="space-y-4 border-t border-neutral-100 pt-6 dark:border-white/[0.06]">
                 <p className={typography.eyebrow}>Schedule</p>
 
                 <div className="flex flex-wrap gap-2">
@@ -281,38 +291,15 @@ export function RitualSheet({ open, onClose, initial, onSave, onDelete }: Ritual
                       key={r.key}
                       type="button"
                       onClick={() => setRecurrenceKind(r.key)}
-                      className={`h-8 rounded-full border px-3 text-[12px] font-semibold transition-colors ${
-                        recurrenceKind === r.key
-                          ? "border-neutral-900 bg-neutral-900 text-white dark:border-white dark:bg-white dark:text-neutral-900"
-                          : "border-neutral-200 bg-white text-neutral-500 hover:border-neutral-300 dark:border-white/10 dark:bg-white/[0.04] dark:text-neutral-400"
-                      }`}
+                      aria-pressed={recurrenceKind === r.key}
+                      className={choiceChipClass(recurrenceKind === r.key)}
                     >
                       {r.label}
                     </button>
                   ))}
                 </div>
 
-                {recurrenceKind === "custom" && (
-                  <div className="flex flex-wrap gap-2">
-                    {DAYS.map((day) => {
-                      const sel = customDays.includes(day);
-                      return (
-                        <button
-                          key={day}
-                          type="button"
-                          onClick={() => setCustomDays((prev) => sel ? prev.filter((x) => x !== day) : [...prev, day])}
-                          className={`h-8 rounded-full border px-3 text-[12px] font-semibold transition-colors ${
-                            sel
-                              ? "border-neutral-900 bg-neutral-900 text-white dark:border-white dark:bg-white dark:text-neutral-900"
-                              : "border-neutral-200 bg-white text-neutral-500 hover:border-neutral-300 dark:border-white/10 dark:bg-white/[0.04] dark:text-neutral-400"
-                          }`}
-                        >
-                          {DAY_LABELS[day]}
-                        </button>
-                      );
-                    })}
-                  </div>
-                )}
+                {recurrenceKind === "custom" && <WeekdayPicker selected={customDays} onChange={setCustomDays} allowEmpty />}
 
                 {recurrenceKind === "interval" && (
                   <div className="flex items-center gap-2">
@@ -322,7 +309,7 @@ export function RitualSheet({ open, onClose, initial, onSave, onDelete }: Ritual
                       min={2}
                       value={intervalDays}
                       onChange={(e) => setIntervalDays(Math.max(2, parseInt(e.target.value, 10) || 2))}
-                      className="h-9 w-16 rounded-xl border border-neutral-200 bg-neutral-50 px-2 text-center text-[14px] font-semibold text-neutral-900 outline-none dark:border-white/10 dark:bg-white/[0.04] dark:text-white"
+                      className="h-11 w-20 rounded-xl border border-neutral-200 bg-neutral-50 px-2 text-center text-[16px] font-semibold text-neutral-900 outline-none dark:border-white/10 dark:bg-white/[0.04] dark:text-white"
                     />
                     <span className="text-[13px] text-neutral-500 dark:text-neutral-400">days</span>
                   </div>
@@ -355,9 +342,9 @@ export function RitualSheet({ open, onClose, initial, onSave, onDelete }: Ritual
               </div>
 
               {/* ── Tracking ───────────────────────────────────────────────── */}
-              <div className="space-y-3 border-t border-neutral-100 pt-4 dark:border-white/[0.06]">
+              <div className="space-y-4 border-t border-neutral-100 pt-6 dark:border-white/[0.06]">
                 <p className={typography.eyebrow}>Details</p>
-                <p className="-mt-1 text-[11px] leading-snug text-neutral-500 dark:text-neutral-400">
+                <p className="-mt-1 text-[13px] leading-snug text-neutral-500 dark:text-neutral-400">
                   You&apos;ll mark it done with one tap and say how closely you followed it. This just shapes what it shows.
                 </p>
                 <div className="flex flex-wrap gap-2">
@@ -366,11 +353,8 @@ export function RitualSheet({ open, onClose, initial, onSave, onDelete }: Ritual
                       key={t.key}
                       type="button"
                       onClick={() => setTrackingType(t.key)}
-                      className={`h-8 rounded-full border px-3 text-[12px] font-semibold transition-colors ${
-                        trackingType === t.key
-                          ? "border-neutral-900 bg-neutral-900 text-white dark:border-white dark:bg-white dark:text-neutral-900"
-                          : "border-neutral-200 bg-white text-neutral-500 hover:border-neutral-300 dark:border-white/10 dark:bg-white/[0.04] dark:text-neutral-400"
-                      }`}
+                      aria-pressed={trackingType === t.key}
+                      className={choiceChipClass(trackingType === t.key)}
                     >
                       {t.label}
                     </button>
@@ -385,13 +369,13 @@ export function RitualSheet({ open, onClose, initial, onSave, onDelete }: Ritual
                       value={target}
                       onChange={(e) => setTarget(e.target.value)}
                       placeholder="Goal"
-                      className="h-10 w-24 rounded-xl border border-neutral-200 bg-neutral-50 px-3 text-[14px] font-semibold text-neutral-900 outline-none placeholder:text-neutral-400 dark:border-white/10 dark:bg-white/[0.04] dark:text-white dark:placeholder:text-neutral-600"
+                      className="h-11 w-24 rounded-xl border border-neutral-200 bg-neutral-50 px-3 text-[16px] font-semibold text-neutral-900 outline-none placeholder:text-neutral-400 dark:border-white/10 dark:bg-white/[0.04] dark:text-white dark:placeholder:text-neutral-600"
                     />
                     <input
                       value={unit}
                       onChange={(e) => setUnit(e.target.value)}
                       placeholder="Unit (ml, min, reps…)"
-                      className="h-10 flex-1 rounded-xl border border-neutral-200 bg-neutral-50 px-3 text-[14px] font-medium text-neutral-900 outline-none placeholder:text-neutral-400 dark:border-white/10 dark:bg-white/[0.04] dark:text-white dark:placeholder:text-neutral-600"
+                      className="h-11 flex-1 rounded-xl border border-neutral-200 bg-neutral-50 px-3 text-[16px] font-medium text-neutral-900 outline-none placeholder:text-neutral-400 dark:border-white/10 dark:bg-white/[0.04] dark:text-white dark:placeholder:text-neutral-600"
                     />
                   </div>
                 )}
@@ -406,7 +390,7 @@ export function RitualSheet({ open, onClose, initial, onSave, onDelete }: Ritual
                     without asking you to check off each one separately. */}
                 <div className="space-y-1.5">
                     {trackingType !== "checklist" && (
-                      <p className="text-[11px] leading-snug text-neutral-500 dark:text-neutral-400">
+                      <p className="text-[13px] leading-snug text-neutral-500 dark:text-neutral-400">
                         Optional — what it covers, with a time if it has one (e.g. &ldquo;Lunch: dal, rice, salad&rdquo; at 1:00 PM). One tap on the routine covers all of them.
                       </p>
                     )}
@@ -432,7 +416,7 @@ export function RitualSheet({ open, onClose, initial, onSave, onDelete }: Ritual
                           onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); addStep(); } }}
                           placeholder={trackingType === "checklist" ? "Add a step…" : "Add a detail…"}
                           aria-label={trackingType === "checklist" ? "New step" : "New detail"}
-                          className="h-11 min-w-0 flex-1 rounded-xl border border-neutral-200 bg-neutral-50 px-3 text-[14px] text-neutral-900 outline-none placeholder:text-neutral-500 dark:border-white/10 dark:bg-white/[0.04] dark:text-white dark:placeholder:text-neutral-400"
+                          className="h-11 min-w-0 flex-1 rounded-xl border border-neutral-200 bg-neutral-50 px-3 text-[16px] text-neutral-900 outline-none placeholder:text-neutral-500 dark:border-white/10 dark:bg-white/[0.04] dark:text-white dark:placeholder:text-neutral-400"
                         />
                         <button
                           type="button"
@@ -460,56 +444,39 @@ export function RitualSheet({ open, onClose, initial, onSave, onDelete }: Ritual
               </div>
 
               {/* ── Advanced (progressive disclosure) ─────────────────────── */}
-              <div className="border-t border-neutral-100 pt-4 dark:border-white/[0.06]">
+              <div className="border-t border-neutral-100 pt-6 dark:border-white/[0.06]">
                 <button
                   type="button"
                   onClick={() => setShowAdvanced((v) => !v)}
-                  className="text-[12px] font-semibold text-neutral-500 underline decoration-neutral-300 underline-offset-2 hover:text-neutral-700 dark:text-neutral-400 dark:decoration-neutral-600"
+                  className="min-h-11 text-[14px] font-semibold text-neutral-600 underline decoration-neutral-300 underline-offset-2 hover:text-neutral-800 dark:text-neutral-300 dark:decoration-neutral-600"
                 >
                   {showAdvanced ? "Hide advanced options" : "Show advanced options"}
                 </button>
 
                 {showAdvanced && (
-                  <div className="mt-3 space-y-3">
+                  <div className="mt-4 space-y-5">
                     <div>
-                      <p className={`mb-1.5 ${typography.eyebrow}`}>Description <span className="normal-case font-normal text-neutral-500 dark:text-neutral-400">(optional)</span></p>
+                      <p className={`mb-2 ${typography.eyebrow}`}>Description <span className="normal-case font-normal text-neutral-500 dark:text-neutral-400">(optional)</span></p>
                       <input
                         value={description}
                         onChange={(e) => setDescription(e.target.value)}
                         placeholder="A short subtitle"
-                        className="h-10 w-full rounded-xl border border-neutral-200 bg-neutral-50 px-3 text-[13px] text-neutral-900 outline-none placeholder:text-neutral-400 dark:border-white/10 dark:bg-white/[0.04] dark:text-white dark:placeholder:text-neutral-600"
+                        className="h-11 w-full rounded-xl border border-neutral-200 bg-neutral-50 px-4 text-[16px] text-neutral-900 outline-none placeholder:text-neutral-400 dark:border-white/10 dark:bg-white/[0.04] dark:text-white dark:placeholder:text-neutral-600"
                       />
                     </div>
 
                     <div>
                       <p className={`mb-2 ${typography.eyebrow}`}>Typical duration <span className="normal-case font-normal text-neutral-500 dark:text-neutral-400">(optional, display only)</span></p>
-                      <div className="flex flex-wrap gap-2">
-                        <button
-                          type="button"
-                          onClick={() => setDuration(undefined)}
-                          className={`rounded-full px-3 py-1 text-[12px] font-semibold transition-colors ${
-                            duration === undefined
-                              ? "bg-neutral-900 text-white dark:bg-white dark:text-neutral-900"
-                              : "border border-neutral-200 text-neutral-500 hover:border-neutral-300 dark:border-white/10 dark:text-neutral-400"
-                          }`}
-                        >
-                          None
-                        </button>
-                        {DURATION_PRESETS.map((d) => (
-                          <button
-                            key={d}
-                            type="button"
-                            onClick={() => setDuration((prev) => prev === d ? undefined : d)}
-                            className={`rounded-full px-3 py-1 text-[12px] font-semibold transition-colors ${
-                              duration === d
-                                ? "bg-neutral-900 text-white dark:bg-white dark:text-neutral-900"
-                                : "border border-neutral-200 text-neutral-500 hover:border-neutral-300 dark:border-white/10 dark:text-neutral-400"
-                            }`}
-                          >
-                            {d}m
-                          </button>
+                      <ChipRow>
+                        {[undefined, ...DURATION_PRESETS].map((d) => (
+                          <ChoiceChip
+                            key={d ?? "none"}
+                            active={duration === d}
+                            label={d === undefined ? "None" : `${d}m`}
+                            onClick={() => setDuration((prev) => (d === undefined ? undefined : prev === d ? undefined : d))}
+                          />
                         ))}
-                      </div>
+                      </ChipRow>
                     </div>
 
                     <div>
@@ -519,32 +486,38 @@ export function RitualSheet({ open, onClose, initial, onSave, onDelete }: Ritual
                         onChange={(e) => setNotes(e.target.value)}
                         placeholder="Any notes or reminders…"
                         rows={2}
-                        className="w-full resize-none rounded-xl border border-neutral-200 bg-neutral-50 px-3 py-2.5 text-[14px] text-neutral-700 outline-none placeholder:text-neutral-400 transition-colors focus:border-neutral-300 focus:bg-white dark:border-white/10 dark:bg-white/[0.04] dark:text-white dark:placeholder:text-neutral-600 dark:focus:border-white/20 dark:focus:bg-white/[0.07]"
+                        className="min-h-[76px] w-full resize-none rounded-xl border border-neutral-200 bg-neutral-50 px-4 py-3 text-[16px] text-neutral-700 outline-none placeholder:text-neutral-400 transition-colors focus:border-neutral-300 focus:bg-white dark:border-white/10 dark:bg-white/[0.04] dark:text-white dark:placeholder:text-neutral-600 dark:focus:border-white/20 dark:focus:bg-white/[0.07]"
                       />
                     </div>
                   </div>
                 )}
               </div>
 
-              {/* Submit */}
-              <Button
-                fullWidth
-                onClick={handleSave}
-                disabled={!canSave}
-                icon={isEdit ? <IconCheck size={18} strokeWidth={2.5} /> : <IconPlus size={18} strokeWidth={2.5} />}
-              >
-                {isEdit ? "Save routine" : "Add routine"}
-              </Button>
-
-              {isEdit && onDelete && (
+              {/* Submit, pinned to the sheet's bottom so it stays in view over
+                  the form and the keyboard. Editing, Delete shares the row on
+                  the leading side and Save holds the trailing one, where the
+                  primary sits in every other sheet; Delete still asks for
+                  confirmation before anything is removed. Adding, Save is the
+                  only action. */}
+              <div className={STICKY_SHEET_FOOTER}>
+                {isEdit && onDelete && (
+                  <Button
+                    variant="destructiveSecondary"
+                    className="flex-1"
+                    onClick={() => { haptic("light"); onDelete(); onClose(); }}
+                  >
+                    Delete routine
+                  </Button>
+                )}
                 <Button
-                  variant="destructiveSecondary"
-                  fullWidth
-                  onClick={() => { haptic("light"); onDelete(); onClose(); }}
+                  className="flex-1"
+                  onClick={handleSave}
+                  disabled={!canSave}
+                  icon={isEdit ? <IconCheck size={18} strokeWidth={2.5} /> : <IconPlus size={18} strokeWidth={2.5} />}
                 >
-                  Delete routine
+                  {isEdit ? "Save routine" : "Add routine"}
                 </Button>
-              )}
+              </div>
             </div>
           </>
         )}

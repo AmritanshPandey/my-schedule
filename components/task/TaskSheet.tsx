@@ -35,6 +35,7 @@ import Input, { FORM_LABEL, Textarea } from "@/components/ui/Input";
 import AddRowButton from "@/components/ui/AddRowButton";
 import SegmentedControl from "@/components/ui/SegmentedControl";
 import WeekdayPicker from "@/components/ui/WeekdayPicker";
+import { ChipRow, ChoiceChip, choiceChipTone } from "@/components/ui/FormChips";
 import { typography } from "@/components/ui/Typography";
 import TimeSlotPicker, { type EditableSlot } from "@/components/TimeSlotPicker";
 import { CategorySelector } from "./CategorySelector";
@@ -59,7 +60,8 @@ import { parseTimeToMinutes, formatMinutes } from "@/lib/timeUtils";
 import { resolveOccurrence } from "@/lib/taskOccurrence";
 import { constrainTaskToPlanWindow } from "@/lib/planTaskWindow";
 import { PlanSelector } from "./PlanSelector";
-import SubtaskDraftRow, { type SubtaskDraft } from "./SubtaskDraftRow";
+import SubtaskDraftRow from "./SubtaskDraftRow";
+import { entryToSubtaskDraft, subtaskDraftToEntry, type SubtaskDraft } from "@/lib/subtaskDraft";
 import { validateTaskSlots } from "@/lib/scheduleRules";
 import BuilderHints from "@/components/intelligence/BuilderHints";
 import { buildTaskReviewContext, reviewTaskDraft, type BuilderHint } from "@/lib/intelligence/builderChecks";
@@ -160,30 +162,6 @@ export interface TaskSheetProps {
   /** Dissolve this task's merge pair (both sides). */
   onUnmergeTask?: (taskId: string) => void;
   presentation?: "sheet" | "page";
-}
-
-function entryToSubtaskDraft(e: ScheduleEntry): SubtaskDraft {
-  return {
-    id: e.id,
-    title: e.task,
-    info: e.info ?? "",
-    duration: e.duration ?? "",
-    timeMinutes: e.timeMinutes,
-    deadline: e.deadline,
-    deadlineScope: e.deadlineScope,
-  };
-}
-
-function subtaskDraftToEntry(d: SubtaskDraft): ScheduleEntry {
-  return {
-    id: d.id,
-    task: d.title.trim(),
-    info: (d.info ?? "").trim() || undefined,
-    duration: (d.duration ?? "").trim() || undefined,
-    timeMinutes: d.timeMinutes != null && d.timeMinutes > 0 ? d.timeMinutes : undefined,
-    deadline: d.deadline || undefined,
-    deadlineScope: d.deadline ? d.deadlineScope ?? "day" : undefined,
-  };
 }
 
 // ── Segmented option tables ──────────────────────────────────────────────────
@@ -747,7 +725,7 @@ export function TaskSheet({
 
     const validSubtasks = subtasks
       .filter((s) => s.title.trim().length > 0)
-      .map(subtaskDraftToEntry);
+      .map((draft) => subtaskDraftToEntry(draft));
 
     // Resolve the recurrence rule + which weekday bucket(s) host the task.
     let recurrence: TaskRecurrence | undefined;
@@ -834,7 +812,7 @@ export function TaskSheet({
     if (!canSave || !selectedPlan || !onDuplicate) return;
     const validSubtasks = subtasks
       .filter((s) => s.title.trim().length > 0)
-      .map(subtaskDraftToEntry);
+      .map((draft) => subtaskDraftToEntry(draft));
     const dupSlots = toDisplaySlots(slots);
     onDuplicate({
       taskDraft: {
@@ -948,7 +926,7 @@ export function TaskSheet({
               }
             />
 
-            <div className={`mt-4 space-y-5 ${presentation === "page" ? "pb-4" : ""}`}>
+            <div className={`mt-4 space-y-7 ${presentation === "page" ? "pb-4" : ""}`}>
               {/* Edit scope — all occurrences vs just this date */}
               {canScopeToOccurrence && (
                 <div>
@@ -1125,7 +1103,7 @@ export function TaskSheet({
                   {/* Which day's times are being edited — a single choice, so
                       a radiogroup rather than the toggles WeekdayPicker draws. */}
                   {perDayActive && (
-                    <div role="radiogroup" aria-label="Day to edit" className="mt-2.5 flex flex-wrap gap-2">
+                    <div role="radiogroup" aria-label="Day to edit" className="mt-3 grid max-w-[392px] grid-cols-7 gap-1.5">
                       {DAYS.filter((d) => repeatDays.includes(d)).map((day) => {
                         const active = resolvedEditDay === day;
                         return (
@@ -1137,11 +1115,7 @@ export function TaskSheet({
                             aria-label={DAY_FULL_LABELS[day]}
                             tabIndex={active ? 0 : -1}
                             onClick={() => setEditDay(day)}
-                            className={`h-8 w-10 rounded-full border text-[12px] font-semibold transition-colors ${
-                              active
-                                ? "border-neutral-900 bg-neutral-900 text-white dark:border-white dark:bg-white dark:text-neutral-900"
-                                : "border-neutral-200 bg-white text-neutral-500 hover:border-neutral-300 hover:text-neutral-800 dark:border-white/10 dark:bg-white/[0.04] dark:text-neutral-400 dark:hover:border-white/20 dark:hover:text-neutral-200"
-                            }`}
+                            className={`flex h-11 min-w-0 items-center justify-center rounded-full border text-[14px] font-semibold transition-colors lg:h-10 lg:text-[13px] ${choiceChipTone(active)}`}
                           >
                             {DAY_LABELS[day]}
                           </button>
@@ -1179,17 +1153,9 @@ export function TaskSheet({
                       (the date below decides), and overridden by the per-day
                       editor, which has its own day row. */}
                   {showRepeatDays && (
-                    <div className="flex items-baseline gap-3 pt-1">
-                      <span className="w-[52px] shrink-0 pt-[7px] text-[12px] font-semibold text-neutral-500 dark:text-neutral-400">
-                        On
-                      </span>
-                      <WeekdayPicker
-                        className="min-w-0 flex-1"
-                        selected={repeatDays}
-                        onChange={setRepeatDays}
-                        allDaysOption
-                        fallbackDay={activeDay}
-                      />
+                    <div className="pt-2">
+                      <p className="mb-2 text-[13px] font-semibold text-neutral-600 dark:text-neutral-400">On these days</p>
+                      <WeekdayPicker selected={repeatDays} onChange={setRepeatDays} allDaysOption fallbackDay={activeDay} />
                     </div>
                   )}
                   {repeatMode === "interval" && (
@@ -1327,31 +1293,16 @@ export function TaskSheet({
                   {/* Standard rest between steps — session-only, and purely additive:
                       it feeds the total below but never nudges the task's own time. */}
                   {taskType === "session" && stepCount > 0 && (
-                    <div className="flex flex-wrap items-center gap-2">
-                      <span className="text-[12px] font-semibold text-neutral-500 dark:text-neutral-400">
-                        Buffer between steps
-                      </span>
-                      <div className="flex gap-1">
-                        {[0, 1, 2, 5, 10].map((m) => {
-                          const active = (stepBuffer ?? 0) === m;
-                          return (
-                            <button
-                              key={m}
-                              type="button"
-                              onClick={() => { haptic("light"); setStepBuffer(m === 0 ? undefined : m); }}
-                              aria-pressed={active}
-                              className={`h-8 min-w-[36px] rounded-full px-2.5 text-[12px] font-bold tabular-nums transition-colors ${
-                                active
-                                  ? "bg-blue-600 text-white dark:bg-blue-500"
-                                  : "border border-neutral-200 text-neutral-500 hover:text-neutral-600 dark:border-white/10 dark:text-neutral-400 dark:hover:text-neutral-300"
-                              }`}
-                            >
-                              {m === 0 ? "None" : `${m}m`}
-                            </button>
-                          );
-                        })}
-                      </div>
-                    </div>
+                    <ChipRow label="Buffer between steps">
+                      {[0, 1, 2, 5, 10].map((m) => (
+                        <ChoiceChip
+                          key={m}
+                          active={(stepBuffer ?? 0) === m}
+                          label={m === 0 ? "None" : `${m}m`}
+                          onClick={() => { haptic("light"); setStepBuffer(m === 0 ? undefined : m); }}
+                        />
+                      ))}
+                    </ChipRow>
                   )}
 
                   {/* Total step/subtask time — always visible once there's anything

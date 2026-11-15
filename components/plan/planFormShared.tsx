@@ -1,5 +1,6 @@
 "use client";
 
+import { ChipRow, ChoiceChip } from "@/components/ui/FormChips";
 import type { AccentColor } from "@/lib/colorSystem";
 import { todayISO } from "@/lib/dateUtils";
 import { typography } from "@/components/ui/Typography";
@@ -61,22 +62,27 @@ export function PlanColorPicker({
   return (
     <div>
       <p className={`mb-2 ${typography.eyebrow}`}>Color</p>
-      <div className="grid grid-cols-9 gap-4">
+      <div className="flex flex-wrap gap-1">
         {PLAN_COLOR_SWATCHES.map(({ color, bg }) => {
           const sel = value === color;
           return (
+            // A 44px target around the 32px swatch.
             <button
               key={color}
               type="button"
               aria-label={color}
               aria-pressed={sel}
               onClick={() => onChange(color)}
-              className={`h-7 w-7 rounded-full ${bg} transition-transform duration-150 ${
-                sel
-                  ? "scale-110 ring-2 ring-offset-2 ring-neutral-900 ring-offset-white dark:ring-white dark:ring-offset-neutral-900"
-                  : "hover:scale-110"
-              }`}
-            />
+              className="group flex h-11 w-11 items-center justify-center rounded-full"
+            >
+              <span
+                className={`h-8 w-8 rounded-full ${bg} transition-transform duration-150 ${
+                  sel
+                    ? "ring-2 ring-offset-2 ring-neutral-900 ring-offset-white dark:ring-white dark:ring-offset-neutral-900"
+                    : "group-hover:scale-110"
+                }`}
+              />
+            </button>
           );
         })}
       </div>
@@ -96,27 +102,14 @@ export function DurationPresets({
   const today = todayISO();
   return (
     <div>
-      <p className={`mb-2 ${typography.eyebrow}`}>Quick duration</p>
-      <div className="flex gap-2 flex-wrap">
+      <ChipRow label="Quick duration">
         {PLAN_DURATION_PRESETS.map(({ label, days }) => {
           const isActive = days !== null
             ? startDate === today && endDate === addDaysISO(days)
             : startDate === today && !endDate;
-          return (
-            <button
-              key={label}
-              type="button"
-              onClick={() => onSelect(today, days !== null ? addDaysISO(days) : "")}
-              className={`rounded-full border px-3 py-1.5 text-[13px] font-semibold transition-all ${isActive
-                ? "border-neutral-950 bg-neutral-950 text-white dark:border-white dark:bg-white dark:text-neutral-900"
-                : "border-neutral-200 bg-white text-neutral-600 hover:border-neutral-300 dark:border-white/10 dark:bg-white/[0.04] dark:text-neutral-300 dark:hover:border-white/20"
-                }`}
-            >
-              {label}
-            </button>
-          );
+          return <ChoiceChip key={label} active={isActive} label={label} onClick={() => onSelect(today, days !== null ? addDaysISO(days) : "")} />;
         })}
-      </div>
+      </ChipRow>
     </div>
   );
 }

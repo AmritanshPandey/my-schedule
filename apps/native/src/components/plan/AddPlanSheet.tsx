@@ -8,6 +8,7 @@ import { stableFieldHash } from '@planr/core/lib/hash';
 import { SECTION_ICONS } from '../SectionIcons';
 import BottomSheet from '../ui/BottomSheet';
 import SheetHeader from '../ui/SheetHeader';
+import { ChoiceChip } from '../ui/FormChips';
 import Button from '../ui/Button';
 import Input from '../ui/Input';
 import DateInput from '../ui/DateInput';
@@ -41,23 +42,10 @@ function createSummaryFromMeta(metaFields: string[]): SummaryConfig[] {
 export function GoalChips({ goals, value, onChange }: { goals: Goal[]; value: string; onChange: (id: string) => void }) {
   const options = [{ id: '', title: 'No goal' }, ...goals.map((g) => ({ id: g.id, title: g.title }))];
   return (
-    <View className="flex-row flex-wrap gap-1.5">
-      {options.map((g) => {
-        const on = value === g.id;
-        return (
-          <Pressable
-            key={g.id || 'none'}
-            accessibilityRole="radio"
-            accessibilityState={{ checked: on }}
-            onPress={() => onChange(g.id)}
-            className={`rounded-full border px-3 py-1.5 ${
-              on ? 'border-neutral-950 bg-neutral-950 dark:border-white dark:bg-white' : 'border-neutral-200 bg-neutral-50 dark:border-white/10 dark:bg-white/[0.04]'
-            }`}
-          >
-            <Text className={`text-[13px] font-semibold ${on ? 'text-white dark:text-neutral-900' : 'text-neutral-700 dark:text-neutral-300'}`}>{g.title}</Text>
-          </Pressable>
-        );
-      })}
+    <View className="flex-row flex-wrap gap-2">
+      {options.map((g) => (
+        <ChoiceChip key={g.id || 'none'} active={value === g.id} label={g.title} onPress={() => onChange(g.id)} />
+      ))}
     </View>
   );
 }
@@ -136,13 +124,23 @@ export default function AddPlanSheet({ open, onClose, setSchedule, goals = [] }:
   }
 
   return (
-    <BottomSheet open={open} onClose={handleClose}>
-      <View className="gap-4 p-5 pb-8">
+    <BottomSheet
+      open={open}
+      onClose={handleClose}
+      fullHeight
+      footer={
+        <Button fullWidth onPress={handleSubmit} disabled={!title.trim()}>
+          Create new plan
+        </Button>
+      }
+    >
+      <View className="gap-7 p-5 pb-8">
         <SheetHeader eyebrow="New" title="Create plan" onClose={handleClose} />
 
-        <View className="gap-2.5">
+        <View className="gap-5">
           <View>
             <Input
+              label="Title"
               value={title}
               onChangeText={setTitle}
               placeholder="Plan title"
@@ -158,8 +156,8 @@ export default function AddPlanSheet({ open, onClose, setSchedule, goals = [] }:
               {title.length}/{PLAN_TITLE_MAX}
             </Text>
           </View>
-          <Input value={description} onChangeText={setDescription} placeholder="Short description (optional)" accessibilityLabel="Plan description" />
-          <View className="flex-row gap-2">
+          <Input label="Description (optional)" value={description} onChangeText={setDescription} placeholder="What it's for, in a line" accessibilityLabel="Plan description" />
+          <View className="flex-row gap-3">
             <View className="flex-1">
               <DateInput label="Start date" value={startDate} onChange={setStartDate} placeholder="Today" />
             </View>
@@ -179,7 +177,7 @@ export default function AddPlanSheet({ open, onClose, setSchedule, goals = [] }:
 
         {goals.length > 0 && (
           <View>
-            <Text className={`mb-1 ${typography.eyebrow}`}>
+            <Text className={`mb-2 ${typography.eyebrow}`}>
               Goal <Text className="font-normal normal-case text-neutral-500 dark:text-neutral-400">(optional)</Text>
             </Text>
             <GoalChips goals={goals} value={goalId} onChange={setGoalId} />
@@ -188,7 +186,7 @@ export default function AddPlanSheet({ open, onClose, setSchedule, goals = [] }:
 
         <View>
           <Text className={`mb-2 ${typography.eyebrow}`}>Icon</Text>
-          <View className="flex-row flex-wrap gap-1.5">
+          <View className="flex-row flex-wrap gap-2">
             {SECTION_ICONS.map(({ name, label, icon: glyph }) => {
               const cls = iconPickerClass(iconName === name);
               return (
@@ -198,10 +196,10 @@ export default function AddPlanSheet({ open, onClose, setSchedule, goals = [] }:
                   accessibilityLabel={label}
                   accessibilityState={{ selected: iconName === name }}
                   onPress={() => setIconName(name)}
-                  className={`${cls.box} w-[18.5%]`}
+                  className={`${cls.box} min-h-[64px] w-[23%]`}
                 >
-                  <Icon icon={glyph} size={18} strokeWidth={1.5} className={cls.icon} />
-                  <Text numberOfLines={1} className={`text-[9px] font-semibold leading-none ${cls.icon}`}>
+                  <Icon icon={glyph} size={22} strokeWidth={1.6} className={cls.icon} />
+                  <Text numberOfLines={1} className={`text-[11px] font-semibold leading-tight ${cls.icon}`}>
                     {label}
                   </Text>
                 </Pressable>
@@ -223,15 +221,20 @@ export default function AddPlanSheet({ open, onClose, setSchedule, goals = [] }:
             </IconButton>
           </View>
           {metaFields.length > 0 && (
-            <View className="mt-2 flex-row flex-wrap gap-1.5">
+            <View className="mt-3 flex-row flex-wrap gap-2">
               {metaFields.map((field) => (
                 <View
                   key={field}
-                  className="flex-row items-center gap-1.5 rounded-full border border-neutral-200 bg-neutral-50 px-2.5 py-1 dark:border-white/10 dark:bg-white/[0.04]"
+                  className="h-11 flex-row items-center gap-1 rounded-full border border-neutral-200 bg-neutral-50 pl-4 pr-1 dark:border-white/10 dark:bg-white/[0.04]"
                 >
-                  <Text className="text-[12px] font-medium text-neutral-600 dark:text-neutral-300">{field}</Text>
-                  <Pressable accessibilityRole="button" accessibilityLabel={`Remove ${field}`} hitSlop={8} onPress={() => setMetaFields((prev) => prev.filter((f) => f !== field))} className="opacity-50">
-                    <Icon icon={IconX} size={11} className="text-neutral-600 dark:text-neutral-300" />
+                  <Text className="text-[14px] font-medium text-neutral-700 dark:text-neutral-200">{field}</Text>
+                  <Pressable
+                    accessibilityRole="button"
+                    accessibilityLabel={`Remove ${field}`}
+                    onPress={() => setMetaFields((prev) => prev.filter((f) => f !== field))}
+                    className="h-9 w-9 items-center justify-center rounded-full active:bg-neutral-200 dark:active:bg-white/10"
+                  >
+                    <Icon icon={IconX} size={14} className="text-neutral-500 dark:text-neutral-400" />
                   </Pressable>
                 </View>
               ))}
@@ -239,9 +242,6 @@ export default function AddPlanSheet({ open, onClose, setSchedule, goals = [] }:
           )}
         </View>
 
-        <Button fullWidth onPress={handleSubmit} disabled={!title.trim()}>
-          Create new plan
-        </Button>
       </View>
     </BottomSheet>
   );

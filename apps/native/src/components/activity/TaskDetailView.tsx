@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState, type ReactNode } from 'react';
 import { Pressable, ScrollView, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { IconArrowBackUp, IconBan, IconCheck, IconClockHour4, IconEdit, IconListCheck, IconNotes, IconX } from '@tabler/icons-react-native';
+import { IconArrowBackUp, IconBan, IconCheck, IconClockHour4, IconEdit, IconListCheck, IconNotes, IconPlayerPlay, IconX } from '@tabler/icons-react-native';
 import type { Milestone, Plan, Schedule, Task } from '@planr/core/lib/scheduleTypes';
 import type { MilestoneLinkKind } from '@planr/core/lib/milestoneLinks';
 import MilestoneLinks from '../milestone/MilestoneLinks';
@@ -20,6 +20,12 @@ import ProgressBar from '../ui/ProgressBar';
 import { Icon } from '../ui/Icon';
 import { Text, TextInput } from '../ui/Text';
 import Button, { BUTTON_TEXT } from '../ui/Button';
+import LogSetsSheet from './LogSetsSheet';
+import ProgressionCard from './ProgressionCard';
+import type { ProgressionSuggestion } from '@planr/core/lib/subtaskProgression';
+import type { ProgressionStep, SetLog } from '@planr/core/lib/scheduleTypes';
+import { currentTargets, hasStrengthTargets } from '@planr/core/lib/subtaskTargets';
+import { setLogFor, setLogSummary } from '@planr/core/lib/setLogs';
 
 export interface TaskDetailViewProps {
   task: Task | null;
@@ -44,6 +50,19 @@ export interface TaskDetailViewProps {
   /** The schedule's activities, so milestones that count this task automatically show. */
   activities?: Schedule['activities'];
   onSetMilestoneLink?: (milestoneId: string, kind: MilestoneLinkKind, itemId: string, linked: boolean) => void;
+  /** ISO date of the occurrence shown — where logged sets are filed. Defaults to today. */
+  dateISO?: string;
+  /** Every logged session, for Previous and today's summary. */
+  setLogs?: readonly SetLog[];
+  /** Accepted progression steps — raise a subtask's targets on read. */
+  progressionSteps?: readonly ProgressionStep[];
+  /** Save a session of sets. Absent = no "Log sets" on the rows. */
+  onSaveSetLog?: (log: SetLog) => void;
+  /** Open focus mode for this occurrence. Absent = no "Start focus". */
+  onStartFocus?: () => void;
+  /** Progression steps ready to suggest today, with the user's answer. */
+  suggestions?: readonly ProgressionSuggestion[];
+  onDecideProgression?: (suggestion: ProgressionSuggestion, decision: 'accepted' | 'held') => void;
 }
 
 /**
@@ -74,6 +93,13 @@ export default function TaskDetailView({
   milestones,
   activities,
   onSetMilestoneLink,
+  dateISO,
+  setLogs,
+  progressionSteps,
+  onSaveSetLog,
+  onStartFocus,
+  suggestions,
+  onDecideProgression,
 }: TaskDetailViewProps) {
   const insets = useSafeAreaInsets();
   const isSession = task?.taskType === 'session';
@@ -100,6 +126,12 @@ export default function TaskDetailView({
   }, [task, isSession, linkedPlan]);
 
   const today = todayISO();
+  const occurrenceISO = dateISO ?? today;
+  // Which subtask's Log sets sheet is open; the last one is kept through the
+  // close so the sheet slides away showing it rather than going blank.
+  const [loggingId, setLoggingId] = useState<string | null>(null);
+  const [lastLoggingId, setLastLoggingId] = useState<string | null>(null);
+  useEffect(() => { setLoggingId(null); }, [task?.id, occurrenceISO]);
   const allIds = useMemo(() => items.map((item) => item.id), [items]);
   const { completedCount, totalCount, pct } = useMemo(() => calculateTaskProgress(task ?? ({} as Task), items.length), [task, items.length]);
   const state = task ? resolveTaskState(task, items.length) : 'incomplete';
@@ -116,6 +148,45 @@ export default function TaskDetailView({
   const barPct = done && items.length === 0 ? 100 : pct;
 
   if (!task) return null;
+
+  /** "Log sets" on rows with strength targets, plus today's logged recap. */
+  function logProps(item: ScheduleEntry): { onLogSets?: () => void; logSummary?: string } {
+    if (!task) return {};
+    const log = setLogFor(setLogs, task.id, item.id, occurrenceISO);
+    const summary = log ? setLogSummary(log) : null;
+    const logSummary =
+      summary && summary.sets > 0
+        ? `${summary.sets} ${summary.sets === 1 ? 'set' : 'sets'} logged${summary.topWeight != null ? ` · top ${summary.topWeight} ${log?.weightUnit ?? 'kg'}` : ''}`
+        : undefined;
+    const canLog = !!onSaveSetLog && !readOnly && (hasStrengthTargets(item.targets) || !!log);
+    return {
+      onLogSets: canLog
+        ? () => {
+            setLastLoggingId(item.id);
+            setLoggingId(item.id);
+          }
+        : undefined,
+      logSummary,
+    };
+  }
+
+  const loggingItem = (loggingId ?? lastLoggingId) ? items.find((item) => item.id === (loggingId ?? lastLoggingId)) ?? null : null;
+  const logSheet = onSaveSetLog ? (
+    <LogSetsSheet
+      open={!!loggingId}
+      onClose={() => setLoggingId(null)}
+      taskId={task.id}
+      entry={loggingItem}
+      values={loggingItem ? currentTargets(loggingItem, task.id, progressionSteps) : {}}
+      dateISO={occurrenceISO}
+      setLogs={setLogs}
+      onSave={(log, allDone) => {
+        onSaveSetLog(log);
+        // Logging every working set is doing the subtask: tick it, once.
+        if (allDone && loggingItem && !(task.completedSubtaskIds ?? []).includes(loggingItem.id)) onToggleSubtask(task.id, loggingItem.id);
+      }}
+    />
+  ) : null;
 
   const tracked = isTrackedTask(task);
   const eyebrow = linkedPlan?.title ?? (isSession ? 'Session' : tracked ? 'Task' : 'Commitment');
@@ -271,6 +342,20 @@ export default function TaskDetailView({
       {milestones && onSetMilestoneLink && tracked && !readOnly ? (
         <MilestoneLinks milestones={milestones} kind="task" itemId={task.id} planId={task.planId} activities={activities} onSetLink={onSetMilestoneLink} />
       ) : null}
+      {!readOnly && onDecideProgression
+        ? suggestions?.map((suggestion) => {
+            const entry = items.find((item) => item.id === suggestion.subtaskId);
+            return entry?.progression ? (
+              <ProgressionCard
+                key={suggestion.subtaskId}
+                suggestion={suggestion}
+                name={entry.task}
+                cadence={entry.progression.cadence}
+                onDecide={(decision) => onDecideProgression(suggestion, decision)}
+              />
+            ) : null;
+          })
+        : null}
       {items.length > 0 && (
         <View className="gap-2">
           {items.map((item) => (
@@ -282,6 +367,8 @@ export default function TaskDetailView({
               today={today}
               readOnly={readOnly}
               onToggle={() => onToggleSubtask(task.id, item.id)}
+              values={currentTargets(item, task.id, progressionSteps)}
+              {...logProps(item)}
             />
           ))}
         </View>
@@ -315,6 +402,18 @@ export default function TaskDetailView({
     )
   ) : (
     <View className="mt-1 gap-2">
+      {/* Doing the work comes before declaring it done: focus is the ink
+          primary, Done stays the one green call to action. */}
+      {tracked && !done && onStartFocus ? (
+        <Button
+          variant="primary"
+          fullWidth
+          onPress={onStartFocus}
+          icon={<Icon icon={IconPlayerPlay} size={18} strokeWidth={2.4} className={BUTTON_TEXT.primary} />}
+        >
+          Start focus
+        </Button>
+      ) : null}
       {tracked && !done && (
         <Button
           variant="cta"
@@ -400,6 +499,7 @@ export default function TaskDetailView({
         >
           {actions}
         </View>
+        {logSheet}
       </View>
     );
   }
@@ -446,6 +546,7 @@ export default function TaskDetailView({
       {summary}
       {checklist}
       {actions}
+      {logSheet}
     </View>
   );
 }

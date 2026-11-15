@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { IconArrowBackUp, IconBan, IconCheck, IconClockHour4, IconEdit, IconListCheck, IconNotes, IconX } from "@tabler/icons-react";
+import { IconArrowBackUp, IconBan, IconCheck, IconClockHour4, IconEdit, IconListCheck, IconNotes, IconPlayerPlay, IconX } from "@tabler/icons-react";
 import type { ScheduleEntry } from "@/components/ScheduleItem";
 import TaskChecklistItem from "@/components/activity/TaskChecklistItem";
 import TaskStatusCheckbox from "@/components/task/TaskStatusCheckbox";
@@ -18,6 +18,12 @@ import type { Milestone, Plan, Schedule, Task } from "@/lib/useScheduleDB";
 import type { MilestoneLinkKind } from "@/lib/milestoneLinks";
 import MilestoneLinks from "@/components/milestone/MilestoneLinks";
 import Button from "@/components/ui/Button";
+import LogSetsSheet from "@/components/activity/LogSetsSheet";
+import ProgressionCard from "@/components/activity/ProgressionCard";
+import type { ProgressionSuggestion } from "@/lib/subtaskProgression";
+import type { ProgressionStep, SetLog } from "@/lib/useScheduleDB";
+import { currentTargets, hasStrengthTargets } from "@/lib/subtaskTargets";
+import { setLogFor, setLogSummary } from "@/lib/setLogs";
 
 export interface TaskDetailViewProps {
   task: Task | null;
@@ -46,6 +52,19 @@ export interface TaskDetailViewProps {
   /** The schedule's activities, so milestones that count this task automatically show. */
   activities?: Schedule["activities"];
   onSetMilestoneLink?: (milestoneId: string, kind: MilestoneLinkKind, itemId: string, linked: boolean) => void;
+  /** ISO date of the occurrence shown — where logged sets are filed. Defaults to today. */
+  dateISO?: string;
+  /** Every logged session, for Previous and today's summary. */
+  setLogs?: readonly SetLog[];
+  /** Accepted progression steps — raise a subtask's targets on read. */
+  progressionSteps?: readonly ProgressionStep[];
+  /** Save a session of sets. Absent = no "Log sets" on the rows. */
+  onSaveSetLog?: (log: SetLog) => void;
+  /** Open focus mode for this occurrence. Absent = no "Start focus". */
+  onStartFocus?: () => void;
+  /** Progression steps ready to suggest today, with the user's answer. */
+  suggestions?: readonly ProgressionSuggestion[];
+  onDecideProgression?: (suggestion: ProgressionSuggestion, decision: "accepted" | "held") => void;
 }
 
 export default function TaskDetailView({
@@ -69,6 +88,13 @@ export default function TaskDetailView({
   milestones,
   activities,
   onSetMilestoneLink,
+  dateISO,
+  setLogs,
+  progressionSteps,
+  onSaveSetLog,
+  onStartFocus,
+  suggestions,
+  onDecideProgression,
 }: TaskDetailViewProps) {
   const isSession = task?.taskType === "session";
 
@@ -97,6 +123,10 @@ export default function TaskDetailView({
   }, [task, isSession, linkedPlan]);
 
   const today = todayISO();
+  const occurrenceISO = dateISO ?? today;
+  // Which subtask's "Log sets" sheet is open (null = none).
+  const [loggingId, setLoggingId] = useState<string | null>(null);
+  useEffect(() => { setLoggingId(null); }, [taskId, occurrenceISO]);
   const allIds = useMemo(() => items.map((item) => item.id), [items]);
   const { completedCount, totalCount, pct } = useMemo(
     () => calculateTaskProgress(task ?? ({} as Task), items.length),
@@ -122,6 +152,18 @@ export default function TaskDetailView({
   const barPct = done && items.length === 0 ? 100 : pct;
 
   if (!task) return null;
+
+  /** "Log sets" on rows with strength targets, plus today's logged recap. */
+  function logProps(item: ScheduleEntry): { onLogSets?: () => void; logSummary?: string } {
+    if (!task) return {};
+    const log = setLogFor(setLogs, task.id, item.id, occurrenceISO);
+    const summary = log ? setLogSummary(log) : null;
+    const logSummary = summary && summary.sets > 0
+      ? `${summary.sets} ${summary.sets === 1 ? "set" : "sets"} logged${summary.topWeight != null ? ` · top ${summary.topWeight} ${log?.weightUnit ?? "kg"}` : ""}`
+      : undefined;
+    const canLog = !!onSaveSetLog && !readOnly && (hasStrengthTargets(item.targets) || !!log);
+    return { onLogSets: canLog ? () => setLoggingId(item.id) : undefined, logSummary };
+  }
 
   // Held time offers no completion actions — only rescheduling and editing.
   const tracked = isTrackedTask(task);
@@ -309,6 +351,19 @@ export default function TaskDetailView({
       {/* No empty state when there are no subtasks. The panel that used to sit
           here read "No subtasks — mark the whole task done below", which only
           restated the button directly beneath it. */}
+      {!readOnly && onDecideProgression && suggestions?.map((suggestion) => {
+        const entry = items.find((item) => item.id === suggestion.subtaskId);
+        return entry?.progression ? (
+          <ProgressionCard
+            key={suggestion.subtaskId}
+            suggestion={suggestion}
+            name={entry.task}
+            cadence={entry.progression.cadence}
+            onDecide={(decision) => onDecideProgression(suggestion, decision)}
+          />
+        ) : null;
+      })}
+
       {items.length > 0 && (
         <div className="flex flex-col gap-2">
           {items.map((item) => (
@@ -324,12 +379,33 @@ export default function TaskDetailView({
               today={today}
               readOnly={readOnly}
               onToggle={() => onToggleSubtask(task.id, item.id)}
+              values={currentTargets(item, task.id, progressionSteps)}
+              {...logProps(item)}
             />
           ))}
         </div>
       )}
     </>
   );
+
+  const loggingItem = loggingId ? items.find((item) => item.id === loggingId) ?? null : null;
+  const logSheet = loggingItem && onSaveSetLog ? (
+    <LogSetsSheet
+      key={loggingItem.id}
+      open
+      onClose={() => setLoggingId(null)}
+      taskId={task.id}
+      entry={loggingItem}
+      values={currentTargets(loggingItem, task.id, progressionSteps)}
+      dateISO={occurrenceISO}
+      setLogs={setLogs}
+      onSave={(log, allDone) => {
+        onSaveSetLog(log);
+        // Logging every working set is doing the subtask: tick it, once.
+        if (allDone && !(task.completedSubtaskIds ?? []).includes(loggingItem.id)) onToggleSubtask(task.id, loggingItem.id);
+      }}
+    />
+  ) : null;
 
   const snoozeButton = tracked && !done && onSnooze ? (
     <Button variant="secondary" size="md" onClick={() => { onSnooze(task.id); onClose(); }} icon={<IconClockHour4 size={16} strokeWidth={2.2} />} className="flex-1">
@@ -369,6 +445,13 @@ export default function TaskDetailView({
           reads "Completed", is tinted rather than solid (it is no longer a
           call to action), and only dismisses. Undoing stays on the header
           checkbox, which is already labelled "Mark task not done". */}
+      {/* Doing the work comes before declaring it done: focus is the ink
+          primary, Done stays the one green call to action. */}
+      {tracked && !done && onStartFocus && (
+        <Button variant="primary" fullWidth onClick={onStartFocus} icon={<IconPlayerPlay size={18} strokeWidth={2.4} />}>
+          Start focus
+        </Button>
+      )}
       {tracked && !done && (
         <Button variant="cta" fullWidth onClick={() => { completePrimary(); onClose(); }} icon={<IconCheck size={18} strokeWidth={2.6} />}>
           Done
@@ -453,6 +536,7 @@ export default function TaskDetailView({
       {summary}
       {checklist}
       {actions}
+      {logSheet}
     </div>
   );
 
@@ -475,6 +559,7 @@ export default function TaskDetailView({
         <div className="shrink-0 border-t border-neutral-200 bg-white px-5 pt-3 dark:border-white/[0.08] dark:bg-neutral-950" style={{ paddingBottom: "max(12px, env(safe-area-inset-bottom))" }}>
           {actions}
         </div>
+        {logSheet}
       </div>
     );
   }

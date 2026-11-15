@@ -13,7 +13,7 @@ import {
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { TrueSheet } from '@lodev09/react-native-true-sheet';
 import { useColorScheme } from 'nativewind';
-import { ModalNestingContext, useModalTurn } from '../../lib/modalTurn';
+import { ModalNestingContext, SheetPresentedContext, useModalTurn } from '../../lib/modalTurn';
 import { SHEET_BG, SHEET_BG_CLASS } from './surfaces';
 
 /**
@@ -48,7 +48,11 @@ interface BottomSheetProps {
   scroll?: boolean;
   /** Full-height panel — the web's "page" presentation of a sheet. */
   fullHeight?: boolean;
-  /** Pinned under the body and kept above the keyboard (the primary action). */
+  /**
+   * Pinned under the body and kept above the keyboard (the primary action).
+   * A sheet whose footer comes and goes passes `null` while it's away, never
+   * `undefined`, so the iOS footer is there from the moment the sheet presents.
+   */
   footer?: ReactNode;
   /** Called once the sheet is fully up — the moment to focus its first field. */
   onPresented?: () => void;
@@ -181,11 +185,13 @@ function IOSSheet({ open, onClose, onDismissed, children, maxHeight, className =
   const [overlays] = useState(createOverlayStore);
   const [headerSlot] = useState(createOverlayStore);
   const [panelOpen, setPanelOpen] = useState(false);
+  const [isUp, setIsUp] = useState(false);
   // The footer floats over the body, so the body ends that much short of it.
   const [footerHeight, setFooterHeight] = useState(0);
   // A full-height sheet with a scrolling body hands it to TrueSheet to pin:
   // only a pinned scroll view is scrolled to the focused field over the keyboard.
   const pinned = fullHeight && scroll;
+  const showFooter = !!footer && !panelOpen;
 
   // Safety net for an owner that unmounts while the sheet is up: the native
   // view is recycled rather than destroyed, and only destruction dismisses
@@ -256,21 +262,28 @@ function IOSSheet({ open, onClose, onDismissed, children, maxHeight, className =
       maxContentHeight={maxHeight}
       scrollable={pinned}
       header={<HeaderHost store={headerSlot} />}
+      // Stays mounted for the whole presentation, collapsed when there is
+      // nothing to show: TrueSheet hands the footer its keyboard observer once,
+      // at present, so one mounted later would never rise with the keyboard.
       footer={
-        // Hidden while a panel (a time picker, a confirm) is open in the
-        // sheet: the footer is drawn over the content, so it covered the
-        // panel's own Done button.
-        footer && !panelOpen ? (
+        footer !== undefined ? (
           // Rendered by TrueSheet outside the content, so it gets the content's
           // contexts again: a sheet opened from it stays a panel in this one.
           <ModalNestingContext.Provider value>
             <SheetOverlayContext.Provider value={overlays}>
+              {/* Collapsed while a panel (a time picker, a confirm) is open in
+                  the sheet: it's drawn over the content, so it covered the
+                  panel's own Done button. */}
               <View
-                onLayout={(e) => setFooterHeight(e.nativeEvent.layout.height)}
-                className={`border-t border-neutral-200 px-5 pt-3 dark:border-white/[0.08] ${SHEET_BG_CLASS}`}
-                style={{ paddingBottom: Math.max(12, insets.bottom) }}
+                // The last real height is kept while collapsed: dropping the
+                // body's padding for a panel would jump the form's scroll.
+                onLayout={(e) => {
+                  if (showFooter) setFooterHeight(e.nativeEvent.layout.height);
+                }}
+                className={showFooter ? `border-t border-neutral-200 px-5 pt-3 dark:border-white/[0.08] ${SHEET_BG_CLASS}` : ''}
+                style={showFooter ? { paddingBottom: Math.max(12, insets.bottom) } : styles.collapsed}
               >
-                {footer}
+                {showFooter ? footer : null}
               </View>
             </SheetOverlayContext.Provider>
           </ModalNestingContext.Provider>
@@ -283,10 +296,12 @@ function IOSSheet({ open, onClose, onDismissed, children, maxHeight, className =
       footerOptions={{ keyboardOffset: -Math.max(0, Math.max(12, insets.bottom) - 12) }}
       onDidPresent={() => {
         presented.current = true;
+        setIsUp(true);
         onPresented?.();
       }}
       onDidDismiss={() => {
         presented.current = false;
+        setIsUp(false);
         setMounted(false);
         // Swiped away rather than closed by the caller: tell the caller.
         if (!closing.current) onClose();
@@ -294,14 +309,16 @@ function IOSSheet({ open, onClose, onDismissed, children, maxHeight, className =
         onDismissed?.();
       }}
     >
-      <ModalNestingContext.Provider value>
-        <SheetOverlayContext.Provider value={overlays}>
-          <View style={[fullHeight ? styles.fill : null, panelOpen ? { minHeight: PANEL_MIN_HEIGHT } : null]}>
-            <SheetHeaderSlotContext.Provider value={headerSlot}>{body}</SheetHeaderSlotContext.Provider>
-            <OverlayHost store={overlays} onActive={setPanelOpen} />
-          </View>
-        </SheetOverlayContext.Provider>
-      </ModalNestingContext.Provider>
+      <SheetPresentedContext.Provider value={isUp}>
+        <ModalNestingContext.Provider value>
+          <SheetOverlayContext.Provider value={overlays}>
+            <View style={[fullHeight ? styles.fill : null, panelOpen ? { minHeight: PANEL_MIN_HEIGHT } : null]}>
+              <SheetHeaderSlotContext.Provider value={headerSlot}>{body}</SheetHeaderSlotContext.Provider>
+              <OverlayHost store={overlays} onActive={setPanelOpen} />
+            </View>
+          </SheetOverlayContext.Provider>
+        </ModalNestingContext.Provider>
+      </SheetPresentedContext.Provider>
     </TrueSheet>
   );
 }
@@ -412,4 +429,5 @@ function ModalSheet({
 const styles = StyleSheet.create({
   fill: { flex: 1 },
   shrink: { flexShrink: 1 },
+  collapsed: { height: 0, overflow: 'hidden' },
 });

@@ -229,6 +229,10 @@ import { buildDeleteConfirmationCopy } from "@/lib/deleteConfirm";
 import { resolveCustomVisibleDates } from "@/lib/customView";
 import { typography } from "@/components/ui/Typography";
 import { setMilestoneLink } from "@/lib/milestoneAutoLinks";
+import { upsertSetLog } from "@/lib/setLogs";
+import { useFocusSession } from "@/lib/useFocusSession";
+import { decideProgression, pendingProgressionsForTask } from "@/lib/subtaskProgression";
+import FocusHost, { focusItems } from "@/components/focus/FocusHost";
 
 // ─── Constants ───────────────────────────────────────────────────────────────
 
@@ -956,6 +960,8 @@ export default function ScheduleApp() {
   // Task whose subtasks are shown in the bottom sheet — stored by id+day so the
   // sheet always reflects the live task (completion updates create new objects).
   const [subtasksRef, setSubtasksRef] = useState<{ id: string; day: DayKey; dateISO: string } | null>(null);
+  // Focus mode: device-local, restored on load if a session from today is open.
+  const focus = useFocusSession();
   const [bulkImportOpen, setBulkImportOpen] = useState(false);
   const [pendingAIAction, setPendingAIAction] = useState<AIActionResult | null>(null);
   // trackingType-aware: a quantity routine is "done" only once its logs reach
@@ -3913,6 +3919,19 @@ export default function ScheduleApp() {
             dayLabel={subtasksRef ? formatDayNoteLabel(subtasksRef.dateISO) : undefined}
             onEdit={subtasksRawTask ? () => { openEditSheet(subtasksRawTask, subtasksRef?.dateISO); setSubtasksRef(null); } : undefined}
             presentation="page"
+            dateISO={subtasksRef?.dateISO}
+            setLogs={schedule.setLogs}
+            progressionSteps={schedule.progressionSteps}
+            onSaveSetLog={(log) => setSchedule((prev) => upsertSetLog(prev, log))}
+            suggestions={subtasksRawTask && !!subtasksRef && subtasksRef.dateISO === todayISO() ? pendingProgressionsForTask(schedule, subtasksRawTask, todayISO()) : undefined}
+            onDecideProgression={(suggestion, decision) => setSchedule((prev) => decideProgression(prev, suggestion, decision))}
+            onStartFocus={subtasksRawTask && subtasksRef && subtasksRef.dateISO === todayISO() ? () => focus.start({
+              taskId: subtasksRawTask.id,
+              day: subtasksRef.day,
+              dateISO: subtasksRef.dateISO,
+              stepIds: focusItems(subtasksRawTask, plansById).map((item) => item.id),
+              alreadyDone: subtasksRawTask.completedSubtaskIds,
+            }) : undefined}
           />
         </div>
       ) : activeTab === 6 ? (
@@ -4975,6 +4994,15 @@ export default function ScheduleApp() {
       )}
 
 
+      <FocusHost
+        focus={focus}
+        schedule={schedule}
+        setSchedule={setSchedule}
+        plansById={plansById}
+        onToggleSubtask={(taskId, subtaskId, day, dateISO) => handleToggleSubtask(taskId, subtaskId, day, dateISO)}
+        onToggleComplete={(taskId, ids, day, dateISO) => handleToggleTaskComplete(taskId, ids, day, dateISO)}
+      />
+
       {detailRitual && (
         <div
           className="fixed inset-0 z-50 bg-[#F5F5F5] dark:bg-[#0E0E0E]"
@@ -5042,6 +5070,19 @@ export default function ScheduleApp() {
           onSaveDayNote={(taskId, note) => handleSaveDayNote(taskId, note, subtasksRef?.dateISO)}
           dayLabel={subtasksRef ? formatDayNoteLabel(subtasksRef.dateISO) : undefined}
           onEdit={subtasksRawTask ? () => { openEditSheet(subtasksRawTask, subtasksRef?.dateISO); setSubtasksRef(null); } : undefined}
+          dateISO={subtasksRef?.dateISO}
+          setLogs={schedule.setLogs}
+          progressionSteps={schedule.progressionSteps}
+          onSaveSetLog={(log) => setSchedule((prev) => upsertSetLog(prev, log))}
+          suggestions={subtasksRawTask && !!subtasksRef && subtasksRef.dateISO === todayISO() ? pendingProgressionsForTask(schedule, subtasksRawTask, todayISO()) : undefined}
+          onDecideProgression={(suggestion, decision) => setSchedule((prev) => decideProgression(prev, suggestion, decision))}
+          onStartFocus={subtasksRawTask && subtasksRef && subtasksRef.dateISO === todayISO() ? () => focus.start({
+            taskId: subtasksRawTask.id,
+            day: subtasksRef.day,
+            dateISO: subtasksRef.dateISO,
+            stepIds: focusItems(subtasksRawTask, plansById).map((item) => item.id),
+            alreadyDone: subtasksRawTask.completedSubtaskIds,
+          }) : undefined}
         />
       )}
 

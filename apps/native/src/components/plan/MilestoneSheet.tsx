@@ -178,9 +178,9 @@ function Chip({ active, label, onPress, tone = 'ink' }: { active: boolean; label
       accessibilityRole="button"
       accessibilityState={{ selected: active }}
       onPress={onPress}
-      className={`rounded-full px-3 py-1.5 ${active ? on : 'border border-neutral-200 dark:border-white/10'}`}
+      className={`h-11 justify-center rounded-full border px-4 ${active ? `border-transparent ${on}` : 'border-neutral-200 bg-white dark:border-white/10 dark:bg-white/[0.04]'}`}
     >
-      <Text className={`text-[12.5px] font-semibold ${active ? onText : 'text-neutral-600 dark:text-neutral-300'}`}>{label}</Text>
+      <Text numberOfLines={1} className={`text-[14px] font-semibold ${active ? onText : 'text-neutral-700 dark:text-neutral-200'}`}>{label}</Text>
     </Pressable>
   );
 }
@@ -334,11 +334,20 @@ export default function MilestoneSheet({
   const alreadyLinkedTracker = milestone?.linkedTrackers?.[0] ? trackers.find((t) => t.id === milestone.linkedTrackers[0]) ?? null : null;
 
   return (
-    <BottomSheet open={isOpen} onClose={onClose}>
-      <View className="gap-4 p-5 pb-8">
+    <BottomSheet
+      open={isOpen}
+      onClose={onClose}
+      fullHeight
+      footer={
+        <Button fullWidth onPress={handleSave} disabled={!canSave}>
+          {mode === 'edit' ? 'Save changes' : 'Add milestone'}
+        </Button>
+      }
+    >
+      <View className="gap-6 p-5 pb-8">
         <SheetHeader eyebrow={eyebrow} title={title} onClose={onClose} />
 
-        <View className="gap-3">
+        <View className="gap-5">
           <Input
             label="Title"
             value={draft.title}
@@ -356,8 +365,8 @@ export default function MilestoneSheet({
           <DateInput label="Start date" value={draft.startDate} disabled={!canEditStartDate} onChange={(v) => setDraft((d) => ({ ...d, startDate: v }))} />
 
           <View>
-            <Text className={`mb-1.5 ${typography.eyebrow}`}>Duration</Text>
-            <View className="gap-2">
+            <Text className={`mb-2 ${typography.eyebrow}`}>Duration</Text>
+            <View className="gap-2.5">
               <Input
                 keyboardType="number-pad"
                 value={draft.durationValue}
@@ -404,8 +413,8 @@ export default function MilestoneSheet({
             </View>
           ) : (
             <View>
-              <Text className={`mb-1.5 ${typography.eyebrow}`}>Success metric (optional)</Text>
-              <View className="mb-2 flex-row flex-wrap gap-1.5">
+              <Text className={`mb-2 ${typography.eyebrow}`}>Success metric (optional)</Text>
+              <View className="mb-3 flex-row flex-wrap gap-2">
                 {(['none', ...(trackers.length > 0 ? ['existing'] : []), 'new'] as DraftState['metricMode'][]).map((metricMode) => (
                   <Chip
                     key={metricMode}
@@ -423,7 +432,7 @@ export default function MilestoneSheet({
               </View>
 
               {draft.metricMode === 'existing' && trackers.length > 0 && (
-                <View className="flex-row flex-wrap gap-1.5">
+                <View className="flex-row flex-wrap gap-2">
                   {trackers.map((t) => (
                     <Chip
                       key={t.id}
@@ -437,11 +446,11 @@ export default function MilestoneSheet({
               )}
 
               {draft.metricMode === 'new' && (
-                <View className="gap-2.5 rounded-2xl border border-neutral-200 bg-neutral-50 p-3 dark:border-white/10 dark:bg-white/[0.04]">
+                <View className="gap-4 rounded-2xl border border-neutral-200 bg-neutral-50 p-4 dark:border-white/10 dark:bg-white/[0.04]">
                   <Input label="Metric title" value={draft.newTrackerTitle} onChangeText={(v) => setDraft((d) => ({ ...d, newTrackerTitle: v }))} placeholder="e.g. Weight" />
                   <Input label="Unit" value={draft.newTrackerUnit} onChangeText={(v) => setDraft((d) => ({ ...d, newTrackerUnit: v }))} placeholder="kg" />
                   <View>
-                    <Text className={`mb-1.5 ${typography.eyebrow}`}>Direction</Text>
+                    <Text className={`mb-2 ${typography.eyebrow}`}>Direction</Text>
                     <SegmentedControl
                       ariaLabel="Direction"
                       options={DIRECTION_OPTIONS}
@@ -449,7 +458,7 @@ export default function MilestoneSheet({
                       onChange={(v) => setDraft((d) => ({ ...d, newTrackerGoalDirection: v }))}
                     />
                   </View>
-                  <View className="flex-row gap-2">
+                  <View className="flex-row gap-3">
                     <View className="flex-1">
                       <Input
                         label="Target value"
@@ -461,7 +470,7 @@ export default function MilestoneSheet({
                     </View>
                     <View className="flex-1">
                       <Input
-                        label="Starting value (optional)"
+                        label="Start (optional)"
                         keyboardType="decimal-pad"
                         value={draft.newTrackerStartingValue}
                         onChangeText={(v) => setDraft((d) => ({ ...d, newTrackerStartingValue: v }))}
@@ -491,10 +500,6 @@ export default function MilestoneSheet({
         </View>
 
         <BuilderHints hints={hints} />
-
-        <Button fullWidth onPress={handleSave} disabled={!canSave}>
-          {mode === 'edit' ? 'Save changes' : 'Add milestone'}
-        </Button>
       </View>
     </BottomSheet>
   );

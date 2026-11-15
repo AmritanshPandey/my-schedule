@@ -6,8 +6,8 @@ import { createGoal, updateGoal } from "@/lib/goalMutations";
 import BottomSheet from "@/components/ui/BottomSheet";
 import SheetHeader from "@/components/ui/SheetHeader";
 import Button from "@/components/ui/Button";
-import Input from "@/components/ui/Input";
-import { typography } from "@/components/ui/Typography";
+import Input, { FORM_LABEL } from "@/components/ui/Input";
+import { STICKY_SHEET_FOOTER } from "@/components/ui/FormChips";
 import BuilderHints from "@/components/intelligence/BuilderHints";
 import { reviewGoalDraft } from "@/lib/intelligence/builderChecks";
 import DateInput from "@/components/ui/DateInput";
@@ -75,16 +75,17 @@ export default function GoalFormSheet({ open, onClose, setSchedule, goal }: Goal
   }
 
   return (
-    <BottomSheet open={open} onClose={onClose}>
-      <div className="space-y-4 p-5 pb-8">
+    <BottomSheet open={open} onClose={onClose} className="scroll-pb-24">
+      <div className="space-y-6 px-5 pt-5">
         <SheetHeader eyebrow={goal ? "Edit" : "New"} title={goal ? "Edit goal" : "Create goal"} onClose={onClose} />
 
-        <div className="space-y-2.5">
+        <div className="space-y-5">
           <div>
             <Input
+              label="Goal"
               value={title}
               onChange={(e) => setTitle(e.target.value)}
-              placeholder="Goal — e.g. Get a senior UX design job"
+              placeholder="e.g. Get a senior UX design job"
               autoFocus
               maxLength={GOAL_TITLE_MAX}
               onKeyDown={(e) => { if (e.key === "Enter" && title.trim()) handleSubmit(); }}
@@ -94,17 +95,18 @@ export default function GoalFormSheet({ open, onClose, setSchedule, goal }: Goal
             </p>
           </div>
           <Input
+            label="Description (optional)"
             value={description}
             onChange={(e) => setDescription(e.target.value)}
-            placeholder="Short description (optional)"
+            placeholder="Why it matters, in a line"
           />
-          <div className="grid grid-cols-2 gap-2">
+          <div className="grid grid-cols-2 gap-3">
             <div>
-              <p className={`mb-1 ${typography.eyebrow}`}>Start date</p>
+              <p className={FORM_LABEL}>Start date</p>
               <DateInput value={startDate} onChange={(v) => setStartDate(v)} />
             </div>
             <div>
-              <p className={`mb-1 ${typography.eyebrow}`}>Target date</p>
+              <p className={FORM_LABEL}>Target date</p>
               <DateInput value={targetDate} onChange={(v) => setTargetDate(v)} />
             </div>
           </div>
@@ -112,9 +114,11 @@ export default function GoalFormSheet({ open, onClose, setSchedule, goal }: Goal
 
         <BuilderHints hints={hints} />
 
-        <Button fullWidth onClick={handleSubmit} disabled={!title.trim()}>
-          {goal ? "Save changes" : "Create goal"}
-        </Button>
+        <div className={STICKY_SHEET_FOOTER}>
+          <Button fullWidth onClick={handleSubmit} disabled={!title.trim()}>
+            {goal ? "Save changes" : "Create goal"}
+          </Button>
+        </div>
       </div>
     </BottomSheet>
   );

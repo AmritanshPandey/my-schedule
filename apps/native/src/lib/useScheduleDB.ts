@@ -406,7 +406,7 @@ export function useScheduleDB() {
           return { ...rest, status: 'upcoming' as const, completionStatus: 'pending' as const };
         }),
       );
-      return { ...current, activities, milestones, ritualCompletions: [], metricEntries: [] };
+      return { ...current, activities, milestones, ritualCompletions: [], metricEntries: [], setLogs: [], progressionSteps: [] };
     })();
     const stamped = stampSchedule(current, next);
     scheduleRef.current = stamped;

@@ -45,15 +45,24 @@ export default function GoalFormSheet({ open, onClose, setSchedule, goal }: { op
   }
 
   return (
-    <BottomSheet open={open} onClose={onClose}>
-      <View className="gap-4 p-5 pb-8">
+    <BottomSheet
+      open={open}
+      onClose={onClose}
+      footer={
+        <Button fullWidth onPress={handleSubmit} disabled={!title.trim()}>
+          {goal ? 'Save changes' : 'Create goal'}
+        </Button>
+      }
+    >
+      <View className="gap-6 p-5 pb-8">
         <SheetHeader eyebrow={goal ? 'Edit' : 'New'} title={goal ? 'Edit goal' : 'Create goal'} onClose={onClose} />
-        <View className="gap-2.5">
+        <View className="gap-5">
           <View>
             <Input
+              label="Goal"
               value={title}
               onChangeText={setTitle}
-              placeholder="Goal — e.g. Get a senior UX design job"
+              placeholder="e.g. Get a senior UX design job"
               autoFocus
               maxLength={GOAL_TITLE_MAX}
               returnKeyType="done"
@@ -66,8 +75,8 @@ export default function GoalFormSheet({ open, onClose, setSchedule, goal }: { op
               {title.length}/{GOAL_TITLE_MAX}
             </Text>
           </View>
-          <Input value={description} onChangeText={setDescription} placeholder="Short description (optional)" accessibilityLabel="Goal description" />
-          <View className="flex-row gap-2">
+          <Input label="Description (optional)" value={description} onChangeText={setDescription} placeholder="Why it matters, in a line" accessibilityLabel="Goal description" />
+          <View className="flex-row gap-3">
             <View className="flex-1">
               <DateInput label="Start date" value={startDate} onChange={setStartDate} clearable />
             </View>
@@ -77,10 +86,6 @@ export default function GoalFormSheet({ open, onClose, setSchedule, goal }: { op
           </View>
         </View>
         <BuilderHints hints={hints} />
-
-        <Button fullWidth onPress={handleSubmit} disabled={!title.trim()}>
-          {goal ? 'Save changes' : 'Create goal'}
-        </Button>
       </View>
     </BottomSheet>
   );

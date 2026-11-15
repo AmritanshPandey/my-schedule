@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { Platform, Pressable, View } from 'react-native';
+import { Keyboard, Platform, Pressable, View } from 'react-native';
 import { IconClock } from '@tabler/icons-react-native';
 import { displayToInputTime, formatDisplayTime, minutesToInputTime, parseTimeToMinutes, punctuateTimeDigits } from '@planr/core/lib/timeUtils';
 import DateTimePicker from '@react-native-community/datetimepicker';
@@ -108,6 +108,8 @@ export default function TimeInput({ value, onChange, label, ariaLabel, onFocus, 
           accessibilityValue={{ text: shown || 'Not set' }}
           disabled={disabled}
           onPress={() => {
+            // The wheels take the keyboard's place, as in Apple's own forms.
+            Keyboard.dismiss();
             onFocus?.();
             setPicking((v) => !v);
           }}

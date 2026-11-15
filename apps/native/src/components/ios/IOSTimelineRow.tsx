@@ -98,7 +98,9 @@ function IOSTimelineRow({
   const subtitle = [label, duration].filter(Boolean).join(' · ');
 
   const hasItems = itemCount > 0;
-  const hasDetail = hasItems || !!task.description?.trim();
+  // Any tracked task opens its detail — that's where focus mode starts, and a
+  // task with no subtasks or description still has a timer to run.
+  const hasDetail = hasItems || !!task.description?.trim() || tracked;
 
   const toggle = () => {
     if (readOnly || !tracked) return;

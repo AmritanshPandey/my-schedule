@@ -20,6 +20,13 @@ import { Platform } from 'react-native';
  */
 export const ModalNestingContext = createContext(false);
 
+/**
+ * False while the iOS sheet around this content is still presenting. A
+ * keyboard raised before then is missed by the sheet's footer, which stays
+ * behind it, so autofocus waits for this (ui/Input).
+ */
+export const SheetPresentedContext = createContext(true);
+
 let holder: symbol | null = null;
 /** When the last holder's dismissal is over (epoch ms). */
 let freeAt = 0;

@@ -17,7 +17,8 @@ import { useAIEnabled } from "@/lib/ai/useAIEnabled";
 import BottomSheet from "@/components/ui/BottomSheet";
 import SheetHeader from "@/components/ui/SheetHeader";
 import Button from "@/components/ui/Button";
-import Input from "@/components/ui/Input";
+import Input, { FORM_LABEL } from "@/components/ui/Input";
+import { STICKY_SHEET_FOOTER } from "@/components/ui/FormChips";
 import { cycleAccentColor } from "@/components/ui/Badge";
 import { stableFieldHash } from "@/lib/hash";
 import { typography } from "@/components/ui/Typography";
@@ -135,8 +136,8 @@ export default function AddPlanSheet({ open, onClose, setSchedule, onUseAI, goal
   }
 
   return (
-    <BottomSheet open={open} onClose={handleClose}>
-      <div className="space-y-4 p-5 pb-8">
+    <BottomSheet open={open} onClose={handleClose} className="scroll-pb-24">
+      <div className="space-y-7 px-5 pt-5">
         <SheetHeader eyebrow="New" title="Create plan" onClose={handleClose} />
 
         {aiEnabled && onUseAI && (
@@ -155,9 +156,10 @@ export default function AddPlanSheet({ open, onClose, setSchedule, onUseAI, goal
           </button>
         )}
 
-        <div className="space-y-2.5">
+        <div className="space-y-5">
           <div>
             <Input
+              label="Title"
               value={title}
               onChange={(e) => setTitle(e.target.value)}
               placeholder="Plan title"
@@ -170,19 +172,18 @@ export default function AddPlanSheet({ open, onClose, setSchedule, onUseAI, goal
             </p>
           </div>
           <Input
+            label="Description (optional)"
             value={description}
             onChange={(e) => setDescription(e.target.value)}
-            placeholder="Short description (optional)"
+            placeholder="What it's for, in a line"
           />
-          <div className="grid grid-cols-2 gap-2">
+          <div className="grid grid-cols-2 gap-3">
             <div>
-              <p className={`mb-1 ${typography.eyebrow}`}>Start date</p>
+              <p className={FORM_LABEL}>Start date</p>
               <DateInput value={startDate} onChange={(v) => setStartDate(v)} />
             </div>
             <div>
-              <p className={`mb-1 ${typography.eyebrow}`}>
-                End date
-              </p>
+              <p className={FORM_LABEL}>End date</p>
               <DateInput value={endDate} onChange={(v) => setEndDate(v)} />
             </div>
           </div>
@@ -196,13 +197,13 @@ export default function AddPlanSheet({ open, onClose, setSchedule, onUseAI, goal
 
         {goals.length > 0 && (
           <div>
-            <p className={`mb-1 ${typography.eyebrow}`}>
+            <p className={FORM_LABEL}>
               Goal <span className="normal-case font-normal text-neutral-500 dark:text-neutral-400">(optional)</span>
             </p>
             <select
               value={goalId}
               onChange={(e) => setGoalId(e.target.value)}
-              className="h-11 w-full min-w-0 rounded-xl border border-neutral-200 bg-neutral-50 px-3 text-[14px] text-neutral-900 outline-none transition-colors focus:border-neutral-300 focus:bg-neutral-100 dark:border-white/10 dark:bg-white/[0.04] dark:text-white dark:focus:border-white/20 dark:focus:bg-white/[0.07] dark:[color-scheme:dark]"
+              className="h-11 w-full min-w-0 rounded-xl border border-neutral-200 bg-neutral-50 px-3 text-[16px] text-neutral-900 outline-none transition-colors focus:border-neutral-300 focus:bg-neutral-100 dark:border-white/10 dark:bg-white/[0.04] dark:text-white dark:focus:border-white/20 dark:focus:bg-white/[0.07] dark:[color-scheme:dark]"
             >
               <option value="">No goal</option>
               {goals.map((g) => (
@@ -214,7 +215,7 @@ export default function AddPlanSheet({ open, onClose, setSchedule, onUseAI, goal
 
         <div>
           <p className={`mb-2 ${typography.eyebrow}`}>Icon</p>
-          <div className="grid grid-cols-5 gap-1.5">
+          <div className="grid grid-cols-4 gap-2 sm:grid-cols-5">
             {SECTION_ICONS.map(({ name, label, icon: Icon }) => {
               const sel = iconName === name;
               return (
@@ -223,10 +224,11 @@ export default function AddPlanSheet({ open, onClose, setSchedule, onUseAI, goal
                   type="button"
                   title={label}
                   onClick={() => setIconName(name)}
-                  className={iconPickerClass(sel)}
+                  aria-pressed={sel}
+                  className={`${iconPickerClass(sel)} min-h-16`}
                 >
-                  <Icon size={18} strokeWidth={1.5} />
-                  <span className="text-[9px] font-semibold leading-none">
+                  <Icon size={22} strokeWidth={1.6} />
+                  <span className="text-[11px] font-semibold leading-tight">
                     {label}
                   </span>
                 </button>
@@ -260,19 +262,20 @@ export default function AddPlanSheet({ open, onClose, setSchedule, onUseAI, goal
             </IconButton>
           </div>
           {metaFields.length > 0 && (
-            <div className="mt-2 flex flex-wrap gap-1.5">
+            <div className="mt-3 flex flex-wrap gap-2">
               {metaFields.map((field) => (
                 <span
                   key={field}
-                  className="inline-flex items-center gap-1.5 rounded-full border border-neutral-200 bg-neutral-50 px-2.5 py-1 text-[12px] font-medium text-neutral-600 dark:border-white/10 dark:bg-white/[0.04] dark:text-neutral-300"
+                  className="inline-flex h-11 items-center gap-1 rounded-full border border-neutral-200 bg-neutral-50 pl-4 pr-1 text-[14px] font-medium text-neutral-700 dark:border-white/10 dark:bg-white/[0.04] dark:text-neutral-200"
                 >
                   {field}
                   <button
                     type="button"
+                    aria-label={`Remove ${field}`}
                     onClick={() => setMetaFields((prev) => prev.filter((f) => f !== field))}
-                    className="opacity-50 hover:opacity-100 hover:text-red-500 transition-opacity"
+                    className="flex h-9 w-9 items-center justify-center rounded-full text-neutral-500 transition-colors hover:bg-neutral-200 hover:text-rose-500 dark:text-neutral-400 dark:hover:bg-white/10"
                   >
-                    <IconX size={11} />
+                    <IconX size={14} />
                   </button>
                 </span>
               ))}
@@ -280,9 +283,11 @@ export default function AddPlanSheet({ open, onClose, setSchedule, onUseAI, goal
           )}
         </div>
 
-        <Button fullWidth onClick={handleSubmit} disabled={!title.trim()}>
-          Create new plan
-        </Button>
+        <div className={STICKY_SHEET_FOOTER}>
+          <Button fullWidth onClick={handleSubmit} disabled={!title.trim()}>
+            Create new plan
+          </Button>
+        </div>
       </div>
     </BottomSheet>
   );

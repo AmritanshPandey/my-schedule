@@ -1,9 +1,10 @@
 import { Pressable, View } from 'react-native';
-import { IconCalendarDue } from '@tabler/icons-react-native';
+import { IconBarbell, IconCalendarDue } from '@tabler/icons-react-native';
+import IconButton, { ICON_BUTTON_TONE } from '../ui/IconButton';
 import type { TaskState } from '@planr/core/lib/taskCompletion';
-import type { ScheduleEntry } from '@planr/core/lib/scheduleEntry';
+import type { ScheduleEntry, TargetValues } from '@planr/core/lib/scheduleEntry';
 import { deadlineState, formatDeadline, type DeadlineState } from '@planr/core/lib/subtaskDeadline';
-import { formatMinutes } from '@planr/core/lib/timeUtils';
+import { subtaskDetailSegments, type DetailSegment } from '@planr/core/lib/subtaskTargets';
 import TaskStatusCheckbox from '../task/TaskStatusCheckbox';
 import { Icon } from '../ui/Icon';
 import { Text } from '../ui/Text';
@@ -14,22 +15,9 @@ const DEADLINE_BADGE: Record<DeadlineState, { box: string; text: string }> = {
   upcoming: { box: 'border-neutral-200 bg-white dark:border-white/[0.12] dark:bg-transparent', text: 'text-neutral-500 dark:text-neutral-400' },
 };
 
-interface DetailSegment {
-  text: string;
-  isTime?: boolean;
-}
-
-/** Same as the web helper: info, then time, then free-text detail. */
-export function getTaskDetailSegments(entry: ScheduleEntry): DetailSegment[] | null {
-  const info = entry.info?.trim() || entry.note?.trim();
-  const segments: DetailSegment[] = [];
-  if (info) segments.push({ text: info });
-  if (entry.timeMinutes != null && entry.timeMinutes > 0) segments.push({ text: formatMinutes(entry.timeMinutes), isTime: true });
-  if (entry.duration) segments.push({ text: entry.duration });
-  if (segments.length > 0) return segments;
-  if (entry.meta && entry.meta.length > 0) return entry.meta.map((m) => ({ text: m.value }));
-  if (entry.time) return [{ text: entry.time }];
-  return null;
+/** Same as the web helper — the shared core label (info, time, strength targets, detail). */
+export function getTaskDetailSegments(entry: ScheduleEntry, values?: TargetValues): DetailSegment[] | null {
+  return subtaskDetailSegments(entry, values);
 }
 
 export function getTaskDetailPill(entry: ScheduleEntry): string | null {
@@ -45,6 +33,9 @@ export default function TaskChecklistItem({
   today,
   readOnly = false,
   onToggle,
+  values,
+  onLogSets,
+  logSummary,
 }: {
   item: ScheduleEntry;
   isDone: boolean;
@@ -52,8 +43,14 @@ export default function TaskChecklistItem({
   today: string;
   readOnly?: boolean;
   onToggle: () => void;
+  /** The figures that apply today — accepted progression steps included. */
+  values?: TargetValues;
+  /** Open the Log sets sheet for this subtask. Absent = no button. */
+  onLogSets?: () => void;
+  /** Today's logged recap, e.g. "3 sets logged · top 62.5 kg". */
+  logSummary?: string;
 }) {
-  const detailSegments = getTaskDetailSegments(item);
+  const detailSegments = getTaskDetailSegments(item, values);
   const deadline = item.deadline
     ? {
         label: formatDeadline(item.deadline, item.deadlineScope ?? 'day'),
@@ -78,13 +75,20 @@ export default function TaskChecklistItem({
         label={isDone ? 'Mark subtask not done' : 'Mark subtask done'}
         onClick={onToggle}
       />
-      <Text
-        className={`min-w-0 flex-1 text-[16px] font-semibold ${
-          isDone || state === 'missed' ? 'text-neutral-400 line-through dark:text-neutral-500' : 'text-neutral-800 dark:text-neutral-200'
-        }`}
-      >
-        {item.task}
-      </Text>
+      <View className="min-w-0 flex-1">
+        <Text
+          className={`text-[16px] font-semibold ${
+            isDone || state === 'missed' ? 'text-neutral-400 line-through dark:text-neutral-500' : 'text-neutral-800 dark:text-neutral-200'
+          }`}
+        >
+          {item.task}
+        </Text>
+        {logSummary ? (
+          <Text className="mt-0.5 text-[13px] font-medium text-neutral-500 dark:text-neutral-400" style={{ fontVariant: ['tabular-nums'] }}>
+            {logSummary}
+          </Text>
+        ) : null}
+      </View>
       {deadline && deadlineTone && (
         <View className={`shrink-0 flex-row items-center gap-1 rounded-full border px-2.5 py-1 ${deadlineTone.box}`}>
           <Icon icon={IconCalendarDue} size={12} strokeWidth={2.2} className={deadlineTone.text} />
@@ -103,6 +107,11 @@ export default function TaskChecklistItem({
           </Text>
         </View>
       )}
+      {onLogSets ? (
+        <IconButton label={`Log sets for ${item.task}`} variant="secondary" size="md" onPress={onLogSets}>
+          <Icon icon={IconBarbell} size={18} strokeWidth={2} className={ICON_BUTTON_TONE.secondary} />
+        </IconButton>
+      ) : null}
     </Pressable>
   );
 }

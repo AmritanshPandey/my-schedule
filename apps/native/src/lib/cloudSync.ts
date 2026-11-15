@@ -47,6 +47,7 @@ import {
 } from '../storage/localMeta';
 import type { Schedule } from '@planr/core/lib/scheduleTypes';
 import { localISODate } from '@planr/core/lib/dateUtils';
+import { trimSetLogsForSync } from '@planr/core/lib/setLogs';
 import { schedulePayloadBytes, validateSchedule } from '@planr/core/lib/scheduleSchema';
 import { baseRevAfterHandoff, pushIsSafe, type SnapshotDoc } from '@planr/core/lib/syncRevision';
 import { mergeSchedules, PLACEHOLDER_STAMP } from '@planr/core/lib/mergeSchedule';
@@ -398,6 +399,7 @@ function trimForSync(schedule: Schedule): Schedule {
         })),
       ]),
     ) as Schedule['activities'],
+    ...(schedule.setLogs ? { setLogs: trimSetLogsForSync(schedule.setLogs, localISODate(cutoff)) } : {}),
   };
 }
 

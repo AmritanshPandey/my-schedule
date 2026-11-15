@@ -115,6 +115,10 @@ import type { CreateTaskFromNoteInput } from "@/components/notes/NotesView";
 import { useCoachTour } from "@/lib/onboarding/useCoachTour";
 import { TOUR_STEPS, type TourId } from "@/lib/onboarding/tours";
 import { setMilestoneLink } from "@/lib/milestoneAutoLinks";
+import { upsertSetLog } from "@/lib/setLogs";
+import { useFocusSession } from "@/lib/useFocusSession";
+import { decideProgression, pendingProgressionsForTask } from "@/lib/subtaskProgression";
+import FocusHost, { focusItems } from "@/components/focus/FocusHost";
 
 const IOSMotionBoundary = dynamic(() => import("@/components/ios/IOSMotionBoundary"), { ssr: false });
 const TaskSheet = dynamic(() => import("@/components/task/TaskSheet").then((m) => ({ default: m.TaskSheet })), { ssr: false });
@@ -387,6 +391,8 @@ export default function IOSScheduleApp() {
   const detailRitual = detailRitualId ? (schedule.rituals ?? []).find((r) => r.id === detailRitualId) ?? null : null;
   const editingRitual = editRitualId ? (schedule.rituals ?? []).find((r) => r.id === editRitualId) ?? null : null;
   const [subtasksRef, setSubtasksRef] = useState<{ id: string; day: DayKey; dateISO: string } | null>(null);
+  // Focus mode: device-local, restored on load if a session from today is open.
+  const focus = useFocusSession();
   const [entryTracker, setEntryTracker] = useState<ProgressTracker | null>(null);
   // A tab's tour explains what's on it, so it waits until there is something
   // there: on an empty tab the empty state's own button is the guidance, and
@@ -1372,6 +1378,19 @@ export default function IOSScheduleApp() {
               dayLabel={formatDayNoteLabel(subtasksRef.dateISO)}
               onEdit={subtasksTask ? () => { openEditSheet(subtasksTask, subtasksRef.dateISO); setSubtasksRef(null); } : undefined}
               presentation="page"
+              dateISO={subtasksRef.dateISO}
+              setLogs={schedule.setLogs}
+              progressionSteps={schedule.progressionSteps}
+              onSaveSetLog={(log) => setSchedule((prev) => upsertSetLog(prev, log))}
+              suggestions={subtasksTask && subtasksRef.dateISO === todayISO() ? pendingProgressionsForTask(schedule, subtasksTask, todayISO()) : undefined}
+              onDecideProgression={(suggestion, decision) => setSchedule((prev) => decideProgression(prev, suggestion, decision))}
+              onStartFocus={subtasksTask && subtasksRef.dateISO === todayISO() ? () => focus.start({
+                taskId: subtasksTask.id,
+                day: subtasksRef.day,
+                dateISO: subtasksRef.dateISO,
+                stepIds: focusItems(subtasksTask, plansById).map((item) => item.id),
+                alreadyDone: subtasksTask.completedSubtaskIds,
+              }) : undefined}
             />
           </ErrorBoundary>
         </IOSMotionBoundary>
@@ -1977,6 +1996,15 @@ export default function IOSScheduleApp() {
           />
         </IOSMotionBoundary>
       )}
+
+      <FocusHost
+        focus={focus}
+        schedule={schedule}
+        setSchedule={setSchedule}
+        plansById={plansById}
+        onToggleSubtask={(taskId, subtaskId, day, dateISO) => handleToggleSubtask(taskId, subtaskId, day, dateISO)}
+        onToggleComplete={(taskId, ids, day, dateISO) => handleToggleTaskComplete(taskId, ids, day, dateISO)}
+      />
 
       {detailRitual && (
         <div

@@ -1,16 +1,18 @@
 "use client";
 
-import { IconCalendarDue } from "@tabler/icons-react";
+import { IconBarbell, IconCalendarDue } from "@tabler/icons-react";
+import IconButton from "@/components/ui/IconButton";
 import Pill from "@/components/ui/Pill";
 import TaskStatusCheckbox from "@/components/task/TaskStatusCheckbox";
 import type { TaskState } from "@/lib/taskCompletion";
-import type { ScheduleEntry, MetaField } from "@/components/ScheduleItem";
+import type { ScheduleEntry } from "@/components/ScheduleItem";
 import {
   deadlineState,
   formatDeadline,
   type DeadlineState,
 } from "@/lib/subtaskDeadline";
-import { formatMinutes } from "@/lib/timeUtils";
+import { subtaskDetailSegments, type DetailSegment } from "@/lib/subtaskTargets";
+import type { TargetValues } from "@planr/core/lib/scheduleEntry";
 
 const DEADLINE_BADGE: Record<DeadlineState, string> = {
   overdue: "border-rose-500/30 bg-rose-500/10 text-rose-600 dark:text-rose-400",
@@ -18,27 +20,11 @@ const DEADLINE_BADGE: Record<DeadlineState, string> = {
   upcoming: "border-neutral-200 bg-white text-neutral-500 dark:border-white/[0.12] dark:bg-transparent dark:text-neutral-400",
 };
 
-interface DetailSegment {
-  text: string;
-  /** Marks the segment as the time figure, so it renders in Info Blue. */
-  isTime?: boolean;
-}
-
-/** Structured detail pieces for a checklist item — info, then time, then any
- *  free-text detail — so the time figure can be styled distinctly from the rest. */
-export function getTaskDetailSegments(entry: ScheduleEntry): DetailSegment[] | null {
-  const info = entry.info?.trim() || entry.note?.trim();
-  const segments: DetailSegment[] = [];
-  if (info) segments.push({ text: info });
-  if (entry.timeMinutes != null && entry.timeMinutes > 0) {
-    segments.push({ text: formatMinutes(entry.timeMinutes), isTime: true });
-  }
-  if (entry.duration) segments.push({ text: entry.duration });
-  if (segments.length > 0) return segments;
-  const meta = (entry as ScheduleEntry & { meta?: MetaField[] }).meta;
-  if (meta && meta.length > 0) return meta.map((m) => ({ text: m.value }));
-  if (entry.time) return [{ text: entry.time }];
-  return null;
+/** Structured detail pieces for a checklist item — info, time, strength
+ *  targets, then free-text detail — so the time figure can be styled distinctly.
+ *  `values` are the figures that apply today (accepted progression steps). */
+export function getTaskDetailSegments(entry: ScheduleEntry, values?: TargetValues): DetailSegment[] | null {
+  return subtaskDetailSegments(entry, values);
 }
 
 export function getTaskDetailPill(entry: ScheduleEntry): string | null {
@@ -53,6 +39,12 @@ interface TaskChecklistItemProps {
   today: string;
   readOnly?: boolean;
   onToggle: () => void;
+  /** The figures that apply today — accepted progression steps included. */
+  values?: TargetValues;
+  /** Open the "Log sets" sheet for this subtask. Absent = no button. */
+  onLogSets?: () => void;
+  /** Today's logged recap, e.g. "3 sets logged · top 62.5 kg". */
+  logSummary?: string;
 }
 
 export default function TaskChecklistItem({
@@ -62,8 +54,11 @@ export default function TaskChecklistItem({
   today,
   readOnly = false,
   onToggle,
+  values,
+  onLogSets,
+  logSummary,
 }: TaskChecklistItemProps) {
-  const detailSegments = getTaskDetailSegments(item);
+  const detailSegments = getTaskDetailSegments(item, values);
   const deadline = item.deadline
     ? {
         label: formatDeadline(item.deadline, item.deadlineScope ?? "day"),
@@ -98,12 +93,17 @@ export default function TaskChecklistItem({
         label={isDone ? "Mark subtask not done" : "Mark subtask done"}
         onClick={onToggle}
       />
-      <span className={`min-w-0 flex-1 text-[16px] font-semibold ${
-        isDone ? "text-neutral-400 line-through dark:text-neutral-500"
-        : state === "missed" ? "text-neutral-400 line-through decoration-rose-400 dark:text-neutral-500"
-        : "text-neutral-800 dark:text-neutral-200"
-      }`}>
-        {item.task}
+      <span className="min-w-0 flex-1">
+        <span className={`block text-[16px] font-semibold ${
+          isDone ? "text-neutral-400 line-through dark:text-neutral-500"
+          : state === "missed" ? "text-neutral-400 line-through decoration-rose-400 dark:text-neutral-500"
+          : "text-neutral-800 dark:text-neutral-200"
+        }`}>
+          {item.task}
+        </span>
+        {logSummary && (
+          <span className="mt-0.5 block text-[13px] font-medium tabular-nums text-neutral-500 dark:text-neutral-400">{logSummary}</span>
+        )}
       </span>
       {deadline && (
         <Pill
@@ -127,6 +127,16 @@ export default function TaskChecklistItem({
             </span>
           ))}
         </Pill>
+      )}
+      {onLogSets && (
+        <IconButton
+          label={`Log sets for ${item.task}`}
+          variant="secondary"
+          size="md"
+          onClick={(e) => { e.stopPropagation(); onLogSets(); }}
+        >
+          <IconBarbell size={18} strokeWidth={2} />
+        </IconButton>
       )}
     </div>
   );

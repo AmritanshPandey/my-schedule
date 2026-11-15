@@ -26,6 +26,7 @@ import Input, { FORM_LABEL, Textarea } from '../ui/Input';
 import AddRowButton from '../ui/AddRowButton';
 import SegmentedControl from '../ui/SegmentedControl';
 import WeekdayPicker from '../ui/WeekdayPicker';
+import { ChipRow, ChoiceChip } from '../ui/FormChips';
 import DateInput from '../ui/DateInput';
 import { typography } from '../ui/Typography';
 import { Icon } from '../ui/Icon';
@@ -34,7 +35,8 @@ import TimeSlotPicker, { type EditableSlot } from '../TimeSlotPicker';
 import { CategorySelector } from './CategorySelector';
 import CategorySheet, { type CategoryDraft } from '../category/CategorySheet';
 import { PlanSelector } from './PlanSelector';
-import SubtaskDraftRow, { type SubtaskDraft } from './SubtaskDraftRow';
+import SubtaskDraftRow from './SubtaskDraftRow';
+import { entryToSubtaskDraft, subtaskDraftToEntry, type SubtaskDraft } from '@planr/core/lib/subtaskDraft';
 import BuilderHints from '../intelligence/BuilderHints';
 
 export interface TaskSaveData {
@@ -91,30 +93,6 @@ export interface TaskSheetProps {
   /** Rendered over the page editor (inside its modal) — the shell's toast,
    *  which would otherwise sit unseen in the window underneath. */
   overlay?: ReactNode;
-}
-
-function entryToSubtaskDraft(e: ScheduleEntry): SubtaskDraft {
-  return {
-    id: e.id,
-    title: e.task,
-    info: e.info ?? '',
-    duration: e.duration ?? '',
-    timeMinutes: e.timeMinutes,
-    deadline: e.deadline,
-    deadlineScope: e.deadlineScope,
-  };
-}
-
-function subtaskDraftToEntry(d: SubtaskDraft): ScheduleEntry {
-  return {
-    id: d.id,
-    task: d.title.trim(),
-    info: (d.info ?? '').trim() || undefined,
-    duration: (d.duration ?? '').trim() || undefined,
-    timeMinutes: d.timeMinutes != null && d.timeMinutes > 0 ? d.timeMinutes : undefined,
-    deadline: d.deadline || undefined,
-    deadlineScope: d.deadline ? d.deadlineScope ?? 'day' : undefined,
-  };
 }
 
 const SCOPE_OPTIONS = [
@@ -319,7 +297,9 @@ export function TaskSheet({
     setFocusNewSubtask(false);
     setDuplicateStep('idle');
     setEditScope('all');
-    if (mode === 'create') setTimeout(() => titleRef.current?.focus(), 350);
+    // As a sheet, the title is focused once the sheet is up (onPresented):
+    // a keyboard raised mid-presentation isn't seen by the sheet's footer.
+    if (mode === 'create' && presentation === 'page') setTimeout(() => titleRef.current?.focus(), 350);
   }, [isOpen]); // eslint-disable-line react-hooks/exhaustive-deps
 
   function applyScope(scope: 'all' | 'occurrence') {
@@ -554,7 +534,7 @@ export function TaskSheet({
 
   function handleSave() {
     if (!canSave || (!isCommitment && !selectedPlan)) return;
-    const validSubtasks = subtasks.filter((s) => s.title.trim().length > 0).map(subtaskDraftToEntry);
+    const validSubtasks = subtasks.filter((s) => s.title.trim().length > 0).map((draft) => subtaskDraftToEntry(draft));
 
     let recurrence: TaskRecurrence | undefined;
     let effectiveRepeatDays = repeatDays;
@@ -620,7 +600,7 @@ export function TaskSheet({
 
   function confirmDuplicate() {
     if (!canSave || !selectedPlan || !onDuplicate) return;
-    const validSubtasks = subtasks.filter((s) => s.title.trim().length > 0).map(subtaskDraftToEntry);
+    const validSubtasks = subtasks.filter((s) => s.title.trim().length > 0).map((draft) => subtaskDraftToEntry(draft));
     const dupSlots = toDisplaySlots(slots);
     onDuplicate({
       taskDraft: {
@@ -671,7 +651,7 @@ export function TaskSheet({
 
   // ── Main form ──────────────────────────────────────────────────────────────
   const formBody = (
-    <View className="mt-4 gap-5">
+    <View className="mt-4 gap-7">
       {canScopeToOccurrence && (
         <View>
           <Text className={FORM_LABEL}>Apply changes to</Text>
@@ -801,7 +781,7 @@ export function TaskSheet({
             onChange={(value) => setSameEveryDay(value === 'same')}
           />
           {perDayActive && (
-            <View accessibilityRole="radiogroup" accessibilityLabel="Day to edit" className="mt-2.5 flex-row flex-wrap gap-2">
+            <View accessibilityRole="radiogroup" accessibilityLabel="Day to edit" className="mt-3 flex-row gap-1.5">
               {DAYS.filter((d) => repeatDays.includes(d)).map((day) => {
                 const on = resolvedEditDay === day;
                 return (
@@ -811,11 +791,11 @@ export function TaskSheet({
                     accessibilityState={{ checked: on }}
                     accessibilityLabel={DAY_FULL_LABELS[day]}
                     onPress={() => setEditDay(day)}
-                    className={`h-8 w-10 items-center justify-center rounded-full border ${
+                    className={`h-11 min-w-0 flex-1 items-center justify-center rounded-full border ${
                       on ? 'border-neutral-900 bg-neutral-900 dark:border-white dark:bg-white' : 'border-neutral-200 bg-white dark:border-white/10 dark:bg-white/[0.04]'
                     }`}
                   >
-                    <Text numberOfLines={1} className={`w-full text-center text-[12px] font-semibold ${on ? 'text-white dark:text-neutral-900' : 'text-neutral-500 dark:text-neutral-400'}`}>{DAY_LABELS[day]}</Text>
+                    <Text numberOfLines={1} className={`w-full text-center text-[14px] font-semibold ${on ? 'text-white dark:text-neutral-900' : 'text-neutral-700 dark:text-neutral-200'}`}>{DAY_LABELS[day]}</Text>
                   </Pressable>
                 );
               })}
@@ -834,9 +814,9 @@ export function TaskSheet({
           <Text className={FORM_LABEL}>Repeat</Text>
           <SegmentedControl ariaLabel="Repeat" options={REPEAT_OPTIONS} value={repeatMode} onChange={setRepeatMode} />
           {showRepeatDays && (
-            <View className="flex-row items-start gap-3 pt-1">
-              <Text className="w-[52px] shrink-0 pt-[7px] text-[12px] font-semibold text-neutral-500 dark:text-neutral-400">On</Text>
-              <WeekdayPicker className="min-w-0 flex-1" selected={repeatDays} onChange={setRepeatDays} allDaysOption fallbackDay={activeDay} />
+            <View className="pt-2">
+              <Text className="mb-2 text-[13px] font-semibold text-neutral-600 dark:text-neutral-400">On these days</Text>
+              <WeekdayPicker selected={repeatDays} onChange={setRepeatDays} allDaysOption fallbackDay={activeDay} />
             </View>
           )}
           {repeatMode === 'interval' && (
@@ -913,32 +893,19 @@ export function TaskSheet({
           <AddRowButton label={taskType === 'session' ? 'Add step' : 'Add subtask'} onClick={addSubtask} />
 
           {taskType === 'session' && stepCount > 0 && (
-            <View className="flex-row flex-wrap items-center gap-2">
-              <Text className="text-[12px] font-semibold text-neutral-500 dark:text-neutral-400">Buffer between steps</Text>
-              <View className="flex-row gap-1">
-                {[0, 1, 2, 5, 10].map((m) => {
-                  const on = (stepBuffer ?? 0) === m;
-                  return (
-                    <Pressable
-                      key={m}
-                      accessibilityRole="button"
-                      accessibilityState={{ selected: on }}
-                      onPress={() => {
-                        haptic('light');
-                        setStepBuffer(m === 0 ? undefined : m);
-                      }}
-                      className={`h-8 min-w-[36px] items-center justify-center rounded-full px-2.5 ${
-                        on ? 'bg-blue-600 dark:bg-blue-500' : 'border border-neutral-200 dark:border-white/10'
-                      }`}
-                    >
-                      <Text className={`text-[12px] font-bold tabular-nums ${on ? 'text-white' : 'text-neutral-500 dark:text-neutral-400'}`}>
-                        {m === 0 ? 'None' : `${m}m`}
-                      </Text>
-                    </Pressable>
-                  );
-                })}
-              </View>
-            </View>
+            <ChipRow label="Buffer between steps">
+              {[0, 1, 2, 5, 10].map((m) => (
+                <ChoiceChip
+                  key={m}
+                  active={(stepBuffer ?? 0) === m}
+                  label={m === 0 ? 'None' : `${m}m`}
+                  onPress={() => {
+                    haptic('light');
+                    setStepBuffer(m === 0 ? undefined : m);
+                  }}
+                />
+              ))}
+            </ChipRow>
           )}
 
           {(stepCount > 0 || combinedStepMinutes != null) && (
@@ -1116,7 +1083,7 @@ export function TaskSheet({
         open={isOpen}
         onClose={duplicateStep === 'picking' ? () => setDuplicateStep('idle') : onClose}
         fullHeight
-        footer={duplicateStep === 'picking' ? undefined : footer}
+        footer={duplicateStep === 'picking' ? null : footer}
         onPresented={mode === 'create' ? () => titleRef.current?.focus() : undefined}
       >
         {duplicateStep === 'picking' ? (

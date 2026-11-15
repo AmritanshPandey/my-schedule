@@ -1,6 +1,7 @@
 import { Pressable, View } from 'react-native';
 import { DAYS, DAY_FULL_LABELS, DAY_LABELS, type DayKey } from '@planr/core/lib/scheduleConstants';
 import { Text } from './Text';
+import { ChoiceChip } from './FormChips';
 
 /** Native port of components/ui/WeekdayPicker.tsx — Monday-first toggle chips. */
 interface WeekdayPickerProps {
@@ -12,18 +13,15 @@ interface WeekdayPickerProps {
   className?: string;
 }
 
-function chipClass(active: boolean): string {
+function dayClass(active: boolean): string {
   return active
     ? 'border-neutral-900 bg-neutral-900 dark:border-white dark:bg-white'
     : 'border-neutral-200 bg-white dark:border-white/10 dark:bg-white/[0.04]';
 }
 
-function chipText(active: boolean): string {
-  return active ? 'text-white dark:text-neutral-900' : 'text-neutral-500 dark:text-neutral-400';
+function dayText(active: boolean): string {
+  return active ? 'text-white dark:text-neutral-900' : 'text-neutral-700 dark:text-neutral-200';
 }
-
-const CHIP = 'h-8 items-center justify-center rounded-full border px-3';
-const CHIP_TEXT = 'text-[12px] font-semibold';
 
 export default function WeekdayPicker({
   selected,
@@ -45,37 +43,40 @@ export default function WeekdayPicker({
     onChange(DAYS.filter((d) => kept.includes(d)));
   }
 
+  // One row of seven equal 44px days, so the week never wraps into a
+  // crowded second line; "Every day" is its own chip above it.
   return (
-    <View className={`flex-row flex-wrap gap-2 ${className}`}>
+    <View className={`gap-2 ${className}`}>
       {allDaysOption && (
-        <Pressable
-          accessibilityRole="button"
-          accessibilityState={{ selected: allSelected }}
-          onPress={() => onChange(allSelected ? [fallbackDay ?? selected[0] ?? DAYS[0]] : [...DAYS])}
-          className={`${CHIP} ${chipClass(allSelected)}`}
-        >
-          <Text className={`${CHIP_TEXT} ${chipText(allSelected)}`}>All days</Text>
-        </Pressable>
+        <View className="flex-row">
+          <ChoiceChip
+            active={allSelected}
+            label="Every day"
+            onPress={() => onChange(allSelected ? [fallbackDay ?? selected[0] ?? DAYS[0]] : [...DAYS])}
+          />
+        </View>
       )}
-      {DAYS.map((day) => {
-        const active = allDaysOption ? !allSelected && selected.includes(day) : selected.includes(day);
-        return (
-          <Pressable
-            key={day}
-            accessibilityRole="button"
-            accessibilityState={{ selected: active }}
-            accessibilityLabel={DAY_FULL_LABELS[day]}
-            onPress={() => toggleDay(day)}
-            className={`${CHIP} w-10 px-0 ${chipClass(active)}`}
-          >
-            {/* Full chip width: iOS measures Nunito's "Mo" / "We" a hair narrow and
-                clips the last letter of a content-sized label. */}
-            <Text numberOfLines={1} className={`w-full text-center ${CHIP_TEXT} ${chipText(active)}`}>
-              {DAY_LABELS[day]}
-            </Text>
-          </Pressable>
-        );
-      })}
+      <View className="flex-row gap-1.5">
+        {DAYS.map((day) => {
+          const active = allDaysOption ? !allSelected && selected.includes(day) : selected.includes(day);
+          return (
+            <Pressable
+              key={day}
+              accessibilityRole="button"
+              accessibilityState={{ selected: active }}
+              accessibilityLabel={DAY_FULL_LABELS[day]}
+              onPress={() => toggleDay(day)}
+              className={`h-11 min-w-0 flex-1 items-center justify-center rounded-full border ${dayClass(active)}`}
+            >
+              {/* Full width: iOS measures Nunito's "Mo" / "We" a hair narrow
+                  and clips the last letter of a content-sized label. */}
+              <Text numberOfLines={1} className={`w-full text-center text-[14px] font-semibold ${dayText(active)}`}>
+                {DAY_LABELS[day]}
+              </Text>
+            </Pressable>
+          );
+        })}
+      </View>
     </View>
   );
 }

@@ -4,10 +4,11 @@ import { memo, useMemo, useState } from "react";
 import { m, AnimatePresence, useMotionValue, useTransform, animate } from "framer-motion";
 import { IconArrowUpRight, IconCheck, IconChevronDown, IconEdit, IconListCheck, IconMinus, IconTrash, IconX } from "@tabler/icons-react";
 import type { Task, Plan, TaskCategory } from "@/lib/useScheduleDB";
-import type { ScheduleEntry, MetaField } from "@/components/ScheduleItem";
+import type { ScheduleEntry } from "@/components/ScheduleItem";
+import { subtaskDetailLabel } from "@/lib/subtaskTargets";
 import { calculateTaskProgress, isTrackedTask, phaseProgress, resolveTaskState, taskStatusLabel } from "@/lib/taskCompletion";
 import type { TaskState } from "@/lib/taskCompletion";
-import { formatSlotsDuration, formatMinutes } from "@/lib/timeUtils";
+import { formatSlotsDuration } from "@/lib/timeUtils";
 import { getSlots } from "@/lib/taskMutations";
 import { haptic } from "@/lib/haptics";
 import { TaskBlockCard } from "@/components/TaskBlockCard";
@@ -29,17 +30,7 @@ const PLAN_DOT: Record<string, string> = {
 // ── Subtask detail pill text ──────────────────────────────────────────────────
 
 function subtaskDetailPill(entry: ScheduleEntry): string | null {
-  const info = entry.info?.trim() || entry.note?.trim();
-  const details = [] as string[];
-  if (info) details.push(info);
-  if (entry.timeMinutes != null && entry.timeMinutes > 0) details.push(formatMinutes(entry.timeMinutes));
-  if (entry.duration) details.push(entry.duration);
-  if (details.length > 0) return details.join(" · ");
-
-  const meta = (entry as ScheduleEntry & { meta?: MetaField[] }).meta;
-  if (meta && meta.length > 0) return meta.map((m) => m.value).join(" | ");
-  if (entry.time) return entry.time;
-  return null;
+  return subtaskDetailLabel(entry);
 }
 
 // ── Checkbox ──────────────────────────────────────────────────────────────────

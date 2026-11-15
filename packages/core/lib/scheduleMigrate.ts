@@ -19,6 +19,8 @@ import type {
   GoalConnectionType,
   GoalStatus,
   MetricEntry,
+  ProgressionStep,
+  SetLog,
   Milestone,
   Note,
   Plan,
@@ -394,6 +396,43 @@ function normalizeMilestone(value: unknown): Milestone | null {
   };
 }
 
+const isStr = (v: unknown): v is string => typeof v === "string" && v.length > 0;
+const ISO_DAY = /^\d{4}-\d{2}-\d{2}$/;
+
+/**
+ * Logged sets. A row missing its identity or date is dropped rather than left
+ * to fail the whole schedule's validation; rows are otherwise kept as stored
+ * (passthrough), and malformed sets inside a row are filtered out.
+ */
+function normalizeSetLogs(value: unknown): SetLog[] {
+  if (!Array.isArray(value)) return [];
+  const out: SetLog[] = [];
+  for (const raw of value) {
+    if (!raw || typeof raw !== "object") continue;
+    const row = raw as SetLog;
+    if (!isStr(row.id) || !isStr(row.taskId) || !isStr(row.subtaskId) || !isStr(row.dateISO) || !ISO_DAY.test(row.dateISO)) continue;
+    if (!isStr(row.completedAt) || Number.isNaN(Date.parse(row.completedAt))) continue;
+    const sets = Array.isArray(row.sets)
+      ? row.sets.filter((set) => set && typeof set === "object" && typeof set.done === "boolean")
+      : [];
+    out.push({ ...row, sets });
+  }
+  return out;
+}
+
+/** Progression decisions — same policy: drop rows that can't be identified. */
+function normalizeProgressionSteps(value: unknown): ProgressionStep[] {
+  if (!Array.isArray(value)) return [];
+  return value.filter((raw): raw is ProgressionStep => {
+    if (!raw || typeof raw !== "object") return false;
+    const s = raw as ProgressionStep;
+    return isStr(s.id) && isStr(s.taskId) && isStr(s.subtaskId) && isStr(s.periodStartISO) && ISO_DAY.test(s.periodStartISO)
+      && (s.decision === "accepted" || s.decision === "held")
+      && !!s.to && typeof s.to === "object"
+      && isStr(s.decidedAt) && !Number.isNaN(Date.parse(s.decidedAt));
+  });
+}
+
 function normalizeMetricEntry(value: unknown, trackers: ProgressTracker[]): MetricEntry | null {
   if (!value || typeof value !== "object") return null;
   const e = value as MetricEntry;
@@ -568,6 +607,8 @@ export function migrate(raw: unknown): Schedule {
       ritualCompletions,
       notes,
       events: normalizeScheduleEvents(r.events),
+      setLogs: normalizeSetLogs(r.setLogs),
+      progressionSteps: normalizeProgressionSteps(r.progressionSteps),
       preferences,
       // Carried raw here and pruned once in safeMigrate, where the final live
       // entity set is known. Dropping it in these literals is exactly how a new
@@ -603,6 +644,8 @@ export function migrate(raw: unknown): Schedule {
       ritualCompletions: [],
       notes: normalizeNotes(r.notes),
       events: normalizeScheduleEvents(r.events),
+      setLogs: normalizeSetLogs(r.setLogs),
+      progressionSteps: normalizeProgressionSteps(r.progressionSteps),
       preferences,
       // Carried raw here and pruned once in safeMigrate, where the final live
       // entity set is known. Dropping it in these literals is exactly how a new
@@ -646,6 +689,8 @@ export function migrate(raw: unknown): Schedule {
     ritualCompletions: [],
     notes: normalizeNotes(r.notes),
     events: normalizeScheduleEvents(r.events),
+      setLogs: normalizeSetLogs(r.setLogs),
+      progressionSteps: normalizeProgressionSteps(r.progressionSteps),
     preferences,
     syncMeta: r.syncMeta as ScheduleSyncMeta | undefined,
   };
@@ -764,6 +809,8 @@ export function emptySchedule(): Schedule {
     notes: [],
     events: [],
     preferences: {},
+    setLogs: [],
+    progressionSteps: [],
   };
 }
 

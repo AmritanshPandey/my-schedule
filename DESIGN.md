@@ -302,9 +302,11 @@ one add affordance that isn't a Button; anywhere else, adding is a `secondary` B
 `+` icon ("+ Add") or a `secondary` / glass-header IconButton.
 
 ### Chips / Pills
-- **Style:** `rounded-lg`/`rounded-full`, hairline border, `text-[12px] font-bold`, muted
-  by default. Active state fills with ink (`bg-neutral-900 text-white`) — a small inversion,
-  not a color shift.
+- **Style:** `rounded-full`, hairline border, muted by default. Active state fills with ink
+  (`bg-neutral-900 text-white`) — a small inversion, not a color shift.
+- **Choice chips** (a pick in a form: a start time, a duration, a weekday): 44px tall,
+  `px-4`, `text-[14px] font-semibold` (`ui/FormChips` `ChoiceChip`; 40px / 13px on desktop).
+  Display-only tags and badges may stay smaller.
 
 ### Cards / Containers
 - **Corner Style:** `rounded-2xl` (16px).
@@ -320,6 +322,27 @@ one add affordance that isn't a Button; anywhere else, adding is a `secondary` B
 - **Focus:** Accent border shift (`border-emerald-500/70`), no heavy glow.
 - **Affordance:** Monospace is used for structured paste/template input where alignment
   matters.
+
+### Forms (create / edit sheets)
+One mobile-first pattern for every create and edit sheet (task, plan, AI plan, milestone,
+routine, goal), on the PWA and iOS alike. The kit is `ui/FormChips` on both platforms.
+- **Labels above, never beside.** A field's label sits on top of it (`FieldLabel` / the
+  eyebrow); no cramped left-hand label column. A row of quick-picks under a field takes a
+  quieter sentence-case label ("Start at", "Duration") rather than another eyebrow.
+- **44px everything.** Fields, chips, day buttons, swatches (a 32px dot in a 44px target)
+  and icon tiles. Text in fields is ≥16px.
+- **One line per row of choices.** A chip row scrolls sideways (`ChipRow`), bleeding to the
+  sheet edge, instead of wrapping into a crowded second line. The week is seven equal
+  buttons on one row, with "Every day" as its own chip above it.
+- **Rhythm.** 28px between sections, 20px between fields in a section, 8px label → control.
+- **Long forms are full height** (`BottomSheet` `fullHeight`), the only way an iOS sheet
+  scrolls the focused field clear of the keyboard. A form that fits above it can stay short.
+- **The primary action is pinned.** Save / Create sits in the sheet's footer, above the
+  keyboard: TrueSheet's footer on iOS (`BottomSheet` `footer`), `STICKY_SHEET_FOOTER` with
+  `scroll-pb-24` on the web, so a focused field scrolls clear of it.
+- **Native pickers for dates and times.** `ui/DateInput` / `ui/TimeInput`: the system
+  calendar and time wheels on iOS, `<input type="date|time">` on touch in the PWA. The
+  custom calendar and typed time field remain for a mouse and for Android's time.
 
 ### Navigation
 - **Style:** Floating bottom nav (mobile) with the Nav shadow; left sidebar (desktop).
