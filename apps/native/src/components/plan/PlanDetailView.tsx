@@ -51,6 +51,7 @@ import IconButton, { ICON_BUTTON_TONE } from '../ui/IconButton';
 import Input from '../ui/Input';
 import { DayPill } from '../ui/Badge';
 import { InternalSectionTitle, SectionIconButton } from '../ui/InternalSectionTitle';
+import PlanSessionsSection from '../session/PlanSessionsSection';
 import { TrackerTabs } from '../ui/TrackerTabs';
 import { typography } from '../ui/Typography';
 import { Icon } from '../ui/Icon';
@@ -267,6 +268,10 @@ interface PlanDetailViewProps {
   onUnlinkTaskFromMilestone?: (milestoneId: string, taskId: string) => void;
   /** Milestone <-> routine linking, and the generic form the item views use. */
   onSetMilestoneLink?: (milestoneId: string, kind: MilestoneLinkKind, itemId: string, linked: boolean) => void;
+  // Run sessions (a plan built by the 5K template); shown only when plan.generator is set.
+  onOpenSession?: (sessionId: string) => void;
+  onDecideAdjustment?: (adjustmentId: string, decision: 'accepted' | 'held') => void;
+  onUpdateRunInputs?: (planId: string, patch: { runDays?: DayKey[]; startTime?: string }) => void;
 }
 
 type PlanTab = 'planning' | 'roadmap';
@@ -309,6 +314,9 @@ export default function PlanDetailView({
   onLinkTaskToMilestone,
   onUnlinkTaskFromMilestone,
   onSetMilestoneLink,
+  onOpenSession,
+  onDecideAdjustment,
+  onUpdateRunInputs,
 }: PlanDetailViewProps) {
   // Whether this plan is still expected to run. Drives the pause affordance
   // and the held-state banner (lib/planLifecycle.ts).
@@ -1287,6 +1295,18 @@ export default function PlanDetailView({
       <View className="mt-6 px-4">
         {planTab === 'planning' ? (
           <>
+            {plan.generator && onOpenSession ? (
+              <View className="mb-8">
+                <PlanSessionsSection
+                  schedule={schedule}
+                  plan={plan}
+                  todayISO={todayISO()}
+                  onOpenSession={onOpenSession}
+                  onDecide={onDecideAdjustment}
+                  onUpdateInputs={onUpdateRunInputs ? (patch) => onUpdateRunInputs(plan.id, patch) : undefined}
+                />
+              </View>
+            ) : null}
             <View className="min-w-0 gap-8">{plannedTasksSection()}</View>
             <View className="mt-8 min-w-0 gap-8">
               {accuracySection()}

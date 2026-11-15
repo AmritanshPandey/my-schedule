@@ -108,6 +108,33 @@ interface TemplatesSheetProps {
   open: boolean;
   onClose: () => void;
   onApply: (template: Template) => void;
+  /** Opens the "Run a 5K" setup; the card shows only when this is given. */
+  onRun5k?: () => void;
+}
+
+/** "Run a 5K" asks a few questions and builds dated runs, so it opens its own setup. */
+function Run5kCard({ onStart }: { onStart: () => void }) {
+  const accent = accentStyles('amber');
+  return (
+    <View className="rounded-2xl border border-neutral-200/80 bg-white dark:border-white/[0.08] dark:bg-neutral-900">
+      <View className="flex-row items-start gap-3 p-4 pb-3">
+        <View className={`h-11 w-11 shrink-0 items-center justify-center rounded-2xl ${accent.tint}`}>
+          <Icon icon={IconRun} size={20} strokeWidth={1.75} className={accent.icon} />
+        </View>
+        <View className="min-w-0 flex-1">
+          <Text className="text-[16px] font-bold leading-snug text-neutral-900 dark:text-white">Run a 5K</Text>
+          <Text className="mt-0.5 text-[12px] leading-relaxed text-neutral-500 dark:text-neutral-400">
+            Tell it how far and how fast you run now. It plans every run, week by week, and adjusts with you.
+          </Text>
+        </View>
+      </View>
+      <View className="px-4 pb-4">
+        <Pressable accessibilityRole="button" onPress={onStart} className={`w-full items-center rounded-xl py-2.5 active:scale-[0.97] active:opacity-80 ${accent.tint}`}>
+          <Text className={`text-[14px] font-bold ${accent.icon}`}>Set up my plan</Text>
+        </Pressable>
+      </View>
+    </View>
+  );
 }
 
 /**
@@ -115,7 +142,7 @@ interface TemplatesSheetProps {
  * creating a plan with its tasks, subtasks and milestones already set up
  * (applied through the shared @planr/core applyTemplate).
  */
-function TemplatesSheetInner({ open, onClose, onApply }: TemplatesSheetProps) {
+function TemplatesSheetInner({ open, onClose, onApply, onRun5k }: TemplatesSheetProps) {
   function handleUse(template: Template) {
     onApply(template);
     onClose();
@@ -140,6 +167,7 @@ function TemplatesSheetInner({ open, onClose, onApply }: TemplatesSheetProps) {
 
         {/* Cards */}
         <View className="gap-3">
+          {onRun5k ? <Run5kCard onStart={onRun5k} /> : null}
           {TEMPLATES.map((t) => (
             <TemplateCard key={t.id} template={t} onUse={handleUse} />
           ))}
