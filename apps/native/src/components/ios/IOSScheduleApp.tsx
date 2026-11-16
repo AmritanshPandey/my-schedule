@@ -144,6 +144,8 @@ import {
 } from '@planr/core/lib/sessions';
 import { createRunPlan, updateRunInputs } from '@planr/core/lib/runPlan';
 import { decideAdjustment, evaluateFinishedWeeks } from '@planr/core/lib/runAdjustments';
+import { applyHealthRuns } from '@planr/core/lib/healthMatch';
+import { isHealthConnected, onHealthConnectionChange, readRunsSince } from '../../lib/health';
 import SessionRow from '../session/SessionRow';
 import SessionDetailSheet from '../session/SessionDetailSheet';
 import LogRunSheet from '../session/LogRunSheet';
@@ -536,6 +538,34 @@ export default function IOSScheduleApp() {
     if (!ready) return;
     setSchedule((prev) => evaluateFinishedWeeks(prev, todayDate, new Date().toISOString()));
   }, [todayDate, ready, setSchedule]);
+
+  // Apple Health: once connected, runs recorded since the earliest run plan
+  // started fill in their sessions, on launch, on every return to the app and
+  // right after connecting. applyHealthRuns skips workouts already logged.
+  useEffect(() => {
+    if (!ready) return;
+    let cancelled = false;
+    const sync = async () => {
+      if (!(await isHealthConnected())) return;
+      const starts = scheduleRef.current.plans.map((p) => p.generator?.inputs.startISO).filter((d): d is string => !!d).sort();
+      if (starts.length === 0) return;
+      const runs = await readRunsSince(new Date(`${starts[0]}T00:00:00`).getTime());
+      if (cancelled || runs.length === 0) return;
+      setSchedule((prev) => applyHealthRuns(prev, runs, new Date().toISOString()).schedule);
+    };
+    sync();
+    const sub = AppState.addEventListener('change', (state) => {
+      if (state === 'active') sync();
+    });
+    const off = onHealthConnectionChange((connected) => {
+      if (connected) sync();
+    });
+    return () => {
+      cancelled = true;
+      sub.remove();
+      off();
+    };
+  }, [ready, setSchedule]);
 
   useEffect(() => {
     const current = todayISO();
