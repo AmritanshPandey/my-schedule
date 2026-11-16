@@ -1,7 +1,7 @@
 import LaunchOverlay from '../ui/LaunchOverlay';
 import EmptyState from '../ui/EmptyState';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { AppState, BackHandler, Modal, Pressable, ScrollView, View } from 'react-native';
+import { AppState, BackHandler, Linking, Modal, Pressable, ScrollView, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import LinearGradient from 'react-native-linear-gradient';
 import { useColorScheme } from 'nativewind';
@@ -93,6 +93,7 @@ import { rescheduleMissedTaskOnce, acknowledgeMiss } from '@planr/core/lib/misse
 import { TOUR_STEPS, type CoachMarkStep, type TourId } from '@planr/core/lib/onboarding/tours';
 import { useScheduleDB } from '../../lib/useScheduleDB';
 import { useReminders } from '../../lib/useReminders';
+import { useWidgetSnapshot } from '../../lib/useWidgetSnapshot';
 import { useNowMinutes } from '../../lib/timeline/useNowMinutes';
 import { useCoachTour } from '../../lib/onboarding/useCoachTour';
 import { useReducedMotion } from '../../lib/useReducedMotion';
@@ -390,6 +391,7 @@ export default function IOSScheduleApp() {
   // to back up, and it sat between a new user and their first step.
   const hasAnyTask = DAYS.some((day) => (schedule.activities[day] ?? []).length > 0);
   useReminders(schedule, ready);
+  useWidgetSnapshot(schedule, ready);
   // The calendar date drives the rollover (not just the weekday, so a week
   // spent backgrounded still rolls over); todayKey is derived from it.
   const [todayDate, setTodayDate] = useState(() => todayISO());
@@ -451,6 +453,28 @@ export default function IOSScheduleApp() {
   });
   const focusShowing = focus.open && !!focus.state;
 
+  // Taps on the home-screen / Lock Screen widget: planr://task/<id>?date=…
+  // opens that task's detail, planr://today opens Today.
+  useEffect(() => {
+    if (!ready) return undefined;
+    const open = (url: string | null | undefined) => {
+      const match = url ? /^planr:\/\/(task|today)(?:\/([^?#]+))?(?:\?date=(\d{4}-\d{2}-\d{2}))?/.exec(url) : null;
+      if (!match) return;
+      setActiveTab(0);
+      setSelectedPlanId(null);
+      const [, kind, id, dateISO] = match;
+      if (kind !== 'task' || !id || !dateISO) return;
+      const day = JS_DAYS[new Date(`${dateISO}T00:00:00`).getDay()];
+      const taskId = decodeURIComponent(id);
+      setActiveDay(day);
+      // The widget may predate a delete: a task that's gone just lands on Today.
+      if (!scheduleRef.current.activities[day]?.some((task) => task.id === taskId)) return;
+      setSubtasksRef({ id: taskId, day, dateISO });
+    };
+    void Linking.getInitialURL().then(open);
+    const sub = Linking.addEventListener('url', ({ url }) => open(url));
+    return () => sub.remove();
+  }, [ready]);
   const [entryTracker, setEntryTracker] = useState<ProgressTracker | null>(null);
   // The log sheet outlives entryTracker by its dismissal, so it keeps the last
   // tracker's labels while it slides away rather than flashing "Value".

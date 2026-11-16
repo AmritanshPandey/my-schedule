@@ -35,7 +35,7 @@ export const googleSignInWebClientId = "REPLACE_WITH_GOOGLE_WEB_CLIENT_ID";
  * iOS sign-in flow; the web client id alone only covers Firebase's later
  * token-verification step. It only exists once an iOS app is registered for
  * this Firebase project (Firebase Console → Project settings → General →
- * "Your apps" → Add app → iOS, bundle id org.reactjs.native.example.PlanRNative)
+ * "Your apps" → Add app → iOS, bundle id com.amritansh.planr)
  * — that registration generates a GoogleService-Info.plist containing it
  * (the CLIENT_ID key), which is the standard place to get this value from.
  * Without it, @react-native-google-signin's `configure()` throws at runtime

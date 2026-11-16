@@ -46,11 +46,20 @@ class SceneDelegate: UIResponder, UIWindowSceneDelegate {
     window.backgroundColor = UIColor(named: "SplashBackground")
     self.window = window
 
+    // A cold launch from the widget arrives here, not in openURLContexts;
+    // passing it as a launch option is what Linking.getInitialURL reads.
+    let launchOptions = connectionOptions.urlContexts.first.map { [UIApplication.LaunchOptionsKey.url: $0.url] }
     factory.startReactNative(
       withModuleName: "PlanRNative",
       in: window,
-      launchOptions: nil
+      launchOptions: launchOptions
     )
+  }
+
+  /// A widget tap (or any planr:// link) while PlanR is already running.
+  func scene(_ scene: UIScene, openURLContexts URLContexts: Set<UIOpenURLContext>) {
+    guard let url = URLContexts.first?.url else { return }
+    RCTLinkingManager.application(UIApplication.shared, open: url, options: [:])
   }
 }
 
