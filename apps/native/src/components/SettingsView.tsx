@@ -25,6 +25,8 @@ import { setStoredThemePreference } from '../storage/themeStore';
 import CategoryManager from './category/CategoryManager';
 import BackupRows from './settings/BackupRows';
 import RemindersRows from './settings/RemindersRows';
+import HealthRows from './settings/HealthRows';
+import { isHealthAvailable } from '../lib/health';
 import ConfirmSheet from './ui/ConfirmSheet';
 import Toggle from './ui/Toggle';
 import Select from './ui/Select';
@@ -469,6 +471,15 @@ export function SettingsView({ schedule, setSchedule, onClearData, onClearProgre
               <RemindersRows />
             </Card>
           </View>
+
+          {isHealthAvailable() ? (
+            <View>
+              <SectionLabel>Health</SectionLabel>
+              <Card>
+                <HealthRows />
+              </Card>
+            </View>
+          ) : null}
 
           <View>
             <SectionLabel>Timeline</SectionLabel>

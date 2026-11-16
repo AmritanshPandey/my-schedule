@@ -125,9 +125,48 @@ interface TemplatesSheetProps {
   open: boolean;
   onClose: () => void;
   onApply: (template: Template) => void;
+  /** Opens the "Run a 5K" setup; the card shows only when this is given. */
+  onRun5k?: () => void;
 }
 
-function TemplatesSheetInner({ open, onClose, onApply }: TemplatesSheetProps) {
+/**
+ * "Run a 5K" asks a few questions and builds dated runs, rather than copying a
+ * fixed set of tasks, so it opens its own setup instead of applying directly.
+ */
+function Run5kCard({ onStart }: { onStart: () => void }) {
+  const accent = accentStyles("amber");
+  return (
+    <div className="rounded-2xl border border-neutral-200/80 bg-white dark:border-white/[0.08] dark:bg-neutral-900">
+      <div className="flex items-start gap-3 p-4 pb-3">
+        <div className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl ${accent.tint} ${accent.icon}`}>
+          <IconRun size={20} strokeWidth={1.75} />
+        </div>
+        <div className="min-w-0 flex-1">
+          <p className="text-[16px] font-bold leading-snug text-neutral-900 dark:text-white">Run a 5K</p>
+          <p className="mt-0.5 text-[12px] leading-relaxed text-neutral-500 dark:text-neutral-400">
+            Tell it how far and how fast you run now. It plans every run, week by week, and adjusts with you.
+          </p>
+        </div>
+      </div>
+      <div className="flex flex-wrap items-center gap-2 px-4 pb-3">
+        <Pill label="4 to 16 weeks" />
+        <Pill label="3 to 5 runs a week" Icon={IconLayoutList} />
+      </div>
+      <div className="px-4 pb-4">
+        <m.button
+          type="button"
+          whileTap={{ scale: 0.97 }}
+          onClick={onStart}
+          className={`w-full rounded-xl py-2.5 text-[14px] font-bold transition-opacity active:opacity-80 ${accent.tint} ${accent.icon}`}
+        >
+          Set up my plan
+        </m.button>
+      </div>
+    </div>
+  );
+}
+
+function TemplatesSheetInner({ open, onClose, onApply, onRun5k }: TemplatesSheetProps) {
   function handleUse(template: Template) {
     onApply(template);
     onClose();
@@ -156,6 +195,7 @@ function TemplatesSheetInner({ open, onClose, onApply }: TemplatesSheetProps) {
 
         {/* Cards */}
         <div className="space-y-3">
+          {onRun5k && <Run5kCard onStart={onRun5k} />}
           {TEMPLATES.map((t) => (
             <TemplateCard key={t.id} template={t} onUse={handleUse} />
           ))}

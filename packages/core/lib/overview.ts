@@ -13,10 +13,11 @@
  * Pure and React-free so it can be unit-tested directly.
  */
 
-import type { DayKey, Milestone, Plan, Ritual, Schedule, Task } from "./scheduleTypes";
+import type { DayKey, Milestone, Plan, Ritual, Schedule, Session, Task } from "./scheduleTypes";
 import { DAYS } from "./scheduleConstants";
 import { addDaysToISO, localISODate } from "./dateUtils";
-import { formatDisplayTime } from "./timeUtils";
+import { formatDisplayTime, parseTimeToMinutes } from "./timeUtils";
+import { headline, sessionState, sessionsForDate, type SessionState } from "./sessions";
 import { isPlanRunning } from "./planLifecycle";
 import { getPlanCardStats } from "./planInsights";
 import { getSlots } from "./taskMutations";
@@ -120,6 +121,17 @@ export type NextUp =
       done: number;
       total: number;
     }
+  | {
+      kind: "session";
+      session: Session;
+      plan: Plan | null;
+      /** "6:00 PM", or "" for an any-time session. */
+      timeLabel: string;
+      openCount: number;
+      remainingMinutes: number;
+      done: number;
+      total: number;
+    }
   | { kind: "day-done"; done: number; total: number }
   | { kind: "empty" };
 
@@ -129,15 +141,44 @@ export type NextUp =
  * Needs attention, not to "next".
  */
 export function selectNextUp(schedule: Schedule, todayISO: string, todayKey: DayKey): NextUp {
-  const { tasks, done, total } = selectTodayTasks(schedule, todayISO, todayKey);
+  const today = selectTodayTasks(schedule, todayISO, todayKey);
+  const { tasks } = today;
+  // Today's sessions sit alongside tasks; a skipped one is off the list.
+  const sessions = sessionsForDate(schedule, todayISO).filter((s) => s.status !== "skipped");
+  const openSessions = sessions.filter((s) => s.status === "planned");
+  const done = today.done + sessions.filter((s) => s.status === "done").length;
+  const total = today.total + sessions.length;
   if (total === 0) return { kind: "empty" };
 
   const plansById = new Map(schedule.plans.map((plan) => [plan.id, plan]));
   const planFor = (task: Task) => (task.planId ? plansById.get(task.planId) ?? null : null);
   const open = tasks.filter((task) => !isTaskResolved(task, getTaskSubtaskSummary(task, planFor(task)).totalCount));
-  if (open.length === 0) return { kind: "day-done", done, total };
+  if (open.length === 0 && openSessions.length === 0) return { kind: "day-done", done, total };
 
-  const task = open[0];
+  const openCount = open.length + openSessions.length;
+  const remainingMinutes =
+    open.reduce((sum, item) => sum + taskDurationMinutes(item), 0) +
+    openSessions.reduce((sum, s) => sum + (s.estimatedMinutes ?? 0), 0);
+  const firstSession = openSessions[0];
+  const firstTask = open[0];
+  const taskStart = firstTask ? parseTimeToMinutes(nextSlotStart(firstTask)) : null;
+  const sessionStart = firstSession?.startTime ? parseTimeToMinutes(firstSession.startTime) : null;
+  // A session goes first when there's no task left, or it starts before the
+  // first open task. An any-time session waits behind timed tasks.
+  if (firstSession && (!firstTask || (sessionStart != null && (taskStart == null || sessionStart < taskStart)))) {
+    return {
+      kind: "session",
+      session: firstSession,
+      plan: plansById.get(firstSession.planId) ?? null,
+      timeLabel: formatDisplayTime(firstSession.startTime),
+      openCount,
+      remainingMinutes,
+      done,
+      total,
+    };
+  }
+
+  const task = firstTask;
   const plan = planFor(task);
   const slots = getSlots(task);
   let slotIndex: number | undefined;
@@ -156,11 +197,20 @@ export function selectNextUp(schedule: Schedule, todayISO: string, todayKey: Day
     timeLabel: formatDisplayTime(startTime),
     slotIndex,
     checkableIds: getTaskCheckableItems(task, plan).map((item) => item.id),
-    openCount: open.length,
-    remainingMinutes: open.reduce((sum, item) => sum + taskDurationMinutes(item), 0),
+    openCount,
+    remainingMinutes,
     done,
     total,
   };
+}
+
+/** The start time of a task's first open slot (its only one for a single-slot task). */
+function nextSlotStart(task: Task): string {
+  const slots = getSlots(task);
+  if (slots.length <= 1) return task.startTime;
+  const completed = new Set(task.completedSlotIndices ?? []);
+  const index = slots.findIndex((_, i) => !completed.has(i));
+  return slots[index === -1 ? 0 : index].startTime;
 }
 
 // ── Status ───────────────────────────────────────────────────────────────────
@@ -241,18 +291,25 @@ export function selectWeekStatus(schedule: Schedule, todayISO: string): WeekStat
       isToday
         ? isTaskCompleted(task, getTaskSubtaskSummary(task, task.planId ? plansById.get(task.planId) ?? null : null).totalCount)
         : eventOn(task, "task");
-    const done = tasks.filter(isDone).length;
+    // Sessions count like tasks: done is done, a planned one whose day has
+    // passed is missed, a skipped one is off the list.
+    const sessions = tracked ? sessionsForDate(schedule, dateISO).filter((s) => s.status !== "skipped") : [];
+    const sessionsDone = sessions.filter((s) => s.status === "done").length;
+    const sessionsMissed = sessions.filter((s) => sessionState(s, todayISO) === "missed").length;
+    const done = tasks.filter(isDone).length + sessionsDone;
     // A completion wins over a missed mark for the same occurrence, as in
     // computeExecutionTrend.
-    const missed = tasks.filter((task) => !isDone(task) && (isToday ? !!task.missed : eventOn(task, "missed"))).length;
+    const missed =
+      tasks.filter((task) => !isDone(task) && (isToday ? !!task.missed : eventOn(task, "missed"))).length + sessionsMissed;
+    const total = tasks.length + sessions.length;
     return {
       day,
       label: DAY_SHORT[i],
       dateISO,
       done,
       missed,
-      total: tasks.length,
-      pct: ratioPct(done, tasks.length),
+      total,
+      pct: ratioPct(done, total),
       isToday,
       isFuture: dateISO > todayISO,
     };
@@ -431,8 +488,21 @@ export interface TodayPlanRow {
   checkableIds: string[];
 }
 
+/** A session on today's plan: a run listed beside the tasks. */
+export interface TodayPlanSessionRow {
+  session: Session;
+  plan: Plan | null;
+  /** "6:00 PM", or "" for an any-time session. */
+  timeLabel: string;
+  state: SessionState;
+  /** "1 km easy · 4 × 400 m @ 5:40/km · 1 km easy". */
+  headline: string;
+}
+
 export interface TodayPlan {
   rows: TodayPlanRow[];
+  /** Today's sessions (skipped ones left out), in the order Today shows them. */
+  sessions: TodayPlanSessionRow[];
   done: number;
   total: number;
   pct: number;
@@ -461,7 +531,18 @@ export function selectTodayPlan(schedule: Schedule, todayISO: string, todayKey: 
       checkableIds: getTaskCheckableItems(task, plan).map((item) => item.id),
     };
   });
-  return { rows, done, total, pct: ratioPct(done, total) };
+  const sessions = sessionsForDate(schedule, todayISO)
+    .filter((s) => s.status !== "skipped")
+    .map((session): TodayPlanSessionRow => ({
+      session,
+      plan: plansById.get(session.planId) ?? null,
+      timeLabel: formatDisplayTime(session.startTime),
+      state: sessionState(session, todayISO),
+      headline: headline(session),
+    }));
+  const allDone = done + sessions.filter((r) => r.state === "done").length;
+  const allTotal = total + sessions.length;
+  return { rows, sessions, done: allDone, total: allTotal, pct: ratioPct(allDone, allTotal) };
 }
 
 // ── Today's routines ─────────────────────────────────────────────────────────

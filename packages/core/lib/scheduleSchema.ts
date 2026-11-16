@@ -138,6 +138,8 @@ export const PlanSchema = z.object({
   // Explicit lifecycle state, not derived health. Absent = "active", so no
   // stored Plan needs migrating.
   status: z.enum(["active", "paused", "completed"]).optional(),
+  // Lazy: the generator schema is declared further down with the session schemas.
+  generator: z.lazy(() => PlanGeneratorSchema).optional(),
 }).passthrough();
 
 export const GoalStatusSchema = z.enum(["active", "completed", "paused", "archived"]);
@@ -302,6 +304,83 @@ export const NoteSchema = z.object({
   linkedPlanIds: z.array(nonEmptyId).optional(),
 }).passthrough();
 
+const hhmm = z.string().regex(/^\d{2}:\d{2}$/);
+
+const RunPlanInputsSchema = z.object({
+  currentDistanceKm: z.number().finite().positive(),
+  easyPaceSecPerKm: z.number().finite().positive(),
+  targetDistanceKm: z.number().finite().positive(),
+  targetPaceSecPerKm: z.number().finite().positive().optional(),
+  weeks: z.number().int().positive(),
+  runDays: z.array(dayKey).min(1),
+  startTime: hhmm.optional(),
+  startISO: isoDate,
+}).passthrough();
+
+export const PlanGeneratorSchema = z.object({
+  templateId: nonEmptyId,
+  inputs: RunPlanInputsSchema,
+  inputsVersion: z.number().int().nonnegative(),
+}).passthrough();
+
+const SessionTaskSchema = z.discriminatedUnion("kind", [
+  z.object({ id: nonEmptyId, kind: z.literal("simple"), title: z.string(), notes: z.string().optional() }).passthrough(),
+  z.object({
+    id: nonEmptyId,
+    kind: z.literal("distance"),
+    title: z.string(),
+    notes: z.string().optional(),
+    plan: z.object({
+      distanceM: z.number().finite().positive(),
+      paceSecPerKm: z.number().finite().positive().optional(),
+      repeats: z.number().int().positive().optional(),
+      restSec: z.number().finite().nonnegative().optional(),
+    }).passthrough(),
+  }).passthrough(),
+]);
+
+export const SessionSchema = z.object({
+  id: nonEmptyId,
+  planId: nonEmptyId,
+  routineKey: z.string().optional(),
+  title: z.string(),
+  dateISO: isoDate,
+  startTime: hhmm.optional(),
+  estimatedMinutes: z.number().finite().nonnegative().optional(),
+  tasks: z.array(SessionTaskSchema),
+  status: z.enum(["planned", "done", "skipped"]),
+  generated: z.object({ weekIndex: z.number().int().positive(), slot: z.number().int().nonnegative(), inputsVersion: z.number().int().nonnegative() }).passthrough().optional(),
+  editedAt: isoDateTime.optional(),
+  createdAt: isoDateTime,
+  updatedAt: isoDateTime,
+}).passthrough();
+
+export const SessionLogSchema = z.object({
+  id: nonEmptyId,
+  sessionId: nonEmptyId,
+  source: z.enum(["mark", "manual", "health"]),
+  actual: z.object({
+    distanceM: z.number().finite().positive(),
+    durationSec: z.number().finite().positive(),
+    effort: z.enum(["easy", "ok", "hard"]).optional(),
+  }).passthrough().optional(),
+  healthWorkoutId: z.string().optional(),
+  note: z.string().optional(),
+  loggedAt: isoDateTime,
+}).passthrough();
+
+export const PlanAdjustmentSchema = z.object({
+  id: nonEmptyId,
+  planId: nonEmptyId,
+  weekIndex: z.number().int().positive(),
+  kind: z.enum(["pace", "repeat-week", "ease"]),
+  detail: z.record(z.string(), z.number().finite()),
+  reason: z.string(),
+  decision: z.enum(["pending", "accepted", "held"]),
+  decidedAt: isoDateTime.optional(),
+  createdAt: isoDateTime,
+}).passthrough();
+
 const preferences = z.object({
   dayStartTime: z.string().optional(),
   dayEndMinutes: z.number().int().finite().optional(),
@@ -331,6 +410,10 @@ export const ScheduleSchema = z.object({
   progressionSteps: z.array(ProgressionStepSchema).optional(),
   notes: z.array(NoteSchema),
   events: z.array(ScheduleEventSchema),
+  // Optional: every schedule written before sessions existed has none.
+  sessions: z.array(SessionSchema).optional(),
+  sessionLogs: z.array(SessionLogSchema).optional(),
+  planAdjustments: z.array(PlanAdjustmentSchema).optional(),
   preferences,
   // Per-entity change/deletion bookkeeping for the cloud merge (see
   // lib/stampSchedule.ts). Values are epoch seconds. Declared rather than left

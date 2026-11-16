@@ -45,7 +45,9 @@ import {
   type PlanCoachMessage,
   type ProgressTracker,
   type Ritual,
+  type RunPlanInputs,
   type Schedule,
+  type Session,
   type Task,
   type TaskTypeValue,
   type TrackerCadence,
@@ -119,6 +121,23 @@ import { upsertSetLog } from "@/lib/setLogs";
 import { useFocusSession } from "@/lib/useFocusSession";
 import { decideProgression, pendingProgressionsForTask } from "@/lib/subtaskProgression";
 import FocusHost, { focusItems } from "@/components/focus/FocusHost";
+import SessionRow from "@/components/session/SessionRow";
+import SessionDetailSheet from "@/components/session/SessionDetailSheet";
+import LogRunSheet from "@/components/session/LogRunSheet";
+import RunPlanSetupSheet from "@/components/session/RunPlanSetupSheet";
+import {
+  actualFor,
+  deletePlanSessions,
+  logSessionRun,
+  markSessionDone,
+  moveSession,
+  sessionState,
+  sessionsForDate,
+  skipSession,
+  undoSessionDone,
+} from "@/lib/sessions";
+import { createRunPlan, updateRunInputs } from "@/lib/runPlan";
+import { decideAdjustment, evaluateFinishedWeeks } from "@/lib/runAdjustments";
 
 const IOSMotionBoundary = dynamic(() => import("@/components/ios/IOSMotionBoundary"), { ssr: false });
 const TaskSheet = dynamic(() => import("@/components/task/TaskSheet").then((m) => ({ default: m.TaskSheet })), { ssr: false });
@@ -322,6 +341,10 @@ export default function IOSScheduleApp() {
   const [missedSheet, setMissedSheet] = useState<MissedTask | null>(null);
   const [quickRetimeTarget, setQuickRetimeTarget] = useState<(QuickRetimeTarget & { day: DayKey; dateISO: string }) | null>(null);
   const [templatesOpen, setTemplatesOpen] = useState(false);
+  // Run sessions (the 5K template): which one is open, which is being logged, and the setup sheet.
+  const [sessionDetailId, setSessionDetailId] = useState<string | null>(null);
+  const [logRunId, setLogRunId] = useState<string | null>(null);
+  const [runSetupOpen, setRunSetupOpen] = useState(false);
   // Today tab starts as a clean execution surface; editing affordances (per-card
   // pencil, day actions, wallpaper, add-task) are revealed only in edit mode.
   const [todayEditMode, setTodayEditMode] = useState(false);
@@ -445,6 +468,13 @@ export default function IOSScheduleApp() {
     // identically from the date. Recording it as an edit would let a device
     // that was merely left open outrank one that actually did work.
     setSchedule((prev) => resetStaleCompletions(prev, todayISO()), { stamp: false });
+  }, [todayKey, ready, setSchedule]);
+
+  // A finished plan week may bring one suggestion for the next (lib/runAdjustments).
+  // Returns the same schedule when there's nothing to ask, so this is free most days.
+  useEffect(() => {
+    if (!ready) return;
+    setSchedule((prev) => evaluateFinishedWeeks(prev, todayISO(), new Date().toISOString()));
   }, [todayKey, ready, setSchedule]);
 
   useEffect(() => {
@@ -637,7 +667,11 @@ export default function IOSScheduleApp() {
   // Counts cover tracked work only. dayTasksView keeps commitments — it drives
   // the rendered day list, which does show them.
   const dayTracked = useMemo(() => dayTasksView.filter(isTrackedTask), [dayTasksView]);
-  const dayDone = dayTracked.filter((task) => isTaskCompleted(task, taskEffectiveItemCount(task))).length;
+  // Runs count like tasks; a skipped one is off the day's list.
+  const daySessions = sessionsForDate(schedule, activeDateISO).filter((s) => s.status !== "skipped");
+  const dayDone =
+    dayTracked.filter((task) => isTaskCompleted(task, taskEffectiveItemCount(task))).length +
+    daySessions.filter((s) => s.status === "done").length;
   const needsAttention = useMemo(() => {
     // trackingType-aware — a half-logged quantity routine must still count as
     // unfinished here, or its at-risk warning is silently suppressed.
@@ -940,6 +974,26 @@ export default function IOSScheduleApp() {
     }));
   }
 
+  // ── Run sessions ─────────────────────────────────────────────────────────
+  const stampNow = () => new Date().toISOString();
+
+  function handleToggleSession(sessionId: string) {
+    setSchedule((prev) => {
+      const session = prev.sessions?.find((s) => s.id === sessionId);
+      if (!session) return prev;
+      return session.status === "done" ? undoSessionDone(prev, sessionId, stampNow()) : markSessionDone(prev, sessionId, stampNow());
+    });
+  }
+
+  function handleCreateRunPlan(inputs: RunPlanInputs, createGoal: boolean) {
+    const { schedule: next, planId } = createRunPlan(schedule, inputs, { createGoal }, stampNow());
+    setSchedule(() => next);
+    setRunSetupOpen(false);
+    setSelectedPlanId(planId);
+    setActiveTab(1);
+    setToast("Plan created");
+  }
+
   function handleDeletePlan(planId: string) {
     const plan = schedule.plans.find((item) => item.id === planId);
     openConfirm({
@@ -948,14 +1002,17 @@ export default function IOSScheduleApp() {
       confirmLabel: "Delete",
       destructive: true,
       onConfirm: () => {
-        setSchedule((prev) => ({
+        setSchedule((current) => {
+          const prev = deletePlanSessions(current, planId);
+          return {
           ...prev,
           plans: prev.plans.filter((item) => item.id !== planId),
           activities: Object.fromEntries(DAYS.map((day) => [day, prev.activities[day].filter((task) => task.planId !== planId)])) as Schedule["activities"],
           metricEntries: prev.metricEntries.filter((item) => item.planId !== planId),
           progressTrackers: prev.progressTrackers.filter((item) => item.planId !== planId),
           milestones: prev.milestones.filter((item) => item.planId !== planId),
-        }));
+          };
+        });
         setSelectedPlanId((current) => (current === planId ? null : current));
       },
     });
@@ -1271,9 +1328,27 @@ export default function IOSScheduleApp() {
       }
     }
 
+    // Run sessions join the same timeline, slotted in by start time; any-time
+    // ones go last. Skipped sessions stay visible (greyed) on their day.
+    type Entry =
+      | { kind: "task"; entry: (typeof groupedRows)[number]; at: number }
+      | { kind: "session"; session: Session; at: number };
+    const entryStart = (entry: (typeof groupedRows)[number]) => {
+      const row = entry.kind === "merged" ? entry.primary : entry.row;
+      const m = parseTimeToMinutes(getSlots(row.task)[row.slotIndex ?? 0]?.startTime ?? "");
+      return toScheduleDayMinutes(m ?? 0);
+    };
+    const entries: Entry[] = [
+      ...groupedRows.map((entry) => ({ kind: "task" as const, entry, at: entryStart(entry) })),
+      ...sessionsForDate(schedule, dateISO).map((session) => {
+        const m = session.startTime ? parseTimeToMinutes(session.startTime) : null;
+        return { kind: "session" as const, session, at: m == null ? Number.POSITIVE_INFINITY : toScheduleDayMinutes(m) };
+      }),
+    ].sort((a, b) => a.at - b.at);
+
     return (
       <div className="flex flex-col">
-        {groupedRows.length === 0 ? (
+        {entries.length === 0 ? (
           <EmptyState
             icon={IconCalendar}
             title="Nothing scheduled"
@@ -1281,9 +1356,27 @@ export default function IOSScheduleApp() {
             action={emptyAction ? { label: "Add task", onClick: emptyAction } : undefined}
           />
         ) : (
-          groupedRows.map((entry, i) => {
+          entries.map((item, i) => {
             const isFirst = i === 0;
-            const isLast = i === groupedRows.length - 1;
+            const isLast = i === entries.length - 1;
+            if (item.kind === "session") {
+              const session = item.session;
+              return (
+                <SessionRow
+                  key={`session-${session.id}`}
+                  session={session}
+                  state={sessionState(session, todayISO())}
+                  actual={actualFor(schedule, session.id)}
+                  plan={plansById.get(session.planId) ?? null}
+                  isFirst={isFirst}
+                  isLast={isLast}
+                  readOnly={dateISO > todayISO()}
+                  onOpen={() => setSessionDetailId(session.id)}
+                  onToggleDone={() => handleToggleSession(session.id)}
+                />
+              );
+            }
+            const entry = item.entry;
             if (entry.kind === "merged") {
               const toHalf = ({ task, slotIndex }: (typeof rows)[number]) => ({
                 task,
@@ -1412,6 +1505,8 @@ export default function IOSScheduleApp() {
               setActiveDay(todayKey);
               openCreateSheet();
             }}
+            onOpenSession={setSessionDetailId}
+            onToggleSession={handleToggleSession}
             onStartSetupStep={(step) => {
               if (step === "plan") { setActiveTab(1); setAddingPlan(true); }
               else if (step === "ritual") { setActiveTab(2); setRitualAddOpen(true); }
@@ -1477,7 +1572,7 @@ export default function IOSScheduleApp() {
                     ? "Today's Task"
                     : new Date(activeDateISO + "T00:00:00").toLocaleDateString(undefined, { weekday: "long" })}
                 </h2>
-                <p className="text-[12px] font-semibold text-neutral-500 dark:text-neutral-400">{dayDone}/{dayTracked.length} done</p>
+                <p className="text-[12px] font-semibold text-neutral-500 dark:text-neutral-400">{dayDone}/{dayTracked.length + daySessions.length} done</p>
               </div>
               <div className="flex items-center gap-2">
                 {todayEditMode && (
@@ -1500,6 +1595,15 @@ export default function IOSScheduleApp() {
           <IOSMotionBoundary>
             <ErrorBoundary section name="Plans">
               <PlanDetailView
+                onOpenSession={setSessionDetailId}
+                onDecideAdjustment={(id, decision) => {
+                  setSchedule((prev) => decideAdjustment(prev, id, decision, todayISO(), stampNow()));
+                  setToast(decision === "accepted" ? "Plan updated" : "Kept as planned");
+                }}
+                onUpdateRunInputs={(planId, patch) => {
+                  setSchedule((prev) => updateRunInputs(prev, planId, patch, todayISO(), stampNow()));
+                  setToast("Plan updated");
+                }}
                 onSetMilestoneLink={handleSetMilestoneLink}
                 plan={selectedPlan}
                 schedule={schedule}
@@ -1866,7 +1970,53 @@ export default function IOSScheduleApp() {
         onSave={handleQuickRetime}
       />
 
-      <TemplatesSheet open={templatesOpen} onClose={() => setTemplatesOpen(false)} onApply={handleApplyTemplate} />
+      <TemplatesSheet
+        open={templatesOpen}
+        onClose={() => setTemplatesOpen(false)}
+        onApply={handleApplyTemplate}
+        onRun5k={() => { setTemplatesOpen(false); setRunSetupOpen(true); }}
+      />
+      <RunPlanSetupSheet open={runSetupOpen} onCreate={handleCreateRunPlan} onClose={() => setRunSetupOpen(false)} />
+      {(() => {
+        const session = sessionDetailId ? schedule.sessions?.find((s) => s.id === sessionDetailId) ?? null : null;
+        const logging = logRunId ? schedule.sessions?.find((s) => s.id === logRunId) ?? null : null;
+        const loggedActual = logging ? actualFor(schedule, logging.id) : undefined;
+        return (
+          <>
+            <SessionDetailSheet
+              open={!!session && !logging}
+              session={session}
+              state={session ? sessionState(session, todayISO()) : "planned"}
+              actual={session ? actualFor(schedule, session.id) : undefined}
+              planTitle={session ? schedule.plans.find((p) => p.id === session.planId)?.title : undefined}
+              onClose={() => setSessionDetailId(null)}
+              onLog={() => session && setLogRunId(session.id)}
+              onMarkDone={() => { if (session) { haptic("medium"); setSchedule((prev) => markSessionDone(prev, session.id, stampNow())); } }}
+              onUndo={() => session && setSchedule((prev) => undoSessionDone(prev, session.id, stampNow()))}
+              onSkip={() => { if (session) { setSchedule((prev) => skipSession(prev, session.id, stampNow())); setSessionDetailId(null); } }}
+              onMove={(dateISO, startTime) => {
+                if (!session) return;
+                setSchedule((prev) => moveSession(prev, session.id, dateISO, startTime, stampNow()));
+                setSessionDetailId(null);
+                setToast("Run moved");
+              }}
+            />
+            <LogRunSheet
+              open={!!logging}
+              session={logging}
+              initial={loggedActual?.source === "mark" ? undefined : loggedActual}
+              onClose={() => setLogRunId(null)}
+              onSave={(actual, note) => {
+                if (!logging) return;
+                haptic("medium");
+                setSchedule((prev) => logSessionRun(prev, logging.id, actual, note, stampNow()));
+                setLogRunId(null);
+                setToast("Run logged");
+              }}
+            />
+          </>
+        );
+      })()}
 
       {activeTab !== 6 && !subtasksRef && !taskSheetOpen && (
         <IOSBottomNav
