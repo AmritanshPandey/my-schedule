@@ -1,18 +1,19 @@
 "use client";
 
 /**
- * The iPhone shell's tab bar — five destinations on a floating liquid-glass
- * capsule, the same material and shape as iOS's own tab bar.
+ * The iPhone shell's tab bar — the three daily destinations (Overview, Today,
+ * Plans) on a floating liquid-glass capsule, the same material and shape as
+ * iOS's own tab bar. Everything else (Routine, Tracking, Notes, Settings)
+ * lives in the header's menu (IOSMenu).
  *
- * Creation lives where the thing is made, not in a global menu: Today's
- * header adds a task, Plans' header adds a plan, Routine adds a routine, and
- * Notes adds a note. The bar only navigates.
+ * Creation lives where the thing is made, not in a global menu: Today adds a
+ * task, Plans adds a plan, Routine adds a routine. The bar only navigates.
  *
  * The active tab is a single sliding pill rather than a background that snaps
  * on and off per button — switching tabs then reads as one continuous glide,
  * a "where am I" cue that follows you, instead of one highlight disappearing
  * and an unrelated one appearing a frame later. It is positioned as a
- * percentage of five equal columns, so nothing has to be measured: no
+ * percentage of equal columns, so nothing has to be measured: no
  * ResizeObserver, no position math. The columns must therefore stay equal —
  * no gap between buttons.
  *
@@ -26,11 +27,12 @@
  * measurably works.
  */
 import {
-  IconChartLine,
   IconCalendarEvent,
+  IconCalendarEventFilled,
   IconClipboardData,
+  IconClipboardDataFilled,
   IconLayoutDashboard,
-  IconRepeat,
+  IconLayoutDashboardFilled,
 } from "@tabler/icons-react";
 import { haptic } from "@/lib/haptics";
 
@@ -40,13 +42,11 @@ interface IOSBottomNavProps {
 }
 
 /** Visual left-to-right order — independent of the tab ids themselves, which
- *  don't run 0..4 (Overview is tab 4, Tracking is tab 8). */
+ *  don't run 0..2 (Overview is tab 4). The active tab takes the filled icon. */
 const TABS = [
-  { tab: 4, label: "Overview", short: "Overview", Icon: IconLayoutDashboard },
-  { tab: 0, label: "Today", short: "Today", Icon: IconCalendarEvent },
-  { tab: 1, label: "Plans", short: "Plans", Icon: IconClipboardData },
-  { tab: 2, label: "Routine", short: "Routine", Icon: IconRepeat },
-  { tab: 8, label: "Tracking", short: "Track", Icon: IconChartLine },
+  { tab: 4, label: "Overview", Icon: IconLayoutDashboard, ActiveIcon: IconLayoutDashboardFilled },
+  { tab: 0, label: "Today", Icon: IconCalendarEvent, ActiveIcon: IconCalendarEventFilled },
+  { tab: 1, label: "Plans", Icon: IconClipboardData, ActiveIcon: IconClipboardDataFilled },
 ] as const;
 
 export default function IOSBottomNav({ activeTab, onTabChange }: IOSBottomNavProps) {
@@ -61,7 +61,7 @@ export default function IOSBottomNav({ activeTab, onTabChange }: IOSBottomNavPro
         role="navigation"
         aria-label="Main navigation"
         data-glass
-        className="liquid-glass pointer-events-auto relative flex h-[64px] w-full max-w-md items-center rounded-full px-1.5"
+        className="liquid-glass pointer-events-auto relative flex h-[64px] w-full max-w-[320px] items-center rounded-full px-1.5"
       >
         {/* The pill rides behind the buttons; it is decoration, so it is
             hidden from assistive tech and never intercepts a tap. */}
@@ -76,8 +76,9 @@ export default function IOSBottomNav({ activeTab, onTabChange }: IOSBottomNavPro
           />
         )}
 
-        {TABS.map(({ tab, label, short, Icon }) => {
+        {TABS.map(({ tab, label, Icon, ActiveIcon }) => {
           const active = activeTab === tab;
+          const TabIcon = active ? ActiveIcon : Icon;
           return (
             <button
               key={tab}
@@ -87,12 +88,12 @@ export default function IOSBottomNav({ activeTab, onTabChange }: IOSBottomNavPro
               onClick={() => { haptic("light"); onTabChange(tab); }}
               aria-label={label}
               aria-current={active ? "page" : undefined}
-              className={`relative z-10 flex h-[54px] min-w-0 flex-1 flex-col items-center justify-center gap-[3px] rounded-full transition-colors duration-150 active:scale-[0.96] ${
-                active ? "text-[#008236] dark:text-[#2FD46E]" : "text-neutral-600 dark:text-neutral-300"
+              className={`relative z-10 flex h-[54px] min-w-0 flex-1 flex-col items-center justify-center gap-1 rounded-full transition-colors duration-150 active:scale-[0.96] ${
+                active ? "text-neutral-950 dark:text-white" : "text-neutral-700 dark:text-neutral-300"
               }`}
             >
-              <Icon size={22} strokeWidth={active ? 2.2 : 1.9} aria-hidden="true" />
-              <span className={`text-[10.5px] leading-none ${active ? "font-bold" : "font-semibold"}`}>{short}</span>
+              <TabIcon size={23} strokeWidth={1.9} aria-hidden="true" />
+              <span className={`text-[11.5px] leading-none ${active ? "font-semibold" : "font-medium"}`}>{label}</span>
             </button>
           );
         })}

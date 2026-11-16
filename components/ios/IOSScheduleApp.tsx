@@ -12,6 +12,7 @@ import {
   IconClipboardData,
   IconClockHour3,
   IconEdit,
+  IconMenu2,
   IconNotes,
   IconPhoto,
   IconPlus,
@@ -25,6 +26,8 @@ import type { MilestoneSaveData } from "@/components/plan/MilestoneSheet";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
 import type { CategoryDraft } from "@/components/category/CategorySheet";
 import IOSBottomNav from "@/components/ios/IOSBottomNav";
+import IOSMenu, { type MenuDestination } from "@/components/ios/IOSMenu";
+import PlanrWordmark from "@/components/ios/PlanrWordmark";
 import IOSTimelineRow from "@/components/ios/IOSTimelineRow";
 import IOSMergedTimelineRow from "@/components/ios/IOSMergedTimelineRow";
 import { useNowMinutes } from "@/lib/timeline/useNowMinutes";
@@ -35,7 +38,6 @@ import Button from "@/components/ui/Button";
 import IconButton from "@/components/ui/IconButton";
 import {
   DAYS,
-  DAY_LABELS,
   DAY_FULL_LABELS,
   type DayKey,
   type MetricEntry,
@@ -182,26 +184,79 @@ function quickTaskTimeRange(now = new Date()): { startTime: string; endTime: str
 
 const GLASS_ICON = "text-neutral-800 dark:text-neutral-100";
 
+type HeaderAction = {
+  icon: React.ComponentType<{ size?: number; strokeWidth?: number; className?: string }>;
+  label: string;
+  onClick: () => void;
+  destructive?: boolean;
+  /** `data-tour` id, when a coach-mark step points at this action. */
+  tour?: string;
+};
+
+/**
+ * A page's own title row, inside the scrolling content: the title, a small
+ * count under it, and the page's actions on one glass capsule (edit, add).
+ * The three main tabs put their actions here rather than in the header,
+ * which only carries the wordmark and the menu.
+ */
+function PageHeading({ title, subtitle, actions }: { title: string; subtitle?: string; actions?: HeaderAction[] }) {
+  return (
+    <div className="flex items-center justify-between gap-3">
+      <div className="min-w-0">
+        <h2 className="truncate text-[26px] font-bold leading-tight tracking-[-0.02em] text-neutral-950 dark:text-white">{title}</h2>
+        {subtitle && <p className="mt-0.5 text-[13px] font-semibold text-neutral-500 dark:text-neutral-400">{subtitle}</p>}
+      </div>
+      {actions?.length ? (
+        <div data-glass className="liquid-glass flex shrink-0 items-center rounded-full px-1">
+          {actions.map((action) => {
+            const Icon = action.icon;
+            return (
+              <IconButton key={action.label} label={action.label} variant="ghost" size="lg" onClick={action.onClick} data-tour={action.tour}>
+                <Icon size={22} strokeWidth={2} className={GLASS_ICON} />
+              </IconButton>
+            );
+          })}
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
 function IOSHeader({
   title,
   onBack,
   actions,
-  onSettings,
-  onNotes,
+  brand,
+  onMenu,
 }: {
   title: string;
   onBack?: () => void;
-  actions?: Array<{
-    icon: React.ComponentType<{ size?: number; strokeWidth?: number; className?: string }>;
-    label: string;
-    onClick: () => void;
-    destructive?: boolean;
-    /** `data-tour` id, when a coach-mark step points at this action. */
-    tour?: string;
-  }>;
-  onSettings?: () => void;
-  onNotes?: () => void;
+  /** The three main tabs: the planr. wordmark and the menu button, no title. */
+  brand?: boolean;
+  onMenu?: () => void;
+  actions?: HeaderAction[];
 }) {
+  if (brand) {
+    return (
+      <header data-glass data-scroll-edge className="ios-scroll-edge fixed inset-x-0 top-0 z-30 px-4 pb-2 pt-[calc(env(safe-area-inset-top)+10px)]">
+        <div className="flex h-14 items-center justify-between gap-3">
+          <h1 className="sr-only">{title}</h1>
+          <PlanrWordmark className="pl-1" />
+          {onMenu && (
+            <button
+              type="button"
+              onClick={onMenu}
+              aria-label="Menu"
+              data-glass
+              className="liquid-glass flex h-14 w-14 items-center justify-center rounded-full transition-transform duration-150 active:scale-[0.94]"
+            >
+              <IconMenu2 size={24} strokeWidth={1.9} className={GLASS_ICON} />
+            </button>
+          )}
+        </div>
+      </header>
+    );
+  }
   return (
     // No bar: content scrolls up under a fade of the page color, and the
     // controls float on liquid glass — the shape of iOS's own navigation bar.
@@ -226,42 +281,27 @@ function IOSHeader({
             <h1 className="truncate text-[16px] font-semibold leading-none text-neutral-950 dark:text-white">{title}</h1>
           )}
         </div>
-        {(actions?.length || onNotes || onSettings) && (
+        {actions?.length ? (
           // One capsule for the group, like a system toolbar.
           <div data-glass className="liquid-glass flex shrink-0 items-center rounded-full">
-            {actions?.length ? (
-              actions.map((action) => {
-                const Icon = action.icon;
-                return (
-                  <IconButton
-                    key={action.label}
-                    label={action.label}
-                    variant={action.destructive ? "destructive" : "ghost"}
-                    size="lg"
-                    onClick={action.onClick}
-                    data-tour={action.tour}
-                  >
-                    {/* On glass the icons sit on a moving backdrop, so they take full ink. */}
-                    <Icon size={21} strokeWidth={2} className={action.destructive ? undefined : GLASS_ICON} />
-                  </IconButton>
-                );
-              })
-            ) : (
-              <>
-                {onNotes && (
-                  <IconButton label="Notes" variant="ghost" size="lg" onClick={onNotes}>
-                    <IconNotes size={20} strokeWidth={2} className={GLASS_ICON} />
-                  </IconButton>
-                )}
-                {onSettings && (
-                  <IconButton label="Settings" variant="ghost" size="lg" onClick={onSettings}>
-                    <IconSettings size={20} strokeWidth={2} className={GLASS_ICON} />
-                  </IconButton>
-                )}
-              </>
-            )}
+            {actions.map((action) => {
+              const Icon = action.icon;
+              return (
+                <IconButton
+                  key={action.label}
+                  label={action.label}
+                  variant={action.destructive ? "destructive" : "ghost"}
+                  size="lg"
+                  onClick={action.onClick}
+                  data-tour={action.tour}
+                >
+                  {/* On glass the icons sit on a moving backdrop, so they take full ink. */}
+                  <Icon size={21} strokeWidth={2} className={action.destructive ? undefined : GLASS_ICON} />
+                </IconButton>
+              );
+            })}
           </div>
-        )}
+        ) : null}
       </div>
     </header>
   );
@@ -331,6 +371,14 @@ export default function IOSScheduleApp() {
   const nowMinutes = useNowMinutes();
   const [activeTab, setActiveTab] = useState(4);
   const aiEnabled = useAIEnabled();
+  // The three main tabs sit on the tab bar; everything else opens from the
+  // header menu and its back button returns to the main tab it came from.
+  const isMainTab = activeTab === 4 || activeTab === 0 || activeTab === 1;
+  const [menuOpen, setMenuOpen] = useState(false);
+  const lastMainTabRef = useRef(4);
+  useEffect(() => {
+    if (isMainTab) lastMainTabRef.current = activeTab;
+  }, [activeTab, isMainTab]);
 
   // Settings is the only way into the AI tab, and that link is gated on the
   // same value — but the AI screen carries its own master switch, so turning
@@ -1432,6 +1480,8 @@ export default function IOSScheduleApp() {
             onToast={setToast}
             onReviewTask={(task) => openEditSheet(task)}
             onReviewDay={(day) => { setActiveDay(day); setActiveTab(0); }}
+            onOpenTask={(taskId) => setSubtasksRef({ id: taskId, day: todayKey, dateISO: todayISO() })}
+            nowMinutes={nowMinutes}
           />
         </ErrorBoundary>
       );
@@ -1462,7 +1512,7 @@ export default function IOSScheduleApp() {
                   const isToday = localISODate(date) === todayISO();
                   return (
                     <button key={day} type="button" onClick={() => setActiveDay(day)} className={`flex flex-col items-center gap-2 rounded-[14px] py-3 ${isActive ? "bg-neutral-950 text-white dark:bg-white dark:text-neutral-950" : ""}`}>
-                      <span className={`text-[11px] font-semibold leading-none ${isActive ? "opacity-60" : isToday ? "text-rose-500" : "text-neutral-500 dark:text-neutral-400"}`}>{DAY_LABELS[day]}</span>
+                      <span className={`text-[11px] font-semibold leading-none ${isActive ? "opacity-60" : isToday ? "text-rose-500" : "text-neutral-500 dark:text-neutral-400"}`}>{date.toLocaleDateString("en-US", { weekday: "short" })}</span>
                       <span className={`text-[18px] font-bold leading-none tabular-nums ${!isActive && isToday ? "text-rose-500" : ""}`}>{date.getDate()}</span>
                     </button>
                   );
@@ -1470,23 +1520,28 @@ export default function IOSScheduleApp() {
               </div>
             </div>
 
-            <div className="flex items-center justify-between">
-              <div>
-                <h2 className="text-[20px] font-semibold text-neutral-950 dark:text-white">
-                  {activeDay === todayKey
-                    ? "Today's Task"
-                    : new Date(activeDateISO + "T00:00:00").toLocaleDateString(undefined, { weekday: "long" })}
-                </h2>
-                <p className="text-[12px] font-semibold text-neutral-500 dark:text-neutral-400">{dayDone}/{dayTracked.length} done</p>
-              </div>
-              <div className="flex items-center gap-2">
-                {todayEditMode && (
-                  <IconButton label="Lock screen wallpaper" size="lg" onClick={() => { haptic("light"); setWallpaperOpen(true); }}>
-                    <IconPhoto size={21} strokeWidth={2} />
-                  </IconButton>
-                )}
-              </div>
-            </div>
+            <PageHeading
+              title={activeDay === todayKey
+                ? "Today's Task"
+                : new Date(activeDateISO + "T00:00:00").toLocaleDateString(undefined, { weekday: "long" })}
+              subtitle={`${dayDone}/${dayTracked.length} done`}
+              actions={[
+                ...(todayEditMode
+                  ? [{ icon: IconPhoto, label: "Lock screen wallpaper", onClick: () => { haptic("light"); setWallpaperOpen(true); } }]
+                  : []),
+                {
+                  icon: todayEditMode ? IconCheck : IconEdit,
+                  label: todayEditMode ? "Done editing" : "Edit day",
+                  onClick: () => { haptic("light"); setTodayEditMode((v) => !v); },
+                },
+                {
+                  icon: IconPlus,
+                  label: "Add task",
+                  tour: "new-item-button",
+                  onClick: () => { haptic("light"); openCreateSheet(); },
+                },
+              ]}
+            />
             {hasAnyTask && <SignInPrompt />}
             {renderTaskList(dayTasksView, activeDay, activeDateISO, () => openCreateSheet(), todayEditMode)}
           </div>
@@ -1577,6 +1632,15 @@ export default function IOSScheduleApp() {
       return (
         <ErrorBoundary section name="Plans">
           <div className="space-y-3 px-4 pt-5" data-tour="plans-list">
+            <PageHeading
+              title="Plans"
+              subtitle={schedule.plans.length ? `${schedule.plans.length} ${schedule.plans.length === 1 ? "plan" : "plans"}` : undefined}
+              actions={[
+                { icon: IconTemplate, label: "Browse templates", onClick: () => { haptic("light"); setTemplatesOpen(true); } },
+                { icon: IconTargetArrow, label: "Goals", onClick: () => { haptic("light"); setGoalsSheetOpen(true); } },
+                { icon: IconPlus, label: "New plan", tour: "new-item-button", onClick: () => { haptic("light"); setAddingPlan(true); } },
+              ]}
+            />
             {schedule.plans.length === 0 ? (
               <EmptyState
                 icon={IconClipboardData}
@@ -1744,8 +1808,10 @@ export default function IOSScheduleApp() {
     <main className="min-h-dvh shrink-0 bg-[#F3F4F1] text-neutral-900 dark:bg-[#0E0E0E] dark:text-white">
       {!subtasksRef && activeTab !== 6 && (
         <IOSHeader
-          title={selectedPlan ? selectedPlan.title : activeTab === 0 ? "Today" : activeTab === 1 ? "Plans" : activeTab === 2 ? "Routine" : activeTab === 8 ? "Tracking" : activeTab === 5 ? "Settings" : activeTab === 6 ? "Notes" : overviewGreeting()}
-          onBack={selectedPlan ? () => setSelectedPlanId(null) : undefined}
+          title={selectedPlan ? selectedPlan.title : activeTab === 0 ? "Today" : activeTab === 1 ? "Plans" : activeTab === 2 ? "Routine" : activeTab === 8 ? "Tracking" : activeTab === 5 ? "Settings" : activeTab === 6 ? "Notes" : "Overview"}
+          brand={isMainTab && !selectedPlan}
+          onMenu={() => { haptic("light"); setMenuOpen(true); }}
+          onBack={selectedPlan ? () => setSelectedPlanId(null) : !isMainTab ? () => setActiveTab(lastMainTabRef.current) : undefined}
           actions={
             selectedPlan
               ? [
@@ -1767,56 +1833,6 @@ export default function IOSScheduleApp() {
                     },
                   },
                 ]
-              : activeTab === 1
-              ? [
-                  {
-                    icon: IconTemplate,
-                    label: "Browse templates",
-                    onClick: () => {
-                      haptic("light");
-                      setTemplatesOpen(true);
-                    },
-                  },
-                  {
-                    icon: IconTargetArrow,
-                    label: "Goals",
-                    onClick: () => {
-                      haptic("light");
-                      setGoalsSheetOpen(true);
-                    },
-                  },
-                  {
-                    icon: IconPlus,
-                    label: "New plan",
-                    tour: "new-item-button",
-                    onClick: () => {
-                      haptic("light");
-                      setAddingPlan(true);
-                    },
-                  },
-                ]
-              : // Every tab adds from the same place: a glass + in the header,
-                // never a button inside the page.
-                activeTab === 0
-              ? [
-                  {
-                    icon: todayEditMode ? IconCheck : IconEdit,
-                    label: todayEditMode ? "Done editing" : "Edit day",
-                    onClick: () => {
-                      haptic("light");
-                      setTodayEditMode((v) => !v);
-                    },
-                  },
-                  {
-                    icon: IconPlus,
-                    label: "Add task",
-                    tour: "new-item-button",
-                    onClick: () => {
-                      haptic("light");
-                      openCreateSheet();
-                    },
-                  },
-                ]
               : activeTab === 2
               ? [
                   {
@@ -1831,8 +1847,6 @@ export default function IOSScheduleApp() {
                 ]
               : undefined
           }
-          onSettings={() => { setSelectedPlanId(null); setActiveTab(5); }}
-          onNotes={() => { setSelectedPlanId(null); setActiveTab(6); }}
         />
       )}
       <div className={subtasksRef || activeTab === 6 ? "h-dvh bg-white pt-[env(safe-area-inset-top)] dark:bg-neutral-950" : "pb-36 pt-[calc(env(safe-area-inset-top)+76px)]"}>{content}</div>
@@ -1874,6 +1888,16 @@ export default function IOSScheduleApp() {
           onTabChange={(tab) => { setActiveTab(tab); setSelectedPlanId(null); }}
         />
       )}
+
+      <IOSMenu
+        open={menuOpen}
+        onClose={() => setMenuOpen(false)}
+        onNavigate={(to: MenuDestination) => {
+          setSelectedPlanId(null);
+          if (to === "wallpaper") setWallpaperOpen(true);
+          else setActiveTab(to === "routine" ? 2 : to === "tracking" ? 8 : to === "notes" ? 6 : 5);
+        }}
+      />
 
       {/* ── Per-tab guided tour — short, skippable, once per device ─────────
           CoachMarks uses framer-motion's `m.*` primitives, which render

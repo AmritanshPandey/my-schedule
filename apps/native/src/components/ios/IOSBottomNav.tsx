@@ -2,7 +2,14 @@ import { useEffect, useRef, useState } from 'react';
 import { AccessibilityInfo, Animated, Easing, Pressable, View, type LayoutChangeEvent } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useColorScheme } from 'nativewind';
-import { IconCalendarEvent, IconChartLine, IconClipboardData, IconLayoutDashboard, IconRepeat } from '@tabler/icons-react-native';
+import {
+  IconCalendarEvent,
+  IconCalendarEventFilled,
+  IconClipboardData,
+  IconClipboardDataFilled,
+  IconLayoutDashboard,
+  IconLayoutDashboardFilled,
+} from '@tabler/icons-react-native';
 import { haptic } from '../../lib/haptics';
 import { Glass, isLiquidGlassSupported } from '../ui/Glass';
 import { Icon } from '../ui/Icon';
@@ -15,12 +22,12 @@ interface IOSBottomNavProps {
 
 /** Visual left-to-right order — independent of the tab ids themselves, which
  *  don't run 0..4 (Overview is tab 4, Tracking is tab 8). */
+// The three daily destinations; Routine, Tracking, Notes and Settings open
+// from the header menu (IOSMenu). The active tab takes the filled icon.
 const TABS = [
-  { tab: 4, label: 'Overview', short: 'Overview', icon: IconLayoutDashboard },
-  { tab: 0, label: 'Today', short: 'Today', icon: IconCalendarEvent },
-  { tab: 1, label: 'Plans', short: 'Plans', icon: IconClipboardData },
-  { tab: 2, label: 'Routine', short: 'Routine', icon: IconRepeat },
-  { tab: 8, label: 'Tracking', short: 'Track', icon: IconChartLine },
+  { tab: 4, label: 'Overview', icon: IconLayoutDashboard, activeIcon: IconLayoutDashboardFilled },
+  { tab: 0, label: 'Today', icon: IconCalendarEvent, activeIcon: IconCalendarEventFilled },
+  { tab: 1, label: 'Plans', icon: IconClipboardData, activeIcon: IconClipboardDataFilled },
 ] as const;
 
 /** Horizontal inset of the track inside the capsule (web: px-1.5). */
@@ -79,7 +86,7 @@ export default function IOSBottomNav({ activeTab, onTabChange }: IOSBottomNavPro
       <Glass
         accessibilityRole="tablist"
         accessibilityLabel="Main navigation"
-        className="h-[64px] w-full max-w-md flex-row items-center rounded-full"
+        className="h-[64px] w-full max-w-[320px] flex-row items-center rounded-full"
         style={[
           { paddingHorizontal: INSET },
           // The glass casts its own soft shadow; the fallback needs the lift.
@@ -104,7 +111,7 @@ export default function IOSBottomNav({ activeTab, onTabChange }: IOSBottomNavPro
               style={{ width: columnWidth, transform: [{ translateX: pillX }] }}
             />
           )}
-          {TABS.map(({ tab, label, short, icon }) => {
+          {TABS.map(({ tab, label, icon, activeIcon }) => {
             const active = activeTab === tab;
             return (
               <Pressable
@@ -118,21 +125,21 @@ export default function IOSBottomNav({ activeTab, onTabChange }: IOSBottomNavPro
                   haptic('light');
                   onTabChange(tab);
                 }}
-                className="h-[54px] min-w-0 flex-1 items-center justify-center gap-[3px] rounded-full active:scale-[0.96]"
+                className="h-[54px] min-w-0 flex-1 items-center justify-center gap-1 rounded-full active:scale-[0.96]"
               >
                 <Icon
-                  icon={icon}
-                  size={22}
-                  strokeWidth={active ? 2.2 : 1.9}
-                  className={active ? 'text-[#008236] dark:text-[#2FD46E]' : 'text-neutral-600 dark:text-neutral-300'}
+                  icon={active ? activeIcon : icon}
+                  size={23}
+                  strokeWidth={1.9}
+                  className={active ? 'text-neutral-950 dark:text-white' : 'text-neutral-700 dark:text-neutral-300'}
                 />
                 <Text
                   numberOfLines={1}
-                  className={`text-[10.5px] leading-none ${
-                    active ? 'font-bold text-[#008236] dark:text-[#2FD46E]' : 'font-semibold text-neutral-600 dark:text-neutral-300'
+                  className={`text-[11.5px] leading-none ${
+                    active ? 'font-semibold text-neutral-950 dark:text-white' : 'font-medium text-neutral-700 dark:text-neutral-300'
                   }`}
                 >
-                  {short}
+                  {label}
                 </Text>
               </Pressable>
             );

@@ -13,16 +13,15 @@ import {
   IconChevronRight,
   IconClipboardData,
   IconEdit,
-  IconNotes,
+  IconMenu2,
   IconPhoto,
   IconPlus,
-  IconSettings,
   IconTargetArrow,
   IconTemplate,
   IconTrash,
 } from '@tabler/icons-react-native';
 import type { DayKey, MetricEntry, Milestone, Note, Plan, ProgressTracker, Ritual, Schedule, Task, TaskTypeValue, TrackerCadence } from '@planr/core/lib/scheduleTypes';
-import { DAYS, DAY_FULL_LABELS, DAY_LABELS } from '@planr/core/lib/scheduleConstants';
+import { DAYS, DAY_FULL_LABELS } from '@planr/core/lib/scheduleConstants';
 import { resetStaleCompletions } from '@planr/core/lib/scheduleNormalize';
 import { categoryHex, resolveAccentColor } from '@planr/core/lib/colorSystem';
 import { canDeleteCategory, categoryUsageCounts, ensureCategoryIn } from '@planr/core/lib/taskCategories';
@@ -87,7 +86,6 @@ import { calculateMilestoneState, type MilestoneState } from '@planr/core/lib/mi
 import { unlinkEverywhere, type MilestoneLinkKind } from '@planr/core/lib/milestoneLinks';
 import { formatDisplayTime, inputToDisplayTime, minutesToInputTime, parseTimeToMinutes, toScheduleDayMinutes } from '@planr/core/lib/timeUtils';
 import { completedRitualIdsOn } from '@planr/core/lib/consistency/ritualDayStatus';
-import { overviewGreeting } from '@planr/core/lib/overview';
 import { selectNeedsAttention, type MissedTask } from '@planr/core/lib/needsAttention';
 import { rescheduleMissedTaskOnce, acknowledgeMiss } from '@planr/core/lib/missedRecovery';
 import { TOUR_STEPS, type CoachMarkStep, type TourId } from '@planr/core/lib/onboarding/tours';
@@ -107,6 +105,8 @@ import IconButton, { ICON_BUTTON_TONE } from '../ui/IconButton';
 import { Text } from '../ui/Text';
 import { SECTION_ICONS } from '../SectionIcons';
 import IOSBottomNav from './IOSBottomNav';
+import IOSMenu, { type MenuDestination } from './IOSMenu';
+import PlanrWordmark from './PlanrWordmark';
 import IOSTimelineRow from './IOSTimelineRow';
 import IOSMergedTimelineRow from './IOSMergedTimelineRow';
 import SignInPrompt from '../auth/SignInPrompt';
@@ -220,18 +220,54 @@ type HeaderAction = {
   tour?: string;
 };
 
+/**
+ * A page's own title row inside the scrolling content: the title, a count
+ * under it, and the page's actions on one glass capsule (edit, add). The main
+ * tabs put their actions here; the header only carries the wordmark and menu.
+ */
+function PageHeading({ title, subtitle, actions }: { title: string; subtitle?: string; actions?: HeaderAction[] }) {
+  const glass = isLiquidGlassSupported;
+  const iconClass = glass ? 'text-neutral-800 dark:text-neutral-100' : ICON_BUTTON_TONE.ghost;
+  const buttons = actions?.map((action) => {
+    const button = (
+      <IconButton key={action.label} label={action.label} variant="ghost" size="lg" onPress={action.onClick}>
+        <Icon icon={action.icon} size={22} strokeWidth={2} className={iconClass} />
+      </IconButton>
+    );
+    return action.tour ? (
+      <TourTarget key={action.label} id={action.tour}>
+        {button}
+      </TourTarget>
+    ) : (
+      button
+    );
+  });
+  return (
+    <View className="flex-row items-center justify-between gap-3">
+      <View className="min-w-0 flex-1">
+        <Text accessibilityRole="header" numberOfLines={1} className="text-[26px] font-bold leading-[32px] tracking-[-0.5px] text-neutral-950 dark:text-white">
+          {title}
+        </Text>
+        {subtitle ? <Text className="mt-0.5 text-[13px] font-semibold text-neutral-500 dark:text-neutral-400">{subtitle}</Text> : null}
+      </View>
+      {buttons?.length ? <Glass className="shrink-0 flex-row items-center rounded-full px-1">{buttons}</Glass> : null}
+    </View>
+  );
+}
+
 function IOSHeader({
   title,
   onBack,
   actions,
-  onSettings,
-  onNotes,
+  brand,
+  onMenu,
 }: {
   title: string;
   onBack?: () => void;
   actions?: HeaderAction[];
-  onSettings?: () => void;
-  onNotes?: () => void;
+  /** The three main tabs: the planr. wordmark and the menu button, no title. */
+  brand?: boolean;
+  onMenu?: () => void;
 }) {
   const insets = useSafeAreaInsets();
   const { colorScheme } = useColorScheme();
@@ -259,21 +295,8 @@ function IOSHeader({
         button
       );
     })
-  ) : (
-    <>
-      {onNotes && (
-        <IconButton label="Notes" variant="ghost" size="lg" onPress={onNotes}>
-          <Icon icon={IconNotes} size={20} strokeWidth={2} className={iconClass} />
-        </IconButton>
-      )}
-      {onSettings && (
-        <IconButton label="Settings" variant="ghost" size="lg" onPress={onSettings}>
-          <Icon icon={IconSettings} size={20} strokeWidth={2} className={iconClass} />
-        </IconButton>
-      )}
-    </>
-  );
-  const hasActions = Boolean(actions?.length || onNotes || onSettings);
+  ) : null;
+  const hasActions = Boolean(actions?.length);
 
   return (
     <View
@@ -292,6 +315,21 @@ function IOSHeader({
           style={{ position: 'absolute', left: 0, right: 0, top: 0, bottom: -16 }}
         />
       )}
+      {brand ? (
+        <View className="h-14 flex-row items-center justify-between gap-3">
+          <Text accessibilityRole="header" className="absolute opacity-0">
+            {title}
+          </Text>
+          <PlanrWordmark />
+          {onMenu && (
+            <Pressable accessibilityRole="button" accessibilityLabel="Menu" onPress={onMenu} className="active:scale-[0.94]">
+              <Glass interactive className="h-14 w-14 items-center justify-center rounded-full">
+                <Icon icon={IconMenu2} size={24} strokeWidth={1.9} className={iconClass} />
+              </Glass>
+            </Pressable>
+          )}
+        </View>
+      ) : (
       <View className="h-12 flex-row items-center justify-between gap-3">
         <View className="min-w-0 shrink">
           {onBack ? (
@@ -321,6 +359,7 @@ function IOSHeader({
           <View className="shrink-0 flex-row items-center gap-1">{actionButtons}</View>
         )}
       </View>
+      )}
     </View>
   );
 }
@@ -407,6 +446,14 @@ export default function IOSScheduleApp() {
   // Drives the timeline "in progress" ring on today's list.
   const nowMinutes = useNowMinutes();
   const [activeTab, setActiveTab] = useState(4);
+  // The three main tabs sit on the tab bar; everything else opens from the
+  // header menu, and its back button returns to the main tab it came from.
+  const isMainTab = activeTab === 4 || activeTab === 0 || activeTab === 1;
+  const [menuOpen, setMenuOpen] = useState(false);
+  const lastMainTabRef = useRef(4);
+  useEffect(() => {
+    if (isMainTab) lastMainTabRef.current = activeTab;
+  }, [activeTab, isMainTab]);
 
   // A short, skippable coach-mark tour per tab. Overview (4) and Settings (5)
   // intentionally have no entry in TOUR_STEPS — see lib/onboarding/tours.ts.
@@ -1510,6 +1557,8 @@ export default function IOSScheduleApp() {
               setActiveDay(day);
               setActiveTab(0);
             }}
+            onOpenTask={(taskId) => setSubtasksRef({ id: taskId, day: todayKey, dateISO: todayISO() })}
+            nowMinutes={nowMinutes}
           />
         </ErrorBoundary>
       );
@@ -1564,7 +1613,7 @@ export default function IOSScheduleApp() {
                           isActive ? 'text-white opacity-60 dark:text-neutral-950' : isToday ? 'text-rose-500' : 'text-neutral-500 dark:text-neutral-400'
                         }`}
                       >
-                        {DAY_LABELS[day]}
+                        {date.toLocaleDateString('en-US', { weekday: 'short' })}
                       </Text>
                       <Text
                         className={`text-[18px] font-bold leading-[24px] tabular-nums ${
@@ -1579,30 +1628,32 @@ export default function IOSScheduleApp() {
               </View>
             </View>
 
-            <View className="flex-row items-center justify-between">
-              <View className="min-w-0 flex-1">
-                <Text accessibilityRole="header" className="text-[20px] font-semibold text-neutral-950 dark:text-white">
-                  {activeDay === todayKey ? "Today's Task" : new Date(activeDateISO + 'T00:00:00').toLocaleDateString(undefined, { weekday: 'long' })}
-                </Text>
-                <Text className="text-[12px] font-semibold text-neutral-500 dark:text-neutral-400">
-                  {dayDone}/{dayTracked.length} done
-                </Text>
-              </View>
-              <View className="flex-row items-center gap-2">
-                {todayEditMode && (
-                  <IconButton
-                    label="Lock screen wallpaper"
-                    size="lg"
-                    onPress={() => {
-                      haptic('light');
-                      setWallpaperOpen(true);
-                    }}
-                  >
-                    <Icon icon={IconPhoto} size={21} strokeWidth={2} className={ICON_BUTTON_TONE.secondary} />
-                  </IconButton>
-                )}
-              </View>
-            </View>
+            <PageHeading
+              title={activeDay === todayKey ? "Today's Task" : new Date(activeDateISO + 'T00:00:00').toLocaleDateString(undefined, { weekday: 'long' })}
+              subtitle={`${dayDone}/${dayTracked.length} done`}
+              actions={[
+                ...(todayEditMode
+                  ? [{ icon: IconPhoto, label: 'Lock screen wallpaper', onClick: () => { haptic('light'); setWallpaperOpen(true); } }]
+                  : []),
+                {
+                  icon: todayEditMode ? IconCheck : IconEdit,
+                  label: todayEditMode ? 'Done editing' : 'Edit day',
+                  onClick: () => {
+                    haptic('light');
+                    setTodayEditMode((v) => !v);
+                  },
+                },
+                {
+                  icon: IconPlus,
+                  label: 'Add task',
+                  tour: 'new-item-button',
+                  onClick: () => {
+                    haptic('light');
+                    openCreateSheet();
+                  },
+                },
+              ]}
+            />
             {hasAnyTask && <SignInPrompt />}
             {renderTaskList(dayTasksView, activeDay, activeDateISO, () => openCreateSheet(), todayEditMode)}
           </TourTarget>
@@ -1689,6 +1740,15 @@ export default function IOSScheduleApp() {
       return (
         <ErrorBoundary section name="Plans">
           <TourTarget id="plans-list" className="gap-3 px-4 pt-5">
+            <PageHeading
+              title="Plans"
+              subtitle={schedule.plans.length ? `${schedule.plans.length} ${schedule.plans.length === 1 ? 'plan' : 'plans'}` : undefined}
+              actions={[
+                { icon: IconTemplate, label: 'Browse templates', onClick: () => { haptic('light'); setTemplatesOpen(true); } },
+                { icon: IconTargetArrow, label: 'Goals', onClick: () => { haptic('light'); setGoalsSheetOpen(true); } },
+                { icon: IconPlus, label: 'New plan', tour: 'new-item-button', onClick: () => { haptic('light'); setAddingPlan(true); } },
+              ]}
+            />
             {schedule.plans.length === 0 ? (
               <EmptyState
                 icon={IconClipboardData}
@@ -1885,9 +1945,14 @@ export default function IOSScheduleApp() {
                       ? 'Tracking'
                       : activeTab === 5
                         ? 'Settings'
-                        : overviewGreeting()
+                        : 'Overview'
           }
-          onBack={selectedPlan ? () => setSelectedPlanId(null) : undefined}
+          brand={isMainTab && !selectedPlan}
+          onMenu={() => {
+            haptic('light');
+            setMenuOpen(true);
+          }}
+          onBack={selectedPlan ? () => setSelectedPlanId(null) : !isMainTab ? () => setActiveTab(lastMainTabRef.current) : undefined}
           actions={
             selectedPlan
               ? [
@@ -1909,80 +1974,32 @@ export default function IOSScheduleApp() {
                     },
                   },
                 ]
-              : activeTab === 1
+              : activeTab === 2
                 ? [
                     {
-                      icon: IconTemplate,
-                      label: 'Browse templates',
-                      onClick: () => {
-                        haptic('light');
-                        setTemplatesOpen(true);
-                      },
-                    },
-                    {
-                      icon: IconTargetArrow,
-                      label: 'Goals',
-                      onClick: () => {
-                        haptic('light');
-                        setGoalsSheetOpen(true);
-                      },
-                    },
-                    {
                       icon: IconPlus,
-                      label: 'New plan',
+                      label: 'Add routine',
                       tour: 'new-item-button',
                       onClick: () => {
-                        haptic('light');
-                        setAddingPlan(true);
+                        haptic('medium');
+                        setRitualAddOpen(true);
                       },
                     },
                   ]
-                : // Every tab adds from the same place: a glass + in the header,
-                  // never a button inside the page.
-                  activeTab === 0
-                  ? [
-                      {
-                        icon: todayEditMode ? IconCheck : IconEdit,
-                        label: todayEditMode ? 'Done editing' : 'Edit day',
-                        onClick: () => {
-                          haptic('light');
-                          setTodayEditMode((v) => !v);
-                        },
-                      },
-                      {
-                        icon: IconPlus,
-                        label: 'Add task',
-                        tour: 'new-item-button',
-                        onClick: () => {
-                          haptic('light');
-                          openCreateSheet();
-                        },
-                      },
-                    ]
-                  : activeTab === 2
-                    ? [
-                        {
-                          icon: IconPlus,
-                          label: 'Add routine',
-                          tour: 'new-item-button',
-                          onClick: () => {
-                            haptic('medium');
-                            setRitualAddOpen(true);
-                          },
-                        },
-                      ]
-                    : undefined
+                : undefined
           }
-          onSettings={() => {
-            setSelectedPlanId(null);
-            setActiveTab(5);
-          }}
-          onNotes={() => {
-            setSelectedPlanId(null);
-            setActiveTab(6);
-          }}
         />
       )}
+
+      <IOSMenu
+        open={menuOpen}
+        onClose={() => setMenuOpen(false)}
+        onNavigate={(to: MenuDestination) => {
+          setSelectedPlanId(null);
+          if (to === 'wallpaper') setWallpaperOpen(true);
+          else setActiveTab(to === 'routine' ? 2 : to === 'tracking' ? 8 : to === 'notes' ? 6 : 5);
+        }}
+      />
 
       <DayActionsSheet
         open={dayActionsOpen}

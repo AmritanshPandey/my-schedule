@@ -5,6 +5,7 @@ import type { GoalPaceRow } from "@/lib/overview";
 import { accentStyles } from "@/lib/colorSystem";
 import { haptic } from "@/lib/haptics";
 import { CARD } from "@/components/ui/surfaces";
+import { MOBILE_CARD } from "@/components/overview/MobileOverviewCards";
 import HealthBadge, { HEALTH_FILL } from "@/components/ui/HealthBadge";
 import ProgressBar from "@/components/ui/ProgressBar";
 import Button from "@/components/ui/Button";
@@ -58,6 +59,55 @@ export default function GoalPaceCard({
             </Button>
           )}
         </div>
+      </section>
+    );
+  }
+
+  if (compact) {
+    // The phone: one row per milestone, its badge and its progress, and a tap
+    // through to the plan. Slipping milestones already lead Needs attention
+    // with their fix, so the callouts stay on desktop.
+    return (
+      <section data-testid="overview-goal-pace" aria-labelledby="overview-goal-title" className={MOBILE_CARD}>
+        <div className="flex items-center justify-between gap-3">
+          <h2 id="overview-goal-title" className="text-[17px] font-semibold text-neutral-950 dark:text-white">Goal on pace</h2>
+          {onSeeAll && totalCount > rows.length ? (
+            <Button variant="ghost" size="sm" onClick={() => { haptic("light"); onSeeAll(); }} className="-my-2">
+              See all {totalCount}
+            </Button>
+          ) : (
+            <span className="flex h-8 min-w-8 items-center justify-center rounded-full bg-neutral-100 px-2 text-[14px] font-semibold tabular-nums text-neutral-900 dark:bg-white/[0.08] dark:text-white">
+              {rows.length}
+            </span>
+          )}
+        </div>
+        <ul className="mt-2 divide-y divide-neutral-100 dark:divide-white/[0.07]">
+          {rows.map(({ plan, milestone, state }) => (
+            <li key={plan.id}>
+              <button
+                type="button"
+                onClick={() => { haptic("light"); onOpenPlan(plan.id); }}
+                className="w-full py-4 text-left active:opacity-70"
+              >
+                <span className="flex items-start justify-between gap-3">
+                  <span className="min-w-0">
+                    <span className="block truncate text-[17px] font-medium text-neutral-950 dark:text-white">{milestone ? milestone.title : plan.title}</span>
+                    <span className="mt-0.5 block truncate text-[14px] text-neutral-500 dark:text-neutral-400">
+                      {milestone ? `${plan.title} · due ${formatShortDate(milestone.plannedEndDate)}` : plan.title}
+                    </span>
+                  </span>
+                  {state ? <HealthBadge health={state.health} /> : null}
+                </span>
+                {state && state.overallProgress !== null && (
+                  <span className="mt-3 flex items-center gap-4">
+                    <ProgressBar pct={state.overallProgress} height={6} className="w-[58%]" fillClassName={HEALTH_FILL[state.health]} />
+                    <span className="text-[13px] font-medium tabular-nums text-neutral-500 dark:text-neutral-400">{state.overallProgress}%</span>
+                  </span>
+                )}
+              </button>
+            </li>
+          ))}
+        </ul>
       </section>
     );
   }
