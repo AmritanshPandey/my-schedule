@@ -16,6 +16,8 @@ import { isPlanRunning } from "./planLifecycle";
 import { categoriesById, taskIdentity } from "./taskIdentity";
 import { categoryHex, resolveAccentColor } from "./colorSystem";
 import { DEFAULT_TIMELINE_START_MINUTES } from "./timeline/displayWindow";
+import { sessionsForDate } from "./sessions";
+import { parseTimeToMinutes } from "./timeUtils";
 
 export interface DayBlock {
   id: string;
@@ -76,6 +78,19 @@ export function selectDayShape(schedule: Schedule, todayISO: string, todayKey: D
       blocks.push({ id: `${task.id}:${index}`, title: task.title, start: interval.start, end: interval.end, color });
     });
   }
+  // Timed runs take their estimated length from their start, coloured by their plan.
+  const runLegend = new Map<string, DayLegendRow>();
+  for (const session of sessionsForDate(schedule, todayISO)) {
+    if (session.status === "skipped" || !session.startTime || !session.estimatedMinutes) continue;
+    const start = parseTimeToMinutes(session.startTime);
+    const plan = plansById.get(session.planId);
+    if (start == null || !plan) continue;
+    const color = categoryHex(resolveAccentColor(plan.color, plan.emoji));
+    blocks.push({ id: `session:${session.id}`, title: session.title, start, end: start + session.estimatedMinutes, color });
+    const id = `plan:${plan.id}`;
+    const row = runLegend.get(id) ?? { id, label: plan.title, color, minutes: 0 };
+    runLegend.set(id, { ...row, minutes: row.minutes + session.estimatedMinutes });
+  }
   blocks.sort((a, b) => a.start - b.start || a.end - b.end);
 
   const prevKey = DAYS[(DAYS.indexOf(todayKey) + 6) % 7] as DayKey;
@@ -90,6 +105,7 @@ export function selectDayShape(schedule: Schedule, todayISO: string, todayKey: D
   const legend = breakdown.slices
     .filter((slice) => slice.kind !== "unscheduled" && slice.kind !== "sleep" && slice.minutes > 0)
     .map((slice) => ({ id: slice.id, label: slice.label, color: slice.color ? categoryHex(slice.color) : null, minutes: slice.minutes }))
+    .concat([...runLegend.values()])
     .sort((a, b) => b.minutes - a.minutes);
 
   const first = blocks.length ? Math.min(...blocks.map((b) => b.start)) : DEFAULT_WINDOW.start;

@@ -3,9 +3,13 @@ rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
 
-    // Users can only read and write their own data.
+    // Users can only read and write their own data, and never after the
+    // account was deleted: another device's ID token stays valid for up to an
+    // hour after deleteAccount removes the Auth user, and its next push would
+    // otherwise recreate the data under a uid nobody can sign in as.
     match /users/{uid}/{document=**} {
-      allow read, write: if request.auth != null && request.auth.uid == uid;
+      allow read, write: if request.auth != null && request.auth.uid == uid
+        && !exists(/databases/$(database)/documents/deletedAccounts/$(uid));
     }
 
     // Deny everything else.

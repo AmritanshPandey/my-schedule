@@ -43,6 +43,7 @@ import { formatDisplayTime, minutesToInputTime } from "@/lib/timeUtils";
 import type { Schedule, SchedulePreferences } from "@/lib/useScheduleDB";
 import ConfirmSheet from "@/components/ui/ConfirmSheet";
 import BackupRows from "@/components/settings/BackupRows";
+import DeleteAccountRow from "@/components/settings/DeleteAccountRow";
 import RemindersRows from "@/components/settings/RemindersRows";
 import { CARD as CARD_SURFACE } from "@/components/ui/surfaces";
 import { SETTINGS_CONTROL_CLASS } from "@/components/ui/Input";
@@ -53,6 +54,7 @@ import { formatDayNoteLabel, localISODate } from "@/lib/dateUtils";
 import DateInput from "@/components/ui/DateInput";
 import Button from "@/components/ui/Button";
 import IconButton from "@/components/ui/IconButton";
+import type { RestoreHandler } from "@/lib/restoreMerge";
 
 const PROVIDER_LABEL: Record<string, string> = {
   mlx: "MLX",
@@ -348,7 +350,7 @@ interface SettingsViewProps {
   setSchedule: (updater: (prev: Schedule) => Schedule) => void;
   onClearData: () => Promise<void>;
   onClearProgress?: () => Promise<void>;
-  onRestoreData?: (raw: unknown) => boolean;
+  onRestoreData?: RestoreHandler;
   onUpdatePreferences?: (patch: Partial<SchedulePreferences>) => void;
   onClose?: () => void;
   onOpenAI: () => void;
@@ -830,6 +832,12 @@ export function SettingsView({
                   )}
                 </AnimatePresence>
               </div>
+              {!isGuest && (
+                <>
+                  <Divider />
+                  <DeleteAccountRow onClearData={onClearData} onDone={onClose} />
+                </>
+              )}
             </Card>
           </div>
 

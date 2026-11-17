@@ -72,6 +72,7 @@ import { formatDisplayTime, formatDuration } from "@/lib/timeUtils";
 import { formatDate, formatDateShort, todayISO } from "@/lib/dateUtils";
 import { DayPill } from "@/components/ui/Badge";
 import { InternalSectionTitle, SectionIconButton } from "@/components/ui/InternalSectionTitle";
+import PlanSessionsSection from "@/components/session/PlanSessionsSection";
 import { TrackerTabs } from "@/components/ui/TrackerTabs";
 import AccuracyCalendar from "@/components/plan/AccuracyCalendar";
 import {
@@ -292,6 +293,11 @@ interface PlanDetailViewProps {
   // AI
   onAddGeneratedTasks?: (tasks: AIGeneratedTask[], planId: string, milestoneId?: string) => void;
   onUpdateCoachMessages?: (planId: string, messages: PlanCoachMessage[]) => void;
+  // Run sessions (a plan built by the 5K template): open one, answer a
+  // suggestion, change run days. The section shows only when plan.generator is set.
+  onOpenSession?: (sessionId: string) => void;
+  onDecideAdjustment?: (adjustmentId: string, decision: "accepted" | "held") => void;
+  onUpdateRunInputs?: (planId: string, patch: { runDays?: DayKey[]; startTime?: string; targetPaceSecPerKm?: number }) => void;
 }
 
 // ── Component ─────────────────────────────────────────────────────────────────
@@ -326,6 +332,9 @@ export default function PlanDetailView({
   onUnlinkTaskFromMilestone,
   onSetMilestoneLink,
   onUpdateCoachMessages,
+  onOpenSession,
+  onDecideAdjustment,
+  onUpdateRunInputs,
 }: PlanDetailViewProps) {
   // Whether this plan is still expected to run. Drives the pause affordance
   // and the held-state banner; the counting rules behind it live in the lib
@@ -2197,6 +2206,16 @@ export default function PlanDetailView({
           broke the smoke test's `getByText(...).first()`. */}
       <div className="mt-6 gap-6 px-4 lg:grid lg:grid-cols-3 lg:items-start lg:px-8 xl:gap-8">
         <div className={`min-w-0 flex-col gap-8 lg:flex ${planTab === "planning" ? "flex" : "hidden"}`}>
+          {plan.generator && onOpenSession && (
+            <PlanSessionsSection
+              schedule={schedule}
+              plan={plan}
+              todayISO={todayISO()}
+              onOpenSession={onOpenSession}
+              onDecide={onDecideAdjustment}
+              onUpdateInputs={onUpdateRunInputs ? (patch) => onUpdateRunInputs(plan.id, patch) : undefined}
+            />
+          )}
           {plannedTasksSection()}
         </div>
         <div className={`mt-8 min-w-0 flex-col gap-8 lg:mt-0 lg:flex ${planTab === "planning" ? "flex" : "hidden"}`}>

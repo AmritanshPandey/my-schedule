@@ -19,7 +19,9 @@ import {
   IconPlus,
   IconTrendingDown,
   IconX,
+  IconRun,
 } from "@tabler/icons-react";
+import { headline } from "@/lib/sessions";
 import Button from "@/components/ui/Button";
 import IconButton from "@/components/ui/IconButton";
 import { haptic } from "@/lib/haptics";
@@ -93,6 +95,8 @@ export function OverviewHero({
   onOpenTask,
   onOpenToday,
   onAddTask,
+  onOpenSession,
+  onToggleSession,
 }: {
   next: NextUp;
   /** The next task's checklist progress, or null when it has none. */
@@ -103,6 +107,9 @@ export function OverviewHero({
   onOpenTask: (taskId: string) => void;
   onOpenToday: () => void;
   onAddTask: () => void;
+  /** When a run is next: open its detail, and Mark done ticks it. */
+  onOpenSession?: (sessionId: string) => void;
+  onToggleSession?: (sessionId: string) => void;
 }) {
   const dateLabel = new Date().toLocaleDateString(undefined, { weekday: "long", month: "short", day: "numeric" });
   const done = next.kind === "empty" ? 0 : next.done;
@@ -166,6 +173,42 @@ export function OverviewHero({
                 if (next.slotIndex !== undefined) onToggleSlot(next.task.id, next.slotIndex);
                 else onMarkDone(next.task.id, next.checkableIds);
               }}
+            >
+              Mark done
+            </Button>
+            <Button variant="secondary" size="lg" className="flex-1" trailingIcon={<IconChevronRight size={18} strokeWidth={2.2} aria-hidden="true" />} onClick={() => { haptic("light"); onOpenToday(); }}>
+              Today
+            </Button>
+          </div>
+        </>
+      ) : next.kind === "session" ? (
+        <>
+          <div className="mt-5 flex items-center justify-between gap-3 text-[13px] font-medium text-neutral-500 dark:text-neutral-400">
+            <span>Next up{next.timeLabel ? ` · ${next.timeLabel}` : ""}</span>
+            {next.session.estimatedMinutes ? <span>Duration: {formatMinutesBrief(next.session.estimatedMinutes)}</span> : null}
+          </div>
+          <div className="mt-2 flex items-center justify-between gap-3">
+            <h3 className="min-w-0 text-[28px] font-bold leading-tight tracking-[-0.02em] text-neutral-950 dark:text-white">{next.session.title}</h3>
+            {onOpenSession && (
+              <button
+                type="button"
+                onClick={() => { haptic("light"); onOpenSession(next.session.id); }}
+                aria-label={`Open ${next.session.title}`}
+                className="flex min-h-[44px] shrink-0 items-center gap-1.5 rounded-full bg-neutral-100 px-4 text-[14px] font-semibold text-neutral-600 active:scale-[0.97] dark:bg-white/[0.08] dark:text-neutral-300"
+              >
+                <IconRun size={18} strokeWidth={1.9} aria-hidden="true" />
+                <IconArrowUpRight size={18} strokeWidth={1.9} aria-hidden="true" />
+              </button>
+            )}
+          </div>
+          <p className="mt-1 truncate text-[13px] font-medium text-neutral-500 dark:text-neutral-400">{headline(next.session)}</p>
+          <div className="mt-4 flex gap-3 border-t border-neutral-100 pt-4 dark:border-white/[0.07]">
+            <Button
+              variant="primary"
+              size="lg"
+              className="flex-[1.7]"
+              icon={<IconCheck size={20} strokeWidth={2.4} aria-hidden="true" />}
+              onClick={() => { haptic("medium"); onToggleSession?.(next.session.id); }}
             >
               Mark done
             </Button>

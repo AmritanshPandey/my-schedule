@@ -25,6 +25,9 @@ import type {
   MetricEntry,
   Milestone,
   Note,
+  PlanAdjustment,
+  Session,
+  SessionLog,
   Plan,
   ProgressionStep,
   ProgressTracker,
@@ -192,6 +195,19 @@ function mergeKeyed<T>(
   return { items, survivors };
 }
 
+// -- Sessions ----------------------------------------------------------------
+
+/**
+ * A plan rebuild regenerates future sessions under the same ids. When one
+ * device marked a run done and another regenerated that session (new time,
+ * new paces) without anyone touching it by hand, the regenerated copy can be
+ * the newer write; it must not undo the run. A hand edit (editedAt) still wins.
+ */
+function keepDoneSession(winner: Session, loser: Session): Session {
+  if (loser.status === "done" && winner.status === "planned" && winner.generated && !winner.editedAt) return loser;
+  return winner;
+}
+
 // -- Tasks -------------------------------------------------------------------
 
 /**
@@ -349,6 +365,11 @@ export function mergeSchedules(a: MergeSide, b: MergeSide): Schedule {
         at,
         bt,
       ),
+    ),
+    sessions: collect(mergeKeyed<Session>(a.schedule.sessions, b.schedule.sessions, byId(NS.session), at, bt, keepDoneSession)),
+    sessionLogs: collect(mergeKeyed<SessionLog>(a.schedule.sessionLogs, b.schedule.sessionLogs, byId(NS.sessionLog), at, bt)),
+    planAdjustments: collect(
+      mergeKeyed<PlanAdjustment>(a.schedule.planAdjustments, b.schedule.planAdjustments, byId(NS.planAdjustment), at, bt),
     ),
     events: mergeEvents(a.schedule.events, b.schedule.events),
     preferences: mergePreferences(a, b),

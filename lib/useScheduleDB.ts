@@ -21,6 +21,8 @@ import { validateSchedule } from "@/lib/scheduleSchema";
 import { mergeSchedules, resolveLocalWrite } from "@/lib/mergeSchedule";
 import { onLocalWrite, publishLocalWrite } from "@/lib/tabSync";
 import { stampSchedule } from "@/lib/stampSchedule";
+import { clearSessionProgress } from "@/lib/sessions";
+import { restoreMissing, restoredCount, type RestoreHandler } from "@/lib/restoreMerge";
 
 // ─── Shared domain types (packages/core/lib/scheduleTypes.ts) ─────────────
 // Moved out so apps/native can use the same types via @planr/core. Re-exported
@@ -60,6 +62,12 @@ export type {
   ProgressEntry,
   DayActivities,
   RitualCompletion,
+  Session,
+  SessionTask,
+  SessionLog,
+  PlanAdjustment,
+  RunPlanInputs,
+  RunEffort,
   Note,
   SchedulePreferences,
   CategoryKind,
@@ -630,23 +638,28 @@ export function useScheduleDB() {
   }, [ready]);
 
   /**
-   * Replace the whole schedule with data restored from a backup file. The raw
-   * object goes through the same migrate pipeline as any stored snapshot, so
-   * old exports load cleanly. Returns false (state untouched) when the payload
+   * Restore data from a backup file or cloud snapshot. The raw object goes
+   * through the same migrate pipeline as any stored snapshot, so old exports
+   * load cleanly. "merge" adds back what the backup has and the app doesn't,
+   * leaving everything current untouched; "replace" makes the app match the
+   * backup exactly. Returns { ok: false } (state untouched) when the payload
    * is corrupt. Persistence + cloud sync then follow the normal debounced
    * write path, exactly like any other edit.
    */
-  const restoreData = useCallback((raw: unknown): boolean => {
+  const restoreData = useCallback<RestoreHandler>((raw, mode) => {
     const migrated = safeMigrate(raw);
-    if (!migrated) return false;
-    // Whole-schedule replacement still has to say what it REMOVED. Without
-    // tombstones a merge reads "restore" as "add these back" and every entity
-    // the backup doesn't contain returns from the other device.
-    const next = stampSchedule(scheduleRef.current, migrated);
+    if (!migrated) return { ok: false };
+    const current = scheduleRef.current;
+    // A replacement still has to say what it REMOVED. Without tombstones a
+    // merge reads "restore" as "add these back" and every entity the backup
+    // doesn't contain returns from the other device. A merge removes nothing,
+    // and the stamp marks what it brought back as re-created everywhere.
+    const target = mode === "merge" ? restoreMissing(current, migrated) : migrated;
+    const next = stampSchedule(current, target);
     scheduleRef.current = next;
     setScheduleState(next);
     setIsFirstLaunch(false);
-    return true;
+    return { ok: true, added: mode === "merge" ? restoredCount(current, target) : 0 };
   }, []);
 
   async function clearData(): Promise<void> {
@@ -687,7 +700,7 @@ export function useScheduleDB() {
           return { ...rest, status: "upcoming" as const, completionStatus: "pending" as const };
         }),
       );
-      return { ...schedule, activities, milestones, ritualCompletions: [], metricEntries: [], setLogs: [], progressionSteps: [] };
+      return { ...schedule, activities, milestones, ritualCompletions: [], metricEntries: [], setLogs: [], progressionSteps: [], ...clearSessionProgress(schedule) };
     })();
     // Cleared ritual check-ins and metric rows are deletions; the reset tasks
     // and milestones are edits. Both need recording or the merge undoes them.

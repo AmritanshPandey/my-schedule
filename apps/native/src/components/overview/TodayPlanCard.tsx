@@ -1,7 +1,8 @@
 import { Pressable, View } from 'react-native';
-import { IconCalendarPlus, IconCheck, IconFlame, IconListCheck, IconX } from '@tabler/icons-react-native';
+import { IconCalendarPlus, IconCheck, IconFlame, IconListCheck, IconRun, IconX } from '@tabler/icons-react-native';
 import type { ExecutionStreak } from '@planr/core/lib/consistency/calculateExecutionStreak';
-import type { TodayPlan, TodayPlanRow } from '@planr/core/lib/overview';
+import type { TodayPlan, TodayPlanRow, TodayPlanSessionRow } from '@planr/core/lib/overview';
+import CheckDraw from '../ui/CheckDraw';
 import { getSlots } from '@planr/core/lib/taskMutations';
 import { haptic } from '../../lib/haptics';
 import { CARD } from '../ui/surfaces';
@@ -83,12 +84,56 @@ function TaskRow({
   );
 }
 
+/** A run on today's plan: the circle marks it done, the row opens it. */
+function SessionPlanRow({ row, onOpen, onToggle }: { row: TodayPlanSessionRow; onOpen?: () => void; onToggle?: () => void }) {
+  const done = row.state === 'done';
+  const missed = row.state === 'missed';
+  return (
+    <View className="flex-row items-center gap-3 py-2">
+      <Pressable
+        accessibilityRole="checkbox"
+        accessibilityLabel={done ? `Mark ${row.session.title} not done` : `Mark ${row.session.title} done`}
+        accessibilityState={{ checked: done }}
+        disabled={!onToggle}
+        hitSlop={8}
+        onPress={() => {
+          haptic('medium');
+          onToggle?.();
+        }}
+        className={`h-7 w-7 items-center justify-center rounded-full ${done ? 'bg-emerald-500' : missed ? 'bg-rose-500' : 'border-2 border-neutral-300 dark:border-white/25'}`}
+      >
+        <CheckDraw visible={done} size={15} strokeWidth={3} className="text-white" />
+      </Pressable>
+      <Pressable
+        accessibilityRole="button"
+        onPress={() => {
+          haptic('light');
+          onOpen?.();
+        }}
+        className="min-h-[44px] min-w-0 flex-1 flex-row items-center gap-2"
+      >
+        <Icon icon={IconRun} size={16} strokeWidth={2} className="text-neutral-500 dark:text-neutral-400" />
+        <View className="min-w-0 flex-1">
+          <Text numberOfLines={1} className={`text-[15px] font-bold ${missed ? 'text-neutral-500 dark:text-neutral-400' : 'text-neutral-900 dark:text-white'}`}>
+            {row.session.title}
+          </Text>
+          <Text numberOfLines={1} className="text-[12.5px] font-medium text-neutral-500 dark:text-neutral-400">
+            {[row.timeLabel || 'Any time', row.headline].join(' · ')}
+          </Text>
+        </View>
+      </Pressable>
+    </View>
+  );
+}
+
 export default function TodayPlanCard({
   plan,
   streak,
   onMarkDone,
   onToggleSlot,
   onAddTask,
+  onOpenSession,
+  onToggleSession,
 }: {
   plan: TodayPlan;
   streak?: ExecutionStreak;
@@ -96,6 +141,8 @@ export default function TodayPlanCard({
   onToggleSlot: (taskId: string, slotIndex: number) => void;
   /** The empty day's "Add a task". */
   onAddTask: () => void;
+  onOpenSession?: (sessionId: string) => void;
+  onToggleSession?: (sessionId: string) => void;
 }) {
   const { rows, done, total, pct } = plan;
   const left = total - done;
@@ -123,7 +170,11 @@ export default function TodayPlanCard({
         )}
       </View>
       <Text accessibilityRole="header" className="mt-0.5 text-[24px] font-extrabold leading-tight tracking-[-0.3px] text-neutral-950 dark:text-white">
-        {total === 0 ? 'Plan your day' : `${total} ${total === 1 ? 'task' : 'tasks'} for today`}
+        {total === 0
+          ? 'Plan your day'
+          : plan.sessions.length > 0
+            ? `${total} to do today`
+            : `${total} ${total === 1 ? 'task' : 'tasks'} for today`}
       </Text>
 
       {total === 0 ? (
@@ -150,7 +201,20 @@ export default function TodayPlanCard({
             <ProgressBar pct={pct} height={6} className="flex-1" />
             <Text className="w-10 shrink-0 text-right text-[12px] font-bold tabular-nums text-neutral-600 dark:text-neutral-300">{pct}%</Text>
           </View>
-          <View className="mt-1">
+          {plan.sessions.length > 0 ? (
+            <View className="mt-1" testID="overview-today-sessions">
+              {plan.sessions.map((row, index) => (
+                <View key={row.session.id} className={index > 0 ? 'border-t border-neutral-100 dark:border-white/[0.06]' : ''}>
+                  <SessionPlanRow
+                    row={row}
+                    onOpen={onOpenSession ? () => onOpenSession(row.session.id) : undefined}
+                    onToggle={onToggleSession ? () => onToggleSession(row.session.id) : undefined}
+                  />
+                </View>
+              ))}
+            </View>
+          ) : null}
+          <View className={plan.sessions.length > 0 && rows.length > 0 ? 'border-t border-neutral-100 dark:border-white/[0.06]' : 'mt-1'}>
             {rows.map((row, index) => (
               <View key={row.task.id} className={index > 0 ? 'border-t border-neutral-100 dark:border-white/[0.06]' : ''}>
                 <TaskRow row={row} onMarkDone={onMarkDone} onToggleSlot={onToggleSlot} />

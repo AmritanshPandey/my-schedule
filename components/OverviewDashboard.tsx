@@ -59,6 +59,8 @@ interface OverviewDashboardProps {
   onMissedTask?: (taskId: string, subtaskIds: string[]) => void;
   /** The empty day's "Add a task". */
   onAddTask?: () => void;
+  /** Desktop shows today's runs read-only: tapping one opens its detail. */
+  onOpenSession?: (sessionId: string) => void;
   /** Open the recovery sheet for a missed task in "Needs attention". */
   onHandleMissed?: (missed: MissedTask) => void;
   /** Open the adaptation sheet for an off-pace milestone. */
@@ -310,6 +312,7 @@ export default function OverviewDashboard({
   onUnmarkRitualDone,
   onMissedTask,
   onAddTask,
+  onOpenSession,
   onHandleMissed,
   onAdaptMilestone,
   onReviewUnreliableSlot,
@@ -407,6 +410,7 @@ export default function OverviewDashboard({
                 onToggleSlot={onToggleSlot}
                 onMissed={onMissedTask}
                 onAddTask={onAddTask ?? (() => onNavigate(0))}
+                onOpenSession={onOpenSession}
               />
               <TodayRoutineCard
                 rows={todayRoutines.rows}

@@ -202,42 +202,6 @@ export const TEMPLATES: Template[] = [
     ],
   },
   {
-    id: "run-training",
-    title: "Run Training",
-    description: "Progressive running plan to build endurance from couch to consistent runner.",
-    emoji: "run",
-    category: "fitness",
-    color: "amber",
-    durationDays: 60,
-    tasks: [
-      {
-        title: "Morning Run",
-        description: "Easy pace — focus on consistency not speed",
-        startTime: "06:30 AM",
-        endTime: "07:15 AM",
-        days: ["monday", "wednesday", "friday", "sunday"],
-      },
-      {
-        title: "Recovery Walk",
-        startTime: "07:00 PM",
-        endTime: "07:30 PM",
-        days: ["tuesday", "thursday", "saturday"],
-      },
-    ],
-    subtasks: [
-      { title: "Warm-up walk", duration: "5m" },
-      { title: "Run interval", duration: "30m" },
-      { title: "Cool-down walk", duration: "5m" },
-      { title: "Stretching", duration: "5m" },
-    ],
-    milestones: [
-      { title: "First 5K run completed", offsetDays: 14 },
-      { title: "Running 3× a week consistently", offsetDays: 21 },
-      { title: "10K without stopping", offsetDays: 45 },
-      { title: "60-day program complete", offsetDays: 60 },
-    ],
-  },
-  {
     id: "work-routine",
     title: "Work Routine",
     description: "Structure your workday to maximise focus and end each day with clear progress.",

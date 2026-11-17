@@ -38,6 +38,8 @@ import { pushHistory, popHistory, HISTORY_LIMIT } from '@planr/core/lib/schedule
 import { validateSchedule } from '@planr/core/lib/scheduleSchema';
 import { mergeSchedules } from '@planr/core/lib/mergeSchedule';
 import { stampSchedule } from '@planr/core/lib/stampSchedule';
+import { clearSessionProgress } from '@planr/core/lib/sessions';
+import { restoreMissing, restoredCount, type RestoreHandler } from '@planr/core/lib/restoreMerge';
 import {
   emptySchedule as emptyEmpty,
   hasMeaningfulData,
@@ -359,15 +361,21 @@ export function useScheduleDB() {
     return () => clearInterval(id);
   }, [ready]);
 
-  /** Replace the whole schedule with a restored backup. False when corrupt. */
-  const restoreData = useCallback((raw: unknown): boolean => {
+  /**
+   * Restore a backup. "merge" adds back what's missing and keeps everything
+   * current; "replace" matches the backup exactly (tombstoning the rest).
+   * { ok: false } when corrupt.
+   */
+  const restoreData = useCallback<RestoreHandler>((raw, mode) => {
     const migrated = safeMigrate(raw);
-    if (!migrated) return false;
-    const next = stampSchedule(scheduleRef.current, migrated);
+    if (!migrated) return { ok: false };
+    const current = scheduleRef.current;
+    const target = mode === 'merge' ? restoreMissing(current, migrated) : migrated;
+    const next = stampSchedule(current, target);
     scheduleRef.current = next;
     setScheduleState(next);
     setIsFirstLaunch(false);
-    return true;
+    return { ok: true, added: mode === 'merge' ? restoredCount(current, target) : 0 };
   }, []);
 
   async function clearData(): Promise<void> {
@@ -406,7 +414,7 @@ export function useScheduleDB() {
           return { ...rest, status: 'upcoming' as const, completionStatus: 'pending' as const };
         }),
       );
-      return { ...current, activities, milestones, ritualCompletions: [], metricEntries: [], setLogs: [], progressionSteps: [] };
+      return { ...current, activities, milestones, ritualCompletions: [], metricEntries: [], setLogs: [], progressionSteps: [], ...clearSessionProgress(current) };
     })();
     const stamped = stampSchedule(current, next);
     scheduleRef.current = stamped;

@@ -9,22 +9,67 @@
 /* Begin PBXBuildFile section */
 		0C80B921A6F3F58F76C31292 /* libPods-PlanRNative.a in Frameworks */ = {isa = PBXBuildFile; fileRef = 5DCACB8F33CDC322A6C60F78 /* libPods-PlanRNative.a */; };
 		13B07FBF1A68108700A75B9A /* Images.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 13B07FB51A68108700A75B9A /* Images.xcassets */; };
+		6A0FCB1759782A1470E64CA7 /* SwiftUI.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = C6E1007F8A9FCBE2C4848C9C /* SwiftUI.framework */; };
 		761780ED2CA45674006654EE /* AppDelegate.swift in Sources */ = {isa = PBXBuildFile; fileRef = 761780EC2CA45674006654EE /* AppDelegate.swift */; };
 		81AB9BB82411601600AC10FF /* LaunchScreen.storyboard in Resources */ = {isa = PBXBuildFile; fileRef = 81AB9BB72411601600AC10FF /* LaunchScreen.storyboard */; };
+		97FDACCEC08CF25665B0262A /* NextUpWidget.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2FD3EACE3585B884E7051E5D /* NextUpWidget.swift */; };
+		A082DCC75FE248111EA240AD /* PlanRWidget.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = EDBA9EABFFCB145AF7E7068C /* PlanRWidget.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
+		C33B4CA7E18323C1A2FE9AD5 /* PlanRWidgetBridge.m in Sources */ = {isa = PBXBuildFile; fileRef = AF179E9D3E660E7A96002509 /* PlanRWidgetBridge.m */; };
+		CED6D394082906B4484D902B /* Foundation.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = D10C3861C36FBB4142E11850 /* Foundation.framework */; };
 		D3368A39723CEDA5DFB0BCA2 /* PrivacyInfo.xcprivacy in Resources */ = {isa = PBXBuildFile; fileRef = 13B07FB81A68108700A75B9A /* PrivacyInfo.xcprivacy */; };
+		DAA8129A6E9136C875AE3012 /* PlanRWidgetBridge.swift in Sources */ = {isa = PBXBuildFile; fileRef = 95FA0566E60390FB491DC09D /* PlanRWidgetBridge.swift */; };
+		DDB4F2FEF67673A86ADA45D0 /* Provider.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9BD7570EA5F44138E27048AC /* Provider.swift */; };
+		E3C7493329FC49DFC1B7BFCB /* WidgetKit.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = AEEEACC83353F6E2C70A2F27 /* WidgetKit.framework */; };
+		E7E8B779C1264CFC1B61EAF6 /* Snapshot.swift in Sources */ = {isa = PBXBuildFile; fileRef = EDFF081EA47FF0060BF9A6F2 /* Snapshot.swift */; };
 /* End PBXBuildFile section */
+
+/* Begin PBXContainerItemProxy section */
+		E8784355E4E4EE142188BE33 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = 83CBB9F71A601CBA00E9B192 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = EDD91CF67CF800889709756A;
+			remoteInfo = PlanRWidget;
+		};
+/* End PBXContainerItemProxy section */
+
+/* Begin PBXCopyFilesBuildPhase section */
+		88DDE8F05F2D93C80421BB87 /* Embed Foundation Extensions */ = {
+			isa = PBXCopyFilesBuildPhase;
+			buildActionMask = 2147483647;
+			dstPath = "";
+			dstSubfolderSpec = 13;
+			files = (
+				A082DCC75FE248111EA240AD /* PlanRWidget.appex in Embed Foundation Extensions */,
+			);
+			name = "Embed Foundation Extensions";
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXCopyFilesBuildPhase section */
 
 /* Begin PBXFileReference section */
 		13B07F961A680F5B00A75B9A /* PlanRNative.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = PlanRNative.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		13B07FB51A68108700A75B9A /* Images.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; name = Images.xcassets; path = PlanRNative/Images.xcassets; sourceTree = "<group>"; };
 		13B07FB61A68108700A75B9A /* Info.plist */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = text.plist.xml; name = Info.plist; path = PlanRNative/Info.plist; sourceTree = "<group>"; };
 		13B07FB81A68108700A75B9A /* PrivacyInfo.xcprivacy */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = text.plist.xml; name = PrivacyInfo.xcprivacy; path = PlanRNative/PrivacyInfo.xcprivacy; sourceTree = "<group>"; };
+		2FD3EACE3585B884E7051E5D /* NextUpWidget.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = NextUpWidget.swift; sourceTree = "<group>"; };
 		3B4392A12AC88292D35C810B /* Pods-PlanRNative.debug.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; name = "Pods-PlanRNative.debug.xcconfig"; path = "Target Support Files/Pods-PlanRNative/Pods-PlanRNative.debug.xcconfig"; sourceTree = "<group>"; };
+		416A824EBAF31D5E74129DBB /* PlanRNative.entitlements */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.plist.entitlements; path = PlanRNative/PlanRNative.entitlements; sourceTree = "<group>"; };
 		5709B34CF0A7D63546082F79 /* Pods-PlanRNative.release.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; name = "Pods-PlanRNative.release.xcconfig"; path = "Target Support Files/Pods-PlanRNative/Pods-PlanRNative.release.xcconfig"; sourceTree = "<group>"; };
 		5DCACB8F33CDC322A6C60F78 /* libPods-PlanRNative.a */ = {isa = PBXFileReference; explicitFileType = archive.ar; includeInIndex = 0; path = "libPods-PlanRNative.a"; sourceTree = BUILT_PRODUCTS_DIR; };
+		65F6704BE9C97B90637E4E1C /* Info.plist */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
 		761780EC2CA45674006654EE /* AppDelegate.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = AppDelegate.swift; path = PlanRNative/AppDelegate.swift; sourceTree = "<group>"; };
 		81AB9BB72411601600AC10FF /* LaunchScreen.storyboard */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = file.storyboard; name = LaunchScreen.storyboard; path = PlanRNative/LaunchScreen.storyboard; sourceTree = "<group>"; };
+		95FA0566E60390FB491DC09D /* PlanRWidgetBridge.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = PlanRNative/PlanRWidgetBridge.swift; sourceTree = "<group>"; };
+		9BD7570EA5F44138E27048AC /* Provider.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = Provider.swift; sourceTree = "<group>"; };
+		AEEEACC83353F6E2C70A2F27 /* WidgetKit.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = WidgetKit.framework; path = System/Library/Frameworks/WidgetKit.framework; sourceTree = SDKROOT; };
+		AF179E9D3E660E7A96002509 /* PlanRWidgetBridge.m */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.c.objc; path = PlanRNative/PlanRWidgetBridge.m; sourceTree = "<group>"; };
+		C6E1007F8A9FCBE2C4848C9C /* SwiftUI.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = SwiftUI.framework; path = System/Library/Frameworks/SwiftUI.framework; sourceTree = SDKROOT; };
+		D10C3861C36FBB4142E11850 /* Foundation.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = Foundation.framework; path = Platforms/iPhoneOS.platform/Developer/SDKs/iPhoneOS14.0.sdk/System/Library/Frameworks/Foundation.framework; sourceTree = DEVELOPER_DIR; };
 		ED297162215061F000B7C4FE /* JavaScriptCore.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = JavaScriptCore.framework; path = System/Library/Frameworks/JavaScriptCore.framework; sourceTree = SDKROOT; };
+		EDBA9EABFFCB145AF7E7068C /* PlanRWidget.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = PlanRWidget.appex; sourceTree = BUILT_PRODUCTS_DIR; };
+		EDFF081EA47FF0060BF9A6F2 /* Snapshot.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = Snapshot.swift; sourceTree = "<group>"; };
+		FC7EEBA3BCD8922BD8D32B34 /* PlanRWidget.entitlements */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.plist.entitlements; path = PlanRWidget.entitlements; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -36,9 +81,27 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		4E9884B324B72F1A638EB0AA /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				CED6D394082906B4484D902B /* Foundation.framework in Frameworks */,
+				E3C7493329FC49DFC1B7BFCB /* WidgetKit.framework in Frameworks */,
+				6A0FCB1759782A1470E64CA7 /* SwiftUI.framework in Frameworks */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 /* End PBXFrameworksBuildPhase section */
 
 /* Begin PBXGroup section */
+		009288F18ED37105AFC1643A /* iOS */ = {
+			isa = PBXGroup;
+			children = (
+				D10C3861C36FBB4142E11850 /* Foundation.framework */,
+			);
+			name = iOS;
+			sourceTree = "<group>";
+		};
 		13B07FAE1A68108700A75B9A /* PlanRNative */ = {
 			isa = PBXGroup;
 			children = (
@@ -47,6 +110,9 @@
 				13B07FB61A68108700A75B9A /* Info.plist */,
 				81AB9BB72411601600AC10FF /* LaunchScreen.storyboard */,
 				13B07FB81A68108700A75B9A /* PrivacyInfo.xcprivacy */,
+				95FA0566E60390FB491DC09D /* PlanRWidgetBridge.swift */,
+				AF179E9D3E660E7A96002509 /* PlanRWidgetBridge.m */,
+				416A824EBAF31D5E74129DBB /* PlanRNative.entitlements */,
 			);
 			name = PlanRNative;
 			sourceTree = "<group>";
@@ -56,6 +122,9 @@
 			children = (
 				ED297162215061F000B7C4FE /* JavaScriptCore.framework */,
 				5DCACB8F33CDC322A6C60F78 /* libPods-PlanRNative.a */,
+				009288F18ED37105AFC1643A /* iOS */,
+				AEEEACC83353F6E2C70A2F27 /* WidgetKit.framework */,
+				C6E1007F8A9FCBE2C4848C9C /* SwiftUI.framework */,
 			);
 			name = Frameworks;
 			sourceTree = "<group>";
@@ -75,6 +144,7 @@
 				83CBBA001A601CBA00E9B192 /* Products */,
 				2D16E6871FA4F8E400B85C8A /* Frameworks */,
 				BBD78D7AC51CEA395F1C20DB /* Pods */,
+				9C72D6E9B11A4C3A6A1D8CDB /* PlanRWidget */,
 			);
 			indentWidth = 2;
 			sourceTree = "<group>";
@@ -85,8 +155,22 @@
 			isa = PBXGroup;
 			children = (
 				13B07F961A680F5B00A75B9A /* PlanRNative.app */,
+				EDBA9EABFFCB145AF7E7068C /* PlanRWidget.appex */,
 			);
 			name = Products;
+			sourceTree = "<group>";
+		};
+		9C72D6E9B11A4C3A6A1D8CDB /* PlanRWidget */ = {
+			isa = PBXGroup;
+			children = (
+				2FD3EACE3585B884E7051E5D /* NextUpWidget.swift */,
+				9BD7570EA5F44138E27048AC /* Provider.swift */,
+				EDFF081EA47FF0060BF9A6F2 /* Snapshot.swift */,
+				65F6704BE9C97B90637E4E1C /* Info.plist */,
+				FC7EEBA3BCD8922BD8D32B34 /* PlanRWidget.entitlements */,
+			);
+			name = PlanRWidget;
+			path = PlanRWidget;
 			sourceTree = "<group>";
 		};
 		BBD78D7AC51CEA395F1C20DB /* Pods */ = {
@@ -112,15 +196,34 @@
 				00DD1BFF1BD5951E006B06BC /* Bundle React Native code and images */,
 				00EEFC60759A1932668264C0 /* [CP] Embed Pods Frameworks */,
 				E235C05ADACE081382539298 /* [CP] Copy Pods Resources */,
+				88DDE8F05F2D93C80421BB87 /* Embed Foundation Extensions */,
 			);
 			buildRules = (
 			);
 			dependencies = (
+				8EC20A7DED33B924B192D309 /* PBXTargetDependency */,
 			);
 			name = PlanRNative;
 			productName = PlanRNative;
 			productReference = 13B07F961A680F5B00A75B9A /* PlanRNative.app */;
 			productType = "com.apple.product-type.application";
+		};
+		EDD91CF67CF800889709756A /* PlanRWidget */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 95AF757E0D1656CDB3913D86 /* Build configuration list for PBXNativeTarget "PlanRWidget" */;
+			buildPhases = (
+				C1A13533BEEA84982DEB0163 /* Sources */,
+				4E9884B324B72F1A638EB0AA /* Frameworks */,
+				72F441DDB98BBC40DD07085F /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			name = PlanRWidget;
+			productName = PlanRWidget;
+			productReference = EDBA9EABFFCB145AF7E7068C /* PlanRWidget.appex */;
+			productType = "com.apple.product-type.app-extension";
 		};
 /* End PBXNativeTarget section */
 
@@ -149,6 +252,7 @@
 			projectRoot = "";
 			targets = (
 				13B07F861A680F5B00A75B9A /* PlanRNative */,
+				EDD91CF67CF800889709756A /* PlanRWidget */,
 			);
 		};
 /* End PBXProject section */
@@ -161,6 +265,13 @@
 				81AB9BB82411601600AC10FF /* LaunchScreen.storyboard in Resources */,
 				13B07FBF1A68108700A75B9A /* Images.xcassets in Resources */,
 				D3368A39723CEDA5DFB0BCA2 /* PrivacyInfo.xcprivacy in Resources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		72F441DDB98BBC40DD07085F /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -247,10 +358,31 @@
 			buildActionMask = 2147483647;
 			files = (
 				761780ED2CA45674006654EE /* AppDelegate.swift in Sources */,
+				DAA8129A6E9136C875AE3012 /* PlanRWidgetBridge.swift in Sources */,
+				C33B4CA7E18323C1A2FE9AD5 /* PlanRWidgetBridge.m in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		C1A13533BEEA84982DEB0163 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				97FDACCEC08CF25665B0262A /* NextUpWidget.swift in Sources */,
+				DDB4F2FEF67673A86ADA45D0 /* Provider.swift in Sources */,
+				E7E8B779C1264CFC1B61EAF6 /* Snapshot.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
 /* End PBXSourcesBuildPhase section */
+
+/* Begin PBXTargetDependency section */
+		8EC20A7DED33B924B192D309 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			name = PlanRWidget;
+			target = EDD91CF67CF800889709756A /* PlanRWidget */;
+			targetProxy = E8784355E4E4EE142188BE33 /* PBXContainerItemProxy */;
+		};
+/* End PBXTargetDependency section */
 
 /* Begin XCBuildConfiguration section */
 		13B07F941A680F5B00A75B9A /* Debug */ = {
@@ -259,6 +391,7 @@
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				CLANG_ENABLE_MODULES = YES;
+				CODE_SIGN_ENTITLEMENTS = PlanRNative/PlanRNative.entitlements;
 				CURRENT_PROJECT_VERSION = 1;
 				ENABLE_BITCODE = NO;
 				INFOPLIST_FILE = PlanRNative/Info.plist;
@@ -273,7 +406,7 @@
 					"-ObjC",
 					"-lc++",
 				);
-				PRODUCT_BUNDLE_IDENTIFIER = "org.reactjs.native.example.$(PRODUCT_NAME:rfc1034identifier)";
+				PRODUCT_BUNDLE_IDENTIFIER = com.amritansh.planr;
 				PRODUCT_NAME = PlanRNative;
 				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
 				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
@@ -289,6 +422,7 @@
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				CLANG_ENABLE_MODULES = YES;
+				CODE_SIGN_ENTITLEMENTS = PlanRNative/PlanRNative.entitlements;
 				CURRENT_PROJECT_VERSION = 1;
 				INFOPLIST_FILE = PlanRNative/Info.plist;
 				IPHONEOS_DEPLOYMENT_TARGET = 15.1;
@@ -302,7 +436,7 @@
 					"-ObjC",
 					"-lc++",
 				);
-				PRODUCT_BUNDLE_IDENTIFIER = "org.reactjs.native.example.$(PRODUCT_NAME:rfc1034identifier)";
+				PRODUCT_BUNDLE_IDENTIFIER = com.amritansh.planr;
 				PRODUCT_NAME = PlanRNative;
 				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
 				SWIFT_VERSION = 5.0;
@@ -386,7 +520,7 @@
 					"-DRCT_REMOVE_LEGACY_ARCH=1",
 				);
 				PODFILE_DIR = "$(SRCROOT)";
-				REACT_NATIVE_PATH = "${PODS_ROOT}/../../../../node_modules/react-native";
+				REACT_NATIVE_PATH = "${PODS_ROOT}/../../../../../../../node_modules/react-native";
 				SDKROOT = iphoneos;
 				SWIFT_ACTIVE_COMPILATION_CONDITIONS = "$(inherited) DEBUG";
 				USE_HERMES = true;
@@ -460,9 +594,62 @@
 					"-DRCT_REMOVE_LEGACY_ARCH=1",
 				);
 				PODFILE_DIR = "$(SRCROOT)";
-				REACT_NATIVE_PATH = "${PODS_ROOT}/../../../../node_modules/react-native";
+				REACT_NATIVE_PATH = "${PODS_ROOT}/../../../../../../../node_modules/react-native";
 				SDKROOT = iphoneos;
 				USE_HERMES = true;
+				VALIDATE_PRODUCT = YES;
+			};
+			name = Release;
+		};
+		D49314BD2E2FAC045F2B26DD /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = "";
+				CLANG_ENABLE_OBJC_WEAK = NO;
+				CODE_SIGN_ENTITLEMENTS = PlanRWidget/PlanRWidget.entitlements;
+				CURRENT_PROJECT_VERSION = 1;
+				GENERATE_INFOPLIST_FILE = NO;
+				INFOPLIST_FILE = PlanRWidget/Info.plist;
+				IPHONEOS_DEPLOYMENT_TARGET = 16.0;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@executable_path/../../Frameworks",
+				);
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.amritansh.planr.widget;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = iphoneos;
+				SKIP_INSTALL = YES;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Debug;
+		};
+		F0778490F85390CC625A6693 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = "";
+				CLANG_ENABLE_OBJC_WEAK = NO;
+				CODE_SIGN_ENTITLEMENTS = PlanRWidget/PlanRWidget.entitlements;
+				CURRENT_PROJECT_VERSION = 1;
+				GENERATE_INFOPLIST_FILE = NO;
+				INFOPLIST_FILE = PlanRWidget/Info.plist;
+				IPHONEOS_DEPLOYMENT_TARGET = 16.0;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@executable_path/../../Frameworks",
+				);
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.amritansh.planr.widget;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = iphoneos;
+				SKIP_INSTALL = YES;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
 				VALIDATE_PRODUCT = YES;
 			};
 			name = Release;
@@ -484,6 +671,15 @@
 			buildConfigurations = (
 				83CBBA201A601CBA00E9B192 /* Debug */,
 				83CBBA211A601CBA00E9B192 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		95AF757E0D1656CDB3913D86 /* Build configuration list for PBXNativeTarget "PlanRWidget" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				F0778490F85390CC625A6693 /* Release */,
+				D49314BD2E2FAC045F2B26DD /* Debug */,
 			);
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;

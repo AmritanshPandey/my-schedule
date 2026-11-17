@@ -1,8 +1,7 @@
 import { useCallback, useEffect, useState, type ReactNode } from 'react';
 import { ActivityIndicator, Image, Pressable, Share, View } from 'react-native';
-import Svg, { Path } from 'react-native-svg';
 import { useColorScheme } from 'nativewind';
-import { IconClock, IconCloud, IconCompass, IconMoon, IconRefresh, IconShield, IconSun, IconTerminal2, IconTrash, IconX } from '@tabler/icons-react-native';
+import { IconClock, IconCloud, IconCompass, IconMoon, IconRefresh, IconShield, IconSun, IconTerminal2, IconTrash, IconUserX, IconX } from '@tabler/icons-react-native';
 import type { Schedule, SchedulePreferences } from '@planr/core/lib/scheduleTypes';
 import { TOUR_IDS } from '@planr/core/lib/onboarding/tours';
 import { formatDisplayTime, minutesToInputTime } from '@planr/core/lib/timeUtils';
@@ -12,6 +11,9 @@ import { MAX_SLEEP_HOURS, MIN_SLEEP_HOURS } from '@planr/core/lib/timeline/sleep
 import { localISODate } from '@planr/core/lib/dateUtils';
 import { useAuth } from '../contexts/AuthProvider';
 import { useGoogleSignIn } from './auth/useGoogleSignIn';
+import { useAppleSignIn } from './auth/useAppleSignIn';
+import { AppleSignInButton } from './auth/AppleSignInButton';
+import { GoogleSignInButton } from './auth/GoogleSignInButton';
 import { AuthErrorNote } from './auth/AuthErrorNote';
 import { deleteCloudData } from '../lib/cloudSync';
 import { useSyncStatus } from '../lib/useSyncStatus';
@@ -25,6 +27,8 @@ import { setStoredThemePreference } from '../storage/themeStore';
 import CategoryManager from './category/CategoryManager';
 import BackupRows from './settings/BackupRows';
 import RemindersRows from './settings/RemindersRows';
+import HealthRows from './settings/HealthRows';
+import { isHealthAvailable } from '../lib/health';
 import ConfirmSheet from './ui/ConfirmSheet';
 import Toggle from './ui/Toggle';
 import Select from './ui/Select';
@@ -34,6 +38,7 @@ import { Icon, type TablerIcon } from './ui/Icon';
 import { Text } from './ui/Text';
 import Button, { BUTTON_TEXT } from './ui/Button';
 import IconButton, { ICON_BUTTON_TONE } from './ui/IconButton';
+import type { RestoreHandler } from '@planr/core/lib/restoreMerge';
 
 // ── Primitives ────────────────────────────────────────────────────────────────
 
@@ -235,19 +240,6 @@ function DiagnosticsCard() {
   );
 }
 
-// ── Google logo ───────────────────────────────────────────────────────────────
-
-function GoogleLogo() {
-  return (
-    <Svg viewBox="0 0 24 24" width={15} height={15}>
-      <Path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" />
-      <Path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" />
-      <Path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l3.66-2.84z" />
-      <Path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" />
-    </Svg>
-  );
-}
-
 // ── Main view ─────────────────────────────────────────────────────────────────
 
 interface SettingsViewProps {
@@ -256,7 +248,7 @@ interface SettingsViewProps {
   setSchedule: (updater: (prev: Schedule) => Schedule) => void;
   onClearData: () => Promise<void>;
   onClearProgress?: () => Promise<void>;
-  onRestoreData?: (raw: unknown) => boolean;
+  onRestoreData?: RestoreHandler;
   onUpdatePreferences?: (patch: Partial<SchedulePreferences>) => void;
   onClose?: () => void;
 }
@@ -274,8 +266,12 @@ interface SettingsViewProps {
  * app updates through the store, not by clearing a service-worker cache).
  */
 export function SettingsView({ schedule, setSchedule, onClearData, onClearProgress, onRestoreData, onUpdatePreferences, onClose }: SettingsViewProps) {
-  const { user, isGuest, authLoading, logout } = useAuth();
+  const { user, isGuest, authLoading, logout, deleteAccount } = useAuth();
+  const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
+  const [deletePhase, setDeletePhase] = useState<'idle' | 'deleting'>('idle');
+  const [deleteError, setDeleteError] = useState<string | null>(null);
   const { signingIn, error: signInError, isAuthAvailable, isGoogleSignInReady, signIn } = useGoogleSignIn();
+  const apple = useAppleSignIn();
   const { colorScheme, setColorScheme } = useColorScheme();
   const [busy, setBusy] = useState(false);
   const [clearPhase, setClearPhase] = useState<'idle' | 'clearing'>('idle');
@@ -315,6 +311,20 @@ export function SettingsView({ schedule, setSchedule, onClearData, onClearProgre
       onClose?.();
     }
   }, [onClearData, onClose]);
+  // Deletes every cloud copy and the login (functions/src deleteAccount), then
+  // this device's copy, then signs out. The App Store's account-deletion row.
+  const handleDeleteAccount = useCallback(async () => {
+    setDeletePhase('deleting');
+    setDeleteError(null);
+    try {
+      await deleteAccount(onClearData);
+      onClose?.();
+    } catch {
+      setDeleteError("Couldn't delete your account. It's still here. Check your connection and try again.");
+    } finally {
+      setDeletePhase('idle');
+    }
+  }, [deleteAccount, onClearData, onClose]);
   const handleClearProgress = useCallback(async () => {
     if (!onClearProgress) return;
     setProgressPhase('clearing');
@@ -369,19 +379,14 @@ export function SettingsView({ schedule, setSchedule, onClearData, onClearProgre
                   <View className="px-4 py-4">
                     <Text className="mb-0.5 text-[14px] font-bold text-neutral-900 dark:text-white">Sign in to sync</Text>
                     <Text className="mb-3.5 text-[12px] text-neutral-500 dark:text-neutral-400">Back up your data and access it across all your devices.</Text>
-                    <Button
-                      variant="secondary"
-                      size="md"
-                      fullWidth
-                      onPress={() => void signIn()}
-                      disabled={!isAuthAvailable}
-                      loading={signingIn}
-                      icon={<GoogleLogo />}
-                    >
-                      {signingIn ? 'Signing in…' : 'Continue with Google'}
-                    </Button>
+                    {apple.isAppleSignInAvailable && (
+                      <View className={`mb-2.5 ${apple.signingIn ? 'opacity-60' : ''}`} pointerEvents={apple.signingIn ? 'none' : 'auto'}>
+                        <AppleSignInButton onPress={() => void apple.signIn()} />
+                      </View>
+                    )}
+                    <GoogleSignInButton onPress={() => void signIn()} signingIn={signingIn} disabled={!isAuthAvailable} />
                     <AuthErrorNote
-                      message={signInError ?? (isAuthAvailable && !isGoogleSignInReady ? "Google Sign-In isn't set up for this build yet." : null)}
+                      message={signInError ?? apple.error ?? (isAuthAvailable && !isGoogleSignInReady ? "Google Sign-In isn't set up for this build yet." : null)}
                       unavailable={!isAuthAvailable}
                     />
                   </View>
@@ -469,6 +474,15 @@ export function SettingsView({ schedule, setSchedule, onClearData, onClearProgre
               <RemindersRows />
             </Card>
           </View>
+
+          {isHealthAvailable() ? (
+            <View>
+              <SectionLabel>Health</SectionLabel>
+              <Card>
+                <HealthRows />
+              </Card>
+            </View>
+          ) : null}
 
           <View>
             <SectionLabel>Timeline</SectionLabel>
@@ -662,6 +676,43 @@ export function SettingsView({ schedule, setSchedule, onClearData, onClearProgre
                   </View>
                 )}
               </View>
+              {!isGuest && (
+                <>
+                  <Divider />
+                  <View className="px-4 py-3.5">
+                    {deletePhase === 'idle' && (
+                      <View className="flex-row items-center gap-3">
+                        <RowIcon icon={IconUserX} tone="text-rose-500" box="border-rose-100 bg-rose-50 dark:border-rose-500/20 dark:bg-rose-500/10" />
+                        <View className="min-w-0 flex-1">
+                          <Text className="text-[13px] font-semibold text-neutral-800 dark:text-white">Delete account</Text>
+                          <Text className="text-[11px] text-neutral-500 dark:text-neutral-400">Removes your data and your sign-in</Text>
+                        </View>
+                        <Pressable
+                          accessibilityRole="button"
+                          onPress={() => {
+                            haptic('light');
+                            setDeleteConfirmOpen(true);
+                          }}
+                          className="rounded-xl border border-rose-200 bg-rose-50 px-3 py-1.5 active:bg-rose-100 dark:border-rose-500/20 dark:bg-rose-500/10"
+                        >
+                          <Text className="text-[11px] font-semibold text-rose-600 dark:text-rose-400">Delete</Text>
+                        </Pressable>
+                      </View>
+                    )}
+                    {deletePhase === 'deleting' && (
+                      <View className="flex-row items-center gap-3">
+                        <ActivityIndicator size="small" />
+                        <Text className="text-[13px] font-medium text-neutral-500">Deleting account…</Text>
+                      </View>
+                    )}
+                    {deleteError && (
+                      <Text accessibilityRole="alert" className="mt-2 text-[11px] font-medium text-rose-600 dark:text-rose-400">
+                        {deleteError}
+                      </Text>
+                    )}
+                  </View>
+                </>
+              )}
             </Card>
           </View>
 
@@ -679,6 +730,17 @@ export function SettingsView({ schedule, setSchedule, onClearData, onClearProgre
         title={clearCopy.title}
         description={clearCopy.description}
         confirmLabel={clearCopy.confirmLabel}
+      />
+      <ConfirmSheet
+        open={deleteConfirmOpen}
+        onClose={() => setDeleteConfirmOpen(false)}
+        onConfirm={() => {
+          setDeleteConfirmOpen(false);
+          void handleDeleteAccount();
+        }}
+        title="Delete your account?"
+        description="Permanently deletes your plans, history, notes and backups from the cloud and from this device, and removes your sign-in. Other signed-in devices stop syncing. This can't be undone. Export a backup first if you might want your data later."
+        confirmLabel="Delete account"
       />
     </View>
   );

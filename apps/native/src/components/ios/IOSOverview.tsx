@@ -48,6 +48,8 @@ export default function IOSOverview({
   onDismissSetup,
   onNavigate,
   onAddTask,
+  onOpenSession,
+  onToggleSession,
   onStartSetupStep,
   onOpenPlan,
   onMarkDone,
@@ -73,6 +75,9 @@ export default function IOSOverview({
   onNavigate: (tab: number) => void;
   /** Opens the new-task sheet for today (the empty day's "Add a task"). */
   onAddTask: () => void;
+  /** A run on today's plan: open it, or toggle it done. */
+  onOpenSession?: (sessionId: string) => void;
+  onToggleSession?: (sessionId: string) => void;
   /** Opens a setup step's own sheet (new plan, new task, new routine), not just its tab. */
   onStartSetupStep: (step: SetupStep['key']) => void;
   onOpenPlan: (planId: string) => void;
@@ -208,6 +213,8 @@ export default function IOSOverview({
         onOpenTask={onOpenTask}
         onOpenToday={() => onNavigate(0)}
         onAddTask={onAddTask}
+        onOpenSession={onOpenSession}
+        onToggleSession={onToggleSession}
       />
 
       <AttentionCard

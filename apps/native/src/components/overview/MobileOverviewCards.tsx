@@ -10,6 +10,7 @@ import LinearGradient from 'react-native-linear-gradient';
 import {
   IconAlertTriangle,
   IconArrowUpRight,
+  IconRun,
   IconCalendarCheck,
   IconCheck,
   IconChevronRight,
@@ -22,6 +23,7 @@ import {
   IconX,
 } from '@tabler/icons-react-native';
 import { haptic } from '../../lib/haptics';
+import { headline } from '@planr/core/lib/sessions';
 import { formatDateShort, todayISO } from '@planr/core/lib/dateUtils';
 import { bandRangeLabel } from '@planr/core/lib/slotReliability';
 import {
@@ -104,6 +106,8 @@ export function OverviewHero({
   onOpenTask,
   onOpenToday,
   onAddTask,
+  onOpenSession,
+  onToggleSession,
 }: {
   next: NextUp;
   subtasks: { done: number; total: number } | null;
@@ -113,6 +117,9 @@ export function OverviewHero({
   onOpenTask: (taskId: string) => void;
   onOpenToday: () => void;
   onAddTask: () => void;
+  /** When a run is next: open its detail, and Mark done ticks it. */
+  onOpenSession?: (sessionId: string) => void;
+  onToggleSession?: (sessionId: string) => void;
 }) {
   const dateLabel = new Date().toLocaleDateString(undefined, { weekday: 'long', month: 'short', day: 'numeric' });
   const done = next.kind === 'empty' ? 0 : next.done;
@@ -172,6 +179,59 @@ export function OverviewHero({
                 haptic('medium');
                 if (next.slotIndex !== undefined) onToggleSlot(next.task.id, next.slotIndex);
                 else onMarkDone(next.task.id, next.checkableIds);
+              }}
+            >
+              Mark done
+            </Button>
+            <Button
+              variant="secondary"
+              size="lg"
+              className="flex-1"
+              trailingIcon={<Icon icon={IconChevronRight} size={18} strokeWidth={2.2} className={BUTTON_TEXT.secondary} />}
+              onPress={() => {
+                haptic('light');
+                onOpenToday();
+              }}
+            >
+              Today
+            </Button>
+          </View>
+        </>
+      ) : next.kind === 'session' ? (
+        <>
+          <View className="mt-5 flex-row items-center justify-between gap-3">
+            <Text className="text-[13px] font-medium text-neutral-500 dark:text-neutral-400">Next up{next.timeLabel ? ` · ${next.timeLabel}` : ''}</Text>
+            {next.session.estimatedMinutes ? (
+              <Text className="text-[13px] font-medium text-neutral-500 dark:text-neutral-400">Duration: {formatMinutesBrief(next.session.estimatedMinutes)}</Text>
+            ) : null}
+          </View>
+          <View className="mt-2 flex-row items-center justify-between gap-3">
+            <Text className="min-w-0 flex-1 text-[28px] font-bold leading-[34px] tracking-[-0.5px] text-neutral-950 dark:text-white">{next.session.title}</Text>
+            {onOpenSession ? (
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel={`Open ${next.session.title}`}
+                onPress={() => {
+                  haptic('light');
+                  onOpenSession(next.session.id);
+                }}
+                className="min-h-[44px] flex-row items-center gap-1.5 rounded-full bg-neutral-100 px-4 active:scale-[0.97] dark:bg-white/[0.08]"
+              >
+                <Icon icon={IconRun} size={18} strokeWidth={1.9} className="text-neutral-600 dark:text-neutral-300" />
+                <Icon icon={IconArrowUpRight} size={18} strokeWidth={1.9} className="text-neutral-600 dark:text-neutral-300" />
+              </Pressable>
+            ) : null}
+          </View>
+          <Text numberOfLines={1} className="mt-1 text-[13px] font-medium text-neutral-500 dark:text-neutral-400">{headline(next.session)}</Text>
+          <View className="mt-4 flex-row gap-3 border-t border-neutral-100 pt-4 dark:border-white/[0.07]">
+            <Button
+              variant="primary"
+              size="lg"
+              className="flex-[1.7]"
+              icon={<Icon icon={IconCheck} size={20} strokeWidth={2.4} className={BUTTON_TEXT.primary} />}
+              onPress={() => {
+                haptic('medium');
+                onToggleSession?.(next.session.id);
               }}
             >
               Mark done
