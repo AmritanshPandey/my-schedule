@@ -33,5 +33,7 @@ module.exports = {
     // Metro handles global.css via nativewind's metro transform; Jest has no
     // such pipeline, so stub CSS imports out entirely for the test runner.
     '\\.css$': '<rootDir>/__mocks__/styleMock.js',
+    // Native-only module with no Jest mock of its own; see the mock's header.
+    '^@invertase/react-native-apple-authentication$': '<rootDir>/__mocks__/appleAuthentication.js',
   },
 };

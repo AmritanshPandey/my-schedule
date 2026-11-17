@@ -27,7 +27,7 @@ export const firebaseConfig = {
  * @react-native-google-signin even on native: Firebase verifies the ID
  * token's audience against this, not a platform-specific client id.
  */
-export const googleSignInWebClientId = "REPLACE_WITH_GOOGLE_WEB_CLIENT_ID";
+export const googleSignInWebClientId = "704686654641-ee262n95vhqkb78k2c4qo8mcb1ta2st1.apps.googleusercontent.com";
 
 /**
  * The iOS app's OWN OAuth client ID — a second, separate id from the web one
@@ -35,14 +35,14 @@ export const googleSignInWebClientId = "REPLACE_WITH_GOOGLE_WEB_CLIENT_ID";
  * iOS sign-in flow; the web client id alone only covers Firebase's later
  * token-verification step. It only exists once an iOS app is registered for
  * this Firebase project (Firebase Console → Project settings → General →
- * "Your apps" → Add app → iOS, bundle id com.amritansh.planr)
+ * "Your apps" → the iOS app "PlanR iOS", bundle id com.amritansh.planr)
  * — that registration generates a GoogleService-Info.plist containing it
  * (the CLIENT_ID key), which is the standard place to get this value from.
  * Without it, @react-native-google-signin's `configure()` throws at runtime
  * ("failed to determine clientID") — so it's guarded below rather than
  * called unconditionally.
  */
-export const googleSignInIosClientId = "REPLACE_WITH_GOOGLE_IOS_CLIENT_ID";
+export const googleSignInIosClientId = "704686654641-p0agh5d521ok4r7an65kg5re5ajrsns8.apps.googleusercontent.com";
 
 /** True once the placeholders above have actually been filled in. Mirrors
  *  lib/firebase.ts's isFirebaseConfigured — the same graceful-degrade-to-

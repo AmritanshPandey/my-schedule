@@ -14,7 +14,8 @@ Two contexts, one system:
 - **Mobile (daily execution):** quick check-ins — mark tasks done, log a tracker, keep a
   streak alive. Fast, thumb-driven, often on the go.
 - **Desktop (strategy & setup):** building plans, structuring milestones and subtasks,
-  reviewing trends and consistency over time.
+  reviewing trends and consistency over time. The AI assistant lives here: it drafts and
+  adapts plans, and it is a strategy tool, not a coach in the phone app.
 
 ## Product Purpose
 
@@ -29,7 +30,7 @@ plan.
 
 ## Brand Personality
 
-Sharp, motivating, energetic. A coach in your pocket: momentum-forward, rewarding, with
+Sharp, motivating, energetic. A training partner that keeps you honest: momentum-forward, rewarding, with
 lively micro-interactions that make progress feel earned. The energy is disciplined, not
 loud — confident and precise, never cute. Voice is direct and verb-first ("Mark done",
 "Set up tracking"), celebrates real progress without hype, and never nags.
