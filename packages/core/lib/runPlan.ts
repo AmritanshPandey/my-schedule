@@ -318,7 +318,7 @@ export function createRunPlan(
 
 /**
  * Regenerate a generated plan from its inputs and accepted adjustments.
- * Only sessions dated today or later that are still planned, unlogged and
+ * Only sessions dated after today that are still planned, unlogged and
  * never edited by hand are replaced; everything else is the user's history.
  */
 export function rebuildRunPlan(schedule: Schedule, planId: string, todayISO: string, nowISO: string): Schedule {
@@ -326,11 +326,12 @@ export function rebuildRunPlan(schedule: Schedule, planId: string, todayISO: str
   if (!plan?.generator) return schedule;
   const all = schedule.sessions ?? [];
   const mine = all.filter((s) => s.planId === planId);
-  const kept = mine.filter((s) => s.dateISO < todayISO || s.status !== "planned" || !!s.editedAt || logsFor(schedule, s.id).length > 0);
+  // Today's runs are left as they are too: one may be under way, or done on another device not yet synced.
+  const kept = mine.filter((s) => s.dateISO <= todayISO || s.status !== "planned" || !!s.editedAt || logsFor(schedule, s.id).length > 0);
   const keptIds = new Set(kept.map((s) => s.id));
   const version = plan.generator.inputsVersion;
   const fresh = generateRunPlan(plan.generator.inputs, schedule.planAdjustments ?? [], planId, nowISO)
-    .filter((s) => s.dateISO >= todayISO && !keptIds.has(s.id))
+    .filter((s) => s.dateISO > todayISO && !keptIds.has(s.id))
     .map((s) => ({ ...s, generated: { ...s.generated!, inputsVersion: version } }));
   const sessions = [...all.filter((s) => s.planId !== planId), ...kept, ...fresh];
   const endISO = lastDate([...kept, ...fresh]);

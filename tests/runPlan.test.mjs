@@ -234,3 +234,12 @@ test("the long run is never shorter than the week's easy runs", () => {
     for (const s of week.filter((x) => x.routineKey === "easy")) assert.ok(km(long) >= km(s), `long ${km(long)} < easy ${km(s)}`);
   }
 });
+
+test("a rebuild leaves today's runs alone", () => {
+  let { schedule, planId } = created();
+  const today = "2026-11-16";
+  const before = schedule.sessions.find((s) => s.dateISO === today);
+  schedule = R.updateRunInputs(schedule, planId, { startTime: "06:00" }, today, NOW);
+  assert.deepEqual(schedule.sessions.find((s) => s.id === before.id), before);
+  assert.ok(schedule.sessions.filter((s) => s.dateISO > today).every((s) => s.startTime === "06:00"));
+});

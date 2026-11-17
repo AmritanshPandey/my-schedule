@@ -153,3 +153,25 @@ test("clearing history resets sessions to planned and drops logs and suggestions
   assert.deepEqual(out.planAdjustments, []);
   assert.deepEqual(out.sessions[0].tasks, s.sessions[0].tasks);
 });
+
+test("a regenerated copy never undoes a run another device marked done", () => {
+  const gen = (over = {}) => session("s1", { generated: { weekIndex: 1, slot: 0, inputsVersion: 1 }, ...over });
+  const base = stampSchedule(migrate({}), { ...migrate({}), sessions: [gen()] }, T0);
+  const phone = stampSchedule(base, { ...base, sessions: [gen({ status: "done", updatedAt: iso(T0 + 60_000) })], sessionLogs: [log("l1", "s1")] }, T0 + 60_000);
+  const desktop = stampSchedule(base, { ...base, sessions: [gen({ startTime: "07:00", generated: { weekIndex: 1, slot: 0, inputsVersion: 2 }, updatedAt: iso(T0 + 120_000) })] }, T0 + 120_000);
+  for (const merged of [
+    mergeSchedules({ schedule: phone, lastUpdated: T0 + 60_000 }, { schedule: desktop, lastUpdated: T0 + 120_000 }),
+    mergeSchedules({ schedule: desktop, lastUpdated: T0 + 120_000 }, { schedule: phone, lastUpdated: T0 + 60_000 }),
+  ]) {
+    assert.equal(merged.sessions[0].status, "done");
+    assert.equal(merged.sessionLogs.length, 1);
+  }
+});
+
+test("a hand edit still beats an older done mark", () => {
+  const base = stampSchedule(migrate({}), { ...migrate({}), sessions: [session("s1")] }, T0);
+  const phone = stampSchedule(base, { ...base, sessions: [session("s1", { status: "done" })] }, T0 + 60_000);
+  const desktop = stampSchedule(base, { ...base, sessions: [session("s1", { dateISO: "2026-11-20", editedAt: iso(T0 + 120_000) })] }, T0 + 120_000);
+  const merged = mergeSchedules({ schedule: phone, lastUpdated: T0 + 60_000 }, { schedule: desktop, lastUpdated: T0 + 120_000 });
+  assert.equal(merged.sessions[0].dateISO, "2026-11-20");
+});
