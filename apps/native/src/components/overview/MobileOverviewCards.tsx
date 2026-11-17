@@ -5,7 +5,7 @@
  * components/overview/MobileOverviewCards.tsx — keep the two in step.
  */
 import type { ReactNode } from 'react';
-import { Pressable, View } from 'react-native';
+import { Pressable, StyleSheet, View } from 'react-native';
 import LinearGradient from 'react-native-linear-gradient';
 import {
   IconAlertTriangle,
@@ -83,17 +83,19 @@ function CardTitle({ icon, title, trailing }: { icon?: TablerIcon; title: string
 function StreakBadge({ streak }: { streak: ExecutionStreak }) {
   if (streak.streak <= 0) return null;
   return (
-    <LinearGradient
-      colors={['#F43F5E', '#F59E0B']}
-      start={{ x: 0, y: 0.5 }}
-      end={{ x: 1, y: 0.5 }}
+    // The gradient fills behind a plain row: as the sizing container itself it
+    // didn't measure its children under the new architecture, clipping the label.
+    <View
       accessible
       accessibilityLabel={`${streak.streak}-day streak${streak.atRisk ? ', do one thing today to keep it' : ''}`}
-      style={{ flexDirection: 'row', alignItems: 'center', gap: 6, borderRadius: 999, paddingHorizontal: 14, paddingVertical: 6 }}
+      style={{ borderRadius: 999, overflow: 'hidden', flexShrink: 0 }}
     >
-      <Icon icon={IconFlame} size={18} strokeWidth={2} className="text-white" />
-      <Text className="text-[14px] font-semibold text-white">{streak.streak}-day streak</Text>
-    </LinearGradient>
+      <LinearGradient colors={['#F43F5E', '#F59E0B']} start={{ x: 0, y: 0.5 }} end={{ x: 1, y: 0.5 }} style={StyleSheet.absoluteFill} />
+      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, paddingHorizontal: 14, paddingVertical: 6 }}>
+        <Icon icon={IconFlame} size={18} strokeWidth={2} className="text-white" />
+        <Text className="text-[14px] font-semibold text-white">{streak.streak}-day streak</Text>
+      </View>
+    </View>
   );
 }
 
