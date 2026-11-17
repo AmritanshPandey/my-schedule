@@ -165,3 +165,39 @@ test("accepting rebuilds the plan; pendingAdjustment finds the open one", () => 
   assert.equal(schedule.planAdjustments[0].decidedAt, NOW);
   assert.equal(schedule.sessions.filter((s) => s.planId === planId).length, 36);
 });
+
+test("two devices evaluating the same week make the same suggestion", () => {
+  let { schedule } = plan();
+  const w = week(schedule, 1);
+  schedule = run(run(schedule, w[0], 0), w[1], 0);
+  const a = A.evaluateFinishedWeeks(schedule, AFTER_W1, NOW).planAdjustments;
+  const b = A.evaluateFinishedWeeks(schedule, AFTER_W1, "2026-11-23T08:00:00.000Z").planAdjustments;
+  assert.equal(a[0].id, b[0].id);
+});
+
+test("duplicate accepted suggestions for one week apply once", () => {
+  let { schedule, planId } = plan();
+  const dup = (id) => ({ id, planId, weekIndex: 3, kind: "repeat-week", detail: {}, reason: "", decision: "accepted", createdAt: NOW });
+  schedule = { ...schedule, planAdjustments: [dup("x1"), dup("x2")] };
+  schedule = R.rebuildRunPlan(schedule, planId, "2026-11-14", NOW);
+  assert.equal(schedule.sessions.filter((s) => s.planId === planId).length, 36);
+});
+
+test("a second suggestion for an already-decided week can't be accepted", () => {
+  let { schedule, planId } = plan();
+  const adj = (id, decision) => ({ id, planId, weekIndex: 3, kind: "repeat-week", detail: {}, reason: "", decision, createdAt: NOW });
+  schedule = { ...schedule, planAdjustments: [adj("x1", "held"), adj("x2", "pending")] };
+  assert.equal(A.pendingAdjustment(schedule, planId), undefined);
+  const after = A.decideAdjustment(schedule, "x2", "accepted", "2026-11-14", NOW);
+  assert.equal(after.sessions.filter((s) => s.planId === planId).length, 32);
+});
+
+test("a newer suggestion retires an unanswered older one", () => {
+  let { schedule, planId } = plan();
+  schedule = { ...schedule, planAdjustments: [{ id: "old", planId, weekIndex: 3, kind: "ease", detail: {}, reason: "Older", decision: "pending", createdAt: NOW }] };
+  const w5 = week(schedule, 4);
+  schedule = run(run(schedule, w5[0], 0), w5[1], 0);
+  schedule = A.evaluateFinishedWeeks(schedule, "2026-12-14", NOW);
+  assert.equal(schedule.planAdjustments.find((a) => a.id === "old").decision, "held");
+  assert.equal(A.pendingAdjustment(schedule, planId).weekIndex, 5);
+});

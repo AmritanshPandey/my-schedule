@@ -147,11 +147,28 @@ function weekTotal(spec: WeekSpec, n: number): number {
   return spec.longKm + (spec.quality ? qualityKm(spec.quality) : 0) + spec.easyKm * (n - 2);
 }
 
+/**
+ * Accepted suggestions, one per plan week: if two devices each accepted their
+ * own copy before syncing, only the first counts, so a week is never repeated twice.
+ */
+function acceptedOncePerWeek(adjustments: PlanAdjustment[]): PlanAdjustment[] {
+  const seen = new Set<string>();
+  return adjustments
+    .filter((a) => a.decision === "accepted")
+    .sort((a, b) => a.createdAt.localeCompare(b.createdAt) || a.id.localeCompare(b.id))
+    .filter((a) => {
+      const key = `${a.planId}|${a.weekIndex}`;
+      if (seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    });
+}
+
 /** The order logical weeks are run in, after accepted repeats and eases. */
 function weekSequence(weeks: number, adjustments: PlanAdjustment[]): number[] {
   const seq = Array.from({ length: weeks }, (_, i) => i + 1);
-  const accepted = adjustments
-    .filter((a) => a.decision === "accepted" && (a.kind === "repeat-week" || a.kind === "ease"))
+  const accepted = acceptedOncePerWeek(adjustments)
+    .filter((a) => a.kind === "repeat-week" || a.kind === "ease")
     .sort((a, b) => a.createdAt.localeCompare(b.createdAt) || a.weekIndex - b.weekIndex);
   for (const a of accepted) {
     const at = Math.min(Math.max(a.weekIndex, 2), seq.length);
@@ -161,8 +178,8 @@ function weekSequence(weeks: number, adjustments: PlanAdjustment[]): number[] {
 }
 
 function paceDeltaFrom(adjustments: PlanAdjustment[], position: number): number {
-  return adjustments
-    .filter((a) => a.decision === "accepted" && a.kind === "pace" && a.weekIndex <= position)
+  return acceptedOncePerWeek(adjustments)
+    .filter((a) => a.kind === "pace" && a.weekIndex <= position)
     .reduce((sum, a) => sum + (a.detail.paceDeltaSec ?? 0), 0);
 }
 

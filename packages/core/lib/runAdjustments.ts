@@ -1,5 +1,4 @@
 import type { Plan, PlanAdjustment, Schedule, Session } from "./scheduleTypes";
-import { uid } from "./id";
 import { actualFor, paceSecPerKm, sessionState } from "./sessions";
 import { rebuildRunPlan } from "./runPlan";
 
@@ -120,10 +119,31 @@ export function evaluateFinishedWeeks(schedule: Schedule, todayISO: string, nowI
     if (asked) continue;
     const proposal = propose(schedule, plan, finished, todayISO);
     if (proposal) {
-      added.push({ id: uid(), planId: plan.id, weekIndex: target, decision: "pending", createdAt: nowISO, ...proposal });
+      // Same id on every device for the same plan week, so two devices that
+      // both evaluate before syncing merge into one suggestion, not two.
+      added.push({ id: adjustmentId(plan.id, target), planId: plan.id, weekIndex: target, decision: "pending", createdAt: nowISO, ...proposal });
     }
   }
-  return added.length ? { ...schedule, planAdjustments: [...(schedule.planAdjustments ?? []), ...added] } : schedule;
+  if (added.length === 0) return schedule;
+  // A newer suggestion retires an unanswered older one for the same plan: it
+  // was about a week that has passed.
+  const retired = (schedule.planAdjustments ?? []).map((a) =>
+    a.decision === "pending" && added.some((n) => n.planId === a.planId && n.weekIndex > a.weekIndex)
+      ? { ...a, decision: "held" as const, decidedAt: nowISO }
+      : a,
+  );
+  return { ...schedule, planAdjustments: [...retired, ...added] };
+}
+
+export function adjustmentId(planId: string, weekIndex: number): string {
+  return `${planId}-adj-w${weekIndex}`;
+}
+
+/** True when another suggestion for the same plan week has already been answered. */
+function weekAlreadyDecided(schedule: Schedule, adj: PlanAdjustment): boolean {
+  return (schedule.planAdjustments ?? []).some(
+    (a) => a.id !== adj.id && a.planId === adj.planId && a.weekIndex === adj.weekIndex && a.decision !== "pending",
+  );
 }
 
 export function decideAdjustment(
@@ -134,7 +154,7 @@ export function decideAdjustment(
   nowISO: string,
 ): Schedule {
   const adj = (schedule.planAdjustments ?? []).find((a) => a.id === adjustmentId);
-  if (!adj || adj.decision !== "pending") return schedule;
+  if (!adj || adj.decision !== "pending" || weekAlreadyDecided(schedule, adj)) return schedule;
   const next: Schedule = {
     ...schedule,
     planAdjustments: (schedule.planAdjustments ?? []).map((a) => (a.id === adjustmentId ? { ...a, decision, decidedAt: nowISO } : a)),
@@ -142,6 +162,9 @@ export function decideAdjustment(
   return decision === "accepted" ? rebuildRunPlan(next, adj.planId, todayISO, nowISO) : next;
 }
 
+/** The newest open suggestion for a plan whose week hasn't been answered already. */
 export function pendingAdjustment(schedule: Schedule, planId: string): PlanAdjustment | undefined {
-  return (schedule.planAdjustments ?? []).find((a) => a.planId === planId && a.decision === "pending");
+  return (schedule.planAdjustments ?? [])
+    .filter((a) => a.planId === planId && a.decision === "pending" && !weekAlreadyDecided(schedule, a))
+    .sort((a, b) => b.weekIndex - a.weekIndex)[0];
 }
