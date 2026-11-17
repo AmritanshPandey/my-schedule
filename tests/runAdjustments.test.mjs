@@ -201,3 +201,9 @@ test("a newer suggestion retires an unanswered older one", () => {
   assert.equal(schedule.planAdjustments.find((a) => a.id === "old").decision, "held");
   assert.equal(A.pendingAdjustment(schedule, planId).weekIndex, 5);
 });
+
+test("a paused plan gets no suggestions", () => {
+  let { schedule, planId } = plan();
+  schedule = { ...schedule, plans: schedule.plans.map((p) => (p.id === planId ? { ...p, status: "paused" } : p)) };
+  assert.deepEqual(evaluate(schedule), []);
+});

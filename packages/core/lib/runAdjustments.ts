@@ -1,6 +1,7 @@
 import type { Plan, PlanAdjustment, Schedule, Session } from "./scheduleTypes";
 import { actualFor, paceSecPerKm, sessionState } from "./sessions";
 import { rebuildRunPlan } from "./runPlan";
+import { isPlanRunning } from "./planLifecycle";
 
 /**
  * Weekly suggestions for a generated plan. When a plan week ends, compare what
@@ -104,7 +105,7 @@ function propose(schedule: Schedule, plan: Plan, week: number, todayISO: string)
 export function evaluateFinishedWeeks(schedule: Schedule, todayISO: string, nowISO: string): Schedule {
   const added: PlanAdjustment[] = [];
   for (const plan of schedule.plans) {
-    if (!plan.generator) continue;
+    if (!plan.generator || !isPlanRunning(plan)) continue;
     const mine = (schedule.sessions ?? []).filter((s) => s.planId === plan.id && s.generated);
     if (mine.length === 0) continue;
     const lastWeek = Math.max(...mine.map((s) => s.generated!.weekIndex));

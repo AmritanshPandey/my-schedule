@@ -184,3 +184,9 @@ test("marking a done run done again adds nothing", () => {
   s = S.markSessionDone(s, "a", NOW);
   assert.equal(s.sessionLogs.length, 1);
 });
+
+test("a paused plan's runs leave the day, done ones stay", () => {
+  const paused = { ...base().plans[0], status: "paused" };
+  const s = base({ plans: [paused], sessions: [session("p"), session("d", { status: "done" })] });
+  assert.deepEqual(S.sessionsForDate(s, "2026-11-18").map((x) => x.id), ["d"]);
+});

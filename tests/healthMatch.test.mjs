@@ -113,3 +113,11 @@ test("a run on a day with no session changes nothing", () => {
   assert.equal(out.matched, 0);
   assert.equal(out.schedule, s0);
 });
+
+test("runs never fill sessions of a paused or deleted plan", () => {
+  const runAt = [run("w1", localMs("2026-11-18", 8, 0), 3, 1080)];
+  const paused = { ...schedule([session("a", 3)]), plans: [{ ...plan, status: "paused" }] };
+  assert.equal(H.applyHealthRuns(paused, runAt, NOW).matched, 0);
+  const deleted = { ...schedule([session("a", 3)]), plans: [] };
+  assert.equal(H.applyHealthRuns(deleted, runAt, NOW).matched, 0);
+});

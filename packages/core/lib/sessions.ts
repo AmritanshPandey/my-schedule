@@ -1,5 +1,6 @@
 import type { RunEffort, Schedule, Session, SessionLog, SessionTask } from "./scheduleTypes";
 import { uid } from "./id";
+import { isPlanRunning } from "./planLifecycle";
 
 /**
  * Sessions: the dated, planned occurrences of a plan's routines, and what was
@@ -18,12 +19,13 @@ export function sessionState(session: Session, todayISO: string): SessionState {
 
 /**
  * A day's sessions, timed ones by start time and then the any-time ones. A
- * session whose plan was deleted only shows if it was done (it is history).
+ * session whose plan was deleted or is paused only shows if it was done (it
+ * is history); a paused plan's runs aren't due, as its tasks aren't.
  */
 export function sessionsForDate(schedule: Schedule, dateISO: string): Session[] {
-  const planIds = new Set(schedule.plans.map((p) => p.id));
+  const running = new Set(schedule.plans.filter((p) => isPlanRunning(p)).map((p) => p.id));
   return (schedule.sessions ?? [])
-    .filter((s) => s.dateISO === dateISO && (planIds.has(s.planId) || s.status === "done"))
+    .filter((s) => s.dateISO === dateISO && (running.has(s.planId) || s.status === "done"))
     .sort((a, b) => {
       if (a.startTime && b.startTime) return a.startTime.localeCompare(b.startTime);
       if (a.startTime) return -1;

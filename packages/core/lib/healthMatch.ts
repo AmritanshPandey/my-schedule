@@ -2,6 +2,7 @@ import type { Schedule, SessionLog } from "./scheduleTypes";
 import { localISODate } from "./dateUtils";
 import { plannedDistanceM } from "./sessions";
 import { uid } from "./id";
+import { isPlanRunning } from "./planLifecycle";
 
 /**
  * Apple Health → sessions. Pure, so the matching can be tested without a
@@ -34,12 +35,14 @@ export function applyHealthRuns(schedule: Schedule, runs: HealthRun[], nowISO: s
   const filled = new Set(logs.filter((l) => l.source === "health").map((l) => l.sessionId));
   const added: SessionLog[] = [];
   const doneIds = new Set<string>();
+  // Only plans that still exist and are running can take a run.
+  const running = new Set(schedule.plans.filter((p) => isPlanRunning(p)).map((p) => p.id));
 
   for (const run of [...runs].sort((a, b) => a.startMs - b.startMs)) {
     if (seen.has(run.id) || run.distanceM <= 0 || run.durationSec <= 0) continue;
     const date = localDateOf(run.startMs);
     const candidates = (schedule.sessions ?? []).filter(
-      (s) => s.dateISO === date && s.status !== "skipped" && !filled.has(s.id),
+      (s) => s.dateISO === date && s.status !== "skipped" && running.has(s.planId) && !filled.has(s.id),
     );
     if (candidates.length === 0) continue;
     const best = candidates.reduce((a, b) =>
