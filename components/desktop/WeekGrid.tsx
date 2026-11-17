@@ -3,7 +3,8 @@
 import type { PointerEvent as ReactPointerEvent, ReactNode } from "react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { AnimatePresence, m } from "framer-motion";
-import { IconChevronLeft, IconChevronRight, IconDotsVertical, IconClockX, IconAlertTriangle, IconTrash, IconEdit, IconCheck } from "@tabler/icons-react";
+import { IconChevronLeft, IconChevronRight, IconDotsVertical, IconClockX, IconAlertTriangle, IconTrash, IconEdit, IconCheck, IconRun } from "@tabler/icons-react";
+import { headline, sessionsForDate } from "@/lib/sessions";
 import type { DayKey, Plan, Ritual, RitualCompletion, Schedule, Task, TaskSlot } from "@/lib/useScheduleDB";
 import { DAYS } from "@/lib/useScheduleDB";
 import { getSlots, sortTasksByTime } from "@/lib/taskMutations";
@@ -324,6 +325,8 @@ interface WeekGridProps {
     endTime: string,
   ) => void;
   onDuplicateRitual?: (ritualId: string, stepId: string | undefined, nextTime: string) => void;
+  /** Run sessions show read-only on desktop; a chip opens the run's detail. */
+  onOpenSession?: (sessionId: string) => void;
   /** Grid block hover-icon, today only, not-yet-missed: mark it missed. */
   onMarkMissed?: (taskId: string, allSubtaskIds: string[], day: DayKey, dateISO: string) => void;
   /**
@@ -402,6 +405,7 @@ export function WeekGrid({
   onMoveRitual,
   onDuplicateTask,
   onDuplicateRitual,
+  onOpenSession,
   onMarkMissed,
   onMarkSlotMissed,
   onOpenMissedRecovery,
@@ -1574,6 +1578,33 @@ export function WeekGrid({
                         dateISO,
                       )}
                     </div>
+                  );
+                })}
+
+                {/* Run sessions, read-only: a chip at the run's time (any-time runs
+                    at the top of the day) that opens its detail. */}
+                {sessionsForDate(schedule, dateISO).map((session) => {
+                  const mins = session.startTime ? parseTimeToMinutes(session.startTime) : null;
+                  const mapped = mins == null ? startMin : mapMinutesToTimeline(mins, startMin, endMin);
+                  if (mapped < startMin || mapped > endMin) return null;
+                  const done = session.status === "done";
+                  return (
+                    <button
+                      key={`session-${session.id}`}
+                      type="button"
+                      data-session-mark
+                      title={`${session.title} · ${headline(session)}`}
+                      onClick={() => onOpenSession?.(session.id)}
+                      className={`absolute left-1 z-[6] flex max-w-[calc(100%-0.5rem)] items-center gap-1 rounded-full border px-2 py-0.5 text-[11px] font-semibold ${
+                        done
+                          ? "border-emerald-500/30 bg-emerald-50 text-emerald-800 dark:bg-emerald-500/10 dark:text-emerald-300"
+                          : "border-neutral-200 bg-white text-neutral-700 dark:border-white/10 dark:bg-neutral-900 dark:text-neutral-200"
+                      }`}
+                      style={{ top: (mapped - startMin) * PX_MIN }}
+                    >
+                      {done ? <IconCheck size={12} strokeWidth={2.6} aria-hidden /> : <IconRun size={12} strokeWidth={2.2} aria-hidden />}
+                      <span className="truncate">{session.title}</span>
+                    </button>
                   );
                 })}
 

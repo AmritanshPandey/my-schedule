@@ -4049,6 +4049,7 @@ export default function ScheduleApp() {
             {/* ── Desktop WeekGrid (right panel, lg+ only) ──────────────────── */}
             <div className="hidden lg:flex lg:min-w-0 lg:flex-1 lg:overflow-hidden">
               <WeekGrid
+                onOpenSession={setSessionDetailId}
                 schedule={schedule}
                 plansById={plansById}
                 rituals={schedule.rituals ?? []}
