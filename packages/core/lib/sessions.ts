@@ -37,15 +37,15 @@ export function logsFor(schedule: Schedule, sessionId: string): SessionLog[] {
 }
 
 /**
- * What actually happened: the latest log with numbers (typed or from Apple
- * Health), else the latest plain "mark done". Nothing while the session isn't
- * done, so undoing a run never leaves an actual on show.
+ * What actually happened: what the user typed first (it carries effort and a
+ * note), else what Apple Health recorded, else a plain "mark done". Nothing
+ * while the session isn't done, so unticking a run never leaves an actual on show.
  */
 export function actualFor(schedule: Schedule, sessionId: string): SessionLog | undefined {
   const session = (schedule.sessions ?? []).find((s) => s.id === sessionId);
   if (!session || session.status !== "done") return undefined;
   const logs = logsFor(schedule, sessionId).sort((a, b) => b.loggedAt.localeCompare(a.loggedAt));
-  return logs.find((l) => l.source !== "mark") ?? logs[0];
+  return logs.find((l) => l.source === "manual") ?? logs.find((l) => l.source === "health") ?? logs[0];
 }
 
 export function paceSecPerKm(actual: { distanceM: number; durationSec: number }): number {
@@ -68,6 +68,7 @@ function updateSession(schedule: Schedule, sessionId: string, patch: (s: Session
 }
 
 export function markSessionDone(schedule: Schedule, sessionId: string, nowISO: string): Schedule {
+  if ((schedule.sessions ?? []).find((s) => s.id === sessionId)?.status === "done") return schedule;
   const next = updateSession(schedule, sessionId, (s) => ({ ...s, status: "done", updatedAt: nowISO }));
   const log: SessionLog = { id: uid(), sessionId, source: "mark", loggedAt: nowISO };
   return { ...next, sessionLogs: [...(schedule.sessionLogs ?? []), log] };
@@ -88,14 +89,16 @@ export function logSessionRun(
 }
 
 /**
- * Back to planned. Typed and marked logs go; a Health log stays so the same
- * workout isn't imported again (actualFor hides it while the session isn't done).
+ * Back to planned. Only the plain "mark done" goes: a typed log stays (one
+ * mistaken tap shouldn't erase the run's numbers, effort and note) and so does
+ * a Health log (so the workout isn't imported again). actualFor hides both
+ * while the session is planned, and they show again when it's ticked.
  */
 export function undoSessionDone(schedule: Schedule, sessionId: string, nowISO: string): Schedule {
   const next = updateSession(schedule, sessionId, (s) => ({ ...s, status: "planned", updatedAt: nowISO }));
   return {
     ...next,
-    sessionLogs: (schedule.sessionLogs ?? []).filter((l) => !(l.sessionId === sessionId && l.source !== "health")),
+    sessionLogs: (schedule.sessionLogs ?? []).filter((l) => !(l.sessionId === sessionId && l.source === "mark")),
   };
 }
 

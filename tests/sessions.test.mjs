@@ -162,3 +162,25 @@ test("validateRunLog refuses values that round to nothing or go negative", () =>
   assert.equal(S.validateRunLog({ distanceKm: 3, minutes: -5, seconds: 400 }), "Enter how long it took.");
   assert.equal(S.validateRunLog({ distanceKm: 3, minutes: 10, seconds: -1 }), "Enter how long it took.");
 });
+
+test("a typed log wins over an Apple Health log for the same run", () => {
+  const sess = session("a", { status: "done" });
+  const manual = { id: "n", sessionId: "a", source: "manual", actual: { distanceM: 1500, durationSec: 600, effort: "hard" }, note: "knee", loggedAt: "2026-11-18T09:00:00.000Z" };
+  const health = { id: "h", sessionId: "a", source: "health", actual: { distanceM: 1520, durationSec: 590 }, healthWorkoutId: "w", loggedAt: "2026-11-18T11:00:00.000Z" };
+  assert.equal(S.actualFor(base({ sessions: [sess], sessionLogs: [manual, health] }), "a").id, "n");
+});
+
+test("unticking a run keeps its typed log for when it's ticked again", () => {
+  let s = base({ sessions: [session("a")] });
+  s = S.logSessionRun(s, "a", { distanceM: 3000, durationSec: 1080, effort: "hard" }, "windy", NOW);
+  s = S.undoSessionDone(s, "a", NOW);
+  assert.equal(S.actualFor(s, "a"), undefined);
+  s = S.markSessionDone(s, "a", NOW);
+  assert.equal(S.actualFor(s, "a").note, "windy");
+});
+
+test("marking a done run done again adds nothing", () => {
+  let s = S.markSessionDone(base({ sessions: [session("a")] }), "a", NOW);
+  s = S.markSessionDone(s, "a", NOW);
+  assert.equal(s.sessionLogs.length, 1);
+});
