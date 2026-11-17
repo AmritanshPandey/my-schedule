@@ -4,6 +4,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { AnimatePresence, m } from "framer-motion";
 import { IconChevronDown, IconDownload, IconFileText, IconHistory, IconSparkles, IconUpload } from "@tabler/icons-react";
 import ConfirmSheet from "@/components/ui/ConfirmSheet";
+import Button from "@/components/ui/Button";
 import { useAuth } from "@/contexts/AuthProvider";
 import { downloadBackup, parseBackup } from "@/lib/backup";
 import { buildDemoSchedule } from "@/lib/demoData";
@@ -12,7 +13,7 @@ import { downloadMarkdown, type MarkdownScope } from "@/lib/markdownExport";
 import { listCloudBackups, fetchCloudBackup, type CloudBackupMeta } from "@/lib/cloudSync";
 import { haptic } from "@/lib/haptics";
 import type { Schedule } from "@/lib/useScheduleDB";
-import Button from "@/components/ui/Button";
+import type { RestoreHandler, RestoreMode, RestoreOutcome } from "@/lib/restoreMerge";
 
 function formatBackupDate(isoDate: string): string {
   const date = new Date(`${isoDate}T00:00:00`);
@@ -30,6 +31,27 @@ function hasAnyData(schedule: Schedule): boolean {
   );
 }
 
+/** Two ways back from a backup. Shared by the file and the cloud snapshot sheets. */
+const RESTORE_DESCRIPTION =
+  "Add back what's missing keeps everything you have now and returns anything the backup has that you don't. Replace everything makes the app match the backup exactly. Anything added since is deleted on every signed-in device.";
+
+function restoreMessage(outcome: RestoreOutcome, mode: RestoreMode, replaced: string): string {
+  if (!outcome.ok) return "";
+  if (mode === "replace") return replaced;
+  if (outcome.added === 0) return "Nothing was missing. Your data is unchanged.";
+  return `Added back ${outcome.added} ${outcome.added === 1 ? "item" : "items"}.`;
+}
+
+function RestoreActions({ onPick, onCancel }: { onPick: (mode: RestoreMode) => void; onCancel: () => void }) {
+  return (
+    <div className="flex flex-col gap-2.5">
+      <Button variant="primary" fullWidth onClick={() => onPick("merge")}>Add back what&apos;s missing</Button>
+      <Button variant="destructiveSecondary" fullWidth onClick={() => onPick("replace")}>Replace everything</Button>
+      <Button variant="ghost" fullWidth onClick={onCancel}>Cancel</Button>
+    </div>
+  );
+}
+
 /**
  * "Export backup" / "Restore from backup" rows for the Data card in both
  * settings surfaces (full-page SettingsView and the desktop SettingsSheet).
@@ -40,7 +62,7 @@ export default function BackupRows({
   onRestoreData,
 }: {
   schedule: Schedule;
-  onRestoreData?: (raw: unknown) => boolean;
+  onRestoreData?: RestoreHandler;
 }) {
   const { isGuest } = useAuth();
   const fileRef = useRef<HTMLInputElement>(null);
@@ -98,15 +120,15 @@ export default function BackupRows({
     }
   }, [showFeedback]);
 
-  const handleRestoreConfirm = useCallback(() => {
+  const handleRestoreConfirm = useCallback((mode: RestoreMode) => {
     setConfirmOpen(false);
     if (pendingRaw == null || !onRestoreData) return;
-    const ok = onRestoreData(pendingRaw);
+    const outcome = onRestoreData(pendingRaw, mode);
     setPendingRaw(null);
-    if (ok) haptic("light");
+    if (outcome.ok) haptic("light");
     showFeedback(
-      ok ? "done" : "error",
-      ok ? "Backup restored." : "That backup couldn't be loaded — your data is unchanged.",
+      outcome.ok ? "done" : "error",
+      outcome.ok ? restoreMessage(outcome, mode, "Backup restored.") : "That backup couldn't be loaded — your data is unchanged.",
     );
   }, [pendingRaw, onRestoreData, showFeedback]);
 
@@ -133,7 +155,7 @@ export default function BackupRows({
       }
     }
 
-    const ok = onRestoreData(buildDemoSchedule());
+    const ok = onRestoreData(buildDemoSchedule(), "replace").ok;
     if (ok) haptic("light");
     showFeedback(
       ok ? "done" : "error",
@@ -161,7 +183,7 @@ export default function BackupRows({
     }
   }, [historyOpen, history, showFeedback]);
 
-  const handleCloudRestore = useCallback(async () => {
+  const handleCloudRestore = useCallback(async (mode: RestoreMode) => {
     const id = cloudRestoreId;
     setCloudRestoreId(null);
     if (!id || !onRestoreData) return;
@@ -172,11 +194,13 @@ export default function BackupRows({
         showFeedback("error", "That snapshot is no longer available.");
         return;
       }
-      const ok = onRestoreData(raw);
-      if (ok) haptic("light");
+      const outcome = onRestoreData(raw, mode);
+      if (outcome.ok) haptic("light");
       showFeedback(
-        ok ? "done" : "error",
-        ok ? `Restored the snapshot from ${formatBackupDate(id)}.` : "That snapshot couldn't be loaded — your data is unchanged.",
+        outcome.ok ? "done" : "error",
+        outcome.ok
+          ? restoreMessage(outcome, mode, `Restored the snapshot from ${formatBackupDate(id)}.`)
+          : "That snapshot couldn't be loaded — your data is unchanged.",
       );
     } catch {
       showFeedback("error", "Couldn't fetch that snapshot — check your connection.");
@@ -347,18 +371,28 @@ export default function BackupRows({
       <ConfirmSheet
         open={confirmOpen}
         onClose={() => { setConfirmOpen(false); setPendingRaw(null); }}
-        onConfirm={handleRestoreConfirm}
+        onConfirm={() => handleRestoreConfirm("merge")}
         title="Restore this backup?"
-        description="Everything currently in the app is replaced with the backup's contents. Consider exporting a backup of the current data first."
-        confirmLabel="Restore backup"
+        description={RESTORE_DESCRIPTION}
+        actions={
+          <RestoreActions
+            onPick={handleRestoreConfirm}
+            onCancel={() => { setConfirmOpen(false); setPendingRaw(null); }}
+          />
+        }
       />
       <ConfirmSheet
         open={cloudRestoreId !== null}
         onClose={() => setCloudRestoreId(null)}
-        onConfirm={() => void handleCloudRestore()}
+        onConfirm={() => void handleCloudRestore("merge")}
         title={cloudRestoreId ? `Restore ${formatBackupDate(cloudRestoreId)}?` : "Restore snapshot?"}
-        description="Everything currently in the app is replaced with that day's snapshot. Consider exporting a backup of the current data first."
-        confirmLabel="Restore snapshot"
+        description={RESTORE_DESCRIPTION}
+        actions={
+          <RestoreActions
+            onPick={(mode) => void handleCloudRestore(mode)}
+            onCancel={() => setCloudRestoreId(null)}
+          />
+        }
       />
       <ConfirmSheet
         open={demoOpen}

@@ -131,10 +131,14 @@ function backupsCollection(uid: string) {
 async function writeDailyBackup(uid: string, payload: Schedule, lastUpdated: number): Promise<void> {
   const today = localISODate(new Date());
   if (_lastBackupDate === today) return;
-  await setDoc(backupDocRef(uid, today), {
-    schedule: payload,
-    lastUpdated,
-    savedAt: serverTimestamp(),
+  // The first push of the day, from any device or session, owns the day's
+  // backup. `_lastBackupDate` is per-session memory, so without this check
+  // every new session (or other device) overwrote it, and after a bad sync
+  // that replaced the morning's good copy with the bad state.
+  const ref = backupDocRef(uid, today);
+  await runTransaction(db!, async (tx) => {
+    if ((await tx.get(ref)).exists()) return;
+    tx.set(ref, { schedule: payload, lastUpdated, savedAt: serverTimestamp() });
   });
   _lastBackupDate = today;
   // Prune: doc ids are ISO dates, so lexicographic order is chronological.
@@ -314,13 +318,22 @@ export function noteLatestSchedule(schedule: Schedule): void {
   _lastSchedule = schedule;
 }
 
-/** Delete the user's cloud snapshot and its daily backups. Used by "Clear data". */
+/** Delete the user's cloud data: snapshot, daily backups, conflict archive and digest. Used by "Clear data". */
 export async function deleteCloudData(): Promise<void> {
   if (!_uid) return;
   try {
     await deleteDoc(firestoreRef(_uid));
-    const backups = await getDocs(backupsCollection(_uid));
-    await Promise.all(backups.docs.map((d) => deleteDoc(d.ref)));
+    // Every cloud copy of the data, not just the live one: the conflict
+    // archive holds whole pre-merge schedules and the digest summarises them.
+    const [backups, conflicts] = await Promise.all([
+      getDocs(backupsCollection(_uid)),
+      getDocs(conflictsCollection(_uid)),
+    ]);
+    await Promise.all([
+      ...backups.docs.map((d) => deleteDoc(d.ref)),
+      ...conflicts.docs.map((d) => deleteDoc(d.ref)),
+      deleteDoc(doc(db!, "users", _uid, "data", "milestoneDigest")),
+    ]);
     _lastSyncedAt = 0;
     _lastBackupDate = null;
     _pending = null;

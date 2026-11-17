@@ -1,7 +1,7 @@
 /**
- * PlanR's Cloud Functions — server-side milestone health, on the same
+ * PlanR's Cloud Functions — server-side milestone health and account deletion, on the same
  * `users/{uid}/data/snapshot` document the client (lib/cloudSync.ts) and the
- * Cloudflare reminders Worker (worker/src/index.ts) already read. Two
+ * Cloudflare reminders Worker (worker/src/index.ts) already read. Three
  * entry points:
  *
  * 1. `getMilestoneStates` (callable): on-demand, authenticated recompute for
@@ -12,6 +12,8 @@
  * 2. `dailyMilestoneDigest` (scheduled): runs once a day for every user,
  *    independent of whether they ever open the app, and writes an
  *    at-risk/delayed summary to `users/{uid}/data/milestoneDigest`.
+ * 3. `deleteAccount` (callable): deletes everything under `users/{uid}` and
+ *    then the Auth user. Backs the "Delete account" row in Settings.
  *    Deliberately does NOT send a push notification itself — the Worker
  *    already owns Web Push delivery (its own VAPID keys, subscription
  *    pruning, per-day dedup); duplicating that stack here would mean two
@@ -31,6 +33,7 @@
 
 import { initializeApp } from "firebase-admin/app";
 import { getFirestore, Timestamp } from "firebase-admin/firestore";
+import { getAuth } from "firebase-admin/auth";
 import { onCall, HttpsError } from "firebase-functions/v2/https";
 import { onSchedule } from "firebase-functions/v2/scheduler";
 import { logger } from "firebase-functions";
@@ -133,5 +136,46 @@ export const dailyMilestoneDigest = onSchedule(
     }
 
     logger.info("dailyMilestoneDigest complete", { usersScanned, digestsWritten });
+  },
+);
+
+// ── Callable: deleteAccount ─────────────────────────────────────────────────
+
+/**
+ * Permanently delete the caller's account: every document under
+ * `users/{uid}` (snapshot, daily backups, conflict archive, digest, push
+ * subscriptions and configs), then the Firebase Auth user itself. Server-side
+ * because the client can't list or delete what firestore.rules hides from it,
+ * and can't delete its own Auth user without a fresh sign-in.
+ *
+ * Data first, then the user: if the data delete fails the account still
+ * exists and the user can retry; the reverse order would strand data behind a
+ * uid nobody can sign in as.
+ */
+export const deleteAccount = onCall(
+  { region: "us-central1" },
+  async (request): Promise<{ deleted: true }> => {
+    const uid = request.auth?.uid;
+    if (!uid) {
+      throw new HttpsError("unauthenticated", "Sign in to delete your account.");
+    }
+    let userDeleted = false;
+    try {
+      // Tombstone first: firestore.rules refuse every write under users/{uid}
+      // once this exists, so a device still holding a valid ID token can't
+      // recreate the data mid-delete or after. Holds no data beyond the time.
+      await db().doc(`deletedAccounts/${uid}`).set({ deletedAt: Timestamp.now() });
+      await db().recursiveDelete(db().doc(`users/${uid}`));
+      await getAuth().deleteUser(uid);
+      userDeleted = true;
+    } catch (err) {
+      logger.error("deleteAccount failed", { uid, error: String(err) });
+      // The account still exists: lift the tombstone so its devices can sync
+      // again (and re-push whatever a partial delete removed). Best-effort.
+      if (!userDeleted) await db().doc(`deletedAccounts/${uid}`).delete().catch(() => {});
+      throw new HttpsError("internal", "Couldn't delete the account. It is still there; try again.");
+    }
+    logger.info("deleteAccount complete", { uid });
+    return { deleted: true };
   },
 );
