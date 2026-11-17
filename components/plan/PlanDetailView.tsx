@@ -297,7 +297,7 @@ interface PlanDetailViewProps {
   // suggestion, change run days. The section shows only when plan.generator is set.
   onOpenSession?: (sessionId: string) => void;
   onDecideAdjustment?: (adjustmentId: string, decision: "accepted" | "held") => void;
-  onUpdateRunInputs?: (planId: string, patch: { runDays?: DayKey[]; startTime?: string }) => void;
+  onUpdateRunInputs?: (planId: string, patch: { runDays?: DayKey[]; startTime?: string; targetPaceSecPerKm?: number }) => void;
 }
 
 // ── Component ─────────────────────────────────────────────────────────────────

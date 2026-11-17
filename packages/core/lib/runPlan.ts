@@ -349,9 +349,20 @@ export function updateRunInputs(
   todayISO: string,
   nowISO: string,
 ): Schedule {
-  const plans = schedule.plans.map((p) => {
-    if (p.id !== planId || !p.generator) return p;
-    return { ...p, generator: { ...p.generator, inputs: { ...p.generator.inputs, ...patch }, inputsVersion: p.generator.inputsVersion + 1 } };
-  });
+  const plan = schedule.plans.find((p) => p.id === planId);
+  if (!plan?.generator || runInputsPatchError(plan.generator.inputs, patch)) return schedule;
+  // A key present with undefined clears it (a blank usual time means any time).
+  const inputs = { ...plan.generator.inputs, ...patch };
+  const plans = schedule.plans.map((p) =>
+    p.id === planId ? { ...p, generator: { ...plan.generator!, inputs, inputsVersion: plan.generator!.inputsVersion + 1 } } : p,
+  );
   return rebuildRunPlan({ ...schedule, plans }, planId, todayISO, nowISO);
+}
+
+/** Error copy for a mid-plan change, or null. The start date has passed by now, so it isn't re-checked. */
+export function runInputsPatchError(
+  inputs: RunPlanInputs,
+  patch: Partial<Pick<RunPlanInputs, "runDays" | "startTime" | "targetPaceSecPerKm">>,
+): string | null {
+  return validateRunInputs({ ...inputs, ...patch }, inputs.startISO);
 }

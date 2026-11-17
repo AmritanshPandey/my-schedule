@@ -243,3 +243,18 @@ test("a rebuild leaves today's runs alone", () => {
   assert.deepEqual(schedule.sessions.find((s) => s.id === before.id), before);
   assert.ok(schedule.sessions.filter((s) => s.dateISO > today).every((s) => s.startTime === "06:00"));
 });
+
+test("updateRunInputs can clear the usual time and change target pace", () => {
+  let { schedule, planId } = created();
+  schedule = R.updateRunInputs(schedule, planId, { startTime: undefined, targetPaceSecPerKm: 320 }, "2026-11-16", NOW);
+  const future = schedule.sessions.filter((s) => s.dateISO > "2026-11-16");
+  assert.ok(future.every((s) => s.startTime === undefined));
+  assert.equal(future.at(-1).tasks[0].plan.paceSecPerKm, 320);
+});
+
+test("updateRunInputs ignores a change the plan can't be built from", () => {
+  let { schedule, planId } = created();
+  const before = schedule;
+  schedule = R.updateRunInputs(schedule, planId, { targetPaceSecPerKm: Number.NaN }, "2026-11-16", NOW);
+  assert.equal(schedule, before);
+});

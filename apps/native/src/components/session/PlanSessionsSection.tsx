@@ -9,7 +9,8 @@ import Button from '../ui/Button';
 import Pill from '../ui/Pill';
 import WeekdayPicker from '../ui/WeekdayPicker';
 import TimeInput from '../ui/TimeInput';
-import { FORM_LABEL } from '../ui/Input';
+import Input, { FORM_LABEL } from '../ui/Input';
+import { runInputsPatchError } from '@planr/core/lib/runPlan';
 import { InternalSectionTitle, SectionIconButton } from '../ui/InternalSectionTitle';
 import { Icon } from '../ui/Icon';
 import { Text } from '../ui/Text';
@@ -22,7 +23,7 @@ export interface PlanSessionsSectionProps {
   todayISO: string;
   onOpenSession: (sessionId: string) => void;
   onDecide?: (adjustmentId: string, decision: 'accepted' | 'held') => void;
-  onUpdateInputs?: (patch: Partial<Pick<RunPlanInputs, 'runDays' | 'startTime'>>) => void;
+  onUpdateInputs?: (patch: Partial<Pick<RunPlanInputs, 'runDays' | 'startTime' | 'targetPaceSecPerKm'>>) => void;
 }
 
 const shortDate = (iso: string) => new Date(`${iso}T12:00:00`).toLocaleDateString('en-US', { weekday: 'short', day: 'numeric' });
@@ -35,6 +36,13 @@ export default function PlanSessionsSection({ schedule, plan, todayISO, onOpenSe
   const [editing, setEditing] = useState(false);
   const [days, setDays] = useState<DayKey[]>(plan.generator?.inputs.runDays ?? []);
   const [time, setTime] = useState(plan.generator?.inputs.startTime ?? '');
+  const startPace = plan.generator?.inputs.targetPaceSecPerKm;
+  const [paceMin, setPaceMin] = useState(startPace ? String(Math.floor(startPace / 60)) : '');
+  const [paceSec, setPaceSec] = useState(startPace ? String(startPace % 60).padStart(2, '0') : '');
+  // Blank target pace = just finish; time blank = any time (sent as a cleared key).
+  const targetPace = paceMin.trim() === '' ? undefined : Number(paceMin) * 60 + (paceSec.trim() === '' ? 0 : Number(paceSec));
+  const patch = { runDays: days, startTime: time || undefined, targetPaceSecPerKm: targetPace };
+  const editError = plan.generator ? runInputsPatchError(plan.generator.inputs, patch) : null;
   const pending = pendingAdjustment(schedule, plan.id);
   const easyPace = plan.generator?.inputs.easyPaceSecPerKm ?? 360;
 
@@ -47,7 +55,6 @@ export default function PlanSessionsSection({ schedule, plan, todayISO, onOpenSe
     .map((s) => ({ s, log: actualFor(schedule, s.id) }))
     .filter((x) => x.log?.actual && x.log.source !== 'mark')
     .slice(-6);
-  const badDays = days.length < 3 || days.length > 5;
 
   return (
     <View>
@@ -74,17 +81,31 @@ export default function PlanSessionsSection({ schedule, plan, todayISO, onOpenSe
             <WeekdayPicker selected={days} onChange={setDays} allowEmpty />
           </View>
           <TimeInput label="Usual time" value={time} onChange={setTime} />
-          <Text className="text-[12.5px] font-medium text-neutral-500 dark:text-neutral-400">Runs you've done or moved yourself stay where they are.</Text>
+          <View>
+            <Text className={FORM_LABEL}>Target pace (blank to just finish)</Text>
+            <View className="flex-row items-center gap-2">
+              <View className="flex-1">
+                <Input accessibilityLabel="Target pace minutes" keyboardType="number-pad" value={paceMin} onChangeText={setPaceMin} />
+              </View>
+              <Text className="text-[16px] font-bold text-neutral-500">:</Text>
+              <View className="flex-1">
+                <Input accessibilityLabel="Target pace seconds" keyboardType="number-pad" value={paceSec} onChangeText={setPaceSec} />
+              </View>
+              <Text className="text-[13px] font-semibold text-neutral-500 dark:text-neutral-400">/km</Text>
+            </View>
+          </View>
+          <Text className="text-[12.5px] font-medium text-neutral-500 dark:text-neutral-400">Runs you've done, moved yourself or have today stay as they are.</Text>
+          {editError ? <Text accessibilityRole="alert" className="text-[13px] font-semibold text-rose-600 dark:text-rose-400">{editError}</Text> : null}
           <Button
             variant="primary"
             fullWidth
-            disabled={badDays}
+            disabled={!!editError}
             onPress={() => {
-              onUpdateInputs({ runDays: days, ...(time ? { startTime: time } : {}) });
+              onUpdateInputs(patch);
               setEditing(false);
             }}
           >
-            {badDays ? 'Pick 3 to 5 run days' : 'Update plan'}
+            Update plan
           </Button>
         </View>
       ) : null}

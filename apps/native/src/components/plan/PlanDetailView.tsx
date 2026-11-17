@@ -271,7 +271,7 @@ interface PlanDetailViewProps {
   // Run sessions (a plan built by the 5K template); shown only when plan.generator is set.
   onOpenSession?: (sessionId: string) => void;
   onDecideAdjustment?: (adjustmentId: string, decision: 'accepted' | 'held') => void;
-  onUpdateRunInputs?: (planId: string, patch: { runDays?: DayKey[]; startTime?: string }) => void;
+  onUpdateRunInputs?: (planId: string, patch: { runDays?: DayKey[]; startTime?: string; targetPaceSecPerKm?: number }) => void;
 }
 
 type PlanTab = 'planning' | 'roadmap';

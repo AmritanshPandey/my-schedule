@@ -6,7 +6,8 @@ import Button from "@/components/ui/Button";
 import Pill from "@/components/ui/Pill";
 import WeekdayPicker from "@/components/ui/WeekdayPicker";
 import TimeInput from "@/components/ui/TimeInput";
-import { FORM_LABEL } from "@/components/ui/Input";
+import { FORM_INPUT_CLASS, FORM_LABEL } from "@/components/ui/Input";
+import { runInputsPatchError } from "@/lib/runPlan";
 import { InternalSectionTitle, SectionIconButton } from "@/components/ui/InternalSectionTitle";
 import type { DayKey, Plan, RunPlanInputs, Schedule, Session } from "@/lib/useScheduleDB";
 import { actualFor, formatDistance, formatPace, headline, paceSecPerKm, plannedDistanceM, sessionState } from "@/lib/sessions";
@@ -20,7 +21,7 @@ export interface PlanSessionsSectionProps {
   todayISO: string;
   onOpenSession: (sessionId: string) => void;
   onDecide?: (adjustmentId: string, decision: "accepted" | "held") => void;
-  onUpdateInputs?: (patch: Partial<Pick<RunPlanInputs, "runDays" | "startTime">>) => void;
+  onUpdateInputs?: (patch: Partial<Pick<RunPlanInputs, "runDays" | "startTime" | "targetPaceSecPerKm">>) => void;
 }
 
 const shortDate = (iso: string) => new Date(`${iso}T12:00:00`).toLocaleDateString("en-US", { weekday: "short", day: "numeric" });
@@ -33,6 +34,13 @@ export default function PlanSessionsSection({ schedule, plan, todayISO, onOpenSe
   const [editing, setEditing] = useState(false);
   const [days, setDays] = useState<DayKey[]>(plan.generator?.inputs.runDays ?? []);
   const [time, setTime] = useState(plan.generator?.inputs.startTime ?? "");
+  const startPace = plan.generator?.inputs.targetPaceSecPerKm;
+  const [paceMin, setPaceMin] = useState(startPace ? String(Math.floor(startPace / 60)) : "");
+  const [paceSec, setPaceSec] = useState(startPace ? String(startPace % 60).padStart(2, "0") : "");
+  // Blank target pace = just finish; time blank = any time (sent as a cleared key).
+  const targetPace = paceMin.trim() === "" ? undefined : Number(paceMin) * 60 + (paceSec.trim() === "" ? 0 : Number(paceSec));
+  const patch = { runDays: days, startTime: time || undefined, targetPaceSecPerKm: targetPace };
+  const editError = plan.generator ? runInputsPatchError(plan.generator.inputs, patch) : null;
   const pending = pendingAdjustment(schedule, plan.id);
   const easyPace = plan.generator?.inputs.easyPaceSecPerKm ?? 360;
 
@@ -80,17 +88,27 @@ export default function PlanSessionsSection({ schedule, plan, todayISO, onOpenSe
             <WeekdayPicker selected={days} onChange={setDays} allowEmpty />
           </div>
           <TimeInput label="Usual time" value={time} onChange={setTime} />
-          <p className="text-[12.5px] font-medium text-neutral-500 dark:text-neutral-400">Runs you've done or moved yourself stay where they are.</p>
+          <div>
+            <span className={FORM_LABEL}>Target pace (blank to just finish)</span>
+            <div className="flex items-center gap-2">
+              <input aria-label="Target pace minutes" inputMode="numeric" value={paceMin} onChange={(e) => setPaceMin(e.target.value)} className={FORM_INPUT_CLASS} />
+              <span className="text-[16px] font-bold text-neutral-500" aria-hidden>:</span>
+              <input aria-label="Target pace seconds" inputMode="numeric" value={paceSec} onChange={(e) => setPaceSec(e.target.value)} className={FORM_INPUT_CLASS} />
+              <span className="shrink-0 text-[13px] font-semibold text-neutral-500 dark:text-neutral-400">/km</span>
+            </div>
+          </div>
+          <p className="text-[12.5px] font-medium text-neutral-500 dark:text-neutral-400">Runs you've done, moved yourself or have today stay as they are.</p>
+          {editError && <p role="alert" className="text-[13px] font-semibold text-rose-600 dark:text-rose-400">{editError}</p>}
           <Button
             variant="primary"
             fullWidth
-            disabled={days.length < 3 || days.length > 5}
+            disabled={!!editError}
             onClick={() => {
-              onUpdateInputs({ runDays: days, ...(time ? { startTime: time } : {}) });
+              onUpdateInputs(patch);
               setEditing(false);
             }}
           >
-            {days.length < 3 || days.length > 5 ? "Pick 3 to 5 run days" : "Update plan"}
+            Update plan
           </Button>
         </div>
       )}
