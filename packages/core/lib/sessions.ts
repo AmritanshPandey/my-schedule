@@ -54,9 +54,12 @@ export function paceSecPerKm(actual: { distanceM: number; durationSec: number })
 
 /** Error copy for the typed-log form, or null when it can be saved. */
 export function validateRunLog(input: { distanceKm: number; minutes: number; seconds: number }): string | null {
-  if (!Number.isFinite(input.distanceKm) || input.distanceKm <= 0) return "Enter how far you ran.";
-  const total = (Number.isFinite(input.minutes) ? input.minutes : 0) * 60 + (Number.isFinite(input.seconds) ? input.seconds : 0);
-  if (total <= 0) return "Enter how long it took.";
+  // Checked on the values as saved (rounded to whole metres and seconds): a
+  // log that rounds to zero would be rejected by the schema and block saving.
+  if (!Number.isFinite(input.distanceKm) || Math.round(input.distanceKm * 1000) < 10) return "Enter how far you ran.";
+  const minutes = Number.isFinite(input.minutes) ? input.minutes : 0;
+  const seconds = Number.isFinite(input.seconds) ? input.seconds : 0;
+  if (minutes < 0 || seconds < 0 || Math.round(minutes * 60 + seconds) < 1) return "Enter how long it took.";
   return null;
 }
 

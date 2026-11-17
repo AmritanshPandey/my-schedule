@@ -190,3 +190,47 @@ test("updateRunInputs moves future untouched sessions to the new days", () => {
 test("the fixed Run Training template is gone", () => {
   assert.equal(TEMPLATES.find((t) => t.id === "run-training"), undefined);
 });
+
+const { validateSchedule } = await import("@/lib/scheduleSchema.ts");
+
+test("validateRunInputs refuses distances and paces the plan can't be built from", () => {
+  assert.equal(R.validateRunInputs({ ...INPUTS, currentDistanceKm: 0.2 }, TODAY), "Start from at least 0.5 km.");
+  assert.equal(R.validateRunInputs({ ...INPUTS, easyPaceSecPerKm: 15 }, TODAY), "Enter an easy pace between 3:00 and 15:00 per km.");
+  assert.equal(R.validateRunInputs({ ...INPUTS, easyPaceSecPerKm: 1000 }, TODAY), "Enter an easy pace between 3:00 and 15:00 per km.");
+  assert.equal(R.validateRunInputs({ ...INPUTS, targetPaceSecPerKm: 60 }, TODAY), "Enter a target pace between 2:30 and 15:00 per km.");
+  assert.equal(R.validateRunInputs({ ...INPUTS, targetPaceSecPerKm: Number.NaN }, TODAY), "Enter a target pace between 2:30 and 15:00 per km.");
+});
+
+test("validateRunInputs refuses a target too far for the weeks given", () => {
+  assert.equal(
+    R.validateRunInputs({ ...INPUTS, currentDistanceKm: 3, targetDistanceKm: 21, weeks: 4 }, TODAY),
+    "That's a big jump for 4 weeks. Add weeks or lower the target.",
+  );
+  assert.equal(R.validateRunInputs({ ...INPUTS, currentDistanceKm: 3, targetDistanceKm: 5, weeks: 8 }, TODAY), null);
+});
+
+test("every plan the inputs allow passes the schedule schema", () => {
+  for (const currentDistanceKm of [0.5, 1, 3, 8]) {
+    for (const easyPaceSecPerKm of [180, 360, 900]) {
+      for (const weeks of [4, 8, 16]) {
+        for (const runDays of [["monday", "wednesday", "friday"], ["monday", "tuesday", "thursday", "saturday", "sunday"]]) {
+          for (const targetPaceSecPerKm of [undefined, 150, 900]) {
+            const inputs = { currentDistanceKm, easyPaceSecPerKm, targetDistanceKm: currentDistanceKm + 2, weeks, runDays, startISO: "2026-11-16", ...(targetPaceSecPerKm ? { targetPaceSecPerKm } : {}) };
+            if (R.validateRunInputs(inputs, TODAY)) continue;
+            const { schedule } = R.createRunPlan(migrate({}), inputs, { createGoal: true }, NOW);
+            const result = validateSchedule(schedule);
+            assert.ok(result.success, `${JSON.stringify(inputs)} → ${result.success ? "" : result.error.issues[0].path.join(".") + " " + result.error.issues[0].message}`);
+          }
+        }
+      }
+    }
+  }
+});
+
+test("the long run is never shorter than the week's easy runs", () => {
+  const sessions = R.generateRunPlan({ ...INPUTS, currentDistanceKm: 1, runDays: ["monday", "wednesday", "friday"] }, [], "p1", NOW);
+  for (const week of byWeek(sessions).slice(0, -1)) {
+    const long = week.find((s) => s.routineKey === "long");
+    for (const s of week.filter((x) => x.routineKey === "easy")) assert.ok(km(long) >= km(s), `long ${km(long)} < easy ${km(s)}`);
+  }
+});

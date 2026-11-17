@@ -155,3 +155,10 @@ test("headline describes the planned run", () => {
   assert.equal(S.headline(session("b", { tasks: [dist("t", "Tempo", 2500, { paceSecPerKm: 330 })] })), "2.5 km @ 5:30/km");
   assert.equal(S.headline(session("c", { tasks: [{ id: "s", kind: "simple", title: "Stretch" }] })), "Stretch");
 });
+
+test("validateRunLog refuses values that round to nothing or go negative", () => {
+  assert.equal(S.validateRunLog({ distanceKm: 0.0004, minutes: 10, seconds: 0 }), "Enter how far you ran.");
+  assert.equal(S.validateRunLog({ distanceKm: 3, minutes: Number.NaN, seconds: 0.4 }), "Enter how long it took.");
+  assert.equal(S.validateRunLog({ distanceKm: 3, minutes: -5, seconds: 400 }), "Enter how long it took.");
+  assert.equal(S.validateRunLog({ distanceKm: 3, minutes: 10, seconds: -1 }), "Enter how long it took.");
+});

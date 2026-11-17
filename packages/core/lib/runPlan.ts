@@ -37,13 +37,37 @@ function weekdayOf(iso: string): number {
   return new Date(`${iso}T00:00:00Z`).getUTCDay();
 }
 
+/** The range a plan can be built from; outside it a generated run could be zero length or zero pace. */
+const MIN_CURRENT_KM = 0.5;
+const EASY_PACE_RANGE = [180, 900] as const; // 3:00 to 15:00 per km
+const TARGET_PACE_RANGE = [150, 900] as const; // 2:30 to 15:00 per km
+
+/**
+ * Error copy, or null when a sound plan can be built. Everything the generator
+ * relies on is checked here, so it never writes a row the schedule schema
+ * would reject (a rejected row blocks every save after it).
+ */
 export function validateRunInputs(inputs: RunPlanInputs, todayISO: string): string | null {
   if (!Number.isFinite(inputs.currentDistanceKm) || inputs.currentDistanceKm <= 0) return "Enter how far you can run now.";
+  if (inputs.currentDistanceKm < MIN_CURRENT_KM) return "Start from at least 0.5 km.";
   if (!Number.isFinite(inputs.easyPaceSecPerKm) || inputs.easyPaceSecPerKm <= 0) return "Enter your easy pace.";
+  if (inputs.easyPaceSecPerKm < EASY_PACE_RANGE[0] || inputs.easyPaceSecPerKm > EASY_PACE_RANGE[1]) {
+    return "Enter an easy pace between 3:00 and 15:00 per km.";
+  }
+  if (
+    inputs.targetPaceSecPerKm !== undefined &&
+    !(inputs.targetPaceSecPerKm >= TARGET_PACE_RANGE[0] && inputs.targetPaceSecPerKm <= TARGET_PACE_RANGE[1])
+  ) {
+    return "Enter a target pace between 2:30 and 15:00 per km.";
+  }
   if (!Number.isFinite(inputs.targetDistanceKm) || inputs.targetDistanceKm < inputs.currentDistanceKm) {
     return "Your target should be at least your current distance.";
   }
   if (!Number.isInteger(inputs.weeks) || inputs.weeks < 4 || inputs.weeks > 16) return "Choose 4 to 16 weeks.";
+  // The longest run may grow about 10% a week; a target past that can't be reached safely.
+  if (inputs.targetDistanceKm > inputs.currentDistanceKm * Math.pow(1.1, inputs.weeks - 1) + 1) {
+    return `That's a big jump for ${inputs.weeks} weeks. Add weeks or lower the target.`;
+  }
   const days = new Set(inputs.runDays);
   if (days.size < 3 || days.size > 5) return "Pick 3 to 5 run days.";
   if (!inputs.startISO || inputs.startISO < todayISO) return "Start today or later.";
@@ -89,10 +113,11 @@ function weekSpecs(inputs: RunPlanInputs): WeekSpec[] {
       continue;
     }
     if (w % 4 === 0 && prev) {
-      const longKm = Math.max(MIN_EASY_KM, floor05(prev.longKm * 0.8));
+      let longKm = Math.max(MIN_EASY_KM, floor05(prev.longKm * 0.8));
       const q = prev.quality;
       const rest = 0.8 * prevTotal - longKm - (q ? qualityKm(q) : 0);
       const easyKm = Math.max(MIN_EASY_KM, floor05(rest / Math.max(1, n - 2)));
+      longKm = Math.max(longKm, easyKm);
       specs.push({ final: false, longKm, easyKm, quality: q, qualityPace: prev.qualityPace });
       continue;
     }
@@ -108,6 +133,8 @@ function weekSpecs(inputs: RunPlanInputs): WeekSpec[] {
       const over = longKm + qualityKm(quality) + easyKm * (n - 2) - (lastBuild * 1.1 + 0.5);
       if (over > 0) longKm = Math.max(MIN_EASY_KM, floor05(longKm - over));
     }
+    // The long run is never shorter than the week's easy runs.
+    longKm = Math.max(longKm, easyKm);
     const spec = { final: false, longKm, easyKm, quality, qualityPace };
     specs.push(spec);
     lastBuild = weekTotal(spec, n);
