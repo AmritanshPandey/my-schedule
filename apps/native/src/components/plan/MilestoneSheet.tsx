@@ -14,12 +14,16 @@ import { formatTrackerFigure, milestoneSpan } from '@planr/core/lib/milestoneTar
 import { reviewMilestoneDraft } from '@planr/core/lib/intelligence/builderChecks';
 import BottomSheet from '../ui/BottomSheet';
 import SheetHeader from '../ui/SheetHeader';
-import Button from '../ui/Button';
+import Button, { BUTTON_TEXT } from '../ui/Button';
 import Input from '../ui/Input';
 import DateInput from '../ui/DateInput';
 import SegmentedControl from '../ui/SegmentedControl';
 import { typography } from '../ui/Typography';
-import { Text } from '../ui/Text';
+import { Text, TextInput } from '../ui/Text';
+import Toggle from '../ui/Toggle';
+import { Icon } from '../ui/Icon';
+import { IconPlus } from '@tabler/icons-react-native';
+import { milestoneTrackerTargets } from '@planr/core/lib/milestoneAutoLinks';
 import BuilderHints from '../intelligence/BuilderHints';
 
 export interface MilestoneSaveData {
@@ -34,8 +38,12 @@ export interface MilestoneSaveData {
   status: Milestone['status'];
   linkedActivities: string[];
   linkedTrackers: string[];
-  /** This milestone's own figure on its tracker (see lib/milestoneTargets.ts). Undefined = implied. */
+  /** The first target's figure — kept for readers of the legacy single target. */
   targetValue?: number;
+  /** What success means (lib/milestoneCriteria.ts): a figure per tracker. Undefined = none. */
+  trackerTargets?: Record<string, number>;
+  /** Share (0-100) of the plan's tasks due in these dates that must get done. Undefined = none. */
+  consistencyTarget?: number;
   sortOrder: number;
   targetDate?: string;
   estimatedDays?: number;
@@ -43,12 +51,10 @@ export interface MilestoneSaveData {
   completionStatus?: 'pending' | 'completed';
   completedDate?: string;
   /**
-   * A brand-new tracker to create and link as this milestone's success
-   * metric, when the draft defined one instead of picking an existing
-   * tracker. The caller (PlanDetailView's handleMilestoneSave) creates it via
-   * the same onAddTracker path the title-detection suggestion already uses,
-   * then saves the milestone with `linkedTrackers: [newTracker.id]` (already
-   * set on this same MilestoneSaveData) pointing at it.
+   * A brand-new tracker to create for this milestone, when the draft defined
+   * one. The caller (PlanDetailView's handleMilestoneSave) creates it via the
+   * same onAddTracker path the title-detection suggestion already uses; its
+   * goal is this milestone's target on it (already in `trackerTargets`).
    */
   newTracker?: {
     id: string;
@@ -80,18 +86,18 @@ interface DraftState {
   startDate: string;
   durationValue: string;
   durationType: DurationType;
-  // Success metric — only editable while the milestone has no tracker linked
-  // yet (a linked one is managed from the milestone's own detail view, so
-  // this never becomes a second, conflicting place to unlink it).
-  metricMode: 'none' | 'existing' | 'new';
-  existingTrackerId: string;
+  // What success means. Tracker id → typed target ('' = no target).
+  targets: Record<string, string>;
+  /** Whether the "define a new tracker" form is open. */
+  addingTracker: boolean;
   newTrackerTitle: string;
   newTrackerUnit: string;
   newTrackerGoalDirection: GoalDirection;
   newTrackerGoalValue: string;
   newTrackerStartingValue: string;
-  /** The figure the tracker should reach by this milestone's end. Blank = implied by the plan. */
-  targetValue: string;
+  consistencyOn: boolean;
+  /** Typed percentage, 1-100. */
+  consistencyValue: string;
 }
 
 const DURATION_TYPES: Array<{ value: DurationType; label: string }> = [
@@ -133,20 +139,21 @@ function emptyDraft(startDate: string): DraftState {
     startDate,
     durationValue: '7',
     durationType: 'days',
-    metricMode: 'none',
-    existingTrackerId: '',
     newTrackerTitle: '',
     newTrackerUnit: '',
     newTrackerGoalDirection: 'increase_good',
     newTrackerGoalValue: '',
     newTrackerStartingValue: '',
-    targetValue: '',
+    targets: {},
+    addingTracker: false,
+    consistencyOn: false,
+    consistencyValue: '80',
   };
 }
 
 function milestoneToDraft(milestone: Milestone): DraftState {
   const duration = inferDurationDraft(milestone.plannedDurationDays);
-  const linkedTrackerId = milestone.linkedTrackers?.[0];
+  const targets = Object.fromEntries(Object.entries(milestoneTrackerTargets(milestone)).map(([id, value]) => [id, String(value)]));
   return {
     title: milestone.title,
     description: milestone.description ?? '',
@@ -154,14 +161,15 @@ function milestoneToDraft(milestone: Milestone): DraftState {
     startDate: milestone.startDate,
     durationValue: duration.durationValue,
     durationType: duration.durationType,
-    metricMode: linkedTrackerId ? 'existing' : 'none',
-    existingTrackerId: linkedTrackerId ?? '',
+    targets,
+    addingTracker: false,
     newTrackerTitle: '',
     newTrackerUnit: '',
     newTrackerGoalDirection: 'increase_good',
     newTrackerGoalValue: '',
     newTrackerStartingValue: '',
-    targetValue: milestone.targetValue !== undefined ? String(milestone.targetValue) : '',
+    consistencyOn: milestone.consistencyTarget !== undefined,
+    consistencyValue: String(milestone.consistencyTarget ?? 80),
   };
 }
 
@@ -170,25 +178,10 @@ const DIRECTION_OPTIONS = [
   { value: 'decrease_good', label: 'Decrease ↓' },
 ] as const satisfies readonly { value: GoalDirection; label: string }[];
 
-function Chip({ active, label, onPress, tone = 'ink' }: { active: boolean; label: string; onPress: () => void; tone?: 'ink' | 'green' }) {
-  const on = tone === 'green' ? 'bg-emerald-600 dark:bg-emerald-500' : 'bg-neutral-900 dark:bg-white';
-  const onText = tone === 'green' ? 'text-white dark:text-neutral-950' : 'text-white dark:text-neutral-900';
-  return (
-    <Pressable
-      accessibilityRole="button"
-      accessibilityState={{ selected: active }}
-      onPress={onPress}
-      className={`h-11 justify-center rounded-full border px-4 ${active ? `border-transparent ${on}` : 'border-neutral-200 bg-white dark:border-white/10 dark:bg-white/[0.04]'}`}
-    >
-      <Text numberOfLines={1} className={`text-[14px] font-semibold ${active ? onText : 'text-neutral-700 dark:text-neutral-200'}`}>{label}</Text>
-    </Pressable>
-  );
-}
-
 /**
  * Native port of components/plan/MilestoneSheet.tsx — add/edit a roadmap
- * milestone: dates, duration (with the cascade preview), and the success
- * metric (none / existing tracker / define a new one).
+ * milestone: dates, duration (with the cascade preview), and what counts as
+ * done (a target per tracker, a new tracker, a consistency goal).
  */
 export default function MilestoneSheet({
   mode,
@@ -225,8 +218,6 @@ export default function MilestoneSheet({
           startDate: draft.startDate,
           plannedDurationDays,
           plannedEndDate,
-          linkedActivities: milestone?.linkedActivities,
-          linkedTrackers: milestone?.linkedTrackers,
         },
         milestones,
         { mode, editingId: milestone?.id },
@@ -250,40 +241,39 @@ export default function MilestoneSheet({
     return { count: originalFuture.length, shiftDays };
   }, [draft.startDate, milestone, mode, orderedMilestones, plannedDurationDays, plannedEndDate]);
 
-  // The tracker this milestone's own figure is set on — the linked one, or
-  // the existing one being picked. A brand-new tracker's goal is its figure.
-  const targetTracker =
-    (milestone?.linkedTrackers?.[0]
-      ? trackers.find((t) => t.id === milestone.linkedTrackers[0])
-      : draft.metricMode === 'existing'
-        ? trackers.find((t) => t.id === draft.existingTrackerId)
-        : undefined) ?? null;
-
-  // What the plan implies when no figure is typed — the input's placeholder.
+  // With no targets anywhere, the plan's only tracker still measures the
+  // milestone against its goal spread by date — its field's placeholder.
   const impliedTarget = useMemo(() => {
-    if (!targetTracker || !draft.startDate || !plannedEndDate) return null;
+    if (trackers.length !== 1 || !draft.startDate || !plannedEndDate) return null;
+    const only = trackers[0];
     const self = {
       ...(milestone ?? {}),
       id: milestone?.id ?? '__draft',
       startDate: draft.startDate,
       plannedEndDate,
-      linkedTrackers: [targetTracker.id],
+      linkedTrackers: [only.id],
+      trackerTargets: undefined,
       targetValue: undefined,
       sortOrder: milestone?.sortOrder ?? milestones.length,
     } as Milestone;
     const siblings = [...milestones.filter((m) => m.id !== self.id), self];
-    return milestoneSpan(self, targetTracker, siblings, [])?.to ?? null;
-  }, [targetTracker, draft.startDate, plannedEndDate, milestone, milestones]);
+    return milestoneSpan(self, only, siblings, [])?.to ?? null;
+  }, [trackers, draft.startDate, plannedEndDate, milestone, milestones]);
 
   const newTrackerTitle = draft.newTrackerTitle.trim();
-  const willCreateNewTracker = draft.metricMode === 'new' && newTrackerTitle.length > 0;
+  const willCreateNewTracker = draft.addingTracker && newTrackerTitle.length > 0;
 
   function handleSave() {
     const title = draft.title.trim();
     if (!title || !draft.startDate || !plannedEndDate) return;
     const status = milestone?.status === 'completed' ? 'completed' : 'upcoming';
 
-    let linkedTrackers = milestone?.linkedTrackers ?? [];
+    const trackerTargets: Record<string, number> = {};
+    for (const t of trackers) {
+      const raw = draft.targets[t.id]?.trim();
+      const value = raw ? Number(raw) : NaN;
+      if (Number.isFinite(value)) trackerTargets[t.id] = value;
+    }
     let newTracker: MilestoneSaveData['newTracker'];
     if (willCreateNewTracker) {
       const goalValue = draft.newTrackerGoalValue.trim() ? Number(draft.newTrackerGoalValue) : undefined;
@@ -297,13 +287,12 @@ export default function MilestoneSheet({
         goalValue: Number.isFinite(goalValue) ? goalValue : undefined,
         startingValue: Number.isFinite(startingValue) ? startingValue : undefined,
       };
-      linkedTrackers = [newTrackerId];
-    } else if (draft.metricMode === 'existing' && draft.existingTrackerId) {
-      linkedTrackers = [draft.existingTrackerId];
+      // Its goal is what this milestone is aiming for on it.
+      if (newTracker.goalValue !== undefined) trackerTargets[newTrackerId] = newTracker.goalValue;
     }
-
-    const parsedTarget = draft.targetValue.trim() ? Number(draft.targetValue) : undefined;
-    const targetValue = targetTracker && Number.isFinite(parsedTarget) ? parsedTarget : undefined;
+    const linkedTrackers = Object.keys(trackerTargets);
+    const consistency = Number(draft.consistencyValue);
+    const consistencyTarget = draft.consistencyOn && Number.isFinite(consistency) ? Math.max(1, Math.min(100, Math.round(consistency))) : undefined;
 
     onSave({
       title,
@@ -314,9 +303,11 @@ export default function MilestoneSheet({
       plannedEndDate,
       actualCompletedDate: milestone?.actualCompletedDate,
       status,
-      linkedActivities: milestone?.linkedActivities ?? [],
+      linkedActivities: [],
       linkedTrackers,
-      targetValue,
+      targetValue: linkedTrackers.length ? trackerTargets[linkedTrackers[0]] : undefined,
+      trackerTargets: linkedTrackers.length ? trackerTargets : undefined,
+      consistencyTarget,
       newTracker,
       sortOrder: milestone?.sortOrder ?? orderedMilestones.length,
       targetDate: plannedEndDate,
@@ -331,7 +322,6 @@ export default function MilestoneSheet({
   const eyebrow = mode === 'edit' ? 'Edit' : 'New';
   const title = mode === 'edit' ? 'Edit milestone' : 'Add milestone';
   const canSave = !!draft.title.trim() && !!draft.startDate && plannedDurationDays > 0;
-  const alreadyLinkedTracker = milestone?.linkedTrackers?.[0] ? trackers.find((t) => t.id === milestone.linkedTrackers[0]) ?? null : null;
 
   return (
     <BottomSheet
@@ -402,101 +392,113 @@ export default function MilestoneSheet({
             </View>
           )}
 
-          {alreadyLinkedTracker ? (
-            <View className="rounded-2xl border border-neutral-200 bg-neutral-50 px-4 py-3 dark:border-white/10 dark:bg-white/[0.04]">
-              <Text className={typography.eyebrow}>Success metric</Text>
-              <Text className="mt-1 text-[14px] font-semibold text-neutral-800 dark:text-neutral-100">
-                {alreadyLinkedTracker.title}
-                {alreadyLinkedTracker.unit ? ` (${alreadyLinkedTracker.unit})` : ''}
-              </Text>
-              <Text className="mt-0.5 text-[12px] text-neutral-500 dark:text-neutral-400">Manage this from the milestone's detail view.</Text>
-            </View>
-          ) : (
-            <View>
-              <Text className={`mb-2 ${typography.eyebrow}`}>Success metric (optional)</Text>
-              <View className="mb-3 flex-row flex-wrap gap-2">
-                {(['none', ...(trackers.length > 0 ? ['existing'] : []), 'new'] as DraftState['metricMode'][]).map((metricMode) => (
-                  <Chip
-                    key={metricMode}
-                    active={draft.metricMode === metricMode}
-                    label={metricMode === 'none' ? 'None' : metricMode === 'existing' ? 'Existing tracker' : 'Define new'}
-                    onPress={() =>
-                      setDraft((d) => ({
-                        ...d,
-                        metricMode,
-                        existingTrackerId: metricMode === 'existing' && !d.existingTrackerId ? trackers[0]?.id ?? '' : d.existingTrackerId,
-                      }))
-                    }
-                  />
+          {/* What counts as done (lib/milestoneCriteria.ts). The plan's tasks
+              due in these dates always count; the targets decide success,
+              and when every one is met the milestone completes itself. */}
+          <View testID="milestone-success">
+            <Text className={`mb-1 ${typography.eyebrow}`}>What counts as done</Text>
+            <Text className="mb-3 text-[13px] leading-snug text-neutral-500 dark:text-neutral-400">
+              Every task in this plan due between these dates counts automatically. Set targets and the milestone completes itself once they're all met.
+            </Text>
+
+            {trackers.length > 0 && (
+              <View className="mb-3 gap-2">
+                {trackers.map((t) => (
+                  <View key={t.id} className="flex-row items-center gap-3 rounded-2xl border border-neutral-200 bg-neutral-50 px-4 py-2.5 dark:border-white/10 dark:bg-white/[0.04]">
+                    <View className="min-w-0 flex-1">
+                      <Text numberOfLines={1} className="text-[14px] font-semibold text-neutral-800 dark:text-neutral-100">
+                        {t.title}
+                      </Text>
+                      <Text className="text-[12px] text-neutral-500 dark:text-neutral-400">
+                        {t.goalDirection === 'decrease_good' ? 'Reach or go below' : 'Reach or pass'}
+                        {t.unit ? ` · ${t.unit}` : ''}
+                      </Text>
+                    </View>
+                    <TextInput
+                      accessibilityLabel={`${t.title} target`}
+                      keyboardType="decimal-pad"
+                      value={draft.targets[t.id] ?? ''}
+                      onChangeText={(v) => setDraft((d) => ({ ...d, targets: { ...d.targets, [t.id]: v } }))}
+                      placeholder={impliedTarget !== null && trackers.length === 1 ? formatTrackerFigure(impliedTarget, t) : 'No target'}
+                      className="h-11 w-28 rounded-xl border border-neutral-200 bg-white px-3 text-right text-[16px] text-neutral-900 dark:border-white/10 dark:bg-white/[0.06] dark:text-white"
+                    />
+                  </View>
                 ))}
               </View>
+            )}
 
-              {draft.metricMode === 'existing' && trackers.length > 0 && (
-                <View className="flex-row flex-wrap gap-2">
-                  {trackers.map((t) => (
-                    <Chip
-                      key={t.id}
-                      tone="green"
-                      active={draft.existingTrackerId === t.id}
-                      label={`${t.title}${t.unit ? ` (${t.unit})` : ''}`}
-                      onPress={() => setDraft((d) => ({ ...d, existingTrackerId: t.id }))}
-                    />
-                  ))}
+            {draft.addingTracker ? (
+              <View className="mb-3 gap-4 rounded-2xl border border-neutral-200 bg-neutral-50 p-4 dark:border-white/10 dark:bg-white/[0.04]">
+                <Input label="Tracker" value={draft.newTrackerTitle} onChangeText={(v) => setDraft((d) => ({ ...d, newTrackerTitle: v }))} placeholder="e.g. Weight" />
+                <Input label="Unit" value={draft.newTrackerUnit} onChangeText={(v) => setDraft((d) => ({ ...d, newTrackerUnit: v }))} placeholder="kg" />
+                <View>
+                  <Text className={`mb-2 ${typography.eyebrow}`}>Direction</Text>
+                  <SegmentedControl
+                    ariaLabel="Direction"
+                    options={DIRECTION_OPTIONS}
+                    value={draft.newTrackerGoalDirection}
+                    onChange={(v) => setDraft((d) => ({ ...d, newTrackerGoalDirection: v }))}
+                  />
                 </View>
-              )}
-
-              {draft.metricMode === 'new' && (
-                <View className="gap-4 rounded-2xl border border-neutral-200 bg-neutral-50 p-4 dark:border-white/10 dark:bg-white/[0.04]">
-                  <Input label="Metric title" value={draft.newTrackerTitle} onChangeText={(v) => setDraft((d) => ({ ...d, newTrackerTitle: v }))} placeholder="e.g. Weight" />
-                  <Input label="Unit" value={draft.newTrackerUnit} onChangeText={(v) => setDraft((d) => ({ ...d, newTrackerUnit: v }))} placeholder="kg" />
-                  <View>
-                    <Text className={`mb-2 ${typography.eyebrow}`}>Direction</Text>
-                    <SegmentedControl
-                      ariaLabel="Direction"
-                      options={DIRECTION_OPTIONS}
-                      value={draft.newTrackerGoalDirection}
-                      onChange={(v) => setDraft((d) => ({ ...d, newTrackerGoalDirection: v }))}
+                <View className="flex-row gap-3">
+                  <View className="flex-1">
+                    <Input
+                      label="Target"
+                      keyboardType="decimal-pad"
+                      value={draft.newTrackerGoalValue}
+                      onChangeText={(v) => setDraft((d) => ({ ...d, newTrackerGoalValue: v }))}
+                      placeholder="75"
                     />
                   </View>
-                  <View className="flex-row gap-3">
-                    <View className="flex-1">
-                      <Input
-                        label="Target value"
-                        keyboardType="decimal-pad"
-                        value={draft.newTrackerGoalValue}
-                        onChangeText={(v) => setDraft((d) => ({ ...d, newTrackerGoalValue: v }))}
-                        placeholder="75"
-                      />
-                    </View>
-                    <View className="flex-1">
-                      <Input
-                        label="Start (optional)"
-                        keyboardType="decimal-pad"
-                        value={draft.newTrackerStartingValue}
-                        onChangeText={(v) => setDraft((d) => ({ ...d, newTrackerStartingValue: v }))}
-                        placeholder="82"
-                      />
-                    </View>
+                  <View className="flex-1">
+                    <Input
+                      label="Start (optional)"
+                      keyboardType="decimal-pad"
+                      value={draft.newTrackerStartingValue}
+                      onChangeText={(v) => setDraft((d) => ({ ...d, newTrackerStartingValue: v }))}
+                      placeholder="82"
+                    />
                   </View>
+                </View>
+                <Button variant="ghost" size="sm" onPress={() => setDraft((d) => ({ ...d, addingTracker: false, newTrackerTitle: '' }))}>
+                  Cancel new tracker
+                </Button>
+              </View>
+            ) : (
+              <View className="mb-3 self-start">
+                <Button
+                  variant="secondary"
+                  size="md"
+                  icon={<Icon icon={IconPlus} size={16} strokeWidth={2.2} className={BUTTON_TEXT.secondary} />}
+                  onPress={() => setDraft((d) => ({ ...d, addingTracker: true }))}
+                >
+                  New tracker
+                </Button>
+              </View>
+            )}
+
+            <View className="rounded-2xl border border-neutral-200 bg-neutral-50 px-4 py-3 dark:border-white/10 dark:bg-white/[0.04]">
+              <View className="flex-row items-center justify-between gap-3">
+                <View className="min-w-0 shrink">
+                  <Text className="text-[14px] font-semibold text-neutral-800 dark:text-neutral-100">Consistency goal</Text>
+                  <Text className="text-[12px] text-neutral-500 dark:text-neutral-400">Share of these dates' tasks to get done</Text>
+                </View>
+                <Toggle on={draft.consistencyOn} onChange={(on) => setDraft((d) => ({ ...d, consistencyOn: on }))} label="Consistency goal" />
+              </View>
+              {draft.consistencyOn && (
+                <View className="mt-3 flex-row items-center gap-2">
+                  <TextInput
+                    accessibilityLabel="Consistency goal, percent"
+                    keyboardType="number-pad"
+                    value={draft.consistencyValue}
+                    onChangeText={(v) => setDraft((d) => ({ ...d, consistencyValue: v }))}
+                    className="h-11 w-24 rounded-xl border border-neutral-200 bg-white px-3 text-right text-[16px] text-neutral-900 dark:border-white/10 dark:bg-white/[0.06] dark:text-white"
+                  />
+                  <Text className="text-[14px] font-medium text-neutral-600 dark:text-neutral-300">% of tasks done</Text>
                 </View>
               )}
             </View>
-          )}
-
-          {targetTracker && (
-            <View>
-              <Input
-                label={`Target by ${plannedEndDate ? formatDate(plannedEndDate) : 'the end'}${targetTracker.unit ? ` (${targetTracker.unit})` : ''}`}
-                keyboardType="decimal-pad"
-                value={draft.targetValue}
-                onChangeText={(v) => setDraft((d) => ({ ...d, targetValue: v }))}
-                placeholder={impliedTarget !== null && targetTracker ? `${formatTrackerFigure(impliedTarget, targetTracker)} from the plan` : 'e.g. 21'}
-              />
-              <Text className="mt-1.5 text-[12px] leading-snug text-neutral-500 dark:text-neutral-400">
-                Where {targetTracker.title} should be when this milestone ends. Leave blank to spread its goal across the plan's milestones.
-              </Text>
-            </View>
-          )}
+          </View>
         </View>
 
         <BuilderHints hints={hints} />

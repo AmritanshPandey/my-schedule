@@ -30,8 +30,6 @@ import ProgressBar from "@/components/ui/ProgressBar";
 import RoutineMonthCalendar from "@/components/activity/RoutineMonthCalendar";
 import FollowedPicker from "@/components/activity/FollowedPicker";
 import { CARD, SOFT_PANEL } from "@/components/ui/surfaces";
-import MilestoneLinks from "@/components/milestone/MilestoneLinks";
-import type { MilestoneLinkKind } from "@/lib/milestoneLinks";
 import Button from "@/components/ui/Button";
 import IconButton from "@/components/ui/IconButton";
 
@@ -51,8 +49,6 @@ interface RoutineDetailViewProps {
   onEdit: () => void;
   onDelete: () => void;
   /** Every milestone — shows which ones this routine advances. Absent = hidden. */
-  milestones?: readonly Milestone[];
-  onSetMilestoneLink?: (milestoneId: string, kind: MilestoneLinkKind, itemId: string, linked: boolean) => void;
 }
 
 const EYEBROW = "text-[11px] font-bold uppercase tracking-[0.08em] text-neutral-600 dark:text-neutral-400";
@@ -70,8 +66,6 @@ export default function RoutineDetailView({
   onToggleStep,
   onEdit,
   onDelete,
-  milestones,
-  onSetMilestoneLink,
 }: RoutineDetailViewProps) {
   const [customValue, setCustomValue] = useState("");
   const today = todayISO();
@@ -333,16 +327,6 @@ export default function RoutineDetailView({
             </div>
           )}
 
-          {/* ── What this routine advances ───────────────────────────────── */}
-          {milestones && onSetMilestoneLink && (
-            <MilestoneLinks
-              className={`p-4 ${CARD}`}
-              milestones={milestones}
-              kind="ritual"
-              itemId={ritual.id}
-              onSetLink={onSetMilestoneLink}
-            />
-          )}
 
           {/* ── The record ───────────────────────────────────────────────── */}
           <div className={`space-y-3 p-4 ${CARD}`}>

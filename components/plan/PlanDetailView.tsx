@@ -47,7 +47,6 @@ import { calculateMilestoneState, linkedRoutineFollowThrough, planProgressFromMi
 import { paceNarrative } from "@/lib/paceModel";
 import type { MilestoneLinkKind } from "@/lib/milestoneLinks";
 import { formatTrackerFigure, milestoneSpan } from "@/lib/milestoneTargets";
-import MilestoneLinks from "@/components/milestone/MilestoneLinks";
 import { isPlanRunning, planLifecycleLabel } from "@/lib/planLifecycle";
 import { valueForDate } from "@/lib/metricEntries";
 import { planEffectiveEndDate, resolveMilestoneStatus } from "@/lib/roadmapDates";
@@ -91,7 +90,8 @@ import AIActionSheet, { type ResultItem } from "@/components/ai/AIActionSheet";
 import { detectMeasurableGoal, type MeasurableGoal } from "@/lib/milestoneIntelligence";
 import { getSlots, uid } from "@/lib/taskMutations";
 import { typography } from "@/components/ui/Typography";
-import { withAutoLinks } from "@/lib/milestoneAutoLinks";
+import { milestoneTrackerTargets, withAutoLinks } from "@/lib/milestoneAutoLinks";
+import { criteriaMet, formatCriterionFigure, milestoneCriteria } from "@/lib/milestoneCriteria";
 
 
 
@@ -280,13 +280,10 @@ interface PlanDetailViewProps {
   // the AI post-milestone CTA below, which creates+links a suggested tracker
   // in one step.
   onLinkTrackerToMilestone?: (milestoneId: string, trackerId: string) => void;
-  onUnlinkTrackerFromMilestone?: (milestoneId: string, trackerId: string) => void;
   // Milestone <-> task linking — the activity signal calculateMilestoneState
   // reads for task progress/consistency. The AI-generated-tasks flow already
   // links at creation time (onAddGeneratedTasks' milestoneId); these cover
   // linking/unlinking an already-existing task by hand.
-  onLinkTaskToMilestone?: (milestoneId: string, taskId: string) => void;
-  onUnlinkTaskFromMilestone?: (milestoneId: string, taskId: string) => void;
   // Milestone <-> routine linking (and the generic form the item-side views
   // use). Routines aren't plan-scoped, so any routine can be linked.
   onSetMilestoneLink?: (milestoneId: string, kind: MilestoneLinkKind, itemId: string, linked: boolean) => void;
@@ -327,9 +324,6 @@ export default function PlanDetailView({
   onCompleteMilestone,
   onAddGeneratedTasks,
   onLinkTrackerToMilestone,
-  onUnlinkTrackerFromMilestone,
-  onLinkTaskToMilestone,
-  onUnlinkTaskFromMilestone,
   onSetMilestoneLink,
   onUpdateCoachMessages,
   onOpenSession,
@@ -1257,7 +1251,6 @@ export default function PlanDetailView({
     // The row counts what the milestone actually measures: its hand-made
     // links, or the plan's own work when it has none (lib/milestoneAutoLinks).
     const m = withAutoLinks(raw, schedule.activities as unknown as Record<string, Task[]>, trackers);
-    const autoTasks = (raw.linkedActivities?.length ?? 0) === 0 && (m.linkedActivities?.length ?? 0) > 0;
     const status = resolveMilestoneStatus(m);
     const isCompleted = status === "completed";
     const progress = milestoneProgressById.get(m.id);
@@ -1364,11 +1357,9 @@ export default function PlanDetailView({
               {daysLabel}
             </span>
           </div>
-          {/* Linked tasks + tracker badges ("auto" when the plan's own tasks
-              are what's counted) — the task badge shows live
-              linked-task/subtask completion when there's anything to show
-              (calculateMilestoneProgress), falling back to the plain linked
-              count for a milestone with nothing trackable linked yet. */}
+          {/* What the milestone counts — the plan's tasks in its dates (live
+              completion, calculateMilestoneProgress), its targeted trackers,
+              and any routines. */}
           {((m.linkedActivities?.length ?? 0) > 0 || (m.linkedTrackers?.length ?? 0) > 0 || (m.linkedRituals?.length ?? 0) > 0) && (
             <div className="mt-1.5 flex items-center gap-2">
               {(m.linkedActivities?.length ?? 0) > 0 && (
@@ -1377,7 +1368,6 @@ export default function PlanDetailView({
                   {progress?.hasLinkedTasks
                     ? `${progress.completedCount}/${progress.totalCount} tasks`
                     : `${m.linkedActivities!.length} task${m.linkedActivities!.length !== 1 ? "s" : ""}`}
-                  {autoTasks && <span className="font-medium text-neutral-500 dark:text-neutral-400">· auto</span>}
                 </span>
               )}
               {(m.linkedTrackers?.length ?? 0) > 0 && (
@@ -2366,7 +2356,6 @@ export default function PlanDetailView({
           const isActive    = status === "active";
           const progress = milestoneProgressById.get(m.id);
           const health = milestoneStateById.get(m.id);
-          const readyToComplete = !!progress?.hasLinkedTasks && progress.pct === 100 && !isCompleted;
           const showHealthBadge = health && !["not_started", "completed", "getting_started"].includes(health.health);
           // The "success metric" a milestone's outcome-driven progress is
           // computed from (lib/milestoneHealth.ts) — the first linked tracker
@@ -2374,12 +2363,18 @@ export default function PlanDetailView({
           // What the milestone actually measures — its hand-made links, or the
           // plan's own work when it has none (lib/milestoneAutoLinks.ts).
           const em = withAutoLinks(m, schedule.activities as unknown as Record<string, Task[]>, trackers);
-          const autoTasks = (m.linkedActivities?.length ?? 0) === 0 && (em.linkedActivities?.length ?? 0) > 0;
-          const autoTracker = (m.linkedTrackers?.length ?? 0) === 0 && (em.linkedTrackers?.length ?? 0) > 0;
+          const autoTracker = Object.keys(milestoneTrackerTargets(m)).length === 0 && (em.linkedTrackers?.length ?? 0) > 0;
+          const criteria = milestoneCriteria(m, {
+            activities: schedule.activities as unknown as Record<string, Task[]>,
+            trackers: schedule.progressTrackers ?? [],
+            metricEntries: schedule.metricEntries ?? [],
+            rituals: schedule.rituals,
+            ritualCompletions: schedule.ritualCompletions,
+            trackingStart: schedule.preferences?.startDate,
+          });
+          const criteriaAllMet = criteriaMet(criteria);
           const linkedTrackerId = em.linkedTrackers?.[0];
           const linkedTracker = linkedTrackerId ? trackers.find((t) => t.id === linkedTrackerId) ?? null : null;
-          // `trackers` is already scoped to this plan (see its own definition above).
-          const linkableTrackers = trackers.filter((t) => !(em.linkedTrackers ?? []).includes(t.id));
           // Tasks this milestone could still link — excludes commitments
           // (never tracked, see isTrackedTask) since linking one would
           // silently contribute nothing to progress.
@@ -2394,9 +2389,6 @@ export default function PlanDetailView({
           const routines = schedule.rituals ?? [];
           const linkedRoutineIds = m.linkedRituals ?? [];
           const linkableRoutines = routines.filter((r) => !linkedRoutineIds.includes(r.id));
-          const linkableTasks = uniqueTasks.filter(
-            ({ task }) => isTrackedTask(task) && !(em.linkedActivities ?? []).includes(task.id)
-          );
 
           return (
             <div className="px-5 pb-8 pt-4">
@@ -2570,66 +2562,29 @@ export default function PlanDetailView({
                 </div>
               )}
 
-              {/* Linked tasks — the activity signal calculateMilestoneState
-                  reads for task progress/consistency. Each row can be
-                  unlinked (the task itself is untouched — only the
-                  relationship is removed); unlinked plan tasks can be added
-                  from the picker below. */}
-              {(progress?.hasLinkedTasks || onLinkTaskToMilestone) && (
-                <div className="mb-5">
-                  <p className="mb-2 text-[11px] font-bold uppercase tracking-[0.08em] text-neutral-600 dark:text-neutral-400">
-                    {autoTasks ? "Tasks counted" : "Linked tasks"}
+              {/* Tasks counted — every task in this plan due in these dates
+                  (lib/milestoneAutoLinks.ts). Read-only: there is nothing to
+                  link by hand. */}
+              {progress?.hasLinkedTasks && (
+                <div className="mb-5" data-testid="milestone-tasks">
+                  <p className="mb-1 text-[11px] font-bold uppercase tracking-[0.08em] text-neutral-600 dark:text-neutral-400">
+                    Tasks counted
                   </p>
-                  {autoTasks && (
-                    <p className="-mt-1 mb-2 text-[12px] leading-snug text-neutral-500 dark:text-neutral-400">
-                      Automatic: every task in this plan due in these dates. Link or unlink one to choose them yourself.
-                    </p>
-                  )}
-                  {progress?.hasLinkedTasks && (
-                    <div className="mb-2 space-y-2">
-                      {progress.taskBreakdown.map((t) => (
-                        <div key={t.taskId} className="flex items-center justify-between gap-3">
-                          <span className="min-w-0 flex-1 truncate text-[14px] font-medium text-neutral-700 dark:text-neutral-300">
-                            {taskTitleById.get(t.taskId) ?? "Deleted task"}
-                          </span>
-                          <div className="flex shrink-0 items-center gap-2">
-                            <span className="text-[12px] font-semibold text-neutral-500 dark:text-neutral-400">
-                              {t.completedCount}/{t.totalCount}
-                            </span>
-                            {onUnlinkTaskFromMilestone && (
-                              <button
-                                type="button"
-                                onClick={() => onUnlinkTaskFromMilestone(m.id, t.taskId)}
-                                className="min-h-11 px-1 text-[11px] font-semibold text-neutral-500 hover:text-rose-500 dark:text-neutral-400 dark:hover:text-rose-400"
-                              >
-                                Unlink
-                              </button>
-                            )}
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                  )}
-                  {onLinkTaskToMilestone && (
-                    linkableTasks.length > 0 ? (
-                      <div className="flex flex-wrap gap-1.5">
-                        {linkableTasks.map(({ task }) => (
-                          <button
-                            key={task.id}
-                            type="button"
-                            onClick={() => onLinkTaskToMilestone(m.id, task.id)}
-                            className="min-h-11 rounded-full border border-neutral-200 px-3.5 text-[13px] font-semibold text-neutral-600 hover:border-neutral-300 hover:bg-neutral-50 dark:border-white/10 dark:text-neutral-300 dark:hover:border-white/20 dark:hover:bg-white/[0.04]"
-                          >
-                            + {taskTitleById.get(task.id) ?? task.title}
-                          </button>
-                        ))}
+                  <p className="mb-2 text-[12px] leading-snug text-neutral-500 dark:text-neutral-400">
+                    Every task in this plan due between these dates.
+                  </p>
+                  <div className="space-y-2">
+                    {progress.taskBreakdown.map((t) => (
+                      <div key={t.taskId} className="flex items-center justify-between gap-3">
+                        <span className="min-w-0 flex-1 truncate text-[14px] font-medium text-neutral-700 dark:text-neutral-300">
+                          {taskTitleById.get(t.taskId) ?? "Deleted task"}
+                        </span>
+                        <span className="shrink-0 text-[12px] font-semibold tabular-nums text-neutral-500 dark:text-neutral-400">
+                          {t.completedCount}/{t.totalCount}
+                        </span>
                       </div>
-                    ) : !progress?.hasLinkedTasks ? (
-                      <p className="text-[13px] leading-relaxed text-neutral-500 dark:text-neutral-400">
-                        No tasks on this plan yet. Add one to track activity toward this milestone.
-                      </p>
-                    ) : null
-                  )}
+                    ))}
+                  </div>
                 </div>
               )}
 
@@ -2701,73 +2656,59 @@ export default function PlanDetailView({
                 </div>
               )}
 
-              {/* Success metric — links this milestone to the tracker its
-                  metric progress/forecast is computed from
-                  (lib/milestoneHealth.ts). A linked tracker can be unlinked
-                  (the tracker itself, and its logged entries, are untouched —
-                  only the relationship is removed); an unlinked milestone can
-                  pick any of the plan's existing trackers. */}
-              {(onLinkTrackerToMilestone || onUnlinkTrackerFromMilestone) && (
-                <div className="mb-5">
-                  <p className="mb-2 text-[11px] font-bold uppercase tracking-[0.08em] text-neutral-600 dark:text-neutral-400">
-                    Success metric
-                  </p>
-                  {autoTracker && (
-                    <p className="-mt-1 mb-2 text-[12px] leading-snug text-neutral-500 dark:text-neutral-400">
-                      Automatic: this plan&apos;s only tracker.
-                    </p>
-                  )}
-                  {linkedTracker ? (
-                    <div className="flex items-center justify-between gap-3 rounded-xl border border-neutral-200 bg-neutral-50 px-3 py-2.5 dark:border-white/10 dark:bg-white/[0.04]">
-                      <div className="min-w-0">
-                        <p className="truncate text-[14px] font-semibold text-neutral-800 dark:text-neutral-100">
-                          {linkedTracker.title}
-                        </p>
-                        <p className="text-[12px] text-neutral-500 dark:text-neutral-400">
-                          {linkedSpan ? fig(linkedSpan.from) : linkedTracker.startingValue ?? "–"} → {linkedSpan ? fig(linkedSpan.to) : linkedTracker.goalValue ?? "–"}
-                          {linkedTracker.unit ? ` ${linkedTracker.unit}` : ""}
-                          {linkedTracker.goalDirection === "decrease_good" ? " ↓" : " ↑"}
-                          {m.targetValue === undefined && linkedSpan && " · implied by the plan"}
-                        </p>
-                      </div>
-                      {onUnlinkTrackerFromMilestone && (
-                        <button
-                          type="button"
-                          onClick={() => onUnlinkTrackerFromMilestone(m.id, linkedTracker.id)}
-                          className="shrink-0 text-[12px] font-semibold text-neutral-500 hover:text-rose-500 dark:text-neutral-400 dark:hover:text-rose-400"
-                        >
-                          Unlink
-                        </button>
-                      )}
-                    </div>
-                  ) : linkableTrackers.length > 0 && onLinkTrackerToMilestone ? (
-                    <div className="flex flex-wrap gap-1.5">
-                      {linkableTrackers.map((t) => (
-                        <button
-                          key={t.id}
-                          type="button"
-                          onClick={() => onLinkTrackerToMilestone(m.id, t.id)}
-                          className="rounded-full border border-neutral-200 px-3 py-1.5 text-[12.5px] font-semibold text-neutral-600 hover:border-neutral-300 hover:bg-neutral-50 dark:border-white/10 dark:text-neutral-300 dark:hover:border-white/20 dark:hover:bg-white/[0.04]"
-                        >
-                          + {t.title}{t.unit ? ` (${t.unit})` : ""}
-                        </button>
-                      ))}
-                    </div>
-                  ) : (
-                    <p className="text-[13px] leading-relaxed text-neutral-500 dark:text-neutral-400">
-                      No trackers yet on this plan — create one under Progress Tracking to measure this milestone's outcome (e.g. weight, savings).
-                    </p>
-                  )}
-                </div>
-              )}
-
-              {/* Ready-to-complete nudge — purely informational, still a
-                  manual click; never auto-completes. */}
-              {readyToComplete && (
-                <p className="mb-2 text-center text-[12.5px] font-medium text-emerald-600 dark:text-emerald-400">
-                  All linked tasks are complete — ready to mark this milestone done.
+              {/* What counts as done — each target and where it stands
+                  (lib/milestoneCriteria.ts). Set in Edit; when every one is
+                  met the milestone completes itself. */}
+              <div className="mb-5" data-testid="milestone-criteria">
+                <p className="mb-2 text-[11px] font-bold uppercase tracking-[0.08em] text-neutral-600 dark:text-neutral-400">
+                  What counts as done
                 </p>
-              )}
+                {criteria.length > 0 ? (
+                  <div className="space-y-2">
+                    {criteria.map((c) => (
+                      <div
+                        key={c.kind === "tracker" ? c.trackerId : "consistency"}
+                        className="flex items-center justify-between gap-3 rounded-xl border border-neutral-200 bg-neutral-50 px-3 py-2.5 dark:border-white/10 dark:bg-white/[0.04]"
+                      >
+                        <div className="min-w-0">
+                          <p className="truncate text-[14px] font-semibold text-neutral-800 dark:text-neutral-100">
+                            {c.kind === "tracker" ? c.title : `Consistency ${c.target}%`}
+                          </p>
+                          <p className="text-[12px] tabular-nums text-neutral-500 dark:text-neutral-400">
+                            {c.kind === "tracker"
+                              ? `${c.current === null ? "Nothing logged" : formatCriterionFigure(c.current)} → ${formatCriterionFigure(c.target)}${c.unit ? ` ${c.unit}` : ""} ${c.decreasing ? "↓" : "↑"}`
+                              : c.expectedTotal > 0
+                                ? `${formatCriterionFigure(c.completed)} of ${c.expectedTotal} done · needs ${c.needed}`
+                                : "Nothing due in these dates yet"}
+                          </p>
+                        </div>
+                        {c.met ? (
+                          <span className="inline-flex shrink-0 items-center gap-1 text-[12px] font-bold text-emerald-700 dark:text-emerald-400">
+                            <IconCheck size={14} strokeWidth={2.5} aria-hidden="true" />
+                            Met
+                          </span>
+                        ) : (
+                          <span className="shrink-0 text-[12px] font-semibold text-neutral-500 dark:text-neutral-400">Not yet</span>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                ) : autoTracker && linkedTracker ? (
+                  <p className="text-[13px] leading-relaxed text-neutral-500 dark:text-neutral-400">
+                    {linkedTracker.title}: {linkedSpan ? fig(linkedSpan.from) : linkedTracker.startingValue ?? "–"} → {linkedSpan ? fig(linkedSpan.to) : linkedTracker.goalValue ?? "–"}
+                    {linkedTracker.unit ? ` ${linkedTracker.unit}` : ""}, implied by the plan. Set a target in Edit to have this milestone complete itself.
+                  </p>
+                ) : (
+                  <p className="text-[13px] leading-relaxed text-neutral-500 dark:text-neutral-400">
+                    No targets yet. In Edit, give a tracker a target or set a consistency goal, and this milestone completes itself once they&apos;re met.
+                  </p>
+                )}
+                {criteriaAllMet && m.autoComplete === false && !isCompleted && (
+                  <p className="mt-2 text-[12.5px] font-medium text-emerald-700 dark:text-emerald-400">
+                    Every target is met. Mark it done when you&apos;re ready.
+                  </p>
+                )}
+              </div>
 
               {/* Mark Done — any non-completed milestone */}
               {!isCompleted && (
@@ -2908,18 +2849,6 @@ export default function PlanDetailView({
                 </div>
               )}
 
-              {/* Which milestones this task moves forward. */}
-              {onSetMilestoneLink && isTrackedTask(task) && (
-                <MilestoneLinks
-                  className="mb-5"
-                  milestones={schedule.milestones}
-                  kind="task"
-                  itemId={task.id}
-                  planId={plan.id}
-                  activities={schedule.activities}
-                  onSetLink={onSetMilestoneLink}
-                />
-              )}
 
               {/* Actions */}
               <div className="flex gap-3">

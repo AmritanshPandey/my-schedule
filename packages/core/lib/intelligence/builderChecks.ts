@@ -154,9 +154,6 @@ export interface MilestoneDraft {
   startDate: string;
   plannedDurationDays: number;
   plannedEndDate: string;
-  /** Edit mode only — a new milestone has nothing linked yet by definition. */
-  linkedActivities?: string[];
-  linkedTrackers?: string[];
 }
 
 export const MILESTONE_MIN_DAYS = 3;
@@ -182,18 +179,6 @@ export function reviewMilestoneDraft(
 
   if (options.mode === "create" && draft.plannedEndDate && draft.plannedEndDate < todayISO) {
     hints.push({ id: "ms-past", tone: "warn", message: "With these dates the milestone would already be over." });
-  }
-
-  if (
-    options.mode === "edit"
-    && (draft.linkedActivities?.length ?? 0) === 0
-    && (draft.linkedTrackers?.length ?? 0) === 0
-  ) {
-    hints.push({
-      id: "ms-unlinked",
-      tone: "warn",
-      message: "Nothing is linked to this milestone yet, so its progress can't be measured. Open it on the plan page to link tasks or a tracker.",
-    });
   }
 
   const vague = findVaguePhrase(text);

@@ -94,10 +94,11 @@ test("origin falls back to the earliest entry, and no origin means no path", () 
   assert.equal(path.points[0].value, 6);
 });
 
-test("only milestones whose primary tracker this is take part", () => {
-  const secondary = milestone({ id: "x", linkedTrackers: ["other", "t1"] });
-  const path = plannedTrackerPath(distance, [base, secondary], []);
-  assert.deepEqual(path.points.map((p) => p.milestoneId ?? "origin"), ["origin", "base"]);
+test("a milestone takes part when it targets the tracker, even second; a bare link doesn't", () => {
+  const bare = milestone({ id: "x", linkedTrackers: ["other", "t1"] });
+  assert.deepEqual(plannedTrackerPath(distance, [base, bare], []).points.map((p) => p.milestoneId ?? "origin"), ["origin", "base"]);
+  const targeted = milestone({ id: "y", linkedTrackers: ["other", "t1"], trackerTargets: { other: 1, t1: 12 } });
+  assert.deepEqual(plannedTrackerPath(distance, [base, targeted], []).points.map((p) => p.milestoneId ?? "origin"), ["origin", "base", "y"]);
 });
 
 test("milestoneSpan: each milestone measures from the previous checkpoint", () => {
@@ -187,15 +188,15 @@ test("the headline blends metric and routines with equal weight", () => {
   assert.equal(state.overallProgress, 35);
 });
 
-test("secondary trackers join the metric average against their own goals", () => {
+test("every targeted tracker joins the metric average against its own target", () => {
   const pages = { id: "t2", planId: "p1", title: "Pages", type: "number", startingValue: 0, goalValue: 100 };
-  const m = milestone({ linkedTrackers: ["t1", "t2"], targetValue: 15 });
+  const m = milestone({ trackerTargets: { t1: 15, t2: 60 } });
   const state = calculateMilestoneState({
     milestone: m, plan, activities: {}, trackers: [distance, pages],
     metricEntries: [entry("2026-09-04", 10), entry("2026-09-04", 30, "t2")],
     now: new Date("2026-09-05T12:00:00"), milestones: [m],
   });
-  assert.deepEqual(state.progressSources, [{ kind: "metric", pct: 40 }]); // (50 + 30) / 2
+  assert.deepEqual(state.progressSources, [{ kind: "metric", pct: 50 }]); // (5→15 at 10) and (0→60 at 30)
 });
 
 // ── Item-side links ─────────────────────────────────────────────────────────

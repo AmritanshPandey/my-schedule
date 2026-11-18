@@ -119,6 +119,7 @@ import type { CreateTaskFromNoteInput } from "@/components/notes/NotesView";
 import { useCoachTour } from "@/lib/onboarding/useCoachTour";
 import { TOUR_STEPS, type TourId } from "@/lib/onboarding/tours";
 import { setMilestoneLink } from "@/lib/milestoneAutoLinks";
+import { useMilestoneAutoComplete } from "@/lib/useMilestoneAutoComplete";
 import { upsertSetLog } from "@/lib/setLogs";
 import { useFocusSession } from "@/lib/useFocusSession";
 import { decideProgression, pendingProgressionsForTask } from "@/lib/subtaskProgression";
@@ -496,6 +497,8 @@ export default function IOSScheduleApp() {
   const setToast = useCallback((next: string | { message: string; actionLabel?: string; onAction?: () => void } | null) => {
     setToastState(next === null ? null : typeof next === "string" ? { message: next } : next);
   }, []);
+  // A milestone whose targets are all met completes itself, with Undo.
+  useMilestoneAutoComplete(schedule, setSchedule, ready, setToast);
   const [initialNoteId, setInitialNoteId] = useState<string | null>(null);
   const scheduleRef = useRef(schedule);
   scheduleRef.current = schedule;
@@ -1499,9 +1502,6 @@ export default function IOSScheduleApp() {
         <IOSMotionBoundary>
           <ErrorBoundary section name="Task detail">
             <TaskDetailView
-              milestones={schedule.milestones}
-              activities={schedule.activities}
-              onSetMilestoneLink={handleSetMilestoneLink}
               task={subtasksTask}
               linkedPlan={subtasksTask?.planId ? plansById.get(subtasksTask.planId) ?? null : null}
               readOnly={subtasksRef.dateISO !== todayISO()}
@@ -1707,24 +1707,6 @@ export default function IOSScheduleApp() {
                     milestones: setMilestoneLink(prev, milestoneId, "tracker", trackerId, true),
                   }));
                 }}
-                onUnlinkTrackerFromMilestone={(milestoneId, trackerId) => {
-                  setSchedule((prev) => ({
-                    ...prev,
-                    milestones: setMilestoneLink(prev, milestoneId, "tracker", trackerId, false),
-                  }));
-                }}
-                onLinkTaskToMilestone={(milestoneId, taskId) => {
-                  setSchedule((prev) => ({
-                    ...prev,
-                    milestones: setMilestoneLink(prev, milestoneId, "task", taskId, true),
-                  }));
-                }}
-                onUnlinkTaskFromMilestone={(milestoneId, taskId) => {
-                  setSchedule((prev) => ({
-                    ...prev,
-                    milestones: setMilestoneLink(prev, milestoneId, "task", taskId, false),
-                  }));
-                }}
                 onUpdateCoachMessages={(planId: string, messages: PlanCoachMessage[]) => {
                   setSchedule((prev) => ({ ...prev, plans: prev.plans.map((plan) => (plan.id === planId ? { ...plan, coachMessages: messages } : plan)) }));
                 }}
@@ -1882,7 +1864,6 @@ export default function IOSScheduleApp() {
               <TrackingView
                 phoneShell
                 milestones={schedule.milestones}
-                onSetMilestoneLink={handleSetMilestoneLink}
                 trackers={schedule.progressTrackers}
                 metricEntries={schedule.metricEntries}
                 plans={schedule.plans}
@@ -2186,8 +2167,6 @@ export default function IOSScheduleApp() {
           style={{ paddingTop: "env(safe-area-inset-top, 0px)" }}
         >
           <RoutineDetailView
-            milestones={schedule.milestones}
-            onSetMilestoneLink={handleSetMilestoneLink}
             ritual={detailRitual}
             ritualCompletions={schedule.ritualCompletions ?? []}
             trackingStart={schedule.preferences?.startDate}

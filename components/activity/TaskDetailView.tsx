@@ -15,8 +15,6 @@ import { calculateTaskProgress, isTrackedTask, phaseProgress, resolveSlotState, 
 import { getSlots } from "@/lib/taskMutations";
 import { formatDisplayTime, formatDuration } from "@/lib/timeUtils";
 import type { Milestone, Plan, Schedule, Task } from "@/lib/useScheduleDB";
-import type { MilestoneLinkKind } from "@/lib/milestoneLinks";
-import MilestoneLinks from "@/components/milestone/MilestoneLinks";
 import Button from "@/components/ui/Button";
 import LogSetsSheet from "@/components/activity/LogSetsSheet";
 import ProgressionCard from "@/components/activity/ProgressionCard";
@@ -47,11 +45,6 @@ export interface TaskDetailViewProps {
   dayLabel?: string;
   onEdit?: () => void;
   presentation?: "sheet" | "page";
-  /** Every milestone — shows which ones this task advances. Absent = hidden. */
-  milestones?: readonly Milestone[];
-  /** The schedule's activities, so milestones that count this task automatically show. */
-  activities?: Schedule["activities"];
-  onSetMilestoneLink?: (milestoneId: string, kind: MilestoneLinkKind, itemId: string, linked: boolean) => void;
   /** ISO date of the occurrence shown — where logged sets are filed. Defaults to today. */
   dateISO?: string;
   /** Every logged session, for Previous and today's summary. */
@@ -85,9 +78,6 @@ export default function TaskDetailView({
   dayLabel,
   onEdit,
   presentation = "sheet",
-  milestones,
-  activities,
-  onSetMilestoneLink,
   dateISO,
   setLogs,
   progressionSteps,
@@ -334,19 +324,6 @@ export default function TaskDetailView({
       )}
 
       {dayNoteBlock}
-
-      {/* Which milestones this task moves forward — commitments are never
-          tracked, so linking one would count for nothing. */}
-      {milestones && onSetMilestoneLink && tracked && !readOnly && (
-        <MilestoneLinks
-          milestones={milestones}
-          kind="task"
-          itemId={task.id}
-          planId={task.planId}
-          activities={activities}
-          onSetLink={onSetMilestoneLink}
-        />
-      )}
 
       {/* No empty state when there are no subtasks. The panel that used to sit
           here read "No subtasks — mark the whole task done below", which only

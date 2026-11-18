@@ -166,11 +166,6 @@ test("a measurable milestone of sensible length is left alone", () => {
   assert.deepEqual(reviewMilestoneDraft(msDraft(), [], { mode: "create", now: NOW }), []);
 });
 
-test("an existing milestone with nothing linked is flagged — its progress is unmeasurable", () => {
-  const hints = reviewMilestoneDraft(msDraft({ linkedActivities: [], linkedTrackers: [] }), [], { mode: "edit", editingId: "m1", now: NOW });
-  assert.deepEqual(ids(hints), ["ms-unlinked"]);
-});
-
 test("duplicates, vague finish lines and odd lengths are caught", () => {
   assert.equal(
     reviewMilestoneDraft(msDraft({ title: "5K run without stopping" }), [{ id: "m0", title: "Run 5K without stopping" }], { mode: "create", now: NOW })[0].id,
