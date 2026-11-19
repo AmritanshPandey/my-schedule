@@ -29,6 +29,12 @@ import { bandForMinutes, computeSlotReliability, suggestBetterBand, type SlotRel
 import { computeCapacityModel, plannedWeeklyMinutes, UNREALISTIC_RATIO, type CapacityModel } from "../capacityModel";
 import { computeTaskStats, taskDurationMinutes, type TaskExecutionStats } from "./taskStats";
 import { bandPhrase, findRetimeTarget, formatDuration, pct } from "./patterns";
+import { getSlots } from "../taskMutations";
+import { isTaskScheduledOn, resolveOccurrence } from "../taskOccurrence";
+import { addDaysToISO } from "../dateUtils";
+import { toScheduleDayMinutes } from "../timeUtils";
+import { resolveWakingWindow } from "../timeline/sleepWindow";
+import type { Task } from "../scheduleTypes";
 
 export const MAX_HINTS = 2;
 
@@ -254,6 +260,8 @@ export interface TaskDraft {
   endTime: string;
   /** The task being edited, if any. */
   taskId?: string;
+  /** A one-off's date. Set, only the date-free checks run (clash, duplicate). */
+  dateISO?: string;
 }
 
 /** Sessions this long or longer are compared against shorter ones. */
@@ -270,6 +278,119 @@ function draftDuration(draft: TaskDraft): number {
   const end = inputMinutes(draft.endTime);
   if (start === null || end === null) return 0;
   return end >= start ? end - start : end + 24 * 60 - start;
+}
+
+
+// ── Clashes ──────────────────────────────────────────────────────────────────
+
+/** How many weeks ahead a recurring draft looks for a clash on its weekdays. */
+const CLASH_WEEKS = 4;
+const DAY = 24 * 60;
+
+const DAY_INDEX: Record<DayKey, number> = { sunday: 0, monday: 1, tuesday: 2, wednesday: 3, thursday: 4, friday: 5, saturday: 6 };
+
+/** The next `count` dates (from `fromISO`, inclusive) that fall on `day`. */
+function upcomingDates(day: DayKey, fromISO: string, count: number): string[] {
+  let cursor = fromISO;
+  for (let i = 0; i < 7 && new Date(`${cursor}T00:00:00`).getDay() !== DAY_INDEX[day]; i++) cursor = addDaysToISO(cursor, 1);
+  return Array.from({ length: count }, (_, i) => addDaysToISO(cursor, i * 7));
+}
+
+/** A slot as schedule-day minutes, an end past midnight carried into the next day. */
+function slotSpan(startTime: string, endTime: string): { start: number; end: number } | null {
+  const rawStart = parseTimeToMinutes(startTime);
+  const rawEnd = parseTimeToMinutes(endTime);
+  if (rawStart === null || rawEnd === null) return null;
+  const start = toScheduleDayMinutes(rawStart);
+  let end = toScheduleDayMinutes(rawEnd);
+  if (end <= start) end += DAY;
+  return { start, end };
+}
+
+interface Clash { task: Task; day: DayKey; start: number; end: number }
+
+/**
+ * The other tasks this draft would sit on top of, on the days it runs. A task
+ * merged with the one being edited ("Occurs with") is meant to overlap and is
+ * left out, as is anything that no longer runs (ended, or a past one-off).
+ */
+export function findDraftClashes(draft: TaskDraft, schedule: Schedule, todayISO: string): Clash[] {
+  const start = parseTimeToMinutes(draft.startTime);
+  if (start === null) return [];
+  const span = slotSpan(draft.startTime, draft.endTime);
+  if (!span) return [];
+  const editing = draft.taskId
+    ? draft.days.flatMap((d) => schedule.activities[d] ?? []).find((t) => t.id === draft.taskId)
+    : undefined;
+  const clashes: Clash[] = [];
+  for (const day of draft.days) {
+    const dates = draft.dateISO ? [draft.dateISO] : upcomingDates(day, todayISO, CLASH_WEEKS);
+    for (const other of schedule.activities[day] ?? []) {
+      if (other.id === draft.taskId) continue;
+      if (editing?.mergeGroupId && other.mergeGroupId === editing.mergeGroupId) continue;
+      if (!dates.some((d) => isTaskScheduledOn(other, d, true, schedule.preferences?.startDate))) continue;
+      // On a known date, that date's own times (a moved occurrence) count.
+      for (const slot of getSlots(draft.dateISO ? resolveOccurrence(other, draft.dateISO) : other)) {
+        const o = slotSpan(slot.startTime, slot.endTime);
+        if (o && o.start < span.end && span.start < o.end) clashes.push({ task: other, day, ...o });
+      }
+    }
+  }
+  return clashes;
+}
+
+/**
+ * The earliest start, from the draft's own time onward, at which it fits clear
+ * of every task on every day it runs — before the waking day ends. Null when
+ * the rest of the day has no gap that long.
+ */
+function nextFreeStart(draft: TaskDraft, schedule: Schedule, todayISO: string, duration: number): number | null {
+  const span = slotSpan(draft.startTime, draft.endTime);
+  if (!span) return null;
+  const dayEnd = resolveWakingWindow(schedule.preferences?.dayStartTime, schedule.preferences?.sleepHours).endMinutes;
+  const busy: Array<{ start: number; end: number }> = [];
+  for (const day of draft.days) {
+    const dates = draft.dateISO ? [draft.dateISO] : upcomingDates(day, todayISO, CLASH_WEEKS);
+    for (const other of schedule.activities[day] ?? []) {
+      if (other.id === draft.taskId) continue;
+      if (!dates.some((d) => isTaskScheduledOn(other, d, true, schedule.preferences?.startDate))) continue;
+      for (const slot of getSlots(draft.dateISO ? resolveOccurrence(other, draft.dateISO) : other)) {
+        const o = slotSpan(slot.startTime, slot.endTime);
+        if (o) busy.push(o);
+      }
+    }
+  }
+  const candidates = [span.start, ...busy.map((b) => b.end)].filter((c) => c >= span.start).sort((a, b) => a - b);
+  for (const c of candidates) {
+    if (c + duration > Math.max(dayEnd, span.start + duration)) break;
+    if (!busy.some((b) => b.start < c + duration && c < b.end)) return c;
+  }
+  return null;
+}
+
+function clashHint(draft: TaskDraft, schedule: Schedule, todayISO: string, duration: number): BuilderHint | null {
+  const clashes = findDraftClashes(draft, schedule, todayISO);
+  if (clashes.length === 0) return null;
+  const first = clashes[0];
+  const range = `${formatDisplayTime(minutesToInputTime(first.start % DAY))}–${formatDisplayTime(minutesToInputTime(first.end % DAY))}`;
+  const days = [...new Set(clashes.filter((c) => c.task.id === first.task.id).map((c) => c.day))];
+  const others = new Set(clashes.map((c) => c.task.id)).size - 1;
+  const where = draft.dateISO ? "" : ` on ${days.map((d) => DAY_FULL_LABELS[d]).join(", ")}`;
+  const more = others > 0 ? ` and ${others} more` : "";
+  const free = nextFreeStart(draft, schedule, todayISO, duration);
+  return {
+    id: "task-overlap",
+    tone: "warn",
+    message: `Overlaps "${first.task.title}" (${range})${where}${more}.`,
+    action: free !== null
+      ? {
+          kind: "set_time",
+          label: `Move to ${formatDisplayTime(minutesToInputTime(free % DAY))}`,
+          startTime: minutesToInputTime(free % DAY),
+          endTime: minutesToInputTime((free + duration) % DAY),
+        }
+      : undefined,
+  };
 }
 
 export function reviewTaskDraft(draft: TaskDraft, ctx: TaskReviewContext): BuilderHint[] {
@@ -294,7 +415,17 @@ export function reviewTaskDraft(draft: TaskDraft, ctx: TaskReviewContext): Build
 
   const start = inputMinutes(draft.startTime);
   const duration = draftDuration(draft);
-  if (!tracked || start === null || duration <= 0 || draft.days.length === 0) return hints.slice(0, MAX_HINTS);
+
+  // A clash is the most concrete problem a draft can have, so it leads — and
+  // it applies to every kind of block, held time included.
+  if (start !== null && duration > 0 && draft.days.length > 0) {
+    const clash = clashHint(draft, ctx.schedule, ctx.todayISO, duration);
+    if (clash) hints.unshift(clash);
+  }
+
+  // A one-off is checked only for clashes and duplicates: the evidence checks
+  // below read a weekly pattern it doesn't have.
+  if (draft.dateISO || !tracked || start === null || duration <= 0 || draft.days.length === 0) return hints.slice(0, MAX_HINTS);
 
   // When this person actually finishes work — with a free better slot.
   const draftSlot = { startTime: inputToDisplayTime(draft.startTime) };

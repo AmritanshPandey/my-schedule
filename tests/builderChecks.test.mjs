@@ -220,3 +220,62 @@ test("commitments are never coached on timing", () => {
   const hints = reviewTaskDraft({ title: "Commute", taskType: "commitment", days: ["monday"], startTime: "22:00", endTime: "22:30" }, ctx);
   assert.deepEqual(hints, []);
 });
+
+// ── Clashes ──────────────────────────────────────────────────────────────────
+
+const clash = (hints) => hints.find((h) => h.id === "task-overlap");
+
+test("a task that sits on top of another is flagged first, with the next free time", () => {
+  const s = schedule([task("Strength workout", "7:00 AM", "8:00 AM", always, { days: ["monday", "wednesday"] })]);
+  const hints = reviewTaskDraft({ title: "Read", days: ["monday"], startTime: "07:30", endTime: "08:00" }, buildTaskReviewContext(s, NOW));
+  assert.equal(hints[0]?.id, "task-overlap", ids(hints).join(","));
+  assert.match(hints[0].message, /Overlaps "Strength workout" \(7:00 AM–8:00 AM\) on Monday/);
+  assert.deepEqual([hints[0].action?.startTime, hints[0].action?.endTime], ["08:00", "08:30"]);
+});
+
+test("back-to-back is not a clash", () => {
+  const s = schedule([task("Strength workout", "7:00 AM", "8:00 AM", always)]);
+  const hints = reviewTaskDraft({ title: "Read", days: ["monday"], startTime: "08:00", endTime: "08:30" }, buildTaskReviewContext(s, NOW));
+  assert.equal(clash(hints), undefined);
+});
+
+test("the move skips a second block that would also clash, and must be free on every day", () => {
+  const s = schedule([
+    task("Workout", "7:00 AM", "8:00 AM", always, { days: ["monday"] }),
+    task("Standup", "8:00 AM", "8:30 AM", always, { days: ["tuesday"] }),
+  ]);
+  const hint = clash(reviewTaskDraft({ title: "Read", days: ["monday", "tuesday"], startTime: "07:30", endTime: "08:00" }, buildTaskReviewContext(s, NOW)));
+  assert.equal(hint.action?.startTime, "08:30");
+});
+
+test("editing a task never clashes with itself, or with the task it is merged with", () => {
+  const s = schedule([
+    { ...task("A", "7:00 AM", "8:00 AM", always, { days: ["monday"] }), mergeGroupId: "g" },
+    { ...task("B", "7:00 AM", "8:00 AM", always, { days: ["monday"] }), mergeGroupId: "g" },
+  ]);
+  const hints = reviewTaskDraft({ title: "A", days: ["monday"], startTime: "07:00", endTime: "08:00", taskId: "A" }, buildTaskReviewContext(s, NOW));
+  assert.equal(clash(hints), undefined);
+});
+
+test("a task that no longer runs, or a past one-off, doesn't count", () => {
+  const s = schedule([
+    { ...task("Old", "7:00 AM", "8:00 AM", always, { days: ["monday"] }), activeUntil: "2026-09-01" },
+    { ...task("Done once", "7:00 AM", "8:00 AM", always, { days: ["monday"] }), recurrence: { type: "once", dateISO: "2026-09-14" } },
+  ]);
+  const hints = reviewTaskDraft({ title: "Read", days: ["monday"], startTime: "07:30", endTime: "08:00" }, buildTaskReviewContext(s, NOW));
+  assert.equal(clash(hints), undefined);
+});
+
+test("a one-off is checked against that date only", () => {
+  const s = schedule([task("Weekly call", "9:00 AM", "10:00 AM", always, { days: ["monday"] })]);
+  const ctx = buildTaskReviewContext(s, NOW);
+  const onMonday = reviewTaskDraft({ title: "Dentist", days: ["monday"], dateISO: "2026-09-21", startTime: "09:30", endTime: "10:30" }, ctx);
+  assert.equal(onMonday[0]?.id, "task-overlap");
+  assert.doesNotMatch(onMonday[0].message, / on Monday/, "a one-off doesn't name a weekday");
+});
+
+test("held time clashes too", () => {
+  const s = schedule([task("Commute", "8:00 AM", "9:00 AM", always, { days: ["monday"] })]);
+  const hints = reviewTaskDraft({ title: "Gym", taskType: "commitment", days: ["monday"], startTime: "08:30", endTime: "09:30" }, buildTaskReviewContext(s, NOW));
+  assert.equal(hints[0]?.id, "task-overlap");
+});

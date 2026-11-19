@@ -434,19 +434,27 @@ export function TaskSheet({
   }, [isOpen, activities, plans, preferences]);
 
   const builderHints = useMemo(() => {
-    if (!reviewContext || isOccurrenceScope || repeatMode === 'once' || perDayActive || slots.length !== 1) return [];
+    if (!reviewContext || perDayActive || slots.length !== 1) return [];
+    // A single date — one day of a recurring task, or a one-off — is checked
+    // on that date alone (clashes and duplicates); a weekly task on its days.
+    const dateISO = isOccurrenceScope ? occurrenceDateISO : repeatMode === 'once' ? onceDate || undefined : undefined;
+    if (repeatMode === 'once' && !isOccurrenceScope && !dateISO) return [];
     return reviewTaskDraft(
       {
         title,
         taskType,
-        days: repeatDays,
+        days: dateISO ? [weekdayOfISO(dateISO)] : repeatDays,
+        dateISO,
         startTime: slots[0].startTime,
         endTime: slots[0].endTime,
         taskId: mode === 'edit' ? task?.id : undefined,
       },
       reviewContext,
     );
-  }, [reviewContext, isOccurrenceScope, repeatMode, perDayActive, slots, title, taskType, repeatDays, mode, task?.id]);
+  }, [reviewContext, isOccurrenceScope, occurrenceDateISO, onceDate, repeatMode, perDayActive, slots, title, taskType, repeatDays, mode, task?.id]);
+
+  const clashHints = builderHints.filter((h) => h.id === 'task-overlap');
+  const otherHints = builderHints.filter((h) => h.id !== 'task-overlap');
 
   function applyBuilderHint(hint: BuilderHint) {
     if (hint.action?.kind === 'set_time') {
@@ -807,6 +815,8 @@ export function TaskSheet({
       <View>
         <TimeSlotPicker slots={editorSlots} onSlotsChange={setEditorSlots} suggestedSlots={suggestedSlots} usualTimeSlot={usualTimeSlot} />
         {timeError && <Text className="mt-2 text-[12px] font-semibold text-rose-500 dark:text-rose-400">{timeError.message}</Text>}
+        {/* A clash sits with the time that causes it. */}
+        <BuilderHints hints={clashHints} onAction={applyBuilderHint} />
       </View>
 
       {!isOccurrenceScope && (
@@ -836,7 +846,7 @@ export function TaskSheet({
         </View>
       )}
 
-      <BuilderHints hints={builderHints} onAction={applyBuilderHint} />
+      <BuilderHints hints={otherHints} onAction={applyBuilderHint} />
 
       {showActiveWindow && (
         <View className="gap-2">
