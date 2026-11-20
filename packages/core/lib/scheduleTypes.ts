@@ -224,6 +224,9 @@ export interface Task {
    * lib/taskMerge.ts.
    */
   mergeGroupId?: string;
+  /** Minutes before this task starts to remind; absent = the Settings default
+   *  (lib/reminders.ts). 0 = at the start. */
+  reminderLeadMinutes?: number;
 }
 
 export interface SummaryConfig {

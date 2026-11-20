@@ -14,6 +14,7 @@ import {
 } from "@/lib/reminders";
 import { formatDisplayTime, minutesToInputTime } from "@/lib/timeUtils";
 import { SETTINGS_CONTROL_CLASS } from "@/components/ui/Input";
+import { REMINDER_LEAD_OPTIONS, leadLabel, ENDING_SOON_MINUTES } from "@planr/core/lib/reminders";
 import Toggle from "@/components/ui/Toggle";
 import { useAuth } from "@/contexts/AuthProvider";
 import { subscribeToPush, unsubscribeFromPush, isPushSupported, sendTestPush, type TestPushResult } from "@/lib/push/webPush";
@@ -213,6 +214,35 @@ export default function RemindersRows() {
                 on={settings.tasks}
                 onChange={(v) => patch({ tasks: v })}
               />
+              {settings.tasks && (
+                <>
+                  <div className="flex items-center gap-3 py-2.5">
+                    <div className="min-w-0 flex-1">
+                      <p className="text-[12px] font-semibold text-neutral-700 dark:text-neutral-200">Remind me</p>
+                      <p className="mt-0.5 text-[11px] leading-snug text-neutral-500 dark:text-neutral-400">Each task can set its own</p>
+                    </div>
+                    <div className="relative">
+                      <select
+                        aria-label="Remind me"
+                        value={String(settings.leadMinutes ?? 0)}
+                        onChange={(e) => patch({ leadMinutes: Number(e.target.value) })}
+                        className={`${SETTINGS_CONTROL_CLASS} pr-9 appearance-none`}
+                      >
+                        {REMINDER_LEAD_OPTIONS.map((m) => (
+                          <option key={m} value={m}>{leadLabel(m)}</option>
+                        ))}
+                      </select>
+                      <IconClock size={14} strokeWidth={2} className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-neutral-500 dark:text-neutral-400" />
+                    </div>
+                  </div>
+                  <SubRow
+                    label="Ending soon"
+                    description={`A heads-up ${ENDING_SOON_MINUTES} minutes before a task ends`}
+                    on={!!settings.endingSoon}
+                    onChange={(v) => patch({ endingSoon: v })}
+                  />
+                </>
+              )}
               <SubRow
                 label="Routine times"
                 on={settings.rituals}

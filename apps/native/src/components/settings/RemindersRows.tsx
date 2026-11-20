@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { AppState, Platform, Pressable, View } from 'react-native';
 import { IconAlertTriangle, IconBell, IconBellOff, IconClock, IconSend } from '@tabler/icons-react-native';
 import { formatDisplayTime, minutesToInputTime } from '@planr/core/lib/timeUtils';
+import { REMINDER_LEAD_OPTIONS, leadLabel, ENDING_SOON_MINUTES } from '@planr/core/lib/reminders';
 import { haptic } from '../../lib/haptics';
 import {
   batteryOptimizationOn,
@@ -26,6 +27,8 @@ import Toggle from '../ui/Toggle';
 import Select from '../ui/Select';
 import { Icon, type TablerIcon } from '../ui/Icon';
 import { Text } from '../ui/Text';
+
+const LEAD_OPTIONS = REMINDER_LEAD_OPTIONS.map((m) => ({ value: String(m), label: leadLabel(m) }));
 
 const NUDGE_OPTIONS = Array.from({ length: 12 }, (_, i) => {
   const value = minutesToInputTime(16 * 60 + i * 30); // 16:00 → 21:30
@@ -227,6 +230,32 @@ export default function RemindersRows() {
       {enabled && (
         <View className="mt-2 border-t border-neutral-100 dark:border-white/[0.05]">
           <SubRow label="Task start times" on={settings.tasks} onChange={(v) => patch({ tasks: v })} />
+          {settings.tasks && (
+            <>
+              <View className="flex-row items-center gap-3 border-t border-neutral-100 py-2.5 dark:border-white/[0.05]">
+                <View className="min-w-0 flex-1">
+                  <Text className="text-[12px] font-semibold text-neutral-700 dark:text-neutral-200">Remind me</Text>
+                  <Text className="mt-0.5 text-[11px] leading-snug text-neutral-500 dark:text-neutral-400">Each task can set its own</Text>
+                </View>
+                <Select
+                  value={String(settings.leadMinutes ?? 0)}
+                  options={LEAD_OPTIONS}
+                  onChange={(v) => patch({ leadMinutes: Number(v) })}
+                  label="Remind me"
+                  icon={IconClock}
+                  className="w-40"
+                />
+              </View>
+              <View className="border-t border-neutral-100 dark:border-white/[0.05]">
+                <SubRow
+                  label="Ending soon"
+                  description={`A heads-up ${ENDING_SOON_MINUTES} minutes before a task ends`}
+                  on={!!settings.endingSoon}
+                  onChange={(v) => patch({ endingSoon: v })}
+                />
+              </View>
+            </>
+          )}
           <View className="border-t border-neutral-100 dark:border-white/[0.05]">
             <SubRow label="Routine times" on={settings.rituals} onChange={(v) => patch({ rituals: v })} />
           </View>

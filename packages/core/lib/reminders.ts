@@ -21,6 +21,32 @@ export interface ReminderSettings {
   rituals: boolean;     // notify at each ritual's time
   streakNudge: boolean; // evening nudge when tasks are still open
   nudgeTime: string;    // "HH:MM" 24-hour
+  /** Minutes before a task starts to remind (0 = at the start). A task's own
+   *  `reminderLeadMinutes` overrides it. Absent in older saved settings = 0. */
+  leadMinutes?: number;
+  /** A heads-up ENDING_SOON_MINUTES before a task's block ends. */
+  endingSoon?: boolean;
+}
+
+/** The lead times offered in Settings and on a task. */
+export const REMINDER_LEAD_OPTIONS = [0, 5, 10, 15, 30] as const;
+
+/** How long before a block ends the "ending soon" heads-up comes. */
+export const ENDING_SOON_MINUTES = 5;
+
+/** The words for a lead time: "At start" / "10 min before". */
+export function leadLabel(minutes: number): string {
+  return minutes === 0 ? "At start" : `${minutes} min before`;
+}
+
+/** The lead time this task's reminder uses: its own, else the default. */
+export function taskLeadMinutes(task: Pick<Task, "reminderLeadMinutes">, settings: Pick<ReminderSettings, "leadMinutes">): number {
+  return Math.max(0, task.reminderLeadMinutes ?? settings.leadMinutes ?? 0);
+}
+
+/** "Starts now · 7:00 AM" at the start; "In 10 min · 7:00 AM" ahead of it. */
+function startBody(lead: number, startTime: string): string {
+  return `${lead > 0 ? `In ${lead} min` : "Starts now"} · ${formatDisplayTime(startTime)}`;
 }
 
 export const DEFAULT_REMINDER_SETTINGS: ReminderSettings = {
@@ -29,6 +55,8 @@ export const DEFAULT_REMINDER_SETTINGS: ReminderSettings = {
   rituals: true,
   streakNudge: true,
   nudgeTime: "19:00",
+  leadMinutes: 0,
+  endingSoon: false,
 };
 
 export interface PendingReminder {
@@ -78,17 +106,33 @@ export function collectRemindersFor(
       if (taskIsDone(task)) continue;
       if (!isTaskScheduledOn(task, todayISO, true, schedule.preferences?.startDate)) continue;
       const occ = resolveOccurrence(task, todayISO);
+      const lead = taskLeadMinutes(occ, settings);
       // One reminder per phase — a multi-slot task fires at each start time.
       getSlots(occ).forEach((slot, index) => {
         const startMin = parseTimeToMinutes(slot.startTime);
         if (startMin == null) return;
-        const atMs = msAt(todayISO, startMin);
-        if (atMs <= earliestMs) return;
+        const atMs = msAt(todayISO, Math.max(0, startMin - lead));
+        if (atMs > earliestMs) {
+          out.push({
+            atMs,
+            tag: `planr-task-${task.id}-${todayISO}-${index}`,
+            title: occ.title,
+            body: startBody(lead, slot.startTime),
+          });
+        }
+        // "Ending soon" — for work you can still close, and only when the
+        // block is long enough that the heads-up isn't on top of the start.
+        const endMin = parseTimeToMinutes(slot.endTime);
+        if (!settings.endingSoon || endMin == null || !isTrackedTask(occ)) return;
+        const end = endMin > startMin ? endMin : endMin + 24 * 60;
+        if (end - startMin <= ENDING_SOON_MINUTES * 2) return;
+        const endAtMs = msAt(todayISO, end - ENDING_SOON_MINUTES);
+        if (endAtMs <= earliestMs) return;
         out.push({
-          atMs,
-          tag: `planr-task-${task.id}-${todayISO}-${index}`,
+          atMs: endAtMs,
+          tag: `planr-task-end-${task.id}-${todayISO}-${index}`,
           title: occ.title,
-          body: `Starts now · ${formatDisplayTime(slot.startTime)}`,
+          body: `Ends in ${ENDING_SOON_MINUTES} min · ${formatDisplayTime(slot.endTime)}`,
         });
       });
     }
@@ -99,13 +143,14 @@ export function collectRemindersFor(
       if (session.status !== "planned" || !session.startTime) continue;
       const startMin = parseTimeToMinutes(session.startTime);
       if (startMin == null) continue;
-      const atMs = msAt(todayISO, startMin);
+      const lead = Math.max(0, settings.leadMinutes ?? 0);
+      const atMs = msAt(todayISO, Math.max(0, startMin - lead));
       if (atMs <= earliestMs) continue;
       out.push({
         atMs,
         tag: `planr-session-${session.id}-${todayISO}`,
         title: session.title,
-        body: `Starts now · ${formatDisplayTime(session.startTime)} · ${headline(session)}`,
+        body: `${startBody(lead, session.startTime)} · ${headline(session)}`,
       });
     }
   }

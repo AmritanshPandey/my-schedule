@@ -85,3 +85,28 @@ test("an undefined secret counts as missing, not as configured", () => {
   const problem = vapidConfigProblem({ subject: undefined, publicKey: undefined, privateKey: undefined });
   assert.ok(problem, "an entirely unconfigured Worker must report a problem");
 });
+
+// ── Reminder lead time and "ending soon" (mirrors packages/core/lib/reminders.ts) ──
+
+const { computeDueReminders } = await import("../src/reminders.ts");
+
+const SETTINGS = { enabled: true, tasks: true, rituals: false, streakNudge: false, nudgeTime: "19:00" };
+// Monday 21 Sep 2026; "UTC" keeps local time equal to the clock below.
+const leadSchedule = (over = {}) => ({ activities: { monday: [{ id: "t1", title: "Run", startTime: "7:00 AM", endTime: "8:00 AM", ...over }] } });
+const due = (settings, clock, over) => computeDueReminders(leadSchedule(over), { ...SETTINGS, ...settings }, "UTC", new Date(`2026-09-21T${clock}:00Z`));
+
+test("worker: no lead time still fires at the start", () => {
+  assert.equal(due({}, "07:00")[0]?.body, "Starts now · 7:00 AM");
+  assert.equal(due({}, "06:50").length, 0);
+});
+
+test("worker: the default lead time fires earlier, a task's own wins", () => {
+  assert.equal(due({ leadMinutes: 10 }, "06:50")[0]?.body, "In 10 min · 7:00 AM");
+  assert.equal(due({ leadMinutes: 10 }, "07:00").length, 0);
+  assert.equal(due({ leadMinutes: 10 }, "06:30", { reminderLeadMinutes: 30 })[0]?.tag, "planr-task-t1-2026-09-21-0");
+});
+
+test("worker: 'ending soon' fires 5 minutes before the end, only when on", () => {
+  assert.equal(due({ endingSoon: true }, "07:55")[0]?.tag, "planr-task-end-t1-2026-09-21-0");
+  assert.equal(due({}, "07:55").length, 0);
+});

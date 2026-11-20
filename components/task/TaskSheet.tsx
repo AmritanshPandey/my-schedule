@@ -41,6 +41,8 @@ import TimeSlotPicker, { type EditableSlot } from "@/components/TimeSlotPicker";
 import { CategorySelector } from "./CategorySelector";
 import CategorySheet, { type CategoryDraft } from "@/components/category/CategorySheet";
 import { haptic } from "@/lib/haptics";
+import { getReminderSettings } from "@/lib/reminders";
+import { REMINDER_LEAD_OPTIONS, leadLabel } from "@planr/core/lib/reminders";
 import type { DayKey, Plan, Schedule, Task, TaskCategory, TaskRecurrence, TaskTypeValue } from "@/lib/useScheduleDB";
 import { findAvailableSlots, suggestSlots } from "@/lib/availableSlots";
 import { computeUsualTimeSlot } from "@/lib/usualTimeSlot";
@@ -294,6 +296,10 @@ export function TaskSheet({
   // the step total (and the allotted-time check) but never moves the task's
   // own start/end — see `Task.stepBufferMinutes`.
   const [stepBuffer, setStepBuffer] = useState<number | undefined>(undefined);
+  // Minutes before the start to remind; undefined = the Settings default.
+  const [reminderLead, setReminderLead] = useState<number | undefined>(undefined);
+  // Read when the sheet opens, so "Default" names what the default currently is.
+  const defaultLead = useMemo(() => (isOpen ? getReminderSettings().leadMinutes ?? 0 : 0), [isOpen]);
   const [focusNewSubtask, setFocusNewSubtask] = useState(false);
   const [duplicateStep, setDuplicateStep] = useState<"idle" | "picking">("idle");
   const [duplicateDays, setDuplicateDays] = useState<DayKey[]>([]);
@@ -363,6 +369,7 @@ export function TaskSheet({
       const taskSubtasks = task.subtasks ?? linkedPlan?.items ?? [];
       setSubtasks(taskSubtasks.map(entryToSubtaskDraft));
       setStepBuffer(task.stepBufferMinutes);
+      setReminderLead(task.reminderLeadMinutes);
       const r = task.recurrence;
       if (r?.type === "once") { setRepeatMode("once"); setOnceDate(r.dateISO); }
       else if (r?.type === "weekly" && r.interval > 1) { setRepeatMode("interval"); setIntervalWeeks(r.interval); setOnceDate(baseDateISO); }
@@ -382,6 +389,7 @@ export function TaskSheet({
       setRepeatDays([activeDay]);
       setSubtasks([]);
       setStepBuffer(undefined);
+      setReminderLead(undefined);
       // Seed from the category matching the plan's icon when the user already
       // has one — a fresh task then lands in the right bucket without a pick.
       const seedIcon = plans.find((p) => p.id === pid)?.emoji || "";
@@ -794,6 +802,7 @@ export function TaskSheet({
       activeFrom: taskWindow.activeFrom,
       activeUntil: taskWindow.activeUntil,
       stepBufferMinutes: taskType === "session" && stepBuffer ? stepBuffer : undefined,
+      reminderLeadMinutes: reminderLead,
     };
 
     onSave({
@@ -1149,6 +1158,23 @@ export function TaskSheet({
               {/* A clash sits with the time that causes it, not with the
                   advice further down the form. */}
               <BuilderHints hints={clashHints} onAction={applyBuilderHint} />
+
+              {/* When this task's reminder comes — the whole task's setting, so
+                  not offered while editing a single day. */}
+              {!isOccurrenceScope && (
+                <ChipRow label="Reminder">
+                  {/* A chip equal to the default would only repeat it — unless this task
+                      already chose it explicitly. */}
+                  {[undefined, ...REMINDER_LEAD_OPTIONS.filter((m) => m !== defaultLead || reminderLead === m)].map((m) => (
+                    <ChoiceChip
+                      key={m ?? "default"}
+                      active={reminderLead === m}
+                      label={m === undefined ? `Default (${leadLabel(defaultLead).toLowerCase()})` : m === 0 ? "At start" : `${m}m before`}
+                      onClick={() => { haptic("light"); setReminderLead(m); }}
+                    />
+                  ))}
+                </ChipRow>
+              )}
 
               {/* Recurrence mode */}
               {!isOccurrenceScope && (

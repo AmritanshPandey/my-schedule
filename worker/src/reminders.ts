@@ -19,7 +19,14 @@ export interface ReminderSettings {
   rituals: boolean;
   streakNudge: boolean;
   nudgeTime: string; // "HH:MM"
+  /** Minutes before a task starts (0 / absent = at the start). */
+  leadMinutes?: number;
+  /** A heads-up ENDING_SOON_MINUTES before a block ends. */
+  endingSoon?: boolean;
 }
+
+/** Mirrors packages/core/lib/reminders.ts. */
+export const ENDING_SOON_MINUTES = 5;
 
 interface Slot { startTime?: string; endTime?: string; }
 interface CompletionEvent { completedAt?: string; completionType?: string; subtaskId?: string; }
@@ -36,6 +43,7 @@ interface Task {
   activeFrom?: string;
   activeUntil?: string;
   exceptions?: Record<string, { skipped?: boolean } | undefined>;
+  reminderLeadMinutes?: number;
   recurrence?: { type?: string; anchorDate?: string; intervalWeeks?: number };
 }
 interface Ritual { id: string; title?: string; time?: string; repeatDays?: DayKey[]; }
@@ -164,13 +172,26 @@ export function computeDueReminders(
   if (settings.tasks) {
     for (const task of schedule.activities?.[dayKey] ?? []) {
       if (isDone(task, dateISO) || !scheduledOn(task, dateISO)) continue;
+      const lead = Math.max(0, task.reminderLeadMinutes ?? settings.leadMinutes ?? 0);
       getSlots(task).forEach((slot, index) => {
         const min = parseTimeToMinutes(slot.startTime);
-        if (min == null || !inWindow(min)) return;
+        if (min == null) return;
+        if (inWindow(Math.max(0, min - lead))) {
+          out.push({
+            tag: `planr-task-${task.id}-${dateISO}-${index}`,
+            title: task.title || "Task",
+            body: `${lead > 0 ? `In ${lead} min` : "Starts now"} · ${formatDisplay(min)}`,
+            url: "/",
+          });
+        }
+        const endMin = parseTimeToMinutes(slot.endTime);
+        if (!settings.endingSoon || endMin == null || !isTracked(task)) return;
+        const end = endMin > min ? endMin : endMin + 24 * 60;
+        if (end - min <= ENDING_SOON_MINUTES * 2 || !inWindow(end - ENDING_SOON_MINUTES)) return;
         out.push({
-          tag: `planr-task-${task.id}-${dateISO}-${index}`,
+          tag: `planr-task-end-${task.id}-${dateISO}-${index}`,
           title: task.title || "Task",
-          body: `Starts now · ${formatDisplay(min)}`,
+          body: `Ends in ${ENDING_SOON_MINUTES} min · ${formatDisplay(endMin)}`,
           url: "/",
         });
       });

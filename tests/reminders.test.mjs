@@ -336,3 +336,52 @@ test("the same reminder never fires twice", async () => {
   second();
   assert.equal(shown.length, 1, "a re-arm must not repeat an already-shown reminder");
 });
+
+// ── Lead time and "ending soon" ──────────────────────────────────────────────
+
+const hm = (ms) => new Date(ms).toTimeString().slice(0, 5);
+
+test("with no lead time set, a task still reminds at its start (older settings unchanged)", () => {
+  enableReminders();
+  const [r] = collectReminders(dailySevenAm(), at("2026-09-21", "06:00:00"));
+  assert.equal(hm(r.atMs), "07:00");
+  assert.match(r.body, /^Starts now · 7:00 AM/);
+});
+
+test("the default lead time moves the reminder earlier and says how long until it starts", () => {
+  enableReminders({ leadMinutes: 10 });
+  const [r] = collectReminders(dailySevenAm(), at("2026-09-21", "06:00:00"));
+  assert.equal(hm(r.atMs), "06:50");
+  assert.match(r.body, /^In 10 min · 7:00 AM/);
+  assert.equal(r.tag, "planr-task-t1-2026-09-21-0", "the tag is unchanged, so device and server still dedupe");
+});
+
+test("a task's own lead time overrides the default, including back to 'at start'", () => {
+  enableReminders({ leadMinutes: 10 });
+  const activities = emptyActivities();
+  activities.monday.push(task({ id: "a", reminderLeadMinutes: 30 }), task({ id: "b", startTime: "9:00 AM", endTime: "9:30 AM", reminderLeadMinutes: 0 }));
+  const rs = collectReminders(schedule({ activities }), at("2026-09-21", "06:00:00"));
+  assert.deepEqual(rs.map((r) => hm(r.atMs)), ["06:30", "09:00"]);
+});
+
+test("'ending soon' comes 5 minutes before a block ends, only when it's turned on", () => {
+  enableReminders({ endingSoon: true });
+  const rs = collectReminders(dailySevenAm(), at("2026-09-21", "06:00:00"));
+  const end = rs.find((r) => r.tag.startsWith("planr-task-end-"));
+  assert.equal(hm(end.atMs), "07:55");
+  assert.match(end.body, /^Ends in 5 min · 8:00 AM/);
+  enableReminders();
+  assert.ok(!collectReminders(dailySevenAm(), at("2026-09-21", "06:00:00")).some((r) => r.tag.startsWith("planr-task-end-")));
+});
+
+test("'ending soon' still fires after the start reminder has passed, but not for short blocks or held time", () => {
+  enableReminders({ endingSoon: true });
+  const activities = emptyActivities();
+  activities.monday.push(
+    task({ id: "short", startTime: "7:00 AM", endTime: "7:10 AM" }),
+    task({ id: "commute", startTime: "7:00 AM", endTime: "8:00 AM", taskType: "commitment" }),
+    task({ id: "run" }),
+  );
+  const rs = collectReminders(schedule({ activities }), at("2026-09-21", "07:30:00"));
+  assert.deepEqual(rs.map((r) => r.tag), ["planr-task-end-run-2026-09-21-0"]);
+});
