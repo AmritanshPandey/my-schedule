@@ -3,8 +3,6 @@ import { Pressable, ScrollView, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { IconCheck, IconEdit, IconFlame, IconMinus, IconPlus, IconTrash, IconTrophy, IconX } from '@tabler/icons-react-native';
 import type { Milestone, Ritual, RitualCompletion } from '@planr/core/lib/scheduleTypes';
-import type { MilestoneLinkKind } from '@planr/core/lib/milestoneLinks';
-import MilestoneLinks from '../milestone/MilestoneLinks';
 import { todayISO } from '@planr/core/lib/dateUtils';
 import { calculateRitualStats } from '@planr/core/lib/consistency/calculateRitualStreak';
 import { entriesForRitualDate } from '@planr/core/lib/ritualCompletions';
@@ -41,8 +39,6 @@ interface RoutineDetailViewProps {
   onEdit: () => void;
   onDelete: () => void;
   /** Every milestone — shows which ones this item advances. Absent = hidden. */
-  milestones?: readonly Milestone[];
-  onSetMilestoneLink?: (milestoneId: string, kind: MilestoneLinkKind, itemId: string, linked: boolean) => void;
 }
 
 const EYEBROW = 'text-[11px] font-bold uppercase tracking-[0.08em] text-neutral-600 dark:text-neutral-400';
@@ -70,8 +66,6 @@ export default function RoutineDetailView({
   onToggleStep,
   onEdit,
   onDelete,
-  milestones,
-  onSetMilestoneLink,
 }: RoutineDetailViewProps) {
   const insets = useSafeAreaInsets();
   const [customValue, setCustomValue] = useState('');
@@ -380,10 +374,6 @@ export default function RoutineDetailView({
             </View>
           )}
 
-          {/* ── What this routine advances ───────────────────────────────── */}
-          {milestones && onSetMilestoneLink ? (
-            <MilestoneLinks className={`p-4 ${CARD}`} milestones={milestones} kind="ritual" itemId={ritual.id} onSetLink={onSetMilestoneLink} />
-          ) : null}
 
           {/* ── The record ───────────────────────────────────────────────── */}
           <View className={`gap-3 p-4 ${CARD}`}>

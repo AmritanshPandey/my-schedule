@@ -493,13 +493,27 @@ export interface Milestone {
    * `goalValue` across its milestones by date.
    */
   targetValue?: number;
-  /**
-   * Kinds of link someone has switched off by unlinking the last automatic
-   * item (lib/milestoneAutoLinks.ts). Without it an emptied list would read
-   * as "automatic" again and the item would come straight back. Absent =
-   * automatic wherever there are no hand-made links.
-   */
+  /** Deprecated: hand links no longer decide what counts (lib/milestoneAutoLinks.ts). Read by nothing. */
   autoLinkOff?: { tasks?: boolean; tracker?: boolean };
+  /**
+   * What success means for this milestone (lib/milestoneCriteria.ts): the
+   * figure each of the plan's trackers should reach, keyed by tracker id. A
+   * tracker counts toward the milestone exactly when it has a target here.
+   * Absent = the legacy single `targetValue` on `linkedTrackers[0]`.
+   */
+  trackerTargets?: Record<string, number>;
+  /**
+   * The share (0-100) of the plan's tasks due inside the milestone's dates
+   * (plus any linked routines' due days) that has to get done. Unset = no
+   * consistency goal.
+   */
+  consistencyTarget?: number;
+  /**
+   * False once someone undid an automatic completion: from then on this
+   * milestone is completed by hand only, so meeting its targets again
+   * doesn't immediately re-complete it.
+   */
+  autoComplete?: false;
   createdAt: string;
   updatedAt: string;
   // Legacy fields retained for backward-compatible reads/writes.

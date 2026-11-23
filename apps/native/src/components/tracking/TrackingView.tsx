@@ -8,8 +8,6 @@ import type { MilestoneState } from '@planr/core/lib/milestoneHealth';
 import { paceNarrative } from '@planr/core/lib/paceModel';
 import { buildTrackerStat, groupTrackerStatsByPlan, trackerRampTone, type TrackerStat } from '@planr/core/lib/trackerStats';
 import { plannedTrackerPath, planGap, type PlannedTrackerPath, type PlanGap } from '@planr/core/lib/milestoneTargets';
-import type { MilestoneLinkKind } from '@planr/core/lib/milestoneLinks';
-import MilestoneLinks from '../milestone/MilestoneLinks';
 import { buildCheckIn, checkInRecordLabel, checkInStatusLabel, nextCheckInLabel, type CheckInState } from '@planr/core/lib/trackerCadence';
 import { quickAmountsForUnit } from '@planr/core/lib/quickAmounts';
 import { todayISO } from '@planr/core/lib/dateUtils';
@@ -60,7 +58,6 @@ export interface TrackingViewProps {
   /** Every milestone — draws each tracker's planned path and lists what it advances. */
   milestones?: readonly Milestone[];
   /** Link/unlink a tracker to a milestone from its card. Absent = read-only. */
-  onSetMilestoneLink?: (milestoneId: string, kind: MilestoneLinkKind, itemId: string, linked: boolean) => void;
 }
 
 /** "1.5" not "1.50", "500" not "500.0" — values are user-typed, not currency. */
@@ -159,9 +156,6 @@ function MetricCard({
   plan,
   milestoneLink,
   planned,
-  milestones,
-  allTrackers,
-  onSetMilestoneLink,
   onLog,
   onOpenAddEntry,
   onDeleteEntry,
@@ -174,10 +168,6 @@ function MetricCard({
   milestoneLink?: { milestone: Milestone; state: MilestoneState };
   /** The tracker's planned path and today's gap to it. Null = no path to draw. */
   planned: { path: PlannedTrackerPath; gap: PlanGap | null } | null;
-  milestones?: readonly Milestone[];
-  /** Every tracker, so a plan's only tracker shows the milestones that use it automatically. */
-  allTrackers?: readonly ProgressTracker[];
-  onSetMilestoneLink?: TrackingViewProps['onSetMilestoneLink'];
   onLog: TrackingViewProps['onLog'];
   onOpenAddEntry: TrackingViewProps['onOpenAddEntry'];
   onDeleteEntry: TrackingViewProps['onDeleteEntry'];
@@ -351,17 +341,6 @@ function MetricCard({
           {/* Silent when the trend is too scattered to quote. */}
           {pace && <Text className="text-[13px] font-medium text-neutral-500 dark:text-neutral-400">{pace}</Text>}
 
-          {milestones && onSetMilestoneLink && (
-            <MilestoneLinks
-              milestones={milestones}
-              kind="tracker"
-              itemId={tracker.id}
-              planId={tracker.planId}
-              trackers={allTrackers}
-              onSetLink={onSetMilestoneLink}
-              hideIds={milestoneLink ? [milestoneLink.milestone.id] : undefined}
-            />
-          )}
 
           {todaysEntries.length > 0 && (
             <View>
@@ -409,7 +388,6 @@ export default function TrackingView({
   onSetCadence,
   onNavigateToPlans,
   milestones,
-  onSetMilestoneLink,
 }: TrackingViewProps) {
   const today = todayISO();
   const plansById = useMemo(() => new Map(plans.map((p) => [p.id, p])), [plans]);
@@ -523,9 +501,6 @@ export default function TrackingView({
                     plan={group.plan}
                     milestoneLink={milestoneByTrackerId?.get(stat.tracker.id)}
                     planned={plannedByTracker.get(stat.tracker.id) ?? null}
-                    milestones={milestones}
-                    allTrackers={trackers}
-                    onSetMilestoneLink={onSetMilestoneLink}
                     onLog={onLog}
                     onOpenAddEntry={onOpenAddEntry}
                     onDeleteEntry={onDeleteEntry}

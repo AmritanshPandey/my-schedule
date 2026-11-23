@@ -1,26 +1,19 @@
 /**
- * Automatic milestone links — a milestone counts its plan's own work without
- * anyone wiring it up.
+ * Which of its plan's work a milestone counts — derived, never hand-picked.
  *
- * A milestone is a stretch of its plan's timeline. Asking people to also pick,
- * by hand, which of the plan's tasks and trackers "belong" to that stretch made
- * the goal → plan → milestone roll-up read 0% for anyone who skipped the step,
- * however much they actually did. So, per link kind:
+ * A milestone is a stretch of its plan's timeline, so:
  *
- *  - tasks: a milestone with no hand-made task links counts every tracked task
- *    in its plan that is due at least once between its start and end dates.
- *  - tracker: a milestone with no hand-made tracker link uses the plan's
- *    tracker when the plan has exactly one. With several, which one measures
- *    this stretch is a real choice, so it stays the person's to make.
+ *  - tasks: every tracked task in its plan that is due at least once between
+ *    its start and end dates. Always — there is no per-task linking.
+ *  - trackers: the ones it sets a target for (`trackerTargets`, or the legacy
+ *    single `targetValue` on `linkedTrackers[0]`). With no target at all, the
+ *    plan's only tracker counts, measured against its goal spread across the
+ *    milestones by date; with several and no target, none does.
+ *  - routines: hand-picked in the milestone sheet (`linkedRituals`), since a
+ *    routine doesn't belong to a plan.
  *
- * Hand-made links always win — they are the override, kind by kind — so every
- * milestone someone already linked reads exactly as before. Routines have no
- * plan to belong to yet, so they are only ever linked by hand.
- *
- * Nothing here is stored: the automatic set is derived on read, so a task
- * added to the plan next week starts counting the moment it exists. Only a
- * manual edit writes, and `materializeLinks` makes that edit start from what
- * the person was already seeing rather than from an empty list.
+ * Nothing here is stored: the set is derived on read, so a task added to the
+ * plan next week starts counting the moment it exists.
  *
  * Pure and React-free, so it is unit-testable directly.
  */
@@ -95,95 +88,64 @@ export function autoTrackerIds(milestone: Milestone, trackers: readonly Progress
   return own.length === 1 ? [own[0].id] : [];
 }
 
-/** Which links of this milestone would be filled automatically. */
+/**
+ * The targets this milestone sets, tracker id → figure. Reads the legacy
+ * single `targetValue` (on `linkedTrackers[0]`) when there is no map yet.
+ */
+export function milestoneTrackerTargets(milestone: Milestone): Record<string, number> {
+  if (milestone.trackerTargets && Object.keys(milestone.trackerTargets).length > 0) return milestone.trackerTargets;
+  const legacy = milestone.linkedTrackers?.[0];
+  if (legacy && typeof milestone.targetValue === "number" && Number.isFinite(milestone.targetValue)) {
+    return { [legacy]: milestone.targetValue };
+  }
+  return {};
+}
+
+/** Whether the tracker set came from the plan rather than from targets. */
 export function autoLinkedKinds(milestone: Milestone): AutoLinked {
-  return {
-    tasks: (milestone.linkedActivities?.length ?? 0) === 0 && !milestone.autoLinkOff?.tasks,
-    tracker: (milestone.linkedTrackers?.length ?? 0) === 0 && !milestone.autoLinkOff?.tracker,
-  };
+  return { tasks: true, tracker: Object.keys(milestoneTrackerTargets(milestone)).length === 0 };
 }
 
 /**
- * The milestone as every progress number should read it: hand-made links
- * where there are any, the automatic set where there aren't. Returns the same
- * object when nothing needed filling.
+ * The milestone as every progress number should read it: the plan's tasks due
+ * in its dates, and the trackers it sets targets for (else the plan's only
+ * tracker). `targetValue` mirrors the first tracker's target, which is what
+ * the planned-path code reads for the primary tracker.
+ *
+ * `activities` undefined leaves the task set as stored — for sibling lists
+ * that only need their trackers resolved.
  */
 export function withAutoLinks(
   milestone: Milestone,
   activities: Activities | undefined,
   trackers?: readonly ProgressTracker[],
 ): Milestone {
-  const auto = autoLinkedKinds(milestone);
-  const tasks = auto.tasks && activities ? autoTaskIds(milestone, activities) : null;
-  const tracker = auto.tracker && trackers ? autoTrackerIds(milestone, trackers) : null;
-  if (!tasks?.length && !tracker?.length) return milestone;
+  const targets = milestoneTrackerTargets(milestone);
+  const targetIds = Object.keys(targets).filter((id) => !trackers || trackers.some((t) => t.id === id));
+  const trackerIds = targetIds.length ? targetIds : trackers ? autoTrackerIds(milestone, trackers) : milestone.linkedTrackers ?? [];
+  const tasks = activities ? autoTaskIds(milestone, activities) : milestone.linkedActivities ?? [];
   return {
     ...milestone,
-    ...(tasks?.length ? { linkedActivities: tasks } : {}),
-    ...(tracker?.length ? { linkedTrackers: tracker, linkedTrackerId: tracker[0] } : {}),
+    linkedActivities: tasks,
+    linkedTrackers: trackerIds,
+    linkedTrackerId: trackerIds[0],
+    trackerTargets: targetIds.length ? Object.fromEntries(targetIds.map((id) => [id, targets[id]])) : undefined,
+    targetValue: trackerIds[0] !== undefined ? targets[trackerIds[0]] : undefined,
   };
 }
 
-/** `withAutoLinks` across a list — for surfaces that show which milestones an item advances. */
-export function resolveMilestoneLinks(
-  milestones: readonly Milestone[],
-  activities: Activities | undefined,
-  trackers?: readonly ProgressTracker[],
-): Milestone[] {
-  return milestones.map((m) => withAutoLinks(m, activities, trackers));
-}
-
 /**
- * Before a hand edit to one kind of link on an automatic milestone, write the
- * automatic set down so the edit starts from it. Without this, linking one
- * extra task to a milestone that was counting six would leave it counting one.
- */
-export function materializeLinks(
-  milestones: Milestone[],
-  milestoneId: string,
-  kind: "task" | "tracker",
-  activities: Activities | undefined,
-  trackers?: readonly ProgressTracker[],
-): Milestone[] {
-  return milestones.map((m) => {
-    if (m.id !== milestoneId) return m;
-    const auto = autoLinkedKinds(m);
-    if (kind === "task" && auto.tasks && activities) {
-      const ids = autoTaskIds(m, activities);
-      return ids.length ? { ...m, linkedActivities: ids } : m;
-    }
-    if (kind === "tracker" && auto.tracker && trackers) {
-      const ids = autoTrackerIds(m, trackers);
-      return ids.length ? { ...m, linkedTrackers: ids, linkedTrackerId: ids[0] } : m;
-    }
-    return m;
-  });
-}
-
-/**
- * The one way to hand-edit a milestone link: links or unlinks the item, first
- * writing down the automatic set when this kind of link was still automatic.
- * Takes the whole schedule so every caller resolves "automatic" the same way.
+ * Link or unlink an item on a milestone by hand. Only routines are linked
+ * this way (a routine doesn't belong to a plan); a tracker counts by its
+ * target and tasks by their dates, so links of those kinds are stored but
+ * never read for progress.
  */
 export function setMilestoneLink(
-  schedule: { milestones?: Milestone[]; activities?: Activities; progressTrackers?: ProgressTracker[] },
+  schedule: { milestones?: Milestone[] },
   milestoneId: string,
   kind: MilestoneLinkKind,
   itemId: string,
   linked: boolean,
 ): Milestone[] {
-  const milestones = schedule.milestones ?? [];
-  if (kind === "ritual") return (linked ? linkItem : unlinkItem)(milestones, milestoneId, kind, itemId);
-  const base = materializeLinks(milestones, milestoneId, kind, schedule.activities, schedule.progressTrackers);
-  const next = (linked ? linkItem : unlinkItem)(base, milestoneId, kind, itemId);
-  const key = kind === "task" ? "tasks" : "tracker";
-  return next.map((m) => {
-    if (m.id !== milestoneId) return m;
-    const ids = kind === "task" ? m.linkedActivities : m.linkedTrackers;
-    // Unlinking the last one is a choice to count none; linking one again
-    // simply takes over, since hand-made links always win.
-    const off = !linked && (ids?.length ?? 0) === 0;
-    if (off === !!m.autoLinkOff?.[key]) return m;
-    return { ...m, autoLinkOff: { ...m.autoLinkOff, [key]: off } };
-  });
+  return (linked ? linkItem : unlinkItem)(schedule.milestones ?? [], milestoneId, kind, itemId);
 }

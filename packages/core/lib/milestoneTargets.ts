@@ -49,10 +49,24 @@ function sortedEntries(trackerId: string, entries: readonly MetricEntry[], track
     .sort((a, b) => a.date.localeCompare(b.date));
 }
 
-/** Milestones this tracker is the primary tracker of, earliest end first. */
+/** The figure a milestone sets for this tracker, if it sets one. */
+export function milestoneTargetFor(milestone: Milestone, trackerId: string): number | undefined {
+  const own = milestone.trackerTargets?.[trackerId];
+  if (typeof own === "number" && Number.isFinite(own)) return own;
+  if (milestone.linkedTrackers?.[0] === trackerId && typeof milestone.targetValue === "number" && Number.isFinite(milestone.targetValue)) {
+    return milestone.targetValue;
+  }
+  return undefined;
+}
+
+/**
+ * Milestones that measure this tracker, earliest end first: those that set it
+ * a target, plus those it is the primary (first) tracker of — which is how
+ * the plan's only tracker joins when no milestone set targets.
+ */
 export function milestonesOnTracker(trackerId: string, milestones: readonly Milestone[]): Milestone[] {
   return milestones
-    .filter((m) => m.linkedTrackers?.[0] === trackerId)
+    .filter((m) => m.linkedTrackers?.[0] === trackerId || milestoneTargetFor(m, trackerId) !== undefined)
     .sort((a, b) => a.plannedEndDate.localeCompare(b.plannedEndDate) || a.sortOrder - b.sortOrder);
 }
 
@@ -77,9 +91,7 @@ export function plannedTrackerPath(
 
   // Known values per milestone: explicit targets, plus the tracker's goal on
   // the last milestone when that one doesn't say otherwise.
-  const known: Array<number | undefined> = mine.map((m) =>
-    typeof m.targetValue === "number" && Number.isFinite(m.targetValue) ? m.targetValue : undefined,
-  );
+  const known: Array<number | undefined> = mine.map((m) => milestoneTargetFor(m, tracker.id));
   const lastIndex = mine.length - 1;
   const goalOnLast = known[lastIndex] === undefined && tracker.goalValue !== undefined;
   if (goalOnLast) known[lastIndex] = tracker.goalValue;

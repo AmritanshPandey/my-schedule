@@ -3,8 +3,6 @@ import { Pressable, ScrollView, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { IconArrowBackUp, IconBan, IconCheck, IconClockHour4, IconEdit, IconListCheck, IconNotes, IconPlayerPlay, IconX } from '@tabler/icons-react-native';
 import type { Milestone, Plan, Schedule, Task } from '@planr/core/lib/scheduleTypes';
-import type { MilestoneLinkKind } from '@planr/core/lib/milestoneLinks';
-import MilestoneLinks from '../milestone/MilestoneLinks';
 import type { ScheduleEntry } from '@planr/core/lib/scheduleEntry';
 import { todayISO } from '@planr/core/lib/dateUtils';
 import { compareDeadline } from '@planr/core/lib/subtaskDeadline';
@@ -45,11 +43,6 @@ export interface TaskDetailViewProps {
   dayLabel?: string;
   onEdit?: () => void;
   presentation?: 'sheet' | 'page';
-  /** Every milestone — shows which ones this item advances. Absent = hidden. */
-  milestones?: readonly Milestone[];
-  /** The schedule's activities, so milestones that count this task automatically show. */
-  activities?: Schedule['activities'];
-  onSetMilestoneLink?: (milestoneId: string, kind: MilestoneLinkKind, itemId: string, linked: boolean) => void;
   /** ISO date of the occurrence shown — where logged sets are filed. Defaults to today. */
   dateISO?: string;
   /** Every logged session, for Previous and today's summary. */
@@ -90,9 +83,6 @@ export default function TaskDetailView({
   dayLabel,
   onEdit,
   presentation = 'sheet',
-  milestones,
-  activities,
-  onSetMilestoneLink,
   dateISO,
   setLogs,
   progressionSteps,
@@ -338,10 +328,6 @@ export default function TaskDetailView({
     <>
       {task.description ? <Text className="text-[14px] leading-relaxed text-neutral-500 dark:text-neutral-400">{task.description}</Text> : null}
       {dayNoteBlock}
-      {/* Which milestones this task moves forward — commitments never count. */}
-      {milestones && onSetMilestoneLink && tracked && !readOnly ? (
-        <MilestoneLinks milestones={milestones} kind="task" itemId={task.id} planId={task.planId} activities={activities} onSetLink={onSetMilestoneLink} />
-      ) : null}
       {!readOnly && onDecideProgression
         ? suggestions?.map((suggestion) => {
             const entry = items.find((item) => item.id === suggestion.subtaskId);

@@ -37,8 +37,7 @@ registerHooks({
 });
 
 const mod = await import("@/packages/core/lib/milestoneAutoLinks.ts");
-const { autoTaskIds, autoTrackerIds, withAutoLinks, resolveMilestoneLinks, materializeLinks } = mod;
-const { linkItem } = await import("@/packages/core/lib/milestoneLinks.ts");
+const { autoTaskIds, autoTrackerIds, withAutoLinks } = mod;
 const { calculateMilestoneState } = await import("@/packages/core/lib/milestoneHealth.ts");
 
 // ── Fixtures ─────────────────────────────────────────────────────────────────
@@ -83,9 +82,9 @@ test("a one-off only counts toward the milestone whose dates hold it", () => {
   assert.ok(!autoTaskIds(october, activities).includes("one-off-in"));
 });
 
-test("hand-made task links win over the automatic set", () => {
-  const m = milestone({ linkedActivities: ["lift"] });
-  assert.equal(withAutoLinks(m, activities), m);
+test("stored task links are ignored: the plan's own tasks always count", () => {
+  const m = withAutoLinks(milestone({ linkedActivities: ["lift"] }), activities);
+  assert.deepEqual([...m.linkedActivities].sort(), ["lift", "one-off-in", "run"]);
 });
 
 // ── Tracker ──────────────────────────────────────────────────────────────────
@@ -98,29 +97,24 @@ test("with several trackers the choice stays the person's", () => {
   assert.deepEqual(autoTrackerIds(milestone(), [tracker("w"), tracker("z")]), []);
 });
 
-test("hand-made tracker link wins, and auto tasks still fill alongside it", () => {
-  const m = withAutoLinks(milestone({ linkedTrackers: ["z"] }), activities, [tracker("w")]);
+test("trackers with a target count; a bare hand link doesn't", () => {
+  const withTarget = withAutoLinks(milestone({ trackerTargets: { z: 70 } }), activities, [tracker("w"), tracker("z")]);
+  assert.deepEqual(withTarget.linkedTrackers, ["z"]);
+  assert.equal(withTarget.targetValue, 70);
+  const bare = withAutoLinks(milestone({ linkedTrackers: ["z"] }), activities, [tracker("w"), tracker("z")]);
+  assert.deepEqual(bare.linkedTrackers, []);
+});
+
+test("the legacy single targetValue reads as a target on its tracker", () => {
+  const m = withAutoLinks(milestone({ linkedTrackers: ["z"], targetValue: 75 }), activities, [tracker("w"), tracker("z")]);
   assert.deepEqual(m.linkedTrackers, ["z"]);
-  assert.ok(m.linkedActivities.includes("run"));
+  assert.deepEqual(m.trackerTargets, { z: 75 });
 });
 
-test("nothing to fill returns the same milestone object", () => {
-  const empty = milestone({ planId: "nothing" });
-  assert.equal(withAutoLinks(empty, activities, [tracker("w")]), empty);
-  assert.deepEqual(resolveMilestoneLinks([empty], activities), [empty]);
-});
-
-// ── Manual edits start from what was shown ───────────────────────────────────
-
-test("linking one task to an automatic milestone keeps the others it was counting", () => {
-  const ms = materializeLinks([milestone()], "m1", "task", activities);
-  const next = linkItem(ms, "m1", "task", "other-plan");
-  assert.deepEqual(next[0].linkedActivities.sort(), ["lift", "one-off-in", "other-plan", "run"]);
-});
-
-test("materializing leaves an already hand-linked milestone alone", () => {
-  const ms = [milestone({ linkedActivities: ["lift"] })];
-  assert.deepEqual(materializeLinks(ms, "m1", "task", activities), ms);
+test("several targets: every tracker counts, the first is primary", () => {
+  const m = withAutoLinks(milestone({ trackerTargets: { w: 74, z: 10 } }), activities, [tracker("w"), tracker("z")]);
+  assert.deepEqual(m.linkedTrackers, ["w", "z"]);
+  assert.equal(m.targetValue, 74);
 });
 
 // ── Progress actually reads it ───────────────────────────────────────────────
@@ -134,27 +128,4 @@ test("an unlinked milestone now has data, and says its links are automatic", () 
   assert.equal(state.hasData, true);
   assert.deepEqual(state.autoLinked, { tasks: true, tracker: true });
   assert.ok(state.taskProgress !== null);
-});
-
-test("a hand-linked milestone reports nothing automatic", () => {
-  const state = calculateMilestoneState({
-    milestone: milestone({ linkedActivities: ["lift"], linkedTrackers: ["w"] }), plan, activities, trackers: [tracker("w")], metricEntries: [], now: new Date("2026-09-15T12:00:00"),
-  });
-  assert.deepEqual(state.autoLinked, { tasks: false, tracker: false });
-});
-
-test("unlinking the last automatic item switches that kind off instead of refilling it", () => {
-  const { setMilestoneLink } = mod;
-  const schedule = { milestones: [milestone()], activities, progressTrackers: [tracker("w")] };
-  const ms = setMilestoneLink(schedule, "m1", "tracker", "w", false);
-  assert.deepEqual(ms[0].linkedTrackers, []);
-  assert.equal(ms[0].autoLinkOff.tracker, true);
-  assert.deepEqual(withAutoLinks(ms[0], activities, [tracker("w")]).linkedTrackers, []);
-});
-
-test("unlinking one of several automatic tasks keeps the rest and stays hand-made", () => {
-  const { setMilestoneLink } = mod;
-  const ms = setMilestoneLink({ milestones: [milestone()], activities }, "m1", "task", "run", false);
-  assert.deepEqual(ms[0].linkedActivities.sort(), ["lift", "one-off-in"]);
-  assert.ok(!ms[0].autoLinkOff?.tasks);
 });
