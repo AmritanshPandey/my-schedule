@@ -1426,7 +1426,7 @@ export function TaskSheet({
             <div
               className={
                 presentation === "page"
-                  ? "fixed inset-x-0 bottom-0 z-30 flex items-center gap-2 border-t border-neutral-200 bg-white px-5 pt-3 dark:border-white/[0.08] dark:bg-neutral-950"
+                  ? "fixed inset-x-0 bottom-0 z-30 flex flex-wrap items-center gap-2 border-t border-neutral-200 bg-white px-5 pt-3 dark:border-white/[0.08] dark:bg-neutral-950"
                   : "sticky bottom-0 z-20 -mx-5 mt-6 flex flex-wrap items-center gap-2 border-t border-neutral-200 bg-white px-5 py-3 dark:border-white/[0.08] dark:bg-neutral-900"
               }
               style={presentation === "page" ? { paddingBottom: "max(12px, env(safe-area-inset-bottom))" } : undefined}
@@ -1448,7 +1448,7 @@ export function TaskSheet({
                   onClick={openDuplicatePicker}
                   disabled={!canSave}
                   aria-label="Duplicate task"
-                  className="h-12 w-12 shrink-0 px-0 text-neutral-700 shadow-sm ring-1 ring-black/[0.03] hover:border-neutral-300 hover:bg-neutral-100 dark:bg-white/[0.06] dark:text-neutral-200 dark:ring-white/[0.06] dark:hover:bg-white/[0.10]"
+                  className="h-12 w-12 shrink-0 !px-0 text-neutral-700 shadow-sm ring-1 ring-black/[0.03] hover:border-neutral-300 hover:bg-neutral-100 dark:bg-white/[0.06] dark:text-neutral-200 dark:ring-white/[0.06] dark:hover:bg-white/[0.10]"
                 >
                   <IconCopyPlus size={20} strokeWidth={2} />
                 </Button>
@@ -1458,7 +1458,7 @@ export function TaskSheet({
                   variant="destructiveSecondary"
                   onClick={() => { haptic("light"); onDelete(); }}
                   aria-label="Delete task"
-                  className="h-12 w-12 shrink-0 px-0 text-rose-500 shadow-sm ring-1 ring-rose-500/10 hover:border-rose-300 hover:bg-rose-500/10 dark:bg-rose-500/[0.08] dark:text-rose-300 dark:ring-rose-400/10 dark:hover:border-rose-400/25 dark:hover:bg-rose-500/15"
+                  className="h-12 w-12 shrink-0 !px-0 text-rose-500 shadow-sm ring-1 ring-rose-500/10 hover:border-rose-300 hover:bg-rose-500/10 dark:bg-rose-500/[0.08] dark:text-rose-300 dark:ring-rose-400/10 dark:hover:border-rose-400/25 dark:hover:bg-rose-500/15"
                 >
                   <IconTrash size={20} strokeWidth={2} />
                 </Button>
