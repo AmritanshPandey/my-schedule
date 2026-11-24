@@ -28,6 +28,10 @@ export interface SubtaskDraft {
   targets?: SubtaskTargets;
   restSeconds?: number;
   progression?: SubtaskProgression;
+  /** How much, for an ingredient or a shopping item (lib/taskFields.ts). */
+  quantity?: string;
+  /** What it costs, for a shopping item. */
+  cost?: number;
   /** The stored entry this draft was opened from — carries the fields the form doesn't edit. */
   source?: ScheduleEntry;
 }
@@ -61,6 +65,8 @@ export function entryToSubtaskDraft(e: ScheduleEntry): SubtaskDraft {
     targets,
     restSeconds: e.restSeconds,
     progression: e.progression,
+    quantity: e.quantity,
+    cost: e.cost,
     source: e,
   };
 }
@@ -107,6 +113,8 @@ export function subtaskDraftToEntry(d: SubtaskDraft, nowISO: string = new Date()
     targets: cleanTargets(d.targets),
     restSeconds: d.restSeconds != null && d.restSeconds > 0 ? Math.round(d.restSeconds) : undefined,
     progression: d.progression,
+    quantity: (d.quantity ?? "").trim() || undefined,
+    cost: d.cost != null && Number.isFinite(d.cost) && d.cost >= 0 ? d.cost : undefined,
   };
   const before = source ? baseTargets(source) : {};
   const after = baseTargets(entry);

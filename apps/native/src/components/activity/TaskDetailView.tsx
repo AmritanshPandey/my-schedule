@@ -2,7 +2,8 @@ import { useEffect, useMemo, useState, type ReactNode } from 'react';
 import { Pressable, ScrollView, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { IconArrowBackUp, IconBan, IconCheck, IconClockHour4, IconEdit, IconListCheck, IconNotes, IconPlayerPlay, IconX } from '@tabler/icons-react-native';
-import type { Milestone, Plan, Schedule, Task } from '@planr/core/lib/scheduleTypes';
+import type { Plan, ProgressTracker, Task, TaskCategory } from '@planr/core/lib/scheduleTypes';
+import { filledFields, formatFieldValue, taskFieldTemplate } from '@planr/core/lib/taskFields';
 import type { ScheduleEntry } from '@planr/core/lib/scheduleEntry';
 import { todayISO } from '@planr/core/lib/dateUtils';
 import { compareDeadline } from '@planr/core/lib/subtaskDeadline';
@@ -45,6 +46,9 @@ export interface TaskDetailViewProps {
   presentation?: 'sheet' | 'page';
   /** ISO date of the occurrence shown — where logged sets are filed. Defaults to today. */
   dateISO?: string;
+  /** Categories and trackers, for the task's category-specific fields (lib/taskFields.ts). */
+  categories?: readonly TaskCategory[];
+  trackers?: readonly ProgressTracker[];
   /** Every logged session, for Previous and today's summary. */
   setLogs?: readonly SetLog[];
   /** Accepted progression steps — raise a subtask's targets on read. */
@@ -84,6 +88,8 @@ export default function TaskDetailView({
   onEdit,
   presentation = 'sheet',
   dateISO,
+  categories,
+  trackers,
   setLogs,
   progressionSteps,
   onSaveSetLog,
@@ -324,10 +330,26 @@ export default function TaskDetailView({
       </View>
     );
 
+  const fieldTemplate = taskFieldTemplate(task, categories);
+  const detailRows = fieldTemplate ? filledFields(fieldTemplate, task.details) : [];
+
   const checklist = (
     <>
       {task.description ? <Text className="text-[14px] leading-relaxed text-neutral-500 dark:text-neutral-400">{task.description}</Text> : null}
       {dayNoteBlock}
+      {/* The category's own fields — only the ones filled in. */}
+      {detailRows.length > 0 && (
+        <View testID="task-details" className="gap-2 rounded-2xl border border-neutral-200 bg-white px-4 py-3 dark:border-white/[0.08] dark:bg-white/[0.03]">
+          {detailRows.map(({ def, value }) => (
+            <View key={def.key} accessible className="flex-row gap-4">
+              <Text className="w-28 shrink-0 text-[13px] font-medium leading-5 text-neutral-500 dark:text-neutral-400">{def.label}</Text>
+              <Text className="min-w-0 flex-1 text-[14px] font-semibold leading-5 text-neutral-900 dark:text-white">
+                {formatFieldValue(def, value, (id) => trackers?.find((t) => t.id === id)?.title)}
+              </Text>
+            </View>
+          ))}
+        </View>
+      )}
       {!readOnly && onDecideProgression
         ? suggestions?.map((suggestion) => {
             const entry = items.find((item) => item.id === suggestion.subtaskId);
@@ -342,6 +364,9 @@ export default function TaskDetailView({
             ) : null;
           })
         : null}
+      {items.length > 0 && fieldTemplate && fieldTemplate.listLabel !== 'Checklist' && (
+        <Text className="-mb-1 text-[11px] font-bold uppercase tracking-[0.08em] text-neutral-600 dark:text-neutral-400">{fieldTemplate.listLabel}</Text>
+      )}
       {items.length > 0 && (
         <View className="gap-2">
           {items.map((item) => (

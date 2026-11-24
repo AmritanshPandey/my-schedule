@@ -14,7 +14,8 @@ import { compareDeadline } from "@/lib/subtaskDeadline";
 import { calculateTaskProgress, isTrackedTask, phaseProgress, resolveSlotState, resolveTaskState } from "@/lib/taskCompletion";
 import { getSlots } from "@/lib/taskMutations";
 import { formatDisplayTime, formatDuration } from "@/lib/timeUtils";
-import type { Milestone, Plan, Schedule, Task } from "@/lib/useScheduleDB";
+import type { Plan, ProgressTracker, Task, TaskCategory } from "@/lib/useScheduleDB";
+import { filledFields, formatFieldValue, taskFieldTemplate } from "@/lib/taskFields";
 import Button from "@/components/ui/Button";
 import LogSetsSheet from "@/components/activity/LogSetsSheet";
 import ProgressionCard from "@/components/activity/ProgressionCard";
@@ -47,6 +48,9 @@ export interface TaskDetailViewProps {
   presentation?: "sheet" | "page";
   /** ISO date of the occurrence shown — where logged sets are filed. Defaults to today. */
   dateISO?: string;
+  /** Categories and trackers, for the task's category-specific fields (lib/taskFields.ts). */
+  categories?: readonly TaskCategory[];
+  trackers?: readonly ProgressTracker[];
   /** Every logged session, for Previous and today's summary. */
   setLogs?: readonly SetLog[];
   /** Accepted progression steps — raise a subtask's targets on read. */
@@ -79,6 +83,8 @@ export default function TaskDetailView({
   onEdit,
   presentation = "sheet",
   dateISO,
+  categories,
+  trackers,
   setLogs,
   progressionSteps,
   onSaveSetLog,
@@ -317,6 +323,9 @@ export default function TaskDetailView({
       </div>
     );
 
+  const fieldTemplate = taskFieldTemplate(task, categories);
+  const detailRows = fieldTemplate ? filledFields(fieldTemplate, task.details) : [];
+
   const checklist = (
     <>
       {task.description && (
@@ -324,6 +333,20 @@ export default function TaskDetailView({
       )}
 
       {dayNoteBlock}
+
+      {/* The category's own fields — only the ones filled in. */}
+      {detailRows.length > 0 && (
+        <dl data-testid="task-details" className="grid grid-cols-[auto_1fr] gap-x-4 gap-y-2 rounded-2xl border border-neutral-200 bg-white px-4 py-3 dark:border-white/[0.08] dark:bg-white/[0.03]">
+          {detailRows.map(({ def, value }) => (
+            <div key={def.key} className="contents">
+              <dt className="text-[13px] font-medium text-neutral-500 dark:text-neutral-400">{def.label}</dt>
+              <dd className="min-w-0 whitespace-pre-line text-[14px] font-semibold text-neutral-900 dark:text-white">
+                {formatFieldValue(def, value, (id) => trackers?.find((t) => t.id === id)?.title)}
+              </dd>
+            </div>
+          ))}
+        </dl>
+      )}
 
       {/* No empty state when there are no subtasks. The panel that used to sit
           here read "No subtasks — mark the whole task done below", which only
@@ -341,6 +364,9 @@ export default function TaskDetailView({
         ) : null;
       })}
 
+      {items.length > 0 && fieldTemplate && fieldTemplate.listLabel !== "Checklist" && (
+        <p className="-mb-1 text-[11px] font-bold uppercase tracking-[0.08em] text-neutral-600 dark:text-neutral-400">{fieldTemplate.listLabel}</p>
+      )}
       {items.length > 0 && (
         <div className="flex flex-col gap-2">
           {items.map((item) => (

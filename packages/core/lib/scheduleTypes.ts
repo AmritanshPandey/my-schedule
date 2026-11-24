@@ -96,6 +96,9 @@ export interface TaskCompletionEvent {
   completionType: "task" | "subtask" | "missed" | "slot";
   subtaskId?: string;  // present for subtask-level events (completed or missed)
   slotIndex?: number;  // present for slot-level events — index into getSlots(task)
+  /** This completion's amount has been logged to its Finance tracker
+   *  (lib/taskFields.ts) — so an entry deleted by hand isn't logged again. */
+  amountLogged?: boolean;
 }
 
 /**
@@ -227,7 +230,21 @@ export interface Task {
   /** Minutes before this task starts to remind; absent = the Settings default
    *  (lib/reminders.ts). 0 = at the start. */
   reminderLeadMinutes?: number;
+  /**
+   * The category-specific fields (subject, servings, amount…), keyed by the
+   * field's key in its category's template (lib/taskFields.ts). Only filled
+   * fields are stored.
+   */
+  details?: TaskDetails;
 }
+
+/** Category-specific task field values — text or numbers, keyed by field. */
+export type TaskDetails = Record<string, string | number>;
+
+/** Which field template a category's tasks use (lib/taskFields.ts). */
+export type TaskFieldKind =
+  | "fitness" | "study" | "work" | "cooking" | "chores"
+  | "finance" | "shopping" | "travel" | "wellness" | "creative";
 
 export interface SummaryConfig {
   label: string;
@@ -744,6 +761,11 @@ export interface TaskCategory {
   sortOrder?: number;
   /** See CategoryKind. Unset = "active". */
   kind?: CategoryKind;
+  /**
+   * The field template its tasks use (lib/taskFields.ts). Unset = suggested
+   * from the title or icon; "none" = no category-specific fields.
+   */
+  fieldKind?: TaskFieldKind | "none";
 }
 
 /**

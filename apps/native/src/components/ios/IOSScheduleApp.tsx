@@ -91,6 +91,7 @@ import { rescheduleMissedTaskOnce, acknowledgeMiss } from '@planr/core/lib/misse
 import { TOUR_STEPS, type CoachMarkStep, type TourId } from '@planr/core/lib/onboarding/tours';
 import { useScheduleDB } from '../../lib/useScheduleDB';
 import { useReminders } from '../../lib/useReminders';
+import { useFinanceLogging } from '../../lib/useFinanceLogging';
 import { useWidgetSnapshot } from '../../lib/useWidgetSnapshot';
 import { useNowMinutes } from '../../lib/timeline/useNowMinutes';
 import { useCoachTour } from '../../lib/onboarding/useCoachTour';
@@ -451,6 +452,8 @@ export default function IOSScheduleApp() {
   const hasAnyTask = DAYS.some((day) => (schedule.activities[day] ?? []).length > 0);
   useReminders(schedule, ready);
   useWidgetSnapshot(schedule, ready);
+  // Completing a Finance task logs its amount to the chosen tracker.
+  useFinanceLogging(schedule, setSchedule, ready);
   // The calendar date drives the rollover (not just the weekday, so a week
   // spent backgrounded still rolls over); todayKey is derived from it.
   const [todayDate, setTodayDate] = useState(() => todayISO());
@@ -1604,6 +1607,8 @@ export default function IOSScheduleApp() {
       return (
         <ErrorBoundary section name="Task detail">
           <TaskDetailView
+            categories={schedule.categories}
+            trackers={schedule.progressTrackers}
             task={subtasksTask}
             linkedPlan={subtasksTask?.planId ? plansById.get(subtasksTask.planId) ?? null : null}
             readOnly={subtasksRef.dateISO !== todayISO()}
@@ -2238,6 +2243,7 @@ export default function IOSScheduleApp() {
         task={taskSheetTask}
         plans={schedule.plans}
         categories={schedule.categories}
+        trackers={schedule.progressTrackers}
         onCreateCategory={handleCreateCategory}
         onUpdateCategory={handleUpdateCategory}
         onDeleteCategory={handleDeleteCategory}

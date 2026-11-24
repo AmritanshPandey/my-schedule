@@ -49,6 +49,7 @@ const OPTIONAL_TASK_FIELDS = [
   "stepBufferMinutes",
   "mergeGroupId",
   "reminderLeadMinutes",
+  "details",
 ] as const;
 
 /** Exposed for the round-trip test that guards against silent field loss. */
@@ -69,6 +70,7 @@ function keepField(key: (typeof OPTIONAL_TASK_FIELDS)[number], value: unknown): 
       return Array.isArray(value);
     case "exceptions":
     case "recurrence":
+    case "details":
       return isPlainObject(value);
     case "stepBufferMinutes":
       return typeof value === "number" && value > 0 && value <= 60;
