@@ -35,6 +35,8 @@ interface SubtaskDraftRowProps {
   showDeadline?: boolean;
   /** Per-item figures the task's category uses — quantity for ingredients, quantity and cost for shopping (lib/taskFields.ts). */
   itemFields?: ReadonlyArray<"quantity" | "cost">;
+  /** Show sets / reps / weight / rest without asking — a Fitness task's exercises. */
+  showStrength?: boolean;
 }
 
 const SCOPE_LABEL: Record<DeadlineScope, string> = { day: "Day", week: "Wk", month: "Mo" };
@@ -51,6 +53,7 @@ function SubtaskDraftRow({
   autoFocus,
   showDeadline,
   itemFields = [],
+  showStrength = false,
 }: SubtaskDraftRowProps) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: draft.id });
   const [deleteOpen, setDeleteOpen] = useState(false);
@@ -73,7 +76,8 @@ function SubtaskDraftRow({
   }
 
   // Sets / reps / weight / rest stay tucked away until asked for — most
-  // subtasks are not lifts — but open on their own once any is set.
+  // subtasks are not lifts — but open on their own once any is set, and
+  // always for a Fitness task's exercises (showStrength).
   const [strengthOpen, setStrengthOpen] = useState(() => hasStrengthTargets(draft.targets) || draft.restSeconds != null);
   function setTarget(key: keyof SubtaskTargets, value: SubtaskTargets[keyof SubtaskTargets]) {
     onChange(draft.id, { ...draft, targets: { ...draft.targets, [key]: value } });
@@ -230,7 +234,7 @@ function SubtaskDraftRow({
             )}
           </div>
 
-          {strengthOpen ? (
+          {showStrength || strengthOpen ? (
             <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
               <StrengthField label="Sets" value={numberValue(draft.targets?.sets)} placeholder="3" inputMode="numeric"
                 onChange={(raw) => setTarget("sets", readNumber(raw))} />

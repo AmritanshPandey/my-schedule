@@ -43,6 +43,7 @@ function SubtaskDraftRow({
   autoFocus,
   showDeadline,
   itemFields = [],
+  showStrength = false,
 }: {
   draft: SubtaskDraft;
   onChange: (id: string, updated: SubtaskDraft) => void;
@@ -56,6 +57,8 @@ function SubtaskDraftRow({
   showDeadline?: boolean;
   /** Per-item figures the task's category uses — quantity for ingredients, quantity and cost for shopping (lib/taskFields.ts). */
   itemFields?: ReadonlyArray<'quantity' | 'cost'>;
+  /** Show sets / reps / weight / rest without asking — a Fitness task's exercises. */
+  showStrength?: boolean;
 }) {
   const [deleteOpen, setDeleteOpen] = useState(false);
   const deleteCopy = buildDeleteConfirmationCopy('subtask', {
@@ -72,7 +75,8 @@ function SubtaskDraftRow({
   }
 
   // Sets / reps / weight / rest stay tucked away until asked for — most
-  // subtasks are not lifts — but open on their own once any is set.
+  // subtasks are not lifts — but open on their own once any is set, and
+  // always for a Fitness task's exercises (showStrength).
   const [strengthOpen, setStrengthOpen] = useState(() => hasStrengthTargets(draft.targets) || draft.restSeconds != null);
   function setTarget(key: keyof SubtaskTargets, value: SubtaskTargets[keyof SubtaskTargets]) {
     onChange(draft.id, { ...draft, targets: { ...draft.targets, [key]: value } });
@@ -205,7 +209,7 @@ function SubtaskDraftRow({
             </View>
           )}
 
-          {strengthOpen ? (
+          {showStrength || strengthOpen ? (
             <View className="flex-row flex-wrap gap-2">
               <StrengthField label="Sets" value={draft.targets?.sets} placeholder="3" decimal={false} onChange={(n) => setTarget('sets', n)} />
               <StrengthField label="Reps" value={draft.targets?.reps} placeholder="10" decimal={false} onChange={(n) => setTarget('reps', n)} />
