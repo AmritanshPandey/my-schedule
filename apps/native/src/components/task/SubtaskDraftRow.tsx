@@ -90,6 +90,62 @@ function SubtaskDraftRow({
     onChange(draft.id, { ...draft, cost: raw.trim() === '' || !Number.isFinite(n) || n < 0 ? undefined : n });
   }
 
+  // A Fitness task's exercise leads with its sets and weight, so its time
+  // moves down beside the details; everything else keeps its time by the name.
+  // The time counts toward the task's allotted-time budget.
+  const timeField = (
+    <View className="relative h-10 w-[112px] shrink-0 justify-center">
+      <View pointerEvents="none" className="absolute left-2.5 z-10">
+        <Icon icon={IconClock} size={13} strokeWidth={2.2} className={timeInvalid ? 'text-rose-500 dark:text-rose-400' : 'text-blue-500 dark:text-blue-400'} />
+      </View>
+      <TextInput
+        value={timeText}
+        onChangeText={handleTimeChange}
+        placeholder="15min"
+        accessibilityLabel="Subtask time (minutes or hours)"
+        autoComplete="off"
+        className={`h-10 w-full text-center font-bold ${ROW_INPUT} pl-6 ${
+          timeInvalid ? 'border-rose-400 text-rose-600 dark:text-rose-400' : 'text-blue-600 dark:text-blue-400'
+        }`}
+      />
+    </View>
+  );
+  const timeError = timeInvalid && <Text className="text-[11px] font-semibold text-rose-500 dark:text-rose-400">Use a time like 15min, 1h, or 1h30m.</Text>;
+  const strengthFields = (
+    <View className="flex-row flex-wrap gap-2">
+      <StrengthField label="Sets" value={draft.targets?.sets} placeholder="3" decimal={false} onChange={(n) => setTarget('sets', n)} />
+      <StrengthField label="Reps" value={draft.targets?.reps} placeholder="10" decimal={false} onChange={(n) => setTarget('reps', n)} />
+      <StrengthField
+        label="Weight"
+        value={draft.targets?.weight}
+        placeholder="0"
+        decimal
+        onChange={(n) => setTarget('weight', n)}
+        suffix={
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel={`Weight unit: ${weightUnit}. Switch to ${weightUnit === 'kg' ? 'lb' : 'kg'}`}
+            onPress={() => setTarget('weightUnit', weightUnit === 'kg' ? 'lb' : 'kg')}
+            className="h-11 min-w-11 items-center justify-center px-2"
+          >
+            <Text className="text-[14px] font-semibold text-neutral-500 dark:text-neutral-400">{weightUnit}</Text>
+          </Pressable>
+        }
+      />
+      <StrengthField
+        label="Rest"
+        value={draft.restSeconds}
+        placeholder="90"
+        decimal={false}
+        onChange={(n) => onChange(draft.id, { ...draft, restSeconds: n })}
+        suffix={<Text className="pr-3 text-[14px] font-semibold text-neutral-500 dark:text-neutral-400">s</Text>}
+      />
+      <View className="w-full">
+        <ProgressionFields value={draft.progression} onChange={(progression) => onChange(draft.id, { ...draft, progression })} />
+      </View>
+    </View>
+  );
+
   return (
     <View className="rounded-2xl border border-neutral-200 bg-neutral-50/60 p-2.5 dark:border-white/[0.08] dark:bg-white/[0.02]">
       <View className="flex-row items-start gap-2">
@@ -137,26 +193,15 @@ function SubtaskDraftRow({
                 style={{ fontVariant: ['tabular-nums'] }}
               />
             )}
-            <View className="relative h-10 w-[112px] shrink-0 justify-center">
-              <View pointerEvents="none" className="absolute left-2.5 z-10">
-                <Icon icon={IconClock} size={13} strokeWidth={2.2} className={timeInvalid ? 'text-rose-500 dark:text-rose-400' : 'text-blue-500 dark:text-blue-400'} />
-              </View>
-              <TextInput
-                value={timeText}
-                onChangeText={handleTimeChange}
-                placeholder="15min"
-                accessibilityLabel="Subtask time (minutes or hours)"
-                autoComplete="off"
-                className={`h-10 w-full text-center font-bold ${ROW_INPUT} pl-6 ${
-                  timeInvalid ? 'border-rose-400 text-rose-600 dark:text-rose-400' : 'text-blue-600 dark:text-blue-400'
-                }`}
-              />
-            </View>
+            {!showStrength && timeField}
           </View>
 
-          {timeInvalid && <Text className="text-[11px] font-semibold text-rose-500 dark:text-rose-400">Use a time like 15min, 1h, or 1h30m.</Text>}
+          {!showStrength && timeError}
+
+          {showStrength && strengthFields}
 
           <View className="flex-row flex-wrap items-center gap-2">
+            {showStrength && timeField}
             <TextInput
               value={draft.duration ?? ''}
               onChangeText={(v) => onChange(draft.id, { ...draft, duration: v })}
@@ -174,6 +219,7 @@ function SubtaskDraftRow({
               className={`h-10 min-w-[120px] flex-1 text-neutral-600 dark:text-neutral-300 ${ROW_INPUT}`}
             />
           </View>
+          {showStrength && timeError}
           {showDeadline && (
             <View className="gap-1.5">
               <DateInput
@@ -209,39 +255,8 @@ function SubtaskDraftRow({
             </View>
           )}
 
-          {showStrength || strengthOpen ? (
-            <View className="flex-row flex-wrap gap-2">
-              <StrengthField label="Sets" value={draft.targets?.sets} placeholder="3" decimal={false} onChange={(n) => setTarget('sets', n)} />
-              <StrengthField label="Reps" value={draft.targets?.reps} placeholder="10" decimal={false} onChange={(n) => setTarget('reps', n)} />
-              <StrengthField
-                label="Weight"
-                value={draft.targets?.weight}
-                placeholder="0"
-                decimal
-                onChange={(n) => setTarget('weight', n)}
-                suffix={
-                  <Pressable
-                    accessibilityRole="button"
-                    accessibilityLabel={`Weight unit: ${weightUnit}. Switch to ${weightUnit === 'kg' ? 'lb' : 'kg'}`}
-                    onPress={() => setTarget('weightUnit', weightUnit === 'kg' ? 'lb' : 'kg')}
-                    className="h-11 min-w-11 items-center justify-center px-2"
-                  >
-                    <Text className="text-[14px] font-semibold text-neutral-500 dark:text-neutral-400">{weightUnit}</Text>
-                  </Pressable>
-                }
-              />
-              <StrengthField
-                label="Rest"
-                value={draft.restSeconds}
-                placeholder="90"
-                decimal={false}
-                onChange={(n) => onChange(draft.id, { ...draft, restSeconds: n })}
-                suffix={<Text className="pr-3 text-[14px] font-semibold text-neutral-500 dark:text-neutral-400">s</Text>}
-              />
-              <View className="w-full">
-                <ProgressionFields value={draft.progression} onChange={(progression) => onChange(draft.id, { ...draft, progression })} />
-              </View>
-            </View>
+          {showStrength ? null : strengthOpen ? (
+            strengthFields
           ) : (
             <Pressable
               accessibilityRole="button"
