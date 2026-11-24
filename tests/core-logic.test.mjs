@@ -3194,18 +3194,21 @@ test("calculateMilestoneProgress returns hasLinkedTasks:false for zero/deleted-o
     mkTask("t2", ["c", "d"], ["c"]),        // 1/2
   ];
 
-  const noLinks = { id: "m0", planId: "p1", linkedActivities: [] };
-  assert.deepEqual(calculateMilestoneProgress(noLinks, sched.activities, null), {
+  // A milestone counts its plan's tasks due in its dates (lib/milestoneAutoLinks.ts);
+  // 2026-06-01 is a Monday.
+  const window = { startDate: "2026-06-01", plannedEndDate: "2026-06-07" };
+  const otherPlan = { id: "m0", planId: "p2", linkedActivities: [], ...window };
+  assert.deepEqual(calculateMilestoneProgress(otherPlan, sched.activities, null), {
     milestoneId: "m0", hasLinkedTasks: false, completedCount: 0, totalCount: 0, pct: null, taskBreakdown: [],
   });
 
-  const deletedOnly = { id: "m1", planId: "p1", linkedActivities: ["gone"] };
-  assert.equal(calculateMilestoneProgress(deletedOnly, sched.activities, null).hasLinkedTasks, false);
+  const staleLinks = { id: "m1", planId: "p2", linkedActivities: ["gone"], ...window };
+  assert.equal(calculateMilestoneProgress(staleLinks, sched.activities, null).hasLinkedTasks, false, "stored links are ignored");
 
-  const linked = { id: "m2", planId: "p1", linkedActivities: ["t1", "t2", "t1"] }; // duplicate id
-  const progress = calculateMilestoneProgress(linked, sched.activities, null);
+  const own = { id: "m2", planId: "p1", linkedActivities: ["t1"], ...window };
+  const progress = calculateMilestoneProgress(own, sched.activities, null);
   assert.equal(progress.hasLinkedTasks, true);
-  assert.equal(progress.taskBreakdown.length, 2, "duplicate linked id is deduped");
+  assert.equal(progress.taskBreakdown.length, 2, "every plan task due in the window counts, not just the stored link");
   assert.equal(progress.completedCount, 3, "2 (t1) + 1 (t2)");
   assert.equal(progress.totalCount, 4, "2 (t1) + 2 (t2)");
   assert.equal(progress.pct, 75);
@@ -3220,12 +3223,16 @@ test("calculatePlanProgress averages per-milestone pct with equal weight, not pe
     completionHistory: Array.from({ length: completed }, (_, i) => event(id, "subtask", "2026-06-01T12:00:00Z", `${id}-${i}`)),
   });
   // Milestone A: one task, fully done. Milestone B: one 10-subtask task, 10% done.
-  sched.activities.monday = [mkTask("a", 1, 1), mkTask("b", 10, 1)];
+  // One-offs, so each lands in exactly one milestone's dates (Mondays 1 and 8 June 2026).
+  sched.activities.monday = [
+    { ...mkTask("a", 1, 1), recurrence: { type: "once", dateISO: "2026-06-01" } },
+    { ...mkTask("b", 10, 1), recurrence: { type: "once", dateISO: "2026-06-08" } },
+  ];
 
   const plan = { id: "p1" };
   const milestones = [
-    { id: "m-a", planId: "p1", linkedActivities: ["a"] },
-    { id: "m-b", planId: "p1", linkedActivities: ["b"] },
+    { id: "m-a", planId: "p1", linkedActivities: [], startDate: "2026-06-01", plannedEndDate: "2026-06-07" },
+    { id: "m-b", planId: "p1", linkedActivities: [], startDate: "2026-06-08", plannedEndDate: "2026-06-14" },
   ];
   const progress = calculatePlanProgress(plan, milestones, sched.activities);
   assert.equal(progress.hasLinkedTasks, true);
@@ -3249,7 +3256,7 @@ test("computeRoadmapStats overallPct rolls up linked-task progress, falling back
   assert.equal(noMilestones.overallPctFromLinkedTasks, false);
   assert.equal(noMilestones.overallPct, noMilestones.consistencyPct);
 
-  // A milestone exists but has no linked tasks → same fallback, not a false 0.
+  // A milestone exists but its plan has no tasks yet → same fallback, not a false 0.
   const unlinkedMilestone = {
     id: "m0", planId: "p1", linkedActivities: [], sortOrder: 0, status: "upcoming",
     startDate: "2026-06-01", plannedEndDate: "2026-06-07", plannedDurationDays: 7, createdAt: "", updatedAt: "",
@@ -3257,14 +3264,14 @@ test("computeRoadmapStats overallPct rolls up linked-task progress, falling back
   const noLinks = computeRoadmapStats("p1", sched.activities, [unlinkedMilestone], plan);
   assert.equal(noLinks.overallPctFromLinkedTasks, false);
 
-  // A milestone with a fully-done linked task → overallPct comes from the
-  // rollup (100), independent of the day-consistency scan.
-  sched.activities.monday = [{
+  // The plan gains a task in the milestone's dates, fully done → overallPct
+  // comes from the rollup (100), independent of the day-consistency scan.
+  // A new activities object, as every edit in the app makes one (the link cache keys on it).
+  sched.activities = { ...sched.activities, monday: [{
     id: "t1", title: "T", startTime: "9:00 AM", endTime: "10:00 AM", planId: "p1",
     completed: true, completionHistory: [event("t1", "task", "2026-06-01T12:00:00Z")],
-  }];
-  const linkedMilestone = { ...unlinkedMilestone, linkedActivities: ["t1"] };
-  const withLinks = computeRoadmapStats("p1", sched.activities, [linkedMilestone], plan);
+  }] };
+  const withLinks = computeRoadmapStats("p1", sched.activities, [unlinkedMilestone], plan);
   assert.equal(withLinks.overallPctFromLinkedTasks, true);
   assert.equal(withLinks.overallPct, 100);
 });

@@ -7,8 +7,6 @@ import type { MilestoneState } from "@/lib/milestoneHealth";
 import { paceNarrative } from "@/lib/paceModel";
 import { buildTrackerStat, groupTrackerStatsByPlan, trackerRampTone, type TrackerStat } from "@/lib/trackerStats";
 import { plannedTrackerPath, planGap, type PlannedTrackerPath, type PlanGap } from "@/lib/milestoneTargets";
-import type { MilestoneLinkKind } from "@/lib/milestoneLinks";
-import MilestoneLinks from "@/components/milestone/MilestoneLinks";
 import {
   buildCheckIn,
   checkInRecordLabel,
@@ -66,7 +64,6 @@ export interface TrackingViewProps {
    */
   milestones?: readonly Milestone[];
   /** Link/unlink a tracker to a milestone from its card. Absent = read-only. */
-  onSetMilestoneLink?: (milestoneId: string, kind: MilestoneLinkKind, itemId: string, linked: boolean) => void;
 }
 
 /** "1.5" not "1.50", "500" not "500.0" — values are user-typed, not currency. */
@@ -194,8 +191,6 @@ function MetricCard({
   milestoneLink,
   planned,
   milestones,
-  allTrackers,
-  onSetMilestoneLink,
   onLog,
   onOpenAddEntry,
   onDeleteEntry,
@@ -209,9 +204,6 @@ function MetricCard({
   /** The tracker's planned path and today's gap to it. Null = no path to draw. */
   planned: { path: PlannedTrackerPath; gap: PlanGap | null } | null;
   milestones?: readonly Milestone[];
-  /** Every tracker, so a plan's only tracker shows the milestones that use it automatically. */
-  allTrackers?: readonly ProgressTracker[];
-  onSetMilestoneLink?: TrackingViewProps["onSetMilestoneLink"];
   onLog: TrackingViewProps["onLog"];
   onOpenAddEntry: TrackingViewProps["onOpenAddEntry"];
   onDeleteEntry: TrackingViewProps["onDeleteEntry"];
@@ -392,17 +384,6 @@ function MetricCard({
               confident-looking number with nothing behind it. */}
           {pace && <p className="text-[13px] font-medium text-neutral-500 dark:text-neutral-400">{pace}</p>}
 
-          {milestones && onSetMilestoneLink && (
-            <MilestoneLinks
-              milestones={milestones}
-              kind="tracker"
-              itemId={tracker.id}
-              planId={tracker.planId}
-              trackers={allTrackers}
-              onSetLink={onSetMilestoneLink}
-              hideIds={milestoneLink ? [milestoneLink.milestone.id] : undefined}
-            />
-          )}
 
           {todaysEntries.length > 0 && (
             <div>
@@ -453,7 +434,6 @@ export default function TrackingView({
   onNavigateToPlans,
   phoneShell = false,
   milestones,
-  onSetMilestoneLink,
 }: TrackingViewProps) {
   const today = todayISO();
   const plansById = useMemo(() => new Map(plans.map((p) => [p.id, p])), [plans]);
@@ -575,8 +555,6 @@ export default function TrackingView({
                       milestoneLink={milestoneByTrackerId?.get(stat.tracker.id)}
                       planned={plannedByTracker.get(stat.tracker.id) ?? null}
                       milestones={milestones}
-                      allTrackers={trackers}
-                      onSetMilestoneLink={onSetMilestoneLink}
                       onLog={onLog}
                       onOpenAddEntry={onOpenAddEntry}
                       onDeleteEntry={onDeleteEntry}

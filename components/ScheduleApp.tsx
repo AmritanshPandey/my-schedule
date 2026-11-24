@@ -230,6 +230,7 @@ import { buildDeleteConfirmationCopy } from "@/lib/deleteConfirm";
 import { resolveCustomVisibleDates } from "@/lib/customView";
 import { typography } from "@/components/ui/Typography";
 import { setMilestoneLink } from "@/lib/milestoneAutoLinks";
+import { useMilestoneAutoComplete } from "@/lib/useMilestoneAutoComplete";
 import { upsertSetLog } from "@/lib/setLogs";
 import { useFocusSession } from "@/lib/useFocusSession";
 import { decideProgression, pendingProgressionsForTask } from "@/lib/subtaskProgression";
@@ -1008,6 +1009,9 @@ export default function ScheduleApp() {
   function setToastMessage(next: string | ToastState | null) {
     setToastState(typeof next === "string" ? { message: next } : next);
   }
+
+  // A milestone whose targets are all met completes itself, with Undo.
+  useMilestoneAutoComplete(schedule, setSchedule, ready, setToastState);
 
   // Explicit "Save" for the timeline. Edits already auto-save locally; this
   // force-flushes to the cloud and confirms, for reassurance after a batch of
@@ -2227,30 +2231,6 @@ export default function ScheduleApp() {
     setSchedule((prev) => ({
       ...prev,
       milestones: setMilestoneLink(prev, milestoneId, "tracker", trackerId, true),
-    }));
-  }
-
-  // The inverse of handleLinkTrackerToMilestone — removes the relationship
-  // only. The tracker itself, and every entry logged against it, are untouched.
-  function handleUnlinkTrackerFromMilestone(milestoneId: string, trackerId: string) {
-    setSchedule((prev) => ({
-      ...prev,
-      milestones: setMilestoneLink(prev, milestoneId, "tracker", trackerId, false),
-    }));
-  }
-
-  // The task-linking analogue of the two tracker handlers above.
-  function handleLinkTaskToMilestone(milestoneId: string, taskId: string) {
-    setSchedule((prev) => ({
-      ...prev,
-      milestones: setMilestoneLink(prev, milestoneId, "task", taskId, true),
-    }));
-  }
-
-  function handleUnlinkTaskFromMilestone(milestoneId: string, taskId: string) {
-    setSchedule((prev) => ({
-      ...prev,
-      milestones: setMilestoneLink(prev, milestoneId, "task", taskId, false),
     }));
   }
 
@@ -3956,11 +3936,8 @@ export default function ScheduleApp() {
           style={{ paddingTop: "env(safe-area-inset-top, 0px)" }}
         >
           <TaskDetailView
-              categories={schedule.categories}
-              trackers={schedule.progressTrackers}
-            milestones={schedule.milestones}
-            activities={schedule.activities}
-            onSetMilestoneLink={handleSetMilestoneLink}
+            categories={schedule.categories}
+            trackers={schedule.progressTrackers}
             task={subtasksDetailTask}
             linkedPlan={subtasksLinkedPlan}
             readOnly={!!subtasksRef && subtasksRef.dateISO !== todayISO()}
@@ -4706,9 +4683,6 @@ export default function ScheduleApp() {
               onCompleteMilestone={handleCompleteMilestone}
               onAddGeneratedTasks={handleAddGeneratedTasks}
               onLinkTrackerToMilestone={handleLinkTrackerToMilestone}
-              onUnlinkTrackerFromMilestone={handleUnlinkTrackerFromMilestone}
-              onLinkTaskToMilestone={handleLinkTaskToMilestone}
-              onUnlinkTaskFromMilestone={handleUnlinkTaskFromMilestone}
               onUpdateCoachMessages={handleUpdateCoachMessages}
             />
             </ErrorBoundary>
@@ -4755,7 +4729,6 @@ export default function ScheduleApp() {
             <ErrorBoundary section name="Tracking">
             <TrackingView
               milestones={schedule.milestones}
-              onSetMilestoneLink={handleSetMilestoneLink}
               trackers={schedule.progressTrackers}
               metricEntries={schedule.metricEntries}
               plans={schedule.plans}
@@ -5078,8 +5051,6 @@ export default function ScheduleApp() {
           style={{ paddingTop: "env(safe-area-inset-top, 0px)" }}
         >
           <RoutineDetailView
-            milestones={schedule.milestones}
-            onSetMilestoneLink={handleSetMilestoneLink}
             ritual={detailRitual}
             ritualCompletions={schedule.ritualCompletions ?? []}
             trackingStart={schedule.preferences?.startDate}

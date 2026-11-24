@@ -751,7 +751,7 @@ export function calculateMilestoneState(params: {
   for (const id of (milestone.linkedTrackers ?? []).slice(1)) {
     const t = trackers.find((x) => x.id === id);
     if (!t) continue;
-    const p = metricProgressOver(t, milestoneSpan(milestone, t, undefined, metricEntries, trackingStart), metricEntries, now, trackingStart).progress;
+    const p = metricProgressOver(t, milestoneSpan(milestone, t, milestones, metricEntries, trackingStart), metricEntries, now, trackingStart).progress;
     if (p !== null) metricPcts.push(p);
   }
   if (metricPcts.length > 0) {

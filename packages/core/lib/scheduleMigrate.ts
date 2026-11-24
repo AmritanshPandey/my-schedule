@@ -373,6 +373,17 @@ function normalizeMilestone(value: unknown): Milestone | null {
     : [];
   const targetValue =
     typeof m.targetValue === "number" && Number.isFinite(m.targetValue) ? m.targetValue : undefined;
+  // Per-tracker targets; only finite numbers survive. An empty map reads as unset.
+  const rawTargets = m.trackerTargets && typeof m.trackerTargets === "object" && !Array.isArray(m.trackerTargets)
+    ? Object.entries(m.trackerTargets as Record<string, unknown>).filter(
+        (entry): entry is [string, number] => typeof entry[1] === "number" && Number.isFinite(entry[1]),
+      )
+    : [];
+  const trackerTargets = rawTargets.length ? Object.fromEntries(rawTargets) : undefined;
+  const consistencyTarget =
+    typeof m.consistencyTarget === "number" && Number.isFinite(m.consistencyTarget)
+      ? Math.max(1, Math.min(100, Math.round(m.consistencyTarget)))
+      : undefined;
   const now = new Date().toISOString();
   return {
     id: m.id,
@@ -388,6 +399,9 @@ function normalizeMilestone(value: unknown): Milestone | null {
     linkedTrackers,
     linkedRituals,
     targetValue,
+    ...(trackerTargets ? { trackerTargets } : {}),
+    ...(consistencyTarget !== undefined ? { consistencyTarget } : {}),
+    ...(m.autoComplete === false ? { autoComplete: false as const } : {}),
     createdAt: typeof m.createdAt === "string" ? m.createdAt : now,
     updatedAt: typeof m.updatedAt === "string" ? m.updatedAt : now,
     targetDate: plannedEndDate,

@@ -105,6 +105,7 @@ import Button from '../ui/Button';
 import IconButton, { ICON_BUTTON_TONE } from '../ui/IconButton';
 import { Text } from '../ui/Text';
 import { SECTION_ICONS } from '../SectionIcons';
+import { useMilestoneAutoComplete } from '../../lib/useMilestoneAutoComplete';
 import IOSBottomNav from './IOSBottomNav';
 import IOSMenu, { type MenuDestination } from './IOSMenu';
 import PlanrWordmark from './PlanrWordmark';
@@ -562,6 +563,8 @@ export default function IOSScheduleApp() {
   const setToast = useCallback((next: string | ToastState | null) => {
     setToastState(next === null ? null : typeof next === 'string' ? { message: next } : next);
   }, []);
+  // A milestone whose targets are all met completes itself, with Undo.
+  useMilestoneAutoComplete(schedule, setSchedule, ready, setToast);
   const [initialNoteId, setInitialNoteId] = useState<string | null>(null);
 
   const activeTourId: TourId | null =
@@ -1601,9 +1604,6 @@ export default function IOSScheduleApp() {
       return (
         <ErrorBoundary section name="Task detail">
           <TaskDetailView
-            milestones={schedule.milestones}
-            activities={schedule.activities}
-            onSetMilestoneLink={handleSetMilestoneLink}
             task={subtasksTask}
             linkedPlan={subtasksTask?.planId ? plansById.get(subtasksTask.planId) ?? null : null}
             readOnly={subtasksRef.dateISO !== todayISO()}
@@ -1868,24 +1868,6 @@ export default function IOSScheduleApp() {
                   milestones: setMilestoneLink(prev, milestoneId, 'tracker', trackerId, true),
                 }));
               }}
-              onUnlinkTrackerFromMilestone={(milestoneId, trackerId) => {
-                setSchedule((prev) => ({
-                  ...prev,
-                  milestones: setMilestoneLink(prev, milestoneId, 'tracker', trackerId, false),
-                }));
-              }}
-              onLinkTaskToMilestone={(milestoneId, taskId) => {
-                setSchedule((prev) => ({
-                  ...prev,
-                  milestones: setMilestoneLink(prev, milestoneId, 'task', taskId, true),
-                }));
-              }}
-              onUnlinkTaskFromMilestone={(milestoneId, taskId) => {
-                setSchedule((prev) => ({
-                  ...prev,
-                  milestones: setMilestoneLink(prev, milestoneId, 'task', taskId, false),
-                }));
-              }}
             />
           </ErrorBoundary>
         );
@@ -2015,7 +1997,6 @@ export default function IOSScheduleApp() {
           <TourTarget id="tracking-view">
             <TrackingView
               milestones={schedule.milestones}
-              onSetMilestoneLink={handleSetMilestoneLink}
               trackers={schedule.progressTrackers}
               metricEntries={schedule.metricEntries}
               plans={schedule.plans}
@@ -2372,8 +2353,6 @@ export default function IOSScheduleApp() {
       {detailRitual && (
         <View className="absolute inset-0 z-50 bg-[#F5F5F5] dark:bg-[#0E0E0E]" style={{ paddingTop: insets.top }}>
           <RoutineDetailView
-            milestones={schedule.milestones}
-            onSetMilestoneLink={handleSetMilestoneLink}
             ritual={detailRitual}
             ritualCompletions={schedule.ritualCompletions ?? []}
             trackingStart={schedule.preferences?.startDate}
