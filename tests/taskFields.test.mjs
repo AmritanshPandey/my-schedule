@@ -151,3 +151,51 @@ test("no tracker chosen, no logging", () => {
   s.activities.thursday[0].details = { amount: 1200 };
   assert.deepEqual(reconcileFinanceEntries(s, NOW).metricEntries, []);
 });
+
+test("an amount deleted by hand stays deleted while the task is still complete", () => {
+  const logged = reconcileFinanceEntries(financeSchedule([done("2026-11-19")]), NOW);
+  const deleted = { ...logged, metricEntries: [] };
+  assert.equal(reconcileFinanceEntries(deleted, NOW), deleted);
+});
+
+test("completing again after un-completing logs again, even if the first was deleted by hand", () => {
+  const logged = reconcileFinanceEntries(financeSchedule([done("2026-11-19")]), NOW);
+  const again = { ...financeSchedule([{ ...done("2026-11-19"), id: "second" }]), metricEntries: [] };
+  assert.equal(logged.metricEntries.length, 1);
+  assert.deepEqual(reconcileFinanceEntries(again, NOW).metricEntries.map((e) => e.value), [1200]);
+});
+
+test("one weekday's copy having logged a completion covers the task's other copies", () => {
+  const s = financeSchedule([done("2026-11-19")]);
+  s.activities.friday = [{ ...s.activities.thursday[0] }];
+  const logged = reconcileFinanceEntries(s, NOW);
+  assert.equal(logged.metricEntries.length, 1);
+  const deleted = { ...logged, metricEntries: [] };
+  assert.equal(reconcileFinanceEntries(deleted, NOW), deleted);
+});
+
+test("an entry that arrived by sync is recognised, not logged twice", () => {
+  const entry = { id: "fin~rent~2026-11-19", planId: "p1", trackerId: "k1", value: 1200, date: "2026-11-19" };
+  const s = reconcileFinanceEntries(financeSchedule([done("2026-11-19")], { metricEntries: [entry] }), NOW);
+  assert.deepEqual(s.metricEntries, [entry]);
+  const deleted = { ...s, metricEntries: [] };
+  assert.equal(reconcileFinanceEntries(deleted, NOW), deleted);
+});
+
+test("merging two devices keeps 'already logged' whichever copy of the task wins", async () => {
+  const { unionHistory } = await import("@/packages/core/lib/mergeSchedule.ts");
+  const plain = done("2026-11-19");
+  const marked = { ...plain, amountLogged: true };
+  assert.deepEqual(unionHistory([plain], [marked]), [marked]);
+  assert.deepEqual(unionHistory([marked], [plain]), [marked]);
+});
+
+test("the marker survives loading", () => {
+  const s = migrate({
+    plans: [{ id: "p1", title: "Money", category: "routine", color: "emerald", description: "", progress: 0, linkedActivities: [], targetOutcome: "" }],
+    milestones: [],
+    ...financeSchedule([{ ...done("2026-11-19"), amountLogged: true }]),
+  });
+  const task = Object.values(s.activities).flat().find((t) => t.id === "rent");
+  assert.equal(task?.completionHistory?.[0]?.amountLogged, true);
+});

@@ -96,6 +96,9 @@ export interface TaskCompletionEvent {
   completionType: "task" | "subtask" | "missed" | "slot";
   subtaskId?: string;  // present for subtask-level events (completed or missed)
   slotIndex?: number;  // present for slot-level events — index into getSlots(task)
+  /** This completion's amount has been logged to its Finance tracker
+   *  (lib/taskFields.ts) — so an entry deleted by hand isn't logged again. */
+  amountLogged?: boolean;
 }
 
 /**

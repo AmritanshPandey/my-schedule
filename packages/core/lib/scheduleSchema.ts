@@ -74,6 +74,7 @@ const completionEvent = z.object({
   completionType: z.enum(["task", "subtask", "missed", "slot"]),
   subtaskId: z.string().optional(),
   slotIndex: z.number().int().nonnegative().optional(),
+  amountLogged: z.boolean().optional(),
 }).passthrough();
 
 export const TaskSchema = z.object({

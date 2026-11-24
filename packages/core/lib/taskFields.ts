@@ -293,6 +293,10 @@ function financeEntryId(taskId: string, dateISO: string): string {
  * already there keep their value, so changing the amount later doesn't
  * rewrite history. Returns the same schedule when nothing needs to change.
  *
+ * A completion logs once: it is marked `amountLogged` when its entry exists,
+ * so an entry someone deletes by hand isn't put back. Un-completing drops the
+ * marked event, so completing again logs again.
+ *
  * Only recent entries of Finance tasks that still log are ever removed: the
  * cloud copy keeps 90 days of completion history, so a fresh device can't
  * tell an old completion from none, and a deleted task's spending stays
@@ -303,6 +307,8 @@ export function reconcileFinanceEntries(schedule: Schedule, now: Date = new Date
   const trackers = new Map((schedule.progressTrackers ?? []).map((t) => [t.id, t]));
   const desired = new Map<string, MetricEntry>();
   const logging = new Set<string>();
+  /** Entries whose completion has been logged before, on any copy of the task. */
+  const loggedBefore = new Set<string>();
 
   for (const day of DAYS) {
     for (const task of schedule.activities?.[day] ?? []) {
@@ -318,6 +324,7 @@ export function reconcileFinanceEntries(schedule: Schedule, now: Date = new Date
         if (event.completionType !== "task") continue;
         const dateISO = localISODate(new Date(event.completedAt));
         const id = financeEntryId(task.id, dateISO);
+        if (event.amountLogged) loggedBefore.add(id);
         if (!desired.has(id)) desired.set(id, { id, planId: tracker.planId, trackerId, value: amount, date: dateISO });
       }
     }
@@ -333,9 +340,36 @@ export function reconcileFinanceEntries(schedule: Schedule, now: Date = new Date
     return !logging.has(taskId) || e.date < cutoffISO;
   });
   const have = new Set(kept.map((e) => e.id));
-  const added = [...desired.values()].filter((e) => !have.has(e.id));
-  if (added.length === 0 && kept.length === entries.length) return schedule;
-  return { ...schedule, metricEntries: [...kept, ...added] };
+  const added = [...desired.values()].filter((e) => !have.has(e.id) && !loggedBefore.has(e.id));
+
+  // Every completion that now has (or once had) its entry is settled.
+  let marked = false;
+  const activities = { ...schedule.activities };
+  for (const day of DAYS) {
+    const tasks = activities[day];
+    if (!tasks?.some((t) => logging.has(t.id))) continue;
+    const next = tasks.map((task) => {
+      if (!logging.has(task.id)) return task;
+      let changed = false;
+      const completionHistory = (task.completionHistory ?? []).map((event) => {
+        if (event.completionType !== "task" || event.amountLogged) return event;
+        if (!desired.has(financeEntryId(task.id, localISODate(new Date(event.completedAt))))) return event;
+        changed = true;
+        return { ...event, amountLogged: true };
+      });
+      if (!changed) return task;
+      marked = true;
+      return { ...task, completionHistory };
+    });
+    if (next.some((t, i) => t !== tasks[i])) activities[day] = next;
+  }
+
+  if (added.length === 0 && kept.length === entries.length && !marked) return schedule;
+  return {
+    ...schedule,
+    ...(marked ? { activities } : {}),
+    ...(added.length > 0 || kept.length !== entries.length ? { metricEntries: [...kept, ...added] } : {}),
+  };
 }
 
 const NUMERIC_TYPES = new Set<TaskFieldType>(["number", "minutes", "money", "percent"]);

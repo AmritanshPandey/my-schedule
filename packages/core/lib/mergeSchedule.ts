@@ -227,8 +227,10 @@ export function unionHistory(
   for (const e of a) byId.set(e.id, e);
   let added = false;
   for (const e of b) {
-    if (byId.has(e.id)) continue;
-    byId.set(e.id, e);
+    const mine = byId.get(e.id);
+    // Either device having logged a completion's amount settles it for both.
+    if (mine && !(e.amountLogged && !mine.amountLogged)) continue;
+    byId.set(e.id, mine ? { ...mine, amountLogged: true } : e);
     added = true;
   }
   if (!added) return a;
