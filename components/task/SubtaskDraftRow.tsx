@@ -33,6 +33,8 @@ interface SubtaskDraftRowProps {
   onCopyToTask?: (id: string) => void;
   autoFocus?: boolean;
   showDeadline?: boolean;
+  /** Per-item figures the task's category uses — quantity for ingredients, quantity and cost for shopping (lib/taskFields.ts). */
+  itemFields?: ReadonlyArray<"quantity" | "cost">;
 }
 
 const SCOPE_LABEL: Record<DeadlineScope, string> = { day: "Day", week: "Wk", month: "Mo" };
@@ -48,6 +50,7 @@ function SubtaskDraftRow({
   onCopyToTask,
   autoFocus,
   showDeadline,
+  itemFields = [],
 }: SubtaskDraftRowProps) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: draft.id });
   const [deleteOpen, setDeleteOpen] = useState(false);
@@ -115,6 +118,27 @@ function SubtaskDraftRow({
               spellCheck
               className={`h-10 min-w-[150px] flex-[1_1_180px] font-semibold ${ROW_INPUT}`}
             />
+            {itemFields.includes("quantity") && (
+              <input
+                value={draft.quantity ?? ""}
+                onChange={(e) => onChange(draft.id, { ...draft, quantity: e.target.value })}
+                placeholder="Qty"
+                aria-label="Quantity"
+                autoComplete="off"
+                className={`h-10 w-[88px] shrink-0 text-center ${ROW_INPUT}`}
+              />
+            )}
+            {itemFields.includes("cost") && (
+              <input
+                value={numberValue(draft.cost)}
+                onChange={(e) => onChange(draft.id, { ...draft, cost: readNumber(e.target.value) })}
+                placeholder="Cost"
+                aria-label="Cost"
+                inputMode="decimal"
+                autoComplete="off"
+                className={`h-10 w-[88px] shrink-0 text-center ${ROW_INPUT}`}
+              />
+            )}
             {/* Dedicated time — accepts only a time (min/hour); this is what
                 counts toward the task's allotted-time budget. */}
             <div className="relative h-10 w-[112px] shrink-0">

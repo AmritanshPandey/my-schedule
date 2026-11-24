@@ -1,7 +1,9 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import type { CategoryKind, TaskCategory } from "@/lib/useScheduleDB";
+import type { CategoryKind, TaskCategory, TaskFieldKind } from "@/lib/useScheduleDB";
+import { inferFieldKind, TASK_FIELD_KINDS, TASK_FIELD_TEMPLATES } from "@/lib/taskFields";
+import { IconChevronDown } from "@tabler/icons-react";
 import { colorFromIcon, type AccentColor } from "@/lib/colorSystem";
 import { defaultCategoryTitle } from "@/lib/taskCategories";
 import { SECTION_ICONS } from "@/components/SectionIcons";
@@ -19,6 +21,8 @@ export interface CategoryDraft {
   icon: string;
   color: AccentColor;
   kind: CategoryKind;
+  /** Undefined = suggested from the title or icon (lib/taskFields.ts). */
+  fieldKind?: TaskFieldKind | "none";
 }
 
 /**
@@ -59,6 +63,8 @@ export default function CategorySheet({ open, category, onClose, onSave }: Categ
   const [colorTouched, setColorTouched] = useState(false);
   const [titleTouched, setTitleTouched] = useState(false);
   const [kind, setKind] = useState<CategoryKind>("active");
+  // "auto" = follow what the title/icon suggest; stored as no fieldKind.
+  const [fieldKind, setFieldKind] = useState<TaskFieldKind | "none" | "auto">("auto");
 
   useEffect(() => {
     if (!open) return;
@@ -67,6 +73,7 @@ export default function CategorySheet({ open, category, onClose, onSave }: Categ
       setIcon(category.icon);
       setColor(category.color);
       setKind(category.kind ?? "active");
+      setFieldKind(category.fieldKind ?? "auto");
       setColorTouched(true);
       setTitleTouched(true);
     } else {
@@ -74,6 +81,7 @@ export default function CategorySheet({ open, category, onClose, onSave }: Categ
       setIcon("star");
       setColor(colorFromIcon("star"));
       setKind("active");
+      setFieldKind("auto");
       setColorTouched(false);
       setTitleTouched(false);
     }
@@ -92,6 +100,9 @@ export default function CategorySheet({ open, category, onClose, onSave }: Categ
 
   const trimmed = title.trim();
   const canSave = trimmed.length > 0;
+  const suggested = inferFieldKind({ title: trimmed, icon });
+  const effectiveKind = fieldKind === "auto" ? suggested : fieldKind === "none" ? null : fieldKind;
+  const effectiveTemplate = effectiveKind ? TASK_FIELD_TEMPLATES[effectiveKind] : null;
 
   return (
     <BottomSheet open={open} onClose={onClose} desktopWidth="max-w-[520px]">
@@ -170,11 +181,35 @@ export default function CategorySheet({ open, category, onClose, onSave }: Categ
             </p>
           </div>
 
+          <div>
+            <p className={`mb-2 ${typography.eyebrow}`}>Task fields</p>
+            <div className="relative">
+              <select
+                aria-label="Task fields"
+                value={fieldKind}
+                onChange={(e) => setFieldKind(e.target.value as TaskFieldKind | "none" | "auto")}
+                className="h-11 w-full appearance-none rounded-xl border border-neutral-200 bg-neutral-50 px-3 pr-9 text-[16px] font-semibold text-neutral-700 outline-none transition-colors focus:border-neutral-300 focus:bg-neutral-100 dark:border-white/10 dark:bg-white/[0.04] dark:text-neutral-200 dark:focus:border-white/20 dark:focus:bg-white/[0.07]"
+              >
+                <option value="auto">{suggested ? `Suggested: ${TASK_FIELD_TEMPLATES[suggested].label}` : "Suggested: none"}</option>
+                {TASK_FIELD_KINDS.map((k) => (
+                  <option key={k} value={k}>{TASK_FIELD_TEMPLATES[k].label}</option>
+                ))}
+                <option value="none">None</option>
+              </select>
+              <IconChevronDown size={14} strokeWidth={2} className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-neutral-500 dark:text-neutral-400" />
+            </div>
+            <p className="mt-2 text-[12px] text-neutral-500 dark:text-neutral-400">
+              {effectiveTemplate
+                ? `Tasks here ask for ${effectiveTemplate.fields.map((f) => f.label.toLowerCase()).join(", ")}${effectiveTemplate.listLabel !== "Checklist" ? `, and their checklist is ${effectiveTemplate.listLabel.toLowerCase()}` : ""}.`
+                : "Tasks here have no extra fields."}
+            </p>
+          </div>
+
           <Button
             variant="primary"
             className="w-full"
             disabled={!canSave}
-            onClick={() => { if (canSave) onSave({ title: trimmed, icon, color, kind }); }}
+            onClick={() => { if (canSave) onSave({ title: trimmed, icon, color, kind, fieldKind: fieldKind === "auto" ? undefined : fieldKind }); }}
           >
             {category ? "Save category" : "Create category"}
           </Button>

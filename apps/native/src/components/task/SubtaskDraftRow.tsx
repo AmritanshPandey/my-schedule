@@ -42,6 +42,7 @@ function SubtaskDraftRow({
   canMoveDown = false,
   autoFocus,
   showDeadline,
+  itemFields = [],
 }: {
   draft: SubtaskDraft;
   onChange: (id: string, updated: SubtaskDraft) => void;
@@ -53,6 +54,8 @@ function SubtaskDraftRow({
   canMoveDown?: boolean;
   autoFocus?: boolean;
   showDeadline?: boolean;
+  /** Per-item figures the task's category uses — quantity for ingredients, quantity and cost for shopping (lib/taskFields.ts). */
+  itemFields?: ReadonlyArray<'quantity' | 'cost'>;
 }) {
   const [deleteOpen, setDeleteOpen] = useState(false);
   const deleteCopy = buildDeleteConfirmationCopy('subtask', {
@@ -75,6 +78,13 @@ function SubtaskDraftRow({
     onChange(draft.id, { ...draft, targets: { ...draft.targets, [key]: value } });
   }
   const weightUnit = draft.targets?.weightUnit ?? 'kg';
+  // Local text so a half-typed "2." keeps its point; the draft gets the number.
+  const [costText, setCostText] = useState(() => (draft.cost != null ? String(draft.cost) : ''));
+  function handleCostChange(raw: string) {
+    setCostText(raw);
+    const n = Number(raw.replace(',', '.'));
+    onChange(draft.id, { ...draft, cost: raw.trim() === '' || !Number.isFinite(n) || n < 0 ? undefined : n });
+  }
 
   return (
     <View className="rounded-2xl border border-neutral-200 bg-neutral-50/60 p-2.5 dark:border-white/[0.08] dark:bg-white/[0.02]">
@@ -101,6 +111,28 @@ function SubtaskDraftRow({
               autoComplete="off"
               className={`h-10 min-w-[150px] flex-1 font-semibold ${ROW_INPUT}`}
             />
+            {itemFields.includes('quantity') && (
+              <TextInput
+                value={draft.quantity ?? ''}
+                onChangeText={(v) => onChange(draft.id, { ...draft, quantity: v })}
+                placeholder="Qty"
+                accessibilityLabel="Quantity"
+                autoComplete="off"
+                className={`h-10 w-[88px] shrink-0 text-center ${ROW_INPUT}`}
+              />
+            )}
+            {itemFields.includes('cost') && (
+              <TextInput
+                value={costText}
+                onChangeText={handleCostChange}
+                placeholder="Cost"
+                accessibilityLabel="Cost"
+                keyboardType="decimal-pad"
+                autoComplete="off"
+                className={`h-10 w-[88px] shrink-0 text-center ${ROW_INPUT}`}
+                style={{ fontVariant: ['tabular-nums'] }}
+              />
+            )}
             <View className="relative h-10 w-[112px] shrink-0 justify-center">
               <View pointerEvents="none" className="absolute left-2.5 z-10">
                 <Icon icon={IconClock} size={13} strokeWidth={2.2} className={timeInvalid ? 'text-rose-500 dark:text-rose-400' : 'text-blue-500 dark:text-blue-400'} />

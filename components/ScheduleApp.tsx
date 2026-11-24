@@ -1,5 +1,6 @@
 "use client";
 
+import { useFinanceLogging } from "@/lib/useFinanceLogging";
 import { markActivated } from "@/lib/activation";
 import { memo, useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { AnimatePresence, m } from "framer-motion";
@@ -1000,6 +1001,9 @@ export default function ScheduleApp() {
   ) {
     setConfirmState({ ...copy, onConfirm: fn });
   }
+
+  // Completing a Finance task logs its amount to the chosen tracker.
+  useFinanceLogging(schedule, setSchedule, ready);
 
   function setToastMessage(next: string | ToastState | null) {
     setToastState(typeof next === "string" ? { message: next } : next);
@@ -3952,6 +3956,8 @@ export default function ScheduleApp() {
           style={{ paddingTop: "env(safe-area-inset-top, 0px)" }}
         >
           <TaskDetailView
+              categories={schedule.categories}
+              trackers={schedule.progressTrackers}
             milestones={schedule.milestones}
             activities={schedule.activities}
             onSetMilestoneLink={handleSetMilestoneLink}
@@ -4967,6 +4973,7 @@ export default function ScheduleApp() {
           task={taskSheetTask}
           plans={schedule.plans}
           categories={schedule.categories}
+          trackers={schedule.progressTrackers}
           onCreateCategory={handleCreateCategory}
           onUpdateCategory={handleUpdateCategory}
           onDeleteCategory={handleDeleteCategory}

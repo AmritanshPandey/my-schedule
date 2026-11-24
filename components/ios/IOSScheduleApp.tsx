@@ -1,5 +1,6 @@
 "use client";
 
+import { useFinanceLogging } from "@/lib/useFinanceLogging";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import dynamic from "next/dynamic";
 import {
@@ -493,6 +494,9 @@ export default function IOSScheduleApp() {
    * with an action so a destructive change can offer "Undo" — which this
    * surface previously had no way to express.
    */
+  // Completing a Finance task logs its amount to the chosen tracker.
+  useFinanceLogging(schedule, setSchedule, ready);
+
   const setToast = useCallback((next: string | { message: string; actionLabel?: string; onAction?: () => void } | null) => {
     setToastState(next === null ? null : typeof next === "string" ? { message: next } : next);
   }, []);
@@ -1499,6 +1503,8 @@ export default function IOSScheduleApp() {
         <IOSMotionBoundary>
           <ErrorBoundary section name="Task detail">
             <TaskDetailView
+              categories={schedule.categories}
+              trackers={schedule.progressTrackers}
               milestones={schedule.milestones}
               activities={schedule.activities}
               onSetMilestoneLink={handleSetMilestoneLink}
@@ -2079,6 +2085,7 @@ export default function IOSScheduleApp() {
             task={taskSheetTask}
             plans={schedule.plans}
           categories={schedule.categories}
+          trackers={schedule.progressTrackers}
           onCreateCategory={handleCreateCategory}
           onUpdateCategory={handleUpdateCategory}
           onDeleteCategory={handleDeleteCategory}

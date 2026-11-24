@@ -48,6 +48,8 @@ const scheduleEntry = z.object({
   restSeconds: z.number().finite().nonnegative().optional(),
   progression: subtaskProgression.optional(),
   targetsSetAt: isoDateTime.optional(),
+  quantity: z.string().optional(),
+  cost: z.number().finite().nonnegative().optional(),
 }).passthrough();
 
 const taskSlot = z.object({ startTime: z.string(), endTime: z.string() }).passthrough();
@@ -100,6 +102,7 @@ export const TaskSchema = z.object({
   activeFrom: isoDate.optional(),
   activeUntil: isoDate.optional(),
   mergeGroupId: z.string().optional(),
+  details: z.record(z.string(), z.union([z.string(), z.number().finite()])).optional(),
 }).passthrough();
 
 const planMetricGoal = z.object({
@@ -398,7 +401,7 @@ export const ScheduleSchema = z.object({
   // connections existed has no such key, and must still validate.
   goalConnections: z.array(GoalConnectionSchema).optional(),
   plans: z.array(PlanSchema),
-  categories: z.array(z.object({ id: nonEmptyId, title: z.string(), icon: z.string(), color: accentColor, sortOrder: z.number().finite().optional(), kind: z.enum(["active", "rest", "sleep"]).optional() }).passthrough()),
+  categories: z.array(z.object({ id: nonEmptyId, title: z.string(), icon: z.string(), color: accentColor, sortOrder: z.number().finite().optional(), kind: z.enum(["active", "rest", "sleep"]).optional(), fieldKind: z.enum(["fitness", "study", "work", "cooking", "chores", "finance", "shopping", "travel", "wellness", "creative", "none"]).optional() }).passthrough()),
   activities: z.object(Object.fromEntries(DAYS.map((day) => [day, z.array(TaskSchema)])) as Record<string, z.ZodType>).passthrough(),
   progressTrackers: z.array(ProgressTrackerSchema),
   metricEntries: z.array(MetricEntrySchema),

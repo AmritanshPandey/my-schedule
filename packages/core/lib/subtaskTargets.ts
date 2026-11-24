@@ -119,6 +119,12 @@ export interface DetailSegment {
 export function subtaskDetailSegments(entry: ScheduleEntry, values: TargetValues = baseTargets(entry)): DetailSegment[] | null {
   const info = entry.info?.trim() || entry.note?.trim();
   const segments: DetailSegment[] = [];
+  // An ingredient's or shopping item's amount leads: it's what you read first.
+  const quantity = entry.quantity?.trim();
+  if (quantity) segments.push({ text: quantity });
+  if (entry.cost != null && Number.isFinite(entry.cost)) {
+    segments.push({ text: entry.cost.toLocaleString(undefined, { maximumFractionDigits: 2 }) });
+  }
   if (info) segments.push({ text: info });
   if (values.minutes != null && values.minutes > 0) segments.push({ text: formatMinutes(values.minutes), isTime: true });
   const strength = formatStrengthTargets(values);

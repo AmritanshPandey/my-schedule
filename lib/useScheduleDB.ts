@@ -78,6 +78,8 @@ export type {
   GoalDirection,
   ScheduleSyncMeta,
   DayKey,
+  TaskDetails,
+  TaskFieldKind,
 } from "@planr/core/lib/scheduleTypes";
 export { RITUAL_COLORS, RITUAL_TRACKING_TYPES, TRACKER_CADENCES } from "@planr/core/lib/scheduleTypes";
 import type { Schedule } from "@planr/core/lib/scheduleTypes";

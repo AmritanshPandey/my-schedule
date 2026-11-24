@@ -227,7 +227,21 @@ export interface Task {
   /** Minutes before this task starts to remind; absent = the Settings default
    *  (lib/reminders.ts). 0 = at the start. */
   reminderLeadMinutes?: number;
+  /**
+   * The category-specific fields (subject, servings, amount…), keyed by the
+   * field's key in its category's template (lib/taskFields.ts). Only filled
+   * fields are stored.
+   */
+  details?: TaskDetails;
 }
+
+/** Category-specific task field values — text or numbers, keyed by field. */
+export type TaskDetails = Record<string, string | number>;
+
+/** Which field template a category's tasks use (lib/taskFields.ts). */
+export type TaskFieldKind =
+  | "fitness" | "study" | "work" | "cooking" | "chores"
+  | "finance" | "shopping" | "travel" | "wellness" | "creative";
 
 export interface SummaryConfig {
   label: string;
@@ -730,6 +744,11 @@ export interface TaskCategory {
   sortOrder?: number;
   /** See CategoryKind. Unset = "active". */
   kind?: CategoryKind;
+  /**
+   * The field template its tasks use (lib/taskFields.ts). Unset = suggested
+   * from the title or icon; "none" = no category-specific fields.
+   */
+  fieldKind?: TaskFieldKind | "none";
 }
 
 /**

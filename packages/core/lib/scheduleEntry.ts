@@ -44,6 +44,10 @@ export interface ScheduleEntry {
    * steps decided before it no longer apply: an edit is a new base.
    */
   targetsSetAt?: string;
+  /** How much — "2 cups", "3" — for an ingredient or a shopping item (lib/taskFields.ts). */
+  quantity?: string;
+  /** What it costs, for a shopping item. */
+  cost?: number;
 }
 
 export type WeightUnit = "kg" | "lb";

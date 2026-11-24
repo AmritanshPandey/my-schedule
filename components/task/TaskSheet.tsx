@@ -43,7 +43,7 @@ import CategorySheet, { type CategoryDraft } from "@/components/category/Categor
 import { haptic } from "@/lib/haptics";
 import { getReminderSettings } from "@/lib/reminders";
 import { REMINDER_LEAD_OPTIONS, leadLabel } from "@planr/core/lib/reminders";
-import type { DayKey, Plan, Schedule, Task, TaskCategory, TaskRecurrence, TaskTypeValue } from "@/lib/useScheduleDB";
+import type { DayKey, Plan, ProgressTracker, Schedule, Task, TaskCategory, TaskRecurrence, TaskTypeValue } from "@/lib/useScheduleDB";
 import { findAvailableSlots, suggestSlots } from "@/lib/availableSlots";
 import { computeUsualTimeSlot } from "@/lib/usualTimeSlot";
 import { mergeCandidates, findMergePartner } from "@/lib/taskMerge";
@@ -58,7 +58,9 @@ import {
   getSlots,
 } from "@/lib/taskMutations";
 import type { TaskSlot } from "@/lib/useScheduleDB";
-import { parseTimeToMinutes, formatMinutes } from "@/lib/timeUtils";
+import { parseTimeToMinutes, formatMinutes, minutesToInputTime } from "@/lib/timeUtils";
+import { detailsDurationMinutes, detailsToFormValues, formValuesToDetails, taskFieldTemplate } from "@/lib/taskFields";
+import TaskDetailsFields from "@/components/task/TaskDetailsFields";
 import { resolveOccurrence } from "@/lib/taskOccurrence";
 import { constrainTaskToPlanWindow } from "@/lib/planTaskWindow";
 import { PlanSelector } from "./PlanSelector";
@@ -110,6 +112,8 @@ export interface TaskSheetProps {
   plans: Plan[];
   /** Owns every task's icon and colour; see lib/taskCategories.ts. */
   categories: TaskCategory[];
+  /** Every tracker, for a Finance task's "Log amount to" (filtered to the plan). */
+  trackers?: ProgressTracker[];
   /** Persist a category created from inside this sheet, returning its id. */
   onCreateCategory: (draft: CategoryDraft) => string;
   /**
@@ -240,6 +244,7 @@ export function TaskSheet({
   task,
   plans,
   categories,
+  trackers = [],
   onCreateCategory,
   onUpdateCategory,
   onDeleteCategory,
@@ -308,6 +313,8 @@ export function TaskSheet({
   // Identity comes from the task's category, so there is nothing to pick here
   // beyond which category it is. See components/category/CategorySheet.tsx.
   const [categoryId, setCategoryId] = useState<string>("");
+  // The category's own fields (lib/taskFields.ts), as typed strings.
+  const [details, setDetails] = useState<Record<string, string>>({});
   const [categorySheetOpen, setCategorySheetOpen] = useState(false);
   /** Non-null puts the category sheet in edit mode for that category. */
   const [editingCategory, setEditingCategory] = useState<TaskCategory | null>(null);
@@ -365,6 +372,7 @@ export function TaskSheet({
       setEditDay(selectedDays.includes(activeDay) ? activeDay : selectedDays[0]);
       setRepeatDays(selectedDays);
       setCategoryId(task.categoryId ?? "");
+      setDetails(detailsToFormValues(task.details));
       // Load per-task subtasks; fall back to plan template for tasks created before this fix
       const taskSubtasks = task.subtasks ?? linkedPlan?.items ?? [];
       setSubtasks(taskSubtasks.map(entryToSubtaskDraft));
@@ -394,6 +402,7 @@ export function TaskSheet({
       // has one — a fresh task then lands in the right bucket without a pick.
       const seedIcon = plans.find((p) => p.id === pid)?.emoji || "";
       setCategoryId(categories.find((c) => c.icon === seedIcon)?.id ?? "");
+      setDetails({});
       setRepeatMode("weekly");
       setIntervalWeeks(2);
       setOnceDate(baseDateISO);
@@ -736,6 +745,23 @@ export function TaskSheet({
             ? "Pick at least one day to save."
             : null;
 
+  const fieldTemplate = useMemo(() => (categoryId ? taskFieldTemplate({ categoryId }, categories) : null), [categoryId, categories]);
+
+  /**
+   * One detail typed. A duration field (study, prep + cook, estimated…) also
+   * sets the task's end time from its start, when the task is one block.
+   */
+  function handleDetailChange(key: string, value: string) {
+    const next = { ...details, [key]: value };
+    setDetails(next);
+    if (!fieldTemplate?.fields.some((f) => f.key === key && f.role === "duration")) return;
+    const total = detailsDurationMinutes(fieldTemplate, formValuesToDetails(fieldTemplate, next));
+    if (!total || slots.length !== 1) return;
+    const start = parseTimeToMinutes(slots[0].startTime);
+    if (start === null) return;
+    setSlots([{ ...slots[0], endTime: minutesToInputTime((start + total) % (24 * 60)) }]);
+  }
+
   function handleSave() {
     if (!canSave || (!isCommitment && !selectedPlan)) return;
 
@@ -776,6 +802,7 @@ export function TaskSheet({
         )
       : { activeFrom: undefined, activeUntil: undefined };
     const taskDraft: Omit<Task, "id"> = {
+      details: formValuesToDetails(fieldTemplate, details),
       title: title.trim(),
       description: description.trim() || undefined,
       startTime: primary.startTime,
@@ -842,6 +869,7 @@ export function TaskSheet({
         planId: selectedPlan.id,
         taskType,
         subtasks: validSubtasks.length > 0 ? validSubtasks : undefined,
+        details: formValuesToDetails(fieldTemplate, details),
       },
       taskId: undefined,
       repeatDays: duplicateDays.length > 0 ? duplicateDays : repeatDays,
@@ -1047,6 +1075,17 @@ export function TaskSheet({
                   usage={categoryUsage}
                   optional
                   emptyLabel={isCommitment ? undefined : "None (adds an icon and colour)"}
+                />
+              )}
+
+              {/* The category's own fields (Study: subject, topic…). Template
+                  identity, like the category itself, so not per-date. */}
+              {!isOccurrenceScope && fieldTemplate && taskType !== "commitment" && (
+                <TaskDetailsFields
+                  template={fieldTemplate}
+                  values={details}
+                  onChange={handleDetailChange}
+                  trackers={trackers.filter((t) => !selectedPlan || t.planId === selectedPlan.id)}
                 />
               )}
 
@@ -1286,7 +1325,7 @@ export function TaskSheet({
                 <section className="space-y-3">
                   <div className="flex items-center justify-between">
                     <p className={typography.eyebrow}>
-                      {taskType === "session" ? "Session steps" : "Subtasks"}
+                      {taskType === "session" ? "Session steps" : fieldTemplate?.listLabel ?? "Subtasks"}
                     </p>
                     {canExpand && title.trim().length > 0 && (
                       <Button variant="ghost" size="sm" onClick={() => setExpandSheetOpen(true)} icon={<IconSparkles size={15} strokeWidth={2} />}>
@@ -1310,6 +1349,7 @@ export function TaskSheet({
                             draft={s}
                             autoFocus={focusNewSubtask && i === subtasks.length - 1}
                             showDeadline={taskType === "task"}
+                            itemFields={taskType === "task" ? fieldTemplate?.itemFields : undefined}
                             onChange={updateSubtask}
                             onDelete={removeSubtask}
                             onDuplicate={duplicateSubtask}
@@ -1323,7 +1363,7 @@ export function TaskSheet({
                   </DndContext>
 
                   <AddRowButton
-                    label={taskType === "session" ? "Add step" : "Add subtask"}
+                    label={taskType === "session" ? "Add step" : fieldTemplate ? `Add ${fieldTemplate.itemLabel}` : "Add subtask"}
                     onClick={addSubtask}
                   />
 

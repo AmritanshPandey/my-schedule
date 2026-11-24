@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } fro
 import { Modal, Pressable, ScrollView, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { IconArrowLeft, IconCheck, IconClock, IconCopy, IconCopyPlus, IconMinus, IconPlus, IconTrash } from '@tabler/icons-react-native';
-import type { DayKey, Plan, Schedule, Task, TaskCategory, TaskRecurrence, TaskSlot, TaskTypeValue } from '@planr/core/lib/scheduleTypes';
+import type { DayKey, Plan, ProgressTracker, Schedule, Task, TaskCategory, TaskRecurrence, TaskSlot, TaskTypeValue } from '@planr/core/lib/scheduleTypes';
 import type { ScheduleEntry } from '@planr/core/lib/scheduleEntry';
 import { DAYS, DAY_LABELS, DAY_FULL_LABELS } from '@planr/core/lib/scheduleConstants';
 import { findAvailableSlots, suggestSlots } from '@planr/core/lib/availableSlots';
@@ -11,7 +11,8 @@ import { mergeCandidates, findMergePartner } from '@planr/core/lib/taskMerge';
 import { localISODate, formatDate } from '@planr/core/lib/dateUtils';
 import { uid } from '@planr/core/lib/id';
 import { getSlots } from '@planr/core/lib/taskMutations';
-import { displayToInputTime, inputToDisplayTime, parseTimeToMinutes, formatMinutes } from '@planr/core/lib/timeUtils';
+import { displayToInputTime, inputToDisplayTime, parseTimeToMinutes, formatMinutes, minutesToInputTime } from '@planr/core/lib/timeUtils';
+import { detailsDurationMinutes, detailsToFormValues, formValuesToDetails, taskFieldTemplate } from '@planr/core/lib/taskFields';
 import { resolveOccurrence } from '@planr/core/lib/taskOccurrence';
 import { constrainTaskToPlanWindow } from '@planr/core/lib/planTaskWindow';
 import { validateTaskSlots } from '@planr/core/lib/scheduleRules';
@@ -38,6 +39,7 @@ import { CategorySelector } from './CategorySelector';
 import CategorySheet, { type CategoryDraft } from '../category/CategorySheet';
 import { PlanSelector } from './PlanSelector';
 import SubtaskDraftRow from './SubtaskDraftRow';
+import TaskDetailsFields from './TaskDetailsFields';
 import { entryToSubtaskDraft, subtaskDraftToEntry, type SubtaskDraft } from '@planr/core/lib/subtaskDraft';
 import BuilderHints from '../intelligence/BuilderHints';
 
@@ -68,6 +70,8 @@ export interface TaskSheetProps {
   task?: Task | null;
   plans: Plan[];
   categories: TaskCategory[];
+  /** Trackers, for a Finance task's "Log amount to". */
+  trackers?: ProgressTracker[];
   onCreateCategory: (draft: CategoryDraft) => string;
   onUpdateCategory?: (id: string, draft: CategoryDraft) => void;
   onDeleteCategory?: (id: string) => void;
@@ -161,6 +165,7 @@ export function TaskSheet({
   task,
   plans,
   categories,
+  trackers = [],
   onCreateCategory,
   onUpdateCategory,
   onDeleteCategory,
@@ -212,6 +217,7 @@ export function TaskSheet({
   const [duplicateDays, setDuplicateDays] = useState<DayKey[]>([]);
   const [editScope, setEditScope] = useState<'all' | 'occurrence'>('all');
   const [categoryId, setCategoryId] = useState<string>('');
+  const [details, setDetails] = useState<Record<string, string>>({});
   const [categorySheetOpen, setCategorySheetOpen] = useState(false);
   const [editingCategory, setEditingCategory] = useState<TaskCategory | null>(null);
   const [repeatMode, setRepeatMode] = useState<'weekly' | 'interval' | 'once'>('weekly');
@@ -262,6 +268,7 @@ export function TaskSheet({
       setEditDay(selectedDays.includes(activeDay) ? activeDay : selectedDays[0]);
       setRepeatDays(selectedDays);
       setCategoryId(task.categoryId ?? '');
+      setDetails(detailsToFormValues(task.details));
       const taskSubtasks = task.subtasks ?? linkedPlan?.items ?? [];
       setSubtasks(taskSubtasks.map(entryToSubtaskDraft));
       setStepBuffer(task.stepBufferMinutes);
@@ -296,6 +303,7 @@ export function TaskSheet({
       setReminderLead(undefined);
       const seedIcon = plans.find((p) => p.id === pid)?.emoji || '';
       setCategoryId(categories.find((c) => c.icon === seedIcon)?.id ?? '');
+      setDetails({});
       setRepeatMode('weekly');
       setIntervalWeeks(2);
       setOnceDate(baseDateISO);
@@ -548,6 +556,20 @@ export function TaskSheet({
             ? 'Pick at least one day to save.'
             : null;
 
+  const fieldTemplate = useMemo(() => (categoryId ? taskFieldTemplate({ categoryId }, categories) : null), [categoryId, categories]);
+
+  /** A duration field (prep + cook, study time…) sets the end time from the start. */
+  function handleDetailChange(key: string, value: string) {
+    const next = { ...details, [key]: value };
+    setDetails(next);
+    if (!fieldTemplate?.fields.some((f) => f.key === key && f.role === 'duration')) return;
+    const total = detailsDurationMinutes(fieldTemplate, formValuesToDetails(fieldTemplate, next));
+    if (!total || slots.length !== 1) return;
+    const start = parseTimeToMinutes(slots[0].startTime);
+    if (start === null) return;
+    setSlots([{ ...slots[0], endTime: minutesToInputTime((start + total) % (24 * 60)) }]);
+  }
+
   function handleSave() {
     if (!canSave || (!isCommitment && !selectedPlan)) return;
     const validSubtasks = subtasks.filter((s) => s.title.trim().length > 0).map((draft) => subtaskDraftToEntry(draft));
@@ -597,6 +619,7 @@ export function TaskSheet({
       activeUntil: taskWindow.activeUntil,
       stepBufferMinutes: taskType === 'session' && stepBuffer ? stepBuffer : undefined,
       reminderLeadMinutes: reminderLead,
+      details: formValuesToDetails(fieldTemplate, details),
     };
 
     onSave({
@@ -630,6 +653,7 @@ export function TaskSheet({
         planId: selectedPlan.id,
         taskType,
         subtasks: validSubtasks.length > 0 ? validSubtasks : undefined,
+        details: formValuesToDetails(fieldTemplate, details),
       },
       taskId: undefined,
       repeatDays: duplicateDays.length > 0 ? duplicateDays : repeatDays,
@@ -752,6 +776,15 @@ export function TaskSheet({
           usage={categoryUsage}
           optional
           emptyLabel={isCommitment ? undefined : 'None (adds an icon and colour)'}
+        />
+      )}
+
+      {!isOccurrenceScope && fieldTemplate && taskType !== 'commitment' && (
+        <TaskDetailsFields
+          template={fieldTemplate}
+          values={details}
+          onChange={handleDetailChange}
+          trackers={trackers.filter((t) => !selectedPlan || t.planId === selectedPlan.id)}
         />
       )}
 
@@ -913,13 +946,14 @@ export function TaskSheet({
 
       {selectedPlan && !isOccurrenceScope && taskType !== 'commitment' && (
         <View className="gap-3">
-          <Text className={typography.eyebrow}>{taskType === 'session' ? 'Session steps' : 'Subtasks'}</Text>
+          <Text className={typography.eyebrow}>{taskType === 'session' ? 'Session steps' : fieldTemplate?.listLabel ?? 'Subtasks'}</Text>
           {subtasks.map((s, i) => (
             <SubtaskDraftRow
               key={s.id}
               draft={s}
               autoFocus={focusNewSubtask && i === subtasks.length - 1}
               showDeadline={taskType === 'task'}
+              itemFields={taskType === 'task' ? fieldTemplate?.itemFields : undefined}
               onChange={updateSubtask}
               onDelete={removeSubtask}
               onDuplicate={duplicateSubtask}
@@ -929,7 +963,7 @@ export function TaskSheet({
               onCopyToTask={onCopySubtaskToTasks && copyCandidates.length > 0 ? openCopyToTask : undefined}
             />
           ))}
-          <AddRowButton label={taskType === 'session' ? 'Add step' : 'Add subtask'} onClick={addSubtask} />
+          <AddRowButton label={taskType === 'session' ? 'Add step' : fieldTemplate ? `Add ${fieldTemplate.itemLabel}` : 'Add subtask'} onClick={addSubtask} />
 
           {taskType === 'session' && stepCount > 0 && (
             <ChipRow label="Buffer between steps">
