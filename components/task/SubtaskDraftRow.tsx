@@ -89,6 +89,79 @@ function SubtaskDraftRow({
   };
   const weightUnit = draft.targets?.weightUnit ?? "kg";
 
+  // A Fitness task's exercise leads with its sets and weight, so its time
+  // moves down beside the details; everything else keeps its time by the name.
+  // The time counts toward the task's allotted-time budget.
+  const timeField = (
+    <div className="relative h-10 w-[112px] shrink-0">
+      <IconClock
+        size={13}
+        strokeWidth={2.2}
+        className={`pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2 ${
+          timeInvalid ? "text-rose-500 dark:text-rose-400" : "text-blue-500 dark:text-blue-400"
+        }`}
+      />
+      <input
+        value={timeText}
+        onChange={(e) => handleTimeChange(e.target.value)}
+        placeholder="15min"
+        aria-label="Subtask time (minutes or hours)"
+        aria-invalid={timeInvalid}
+        autoComplete="off"
+        inputMode="text"
+        className={`h-10 w-full text-center font-bold ${ROW_INPUT} !pl-6 ${
+          timeInvalid
+            ? "text-rose-600 ring-1 ring-rose-400 dark:text-rose-400"
+            : "text-blue-600 dark:text-blue-400"
+        }`}
+      />
+    </div>
+  );
+  const timeError = timeInvalid && (
+    <p className="text-[11px] font-semibold text-rose-500 dark:text-rose-400">
+      Use a time like 15min, 1h, or 1h30m.
+    </p>
+  );
+  const strengthFields = (
+    <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+      <StrengthField label="Sets" value={numberValue(draft.targets?.sets)} placeholder="3" inputMode="numeric"
+        onChange={(raw) => setTarget("sets", readNumber(raw))} />
+      <StrengthField label="Reps" value={numberValue(draft.targets?.reps)} placeholder="10" inputMode="numeric"
+        onChange={(raw) => setTarget("reps", readNumber(raw))} />
+      <StrengthField
+        label="Weight"
+        value={numberValue(draft.targets?.weight)}
+        placeholder="0"
+        inputMode="decimal"
+        onChange={(raw) => setTarget("weight", readNumber(raw))}
+        suffix={
+          <button
+            type="button"
+            onClick={() => setTarget("weightUnit", weightUnit === "kg" ? "lb" : "kg")}
+            aria-label={`Weight unit: ${weightUnit}. Switch to ${weightUnit === "kg" ? "lb" : "kg"}`}
+            className="flex h-11 min-w-11 items-center justify-center rounded-r-xl px-2 text-[14px] font-semibold text-neutral-500 hover:text-neutral-900 dark:text-neutral-400 dark:hover:text-white"
+          >
+            {weightUnit}
+          </button>
+        }
+      />
+      <StrengthField
+        label="Rest"
+        value={numberValue(draft.restSeconds)}
+        placeholder="90"
+        inputMode="numeric"
+        onChange={(raw) => onChange(draft.id, { ...draft, restSeconds: readNumber(raw) })}
+        suffix={<span className="pr-3 text-[14px] font-semibold text-neutral-500 dark:text-neutral-400">s</span>}
+      />
+      <div className="col-span-2 sm:col-span-4">
+        <ProgressionFields
+          value={draft.progression}
+          onChange={(progression) => onChange(draft.id, { ...draft, progression })}
+        />
+      </div>
+    </div>
+  );
+
   return (
     <div
       ref={setNodeRef}
@@ -143,40 +216,15 @@ function SubtaskDraftRow({
                 className={`h-10 w-[88px] shrink-0 text-center ${ROW_INPUT}`}
               />
             )}
-            {/* Dedicated time — accepts only a time (min/hour); this is what
-                counts toward the task's allotted-time budget. */}
-            <div className="relative h-10 w-[112px] shrink-0">
-              <IconClock
-                size={13}
-                strokeWidth={2.2}
-                className={`pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2 ${
-                  timeInvalid ? "text-rose-500 dark:text-rose-400" : "text-blue-500 dark:text-blue-400"
-                }`}
-              />
-              <input
-                value={timeText}
-                onChange={(e) => handleTimeChange(e.target.value)}
-                placeholder="15min"
-                aria-label="Subtask time (minutes or hours)"
-                aria-invalid={timeInvalid}
-                autoComplete="off"
-                inputMode="text"
-                className={`h-10 w-full text-center font-bold ${ROW_INPUT} !pl-6 ${
-                  timeInvalid
-                    ? "text-rose-600 ring-1 ring-rose-400 dark:text-rose-400"
-                    : "text-blue-600 dark:text-blue-400"
-                }`}
-              />
-            </div>
+            {!showStrength && timeField}
           </div>
 
-          {timeInvalid && (
-            <p className="text-[11px] font-semibold text-rose-500 dark:text-rose-400">
-              Use a time like 15min, 1h, or 1h30m.
-            </p>
-          )}
+          {!showStrength && timeError}
+
+          {showStrength && strengthFields}
 
           <div className="flex flex-wrap items-center gap-2">
+            {showStrength && timeField}
             {/* Free-text detail — a short note, quantity, or spec; whatever
                 this step needs (e.g. "3 pages", "2 sets", "medium heat"). */}
             <input
@@ -234,44 +282,10 @@ function SubtaskDraftRow({
             )}
           </div>
 
-          {showStrength || strengthOpen ? (
-            <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
-              <StrengthField label="Sets" value={numberValue(draft.targets?.sets)} placeholder="3" inputMode="numeric"
-                onChange={(raw) => setTarget("sets", readNumber(raw))} />
-              <StrengthField label="Reps" value={numberValue(draft.targets?.reps)} placeholder="10" inputMode="numeric"
-                onChange={(raw) => setTarget("reps", readNumber(raw))} />
-              <StrengthField
-                label="Weight"
-                value={numberValue(draft.targets?.weight)}
-                placeholder="0"
-                inputMode="decimal"
-                onChange={(raw) => setTarget("weight", readNumber(raw))}
-                suffix={
-                  <button
-                    type="button"
-                    onClick={() => setTarget("weightUnit", weightUnit === "kg" ? "lb" : "kg")}
-                    aria-label={`Weight unit: ${weightUnit}. Switch to ${weightUnit === "kg" ? "lb" : "kg"}`}
-                    className="flex h-11 min-w-11 items-center justify-center rounded-r-xl px-2 text-[14px] font-semibold text-neutral-500 hover:text-neutral-900 dark:text-neutral-400 dark:hover:text-white"
-                  >
-                    {weightUnit}
-                  </button>
-                }
-              />
-              <StrengthField
-                label="Rest"
-                value={numberValue(draft.restSeconds)}
-                placeholder="90"
-                inputMode="numeric"
-                onChange={(raw) => onChange(draft.id, { ...draft, restSeconds: readNumber(raw) })}
-                suffix={<span className="pr-3 text-[14px] font-semibold text-neutral-500 dark:text-neutral-400">s</span>}
-              />
-              <div className="col-span-2 sm:col-span-4">
-                <ProgressionFields
-                  value={draft.progression}
-                  onChange={(progression) => onChange(draft.id, { ...draft, progression })}
-                />
-              </div>
-            </div>
+          {showStrength && timeError}
+
+          {showStrength ? null : strengthOpen ? (
+            strengthFields
           ) : (
             <button
               type="button"
