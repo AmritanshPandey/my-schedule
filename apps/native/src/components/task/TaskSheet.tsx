@@ -333,7 +333,6 @@ export function TaskSheet({
 
   function handleSelectPlan(plan: Plan) {
     setPlanId(plan.id);
-    if (mode === 'create') setSubtasks([]);
   }
 
   // ── Subtask management ─────────────────────────────────────────────────────
@@ -944,7 +943,7 @@ export function TaskSheet({
         </View>
       )}
 
-      {selectedPlan && !isOccurrenceScope && taskType !== 'commitment' && (
+      {!isOccurrenceScope && taskType !== 'commitment' && (
         <View className="gap-3">
           <Text className={typography.eyebrow}>{taskType === 'session' ? 'Session steps' : fieldTemplate?.listLabel ?? 'Subtasks'}</Text>
           {subtasks.map((s, i) => (
@@ -954,6 +953,7 @@ export function TaskSheet({
               autoFocus={focusNewSubtask && i === subtasks.length - 1}
               showDeadline={taskType === 'task'}
               itemFields={taskType === 'task' ? fieldTemplate?.itemFields : undefined}
+              showStrength={taskType === 'task' && fieldTemplate?.kind === 'fitness'}
               onChange={updateSubtask}
               onDelete={removeSubtask}
               onDuplicate={duplicateSubtask}

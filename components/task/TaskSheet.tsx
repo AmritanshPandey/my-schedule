@@ -434,7 +434,6 @@ export function TaskSheet({
 
   function handleSelectPlan(plan: Plan) {
     setPlanId(plan.id);
-    if (mode === "create") setSubtasks([]);
   }
 
 
@@ -1321,7 +1320,7 @@ export function TaskSheet({
 
               {/* Subtasks / Session Steps */}
               {/* Commitments have nothing to check off, so no subtask list. */}
-              {selectedPlan && !isOccurrenceScope && taskType !== "commitment" && (
+              {!isOccurrenceScope && taskType !== "commitment" && (
                 <section className="space-y-3">
                   <div className="flex items-center justify-between">
                     <p className={typography.eyebrow}>
@@ -1350,6 +1349,7 @@ export function TaskSheet({
                             autoFocus={focusNewSubtask && i === subtasks.length - 1}
                             showDeadline={taskType === "task"}
                             itemFields={taskType === "task" ? fieldTemplate?.itemFields : undefined}
+                            showStrength={taskType === "task" && fieldTemplate?.kind === "fitness"}
                             onChange={updateSubtask}
                             onDelete={removeSubtask}
                             onDuplicate={duplicateSubtask}
