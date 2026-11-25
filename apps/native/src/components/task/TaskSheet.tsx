@@ -12,7 +12,7 @@ import { localISODate, formatDate } from '@planr/core/lib/dateUtils';
 import { uid } from '@planr/core/lib/id';
 import { getSlots } from '@planr/core/lib/taskMutations';
 import { displayToInputTime, inputToDisplayTime, parseTimeToMinutes, formatMinutes, minutesToInputTime } from '@planr/core/lib/timeUtils';
-import { detailsDurationMinutes, detailsToFormValues, formValuesToDetails, taskFieldTemplate } from '@planr/core/lib/taskFields';
+import { detailsDurationMinutes, detailsToFormValues, formValuesToDetails, showsStrengthFields, taskFieldTemplate } from '@planr/core/lib/taskFields';
 import { resolveOccurrence } from '@planr/core/lib/taskOccurrence';
 import { constrainTaskToPlanWindow } from '@planr/core/lib/planTaskWindow';
 import { validateTaskSlots } from '@planr/core/lib/scheduleRules';
@@ -556,6 +556,8 @@ export function TaskSheet({
             : null;
 
   const fieldTemplate = useMemo(() => (categoryId ? taskFieldTemplate({ categoryId }, categories) : null), [categoryId, categories]);
+  // Strength work, not cardio: its exercises open with sets and weight.
+  const showStrength = taskType === 'task' && showsStrengthFields(categories.find((c) => c.id === categoryId));
 
   /** A duration field (prep + cook, study time…) sets the end time from the start. */
   function handleDetailChange(key: string, value: string) {
@@ -953,7 +955,7 @@ export function TaskSheet({
               autoFocus={focusNewSubtask && i === subtasks.length - 1}
               showDeadline={taskType === 'task'}
               itemFields={taskType === 'task' ? fieldTemplate?.itemFields : undefined}
-              showStrength={taskType === 'task' && fieldTemplate?.kind === 'fitness'}
+              showStrength={showStrength}
               onChange={updateSubtask}
               onDelete={removeSubtask}
               onDuplicate={duplicateSubtask}

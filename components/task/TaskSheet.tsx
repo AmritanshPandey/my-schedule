@@ -59,7 +59,7 @@ import {
 } from "@/lib/taskMutations";
 import type { TaskSlot } from "@/lib/useScheduleDB";
 import { parseTimeToMinutes, formatMinutes, minutesToInputTime } from "@/lib/timeUtils";
-import { detailsDurationMinutes, detailsToFormValues, formValuesToDetails, taskFieldTemplate } from "@/lib/taskFields";
+import { detailsDurationMinutes, detailsToFormValues, formValuesToDetails, showsStrengthFields, taskFieldTemplate } from "@/lib/taskFields";
 import TaskDetailsFields from "@/components/task/TaskDetailsFields";
 import { resolveOccurrence } from "@/lib/taskOccurrence";
 import { constrainTaskToPlanWindow } from "@/lib/planTaskWindow";
@@ -745,6 +745,8 @@ export function TaskSheet({
             : null;
 
   const fieldTemplate = useMemo(() => (categoryId ? taskFieldTemplate({ categoryId }, categories) : null), [categoryId, categories]);
+  // Strength work, not cardio: its exercises open with sets and weight.
+  const showStrength = taskType === "task" && showsStrengthFields(categories.find((c) => c.id === categoryId));
 
   /**
    * One detail typed. A duration field (study, prep + cook, estimated…) also
@@ -1349,7 +1351,7 @@ export function TaskSheet({
                             autoFocus={focusNewSubtask && i === subtasks.length - 1}
                             showDeadline={taskType === "task"}
                             itemFields={taskType === "task" ? fieldTemplate?.itemFields : undefined}
-                            showStrength={taskType === "task" && fieldTemplate?.kind === "fitness"}
+                            showStrength={showStrength}
                             onChange={updateSubtask}
                             onDelete={removeSubtask}
                             onDuplicate={duplicateSubtask}
