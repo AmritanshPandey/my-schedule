@@ -4,10 +4,12 @@
  * (Your day), how the week is going (This week) and goal pace. Native twin of
  * components/overview/MobileOverviewCards.tsx — keep the two in step.
  */
+import { stepsLeftLabel } from '@planr/core/lib/subtaskModeCopy';
 import type { ReactNode } from 'react';
 import { Pressable, StyleSheet, View } from 'react-native';
 import LinearGradient from 'react-native-linear-gradient';
 import {
+  IconMinus,
   IconAlertTriangle,
   IconArrowUpRight,
   IconRun,
@@ -355,10 +357,10 @@ export function AttentionCard({
     })),
     ...data.missedTasks.map((row) => ({
       key: `t:${row.task.id}:${row.dateISO}`,
-      icon: IconX,
+      icon: row.stepsLeft ? IconMinus : IconX,
       title: row.task.title,
-      status: 'Not done',
-      detail: `Missed ${formatDaysAgo(row.daysAgo)}`,
+      status: row.stepsLeft ? stepsLeftLabel(row.stepsLeft) : 'Not done',
+      detail: row.stepsLeft ? `Partly done ${formatDaysAgo(row.daysAgo)}` : `Missed ${formatDaysAgo(row.daysAgo)}`,
       onOpen: () => onHandleMissed(row),
       dismissKey: null as string | null,
     })),
@@ -581,13 +583,13 @@ export function WeekBarsCard({ status, onOpenDay }: { status: WeekStatus; onOpen
       </View>
       <View className="mt-5 flex-row gap-2">
         {status.days.map((day) => {
-          const fill = day.isFuture || day.total === 0 ? 0 : Math.max(day.pct, day.missed > 0 && day.done === 0 ? 100 : 0);
-          const color = day.done === 0 && day.missed > 0 ? 'bg-rose-500' : day.pct >= 100 ? 'bg-emerald-600' : 'bg-amber-500';
+          const fill = day.isFuture || day.total === 0 ? 0 : Math.max(day.pct, day.missed > 0 && day.credit === 0 ? 100 : 0);
+          const color = day.credit === 0 && day.missed > 0 ? 'bg-rose-500' : day.pct >= 100 ? 'bg-emerald-600' : 'bg-amber-500';
           return (
             <Pressable
               key={day.day}
               accessibilityRole="button"
-              accessibilityLabel={`${day.label}: ${day.done} of ${day.total} done${day.missed ? `, ${day.missed} missed` : ''}`}
+              accessibilityLabel={`${day.label}: ${day.done} of ${day.total} done${day.partial ? `, ${day.partial} partly done` : ''}${day.missed ? `, ${day.missed} missed` : ''}`}
               onPress={() => {
                 haptic('light');
                 onOpenDay(day.dateISO);
@@ -608,7 +610,7 @@ export function WeekBarsCard({ status, onOpenDay }: { status: WeekStatus; onOpen
         })}
       </View>
       <Text className="mt-4 border-t border-neutral-100 pt-3 text-[14px] font-medium text-neutral-500 dark:border-white/[0.07] dark:text-neutral-400">
-        {status.tasksDone} of {status.tasksTotal} tasks
+        {`${status.tasksDone} of ${status.tasksTotal} tasks${status.partial > 0 ? ` · ${status.partial} partly done` : ''}`}
       </Text>
     </View>
   );

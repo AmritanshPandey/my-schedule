@@ -139,11 +139,7 @@ import { CurrentTaskHighlightLayer } from "@/components/timeline/CurrentTaskHigh
 import TimelineDraftCard from "@/components/timeline/TimelineDraftCard";
 import { taskLaneStyle } from "@/lib/timeline/taskLaneStyle";
 import {
-  toggleTaskFromCheckbox,
-  toggleSubtaskComplete,
-  toggleSlotComplete,
   isTrackedTask,
-  markTaskMissed,
   markSlotMissed,
   snoozeTaskLater,
   completionForDate,

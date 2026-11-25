@@ -1,8 +1,10 @@
+import { subtaskModeOf } from '@planr/core/lib/subtaskMode';
+import { partlyDoneLabel } from '@planr/core/lib/subtaskModeCopy';
 import { memo } from 'react';
 import { sameRowProps } from '../../lib/sameRowProps';
 import type { ReactNode } from 'react';
 import { Pressable, View, type TextStyle } from 'react-native';
-import { IconEdit, IconListCheck, IconX } from '@tabler/icons-react-native';
+import { IconMinus, IconEdit, IconListCheck, IconX } from '@tabler/icons-react-native';
 import type { Plan, Task, TaskCategory } from '@planr/core/lib/scheduleTypes';
 import {
   calculateTaskProgress,
@@ -83,6 +85,7 @@ function IOSTimelineRow({
   const allSubtaskIds = getTaskCheckableItems(task, linkedPlan).map((i) => i.id);
   const { completedCount, totalCount } = task.taskType === 'session' ? summary : calculateTaskProgress(task, itemCount);
   const tracked = isTrackedTask(task);
+  const mode = subtaskModeOf(task);
 
   const slots = getSlots(task);
   const singleSlot = slotIndex != null && slotIndex >= 0 && slotIndex < slots.length;
@@ -91,6 +94,8 @@ function IOSTimelineRow({
   const state = singleSlot && tracked ? resolveSlotState(task, slotIndex!) : resolveTaskState(task, task.taskType === 'session' ? 0 : itemCount);
   const done = state === 'completed';
   const missed = state === 'missed';
+  // A day that's over with some of it done. Today's progress keeps its count.
+  const partlyDone = state === 'partial' && readOnly;
 
   const duration = singleSlot ? formatSlotsDuration([slots[slotIndex!]]) : formatSlotsDuration(slots);
   const timeLabel = formatDisplayTime(slot?.startTime ?? '');
@@ -130,6 +135,8 @@ function IOSTimelineRow({
       ? 'border-transparent bg-emerald-500'
       : missed
         ? 'border-transparent bg-rose-500'
+        : partlyDone
+        ? 'border-transparent bg-amber-600'
         : isCurrent
           ? 'border-2 border-emerald-500 bg-white dark:bg-neutral-950'
           : 'border-2 border-neutral-300 bg-white dark:border-white/25 dark:bg-neutral-950';
@@ -137,9 +144,9 @@ function IOSTimelineRow({
       <Pressable
         disabled={readOnly}
         accessibilityRole="checkbox"
-        accessibilityLabel={done ? 'Mark not done' : 'Mark done'}
+        accessibilityLabel={partlyDone ? partlyDoneLabel(completedCount, totalCount) : done ? 'Mark not done' : 'Mark done'}
         accessibilityHint={canMiss ? 'Hold to mark missed' : undefined}
-        accessibilityState={{ checked: done, disabled: readOnly }}
+        accessibilityState={{ checked: partlyDone ? 'mixed' : done, disabled: readOnly }}
         onPress={toggle}
         onLongPress={
           canMiss
@@ -155,6 +162,7 @@ function IOSTimelineRow({
       >
         <CheckDraw visible={done} size={15} strokeWidth={3} className="text-white" />
         {missed && <Icon icon={IconX} size={14} strokeWidth={3} className="text-white" />}
+        {partlyDone && <Icon icon={IconMinus} size={14} strokeWidth={3} className="text-white" />}
         {isCurrent && !done && !missed && (
           <Pulse>
             <View className="h-2 w-2 rounded-full bg-emerald-500" />
@@ -175,7 +183,7 @@ function IOSTimelineRow({
   if (done) {
     trailing = (
       <Pill variant="success" size="sm">
-        Completed
+        {mode === 'steps' && completedCount < totalCount ? `Done · ${completedCount} of ${totalCount}` : 'Completed'}
       </Pill>
     );
   } else if (missed) {
@@ -183,6 +191,12 @@ function IOSTimelineRow({
       <Pill variant="danger" size="sm">
         Missed
       </Pill>
+    );
+  } else if (partlyDone) {
+    trailing = (
+      <View className="shrink-0 rounded-full border border-amber-500/30 bg-amber-500/10 px-2.5 py-1">
+        <Text className="text-[12px] font-semibold tabular-nums text-amber-800 dark:text-amber-300">{partlyDoneLabel(completedCount, totalCount)}</Text>
+      </View>
     );
   } else if (isCurrent) {
     trailing = (
@@ -198,7 +212,7 @@ function IOSTimelineRow({
       <View className="shrink-0 flex-row items-center gap-1.5 rounded-full border border-neutral-200 bg-white px-2.5 py-1 dark:border-white/[0.10] dark:bg-white/[0.04]">
         <Icon icon={IconListCheck} size={13} strokeWidth={2} className="text-neutral-500 dark:text-neutral-400" />
         <Text className="text-[12px] font-bold tabular-nums text-neutral-500 dark:text-neutral-400">
-          {completedCount}/{totalCount || itemCount}
+          {mode === 'steps' ? `${completedCount} of ${totalCount}` : `${completedCount}/${totalCount || itemCount}`}
         </Text>
       </View>
     );

@@ -15,6 +15,8 @@ import { displayToInputTime, inputToDisplayTime, parseTimeToMinutes, formatMinut
 import { detailsDurationMinutes, detailsToFormValues, formValuesToDetails, showsStrengthFields, taskFieldTemplate } from '@planr/core/lib/taskFields';
 import { resolveOccurrence } from '@planr/core/lib/taskOccurrence';
 import { constrainTaskToPlanWindow } from '@planr/core/lib/planTaskWindow';
+import { defaultSubtaskMode, subtaskModeOf, withoutMark, type SubtaskMode } from '@planr/core/lib/subtaskMode';
+import { SUBTASK_MODE_HINT, SUBTASK_MODE_LABEL } from '@planr/core/lib/subtaskModeCopy';
 import { validateTaskSlots } from '@planr/core/lib/scheduleRules';
 import { buildTaskReviewContext, reviewTaskDraft, type BuilderHint } from '@planr/core/lib/intelligence/builderChecks';
 import { haptic } from '../../lib/haptics';
@@ -122,6 +124,10 @@ const REPEAT_OPTIONS = [
   { value: 'interval', label: 'Multi-week' },
   { value: 'once', label: 'One-off' },
 ] as const;
+const SUBTASK_MODE_OPTIONS = [
+  { value: 'checklist', label: SUBTASK_MODE_LABEL.checklist },
+  { value: 'steps', label: SUBTASK_MODE_LABEL.steps },
+] as const satisfies readonly { value: SubtaskMode; label: string }[];
 
 function isValidInputTime(value: string): boolean {
   return /^([01]\d|2[0-3]):[0-5]\d$/.test(value);
@@ -207,6 +213,8 @@ export function TaskSheet({
   const [editDay, setEditDay] = useState<DayKey>(activeDay);
   const [repeatDays, setRepeatDays] = useState<DayKey[]>([activeDay]);
   const [subtasks, setSubtasks] = useState<SubtaskDraft[]>([]);
+  // Null until the user picks: the default follows one-off vs repeating.
+  const [pickedMode, setPickedMode] = useState<SubtaskMode | null>(null);
   const [stepBuffer, setStepBuffer] = useState<number | undefined>(undefined);
   // Minutes before the start to remind; undefined = the Settings default.
   const [reminderLead, setReminderLead] = useState<number | undefined>(undefined);
@@ -271,6 +279,7 @@ export function TaskSheet({
       setDetails(detailsToFormValues(task.details));
       const taskSubtasks = task.subtasks ?? linkedPlan?.items ?? [];
       setSubtasks(taskSubtasks.map(entryToSubtaskDraft));
+      setPickedMode(task.subtasks?.length ? subtaskModeOf(task) : null);
       setStepBuffer(task.stepBufferMinutes);
       setReminderLead(task.reminderLeadMinutes);
       const r = task.recurrence;
@@ -299,6 +308,7 @@ export function TaskSheet({
       setEditDay(activeDay);
       setRepeatDays([activeDay]);
       setSubtasks([]);
+      setPickedMode(null);
       setStepBuffer(undefined);
       setReminderLead(undefined);
       const seedIcon = plans.find((p) => p.id === pid)?.emoji || '';
@@ -571,6 +581,8 @@ export function TaskSheet({
     setSlots([{ ...slots[0], endTime: minutesToInputTime((start + total) % (24 * 60)) }]);
   }
 
+  const subtaskMode: SubtaskMode = pickedMode ?? defaultSubtaskMode(repeatMode === 'once');
+
   function handleSave() {
     if (!canSave || (!isCommitment && !selectedPlan)) return;
     const validSubtasks = subtasks.filter((s) => s.title.trim().length > 0).map((draft) => subtaskDraftToEntry(draft));
@@ -615,6 +627,7 @@ export function TaskSheet({
       planId: isCommitment ? '' : selectedPlan!.id,
       taskType,
       subtasks: mode === 'edit' ? validSubtasks : validSubtasks.length > 0 ? validSubtasks : undefined,
+      subtaskMode: taskType === 'task' && validSubtasks.length > 0 ? subtaskMode : undefined,
       recurrence,
       activeFrom: taskWindow.activeFrom,
       activeUntil: taskWindow.activeUntil,
@@ -653,7 +666,9 @@ export function TaskSheet({
         categoryId: categoryId || undefined,
         planId: selectedPlan.id,
         taskType,
-        subtasks: validSubtasks.length > 0 ? validSubtasks : undefined,
+        // A copy is new work: nothing in it is finished yet.
+        subtasks: validSubtasks.length > 0 ? validSubtasks.map(withoutMark) : undefined,
+        subtaskMode: taskType === 'task' && validSubtasks.length > 0 ? subtaskMode : undefined,
         details: formValuesToDetails(fieldTemplate, details),
       },
       taskId: undefined,
@@ -948,6 +963,21 @@ export function TaskSheet({
       {!isOccurrenceScope && taskType !== 'commitment' && (
         <View className="gap-3">
           <Text className={typography.eyebrow}>{taskType === 'session' ? 'Session steps' : fieldTemplate?.listLabel ?? 'Subtasks'}</Text>
+          {/* What a tick means. Only once there is something to tick. */}
+          {taskType === 'task' && stepCount > 0 && (
+            <View testID="subtask-mode">
+              <SegmentedControl<SubtaskMode>
+                ariaLabel="What happens to ticked subtasks"
+                options={SUBTASK_MODE_OPTIONS}
+                value={subtaskMode}
+                onChange={(next) => {
+                  haptic('light');
+                  setPickedMode(next);
+                }}
+              />
+              <Text className="mt-1.5 text-[12px] leading-snug text-neutral-500 dark:text-neutral-400">{SUBTASK_MODE_HINT[subtaskMode]}</Text>
+            </View>
+          )}
           {subtasks.map((s, i) => (
             <SubtaskDraftRow
               key={s.id}

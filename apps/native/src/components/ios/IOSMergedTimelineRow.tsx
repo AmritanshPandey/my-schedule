@@ -1,7 +1,7 @@
 import { memo } from 'react';
 import { sameRowProps } from '../../lib/sameRowProps';
 import { Pressable, View } from 'react-native';
-import { IconEdit } from '@tabler/icons-react-native';
+import { IconMinus, IconEdit } from '@tabler/icons-react-native';
 import type { Plan, Task, TaskCategory } from '@planr/core/lib/scheduleTypes';
 import { getTaskCheckableItems, isTrackedTask, resolveSlotState, resolveTaskState } from '@planr/core/lib/taskCompletion';
 import { getSlots } from '@planr/core/lib/taskMutations';
@@ -70,7 +70,7 @@ function halfState(half: IOSMergedTimelineHalf) {
   const singleSlot = half.slotIndex != null && half.slotIndex >= 0 && half.slotIndex < slots.length;
   const tracked = isTrackedTask(half.task);
   const state = singleSlot && tracked ? resolveSlotState(half.task, half.slotIndex!) : resolveTaskState(half.task, half.task.taskType === 'session' ? 0 : summary);
-  return { tracked, singleSlot, state, done: state === 'completed', missed: state === 'missed' };
+  return { tracked, singleSlot, state, done: state === 'completed', missed: state === 'missed', partial: state === 'partial' };
 }
 
 function Node({
@@ -84,7 +84,8 @@ function Node({
   onToggleComplete: (taskId: string, allSubtaskIds: string[]) => void;
   onToggleSlot?: (taskId: string, slotIndex: number) => void;
 }) {
-  const { tracked, singleSlot, done, missed } = halfState(half);
+  const { tracked, singleSlot, done, missed, partial } = halfState(half);
+  const partlyDone = partial && readOnly;
   if (!tracked) {
     return (
       <View className="h-5 w-5 items-center justify-center">
@@ -97,7 +98,7 @@ function Node({
     <Pressable
       disabled={readOnly}
       accessibilityRole="checkbox"
-      accessibilityLabel={done ? 'Mark not done' : 'Mark done'}
+      accessibilityLabel={partlyDone ? 'Partly done' : done ? 'Mark not done' : 'Mark done'}
       accessibilityState={{ checked: done, disabled: readOnly }}
       hitSlop={6}
       onPress={() => {
@@ -107,10 +108,11 @@ function Node({
         else onToggleComplete(half.task.id, allSubtaskIds);
       }}
       className={`relative z-10 h-6 w-6 shrink-0 items-center justify-center rounded-full border-2 ${
-        done ? 'border-transparent bg-emerald-500' : missed ? 'border-transparent bg-rose-500' : 'border-neutral-300 bg-white dark:border-white/25 dark:bg-neutral-950'
+        done ? 'border-transparent bg-emerald-500' : missed ? 'border-transparent bg-rose-500' : partlyDone ? 'border-transparent bg-amber-600' : 'border-neutral-300 bg-white dark:border-white/25 dark:bg-neutral-950'
       }`}
     >
       <CheckDraw visible={done} size={13} strokeWidth={3} className="text-white" />
+      {partlyDone && <Icon icon={IconMinus} size={13} strokeWidth={3} className="text-white" />}
     </Pressable>
   );
 }

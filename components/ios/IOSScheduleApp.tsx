@@ -89,7 +89,7 @@ import {
   type TaskRemovalScope,
 } from "@/lib/taskMutations";
 import { mergeTasks, unmergeTask, findMergePairs } from "@/lib/taskMerge";
-import { completionForDate, getTaskCheckableItems, getTaskSubtaskSummary, isTaskCompleted, isTrackedTask, markTaskMissed, snoozeTaskLater, toggleSlotComplete, toggleSubtaskComplete, toggleTaskFromCheckbox } from "@/lib/taskCompletion";
+import { completionForDate, getTaskCheckableItems, getTaskSubtaskSummary, isTaskCompleted, isTrackedTask, snoozeTaskLater } from "@/lib/taskCompletion";
 import { diffException, isTaskScheduledOn, occurrenceNote, resolveOccurrence } from "@/lib/taskOccurrence";
 import { validateDatedTasks } from "@/lib/scheduleRules";
 import { resolveTimes as resolveParsedTimes } from "@/lib/scheduleParser";
