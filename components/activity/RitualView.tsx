@@ -205,7 +205,7 @@ function DateActionButton({
           setOpen((current) => !current);
         }}
         icon={<IconCalendarEvent size={16} strokeWidth={2.3} />}
-        className="w-11 px-0 sm:w-auto sm:px-4"
+        className="w-11 max-sm:!px-0 sm:w-auto"
       >
         <span className="hidden tabular-nums sm:inline">{formatDateButtonLabel(value)}</span>
       </Button>
