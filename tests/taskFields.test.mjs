@@ -36,7 +36,7 @@ registerHooks({
   },
 });
 
-const { inferFieldKind, categoryFieldKind, taskFieldTemplate, filledFields, detailsDurationMinutes, formatFieldValue, normalizeTaskDetails, reconcileFinanceEntries } =
+const { inferFieldKind, categoryFieldKind, taskFieldTemplate, filledFields, detailsDurationMinutes, formatFieldValue, normalizeTaskDetails, reconcileFinanceEntries, showsStrengthFields } =
   await import("@/packages/core/lib/taskFields.ts");
 const { subtaskDraftToEntry, entryToSubtaskDraft } = await import("@/packages/core/lib/subtaskDraft.ts");
 const { migrate } = await import("@/packages/core/lib/scheduleMigrate.ts");
@@ -198,4 +198,14 @@ test("the marker survives loading", () => {
   });
   const task = Object.values(s.activities).flat().find((t) => t.id === "rent");
   assert.equal(task?.completionHistory?.[0]?.amountLogged, true);
+});
+
+// ── Sets and weight ─────────────────────────────────────────────────────────
+
+test("strength categories show sets and weight; cardio and other kinds don't", () => {
+  const c = (title, icon = "star", fieldKind) => ({ id: "c", title, icon, color: "amber", fieldKind });
+  for (const yes of [c("Workout"), c("Gym"), c("Strength training", "run"), c("Cardio & weights", "run"), c("Push day", "barbell"), c("Morning moves", "star", "fitness"), c("Marathon strength")])
+    assert.equal(showsStrengthFields(yes), true, yes.title);
+  for (const no of [c("Cardio"), c("Cardio", "barbell"), c("Morning run"), c("Running"), c("Cycling"), c("Hiking"), c("Swimming"), c("Sunday long", "run"), c("Commute", "bike"), c("Outdoors", "mountain"), c("Cardio", "run", "fitness"), c("Marathon training", "run"), c("Study"), c("Gym", "barbell", "none"), c("Gym", "barbell", "study"), null, undefined])
+    assert.equal(showsStrengthFields(no), false, no?.title);
 });

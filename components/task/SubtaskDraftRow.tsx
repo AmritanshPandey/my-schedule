@@ -35,7 +35,7 @@ interface SubtaskDraftRowProps {
   showDeadline?: boolean;
   /** Per-item figures the task's category uses — quantity for ingredients, quantity and cost for shopping (lib/taskFields.ts). */
   itemFields?: ReadonlyArray<"quantity" | "cost">;
-  /** Show sets / reps / weight / rest without asking — a Fitness task's exercises. */
+  /** Show sets / reps / weight / rest without asking — a strength task's exercises (lib/taskFields.ts showsStrengthFields). */
   showStrength?: boolean;
 }
 
@@ -77,9 +77,10 @@ function SubtaskDraftRow({
 
   // Sets / reps / weight / rest stay tucked away until asked for — most
   // subtasks are not lifts — but open on their own once any is set, and
-  // always for a Fitness task's exercises (showStrength).
+  // always for a strength task's exercises (showStrength).
   const [strengthOpen, setStrengthOpen] = useState(() => hasStrengthTargets(draft.targets) || draft.restSeconds != null);
   function setTarget(key: keyof SubtaskTargets, value: SubtaskTargets[keyof SubtaskTargets]) {
+    setStrengthOpen(true); // stays in view if the task then moves to another category
     onChange(draft.id, { ...draft, targets: { ...draft.targets, [key]: value } });
   }
   const numberValue = (n: number | undefined) => (n == null || Number.isNaN(n) ? "" : String(n));
@@ -89,7 +90,7 @@ function SubtaskDraftRow({
   };
   const weightUnit = draft.targets?.weightUnit ?? "kg";
 
-  // A Fitness task's exercise leads with its sets and weight, so its time
+  // A strength task's exercise leads with its sets and weight, so its time
   // moves down beside the details; everything else keeps its time by the name.
   // The time counts toward the task's allotted-time budget.
   const timeField = (
@@ -150,7 +151,7 @@ function SubtaskDraftRow({
         value={numberValue(draft.restSeconds)}
         placeholder="90"
         inputMode="numeric"
-        onChange={(raw) => onChange(draft.id, { ...draft, restSeconds: readNumber(raw) })}
+        onChange={(raw) => { setStrengthOpen(true); onChange(draft.id, { ...draft, restSeconds: readNumber(raw) }); }}
         suffix={<span className="pr-3 text-[14px] font-semibold text-neutral-500 dark:text-neutral-400">s</span>}
       />
       <div className="col-span-2 sm:col-span-4">

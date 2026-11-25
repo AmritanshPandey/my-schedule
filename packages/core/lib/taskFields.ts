@@ -213,6 +213,22 @@ export function categoryFieldKind(category: Pick<TaskCategory, "title" | "icon" 
   return category.fieldKind ?? inferFieldKind(category);
 }
 
+const STRENGTH_WORD = /workout|gym|lift|strength|weight|resistance|crossfit|calisthenic/i;
+const CARDIO_WORD = /\brun|jog|marathon|cardio|cycl|\bbik|swim|hik|\bwalk|rowing|aerobic/i;
+const CARDIO_ICONS = new Set(["run", "bike", "mountain"]);
+
+/**
+ * Whether a category's exercises open with sets, reps, weight and rest: a
+ * Fitness one that isn't cardio. Its name decides before its icon, and a name
+ * that says both ("Cardio & weights") counts as strength.
+ */
+export function showsStrengthFields(category: Pick<TaskCategory, "title" | "icon" | "fieldKind"> | null | undefined): boolean {
+  if (!category || categoryFieldKind(category) !== "fitness") return false;
+  if (STRENGTH_WORD.test(category.title)) return true;
+  if (CARDIO_WORD.test(category.title)) return false;
+  return !CARDIO_ICONS.has(category.icon);
+}
+
 /** The template for a task, through its category. */
 export function taskFieldTemplate(
   task: Pick<Task, "categoryId">,
