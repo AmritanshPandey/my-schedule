@@ -56,8 +56,12 @@ export default function TaskStatusCheckbox({
       className={`tap-target flex shrink-0 items-center justify-center border-2 transition-colors disabled:opacity-100 ${
         sizeClasses[size]
       } ${readOnly ? "cursor-default" : "active:scale-95"} ${
-        done || partial
+        done
           ? "border-transparent bg-green-600"
+        : partial
+          // In progress today reads as momentum; on a day that's over it's
+          // what was left — the dash carries it as well as the colour.
+          ? readOnly ? "border-transparent bg-amber-600" : "border-transparent bg-green-600"
         : missed
           ? "border-transparent bg-rose-500"
           : readOnly

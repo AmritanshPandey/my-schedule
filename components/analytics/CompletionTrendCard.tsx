@@ -33,7 +33,7 @@ const PLOT_H = 76;
  */
 export default function CompletionTrendCard({ schedule }: { schedule: Schedule }) {
   const trend = useMemo(() => computeExecutionTrend(schedule), [schedule]);
-  const { weeks, current, deltaPct, averagePct, bestPct, currentMissed } = trend;
+  const { weeks, current, deltaPct, averagePct, bestPct, currentMissed, currentPartial } = trend;
   const narrative = useMemo(() => trendNarrative(trend), [trend]);
   // A different class of fact from the trend above it: not how this week
   // moved, but the standing pattern of WHEN this person finishes things.
@@ -44,10 +44,10 @@ export default function CompletionTrendCard({ schedule }: { schedule: Schedule }
   );
 
   const n = weeks.length;
-  // Bars encode outcome *volume* (done + missed), so a week where most tasks
+  // Bars encode outcome *volume* (done + partly + missed), so a week where most tasks
   // slipped reads as a tall mostly-rose bar rather than a misleading full-green
   // one. Normalised to the busiest week so heights stay comparable.
-  const maxActioned = Math.max(1, ...weeks.map((w) => w.completed + w.missed));
+  const maxActioned = Math.max(1, ...weeks.map((w) => w.completed + w.partial + w.missed));
 
   // x is the column centre as a 0–100 fraction; y is inverted pct. The line SVG
   // uses a 0 0 100 100 viewBox with a non-scaling stroke, so these map straight
@@ -89,6 +89,12 @@ export default function CompletionTrendCard({ schedule }: { schedule: Schedule }
           <p className="text-[12px] text-neutral-500 dark:text-neutral-400">
             {current.completed} of {current.scheduled} tasks
           </p>
+          {currentPartial > 0 && (
+            <p className="mt-1 flex items-center gap-1 text-[12px] font-bold tabular-nums text-amber-800 dark:text-amber-300">
+              <IconMinus size={13} strokeWidth={2.5} aria-hidden />
+              {currentPartial} partly done
+            </p>
+          )}
           {currentMissed > 0 && (
             <p className="mt-1 flex items-center gap-1 text-[12px] font-bold tabular-nums text-rose-600 dark:text-rose-400">
               <IconX size={13} strokeWidth={2.5} />
@@ -126,6 +132,10 @@ export default function CompletionTrendCard({ schedule }: { schedule: Schedule }
           Done
         </span>
         <span className="flex items-center gap-1">
+          <span aria-hidden className="h-2.5 w-2 rounded-[2px] bg-amber-400" />
+          Partly
+        </span>
+        <span className="flex items-center gap-1">
           <span aria-hidden className="h-2.5 w-2 rounded-[2px] bg-rose-500" />
           Missed
         </span>
@@ -143,16 +153,18 @@ export default function CompletionTrendCard({ schedule }: { schedule: Schedule }
           {weeks.map((week, i) => {
             const doneH = Math.round((week.completed / maxActioned) * PLOT_H);
             const missH = Math.round((week.missed / maxActioned) * PLOT_H);
-            const empty = doneH === 0 && missH === 0;
+            const partH = Math.round((week.partial / maxActioned) * PLOT_H);
+            const empty = doneH === 0 && partH === 0 && missH === 0;
             return (
               <div
                 key={week.monStr}
                 className={`animate-bar-rise flex flex-1 flex-col justify-end ${week.isCurrentWeek ? "" : "opacity-60"}`}
                 style={{ animationDelay: `${i * 30}ms` }}
-                title={`Week of ${week.label}: ${week.completed} done · ${week.missed} missed · ${week.pct}%`}
+                title={`Week of ${week.label}: ${week.completed} done · ${week.partial} partly · ${week.missed} missed · ${week.pct}%`}
               >
                 {missH > 0 && <div className="rounded-t bg-rose-500" style={{ height: missH }} />}
-                {doneH > 0 && <div className={`bg-emerald-500 ${missH > 0 ? "" : "rounded-t"}`} style={{ height: doneH }} />}
+                {partH > 0 && <div className={`bg-amber-400 ${missH > 0 ? "" : "rounded-t"}`} style={{ height: partH }} />}
+                {doneH > 0 && <div className={`bg-emerald-500 ${missH > 0 || partH > 0 ? "" : "rounded-t"}`} style={{ height: doneH }} />}
                 {empty && <div className="h-[3px] rounded-t bg-neutral-200 dark:bg-white/[0.10]" />}
               </div>
             );

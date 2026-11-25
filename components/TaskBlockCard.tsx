@@ -224,7 +224,8 @@ export function TaskBlockCard({
         className={`flex shrink-0 select-none items-center justify-center border-[1.5px] transition-colors [-webkit-touch-callout:none] disabled:opacity-100 motion-safe:duration-500 ${readOnly ? "cursor-default" : ""} ${
           isList ? "h-7 w-7 rounded-[8px]" : "h-[18px] w-[18px] rounded-pr-sm"
         } ${
-          done || partial ? "border-transparent bg-green-500"
+          done || (partial && !readOnly) ? "border-transparent bg-green-500"
+            : partial ? "border-transparent bg-amber-600"
           : missed ? "border-transparent bg-rose-500"
           : readOnly ? "border-neutral-200 bg-neutral-100/80 dark:border-white/[0.08] dark:bg-white/[0.04]"
           // Tints toward rose across the hold, landing exactly as it fires.

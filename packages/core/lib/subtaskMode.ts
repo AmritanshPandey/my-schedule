@@ -74,6 +74,11 @@ export function allStepsDone(task: Task): boolean {
   return steps.length > 0 && steps.every((entry) => stepDone(task, entry));
 }
 
+/** Steps still to do. */
+export function stepsLeft(task: Task): number {
+  return (task.subtasks ?? []).filter((entry) => !stepDone(task, entry)).length;
+}
+
 /**
  * How far a one-off Steps task had got by the end of `dateISO`. A catch-up copy
  * doesn't get credit for what was finished before its own day: that work was

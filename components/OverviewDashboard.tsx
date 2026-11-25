@@ -48,6 +48,8 @@ interface OverviewDashboardProps {
   onNavigate: (tab: number) => void;
   onMarkTaskDone: (taskId: string, subtaskIds: string[]) => void;
   onToggleSlot: (taskId: string, slotIndex: number) => void;
+  /** Opens a task's detail — on desktop, the only place to tick its subtasks. */
+  onOpenSubtasks?: (taskId: string) => void;
   /** Opens one plan's detail (Goals & milestones rows). Falls back to the Plans tab. */
   onOpenPlan?: (planId: string) => void;
   completedRitualIds: Set<string>;
@@ -305,6 +307,7 @@ export default function OverviewDashboard({
   onNavigate,
   onMarkTaskDone,
   onToggleSlot,
+  onOpenSubtasks,
   onOpenPlan,
   completedRitualIds,
   onLogTracker,
@@ -409,6 +412,7 @@ export default function OverviewDashboard({
                 onMarkDone={onMarkTaskDone}
                 onToggleSlot={onToggleSlot}
                 onMissed={onMissedTask}
+                onOpenSubtasks={onOpenSubtasks}
                 onAddTask={onAddTask ?? (() => onNavigate(0))}
                 onOpenSession={onOpenSession}
               />

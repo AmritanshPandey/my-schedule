@@ -135,6 +135,12 @@ test("a finished step survives the form, load and validation", () => {
   assert.deepEqual(parsed.data.completionHistory[2].credit, { done: 4, total: 5 });
 });
 
+test("a subtask duplicated in the form starts unfinished", () => {
+  const finished = { ...items(1)[0], mark: mark(TUE) };
+  const copy = { ...entryToSubtaskDraft(finished), id: "copy" };
+  assert.equal(subtaskDraftToEntry(copy).mark, undefined);
+});
+
 test("an edit opened before a tick doesn't undo it", () => {
   const before = schedule({ [todayDay]: [steps()], [otherDay]: [steps()] });
   const { id: _id, ...stale } = before.activities[todayDay][0];

@@ -30,7 +30,7 @@ function WeekLineChart({ days }: { days: WeekDayStatus[] }) {
         preserveAspectRatio="none"
         className="h-24 w-full overflow-visible text-emerald-500 dark:text-emerald-400"
         role="img"
-        aria-label={days.map((d) => `${d.label} ${d.done} of ${d.total}`).join(", ")}
+        aria-label={days.map((d) => `${d.label} ${d.done} of ${d.total}${d.partial ? `, ${d.partial} partly done` : ""}`).join(", ")}
       >
         {[0, 50, 100].map((pct) => (
           <line key={pct} x1={0} x2={W} y1={y(pct)} y2={y(pct)} className="stroke-neutral-200 dark:stroke-white/[0.08]" strokeWidth={1} vectorEffect="non-scaling-stroke" />
@@ -76,7 +76,7 @@ export default function WeekStatusCard({
   onOpen?: () => void;
   children?: ReactNode;
 }) {
-  const { days, verdict, verdictPct, tasksDone, tasksTotal, routinesDone, routinesTotal, vsLastWeekPct, hasData } = status;
+  const { days, verdict, verdictPct, tasksDone, tasksTotal, partial, routinesDone, routinesTotal, vsLastWeekPct, hasData } = status;
 
   if (!hasData) {
     return (
@@ -132,6 +132,9 @@ export default function WeekStatusCard({
           <p className="mt-1 text-[20px] font-extrabold leading-none tabular-nums text-neutral-950 dark:text-white">
             {tasksDone}/{tasksTotal}
           </p>
+          {partial > 0 && (
+            <p className="mt-1 text-[12px] font-semibold tabular-nums text-amber-800 dark:text-amber-300">+ {partial} partly done</p>
+          )}
         </div>
         <div className={`${SOFT_PANEL} px-3 py-2.5`}>
           <p className="text-[11px] font-bold uppercase tracking-[0.06em] text-neutral-500 dark:text-neutral-400">Routine done</p>

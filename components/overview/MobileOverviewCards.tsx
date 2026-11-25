@@ -6,6 +6,7 @@
  * the day goes (Your day), and how the week is going (This week). Desktop
  * keeps its own review layout; these are the thumb-first versions.
  */
+import { stepsLeftLabel } from "@/lib/subtaskModeCopy";
 import {
   IconAlertTriangle,
   IconArrowUpRight,
@@ -18,6 +19,7 @@ import {
   IconListCheck,
   IconPlus,
   IconTrendingDown,
+  IconMinus,
   IconX,
   IconRun,
 } from "@tabler/icons-react";
@@ -309,10 +311,10 @@ export function AttentionCard({
     })),
     ...data.missedTasks.map((row) => ({
       key: `t:${row.task.id}:${row.dateISO}`,
-      icon: IconX,
+      icon: row.stepsLeft ? IconMinus : IconX,
       title: row.task.title,
-      status: "Not done",
-      detail: `Missed ${formatDaysAgo(row.daysAgo)}`,
+      status: row.stepsLeft ? stepsLeftLabel(row.stepsLeft) : "Not done",
+      detail: row.stepsLeft ? `Partly done ${formatDaysAgo(row.daysAgo)}` : `Missed ${formatDaysAgo(row.daysAgo)}`,
       onOpen: () => onHandleMissed(row),
       dismissKey: null as string | null,
     })),
@@ -509,9 +511,9 @@ export function WeekBarsCard({ status, onOpenDay }: { status: WeekStatus; onOpen
       </p>
       <div className="mt-5 grid grid-cols-7 gap-2">
         {status.days.map((day) => {
-          const fill = day.isFuture || day.total === 0 ? 0 : Math.max(day.pct, day.missed > 0 && day.done === 0 ? 100 : 0);
+          const fill = day.isFuture || day.total === 0 ? 0 : Math.max(day.pct, day.missed > 0 && day.credit === 0 ? 100 : 0);
           const color =
-            day.done === 0 && day.missed > 0 ? "bg-rose-500"
+            day.credit === 0 && day.missed > 0 ? "bg-rose-500"
             : day.pct >= 100 ? "bg-emerald-600"
             : "bg-amber-500";
           return (
@@ -519,7 +521,7 @@ export function WeekBarsCard({ status, onOpenDay }: { status: WeekStatus; onOpen
               key={day.day}
               type="button"
               onClick={() => { haptic("light"); onOpenDay(day.dateISO); }}
-              aria-label={`${day.label}: ${day.done} of ${day.total} done${day.missed ? `, ${day.missed} missed` : ""}`}
+              aria-label={`${day.label}: ${day.done} of ${day.total} done${day.partial ? `, ${day.partial} partly done` : ""}${day.missed ? `, ${day.missed} missed` : ""}`}
               className="flex flex-col items-center gap-1.5"
             >
               <span
@@ -537,6 +539,7 @@ export function WeekBarsCard({ status, onOpenDay }: { status: WeekStatus; onOpen
       </div>
       <p className="mt-4 border-t border-neutral-100 pt-3 text-[14px] font-medium text-neutral-500 dark:border-white/[0.07] dark:text-neutral-400">
         {status.tasksDone} of {status.tasksTotal} tasks
+        {status.partial > 0 && ` · ${status.partial} partly done`}
       </p>
     </section>
   );

@@ -11,7 +11,7 @@ import { uid } from "./id";
 import { localISODate } from "./dateUtils";
 import { parseTimeToMinutes, toScheduleDayMinutes } from "./timeUtils";
 import type { ScheduleEntry } from "./scheduleEntry";
-import { allStepsDone, clearStepMarks, isOneOffTask, isStepsTask, laterMark, stepDone, stepDoneOn, withMark } from "./subtaskMode";
+import { allStepsDone, clearStepMarks, isOneOffTask, isStepsTask, laterMark, stepDone, stepDoneOn, withMark, withoutMark } from "./subtaskMode";
 import { unifyStepMarks } from "./stepMarks";
 
 export { uid } from "./id";
@@ -929,7 +929,7 @@ export function addSubtaskToTasks(
         day,
         (prev.activities[day] ?? []).map((t) =>
           idSet.has(t.id)
-            ? { ...t, subtasks: [...(t.subtasks ?? []), { ...entry, id: newIds.get(t.id)! }] }
+            ? { ...t, subtasks: [...(t.subtasks ?? []), { ...withoutMark(entry), id: newIds.get(t.id)! }] }
             : t
         ),
       ])

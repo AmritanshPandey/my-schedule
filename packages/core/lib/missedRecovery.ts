@@ -59,6 +59,9 @@ export function rescheduleMissedTaskOnce(
   targetDateISO: string,
   startMinutes: number,
 ): Schedule {
+  // The stored task, not the caller's: a detail page holds a copy with one
+  // date's state spread over it, and a list may be a render behind.
+  task = schedule.activities[weekdayKeyOf(missedDateISO)]?.find((t) => t.id === task.id) ?? task;
   const first = getSlots(task)[0];
   const srcStart = parseTimeToMinutes(first?.startTime ?? "") ?? startMinutes;
   let srcEnd = parseTimeToMinutes(first?.endTime ?? "") ?? srcStart;

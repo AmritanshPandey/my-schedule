@@ -1,5 +1,6 @@
 "use client";
 
+import { allStepsDone, doneSubtaskIds, isStepsTask } from "@planr/core/lib/subtaskMode";
 import FocusMode, { type FocusFinish } from "@/components/focus/FocusMode";
 import type { ScheduleEntry } from "@/components/ScheduleItem";
 import type { DayKey, Plan, Schedule } from "@/lib/useScheduleDB";
@@ -39,13 +40,23 @@ export default function FocusHost({ focus, schedule, setSchedule, plansById, onT
   if (!task || !isTrackedTask(task)) return null;
   const items = focusItems(task, plansById);
 
+  /** Steps are ticked one by one — completing the block never ticks them, and a
+   *  block already done today can still have more steps finished in it. */
+  function finishSteps(newlyDone: string[], taskDone: boolean) {
+    if (!task || !state) return;
+    for (const id of newlyDone) onToggleSubtask(task.id, id, day, state.dateISO);
+    if (newlyDone.length === 0 && !taskDone && allStepsDone(task)) onToggleComplete(task.id, items.map((i) => i.id), day, state.dateISO);
+  }
+
   function handleFinish({ logs, doneStepIds }: FocusFinish) {
     if (!task || !state) return;
     if (logs.length > 0) setSchedule((prev) => logs.reduce((acc, log) => upsertSetLog(acc, log), prev));
 
-    const alreadyDone = task.completedSubtaskIds ?? [];
+    const alreadyDone = doneSubtaskIds(task);
     const taskDone = resolveTaskState(task, items.length) === "completed";
-    if (!taskDone) {
+    if (isStepsTask(task)) {
+      finishSteps(doneStepIds.filter((id) => !alreadyDone.includes(id)), taskDone);
+    } else if (!taskDone) {
       const allIds = items.map((i) => i.id);
       if (items.length === 0 || allIds.every((id) => doneStepIds.includes(id))) {
         // Everything done: complete the task in one step (it ticks every subtask).

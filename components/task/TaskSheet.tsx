@@ -37,6 +37,8 @@ import SegmentedControl from "@/components/ui/SegmentedControl";
 import WeekdayPicker from "@/components/ui/WeekdayPicker";
 import { ChipRow, ChoiceChip, choiceChipTone } from "@/components/ui/FormChips";
 import { typography } from "@/components/ui/Typography";
+import { defaultSubtaskMode, subtaskModeOf, withoutMark, type SubtaskMode } from "@/lib/subtaskMode";
+import { SUBTASK_MODE_HINT, SUBTASK_MODE_LABEL } from "@/lib/subtaskModeCopy";
 import TimeSlotPicker, { type EditableSlot } from "@/components/TimeSlotPicker";
 import { CategorySelector } from "./CategorySelector";
 import CategorySheet, { type CategoryDraft } from "@/components/category/CategorySheet";
@@ -297,6 +299,8 @@ export function TaskSheet({
   const [editDay, setEditDay] = useState<DayKey>(activeDay);
   const [repeatDays, setRepeatDays] = useState<DayKey[]>([activeDay]);
   const [subtasks, setSubtasks] = useState<SubtaskDraft[]>([]);
+  // Null until the user picks: the default follows one-off vs repeating.
+  const [pickedMode, setPickedMode] = useState<SubtaskMode | null>(null);
   // Standard rest inserted between session steps. Session-only; counts toward
   // the step total (and the allotted-time check) but never moves the task's
   // own start/end — see `Task.stepBufferMinutes`.
@@ -376,6 +380,7 @@ export function TaskSheet({
       // Load per-task subtasks; fall back to plan template for tasks created before this fix
       const taskSubtasks = task.subtasks ?? linkedPlan?.items ?? [];
       setSubtasks(taskSubtasks.map(entryToSubtaskDraft));
+      setPickedMode(task.subtasks?.length ? subtaskModeOf(task) : null);
       setStepBuffer(task.stepBufferMinutes);
       setReminderLead(task.reminderLeadMinutes);
       const r = task.recurrence;
@@ -396,6 +401,7 @@ export function TaskSheet({
       setEditDay(activeDay);
       setRepeatDays([activeDay]);
       setSubtasks([]);
+      setPickedMode(null);
       setStepBuffer(undefined);
       setReminderLead(undefined);
       // Seed from the category matching the plan's icon when the user already
@@ -763,6 +769,8 @@ export function TaskSheet({
     setSlots([{ ...slots[0], endTime: minutesToInputTime((start + total) % (24 * 60)) }]);
   }
 
+  const subtaskMode: SubtaskMode = pickedMode ?? defaultSubtaskMode(repeatMode === "once");
+
   function handleSave() {
     if (!canSave || (!isCommitment && !selectedPlan)) return;
 
@@ -825,6 +833,7 @@ export function TaskSheet({
           : validSubtasks.length > 0
           ? validSubtasks
           : undefined,
+      subtaskMode: taskType === "task" && validSubtasks.length > 0 ? subtaskMode : undefined,
       recurrence,
       // Active window only applies to recurring tasks; a one-off carries its own date.
       activeFrom: taskWindow.activeFrom,
@@ -869,7 +878,9 @@ export function TaskSheet({
         categoryId: categoryId || undefined,
         planId: selectedPlan.id,
         taskType,
-        subtasks: validSubtasks.length > 0 ? validSubtasks : undefined,
+        // A copy is new work: nothing in it is finished yet.
+        subtasks: validSubtasks.length > 0 ? validSubtasks.map(withoutMark) : undefined,
+        subtaskMode: taskType === "task" && validSubtasks.length > 0 ? subtaskMode : undefined,
         details: formValuesToDetails(fieldTemplate, details),
       },
       taskId: undefined,
@@ -1334,6 +1345,24 @@ export function TaskSheet({
                       </Button>
                     )}
                   </div>
+
+                  {/* What a tick means. Only once there is something to tick. */}
+                  {taskType === "task" && stepCount > 0 && (
+                    <div data-testid="subtask-mode">
+                      <SegmentedControl<SubtaskMode>
+                        ariaLabel="What happens to ticked subtasks"
+                        options={[
+                          { value: "checklist", label: SUBTASK_MODE_LABEL.checklist },
+                          { value: "steps", label: SUBTASK_MODE_LABEL.steps },
+                        ]}
+                        value={subtaskMode}
+                        onChange={(next) => { haptic("light"); setPickedMode(next); }}
+                      />
+                      <p className="mt-1.5 text-[12px] leading-snug text-neutral-500 dark:text-neutral-400">
+                        {SUBTASK_MODE_HINT[subtaskMode]}
+                      </p>
+                    </div>
+                  )}
 
                   <DndContext sensors={subtaskSensors} onDragEnd={handleSubtasksDragEnd}>
                     <SortableContext items={subtaskIds} strategy={verticalListSortingStrategy}>
