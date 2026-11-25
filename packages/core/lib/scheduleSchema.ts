@@ -50,6 +50,7 @@ const scheduleEntry = z.object({
   targetsSetAt: isoDateTime.optional(),
   quantity: z.string().optional(),
   cost: z.number().finite().nonnegative().optional(),
+  mark: z.object({ done: z.boolean(), at: isoDateTime }).passthrough().optional(),
 }).passthrough();
 
 const taskSlot = z.object({ startTime: z.string(), endTime: z.string() }).passthrough();
@@ -75,6 +76,8 @@ const completionEvent = z.object({
   subtaskId: z.string().optional(),
   slotIndex: z.number().int().nonnegative().optional(),
   amountLogged: z.boolean().optional(),
+  credit: z.object({ done: z.number().int().nonnegative(), total: z.number().int().nonnegative() }).passthrough().optional(),
+  auto: z.boolean().optional(),
 }).passthrough();
 
 export const TaskSchema = z.object({
@@ -96,6 +99,8 @@ export const TaskSchema = z.object({
   streakEnabled: z.boolean().optional(),
   sortOrder: z.number().finite().optional(),
   subtasks: z.array(scheduleEntry).optional(),
+  subtaskMode: z.enum(["checklist", "steps"]).optional(),
+  continuesTaskId: z.string().optional(),
   stepBufferMinutes: z.number().finite().positive().max(60).optional(),
   taskType: z.enum(["task", "session", "commitment"]).optional(),
   exceptions: z.record(z.string(), taskException).optional(),

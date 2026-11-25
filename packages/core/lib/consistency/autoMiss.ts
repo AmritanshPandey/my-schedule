@@ -21,6 +21,8 @@ import { localISODate, addDaysToISO } from "../dateUtils";
 import { getConfiguredDayStartMinutes, DEFAULT_TIMELINE_START_MINUTES } from "../timeline/displayWindow";
 import { isTrackedTask, completionForDate, datedMissedEvent, datedMissedSlotEvent } from "../taskCompletion";
 import { isTaskScheduledOn } from "../taskOccurrence";
+import { allStepsDone, isOneOffTask, isStepsTask } from "../subtaskMode";
+import { occurrenceProgress } from "../taskProgress";
 import { getSlots } from "../taskMutations";
 
 /** Never backfill more than a month, so a long-absent user isn't flooded. */
@@ -30,6 +32,12 @@ export const MAX_LOOKBACK_DAYS = 31;
 function weekdayKeyOf(dateISO: string): (typeof DAYS)[number] {
   // JS getDay(): Sun=0…Sat=6; our DAYS start at Monday.
   return DAYS[(new Date(`${dateISO}T00:00:00`).getDay() + 6) % 7];
+}
+
+function hasMissedEvent(task: Task, dateISO: string): boolean {
+  return (task.completionHistory ?? []).some(
+    (e) => e.completionType === "missed" && !e.subtaskId && e.slotIndex === undefined && localISODate(new Date(e.completedAt)) === dateISO,
+  );
 }
 
 /**
@@ -75,6 +83,8 @@ export function applyAutoMissed(schedule: Schedule, now: Date): Schedule {
     schedule.plans.filter((plan) => !isPlanRunning(plan)).map((plan) => plan.id),
   );
 
+  const plansById = new Map(schedule.plans.map((plan) => [plan.id, plan]));
+
   for (let d = startISO; d <= endISO; d = addDaysToISO(d, 1)) {
     const weekday = weekdayKeyOf(d);
     const bucket = activities[weekday];
@@ -85,7 +95,9 @@ export function applyAutoMissed(schedule: Schedule, now: Date): Schedule {
       if (task.planId && pausedPlanIds.has(task.planId)) return task; // held plan — nothing was expected
       if (!isTaskScheduledOn(task, d, true)) return task; // honors recurrence/skips/active window
       const state = completionForDate(task, d);
-      if (state.completed || state.missed) return task; // already resolved for that date
+      if (state.completed || state.missed || hasMissedEvent(task, d)) return task; // already resolved for that date
+      // Every step finished and the task not ended yet: nothing was left to miss.
+      if (isStepsTask(task) && !isOneOffTask(task) && allStepsDone(task)) return task;
 
       const totalSlots = getSlots(task).length;
       if (totalSlots > 1) {
@@ -111,7 +123,17 @@ export function applyAutoMissed(schedule: Schedule, now: Date): Schedule {
 
       bucketChanged = true;
       changed = true;
-      return { ...task, completionHistory: [...(task.completionHistory ?? []), datedMissedEvent(task.id, d)] };
+      // Part of it was done: the miss carries how much, so the day keeps its
+      // real share however the list changes later (lib/taskProgress.ts).
+      const progress = occurrenceProgress(task, plansById.get(task.planId) ?? null, d);
+      const event = datedMissedEvent(task.id, d);
+      return {
+        ...task,
+        completionHistory: [
+          ...(task.completionHistory ?? []),
+          progress.done > 0 ? { ...event, credit: { done: progress.done, total: progress.total } } : event,
+        ],
+      };
     });
     if (bucketChanged) activities[weekday] = next;
   }

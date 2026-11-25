@@ -43,6 +43,7 @@ import type {
 } from "./scheduleTypes";
 import { DAYS, MAX_SCHEDULE_EVENTS } from "./scheduleConstants";
 import { NS, entityKey, ritualCompletionKey, taskKey } from "./stampSchedule";
+import { laterMark } from "./subtaskMode";
 
 /** One side of the merge: its data plus the clock to fall back on. */
 export interface MergeSide {
@@ -237,10 +238,45 @@ export function unionHistory(
   return [...byId.values()].sort((x, y) => x.completedAt.localeCompare(y.completedAt));
 }
 
+/**
+ * Keep each step's latest mark whichever side won the task: two devices that
+ * ticked different steps offline must both keep theirs. The winner still
+ * decides which steps exist, and in what order.
+ */
+function mergeMarks(winner: Task, loser: Task): Task["subtasks"] {
+  if (!winner.subtasks?.length || !loser.subtasks?.length) return winner.subtasks;
+  const theirs = new Map(loser.subtasks.map((entry) => [entry.id, entry.mark]));
+  let changed = false;
+  const next = winner.subtasks.map((entry) => {
+    const mark = laterMark(entry.mark, theirs.get(entry.id));
+    if (mark === entry.mark) return entry;
+    if (mark && entry.mark && mark.at === entry.mark.at && mark.done === entry.mark.done) return entry;
+    changed = true;
+    return { ...entry, mark };
+  });
+  return changed ? next : winner.subtasks;
+}
+
 function combineTasks(winner: Task, loser: Task): Task {
   const history = unionHistory(winner.completionHistory, loser.completionHistory);
-  if (history === winner.completionHistory) return winner;
-  return { ...winner, completionHistory: history };
+  const subtasks = mergeMarks(winner, loser);
+  // A version from before these fields existed drops them on load, so a missing
+  // value is "didn't know", never a choice to clear it.
+  const subtaskMode = winner.subtaskMode ?? loser.subtaskMode;
+  const continuesTaskId = winner.continuesTaskId ?? loser.continuesTaskId;
+  if (
+    history === winner.completionHistory &&
+    subtasks === winner.subtasks &&
+    subtaskMode === winner.subtaskMode &&
+    continuesTaskId === winner.continuesTaskId
+  ) return winner;
+  return {
+    ...winner,
+    ...(history === winner.completionHistory ? null : { completionHistory: history }),
+    ...(subtasks === winner.subtasks ? null : { subtasks }),
+    ...(subtaskMode === winner.subtaskMode ? null : { subtaskMode }),
+    ...(continuesTaskId === winner.continuesTaskId ? null : { continuesTaskId }),
+  };
 }
 
 // -- Preferences -------------------------------------------------------------

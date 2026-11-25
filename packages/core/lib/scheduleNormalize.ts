@@ -42,6 +42,8 @@ const OPTIONAL_TASK_FIELDS = [
   "streakEnabled",
   "sortOrder",
   "subtasks",
+  "subtaskMode",
+  "continuesTaskId",
   "exceptions",
   "recurrence",
   "activeFrom",
@@ -72,6 +74,8 @@ function keepField(key: (typeof OPTIONAL_TASK_FIELDS)[number], value: unknown): 
     case "recurrence":
     case "details":
       return isPlainObject(value);
+    case "subtaskMode":
+      return value === "checklist" || value === "steps";
     case "stepBufferMinutes":
       return typeof value === "number" && value > 0 && value <= 60;
     case "reminderLeadMinutes":

@@ -24,6 +24,7 @@ import { getSlots } from "./taskMutations";
 import { getTaskCheckableItems, getTaskSubtaskSummary, isTaskCompleted, isTaskResolved, isTrackedTask, resolveTaskState, type TaskState } from "./taskCompletion";
 import { selectTodayTasks } from "./todayTasks";
 import { computeExecutionTrend } from "./executionAnalytics";
+import { collectOccurrences, occurrenceKey } from "./taskProgress";
 import { calculateExecutionStreak, type ExecutionStreak } from "./consistency/calculateExecutionStreak";
 import { ritualScheduledOnDate } from "./consistency/calculateRitualStreak";
 import { completedRitualIdsOn } from "./consistency/ritualDayStatus";
@@ -225,6 +226,10 @@ export interface WeekDayStatus {
   done: number;
   /** Occurrences recorded as missed on that date (auto-miss rollover or by hand). */
   missed: number;
+  /** Occurrences partly done once their day was over. Never in `missed`. */
+  partial: number;
+  /** Done plus each partly done occurrence's share — what the bar shows. */
+  credit: number;
   total: number;
   pct: number;
   isToday: boolean;
@@ -246,10 +251,13 @@ export interface WeekStatus {
   /** This week's completion % minus last week's (computeExecutionTrend.deltaPct). */
   vsLastWeekPct: number;
   /** Missed tasks this week — the same number the execution trend reports. */
+  /** Partly done this week, days that are over — never counted in missed. */
+  partial: number;
   missed: number;
   streak: ExecutionStreak;
   /**
-   * How the week is going so far: done ÷ (done + missed), over recorded
+   * How the week is going so far: done ÷ (done + partial + missed), with each
+   * partly done occurrence worth its share, over recorded
    * outcomes only. Work still open today isn't late yet, and a past day with
    * nothing recorded proves nothing either way — the weekday buckets carry no
    * creation date, so a task added this morning would otherwise read as five
@@ -275,6 +283,8 @@ export function selectWeekStatus(schedule: Schedule, todayISO: string): WeekStat
   const todayIdx = new Date(`${todayISO}T00:00:00`).getDay();
   const monday = addDaysToISO(todayISO, -((todayIdx + 6) % 7));
 
+  const occurrences = collectOccurrences(schedule);
+
   const days: WeekDayStatus[] = DAYS.map((day, i) => {
     // Commitments never count. This keeps the desktop week bar's long-standing
     // occurrence behaviour (no isTaskScheduledOn) so no existing number moves.
@@ -283,24 +293,21 @@ export function selectWeekStatus(schedule: Schedule, todayISO: string): WeekStat
     const tracked = !trackingStart || dateISO >= trackingStart;
     const tasks = tracked ? (schedule.activities[day] ?? []).filter(isTrackedTask) : [];
     const isToday = dateISO === todayISO;
-    const eventOn = (task: Task, type: "task" | "missed") =>
-      (task.completionHistory ?? []).some(
-        (event) => event.completionType === type && !event.subtaskId && localISODate(new Date(event.completedAt)) === dateISO,
-      );
+    const outcome = (task: Task) => occurrences.get(occurrenceKey(task.id, dateISO));
     const isDone = (task: Task) =>
       isToday
         ? isTaskCompleted(task, getTaskSubtaskSummary(task, task.planId ? plansById.get(task.planId) ?? null : null).totalCount)
-        : eventOn(task, "task");
+        : outcome(task)?.state === "done";
     // Sessions count like tasks: done is done, a planned one whose day has
     // passed is missed, a skipped one is off the list.
     const sessions = tracked ? sessionsForDate(schedule, dateISO).filter((s) => s.status !== "skipped") : [];
     const sessionsDone = sessions.filter((s) => s.status === "done").length;
     const sessionsMissed = sessions.filter((s) => sessionState(s, todayISO) === "missed").length;
     const done = tasks.filter(isDone).length + sessionsDone;
-    // A completion wins over a missed mark for the same occurrence, as in
-    // computeExecutionTrend.
     const missed =
-      tasks.filter((task) => !isDone(task) && (isToday ? !!task.missed : eventOn(task, "missed"))).length + sessionsMissed;
+      tasks.filter((task) => !isDone(task) && (isToday ? !!task.missed : outcome(task)?.state === "missed")).length + sessionsMissed;
+    const partials = tasks.filter((task) => !isDone(task) && outcome(task)?.state === "partial");
+    const credit = done + partials.reduce((sum, task) => sum + (outcome(task)?.credit ?? 0), 0);
     const total = tasks.length + sessions.length;
     return {
       day,
@@ -308,8 +315,10 @@ export function selectWeekStatus(schedule: Schedule, todayISO: string): WeekStat
       dateISO,
       done,
       missed,
+      partial: isToday ? 0 : partials.length,
+      credit,
       total,
-      pct: ratioPct(done, total),
+      pct: ratioPct(credit, total),
       isToday,
       isFuture: dateISO > todayISO,
     };
@@ -317,6 +326,7 @@ export function selectWeekStatus(schedule: Schedule, todayISO: string): WeekStat
 
   const tasksTotal = days.reduce((sum, day) => sum + day.total, 0);
   const tasksDone = days.reduce((sum, day) => sum + day.done, 0);
+  const tasksCredit = days.reduce((sum, day) => sum + day.credit, 0);
 
   let routinesDue = 0;
   let routinesDone = 0;
@@ -335,8 +345,9 @@ export function selectWeekStatus(schedule: Schedule, todayISO: string): WeekStat
   let judgedDone = 0;
   for (const day of days) {
     if (day.isFuture) continue;
-    judgedDone += day.done;
-    judgedDue += day.done + day.missed;
+    // Today's open work isn't late yet, so only what's finished is judged.
+    judgedDone += day.isToday ? day.done : day.credit;
+    judgedDue += day.done + day.partial + day.missed;
   }
   const verdictPct = ratioPct(judgedDone, judgedDue);
   const tone = statusTone(verdictPct);
@@ -346,7 +357,7 @@ export function selectWeekStatus(schedule: Schedule, todayISO: string): WeekStat
 
   return {
     days,
-    tasksPct: ratioPct(tasksDone, tasksTotal),
+    tasksPct: ratioPct(tasksCredit, tasksTotal),
     tasksDone,
     tasksTotal,
     routinesPct: ratioPct(routinesDone, routinesDue),
@@ -354,6 +365,7 @@ export function selectWeekStatus(schedule: Schedule, todayISO: string): WeekStat
     routinesTotal: routinesDue,
     vsLastWeekPct: trend.deltaPct,
     missed: trend.currentMissed,
+    partial: trend.currentPartial,
     streak: calculateExecutionStreak(schedule, todayISO),
     verdict,
     verdictPct,

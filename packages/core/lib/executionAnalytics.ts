@@ -9,8 +9,10 @@
  *   date) with a whole-task completion (`completionType === "task"`) dated in
  *   that week. A task toggled done several times on a day counts once, and a
  *   log shared by a task's weekday copies counts once, not once per copy.
- * - `missed` = distinct occurrences with a dated miss and no completion, capped
- *   so `completed + missed` never exceeds `scheduled`.
+ * - `partial` = occurrences with some of it done. They add their share to `pct`
+ *   ("4 of 5" is 80% of one task) and are never counted as missed.
+ * - `missed` = distinct occurrences with a dated miss and nothing done, capped so
+ *   `completed + partial + missed` never exceeds `scheduled`.
  * - Nothing dated before the tracking start (`preferences.startDate`) counts.
  * - `scheduled` = the current count of scheduled tasks across all weekday
  *   buckets. The data model stores recurring weekday templates with no history,
@@ -23,15 +25,17 @@ import { DAYS } from "./scheduleConstants";
 import { localISODate } from "./dateUtils";
 import { isTaskScheduledOn } from "./taskOccurrence";
 import { isTrackedTask } from "./taskCompletion";
+import { collectOccurrences, occurrenceKey } from "./taskProgress";
 
 export interface ExecutionWeek {
   monStr: string;        // ISO date of that week's Monday
   sunStr: string;        // ISO date of that week's Sunday
   label: string;         // "May 12"
   completed: number;     // distinct tasks completed that week
-  missed: number;        // distinct tasks missed that week (auto or manual)
+  partial: number;       // occurrences partly done, once their day was over
+  missed: number;        // occurrences with nothing done (auto or manual)
   scheduled: number;     // scheduled tasks per week (current schedule)
-  pct: number;           // 0..100, clamped
+  pct: number;           // 0..100, clamped; a partly done task adds its share
   isCurrentWeek: boolean;
 }
 
@@ -45,6 +49,7 @@ export interface ExecutionTrend {
   totalCompleted: number; // sum of completed across the window
   totalMissed: number;    // sum of missed across the window
   currentMissed: number;  // tasks missed this week
+  currentPartial: number; // tasks partly done this week
   scheduled: number;      // tasks scheduled per week
 }
 
@@ -90,49 +95,51 @@ export function computeExecutionTrend(schedule: Schedule, weeksCount = 8, now: D
     return count;
   };
 
-  // An occurrence is a task on a date. A recurring task lives in several
-  // weekday buckets under one id, and those copies can carry the same
-  // completion log, so keying by bucket would count one miss once per copy.
-  // Keying by task id + date counts it once however many copies hold it.
-  const doneKeys = new Set<string>();
-  const missedKeys = new Set<string>();
-  const counts = (dateISO: string) => !trackingStart || dateISO >= trackingStart;
-
+  // An occurrence is a task on a date; lib/taskProgress.ts counts each once
+  // however many weekday copies hold it, and gives a partly done one its share.
+  const weekMondayOf = (iso: string): string => localISODate(mondayOf(new Date(iso + "T00:00:00")));
+  const todayISO = localISODate(today);
+  interface Tally { completed: number; missed: number; partial: number; partialCredit: number }
+  const byWeek = new Map<string, Tally>();
+  const tally = (dateISO: string): Tally => {
+    const wk = weekMondayOf(dateISO);
+    let t = byWeek.get(wk);
+    if (!t) byWeek.set(wk, (t = { completed: 0, missed: 0, partial: 0, partialCredit: 0 }));
+    return t;
+  };
+  const occurrences = collectOccurrences(schedule);
+  for (const [key, { state, credit }] of occurrences) {
+    const dateISO = key.slice(key.lastIndexOf("|") + 1);
+    const t = tally(dateISO);
+    if (state === "done") t.completed++;
+    else if (state === "missed") t.missed++;
+    else {
+      // Today's share counts as it grows, but today isn't "partly done" yet.
+      t.partialCredit += credit;
+      if (dateISO < todayISO) t.partial++;
+    }
+  }
+  // Legacy fallback: completed flag with no event history.
+  const legacyDone = new Set<string>();
   for (const day of DAYS) {
     for (const task of schedule.activities[day] ?? []) {
-      if (!isTrackedTask(task)) continue;
-      let sawDone = false;
-      if (Array.isArray(task.completionHistory)) {
-        for (const ev of task.completionHistory) {
-          if (!ev.completedAt) continue;
-          const dateISO = localISODate(new Date(ev.completedAt));
-          if (!counts(dateISO)) continue;
-          if (ev.completionType === "task") {
-            doneKeys.add(`${task.id}|${dateISO}`);
-            sawDone = true;
-          } else if (ev.completionType === "missed" && !ev.subtaskId) {
-            missedKeys.add(`${task.id}|${dateISO}`);
-          }
-        }
-      }
-      // Legacy fallback: completed flag with no event history.
-      if (!sawDone && task.completed && task.completedAt) {
-        const dateISO = localISODate(new Date(task.completedAt));
-        if (counts(dateISO)) doneKeys.add(`${task.id}|${dateISO}`);
+      if (!isTrackedTask(task) || !task.completed || !task.completedAt) continue;
+      if ((task.completionHistory ?? []).some((e) => e.completionType === "task")) continue;
+      const dateISO = localISODate(new Date(task.completedAt));
+      const key = occurrenceKey(task.id, dateISO);
+      if ((trackingStart && dateISO < trackingStart) || legacyDone.has(key)) continue;
+      legacyDone.add(key);
+      const seen = occurrences.get(key);
+      if (seen?.state === "done") continue;
+      const t = tally(dateISO);
+      t.completed++;
+      if (seen?.state === "missed") t.missed--;
+      if (seen?.state === "partial") {
+        t.partialCredit -= seen.credit;
+        if (dateISO < todayISO) t.partial--;
       }
     }
   }
-
-  // Bucket by week. A completion wins over a missed mark for the same occurrence.
-  const weekMondayOf = (iso: string): string => localISODate(mondayOf(new Date(iso + "T00:00:00")));
-  const weekDone = new Map<string, number>();
-  const weekMissed = new Map<string, number>();
-  const bump = (map: Map<string, number>, key: string) => {
-    const wk = weekMondayOf(key.slice(key.lastIndexOf("|") + 1));
-    map.set(wk, (map.get(wk) ?? 0) + 1);
-  };
-  for (const key of doneKeys) bump(weekDone, key);
-  for (const key of missedKeys) if (!doneKeys.has(key)) bump(weekMissed, key);
 
   // Weeks that finish before the schedule's tracking start are dropped: they
   // predate the user's adoption and would drag the average down with zeroes.
@@ -148,15 +155,20 @@ export function computeExecutionTrend(schedule: Schedule, weeksCount = 8, now: D
     // the tracking start is set to a future date.
     if (i !== 0 && trackingStart && localISODate(sun) < trackingStart) continue;
     const scheduled = scheduledInWeek(mon);
-    const completed = Math.min(weekDone.get(monStr) ?? 0, scheduled || Infinity);
-    // Done + missed can never exceed what was scheduled.
-    const missed = Math.min(weekMissed.get(monStr) ?? 0, scheduled ? Math.max(0, scheduled - completed) : Infinity);
-    const pct = scheduled > 0 ? Math.min(100, Math.round((completed / scheduled) * 100)) : 0;
+    const t = byWeek.get(monStr) ?? { completed: 0, missed: 0, partial: 0, partialCredit: 0 };
+    // Done + partial + missed can never exceed what was scheduled.
+    const cap = scheduled || Infinity;
+    const completed = Math.min(t.completed, cap);
+    const partial = Math.min(t.partial, Math.max(0, cap - completed));
+    const missed = Math.min(t.missed, Math.max(0, cap - completed - partial));
+    const credit = Math.min(completed + t.partialCredit, cap);
+    const pct = scheduled > 0 ? Math.min(100, Math.round((credit / scheduled) * 100)) : 0;
     weeks.push({
       monStr,
       sunStr: localISODate(sun),
       label: mon.toLocaleDateString("en-US", { month: "short", day: "numeric" }),
       completed,
+      partial,
       missed,
       scheduled,
       pct,
@@ -183,6 +195,7 @@ export function computeExecutionTrend(schedule: Schedule, weeksCount = 8, now: D
     totalCompleted,
     totalMissed,
     currentMissed: current.missed,
+    currentPartial: current.partial,
     scheduled: current.scheduled,
   };
 }

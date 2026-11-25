@@ -32,6 +32,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { AppState } from 'react-native';
 import type { Note, Schedule } from '@planr/core/lib/scheduleTypes';
+import { clearStepMarks } from '@planr/core/lib/subtaskMode';
 import { DAYS } from '@planr/core/lib/scheduleConstants';
 import { applyAutoMissed } from '@planr/core/lib/consistency/autoMiss';
 import { pushHistory, popHistory, HISTORY_LIMIT } from '@planr/core/lib/scheduleHistory';
@@ -403,7 +404,7 @@ export function useScheduleDB() {
         activities[day] = (current.activities[day] ?? []).map((t) => {
           const { completed: _c, completedAt: _a, completedSubtaskIds: _s, completedSlotIndices: _sl, completionHistory: _h, missed: _m, missedAt: _ma, missedSlotIndices: _msl, ...rest } = t;
           void _c; void _a; void _s; void _sl; void _h; void _m; void _ma; void _msl;
-          return rest;
+          return clearStepMarks(rest);
         });
       }
       const milestones = normalizeMilestoneTimelines(

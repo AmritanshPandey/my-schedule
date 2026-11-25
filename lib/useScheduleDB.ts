@@ -14,6 +14,7 @@ export { DAYS, DAY_LABELS, DAY_FULL_LABELS } from "@/lib/scheduleConstants";
 // Pure normalization lives in scheduleNormalize.ts (no React/auth deps, so it's
 // unit-testable). Re-exported here so existing import sites are unchanged.
 export { normalizeTasks, resetStaleCompletions } from "@/lib/scheduleNormalize";
+import { clearStepMarks } from "@planr/core/lib/subtaskMode";
 import { applyAutoMissed } from "@/lib/consistency/autoMiss";
 import { isEditableTarget } from "@/lib/keyboardEvents";
 import { pushHistory, popHistory, HISTORY_LIMIT } from "@/lib/scheduleHistory";
@@ -689,7 +690,7 @@ export function useScheduleDB() {
         activities[day] = (schedule.activities[day] ?? []).map((t) => {
           const { completed: _c, completedAt: _a, completedSubtaskIds: _s, completedSlotIndices: _sl, completionHistory: _h, missed: _m, missedAt: _ma, missedSlotIndices: _msl, ...rest } = t;
           void _c; void _a; void _s; void _sl; void _h; void _m; void _ma; void _msl;
-          return rest;
+          return clearStepMarks(rest);
         });
       }
       // Un-complete milestones: strip the completion dates and re-derive status

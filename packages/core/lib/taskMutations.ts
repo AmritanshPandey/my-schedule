@@ -11,6 +11,8 @@ import { uid } from "./id";
 import { localISODate } from "./dateUtils";
 import { parseTimeToMinutes, toScheduleDayMinutes } from "./timeUtils";
 import type { ScheduleEntry } from "./scheduleEntry";
+import { allStepsDone, clearStepMarks, isOneOffTask, isStepsTask, laterMark, stepDone, stepDoneOn, withMark } from "./subtaskMode";
+import { unifyStepMarks } from "./stepMarks";
 
 export { uid } from "./id";
 export type { TaskSlot } from "./scheduleTypes";
@@ -299,9 +301,33 @@ export interface TaskDeleteSnapshot {
   milestoneLinks: Array<{ milestoneId: string; linkedActivities: string[] }>;
 }
 
+/**
+ * The edited list with each step's latest mark: the form may have been open
+ * while a step was ticked elsewhere. Switching a checklist to Steps keeps
+ * today's ticks as finished steps.
+ */
+function carryMarks(existing: Task, edited: Task): ScheduleEntry[] | undefined {
+  if (!isStepsTask(edited)) return edited.subtasks;
+  const before = new Map((existing.subtasks ?? []).map((e) => [e.id, e]));
+  const switching = !isStepsTask(existing);
+  const tickedToday = new Set(existing.completedSubtaskIds ?? []);
+  const now = new Date().toISOString();
+  return edited.subtasks?.map((entry) => {
+    if (switching) return tickedToday.has(entry.id) ? withMark(entry, true, now) : entry;
+    const old = before.get(entry.id);
+    // A one-off from before marks: write down what its log says was finished.
+    if (!entry.mark && old && !old.mark && stepDone(existing, old)) {
+      return withMark(entry, true, new Date(`${stepDoneOn(existing, old)}T12:00:00`).toISOString());
+    }
+    const mark = laterMark(entry.mark, old?.mark);
+    return mark === entry.mark ? entry : { ...entry, mark };
+  });
+}
+
 function reconcileEditedTask(existing: Task, updates: Omit<Task, "id">): Task {
-  const merged = withSlots({ ...existing, ...updates });
-  if (updates.taskType === "session") return merged;
+  const base = withSlots({ ...existing, ...updates });
+  if (updates.taskType === "session") return base;
+  const merged: Task = { ...base, subtasks: carryMarks(existing, base) };
 
   // Drop any completed-slot index that no longer exists after the edit (e.g. a
   // slot was removed), and fold slot-completeness into whether the task as a
@@ -319,11 +345,17 @@ function reconcileEditedTask(existing: Task, updates: Omit<Task, "id">): Task {
   const wasCompleted = existing.completed ?? (
     nextSubtaskIds.size > 0 && completedSubtaskIds.length === nextSubtaskIds.size
   );
-  const staysCompleted =
-    (nextSubtaskIds.size === 0
+  const today = localISODate(new Date());
+  // Steps aren't what keeps a repeating block done, so editing the list can't
+  // reopen it. A one-off finished by its steps reopens when one is added.
+  const doneByHand = (existing.completionHistory ?? []).some(
+    (e) => e.completionType === "task" && !e.auto && localISODate(new Date(e.completedAt)) === today
+  );
+  const staysCompleted = isStepsTask(merged)
+    ? !!wasCompleted && slotsStayDone && (!isOneOffTask(merged) || doneByHand || allStepsDone(merged))
+    : (nextSubtaskIds.size === 0
       ? wasCompleted && (existing.subtasks?.length ?? 0) === 0
       : wasCompleted && completedSubtaskIds.length === nextSubtaskIds.size) && slotsStayDone;
-  const today = localISODate(new Date());
   const completionHistory = (existing.completionHistory ?? []).filter((event) => {
     if (localISODate(new Date(event.completedAt)) !== today) return true;
     if (event.completionType === "subtask") {
@@ -445,7 +477,7 @@ export function updateTaskDays(
       })
     ) as Schedule["activities"];
 
-    return { ...prev, plans, activities };
+    return unifyStepMarks({ ...prev, plans, activities }, taskId);
   };
 }
 
@@ -491,7 +523,7 @@ export function updateTaskPerDay(
       })
     ) as Schedule["activities"];
 
-    return { ...prev, plans, activities };
+    return unifyStepMarks({ ...prev, plans, activities }, taskId);
   };
 }
 
@@ -545,9 +577,12 @@ export function clearOccurrenceState(task: Task): Task {
  * `mergeGroupId` is dropped deliberately. Carrying it over made a third task
  * join a group that `findMergePartner` (lib/taskMerge.ts) documents as strictly
  * pairwise, so it returned the first match and the third row rendered alone.
+ *
+ * Finished steps and a "Continue on…" link are dropped for the same reason:
+ * this is new work, not the same work somewhere else.
  */
 function freshCopy(task: Task): Task {
-  return { ...clearOccurrenceState(task), id: uid(), mergeGroupId: undefined };
+  return { ...clearStepMarks(clearOccurrenceState(task)), id: uid(), mergeGroupId: undefined, continuesTaskId: undefined };
 }
 
 /**

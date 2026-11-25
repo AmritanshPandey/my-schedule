@@ -48,6 +48,11 @@ export interface ScheduleEntry {
   quantity?: string;
   /** What it costs, for a shopping item. */
   cost?: number;
+  /**
+   * Steps only (lib/subtaskMode.ts): whether this step is finished, and when
+   * that was last decided. Same on every weekday copy of the task.
+   */
+  mark?: { done: boolean; at: string };
 }
 
 export type WeightUnit = "kg" | "lb";

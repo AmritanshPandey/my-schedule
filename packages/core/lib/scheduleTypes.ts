@@ -99,6 +99,16 @@ export interface TaskCompletionEvent {
   /** This completion's amount has been logged to its Finance tracker
    *  (lib/taskFields.ts) — so an entry deleted by hand isn't logged again. */
   amountLogged?: boolean;
+  /**
+   * On a "missed" event: what had been ticked when the day closed, so a partly
+   * done checklist keeps its real share even if the list changes later
+   * (lib/taskProgress.ts). An optional field rather than a new event type —
+   * older versions reject an unknown type but pass an unknown field through.
+   */
+  credit?: { done: number; total: number };
+  /** On a "task" event: written by ticking a step, not by marking the task
+   *  done — so unticking that day's last step takes it back. */
+  auto?: boolean;
 }
 
 /**
@@ -195,6 +205,13 @@ export interface Task {
   streakEnabled?: boolean;            // opt-in to streak tracking
   sortOrder?: number;                 // drag-reorder position within a day
   subtasks?: ScheduleEntry[];         // per-task subtask list (overrides plan.items)
+  /** Whether subtasks start fresh each time or stay done. Absent = one-off
+   *  tasks are Steps, repeating ones a Checklist. Read it through
+   *  `subtaskModeOf` (lib/subtaskMode.ts), never directly. */
+  subtaskMode?: "checklist" | "steps";
+  /** The task this one-off carries on from ("Continue on…"). Its steps are the
+   *  same steps, so finishing one finishes it on both. */
+  continuesTaskId?: string;
   /**
    * Standard rest inserted between session steps, in minutes. Counts toward the
    * step total (and the "fits the allotted time" check) but never moves the

@@ -13,6 +13,7 @@ import { localISODate } from "./dateUtils";
 import { parseTimeToMinutes, currentMinutes } from "./timeUtils";
 import { minutesToDisplayTime } from "./timeline/dragTimeUtils";
 import { getSlots } from "./taskMutations";
+import { allStepsDone, doneSubtaskIds, isOneOffTask, isStepsTask, oneOffStepsProgress, stepDone, withMark } from "./subtaskMode";
 
 /** True when a task has more than one time slot — the multi-phase-same-day case. */
 export function isMultiSlot(task: Task): boolean {
@@ -162,7 +163,7 @@ export function calculateTaskProgress(task: Task, totalSubtasks: number): TaskPr
     const done = task.completed ? 1 : 0;
     return { completedCount: done, totalCount: 1, pct: done * 100 };
   }
-  const completedIds = new Set(task.completedSubtaskIds ?? []);
+  const completedIds = new Set(doneSubtaskIds(task));
   const completedCount = task.subtasks?.length
     ? task.subtasks.filter((subtask) => completedIds.has(subtask.id)).length
     : Math.min(completedIds.size, totalSubtasks);
@@ -202,11 +203,12 @@ export function getTaskSubtaskSummary(task: Task, plan: Plan | null): TaskSubtas
   const effectiveItems = getTaskCheckableItems(task, plan);
   const totalCount = effectiveItems.length;
 
-  const completedIds = new Set(task.completedSubtaskIds ?? []);
+  const completedIds = new Set(doneSubtaskIds(task));
   let completedCount = effectiveItems.reduce((n, item) => n + (completedIds.has(item.id) ? 1 : 0), 0);
   // A whole-task completion implies every item is done (the per-item ids may not
-  // all be recorded individually).
-  if (task.completed && totalCount > 0) completedCount = totalCount;
+  // all be recorded individually). Not for Steps: marking the block done says
+  // nothing about which steps are finished.
+  if (task.completed && totalCount > 0 && !isStepsTask(task)) completedCount = totalCount;
 
   return { isSession, hasItems: totalCount > 0, completedCount, totalCount };
 }
@@ -220,6 +222,7 @@ export function isTaskCompleted(task: Task, totalSubtasks: number): boolean {
   if (!isTrackedTask(task)) return false;
   if (totalSubtasks === 0) return !!task.completed;
   if (task.completed !== undefined) return task.completed;
+  if (isStepsTask(task)) return stepsDayDone(task);
   return new Set(task.completedSubtaskIds ?? []).size >= totalSubtasks;
 }
 
@@ -233,8 +236,22 @@ export function resolveTaskState(task: Task, totalSubtasks: number): TaskState {
   if (!isTrackedTask(task)) return "incomplete";
   if (isTaskCompleted(task, totalSubtasks)) return "completed";
   if (task.missed) return "missed";
+  // A repeating Steps block is never "partial": any step finished today
+  // completes it, and steps finished on other days say nothing about today.
+  if (isStepsTask(task) && !isOneOffTask(task)) return "incomplete";
   if (totalSubtasks > 0 && calculateTaskProgress(task, totalSubtasks).completedCount > 0) return "partial";
   return "incomplete";
+}
+
+/**
+ * Whether ticking steps alone has finished this occurrence. A repeating block
+ * is done once any step was finished today; a one-off needs every step, since
+ * no later block picks up the rest. A split task is done by its phases.
+ */
+function stepsDayDone(task: Task): boolean {
+  const oneOff = isOneOffTask(task);
+  if (isMultiSlot(task)) return slotsAllDone(task) && (!oneOff || allStepsDone(task));
+  return oneOff ? allStepsDone(task) : (task.completedSubtaskIds?.length ?? 0) > 0;
 }
 
 /** A task is "resolved" for the day once it's either done or explicitly missed. */
@@ -375,9 +392,22 @@ export function toggleTaskComplete(
 ): Partial<Task> {
   const wasComplete = isTaskCompleted(task, allSubtaskIds.length);
   const now = new Date().toISOString();
+  const steps = isStepsTask(task);
 
   if (wasComplete) {
+    // Undoing a Steps block takes back the steps finished in it today — they
+    // are what made it done — and leaves earlier ones alone.
+    const today = localISODate(new Date());
+    const tickedToday = new Set([
+      ...(task.completedSubtaskIds ?? []),
+      ...(task.completionHistory ?? [])
+        .filter((e) => e.completionType === "subtask" && e.subtaskId && localISODate(new Date(e.completedAt)) === today)
+        .map((e) => e.subtaskId as string),
+    ]);
     return {
+      ...(steps
+        ? { subtasks: (task.subtasks ?? []).map((e) => (tickedToday.has(e.id) && stepDone(task, e) ? withMark(e, false, now) : e)) }
+        : null),
       completed: false,
       completedAt: undefined,
       completedSubtaskIds: [],
@@ -395,7 +425,9 @@ export function toggleTaskComplete(
   return {
     completed: true,
     completedAt: now,
-    completedSubtaskIds: allSubtaskIds,
+    // Marking a Steps block done never ticks its steps: you can work a block
+    // without finishing anything in it.
+    completedSubtaskIds: steps ? task.completedSubtaskIds ?? [] : allSubtaskIds,
     // "Mark the whole task done" implies every phase is done — otherwise the
     // timeline/list would show unchecked phases on a task that reads complete.
     completedSlotIndices: slotIndices,
@@ -428,7 +460,8 @@ export function markTaskMissed(task: Task, allSubtaskIds: string[]): Partial<Tas
   const cleared = stripTodayEvents(task.completionHistory, ["task", "subtask", "slot", "missed"]);
   const events: TaskCompletionEvent[] = [
     createCompletionEvent(task.id, "missed"),
-    ...allSubtaskIds.map((sid) => createCompletionEvent(task.id, "missed", sid)),
+    // Steps aren't missed along with the day: each is done or still to do.
+    ...(isStepsTask(task) ? [] : allSubtaskIds).map((sid) => createCompletionEvent(task.id, "missed", sid)),
   ];
   return {
     completed: false,
@@ -554,6 +587,7 @@ export function toggleSubtaskComplete(
   subtaskId: string,
   totalSubtasks: number
 ): Partial<Task> {
+  if (isStepsTask(task)) return toggleStep(task, subtaskId);
   const current = task.completedSubtaskIds ?? [];
   const isDone = current.includes(subtaskId);
   const next = isDone
@@ -610,6 +644,59 @@ export function toggleSubtaskComplete(
   };
 }
 
+/**
+ * The Steps half of toggleSubtaskComplete. The step's own mark is what lasts;
+ * `completedSubtaskIds` only records that it was ticked today. The task event
+ * a tick adds is flagged `auto`, so unticking the day's last step takes it
+ * back without ever undoing a "Mark done" the user made by hand.
+ */
+function toggleStep(task: Task, stepId: string): Partial<Task> {
+  const entry = task.subtasks?.find((e) => e.id === stepId);
+  if (!entry) return {};
+  const now = new Date().toISOString();
+  const today = localISODate(new Date());
+  const isToday = (e: TaskCompletionEvent) => localISODate(new Date(e.completedAt)) === today;
+  const done = stepDone(task, entry);
+  const history = task.completionHistory ?? [];
+  const subtasks = (task.subtasks ?? []).map((e) => (e.id === stepId ? withMark(e, !done, now) : e));
+  const ticked = new Set(task.completedSubtaskIds ?? []);
+
+  if (!done) {
+    ticked.add(stepId);
+    const completedSubtaskIds = [...ticked];
+    const base = stripTodayEvents(history, ["missed"]);
+    const dayDone = !!task.completed || stepsDayDone({ ...task, subtasks, completedSubtaskIds });
+    const events: TaskCompletionEvent[] = [createCompletionEvent(task.id, "subtask", stepId)];
+    if (dayDone && !base.some((e) => e.completionType === "task" && isToday(e))) {
+      events.push({ ...createCompletionEvent(task.id, "task"), auto: true });
+    }
+    return {
+      subtasks,
+      completedSubtaskIds,
+      completed: dayDone,
+      completedAt: dayDone ? task.completedAt ?? now : undefined,
+      missed: false,
+      missedAt: undefined,
+      completionHistory: [...base, ...events],
+    };
+  }
+
+  ticked.delete(stepId);
+  const completedSubtaskIds = [...ticked];
+  const withoutTick = history.filter((e) => !(isToday(e) && e.completionType === "subtask" && e.subtaskId === stepId));
+  const byHand = withoutTick.some((e) => e.completionType === "task" && isToday(e) && !e.auto);
+  const dayDone = byHand || stepsDayDone({ ...task, subtasks, completedSubtaskIds });
+  return {
+    subtasks,
+    completedSubtaskIds,
+    completed: dayDone,
+    completedAt: dayDone ? task.completedAt : undefined,
+    completionHistory: dayDone
+      ? withoutTick
+      : withoutTick.filter((e) => !(e.completionType === "task" && isToday(e) && e.auto)),
+  };
+}
+
 // ── Toggle individual slot (multi-phase-same-day tasks) ──────────────────────
 
 /**
@@ -631,8 +718,10 @@ export function toggleSlotComplete(
     ? current.filter((i) => i !== slotIndex)
     : Array.from(new Set([...current, slotIndex]));
 
-  const subtasksDone =
-    totalSubtasks === 0 || new Set(task.completedSubtaskIds ?? []).size >= totalSubtasks;
+  // Lasting steps don't hold a repeating block open; a one-off still needs them.
+  const subtasksDone = isStepsTask(task)
+    ? !isOneOffTask(task) || allStepsDone(task)
+    : totalSubtasks === 0 || new Set(task.completedSubtaskIds ?? []).size >= totalSubtasks;
   const allNowDone = next.length >= totalSlots && subtasksDone;
   const now = new Date().toISOString();
   const history = task.completionHistory ?? [];
@@ -690,7 +779,17 @@ export function toggleSlotComplete(
 export function completionForDate(
   task: Task,
   dateISO: string
-): { completed: boolean; completedSubtaskIds: string[]; completedSlotIndices: number[]; missed: boolean; missedSlotIndices: number[] } {
+): {
+  completed: boolean;
+  completedSubtaskIds: string[];
+  completedSlotIndices: number[];
+  /** Nothing was done that day. A day with some of it done is `partial` instead. */
+  missed: boolean;
+  missedSlotIndices: number[];
+  /** Some of it was done, but not all. */
+  partial: boolean;
+} {
+  const steps = isStepsTask(task);
   const onDate = (task.completionHistory ?? []).filter(
     (e) => localISODate(new Date(e.completedAt)) === dateISO
   );
@@ -703,13 +802,17 @@ export function completionForDate(
         .map((e) => e.slotIndex as number)
     )
   );
+  const subIds = Array.from(
+    new Set(onDate.filter((e) => e.completionType === "subtask" && e.subtaskId).map((e) => e.subtaskId as string))
+  );
   if (onDate.some((e) => e.completionType === "task")) {
     return {
       completed: true,
-      completedSubtaskIds: allSubIds,
+      completedSubtaskIds: steps ? subIds : allSubIds,
       completedSlotIndices: totalSlots > 1 ? Array.from({ length: totalSlots }, (_, i) => i) : slotIndices,
       missed: false,
       missedSlotIndices: [],
+      partial: false,
     };
   }
   // A missed event carrying a slotIndex is scoped to that one phase; a
@@ -729,15 +832,28 @@ export function completionForDate(
     (e) => e.completionType === "missed" && !e.subtaskId && e.slotIndex === undefined
   );
   const missed = wholeTaskMissedEvent || (totalSlots > 1 && missedSlotIndices.length >= totalSlots);
-  const subIds = Array.from(
-    new Set(onDate.filter((e) => e.completionType === "subtask" && e.subtaskId).map((e) => e.subtaskId as string))
-  );
+  const multiSlot = totalSlots > 1;
+  let completed: boolean;
+  let partial: boolean;
+  if (steps && isOneOffTask(task)) {
+    const { done, total } = oneOffStepsProgress(task, dateISO);
+    completed = !multiSlot && total > 0 && done >= total;
+    partial = !completed && done > 0;
+  } else if (steps) {
+    completed = !multiSlot && subIds.length > 0;
+    partial = false;
+  } else {
+    completed = allSubIds.length > 0 && subIds.length >= allSubIds.length;
+    partial = !completed && (subIds.length > 0 || onDate.some((e) => e.completionType === "missed" && (e.credit?.done ?? 0) > 0));
+  }
+  if (multiSlot && !completed && slotIndices.length > 0) partial = true;
   return {
-    completed: allSubIds.length > 0 && subIds.length >= allSubIds.length,
+    completed,
     completedSubtaskIds: subIds,
     completedSlotIndices: slotIndices,
-    missed,
+    missed: missed && !partial && !completed,
     missedSlotIndices,
+    partial,
   };
 }
 
@@ -780,7 +896,7 @@ export function toggleTaskCompleteForDate(
   }
   const events = [
     datedEvent(task.id, dateISO, "task"),
-    ...allSubtaskIds.map((sid) => datedEvent(task.id, dateISO, "subtask", sid)),
+    ...(isStepsTask(task) ? [] : allSubtaskIds).map((sid) => datedEvent(task.id, dateISO, "subtask", sid)),
     // Whole-task completion implies every phase, so completionForDate reports
     // the same thing whether it's read via the task or the slot events.
     ...allSlotIndices(task).map((i) => datedSlotEvent(task.id, dateISO, i)),
@@ -799,6 +915,20 @@ export function toggleSubtaskCompleteForDate(
   const onDate = (e: TaskCompletionEvent) => localISODate(new Date(e.completedAt)) === dateISO;
   const dayEvents = history.filter(onDate);
   const hasSub = dayEvents.some((e) => e.completionType === "subtask" && e.subtaskId === subtaskId);
+
+  if (isStepsTask(task)) {
+    const at = new Date(`${dateISO}T12:00:00`).toISOString();
+    const subtasks = (task.subtasks ?? []).map((e) => (e.id === subtaskId ? withMark(e, !hasSub, hasSub ? new Date().toISOString() : at) : e));
+    const kept = hasSub
+      ? history.filter((e) => !(onDate(e) && e.completionType === "subtask" && e.subtaskId === subtaskId))
+      : [...history, datedEvent(task.id, dateISO, "subtask", subtaskId)];
+    const next: Task = { ...task, subtasks, completionHistory: kept };
+    const ticked = kept.some((e) => onDate(e) && e.completionType === "subtask");
+    const dayDone = !isMultiSlot(task) && (isOneOffTask(task) ? allStepsDone(next) : ticked);
+    const hasTask = kept.some((e) => onDate(e) && e.completionType === "task");
+    if (dayDone && !hasTask) kept.push({ ...datedEvent(task.id, dateISO, "task"), auto: true });
+    return { subtasks, completionHistory: dayDone ? kept : kept.filter((e) => !(onDate(e) && e.completionType === "task" && e.auto)) };
+  }
 
   if (hasSub) {
     // Remove this subtask's event for the date + any auto-task event (no longer all-done).

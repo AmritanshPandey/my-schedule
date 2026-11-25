@@ -13,6 +13,8 @@
  * Pure and React-free so it can be unit-tested directly.
  */
 
+import { occurrenceProgress } from "./taskProgress";
+import { isOneOffTask, isStepsTask } from "./subtaskMode";
 import type { Milestone, Plan, Ritual, Schedule, Task, DayKey } from "./scheduleTypes";
 import { isPlanRunning } from "./planLifecycle";
 import { DAYS } from "./scheduleConstants";
@@ -43,6 +45,8 @@ export interface MissedTask {
   dateISO: string;
   /** Whole days ago, always >= 1 (today is excluded). */
   daysAgo: number;
+  /** A one-off with some steps finished: how many are left to continue with. */
+  stepsLeft?: number;
 }
 
 export interface AtRiskRitual {
@@ -244,11 +248,19 @@ export function selectNeedsAttention(
         const key = `${task.id}|${dateISO}`;
         if (seen.has(key) || acknowledged.has(key)) continue;
         seen.add(key);
+        const plan = task.planId ? plansById.get(task.planId) ?? null : null;
+        const progress = occurrenceProgress(task, plan, dateISO);
+        if (progress.state === "done") continue;
+        // A partly done checklist or split day isn't a miss and has nothing to
+        // carry on with; a one-off's remaining steps do.
+        const oneOffSteps = isOneOffTask(task) && isStepsTask(task);
+        if (progress.state === "partial" && !oneOffSteps) continue;
         missedTasks.push({
           task,
-          plan: task.planId ? plansById.get(task.planId) ?? null : null,
+          plan,
           dateISO,
           daysAgo: daysBetweenISO(dateISO, todayISO),
+          ...(progress.state === "partial" ? { stepsLeft: progress.total - progress.done } : null),
         });
       }
     }
