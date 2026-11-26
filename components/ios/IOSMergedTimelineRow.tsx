@@ -1,6 +1,6 @@
 "use client";
 
-import { IconEdit } from "@tabler/icons-react";
+import { IconMinus, IconEdit } from "@tabler/icons-react";
 import CheckDraw from "@/components/ui/CheckDraw";
 import type { Plan, Task, TaskCategory } from "@/lib/useScheduleDB";
 import { getTaskCheckableItems, isTrackedTask, resolveSlotState, resolveTaskState } from "@/lib/taskCompletion";
@@ -80,7 +80,7 @@ function halfState(half: IOSMergedTimelineHalf) {
   const state = singleSlot && tracked
     ? resolveSlotState(half.task, half.slotIndex!)
     : resolveTaskState(half.task, half.task.taskType === "session" ? 0 : summary);
-  return { tracked, singleSlot, state, done: state === "completed", missed: state === "missed" };
+  return { tracked, singleSlot, state, done: state === "completed", missed: state === "missed", partial: state === "partial" };
 }
 
 function Node({
@@ -94,7 +94,8 @@ function Node({
   onToggleComplete: (taskId: string, allSubtaskIds: string[]) => void;
   onToggleSlot?: (taskId: string, slotIndex: number) => void;
 }) {
-  const { tracked, singleSlot, done, missed } = halfState(half);
+  const { tracked, singleSlot, done, missed, partial } = halfState(half);
+  const partlyDone = partial && readOnly;
   if (!tracked) {
     return (
       <span className="flex h-5 w-5 items-center justify-center">
@@ -107,7 +108,7 @@ function Node({
     <button
       type="button"
       disabled={readOnly}
-      aria-label={done ? "Mark not done" : "Mark done"}
+      aria-label={partlyDone ? "Partly done" : done ? "Mark not done" : "Mark done"}
       aria-pressed={done}
       onClick={() => {
         if (readOnly) return;
@@ -120,10 +121,13 @@ function Node({
           ? "border-transparent bg-emerald-500 text-white"
           : missed
           ? "border-transparent bg-rose-500 text-white"
+          : partlyDone
+          ? "border-transparent bg-amber-600 text-white"
           : "border-neutral-300 bg-white dark:border-white/25 dark:bg-neutral-950"
       }`}
     >
       <CheckDraw visible={done} size={13} strokeWidth={3} className="text-white" />
+      {partlyDone && <IconMinus size={13} strokeWidth={3} aria-hidden />}
     </button>
   );
 }

@@ -1,7 +1,9 @@
 "use client";
 
-import { IconEdit, IconListCheck, IconX } from "@tabler/icons-react";
+import { IconEdit, IconListCheck, IconMinus, IconX } from "@tabler/icons-react";
 import CheckDraw from "@/components/ui/CheckDraw";
+import { subtaskModeOf } from "@/lib/subtaskMode";
+import { partlyDoneLabel } from "@/lib/subtaskModeCopy";
 import Pill from "@/components/ui/Pill";
 import type { Plan, Task, TaskCategory } from "@/lib/useScheduleDB";
 import {
@@ -84,6 +86,7 @@ export default function IOSTimelineRow({
     ? summary
     : calculateTaskProgress(task, itemCount);
   const tracked = isTrackedTask(task);
+  const mode = subtaskModeOf(task);
 
   const slots = getSlots(task);
   const singleSlot = slotIndex != null && slotIndex >= 0 && slotIndex < slots.length;
@@ -98,6 +101,8 @@ export default function IOSTimelineRow({
     : resolveTaskState(task, task.taskType === "session" ? 0 : itemCount);
   const done = state === "completed";
   const missed = state === "missed";
+  // A day that's over with some of it done. Today's progress keeps its count.
+  const partlyDone = state === "partial" && readOnly;
 
   const duration = singleSlot ? formatSlotsDuration([slots[slotIndex!]]) : formatSlotsDuration(slots);
   const timeLabel = formatDisplayTime(slot?.startTime ?? "");
@@ -140,6 +145,8 @@ export default function IOSTimelineRow({
       ? "border-transparent bg-emerald-500 text-white"
       : missed
       ? "border-transparent bg-rose-500 text-white"
+      : partlyDone
+      ? "border-transparent bg-amber-600 text-white"
       : isCurrent
       ? "border-2 border-emerald-500 bg-white dark:bg-neutral-950"
       : "border-2 border-neutral-300 bg-white dark:border-white/25 dark:bg-neutral-950";
@@ -147,7 +154,7 @@ export default function IOSTimelineRow({
       <button
         type="button"
         disabled={readOnly}
-        aria-label={done ? "Mark not done" : "Mark done"}
+        aria-label={partlyDone ? partlyDoneLabel(completedCount, totalCount) : done ? "Mark not done" : "Mark done"}
         aria-pressed={done}
         onClick={toggle}
         {...longPress.pressHandlers}
@@ -155,6 +162,7 @@ export default function IOSTimelineRow({
       >
         <CheckDraw visible={done} size={15} strokeWidth={3} className="text-white" />
         {missed && <IconX size={14} strokeWidth={3} className="text-white" />}
+        {partlyDone && <IconMinus size={14} strokeWidth={3} className="text-white" />}
         {isCurrent && !done && !missed && (
           <span className="h-2 w-2 rounded-full bg-emerald-500 motion-safe:animate-pulse" />
         )}
@@ -178,9 +186,19 @@ export default function IOSTimelineRow({
   // ── Trailing status ─────────────────────────────────────────────────────────
   let trailing: React.ReactNode = null;
   if (done) {
-    trailing = <Pill variant="success" size="sm">Completed</Pill>;
+    trailing = (
+      <Pill variant="success" size="sm">
+        {mode === "steps" && completedCount < totalCount ? `Done · ${completedCount} of ${totalCount}` : "Completed"}
+      </Pill>
+    );
   } else if (missed) {
     trailing = <Pill variant="danger" size="sm">Missed</Pill>;
+  } else if (partlyDone) {
+    trailing = (
+      <span className="inline-flex shrink-0 items-center rounded-full border border-amber-500/30 bg-amber-500/10 px-2.5 py-1 text-[12px] font-semibold tabular-nums text-amber-800 dark:text-amber-300">
+        {partlyDoneLabel(completedCount, totalCount)}
+      </span>
+    );
   } else if (isCurrent) {
     trailing = (
       <span className="inline-flex shrink-0 items-center gap-1.5 rounded-full border border-emerald-500/40 bg-emerald-500/[0.08] px-2.5 py-1 text-[12px] font-semibold text-emerald-700 dark:text-emerald-400">
@@ -192,7 +210,7 @@ export default function IOSTimelineRow({
     trailing = (
       <span className="inline-flex shrink-0 items-center gap-1.5 rounded-full border border-neutral-200 bg-white px-2.5 py-1 text-[12px] font-bold tabular-nums text-neutral-500 dark:border-white/[0.10] dark:bg-white/[0.04] dark:text-neutral-400">
         <IconListCheck size={13} strokeWidth={2} />
-        {completedCount}/{totalCount || itemCount}
+        {mode === "steps" ? `${completedCount} of ${totalCount}` : `${completedCount}/${totalCount || itemCount}`}
       </span>
     );
   }

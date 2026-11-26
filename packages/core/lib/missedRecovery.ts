@@ -18,6 +18,8 @@ import { DAYS } from "./scheduleConstants";
 import { getSlots } from "./taskMutations";
 import { parseTimeToMinutes, minutesToInputTime, inputToDisplayTime } from "./timeUtils";
 import { uid } from "./id";
+import { isStepsTask, subtaskModeOf } from "./subtaskMode";
+import { stepsWithMarks } from "./stepMarks";
 
 /** The stable key identifying one missed occurrence. */
 export function missKey(taskId: string, dateISO: string): string {
@@ -47,7 +49,8 @@ export function acknowledgeMiss(schedule: Schedule, taskId: string, dateISO: str
  * Reschedule a missed task: add a fresh one-off occurrence on `targetDateISO`
  * starting at `startMinutes` (preserving the original duration), and dismiss the
  * original miss (`missedDateISO`). The clone keeps identity (title, category,
- * plan, subtasks, kind) but resets all completion state.
+ * plan, subtasks, kind) but resets all completion state — except finished steps,
+ * which are never done twice.
  */
 export function rescheduleMissedTaskOnce(
   schedule: Schedule,
@@ -56,6 +59,9 @@ export function rescheduleMissedTaskOnce(
   targetDateISO: string,
   startMinutes: number,
 ): Schedule {
+  // The stored task, not the caller's: a detail page holds a copy with one
+  // date's state spread over it, and a list may be a render behind.
+  task = schedule.activities[weekdayKeyOf(missedDateISO)]?.find((t) => t.id === task.id) ?? task;
   const first = getSlots(task)[0];
   const srcStart = parseTimeToMinutes(first?.startTime ?? "") ?? startMinutes;
   let srcEnd = parseTimeToMinutes(first?.endTime ?? "") ?? srcStart;
@@ -72,6 +78,12 @@ export function rescheduleMissedTaskOnce(
     endTime: endDisp,
     slots: [{ startTime: startDisp, endTime: endDisp }],
     recurrence: { type: "once", dateISO: targetDateISO },
+    // A one-off defaults to Steps, so a moved gym session has to say it's still
+    // a checklist. Steps keep what's finished, and stay the original's steps.
+    subtaskMode: task.subtasks?.length ? subtaskModeOf(task) : task.subtaskMode,
+    ...(isStepsTask(task)
+      ? { subtasks: stepsWithMarks(task), continuesTaskId: task.continuesTaskId ?? task.id }
+      : { continuesTaskId: undefined }),
     // A catch-up copy stands on its own — drop the source's per-date overrides
     // and active window, and start with clean completion state.
     exceptions: undefined,

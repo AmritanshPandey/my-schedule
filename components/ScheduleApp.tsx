@@ -139,11 +139,7 @@ import { CurrentTaskHighlightLayer } from "@/components/timeline/CurrentTaskHigh
 import TimelineDraftCard from "@/components/timeline/TimelineDraftCard";
 import { taskLaneStyle } from "@/lib/timeline/taskLaneStyle";
 import {
-  toggleTaskFromCheckbox,
-  toggleSubtaskComplete,
-  toggleSlotComplete,
   isTrackedTask,
-  markTaskMissed,
   markSlotMissed,
   snoozeTaskLater,
   completionForDate,
@@ -209,6 +205,8 @@ import {
 } from "@/lib/timeline/displayWindow";
 import { SCHEDULE_DAY_HANDOVER_MINUTES, taskContinuations } from "@/lib/timeline/overnight";
 import { findMergePairs, mergeTasks, unmergeTask, mergeCandidates } from "@/lib/taskMerge";
+import { toggleTaskOn, toggleSubtaskOn, toggleSlotOn, markMissedOn, finishTaskAfter } from "@/lib/taskActions";
+import { doneSubtaskIds, stepsLeft } from "@/lib/subtaskMode";
 import { todayISO, daysBetween as daysBetweenUtil, formatDate, formatDayNoteLabel, addDaysToISO, localISODate } from "@/lib/dateUtils";
 import { derivePlanStatus, getPlanCardStats, needsAttention } from "@/lib/planInsights";
 import { MainTitleSection, IconActionButton, CtaActionButton } from "@/components/ui/MainTitleSection";
@@ -1586,18 +1584,7 @@ export default function ScheduleApp() {
       // Only today is editable — past/future days are read-only (history view).
       if (dateISO && dateISO !== todayISO()) return;
       haptic("medium");
-      setSchedule((prev) => ({
-        ...prev,
-        activities: {
-          ...prev.activities,
-          // Tapping the checkbox of a "missed" task clears it back to incomplete
-          // (un-miss) rather than completing it. The branch lives in
-          // toggleTaskFromCheckbox so the iOS shell cannot drift from it again.
-          [day]: (prev.activities[day] ?? []).map((t) =>
-            t.id === taskId ? { ...t, ...toggleTaskFromCheckbox(t, allSubtaskIds) } : t
-          ),
-        },
-      }));
+      setSchedule(toggleTaskOn(day, taskId, allSubtaskIds));
     },
     [activeDay, setSchedule]
   );
@@ -1607,17 +1594,19 @@ export default function ScheduleApp() {
       // Only today is editable — past/future days are read-only (history view).
       if (dateISO && dateISO !== todayISO()) return;
       haptic("medium");
-      setSchedule((prev) => ({
-        ...prev,
-        activities: {
-          ...prev.activities,
-          [day]: (prev.activities[day] ?? []).map((t) =>
-            t.id === taskId ? { ...t, ...markTaskMissed(t, allSubtaskIds) } : t
-          ),
-        },
-      }));
+      setSchedule(markMissedOn(day, taskId, allSubtaskIds));
     },
     [activeDay, setSchedule]
+  );
+
+  /** Every step is done and the user asked to end the task: today is its last day. */
+  const handleFinishTask = useCallback(
+    (taskId: string) => {
+      haptic("medium");
+      setSchedule(finishTaskAfter(taskId, todayISO()));
+      setToastMessage("Task finished");
+    },
+    [setSchedule]
   );
 
   const handleSnoozeTaskLater = useCallback(
@@ -1704,18 +1693,7 @@ export default function ScheduleApp() {
     (taskId: string, subtaskId: string, day: DayKey = activeDay, dateISO?: string) => {
       if (dateISO && dateISO !== todayISO()) return; // read-only past/future
       haptic("light");
-      setSchedule((prev) => ({
-        ...prev,
-        activities: {
-          ...prev.activities,
-          [day]: (prev.activities[day] ?? []).map((t) => {
-            if (t.id !== taskId) return t;
-            const linkedPlan = t.planId ? prev.plans.find((plan) => plan.id === t.planId) ?? null : null;
-            const totalSubtasks = getTaskSubtaskSummary(t, linkedPlan).totalCount;
-            return { ...t, ...toggleSubtaskComplete(t, subtaskId, totalSubtasks) };
-          }),
-        },
-      }));
+      setSchedule(toggleSubtaskOn(day, taskId, subtaskId));
     },
     [activeDay, setSchedule]
   );
@@ -1726,18 +1704,7 @@ export default function ScheduleApp() {
     (taskId: string, slotIndex: number, day: DayKey = activeDay, dateISO?: string) => {
       if (dateISO && dateISO !== todayISO()) return; // read-only past/future
       haptic("light");
-      setSchedule((prev) => ({
-        ...prev,
-        activities: {
-          ...prev.activities,
-          [day]: (prev.activities[day] ?? []).map((t) => {
-            if (t.id !== taskId) return t;
-            const linkedPlan = t.planId ? prev.plans.find((plan) => plan.id === t.planId) ?? null : null;
-            const totalSubtasks = getTaskSubtaskSummary(t, linkedPlan).totalCount;
-            return { ...t, ...toggleSlotComplete(t, slotIndex, totalSubtasks) };
-          }),
-        },
-      }));
+      setSchedule(toggleSlotOn(day, taskId, slotIndex));
     },
     [activeDay, setSchedule]
   );
@@ -3953,6 +3920,11 @@ export default function ScheduleApp() {
             dayNote={subtasksRef && subtasksRawTask ? occurrenceNote(subtasksRawTask, subtasksRef.dateISO) : undefined}
             onSaveDayNote={(taskId, note) => handleSaveDayNote(taskId, note, subtasksRef?.dateISO)}
             dayLabel={subtasksRef ? formatDayNoteLabel(subtasksRef.dateISO) : undefined}
+            onFinishTask={(taskId) => { handleFinishTask(taskId); setSubtasksRef(null); }}
+            onContinue={subtasksRawTask && subtasksRef ? () => {
+              setMissedSheet({ task: subtasksRawTask, plan: subtasksLinkedPlan, dateISO: subtasksRef.dateISO, daysAgo: Math.max(0, daysBetween(subtasksRef.dateISO, todayISO()) ?? 0), stepsLeft: stepsLeft(subtasksRawTask) });
+              setSubtasksRef(null);
+            } : undefined}
             onEdit={subtasksRawTask ? () => { openEditSheet(subtasksRawTask, subtasksRef?.dateISO); setSubtasksRef(null); } : undefined}
             presentation="page"
             dateISO={subtasksRef?.dateISO}
@@ -3966,7 +3938,7 @@ export default function ScheduleApp() {
               day: subtasksRef.day,
               dateISO: subtasksRef.dateISO,
               stepIds: focusItems(subtasksRawTask, plansById).map((item) => item.id),
-              alreadyDone: subtasksRawTask.completedSubtaskIds,
+              alreadyDone: doneSubtaskIds(subtasksRawTask),
             }) : undefined}
           />
         </div>
@@ -4773,6 +4745,7 @@ export default function ScheduleApp() {
                 onNavigate={(tab) => { setActiveTab(tab); setSelectedPlanId(null); }}
                 onMarkTaskDone={(id, subtaskIds) => handleToggleTaskComplete(id, subtaskIds, todayKey)}
                 onToggleSlot={(id, slotIndex) => handleToggleSlot(id, slotIndex, todayKey, todayISO())}
+                onOpenSubtasks={(id) => setSubtasksRef({ id, day: todayKey, dateISO: todayISO() })}
                 onOpenPlan={(planId) => { setActiveTab(1); setSelectedPlanId(planId); }}
                 completedRitualIds={completedRitualIds}
                 onLogTracker={(tracker) => setEntryTracker(tracker)}
@@ -5109,6 +5082,11 @@ export default function ScheduleApp() {
           dayNote={subtasksRef && subtasksRawTask ? occurrenceNote(subtasksRawTask, subtasksRef.dateISO) : undefined}
           onSaveDayNote={(taskId, note) => handleSaveDayNote(taskId, note, subtasksRef?.dateISO)}
           dayLabel={subtasksRef ? formatDayNoteLabel(subtasksRef.dateISO) : undefined}
+            onFinishTask={(taskId) => { handleFinishTask(taskId); setSubtasksRef(null); }}
+            onContinue={subtasksRawTask && subtasksRef ? () => {
+              setMissedSheet({ task: subtasksRawTask, plan: subtasksLinkedPlan, dateISO: subtasksRef.dateISO, daysAgo: Math.max(0, daysBetween(subtasksRef.dateISO, todayISO()) ?? 0), stepsLeft: stepsLeft(subtasksRawTask) });
+              setSubtasksRef(null);
+            } : undefined}
           onEdit={subtasksRawTask ? () => { openEditSheet(subtasksRawTask, subtasksRef?.dateISO); setSubtasksRef(null); } : undefined}
           dateISO={subtasksRef?.dateISO}
           setLogs={schedule.setLogs}
@@ -5121,7 +5099,7 @@ export default function ScheduleApp() {
             day: subtasksRef.day,
             dateISO: subtasksRef.dateISO,
             stepIds: focusItems(subtasksRawTask, plansById).map((item) => item.id),
-            alreadyDone: subtasksRawTask.completedSubtaskIds,
+            alreadyDone: doneSubtaskIds(subtasksRawTask),
           }) : undefined}
         />
       )}

@@ -5,6 +5,7 @@ import { m, AnimatePresence, useMotionValue, useTransform, animate } from "frame
 import { IconArrowUpRight, IconCheck, IconChevronDown, IconEdit, IconListCheck, IconMinus, IconTrash, IconX } from "@tabler/icons-react";
 import type { Task, Plan, TaskCategory } from "@/lib/useScheduleDB";
 import type { ScheduleEntry } from "@/components/ScheduleItem";
+import { doneSubtaskIds } from "@/lib/subtaskMode";
 import { subtaskDetailLabel } from "@/lib/subtaskTargets";
 import { calculateTaskProgress, isTrackedTask, phaseProgress, resolveTaskState, taskStatusLabel } from "@/lib/taskCompletion";
 import type { TaskState } from "@/lib/taskCompletion";
@@ -62,7 +63,7 @@ function TaskCheckbox({ state, size = "lg", readOnly = false, onChange }: Checkb
       aria-pressed={state === "completed"}
       className={`shrink-0 ${dim} ${round} border-2 flex items-center justify-center transition-colors duration-150 disabled:opacity-100 ${readOnly ? "cursor-default" : ""} ${
         filled
-          ? "border-transparent bg-green-500"
+          ? state === "partial" && readOnly ? "border-transparent bg-amber-600" : "border-transparent bg-green-500"
           : missed
           ? "border-transparent bg-rose-500"
           : readOnly
@@ -213,6 +214,7 @@ function ListTaskCardInner({
     () => (isRoutine ? subtasks : (task.subtasks !== undefined ? subtasks : templateItems)),
     [isRoutine, subtasks, task.subtasks, templateItems]
   );
+  const doneIds = useMemo(() => new Set(doneSubtaskIds(task)), [task]);
   const allSubtaskIds = useMemo(() => effectiveItems.map((s) => s.id), [effectiveItems]);
 
   const { completedCount, totalCount, pct } = useMemo(
@@ -338,7 +340,7 @@ function ListTaskCardInner({
         <div className="mr-3 w-[3px] shrink-0 rounded-full bg-neutral-200 dark:bg-white/[0.08]" />
         <div className="flex-1 space-y-2">
           {effectiveItems.map((item) => {
-            const isDone = (task.completedSubtaskIds ?? []).includes(item.id);
+            const isDone = doneIds.has(item.id);
             const detail = subtaskDetailPill(item);
             return (
               <div

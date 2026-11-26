@@ -175,13 +175,14 @@ export function computeTaskStats(
       if (!copy || !isTaskScheduledOn(copy, dateISO, true, trackingStart)) continue;
 
       const state = completionForDate({ ...copy, completionHistory: group.events }, dateISO);
-      if (!state.completed && !state.missed) continue;
+      if (!state.completed && !state.missed && !state.partial) continue;
 
       const slot = getSlots(resolveOccurrence(copy, dateISO))[0];
       outcomes.push({
         dateISO,
         weekday,
-        done: state.completed,
+        // Part done is showing up, for the purpose of judging the slot.
+        done: state.completed || state.partial,
         startMinutes: parseTimeToMinutes(slot?.startTime ?? ""),
       });
     }

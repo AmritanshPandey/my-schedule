@@ -6,7 +6,7 @@ import { IconChevronLeft, IconChevronRight, IconLayoutGrid, IconPlus } from "@ta
 import type { DayKey, Task } from "@/lib/useScheduleDB";
 import { todayISO, localISODate } from "@/lib/dateUtils";
 import { completedOnDate } from "@/lib/consistency/calculateDailyStats";
-import { isTrackedTask } from "@/lib/taskCompletion";
+import { completionForDate, isTrackedTask } from "@/lib/taskCompletion";
 import { isTaskScheduledOn } from "@/lib/taskOccurrence";
 import Button from "@/components/ui/Button";
 
@@ -73,7 +73,12 @@ function buildCalendarDays(
 
     const done = completedOnDate(tasks, iso, iso === today);
     const status: DayStatus =
-      done === tasks.length ? "completed" : done > 0 ? "partial" : "missed";
+      done === tasks.length
+        ? "completed"
+        // A day with any of it done isn't a miss.
+        : done > 0 || tasks.some((t) => completionForDate(t, iso).partial)
+        ? "partial"
+        : "missed";
     result.push({ day: d, dateISO: iso, status });
   }
 

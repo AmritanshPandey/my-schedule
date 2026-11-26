@@ -1,3 +1,4 @@
+import { stepsLeftLabel } from '@planr/core/lib/subtaskModeCopy';
 import { useEffect, useState } from 'react';
 import { Pressable, View } from 'react-native';
 import { IconArrowUp, IconTrash } from '@tabler/icons-react-native';
@@ -66,7 +67,7 @@ export default function MissedTaskSheet({ missed, onClose, onReschedule, onDismi
     <BottomSheet open={!!missed} onClose={onClose}>
       {missed && (
         <View className="px-5 pb-6 pt-4">
-          <SheetHeader eyebrow={`Missed ${formatDaysAgo(missed.daysAgo)}`} title={missed.task.title} onClose={onClose} />
+          <SheetHeader eyebrow={missed.stepsLeft ? `Continue · ${stepsLeftLabel(missed.stepsLeft)}` : `Missed ${formatDaysAgo(missed.daysAgo)}`} title={missed.task.title} onClose={onClose} />
 
           <View className="mt-5 gap-4">
             <View>
@@ -107,12 +108,15 @@ export default function MissedTaskSheet({ missed, onClose, onReschedule, onDismi
           <View className="mt-6 gap-2.5">
             <Button fullWidth onPress={handleReschedule}>
               <Icon icon={IconArrowUp} size={16} strokeWidth={2.4} className={BUTTON_TEXT.primary} />
-              {`Add to ${friendlyDate(dateISO, todayISO)}`}
+              {`${missed.stepsLeft ? 'Continue' : 'Add to'} ${friendlyDate(dateISO, todayISO)}`}
             </Button>
-            <Button variant="destructiveSecondary" fullWidth onPress={handleDismiss}>
-              <Icon icon={IconTrash} size={15} strokeWidth={2} className={BUTTON_TEXT.destructiveSecondary} />
-              Dismiss
-            </Button>
+            {/* Carrying on before the day is over: nothing to dismiss yet. */}
+            {missed.daysAgo > 0 && (
+              <Button variant="destructiveSecondary" fullWidth onPress={handleDismiss}>
+                <Icon icon={IconTrash} size={15} strokeWidth={2} className={BUTTON_TEXT.destructiveSecondary} />
+                Dismiss
+              </Button>
+            )}
           </View>
         </View>
       )}

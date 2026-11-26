@@ -11,6 +11,7 @@ import TimeInput from "@/components/ui/TimeInput";
 import { localISODate } from "@/lib/dateUtils";
 import { haptic } from "@/lib/haptics";
 import { formatDaysAgo, type MissedTask } from "@/lib/needsAttention";
+import { stepsLeftLabel } from "@/lib/subtaskModeCopy";
 import DateInput from "@/components/ui/DateInput";
 
 interface MissedTaskSheetProps {
@@ -70,7 +71,7 @@ export default function MissedTaskSheet({ missed, onClose, onReschedule, onDismi
     <BottomSheet open={!!missed} onClose={onClose}>
       {missed && (
         <div className="px-5 pb-6 pt-4">
-          <SheetHeader eyebrow={`Missed ${formatDaysAgo(missed.daysAgo)}`} title={missed.task.title} onClose={onClose} />
+          <SheetHeader eyebrow={missed.stepsLeft ? `Continue · ${stepsLeftLabel(missed.stepsLeft)}` : `Missed ${formatDaysAgo(missed.daysAgo)}`} title={missed.task.title} onClose={onClose} />
 
           <div className="mt-5 space-y-4">
             <div>
@@ -111,12 +112,13 @@ export default function MissedTaskSheet({ missed, onClose, onReschedule, onDismi
           <div className="mt-6 space-y-2.5">
             <Button fullWidth onClick={handleReschedule}>
               <IconArrowUp size={16} strokeWidth={2.4} />
-              Add to {friendlyDate(dateISO, todayISO)}
+              {missed.stepsLeft ? "Continue" : "Add to"} {friendlyDate(dateISO, todayISO)}
             </Button>
-            <Button variant="destructiveSecondary" fullWidth onClick={handleDismiss}>
+            {/* Carrying on before the day is over: nothing to dismiss yet. */}
+            {missed.daysAgo > 0 && <Button variant="destructiveSecondary" fullWidth onClick={handleDismiss}>
               <IconTrash size={15} strokeWidth={2} />
               Dismiss
-            </Button>
+            </Button>}
           </div>
         </div>
       )}

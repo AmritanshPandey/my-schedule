@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { IconArrowBackUp, IconBan, IconCheck, IconClockHour4, IconEdit, IconListCheck, IconNotes, IconPlayerPlay, IconX } from "@tabler/icons-react";
+import { IconArrowBackUp, IconBan, IconCheck, IconChevronDown, IconClockHour4, IconEdit, IconListCheck, IconNotes, IconPlayerPlay, IconX } from "@tabler/icons-react";
 import type { ScheduleEntry } from "@/components/ScheduleItem";
 import TaskChecklistItem from "@/components/activity/TaskChecklistItem";
 import TaskStatusCheckbox from "@/components/task/TaskStatusCheckbox";
@@ -11,6 +11,8 @@ import Pill from "@/components/ui/Pill";
 import ProgressBar from "@/components/ui/ProgressBar";
 import { todayISO } from "@/lib/dateUtils";
 import { compareDeadline } from "@/lib/subtaskDeadline";
+import { doneSubtaskIds, isOneOffTask, isStepsTask } from "@/lib/subtaskMode";
+import { subtaskCountLabel } from "@/lib/subtaskModeCopy";
 import { calculateTaskProgress, isTrackedTask, phaseProgress, resolveSlotState, resolveTaskState } from "@/lib/taskCompletion";
 import { getSlots } from "@/lib/taskMutations";
 import { formatDisplayTime, formatDuration } from "@/lib/timeUtils";
@@ -59,6 +61,10 @@ export interface TaskDetailViewProps {
   onSaveSetLog?: (log: SetLog) => void;
   /** Open focus mode for this occurrence. Absent = no "Start focus". */
   onStartFocus?: () => void;
+  /** End a repeating task whose steps are all done. Absent = not offered. */
+  onFinishTask?: (taskId: string) => void;
+  /** Carry a one-off's remaining steps to another day. Absent = not offered. */
+  onContinue?: () => void;
   /** Progression steps ready to suggest today, with the user's answer. */
   suggestions?: readonly ProgressionSuggestion[];
   onDecideProgression?: (suggestion: ProgressionSuggestion, decision: "accepted" | "held") => void;
@@ -89,6 +95,8 @@ export default function TaskDetailView({
   progressionSteps,
   onSaveSetLog,
   onStartFocus,
+  onFinishTask,
+  onContinue,
   suggestions,
   onDecideProgression,
 }: TaskDetailViewProps) {
@@ -123,6 +131,13 @@ export default function TaskDetailView({
   // Which subtask's "Log sets" sheet is open (null = none).
   const [loggingId, setLoggingId] = useState<string | null>(null);
   useEffect(() => { setLoggingId(null); }, [taskId, occurrenceISO]);
+  const steps = !!task && isStepsTask(task);
+  const oneOff = !!task && isOneOffTask(task);
+  const doneIds = useMemo(() => new Set(task ? doneSubtaskIds(task) : []), [task]);
+  // Finished steps fold away, so the list is what's left to do. A checklist
+  // keeps its order — you tick down it.
+  const openItems = steps ? items.filter((item) => !doneIds.has(item.id)) : items;
+  const finishedItems = steps ? items.filter((item) => doneIds.has(item.id)) : [];
   const allIds = useMemo(() => items.map((item) => item.id), [items]);
   const { completedCount, totalCount, pct } = useMemo(
     () => calculateTaskProgress(task ?? ({} as Task), items.length),
@@ -224,7 +239,7 @@ export default function TaskDetailView({
         {items.length > 0 && (
           <span className="ml-auto inline-flex items-center gap-1.5 text-[14px] font-bold tabular-nums text-neutral-500 dark:text-neutral-400">
             <IconListCheck size={16} strokeWidth={2} />
-            {completedCount}/{totalCount}
+            {subtaskCountLabel(steps ? "steps" : "checklist", completedCount, totalCount)}
           </span>
         )}
       </div>
@@ -326,6 +341,24 @@ export default function TaskDetailView({
   const fieldTemplate = taskFieldTemplate(task, categories);
   const detailRows = fieldTemplate ? filledFields(fieldTemplate, task.details) : [];
 
+  const row = (item: ScheduleEntry) => (
+    <TaskChecklistItem
+      key={item.id}
+      item={item}
+      isDone={doneIds.has(item.id)}
+      // Each subtask carries its OWN state, not the parent's: a partial
+      // parent must never render its unchecked subtasks as a "partial"
+      // (green minus) — they're simply not done. A missed day still
+      // shows unchecked subtasks as missed.
+      state={state === "missed" && !steps ? "missed" : "incomplete"}
+      today={today}
+      readOnly={readOnly}
+      onToggle={() => onToggleSubtask(task.id, item.id)}
+      values={currentTargets(item, task.id, progressionSteps)}
+      {...logProps(item)}
+    />
+  );
+
   const checklist = (
     <>
       {task.description && (
@@ -369,27 +402,36 @@ export default function TaskDetailView({
       )}
       {items.length > 0 && (
         <div className="flex flex-col gap-2">
-          {items.map((item) => (
-            <TaskChecklistItem
-              key={item.id}
-              item={item}
-              isDone={(task.completedSubtaskIds ?? []).includes(item.id)}
-              // Each subtask carries its OWN state, not the parent's: a partial
-              // parent must never render its unchecked subtasks as a "partial"
-              // (green minus) — they're simply not done. A missed day still
-              // shows unchecked subtasks as missed.
-              state={state === "missed" ? "missed" : "incomplete"}
-              today={today}
-              readOnly={readOnly}
-              onToggle={() => onToggleSubtask(task.id, item.id)}
-              values={currentTargets(item, task.id, progressionSteps)}
-              {...logProps(item)}
-            />
-          ))}
+          {openItems.map((item) => row(item))}
+          {finishedItems.length > 0 && (
+            <details data-testid="finished-steps" className="group" open={openItems.length === 0}>
+              <summary className="flex min-h-[44px] cursor-pointer list-none items-center gap-2 text-[14px] font-bold text-neutral-600 dark:text-neutral-400 [&::-webkit-details-marker]:hidden">
+                <IconChevronDown size={16} strokeWidth={2.2} aria-hidden className="transition-transform group-open:rotate-180 motion-reduce:transition-none" />
+                Done ({finishedItems.length})
+              </summary>
+              <div className="flex flex-col gap-2">{finishedItems.map((item) => row(item))}</div>
+            </details>
+          )}
         </div>
+      )}
+
+      {steps && !oneOff && openItems.length === 0 && onFinishTask && !readOnly && !task.activeUntil && (
+        <div data-testid="finish-task" className="rounded-2xl border border-neutral-200 bg-neutral-50 px-4 py-3.5 dark:border-white/[0.08] dark:bg-white/[0.03]">
+          <p className="text-[14px] font-bold text-neutral-900 dark:text-white">Every step is done</p>
+          <p className="mt-0.5 text-[13px] text-neutral-600 dark:text-neutral-400">Finish this task to stop it repeating, or add more steps.</p>
+          <Button variant="secondary" size="md" className="mt-2.5" onClick={() => onFinishTask(task.id)}>
+            Finish this task
+          </Button>
+        </div>
+      )}
+      {steps && oneOff && openItems.length > 0 && onContinue && (readOnly || completedCount > 0) && (
+        <Button variant="secondary" size="md" fullWidth onClick={onContinue}>
+          Continue on another day
+        </Button>
       )}
     </>
   );
+
 
   const loggingItem = loggingId ? items.find((item) => item.id === loggingId) ?? null : null;
   const logSheet = loggingItem && onSaveSetLog ? (
@@ -405,7 +447,7 @@ export default function TaskDetailView({
       onSave={(log, allDone) => {
         onSaveSetLog(log);
         // Logging every working set is doing the subtask: tick it, once.
-        if (allDone && !(task.completedSubtaskIds ?? []).includes(loggingItem.id)) onToggleSubtask(task.id, loggingItem.id);
+        if (allDone && !doneIds.has(loggingItem.id)) onToggleSubtask(task.id, loggingItem.id);
       }}
     />
   ) : null;

@@ -4,7 +4,7 @@ import { IconChevronLeft, IconChevronRight, IconLayoutGrid, IconPlus } from '@ta
 import type { DayKey, Task } from '@planr/core/lib/scheduleTypes';
 import { todayISO, localISODate } from '@planr/core/lib/dateUtils';
 import { completedOnDate } from '@planr/core/lib/consistency/calculateDailyStats';
-import { isTrackedTask } from '@planr/core/lib/taskCompletion';
+import { completionForDate, isTrackedTask } from '@planr/core/lib/taskCompletion';
 import { isTaskScheduledOn } from '@planr/core/lib/taskOccurrence';
 import { Icon } from '../ui/Icon';
 import { Text } from '../ui/Text';
@@ -73,7 +73,12 @@ function buildCalendarDays(
 
     const done = completedOnDate(tasks, iso, iso === today);
     const status: DayStatus =
-      done === tasks.length ? 'completed' : done > 0 ? 'partial' : 'missed';
+      done === tasks.length
+        ? 'completed'
+        // A day with any of it done isn't a miss.
+        : done > 0 || tasks.some((t) => completionForDate(t, iso).partial)
+          ? 'partial'
+          : 'missed';
     result.push({ day: d, dateISO: iso, status });
   }
 

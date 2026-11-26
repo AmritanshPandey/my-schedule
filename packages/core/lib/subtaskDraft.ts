@@ -11,6 +11,7 @@
 
 import type { ScheduleEntry, SubtaskProgression, SubtaskTargets, TargetValues } from "./scheduleEntry";
 import { baseTargets, parseDurationText } from "./subtaskTargets";
+import { withoutMark } from "./subtaskMode";
 
 export type DeadlineScope = "day" | "week" | "month";
 
@@ -102,7 +103,8 @@ function sameFigures(a: TargetValues, b: TargetValues): boolean {
 export function subtaskDraftToEntry(d: SubtaskDraft, nowISO: string = new Date().toISOString()): ScheduleEntry {
   const { source } = d;
   const entry: ScheduleEntry = {
-    ...(source ?? {}),
+    // A duplicated row keeps its source's fields but not its tick.
+    ...(source ? (source.id === d.id ? source : withoutMark(source)) : {}),
     id: d.id,
     task: d.title.trim(),
     info: (d.info ?? "").trim() || undefined,

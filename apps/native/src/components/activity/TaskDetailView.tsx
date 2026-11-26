@@ -1,12 +1,14 @@
 import { useEffect, useMemo, useState, type ReactNode } from 'react';
 import { Pressable, ScrollView, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { IconArrowBackUp, IconBan, IconCheck, IconClockHour4, IconEdit, IconListCheck, IconNotes, IconPlayerPlay, IconX } from '@tabler/icons-react-native';
+import { IconChevronUp, IconChevronDown, IconArrowBackUp, IconBan, IconCheck, IconClockHour4, IconEdit, IconListCheck, IconNotes, IconPlayerPlay, IconX } from '@tabler/icons-react-native';
 import type { Plan, ProgressTracker, Task, TaskCategory } from '@planr/core/lib/scheduleTypes';
 import { filledFields, formatFieldValue, taskFieldTemplate } from '@planr/core/lib/taskFields';
 import type { ScheduleEntry } from '@planr/core/lib/scheduleEntry';
 import { todayISO } from '@planr/core/lib/dateUtils';
 import { compareDeadline } from '@planr/core/lib/subtaskDeadline';
+import { doneSubtaskIds, isOneOffTask, isStepsTask } from '@planr/core/lib/subtaskMode';
+import { subtaskCountLabel } from '@planr/core/lib/subtaskModeCopy';
 import { calculateTaskProgress, isTrackedTask, phaseProgress, resolveSlotState, resolveTaskState } from '@planr/core/lib/taskCompletion';
 import { getSlots } from '@planr/core/lib/taskMutations';
 import { formatDisplayTime, formatDuration } from '@planr/core/lib/timeUtils';
@@ -57,6 +59,10 @@ export interface TaskDetailViewProps {
   onSaveSetLog?: (log: SetLog) => void;
   /** Open focus mode for this occurrence. Absent = no "Start focus". */
   onStartFocus?: () => void;
+  /** End a repeating task whose steps are all done. Absent = not offered. */
+  onFinishTask?: (taskId: string) => void;
+  /** Carry a one-off's remaining steps to another day. Absent = not offered. */
+  onContinue?: () => void;
   /** Progression steps ready to suggest today, with the user's answer. */
   suggestions?: readonly ProgressionSuggestion[];
   onDecideProgression?: (suggestion: ProgressionSuggestion, decision: 'accepted' | 'held') => void;
@@ -94,6 +100,8 @@ export default function TaskDetailView({
   progressionSteps,
   onSaveSetLog,
   onStartFocus,
+  onFinishTask,
+  onContinue,
   suggestions,
   onDecideProgression,
 }: TaskDetailViewProps) {
@@ -128,6 +136,15 @@ export default function TaskDetailView({
   const [loggingId, setLoggingId] = useState<string | null>(null);
   const [lastLoggingId, setLastLoggingId] = useState<string | null>(null);
   useEffect(() => { setLoggingId(null); }, [task?.id, occurrenceISO]);
+  const steps = !!task && isStepsTask(task);
+  const oneOff = !!task && isOneOffTask(task);
+  const doneIds = useMemo(() => new Set(task ? doneSubtaskIds(task) : []), [task]);
+  // Finished steps fold away, so the list is what's left to do. A checklist
+  // keeps its order — you tick down it.
+  const openItems = steps ? items.filter((item) => !doneIds.has(item.id)) : items;
+  const finishedItems = steps ? items.filter((item) => doneIds.has(item.id)) : [];
+  const [showFinished, setShowFinished] = useState(false);
+  useEffect(() => { setShowFinished(false); }, [task?.id]);
   const allIds = useMemo(() => items.map((item) => item.id), [items]);
   const { completedCount, totalCount, pct } = useMemo(() => calculateTaskProgress(task ?? ({} as Task), items.length), [task, items.length]);
   const state = task ? resolveTaskState(task, items.length) : 'incomplete';
@@ -179,7 +196,7 @@ export default function TaskDetailView({
       onSave={(log, allDone) => {
         onSaveSetLog(log);
         // Logging every working set is doing the subtask: tick it, once.
-        if (allDone && loggingItem && !(task.completedSubtaskIds ?? []).includes(loggingItem.id)) onToggleSubtask(task.id, loggingItem.id);
+        if (allDone && loggingItem && !doneIds.has(loggingItem.id)) onToggleSubtask(task.id, loggingItem.id);
       }}
     />
   ) : null;
@@ -255,7 +272,7 @@ export default function TaskDetailView({
           <View className="ml-auto flex-row items-center gap-1.5">
             <Icon icon={IconListCheck} size={16} strokeWidth={2} className="text-neutral-500 dark:text-neutral-400" />
             <Text className="text-[14px] font-bold tabular-nums text-neutral-500 dark:text-neutral-400">
-              {completedCount}/{totalCount}
+              {subtaskCountLabel(steps ? 'steps' : 'checklist', completedCount, totalCount)}
             </Text>
           </View>
         )}
@@ -333,6 +350,21 @@ export default function TaskDetailView({
   const fieldTemplate = taskFieldTemplate(task, categories);
   const detailRows = fieldTemplate ? filledFields(fieldTemplate, task.details) : [];
 
+  const finishedOpen = showFinished || openItems.length === 0;
+  const row = (item: ScheduleEntry) => (
+    <TaskChecklistItem
+      key={item.id}
+      item={item}
+      isDone={doneIds.has(item.id)}
+      state={state === 'missed' && !steps ? 'missed' : 'incomplete'}
+      today={today}
+      readOnly={readOnly}
+      onToggle={() => onToggleSubtask(task.id, item.id)}
+      values={currentTargets(item, task.id, progressionSteps)}
+      {...logProps(item)}
+    />
+  );
+
   const checklist = (
     <>
       {task.description ? <Text className="text-[14px] leading-relaxed text-neutral-500 dark:text-neutral-400">{task.description}</Text> : null}
@@ -369,21 +401,37 @@ export default function TaskDetailView({
       )}
       {items.length > 0 && (
         <View className="gap-2">
-          {items.map((item) => (
-            <TaskChecklistItem
-              key={item.id}
-              item={item}
-              isDone={(task.completedSubtaskIds ?? []).includes(item.id)}
-              state={state === 'missed' ? 'missed' : 'incomplete'}
-              today={today}
-              readOnly={readOnly}
-              onToggle={() => onToggleSubtask(task.id, item.id)}
-              values={currentTargets(item, task.id, progressionSteps)}
-              {...logProps(item)}
-            />
-          ))}
+          {openItems.map(row)}
+          {finishedItems.length > 0 && (
+            <View testID="finished-steps" className="gap-2">
+              <Pressable
+                accessibilityRole="button"
+                accessibilityState={{ expanded: finishedOpen }}
+                onPress={() => setShowFinished((open) => !open)}
+                className="min-h-[44px] flex-row items-center gap-2"
+              >
+                <Icon icon={finishedOpen ? IconChevronUp : IconChevronDown} size={16} strokeWidth={2.2} className="text-neutral-600 dark:text-neutral-400" />
+                <Text className="text-[14px] font-bold text-neutral-600 dark:text-neutral-400">{`Done (${finishedItems.length})`}</Text>
+              </Pressable>
+              {finishedOpen && finishedItems.map(row)}
+            </View>
+          )}
         </View>
       )}
+      {steps && !oneOff && openItems.length === 0 && onFinishTask && !readOnly && !task.activeUntil ? (
+        <View testID="finish-task" className="rounded-2xl border border-neutral-200 bg-neutral-50 px-4 py-3.5 dark:border-white/[0.08] dark:bg-white/[0.03]">
+          <Text className="text-[14px] font-bold text-neutral-900 dark:text-white">Every step is done</Text>
+          <Text className="mt-0.5 text-[13px] text-neutral-600 dark:text-neutral-400">Finish this task to stop it repeating, or add more steps.</Text>
+          <Button variant="secondary" size="md" className="mt-2.5 self-start" onPress={() => onFinishTask(task.id)}>
+            Finish this task
+          </Button>
+        </View>
+      ) : null}
+      {steps && oneOff && openItems.length > 0 && onContinue && (readOnly || completedCount > 0) ? (
+        <Button variant="secondary" size="md" fullWidth onPress={onContinue}>
+          Continue on another day
+        </Button>
+      ) : null}
     </>
   );
 

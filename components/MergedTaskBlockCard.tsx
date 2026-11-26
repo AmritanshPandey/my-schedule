@@ -94,7 +94,8 @@ function Half({
           disabled={readOnly}
           onClick={(e) => { e.stopPropagation(); if (!readOnly) onToggle(); }}
           className={`ml-1 flex h-[16px] w-[16px] shrink-0 select-none items-center justify-center rounded-[5px] border-[1.5px] transition-colors disabled:opacity-100 ${readOnly ? "cursor-default" : ""} ${
-            done || partial ? "border-transparent bg-green-500"
+            done || (partial && !readOnly) ? "border-transparent bg-green-500"
+            : partial ? "border-transparent bg-amber-600"
             : missed ? "border-transparent bg-rose-500"
             : readOnly ? "border-neutral-200 bg-neutral-100/80 dark:border-white/[0.08] dark:bg-white/[0.04]"
             : "border-neutral-300 bg-white/80 dark:border-neutral-500 dark:bg-neutral-800"

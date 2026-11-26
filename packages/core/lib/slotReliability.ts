@@ -162,7 +162,7 @@ export function computeSlotReliability(
 
       const state = completionForDate(task, dateISO);
       // Unresolved says nothing — see the header.
-      if (!state.completed && !state.missed) continue;
+      if (!state.completed && !state.missed && !state.partial) continue;
 
       // The occurrence, so a per-date retiming is credited to the band it was
       // actually moved to rather than the template's original slot.
@@ -172,7 +172,9 @@ export function computeSlotReliability(
       if (startMinutes === null) continue;
 
       const band = bandForMinutes(startMinutes);
-      const done = state.completed ? 1 : 0;
+      // Doing part of it is still turning up: the slot works, so it must not
+      // read as one to move away from.
+      const done = state.completed || state.partial ? 1 : 0;
 
       byBand[band].resolved += 1;
       byBand[band].completed += done;

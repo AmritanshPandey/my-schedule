@@ -42,8 +42,11 @@ export default function TaskStatusCheckbox({
         if (!readOnly) onClick?.();
       }}
       className={`shrink-0 items-center justify-center border-2 ${sizeClasses[size]} ${readOnly ? '' : 'active:scale-95'} ${
-        done || partial
+        done
           ? 'border-transparent bg-green-600'
+          : partial
+          // In progress today reads as momentum; on a day that's over it's what was left.
+          ? readOnly ? 'border-transparent bg-amber-600' : 'border-transparent bg-green-600'
           : missed
             ? 'border-transparent bg-rose-500'
             : readOnly

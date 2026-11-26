@@ -89,7 +89,7 @@ import {
   type TaskRemovalScope,
 } from "@/lib/taskMutations";
 import { mergeTasks, unmergeTask, findMergePairs } from "@/lib/taskMerge";
-import { completionForDate, getTaskCheckableItems, getTaskSubtaskSummary, isTaskCompleted, isTrackedTask, markTaskMissed, snoozeTaskLater, toggleSlotComplete, toggleSubtaskComplete, toggleTaskFromCheckbox } from "@/lib/taskCompletion";
+import { completionForDate, getTaskCheckableItems, getTaskSubtaskSummary, isTaskCompleted, isTrackedTask, snoozeTaskLater } from "@/lib/taskCompletion";
 import { diffException, isTaskScheduledOn, occurrenceNote, resolveOccurrence } from "@/lib/taskOccurrence";
 import { validateDatedTasks } from "@/lib/scheduleRules";
 import { resolveTimes as resolveParsedTimes } from "@/lib/scheduleParser";
@@ -111,6 +111,9 @@ import { useAIEnabled } from "@/lib/ai/useAIEnabled";
 import { overviewGreeting } from "@/lib/overview";
 import { selectNeedsAttention, type MissedTask } from "@/lib/needsAttention";
 import IOSOverview from "@/components/ios/IOSOverview";
+import { toggleTaskOn, toggleSubtaskOn, toggleSlotOn, markMissedOn, finishTaskAfter } from "@/lib/taskActions";
+import { doneSubtaskIds, stepsLeft } from "@/lib/subtaskMode";
+import { daysBetween } from "@/lib/dateUtils";
 import MissedTaskSheet from "@/components/MissedTaskSheet";
 import QuickRetimeSheet, { type QuickRetimeTarget } from "@/components/QuickRetimeSheet";
 import { rescheduleMissedTaskOnce, acknowledgeMiss } from "@/lib/missedRecovery";
@@ -809,64 +812,31 @@ export default function IOSScheduleApp() {
 
   function handleToggleTaskComplete(taskId: string, allSubtaskIds: string[], day: DayKey = activeDay, dateISO?: string) {
     if (dateISO && dateISO !== todayISO()) return;
-    setSchedule((prev) => ({
-      ...prev,
-      activities: {
-        ...prev.activities,
-        // A missed task un-marks rather than completing — shared with the
-        // desktop shell so the two can't disagree on what a tap means.
-        [day]: (prev.activities[day] ?? []).map((task) =>
-          task.id === taskId ? { ...task, ...toggleTaskFromCheckbox(task, allSubtaskIds) } : task
-        ),
-      },
-    }));
+    setSchedule(toggleTaskOn(day, taskId, allSubtaskIds));
   }
 
   function handleToggleSubtask(taskId: string, subtaskId: string, day: DayKey = activeDay, dateISO?: string) {
     if (dateISO && dateISO !== todayISO()) return;
-    setSchedule((prev) => ({
-      ...prev,
-      activities: {
-        ...prev.activities,
-        [day]: (prev.activities[day] ?? []).map((task) => {
-          if (task.id !== taskId) return task;
-          const linkedPlan = task.planId ? prev.plans.find((plan) => plan.id === task.planId) ?? null : null;
-          const totalSubtasks = getTaskSubtaskSummary(task, linkedPlan).totalCount;
-          return { ...task, ...toggleSubtaskComplete(task, subtaskId, totalSubtasks) };
-        }),
-      },
-    }));
+    setSchedule(toggleSubtaskOn(day, taskId, subtaskId));
   }
 
   // Independent completion for one phase of a multi-slot task (same-day
   // multiple time blocks) — mirrors handleToggleSubtask, keyed by slot index.
   function handleToggleSlot(taskId: string, slotIndex: number, day: DayKey = activeDay, dateISO?: string) {
     if (dateISO && dateISO !== todayISO()) return;
-    setSchedule((prev) => ({
-      ...prev,
-      activities: {
-        ...prev.activities,
-        [day]: (prev.activities[day] ?? []).map((task) => {
-          if (task.id !== taskId) return task;
-          const linkedPlan = task.planId ? prev.plans.find((plan) => plan.id === task.planId) ?? null : null;
-          const totalSubtasks = getTaskSubtaskSummary(task, linkedPlan).totalCount;
-          return { ...task, ...toggleSlotComplete(task, slotIndex, totalSubtasks) };
-        }),
-      },
-    }));
+    setSchedule(toggleSlotOn(day, taskId, slotIndex));
   }
 
   function handleMarkTaskMissed(taskId: string, allSubtaskIds: string[], day: DayKey = activeDay, dateISO?: string) {
     if (dateISO && dateISO !== todayISO()) return;
-    setSchedule((prev) => ({
-      ...prev,
-      activities: {
-        ...prev.activities,
-        [day]: (prev.activities[day] ?? []).map((task) =>
-          task.id === taskId ? { ...task, ...markTaskMissed(task, allSubtaskIds) } : task
-        ),
-      },
-    }));
+    setSchedule(markMissedOn(day, taskId, allSubtaskIds));
+  }
+
+  /** Every step is done and the user asked to end the task: today is its last day. */
+  function handleFinishTask(taskId: string) {
+    haptic("medium");
+    setSchedule(finishTaskAfter(taskId, todayISO()));
+    setToast("Task finished");
   }
 
   /**
@@ -1523,6 +1493,17 @@ export default function IOSScheduleApp() {
               dayNote={subtasksTask ? occurrenceNote(subtasksTask, subtasksRef.dateISO) : undefined}
               onSaveDayNote={(taskId, note) => handleSaveDayNote(taskId, note, subtasksRef.dateISO)}
               dayLabel={formatDayNoteLabel(subtasksRef.dateISO)}
+              onFinishTask={(taskId) => { handleFinishTask(taskId); setSubtasksRef(null); }}
+              onContinue={subtasksTask ? () => {
+                setMissedSheet({
+                  task: subtasksTask,
+                  plan: subtasksTask.planId ? plansById.get(subtasksTask.planId) ?? null : null,
+                  dateISO: subtasksRef.dateISO,
+                  daysAgo: Math.max(0, daysBetween(subtasksRef.dateISO, todayISO()) ?? 0),
+                  stepsLeft: stepsLeft(subtasksTask),
+                });
+                setSubtasksRef(null);
+              } : undefined}
               onEdit={subtasksTask ? () => { openEditSheet(subtasksTask, subtasksRef.dateISO); setSubtasksRef(null); } : undefined}
               presentation="page"
               dateISO={subtasksRef.dateISO}
@@ -1536,7 +1517,7 @@ export default function IOSScheduleApp() {
                 day: subtasksRef.day,
                 dateISO: subtasksRef.dateISO,
                 stepIds: focusItems(subtasksTask, plansById).map((item) => item.id),
-                alreadyDone: subtasksTask.completedSubtaskIds,
+                alreadyDone: doneSubtaskIds(subtasksTask),
               }) : undefined}
             />
           </ErrorBoundary>

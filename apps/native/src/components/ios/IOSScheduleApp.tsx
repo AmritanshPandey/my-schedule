@@ -27,7 +27,7 @@ import { categoryHex, resolveAccentColor } from '@planr/core/lib/colorSystem';
 import { canDeleteCategory, categoryUsageCounts, ensureCategoryIn } from '@planr/core/lib/taskCategories';
 import { categoriesById, taskIdentity } from '@planr/core/lib/taskIdentity';
 import { constrainTaskToPlanWindow } from '@planr/core/lib/planTaskWindow';
-import { formatDate, formatDayNoteLabel, localISODate, todayISO } from '@planr/core/lib/dateUtils';
+import { daysBetween, formatDate, formatDayNoteLabel, localISODate, todayISO } from '@planr/core/lib/dateUtils';
 import { quickAmountsForUnit } from '@planr/core/lib/quickAmounts';
 import { valueForDate } from '@planr/core/lib/metricEntries';
 import { upsertSetLog } from '@planr/core/lib/setLogs';
@@ -59,11 +59,7 @@ import {
   getTaskSubtaskSummary,
   isTaskCompleted,
   isTrackedTask,
-  markTaskMissed,
   snoozeTaskLater,
-  toggleSlotComplete,
-  toggleSubtaskComplete,
-  toggleTaskFromCheckbox,
 } from '@planr/core/lib/taskCompletion';
 import { diffException, isTaskScheduledOn, occurrenceNote, resolveOccurrence } from '@planr/core/lib/taskOccurrence';
 import { validateDatedTasks } from '@planr/core/lib/scheduleRules';
@@ -87,6 +83,8 @@ import { unlinkEverywhere, type MilestoneLinkKind } from '@planr/core/lib/milest
 import { formatDisplayTime, inputToDisplayTime, minutesToInputTime, parseTimeToMinutes, toScheduleDayMinutes } from '@planr/core/lib/timeUtils';
 import { completedRitualIdsOn } from '@planr/core/lib/consistency/ritualDayStatus';
 import { selectNeedsAttention, type MissedTask } from '@planr/core/lib/needsAttention';
+import { toggleTaskOn, toggleSubtaskOn, toggleSlotOn, markMissedOn, finishTaskAfter } from '@planr/core/lib/taskActions';
+import { doneSubtaskIds, stepsLeft } from '@planr/core/lib/subtaskMode';
 import { rescheduleMissedTaskOnce, acknowledgeMiss } from '@planr/core/lib/missedRecovery';
 import { TOUR_STEPS, type CoachMarkStep, type TourId } from '@planr/core/lib/onboarding/tours';
 import { useScheduleDB } from '../../lib/useScheduleDB';
@@ -919,60 +917,31 @@ export default function IOSScheduleApp() {
 
   function handleToggleTaskComplete(taskId: string, allSubtaskIds: string[], day: DayKey = activeDay, dateISO?: string) {
     if (dateISO && dateISO !== todayISO()) return;
-    setSchedule((prev) => ({
-      ...prev,
-      activities: {
-        ...prev.activities,
-        // A missed task un-marks rather than completing — shared with the
-        // desktop shell so the two can't disagree on what a tap means.
-        [day]: (prev.activities[day] ?? []).map((task) => (task.id === taskId ? { ...task, ...toggleTaskFromCheckbox(task, allSubtaskIds) } : task)),
-      },
-    }));
+    setSchedule(toggleTaskOn(day, taskId, allSubtaskIds));
   }
 
   function handleToggleSubtask(taskId: string, subtaskId: string, day: DayKey = activeDay, dateISO?: string) {
     if (dateISO && dateISO !== todayISO()) return;
-    setSchedule((prev) => ({
-      ...prev,
-      activities: {
-        ...prev.activities,
-        [day]: (prev.activities[day] ?? []).map((task) => {
-          if (task.id !== taskId) return task;
-          const linkedPlan = task.planId ? prev.plans.find((plan) => plan.id === task.planId) ?? null : null;
-          const totalSubtasks = getTaskSubtaskSummary(task, linkedPlan).totalCount;
-          return { ...task, ...toggleSubtaskComplete(task, subtaskId, totalSubtasks) };
-        }),
-      },
-    }));
+    setSchedule(toggleSubtaskOn(day, taskId, subtaskId));
   }
 
   // Independent completion for one phase of a multi-slot task (same-day
   // multiple time blocks) — mirrors handleToggleSubtask, keyed by slot index.
   function handleToggleSlot(taskId: string, slotIndex: number, day: DayKey = activeDay, dateISO?: string) {
     if (dateISO && dateISO !== todayISO()) return;
-    setSchedule((prev) => ({
-      ...prev,
-      activities: {
-        ...prev.activities,
-        [day]: (prev.activities[day] ?? []).map((task) => {
-          if (task.id !== taskId) return task;
-          const linkedPlan = task.planId ? prev.plans.find((plan) => plan.id === task.planId) ?? null : null;
-          const totalSubtasks = getTaskSubtaskSummary(task, linkedPlan).totalCount;
-          return { ...task, ...toggleSlotComplete(task, slotIndex, totalSubtasks) };
-        }),
-      },
-    }));
+    setSchedule(toggleSlotOn(day, taskId, slotIndex));
   }
 
   function handleMarkTaskMissed(taskId: string, allSubtaskIds: string[], day: DayKey = activeDay, dateISO?: string) {
     if (dateISO && dateISO !== todayISO()) return;
-    setSchedule((prev) => ({
-      ...prev,
-      activities: {
-        ...prev.activities,
-        [day]: (prev.activities[day] ?? []).map((task) => (task.id === taskId ? { ...task, ...markTaskMissed(task, allSubtaskIds) } : task)),
-      },
-    }));
+    setSchedule(markMissedOn(day, taskId, allSubtaskIds));
+  }
+
+  /** Every step is done and the user asked to end the task: today is its last day. */
+  function handleFinishTask(taskId: string) {
+    haptic('medium');
+    setSchedule(finishTaskAfter(taskId, todayISO()));
+    setToast('Task finished');
   }
 
   /** Push a task to the next free slot later today. */
@@ -1632,6 +1601,24 @@ export default function IOSScheduleApp() {
                   }
                 : undefined
             }
+            onFinishTask={(taskId) => {
+              handleFinishTask(taskId);
+              setSubtasksRef(null);
+            }}
+            onContinue={
+              subtasksTask
+                ? () => {
+                    setMissedSheet({
+                      task: subtasksTask,
+                      plan: subtasksTask.planId ? plansById.get(subtasksTask.planId) ?? null : null,
+                      dateISO: subtasksRef.dateISO,
+                      daysAgo: Math.max(0, daysBetween(subtasksRef.dateISO, todayISO()) ?? 0),
+                      stepsLeft: stepsLeft(subtasksTask),
+                    });
+                    setSubtasksRef(null);
+                  }
+                : undefined
+            }
             presentation="page"
             dateISO={subtasksRef.dateISO}
             setLogs={schedule.setLogs}
@@ -1647,7 +1634,7 @@ export default function IOSScheduleApp() {
                       day: subtasksRef.day,
                       dateISO: subtasksRef.dateISO,
                       stepIds: focusItems(subtasksTask, plansById).map((item) => item.id),
-                      alreadyDone: subtasksTask.completedSubtaskIds,
+                      alreadyDone: doneSubtaskIds(subtasksTask),
                     })
                 : undefined
             }
