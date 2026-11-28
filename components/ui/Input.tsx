@@ -1,6 +1,6 @@
 "use client";
 
-import { forwardRef, useCallback, useEffect, useRef } from "react";
+import { forwardRef, useCallback, useEffect, useId, useRef } from "react";
 import { typography } from "@/components/ui/Typography";
 
 interface InputProps extends React.InputHTMLAttributes<HTMLInputElement> {
@@ -58,6 +58,9 @@ const Input = forwardRef<HTMLInputElement, InputProps>(function Input(
   ref
 ) {
   const innerRef = useRef<HTMLInputElement>(null);
+  // The visible label names the field for assistive tech and is clickable.
+  const generatedId = useId();
+  const inputId = props.id ?? generatedId;
 
   // Delay focus by ~300 ms so the sheet spring animation completes before the
   // keyboard opens. Native autoFocus fires on mount (mid-animation) and causes
@@ -68,8 +71,9 @@ const Input = forwardRef<HTMLInputElement, InputProps>(function Input(
 
   return (
     <div className="w-full">
-      {label && <label className={FORM_LABEL}>{label}</label>}
+      {label && <label htmlFor={inputId} className={FORM_LABEL}>{label}</label>}
       <input
+        id={inputId}
         ref={(el) => {
           innerRef.current = el;
           if (typeof ref === "function") ref(el);
@@ -87,6 +91,8 @@ export const Textarea = forwardRef<HTMLTextAreaElement, TextareaProps>(function 
   ref
 ) {
   const innerRef = useRef<HTMLTextAreaElement>(null);
+  const generatedId = useId();
+  const inputId = props.id ?? generatedId;
 
   const syncHeight = useCallback(() => {
     const el = innerRef.current;
@@ -107,8 +113,9 @@ export const Textarea = forwardRef<HTMLTextAreaElement, TextareaProps>(function 
 
   return (
     <div className="w-full">
-      {label && <label className={FORM_LABEL}>{label}</label>}
+      {label && <label htmlFor={inputId} className={FORM_LABEL}>{label}</label>}
       <textarea
+        id={inputId}
         ref={(el) => {
           innerRef.current = el;
           if (typeof ref === "function") ref(el);
