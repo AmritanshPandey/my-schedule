@@ -1,5 +1,6 @@
 "use client";
 
+import { dayKeyOfISO } from "@/lib/scheduleConstants";
 import { useFinanceLogging } from "@/lib/useFinanceLogging";
 import { markActivated } from "@/lib/activation";
 import { memo, useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
@@ -1585,6 +1586,12 @@ export default function ScheduleApp() {
     (taskId: string, allSubtaskIds: string[], day: DayKey = activeDay, dateISO?: string) => {
       // Only today is editable — past/future days are read-only (history view).
       if (dateISO && dateISO !== todayISO()) return;
+      // Today's bucket comes from the date, not the todayKey state: that state
+      // only rolls over when the app reports it is active again, so a tap made
+      // right after reopening on a new day would land on yesterday's copy.
+      if (dateISO) day = dayKeyOfISO(dateISO);
+      // …and the screen rolls over with the tap (a no-op on the same day).
+      if (dateISO) setTodayKey(JS_DAYS[new Date().getDay()]);
       haptic("medium");
       setSchedule((prev) => ({
         ...prev,
@@ -1606,6 +1613,12 @@ export default function ScheduleApp() {
     (taskId: string, allSubtaskIds: string[], day: DayKey = activeDay, dateISO?: string) => {
       // Only today is editable — past/future days are read-only (history view).
       if (dateISO && dateISO !== todayISO()) return;
+      // Today's bucket comes from the date, not the todayKey state: that state
+      // only rolls over when the app reports it is active again, so a tap made
+      // right after reopening on a new day would land on yesterday's copy.
+      if (dateISO) day = dayKeyOfISO(dateISO);
+      // …and the screen rolls over with the tap (a no-op on the same day).
+      if (dateISO) setTodayKey(JS_DAYS[new Date().getDay()]);
       haptic("medium");
       setSchedule((prev) => ({
         ...prev,
@@ -1624,6 +1637,12 @@ export default function ScheduleApp() {
     (taskId: string, day: DayKey = activeDay, dateISO?: string) => {
       // Only today is editable — deferring a past/future occurrence is meaningless.
       if (dateISO && dateISO !== todayISO()) return;
+      // Today's bucket comes from the date, not the todayKey state: that state
+      // only rolls over when the app reports it is active again, so a tap made
+      // right after reopening on a new day would land on yesterday's copy.
+      if (dateISO) day = dayKeyOfISO(dateISO);
+      // …and the screen rolls over with the tap (a no-op on the same day).
+      if (dateISO) setTodayKey(JS_DAYS[new Date().getDay()]);
       const task = (schedule.activities[day] ?? []).find((t) => t.id === taskId);
       if (!task) return;
       const patch = snoozeTaskLater(task);
@@ -1703,6 +1722,12 @@ export default function ScheduleApp() {
   const handleToggleSubtask = useCallback(
     (taskId: string, subtaskId: string, day: DayKey = activeDay, dateISO?: string) => {
       if (dateISO && dateISO !== todayISO()) return; // read-only past/future
+      // Today's bucket comes from the date, not the todayKey state: that state
+      // only rolls over when the app reports it is active again, so a tap made
+      // right after reopening on a new day would land on yesterday's copy.
+      if (dateISO) day = dayKeyOfISO(dateISO);
+      // …and the screen rolls over with the tap (a no-op on the same day).
+      if (dateISO) setTodayKey(JS_DAYS[new Date().getDay()]);
       haptic("light");
       setSchedule((prev) => ({
         ...prev,
@@ -1725,6 +1750,12 @@ export default function ScheduleApp() {
   const handleToggleSlot = useCallback(
     (taskId: string, slotIndex: number, day: DayKey = activeDay, dateISO?: string) => {
       if (dateISO && dateISO !== todayISO()) return; // read-only past/future
+      // Today's bucket comes from the date, not the todayKey state: that state
+      // only rolls over when the app reports it is active again, so a tap made
+      // right after reopening on a new day would land on yesterday's copy.
+      if (dateISO) day = dayKeyOfISO(dateISO);
+      // …and the screen rolls over with the tap (a no-op on the same day).
+      if (dateISO) setTodayKey(JS_DAYS[new Date().getDay()]);
       haptic("light");
       setSchedule((prev) => ({
         ...prev,
@@ -1748,6 +1779,12 @@ export default function ScheduleApp() {
   const handleMarkSlotMissed = useCallback(
     (taskId: string, slotIndex: number, day: DayKey = activeDay, dateISO?: string) => {
       if (dateISO && dateISO !== todayISO()) return; // only today is editable
+      // Today's bucket comes from the date, not the todayKey state: that state
+      // only rolls over when the app reports it is active again, so a tap made
+      // right after reopening on a new day would land on yesterday's copy.
+      if (dateISO) day = dayKeyOfISO(dateISO);
+      // …and the screen rolls over with the tap (a no-op on the same day).
+      if (dateISO) setTodayKey(JS_DAYS[new Date().getDay()]);
       haptic("medium");
       setSchedule((prev) => ({
         ...prev,

@@ -21,7 +21,7 @@ import {
   IconTrash,
 } from '@tabler/icons-react-native';
 import type { DayKey, MetricEntry, Milestone, Note, Plan, ProgressTracker, Ritual, RunPlanInputs, Schedule, Session, Task, TaskTypeValue, TrackerCadence } from '@planr/core/lib/scheduleTypes';
-import { DAYS, DAY_FULL_LABELS, DAY_LABELS } from '@planr/core/lib/scheduleConstants';
+import { DAYS, DAY_FULL_LABELS, DAY_LABELS, dayKeyOfISO } from '@planr/core/lib/scheduleConstants';
 import { resetStaleCompletions } from '@planr/core/lib/scheduleNormalize';
 import { categoryHex, resolveAccentColor } from '@planr/core/lib/colorSystem';
 import { canDeleteCategory, categoryUsageCounts, ensureCategoryIn } from '@planr/core/lib/taskCategories';
@@ -919,6 +919,12 @@ export default function IOSScheduleApp() {
 
   function handleToggleTaskComplete(taskId: string, allSubtaskIds: string[], day: DayKey = activeDay, dateISO?: string) {
     if (dateISO && dateISO !== todayISO()) return;
+    // Today's bucket comes from the date, not the todayKey state: that state
+    // only rolls over when the app reports it is active again, so a tap made
+    // right after reopening on a new day would land on yesterday's copy.
+    if (dateISO) day = dayKeyOfISO(dateISO);
+    // …and the screen rolls over with the tap (a no-op on the same day).
+    if (dateISO) setTodayDate(todayISO());
     setSchedule((prev) => ({
       ...prev,
       activities: {
@@ -932,6 +938,12 @@ export default function IOSScheduleApp() {
 
   function handleToggleSubtask(taskId: string, subtaskId: string, day: DayKey = activeDay, dateISO?: string) {
     if (dateISO && dateISO !== todayISO()) return;
+    // Today's bucket comes from the date, not the todayKey state: that state
+    // only rolls over when the app reports it is active again, so a tap made
+    // right after reopening on a new day would land on yesterday's copy.
+    if (dateISO) day = dayKeyOfISO(dateISO);
+    // …and the screen rolls over with the tap (a no-op on the same day).
+    if (dateISO) setTodayDate(todayISO());
     setSchedule((prev) => ({
       ...prev,
       activities: {
@@ -950,6 +962,12 @@ export default function IOSScheduleApp() {
   // multiple time blocks) — mirrors handleToggleSubtask, keyed by slot index.
   function handleToggleSlot(taskId: string, slotIndex: number, day: DayKey = activeDay, dateISO?: string) {
     if (dateISO && dateISO !== todayISO()) return;
+    // Today's bucket comes from the date, not the todayKey state: that state
+    // only rolls over when the app reports it is active again, so a tap made
+    // right after reopening on a new day would land on yesterday's copy.
+    if (dateISO) day = dayKeyOfISO(dateISO);
+    // …and the screen rolls over with the tap (a no-op on the same day).
+    if (dateISO) setTodayDate(todayISO());
     setSchedule((prev) => ({
       ...prev,
       activities: {
@@ -966,6 +984,12 @@ export default function IOSScheduleApp() {
 
   function handleMarkTaskMissed(taskId: string, allSubtaskIds: string[], day: DayKey = activeDay, dateISO?: string) {
     if (dateISO && dateISO !== todayISO()) return;
+    // Today's bucket comes from the date, not the todayKey state: that state
+    // only rolls over when the app reports it is active again, so a tap made
+    // right after reopening on a new day would land on yesterday's copy.
+    if (dateISO) day = dayKeyOfISO(dateISO);
+    // …and the screen rolls over with the tap (a no-op on the same day).
+    if (dateISO) setTodayDate(todayISO());
     setSchedule((prev) => ({
       ...prev,
       activities: {
@@ -979,6 +1003,12 @@ export default function IOSScheduleApp() {
   function handleSnoozeTaskLater(taskId: string, day: DayKey = activeDay, dateISO?: string) {
     // Only today is editable — deferring a past/future occurrence is meaningless.
     if (dateISO && dateISO !== todayISO()) return;
+    // Today's bucket comes from the date, not the todayKey state: that state
+    // only rolls over when the app reports it is active again, so a tap made
+    // right after reopening on a new day would land on yesterday's copy.
+    if (dateISO) day = dayKeyOfISO(dateISO);
+    // …and the screen rolls over with the tap (a no-op on the same day).
+    if (dateISO) setTodayDate(todayISO());
     const task = (schedule.activities[day] ?? []).find((t) => t.id === taskId);
     if (!task) return;
     const patch = snoozeTaskLater(task);

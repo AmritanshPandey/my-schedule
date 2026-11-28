@@ -2,6 +2,12 @@ export type DayKey = "monday" | "tuesday" | "wednesday" | "thursday" | "friday" 
 
 export const DAYS: DayKey[] = ["monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday"];
 
+/** The weekday bucket ("monday"…"sunday") a calendar date ("YYYY-MM-DD") falls in. */
+export function dayKeyOfISO(dateISO: string): DayKey {
+  // JS getDay(): Sunday = 0; DAYS starts on Monday.
+  return DAYS[(new Date(`${dateISO}T00:00:00`).getDay() + 6) % 7];
+}
+
 /**
  * Full weekday names. DAY_LABELS is the two-letter form used by dense chips and
  * grid headers; prose needs the whole word — "Clear every Mo" reads as a typo.
