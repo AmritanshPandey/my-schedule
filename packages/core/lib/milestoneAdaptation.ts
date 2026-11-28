@@ -253,8 +253,15 @@ export function proposeAdaptations(params: ProposeParams): AdaptationOffer[] {
   // two weeks, and it is the number the health engine already computed.
   const forecastIsLater =
     state.forecastDate !== null && state.forecastDate > milestone.plannedEndDate;
+  // Never offer more than the milestone's own length (or the default two
+  // weeks, if that's longer) in one go. A forecast far past that is a pace
+  // problem, not a date problem — and moving a one-week milestone by months,
+  // with every later milestone in tow, is an abandonment dressed as a fix.
+  const maxExtension = Math.max(DEFAULT_EXTENSION_DAYS, daysBetweenISO(milestone.startDate, milestone.plannedEndDate) + 1);
+  const forecastDays = forecastIsLater ? daysBetweenISO(milestone.plannedEndDate, state.forecastDate!) : 0;
+  const capped = forecastIsLater && forecastDays > maxExtension;
   const newEndDate = forecastIsLater
-    ? state.forecastDate!
+    ? capped ? shiftISO(milestone.plannedEndDate, maxExtension) : state.forecastDate!
     : shiftISO(milestone.plannedEndDate, DEFAULT_EXTENSION_DAYS);
   const daysAdded = daysBetweenISO(milestone.plannedEndDate, newEndDate);
 
@@ -276,7 +283,9 @@ export function proposeAdaptations(params: ProposeParams): AdaptationOffer[] {
         basis: forecastIsLater ? "forecast" : "default",
       },
       label: `Extend target by ${plural(daysAdded, "day")}`,
-      rationale: forecastIsLater
+      rationale: capped
+        ? `At your current pace this would finish ${formatDateShort(state.forecastDate!)}. This gives you ${plural(daysAdded, "more day")} instead, so the plan stays a commitment; picking up the pace closes the rest.`
+        : forecastIsLater
         ? `Your current pace projects finishing ${formatDateShort(newEndDate)}. This moves the target to match.`
         : `There is no reliable forecast yet, so this adds ${plural(DEFAULT_EXTENSION_DAYS, "day")} to the current target.`,
       changes: [

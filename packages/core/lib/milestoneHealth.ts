@@ -101,6 +101,16 @@ export interface RoutineInputs {
 /** Days a milestone gets before "nothing logged yet" reads as at-risk/delayed
  *  rather than just getting started — mirrors lib/planInsights.ts's PROVING_DAYS. */
 export const GETTING_STARTED_DAYS = 7;
+/** A short milestone gets a shorter grace period — about the first third of
+ *  it, never under this — so a one-week milestone can still warn in time. */
+export const MIN_GETTING_STARTED_DAYS = 2;
+
+/** How many days a milestone reads "Getting started" before it can be graded
+ *  at risk or delayed: GETTING_STARTED_DAYS, or the first ~30% of a short one. */
+export function gettingStartedDays(milestone: Pick<Milestone, "startDate" | "plannedEndDate">): number {
+  const length = daysBetweenInclusive(milestone.startDate, milestone.plannedEndDate);
+  return Math.min(GETTING_STARTED_DAYS, Math.max(MIN_GETTING_STARTED_DAYS, Math.ceil(length * 0.3)));
+}
 /** Forecast this many days (or more) before the target reads "ahead". */
 export const AHEAD_BUFFER_DAYS = 5;
 /** Forecast up to this many days after the target still reads "at_risk", not "delayed". */
@@ -487,7 +497,12 @@ function forecastTaskDate(milestone: Milestone, activities: Record<string, Task[
   const remaining = total.expected - elapsedToNow.completed;
   if (remaining <= 0) return nowStr;
 
-  const rateFrom = addDaysToISO(nowStr, -(TASK_RATE_WINDOW_DAYS - 1));
+  // The rate is read over the last TASK_RATE_WINDOW_DAYS, but never from
+  // before the milestone began: one session on day one is one a day, not one
+  // a fortnight (which forecast a one-week milestone months late).
+  const windowStart = addDaysToISO(nowStr, -(TASK_RATE_WINDOW_DAYS - 1));
+  const rateFrom = windowStart > milestone.startDate ? windowStart : milestone.startDate;
+  const windowDays = daysBetweenInclusive(rateFrom, nowStr);
   let recentCompleted = 0;
   for (const taskId of milestone.linkedActivities ?? []) {
     const copies = copiesById(taskId, activities);
@@ -497,10 +512,9 @@ function forecastTaskDate(milestone: Milestone, activities: Record<string, Task[
     }
   }
   if (routines) {
-    const from = rateFrom > milestone.startDate ? rateFrom : milestone.startDate;
-    recentCompleted += routineOccurrences(milestone, routines, from, nowStr).completed;
+    recentCompleted += routineOccurrences(milestone, routines, rateFrom, nowStr).completed;
   }
-  const ratePerWeek = recentCompleted / (TASK_RATE_WINDOW_DAYS / 7);
+  const ratePerWeek = recentCompleted / (windowDays / 7);
   if (ratePerWeek <= 0) return null;
 
   const weeksNeeded = remaining / ratePerWeek;
@@ -616,7 +630,7 @@ export function calculateMilestoneHealth(input: {
   if (!hasData) return "getting_started";
 
   const elapsedDays = daysBetweenInclusive(milestone.startDate, todayStr);
-  const stillEarly = elapsedDays < GETTING_STARTED_DAYS;
+  const stillEarly = elapsedDays < gettingStartedDays(milestone);
   if (overallProgress === null && stillEarly) return "getting_started";
   // Nothing logged yet inside the grace period: a zero rate on day one is
   // not evidence of falling behind, so it can't read as at_risk/delayed.
@@ -630,9 +644,12 @@ export function calculateMilestoneHealth(input: {
 
   if (pace === null && cadence === null) return stillEarly ? "getting_started" : "delayed";
   if (pace === "ahead" && (cadence === null || HEALTH_RANK[cadence] >= HEALTH_RANK.on_track)) return "ahead";
-  if (pace === null) return cadence!;
-  if (cadence === null) return pace;
-  return HEALTH_RANK[pace] <= HEALTH_RANK[cadence] ? pace : cadence;
+  const graded = pace === null ? cadence! : cadence === null ? pace : HEALTH_RANK[pace] <= HEALTH_RANK[cadence] ? pace : cadence;
+  // Inside the grace period a few days of rate is too little to call someone
+  // behind — logging the first session must never make a milestone look worse
+  // than logging nothing. Good news can show early; bad news waits.
+  if (stillEarly && (graded === "at_risk" || graded === "delayed")) return "getting_started";
+  return graded;
 }
 
 // ── Status message ───────────────────────────────────────────────────────────
@@ -671,7 +688,9 @@ function buildStatusMessage(
         return `Your metric is on pace, but ${cadenceLabel} has dropped to ${consistency}%, and that's what's putting this at risk.`;
       }
       return forecastDate
-        ? `Your current pace projects this milestone for ${formatDateShort(forecastDate)}, slightly behind your ${target} target.`
+        ? `Your current pace projects this milestone for ${formatDateShort(forecastDate)}, ${
+            daysBetweenSigned(milestone.plannedEndDate, forecastDate) <= AT_RISK_BUFFER_DAYS ? "slightly behind" : "after"
+          } your ${target} target.`
         : "Your recent consistency has dropped. You're slightly behind the pace needed to hit your target.";
     case "delayed":
       if (consistencyLimited) {
