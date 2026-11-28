@@ -763,9 +763,30 @@ export interface TaskCategory {
   kind?: CategoryKind;
   /**
    * The field template its tasks use (lib/taskFields.ts). Unset = suggested
-   * from the title or icon; "none" = no category-specific fields.
+   * from the title or icon; "none" = no category-specific fields; "custom" =
+   * the person's own `customFields`.
    */
-  fieldKind?: TaskFieldKind | "none";
+  fieldKind?: TaskFieldKind | "none" | "custom";
+  /**
+   * The person's own task fields, used when `fieldKind` is "custom". Kept when
+   * they switch to a built-in set, so switching back restores them.
+   */
+  customFields?: CustomTaskField[];
+}
+
+/** The value types a custom task field can hold. */
+export type CustomTaskFieldType = "text" | "longtext" | "number" | "minutes" | "date" | "select" | "money" | "percent";
+
+/** One field a person added to a category (lib/taskFields.ts). */
+export interface CustomTaskField {
+  /** Stable id: a task's value is stored under it, so renaming keeps the data. */
+  key: string;
+  label: string;
+  type: CustomTaskFieldType;
+  /** The choices, for a "select" field. */
+  options?: string[];
+  /** Part of the task's planned length: the form sums these into the end time. */
+  role?: "duration";
 }
 
 /**

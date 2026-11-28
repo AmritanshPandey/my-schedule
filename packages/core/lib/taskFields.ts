@@ -18,7 +18,7 @@
  *  - a Finance task's amount logs to a chosen tracker on each day it's
  *    completed (`reconcileFinanceEntries`).
  */
-import type { MetricEntry, Schedule, Task, TaskCategory, TaskDetails, TaskFieldKind } from "./scheduleTypes";
+import type { CustomTaskField, CustomTaskFieldType, MetricEntry, Schedule, Task, TaskCategory, TaskDetails, TaskFieldKind } from "./scheduleTypes";
 import { DAYS } from "./scheduleConstants";
 import { localISODate } from "./dateUtils";
 
@@ -35,7 +35,7 @@ export interface TaskFieldDef {
 }
 
 export interface TaskFieldTemplate {
-  kind: TaskFieldKind;
+  kind: TaskFieldKind | "custom";
   label: string;
   /** What the checklist is called for this kind. */
   listLabel: string;
@@ -206,11 +206,99 @@ export function inferFieldKind(category: Pick<TaskCategory, "title" | "icon">): 
   return KIND_BY_ICON[category.icon] ?? null;
 }
 
-/** The kind a category's tasks use: its own choice, else what its name suggests. "none" = no fields. */
+/** The built-in kind a category's tasks use: its own choice, else what its name
+ *  suggests. Null for "none" and for "custom" (see `customFieldTemplate`). */
 export function categoryFieldKind(category: Pick<TaskCategory, "title" | "icon" | "fieldKind"> | null | undefined): TaskFieldKind | null {
   if (!category) return null;
-  if (category.fieldKind === "none") return null;
+  if (category.fieldKind === "none" || category.fieldKind === "custom") return null;
   return category.fieldKind ?? inferFieldKind(category);
+}
+
+// ── Custom fields ────────────────────────────────────────────────────────────
+
+/** At most this many fields per category: a task form, not a database. */
+export const MAX_CUSTOM_FIELDS = 12;
+export const CUSTOM_FIELD_LABEL_MAX = 32;
+export const MAX_SELECT_OPTIONS = 12;
+
+/** The types a person can pick, in picker order, with what each is called. */
+export const CUSTOM_FIELD_TYPES: ReadonlyArray<{ type: CustomTaskFieldType; label: string }> = [
+  { type: "text", label: "Text" },
+  { type: "longtext", label: "Long text" },
+  { type: "number", label: "Number" },
+  { type: "minutes", label: "Minutes" },
+  { type: "money", label: "Amount" },
+  { type: "percent", label: "Percent" },
+  { type: "date", label: "Date" },
+  { type: "select", label: "Choice" },
+];
+const CUSTOM_TYPES = new Set(CUSTOM_FIELD_TYPES.map((t) => t.type));
+
+/** A fresh, stable key for a new custom field. */
+export function newCustomFieldKey(): string {
+  return `c_${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`;
+}
+
+/**
+ * Clean a stored or drafted list of custom fields: drops unlabeled, unknown or
+ * duplicate-key fields, trims labels and choices, and caps the counts. A
+ * "select" with no choices left is kept as text, so its values aren't lost.
+ */
+export function normalizeCustomFields(raw: unknown): CustomTaskField[] {
+  if (!Array.isArray(raw)) return [];
+  const seen = new Set<string>();
+  const out: CustomTaskField[] = [];
+  for (const item of raw) {
+    if (out.length >= MAX_CUSTOM_FIELDS) break;
+    if (!item || typeof item !== "object") continue;
+    const f = item as Record<string, unknown>;
+    if (typeof f.key !== "string" || !f.key || seen.has(f.key)) continue;
+    const label = typeof f.label === "string" ? f.label.trim().slice(0, CUSTOM_FIELD_LABEL_MAX) : "";
+    if (!label) continue;
+    let type = typeof f.type === "string" && CUSTOM_TYPES.has(f.type as CustomTaskFieldType) ? (f.type as CustomTaskFieldType) : null;
+    if (!type) continue;
+    const options = Array.isArray(f.options)
+      ? [...new Set(f.options.filter((o): o is string => typeof o === "string").map((o) => o.trim()).filter(Boolean))].slice(0, MAX_SELECT_OPTIONS)
+      : [];
+    if (type === "select" && options.length === 0) type = "text";
+    seen.add(f.key);
+    out.push({
+      key: f.key,
+      label,
+      type,
+      ...(type === "select" ? { options } : {}),
+      ...(type === "minutes" && f.role === "duration" ? { role: "duration" as const } : {}),
+    });
+  }
+  return out;
+}
+
+/**
+ * A built-in set as a starting point for custom fields. Keys are kept, so the
+ * values tasks already hold carry straight over. Tracker links are Finance
+ * plumbing, not a field a person defines, so they're left out.
+ */
+export function customFieldsFrom(template: TaskFieldTemplate | null): CustomTaskField[] {
+  if (!template) return [];
+  return normalizeCustomFields(
+    template.fields
+      .filter((f) => f.type !== "tracker")
+      .map((f) => ({ key: f.key, label: f.label, type: f.type, options: f.options ? [...f.options] : undefined, role: f.role })),
+  );
+}
+
+/** The template a "custom" category's tasks use, or null when it has no fields. */
+export function customFieldTemplate(category: Pick<TaskCategory, "title" | "customFields">): TaskFieldTemplate | null {
+  const fields = normalizeCustomFields(category.customFields);
+  if (fields.length === 0) return null;
+  return {
+    kind: "custom",
+    label: category.title,
+    listLabel: "Checklist",
+    itemLabel: "item",
+    itemFields: [],
+    fields: fields.map((f) => ({ key: f.key, label: f.label, type: f.type, options: f.options, role: f.role })),
+  };
 }
 
 const STRENGTH_WORD = /workout|gym|lift|strength|weight|resistance|crossfit|calisthenic/i;
@@ -235,6 +323,7 @@ export function taskFieldTemplate(
   categories: readonly TaskCategory[] | undefined,
 ): TaskFieldTemplate | null {
   const category = task.categoryId ? (categories ?? []).find((c) => c.id === task.categoryId) : undefined;
+  if (category?.fieldKind === "custom") return customFieldTemplate(category);
   const kind = categoryFieldKind(category);
   return kind ? TASK_FIELD_TEMPLATES[kind] : null;
 }

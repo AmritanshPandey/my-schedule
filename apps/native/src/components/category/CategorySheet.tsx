@@ -1,7 +1,8 @@
 import { useEffect, useState } from 'react';
 import { Pressable, View } from 'react-native';
-import type { CategoryKind, TaskCategory, TaskFieldKind } from '@planr/core/lib/scheduleTypes';
-import { inferFieldKind, TASK_FIELD_KINDS, TASK_FIELD_TEMPLATES } from '@planr/core/lib/taskFields';
+import type { CategoryKind, CustomTaskField, TaskCategory, TaskFieldKind } from '@planr/core/lib/scheduleTypes';
+import { customFieldsFrom, inferFieldKind, TASK_FIELD_KINDS, TASK_FIELD_TEMPLATES } from '@planr/core/lib/taskFields';
+import CustomFieldsEditor, { fromFieldDrafts, toFieldDrafts, type CustomFieldDraft } from './CustomFieldsEditor';
 import { ChipRow, ChoiceChip } from '../ui/FormChips';
 import { colorFromIcon, type AccentColor } from '@planr/core/lib/colorSystem';
 import { defaultCategoryTitle } from '@planr/core/lib/taskCategories';
@@ -23,7 +24,9 @@ export interface CategoryDraft {
   color: AccentColor;
   kind: CategoryKind;
   /** Which task fields the category's tasks get; undefined = suggested from title/icon. */
-  fieldKind?: TaskFieldKind | 'none';
+  fieldKind?: TaskFieldKind | 'none' | 'custom';
+  /** The person's own fields; kept even while a built-in set is chosen. */
+  customFields?: CustomTaskField[];
 }
 
 const KIND_OPTIONS: Array<{ value: CategoryKind; label: string; hint: string }> = [
@@ -51,7 +54,8 @@ export default function CategorySheet({
   const [titleTouched, setTitleTouched] = useState(false);
   const [kind, setKind] = useState<CategoryKind>('active');
   // 'auto' = follow what the title/icon suggest; stored as no fieldKind.
-  const [fieldKind, setFieldKind] = useState<TaskFieldKind | 'none' | 'auto'>('auto');
+  const [fieldKind, setFieldKind] = useState<TaskFieldKind | 'none' | 'custom' | 'auto'>('auto');
+  const [customFields, setCustomFields] = useState<CustomFieldDraft[]>([]);
 
   useEffect(() => {
     if (!open) return;
@@ -61,6 +65,7 @@ export default function CategorySheet({
       setColor(category.color);
       setKind(category.kind ?? 'active');
       setFieldKind(category.fieldKind ?? 'auto');
+      setCustomFields(toFieldDrafts(category.customFields));
       setColorTouched(true);
       setTitleTouched(true);
     } else {
@@ -69,6 +74,7 @@ export default function CategorySheet({
       setColor(colorFromIcon('star'));
       setKind('active');
       setFieldKind('auto');
+      setCustomFields([]);
       setColorTouched(false);
       setTitleTouched(false);
     }
@@ -158,8 +164,14 @@ export default function CategorySheet({
 
           {(() => {
             const suggested = inferFieldKind({ title: trimmed, icon });
-            const effective = fieldKind === 'auto' ? suggested : fieldKind === 'none' ? null : fieldKind;
+            const effective = fieldKind === 'auto' ? suggested : fieldKind === 'none' || fieldKind === 'custom' ? null : fieldKind;
             const template = effective ? TASK_FIELD_TEMPLATES[effective] : null;
+            // Going custom for the first time starts from the set already
+            // showing, and tasks keep the values they hold (same keys).
+            const goCustom = () => {
+              if (customFields.length === 0) setCustomFields(toFieldDrafts(customFieldsFrom(template)));
+              setFieldKind('custom');
+            };
             return (
               <View>
                 <ChipRow label="Task fields">
@@ -171,11 +183,18 @@ export default function CategorySheet({
                   {TASK_FIELD_KINDS.map((k) => (
                     <ChoiceChip key={k} active={fieldKind === k} label={TASK_FIELD_TEMPLATES[k].label} onPress={() => setFieldKind(k)} />
                   ))}
+                  <ChoiceChip active={fieldKind === 'custom'} label="Custom" onPress={goCustom} />
                   <ChoiceChip active={fieldKind === 'none'} label="None" onPress={() => setFieldKind('none')} />
                 </ChipRow>
-                <Text className="mt-2 text-[12px] text-neutral-500 dark:text-neutral-400">
-                  {template ? `Tasks get: ${template.fields.map((f) => f.label).join(', ')}.` : 'Tasks get no extra fields.'}
-                </Text>
+                {fieldKind === 'custom' ? (
+                  <View className="mt-3">
+                    <CustomFieldsEditor fields={customFields} onChange={setCustomFields} />
+                  </View>
+                ) : (
+                  <Text className="mt-2 text-[12px] text-neutral-500 dark:text-neutral-400">
+                    {template ? `Tasks get: ${template.fields.map((f) => f.label).join(', ')}.` : 'Tasks get no extra fields.'}
+                  </Text>
+                )}
               </View>
             );
           })()}
@@ -185,7 +204,9 @@ export default function CategorySheet({
             className="w-full"
             disabled={!canSave}
             onPress={() => {
-              if (canSave) onSave({ title: trimmed, icon, color, kind, fieldKind: fieldKind === 'auto' ? undefined : fieldKind });
+              if (!canSave) return;
+              const saved = fromFieldDrafts(customFields);
+              onSave({ title: trimmed, icon, color, kind, fieldKind: fieldKind === 'auto' ? undefined : fieldKind, customFields: saved.length > 0 ? saved : undefined });
             }}
           >
             {category ? 'Save category' : 'Create category'}

@@ -1,8 +1,9 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import type { CategoryKind, TaskCategory, TaskFieldKind } from "@/lib/useScheduleDB";
-import { inferFieldKind, TASK_FIELD_KINDS, TASK_FIELD_TEMPLATES } from "@/lib/taskFields";
+import type { CategoryKind, CustomTaskField, TaskCategory, TaskFieldKind } from "@/lib/useScheduleDB";
+import { customFieldsFrom, inferFieldKind, TASK_FIELD_KINDS, TASK_FIELD_TEMPLATES } from "@/lib/taskFields";
+import CustomFieldsEditor, { fromFieldDrafts, toFieldDrafts, type CustomFieldDraft } from "@/components/category/CustomFieldsEditor";
 import { IconChevronDown } from "@tabler/icons-react";
 import { colorFromIcon, type AccentColor } from "@/lib/colorSystem";
 import { defaultCategoryTitle } from "@/lib/taskCategories";
@@ -22,7 +23,9 @@ export interface CategoryDraft {
   color: AccentColor;
   kind: CategoryKind;
   /** Undefined = suggested from the title or icon (lib/taskFields.ts). */
-  fieldKind?: TaskFieldKind | "none";
+  fieldKind?: TaskFieldKind | "none" | "custom";
+  /** The person's own fields; kept even while a built-in set is chosen. */
+  customFields?: CustomTaskField[];
 }
 
 /**
@@ -64,7 +67,8 @@ export default function CategorySheet({ open, category, onClose, onSave }: Categ
   const [titleTouched, setTitleTouched] = useState(false);
   const [kind, setKind] = useState<CategoryKind>("active");
   // "auto" = follow what the title/icon suggest; stored as no fieldKind.
-  const [fieldKind, setFieldKind] = useState<TaskFieldKind | "none" | "auto">("auto");
+  const [fieldKind, setFieldKind] = useState<TaskFieldKind | "none" | "custom" | "auto">("auto");
+  const [customFields, setCustomFields] = useState<CustomFieldDraft[]>([]);
 
   useEffect(() => {
     if (!open) return;
@@ -74,6 +78,7 @@ export default function CategorySheet({ open, category, onClose, onSave }: Categ
       setColor(category.color);
       setKind(category.kind ?? "active");
       setFieldKind(category.fieldKind ?? "auto");
+      setCustomFields(toFieldDrafts(category.customFields));
       setColorTouched(true);
       setTitleTouched(true);
     } else {
@@ -82,6 +87,7 @@ export default function CategorySheet({ open, category, onClose, onSave }: Categ
       setColor(colorFromIcon("star"));
       setKind("active");
       setFieldKind("auto");
+      setCustomFields([]);
       setColorTouched(false);
       setTitleTouched(false);
     }
@@ -101,8 +107,15 @@ export default function CategorySheet({ open, category, onClose, onSave }: Categ
   const trimmed = title.trim();
   const canSave = trimmed.length > 0;
   const suggested = inferFieldKind({ title: trimmed, icon });
-  const effectiveKind = fieldKind === "auto" ? suggested : fieldKind === "none" ? null : fieldKind;
+  const effectiveKind = fieldKind === "auto" ? suggested : fieldKind === "none" || fieldKind === "custom" ? null : fieldKind;
   const effectiveTemplate = effectiveKind ? TASK_FIELD_TEMPLATES[effectiveKind] : null;
+
+  function handleFieldKindChange(next: TaskFieldKind | "none" | "custom" | "auto") {
+    // Going custom for the first time starts from the set already showing, so
+    // it's an edit of something familiar, and tasks keep the values they hold.
+    if (next === "custom" && customFields.length === 0) setCustomFields(toFieldDrafts(customFieldsFrom(effectiveTemplate)));
+    setFieldKind(next);
+  }
 
   return (
     <BottomSheet open={open} onClose={onClose} desktopWidth="max-w-[520px]">
@@ -187,29 +200,36 @@ export default function CategorySheet({ open, category, onClose, onSave }: Categ
               <select
                 aria-label="Task fields"
                 value={fieldKind}
-                onChange={(e) => setFieldKind(e.target.value as TaskFieldKind | "none" | "auto")}
+                onChange={(e) => handleFieldKindChange(e.target.value as TaskFieldKind | "none" | "custom" | "auto")}
                 className="h-11 w-full appearance-none rounded-xl border border-neutral-200 bg-neutral-50 px-3 pr-9 text-[16px] font-semibold text-neutral-700 outline-none transition-colors focus:border-neutral-300 focus:bg-neutral-100 dark:border-white/10 dark:bg-white/[0.04] dark:text-neutral-200 dark:focus:border-white/20 dark:focus:bg-white/[0.07]"
               >
                 <option value="auto">{suggested ? `Suggested: ${TASK_FIELD_TEMPLATES[suggested].label}` : "Suggested: none"}</option>
                 {TASK_FIELD_KINDS.map((k) => (
                   <option key={k} value={k}>{TASK_FIELD_TEMPLATES[k].label}</option>
                 ))}
+                <option value="custom">Custom</option>
                 <option value="none">None</option>
               </select>
               <IconChevronDown size={14} strokeWidth={2} className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-neutral-500 dark:text-neutral-400" />
             </div>
+            {fieldKind === "custom" ? (
+              <div className="mt-3">
+                <CustomFieldsEditor fields={customFields} onChange={setCustomFields} />
+              </div>
+            ) : (
             <p className="mt-2 text-[12px] text-neutral-500 dark:text-neutral-400">
               {effectiveTemplate
                 ? `Tasks here ask for ${effectiveTemplate.fields.map((f) => f.label.toLowerCase()).join(", ")}${effectiveTemplate.listLabel !== "Checklist" ? `, and their checklist is ${effectiveTemplate.listLabel.toLowerCase()}` : ""}.`
                 : "Tasks here have no extra fields."}
             </p>
+            )}
           </div>
 
           <Button
             variant="primary"
             className="w-full"
             disabled={!canSave}
-            onClick={() => { if (canSave) onSave({ title: trimmed, icon, color, kind, fieldKind: fieldKind === "auto" ? undefined : fieldKind }); }}
+            onClick={() => { if (canSave) onSave({ title: trimmed, icon, color, kind, fieldKind: fieldKind === "auto" ? undefined : fieldKind, customFields: (() => { const f = fromFieldDrafts(customFields); return f.length > 0 ? f : undefined; })() }); }}
           >
             {category ? "Save category" : "Create category"}
           </Button>

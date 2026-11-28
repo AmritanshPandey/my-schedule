@@ -10,7 +10,7 @@
  * `safeMigrate` (web's lib/errorLog.ts, native's equivalent).
  */
 
-import { TASK_FIELD_TEMPLATES } from "./taskFields";
+import { normalizeCustomFields, TASK_FIELD_TEMPLATES } from "./taskFields";
 import type {
   CategoryKind,
   DayActivities,
@@ -535,9 +535,13 @@ function normalizeCategories(value: unknown): TaskCategory[] {
       color: resolveAccentColor(typeof c.color === "string" ? c.color : undefined, icon),
       ...(typeof c.sortOrder === "number" ? { sortOrder: c.sortOrder } : {}),
       kind: resolveCategoryKind(c.kind, icon),
-      ...(c.fieldKind === "none" || (typeof c.fieldKind === "string" && c.fieldKind in TASK_FIELD_TEMPLATES)
+      ...(c.fieldKind === "none" || c.fieldKind === "custom" || (typeof c.fieldKind === "string" && c.fieldKind in TASK_FIELD_TEMPLATES)
         ? { fieldKind: c.fieldKind as TaskCategory["fieldKind"] }
         : {}),
+      ...(() => {
+        const fields = normalizeCustomFields(c.customFields);
+        return fields.length > 0 ? { customFields: fields } : {};
+      })(),
     }];
   });
 }

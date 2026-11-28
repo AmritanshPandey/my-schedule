@@ -405,7 +405,7 @@ export const ScheduleSchema = z.object({
   // connections existed has no such key, and must still validate.
   goalConnections: z.array(GoalConnectionSchema).optional(),
   plans: z.array(PlanSchema),
-  categories: z.array(z.object({ id: nonEmptyId, title: z.string(), icon: z.string(), color: accentColor, sortOrder: z.number().finite().optional(), kind: z.enum(["active", "rest", "sleep"]).optional(), fieldKind: z.enum(["fitness", "study", "work", "cooking", "chores", "finance", "shopping", "travel", "wellness", "creative", "none"]).optional() }).passthrough()),
+  categories: z.array(z.object({ id: nonEmptyId, title: z.string(), icon: z.string(), color: accentColor, sortOrder: z.number().finite().optional(), kind: z.enum(["active", "rest", "sleep"]).optional(), fieldKind: z.enum(["fitness", "study", "work", "cooking", "chores", "finance", "shopping", "travel", "wellness", "creative", "none", "custom"]).optional(), customFields: z.array(z.object({ key: z.string(), label: z.string(), type: z.enum(["text", "longtext", "number", "minutes", "date", "select", "money", "percent"]), options: z.array(z.string()).optional(), role: z.literal("duration").optional() }).passthrough()).optional() }).passthrough()),
   activities: z.object(Object.fromEntries(DAYS.map((day) => [day, z.array(TaskSchema)])) as Record<string, z.ZodType>).passthrough(),
   progressTrackers: z.array(ProgressTrackerSchema),
   metricEntries: z.array(MetricEntrySchema),
